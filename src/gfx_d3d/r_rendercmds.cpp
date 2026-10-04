@@ -282,14 +282,14 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
     iassert( Sys_IsMainThread() || Sys_IsRenderThread() );
 #ifdef __SWITCH__
     if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: entered\\n");
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: entered\n");
 #endif
     const bool initialDeviceOk = R_CheckLostDevice();
 #ifdef __SWITCH__
     if (Sys_IsRenderThread())
         Switch_LogWrite(initialDeviceOk
-            ? "[KisakCOD][RTHREAD] R_IssueRenderCommands: first device check ok\\n"
-            : "[KisakCOD][RTHREAD] R_IssueRenderCommands: first device check failed\\n");
+            ? "[KisakCOD][RTHREAD] R_IssueRenderCommands: first device check ok\n"
+            : "[KisakCOD][RTHREAD] R_IssueRenderCommands: first device check failed\n");
 #endif
     if (initialDeviceOk)
     {
@@ -297,13 +297,13 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
         frontEndDataOut->drawType = type;
 #ifdef __SWITCH__
         if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before R_HandOffToBackend\\n");
+            Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before R_HandOffToBackend\n");
 #endif
         if (!R_HandOffToBackend(type))
         {
 #ifdef __SWITCH__
             if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: synchronous backend path\\n");
+                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: synchronous backend path\n");
 #endif
             if ((type & 2) != 0)
                 R_PerformanceCounters();
@@ -312,7 +312,7 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
             R_UpdateSkinCacheUsage();
 #ifdef __SWITCH__
             if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before second device check\\n");
+                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before second device check\n");
 #endif
             if (R_CheckLostDevice())
                 v1 = g_disableRendering == 0;
@@ -321,55 +321,55 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
 #ifdef __SWITCH__
             if (Sys_IsRenderThread())
                 Switch_LogWrite(v1
-                    ? "[KisakCOD][RTHREAD] R_IssueRenderCommands: rendering enabled\\n"
-                    : "[KisakCOD][RTHREAD] R_IssueRenderCommands: rendering disabled\\n");
+                    ? "[KisakCOD][RTHREAD] R_IssueRenderCommands: rendering enabled\n"
+                    : "[KisakCOD][RTHREAD] R_IssueRenderCommands: rendering disabled\n");
 #endif
             if (v1)
             {
 #ifdef __SWITCH__
                 if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_BeginFrame\\n");
+                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_BeginFrame\n");
 #endif
                 RB_BeginFrame(frontEndDataOut);
 #ifdef __SWITCH__
                 if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_BeginFrame\\n");
+                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_BeginFrame\n");
                 if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_Draw3D\\n");
+                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_Draw3D\n");
 #endif
                 RB_Draw3D();
 #ifdef __SWITCH__
                 if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_Draw3D\\n");
+                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_Draw3D\n");
                 if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_CallExecuteRenderCommands\\n");
+                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_CallExecuteRenderCommands\n");
 #endif
                 RB_CallExecuteRenderCommands();
 #ifdef __SWITCH__
                 if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_CallExecuteRenderCommands\\n");
+                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_CallExecuteRenderCommands\n");
                 if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_EndFrame\\n");
+                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_EndFrame\n");
 #endif
                 RB_EndFrame(frontEndDataOut->drawType);
 #ifdef __SWITCH__
                 if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_EndFrame\\n");
+                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_EndFrame\n");
 #endif
             }
 #ifdef __SWITCH__
             if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before R_UnlockSkinnedCache\\n");
+                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before R_UnlockSkinnedCache\n");
 #endif
             R_UnlockSkinnedCache();
 #ifdef __SWITCH__
             if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after R_UnlockSkinnedCache\\n");
+                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after R_UnlockSkinnedCache\n");
 #endif
             R_ToggleSmpFrame();
 #ifdef __SWITCH__
             if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after R_ToggleSmpFrame\\n");
+                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after R_ToggleSmpFrame\n");
 #endif
         }
     }
@@ -377,7 +377,7 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
     {
 #ifdef __SWITCH__
         if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: lost-device path\\n");
+            Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: lost-device path\n");
 #endif
         if (Sys_IsMainThread())
             R_WaitFrontendWorkerCmds();
@@ -387,7 +387,7 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
     }
 #ifdef __SWITCH__
     if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: returned\\n");
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: returned\n");
 #endif
 }
 
@@ -1998,77 +1998,3 @@ void __cdecl R_EndDebugFrame()
         R_AddCmdEndOfList();
         R_ClearCmdList();
         R_SyncRenderThread();
-        frontEndDataOut->drawType = -1;
-#ifndef KISAK_SP
-        iassert(Sys_IsMainThread());
-#endif
-        if (R_CheckLostDevice())
-            v0 = g_disableRendering == 0;
-        else
-            v0 = 0;
-        if (v0)
-        {
-            RB_BeginFrame(frontEndDataOut);
-            RB_Draw3D();
-            RB_CallExecuteRenderCommands();
-            RB_EndFrame(-1);
-        }
-        s_cmdList = s_debugFrameGlob.restoreCmdList;
-        frontEndDataOut = s_debugFrameGlob.restoreFrontEndDataOut;
-        if (s_debugFrameGlob.restoreSkinnedCache)
-        {
-            s_debugFrameGlob.restoreSkinnedCache = 0;
-            R_LockSkinnedCache();
-        }
-        s_debugFrameGlob.restoreCmdList = 0;
-        s_debugFrameGlob.restoreFrontEndDataOut = 0;
-        iassert(rg.inFrame);
-        rg.inFrame = s_debugFrameGlob.inFrame;
-    }
-}
-
-#ifdef KISAK_RADIANT
-// ─────────────────────────────────────────────────────────────────────────────
-// Editor render-command additions — cod3src\src\gfx_d3d\r_rendercmds.cpp in the
-// CoD4Radiant binary (IDB port 13343). The editor's line bridge (draw.cpp
-// R_Add3DLine/Draw_02 and the XY/Z/Cam view draws) batches line geometry into
-// GfxCmdDrawLines render commands through these. KisakCOD's CoD3-era
-// r_rendercmds.cpp lacks them; ported verbatim from the IDB.
-//
-// SIGNATURE / §11 NOTES (validated against the kisak callsites above):
-//  • kisak R_GetCommandBuffer(renderCmd, bytes). The IDB pseudocode lists the
-//    args swapped — R_GetCommandBuffer(bytes, RC_DRAW_LINES) — a __usercall
-//    normalization artifact. kisak's own callers use (renderCmd, bytes); we follow
-//    the kisak prototype, NOT the IDB literal order.
-//  • The IDB compares lastCmd->header.id == 20 (the CoD4 RC_DRAW_LINES enum value).
-//    kisak's RC_DRAW_LINES == 0x12. We use the SYMBOL, never the literal.
-//  • GfxCmdDrawLines layout (rb_backend.h): header(4) + lineCount(2)+width(1)+
-//    dimensions(1) = 8-byte prefix, then verts. A line command of N line-segments
-//    is 8 + 0x20*N bytes (0x20 = two GfxPointVertex per segment).
-// ─────────────────────────────────────────────────────────────────────────────
-#include "rb_backend.h"   // GfxCmdDrawLines
-#include <string.h>       // memcpy
-
-// IDB R_AddMultipleRendercommands @ 0x4fb0d0 — extend the last command in place:
-// rewind usedTotal to the start of lastCmd, re-acquire the buffer at the bigger
-// byte count (same id), and hand back the old end-of-buffer where the new data
-// gets appended.
-void *__cdecl R_AddMultipleRendercommands(int bytes)
-{
-    GfxCmdHeader *lastCmd = s_cmdList->lastCmd;
-    uint8_t *cmds = s_cmdList->cmds;
-    int usedTotal = s_cmdList->usedTotal;
-    s_cmdList->usedTotal = (int)((uint8_t *)lastCmd - cmds);
-    uint8_t *appendPos = &cmds[usedTotal];
-    GfxCmdHeader *bufferStart =
-        R_GetCommandBuffer((GfxRenderCommand)lastCmd->id, bytes + lastCmd->byteCount);
-    iassert( s_cmdList->lastCmd == bufferStart );
-    return bufferStart ? appendPos : nullptr;
-}
-
-// IDB R_AddLineCmd @ 0x4fd0a0 — append `count` line-segments of `dimension`-D
-// geometry, merging into the previous RC_DRAW_LINES command when the widths and
-// dimensions match and the byte/line caps still fit.
-void __cdecl R_AddLineCmd(short count, char width, char dimension, GfxPointVertex *verts)
-{
-    iassert( (count > 0) );
