@@ -5027,7 +5027,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
         const bool traceUiImage =
-            g_switchCurrentAssetRawType == 4u &&
+            g_switchCurrentAssetRawType == 6u &&
             g_switchCurrentAssetIndex >= 0 &&
             g_switchCurrentAssetIndex <= 3;
         if (traceUiImage)
@@ -5085,9 +5085,26 @@ void __cdecl Load_GfxImage(bool atStreamStart)
 
         
 
+        if (traceUiImage)
+        {
+            char trace[224];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[SWITCH IMAGE TRACE] asset=%d token=%08x image=%p name=%p stream=%u b0=%08x b4=%08x\\n",
+                g_switchCurrentAssetIndex,
+                serialized.name,
+                static_cast<void *>(varGfxImage),
+                static_cast<const void *>(varGfxImage->name),
+                static_cast<unsigned>(g_streamPosIndex),
+                Switch_GetStreamCursorOffset(0),
+                Switch_GetStreamCursorOffset(4));
+            Switch_LogWrite(trace);
+        }
+
         varGfxTextureLoad = &varGfxImage->texture;
 #ifdef __SWITCH__
-        if (g_switchCurrentAssetRawType == 4u &&
+        if (g_switchCurrentAssetRawType == 6u &&
             g_switchCurrentAssetIndex >= 20)
         {
             char trace[384];
@@ -5151,7 +5168,7 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
         sizeof(value));
 
     const bool traceUiImagePointer =
-        g_switchCurrentAssetRawType == 4u &&
+        g_switchCurrentAssetRawType == 6u &&
         g_switchCurrentAssetIndex >= 0 &&
         g_switchCurrentAssetIndex <= 3;
     if (traceUiImagePointer)
