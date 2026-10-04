@@ -62,7 +62,8 @@ static void SwitchLogVulkanRuntime()
     }
 
     VkPhysicalDevice device = VK_NULL_HANDLE;
-    result = vkEnumeratePhysicalDevices(instance, &deviceCount, &device);
+    uint32_t requestedDevices = 1;
+    result = vkEnumeratePhysicalDevices(instance, &requestedDevices, &device);
     if (result != VK_SUCCESS || device == VK_NULL_HANDLE)
     {
         char line[256];
