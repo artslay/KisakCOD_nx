@@ -7,6 +7,10 @@
 #include <gfx_d3d/r_font.h>
 #include <gfx_d3d/r_rendercmds.h>
 #include "client.h"
+
+#ifdef __SWITCH__
+extern thread_local const char *g_switchFrameStage;
+#endif
 #include <ui/ui.h>
 #include <game/g_local.h>
 #include "cl_demo.h"
@@ -223,28 +227,80 @@ void SCR_UpdateFrame()
     int refreshedUI; // r31
 
     iassert(Sys_IsMainThread() || Sys_IsRenderThread());
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/begin";
+#endif
     //Profile_Begin(18);
     //Profile_Begin(19);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/r_begin";
+#endif
     R_BeginFrame();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/r_begin_done";
+    g_switchFrameStage = "frame/scr/snd_fx";
+#endif
     //Profile_EndInternal(0);
     SND_InitFXSounds();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/snd_fx_done";
+    g_switchFrameStage = "frame/scr/cgame_render";
+#endif
     //Profile_Begin(20);
     refreshedUI = CL_CGameRendering();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/cgame_render_done";
+#endif
     if (Sys_IsMainThread() && !refreshedUI)
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/update_sound";
+#endif
         CL_UpdateSound();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/update_sound_done";
+#endif
+    }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field";
+#endif
     SCR_DrawScreenField(refreshedUI);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field_done";
+#endif
     if (clientUIActives[0].connectionState == CA_ACTIVE)
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/debug_overlays";
+#endif
         //Profile_Begin(349);
         CG_DrawFullScreenDebugOverlays(0);
         //Profile_EndInternal(0);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/debug_overlays_done";
+#endif
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/profile";
+#endif
     R_AddCmdDrawProfile();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/console";
+#endif
     Con_DrawConsole(0);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/devgui";
+#endif
     DevGui_Draw(0);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/end_frame";
+#endif
     //Profile_EndInternal(0);
     //Profile_Begin(21);
     R_EndFrame();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands";
+#endif
     R_IssueRenderCommands(0xFFFFFFFF);
     //Profile_EndInternal(0);
 #ifdef KISAK_XBOX
