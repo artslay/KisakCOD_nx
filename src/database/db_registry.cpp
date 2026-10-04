@@ -3097,6 +3097,23 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         Switch_LogWrite("[SWITCH LOADEDSOUND LINK] before name dereference\n");
 #endif
 #ifdef __SWITCH__
+    if (type == ASSET_TYPE_MATERIAL &&
+        g_switchCurrentAssetRawType == 4u &&
+        g_switchCurrentAssetIndex >= 0 &&
+        g_switchCurrentAssetIndex <= 3)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI MATERIAL] registry name ptr=%p low=%08x header=%p type=%u\\n",
+            static_cast<const void *>(name),
+            static_cast<unsigned>(
+                reinterpret_cast<uintptr_t>(name)),
+            static_cast<void *>(newEntry->entry.asset.header.data),
+            static_cast<unsigned>(type));
+        Switch_LogWrite(trace);
+    }
     g_switchDbStage = "asset/name_deref";
 #endif
     v2 = *name;
