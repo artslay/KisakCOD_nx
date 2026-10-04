@@ -105,6 +105,7 @@ extern void * volatile g_switchDbLastAssetResult;
 extern uint32_t volatile g_switchDbLastAssetType;
 extern void * volatile g_switchDbLastPreloadShaders;
 }
+extern thread_local const char *g_switchFrameStage;
 extern "C" uint32_t Sys_GetSwitchThreadContext();
 extern "C" const char *Sys_GetSwitchThreadStage();
 
@@ -165,10 +166,12 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
     std::snprintf(
         line,
         sizeof(line),
-        "[KisakCOD][CRASH] thread_context=%u (%s) stage=%s\n",
+        "[KisakCOD][CRASH] thread_context=%u (%s) stage=%s\n"
+        "[KisakCOD][CRASH] frame_stage=%s\n",
         threadContext,
         threadName,
-        Sys_GetSwitchThreadStage());
+        Sys_GetSwitchThreadStage(),
+        g_switchFrameStage ? g_switchFrameStage : "(null)");
     Switch_LogCrashLine(line);
 
     std::snprintf(
