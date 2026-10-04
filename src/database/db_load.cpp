@@ -14927,7 +14927,13 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
 #endif
     if (varWeaponDef->bounceSound)
     {
-        if (varWeaponDef->bounceSound == (snd_alias_list_t **)-1)
+        // The serialized WeaponDef stores this pointer as a 32-bit token.
+        // Switch_TranslateWeaponDefSerialized() zero-extends that token to
+        // the native 64-bit pointer, so compare the low 32 bits here instead
+        // of comparing against the 64-bit pointer value (-1).
+        const uint32_t bounceSoundToken = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(varWeaponDef->bounceSound));
+        if (bounceSoundToken == UINT32_MAX)
         {
 #ifdef __SWITCH__
             // bounceSound is a serialized array of 29 four-byte
