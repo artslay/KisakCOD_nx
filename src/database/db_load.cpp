@@ -14857,7 +14857,7 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
 #ifdef __SWITCH__
     if (switchTraceWeapon4728)
     {
-        const sndFields[] = {
+        const uint32_t sndFields[] = {
             340u,344u,348u,352u,356u,360u,364u,368u,372u,376u,380u,384u,
             388u,392u,396u,400u,404u,408u,412u,416u,420u,424u,428u,432u,
             436u,440u,444u,448u,452u,456u,460u,464u,468u,472u,476u,480u,484u,
