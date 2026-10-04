@@ -193,17 +193,18 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         g_switchDbLastAssetResult,
         g_switchDbLastAssetType,
         g_switchDbLastPreloadShaders);
+    Switch_LogCrashLine(line);
+
     std::snprintf(
         line,
         sizeof(line),
-        "[KisakCOD][CRASH] skincache loadForRenderer=%d pool0=0x%016llx pool1=0x%016llx lastBuffer=0x%016llx createCalled=%d createHr=%d\\n",
+        "[KisakCOD][CRASH] skincache loadForRenderer=%d pool0=0x%016llx pool1=0x%016llx lastBuffer=0x%016llx createCalled=%d createHr=%d\n",
         g_switchSkinCacheLoadForRenderer,
         static_cast<unsigned long long>(g_switchSkinCachePool0),
         static_cast<unsigned long long>(g_switchSkinCachePool1),
         static_cast<unsigned long long>(g_switchSkinCacheLastBuffer),
         g_switchSkinCacheCreateCalled,
         g_switchSkinCacheCreateHr);
-    Switch_LogCrashLine(line);
     Switch_LogCrashLine(line);
 
     for (int i = 0; i < 29; i += 2)
