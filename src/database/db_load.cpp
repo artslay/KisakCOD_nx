@@ -1439,29 +1439,19 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
 
         if (nested == UINT32_MAX)
         {
-            // A normal outer XStringPtr points at an already-loaded serialized
-            // 32-bit slot. Resolve its inline string in place; do not advance
-            // the global fastfile cursor here. The original loader's normal
-            // outer-pointer path only converts the offset to that slot.
-            const uint64_t inlineOffset64 =
-                static_cast<uint64_t>(outerBlockOffset) +
-                sizeof(uint32_t);
-            if (inlineOffset64 >= g_streamBlocks[outerBlock].size)
+            // The nested soundName uses the same XString semantics as the
+            // standalone loader: -1 means a following NUL-terminated string
+            // in the current XFile stream. Do not treat bytes after the
+            // serialized pointer slot as already-loaded string data; doing so
+            // under-consumes the global decompression stream and shifts all
+            // following asset payloads.
+            char *stringBuffer =
+                reinterpret_cast<char *>(AllocLoad_raw_byte());
+            if (!stringBuffer)
                 return;
 
-            const uint32_t inlineOffset =
-                static_cast<uint32_t>(inlineOffset64);
-            const char *inlineString =
-                reinterpret_cast<const char *>(
-                    g_streamBlocks[outerBlock].data + inlineOffset);
-            const uint32_t remaining =
-                g_streamBlocks[outerBlock].size - inlineOffset;
-
-            if (std::memchr(inlineString, '\0', remaining))
-                *nativeStringSlot = inlineString;
-            else
-                Switch_LogWrite(
-                    "[SWITCH XSTRINGPTR] unterminated inline string\n");
+            *nativeStringSlot = stringBuffer;
+            Load_XStringCustom(&stringBuffer);
             return;
         }
 
