@@ -6794,6 +6794,14 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
 
             const void **inserted = nullptr;
 
+#ifdef __SWITCH__
+            if (g_switchCurrentAssetIndex == 4728 &&
+                g_switchCurrentAssetRawType == 23u)
+            {
+                g_switchMaterialTechniqueIndex = i;
+            }
+#endif
+
             // Inline MaterialTechnique records are 4-byte aligned in the
             // virtual stream. The pointer-array helper in the reference
             // loader explicitly aligns before peeking/loading the dynamic
