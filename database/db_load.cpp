@@ -638,6 +638,26 @@ static void Switch_TranslateDynEntityDefSerialized(DynEntityDef *out, const uint
     out->contents = Switch_ReadSerializedValue<int>(s, 92);
 }
 
+
+static void Switch_TranslateComPrimaryLightSerialized(ComPrimaryLight *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->type = Switch_ReadSerializedValue<uint8_t>(s, 0);
+    out->canUseShadowMap = Switch_ReadSerializedValue<uint8_t>(s, 1);
+    out->exponent = Switch_ReadSerializedValue<uint16_t>(s, 2);
+    std::memcpy(out->unused, s + 3, sizeof(out->unused));
+    std::memcpy(out->color, s + 4, sizeof(out->color));
+    std::memcpy(out->dir, s + 16, sizeof(out->dir));
+    std::memcpy(out->origin, s + 28, sizeof(out->origin));
+    out->radius = Switch_ReadSerializedValue<float>(s, 40);
+    out->cosHalfFovOuter = Switch_ReadSerializedValue<float>(s, 44);
+    out->cosHalfFovInner = Switch_ReadSerializedValue<float>(s, 48);
+    out->cosHalfFovExpanded = Switch_ReadSerializedValue<float>(s, 52);
+    out->rotationLimit = Switch_ReadSerializedValue<float>(s, 56);
+    out->translationLimit = Switch_ReadSerializedValue<float>(s, 60);
+    Switch_SeedSerializedPointer(out->defName, s, 64);
+}
+
 #endif
 
 #ifdef __SWITCH__
@@ -11955,6 +11975,28 @@ void __cdecl Load_ComPrimaryLightArray(bool atStreamStart, int32_t count)
     ComPrimaryLight *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 68u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        ComPrimaryLight *base = varComPrimaryLight;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varComPrimaryLight = base + index;
+            Switch_TranslateComPrimaryLightSerialized(
+                varComPrimaryLight,
+                serialized.data() + static_cast<size_t>(index) * 68u);
+        }
+        varComPrimaryLight = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, &varComPrimaryLight->type, 68 * count);
     var = varComPrimaryLight;
     for (i = 0; i < count; ++i)
