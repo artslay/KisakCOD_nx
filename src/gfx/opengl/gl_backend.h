@@ -6,6 +6,7 @@
 #ifdef __SWITCH__
 bool Switch_GLBeginDatabaseContext();
 void Switch_GLEndDatabaseContext();
+bool Switch_GLBeginRenderContext();
 #endif
 
 class OpenGLBackend : public IGfxBackend
