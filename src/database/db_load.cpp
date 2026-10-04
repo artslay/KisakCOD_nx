@@ -6472,7 +6472,6 @@ void __cdecl Load_MaterialTechniquePtrArray(bool atStreamStart, int32_t count)
 void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
 {
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH MATERIAL] techset read148 begin\n");
     struct SerializedMaterialTechniqueSet
     {
         uint32_t name;
@@ -6495,7 +6494,7 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     // name + worldVertFormat/meta + remappedTechniqueSet + 34 technique pointers.
     // The Switch runtime is 64-bit, so expand the serialized 32-bit pointers.
     SerializedMaterialTechniqueSet serialized{};
-    const uint8_t *techniqueSetStart = DB_GetStreamPos();
+    DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
 #ifdef __SWITCH__
     if (g_switchCurrentAssetRawType == 5u && g_switchCurrentAssetIndex == 1502)
