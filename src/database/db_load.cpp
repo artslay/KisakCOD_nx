@@ -1456,12 +1456,11 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
             const uint32_t remaining =
                 g_streamBlocks[outerBlock].size - inlineOffset;
 
-            if (std::memchr(inlineString, ' ', remaining))
+            if (std::memchr(inlineString, '\0', remaining))
                 *nativeStringSlot = inlineString;
             else
                 Switch_LogWrite(
-                    "[SWITCH XSTRINGPTR] unterminated inline string
-");
+                    "[SWITCH XSTRINGPTR] unterminated inline string\n");
             return;
         }
 
@@ -6480,7 +6479,7 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     // The Switch runtime is 64-bit, so expand the serialized 32-bit pointers.
     SerializedMaterialTechniqueSet serialized{};
     const uint8_t *techniqueSetStart = DB_GetStreamPos();
-\n
+
 #ifdef __SWITCH__
     if (g_switchCurrentAssetRawType == 5u && g_switchCurrentAssetIndex == 1502)
     {
@@ -7002,7 +7001,7 @@ void __cdecl Load_Material(bool atStreamStart)
 
     SerializedMaterial serialized{};
     uint8_t *materialStreamPos = DB_GetStreamPos();
-\n
+
     const bool traceUiMaterial =
         g_switchCurrentAssetRawType == 4u &&
         g_switchCurrentAssetIndex >= 0 &&
