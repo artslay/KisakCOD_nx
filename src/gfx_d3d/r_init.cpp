@@ -3015,6 +3015,15 @@ void R_InitGraphicsApi()
     iassert( (dx.device != NULL) == (dx.d3d9 != NULL) );
     if (dx.device)
     {
+        // The Switch graphics bootstrap can hand R_InitGraphicsApi an already-created
+        // D3D9-compatible device. In that path the old code jumped straight to
+        // R_InitSystems(), skipping R_CreateForInitOrReset() and therefore never
+        // allocating render targets, dynamic VBs/IBs, and the skinned cache.
+        if (!gfxBuf.skinnedCacheVbPool[0].buffer)
+        {
+            if (!R_CreateForInitOrReset())
+                R_FatalInitError("Couldn't initialize renderer resources");
+        }
         R_InitSystems();
     }
     else
