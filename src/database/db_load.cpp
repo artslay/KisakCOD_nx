@@ -27,6 +27,48 @@ extern void Switch_LogRaw(const char *msg);
 extern void __cdecl Sys_Error(const char *error, ...);
 extern void __cdecl Sys_Print(const char *msg);
 
+static void Switch_PrintRawBytes(
+    const char *tag,
+    const uint8_t *data,
+    uint32_t size)
+{
+    if (!data || !size)
+        return;
+
+    for (uint32_t offset = 0; offset < size; offset += 16)
+    {
+        char trace[320];
+        char ascii[17]{};
+        int written = std::snprintf(
+            trace,
+            sizeof(trace),
+            "%s +%03x:",
+            tag,
+            offset);
+
+        for (uint32_t i = 0; i < 16 && offset + i < size; ++i)
+        {
+            const uint8_t value = data[offset + i];
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                " %02x",
+                static_cast<unsigned>(value));
+            ascii[i] =
+                (value >= 32 && value <= 126)
+                    ? static_cast<char>(value)
+                    : '.';
+        }
+
+        std::snprintf(
+            trace + written,
+            sizeof(trace) - static_cast<size_t>(written),
+            "  |%s|\n",
+            ascii);
+        Sys_Print(trace);
+    }
+}
+
 static void Switch_LogRawDwords(
     const char *tag,
     const uint8_t *data,
@@ -6468,6 +6510,33 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     // The Switch runtime is 64-bit, so expand the serialized 32-bit pointers.
     SerializedMaterialTechniqueSet serialized{};
     const uint8_t *techniqueSetStart = DB_GetStreamPos();
+
+    if (g_switchCurrentAssetIndex == 4728)
+    {
+        char rawPosTrace[256];
+        std::snprintf(
+            rawPosTrace,
+            sizeof(rawPosTrace),
+            "[KisakCOD][TECHSET4728 RAWPOS] stream=%u b0=%08x b4=%08x pos=%p\n",
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            static_cast<const void *>(techniqueSetStart));
+        Sys_Print(rawPosTrace);
+
+        const uint32_t b0Offset = Switch_GetStreamCursorOffset(0);
+        if (g_streamBlocks &&
+            g_streamBlocks[0].data &&
+            b0Offset != UINT32_MAX &&
+            b0Offset + sizeof(SerializedMaterialTechniqueSet) <= g_streamBlocks[0].size)
+        {
+            Switch_PrintRawBytes(
+                "[KisakCOD][TECHSET4728 RAW]",
+                techniqueSetStart,
+                sizeof(SerializedMaterialTechniqueSet));
+        }
+    }
+
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
     if (g_switchCurrentAssetIndex == 4728)
@@ -7060,6 +7129,45 @@ void __cdecl Load_Material(bool atStreamStart)
 
     SerializedMaterial serialized{};
     uint8_t *materialStreamPos = DB_GetStreamPos();
+
+    if (g_switchCurrentAssetIndex == 4728)
+    {
+        char rawPosTrace[256];
+        std::snprintf(
+            rawPosTrace,
+            sizeof(rawPosTrace),
+            "[KisakCOD][MATERIAL4728 RAWPOS] stream=%u b0=%08x b4=%08x pos=%p\\n",
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            static_cast<void *>(materialStreamPos));
+        Sys_Print(rawPosTrace);
+
+        const uint32_t b0Offset = Switch_GetStreamCursorOffset(0);
+        if (g_streamBlocks &&
+            g_streamBlocks[0].data &&
+            b0Offset != UINT32_MAX &&
+            b0Offset >= 64 &&
+            b0Offset + sizeof(SerializedMaterial) <= g_streamBlocks[0].size)
+        {
+            Switch_PrintRawBytes(
+                "[KisakCOD][MATERIAL4728 PREV64]",
+                g_streamBlocks[0].data + b0Offset - 64,
+                64);
+        }
+
+        if (g_streamBlocks &&
+            g_streamBlocks[0].data &&
+            b0Offset != UINT32_MAX &&
+            b0Offset + sizeof(SerializedMaterial) <= g_streamBlocks[0].size)
+        {
+            Switch_PrintRawBytes(
+                "[KisakCOD][MATERIAL4728 RAW]",
+                materialStreamPos,
+                sizeof(SerializedMaterial));
+        }
+    }
+
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
     if (g_switchCurrentAssetIndex == 4728)
