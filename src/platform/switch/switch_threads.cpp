@@ -404,7 +404,8 @@ bool __cdecl Sys_FinishRenderer()
 }
 int __cdecl Sys_IsRendererReady()
 {
-    return g_smpData.load(std::memory_order_acquire) != nullptr;
+    std::lock_guard<std::mutex> lock(g_renderCompletedEvent.mutex);
+    return g_renderCompletedEvent.signaled ? 1 : 0;
 }
 int __cdecl Sys_RendererReady() { return Sys_IsRendererReady(); }
 void *__cdecl Sys_RendererSleep()
