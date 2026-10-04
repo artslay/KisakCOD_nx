@@ -7136,7 +7136,7 @@ void __cdecl Load_Material(bool atStreamStart)
         std::snprintf(
             rawPosTrace,
             sizeof(rawPosTrace),
-            "[KisakCOD][MATERIAL4728 RAWPOS] stream=%u b0=%08x b4=%08x pos=%p\\n",
+            "[KisakCOD][MATERIAL4728 RAWPOS] stream=%u b0=%08x b4=%08x pos=%p\n",
             static_cast<unsigned>(g_streamPosIndex),
             Switch_GetStreamCursorOffset(0),
             Switch_GetStreamCursorOffset(4),
