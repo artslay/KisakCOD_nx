@@ -1753,8 +1753,14 @@ void __cdecl R_EndRemoteScreenUpdate()
             iassert( r_glob.remoteScreenUpdateNesting > 0 );
             if (r_glob.remoteScreenUpdateNesting == 1)
             {
+#ifdef __SWITCH__
+                Switch_LogWrite("[KisakCOD][RENDER] R_EndRemoteScreenUpdate: waiting for renderer notify\\n");
+#endif
                 while (!r_glob.screenUpdateNotify)
                     NET_Sleep(1);
+#ifdef __SWITCH__
+                Switch_LogWrite("[KisakCOD][RENDER] R_EndRemoteScreenUpdate: renderer notify received\\n");
+#endif
                 r_glob.screenUpdateNotify = 0;
                 iassert( r_glob.remoteScreenUpdateNesting > 0 );
                 --r_glob.remoteScreenUpdateNesting;
