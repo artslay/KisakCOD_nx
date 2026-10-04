@@ -14145,7 +14145,6 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
                 DB_GetXFileUncompressedOffset()));
         Sys_Print(trace);
     }
-#endif
     Load_MaterialHandle(0);
 #ifdef __SWITCH__
     if (g_switchCurrentAssetIndex == 4728 &&
