@@ -2900,6 +2900,11 @@ void __cdecl Load_XAnimPartsPtr(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
+            // AllocLoad_FxElemVisStateSample() aligned the serialized inline
+            // object in stream 0 before the native object was allocated.
+            // Preserve that 32-bit fastfile alignment when the native object
+            // lives in persistent ARM64 Hunk memory.
+            DB_AllocStreamPos(3);
             *varXAnimPartsPtr = reinterpret_cast<XAnimParts *>(
                 Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(XAnimParts)),
@@ -3352,6 +3357,11 @@ void __cdecl Load_LoadedSoundPtr(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
+            // AllocLoad_FxElemVisStateSample() aligned the serialized inline
+            // object in stream 0 before the native object was allocated.
+            // Preserve that 32-bit fastfile alignment when the native object
+            // lives in persistent ARM64 Hunk memory.
+            DB_AllocStreamPos(3);
             // LoadedSound is 48 bytes natively on AArch64 (8-byte pointers), while the
             // CoD4 fastfile serializes only 44 bytes. Do not place the native object directly
             // in the stream buffer: the subsequent raw PCM payload starts after 44 serialized
@@ -3644,6 +3654,11 @@ void __cdecl Load_SndCurvePtr(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
+            // AllocLoad_FxElemVisStateSample() aligned the serialized inline
+            // object in stream 0 before the native object was allocated.
+            // Preserve that 32-bit fastfile alignment when the native object
+            // lives in persistent ARM64 Hunk memory.
+            DB_AllocStreamPos(3);
             *varSndCurvePtr = reinterpret_cast<SndCurve *>(
                 Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(SndCurve)),
@@ -9805,6 +9820,11 @@ void __cdecl Load_XModelPtr(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
+            // AllocLoad_FxElemVisStateSample() aligned the serialized inline
+            // object in stream 0 before the native object was allocated.
+            // Preserve that 32-bit fastfile alignment when the native object
+            // lives in persistent ARM64 Hunk memory.
+            DB_AllocStreamPos(3);
             if (switchTraceXModel)
                 g_switchDbStage = "xmodel/alloc";
             *varXModelPtr = reinterpret_cast<XModel *>(
@@ -10401,6 +10421,11 @@ void __cdecl Load_FxEffectDefHandle(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
+            // AllocLoad_FxElemVisStateSample() aligned the serialized inline
+            // object in stream 0 before the native object was allocated.
+            // Preserve that 32-bit fastfile alignment when the native object
+            // lives in persistent ARM64 Hunk memory.
+            DB_AllocStreamPos(3);
             *varFxEffectDefHandle = reinterpret_cast<const FxEffectDef *>(
                 Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(FxEffectDef)),
@@ -14128,6 +14153,11 @@ void __cdecl Load_LocalizeEntryPtr(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
+            // AllocLoad_FxElemVisStateSample() aligned the serialized inline
+            // object in stream 0 before the native object was allocated.
+            // Preserve that 32-bit fastfile alignment when the native object
+            // lives in persistent ARM64 Hunk memory.
+            DB_AllocStreamPos(3);
             *varLocalizeEntryPtr = reinterpret_cast<LocalizeEntry *>(
                 Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(LocalizeEntry)),
@@ -14316,6 +14346,11 @@ void __cdecl Load_FxImpactTablePtr(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
+            // AllocLoad_FxElemVisStateSample() aligned the serialized inline
+            // object in stream 0 before the native object was allocated.
+            // Preserve that 32-bit fastfile alignment when the native object
+            // lives in persistent ARM64 Hunk memory.
+            DB_AllocStreamPos(3);
             *varFxImpactTablePtr = reinterpret_cast<FxImpactTable *>(
                 Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(FxImpactTable)),
@@ -15267,6 +15302,11 @@ void __cdecl Load_WeaponDefPtr(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
+            // AllocLoad_FxElemVisStateSample() aligned the serialized inline
+            // object in stream 0 before the native object was allocated.
+            // Preserve that 32-bit fastfile alignment when the native object
+            // lives in persistent ARM64 Hunk memory.
+            DB_AllocStreamPos(3);
             *varWeaponDefPtr = reinterpret_cast<WeaponDef *>(
                 Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(WeaponDef)),
@@ -17151,6 +17191,11 @@ void __cdecl Load_FontHandle(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
+            // AllocLoad_FxElemVisStateSample() aligned the serialized inline
+            // object in stream 0 before the native object was allocated.
+            // Preserve that 32-bit fastfile alignment when the native object
+            // lives in persistent ARM64 Hunk memory.
+            DB_AllocStreamPos(3);
             *varFontHandle = reinterpret_cast<Font_s *>(
                 Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(Font_s)),
