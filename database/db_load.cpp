@@ -487,6 +487,157 @@ static void Switch_TranslateDynEntityDefSerialized(DynEntityDef *out, const uint
     out->contents = Switch_ReadSerializedValue<int>(s, 92);
 }
 
+
+static void Switch_TranslateGfxCellSerialized(GfxCell *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(out->mins, s + 0, sizeof(out->mins));
+    std::memcpy(out->maxs, s + 12, sizeof(out->maxs));
+    out->aabbTreeCount = Switch_ReadSerializedValue<int>(s, 24);
+    Switch_SeedSerializedPointer(out->aabbTree, s, 28);
+    out->portalCount = Switch_ReadSerializedValue<int>(s, 32);
+    Switch_SeedSerializedPointer(out->portals, s, 36);
+    out->cullGroupCount = Switch_ReadSerializedValue<int>(s, 40);
+    Switch_SeedSerializedPointer(out->cullGroups, s, 44);
+    out->reflectionProbeCount = Switch_ReadSerializedValue<uint8_t>(s, 48);
+    Switch_SeedSerializedPointer(out->reflectionProbes, s, 52);
+}
+
+static void Switch_TranslateGfxAabbTreeSerialized(GfxAabbTree *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(out->mins, s + 0, sizeof(out->mins));
+    std::memcpy(out->maxs, s + 12, sizeof(out->maxs));
+    out->childCount = Switch_ReadSerializedValue<uint16_t>(s, 24);
+    out->surfaceCount = Switch_ReadSerializedValue<uint16_t>(s, 26);
+    out->startSurfIndex = Switch_ReadSerializedValue<uint16_t>(s, 28);
+    out->surfaceCountNoDecal = Switch_ReadSerializedValue<uint16_t>(s, 30);
+    out->startSurfIndexNoDecal = Switch_ReadSerializedValue<uint16_t>(s, 32);
+    out->smodelIndexCount = Switch_ReadSerializedValue<uint16_t>(s, 34);
+    Switch_SeedSerializedPointer(out->smodelIndexes, s, 36);
+    out->childrenOffset = Switch_ReadSerializedValue<uint32_t>(s, 40);
+}
+
+static void Switch_TranslateGfxPortalSerialized(GfxPortal *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(&out->plane, s + 12, sizeof(out->plane));
+    Switch_SeedSerializedPointer(out->cell, s, 32);
+    Switch_SeedSerializedPointer(out->vertices, s, 36);
+    out->vertexCount = Switch_ReadSerializedValue<uint8_t>(s, 40);
+    std::memcpy(out->hullAxis, s + 44, sizeof(out->hullAxis));
+}
+
+static void Switch_TranslateGfxLightmapArraySerialized(GfxLightmapArray *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->primary, s, 0);
+    Switch_SeedSerializedPointer(out->secondary, s, 4);
+}
+
+static void Switch_TranslateGfxSurfaceSerialized(GfxSurface *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(&out->tris, s + 0, sizeof(out->tris));
+    Switch_SeedSerializedPointer(out->material, s, 16);
+    out->lightmapIndex = Switch_ReadSerializedValue<uint8_t>(s, 20);
+    out->reflectionProbeIndex = Switch_ReadSerializedValue<uint8_t>(s, 21);
+    out->primaryLightIndex = Switch_ReadSerializedValue<uint8_t>(s, 22);
+    out->flags = Switch_ReadSerializedValue<uint8_t>(s, 23);
+    std::memcpy(out->bounds, s + 24, sizeof(out->bounds));
+}
+
+static void Switch_TranslateGfxStaticModelDrawInstSerialized(GfxStaticModelDrawInst *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->cullDist = Switch_ReadSerializedValue<float>(s, 0);
+    std::memcpy(&out->placement, s + 4, sizeof(out->placement));
+    Switch_SeedSerializedPointer(out->model, s, 56);
+    std::memcpy(out->smodelCacheIndex, s + 60, sizeof(out->smodelCacheIndex));
+    out->reflectionProbeIndex = Switch_ReadSerializedValue<uint8_t>(s, 68);
+    out->primaryLightIndex = Switch_ReadSerializedValue<uint8_t>(s, 69);
+    out->lightingHandle = Switch_ReadSerializedValue<uint16_t>(s, 70);
+    out->flags = Switch_ReadSerializedValue<uint8_t>(s, 72);
+}
+
+static void Switch_TranslateCStaticModelSerialized(cStaticModel_s *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->writable = Switch_ReadSerializedValue<bool>(s, 0);
+    Switch_SeedSerializedPointer(out->xmodel, s, 4);
+    std::memcpy(out->origin, s + 8, sizeof(out->origin));
+    std::memcpy(out->invScaledAxis, s + 20, sizeof(out->invScaledAxis));
+    std::memcpy(out->absmin, s + 56, sizeof(out->absmin));
+    std::memcpy(out->absmax, s + 68, sizeof(out->absmax));
+}
+
+static void Switch_TranslateCbrushSideSerialized(cbrushside_t *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->plane, s, 0);
+    out->materialNum = Switch_ReadSerializedValue<uint16_t>(s, 4);
+    out->firstAdjacentSideOffset = Switch_ReadSerializedValue<uint16_t>(s, 8);
+    out->edgeCount = Switch_ReadSerializedValue<uint16_t>(s, 10);
+}
+
+static void Switch_TranslateCNodeSerialized(cNode_t *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->plane, s, 0);
+    std::memcpy(out->children, s + 4, sizeof(out->children));
+}
+
+static void Switch_TranslateCLeafBrushNodeSerialized(cLeafBrushNode_s *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->axis = Switch_ReadSerializedValue<int8_t>(s, 0);
+    out->leafBrushCount = Switch_ReadSerializedValue<uint16_t>(s, 2);
+    out->contents = Switch_ReadSerializedValue<int>(s, 4);
+    if (out->leafBrushCount > 0)
+        Switch_SeedSerializedPointer(out->data.leaf.brushes, s, 8);
+    else
+        out->data.children = Switch_ReadSerializedValue<int>(s, 8);
+}
+
+static void Switch_TranslateCollisionPartitionSerialized(CollisionPartition *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->triCount = Switch_ReadSerializedValue<uint8_t>(s, 0);
+    out->borderCount = Switch_ReadSerializedValue<uint8_t>(s, 1);
+    out->firstTri = Switch_ReadSerializedValue<uint32_t>(s, 4);
+    Switch_SeedSerializedPointer(out->borders, s, 8);
+}
+
+static void Switch_TranslateCbrushSerialized(cbrush_t *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(out->mins, s + 0, sizeof(out->mins));
+    out->contents = Switch_ReadSerializedValue<int>(s, 12);
+    std::memcpy(out->maxs, s + 16, sizeof(out->maxs));
+    out->numsides = Switch_ReadSerializedValue<uint16_t>(s, 28);
+    Switch_SeedSerializedPointer(out->sides, s, 32);
+    std::memcpy(out->axialMaterialNum, s + 36, sizeof(out->axialMaterialNum));
+    Switch_SeedSerializedPointer(out->baseAdjacentSide, s, 48);
+    std::memcpy(out->firstAdjacentSideOffsets, s + 52, sizeof(out->firstAdjacentSideOffsets));
+    std::memcpy(out->edgeCount, s + 64, sizeof(out->edgeCount));
+}
+
+static void Switch_TranslateDynEntityDefSerialized(DynEntityDef *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->type = Switch_ReadSerializedValue<uint32_t>(s, 0);
+    out->pose = Switch_ReadSerializedValue<uint32_t>(s, 4);
+    Switch_SeedSerializedPointer(out->xModel, s, 32);
+    out->brushModel = Switch_ReadSerializedValue<uint16_t>(s, 36);
+    out->physicsBrushModel = Switch_ReadSerializedValue<uint16_t>(s, 38);
+    Switch_SeedSerializedPointer(out->destroyFx, s, 40);
+    Switch_SeedSerializedPointer(out->destroyPieces, s, 44);
+    Switch_SeedSerializedPointer(out->physPreset, s, 48);
+    out->health = Switch_ReadSerializedValue<int>(s, 52);
+    out->mass = Switch_ReadSerializedValue<float>(s, 56);
+    out->contents = Switch_ReadSerializedValue<int>(s, 92);
+}
+
 #endif
 
 #ifdef __SWITCH__
