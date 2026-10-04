@@ -12,6 +12,15 @@
 //struct GfxBuffers gfxBuf   85b3aa20     gfx_d3d : r_buffers.obj
 GfxBuffers gfxBuf;
 
+#ifdef __SWITCH__
+extern volatile int32_t g_switchSkinCacheLoadForRenderer;
+extern volatile uintptr_t g_switchSkinCachePool0;
+extern volatile uintptr_t g_switchSkinCachePool1;
+extern volatile uintptr_t g_switchSkinCacheLastBuffer;
+extern volatile int32_t g_switchSkinCacheCreateCalled;
+extern volatile int32_t g_switchSkinCacheCreateHr;
+#endif
+
 void __cdecl TRACK_r_buffers()
 {
     track_static_alloc_internal(&gfxBuf, 2359456, "gfxBuf", 18);
@@ -27,7 +36,21 @@ void *__cdecl R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeIn
     if (!r_loadForRenderer->current.enabled)
         return 0;
 
+    if (sizeInBytes == 0x480000)
+    {
+#ifdef __SWITCH__
+        ++g_switchSkinCacheCreateCalled;
+#endif
+    }
     hr = dx.device->CreateVertexBuffer(sizeInBytes, 520, 0, D3DPOOL_DEFAULT, vb, 0);
+#ifdef __SWITCH__
+    if (sizeInBytes == 0x480000)
+    {
+        g_switchSkinCacheCreateHr = hr;
+        g_switchSkinCacheLastBuffer =
+            (vb && *vb) ? reinterpret_cast<uintptr_t>(*vb) : 0;
+    }
+#endif
     if (hr < 0)
     {
         R_FatalInitError(va("DirectX didn't create a %i-byte dynamic vertex buffer: %s\n", sizeInBytes, R_ErrorDescription(hr)));
@@ -197,8 +220,16 @@ void __cdecl R_CreateDynamicBuffers()
         R_InitDynamicVertexBufferState(&gfxBuf.dynamicVertexBufferPool[bufferIter], 0x100000);
 #endif
     gfxBuf.dynamicVertexBuffer = gfxBuf.dynamicVertexBufferPool;
+#ifdef __SWITCH__
+    g_switchSkinCacheLoadForRenderer =
+        r_loadForRenderer ? r_loadForRenderer->current.enabled : -1;
+#endif
     for (bufferItera = 0; bufferItera != 2; ++bufferItera)
         R_InitDynamicVertexBufferState(&gfxBuf.skinnedCacheVbPool[bufferItera], 0x480000);
+#ifdef __SWITCH__
+    g_switchSkinCachePool0 = reinterpret_cast<uintptr_t>(gfxBuf.skinnedCacheVbPool[0].buffer);
+    g_switchSkinCachePool1 = reinterpret_cast<uintptr_t>(gfxBuf.skinnedCacheVbPool[1].buffer);
+#endif
     R_InitTempSkinBuf();
     for (bufferIterb = 0; bufferIterb != 1; ++bufferIterb)
         R_InitDynamicIndexBufferState(&gfxBuf.dynamicIndexBufferPool[bufferIterb], 0x100000);
