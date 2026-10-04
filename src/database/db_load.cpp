@@ -13949,6 +13949,30 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
         if (varWeaponDef->bounceSound == (snd_alias_list_t **)-1)
         {
 #ifdef __SWITCH__
+            const bool switchTraceWeapon4728 =
+                g_switchCurrentAssetIndex == 4728 &&
+                g_switchCurrentAssetRawType == 23u;
+
+            if (switchTraceWeapon4728)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[SWITCH WEAPON4728] bounce begin token=%08x stream=%u b0=%08x b4=%08x xfile=%llu\n",
+                    static_cast<unsigned>(
+                        static_cast<uint32_t>(
+                            reinterpret_cast<uintptr_t>(
+                                varWeaponDef->bounceSound))),
+                    static_cast<unsigned>(g_streamPosIndex),
+                    Switch_GetStreamCursorOffset(0),
+                    Switch_GetStreamCursorOffset(4),
+                    static_cast<unsigned long long>(
+                        DB_GetXFileUncompressedOffset()));
+                Sys_Print(trace);
+                g_switchDbStage = "weapon/bounce";
+            }
+
             // The serialized bounceSound array is 29 packed 32-bit
             // SndAliasCustom pointer tokens (116 bytes). The native ARM64
             // array is 29 64-bit union slots, so keep the serialized source
@@ -13970,10 +13994,55 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
 #endif
             varsnd_alias_list_name = varWeaponDef->bounceSound;
             Load_snd_alias_list_nameArray(1, 29);
+#ifdef __SWITCH__
+            if (switchTraceWeapon4728)
+            {
+                char trace[512];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[SWITCH WEAPON4728] bounce end stream=%u b0=%08x b4=%08x xfile=%llu first=%08x last=%08x\n",
+                    static_cast<unsigned>(g_streamPosIndex),
+                    Switch_GetStreamCursorOffset(0),
+                    Switch_GetStreamCursorOffset(4),
+                    static_cast<unsigned long long>(
+                        DB_GetXFileUncompressedOffset()),
+                    static_cast<unsigned>(
+                        static_cast<uint32_t>(
+                            reinterpret_cast<uintptr_t>(
+                                varWeaponDef->bounceSound[0]))),
+                    static_cast<unsigned>(
+                        static_cast<uint32_t>(
+                            reinterpret_cast<uintptr_t>(
+                                varWeaponDef->bounceSound[28]))));
+                Sys_Print(trace);
+            }
+#endif
         }
         else
         {
             DB_ConvertOffsetToPointer((uint32_t*)&varWeaponDef->bounceSound);
+#ifdef __SWITCH__
+            if (g_switchCurrentAssetIndex == 4728 &&
+                g_switchCurrentAssetRawType == 23u)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[SWITCH WEAPON4728] bounce reference token=%08x stream=%u b0=%08x b4=%08x xfile=%llu\n",
+                    static_cast<unsigned>(
+                        static_cast<uint32_t>(
+                            reinterpret_cast<uintptr_t>(
+                                varWeaponDef->bounceSound))),
+                    static_cast<unsigned>(g_streamPosIndex),
+                    Switch_GetStreamCursorOffset(0),
+                    Switch_GetStreamCursorOffset(4),
+                    static_cast<unsigned long long>(
+                        DB_GetXFileUncompressedOffset()));
+                Sys_Print(trace);
+            }
+#endif
         }
     }
     varFxEffectDefHandle = &varWeaponDef->viewShellEjectEffect;
@@ -13987,10 +14056,102 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
 #ifdef __SWITCH__
     if (switchTraceWeapon1506)
         Switch_LogWrite("[SWITCH WEAPON1506] shell FX done\n");
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        char trace[448];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH WEAPON4728] before reticleCenter stream=%u b0=%08x b4=%08x xfile=%llu shell=%08x/%08x/%08x/%08x\n",
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            static_cast<unsigned long long>(
+                DB_GetXFileUncompressedOffset()),
+            static_cast<unsigned>(
+                static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(
+                        varWeaponDef->viewShellEjectEffect))),
+            static_cast<unsigned>(
+                static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(
+                        varWeaponDef->worldShellEjectEffect))),
+            static_cast<unsigned>(
+                static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(
+                        varWeaponDef->viewLastShotEjectEffect))),
+            static_cast<unsigned>(
+                static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(
+                        varWeaponDef->worldLastShotEjectEffect))));
+        Sys_Print(trace);
+    }
 #endif
     varMaterialHandle = &varWeaponDef->reticleCenter;
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        g_switchDbStage = "weapon/reticleCenter";
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH WEAPON4728] reticleCenter token=%08x stream=%u b0=%08x b4=%08x xfile=%llu\n",
+            static_cast<unsigned>(
+                static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(
+                        varWeaponDef->reticleCenter))),
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            static_cast<unsigned long long>(
+                DB_GetXFileUncompressedOffset()));
+        Sys_Print(trace);
+    }
+#endif
     Load_MaterialHandle(0);
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH WEAPON4728] reticleCenter done stream=%u b0=%08x b4=%08x xfile=%llu\n",
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            static_cast<unsigned long long>(
+                DB_GetXFileUncompressedOffset()));
+        Sys_Print(trace);
+    }
+#endif
     varMaterialHandle = &varWeaponDef->reticleSide;
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        g_switchDbStage = "weapon/reticleSide";
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH WEAPON4728] reticleSide token=%08x stream=%u b0=%08x b4=%08x xfile=%llu\n",
+            static_cast<unsigned>(
+                static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(
+                        varWeaponDef->reticleSide))),
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            static_cast<unsigned long long>(
+                DB_GetXFileUncompressedOffset()));
+        Sys_Print(trace);
+    }
+#endif
     Load_MaterialHandle(0);
 #ifdef __SWITCH__
     if (switchTraceWeapon1506)
