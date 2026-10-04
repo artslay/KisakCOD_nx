@@ -7217,7 +7217,59 @@ void __cdecl Load_Material(bool atStreamStart)
 
     SerializedMaterial serialized{};
     g_switchDbStage = "material/header";
+    const uint32_t materialStream0Start = Switch_GetStreamCursorOffset(0);
+    const uint64_t materialXfileStart =
+        DB_GetXFileUncompressedOffset();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
+
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        char trace[1024];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL4728] stream0=%08x->%08x xfile=%llu->%llu name=%08x techset=%08x tex=%08x const=%08x state=%08x counts=%u/%u/%u\n",
+            materialStream0Start,
+            Switch_GetStreamCursorOffset(0),
+            static_cast<unsigned long long>(materialXfileStart),
+            static_cast<unsigned long long>(DB_GetXFileUncompressedOffset()),
+            serialized.name,
+            serialized.techniqueSet,
+            serialized.textureTable,
+            serialized.constantTable,
+            serialized.stateBitsTable,
+            static_cast<unsigned>(serialized.textureCount),
+            static_cast<unsigned>(serialized.constantCount),
+            static_cast<unsigned>(serialized.stateBitsCount));
+
+        char *at = trace + std::strlen(trace);
+        std::snprintf(
+            at,
+            sizeof(trace) - static_cast<size_t>(at - trace),
+            " bytes:");
+        at = trace + std::strlen(trace);
+        const uint8_t *headerBytes =
+            reinterpret_cast<const uint8_t *>(&serialized);
+        for (size_t i = 0; i < sizeof(serialized) && i < 80; ++i)
+        {
+            const int used = std::snprintf(
+                at,
+                sizeof(trace) - static_cast<size_t>(at - trace),
+                " %02x",
+                static_cast<unsigned>(headerBytes[i]));
+            if (used <= 0)
+                break;
+            at += used;
+        }
+        std::snprintf(
+            at,
+            sizeof(trace) - static_cast<size_t>(at - trace),
+            "\n");
+        Sys_Print(trace);
+    }
+#endif
 
     memset(varMaterial, 0, sizeof(*varMaterial));
 
