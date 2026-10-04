@@ -1044,9 +1044,18 @@ void __cdecl CL_StartHunkUsers()
         if (!cls.devGuiStarted)
         {
             cls.devGuiStarted = 1;
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][BOOT] CL_StartHunkUsers: before CL_InitDevGui\n");
+#endif
             CL_InitDevGui();
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][BOOT] CL_StartHunkUsers: after CL_InitDevGui\n");
+#endif
             Sys_LoadingKeepAlive();
         }
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][BOOT] CL_StartHunkUsers: returning\n");
+#endif
     }
 }
 

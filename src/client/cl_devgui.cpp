@@ -1,5 +1,8 @@
 #include <universal/q_shared.h>
 #include "client.h"
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *text);
+#endif
 #include <qcommon/cmd.h>
 #include <gfx_d3d/r_devgui.h>
 #include <universal/com_files.h>
@@ -141,14 +144,42 @@ void __cdecl CL_CreateDevGui()
     if (clGuiGlob.inited)
         MyAssertHandler(".\\client\\cl_devgui.cpp", 179, 0, "%s", "!clGuiGlob.inited");
     clGuiGlob.inited = 1;
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before CL_RegisterDevGuiDvars\n");
+#endif
     CL_RegisterDevGuiDvars();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after CL_RegisterDevGuiDvars\n");
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before CL_CreateMapMenuEntries\n");
+#endif
     CL_CreateMapMenuEntries();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after CL_CreateMapMenuEntries\n");
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before R_CreateDevGui\n");
+#endif
     R_CreateDevGui();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after R_CreateDevGui\n");
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before devgui_main insert\n");
+#endif
     Cbuf_InsertText(0, "exec devgui_main");
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after devgui_main insert\n");
+#endif
 #ifndef KISAK_NO_FASTFILES
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before Com_InitSoundDevGuiGraphs\n");
     Com_InitSoundDevGuiGraphs();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after Com_InitSoundDevGuiGraphs\n");
+#endif
+#endif
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before CG_InitVisionSetsMenu\n");
 #endif
     CG_InitVisionSetsMenu();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after CG_InitVisionSetsMenu\n");
+#endif
 }
 
 void __cdecl CL_DestroyDevGui()
