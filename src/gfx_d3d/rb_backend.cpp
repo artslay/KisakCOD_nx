@@ -3084,6 +3084,13 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
         allowRendering = 0;
     if (allowRendering)
     {
+#ifdef __SWITCH__
+        if (!Switch_GLBeginRenderContext())
+        {
+            Com_Error(ERR_FATAL, "Switch render EGL context is not current");
+            return;
+        }
+#endif
         KISAK_NULLSUB();
         RB_BeginFrame(data);
         RB_Draw3D();
