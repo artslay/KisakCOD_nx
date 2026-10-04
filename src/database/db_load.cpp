@@ -1438,17 +1438,30 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
 
         if (nested == UINT32_MAX)
         {
-            // The nested snd_alias_list_name stores a normal XString token.
-            // Consume it through Load_XString so the inline string bytes are
-            // actually removed from the compressed fastfile stream. The old
-            // implementation only pointed at the bytes and left the cursor
-            // at the start of the string, causing the next loader to consume
-            // the string as if it were another serialized object.
-            *nativeStringSlot =
+            // A normal outer XStringPtr points at an already-loaded serialized
+            // 32-bit slot. Resolve its inline string in place; do not advance
+            // the global fastfile cursor here. The original loader's normal
+            // outer-pointer path only converts the offset to that slot.
+            const uint64_t inlineOffset64 =
+                static_cast<uint64_t>(outerBlockOffset) +
+                sizeof(uint32_t);
+            if (inlineOffset64 >= g_streamBlocks[outerBlock].size)
+                return;
+
+            const uint32_t inlineOffset =
+                static_cast<uint32_t>(inlineOffset64);
+            const char *inlineString =
                 reinterpret_cast<const char *>(
-                    static_cast<uintptr_t>(UINT32_MAX));
-            varXString = nativeStringSlot;
-            Load_XString(0);
+                    g_streamBlocks[outerBlock].data + inlineOffset);
+            const uint32_t remaining =
+                g_streamBlocks[outerBlock].size - inlineOffset;
+
+            if (std::memchr(inlineString, ' ', remaining))
+                *nativeStringSlot = inlineString;
+            else
+                Switch_LogWrite(
+                    "[SWITCH XSTRINGPTR] unterminated inline string
+");
             return;
         }
 
@@ -5632,16 +5645,7 @@ void __cdecl Load_MaterialPixelShader(bool atStreamStart)
     varMaterialPixelShader->prog.loadDef.loadForRenderer = serialized.loadForRenderer;
 
     varMaterialPixelShaderProgram = &varMaterialPixelShader->prog;
-    {
-        char trace[160];
-        std::snprintf(trace, sizeof(trace),
-            "[SWITCH PIXELSHADER] before program program=%08x size=%u\n",
-            serialized.program,
-            static_cast<unsigned>(serialized.programSize));
-        Switch_LogWrite(trace);
-    }
     Load_MaterialPixelShaderProgram(0);
-    Switch_LogWrite("[SWITCH PIXELSHADER] after program\n");
 #else
     Load_Stream(atStreamStart, (uint8_t *)varMaterialPixelShader, 16);
     varXString = &varMaterialPixelShader->name;
@@ -6513,77 +6517,7 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     // The Switch runtime is 64-bit, so expand the serialized 32-bit pointers.
     SerializedMaterialTechniqueSet serialized{};
     const uint8_t *techniqueSetStart = DB_GetStreamPos();
-
-    if (g_switchCurrentAssetIndex == 4728)
-    {
-        char rawPosTrace[256];
-        std::snprintf(
-            rawPosTrace,
-            sizeof(rawPosTrace),
-            "[KisakCOD][TECHSET4728 RAWPOS] stream=%u b0=%08x b4=%08x pos=%p\n",
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<const void *>(techniqueSetStart));
-        Sys_Print(rawPosTrace);
-
-        const uint32_t b0Offset = Switch_GetStreamCursorOffset(0);
-        if (g_streamBlocks &&
-            g_streamBlocks[0].data &&
-            b0Offset != UINT32_MAX &&
-            b0Offset + sizeof(SerializedMaterialTechniqueSet) <= g_streamBlocks[0].size)
-        {
-            Switch_PrintRawBytes(
-                "[KisakCOD][TECHSET4728 RAW]",
-                techniqueSetStart,
-                sizeof(SerializedMaterialTechniqueSet));
-        }
-    }
-
-    const uint64_t xfileOffsetBefore =
-        DB_GetXFileUncompressedOffset();
-    DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
-    const uint64_t xfileOffsetAfter =
-        DB_GetXFileUncompressedOffset();
-
-    if (g_switchCurrentAssetIndex == 4728)
-    {
-        char rawTrace[768];
-        std::snprintf(
-            rawTrace,
-            sizeof(rawTrace),
-            "[KisakCOD][TECHSET4728 ACTUAL] rawType=%u runtimeType=%u header=%08x xfile=%llu..%llu size=%u\n",
-            static_cast<unsigned>(g_switchCurrentAssetRawType),
-            varXAsset ? static_cast<unsigned>(varXAsset->type) : ASSET_TYPE_COUNT,
-            static_cast<unsigned>(g_switchCurrentAssetHeader),
-            static_cast<unsigned long long>(xfileOffsetBefore),
-            static_cast<unsigned long long>(xfileOffsetAfter),
-            static_cast<unsigned>(sizeof(serialized)));
-        Sys_Print(rawTrace);
-        Switch_PrintRawBytes(
-            "[KisakCOD][TECHSET4728 ACTUAL RAW]",
-            reinterpret_cast<const uint8_t *>(&serialized),
-            sizeof(serialized));
-
-        char trace[512];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][TECHSET4728] start=%p after=%p stream=%u name=%08x remap=%08x t0=%08x t1=%08x t2=%08x t3=%08x t4=%08x b4=%08x\n",
-            static_cast<const void *>(techniqueSetStart),
-            static_cast<const void *>(DB_GetStreamPos()),
-            static_cast<unsigned>(g_streamPosIndex),
-            serialized.name,
-            serialized.remappedTechniqueSet,
-            serialized.techniques[0],
-            serialized.techniques[1],
-            serialized.techniques[2],
-            serialized.techniques[3],
-            serialized.techniques[4],
-            Switch_GetStreamCursorOffset(4));
-        Sys_Print(trace);
-    }
-
+\n
 #ifdef __SWITCH__
     if (g_switchCurrentAssetRawType == 5u && g_switchCurrentAssetIndex == 1502)
     {
@@ -6649,10 +6583,6 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
 #endif
 
-    Switch_LogRawDwords(
-        "[SWITCH TECHSET WORDS]",
-        reinterpret_cast<const uint8_t *>(&serialized),
-        sizeof(serialized));
 
     varMaterialTechniqueSet->worldVertFormat = serialized.worldVertFormat;
     varMaterialTechniqueSet->hasBeenUploaded =
@@ -7065,8 +6995,7 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
             DB_AllocStreamPos(3);
             if (traceCinematic)
                 Switch_LogWrite("[SWITCH DB FIND] techset ptr -> inline\n");
-            Switch_LogWrite("[SWITCH MATERIAL] techset inline begin\n");
-            *varMaterialTechniqueSetPtr =
+                    *varMaterialTechniqueSetPtr =
                 reinterpret_cast<MaterialTechniqueSet *>(
                     Hunk_Alloc(
                         static_cast<uint32_t>(sizeof(MaterialTechniqueSet)),
@@ -7085,8 +7014,7 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
                 inserted = 0;
             Load_MaterialTechniqueSet(1);
 #ifdef __SWITCH__
-            Switch_LogWrite("[SWITCH MATERIAL] techset payload done\n");
-#endif
+        #endif
             Load_MaterialTechniqueSetAsset((XAssetHeader *)varMaterialTechniqueSetPtr);
             if (inserted)
                 *inserted = *varMaterialTechniqueSetPtr;
@@ -7153,88 +7081,7 @@ void __cdecl Load_Material(bool atStreamStart)
 
     SerializedMaterial serialized{};
     uint8_t *materialStreamPos = DB_GetStreamPos();
-
-    if (g_switchCurrentAssetIndex == 4728)
-    {
-        char rawPosTrace[256];
-        std::snprintf(
-            rawPosTrace,
-            sizeof(rawPosTrace),
-            "[KisakCOD][MATERIAL4728 RAWPOS] stream=%u b0=%08x b4=%08x pos=%p\n",
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<void *>(materialStreamPos));
-        Sys_Print(rawPosTrace);
-
-        const uint32_t b0Offset = Switch_GetStreamCursorOffset(0);
-        if (g_streamBlocks &&
-            g_streamBlocks[0].data &&
-            b0Offset != UINT32_MAX &&
-            b0Offset >= 64 &&
-            b0Offset + sizeof(SerializedMaterial) <= g_streamBlocks[0].size)
-        {
-            Switch_PrintRawBytes(
-                "[KisakCOD][MATERIAL4728 PREV64]",
-                g_streamBlocks[0].data + b0Offset - 64,
-                64);
-        }
-
-        if (g_streamBlocks &&
-            g_streamBlocks[0].data &&
-            b0Offset != UINT32_MAX &&
-            b0Offset + sizeof(SerializedMaterial) <= g_streamBlocks[0].size)
-        {
-            Switch_PrintRawBytes(
-                "[KisakCOD][MATERIAL4728 RAW]",
-                materialStreamPos,
-                sizeof(SerializedMaterial));
-        }
-    }
-
-    const uint64_t xfileOffsetBefore =
-        DB_GetXFileUncompressedOffset();
-    DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
-    const uint64_t xfileOffsetAfter =
-        DB_GetXFileUncompressedOffset();
-
-    if (g_switchCurrentAssetIndex == 4728)
-    {
-        char rawTrace[768];
-        std::snprintf(
-            rawTrace,
-            sizeof(rawTrace),
-            "[KisakCOD][MATERIAL4728 ACTUAL] rawType=%u runtimeType=%u header=%08x xfile=%llu..%llu size=%u\n",
-            static_cast<unsigned>(g_switchCurrentAssetRawType),
-            varXAsset ? static_cast<unsigned>(varXAsset->type) : ASSET_TYPE_COUNT,
-            static_cast<unsigned>(g_switchCurrentAssetHeader),
-            static_cast<unsigned long long>(xfileOffsetBefore),
-            static_cast<unsigned long long>(xfileOffsetAfter),
-            static_cast<unsigned>(sizeof(serialized)));
-        Sys_Print(rawTrace);
-        Switch_PrintRawBytes(
-            "[KisakCOD][MATERIAL4728 ACTUAL RAW]",
-            reinterpret_cast<const uint8_t *>(&serialized),
-            sizeof(serialized));
-
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][MATERIAL4728] start=%p after=%p stream=%u name=%08x techset=%08x textures=%08x counts=%u/%u/%u b4=%08x\n",
-            static_cast<void *>(materialStreamPos),
-            static_cast<void *>(DB_GetStreamPos()),
-            static_cast<unsigned>(g_streamPosIndex),
-            serialized.name,
-            serialized.techniqueSet,
-            serialized.textureTable,
-            static_cast<unsigned>(serialized.textureCount),
-            static_cast<unsigned>(serialized.constantCount),
-            static_cast<unsigned>(serialized.stateBitsCount),
-            Switch_GetStreamCursorOffset(4));
-        Sys_Print(trace);
-    }
-
+\n
     const bool traceUiMaterial =
         g_switchCurrentAssetRawType == 4u &&
         g_switchCurrentAssetIndex >= 0 &&
@@ -7543,8 +7390,7 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
             Load_MaterialAsset((XAssetHeader *)varMaterialHandle);
 #ifdef __SWITCH__
             g_switchDbStage = "material/asset_return";
-            Switch_LogWrite("[SWITCH MATERIAL] asset done\n");
-#endif
+        #endif
             if (inserted)
             {
 #ifdef __SWITCH__
