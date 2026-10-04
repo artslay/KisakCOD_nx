@@ -7042,8 +7042,6 @@ void __cdecl Load_Material(bool atStreamStart)
 
     DB_PushStreamPos(4);
 
-#ifdef __SWITCH__
-#endif
 
     varMaterialInfo = &varMaterial->info;
     varXString = &varMaterial->info.name;
@@ -7052,8 +7050,6 @@ void __cdecl Load_Material(bool atStreamStart)
 #endif
     Load_XString(0);
 
-#ifdef __SWITCH__
-#endif
 
     varMaterialTechniqueSetPtr = &varMaterial->techniqueSet;
 #ifdef __SWITCH__
@@ -7061,8 +7057,6 @@ void __cdecl Load_Material(bool atStreamStart)
 #endif
     Load_MaterialTechniqueSetPtr(0);
 
-#ifdef __SWITCH__
-#endif
 
 #ifdef __SWITCH__
     g_switchDbStage = "material/textures";
@@ -7106,8 +7100,6 @@ void __cdecl Load_Material(bool atStreamStart)
         }
     }
 
-#ifdef __SWITCH__
-#endif
 
 #ifdef __SWITCH__
     g_switchDbStage = "material/constants";
@@ -7130,8 +7122,6 @@ void __cdecl Load_Material(bool atStreamStart)
         }
     }
 
-#ifdef __SWITCH__
-#endif
 
 #ifdef __SWITCH__
     g_switchDbStage = "material/statebits";
@@ -7154,8 +7144,6 @@ void __cdecl Load_Material(bool atStreamStart)
         }
     }
 
-#ifdef __SWITCH__
-#endif
 
 #ifdef __SWITCH__
     g_switchDbStage = "material/pop";
