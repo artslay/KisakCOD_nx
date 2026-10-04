@@ -514,7 +514,7 @@ void __cdecl R_SortWorldSurfaces()
     R_SetPrimaryLightShadowSurfaces();
 }
 
-char __cdecl R_AddParticleCloudDrawSurf(volatile uint32_t cloudIndex, Material *material)
+char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
 {
     int MaterialSortKey; // [esp+20h] [ebp-18h]
     GfxDrawSurf *drawSurf; // [esp+2Ch] [ebp-Ch]
