@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <switch.h>
+#include <vulkan/vulkan.h>
 
 #include <qcommon/qcommon.h>
 #include <qcommon/threads.h>
@@ -19,6 +20,80 @@ static void SwitchBootLog(const char *message)
     std::snprintf(line, sizeof(line), "[KisakCOD][BOOT] %s\n", message);
     Sys_Print(line);
     std::fflush(stdout);
+}
+
+static void SwitchLogVulkanRuntime()
+{
+    VkApplicationInfo appInfo{};
+    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    appInfo.pApplicationName = "KisakCOD";
+    appInfo.applicationVersion = 1;
+    appInfo.pEngineName = "KisakCOD";
+    appInfo.engineVersion = 1;
+    appInfo.apiVersion = VK_API_VERSION_1_0;
+
+    VkInstanceCreateInfo instanceInfo{};
+    instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instanceInfo.pApplicationInfo = &appInfo;
+
+    VkInstance instance = VK_NULL_HANDLE;
+    const VkResult createResult = vkCreateInstance(&instanceInfo, nullptr, &instance);
+    if (createResult != VK_SUCCESS)
+    {
+        char line[256];
+        std::snprintf(line, sizeof(line),
+            "[KisakCOD][BOOT] Vulkan probe: vkCreateInstance failed (%d)",
+            static_cast<int>(createResult));
+        SwitchBootLog(line);
+        return;
+    }
+
+    uint32_t deviceCount = 0;
+    VkResult result = vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+    if (result != VK_SUCCESS || deviceCount == 0)
+    {
+        char line[256];
+        std::snprintf(line, sizeof(line),
+            "[KisakCOD][BOOT] Vulkan probe: no physical device (result=%d count=%u)",
+            static_cast<int>(result), deviceCount);
+        SwitchBootLog(line);
+        vkDestroyInstance(instance, nullptr);
+        return;
+    }
+
+    VkPhysicalDevice device = VK_NULL_HANDLE;
+    result = vkEnumeratePhysicalDevices(instance, &deviceCount, &device);
+    if (result != VK_SUCCESS || device == VK_NULL_HANDLE)
+    {
+        char line[256];
+        std::snprintf(line, sizeof(line),
+            "[KisakCOD][BOOT] Vulkan probe: device enumeration failed (%d)",
+            static_cast<int>(result));
+        SwitchBootLog(line);
+        vkDestroyInstance(instance, nullptr);
+        return;
+    }
+
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(device, &properties);
+
+    char line[512];
+    std::snprintf(line, sizeof(line),
+        "[KisakCOD][BOOT] Vulkan GPU: %s (vendor=0x%04x device=0x%04x)",
+        properties.deviceName,
+        properties.vendorID,
+        properties.deviceID);
+    SwitchBootLog(line);
+
+    std::snprintf(line, sizeof(line),
+        "[KisakCOD][BOOT] Vulkan API: %u.%u.%u driver=0x%08x",
+        VK_VERSION_MAJOR(properties.apiVersion),
+        VK_VERSION_MINOR(properties.apiVersion),
+        VK_VERSION_PATCH(properties.apiVersion),
+        properties.driverVersion);
+    SwitchBootLog(line);
+
+    vkDestroyInstance(instance, nullptr);
 }
 
 int main()
@@ -44,6 +119,9 @@ int main()
     Profile_Init();
 
     SwitchBootLog("Stage 6/7: initializing game engine");
+    SwitchBootLog("Graphics: probing Vulkan runtime");
+    SwitchLogVulkanRuntime();
+    SwitchBootLog("Graphics: starting engine renderer");
     Com_Init((char*)"");
 
     SwitchBootLog("Stage 7/7: engine initialized");
