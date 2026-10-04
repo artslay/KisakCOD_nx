@@ -425,30 +425,8 @@ void __cdecl Com_DvarDump(int channel, const char *match)
         dumpInfo.count = 0;
         dumpInfo.channel = channel;
         dumpInfo.match = match;
-#ifdef __SWITCH__
-        {
-            char trace[160];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][DVARDUMP] before Dvar_ForEach dvarCount=%d\n",
-                dvarCount);
-            Switch_LogWrite(trace);
-        }
-#endif
-        Dvar_ForEach(Com_DvarDumpSingle, &dumpInfo);
-#ifdef __SWITCH__
-        {
-            char trace[160];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][DVARDUMP] after Dvar_ForEach count=%d\n",
-                dumpInfo.count);
-            Switch_LogWrite(trace);
-        }
-#endif
-        Com_sprintf(summary, 0x80u, "\n%i total dvars\n%i dvar indexes\n", dumpInfo.count, dvarCount);
+Dvar_ForEach(Com_DvarDumpSingle, &dumpInfo);
+Com_sprintf(summary, 0x80u, "\n%i total dvars\n%i dvar indexes\n", dumpInfo.count, dvarCount);
 #ifndef KISAK_RADIANT
         Com_PrintMessage(channel, summary, 0);
         Com_PrintMessage(
@@ -464,45 +442,7 @@ void __cdecl Com_DvarDump(int channel, const char *match)
 
 void __cdecl Com_DvarDumpSingle(const dvar_s *dvar, void *userData)
 {
-#ifdef __SWITCH__
-    {
-        char trace[512];
-        const uint32_t callbackIndex = userData ? (*(uint32_t *)userData + 1u) : 0u;
-        if (!dvar)
-        {
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][DVARDUMP] callback=%u dvar=null userData=%p\n",
-                callbackIndex,
-                userData);
-            Switch_LogWrite(trace);
-            return;
-        }
-
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][DVARDUMP] callback=%u dvar=%p name=%p type=%u flags=0x%04x "
-            "current=0x%08x latched=0x%08x reset=0x%08x domain0=0x%08x domain1=0x%08x "
-            "domainFunc=%p hashNext=%p\n",
-            callbackIndex,
-            static_cast<const void *>(dvar),
-            static_cast<const void *>(dvar->name),
-            static_cast<unsigned int>(dvar->type),
-            static_cast<unsigned int>(dvar->flags),
-            static_cast<unsigned int>(dvar->current.integer),
-            static_cast<unsigned int>(dvar->latched.integer),
-            static_cast<unsigned int>(dvar->reset.integer),
-            static_cast<unsigned int>(dvar->domain.integer.min),
-            static_cast<unsigned int>(dvar->domain.integer.max),
-            reinterpret_cast<const void *>(dvar->domainFunc),
-            static_cast<const void *>(dvar->hashNext));
-        Switch_LogWrite(trace);
-        Switch_LogWrite("[KisakCOD][DVARDUMP] before Dvar_HasLatchedValue\n");
-    }
-#endif
-    const char *v2; // eax
+const char *v2; // eax
     const char *v3; // eax
     const char *v4; // [esp-4h] [ebp-810h]
     char message[2052]; // [esp+4h] [ebp-808h] BYREF
@@ -512,29 +452,14 @@ void __cdecl Com_DvarDumpSingle(const dvar_s *dvar, void *userData)
     {
         if (Dvar_HasLatchedValue(dvar))
         {
-#ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][DVARDUMP] Dvar_HasLatchedValue=true\n");
-#endif
-            v4 = Dvar_DisplayableLatchedValue(dvar);
-#ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][DVARDUMP] after Dvar_DisplayableLatchedValue\n");
-#endif
-            v2 = Dvar_DisplayableValue(dvar);
-#ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][DVARDUMP] after Dvar_DisplayableValue\n");
-#endif
-            Com_sprintf(message, 0x800u, "      %s \"%s\" -- latched \"%s\"\n", dvar->name, v2, v4);
+v4 = Dvar_DisplayableLatchedValue(dvar);
+v2 = Dvar_DisplayableValue(dvar);
+Com_sprintf(message, 0x800u, "      %s \"%s\" -- latched \"%s\"\n", dvar->name, v2, v4);
         }
         else
         {
-#ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][DVARDUMP] Dvar_HasLatchedValue=false\n");
-#endif
-            v3 = Dvar_DisplayableValue(dvar);
-#ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][DVARDUMP] after Dvar_DisplayableValue\n");
-#endif
-            Com_sprintf(message, 0x800u, "      %s \"%s\"\n", dvar->name, v3);
+v3 = Dvar_DisplayableValue(dvar);
+Com_sprintf(message, 0x800u, "      %s \"%s\"\n", dvar->name, v3);
         }
 #ifndef KISAK_RADIANT
         Com_PrintMessage(*((uint32_t *)userData + 1), message, 0);
