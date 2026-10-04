@@ -15245,6 +15245,26 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
 
     DB_PushStreamPos(0);
 
+#ifdef __SWITCH__
+    const bool switchRawFilePtrTrace =
+        g_switchCurrentAssetIndex == 1126 &&
+        g_switchCurrentAssetRawType == 31u;
+    if (switchRawFilePtrTrace)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH RAWFILE] ptr value=%08x varPtr=%p stream=%u b0=%08x b4=%08x\n",
+            value,
+            static_cast<void *>(varRawFilePtr),
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     if (value)
     {
         if (value == UINT32_MAX || value == UINT32_MAX - 1u)
@@ -15266,6 +15286,22 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
             varRawFile = nativeRawFile;
 
             Load_RawFile(true);
+
+#ifdef __SWITCH__
+            if (switchRawFilePtrTrace)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[SWITCH RAWFILE] ptr loaded native=%p name=%p len=%d buffer=%p\n",
+                    static_cast<void *>(nativeRawFile),
+                    static_cast<const void *>(nativeRawFile->name),
+                    nativeRawFile->len,
+                    static_cast<const void *>(nativeRawFile->buffer));
+                Switch_LogWrite(trace);
+            }
+#endif
 
             XAssetHeader rawHeader{};
             rawHeader.rawfile = nativeRawFile;
@@ -16762,6 +16798,31 @@ void __cdecl Load_XAssetHeader(bool atStreamStart)
             static_cast<unsigned>(varXAsset ? varXAsset->type : ASSET_TYPE_COUNT),
             varXAssetHeader ? static_cast<void *>(varXAssetHeader->data) : nullptr);
         Switch_LogWrite(trace);
+    }
+#endif
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 1126 &&
+        g_switchCurrentAssetRawType == 31u)
+    {
+        uint64_t headerValue = varXAssetHeader
+            ? *reinterpret_cast<const uint64_t *>(varXAssetHeader)
+            : 0ULL;
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH RAWFILE] xheader enter asset=%d raw=%u runtime=%u atStream=%u "
+            "headerPtr=%p header64=%016llx low=%08x high=%08x\n",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            varXAsset ? static_cast<unsigned>(varXAsset->type) : ASSET_TYPE_COUNT,
+            static_cast<unsigned>(atStreamStart),
+            static_cast<void *>(varXAssetHeader),
+            static_cast<unsigned long long>(headerValue),
+            static_cast<unsigned>(static_cast<uint32_t>(headerValue)),
+            static_cast<unsigned>(static_cast<uint32_t>(headerValue >> 32)));
+        Switch_LogWrite(trace);
+        g_switchDbStage = "rawfile/xheader";
     }
 #endif
 #ifdef __SWITCH__
