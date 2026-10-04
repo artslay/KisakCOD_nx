@@ -6721,24 +6721,7 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
     const uint8_t *techniqueStart = DB_GetStreamPos();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
-    if (g_switchCurrentAssetRawType == 23u &&
-        g_switchCurrentAssetIndex == 4728)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][MATERIAL TECH HEADER] stream=%u offset=%u pos=%p name=%08x flags=%04x passCount=%u after=%u\n",
-            static_cast<unsigned>(techniqueHeaderStream),
-            techniqueHeaderOffset,
-            static_cast<const void *>(techniqueStart),
-            serialized.name,
-            static_cast<unsigned>(serialized.flags),
-            static_cast<unsigned>(serialized.passCount),
-            Switch_GetStreamCursorOffset(techniqueHeaderStream));
-        Switch_LogWrite(trace);
-    }
-
+    
     // MaterialTechnique has one trailing pass in its C++ type. Reserve only
     // the actual pass count from the serialized header instead of a worst-case
     // 64-pass buffer for every inline technique.
@@ -7806,27 +7789,7 @@ void __cdecl Load_Material(bool atStreamStart)
         Switch_LogWrite(trace);
     }
 
-    if (g_switchCurrentAssetRawType == 23u &&
-        g_switchCurrentAssetIndex == 4728)
-    {
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][MATERIAL HEADER] stream=%u start=%u after=%u pos=%p name=%08x techset=%08x textures=%08x counts=%u/%u/%u\n",
-            static_cast<unsigned>(materialHeaderStream),
-            materialHeaderOffset,
-            materialHeaderAfter,
-            static_cast<void *>(materialStreamPos),
-            serialized.name,
-            serialized.techniqueSet,
-            serialized.textureTable,
-            static_cast<unsigned>(serialized.textureCount),
-            static_cast<unsigned>(serialized.constantCount),
-            static_cast<unsigned>(serialized.stateBitsCount));
-        Switch_LogWrite(trace);
-    }
-
+    
 #ifdef __SWITCH__
     Switch_LogRawDwords(
         "[SWITCH MATERIAL WORDS]",
@@ -7908,22 +7871,7 @@ void __cdecl Load_Material(bool atStreamStart)
     varMaterialTechniqueSetPtr = &varMaterial->techniqueSet;
 #ifdef __SWITCH__
     g_switchDbStage = "material/techset";
-    if (g_switchCurrentAssetRawType == 23u &&
-        g_switchCurrentAssetIndex == 4728)
-    {
-        char trace[224];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][MATERIAL TECHSET PTR] activeStream=%u stream0=%u stream4=%u token=%08x\n",
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(varMaterial->techniqueSet)));
-        Switch_LogWrite(trace);
-    }
-#endif
+    #endif
     Load_MaterialTechniqueSetPtr(0);
 
 #ifdef __SWITCH__
@@ -8109,38 +8057,12 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
     uint32_t value; // [esp+4h] [ebp-8h]
     Load_Stream(atStreamStart, (uint8_t *)varMaterialHandle, 4);
 #ifdef __SWITCH__
-    const uint32_t handleSourceStream = g_streamPosIndex;
-    const uint32_t handleSourceOffset =
-        Switch_GetStreamCursorOffset(handleSourceStream);
     value = static_cast<uint32_t>(
         reinterpret_cast<uintptr_t>(*varMaterialHandle));
-    const uintptr_t weaponBase = reinterpret_cast<uintptr_t>(varWeaponDef);
-    const uintptr_t handleAddress =
-        reinterpret_cast<uintptr_t>(varMaterialHandle);
-    const long long weaponFieldOffset =
-        varWeaponDef && handleAddress >= weaponBase &&
-                handleAddress - weaponBase < sizeof(WeaponDef)
-            ? static_cast<long long>(handleAddress - weaponBase)
-            : -1LL;
 #endif
     DB_PushStreamPos(0);
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 23u &&
-        g_switchCurrentAssetIndex == 4728)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][MATERIAL HANDLE] token=%08x weaponField=%lld sourceStream=%u sourceOffset=%u stream0=%u\n",
-            value,
-            weaponFieldOffset,
-            static_cast<unsigned>(handleSourceStream),
-            handleSourceOffset,
-            Switch_GetStreamCursorOffset(0));
-        Switch_LogWrite(trace);
-    }
-#endif
+    #endif
     if (*varMaterialHandle)
     {
         value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(*varMaterialHandle));
@@ -8148,20 +8070,7 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
         {
 #ifdef __SWITCH__
             DB_AllocStreamPos(3);
-            if (g_switchCurrentAssetRawType == 23u &&
-                g_switchCurrentAssetIndex == 4728)
-            {
-                char trace[192];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][MATERIAL INLINE] token=%08x headerStream=%u headerOffset=%u\n",
-                    value,
-                    static_cast<unsigned>(g_streamPosIndex),
-                    Switch_GetStreamCursorOffset(g_streamPosIndex));
-                Switch_LogWrite(trace);
-            }
-            *varMaterialHandle = reinterpret_cast<Material *>(
+                        *varMaterialHandle = reinterpret_cast<Material *>(
                 Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(Material)),
                     "SwitchMaterial",
@@ -14369,62 +14278,7 @@ static void Switch_TranslateWeaponDefSerialized(WeaponDef *weaponDef)
     DB_LoadSwitchSerialized(serialized, SERIALIZED_SIZE);
 
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
-    {
-        const uintptr_t blockBase =
-            g_streamBlocks && serializedStreamIndex < ARRAY_COUNT(g_streamPosArray) &&
-                    g_streamBlocks[serializedStreamIndex].data
-                ? reinterpret_cast<uintptr_t>(
-                      g_streamBlocks[serializedStreamIndex].data)
-                : 0;
-        const uintptr_t rootAddress =
-            reinterpret_cast<uintptr_t>(serializedStreamPos);
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][WEAPON ROOT] asset=4728 stream=%u offset=%u after=%u "
-            "bounce@520=%08x reticle@540/544=%08x/%08x shellFX@524/528/532/536=%08x/%08x/%08x/%08x\n",
-            static_cast<unsigned>(serializedStreamIndex),
-            blockBase && rootAddress >= blockBase
-                ? static_cast<unsigned>(rootAddress - blockBase)
-                : UINT32_MAX,
-            Switch_GetStreamCursorOffset(serializedStreamIndex),
-            Switch_ReadSerializedU32(serialized, 520),
-            Switch_ReadSerializedU32(serialized, 540),
-            Switch_ReadSerializedU32(serialized, 544),
-            Switch_ReadSerializedU32(serialized, 524),
-            Switch_ReadSerializedU32(serialized, 528),
-            Switch_ReadSerializedU32(serialized, 532),
-            Switch_ReadSerializedU32(serialized, 536));
-        Switch_LogWrite(trace);
-
-        int written = std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][WEAPON ROOT INLINE] offsets");
-        for (uint16_t pointerOffset : kSwitchWeaponDefPointerOffsets)
-        {
-            const uint32_t token =
-                Switch_ReadSerializedU32(serialized, pointerOffset);
-            if (token == UINT32_MAX || token == UINT32_MAX - 1u)
-            {
-                written += std::snprintf(
-                    trace + written,
-                    sizeof(trace) - static_cast<size_t>(written),
-                    " %u:%08x",
-                    static_cast<unsigned>(pointerOffset),
-                    token);
-            }
-        }
-        std::snprintf(
-            trace + written,
-            sizeof(trace) - static_cast<size_t>(written),
-            "\n");
-        Switch_LogWrite(trace);
-    }
-
+    
     if (g_switchCurrentAssetIndex == 1506 &&
         g_switchCurrentAssetRawType == 23u)
     {
