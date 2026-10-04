@@ -5649,11 +5649,13 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
                         ? reinterpret_cast<uintptr_t>(
                               g_streamBlocks[g_streamPosIndex].data)
                         : 0;
+                // StreamPosInfo::pos is the cursor of the stream selected
+                // by DB_PushStreamPos(), not the saved parent stream index.
+                // This push targets stream 0, so savedPos belongs to block 0.
                 const uintptr_t savedBlockBase =
-                    g_streamBlocks && stackTopIndex < ARRAY_COUNT(g_streamPosArray) &&
-                    g_streamBlocks[stackTopIndex].data
+                    g_streamBlocks && g_streamBlocks[0].data
                         ? reinterpret_cast<uintptr_t>(
-                              g_streamBlocks[stackTopIndex].data)
+                              g_streamBlocks[0].data)
                         : 0;
                 const uint32_t currentOffset =
                     currentBlockBase && currentPos >= currentBlockBase
@@ -5687,8 +5689,8 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
 #ifdef __SWITCH__
             if (traceUiImagePointer)
             {
-                Switch_LogWrite("[KisakCOD][UI IMAGE] after pop\n");
                 g_switchDbStage = "image/return";
+                Switch_LogWrite("[KisakCOD][UI IMAGE] after pop\n");
             }
 #endif
             return;
