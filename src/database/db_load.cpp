@@ -6550,7 +6550,10 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
         std::snprintf(
             rawTrace,
             sizeof(rawTrace),
-            "[KisakCOD][TECHSET4728 ACTUAL] xfile=%llu..%llu size=%u\n",
+            "[KisakCOD][TECHSET4728 ACTUAL] rawType=%u runtimeType=%u header=%08x xfile=%llu..%llu size=%u\n",
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            varXAsset ? static_cast<unsigned>(varXAsset->type) : ASSET_TYPE_COUNT,
+            static_cast<unsigned>(g_switchCurrentAssetHeader),
             static_cast<unsigned long long>(xfileOffsetBefore),
             static_cast<unsigned long long>(xfileOffsetAfter),
             static_cast<unsigned>(sizeof(serialized)));
@@ -7199,7 +7202,10 @@ void __cdecl Load_Material(bool atStreamStart)
         std::snprintf(
             rawTrace,
             sizeof(rawTrace),
-            "[KisakCOD][MATERIAL4728 ACTUAL] xfile=%llu..%llu size=%u\n",
+            "[KisakCOD][MATERIAL4728 ACTUAL] rawType=%u runtimeType=%u header=%08x xfile=%llu..%llu size=%u\n",
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            varXAsset ? static_cast<unsigned>(varXAsset->type) : ASSET_TYPE_COUNT,
+            static_cast<unsigned>(g_switchCurrentAssetHeader),
             static_cast<unsigned long long>(xfileOffsetBefore),
             static_cast<unsigned long long>(xfileOffsetAfter),
             static_cast<unsigned>(sizeof(serialized)));
