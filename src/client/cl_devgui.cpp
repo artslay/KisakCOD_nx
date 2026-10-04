@@ -167,10 +167,8 @@ void __cdecl CL_CreateDevGui()
     Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after devgui_main insert\n");
 #endif
 #ifndef KISAK_NO_FASTFILES
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before Com_InitSoundDevGuiGraphs\n");
+#ifndef __SWITCH__
     Com_InitSoundDevGuiGraphs();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after Com_InitSoundDevGuiGraphs\n");
 #endif
 #endif
 #ifdef __SWITCH__
