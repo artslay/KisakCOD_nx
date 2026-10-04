@@ -3,6 +3,7 @@
 #include <qcommon/threads.h>
 #include <qcommon/qcommon.h>
 #include <chrono>
+#include <cstdio>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -414,7 +415,7 @@ void *__cdecl Sys_RendererSleep()
         char trace[160];
         std::snprintf(
             trace, sizeof(trace),
-            "[SWITCH RTHREAD] command data received data=%p\\n",
+            "[SWITCH RTHREAD] command data received data=%p\n",
             data);
         Sys_Print(trace);
         g_renderDataLogged = true;
@@ -462,7 +463,7 @@ void __cdecl Sys_WakeRenderer(void *data)
         char trace[160];
         std::snprintf(
             trace, sizeof(trace),
-            "[SWITCH RTHREAD] command handoff data=%p\\n",
+            "[SWITCH RTHREAD] command handoff data=%p\n",
             data);
         Sys_Print(trace);
         g_renderWakeLogged = true;
