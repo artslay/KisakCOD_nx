@@ -1744,6 +1744,22 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, char *name)
     XAssetEntry *newEntry; // [esp+14h] [ebp-4h]
 
 #ifdef __SWITCH__
+    if (type == ASSET_TYPE_SOUND || type == ASSET_TYPE_LOADED_SOUND)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH SOUND DEFAULT] create type=%u asset=%d raw=%u requested=%s default=%s hash=%u bucket=%u\n",
+            static_cast<unsigned>(type),
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            name ? name : "<null>",
+            g_defaultAssetName[type] ? g_defaultAssetName[type] : "<null>",
+            DB_HashForName(g_defaultAssetName[type], type),
+            static_cast<unsigned>(db_hashTable[DB_HashForName(g_defaultAssetName[type], type)]));
+        Switch_LogWrite(trace);
+    }
     if (type == ASSET_TYPE_TECHNIQUE_SET)
     {
         g_switchDbStage = "asset/default_header";
@@ -1761,6 +1777,19 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, char *name)
     }
 #endif
     asset.header = DB_FindXAssetDefaultHeaderInternal(type);
+#ifdef __SWITCH__
+    if (type == ASSET_TYPE_SOUND || type == ASSET_TYPE_LOADED_SOUND)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH SOUND DEFAULT] result type=%u result=%p\n",
+            static_cast<unsigned>(type),
+            static_cast<void *>(asset.header.data));
+        Switch_LogWrite(trace);
+    }
+#endif
 #ifdef __SWITCH__
     if (type == ASSET_TYPE_TECHNIQUE_SET)
     {
@@ -3164,6 +3193,25 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 #endif
     hash = DB_HashForName(name, type);
 #ifdef __SWITCH__
+    if (type == ASSET_TYPE_SOUND &&
+        name &&
+        hash == DB_HashForName("null", ASSET_TYPE_SOUND))
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH SOUND NULL] link asset=%d raw=%u type=%u name=%s first=%02x hash=%u bucket=%u header=%p\n",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<unsigned>(type),
+            name,
+            static_cast<unsigned>(static_cast<uint8_t>(*name)),
+            hash,
+            static_cast<unsigned>(db_hashTable[hash]),
+            static_cast<void *>(newEntry->entry.asset.header.data));
+        Switch_LogWrite(trace);
+    }
     if (type == ASSET_TYPE_TECHNIQUE_SET &&
         name &&
         !I_stricmp(name, "default"))
