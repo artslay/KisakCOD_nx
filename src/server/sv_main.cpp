@@ -646,8 +646,18 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
 
 void __cdecl SV_InitServerThread()
 {
-    if (!Sys_SpawnServerThread(SV_ServerThread))
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] SV_InitServerThread: before Sys_SpawnServerThread\n");
+#endif
+    const int spawned = Sys_SpawnServerThread(SV_ServerThread);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] SV_InitServerThread: after Sys_SpawnServerThread\n");
+#endif
+    if (!spawned)
         Sys_Error("Failed to create server thread");
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] SV_InitServerThread: returning\n");
+#endif
 }
 
 void __cdecl SV_ExitAfterTime()
