@@ -171,12 +171,12 @@ void __cdecl CL_CreateDevGui()
     Com_InitSoundDevGuiGraphs();
 #endif
 #endif
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before CG_InitVisionSetsMenu\n");
-#endif
+#ifndef __SWITCH__
     CG_InitVisionSetsMenu();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after CG_InitVisionSetsMenu\n");
+#else
+    // Vision-set DevGui registration is a developer menu only. The Switch port
+    // does not need to enumerate every RAWFILE here, and the 32-bit asset set
+    // can contain duplicate vision names that collide in DevGui paths.
 #endif
 }
 
