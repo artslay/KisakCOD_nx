@@ -443,7 +443,7 @@ void __cdecl Com_DvarDump(int channel, const char *match)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][DVARDUMP] after Dvar_ForEach count=%d\\n",
+                "[KisakCOD][DVARDUMP] after Dvar_ForEach count=%d\n",
                 dumpInfo.count);
             Switch_LogWrite(trace);
         }
