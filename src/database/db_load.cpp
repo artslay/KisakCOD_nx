@@ -5600,27 +5600,6 @@ void __cdecl Load_MaterialPixelShader(bool atStreamStart)
     const uint8_t *pixelShaderStart = DB_GetStreamPos();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
-#ifdef __SWITCH__
-    Switch_LogRawDwords(
-        "[SWITCH PIXELSHADER RAW]",
-        reinterpret_cast<const uint8_t *>(&serialized),
-        sizeof(serialized));
-#endif
-
-    {
-        char trace[256];
-        std::snprintf(trace, sizeof(trace),
-            "[SWITCH PIXELSHADER] pos=%p raw name=%08x shader=%08x program=%08x size=%u renderer=%u after=%p\n",
-            static_cast<const void *>(pixelShaderStart),
-            serialized.name,
-            serialized.shader,
-            serialized.program,
-            static_cast<unsigned>(serialized.programSize),
-            static_cast<unsigned>(serialized.loadForRenderer),
-            static_cast<void *>(DB_GetStreamPos()));
-        Switch_LogWrite(trace);
-    }
-
     memset(varMaterialPixelShader, 0, sizeof(*varMaterialPixelShader));
 
     if (!serialized.name)
@@ -6189,22 +6168,6 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
     iassert(varMaterialTechniquePtr);
     *varMaterialTechniquePtr = varMaterialTechnique;
 
-#ifdef __SWITCH__
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH TECHNIQUE RAW] pos=%p name=%08x flags=%04x passCount=%u after=%p\n",
-            static_cast<const void *>(techniqueStart),
-            serialized.name,
-            static_cast<unsigned>(serialized.flags),
-            static_cast<unsigned>(serialized.passCount),
-            static_cast<void *>(DB_GetStreamPos()));
-        Switch_LogWrite(trace);
-    }
-#endif
-
     varMaterialTechnique->flags = serialized.flags;
     varMaterialTechnique->passCount = serialized.passCount;
 
@@ -6687,48 +6650,6 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
 
 #ifdef __SWITCH__
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH TECHSET RAW] pos=%p name=%08x world=%02x uploaded=%02x remap=%08x after=%p\n",
-            static_cast<const void *>(techniqueSetStart),
-            serialized.name,
-            static_cast<unsigned>(serialized.worldVertFormat),
-            static_cast<unsigned>(serialized.hasBeenUploaded),
-            serialized.remappedTechniqueSet,
-            static_cast<void *>(DB_GetStreamPos()));
-        Switch_LogWrite(trace);
-
-        for (int base = 0; base < 34; base += 6)
-        {
-            char row[256];
-            int written = std::snprintf(
-                row,
-                sizeof(row),
-                "[SWITCH TECHSET PTRS] %d:",
-                base);
-
-            for (int i = base; i < base + 6 && i < 34; ++i)
-            {
-                written += std::snprintf(
-                    row + written,
-                    sizeof(row) - static_cast<size_t>(written),
-                    " %08x",
-                    serialized.techniques[i]);
-            }
-
-            std::snprintf(
-                row + written,
-                sizeof(row) - static_cast<size_t>(written),
-                "\n");
-            Switch_LogWrite(row);
-        }
-    }
-#endif
-
-#ifdef __SWITCH__
     if (traceRawType == 5u &&
         traceAssetIndex >= 1501 &&
         traceAssetIndex <= 1502)
@@ -7108,13 +7029,6 @@ void __cdecl Load_Material(bool atStreamStart)
             static_cast<unsigned>(serialized.stateBitsCount));
         Switch_LogWrite(trace);
     }
-
-#ifdef __SWITCH__
-    Switch_LogRawDwords(
-        "[SWITCH MATERIAL WORDS]",
-        reinterpret_cast<const uint8_t *>(&serialized),
-        sizeof(serialized));
-#endif
 
     memset(varMaterial, 0, sizeof(*varMaterial));
 
