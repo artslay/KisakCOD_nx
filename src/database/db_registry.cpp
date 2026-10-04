@@ -2924,6 +2924,25 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     type = newEntry->entry.asset.type;
 
 #ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 1126 &&
+        g_switchCurrentAssetRawType == 31u)
+    {
+        const uint64_t headerValue =
+            *reinterpret_cast<const uint64_t *>(&newEntry->entry.asset.header);
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH ASSET1126] DB_Link entry=%p type=%u header64=%016llx low=%08x high=%08x zone=%u\n",
+            static_cast<void *>(newEntry),
+            static_cast<unsigned>(type),
+            static_cast<unsigned long long>(headerValue),
+            static_cast<unsigned>(static_cast<uint32_t>(headerValue)),
+            static_cast<unsigned>(static_cast<uint32_t>(headerValue >> 32)),
+            static_cast<unsigned>(newEntry->entry.zoneIndex));
+        Switch_LogWrite(trace);
+        g_switchDbStage = "asset/link_entry";
+    }
     g_switchDbStage = "asset/type";
 #endif
 #ifdef __SWITCH__
