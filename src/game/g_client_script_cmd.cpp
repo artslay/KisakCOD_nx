@@ -4226,7 +4226,7 @@ void(__cdecl *__cdecl Player_GetMethod(const char **pName))(scr_entref_t)
     return methods_0[v1].actionFunc;
 }
 
-void __cdecl G_AddCommandNotify(volatile unsigned __int16 notify)
+void __cdecl G_AddCommandNotify(unsigned __int16 notify)
 {
     int nesting; // r7
     int v3; // r29
