@@ -5631,6 +5631,51 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
             if (inserted)
                 *inserted = imageHeader.image;
 
+#ifdef __SWITCH__
+            if (traceUiImagePointer)
+            {
+                const uint32_t stackIndex = g_streamPosStackIndex;
+                const uint32_t stackTopIndex =
+                    stackIndex ? g_streamPosStack[stackIndex - 1].index : UINT32_MAX;
+                const uint8_t *stackSavedPos =
+                    stackIndex ? g_streamPosStack[stackIndex - 1].pos : nullptr;
+                uintptr_t currentOffset = 0;
+                uintptr_t savedOffset = 0;
+                const int32_t currentOwner =
+                    g_streamPos ? Switch_StreamOwner(g_streamPos, &currentOffset) : -1;
+                const int32_t savedOwner =
+                    stackSavedPos ? Switch_StreamOwner(stackSavedPos, &savedOffset) : -1;
+                char trace[480];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][UI IMAGE] before pop current=%u stack=%u topIndex=%u "
+                    "curPos=%p owner=%d off=%08x savedPos=%p owner=%d off=%08x "
+                    "b0=%08x b4=%08x\n",
+                    static_cast<unsigned>(g_streamPosIndex),
+                    static_cast<unsigned>(stackIndex),
+                    static_cast<unsigned>(stackTopIndex),
+                    static_cast<void *>(g_streamPos),
+                    currentOwner,
+                    static_cast<unsigned>(currentOffset),
+                    static_cast<const void *>(stackSavedPos),
+                    savedOwner,
+                    static_cast<unsigned>(savedOffset),
+                    Switch_GetStreamCursorOffset(0),
+                    Switch_GetStreamCursorOffset(4));
+                Switch_LogWrite(trace);
+                g_switchDbStage = "image/pop";
+            }
+#endif
+            DB_PopStreamPos();
+#ifdef __SWITCH__
+            if (traceUiImagePointer)
+            {
+                Switch_LogWrite("[KisakCOD][UI IMAGE] after pop\n");
+                g_switchDbStage = "image/return";
+            }
+#endif
+            return;
         }
         else
         {
