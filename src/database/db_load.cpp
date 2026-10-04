@@ -24,50 +24,6 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogRaw(const char *msg);
-extern void __cdecl Sys_Error(const char *error, ...);
-extern void __cdecl Sys_Print(const char *msg);
-
-static void Switch_PrintRawBytes(
-    const char *tag,
-    const uint8_t *data,
-    uint32_t size)
-{
-    if (!data || !size)
-        return;
-
-    for (uint32_t offset = 0; offset < size; offset += 16)
-    {
-        char trace[320];
-        char ascii[17]{};
-        int written = std::snprintf(
-            trace,
-            sizeof(trace),
-            "%s +%03x:",
-            tag,
-            offset);
-
-        for (uint32_t i = 0; i < 16 && offset + i < size; ++i)
-        {
-            const uint8_t value = data[offset + i];
-            written += std::snprintf(
-                trace + written,
-                sizeof(trace) - static_cast<size_t>(written),
-                " %02x",
-                static_cast<unsigned>(value));
-            ascii[i] =
-                (value >= 32 && value <= 126)
-                    ? static_cast<char>(value)
-                    : '.';
-        }
-
-        std::snprintf(
-            trace + written,
-            sizeof(trace) - static_cast<size_t>(written),
-            "  |%s|\n",
-            ascii);
-        Sys_Print(trace);
-    }
-}
 
 static void Switch_LogRawDwords(
     const char *tag,
@@ -109,6 +65,599 @@ static void Switch_LogRawDwords(
         Switch_LogRaw(trace);
     }
 }
+#endif
+
+
+#ifdef __SWITCH__
+
+template<typename T>
+static T Switch_ReadSerializedValue(const uint8_t *serialized, size_t offset)
+{
+    T value{};
+    std::memcpy(&value, serialized + offset, sizeof(T));
+    return value;
+}
+
+template<typename T>
+static void Switch_SeedSerializedPointer(T *&field, const uint8_t *serialized, size_t offset)
+{
+    field = reinterpret_cast<T *>(
+        static_cast<uintptr_t>(Switch_ReadSerializedValue<uint32_t>(serialized, offset)));
+}
+
+static void Switch_TranslateMapEntsSerialized(MapEnts *out)
+{
+    uint8_t serialized[12]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+    Switch_SeedSerializedPointer(out->entityString, serialized, 4);
+    out->numEntityChars = Switch_ReadSerializedValue<int>(serialized, 8);
+}
+
+static void Switch_TranslateComWorldSerialized(ComWorld *out)
+{
+    uint8_t serialized[16]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+    out->isInUse = Switch_ReadSerializedValue<int>(serialized, 4);
+    out->primaryLightCount = Switch_ReadSerializedValue<int>(serialized, 8);
+    Switch_SeedSerializedPointer(out->primaryLights, serialized, 12);
+}
+
+static void Switch_TranslateGameWorldSpSerialized(GameWorldSp *out)
+{
+    uint8_t serialized[44]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+    out->path.nodeCount = Switch_ReadSerializedValue<uint32_t>(serialized, 4);
+    Switch_SeedSerializedPointer(out->path.nodes, serialized, 8);
+    Switch_SeedSerializedPointer(out->path.basenodes, serialized, 12);
+    out->path.chainNodeCount = Switch_ReadSerializedValue<uint32_t>(serialized, 16);
+    Switch_SeedSerializedPointer(out->path.chainNodeForNode, serialized, 20);
+    Switch_SeedSerializedPointer(out->path.nodeForChainNode, serialized, 24);
+    out->path.visBytes = Switch_ReadSerializedValue<int>(serialized, 28);
+    Switch_SeedSerializedPointer(out->path.pathVis, serialized, 32);
+    out->path.nodeTreeCount = Switch_ReadSerializedValue<int>(serialized, 36);
+    Switch_SeedSerializedPointer(out->path.nodeTree, serialized, 40);
+}
+
+static void Switch_TranslateGameWorldMpSerialized(GameWorldMp *out)
+{
+    uint8_t serialized[4]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+}
+
+static void Switch_TranslateClipMapSerialized(clipMap_t *out)
+{
+    uint8_t serialized[284]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+    out->isInUse = Switch_ReadSerializedValue<int>(serialized, 4);
+    out->planeCount = Switch_ReadSerializedValue<int>(serialized, 8);
+    Switch_SeedSerializedPointer(out->planes, serialized, 12);
+    out->numStaticModels = Switch_ReadSerializedValue<uint32_t>(serialized, 16);
+    Switch_SeedSerializedPointer(out->staticModelList, serialized, 20);
+    out->numMaterials = Switch_ReadSerializedValue<uint32_t>(serialized, 24);
+    Switch_SeedSerializedPointer(out->materials, serialized, 28);
+    out->numBrushSides = Switch_ReadSerializedValue<uint32_t>(serialized, 32);
+    Switch_SeedSerializedPointer(out->brushsides, serialized, 36);
+    out->numBrushEdges = Switch_ReadSerializedValue<uint32_t>(serialized, 40);
+    Switch_SeedSerializedPointer(out->brushEdges, serialized, 44);
+    out->numNodes = Switch_ReadSerializedValue<uint32_t>(serialized, 48);
+    Switch_SeedSerializedPointer(out->nodes, serialized, 52);
+    out->numLeafs = Switch_ReadSerializedValue<uint32_t>(serialized, 56);
+    Switch_SeedSerializedPointer(out->leafs, serialized, 60);
+    out->leafbrushNodesCount = Switch_ReadSerializedValue<uint32_t>(serialized, 64);
+    Switch_SeedSerializedPointer(out->leafbrushNodes, serialized, 68);
+    out->numLeafBrushes = Switch_ReadSerializedValue<uint32_t>(serialized, 72);
+    Switch_SeedSerializedPointer(out->leafbrushes, serialized, 76);
+    out->numLeafSurfaces = Switch_ReadSerializedValue<uint32_t>(serialized, 80);
+    Switch_SeedSerializedPointer(out->leafsurfaces, serialized, 84);
+    out->vertCount = Switch_ReadSerializedValue<uint32_t>(serialized, 88);
+    Switch_SeedSerializedPointer(out->verts, serialized, 92);
+    out->triCount = Switch_ReadSerializedValue<int>(serialized, 96);
+    Switch_SeedSerializedPointer(out->triIndices, serialized, 100);
+    Switch_SeedSerializedPointer(out->triEdgeIsWalkable, serialized, 104);
+    out->borderCount = Switch_ReadSerializedValue<int>(serialized, 108);
+    Switch_SeedSerializedPointer(out->borders, serialized, 112);
+    out->partitionCount = Switch_ReadSerializedValue<int>(serialized, 116);
+    Switch_SeedSerializedPointer(out->partitions, serialized, 120);
+    out->aabbTreeCount = Switch_ReadSerializedValue<int>(serialized, 124);
+    Switch_SeedSerializedPointer(out->aabbTrees, serialized, 128);
+    out->numSubModels = Switch_ReadSerializedValue<uint32_t>(serialized, 132);
+    Switch_SeedSerializedPointer(out->cmodels, serialized, 136);
+    out->numBrushes = Switch_ReadSerializedValue<uint16_t>(serialized, 140);
+    Switch_SeedSerializedPointer(out->brushes, serialized, 144);
+    out->numClusters = Switch_ReadSerializedValue<int>(serialized, 148);
+    out->clusterBytes = Switch_ReadSerializedValue<int>(serialized, 152);
+    Switch_SeedSerializedPointer(out->visibility, serialized, 156);
+    out->vised = Switch_ReadSerializedValue<int>(serialized, 160);
+    Switch_SeedSerializedPointer(out->mapEnts, serialized, 164);
+    Switch_SeedSerializedPointer(out->box_brush, serialized, 168);
+    std::memcpy(&out->box_model, serialized + 172, sizeof(out->box_model));
+    out->dynEntCount[0] = Switch_ReadSerializedValue<uint16_t>(serialized, 244);
+    out->dynEntCount[1] = Switch_ReadSerializedValue<uint16_t>(serialized, 246);
+    Switch_SeedSerializedPointer(out->dynEntDefList[0], serialized, 248);
+    Switch_SeedSerializedPointer(out->dynEntDefList[1], serialized, 252);
+    Switch_SeedSerializedPointer(out->dynEntPoseList[0], serialized, 256);
+    Switch_SeedSerializedPointer(out->dynEntPoseList[1], serialized, 260);
+    Switch_SeedSerializedPointer(out->dynEntClientList[0], serialized, 264);
+    Switch_SeedSerializedPointer(out->dynEntClientList[1], serialized, 268);
+    Switch_SeedSerializedPointer(out->dynEntCollList[0], serialized, 272);
+    Switch_SeedSerializedPointer(out->dynEntCollList[1], serialized, 276);
+    out->checksum = Switch_ReadSerializedValue<uint32_t>(serialized, 280);
+}
+
+static void Switch_TranslateGfxWorldSerialized(GfxWorld *out)
+{
+    uint8_t serialized[732]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+    Switch_SeedSerializedPointer(out->baseName, serialized, 4);
+    out->planeCount = Switch_ReadSerializedValue<int>(serialized, 8);
+    out->nodeCount = Switch_ReadSerializedValue<int>(serialized, 12);
+    out->indexCount = Switch_ReadSerializedValue<int>(serialized, 16);
+    Switch_SeedSerializedPointer(out->indices, serialized, 20);
+    out->surfaceCount = Switch_ReadSerializedValue<int>(serialized, 24);
+    std::memcpy(&out->streamInfo, serialized + 28, sizeof(out->streamInfo));
+    out->skySurfCount = Switch_ReadSerializedValue<int>(serialized, 32);
+    Switch_SeedSerializedPointer(out->skyStartSurfs, serialized, 36);
+    Switch_SeedSerializedPointer(out->skyImage, serialized, 40);
+    out->skySamplerState = Switch_ReadSerializedValue<uint8_t>(serialized, 44);
+    out->vertexCount = Switch_ReadSerializedValue<uint32_t>(serialized, 48);
+    Switch_SeedSerializedPointer(out->vd.vertices, serialized, 52);
+    out->vertexLayerDataSize = Switch_ReadSerializedValue<uint32_t>(serialized, 60);
+    Switch_SeedSerializedPointer(out->vld.data, serialized, 64);
+    std::memcpy(&out->sunParse, serialized + 72, sizeof(out->sunParse));
+    Switch_SeedSerializedPointer(out->sunLight, serialized, 200);
+    std::memcpy(out->sunColorFromBsp, serialized + 204, sizeof(out->sunColorFromBsp));
+    out->sunPrimaryLightIndex = Switch_ReadSerializedValue<uint32_t>(serialized, 216);
+    out->primaryLightCount = Switch_ReadSerializedValue<uint32_t>(serialized, 220);
+    out->cullGroupCount = Switch_ReadSerializedValue<int>(serialized, 224);
+    out->reflectionProbeCount = Switch_ReadSerializedValue<uint32_t>(serialized, 228);
+    Switch_SeedSerializedPointer(out->reflectionProbes, serialized, 232);
+    Switch_SeedSerializedPointer(out->reflectionProbeTextures, serialized, 236);
+
+    out->dpvsPlanes.cellCount = Switch_ReadSerializedValue<int>(serialized, 240);
+    Switch_SeedSerializedPointer(out->dpvsPlanes.planes, serialized, 244);
+    Switch_SeedSerializedPointer(out->dpvsPlanes.nodes, serialized, 248);
+    Switch_SeedSerializedPointer(out->dpvsPlanes.sceneEntCellBits, serialized, 252);
+
+    out->cellBitsCount = Switch_ReadSerializedValue<int>(serialized, 256);
+    Switch_SeedSerializedPointer(out->cells, serialized, 260);
+    out->lightmapCount = Switch_ReadSerializedValue<int>(serialized, 264);
+    Switch_SeedSerializedPointer(out->lightmaps, serialized, 268);
+
+    out->lightGrid.hasLightRegions = Switch_ReadSerializedValue<uint8_t>(serialized, 272);
+    out->lightGrid.sunPrimaryLightIndex = Switch_ReadSerializedValue<uint32_t>(serialized, 276);
+    std::memcpy(out->lightGrid.mins, serialized + 280, sizeof(out->lightGrid.mins));
+    std::memcpy(out->lightGrid.maxs, serialized + 292, sizeof(out->lightGrid.maxs));
+    out->lightGrid.rowAxis = Switch_ReadSerializedValue<uint32_t>(serialized, 308);
+    out->lightGrid.colAxis = Switch_ReadSerializedValue<uint32_t>(serialized, 312);
+    Switch_SeedSerializedPointer(out->lightGrid.rowDataStart, serialized, 316);
+    out->lightGrid.rawRowDataSize = Switch_ReadSerializedValue<int>(serialized, 320);
+    Switch_SeedSerializedPointer(out->lightGrid.rawRowData, serialized, 324);
+    out->lightGrid.entryCount = Switch_ReadSerializedValue<int>(serialized, 312);
+    Switch_SeedSerializedPointer(out->lightGrid.entries, serialized, 316);
+    out->lightGrid.colorCount = Switch_ReadSerializedValue<int>(serialized, 320);
+    Switch_SeedSerializedPointer(out->lightGrid.colors, serialized, 324);
+
+    Switch_SeedSerializedPointer(out->lightmapPrimaryTextures, serialized, 328);
+    Switch_SeedSerializedPointer(out->lightmapSecondaryTextures, serialized, 332);
+    out->modelCount = Switch_ReadSerializedValue<int>(serialized, 336);
+    Switch_SeedSerializedPointer(out->models, serialized, 340);
+    std::memcpy(out->mins, serialized + 344, sizeof(out->mins));
+    std::memcpy(out->maxs, serialized + 356, sizeof(out->maxs));
+    out->checksum = Switch_ReadSerializedValue<uint32_t>(serialized, 368);
+    out->materialMemoryCount = Switch_ReadSerializedValue<int>(serialized, 372);
+    Switch_SeedSerializedPointer(out->materialMemory, serialized, 376);
+
+    out->sun.hasValidData = Switch_ReadSerializedValue<bool>(serialized, 380);
+    Switch_SeedSerializedPointer(out->sun.spriteMaterial, serialized, 384);
+    Switch_SeedSerializedPointer(out->sun.flareMaterial, serialized, 388);
+    out->sun.spriteSize = Switch_ReadSerializedValue<float>(serialized, 392);
+    out->sun.flareMinSize = Switch_ReadSerializedValue<float>(serialized, 396);
+    out->sun.flareMinDot = Switch_ReadSerializedValue<float>(serialized, 400);
+    out->sun.flareMaxSize = Switch_ReadSerializedValue<float>(serialized, 404);
+    out->sun.flareMaxDot = Switch_ReadSerializedValue<float>(serialized, 408);
+    out->sun.flareMaxAlpha = Switch_ReadSerializedValue<float>(serialized, 412);
+    out->sun.flareFadeInTime = Switch_ReadSerializedValue<float>(serialized, 416);
+    out->sun.flareFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 420);
+    out->sun.blindMinDot = Switch_ReadSerializedValue<float>(serialized, 424);
+    out->sun.blindMaxDot = Switch_ReadSerializedValue<float>(serialized, 428);
+    out->sun.blindMaxDarken = Switch_ReadSerializedValue<float>(serialized, 432);
+    out->sun.blindFadeInTime = Switch_ReadSerializedValue<float>(serialized, 436);
+    out->sun.blindFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 440);
+    out->sun.glareMinDot = Switch_ReadSerializedValue<float>(serialized, 444);
+    out->sun.glareMaxDot = Switch_ReadSerializedValue<float>(serialized, 448);
+    out->sun.glareMaxLighten = Switch_ReadSerializedValue<float>(serialized, 452);
+    out->sun.glareFadeInTime = Switch_ReadSerializedValue<float>(serialized, 456);
+    out->sun.glareFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 460);
+    std::memcpy(out->sun.sunFxPosition, serialized + 464, sizeof(out->sun.sunFxPosition));
+
+    Switch_SeedSerializedPointer(out->outdoorImage, serialized, 540);
+    Switch_SeedSerializedPointer(out->cellCasterBits, serialized, 544);
+    Switch_SeedSerializedPointer(out->sceneDynModel, serialized, 548);
+    Switch_SeedSerializedPointer(out->sceneDynBrush, serialized, 552);
+    Switch_SeedSerializedPointer(out->primaryLightEntityShadowVis, serialized, 556);
+    Switch_SeedSerializedPointer(out->primaryLightDynEntShadowVis[0], serialized, 560);
+    Switch_SeedSerializedPointer(out->primaryLightDynEntShadowVis[1], serialized, 564);
+    Switch_SeedSerializedPointer(out->nonSunPrimaryLightForModelDynEnt, serialized, 568);
+    Switch_SeedSerializedPointer(out->shadowGeom, serialized, 572);
+    Switch_SeedSerializedPointer(out->lightRegion, serialized, 576);
+
+    out->dpvs.smodelCount = Switch_ReadSerializedValue<uint32_t>(serialized, 580);
+    out->dpvs.staticSurfaceCount = Switch_ReadSerializedValue<uint32_t>(serialized, 584);
+    out->dpvs.staticSurfaceCountNoDecal = Switch_ReadSerializedValue<uint32_t>(serialized, 588);
+    out->dpvs.litSurfsBegin = Switch_ReadSerializedValue<uint32_t>(serialized, 592);
+    out->dpvs.litSurfsEnd = Switch_ReadSerializedValue<uint32_t>(serialized, 596);
+    out->dpvs.decalSurfsBegin = Switch_ReadSerializedValue<uint32_t>(serialized, 600);
+    out->dpvs.decalSurfsEnd = Switch_ReadSerializedValue<uint32_t>(serialized, 604);
+    out->dpvs.emissiveSurfsBegin = Switch_ReadSerializedValue<uint32_t>(serialized, 608);
+    out->dpvs.emissiveSurfsEnd = Switch_ReadSerializedValue<uint32_t>(serialized, 612);
+    out->dpvs.smodelVisDataCount = Switch_ReadSerializedValue<uint32_t>(serialized, 616);
+    out->dpvs.surfaceVisDataCount = Switch_ReadSerializedValue<uint32_t>(serialized, 620);
+    Switch_SeedSerializedPointer(out->dpvs.smodelVisData[0], serialized, 624);
+    Switch_SeedSerializedPointer(out->dpvs.smodelVisData[1], serialized, 628);
+    Switch_SeedSerializedPointer(out->dpvs.smodelVisData[2], serialized, 632);
+    Switch_SeedSerializedPointer(out->dpvs.surfaceVisData[0], serialized, 636);
+    Switch_SeedSerializedPointer(out->dpvs.surfaceVisData[1], serialized, 640);
+    Switch_SeedSerializedPointer(out->dpvs.surfaceVisData[2], serialized, 644);
+    Switch_SeedSerializedPointer(out->dpvs.lodData, serialized, 648);
+    Switch_SeedSerializedPointer(out->dpvs.sortedSurfIndex, serialized, 652);
+    Switch_SeedSerializedPointer(out->dpvs.smodelInsts, serialized, 656);
+    Switch_SeedSerializedPointer(out->dpvs.surfaces, serialized, 660);
+    Switch_SeedSerializedPointer(out->dpvs.cullGroups, serialized, 664);
+    Switch_SeedSerializedPointer(out->dpvs.smodelDrawInsts, serialized, 668);
+    Switch_SeedSerializedPointer(out->dpvs.surfaceMaterials, serialized, 672);
+    Switch_SeedSerializedPointer(out->dpvs.surfaceCastsSunShadow, serialized, 676);
+    out->dpvs.usageCount = Switch_ReadSerializedValue<int>(serialized, 680);
+
+    out->dpvsDyn.dynEntClientWordCount[0] = Switch_ReadSerializedValue<uint32_t>(serialized, 684);
+    out->dpvsDyn.dynEntClientWordCount[1] = Switch_ReadSerializedValue<uint32_t>(serialized, 688);
+    out->dpvsDyn.dynEntClientCount[0] = Switch_ReadSerializedValue<uint32_t>(serialized, 692);
+    out->dpvsDyn.dynEntClientCount[1] = Switch_ReadSerializedValue<uint32_t>(serialized, 696);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntCellBits[0], serialized, 700);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntCellBits[1], serialized, 704);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[0][0], serialized, 708);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[0][1], serialized, 712);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[0][2], serialized, 716);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[1][0], serialized, 720);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[1][1], serialized, 724);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[1][2], serialized, 728);
+}
+
+
+static void Switch_TranslateGfxCellSerialized(GfxCell *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(out->mins, s + 0, sizeof(out->mins));
+    std::memcpy(out->maxs, s + 12, sizeof(out->maxs));
+    out->aabbTreeCount = Switch_ReadSerializedValue<int>(s, 24);
+    Switch_SeedSerializedPointer(out->aabbTree, s, 28);
+    out->portalCount = Switch_ReadSerializedValue<int>(s, 32);
+    Switch_SeedSerializedPointer(out->portals, s, 36);
+    out->cullGroupCount = Switch_ReadSerializedValue<int>(s, 40);
+    Switch_SeedSerializedPointer(out->cullGroups, s, 44);
+    out->reflectionProbeCount = Switch_ReadSerializedValue<uint8_t>(s, 48);
+    Switch_SeedSerializedPointer(out->reflectionProbes, s, 52);
+}
+
+static void Switch_TranslateGfxAabbTreeSerialized(GfxAabbTree *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(out->mins, s + 0, sizeof(out->mins));
+    std::memcpy(out->maxs, s + 12, sizeof(out->maxs));
+    out->childCount = Switch_ReadSerializedValue<uint16_t>(s, 24);
+    out->surfaceCount = Switch_ReadSerializedValue<uint16_t>(s, 26);
+    out->startSurfIndex = Switch_ReadSerializedValue<uint16_t>(s, 28);
+    out->surfaceCountNoDecal = Switch_ReadSerializedValue<uint16_t>(s, 30);
+    out->startSurfIndexNoDecal = Switch_ReadSerializedValue<uint16_t>(s, 32);
+    out->smodelIndexCount = Switch_ReadSerializedValue<uint16_t>(s, 34);
+    Switch_SeedSerializedPointer(out->smodelIndexes, s, 36);
+    out->childrenOffset = Switch_ReadSerializedValue<uint32_t>(s, 40);
+}
+
+static void Switch_TranslateGfxPortalSerialized(GfxPortal *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(&out->plane, s + 12, sizeof(out->plane));
+    Switch_SeedSerializedPointer(out->cell, s, 32);
+    Switch_SeedSerializedPointer(out->vertices, s, 36);
+    out->vertexCount = Switch_ReadSerializedValue<uint8_t>(s, 40);
+    std::memcpy(out->hullAxis, s + 44, sizeof(out->hullAxis));
+}
+
+static void Switch_TranslateGfxLightmapArraySerialized(GfxLightmapArray *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->primary, s, 0);
+    Switch_SeedSerializedPointer(out->secondary, s, 4);
+}
+
+static void Switch_TranslateGfxSurfaceSerialized(GfxSurface *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(&out->tris, s + 0, sizeof(out->tris));
+    Switch_SeedSerializedPointer(out->material, s, 16);
+    out->lightmapIndex = Switch_ReadSerializedValue<uint8_t>(s, 20);
+    out->reflectionProbeIndex = Switch_ReadSerializedValue<uint8_t>(s, 21);
+    out->primaryLightIndex = Switch_ReadSerializedValue<uint8_t>(s, 22);
+    out->flags = Switch_ReadSerializedValue<uint8_t>(s, 23);
+    std::memcpy(out->bounds, s + 24, sizeof(out->bounds));
+}
+
+static void Switch_TranslateGfxStaticModelDrawInstSerialized(GfxStaticModelDrawInst *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->cullDist = Switch_ReadSerializedValue<float>(s, 0);
+    std::memcpy(&out->placement, s + 4, sizeof(out->placement));
+    Switch_SeedSerializedPointer(out->model, s, 56);
+    std::memcpy(out->smodelCacheIndex, s + 60, sizeof(out->smodelCacheIndex));
+    out->reflectionProbeIndex = Switch_ReadSerializedValue<uint8_t>(s, 68);
+    out->primaryLightIndex = Switch_ReadSerializedValue<uint8_t>(s, 69);
+    out->lightingHandle = Switch_ReadSerializedValue<uint16_t>(s, 70);
+    out->flags = Switch_ReadSerializedValue<uint8_t>(s, 72);
+}
+
+static void Switch_TranslateCStaticModelSerialized(cStaticModel_s *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->writable = Switch_ReadSerializedValue<bool>(s, 0);
+    Switch_SeedSerializedPointer(out->xmodel, s, 4);
+    std::memcpy(out->origin, s + 8, sizeof(out->origin));
+    std::memcpy(out->invScaledAxis, s + 20, sizeof(out->invScaledAxis));
+    std::memcpy(out->absmin, s + 56, sizeof(out->absmin));
+    std::memcpy(out->absmax, s + 68, sizeof(out->absmax));
+}
+
+static void Switch_TranslateCbrushSideSerialized(cbrushside_t *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->plane, s, 0);
+    out->materialNum = Switch_ReadSerializedValue<uint16_t>(s, 4);
+    out->firstAdjacentSideOffset = Switch_ReadSerializedValue<uint16_t>(s, 8);
+    out->edgeCount = Switch_ReadSerializedValue<uint16_t>(s, 10);
+}
+
+static void Switch_TranslateCNodeSerialized(cNode_t *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->plane, s, 0);
+    std::memcpy(out->children, s + 4, sizeof(out->children));
+}
+
+static void Switch_TranslateCLeafBrushNodeSerialized(cLeafBrushNode_s *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->axis = Switch_ReadSerializedValue<int8_t>(s, 0);
+    out->leafBrushCount = Switch_ReadSerializedValue<uint16_t>(s, 2);
+    out->contents = Switch_ReadSerializedValue<int>(s, 4);
+    if (out->leafBrushCount > 0)
+        Switch_SeedSerializedPointer(out->data.leaf.brushes, s, 8);
+    else
+        out->data.children = Switch_ReadSerializedValue<int>(s, 8);
+}
+
+static void Switch_TranslateCollisionPartitionSerialized(CollisionPartition *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->triCount = Switch_ReadSerializedValue<uint8_t>(s, 0);
+    out->borderCount = Switch_ReadSerializedValue<uint8_t>(s, 1);
+    out->firstTri = Switch_ReadSerializedValue<uint32_t>(s, 4);
+    Switch_SeedSerializedPointer(out->borders, s, 8);
+}
+
+static void Switch_TranslateCbrushSerialized(cbrush_t *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(out->mins, s + 0, sizeof(out->mins));
+    out->contents = Switch_ReadSerializedValue<int>(s, 12);
+    std::memcpy(out->maxs, s + 16, sizeof(out->maxs));
+    out->numsides = Switch_ReadSerializedValue<uint16_t>(s, 28);
+    Switch_SeedSerializedPointer(out->sides, s, 32);
+    std::memcpy(out->axialMaterialNum, s + 36, sizeof(out->axialMaterialNum));
+    Switch_SeedSerializedPointer(out->baseAdjacentSide, s, 48);
+    std::memcpy(out->firstAdjacentSideOffsets, s + 52, sizeof(out->firstAdjacentSideOffsets));
+    std::memcpy(out->edgeCount, s + 64, sizeof(out->edgeCount));
+}
+
+static void Switch_TranslateDynEntityDefSerialized(DynEntityDef *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->type = Switch_ReadSerializedValue<uint32_t>(s, 0);
+    out->pose = Switch_ReadSerializedValue<uint32_t>(s, 4);
+    Switch_SeedSerializedPointer(out->xModel, s, 32);
+    out->brushModel = Switch_ReadSerializedValue<uint16_t>(s, 36);
+    out->physicsBrushModel = Switch_ReadSerializedValue<uint16_t>(s, 38);
+    Switch_SeedSerializedPointer(out->destroyFx, s, 40);
+    Switch_SeedSerializedPointer(out->destroyPieces, s, 44);
+    Switch_SeedSerializedPointer(out->physPreset, s, 48);
+    out->health = Switch_ReadSerializedValue<int>(s, 52);
+    out->mass = Switch_ReadSerializedValue<float>(s, 56);
+    out->contents = Switch_ReadSerializedValue<int>(s, 92);
+}
+
+
+static void Switch_TranslateGfxCellSerialized(GfxCell *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(out->mins, s + 0, sizeof(out->mins));
+    std::memcpy(out->maxs, s + 12, sizeof(out->maxs));
+    out->aabbTreeCount = Switch_ReadSerializedValue<int>(s, 24);
+    Switch_SeedSerializedPointer(out->aabbTree, s, 28);
+    out->portalCount = Switch_ReadSerializedValue<int>(s, 32);
+    Switch_SeedSerializedPointer(out->portals, s, 36);
+    out->cullGroupCount = Switch_ReadSerializedValue<int>(s, 40);
+    Switch_SeedSerializedPointer(out->cullGroups, s, 44);
+    out->reflectionProbeCount = Switch_ReadSerializedValue<uint8_t>(s, 48);
+    Switch_SeedSerializedPointer(out->reflectionProbes, s, 52);
+}
+
+static void Switch_TranslateGfxAabbTreeSerialized(GfxAabbTree *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(out->mins, s + 0, sizeof(out->mins));
+    std::memcpy(out->maxs, s + 12, sizeof(out->maxs));
+    out->childCount = Switch_ReadSerializedValue<uint16_t>(s, 24);
+    out->surfaceCount = Switch_ReadSerializedValue<uint16_t>(s, 26);
+    out->startSurfIndex = Switch_ReadSerializedValue<uint16_t>(s, 28);
+    out->surfaceCountNoDecal = Switch_ReadSerializedValue<uint16_t>(s, 30);
+    out->startSurfIndexNoDecal = Switch_ReadSerializedValue<uint16_t>(s, 32);
+    out->smodelIndexCount = Switch_ReadSerializedValue<uint16_t>(s, 34);
+    Switch_SeedSerializedPointer(out->smodelIndexes, s, 36);
+    out->childrenOffset = Switch_ReadSerializedValue<uint32_t>(s, 40);
+}
+
+static void Switch_TranslateGfxPortalSerialized(GfxPortal *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(&out->plane, s + 12, sizeof(out->plane));
+    Switch_SeedSerializedPointer(out->cell, s, 32);
+    Switch_SeedSerializedPointer(out->vertices, s, 36);
+    out->vertexCount = Switch_ReadSerializedValue<uint8_t>(s, 40);
+    std::memcpy(out->hullAxis, s + 44, sizeof(out->hullAxis));
+}
+
+static void Switch_TranslateGfxLightmapArraySerialized(GfxLightmapArray *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->primary, s, 0);
+    Switch_SeedSerializedPointer(out->secondary, s, 4);
+}
+
+static void Switch_TranslateGfxSurfaceSerialized(GfxSurface *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(&out->tris, s + 0, sizeof(out->tris));
+    Switch_SeedSerializedPointer(out->material, s, 16);
+    out->lightmapIndex = Switch_ReadSerializedValue<uint8_t>(s, 20);
+    out->reflectionProbeIndex = Switch_ReadSerializedValue<uint8_t>(s, 21);
+    out->primaryLightIndex = Switch_ReadSerializedValue<uint8_t>(s, 22);
+    out->flags = Switch_ReadSerializedValue<uint8_t>(s, 23);
+    std::memcpy(out->bounds, s + 24, sizeof(out->bounds));
+}
+
+static void Switch_TranslateGfxStaticModelDrawInstSerialized(GfxStaticModelDrawInst *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->cullDist = Switch_ReadSerializedValue<float>(s, 0);
+    std::memcpy(&out->placement, s + 4, sizeof(out->placement));
+    Switch_SeedSerializedPointer(out->model, s, 56);
+    std::memcpy(out->smodelCacheIndex, s + 60, sizeof(out->smodelCacheIndex));
+    out->reflectionProbeIndex = Switch_ReadSerializedValue<uint8_t>(s, 68);
+    out->primaryLightIndex = Switch_ReadSerializedValue<uint8_t>(s, 69);
+    out->lightingHandle = Switch_ReadSerializedValue<uint16_t>(s, 70);
+    out->flags = Switch_ReadSerializedValue<uint8_t>(s, 72);
+}
+
+static void Switch_TranslateCStaticModelSerialized(cStaticModel_s *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->writable = Switch_ReadSerializedValue<bool>(s, 0);
+    Switch_SeedSerializedPointer(out->xmodel, s, 4);
+    std::memcpy(out->origin, s + 8, sizeof(out->origin));
+    std::memcpy(out->invScaledAxis, s + 20, sizeof(out->invScaledAxis));
+    std::memcpy(out->absmin, s + 56, sizeof(out->absmin));
+    std::memcpy(out->absmax, s + 68, sizeof(out->absmax));
+}
+
+static void Switch_TranslateCbrushSideSerialized(cbrushside_t *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->plane, s, 0);
+    out->materialNum = Switch_ReadSerializedValue<uint16_t>(s, 4);
+    out->firstAdjacentSideOffset = Switch_ReadSerializedValue<uint16_t>(s, 8);
+    out->edgeCount = Switch_ReadSerializedValue<uint16_t>(s, 10);
+}
+
+static void Switch_TranslateCNodeSerialized(cNode_t *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->plane, s, 0);
+    std::memcpy(out->children, s + 4, sizeof(out->children));
+}
+
+static void Switch_TranslateCLeafBrushNodeSerialized(cLeafBrushNode_s *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->axis = Switch_ReadSerializedValue<int8_t>(s, 0);
+    out->leafBrushCount = Switch_ReadSerializedValue<uint16_t>(s, 2);
+    out->contents = Switch_ReadSerializedValue<int>(s, 4);
+    if (out->leafBrushCount > 0)
+        Switch_SeedSerializedPointer(out->data.leaf.brushes, s, 8);
+    else
+        out->data.children = Switch_ReadSerializedValue<int>(s, 8);
+}
+
+static void Switch_TranslateCollisionPartitionSerialized(CollisionPartition *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->triCount = Switch_ReadSerializedValue<uint8_t>(s, 0);
+    out->borderCount = Switch_ReadSerializedValue<uint8_t>(s, 1);
+    out->firstTri = Switch_ReadSerializedValue<uint32_t>(s, 4);
+    Switch_SeedSerializedPointer(out->borders, s, 8);
+}
+
+static void Switch_TranslateCbrushSerialized(cbrush_t *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    std::memcpy(out->mins, s + 0, sizeof(out->mins));
+    out->contents = Switch_ReadSerializedValue<int>(s, 12);
+    std::memcpy(out->maxs, s + 16, sizeof(out->maxs));
+    out->numsides = Switch_ReadSerializedValue<uint16_t>(s, 28);
+    Switch_SeedSerializedPointer(out->sides, s, 32);
+    std::memcpy(out->axialMaterialNum, s + 36, sizeof(out->axialMaterialNum));
+    Switch_SeedSerializedPointer(out->baseAdjacentSide, s, 48);
+    std::memcpy(out->firstAdjacentSideOffsets, s + 52, sizeof(out->firstAdjacentSideOffsets));
+    std::memcpy(out->edgeCount, s + 64, sizeof(out->edgeCount));
+}
+
+static void Switch_TranslateDynEntityDefSerialized(DynEntityDef *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->type = Switch_ReadSerializedValue<uint32_t>(s, 0);
+    out->pose = Switch_ReadSerializedValue<uint32_t>(s, 4);
+    Switch_SeedSerializedPointer(out->xModel, s, 32);
+    out->brushModel = Switch_ReadSerializedValue<uint16_t>(s, 36);
+    out->physicsBrushModel = Switch_ReadSerializedValue<uint16_t>(s, 38);
+    Switch_SeedSerializedPointer(out->destroyFx, s, 40);
+    Switch_SeedSerializedPointer(out->destroyPieces, s, 44);
+    Switch_SeedSerializedPointer(out->physPreset, s, 48);
+    out->health = Switch_ReadSerializedValue<int>(s, 52);
+    out->mass = Switch_ReadSerializedValue<float>(s, 56);
+    out->contents = Switch_ReadSerializedValue<int>(s, 92);
+}
+
+
+static void Switch_TranslateComPrimaryLightSerialized(ComPrimaryLight *out, const uint8_t *s)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->type = Switch_ReadSerializedValue<uint8_t>(s, 0);
+    out->canUseShadowMap = Switch_ReadSerializedValue<uint8_t>(s, 1);
+    out->exponent = Switch_ReadSerializedValue<uint16_t>(s, 2);
+    std::memcpy(out->unused, s + 3, sizeof(out->unused));
+    std::memcpy(out->color, s + 4, sizeof(out->color));
+    std::memcpy(out->dir, s + 16, sizeof(out->dir));
+    std::memcpy(out->origin, s + 28, sizeof(out->origin));
+    out->radius = Switch_ReadSerializedValue<float>(s, 40);
+    out->cosHalfFovOuter = Switch_ReadSerializedValue<float>(s, 44);
+    out->cosHalfFovInner = Switch_ReadSerializedValue<float>(s, 48);
+    out->cosHalfFovExpanded = Switch_ReadSerializedValue<float>(s, 52);
+    out->rotationLimit = Switch_ReadSerializedValue<float>(s, 56);
+    out->translationLimit = Switch_ReadSerializedValue<float>(s, 60);
+    Switch_SeedSerializedPointer(out->defName, s, 64);
+}
+
 #endif
 
 #ifdef __SWITCH__
@@ -153,8 +702,6 @@ static uint32_t Switch_GetStreamCursorOffset(uint32_t streamIndex)
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern const char * volatile g_switchDbStage;
-static int g_switchMaterialTechniqueIndex = -1;
-extern uint64_t __cdecl DB_GetXFileUncompressedOffset();
 
 enum weapPositionAnimNum_t : __int32
 {
@@ -1345,15 +1892,34 @@ void __cdecl Load_XString(bool atStreamStart)
 
 void __cdecl Load_XStringArray(bool atStreamStart, int32_t count)
 {
-    const char **var; // [esp+0h] [ebp-8h]
-    int32_t i; // [esp+4h] [ebp-4h]
-
+#ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint32_t> serialized(static_cast<size_t>(count));
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size() * sizeof(uint32_t)));
+        const char **var = varXString;
+        for (int32_t i = 0; i < count; ++i)
+        {
+            varXString = var + i;
+            *varXString = reinterpret_cast<const char *>(
+                static_cast<uintptr_t>(serialized[static_cast<size_t>(i)]));
+            Load_XString(false);
+        }
+        return;
+    }
+#endif
+    const char **var;
+    int32_t i;
     Load_Stream(atStreamStart, (uint8_t *)varXString, 4 * count);
     var = varXString;
     for (i = 0; i < count; ++i)
     {
         varXString = var;
-        Load_XString(0);
+        Load_XString(false);
         ++var;
     }
 }
@@ -1395,8 +1961,42 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
         // 0x00646574 becomes address 0x646574).
         if (serialized == UINT32_MAX - 1)
         {
-            Switch_LogWrite(
-                "[SWITCH XSTRINGPTR] unsupported outer alias token\n");
+            DB_AllocStreamPos(3);
+            const void **inserted = DB_InsertPointer();
+            uint32_t nested = 0;
+            DB_LoadSwitchSerialized(&nested, sizeof(nested));
+
+            const char **nativeStringSlot =
+                reinterpret_cast<const char **>(
+                    Hunk_Alloc(
+                        static_cast<uint32_t>(sizeof(const char *)),
+                        "SwitchXStringPtr",
+                        22));
+            if (!nativeStringSlot)
+                return;
+
+            *nativeStringSlot = nullptr;
+            *varXStringPtr = nativeStringSlot;
+
+            if (nested == UINT32_MAX)
+            {
+                char *stringBuffer =
+                    reinterpret_cast<char *>(AllocLoad_raw_byte());
+                if (stringBuffer)
+                {
+                    *nativeStringSlot = stringBuffer;
+                    Load_XStringCustom(&stringBuffer);
+                }
+            }
+            else if (nested && nested != UINT32_MAX - 1u)
+            {
+                *nativeStringSlot =
+                    reinterpret_cast<const char *>(
+                        DB_ConvertOffsetToPointerValue(nested));
+            }
+
+            if (inserted)
+                *inserted = *varXStringPtr;
             return;
         }
 
@@ -1439,19 +2039,17 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
 
         if (nested == UINT32_MAX)
         {
-            // The nested soundName uses the same XString semantics as the
-            // standalone loader: -1 means a following NUL-terminated string
-            // in the current XFile stream. Do not treat bytes after the
-            // serialized pointer slot as already-loaded string data; doing so
-            // under-consumes the global decompression stream and shifts all
-            // following asset payloads.
-            char *stringBuffer =
-                reinterpret_cast<char *>(AllocLoad_raw_byte());
-            if (!stringBuffer)
-                return;
-
-            *nativeStringSlot = stringBuffer;
-            Load_XStringCustom(&stringBuffer);
+            const uint32_t inlineOffset =
+                outerBlockOffset + static_cast<uint32_t>(sizeof(nested));
+            const uint32_t remaining =
+                g_streamBlocks[outerBlock].size - inlineOffset;
+            const char *inlineString = reinterpret_cast<const char *>(
+                g_streamBlocks[outerBlock].data + inlineOffset);
+            if (remaining && std::memchr(inlineString, '\0', remaining))
+                *nativeStringSlot = inlineString;
+            else
+                Switch_LogWrite(
+                    "[SWITCH XSTRINGPTR] unterminated inline string\n");
             return;
         }
 
@@ -1525,9 +2123,6 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
     // that 4-byte stream allocation exactly like the original loader; the
     // native pointer-to-pointer lives separately in Hunk memory.
     const uint8_t *nestedStreamPos = DB_GetStreamPos();
-    // The outer -1 form reserves an aligned serialized pointer slot before
-    // Load_XString(1) reads its nested 32-bit token. This matches the original
-    // CoD4 loader and preserves the DWORD alignment of inline XStringPtr data.
     DB_AllocStreamPos(3);
     uint32_t nested = 0;
     DB_LoadSwitchSerialized(&nested, sizeof(nested));
@@ -3877,38 +4472,6 @@ void __cdecl Load_snd_alias_list_name(bool atStreamStart)
 
 void __cdecl Load_snd_alias_list_nameArray(bool atStreamStart, int32_t count)
 {
-#ifdef __SWITCH__
-    iassert(atStreamStart);
-    iassert(count >= 0);
-
-    if (count <= 0)
-        return;
-
-    // SndAliasCustom is an 8-byte native union on AArch64, but the fastfile
-    // stores its pointer records as a packed 32-bit array. Read the complete
-    // serialized array first; walking it as a native 8-byte array would skip
-    // every second token and then feed stale/unaligned data to the resolver.
-    std::vector<uint32_t> serialized(
-        static_cast<size_t>(count));
-    DB_LoadSwitchSerialized(
-        serialized.data(),
-        static_cast<uint32_t>(
-            sizeof(uint32_t) * static_cast<size_t>(count)));
-
-    snd_alias_list_t **base = varsnd_alias_list_name;
-
-    for (int32_t i = 0; i < count; ++i)
-    {
-        varsnd_alias_list_name = base + i;
-        *varsnd_alias_list_name =
-            reinterpret_cast<snd_alias_list_t *>(
-                static_cast<uintptr_t>(
-                    serialized[static_cast<size_t>(i)]));
-        Load_SndAliasCustom(varsnd_alias_list_name);
-    }
-
-    return;
-#else
     snd_alias_list_t **var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
@@ -3920,7 +4483,6 @@ void __cdecl Load_snd_alias_list_nameArray(bool atStreamStart, int32_t count)
         Load_snd_alias_list_name(0);
         ++var;
     }
-#endif
 }
 
 void __cdecl Mark_LoadedSoundPtr()
@@ -4968,26 +5530,6 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             0,
             "%s",
             "DB_GetStreamPos() == reinterpret_cast< byte * >( varGfxImageLoadDef->data )");
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 4u &&
-        g_switchCurrentAssetIndex >= 20)
-    {
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH UI IMAGE DATA] asset=%d name=%p resourceSize=%u stream=%u b0=%08x b4=%08x data=%p\n",
-            g_switchCurrentAssetIndex,
-            static_cast<const void *>(varGfxImage ? varGfxImage->name : nullptr),
-            varGfxImageLoadDef ? static_cast<unsigned>(varGfxImageLoadDef->resourceSize) : 0u,
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<void *>(varGfxImageLoadDef ? varGfxImageLoadDef->data : nullptr));
-        Switch_LogWrite(trace);
-        g_switchDbStage = "image/pixels";
-    }
-#endif
     varbyte = &varGfxImageLoadDef->data[0];
     Load_byteArray(1, varGfxImageLoadDef->resourceSize);
 }
@@ -5021,7 +5563,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
         const bool traceUiImage =
-            g_switchCurrentAssetRawType == 6u &&
+            g_switchCurrentAssetRawType == 4u &&
             g_switchCurrentAssetIndex >= 0 &&
             g_switchCurrentAssetIndex <= 3;
         if (traceUiImage)
@@ -5079,42 +5621,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
 
         
 
-        if (traceUiImage)
-        {
-            char trace[224];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[SWITCH IMAGE TRACE] asset=%d token=%08x image=%p name=%p stream=%u b0=%08x b4=%08x\n",
-                g_switchCurrentAssetIndex,
-                serialized.name,
-                static_cast<void *>(varGfxImage),
-                static_cast<const void *>(varGfxImage->name),
-                static_cast<unsigned>(g_streamPosIndex),
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4));
-            Switch_LogWrite(trace);
-        }
-
         varGfxTextureLoad = &varGfxImage->texture;
-#ifdef __SWITCH__
-        if (g_switchCurrentAssetRawType == 6u &&
-            g_switchCurrentAssetIndex >= 20)
-        {
-            char trace[384];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[SWITCH UI IMAGE PAYLOAD] asset=%d textureToken=%08x resourcePtr=%p stream=%u b0=%08x b4=%08x\n",
-                g_switchCurrentAssetIndex,
-                serialized.texture,
-                static_cast<void *>(varGfxImage->texture.loadDef),
-                static_cast<unsigned>(g_streamPosIndex),
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4));
-            Switch_LogWrite(trace);
-        }
-#endif
         Load_GfxTextureLoad(0);
 
         if (traceUiImage)
@@ -5162,7 +5669,7 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
         sizeof(value));
 
     const bool traceUiImagePointer =
-        g_switchCurrentAssetRawType == 6u &&
+        g_switchCurrentAssetRawType == 4u &&
         g_switchCurrentAssetIndex >= 0 &&
         g_switchCurrentAssetIndex <= 3;
     if (traceUiImagePointer)
@@ -5315,93 +5822,109 @@ void __cdecl Load_DWORDArray(bool atStreamStart, int32_t count)
     Load_Stream(atStreamStart, (uint8_t *)varDWORD, 4 * count);
 }
 
+#ifdef __SWITCH__
+static void Switch_LogShaderProgramOobIfNeeded(
+    const char *kind,
+    uint32_t token,
+    uint16_t sizeDwords,
+    uint16_t loadForRenderer)
+{
+    const uint32_t streamIndex = g_streamPosIndex;
+    if (!g_streamBlocks ||
+        streamIndex >= ARRAY_COUNT(g_streamPosArray) ||
+        !g_streamBlocks[streamIndex].data)
+        return;
+
+    const XBlock &block = g_streamBlocks[streamIndex];
+    const uint32_t offset = Switch_GetStreamCursorOffset(streamIndex);
+    if (offset == UINT32_MAX || offset > block.size)
+        return;
+
+    const uint32_t bytes = static_cast<uint32_t>(sizeDwords) * 4u;
+    const uint32_t remaining = block.size - offset;
+    if (bytes <= remaining)
+        return;
+
+    char trace[512];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][SHADER PROGRAM OOB] kind=%s asset=%d rawType=%u token=%08x sizeDwords=%u bytes=%u renderer=%u stream=%u offset=%u remaining=%u blockSize=%u\n",
+        kind,
+        g_switchCurrentAssetIndex,
+        static_cast<unsigned>(g_switchCurrentAssetRawType),
+        token,
+        static_cast<unsigned>(sizeDwords),
+        bytes,
+        static_cast<unsigned>(loadForRenderer),
+        static_cast<unsigned>(streamIndex),
+        offset,
+        remaining,
+        block.size);
+    // Use the direct log path: Sys_Error aborts before buffered [SWITCH ...]
+    // diagnostics are flushed.
+    Switch_LogWrite(trace);
+}
+#endif
+
 void __cdecl Load_GfxVertexShaderLoadDef(bool atStreamStart)
 {
-#ifdef __SWITCH__
-    iassert(!atStreamStart);
-#else
     Load_Stream(atStreamStart, (uint8_t *)varGfxVertexShaderLoadDef, 8);
+#ifdef __SWITCH__
+    const uint32_t serializedProgram = static_cast<uint32_t>(
+        reinterpret_cast<uintptr_t>(varGfxVertexShaderLoadDef->program));
+    const uint16_t serializedProgramSize =
+        varGfxVertexShaderLoadDef->programSize;
+    const uint16_t serializedLoadForRenderer =
+        varGfxVertexShaderLoadDef->loadForRenderer;
 #endif
     if (varGfxVertexShaderLoadDef->program)
     {
-#ifdef __SWITCH__
-        const uint32_t programToken = static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(varGfxVertexShaderLoadDef->program));
-
-        // A 32-bit fastfile pointer is either an inline/following sentinel
-        // (-1), an inserted/following pointer (-2), or a normal zone offset.
-        // Only the following forms have program bytes immediately in the
-        // current stream. A normal offset must be converted to a native
-        // ARM64 pointer and must not consume programSize DWORDs here.
-        if (programToken == UINT32_MAX)
-        {
-            varGfxVertexShaderLoadDef->program =
-                (uint32_t *)AllocLoad_FxElemVisStateSample();
-            varDWORD = varGfxVertexShaderLoadDef->program;
-            Load_DWORDArray(1, varGfxVertexShaderLoadDef->programSize);
-        }
-        else if (programToken == UINT32_MAX - 1u)
-        {
-            const void **inserted = DB_InsertPointer();
-            varGfxVertexShaderLoadDef->program =
-                (uint32_t *)AllocLoad_FxElemVisStateSample();
-            varDWORD = varGfxVertexShaderLoadDef->program;
-            Load_DWORDArray(1, varGfxVertexShaderLoadDef->programSize);
-            *inserted = varGfxVertexShaderLoadDef->program;
-        }
-        else
-        {
-            varGfxVertexShaderLoadDef->program =
-                reinterpret_cast<uint32_t *>(
-                    DB_ConvertOffsetToPointerValue(programToken));
-        }
-#else
         varGfxVertexShaderLoadDef->program = (uint32_t *)AllocLoad_FxElemVisStateSample();
         varDWORD = varGfxVertexShaderLoadDef->program;
+#ifdef __SWITCH__
+        Switch_LogShaderProgramOobIfNeeded(
+            "vertex",
+            serializedProgram,
+            serializedProgramSize,
+            serializedLoadForRenderer);
+        const char *previousStage = g_switchDbStage;
+        g_switchDbStage = "material/vertex_shader_program";
+#endif
         Load_DWORDArray(1, varGfxVertexShaderLoadDef->programSize);
+#ifdef __SWITCH__
+        g_switchDbStage = previousStage;
 #endif
     }
 }
 
 void __cdecl Load_GfxPixelShaderLoadDef(bool atStreamStart)
 {
-#ifdef __SWITCH__
-    iassert(!atStreamStart);
-#else
     Load_Stream(atStreamStart, (uint8_t *)varGfxPixelShaderLoadDef, 8);
+#ifdef __SWITCH__
+    const uint32_t serializedProgram = static_cast<uint32_t>(
+        reinterpret_cast<uintptr_t>(varGfxPixelShaderLoadDef->program));
+    const uint16_t serializedProgramSize =
+        varGfxPixelShaderLoadDef->programSize;
+    const uint16_t serializedLoadForRenderer =
+        varGfxPixelShaderLoadDef->loadForRenderer;
 #endif
     if (varGfxPixelShaderLoadDef->program)
     {
-#ifdef __SWITCH__
-        const uint32_t programToken = static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(varGfxPixelShaderLoadDef->program));
-
-        if (programToken == UINT32_MAX)
-        {
-            varGfxPixelShaderLoadDef->program =
-                (uint32_t *)AllocLoad_FxElemVisStateSample();
-            varDWORD = varGfxPixelShaderLoadDef->program;
-            Load_DWORDArray(1, varGfxPixelShaderLoadDef->programSize);
-        }
-        else if (programToken == UINT32_MAX - 1u)
-        {
-            const void **inserted = DB_InsertPointer();
-            varGfxPixelShaderLoadDef->program =
-                (uint32_t *)AllocLoad_FxElemVisStateSample();
-            varDWORD = varGfxPixelShaderLoadDef->program;
-            Load_DWORDArray(1, varGfxPixelShaderLoadDef->programSize);
-            *inserted = varGfxPixelShaderLoadDef->program;
-        }
-        else
-        {
-            varGfxPixelShaderLoadDef->program =
-                reinterpret_cast<uint32_t *>(
-                    DB_ConvertOffsetToPointerValue(programToken));
-        }
-#else
         varGfxPixelShaderLoadDef->program = (uint32_t *)AllocLoad_FxElemVisStateSample();
         varDWORD = varGfxPixelShaderLoadDef->program;
+#ifdef __SWITCH__
+        Switch_LogShaderProgramOobIfNeeded(
+            "pixel",
+            serializedProgram,
+            serializedProgramSize,
+            serializedLoadForRenderer);
+        const char *previousStage = g_switchDbStage;
+        g_switchDbStage = "material/pixel_shader_program";
+#endif
         Load_DWORDArray(1, varGfxPixelShaderLoadDef->programSize);
+#ifdef __SWITCH__
+        g_switchDbStage = previousStage;
 #endif
     }
 }
@@ -5505,9 +6028,33 @@ void __cdecl Load_MaterialVertexShader(bool atStreamStart)
 
     // The upstream loader reads the 16-byte serialized record directly at the current cursor.
     SerializedMaterialVertexShader serialized{};
+    const uint32_t vertexShaderHeaderStream = g_streamPosIndex;
+    const uint32_t vertexShaderHeaderOffset =
+        Switch_GetStreamCursorOffset(vertexShaderHeaderStream);
     const uint8_t *vertexShaderStart = DB_GetStreamPos();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
+    if (serialized.loadForRenderer > 2u)
+    {
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VERTEXSHADER HEADER] stream=%u offset=%u pos=%p name=%08x shader=%08x program=%08x size=%u renderer=%u after=%p\n",
+            static_cast<unsigned>(vertexShaderHeaderStream),
+            vertexShaderHeaderOffset,
+            static_cast<const void *>(vertexShaderStart),
+            serialized.name,
+            serialized.shader,
+            serialized.program,
+            static_cast<unsigned>(serialized.programSize),
+            static_cast<unsigned>(serialized.loadForRenderer),
+            static_cast<void *>(DB_GetStreamPos()));
+        Switch_LogWrite(trace);
+        Switch_LogRawDwords(
+            "[KisakCOD][VERTEXSHADER BYTES]",
+            reinterpret_cast<const uint8_t *>(&serialized),
+            sizeof(serialized));
+    }
 
     memset(varMaterialVertexShader, 0, sizeof(*varMaterialVertexShader));
 
@@ -5543,15 +6090,15 @@ void __cdecl Load_MaterialVertexShader(bool atStreamStart)
 void __cdecl Load_MaterialVertexShaderPtr(bool atStreamStart)
 {
     Load_Stream(atStreamStart, (uint8_t *)varMaterialVertexShaderPtr, 4);
-#ifdef __SWITCH__
-    // The pass header and inline shader payload are serialized in the current
-    // virtual stream (block 4). Keep that cursor active.
     if (*varMaterialVertexShaderPtr)
     {
+#ifdef __SWITCH__
         const uint32_t value = static_cast<uint32_t>(
             reinterpret_cast<uintptr_t>(*varMaterialVertexShaderPtr));
         if (value == UINT32_MAX || value == UINT32_MAX - 1u)
         {
+            // -1 = inline object, -2 = inline object plus an insertion alias.
+            // Both sentinels use the same serialized 16-byte shader record.
             DB_AllocStreamPos(3);
 
             const void **inserted = nullptr;
@@ -5559,10 +6106,9 @@ void __cdecl Load_MaterialVertexShaderPtr(bool atStreamStart)
                 inserted = DB_InsertPointer();
 
             *varMaterialVertexShaderPtr =
-                reinterpret_cast<MaterialVertexShader *>(
-                    Hunk_Alloc(
-                        static_cast<uint32_t>(sizeof(MaterialVertexShader)),
-                        "SwitchMaterialVertexShader", 22));
+                reinterpret_cast<MaterialVertexShader *>(Hunk_Alloc(
+                    static_cast<uint32_t>(sizeof(MaterialVertexShader)),
+                    "SwitchMaterialVertexShader", 22));
             varMaterialVertexShader = *varMaterialVertexShaderPtr;
             Load_MaterialVertexShader(1);
 
@@ -5573,23 +6119,18 @@ void __cdecl Load_MaterialVertexShaderPtr(bool atStreamStart)
             *varMaterialVertexShaderPtr =
                 reinterpret_cast<MaterialVertexShader *>(
                     DB_ConvertOffsetToPointerValue(value));
-    }
 #else
-    if (*varMaterialVertexShaderPtr)
-    {
         if (*varMaterialVertexShaderPtr == (MaterialVertexShader *)-1)
         {
-            *varMaterialVertexShaderPtr =
-                (MaterialVertexShader *)AllocLoad_FxElemVisStateSample();
+            *varMaterialVertexShaderPtr = (MaterialVertexShader *)AllocLoad_FxElemVisStateSample();
             varMaterialVertexShader = *varMaterialVertexShaderPtr;
             Load_MaterialVertexShader(1);
         }
         else
-            DB_ConvertOffsetToPointer((uint32_t *)varMaterialVertexShaderPtr);
-    }
+            DB_ConvertOffsetToPointer((uint32_t*)varMaterialVertexShaderPtr);
 #endif
+    }
 }
-
 void __cdecl Load_MaterialPixelShader(bool atStreamStart)
 {
 #ifdef __SWITCH__
@@ -5609,6 +6150,27 @@ void __cdecl Load_MaterialPixelShader(bool atStreamStart)
     SerializedMaterialPixelShader serialized{};
     const uint8_t *pixelShaderStart = DB_GetStreamPos();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
+
+#ifdef __SWITCH__
+    Switch_LogRawDwords(
+        "[SWITCH PIXELSHADER RAW]",
+        reinterpret_cast<const uint8_t *>(&serialized),
+        sizeof(serialized));
+#endif
+
+    {
+        char trace[256];
+        std::snprintf(trace, sizeof(trace),
+            "[SWITCH PIXELSHADER] pos=%p raw name=%08x shader=%08x program=%08x size=%u renderer=%u after=%p\n",
+            static_cast<const void *>(pixelShaderStart),
+            serialized.name,
+            serialized.shader,
+            serialized.program,
+            static_cast<unsigned>(serialized.programSize),
+            static_cast<unsigned>(serialized.loadForRenderer),
+            static_cast<void *>(DB_GetStreamPos()));
+        Switch_LogWrite(trace);
+    }
 
     memset(varMaterialPixelShader, 0, sizeof(*varMaterialPixelShader));
 
@@ -5634,7 +6196,16 @@ void __cdecl Load_MaterialPixelShader(bool atStreamStart)
     varMaterialPixelShader->prog.loadDef.loadForRenderer = serialized.loadForRenderer;
 
     varMaterialPixelShaderProgram = &varMaterialPixelShader->prog;
+    {
+        char trace[160];
+        std::snprintf(trace, sizeof(trace),
+            "[SWITCH PIXELSHADER] before program program=%08x size=%u\n",
+            serialized.program,
+            static_cast<unsigned>(serialized.programSize));
+        Switch_LogWrite(trace);
+    }
     Load_MaterialPixelShaderProgram(0);
+    Switch_LogWrite("[SWITCH PIXELSHADER] after program\n");
 #else
     Load_Stream(atStreamStart, (uint8_t *)varMaterialPixelShader, 16);
     varXString = &varMaterialPixelShader->name;
@@ -5656,6 +6227,9 @@ static void Load_MaterialPixelShaderHandle(bool atStreamStart)
             reinterpret_cast<uintptr_t>(*varMaterialPixelShaderPtr));
         if (value == UINT32_MAX || value == UINT32_MAX - 1)
         {
+            // Preserve the generated loader's stream alignment before the
+            // inline serialized shader record; Hunk_Alloc is native storage.
+            DB_AllocStreamPos(3);
             *varMaterialPixelShaderPtr =
                 reinterpret_cast<MaterialPixelShader *>(
                     Hunk_Alloc(
@@ -5697,15 +6271,15 @@ static void Load_MaterialPixelShaderHandle(bool atStreamStart)
 void __cdecl Load_MaterialPixelShaderPtr(bool atStreamStart)
 {
     Load_Stream(atStreamStart, (uint8_t *)varMaterialPixelShaderPtr, 4);
-#ifdef __SWITCH__
-    // The pass header and inline pixel shader payload stay in the current
-    // virtual stream (block 4), matching the original loader ordering.
     if (*varMaterialPixelShaderPtr)
     {
+#ifdef __SWITCH__
         const uint32_t value = static_cast<uint32_t>(
             reinterpret_cast<uintptr_t>(*varMaterialPixelShaderPtr));
         if (value == UINT32_MAX || value == UINT32_MAX - 1u)
         {
+            // -1 = inline object, -2 = inline object plus an insertion alias.
+            // Both sentinels use the same serialized 16-byte shader record.
             DB_AllocStreamPos(3);
 
             const void **inserted = nullptr;
@@ -5713,10 +6287,9 @@ void __cdecl Load_MaterialPixelShaderPtr(bool atStreamStart)
                 inserted = DB_InsertPointer();
 
             *varMaterialPixelShaderPtr =
-                reinterpret_cast<MaterialPixelShader *>(
-                    Hunk_Alloc(
-                        static_cast<uint32_t>(sizeof(MaterialPixelShader)),
-                        "SwitchMaterialPixelShader", 22));
+                reinterpret_cast<MaterialPixelShader *>(Hunk_Alloc(
+                    static_cast<uint32_t>(sizeof(MaterialPixelShader)),
+                    "SwitchMaterialPixelShader", 22));
             varMaterialPixelShader = *varMaterialPixelShaderPtr;
             Load_MaterialPixelShader(1);
 
@@ -5727,23 +6300,18 @@ void __cdecl Load_MaterialPixelShaderPtr(bool atStreamStart)
             *varMaterialPixelShaderPtr =
                 reinterpret_cast<MaterialPixelShader *>(
                     DB_ConvertOffsetToPointerValue(value));
-    }
 #else
-    if (*varMaterialPixelShaderPtr)
-    {
         if (*varMaterialPixelShaderPtr == (MaterialPixelShader *)-1)
         {
-            *varMaterialPixelShaderPtr =
-                (MaterialPixelShader *)AllocLoad_FxElemVisStateSample();
+            *varMaterialPixelShaderPtr = (MaterialPixelShader *)AllocLoad_FxElemVisStateSample();
             varMaterialPixelShader = *varMaterialPixelShaderPtr;
             Load_MaterialPixelShader(1);
         }
         else
-            DB_ConvertOffsetToPointer((uint32_t *)varMaterialPixelShaderPtr);
-    }
+            DB_ConvertOffsetToPointer((uint32_t*)varMaterialPixelShaderPtr);
 #endif
+    }
 }
-
 void __cdecl Load_MaterialVertexDeclaration(bool atStreamStart)
 {
 #ifdef __SWITCH__
@@ -5930,13 +6498,73 @@ static void Switch_LoadMaterialPassSerialized(
     varMaterialPass->stableArgCount = serialized.stableArgCount;
     varMaterialPass->customSamplerFlags = serialized.customSamplerFlags;
 
+    if (serialized.vertexShader == UINT32_MAX &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        uint32_t passStream = UINT32_MAX;
+        uint32_t passOffset = UINT32_MAX;
+        const uintptr_t passAddress =
+            reinterpret_cast<uintptr_t>(passStart);
+        if (g_streamBlocks)
+        {
+            for (uint32_t i = 0; i < ARRAY_COUNT(g_streamPosArray); ++i)
+            {
+                if (!g_streamBlocks[i].data)
+                    continue;
+
+                const uintptr_t blockBase = reinterpret_cast<uintptr_t>(
+                    g_streamBlocks[i].data);
+                if (passAddress >= blockBase &&
+                    passAddress - blockBase <= g_streamBlocks[i].size)
+                {
+                    passStream = i;
+                    passOffset = static_cast<uint32_t>(
+                        passAddress - blockBase);
+                    break;
+                }
+            }
+        }
+
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL PASS SHADER] asset=%d passStream=%u passOffset=%u childStream=%u childOffset=%u decl=%08x vs=%08x ps=%08x args=%08x counts=%u/%u/%u\n",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(passStream),
+            passOffset,
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(g_streamPosIndex),
+            serialized.vertexDecl,
+            serialized.vertexShader,
+            serialized.pixelShader,
+            serialized.args,
+            static_cast<unsigned>(serialized.perPrimArgCount),
+            static_cast<unsigned>(serialized.perObjArgCount),
+            static_cast<unsigned>(serialized.stableArgCount));
+        Switch_LogWrite(trace);
+    }
+
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH PASS RAW] pos=%p decl=%08x vs=%08x ps=%08x args=%08x counts=%u/%u/%u flags=%u\n",
+            static_cast<const void *>(passStart),
+            serialized.vertexDecl,
+            serialized.vertexShader,
+            serialized.pixelShader,
+            serialized.args,
+            static_cast<unsigned>(serialized.perPrimArgCount),
+            static_cast<unsigned>(serialized.perObjArgCount),
+            static_cast<unsigned>(serialized.stableArgCount),
+            static_cast<unsigned>(serialized.customSamplerFlags));
+        Switch_LogWrite(trace);
+    }
 
     if (serialized.vertexDecl == UINT32_MAX)
     {
-        // The original AllocLoad_FxElemVisStateSample() aligns the serialized
-        // inline declaration before Load_MaterialVertexDeclaration().
-        // Hunk_Alloc() only allocates the widened native destination, so the
-        // serialized stream cursor must be aligned explicitly here.
         DB_AllocStreamPos(3);
         varMaterialPass->vertexDecl =
             reinterpret_cast<MaterialVertexDeclaration *>(Hunk_Alloc(
@@ -5967,71 +6595,29 @@ static void Switch_LoadMaterialPassSerialized(
     varMaterialPixelShaderPtr = &varMaterialPass->pixelShader;
     Load_MaterialPixelShaderPtr(0);
 
-    const uint32_t argsToken = serialized.args;
     varMaterialPass->args =
         reinterpret_cast<MaterialShaderArgument *>(
-            static_cast<uintptr_t>(argsToken));
-
-    if (argsToken)
+            static_cast<uintptr_t>(serialized.args));
+    if (serialized.args)
     {
         const uint32_t count =
             static_cast<uint32_t>(
                 varMaterialPass->stableArgCount +
                 varMaterialPass->perObjArgCount +
                 varMaterialPass->perPrimArgCount);
-
         if (count)
         {
-            // args follows the same serialized 32-bit pointer convention as
-            // vertexShader/pixelShader: only FOLLOWING/INSERT pointers have
-            // an inline array after the pass headers. A normal zone offset
-            // already points at serialized data elsewhere and must be
-            // converted without consuming the current stream.
-            if (argsToken == UINT32_MAX)
-            {
-                // The 32-bit loader obtains the inline args array through
-                // AllocLoad_FxElemVisStateSample(), which aligns stream 4
-                // before consuming the serialized argument records. Keep the
-                // same source-cursor alignment when the native array lives in
-                // Hunk memory on ARM64.
-                DB_AllocStreamPos(3);
-                varMaterialPass->args =
-                    reinterpret_cast<MaterialShaderArgument *>(
-                        Hunk_Alloc(
-                            static_cast<uint32_t>(
-                                sizeof(MaterialShaderArgument) * count),
-                            "SwitchMaterialShaderArguments", 22));
-                varMaterialShaderArgument = varMaterialPass->args;
-                Load_MaterialShaderArgumentArray(
-                    1,
-                    static_cast<int32_t>(count));
-            }
-            else if (argsToken == UINT32_MAX - 1u)
-            {
-                const void **inserted = DB_InsertPointer();
-                varMaterialPass->args =
-                    reinterpret_cast<MaterialShaderArgument *>(
-                        Hunk_Alloc(
-                            static_cast<uint32_t>(
-                                sizeof(MaterialShaderArgument) * count),
-                            "SwitchMaterialShaderArguments", 22));
-                varMaterialShaderArgument = varMaterialPass->args;
-                Load_MaterialShaderArgumentArray(
-                    1,
-                    static_cast<int32_t>(count));
-                *inserted = varMaterialPass->args;
-            }
-            else
-            {
-                varMaterialPass->args =
-                    reinterpret_cast<MaterialShaderArgument *>(
-                        DB_ConvertOffsetToPointerValue(argsToken));
-            }
+            DB_AllocStreamPos(3);
+            varMaterialPass->args =
+                reinterpret_cast<MaterialShaderArgument *>(Hunk_Alloc(
+                    static_cast<uint32_t>(
+                        sizeof(MaterialShaderArgument) * count),
+                    "SwitchMaterialShaderArguments", 22));
+            varMaterialShaderArgument = varMaterialPass->args;
+            Load_MaterialShaderArgumentArray(1, static_cast<int32_t>(count));
         }
         else
-        {
             varMaterialPass->args = nullptr;
-        }
     }
 }
 #endif
@@ -6082,23 +6668,6 @@ void __cdecl Load_MaterialPassArray(bool atStreamStart, int32_t count)
     iassert(atStreamStart);
     if (count <= 0)
         return;
-
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH MATERIAL TRACE] passArray asset=%d count=%d pos=%p stream=%u b4=%08x\n",
-            g_switchCurrentAssetIndex,
-            count,
-            static_cast<void *>(DB_GetStreamPos()),
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(4));
-        Switch_LogWrite(trace);
-    }
-#endif
 
     MaterialPass *base = varMaterialPass;
     std::vector<SerializedMaterialPass> serialized(
@@ -6161,151 +6730,29 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
 
     // The upstream loader reads the serialized technique header directly at the current cursor.
     SerializedMaterialTechnique serialized{};
+    const uint32_t techniqueHeaderStream = g_streamPosIndex;
+    const uint32_t techniqueHeaderOffset =
+        Switch_GetStreamCursorOffset(techniqueHeaderStream);
     const uint8_t *techniqueStart = DB_GetStreamPos();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
+    if (g_switchCurrentAssetRawType == 23u &&
+        g_switchCurrentAssetIndex == 4728)
     {
-        const uint32_t streamOffset = Switch_GetStreamCursorOffset(4);
-        const uint8_t *block4 =
-            g_streamBlocks && g_streamBlocks[4].data
-                ? g_streamBlocks[4].data
-                : nullptr;
-        const uint32_t block4Size =
-            g_streamBlocks ? g_streamBlocks[4].size : 0u;
-        const uint32_t postOffset =
-            streamOffset >= sizeof(SerializedMaterialTechnique)
-                ? streamOffset - sizeof(SerializedMaterialTechnique)
-                : 0u;
-        char trace[768];
+        char trace[320];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][TECH4728 RAW POST] index=%d start=%08x end=%08x xfile=%llu header=%08x/%04x/%04x bytes:",
-            g_switchMaterialTechniqueIndex,
-            postOffset,
-            streamOffset,
-            static_cast<unsigned long long>(
-                DB_GetXFileUncompressedOffset()),
+            "[KisakCOD][MATERIAL TECH HEADER] stream=%u offset=%u pos=%p name=%08x flags=%04x passCount=%u after=%u\n",
+            static_cast<unsigned>(techniqueHeaderStream),
+            techniqueHeaderOffset,
+            static_cast<const void *>(techniqueStart),
             serialized.name,
             static_cast<unsigned>(serialized.flags),
-            static_cast<unsigned>(serialized.passCount));
-        if (block4 &&
-            postOffset <= block4Size &&
-            block4Size - postOffset >= sizeof(SerializedMaterialTechnique))
-        {
-            for (size_t j = 0; j < sizeof(SerializedMaterialTechnique); ++j)
-            {
-                const int used = std::snprintf(
-                    trace + std::strlen(trace),
-                    sizeof(trace) - std::strlen(trace),
-                    " %02x",
-                    static_cast<unsigned>(block4[postOffset + j]));
-                if (used <= 0)
-                    break;
-            }
-        }
-        std::snprintf(
-            trace + std::strlen(trace),
-            sizeof(trace) - std::strlen(trace),
-            "\n");
-        Sys_Print(trace);
+            static_cast<unsigned>(serialized.passCount),
+            Switch_GetStreamCursorOffset(techniqueHeaderStream));
+        Switch_LogWrite(trace);
     }
-#endif
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
-    {
-        const uint32_t endOffset = Switch_GetStreamCursorOffset(4);
-        const uint32_t startOffset =
-            endOffset >= sizeof(SerializedMaterialTechnique)
-                ? endOffset - sizeof(SerializedMaterialTechnique)
-                : 0u;
-        const uint8_t *block4 =
-            g_streamBlocks && g_streamBlocks[4].data
-                ? g_streamBlocks[4].data
-                : nullptr;
-        const uint32_t block4Size =
-            g_streamBlocks ? g_streamBlocks[4].size : 0u;
-
-        if (block4 && startOffset < block4Size)
-        {
-            char trace[1200];
-            int written = std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][TECH4728 CONTEXT] start=%08x bytes:",
-                startOffset);
-
-            const uint32_t dumpSize =
-                block4Size - startOffset < 64u
-                    ? block4Size - startOffset
-                    : 64u;
-            for (uint32_t j = 0; j < dumpSize; ++j)
-            {
-                written += std::snprintf(
-                    trace + written,
-                    sizeof(trace) - static_cast<size_t>(written),
-                    " %02x",
-                    static_cast<unsigned>(block4[startOffset + j]));
-                if (written >= static_cast<int>(sizeof(trace) - 16))
-                    break;
-            }
-
-            std::snprintf(
-                trace + written,
-                sizeof(trace) - static_cast<size_t>(written),
-                "\n");
-            Sys_Print(trace);
-
-            char scan[768];
-            written = std::snprintf(
-                scan,
-                sizeof(scan),
-                "[KisakCOD][TECH4728 SCAN]");
-            for (uint32_t rel = 0;
-                 rel + sizeof(SerializedMaterialTechnique) <= 64u &&
-                 startOffset + rel + sizeof(SerializedMaterialTechnique) <= block4Size;
-                 rel += 4u)
-            {
-                const uint8_t *candidate = block4 + startOffset + rel;
-                uint32_t name = 0;
-                uint16_t flags = 0;
-                uint16_t passCount = 0;
-                std::memcpy(&name, candidate + 0, sizeof(name));
-                std::memcpy(&flags, candidate + 4, sizeof(flags));
-                std::memcpy(&passCount, candidate + 6, sizeof(passCount));
-
-                const bool plausibleName =
-                    !name ||
-                    name == UINT32_MAX ||
-                    name == UINT32_MAX - 1u ||
-                    ((name >> 28) <= 8u);
-                if (plausibleName && flags < 0x4000u && passCount <= 64u)
-                {
-                    written += std::snprintf(
-                        scan + written,
-                        sizeof(scan) - static_cast<size_t>(written),
-                        " rel=%02x name=%08x flags=%04x passes=%u",
-                        rel,
-                        name,
-                        static_cast<unsigned>(flags),
-                        static_cast<unsigned>(passCount));
-                    if (written >= static_cast<int>(sizeof(scan) - 64))
-                        break;
-                }
-            }
-
-            std::snprintf(
-                scan + written,
-                sizeof(scan) - static_cast<size_t>(written),
-                "\n");
-            Sys_Print(scan);
-        }
-    }
-#endif
 
     // MaterialTechnique has one trailing pass in its C++ type. Reserve only
     // the actual pass count from the serialized header instead of a worst-case
@@ -6321,6 +6768,22 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
     iassert(varMaterialTechniquePtr);
     *varMaterialTechniquePtr = varMaterialTechnique;
 
+#ifdef __SWITCH__
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH TECHNIQUE RAW] pos=%p name=%08x flags=%04x passCount=%u after=%p\n",
+            static_cast<const void *>(techniqueStart),
+            serialized.name,
+            static_cast<unsigned>(serialized.flags),
+            static_cast<unsigned>(serialized.passCount),
+            static_cast<void *>(DB_GetStreamPos()));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     varMaterialTechnique->flags = serialized.flags;
     varMaterialTechnique->passCount = serialized.passCount;
 
@@ -6335,25 +6798,7 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
                 static_cast<uintptr_t>(UINT32_MAX));
 
     // Fastfile order: header, all pass records/payloads, then the inline name.
-#ifdef __SWITCH__
-    g_switchDbStage = "material/techset/technique";
-    if (g_switchCurrentAssetIndex == 4728)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][TECH4728] passCount=%u pos=%p b4=%08x\n",
-            static_cast<unsigned>(varMaterialTechnique->passCount),
-            static_cast<void *>(DB_GetStreamPos()),
-            Switch_GetStreamCursorOffset(4));
-        Sys_Print(trace);
-    }
-#endif
     varMaterialPass = varMaterialTechnique->passArray;
-#ifdef __SWITCH__
-    g_switchDbStage = "material/techset/technique/passes";
-#endif
     Load_MaterialPassArray(1, varMaterialTechnique->passCount);
 
     if (serialized.name == UINT32_MAX)
@@ -6547,10 +6992,6 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
     const void **inserted = nullptr;
 #endif
     Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniquePtr, 4);
-#ifdef __SWITCH__
-    // The pointer record and inline technique payload remain on the current
-    // virtual stream. Only the native destination object lives in Hunk memory.
-#endif
     if (*varMaterialTechniquePtr)
     {
 #ifdef __SWITCH__
@@ -6559,12 +7000,12 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
                 reinterpret_cast<uintptr_t>(*varMaterialTechniquePtr));
         if (value == UINT32_MAX || value == UINT32_MAX - 1u)
         {
+            // Mirror the serialized-header alignment previously supplied by
+            // AllocLoad_FxElemVisStateSample() before the ARM64 object is made.
             DB_AllocStreamPos(3);
             if (value == UINT32_MAX - 1u)
                 inserted = DB_InsertPointer();
-
             Load_MaterialTechnique(1);
-
             if (inserted)
                 *inserted = *reinterpret_cast<void **>(
                     varMaterialTechniquePtr);
@@ -6578,8 +7019,7 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
 #else
         if (*varMaterialTechniquePtr == (MaterialTechnique *)-1)
         {
-            *varMaterialTechniquePtr =
-                (MaterialTechnique *)AllocLoad_FxElemVisStateSample();
+            *varMaterialTechniquePtr = (MaterialTechnique *)AllocLoad_FxElemVisStateSample();
             varMaterialTechnique = *varMaterialTechniquePtr;
             Load_MaterialTechnique(1);
         }
@@ -6593,15 +7033,34 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
 
 void __cdecl Load_MaterialTechniquePtrArray(bool atStreamStart, int32_t count)
 {
-    MaterialTechnique **var; // [esp+0h] [ebp-8h]
-    int32_t i; // [esp+4h] [ebp-4h]
-
+#ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint32_t> serialized(static_cast<size_t>(count));
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size() * sizeof(uint32_t)));
+        MaterialTechnique **var = varMaterialTechniquePtr;
+        for (int32_t i = 0; i < count; ++i)
+        {
+            varMaterialTechniquePtr = var + i;
+            *varMaterialTechniquePtr = reinterpret_cast<MaterialTechnique *>(
+                static_cast<uintptr_t>(serialized[static_cast<size_t>(i)]));
+            Load_MaterialTechniquePtr(false);
+        }
+        return;
+    }
+#endif
+    MaterialTechnique **var;
+    int32_t i;
     Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniquePtr, 4 * count);
     var = varMaterialTechniquePtr;
     for (i = 0; i < count; ++i)
     {
         varMaterialTechniquePtr = var;
-        Load_MaterialTechniquePtr(0);
+        Load_MaterialTechniquePtr(false);
         ++var;
     }
 }
@@ -6609,6 +7068,7 @@ void __cdecl Load_MaterialTechniquePtrArray(bool atStreamStart, int32_t count)
 void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
 {
 #ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH MATERIAL] techset read148 begin\n");
     struct SerializedMaterialTechniqueSet
     {
         uint32_t name;
@@ -6631,30 +7091,13 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     // name + worldVertFormat/meta + remappedTechniqueSet + 34 technique pointers.
     // The Switch runtime is 64-bit, so expand the serialized 32-bit pointers.
     SerializedMaterialTechniqueSet serialized{};
+    const uint32_t techniqueSetHeaderStream = g_streamPosIndex;
+    const uint32_t techniqueSetHeaderOffset =
+        Switch_GetStreamCursorOffset(techniqueSetHeaderStream);
+    const uint8_t *techniqueSetStart = DB_GetStreamPos();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
-
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
-    {
-        char trace[768];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][TECHSET4728] stream0=%08x xfile=%llu name=%08x remap=%08x tok0=%08x tok1=%08x tok2=%08x tok3=%08x tok4=%08x tok5=%08x\n",
-            Switch_GetStreamCursorOffset(0),
-            static_cast<unsigned long long>(DB_GetXFileUncompressedOffset()),
-            serialized.name,
-            serialized.remappedTechniqueSet,
-            serialized.techniques[0],
-            serialized.techniques[1],
-            serialized.techniques[2],
-            serialized.techniques[3],
-            serialized.techniques[4],
-            serialized.techniques[5]);
-        Sys_Print(trace);
-    }
-#endif
+    const uint32_t techniqueSetHeaderAfter =
+        Switch_GetStreamCursorOffset(techniqueSetHeaderStream);
 
 #ifdef __SWITCH__
     if (g_switchCurrentAssetRawType == 5u && g_switchCurrentAssetIndex == 1502)
@@ -6721,6 +7164,10 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
 #endif
 
+    Switch_LogRawDwords(
+        "[SWITCH TECHSET WORDS]",
+        reinterpret_cast<const uint8_t *>(&serialized),
+        sizeof(serialized));
 
     varMaterialTechniqueSet->worldVertFormat = serialized.worldVertFormat;
     varMaterialTechniqueSet->hasBeenUploaded =
@@ -6755,6 +7202,28 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
 #endif
     DB_PushStreamPos(4);
 #ifdef __SWITCH__
+    if (traceRawType == 23u && traceAssetIndex == 4728)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL TECHSET HEADER] stream=%u start=%u after=%u pos=%p name=%08x remap=%08x tech0=%08x tech1=%08x tech2=%08x tech3=%08x childStream=%u childOffset=%u\n",
+            static_cast<unsigned>(techniqueSetHeaderStream),
+            techniqueSetHeaderOffset,
+            techniqueSetHeaderAfter,
+            static_cast<const void *>(techniqueSetStart),
+            serialized.name,
+            serialized.remappedTechniqueSet,
+            serialized.techniques[0],
+            serialized.techniques[1],
+            serialized.techniques[2],
+            serialized.techniques[3],
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(g_streamPosIndex));
+        Switch_LogWrite(trace);
+    }
+
     if (traceRawType == 5u &&
         traceAssetIndex == 1502)
     {
@@ -6788,24 +7257,6 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
         Load_XStringCustom(&nameBuffer);
         varMaterialTechniqueSet->name = nameBuffer;
     }
-
-#ifdef __SWITCH__
-    if (traceAssetIndex == 4728 && traceRawType == 23u)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][TECHSET4728 NAME] token=%08x stream4=%08x xfile=%llu text=%s\n",
-            serialized.name,
-            Switch_GetStreamCursorOffset(4),
-            static_cast<unsigned long long>(DB_GetXFileUncompressedOffset()),
-            varMaterialTechniqueSet->name
-                ? varMaterialTechniqueSet->name
-                : "<null>");
-        Sys_Print(trace);
-    }
-#endif
 
 #ifdef __SWITCH__
     if (traceRawType == 25u && traceAssetIndex == 4510)
@@ -6843,6 +7294,61 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
 
 #ifdef __SWITCH__
+    if (traceRawType == 23u && traceAssetIndex == 4728)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL TECHSET CHILDREN] name=%p stream=%u offset=%u\n",
+            static_cast<const void *>(varMaterialTechniqueSet->name),
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(g_streamPosIndex));
+        Switch_LogWrite(trace);
+    }
+
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH TECHSET RAW] pos=%p name=%08x world=%02x uploaded=%02x remap=%08x after=%p\n",
+            static_cast<const void *>(techniqueSetStart),
+            serialized.name,
+            static_cast<unsigned>(serialized.worldVertFormat),
+            static_cast<unsigned>(serialized.hasBeenUploaded),
+            serialized.remappedTechniqueSet,
+            static_cast<void *>(DB_GetStreamPos()));
+        Switch_LogWrite(trace);
+
+        for (int base = 0; base < 34; base += 6)
+        {
+            char row[256];
+            int written = std::snprintf(
+                row,
+                sizeof(row),
+                "[SWITCH TECHSET PTRS] %d:",
+                base);
+
+            for (int i = base; i < base + 6 && i < 34; ++i)
+            {
+                written += std::snprintf(
+                    row + written,
+                    sizeof(row) - static_cast<size_t>(written),
+                    " %08x",
+                    serialized.techniques[i]);
+            }
+
+            std::snprintf(
+                row + written,
+                sizeof(row) - static_cast<size_t>(written),
+                "\n");
+            Switch_LogWrite(row);
+        }
+    }
+#endif
+
+#ifdef __SWITCH__
     if (traceRawType == 5u &&
         traceAssetIndex >= 1501 &&
         traceAssetIndex <= 1502)
@@ -6877,35 +7383,38 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
             varMaterialTechniquePtr =
                 &varMaterialTechniqueSet->techniques[i];
 
-            const void **inserted = nullptr;
-
-#ifdef __SWITCH__
-            if (g_switchCurrentAssetIndex == 4728 &&
-                g_switchCurrentAssetRawType == 23u)
-            {
-                g_switchMaterialTechniqueIndex = i;
-            }
-#endif
-
-            // Inline MaterialTechnique records are 4-byte aligned in the
-            // virtual stream. The pointer-array helper in the reference
-            // loader explicitly aligns before peeking/loading the dynamic
-            // technique header. Without this, a preceding inline XString can
-            // leave the cursor at e.g. ...157, making the following bytes
-            // decode as a bogus passCount and pass array.
+            // This path loads inline techniques directly instead of going
+            // through Load_MaterialTechniquePtr, so keep the serialized
+            // technique header aligned before reserving an optional pointer.
+            const uint32_t techniqueStream = g_streamPosIndex;
+            const uint32_t techniqueOffsetBeforeAlign =
+                Switch_GetStreamCursorOffset(techniqueStream);
             DB_AllocStreamPos(3);
 
+            const uint32_t techniqueOffsetAfterAlign =
+                Switch_GetStreamCursorOffset(techniqueStream);
+
+            const void **inserted = nullptr;
             if (value == UINT32_MAX - 1)
                 inserted = DB_InsertPointer();
 
-            Load_MaterialTechnique(1);
-#ifdef __SWITCH__
-            if (g_switchCurrentAssetIndex == 4728 &&
-                g_switchCurrentAssetRawType == 23u)
+            if (traceRawType == 23u && traceAssetIndex == 4728)
             {
-                g_switchMaterialTechniqueIndex = -1;
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][MATERIAL TECH ENTRY] index=%d token=%08x stream=%u before=%u aligned=%u header=%u\n",
+                    i,
+                    value,
+                    static_cast<unsigned>(techniqueStream),
+                    techniqueOffsetBeforeAlign,
+                    techniqueOffsetAfterAlign,
+                    Switch_GetStreamCursorOffset(g_streamPosIndex));
+                Switch_LogWrite(trace);
             }
-#endif
+
+            Load_MaterialTechnique(1);
 
 #ifdef __SWITCH__
             if (traceRawType == 5u &&
@@ -7075,23 +7584,6 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
     uint32_t value; // [esp+4h] [ebp-8h]
 
     Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniqueSetPtr, 4);
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728)
-    {
-        const uint32_t traceValue = static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(*varMaterialTechniqueSetPtr));
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][TECHSETPTR4728] token=%08x stream=%u b4=%08x pos=%p\n",
-            traceValue,
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<void *>(DB_GetStreamPos()));
-        Sys_Print(trace);
-    }
-#endif
     DB_PushStreamPos(0);
     if (*varMaterialTechniqueSetPtr)
     {
@@ -7124,7 +7616,8 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
             DB_AllocStreamPos(3);
             if (traceCinematic)
                 Switch_LogWrite("[SWITCH DB FIND] techset ptr -> inline\n");
-                    *varMaterialTechniqueSetPtr =
+            Switch_LogWrite("[SWITCH MATERIAL] techset inline begin\n");
+            *varMaterialTechniqueSetPtr =
                 reinterpret_cast<MaterialTechniqueSet *>(
                     Hunk_Alloc(
                         static_cast<uint32_t>(sizeof(MaterialTechniqueSet)),
@@ -7143,7 +7636,8 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
                 inserted = 0;
             Load_MaterialTechniqueSet(1);
 #ifdef __SWITCH__
-        #endif
+            Switch_LogWrite("[SWITCH MATERIAL] techset payload done\n");
+#endif
             Load_MaterialTechniqueSetAsset((XAssetHeader *)varMaterialTechniqueSetPtr);
             if (inserted)
                 *inserted = *varMaterialTechniqueSetPtr;
@@ -7209,59 +7703,106 @@ void __cdecl Load_Material(bool atStreamStart)
     static_assert(sizeof(SerializedMaterial) == 80);
 
     SerializedMaterial serialized{};
-    g_switchDbStage = "material/header";
-    const uint32_t materialStream0Start = Switch_GetStreamCursorOffset(0);
-    const uint64_t materialXfileStart =
-        DB_GetXFileUncompressedOffset();
+    const uint32_t materialHeaderStream = g_streamPosIndex;
+    const uint32_t materialHeaderOffset =
+        Switch_GetStreamCursorOffset(materialHeaderStream);
+    uint8_t *materialStreamPos = DB_GetStreamPos();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
+    const uint32_t materialHeaderAfter =
+        Switch_GetStreamCursorOffset(materialHeaderStream);
 
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
+    if (serialized.textureCount == UINT8_MAX &&
+        serialized.constantCount == UINT8_MAX &&
+        serialized.stateBitsCount == UINT8_MAX)
     {
-        char trace[1024];
+        char trace[512];
+        int written = std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL RAW INVALID] asset=%d rawType=%u stream=%u offset=%u after=%u bytes=",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<unsigned>(materialHeaderStream),
+            materialHeaderOffset,
+            materialHeaderAfter);
+
+        for (size_t i = 0;
+             i < sizeof(serialized) &&
+             written > 0 &&
+             static_cast<size_t>(written) < sizeof(trace);
+             ++i)
+        {
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                "%02x",
+                static_cast<unsigned>(
+                    reinterpret_cast<const uint8_t *>(&serialized)[i]));
+        }
+
+        if (written > 0 && static_cast<size_t>(written) < sizeof(trace))
+        {
+            std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                "\n");
+        }
+        Switch_LogWrite(trace);
+    }
+
+    const bool traceUiMaterial =
+        g_switchCurrentAssetRawType == 4u &&
+        g_switchCurrentAssetIndex >= 0 &&
+        g_switchCurrentAssetIndex <= 3;
+    if (traceUiMaterial)
+    {
+        char trace[384];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][MATERIAL4728] stream0=%08x->%08x xfile=%llu->%llu name=%08x techset=%08x tex=%08x const=%08x state=%08x counts=%u/%u/%u\n",
-            materialStream0Start,
+            "[KisakCOD][UI MATERIAL] header asset=%d start=%p stream=%u b0=%08x b4=%08x name=%08x techset=%08x textures=%08x count=%u constants=%08x/%u statebits=%08x/%u\n",
+            g_switchCurrentAssetIndex,
+            static_cast<void *>(materialStreamPos),
+            static_cast<unsigned>(g_streamPosIndex),
             Switch_GetStreamCursorOffset(0),
-            static_cast<unsigned long long>(materialXfileStart),
-            static_cast<unsigned long long>(DB_GetXFileUncompressedOffset()),
+            Switch_GetStreamCursorOffset(4),
             serialized.name,
             serialized.techniqueSet,
             serialized.textureTable,
+            static_cast<unsigned>(serialized.textureCount),
             serialized.constantTable,
+            static_cast<unsigned>(serialized.constantCount),
             serialized.stateBitsTable,
+            static_cast<unsigned>(serialized.stateBitsCount));
+        Switch_LogWrite(trace);
+    }
+
+    if (g_switchCurrentAssetRawType == 23u &&
+        g_switchCurrentAssetIndex == 4728)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL HEADER] stream=%u start=%u after=%u pos=%p name=%08x techset=%08x textures=%08x counts=%u/%u/%u\n",
+            static_cast<unsigned>(materialHeaderStream),
+            materialHeaderOffset,
+            materialHeaderAfter,
+            static_cast<void *>(materialStreamPos),
+            serialized.name,
+            serialized.techniqueSet,
+            serialized.textureTable,
             static_cast<unsigned>(serialized.textureCount),
             static_cast<unsigned>(serialized.constantCount),
             static_cast<unsigned>(serialized.stateBitsCount));
-
-        char *at = trace + std::strlen(trace);
-        std::snprintf(
-            at,
-            sizeof(trace) - static_cast<size_t>(at - trace),
-            " bytes:");
-        at = trace + std::strlen(trace);
-        const uint8_t *headerBytes =
-            reinterpret_cast<const uint8_t *>(&serialized);
-        for (size_t i = 0; i < sizeof(serialized) && i < 80; ++i)
-        {
-            const int used = std::snprintf(
-                at,
-                sizeof(trace) - static_cast<size_t>(at - trace),
-                " %02x",
-                static_cast<unsigned>(headerBytes[i]));
-            if (used <= 0)
-                break;
-            at += used;
-        }
-        std::snprintf(
-            at,
-            sizeof(trace) - static_cast<size_t>(at - trace),
-            "\n");
-        Sys_Print(trace);
+        Switch_LogWrite(trace);
     }
+
+#ifdef __SWITCH__
+    Switch_LogRawDwords(
+        "[SWITCH MATERIAL WORDS]",
+        reinterpret_cast<const uint8_t *>(&serialized),
+        sizeof(serialized));
 #endif
 
     memset(varMaterial, 0, sizeof(*varMaterial));
@@ -7303,6 +7844,9 @@ void __cdecl Load_Material(bool atStreamStart)
 
     DB_PushStreamPos(4);
 
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH MATERIAL] read80 done\n");
+#endif
 
     varMaterialInfo = &varMaterial->info;
     varXString = &varMaterial->info.name;
@@ -7311,13 +7855,34 @@ void __cdecl Load_Material(bool atStreamStart)
 #endif
     Load_XString(0);
 
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH MATERIAL] info done\n");
+#endif
 
     varMaterialTechniqueSetPtr = &varMaterial->techniqueSet;
 #ifdef __SWITCH__
     g_switchDbStage = "material/techset";
+    if (g_switchCurrentAssetRawType == 23u &&
+        g_switchCurrentAssetIndex == 4728)
+    {
+        char trace[224];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL TECHSET PTR] activeStream=%u stream0=%u stream4=%u token=%08x\n",
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(varMaterial->techniqueSet)));
+        Switch_LogWrite(trace);
+    }
 #endif
     Load_MaterialTechniqueSetPtr(0);
 
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH MATERIAL] techset done\n");
+#endif
 
 #ifdef __SWITCH__
     g_switchDbStage = "material/textures";
@@ -7361,6 +7926,9 @@ void __cdecl Load_Material(bool atStreamStart)
         }
     }
 
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH MATERIAL] textures done\n");
+#endif
 
 #ifdef __SWITCH__
     g_switchDbStage = "material/constants";
@@ -7383,6 +7951,9 @@ void __cdecl Load_Material(bool atStreamStart)
         }
     }
 
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH MATERIAL] constants done\n");
+#endif
 
 #ifdef __SWITCH__
     g_switchDbStage = "material/statebits";
@@ -7405,6 +7976,9 @@ void __cdecl Load_Material(bool atStreamStart)
         }
     }
 
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH MATERIAL] statebits done\n");
+#endif
 
 #ifdef __SWITCH__
     g_switchDbStage = "material/pop";
@@ -7465,41 +8039,59 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
     const void **inserted; // [esp+0h] [ebp-Ch]
     uint32_t value; // [esp+4h] [ebp-8h]
     Load_Stream(atStreamStart, (uint8_t *)varMaterialHandle, 4);
+#ifdef __SWITCH__
+    const uint32_t handleSourceStream = g_streamPosIndex;
+    const uint32_t handleSourceOffset =
+        Switch_GetStreamCursorOffset(handleSourceStream);
+    value = static_cast<uint32_t>(
+        reinterpret_cast<uintptr_t>(*varMaterialHandle));
+    const uintptr_t weaponBase = reinterpret_cast<uintptr_t>(varWeaponDef);
+    const uintptr_t handleAddress =
+        reinterpret_cast<uintptr_t>(varMaterialHandle);
+    const long long weaponFieldOffset =
+        varWeaponDef && handleAddress >= weaponBase &&
+                handleAddress - weaponBase < sizeof(WeaponDef)
+            ? static_cast<long long>(handleAddress - weaponBase)
+            : -1LL;
+#endif
     DB_PushStreamPos(0);
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetRawType == 23u &&
+        g_switchCurrentAssetIndex == 4728)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL HANDLE] token=%08x weaponField=%lld sourceStream=%u sourceOffset=%u stream0=%u\n",
+            value,
+            weaponFieldOffset,
+            static_cast<unsigned>(handleSourceStream),
+            handleSourceOffset,
+            Switch_GetStreamCursorOffset(0));
+        Switch_LogWrite(trace);
+    }
+#endif
     if (*varMaterialHandle)
     {
         value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(*varMaterialHandle));
-#ifdef __SWITCH__
-        if (g_switchCurrentAssetIndex == 4728)
-        {
-            const char *context = "other";
-            if (varWindow &&
-                varMaterialHandle == &varWindow->background)
-                context = "window";
-            else if (varlistBoxDef_t &&
-                     varMaterialHandle == &varlistBoxDef_t->selectIcon)
-                context = "listbox";
-
-            char trace[384];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][MATCALL4728] context=%s item=%d value=%08x stream=%u b0=%08x b4=%08x tempPos=%p stage=%s\n",
-                context,
-                g_switchCurrentMenuItemIndex,
-                value,
-                static_cast<unsigned>(g_streamPosIndex),
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4),
-                static_cast<void *>(DB_GetStreamPos()),
-                g_switchDbStage ? g_switchDbStage : "");
-            Sys_Print(trace);
-        }
-#endif
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
             DB_AllocStreamPos(3);
+            if (g_switchCurrentAssetRawType == 23u &&
+                g_switchCurrentAssetIndex == 4728)
+            {
+                char trace[192];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][MATERIAL INLINE] token=%08x headerStream=%u headerOffset=%u\n",
+                    value,
+                    static_cast<unsigned>(g_streamPosIndex),
+                    Switch_GetStreamCursorOffset(g_streamPosIndex));
+                Switch_LogWrite(trace);
+            }
             *varMaterialHandle = reinterpret_cast<Material *>(
                 Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(Material)),
@@ -7520,7 +8112,8 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
             Load_MaterialAsset((XAssetHeader *)varMaterialHandle);
 #ifdef __SWITCH__
             g_switchDbStage = "material/asset_return";
-        #endif
+            Switch_LogWrite("[SWITCH MATERIAL] asset done\n");
+#endif
             if (inserted)
             {
 #ifdef __SWITCH__
@@ -7823,6 +8416,28 @@ void __cdecl Load_GfxSurfaceArray(bool atStreamStart, int32_t count)
     GfxSurface *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 48u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxSurface *base = varGfxSurface;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxSurface = base + index;
+            Switch_TranslateGfxSurfaceSerialized(
+                varGfxSurface,
+                serialized.data() + static_cast<size_t>(index) * 48u);
+        }
+        varGfxSurface = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxSurface, 48 * count);
     var = varGfxSurface;
     for (i = 0; i < count; ++i)
@@ -7847,6 +8462,28 @@ void __cdecl Load_GfxLightmapArrayArray(bool atStreamStart, int32_t count)
     GfxLightmapArray *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 8u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxLightmapArray *base = varGfxLightmapArray;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxLightmapArray = base + index;
+            Switch_TranslateGfxLightmapArraySerialized(
+                varGfxLightmapArray,
+                serialized.data() + static_cast<size_t>(index) * 8u);
+        }
+        varGfxLightmapArray = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxLightmapArray, 8 * count);
     var = varGfxLightmapArray;
     for (i = 0; i < count; ++i)
@@ -7928,23 +8565,6 @@ void __cdecl Load_PhysPreset(bool atStreamStart)
     std::memset(varPhysPreset, 0, sizeof(*varPhysPreset));
     varPhysPreset->name = reinterpret_cast<const char *>(
         static_cast<uintptr_t>(serialized.name));
-#ifdef __SWITCH__
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH PHYSPRESET] asset=%d raw=%u token=%08x nameToken=%08x name=%p stream=%u b4=%08x\n",
-            g_switchCurrentAssetIndex,
-            static_cast<unsigned>(g_switchCurrentAssetRawType),
-            static_cast<unsigned>(serialized.name),
-            static_cast<unsigned>(serialized.name),
-            static_cast<const void *>(varPhysPreset->name),
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(4));
-        Switch_LogRaw(trace);
-    }
-#endif
     varPhysPreset->type = serialized.type;
     varPhysPreset->mass = serialized.mass;
     varPhysPreset->bounce = serialized.bounce;
@@ -7961,21 +8581,6 @@ void __cdecl Load_PhysPreset(bool atStreamStart)
     DB_PushStreamPos(4);
     varXString = &varPhysPreset->name;
     Load_XString(0);
-#ifdef __SWITCH__
-    {
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH PHYSPRESET] resolved asset=%d raw=%u name=%p text=%s default=%d\n",
-            g_switchCurrentAssetIndex,
-            static_cast<unsigned>(g_switchCurrentAssetRawType),
-            static_cast<const void *>(varPhysPreset->name),
-            varPhysPreset->name ? varPhysPreset->name : "<null>",
-            varPhysPreset->name && !I_stricmp(varPhysPreset->name, "default"));
-        Switch_LogRaw(trace);
-    }
-#endif
     varXString = &varPhysPreset->sndAliasPrefix;
     Load_XString(0);
     DB_PopStreamPos();
@@ -8008,23 +8613,6 @@ void __cdecl Load_PhysPresetPtr(bool atStreamStart)
 
     *varPhysPresetPtr = reinterpret_cast<PhysPreset *>(
         static_cast<uintptr_t>(serialized));
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4686 &&
-        g_switchCurrentAssetRawType == 3u)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH XMODEL4686] physPreset token=%08x stream=%u pos=%p b4=%08x\n",
-            serialized,
-            static_cast<unsigned>(g_streamPosIndex),
-            static_cast<void *>(DB_GetStreamPos()),
-            Switch_GetStreamCursorOffset(4));
-        Switch_LogRaw(trace);
-        g_switchDbStage = "xmodel4686/physPreset_ptr";
-    }
-#endif
     DB_PushStreamPos(0);
     if (serialized)
     {
@@ -8047,23 +8635,6 @@ void __cdecl Load_PhysPresetPtr(bool atStreamStart)
                 inserted = DB_InsertPointer();
 
             Load_PhysPreset(true);
-#ifdef __SWITCH__
-            if (g_switchCurrentAssetIndex == 4686 &&
-                g_switchCurrentAssetRawType == 3u)
-            {
-                char trace[256];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[SWITCH XMODEL4686] inline PhysPreset name=%p text=%s size=%u b4=%08x\n",
-                    static_cast<const void *>(varPhysPreset->name),
-                    varPhysPreset->name ? varPhysPreset->name : "<null>",
-                    static_cast<unsigned>(sizeof(PhysPreset)),
-                    Switch_GetStreamCursorOffset(4));
-                Switch_LogRaw(trace);
-                g_switchDbStage = "xmodel4686/physPreset_asset";
-            }
-#endif
             Load_PhysPresetAsset(
                 reinterpret_cast<XAssetHeader *>(varPhysPresetPtr));
             if (inserted)
@@ -8204,6 +8775,28 @@ void __cdecl Load_cbrushside_tArray(bool atStreamStart, int32_t count)
     cbrushside_t *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 12u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        cbrushside_t *base = varcbrushside_t;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varcbrushside_t = base + index;
+            Switch_TranslateCbrushSideSerialized(
+                varcbrushside_t,
+                serialized.data() + static_cast<size_t>(index) * 12u);
+        }
+        varcbrushside_t = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varcbrushside_t, 12 * count);
     var = varcbrushside_t;
     for (i = 0; i < count; ++i)
@@ -9117,15 +9710,34 @@ void __cdecl Load_XModelPtr(bool atStreamStart)
 
 void __cdecl Load_XModelPtrArray(bool atStreamStart, int32_t count)
 {
-    XModel **var; // [esp+0h] [ebp-8h]
-    int32_t i; // [esp+4h] [ebp-4h]
-
+#ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint32_t> serialized(static_cast<size_t>(count));
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size() * sizeof(uint32_t)));
+        XModel **var = varXModelPtr;
+        for (int32_t i = 0; i < count; ++i)
+        {
+            varXModelPtr = var + i;
+            *varXModelPtr = reinterpret_cast<XModel *>(
+                static_cast<uintptr_t>(serialized[static_cast<size_t>(i)]));
+            Load_XModelPtr(false);
+        }
+        return;
+    }
+#endif
+    XModel **var;
+    int32_t i;
     Load_Stream(atStreamStart, (uint8_t *)varXModelPtr, 4 * count);
     var = varXModelPtr;
     for (i = 0; i < count; ++i)
     {
         varXModelPtr = var;
-        Load_XModelPtr(0);
+        Load_XModelPtr(false);
         ++var;
     }
 }
@@ -9473,7 +10085,14 @@ void __cdecl Load_PathData(bool atStreamStart)
 
 void __cdecl Load_GameWorldSp(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateGameWorldSpSerialized(varGameWorldSp);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varGameWorldSp, 44);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varGameWorldSp, 44);
+#endif
     DB_PushStreamPos(4);
     varXString = &varGameWorldSp->name;
     Load_XString(0);
@@ -9484,7 +10103,14 @@ void __cdecl Load_GameWorldSp(bool atStreamStart)
 
 void __cdecl Load_GameWorldMp(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateGameWorldMpSerialized(varGameWorldMp);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varGameWorldMp, 4);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varGameWorldMp, 4);
+#endif
     DB_PushStreamPos(4);
     varXString = &varGameWorldMp->name;
     Load_XString(0);
@@ -10572,6 +11198,28 @@ void __cdecl Load_DynEntityDefArray(bool atStreamStart, int32_t count)
     DynEntityDef *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 96u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        DynEntityDef *base = varDynEntityDef;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varDynEntityDef = base + index;
+            Switch_TranslateDynEntityDefSerialized(
+                varDynEntityDef,
+                serialized.data() + static_cast<size_t>(index) * 96u);
+        }
+        varDynEntityDef = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varDynEntityDef, 96 * count);
     var = varDynEntityDef;
     for (i = 0; i < count; ++i)
@@ -10625,7 +11273,14 @@ void __cdecl Mark_DynEntityDefArray(int32_t count)
 
 void __cdecl Load_MapEnts(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateMapEntsSerialized(varMapEnts);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varMapEnts, 12);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varMapEnts, 12);
+#endif
     DB_PushStreamPos(4);
     varXString = &varMapEnts->name;
     Load_XString(0);
@@ -10690,6 +11345,28 @@ void __cdecl Load_cStaticModel_tArray(bool atStreamStart, int32_t count)
     cStaticModel_s *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 80u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        cStaticModel_s *base = varcStaticModel_t;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varcStaticModel_t = base + index;
+            Switch_TranslateCStaticModelSerialized(
+                varcStaticModel_t,
+                serialized.data() + static_cast<size_t>(index) * 80u);
+        }
+        varcStaticModel_t = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varcStaticModel_t, 80 * count);
     var = varcStaticModel_t;
     for (i = 0; i < count; ++i)
@@ -10723,6 +11400,28 @@ void __cdecl Load_cNode_tArray(bool atStreamStart, int32_t count)
     cNode_t *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 8u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        cNode_t *base = varcNode_t;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varcNode_t = base + index;
+            Switch_TranslateCNodeSerialized(
+                varcNode_t,
+                serialized.data() + static_cast<size_t>(index) * 8u);
+        }
+        varcNode_t = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varcNode_t, 8 * count);
     var = varcNode_t;
     for (i = 0; i < count; ++i)
@@ -10790,6 +11489,28 @@ void __cdecl Load_cLeafBrushNode_tArray(bool atStreamStart, int32_t count)
     cLeafBrushNode_s *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 20u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        cLeafBrushNode_s *base = varcLeafBrushNode_t;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varcLeafBrushNode_t = base + index;
+            Switch_TranslateCLeafBrushNodeSerialized(
+                varcLeafBrushNode_t,
+                serialized.data() + static_cast<size_t>(index) * 20u);
+        }
+        varcLeafBrushNode_t = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, &varcLeafBrushNode_t->axis, 20 * count);
     var = varcLeafBrushNode_t;
     for (i = 0; i < count; ++i)
@@ -10833,6 +11554,28 @@ void __cdecl Load_CollisionPartitionArray(bool atStreamStart, int32_t count)
     CollisionPartition *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 12u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        CollisionPartition *base = varCollisionPartition;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varCollisionPartition = base + index;
+            Switch_TranslateCollisionPartitionSerialized(
+                varCollisionPartition,
+                serialized.data() + static_cast<size_t>(index) * 12u);
+        }
+        varCollisionPartition = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, &varCollisionPartition->triCount, 12 * count);
     var = varCollisionPartition;
     for (i = 0; i < count; ++i)
@@ -10889,6 +11632,28 @@ void __cdecl Load_cbrush_tArray(bool atStreamStart, int32_t count)
     cbrush_t *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 80u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        cbrush_t *base = varcbrush_t;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varcbrush_t = base + index;
+            Switch_TranslateCbrushSerialized(
+                varcbrush_t,
+                serialized.data() + static_cast<size_t>(index) * 80u);
+        }
+        varcbrush_t = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varcbrush_t, 80 * count);
     var = varcbrush_t;
     for (i = 0; i < count; ++i)
@@ -10906,7 +11671,14 @@ void __cdecl Load_LeafBrushArray(bool atStreamStart, int32_t count)
 
 void __cdecl Load_clipMap_t(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateClipMapSerialized(varclipMap_t);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varclipMap_t, 284);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varclipMap_t, 284);
+#endif
     DB_PushStreamPos(4);
     varXString = &varclipMap_t->name;
     Load_XString(0);
@@ -11203,6 +11975,28 @@ void __cdecl Load_ComPrimaryLightArray(bool atStreamStart, int32_t count)
     ComPrimaryLight *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 68u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        ComPrimaryLight *base = varComPrimaryLight;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varComPrimaryLight = base + index;
+            Switch_TranslateComPrimaryLightSerialized(
+                varComPrimaryLight,
+                serialized.data() + static_cast<size_t>(index) * 68u);
+        }
+        varComPrimaryLight = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, &varComPrimaryLight->type, 68 * count);
     var = varComPrimaryLight;
     for (i = 0; i < count; ++i)
@@ -11215,7 +12009,14 @@ void __cdecl Load_ComPrimaryLightArray(bool atStreamStart, int32_t count)
 
 void __cdecl Load_ComWorld(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateComWorldSerialized(varComWorld);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varComWorld, 16);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varComWorld, 16);
+#endif
     DB_PushStreamPos(4);
     varXString = &varComWorld->name;
     Load_XString(0);
@@ -11484,10 +12285,10 @@ static void Switch_LoadExpressionEntryPtrArray(
     if (!dst || count <= 0)
         return;
 
-    // The pointer array itself is a packed DWORD array. Do not align the
-    // stream here: the generated loader reads it exactly at the current
-    // virtual cursor. Alignment applies only when allocating each inline
-    // expressionEntry object.
+    // The pointer array is serialized as 32-bit values, even on ARM64.
+    // Keep the original stream-3 alignment before loading inline entries.
+    DB_AllocStreamPos(3);
+
     const size_t serializedSize =
         sizeof(uint32_t) * static_cast<size_t>(count);
 
@@ -11685,23 +12486,6 @@ void __cdecl Load_listBoxDef_t(bool atStreamStart)
         static_assert(offsetof(listBoxDef_s, doubleClick) == 288);
         static_assert(offsetof(listBoxDef_s, selectIcon) == 344);
         static_assert(sizeof(listBoxDef_s) == 352);
-
-        if (g_switchCurrentAssetIndex == 4728 &&
-            varlistBoxDef_t->selectIcon)
-        {
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][LISTBOX4728] item=%d selectIcon=%08x pos=%p b4=%08x\n",
-                g_switchCurrentMenuItemIndex,
-                static_cast<unsigned>(
-                    reinterpret_cast<uintptr_t>(
-                        varlistBoxDef_t->selectIcon)),
-                static_cast<void *>(DB_GetStreamPos()),
-                Switch_GetStreamCursorOffset(4));
-            Sys_Print(trace);
-        }
     }
 #else
     Load_Stream(atStreamStart, (uint8_t *)varlistBoxDef_t, 340);
@@ -11867,23 +12651,6 @@ void __cdecl Load_windowDef_t(bool atStreamStart)
     varXString = &varwindowDef_t->group;
     Load_XString(0);
     varMaterialHandle = &varwindowDef_t->background;
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728)
-    {
-        const uint32_t backgroundToken = static_cast<uint32_t>(
-            reinterpret_cast<uintptr_t>(varwindowDef_t->background));
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][WINDOW4728] background=%08x stream=%u b4=%08x pos=%p\n",
-            backgroundToken,
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<void *>(DB_GetStreamPos()));
-        Sys_Print(trace);
-    }
-#endif
     Load_MaterialHandle(0);
 }
 
@@ -12032,31 +12799,6 @@ void __cdecl Load_itemDef_t(bool atStreamStart)
         g_switchCurrentAssetRawType == 20u)
         g_switchDbStage = "menu/item/header";
     Switch_TranslateItemDefSerialized(varitemDef_t);
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 20u &&
-        (varitemDef_t->window.background ||
-         varitemDef_t->focusSound ||
-         varitemDef_t->typeData.data))
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][ITEM4728] item=%d type=%d bg=%08x focus=%08x typeData=%p vis=%d text=%d mat=%d rectX=%d rectY=%d\n",
-            g_switchCurrentMenuItemIndex,
-            varitemDef_t->type,
-            static_cast<unsigned>(
-                reinterpret_cast<uintptr_t>(varitemDef_t->window.background)),
-            static_cast<unsigned>(
-                reinterpret_cast<uintptr_t>(varitemDef_t->focusSound)),
-            static_cast<void *>(varitemDef_t->typeData.data),
-            varitemDef_t->visibleExp.numEntries,
-            varitemDef_t->textExp.numEntries,
-            varitemDef_t->materialExp.numEntries,
-            varitemDef_t->rectXExp.numEntries,
-            varitemDef_t->rectYExp.numEntries);
-        Sys_Print(trace);
-    }
 #else
     Load_Stream(atStreamStart, (uint8_t *)varitemDef_t, 372);
 #endif
@@ -12214,9 +12956,8 @@ void __cdecl Load_itemDef_ptrArray(bool atStreamStart, int32_t count)
             g_switchCurrentAssetIndex == 11 &&
             g_switchCurrentAssetRawType == 20u;
 
-        // itemDef pointer records are a packed serialized DWORD array.
-        // The generated loader does not align this stream position; only
-        // the native inline item allocation uses 4-byte alignment.
+        DB_AllocStreamPos(3);
+
         std::vector<uint32_t> serialized(
             static_cast<size_t>(count));
         DB_LoadSwitchSerialized(
@@ -12391,15 +13132,6 @@ static void Switch_TranslateWindowDefSerialized(
     window->group = reinterpret_cast<const char *>(
         Switch_WidenSerializedPointer(serialized, 52));
 
-    // Native ARM64 windowDef_t keeps group immediately after rectClient.
-    // The scalar tail starts at native offset 64; writing group at 64 would
-    // overwrite it immediately below and could turn a scalar -1 into a
-    // bogus inline XString pointer, advancing the serialized stream.
-    static_assert(offsetof(windowDef_t, name) == 0);
-    static_assert(offsetof(windowDef_t, group) == 56);
-    static_assert(offsetof(windowDef_t, style) == 64);
-    static_assert(offsetof(windowDef_t, background) == 160);
-
     std::memcpy(
         reinterpret_cast<uint8_t *>(window) + 64,
         serialized + 56,
@@ -12519,9 +13251,6 @@ void __cdecl Load_menuDef_t(bool atStreamStart)
     const bool traceMenu11 =
         g_switchCurrentAssetIndex == 11 &&
         g_switchCurrentAssetRawType == 20u;
-    const bool traceMenu4728 =
-        g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 20u;
 
     iassert(atStreamStart);
     if (traceMenu11)
@@ -12551,27 +13280,6 @@ void __cdecl Load_menuDef_t(bool atStreamStart)
         Switch_LogWrite(trace);
         g_switchDbStage = "menu/load_stream";
     }
-#ifdef __SWITCH__
-    if (traceMenu4728)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][MENU4728] itemCount=%d items=%p font=%p onOpen=%p onClose=%p onESC=%p onKey=%p pos=%p b0=%08x b4=%08x\n",
-            varmenuDef_t->itemCount,
-            static_cast<void *>(varmenuDef_t->items),
-            static_cast<const void *>(varmenuDef_t->font),
-            static_cast<const void *>(varmenuDef_t->onOpen),
-            static_cast<const void *>(varmenuDef_t->onClose),
-            static_cast<const void *>(varmenuDef_t->onESC),
-            static_cast<void *>(varmenuDef_t->onKey),
-            static_cast<void *>(DB_GetStreamPos()),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4));
-        Sys_Print(trace);
-    }
-#endif
 #else
     Load_Stream(atStreamStart, (uint8_t *)varmenuDef_t, 284);
 #endif
@@ -12785,9 +13493,7 @@ void __cdecl Load_menuDef_ptrArray(bool atStreamStart, int32_t count)
 
         if (count > 0)
         {
-            // menuDef pointer records are a packed serialized DWORD array.
-            // Match the generated loader: no cursor alignment is inserted
-            // before consuming the array.
+            DB_AllocStreamPos(3);
             DB_LoadSwitchSerialized(
                 serialized.data(),
                 static_cast<uint32_t>(
@@ -13571,6 +14277,34 @@ static void Switch_TranslateWeaponDefSerialized(WeaponDef *weaponDef)
     DB_LoadSwitchSerialized(serialized, SERIALIZED_SIZE);
 
 #ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        const uintptr_t blockBase =
+            g_streamBlocks && serializedStreamIndex < ARRAY_COUNT(g_streamPosArray) &&
+                    g_streamBlocks[serializedStreamIndex].data
+                ? reinterpret_cast<uintptr_t>(
+                      g_streamBlocks[serializedStreamIndex].data)
+                : 0;
+        const uintptr_t rootAddress =
+            reinterpret_cast<uintptr_t>(serializedStreamPos);
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][WEAPON ROOT] asset=4728 stream=%u offset=%u after=%u materialTokens@536/540/544=%08x/%08x/%08x next=%08x\n",
+            static_cast<unsigned>(serializedStreamIndex),
+            blockBase && rootAddress >= blockBase
+                ? static_cast<unsigned>(rootAddress - blockBase)
+                : UINT32_MAX,
+            Switch_GetStreamCursorOffset(serializedStreamIndex),
+            Switch_ReadSerializedU32(serialized, 536),
+            Switch_ReadSerializedU32(serialized, 540),
+            Switch_ReadSerializedU32(serialized, 544),
+            Switch_ReadSerializedU32(serialized, 548));
+        Switch_LogWrite(trace);
+    }
+
     if (g_switchCurrentAssetIndex == 1506 &&
         g_switchCurrentAssetRawType == 23u)
     {
@@ -13686,57 +14420,73 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
 {
 #ifdef __SWITCH__
     iassert(atStreamStart);
-    const uint8_t *weaponStreamStart = DB_GetStreamPos();
-    const uint32_t weaponStreamStartOffset =
-        Switch_GetStreamCursorOffset(0);
-    const uint64_t weaponXfileStart =
-        DB_GetXFileUncompressedOffset();
-
+    g_switchDbStage = "weapon/header";
     const uint8_t *weaponStreamEnd = DB_GetStreamPos();
     Switch_TranslateWeaponDefSerialized(varWeaponDef);
 
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
+    // Weapon accuracy graphs are authored into a fixed 16-point buffer by
+    // G_ParseWeaponAccurayGraphs. A bad count must not turn into an enormous
+    // inline read on the Switch stream (for example, 29,057 vec2_t values).
+    // Keep the inline cursor aligned to the maximum serialized graph while
+    // disabling malformed offset-backed graphs.
+    static constexpr int32_t kMaxAccuracyGraphKnots = 16;
+    for (int32_t graphIndex = 0; graphIndex < WEAP_ACCURACY_COUNT; ++graphIndex)
     {
-        char trace[1200];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][WEAPON4728 ROOT] stream0=%08x->%08x array0=%p->%p xfile=%llu->%llu reticleRaw=%08x",
-            weaponStreamStartOffset,
-            Switch_GetStreamCursorOffset(0),
-            static_cast<const void *>(g_streamPosArray[0]),
-            static_cast<const void *>(DB_GetStreamPos()),
-            static_cast<unsigned long long>(weaponXfileStart),
-            static_cast<unsigned long long>(
-                DB_GetXFileUncompressedOffset()),
-            static_cast<unsigned>(
-                static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(
-                        varWeaponDef->reticleCenter))));
-        const uint8_t *rootTail =
-            weaponStreamStart &&
-            g_streamBlocks &&
-            g_streamBlocks[0].data
-                ? weaponStreamStart + 0
-                : nullptr;
-        (void)rootTail;
-        const uint8_t *translated =
-            reinterpret_cast<const uint8_t *>(varWeaponDef);
-        int written = std::snprintf(
-            trace + std::strlen(trace),
-            sizeof(trace) - std::strlen(trace),
-            " native=%p nativeSize=%zu",
-            static_cast<const void *>(translated),
-            sizeof(*varWeaponDef));
-        std::snprintf(
-            trace + std::strlen(trace),
-            sizeof(trace) - std::strlen(trace),
-            "\n");
-        Sys_Print(trace);
+        const uint32_t graphToken = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(
+                varWeaponDef->accuracyGraphKnots[graphIndex]));
+        const uint32_t originalGraphToken = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(
+                varWeaponDef->originalAccuracyGraphKnots[graphIndex]));
+        int32_t &graphCount = varWeaponDef->accuracyGraphKnotCount[graphIndex];
+        int32_t &originalGraphCount =
+            varWeaponDef->originalAccuracyGraphKnotCount[graphIndex];
+        if (graphCount < 0 || graphCount > kMaxAccuracyGraphKnots)
+        {
+            const int32_t safeCount = graphCount < 0
+                ? ((graphToken == UINT32_MAX ||
+                    originalGraphToken == UINT32_MAX)
+                    ? kMaxAccuracyGraphKnots
+                    : 0)
+                : kMaxAccuracyGraphKnots;
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[SWITCH WEAPON] invalid accuracy graph asset=%d graph=%d tokens=%08x/%08x count=%d clamped=%d\n",
+                g_switchCurrentAssetIndex,
+                graphIndex,
+                graphToken,
+                originalGraphToken,
+                graphCount,
+                safeCount);
+            Switch_LogWrite(trace);
+            graphCount = safeCount;
+        }
+
+        if (originalGraphCount < 0 ||
+            originalGraphCount > kMaxAccuracyGraphKnots)
+        {
+            const int32_t safeCount = originalGraphCount < 0
+                ? (originalGraphToken == UINT32_MAX
+                    ? kMaxAccuracyGraphKnots
+                    : 0)
+                : kMaxAccuracyGraphKnots;
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[SWITCH WEAPON] invalid original accuracy graph asset=%d graph=%d token=%08x count=%d clamped=%d\n",
+                g_switchCurrentAssetIndex,
+                graphIndex,
+                originalGraphToken,
+                originalGraphCount,
+                safeCount);
+            Switch_LogWrite(trace);
+            originalGraphCount = safeCount;
+        }
     }
-#endif
+
     const bool switchTraceWeapon1506 =
         g_switchCurrentAssetIndex == 1506 &&
         g_switchCurrentAssetRawType == 23u;
@@ -13942,101 +14692,13 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
     {
         if (varWeaponDef->bounceSound == (snd_alias_list_t **)-1)
         {
-#ifdef __SWITCH__
-            const bool switchTraceWeapon4728 =
-                g_switchCurrentAssetIndex == 4728 &&
-                g_switchCurrentAssetRawType == 23u;
-
-            if (switchTraceWeapon4728)
-            {
-                char trace[384];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[SWITCH WEAPON4728] bounce begin token=%08x stream=%u b0=%08x b4=%08x xfile=%llu\n",
-                    static_cast<unsigned>(
-                        static_cast<uint32_t>(
-                            reinterpret_cast<uintptr_t>(
-                                varWeaponDef->bounceSound))),
-                    static_cast<unsigned>(g_streamPosIndex),
-                    Switch_GetStreamCursorOffset(0),
-                    Switch_GetStreamCursorOffset(4),
-                    static_cast<unsigned long long>(
-                        DB_GetXFileUncompressedOffset()));
-                Sys_Print(trace);
-                g_switchDbStage = "weapon/bounce";
-            }
-
-            // The serialized bounceSound array is 29 packed 32-bit
-            // SndAliasCustom pointer tokens (116 bytes). The native ARM64
-            // array is 29 64-bit union slots, so keep the serialized source
-            // in the DB stream and allocate the expanded array in Hunk.
-            DB_AllocStreamPos(3);
-            varWeaponDef->bounceSound =
-                reinterpret_cast<snd_alias_list_t **>(
-                    Hunk_Alloc(
-                        static_cast<uint32_t>(
-                            sizeof(snd_alias_list_t *) * 29u),
-                        "SwitchWeaponBounceSound",
-                        22));
-            std::memset(
-                varWeaponDef->bounceSound,
-                0,
-                sizeof(snd_alias_list_t *) * 29u);
-#else
             varWeaponDef->bounceSound = (snd_alias_list_t **)AllocLoad_FxElemVisStateSample();
-#endif
             varsnd_alias_list_name = varWeaponDef->bounceSound;
             Load_snd_alias_list_nameArray(1, 29);
-#ifdef __SWITCH__
-            if (switchTraceWeapon4728)
-            {
-                char trace[512];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[SWITCH WEAPON4728] bounce end stream=%u b0=%08x b4=%08x xfile=%llu first=%08x last=%08x\n",
-                    static_cast<unsigned>(g_streamPosIndex),
-                    Switch_GetStreamCursorOffset(0),
-                    Switch_GetStreamCursorOffset(4),
-                    static_cast<unsigned long long>(
-                        DB_GetXFileUncompressedOffset()),
-                    static_cast<unsigned>(
-                        static_cast<uint32_t>(
-                            reinterpret_cast<uintptr_t>(
-                                varWeaponDef->bounceSound[0]))),
-                    static_cast<unsigned>(
-                        static_cast<uint32_t>(
-                            reinterpret_cast<uintptr_t>(
-                                varWeaponDef->bounceSound[28]))));
-                Sys_Print(trace);
-            }
-#endif
         }
         else
         {
             DB_ConvertOffsetToPointer((uint32_t*)&varWeaponDef->bounceSound);
-#ifdef __SWITCH__
-            if (g_switchCurrentAssetIndex == 4728 &&
-                g_switchCurrentAssetRawType == 23u)
-            {
-                char trace[384];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[SWITCH WEAPON4728] bounce reference token=%08x stream=%u b0=%08x b4=%08x xfile=%llu\n",
-                    static_cast<unsigned>(
-                        static_cast<uint32_t>(
-                            reinterpret_cast<uintptr_t>(
-                                varWeaponDef->bounceSound))),
-                    static_cast<unsigned>(g_streamPosIndex),
-                    Switch_GetStreamCursorOffset(0),
-                    Switch_GetStreamCursorOffset(4),
-                    static_cast<unsigned long long>(
-                        DB_GetXFileUncompressedOffset()));
-                Sys_Print(trace);
-            }
-#endif
         }
     }
     varFxEffectDefHandle = &varWeaponDef->viewShellEjectEffect;
@@ -14050,132 +14712,10 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
 #ifdef __SWITCH__
     if (switchTraceWeapon1506)
         Switch_LogWrite("[SWITCH WEAPON1506] shell FX done\n");
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
-    {
-        char trace[448];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH WEAPON4728] before reticleCenter stream=%u b0=%08x b4=%08x xfile=%llu shell=%08x/%08x/%08x/%08x\n",
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<unsigned long long>(
-                DB_GetXFileUncompressedOffset()),
-            static_cast<unsigned>(
-                static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(
-                        varWeaponDef->viewShellEjectEffect))),
-            static_cast<unsigned>(
-                static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(
-                        varWeaponDef->worldShellEjectEffect))),
-            static_cast<unsigned>(
-                static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(
-                        varWeaponDef->viewLastShotEjectEffect))),
-            static_cast<unsigned>(
-                static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(
-                        varWeaponDef->worldLastShotEjectEffect))));
-        Sys_Print(trace);
-    }
 #endif
     varMaterialHandle = &varWeaponDef->reticleCenter;
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
-    {
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][WEAPON4728 RETICLE PRE] stream=%u b0=%08x array0Off=%08x b4=%08x xfile=%llu pos=%p token=%08x",
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            g_streamBlocks && g_streamBlocks[0].data &&
-                    g_streamPosArray[0] >= g_streamBlocks[0].data
-                ? static_cast<unsigned>(
-                      g_streamPosArray[0]
-                      - g_streamBlocks[0].data)
-                : UINT32_MAX,
-            Switch_GetStreamCursorOffset(4),
-            static_cast<unsigned long long>(
-                DB_GetXFileUncompressedOffset()),
-            static_cast<const void *>(DB_GetStreamPos()),
-            static_cast<unsigned>(
-                static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(
-                        varWeaponDef->reticleCenter))));
-        std::snprintf(
-            trace + std::strlen(trace),
-            sizeof(trace) - std::strlen(trace),
-            "\n");
-        Sys_Print(trace);
-    }
-#endif
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
-    {
-        g_switchDbStage = "weapon/reticleCenter";
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH WEAPON4728] reticleCenter token=%08x stream=%u b0=%08x b4=%08x xfile=%llu\n",
-            static_cast<unsigned>(
-                static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(
-                        varWeaponDef->reticleCenter))),
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<unsigned long long>(
-                DB_GetXFileUncompressedOffset()));
-        Sys_Print(trace);
-    }
     Load_MaterialHandle(0);
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH WEAPON4728] reticleCenter done stream=%u b0=%08x b4=%08x xfile=%llu\n",
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<unsigned long long>(
-                DB_GetXFileUncompressedOffset()));
-        Sys_Print(trace);
-    }
-#endif
     varMaterialHandle = &varWeaponDef->reticleSide;
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
-    {
-        g_switchDbStage = "weapon/reticleSide";
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH WEAPON4728] reticleSide token=%08x stream=%u b0=%08x b4=%08x xfile=%llu\n",
-            static_cast<unsigned>(
-                static_cast<uint32_t>(
-                    reinterpret_cast<uintptr_t>(
-                        varWeaponDef->reticleSide))),
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<unsigned long long>(
-                DB_GetXFileUncompressedOffset()));
-        Sys_Print(trace);
-    }
-#endif
     Load_MaterialHandle(0);
 #ifdef __SWITCH__
     if (switchTraceWeapon1506)
@@ -14265,6 +14805,7 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
 #endif
     varXString = varWeaponDef->accuracyGraphName;
     Load_XString(0);
+    g_switchDbStage = "weapon/accuracy_graph_0";
     if (varWeaponDef->accuracyGraphKnots[0])
     {
         const bool inlineGraph0 =
@@ -14286,6 +14827,7 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
                 (uint32_t*)varWeaponDef->accuracyGraphKnots);
         }
     }
+    g_switchDbStage = "weapon/original_accuracy_graph_0";
     if (varWeaponDef->originalAccuracyGraphKnots[0])
     {
         const bool inlineOriginalGraph0 =
@@ -14307,6 +14849,7 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
     }
     varXString = &varWeaponDef->accuracyGraphName[1];
     Load_XString(0);
+    g_switchDbStage = "weapon/accuracy_graph_1";
     if (varWeaponDef->accuracyGraphKnots[1])
     {
         const bool inlineGraph1 =
@@ -14328,6 +14871,7 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
                 (uint32_t*)&varWeaponDef->accuracyGraphKnots[1]);
         }
     }
+    g_switchDbStage = "weapon/original_accuracy_graph_1";
     if (varWeaponDef->originalAccuracyGraphKnots[1])
     {
         const bool inlineOriginalGraph1 =
@@ -14673,7 +15217,6 @@ void __cdecl Mark_WeaponDefPtr()
 void __cdecl Load_RawFile(bool atStreamStart)
 {
 #ifdef __SWITCH__
-    g_switchDbStage = "rawfile";
     const bool switchRawFileTrace =
         (g_switchCurrentAssetRawType == 31u &&
          g_switchCurrentAssetIndex >= 1199 &&
@@ -14753,19 +15296,6 @@ void __cdecl Load_RawFile(bool atStreamStart)
     if (varRawFile->buffer)
     {
 #ifdef __SWITCH__
-        {
-            char trace[320];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[SWITCH RAWFILE] payload len=%d buffer=%p stream=%u b0=%08x b4=%08x pos=%p\n",
-                varRawFile->len,
-                static_cast<const void *>(varRawFile->buffer),
-                static_cast<unsigned>(g_streamPosIndex),
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4),
-                static_cast<void *>(DB_GetStreamPos()));
-            Switch_LogWrite(trace);
-        }
         if (switchRawFileTrace)
         {
             char trace[160];
@@ -14912,45 +15442,8 @@ void __cdecl Load_StringTable(bool atStreamStart)
             reinterpret_cast<uintptr_t>(varStringTable->values));
     }
 
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 32u &&
-        g_switchCurrentAssetIndex >= 1620)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH STRINGTABLE] header name=%08x cols=%d rows=%d values=%08x stream=%u b4=%08x pos=%p\n",
-            static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(varStringTable->name)),
-            varStringTable->columnCount,
-            varStringTable->rowCount,
-            serializedValues,
-            static_cast<unsigned>(g_streamPosIndex),
-            g_streamPosIndex == 4 ? Switch_GetStreamCursorOffset(4) : UINT32_MAX,
-            static_cast<void *>(DB_GetStreamPos()));
-        Switch_LogWrite(trace);
-    }
-#endif
     varXString = &varStringTable->name;
     Load_XString(0);
-
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 32u &&
-        g_switchCurrentAssetIndex >= 1620)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH STRINGTABLE] name done name=%p stream=%u b4=%08x pos=%p\n",
-            static_cast<const void *>(varStringTable->name),
-            static_cast<unsigned>(g_streamPosIndex),
-            g_streamPosIndex == 4 ? Switch_GetStreamCursorOffset(4) : UINT32_MAX,
-            static_cast<void *>(DB_GetStreamPos()));
-        Switch_LogWrite(trace);
-    }
-#endif
 
     if (!serializedValues)
     {
@@ -15048,51 +15541,48 @@ void __cdecl Load_StringTablePtr(bool atStreamStart)
     }
 
     *varStringTablePtr = nullptr;
+    // Unlike several other asset-pointer loaders, StringTable's inline body
+    // is consumed from the current stream. The XAsset loader selects stream 4.
+    if (!serialized)
+        return;
 
-    // Match the 32-bit/reference loader's pointer-stream semantics:
-    // the pointer field lives in the current asset record, while the native
-    // StringTable object is allocated out of the TEMP block. Load_StringTable()
-    // itself switches to the VIRTUAL block for the serialized body.
-    DB_PushStreamPos(0);
-
-    if (serialized)
+    if (serialized == UINT32_MAX)
     {
-        if (serialized == UINT32_MAX)
-        {
-            StringTable *table = reinterpret_cast<StringTable *>(Hunk_Alloc(
-                static_cast<uint32_t>(sizeof(StringTable)),
-                "SwitchStringTable",
-                22));
-            std::memset(table, 0, sizeof(*table));
+        DB_AllocStreamPos(3);
+        const uintptr_t serializedTable =
+            reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+        StringTable *table = reinterpret_cast<StringTable *>(Hunk_Alloc(
+            static_cast<uint32_t>(sizeof(StringTable)),
+            "SwitchStringTable",
+            22));
+        std::memset(table, 0, sizeof(*table));
 
-            varStringTable = table;
-            Load_StringTable(true);
-            *varStringTablePtr = table;
-            Load_StringTableAsset(
-                reinterpret_cast<XAssetHeader *>(varStringTablePtr));
+        varStringTable = table;
+        Load_StringTable(true);
+        *varStringTablePtr = table;
+        DB_RegisterSwitchPointerAlias(
+            serializedTable,
+            reinterpret_cast<uintptr_t>(table));
+        Load_StringTableAsset(reinterpret_cast<XAssetHeader *>(varStringTablePtr));
+    }
+    else
+    {
+        const uintptr_t serializedTable =
+            DB_ConvertOffsetToPointerValue(serialized);
+        uintptr_t resolvedTable = 0;
+        if (serializedTable &&
+            DB_ResolveSwitchPointerAlias(serializedTable, &resolvedTable) &&
+            resolvedTable)
+        {
+            *varStringTablePtr = reinterpret_cast<StringTable *>(resolvedTable);
         }
         else
         {
-            const uintptr_t serializedTable =
-                DB_ConvertOffsetToPointerValue(serialized);
-            uintptr_t resolvedTable = 0;
-            if (serializedTable &&
-                DB_ResolveSwitchPointerAlias(serializedTable, &resolvedTable) &&
-                resolvedTable)
-            {
-                *varStringTablePtr =
-                    reinterpret_cast<StringTable *>(resolvedTable);
-            }
-            else
-            {
-                DB_AddSwitchPointerAliasFixup(
-                    serializedTable,
-                    reinterpret_cast<uintptr_t *>(varStringTablePtr));
-            }
+            DB_AddSwitchPointerAliasFixup(
+                serializedTable,
+                reinterpret_cast<uintptr_t *>(varStringTablePtr));
         }
     }
-
-    DB_PopStreamPos();
 #else
     Load_Stream(atStreamStart, (uint8_t *)varStringTablePtr, 4);
     if (*varStringTablePtr)
@@ -15133,6 +15623,28 @@ void __cdecl Load_GfxStaticModelDrawInstArray(bool atStreamStart, int32_t count)
     GfxStaticModelDrawInst *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 76u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxStaticModelDrawInst *base = varGfxStaticModelDrawInst;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxStaticModelDrawInst = base + index;
+            Switch_TranslateGfxStaticModelDrawInstSerialized(
+                varGfxStaticModelDrawInst,
+                serialized.data() + static_cast<size_t>(index) * 76u);
+        }
+        varGfxStaticModelDrawInst = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxStaticModelDrawInst, 76 * count);
     var = varGfxStaticModelDrawInst;
     for (i = 0; i < count; ++i)
@@ -15255,6 +15767,28 @@ void __cdecl Load_GfxAabbTreeArray(bool atStreamStart, int32_t count)
     GfxAabbTree *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 44u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxAabbTree *base = varGfxAabbTree;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxAabbTree = base + index;
+            Switch_TranslateGfxAabbTreeSerialized(
+                varGfxAabbTree,
+                serialized.data() + static_cast<size_t>(index) * 44u);
+        }
+        varGfxAabbTree = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxAabbTree, 44 * count);
     var = varGfxAabbTree;
     for (i = 0; i < count; ++i)
@@ -15299,6 +15833,28 @@ void __cdecl Load_GfxCellArray(bool atStreamStart, int32_t count)
     GfxCell *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 56u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxCell *base = varGfxCell;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxCell = base + index;
+            Switch_TranslateGfxCellSerialized(
+                varGfxCell,
+                serialized.data() + static_cast<size_t>(index) * 56u);
+        }
+        varGfxCell = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxCell, 56 * count);
     var = varGfxCell;
     for (i = 0; i < count; ++i)
@@ -15338,6 +15894,28 @@ void __cdecl Load_GfxPortalArray(bool atStreamStart, int32_t count)
     GfxPortal *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 68u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxPortal *base = varGfxPortal;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxPortal = base + index;
+            Switch_TranslateGfxPortalSerialized(
+                varGfxPortal,
+                serialized.data() + static_cast<size_t>(index) * 68u);
+        }
+        varGfxPortal = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxPortal, 68 * count);
     var = varGfxPortal;
     for (i = 0; i < count; ++i)
@@ -15761,7 +16339,14 @@ void __cdecl Load_GfxWorldDpvsPlanes(bool atStreamStart)
 
 void __cdecl Load_GfxWorld(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateGfxWorldSerialized(varGfxWorld);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varGfxWorld, 732);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varGfxWorld, 732);
+#endif
     DB_PushStreamPos(4);
     varXString = &varGfxWorld->name;
     Load_XString(0);
@@ -16383,12 +16968,6 @@ void __cdecl Load_XAssetHeader(bool atStreamStart)
 
 void __cdecl Load_XAsset(bool atStreamStart)
 {
-#ifdef __SWITCH__
-    // g_switchDbStage is loader-local diagnostic state. Reset it for every
-    // XAsset so an OOB in a non-Material asset cannot inherit the previous
-    // Material stage and misidentify the failing loader.
-    g_switchDbStage = "xasset/header";
-#endif
     Load_Stream(atStreamStart, (uint8_t *)varXAsset, 8);
     varXAssetHeader = &varXAsset->header;
     Load_XAssetHeader(0);

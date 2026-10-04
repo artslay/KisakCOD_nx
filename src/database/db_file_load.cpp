@@ -156,11 +156,6 @@ double __cdecl DB_GetLoadedFraction()
     return (float)((loadedBytesInternal + loadedBytesExternal) / (totalBytesInternal + totalBytesExternal));
 }
 
-uint64_t __cdecl DB_GetXFileUncompressedOffset()
-{
-    return static_cast<uint64_t>(g_load.stream.total_out);
-}
-
 void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
 {
     const char *v2; // eax
@@ -688,44 +683,6 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
             serializedSize);
         DB_IncStreamPos(static_cast<int32_t>(serializedSize));
 
-#ifdef __SWITCH__
-        uint32_t physPresetCount = 0;
-        int32_t firstPhysPreset[8] = {};
-        uint32_t firstPhysPresetCount = 0;
-        for (int32_t scan = 0; scan < count; ++scan)
-        {
-            if (serializedAssets[static_cast<size_t>(scan)].type == ASSET_TYPE_PHYSPRESET)
-            {
-                ++physPresetCount;
-                if (firstPhysPresetCount < ARRAY_COUNT(firstPhysPreset))
-                    firstPhysPreset[firstPhysPresetCount++] = scan;
-            }
-        }
-
-        char trace[384];
-        int written = std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH PHYSPRESET SCAN] zone=%s assetCount=%d rawType1=%u indices=",
-            g_load.filename ? g_load.filename : "<null>",
-            count,
-            physPresetCount);
-        for (uint32_t scan = 0; scan < firstPhysPresetCount; ++scan)
-        {
-            written += std::snprintf(
-                trace + written,
-                sizeof(trace) - static_cast<size_t>(written),
-                "%s%u",
-                scan ? "," : "",
-                static_cast<unsigned>(firstPhysPreset[scan]));
-        }
-        std::snprintf(
-            trace + written,
-            sizeof(trace) - static_cast<size_t>(written),
-            "\n");
-        Switch_LogWrite(trace);
-#endif
-
     }
 
     XAsset *var = varXAsset;
@@ -805,6 +762,11 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
             ++runtimeType;
 #endif
 
+#ifdef __SWITCH__
+        g_switchDbStage = runtimeType < ASSET_TYPE_COUNT
+            ? g_assetNames[runtimeType]
+            : "xasset/invalid_type";
+#endif
         varXAsset->type = static_cast<XAssetType>(runtimeType);
         memcpy(&varXAsset->header, &serialized.header,
             sizeof(serialized.header));
@@ -899,44 +861,6 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
                 static_cast<unsigned>(g_streamPosIndex));
             Switch_LogWrite(trace);
         }
-#endif
-#ifdef __SWITCH__
-        if (i >= count - 8)
-        {
-            char trace[384];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[SWITCH ASSET TAIL] i=%d count=%d rawType=%u runtimeType=%u header=%08x stream=%u b4=%08x pos=%p\n",
-                i,
-                count,
-                static_cast<unsigned>(serialized.type),
-                static_cast<unsigned>(runtimeType),
-                serialized.header,
-                static_cast<unsigned>(g_streamPosIndex),
-                switchBlockOffset(4, g_streamPosIndex == 4 ? DB_GetStreamPos() : g_streamPosArray[4]),
-                static_cast<void *>(DB_GetStreamPos()));
-            Switch_LogWrite(trace);
-        }
-        if (serialized.type == 32u && i >= count - 16)
-        {
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[SWITCH STRINGTABLE ASSET] i=%d header=%08x stream=%u b4=%08x\n",
-                i,
-                serialized.header,
-                static_cast<unsigned>(g_streamPosIndex),
-                switchBlockOffset(4, g_streamPosIndex == 4 ? DB_GetStreamPos() : g_streamPosArray[4]));
-            Switch_LogWrite(trace);
-        }
-#endif
-#ifdef __SWITCH__
-        // The Switch loader dispatches XAssets directly through
-        // Load_XAssetHeader(), bypassing Load_XAsset(). Reset the diagnostic
-        // stage here so it cannot inherit the previous asset's loader stage.
-        g_switchDbStage = "xasset/header";
 #endif
         Load_XAssetHeader(0);
 

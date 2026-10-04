@@ -469,10 +469,9 @@ void __cdecl DB_IncStreamPos(int32_t size)
 const void **__cdecl DB_InsertPointer()
 {
 #ifdef __SWITCH__
-    // ARM64 zone loading reserves a native pointer-sized slot in the
-    // virtual/insert block for every -2 pointer. The serialized asset data
-    // remains 32-bit, so the serialized stream cursor advances by 4 bytes;
-    // the widened native pointer lives in the separate Hunk allocation below.
+    // The fastfile/DB stream layout remains serialized 32-bit. Preserve the
+    // original four-byte stream reservation, but keep the actual pointer slot
+    // native 64-bit so callers may store a Switch pointer without truncation.
     const uintptr_t beforePos =
         reinterpret_cast<uintptr_t>(g_streamPos);
 
