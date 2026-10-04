@@ -3033,43 +3033,13 @@ void R_InitGraphicsApi()
 
 void R_InitSystems()
 {
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] before R_InitImages\n");
-#endif
     R_InitImages();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after R_InitImages\n");
-    Switch_LogWrite("[KisakCOD][RINIT] before Material_Init\n");
-#endif
     Material_Init();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after Material_Init\n");
-    Switch_LogWrite("[KisakCOD][RINIT] before R_InitFonts\n");
-#endif
     R_InitFonts();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after R_InitFonts\n");
-    Switch_LogWrite("[KisakCOD][RINIT] before R_InitLoadWater\n");
-#endif
     R_InitLoadWater();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after R_InitLoadWater\n");
-    Switch_LogWrite("[KisakCOD][RINIT] before R_InitLightDefs\n");
-#endif
     R_InitLightDefs();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after R_InitLightDefs\n");
-    Switch_LogWrite("[KisakCOD][RINIT] before R_ClearFogs\n");
-#endif
     R_ClearFogs();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after R_ClearFogs\n");
-    Switch_LogWrite("[KisakCOD][RINIT] before R_InitDebug\n");
-#endif
     R_InitDebug();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after R_InitDebug\n");
-#endif
     rg.registered = 1;
 }
 
