@@ -183,7 +183,10 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
 {
     g_switchThreadStage = "create/check_context";
     if (context < 0 || context >= THREAD_CONTEXT_COUNT)
-        std::abort();
+    {
+        Sys_Error("Invalid Switch thread context %d", static_cast<int>(context));
+        return;
+    }
 
     g_switchThreadStage = "create/check_join";
     if (g_threads[context].joinable())
