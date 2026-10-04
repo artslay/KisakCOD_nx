@@ -5091,7 +5091,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[SWITCH IMAGE TRACE] asset=%d token=%08x image=%p name=%p stream=%u b0=%08x b4=%08x\\n",
+                "[SWITCH IMAGE TRACE] asset=%d token=%08x image=%p name=%p stream=%u b0=%08x b4=%08x\n",
                 g_switchCurrentAssetIndex,
                 serialized.name,
                 static_cast<void *>(varGfxImage),
