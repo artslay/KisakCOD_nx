@@ -7000,34 +7000,8 @@ void __cdecl Load_Material(bool atStreamStart)
     static_assert(sizeof(SerializedMaterial) == 80);
 
     SerializedMaterial serialized{};
-    uint8_t *materialStreamPos = DB_GetStreamPos();
-
-    const bool traceUiMaterial =
-        g_switchCurrentAssetRawType == 4u &&
-        g_switchCurrentAssetIndex >= 0 &&
-        g_switchCurrentAssetIndex <= 3;
-    if (traceUiMaterial)
-    {
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][UI MATERIAL] header asset=%d start=%p stream=%u b0=%08x b4=%08x name=%08x techset=%08x textures=%08x count=%u constants=%08x/%u statebits=%08x/%u\n",
-            g_switchCurrentAssetIndex,
-            static_cast<void *>(materialStreamPos),
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            serialized.name,
-            serialized.techniqueSet,
-            serialized.textureTable,
-            static_cast<unsigned>(serialized.textureCount),
-            serialized.constantTable,
-            static_cast<unsigned>(serialized.constantCount),
-            serialized.stateBitsTable,
-            static_cast<unsigned>(serialized.stateBitsCount));
-        Switch_LogWrite(trace);
-    }
+    g_switchDbStage = "material/header";
+    DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
     memset(varMaterial, 0, sizeof(*varMaterial));
 
@@ -7069,7 +7043,6 @@ void __cdecl Load_Material(bool atStreamStart)
     DB_PushStreamPos(4);
 
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH MATERIAL] read80 done\n");
 #endif
 
     varMaterialInfo = &varMaterial->info;
@@ -7080,7 +7053,6 @@ void __cdecl Load_Material(bool atStreamStart)
     Load_XString(0);
 
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH MATERIAL] info done\n");
 #endif
 
     varMaterialTechniqueSetPtr = &varMaterial->techniqueSet;
@@ -7090,7 +7062,6 @@ void __cdecl Load_Material(bool atStreamStart)
     Load_MaterialTechniqueSetPtr(0);
 
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH MATERIAL] techset done\n");
 #endif
 
 #ifdef __SWITCH__
@@ -7136,7 +7107,6 @@ void __cdecl Load_Material(bool atStreamStart)
     }
 
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH MATERIAL] textures done\n");
 #endif
 
 #ifdef __SWITCH__
@@ -7161,7 +7131,6 @@ void __cdecl Load_Material(bool atStreamStart)
     }
 
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH MATERIAL] constants done\n");
 #endif
 
 #ifdef __SWITCH__
@@ -7186,7 +7155,6 @@ void __cdecl Load_Material(bool atStreamStart)
     }
 
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH MATERIAL] statebits done\n");
 #endif
 
 #ifdef __SWITCH__
