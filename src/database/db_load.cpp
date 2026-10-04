@@ -7339,6 +7339,33 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
     if (*varMaterialHandle)
     {
         value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(*varMaterialHandle));
+#ifdef __SWITCH__
+        if (g_switchCurrentAssetIndex == 4728)
+        {
+            const char *context = "other";
+            if (varWindow &&
+                varMaterialHandle == &varWindow->background)
+                context = "window";
+            else if (varlistBoxDef_t &&
+                     varMaterialHandle == &varlistBoxDef_t->selectIcon)
+                context = "listbox";
+
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][MATCALL4728] context=%s item=%d value=%08x stream=%u b0=%08x b4=%08x tempPos=%p stage=%s\n",
+                context,
+                g_switchCurrentMenuItemIndex,
+                value,
+                static_cast<unsigned>(g_streamPosIndex),
+                Switch_GetStreamCursorOffset(0),
+                Switch_GetStreamCursorOffset(4),
+                static_cast<void *>(DB_GetStreamPos()),
+                g_switchDbStage ? g_switchDbStage : "");
+            Sys_Print(trace);
+        }
+#endif
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
@@ -11529,6 +11556,23 @@ void __cdecl Load_listBoxDef_t(bool atStreamStart)
         static_assert(offsetof(listBoxDef_s, doubleClick) == 288);
         static_assert(offsetof(listBoxDef_s, selectIcon) == 344);
         static_assert(sizeof(listBoxDef_s) == 352);
+
+        if (g_switchCurrentAssetIndex == 4728 &&
+            varlistBoxDef_t->selectIcon)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][LISTBOX4728] item=%d selectIcon=%08x pos=%p b4=%08x\n",
+                g_switchCurrentMenuItemIndex,
+                static_cast<unsigned>(
+                    reinterpret_cast<uintptr_t>(
+                        varlistBoxDef_t->selectIcon)),
+                static_cast<void *>(DB_GetStreamPos()),
+                Switch_GetStreamCursorOffset(4));
+            Sys_Print(trace);
+        }
     }
 #else
     Load_Stream(atStreamStart, (uint8_t *)varlistBoxDef_t, 340);
@@ -11859,6 +11903,31 @@ void __cdecl Load_itemDef_t(bool atStreamStart)
         g_switchCurrentAssetRawType == 20u)
         g_switchDbStage = "menu/item/header";
     Switch_TranslateItemDefSerialized(varitemDef_t);
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 20u &&
+        (varitemDef_t->window.background ||
+         varitemDef_t->focusSound ||
+         varitemDef_t->typeData.data))
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][ITEM4728] item=%d type=%d bg=%08x focus=%08x typeData=%p vis=%d text=%d mat=%d rectX=%d rectY=%d\n",
+            g_switchCurrentMenuItemIndex,
+            varitemDef_t->type,
+            static_cast<unsigned>(
+                reinterpret_cast<uintptr_t>(varitemDef_t->window.background)),
+            static_cast<unsigned>(
+                reinterpret_cast<uintptr_t>(varitemDef_t->focusSound)),
+            static_cast<void *>(varitemDef_t->typeData.data),
+            varitemDef_t->visibleExp.numEntries,
+            varitemDef_t->textExp.numEntries,
+            varitemDef_t->materialExp.numEntries,
+            varitemDef_t->rectXExp.numEntries,
+            varitemDef_t->rectYExp.numEntries);
+        Sys_Print(trace);
+    }
 #else
     Load_Stream(atStreamStart, (uint8_t *)varitemDef_t, 372);
 #endif
@@ -12321,6 +12390,9 @@ void __cdecl Load_menuDef_t(bool atStreamStart)
     const bool traceMenu11 =
         g_switchCurrentAssetIndex == 11 &&
         g_switchCurrentAssetRawType == 20u;
+    const bool traceMenu4728 =
+        g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 20u;
 
     iassert(atStreamStart);
     if (traceMenu11)
@@ -12350,6 +12422,27 @@ void __cdecl Load_menuDef_t(bool atStreamStart)
         Switch_LogWrite(trace);
         g_switchDbStage = "menu/load_stream";
     }
+#ifdef __SWITCH__
+    if (traceMenu4728)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MENU4728] itemCount=%d items=%p font=%p onOpen=%p onClose=%p onESC=%p onKey=%p pos=%p b0=%08x b4=%08x\n",
+            varmenuDef_t->itemCount,
+            static_cast<void *>(varmenuDef_t->items),
+            static_cast<const void *>(varmenuDef_t->font),
+            static_cast<const void *>(varmenuDef_t->onOpen),
+            static_cast<const void *>(varmenuDef_t->onClose),
+            static_cast<const void *>(varmenuDef_t->onESC),
+            static_cast<void *>(varmenuDef_t->onKey),
+            static_cast<void *>(DB_GetStreamPos()),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4));
+        Sys_Print(trace);
+    }
+#endif
 #else
     Load_Stream(atStreamStart, (uint8_t *)varmenuDef_t, 284);
 #endif
