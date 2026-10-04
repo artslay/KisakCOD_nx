@@ -67,14 +67,11 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[SWITCH STREAM ARRAY MISMATCH]",
         "[SWITCH STREAM REGRESS]",
         "[SWITCH OFFSET INVALID]",
-        "[SWITCH XASSET STREAM]",
         "[SWITCH FX TRACE]",
-        "[SWITCH MENU11 ITEM87]",
-        "[SWITCH XHEADER11]",
         "[SWITCH PHYSPRESET]",
         "[SWITCH WEAPON4728]",
-        "[SWITCH SOUND DEFAULT]",
         "[SWITCH SOUND NULL]",
+        "[SWITCH RINIT]"
     };
 
     for (const char *prefix : kPrefixes)
