@@ -6917,6 +6917,33 @@ void __cdecl Load_MaterialTextureDefArray(bool atStreamStart, int32_t count)
 
     // Phase 2: resolve nested image/water pointers. Inline payloads are located
     // after the complete serialized array, matching the original 32-bit loader.
+#ifdef __SWITCH__
+    volatile uint64_t switchTextureArrayCanary[4] = {
+        0x13579bdf2468ace0ULL,
+        0x0f1e2d3c4b5a6978ULL,
+        0x55aa33cc77ee1199ULL,
+        0xa5a55a5aa55a5a5aULL
+    };
+    const bool traceUiTextureArray =
+        g_switchCurrentAssetRawType == 4u &&
+        g_switchCurrentAssetIndex >= 0 &&
+        g_switchCurrentAssetIndex <= 3;
+    if (traceUiTextureArray)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI MATERIAL] texture array begin count=%d var=%p "
+            "i=%p ret=%p frame=%p\\n",
+            count,
+            static_cast<void *>(var),
+            static_cast<void *>(&i),
+            __builtin_return_address(0),
+            __builtin_frame_address(0));
+        Switch_LogWrite(trace);
+    }
+#endif
     for (i = 0; i < count; ++i)
     {
         varMaterialTextureDef = &var[i];
@@ -6924,15 +6951,57 @@ void __cdecl Load_MaterialTextureDefArray(bool atStreamStart, int32_t count)
             reinterpret_cast<water_t **>(&varMaterialTextureDef->u);
         Load_MaterialTextureDefInfo(0);
 #ifdef __SWITCH__
-        if (g_switchCurrentAssetRawType == 4u &&
-            g_switchCurrentAssetIndex >= 0 &&
-            g_switchCurrentAssetIndex <= 3)
+        if (traceUiTextureArray)
         {
-            Switch_LogWrite("[KisakCOD][UI MATERIAL] texture info returned\n");
+            const uint64_t canary0 = switchTextureArrayCanary[0];
+            const uint64_t canary1 = switchTextureArrayCanary[1];
+            const uint64_t canary2 = switchTextureArrayCanary[2];
+            const uint64_t canary3 = switchTextureArrayCanary[3];
+            char trace[448];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI MATERIAL] texture info returned i=%d/%d "
+                "var=%p defInfo=%p canary=%016llx/%016llx/%016llx/%016llx\\n",
+                i,
+                count,
+                static_cast<void *>(varMaterialTextureDef),
+                static_cast<void *>(varMaterialTextureDefInfo),
+                static_cast<unsigned long long>(canary0),
+                static_cast<unsigned long long>(canary1),
+                static_cast<unsigned long long>(canary2),
+                static_cast<unsigned long long>(canary3));
+            Switch_LogWrite(trace);
             g_switchDbStage = "image/info_return";
         }
 #endif
     }
+#ifdef __SWITCH__
+    if (traceUiTextureArray)
+    {
+        const uint64_t canary0 = switchTextureArrayCanary[0];
+        const uint64_t canary1 = switchTextureArrayCanary[1];
+        const uint64_t canary2 = switchTextureArrayCanary[2];
+        const uint64_t canary3 = switchTextureArrayCanary[3];
+        char trace[448];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI MATERIAL] texture array end i=%d/%d "
+            "var=%p canary=%016llx/%016llx/%016llx/%016llx ret=%p frame=%p\\n",
+            i,
+            count,
+            static_cast<void *>(var),
+            static_cast<unsigned long long>(canary0),
+            static_cast<unsigned long long>(canary1),
+            static_cast<unsigned long long>(canary2),
+            static_cast<unsigned long long>(canary3),
+            __builtin_return_address(0),
+            __builtin_frame_address(0));
+        Switch_LogWrite(trace);
+        g_switchDbStage = "material/texture_array_return";
+    }
+#endif
 #else
     Load_Stream(atStreamStart, (uint8_t *)var, 12 * count);
     for (i = 0; i < count; ++i)
