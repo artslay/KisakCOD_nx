@@ -153,9 +153,7 @@ static uint32_t Switch_GetStreamCursorOffset(uint32_t streamIndex)
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern const char * volatile g_switchDbStage;
-#ifdef __SWITCH__
 static int g_switchMaterialTechniqueIndex = -1;
-#endif
 extern uint64_t __cdecl DB_GetXFileUncompressedOffset();
 
 enum weapPositionAnimNum_t : __int32
@@ -6208,7 +6206,7 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
         std::snprintf(
             trace + written,
             sizeof(trace) - static_cast<size_t>(written),
-            "\\n");
+            "\n");
         Sys_Print(trace);
     }
 #endif
@@ -6471,13 +6469,6 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
                 inserted = DB_InsertPointer();
 
             Load_MaterialTechnique(1);
-#ifdef __SWITCH__
-            if (g_switchCurrentAssetIndex == 4728 &&
-                g_switchCurrentAssetRawType == 23u)
-            {
-                g_switchMaterialTechniqueIndex = -1;
-            }
-#endif
 
             if (inserted)
                 *inserted = *reinterpret_cast<void **>(
@@ -6764,6 +6755,13 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
                 inserted = DB_InsertPointer();
 
             Load_MaterialTechnique(1);
+#ifdef __SWITCH__
+            if (g_switchCurrentAssetIndex == 4728 &&
+                g_switchCurrentAssetRawType == 23u)
+            {
+                g_switchMaterialTechniqueIndex = -1;
+            }
+#endif
 
 #ifdef __SWITCH__
             if (traceRawType == 5u &&
