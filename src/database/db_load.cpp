@@ -7224,9 +7224,11 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
                 static_cast<uintptr_t>(UINT32_MAX));
     }
 
-    // Material has already pushed the virtual block (stream 4). The inline
-    // TechniqueSet header, name and technique payload all advance the same
-    // active virtual-stream cursor, matching the iOS/OAT loader.
+    // The inline TechniqueSet object is serialized on stream 0, while
+    // its nested name and technique records live in the virtual stream 4.
+    // This matches the original generated loader on iOS.
+    DB_PushStreamPos(4);
+
     // The original loader consumes the inline name of the TechniqueSet itself
     // before loading the 34 technique pointer records. Do not move this below
     // the technique loop: that would make the first bytes of the name string
@@ -7547,6 +7549,8 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
 #endif
 
+    DB_PopStreamPos();
+
 #else
     Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniqueSet, 148);
     DB_PushStreamPos(4);
@@ -7564,6 +7568,12 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
     uint32_t value; // [esp+4h] [ebp-8h]
 
     Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniqueSetPtr, 4);
+#ifdef __SWITCH__
+    // The pointer slot is in stream 4, but an inline TechniqueSet object is
+    // serialized on stream 0. Load_MaterialTechniqueSet() switches back to
+    // stream 4 for the nested name and technique records.
+    DB_PushStreamPos(0);
+#endif
     if (*varMaterialTechniqueSetPtr)
     {
         value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(*varMaterialTechniqueSetPtr));
@@ -7648,6 +7658,9 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
 #endif
         }
     }
+#ifdef __SWITCH__
+    DB_PopStreamPos();
+#endif
 }
 
 void __cdecl Load_Material(bool atStreamStart)
