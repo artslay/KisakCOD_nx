@@ -72,7 +72,12 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[SWITCH MENU11 ITEM87]",
         "[SWITCH XHEADER11]",
         "[SWITCH PHYSPRESET]",
-        "[SWITCH WEAPON4728]"
+        "[SWITCH WEAPON4728]",
+        "[SWITCH SOUND DEFAULT]",
+        "[SWITCH SOUND NULL]",
+        "[SWITCH LOADEDSOUND PATH]",
+        "[SWITCH LOADEDSOUND HASH]",
+        "[SWITCH LOADEDSOUND LINK]"
     };
 
     for (const char *prefix : kPrefixes)
