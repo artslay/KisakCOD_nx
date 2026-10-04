@@ -14323,16 +14323,19 @@ static void Switch_TranslateWeaponDefSerialized(WeaponDef *weaponDef)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][WEAPON ROOT] asset=4728 stream=%u offset=%u after=%u materialTokens@536/540/544=%08x/%08x/%08x next=%08x\n",
+            "[KisakCOD][WEAPON ROOT] asset=4728 stream=%u offset=%u after=%u "
+            "reticleCenter@540=%08x reticleSide@544=%08x shellFX@524/528/532/536=%08x/%08x/%08x/%08x\n",
             static_cast<unsigned>(serializedStreamIndex),
             blockBase && rootAddress >= blockBase
                 ? static_cast<unsigned>(rootAddress - blockBase)
                 : UINT32_MAX,
             Switch_GetStreamCursorOffset(serializedStreamIndex),
-            Switch_ReadSerializedU32(serialized, 536),
             Switch_ReadSerializedU32(serialized, 540),
             Switch_ReadSerializedU32(serialized, 544),
-            Switch_ReadSerializedU32(serialized, 548));
+            Switch_ReadSerializedU32(serialized, 524),
+            Switch_ReadSerializedU32(serialized, 528),
+            Switch_ReadSerializedU32(serialized, 532),
+            Switch_ReadSerializedU32(serialized, 536));
         Switch_LogWrite(trace);
     }
 
@@ -14545,6 +14548,61 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
         Switch_LogWrite(trace);
     }
     DB_PushStreamPos(4);
+#ifdef __SWITCH__
+    const bool switchTraceWeapon4728 =
+        g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u;
+    auto switchTraceWeapon4728Cursor = [](const char *label)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH WEAPON4728] %s stream=%u stream0=%u stream4=%u\n",
+            label,
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4));
+        Switch_LogWrite(trace);
+    };
+#endif
+#ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+    {
+        char trace[512];
+        int written = std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH WEAPON4728] root sentinels gun=");
+        for (int i = 0; i < 16; ++i)
+        {
+            const uint32_t token = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(varWeaponDef->gunXModel[i]));
+            if (token == UINT32_MAX || token == UINT32_MAX - 1u)
+                written += std::snprintf(
+                    trace + written,
+                    sizeof(trace) - static_cast<size_t>(written),
+                    "%d:%08x ",
+                    i,
+                    token);
+        }
+        const uint32_t handToken = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(varWeaponDef->handXModel));
+        const uint32_t viewFlashToken = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(varWeaponDef->viewFlashEffect));
+        const uint32_t worldFlashToken = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(varWeaponDef->worldFlashEffect));
+        written += std::snprintf(
+            trace + written,
+            sizeof(trace) - static_cast<size_t>(written),
+            "hand=%08x flash=%08x/%08x\n",
+            handToken,
+            viewFlashToken,
+            worldFlashToken);
+        Switch_LogWrite(trace);
+        switchTraceWeapon4728Cursor("before xmodels");
+    }
+#endif
     if (switchTraceWeapon1506)
     {
         const uintptr_t block0Base =
@@ -14596,6 +14654,8 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
     varXModelPtr = &varWeaponDef->handXModel;
     Load_XModelPtr(0);
 #ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+        switchTraceWeapon4728Cursor("after xmodels");
     if (switchTraceWeapon1506)
         Switch_LogWrite("[SWITCH WEAPON1506] xmodels done\n");
 #endif
@@ -14622,6 +14682,8 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
     varFxEffectDefHandle = &varWeaponDef->worldFlashEffect;
     Load_FxEffectDefHandle(0);
 #ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+        switchTraceWeapon4728Cursor("after flash FX");
     if (switchTraceWeapon1506)
         Switch_LogWrite("[SWITCH WEAPON1506] flash FX done\n");
 #endif
@@ -14741,13 +14803,46 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
     varFxEffectDefHandle = &varWeaponDef->worldLastShotEjectEffect;
     Load_FxEffectDefHandle(0);
 #ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+    {
+        const uint32_t shellTokens[] = {
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varWeaponDef->viewShellEjectEffect)),
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varWeaponDef->worldShellEjectEffect)),
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varWeaponDef->viewLastShotEjectEffect)),
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varWeaponDef->worldLastShotEjectEffect))
+        };
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH WEAPON4728] shellFX=%08x/%08x/%08x/%08x\n",
+            shellTokens[0], shellTokens[1], shellTokens[2], shellTokens[3]);
+        Switch_LogWrite(trace);
+        switchTraceWeapon4728Cursor("after shell FX");
+    }
     if (switchTraceWeapon1506)
         Switch_LogWrite("[SWITCH WEAPON1506] shell FX done\n");
 #endif
     varMaterialHandle = &varWeaponDef->reticleCenter;
+#ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+        switchTraceWeapon4728Cursor("before reticleCenter");
+#endif
     Load_MaterialHandle(0);
+#ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+        switchTraceWeapon4728Cursor("after reticleCenter");
+#endif
     varMaterialHandle = &varWeaponDef->reticleSide;
+#ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+        switchTraceWeapon4728Cursor("before reticleSide");
+#endif
     Load_MaterialHandle(0);
+#ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+        switchTraceWeapon4728Cursor("after reticleSide");
+#endif
 #ifdef __SWITCH__
     if (switchTraceWeapon1506)
         Switch_LogWrite("[SWITCH WEAPON1506] reticle materials done\n");
