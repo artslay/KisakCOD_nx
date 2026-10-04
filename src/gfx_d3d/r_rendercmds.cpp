@@ -1253,8 +1253,14 @@ void __cdecl R_BeginFrame()
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/r_begin/material_override";
 #endif
+#ifdef __SWITCH__
+        if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
+            Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: before Material_OverrideTechniqueSets\n");
+#endif
         Material_OverrideTechniqueSets();
 #ifdef __SWITCH__
+        if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
+            Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: after Material_OverrideTechniqueSets\n");
         g_switchFrameStage = "frame/r_begin/material_override_done";
 #endif
         if (rgp.world && rgp.needSortMaterials)
@@ -1274,8 +1280,14 @@ void __cdecl R_BeginFrame()
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/r_begin/flush_debug";
 #endif
+#ifdef __SWITCH__
+        if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
+            Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: before CL_FlushDebugClientData\n");
+#endif
         CL_FlushDebugClientData();
 #ifdef __SWITCH__
+        if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
+            Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: after CL_FlushDebugClientData\n");
         g_switchFrameStage = "frame/r_begin/flush_debug_done";
 #endif
         v1 = r_skinCache->current.enabled && IsFastFileLoad();
