@@ -153,6 +153,9 @@ static uint32_t Switch_GetStreamCursorOffset(uint32_t streamIndex)
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern const char * volatile g_switchDbStage;
+#ifdef __SWITCH__
+static int g_switchMaterialTechniqueIndex = -1;
+#endif
 extern uint64_t __cdecl DB_GetXFileUncompressedOffset();
 
 enum weapPositionAnimNum_t : __int32
@@ -6168,6 +6171,47 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
     // The upstream loader reads the serialized technique header directly at the current cursor.
     SerializedMaterialTechnique serialized{};
     const uint8_t *techniqueStart = DB_GetStreamPos();
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        const uint32_t streamOffset = Switch_GetStreamCursorOffset(4);
+        const uint8_t *block4 =
+            g_streamBlocks && g_streamBlocks[4].data
+                ? g_streamBlocks[4].data
+                : nullptr;
+        const uint32_t block4Size =
+            g_streamBlocks ? g_streamBlocks[4].size : 0u;
+        const uint32_t remaining =
+            block4 && streamOffset <= block4Size
+                ? block4Size - streamOffset
+                : 0u;
+        char trace[768];
+        int written = std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TECH4728 RAW] index=%d stream=%u offset=%08x pos=%p remaining=%u bytes:",
+            g_switchMaterialTechniqueIndex,
+            static_cast<unsigned>(g_streamPosIndex),
+            streamOffset,
+            static_cast<const void *>(techniqueStart),
+            remaining);
+        const size_t dumpCount = remaining < 16u ? remaining : 16u;
+        for (size_t j = 0; j < dumpCount; ++j)
+        {
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                " %02x",
+                static_cast<unsigned>(block4[streamOffset + j]));
+        }
+        std::snprintf(
+            trace + written,
+            sizeof(trace) - static_cast<size_t>(written),
+            "\\n");
+        Sys_Print(trace);
+    }
+#endif
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
     // MaterialTechnique has one trailing pass in its C++ type. Reserve only
@@ -6427,6 +6471,13 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
                 inserted = DB_InsertPointer();
 
             Load_MaterialTechnique(1);
+#ifdef __SWITCH__
+            if (g_switchCurrentAssetIndex == 4728 &&
+                g_switchCurrentAssetRawType == 23u)
+            {
+                g_switchMaterialTechniqueIndex = -1;
+            }
+#endif
 
             if (inserted)
                 *inserted = *reinterpret_cast<void **>(
