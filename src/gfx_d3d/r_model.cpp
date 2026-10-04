@@ -415,7 +415,7 @@ void __cdecl R_LockSkinnedCache()
             snprintf(
                 msg,
                 sizeof(msg),
-                "[KisakCOD][SKINCACHE] frontEnd=%p skinnedState=%p bufferField=%p buffer=%p device=%p loadForRenderer=%d pool0=%p pool1=%p\\n",
+                "[KisakCOD][SKINCACHE] frontEnd=%p skinnedState=%p bufferField=%p buffer=%p device=%p loadForRenderer=%d pool0=%p pool1=%p\n",
                 (void *)frontEndDataOut,
                 frontEndDataOut ? (void *)frontEndDataOut->skinnedCacheVb : nullptr,
                 frontEndDataOut && frontEndDataOut->skinnedCacheVb
