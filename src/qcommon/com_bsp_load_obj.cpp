@@ -38,7 +38,7 @@ char __cdecl Com_CheckVersionLumpCountError(int version)
 
 bool __cdecl Com_BspError()
 {
-    return comBspGlob.header->ident != 'PSBI'
+    return comBspGlob.header->ident != MAKEFOURCC('P', 'S', 'B', 'I')
         || comBspGlob.header->version < 6
         || comBspGlob.header->version > 0x16
         || Com_CheckVersionLumpCountError(comBspGlob.header->version) != 0;
