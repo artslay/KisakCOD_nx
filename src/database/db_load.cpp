@@ -7467,7 +7467,6 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
 #endif
         }
     }
-    DB_PopStreamPos();
 }
 
 void __cdecl Load_Material(bool atStreamStart)
