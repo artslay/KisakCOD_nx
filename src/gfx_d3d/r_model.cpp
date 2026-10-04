@@ -405,7 +405,36 @@ void __cdecl R_LockSkinnedCache()
     iassert( !gfxBuf.skinnedCacheLockAddr );
     if (!dx.deviceLost)
     {
+#ifdef __SWITCH__
+        {
+            char msg[320];
+            snprintf(
+                msg,
+                sizeof(msg),
+                "[KisakCOD][SKINCACHE] frontEnd=%p skinnedState=%p bufferField=%p buffer=%p device=%p\n",
+                (void *)frontEndDataOut,
+                frontEndDataOut ? (void *)frontEndDataOut->skinnedCacheVb : nullptr,
+                frontEndDataOut && frontEndDataOut->skinnedCacheVb
+                    ? (void *)&frontEndDataOut->skinnedCacheVb->buffer : nullptr,
+                frontEndDataOut && frontEndDataOut->skinnedCacheVb
+                    ? (void *)frontEndDataOut->skinnedCacheVb->buffer : nullptr,
+                (void *)dx.device);
+            Switch_LogWrite(msg);
+        }
+#endif
         vb = frontEndDataOut->skinnedCacheVb->buffer;
+
+#ifdef __SWITCH__
+        {
+            char msg[192];
+            snprintf(
+                msg,
+                sizeof(msg),
+                "[KisakCOD][SKINCACHE] buffer=%p about to LockVertexBuffer\n",
+                (void *)vb);
+            Switch_LogWrite(msg);
+        }
+#endif
 
         iassert( vb );
 
