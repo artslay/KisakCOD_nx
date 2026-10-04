@@ -198,6 +198,21 @@ void Switch_LogWrite(const char *msg)
     if (!msg || !*msg)
         return;
 
+    // Keep the ARM64 fastfile probe readable on the Switch console.
+    // These older renderer/UI traces are not part of the current WeaponDef
+    // source-traversal diagnosis and can flood the deferred log buffer.
+    static constexpr const char *const kSuppressedPrefixes[] =
+    {
+        "[KisakCOD][UI ",
+        "[KisakCOD][VERTEXSHADER "
+    };
+    for (const char *prefix : kSuppressedPrefixes)
+    {
+        const size_t len = std::strlen(prefix);
+        if (std::strncmp(msg, prefix, len) == 0)
+            return;
+    }
+
     const bool isSwitchDiag =
         std::strncmp(msg, "[SWITCH ", 8) == 0;
 
