@@ -326,7 +326,12 @@ void __cdecl Sys_WakeDatabase2() {}
 void __cdecl Sys_SetWorkerCmdEvent() {}
 void __cdecl Sys_ResetWorkerCmdEvent() {}
 int __cdecl Sys_WaitBackendEvent() { return 1; }
-void __cdecl Sys_WaitForWorkerCmd() {}
+void __cdecl Sys_WaitForWorkerCmd()
+{
+    // The Switch worker event is still poll-based; yield while the server start
+    // gate is closed instead of spinning continuously on one core.
+    std::this_thread::yield();
+}
 void __cdecl Sys_SetUpdateSpotLightEffectEvent() {}
 void __cdecl Sys_ResetUpdateSpotLightEffectEvent() {}
 void __cdecl Sys_WaitUpdateNonDependentEffectsCompleted() {}
@@ -367,29 +372,125 @@ WinThreadLock __cdecl Win_GetThreadLock() { return THREAD_LOCK_NONE; }
 void Win_UpdateThreadLock() {}
 
 #ifdef KISAK_SP
-int Sys_WaitStartServer(uint32_t) { return 1; }
-void Sys_InitServerEvents() {}
-void Sys_ClientMessageReceived() {}
-void Sys_ClearClientMessage() {}
+int Sys_WaitStartServer(uint32_t timeout)
+{
+    Sys_EnterCriticalSection(CRITSECT_START_SERVER);
+
+    const bool ready = Sys_WaitForSingleObjectTimeout(&wakeServerEvent, timeout);
+    int result = ready ? 1 : 0;
+
+    if (isDoingDatabaseInit)
+        result = 0;
+    else if (ready)
+        Sys_ResetEvent(&serverCompletedEvent);
+
+    Sys_LeaveCriticalSection(CRITSECT_START_SERVER);
+    return result;
+}
+
+void Sys_InitServerEvents()
+{
+    Sys_ResetEvent(&wakeServerEvent);
+    Sys_ResetEvent(&serverCompletedEvent);
+    Sys_SetEvent(&allowSendClientMessagesEvent);
+    Sys_ResetEvent(&serverSnapshotEvent);
+    Sys_SetEvent(&clientMessageReceived);
+    g_timeout = 0;
+}
+
+void Sys_ClientMessageReceived()
+{
+    Sys_SetEvent(&clientMessageReceived);
+}
+
+void Sys_ClearClientMessage()
+{
+    Sys_ResetEvent(&clientMessageReceived);
+}
+
 int Sys_SpawnServerThread(void (*function)(uint32_t))
 {
+    // Create the synchronization objects before the thread can enter
+    // SV_ServerThread. The native SP implementation creates these events
+    // before creating the server thread.
+    if (!wakeServerEvent)
+        Sys_CreateEvent(true, false, &wakeServerEvent);
+    if (!serverCompletedEvent)
+        Sys_CreateEvent(true, false, &serverCompletedEvent);
+    if (!allowSendClientMessagesEvent)
+        Sys_CreateEvent(true, false, &allowSendClientMessagesEvent);
+    if (!serverSnapshotEvent)
+        Sys_CreateEvent(false, false, &serverSnapshotEvent);
+    if (!clientMessageReceived)
+        Sys_CreateEvent(true, true, &clientMessageReceived);
+
     g_switchThreadStage = "spawnServer/before_create";
     Sys_CreateThread((void (__cdecl *)(uint32_t))function, THREAD_CONTEXT_SERVER);
     g_switchThreadStage = "spawnServer/after_create";
     g_switchThreadStage = "spawnServer/return";
-    return 1;
+    return threadHandle[THREAD_CONTEXT_SERVER] != nullptr ? 1 : 0;
 }
-void Sys_WaitClientMessageReceived() {}
-void Sys_ServerSnapshotCompleted() {}
-bool Sys_WaitServerSnapshot() { return true; }
-void Sys_AllowSendClientMessages() {}
-void Sys_DisallowSendClientMessages() {}
-int Sys_CanSendClientMessages() { return 1; }
-void Sys_ServerCompleted() {}
+
+void Sys_WaitClientMessageReceived()
+{
+    PROF_SCOPED("wait receive msg");
+    Sys_WaitForSingleObject(&clientMessageReceived);
+}
+
+void Sys_ServerSnapshotCompleted()
+{
+    Sys_SetEvent(&serverSnapshotEvent);
+}
+
+bool Sys_WaitServerSnapshot()
+{
+    PROF_SCOPED("wait snapshot");
+    return Sys_WaitForSingleObjectTimeout(&serverSnapshotEvent, 1);
+}
+
+void Sys_AllowSendClientMessages()
+{
+    Sys_SetEvent(&allowSendClientMessagesEvent);
+}
+
+void Sys_DisallowSendClientMessages()
+{
+    Sys_ResetEvent(&allowSendClientMessagesEvent);
+}
+
+int Sys_CanSendClientMessages()
+{
+    return Sys_WaitForSingleObjectTimeout(&allowSendClientMessagesEvent, 0) ? 1 : 0;
+}
+
+void Sys_ServerCompleted()
+{
+    Sys_SetEvent(&serverCompletedEvent);
+}
+
 int Sys_ServerTimeout() { return 0; }
-void Sys_WakeServer() {}
-void Sys_SleepServer() { std::this_thread::yield(); }
-bool Sys_WaitServer() { return true; }
+
+void Sys_WakeServer()
+{
+    Sys_SetEvent(&wakeServerEvent);
+}
+
+void Sys_SleepServer()
+{
+    const bool ready = Sys_WaitForSingleObjectTimeout(&wakeServerEvent, 0);
+    if (ready)
+    {
+        Sys_EnterCriticalSection(CRITSECT_START_SERVER);
+        Sys_ResetEvent(&wakeServerEvent);
+        Sys_LeaveCriticalSection(CRITSECT_START_SERVER);
+    }
+}
+
+bool Sys_WaitServer()
+{
+    PROF_SCOPED("wait server");
+    return Sys_WaitForSingleObjectTimeout(&serverCompletedEvent, 1);
+}
 void Sys_Sleep(uint32_t msec) { std::this_thread::sleep_for(std::chrono::milliseconds(msec)); }
 void Sys_SetServerTimeout(int) {}
 bool Sys_WaitForSaveHistoryDone()
