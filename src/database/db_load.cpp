@@ -15305,6 +15305,7 @@ void __cdecl Load_RawFile(bool atStreamStart)
     DB_PushStreamPos(4);
     varXString = &varRawFile->name;
 #ifdef __SWITCH__
+    Load_XString(0);
     g_switchRawFileB4AfterName =
         (g_streamBlocks && g_streamBlocks[4].data &&
          g_streamPosIndex == 4 &&
