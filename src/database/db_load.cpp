@@ -14854,6 +14854,40 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
     if (switchTraceWeapon1506)
         Switch_LogWrite("[SWITCH WEAPON1506] flash FX done\n");
 #endif
+#ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+    {
+        const sndFields[] = {
+            340u,344u,348u,352u,356u,360u,364u,368u,372u,376u,380u,384u,
+            388u,392u,396u,400u,404u,408u,412u,416u,420u,424u,428u,432u,
+            436u,440u,444u,448u,452u,456u,460u,464u,468u,472u,476u,480u,484u,
+            488u,492u,496u,500u,504u,508u,512u,516u
+        };
+        char trace[768];
+        int written = std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][WEAPON4728 SOUND] tokens");
+        for (uint32_t off : sndFields)
+        {
+            const uint8_t *field =
+                reinterpret_cast<const uint8_t *>(varWeaponDef) +
+                off;
+            uint32_t token = 0;
+            std::memcpy(&token, field, sizeof(token));
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                " %u:%08x",
+                off, token);
+        }
+        std::snprintf(
+            trace + written,
+            sizeof(trace) - static_cast<size_t>(written),
+            "\n");
+        Switch_LogWrite(trace);
+        switchTraceWeapon4728Cursor("before sounds");
+    }
+#endif
     varsnd_alias_list_name = &varWeaponDef->pickupSound;
     Load_snd_alias_list_name(0);
     varsnd_alias_list_name = &varWeaponDef->pickupSoundPlayer;
