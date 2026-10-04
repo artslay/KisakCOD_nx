@@ -1438,15 +1438,29 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
 
         if (nested == UINT32_MAX)
         {
-            // The outer serialized XStringPtr slot contains the -1 sentinel.
-            // The inline string payload follows the current fastfile cursor;
-            // it is not located at outerSlot + sizeof(uint32_t). Consume it
-            // through Load_XString() so stream4 stays in the original order.
-            *nativeStringSlot =
+            // A normal outer XStringPtr points at an already-loaded serialized
+            // 32-bit slot. Resolve its inline string in place; do not advance
+            // the global fastfile cursor here. The original loader's normal
+            // outer-pointer path only converts the offset to that slot.
+            const uint64_t inlineOffset64 =
+                static_cast<uint64_t>(outerBlockOffset) +
+                sizeof(uint32_t);
+            if (inlineOffset64 >= g_streamBlocks[outerBlock].size)
+                return;
+
+            const uint32_t inlineOffset =
+                static_cast<uint32_t>(inlineOffset64);
+            const char *inlineString =
                 reinterpret_cast<const char *>(
-                    static_cast<uintptr_t>(UINT32_MAX));
-            varXString = nativeStringSlot;
-            Load_XString(0);
+                    g_streamBlocks[outerBlock].data + inlineOffset);
+            const uint32_t remaining =
+                g_streamBlocks[outerBlock].size - inlineOffset;
+
+            if (std::memchr(inlineString, '\0', remaining))
+                *nativeStringSlot = inlineString;
+            else
+                Switch_LogWrite(
+                    "[SWITCH XSTRINGPTR] unterminated inline string\n");
             return;
         }
 
