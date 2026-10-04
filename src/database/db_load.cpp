@@ -5485,24 +5485,6 @@ void __cdecl Load_MaterialVertexShader(bool atStreamStart)
     const uint8_t *vertexShaderStart = DB_GetStreamPos();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728)
-    {
-        char trace[384];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][VERTEXSHADER4728] pos=%p name=%08x shader=%08x program=%08x size=%u renderer=%u after=%p b4=%08x\n",
-            static_cast<const void *>(vertexShaderStart),
-            serialized.name,
-            serialized.shader,
-            serialized.program,
-            static_cast<unsigned>(serialized.programSize),
-            static_cast<unsigned>(serialized.loadForRenderer),
-            static_cast<void *>(DB_GetStreamPos()),
-            Switch_GetStreamCursorOffset(4));
-        Sys_Print(trace);
-    }
-#endif
 
     memset(varMaterialVertexShader, 0, sizeof(*varMaterialVertexShader));
 
@@ -5955,25 +5937,6 @@ static void Switch_LoadMaterialPassSerialized(
     varMaterialPass->stableArgCount = serialized.stableArgCount;
     varMaterialPass->customSamplerFlags = serialized.customSamplerFlags;
 
-    if (g_switchCurrentAssetIndex == 4728)
-    {
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][PASS4728] pos=%p decl=%08x vs=%08x ps=%08x args=%08x counts=%u/%u/%u flags=%u b4=%08x\n",
-            static_cast<const void *>(passStart),
-            serialized.vertexDecl,
-            serialized.vertexShader,
-            serialized.pixelShader,
-            serialized.args,
-            static_cast<unsigned>(serialized.perPrimArgCount),
-            static_cast<unsigned>(serialized.perObjArgCount),
-            static_cast<unsigned>(serialized.stableArgCount),
-            static_cast<unsigned>(serialized.customSamplerFlags),
-            Switch_GetStreamCursorOffset(4));
-        Sys_Print(trace);
-    }
 
     if (serialized.vertexDecl == UINT32_MAX)
     {
