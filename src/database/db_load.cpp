@@ -25,6 +25,18 @@
 #ifdef __SWITCH__
 extern void Switch_LogRaw(const char *msg);
 
+int32_t g_switchCurrentAssetB4Start = 0;
+int32_t g_switchPreviousAssetIndex = -1;
+uint32_t g_switchPreviousAssetRawType = 0;
+uint32_t g_switchPreviousAssetHeader = 0;
+uint32_t g_switchPreviousAssetB4Start = 0;
+uint32_t g_switchPreviousAssetB4End = 0;
+int32_t g_switchRawFileLen = -1;
+uint32_t g_switchRawFileNameToken = 0;
+uint32_t g_switchRawFileBufferToken = 0;
+uint32_t g_switchRawFileB4BeforeName = 0;
+uint32_t g_switchRawFileB4AfterName = 0;
+
 static void Switch_LogRawDwords(
     const char *tag,
     const uint8_t *data,
@@ -15042,6 +15054,18 @@ void __cdecl Load_RawFile(bool atStreamStart)
             reinterpret_cast<uint8_t *>(&serialized),
             sizeof(serialized));
 
+#ifdef __SWITCH__
+        g_switchRawFileLen = serialized.len;
+        g_switchRawFileNameToken = serialized.name;
+        g_switchRawFileBufferToken = serialized.buffer;
+        g_switchRawFileB4BeforeName =
+            (g_streamBlocks && g_streamBlocks[4].data &&
+             g_streamPosArray[4])
+                ? static_cast<uint32_t>(
+                    g_streamPosArray[4] - g_streamBlocks[4].data)
+                : 0u;
+        g_switchRawFileB4AfterName = g_switchRawFileB4BeforeName;
+#endif
         varRawFile->name = reinterpret_cast<const char *>(
             static_cast<uintptr_t>(serialized.name));
         varRawFile->len = serialized.len;
@@ -15069,6 +15093,12 @@ void __cdecl Load_RawFile(bool atStreamStart)
     varXString = &varRawFile->name;
     Load_XString(0);
 #ifdef __SWITCH__
+    g_switchRawFileB4AfterName =
+        (g_streamBlocks && g_streamBlocks[4].data &&
+         g_streamPosArray[4])
+            ? static_cast<uint32_t>(
+                g_streamPosArray[4] - g_streamBlocks[4].data)
+            : g_switchRawFileB4BeforeName;
     if (switchRawFileTrace)
     {
         const uintptr_t namePtr =
