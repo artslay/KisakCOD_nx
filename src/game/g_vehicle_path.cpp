@@ -1206,10 +1206,10 @@ void G_VehSetSwitchNode(vehicle_pathpos_t *vpp, int16_t srcNodeIdx, int16_t dstN
         vpp->switchNode[i].speed = -1.0f;
         vpp->switchNode[i].lookAhead = -1.0f;
         vpp->switchNode[i].index = -1;
-        vpp->switchNode[i].name = NULL;
-        vpp->switchNode[i].target = NULL;
-        vpp->switchNode[i].script_linkname = NULL;
-        vpp->switchNode[i].script_noteworthy = NULL;
+        vpp->switchNode[i].name = 0;
+        vpp->switchNode[i].target = 0;
+        vpp->switchNode[i].script_linkname = 0;
+        vpp->switchNode[i].script_noteworthy = 0;
         vpp->switchNode[i].rotated = 0;
 
         for (int j = 0; j < 3; ++j) {
