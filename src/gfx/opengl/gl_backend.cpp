@@ -1,6 +1,10 @@
 #include "gl_backend.h"
 
 #ifdef __SWITCH__
+#include <cstdio>
+#endif
+
+#ifdef __SWITCH__
 #include <switch.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -539,6 +543,35 @@ bool OpenGLBackend::InitContext(const GfxWindowParms* wndParms)
         m_lastError = "eglMakeCurrent failed";
         return false;
     }
+
+    // Read the active runtime strings from the driver instead of hardcoding the
+    // GPU, Mesa or Zink version. This is the actual EGL/OpenGL stack selected by
+    // the Switch graphics runtime after the context becomes current.
+    const char *eglVendor = eglQueryString(s_display, EGL_VENDOR);
+    const char *eglVersion = eglQueryString(s_display, EGL_VERSION);
+    const char *glVendor = reinterpret_cast<const char *>(glGetString(GL_VENDOR));
+    const char *glRenderer = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
+    const char *glVersion = reinterpret_cast<const char *>(glGetString(GL_VERSION));
+    const char *glslVersion = reinterpret_cast<const char *>(glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+    char trace[1024];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][BOOT] EGL runtime: vendor=%s version=%s\\n",
+        eglVendor ? eglVendor : "unknown",
+        eglVersion ? eglVersion : "unknown");
+    Switch_LogWrite(trace);
+
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][BOOT] OpenGL runtime: vendor=%s renderer=%s\\n",
+        glVendor ? glVendor : "unknown",
+        glRenderer ? glRenderer : "unknown");
+    Switch_LogWrite(trace);
+
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][BOOT] OpenGL version: %s GLSL=%s\\n",
+        glVersion ? glVersion : "unknown",
+        glslVersion ? glslVersion : "unknown");
+    Switch_LogWrite(trace);
 
     return true;
 #else
