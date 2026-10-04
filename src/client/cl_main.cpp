@@ -949,9 +949,7 @@ void __cdecl CL_InitRenderer()
     Con_InitClientAssets();
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][CLINIT] after Con_InitClientAssets\n");
-    // The renderer/EGL context is ready here. Release the startup console and
-    // diagnostic log so the next frame is presented by the game renderer.
-    Switch_LogShutdown();
+    Switch_LogWrite("[KisakCOD][CLINIT] leaving CL_InitRenderer\n");
 #endif
 }
 
