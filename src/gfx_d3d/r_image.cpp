@@ -1291,34 +1291,66 @@ bool __cdecl Image_IsCodeImage(int track)
 
 void R_InitCodeImages()
 {
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] enter code images\n");
+    Switch_LogWrite("[KisakCOD][RINIT] before $white\n");
+#endif
     rgp.whiteImage = Image_Register("$white", TS_FUNCTION, IMAGE_TRACK_MISC);
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] after $white\n");
 #endif
     iassert(rgp.whiteImage);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] before $black\n");
+#endif
     rgp.blackImage = Image_Register("$black", TS_FUNCTION, IMAGE_TRACK_MISC);
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] after $black\n");
 #endif
     iassert(rgp.blackImage);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] before $black_3d\n");
+#endif
     rgp.blackImage3D = Image_Register("$black_3d", TS_FUNCTION, IMAGE_TRACK_MISC);
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] after $black_3d\n");
 #endif
     iassert(rgp.blackImage3D);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] before $black_cube\n");
+#endif
     rgp.blackImageCube = Image_Register("$black_cube", TS_FUNCTION, IMAGE_TRACK_MISC);
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] after $black_cube\n");
 #endif
     iassert(rgp.blackImageCube);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] before $gray\n");
+#endif
     rgp.grayImage = Image_Register("$gray", TS_FUNCTION, IMAGE_TRACK_MISC);
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] after $gray\n");
 #endif
     iassert(rgp.grayImage);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] before $identitynormalmap\n");
+#endif
     rgp.identityNormalMapImage = Image_Register("$identitynormalmap", TS_FUNCTION, IMAGE_TRACK_MISC);
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] after $identitynormalmap\n");
 #endif
     iassert(rgp.identityNormalMapImage);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] before $pixelcostcolorcode\n");
+#endif
     rgp.pixelCostColorCodeImage = Image_Register("$pixelcostcolorcode", TS_FUNCTION, IMAGE_TRACK_MISC);
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] after $pixelcostcolorcode\n");
 #endif
     iassert(rgp.pixelCostColorCodeImage);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] code images done\n");
+#endif
 }
 
 #ifdef KISAK_RADIANT
