@@ -143,16 +143,6 @@ void __cdecl R_InitDynamicVertexBufferState(GfxVertexBufferState *vb, int bytes)
     vb->used = 0;
     vb->total = bytes;
     verts = (uint8_t *)R_AllocDynamicVertexBuffer(&vb->buffer, bytes);
-#ifdef __SWITCH__
-    if (bytes == 0x480000)
-    {
-        char msg[192];
-        snprintf(msg, sizeof(msg),
-            "[KisakCOD][SKINCACHE_INIT] state=%p buffer=%p verts=%p total=%d\n",
-            (void *)vb, (void *)vb->buffer, (void *)verts, vb->total);
-        Switch_LogWrite(msg);
-    }
-#endif
     iassert( verts == NULL );
     vb->verts = verts;
 }
