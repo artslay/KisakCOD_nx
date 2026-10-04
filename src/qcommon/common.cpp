@@ -1606,7 +1606,14 @@ void Com_InitDvars()
         DVAR_NOFLAG,
         "Prevents specified threads from changing CPUs; improves profiling and may fix some bugs, but can hurt performance");
 
+#ifdef __SWITCH__
+    // The Switch backend has a dedicated render thread even when the platform
+    // reports hardware_concurrency()==1. Keep renderer SMP enabled so frames
+    // execute on the window-surface EGL context instead of the bootstrap pbuffer.
+    sys_smp_allowed = Dvar_RegisterBool("sys_smp_allowed", 1, DVAR_INIT, "Allow multi-threading");
+#else
     sys_smp_allowed = Dvar_RegisterBool("sys_smp_allowed", Sys_GetCpuCount() > 1u, DVAR_INIT, "Allow multi-threading");
+#endif
 #ifdef KISAK_MP
     com_masterServerName = Dvar_RegisterString(
         "masterServerName",
