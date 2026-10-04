@@ -105,6 +105,8 @@ extern void * volatile g_switchDbLastAssetResult;
 extern uint32_t volatile g_switchDbLastAssetType;
 extern void * volatile g_switchDbLastPreloadShaders;
 }
+extern "C" uint32_t Sys_GetSwitchThreadContext();
+
 
 static void Switch_LogCrashLine(const char *line)
 {
@@ -143,6 +145,28 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         ctx->pstate,
         ctx->esr,
         (ctx->esr >> 26) & 0x3f);
+    Switch_LogCrashLine(line);
+
+    const uint32_t threadContext = Sys_GetSwitchThreadContext();
+    const char *threadName = "unknown";
+    switch (threadContext)
+    {
+        case THREAD_CONTEXT_MAIN: threadName = "main"; break;
+        case THREAD_CONTEXT_SERVER: threadName = "server"; break;
+        case THREAD_CONTEXT_BACKEND: threadName = "backend"; break;
+        case THREAD_CONTEXT_DATABASE: threadName = "database"; break;
+        default:
+            if (threadContext >= THREAD_CONTEXT_WORKER0 &&
+                threadContext < THREAD_CONTEXT_WORKER0 + 32)
+                threadName = "worker";
+            break;
+    }
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] thread_context=%u (%s)\n",
+        threadContext,
+        threadName);
     Switch_LogCrashLine(line);
 
     std::snprintf(

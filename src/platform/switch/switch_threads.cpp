@@ -114,6 +114,11 @@ void __cdecl Sys_InitThread(ThreadContext_t context)
     g_switchThreadValues[2] = &g_switchJmpBuffer;
 }
 
+extern "C" uint32_t Sys_GetSwitchThreadContext()
+{
+    return static_cast<uint32_t>(g_threadContext);
+}
+
 void __cdecl SetThreadName(uint32_t, const char *) {}
 
 void __cdecl Sys_CreateEvent(bool manualReset, bool initialState, void **event)

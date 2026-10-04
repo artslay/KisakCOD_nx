@@ -19,6 +19,9 @@
 #include <client/cl_scrn.h>
 #include <game/savedevice.h>
 #include <qcommon/cmd.h>
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
 
 server_t sv;
 serverStatic_t svs;
@@ -517,21 +520,63 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
         } while (setjmp(*reinterpret_cast<jmp_buf *>(v2)));
     }
     Profile_Guard(1);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][SERVER] thread entered\n");
+#endif
     Sys_InitServerEvents();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][SERVER] after Sys_InitServerEvents\n");
+#endif
     while (1)
     {
         while (1)
         {
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][SERVER] before Sys_ServerCompleted\n");
+#endif
             Sys_ServerCompleted();
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][SERVER] after Sys_ServerCompleted\n");
+            Switch_LogWrite("[KisakCOD][SERVER] before R_ProcessWorkerCmds first\n");
+#endif
             {
                 PROF_SCOPED("wait start server");
                 R_ProcessWorkerCmdsWithTimeout(SV_CheckStartServer, 1);
             }
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][SERVER] after R_ProcessWorkerCmds first\n");
+#endif
             if (!sv.restartServerThread)
                 break;
             sv.serverExecTime = 0;
             sv.restartServerThread = 0;
             sv.clientMessageTimeout = 0;
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][SERVER] restart flag cleared\n");
+#endif
+        }
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][SERVER] before SV_PreFrame\n");
+#endif
+        v3 = Sys_Milliseconds();
+        {
+            PROF_SCOPED("run frame");
+            SV_PreFrame();
+        }
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][SERVER] after SV_PreFrame\n");
+#endif
+        CL_FlushDebugServerData();
+        if (!CL_DemoPlaying())
+        {
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][SERVER] before G_RunFrame\n");
+#endif
+            PROF_SCOPED("G_RunFrame");
+            G_RunFrame(SV_FRAME_DO_ALL, 0);
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][SERVER] after G_RunFrame\n");
+#endif
         }
         v3 = Sys_Milliseconds();
         {
