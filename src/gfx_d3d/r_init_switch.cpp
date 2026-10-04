@@ -88,23 +88,11 @@ void R_ReleaseForShutdownOrReset() {}
 void R_UnloadWorld() {}
 void R_BeginRegistration(vidConfig_t *out) {
     iassert(!rg.registered);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] before R_Init\n");
-#endif
     R_Init();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after R_Init\n");
-#endif
     iassert(rg.registered);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after rg.registered assert\n");
-#endif
     if (out)
         *out = vidConfig;
     s_registered = true;
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after s_registered=true\n");
-#endif
 }
 
 void R_Init() {
@@ -118,13 +106,7 @@ void R_Init() {
 
     R_InitGraphicsApi();
 
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] before R_InitSystems\n");
-#endif
     R_InitSystems();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after R_InitSystems\n");
-#endif
 }
 char R_InitRendererForWindow(HWND) { R_Init(); return 1; }
 HWND R_CreateSwapChains(int, GfxWindowParms *, int) { return nullptr; }
