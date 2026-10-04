@@ -442,10 +442,34 @@ void __cdecl Sys_OutOfMemErrorInternal(const char *filename, int line)
 
 void __cdecl Sys_Init()
 {
-    s_cpuCount = std::thread::hardware_concurrency();
-    if (!s_cpuCount) s_cpuCount = 1;
-    s_cpuCount = s_cpuCount > 4 ? 4 : s_cpuCount;
-    Com_Printf(CON_CHANNEL_SYSTEM, "Switch CPU threads: %u\n", s_cpuCount);
+    // std::thread::hardware_concurrency() is only a hint and currently reports
+    // one thread in this libnx runtime. Query the process CPU affinity mask
+    // directly from Horizon so the engine sees the cores actually available.
+    u64 coreMask = 0;
+    const Result rc = svcGetInfo(
+        &coreMask,
+        InfoType_CoreMask,
+        CUR_PROCESS_HANDLE,
+        0);
+
+    s_cpuCount = 0;
+    if (R_SUCCEEDED(rc))
+    {
+        for (u64 mask = coreMask; mask; mask >>= 1)
+            s_cpuCount += static_cast<uint32_t>(mask & 1u);
+    }
+
+    if (!s_cpuCount)
+        s_cpuCount = 1;
+
+    if (s_cpuCount > 4)
+        s_cpuCount = 4;
+
+    Com_Printf(
+        CON_CHANNEL_SYSTEM,
+        "Switch CPU threads: %u (coreMask=0x%llx)\\n",
+        s_cpuCount,
+        static_cast<unsigned long long>(coreMask));
 }
 
 void __cdecl Sys_LoadingKeepAlive() {}
