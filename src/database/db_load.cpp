@@ -1438,17 +1438,17 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
 
         if (nested == UINT32_MAX)
         {
-            const uint32_t inlineOffset =
-                outerBlockOffset + static_cast<uint32_t>(sizeof(nested));
-            const uint32_t remaining =
-                g_streamBlocks[outerBlock].size - inlineOffset;
-            const char *inlineString = reinterpret_cast<const char *>(
-                g_streamBlocks[outerBlock].data + inlineOffset);
-            if (remaining && std::memchr(inlineString, '\0', remaining))
-                *nativeStringSlot = inlineString;
-            else
-                Switch_LogWrite(
-                    "[SWITCH XSTRINGPTR] unterminated inline string\n");
+            // The nested snd_alias_list_name stores a normal XString token.
+            // Consume it through Load_XString so the inline string bytes are
+            // actually removed from the compressed fastfile stream. The old
+            // implementation only pointed at the bytes and left the cursor
+            // at the start of the string, causing the next loader to consume
+            // the string as if it were another serialized object.
+            *nativeStringSlot =
+                reinterpret_cast<const char *>(
+                    static_cast<uintptr_t>(UINT32_MAX));
+            varXString = nativeStringSlot;
+            Load_XString(0);
             return;
         }
 
@@ -3871,6 +3871,38 @@ void __cdecl Load_snd_alias_list_name(bool atStreamStart)
 
 void __cdecl Load_snd_alias_list_nameArray(bool atStreamStart, int32_t count)
 {
+#ifdef __SWITCH__
+    iassert(atStreamStart);
+    iassert(count >= 0);
+
+    if (count <= 0)
+        return;
+
+    // SndAliasCustom is an 8-byte native union on AArch64, but the fastfile
+    // stores its pointer records as a packed 32-bit array. Read the complete
+    // serialized array first; walking it as a native 8-byte array would skip
+    // every second token and then feed stale/unaligned data to the resolver.
+    std::vector<uint32_t> serialized(
+        static_cast<size_t>(count));
+    DB_LoadSwitchSerialized(
+        serialized.data(),
+        static_cast<uint32_t>(
+            sizeof(uint32_t) * static_cast<size_t>(count)));
+
+    snd_alias_list_t **base = varsnd_alias_list_name;
+
+    for (int32_t i = 0; i < count; ++i)
+    {
+        varsnd_alias_list_name = base + i;
+        *varsnd_alias_list_name =
+            reinterpret_cast<snd_alias_list_t *>(
+                static_cast<uintptr_t>(
+                    serialized[static_cast<size_t>(i)]));
+        Load_SndAliasCustom(varsnd_alias_list_name);
+    }
+
+    return;
+#else
     snd_alias_list_t **var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
@@ -3882,6 +3914,7 @@ void __cdecl Load_snd_alias_list_nameArray(bool atStreamStart, int32_t count)
         Load_snd_alias_list_name(0);
         ++var;
     }
+#endif
 }
 
 void __cdecl Mark_LoadedSoundPtr()
@@ -13915,7 +13948,26 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
     {
         if (varWeaponDef->bounceSound == (snd_alias_list_t **)-1)
         {
+#ifdef __SWITCH__
+            // The serialized bounceSound array is 29 packed 32-bit
+            // SndAliasCustom pointer tokens (116 bytes). The native ARM64
+            // array is 29 64-bit union slots, so keep the serialized source
+            // in the DB stream and allocate the expanded array in Hunk.
+            DB_AllocStreamPos(3);
+            varWeaponDef->bounceSound =
+                reinterpret_cast<snd_alias_list_t **>(
+                    Hunk_Alloc(
+                        static_cast<uint32_t>(
+                            sizeof(snd_alias_list_t *) * 29u),
+                        "SwitchWeaponBounceSound",
+                        22));
+            std::memset(
+                varWeaponDef->bounceSound,
+                0,
+                sizeof(snd_alias_list_t *) * 29u);
+#else
             varWeaponDef->bounceSound = (snd_alias_list_t **)AllocLoad_FxElemVisStateSample();
+#endif
             varsnd_alias_list_name = varWeaponDef->bounceSound;
             Load_snd_alias_list_nameArray(1, 29);
         }
