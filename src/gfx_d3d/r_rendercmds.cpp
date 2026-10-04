@@ -1298,9 +1298,13 @@ void __cdecl R_BeginFrame()
         {
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/r_begin/lock_skin_cache";
+            if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
+                Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: before R_LockSkinnedCache\n");
 #endif
             R_LockSkinnedCache();
 #ifdef __SWITCH__
+            if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
+                Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: after R_LockSkinnedCache\n");
             g_switchFrameStage = "frame/r_begin/lock_skin_cache_done";
 #endif
         }
