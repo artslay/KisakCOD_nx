@@ -75,6 +75,12 @@ extern uint32_t g_switchCurrentAssetRawType;
 extern uint32_t g_switchCurrentAssetHeader;
 extern uint32_t g_switchPointerInsertCount;
 extern uint32_t g_switchPointerInsertExtraBytes;
+extern int32_t g_switchCurrentAssetB4Start;
+extern int32_t g_switchPreviousAssetIndex;
+extern uint32_t g_switchPreviousAssetRawType;
+extern uint32_t g_switchPreviousAssetHeader;
+extern uint32_t g_switchPreviousAssetB4Start;
+extern uint32_t g_switchPreviousAssetB4End;
 #endif
 
 
