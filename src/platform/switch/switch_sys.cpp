@@ -280,10 +280,16 @@ void Switch_LogWrite(const char *msg)
             written += static_cast<size_t>(n);
         }
     }
+
+    // consoleUpdate is kept on the main thread only. The engine blocks there
+    // during startup, so every main-thread print flushes the visible boot log.
+    if (g_switchScreenLog && Sys_IsMainThread())
+        consoleUpdate(nullptr);
 }
 void Switch_LogInit()
 {
-    g_switchScreenLog = false;
+    consoleInit(nullptr);
+    g_switchScreenLog = true;
 
     if (g_switchLogFd >= 0)
         return;
@@ -306,6 +312,7 @@ void Switch_LogInit()
         "Log file: sdmc:/switch/KisakCOD/kisakcod.log\n"
         "========================================\n";
     Switch_LogWrite(header);
+    consoleUpdate(nullptr);
 }
 
 void Switch_LogRaw(const char *msg)
@@ -315,8 +322,11 @@ void Switch_LogRaw(const char *msg)
 
 void Switch_LogReleaseScreen()
 {
-    // Kept as a compatibility hook for renderer bring-up. The Switch build no
-    // longer initializes the libnx framebuffer console, so there is nothing to release.
+    if (!g_switchScreenLog)
+        return;
+
+    consoleUpdate(nullptr);
+    consoleExit(nullptr);
     g_switchScreenLog = false;
 }
 
@@ -328,7 +338,12 @@ void Switch_LogShutdown()
         g_switchLogFd = -1;
     }
 
-    g_switchScreenLog = false;
+    if (g_switchScreenLog)
+    {
+        consoleUpdate(nullptr);
+        consoleExit(nullptr);
+        g_switchScreenLog = false;
+    }
 }
 
 SysInfo sys_info = {};
