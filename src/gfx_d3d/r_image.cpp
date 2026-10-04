@@ -784,6 +784,34 @@ GfxImage *__cdecl Image_Register_FastFile(const char *imageName)
             if (!image)
                 break;
 
+#ifdef __SWITCH__
+            if (!I_stricmp(imageName, "$white"))
+            {
+                const uintptr_t candidateName =
+                    reinterpret_cast<uintptr_t>(image->name);
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[SWITCH IMGBOOT] $white probe hash=%u image=%p name=%p\n",
+                    static_cast<unsigned>(hashIndex),
+                    static_cast<void *>(image),
+                    static_cast<const void *>(image->name));
+                Switch_LogWrite(trace);
+
+                if (candidateName < 0x10000u)
+                {
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[SWITCH IMGBOOT] $white INVALID image name ptr=%p hash=%u\n",
+                        static_cast<const void *>(image->name),
+                        static_cast<unsigned>(hashIndex));
+                    Switch_LogWrite(trace);
+                    return nullptr;
+                }
+            }
+#endif
             if (!I_stricmp(image->name, imageName))
                 return Image_IsProg(image) ? nullptr : image;
 
