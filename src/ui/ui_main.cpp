@@ -2104,7 +2104,7 @@ void UI_CreatePlayerProfile()
 
     if (strlen(ui_playerProfileNameNew->current.string))
     {
-        I_strncpyz(name, (char *)ui_playerProfileNameNew->current.integer, 32);
+        I_strncpyz(name, ui_playerProfileNameNew->current.string, 32);
         Dvar_SetString((dvar_s *)ui_playerProfileNameNew, (char *)"");
 
         uiInfo_s *uiInfo = &::uiInfo;
