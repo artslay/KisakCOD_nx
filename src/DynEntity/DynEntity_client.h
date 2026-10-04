@@ -56,9 +56,20 @@ struct DynEntityPose // sizeof=0x20
 };
 static_assert(sizeof(DynEntityPose) == 0x20);;
 
-struct DynEntityClient // sizeof=0xC
+#ifdef KISAK_SWITCH
+using DynEntityPhysObjId = uintptr_t;
+#else
+using DynEntityPhysObjId = int32_t;
+#endif
+
+static inline dxBody *DynEnt_PhysObjFromId(uintptr_t physObjId)
 {
-    int32_t physObjId;
+    return reinterpret_cast<dxBody *>(physObjId);
+}
+
+struct DynEntityClient // sizeof=0xC on 32-bit, 0x10 on Switch
+{
+    DynEntityPhysObjId physObjId;
     uint16_t flags;
     uint16_t lightingHandle;
     int32_t health;
@@ -104,10 +115,10 @@ static_assert(sizeof(DynEntSortStruct) == 0x8);
 
 //std::pair<DynEntSortStruct *first, DynEntSortStruct *second>; // sizeof=0x8
 
-struct BreakablePiece // sizeof=0xC
+struct BreakablePiece // sizeof=0xC on 32-bit
 {                                       // ...
     const XModel *model;                // ...
-    int32_t physObjId;                      // ...
+    DynEntityPhysObjId physObjId;       // ...
     uint16_t lightingHandle;    // ...
     bool active;                        // ...
     // padding byte
