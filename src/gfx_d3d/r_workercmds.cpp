@@ -127,7 +127,7 @@ int __cdecl R_ProcessWorkerCmdsWithTimeoutInternal(int(__cdecl *timeout)())
         }
         if (timeout())
             return 1;
-    } while (processed || minType);
+    } while (processed || R_GetWorkerCmdMinType() != INT_MAX);
     return 0;
 }
 
