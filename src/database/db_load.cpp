@@ -1807,188 +1807,87 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
     if (!serialized)
         return;
 
-    const bool switchTraceWeapon1506 =
-        g_switchCurrentAssetIndex == 1506 &&
-        g_switchCurrentAssetRawType == 23u;
-
-    // Match the original loader:
-    //   normal token -> DB offset to a serialized XString pointer slot
-    //   -1            -> allocate a 32-bit nested token slot in the current
-    //                    DB stream, then resolve that nested token.
-    if (serialized != UINT32_MAX)
+    // Load_XStringPtr is used by SndAliasCustom. The original loader and the
+    // ARM64/iOS reference have only one inline form here: FOLLOWING (-1).
+    // INSERT (-2) is not an XStringPtr inline form and must not consume an
+    // extra 4 bytes from the global fastfile source.
+    if (serialized == UINT32_MAX)
     {
-        // XStringPtr has two pointer levels in the fastfile: the field points
-        // at a 32-bit serialized string token. Keeping the stream address as a
-        // native const char** works on the original 32-bit target, but on
-        // Switch it makes the raw token look like a host pointer (for example,
-        // 0x00646574 becomes address 0x646574).
-        if (serialized == UINT32_MAX - 1)
-        {
-            DB_AllocStreamPos(3);
-            const void **inserted = DB_InsertPointer();
-            uint32_t nested = 0;
-            DB_LoadSwitchSerialized(&nested, sizeof(nested));
+        const uint8_t *nestedStreamPos = DB_GetStreamPos();
+        DB_AllocStreamPos(3);
 
-            const char **nativeStringSlot =
-                reinterpret_cast<const char **>(
-                    Hunk_Alloc(
-                        static_cast<uint32_t>(sizeof(const char *)),
-                        "SwitchXStringPtr",
-                        22));
-            if (!nativeStringSlot)
-                return;
-
-            *nativeStringSlot = nullptr;
-            *varXStringPtr = nativeStringSlot;
-
-            if (nested == UINT32_MAX)
-            {
-                char *stringBuffer =
-                    reinterpret_cast<char *>(AllocLoad_raw_byte());
-                if (stringBuffer)
-                {
-                    *nativeStringSlot = stringBuffer;
-                    Load_XStringCustom(&stringBuffer);
-                }
-            }
-            else if (nested && nested != UINT32_MAX - 1u)
-            {
-                *nativeStringSlot =
-                    reinterpret_cast<const char *>(
-                        DB_ConvertOffsetToPointerValue(nested));
-            }
-
-            if (inserted)
-                *inserted = *varXStringPtr;
-            return;
-        }
-
-        const uint32_t outerOffset = serialized - 1;
-        const uint32_t outerBlock = outerOffset >> 28;
-        const uint32_t outerBlockOffset = outerOffset & 0x0FFFFFFFu;
-        if (!g_streamBlocks ||
-            outerBlock >= ARRAY_COUNT(g_streamPosArray) ||
-            !g_streamBlocks[outerBlock].data ||
-            outerBlockOffset > g_streamBlocks[outerBlock].size ||
-            g_streamBlocks[outerBlock].size - outerBlockOffset <
-                sizeof(uint32_t))
-        {
-            char trace[192];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[SWITCH XSTRINGPTR] invalid outer token=%08x asset=%d rawType=%u\n",
-                serialized,
-                g_switchCurrentAssetIndex,
-                static_cast<unsigned>(g_switchCurrentAssetRawType));
-            Switch_LogWrite(trace);
-            return;
-        }
-
-        const uint32_t *outerSlot = reinterpret_cast<const uint32_t *>(
-            g_streamBlocks[outerBlock].data + outerBlockOffset);
         uint32_t nested = 0;
-        std::memcpy(&nested, outerSlot, sizeof(nested));
+        DB_LoadSwitchSerialized(&nested, sizeof(nested));
 
-        const char **nativeStringSlot = reinterpret_cast<const char **>(
-            Hunk_Alloc(
-                static_cast<uint32_t>(sizeof(const char *)),
-                "SwitchXStringPtr",
-                22));
+        const char **nativeStringSlot =
+            reinterpret_cast<const char **>(
+                Hunk_Alloc(
+                    static_cast<uint32_t>(sizeof(const char *)),
+                    "SwitchXStringPtr",
+                    22));
         if (!nativeStringSlot)
             return;
+
         *nativeStringSlot = nullptr;
         *varXStringPtr = nativeStringSlot;
 
         if (nested == UINT32_MAX)
         {
-            const uint32_t inlineOffset =
-                outerBlockOffset + static_cast<uint32_t>(sizeof(nested));
-            const uint32_t remaining =
-                g_streamBlocks[outerBlock].size - inlineOffset;
-            const char *inlineString = reinterpret_cast<const char *>(
-                g_streamBlocks[outerBlock].data + inlineOffset);
-            if (remaining && std::memchr(inlineString, '\0', remaining))
-                *nativeStringSlot = inlineString;
-            else
-                Switch_LogWrite(
-                    "[SWITCH XSTRINGPTR] unterminated inline string\n");
-            return;
+            char *stringBuffer =
+                reinterpret_cast<char *>(AllocLoad_raw_byte());
+            *nativeStringSlot = stringBuffer;
+            Load_XStringCustom(&stringBuffer);
+        }
+        else if (nested)
+        {
+            *nativeStringSlot =
+                reinterpret_cast<const char *>(
+                    DB_ConvertOffsetToPointerValue(nested));
         }
 
-        if (!nested)
-            return;
-
-        if (nested == UINT32_MAX - 1)
+#ifdef __SWITCH__
+        if (g_switchCurrentAssetIndex == 4728 &&
+            g_switchCurrentAssetRawType == 23u)
         {
-            Switch_LogWrite(
-                "[SWITCH XSTRINGPTR] unsupported nested alias token\n");
-            return;
-        }
-
-        const uint32_t stringOffset = nested - 1;
-        const uint32_t stringBlock = stringOffset >> 28;
-        const uint32_t stringBlockOffset = stringOffset & 0x0FFFFFFFu;
-        if (stringBlock >= ARRAY_COUNT(g_streamPosArray) ||
-            !g_streamBlocks[stringBlock].data ||
-            stringBlockOffset >= g_streamBlocks[stringBlock].size)
-        {
-            char trace[192];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[SWITCH XSTRINGPTR] invalid nested token=%08x outer=%08x asset=%d rawType=%u\n",
-                nested,
-                serialized,
-                g_switchCurrentAssetIndex,
-                static_cast<unsigned>(g_switchCurrentAssetRawType));
-            Switch_LogWrite(trace);
-            return;
-        }
-
-        const char *string = reinterpret_cast<const char *>(
-            g_streamBlocks[stringBlock].data + stringBlockOffset);
-        const uint32_t stringRemaining =
-            g_streamBlocks[stringBlock].size - stringBlockOffset;
-        if (!std::memchr(string, '\0', stringRemaining))
-        {
-            char trace[192];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[SWITCH XSTRINGPTR] unterminated string token=%08x outer=%08x asset=%d rawType=%u\n",
-                nested,
-                serialized,
-                g_switchCurrentAssetIndex,
-                static_cast<unsigned>(g_switchCurrentAssetRawType));
-            Switch_LogWrite(trace);
-            return;
-        }
-
-        *nativeStringSlot = string;
-
-        if (switchTraceWeapon1506)
-        {
+            const uintptr_t weaponBase =
+                reinterpret_cast<uintptr_t>(varWeaponDef);
+            const uintptr_t fieldAddress =
+                reinterpret_cast<uintptr_t>(varXStringPtr);
             char trace[256];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[SWITCH WEAPON1506] XStringPtr direct token=%08x nested=%08x string=%p\n",
-                serialized,
+                "[KisakCOD][WEAPON4728 SOUND INLINE] field=%lld outer=ffffffff nested=%08x stream=%u cursor=%u\n",
+                varWeaponDef && fieldAddress >= weaponBase
+                    ? static_cast<long long>(fieldAddress - weaponBase)
+                    : -1LL,
                 nested,
-                static_cast<const void *>(string));
+                static_cast<unsigned>(g_streamPosIndex),
+                Switch_GetStreamCursorOffset(g_streamPosIndex));
             Switch_LogWrite(trace);
         }
+#endif
+        (void)nestedStreamPos;
         return;
     }
 
-    // The serialized pointer-to-string slot is still 4 bytes on Switch. Keep
-    // that 4-byte stream allocation exactly like the original loader; the
-    // native pointer-to-pointer lives separately in Hunk memory.
-    const uint8_t *nestedStreamPos = DB_GetStreamPos();
-    DB_AllocStreamPos(3);
+    const uint32_t outerOffset = serialized - 1u;
+    const uint32_t outerBlock = outerOffset >> 28;
+    const uint32_t outerBlockOffset = outerOffset & 0x0FFFFFFFu;
+    if (!g_streamBlocks ||
+        outerBlock >= ARRAY_COUNT(g_streamPosArray) ||
+        !g_streamBlocks[outerBlock].data ||
+        outerBlockOffset > g_streamBlocks[outerBlock].size ||
+        g_streamBlocks[outerBlock].size - outerBlockOffset <
+            sizeof(uint32_t))
+    {
+        return;
+    }
+
+    const uint32_t *outerSlot = reinterpret_cast<const uint32_t *>(
+        g_streamBlocks[outerBlock].data + outerBlockOffset);
     uint32_t nested = 0;
-    DB_LoadSwitchSerialized(&nested, sizeof(nested));
+    std::memcpy(&nested, outerSlot, sizeof(nested));
 
     const char **nativeStringSlot =
         reinterpret_cast<const char **>(
@@ -1996,44 +1895,61 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
                 static_cast<uint32_t>(sizeof(const char *)),
                 "SwitchXStringPtr",
                 22));
+    if (!nativeStringSlot)
+        return;
+
     *nativeStringSlot = nullptr;
     *varXStringPtr = nativeStringSlot;
 
-    if (switchTraceWeapon1506)
+    if (nested == UINT32_MAX)
     {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH WEAPON1506] XStringPtr inline stream=%p nested=%08x slot=%p\n",
-            static_cast<const void *>(nestedStreamPos),
-            nested,
-            static_cast<void *>(nativeStringSlot));
-        Switch_LogWrite(trace);
+        const uint32_t inlineOffset =
+            outerBlockOffset + static_cast<uint32_t>(sizeof(nested));
+        const uint32_t remaining =
+            g_streamBlocks[outerBlock].size - inlineOffset;
+        const char *inlineString = reinterpret_cast<const char *>(
+            g_streamBlocks[outerBlock].data + inlineOffset);
+        if (remaining && std::memchr(inlineString, '\0', remaining))
+            *nativeStringSlot = inlineString;
+        return;
     }
 
     if (!nested)
         return;
 
-    if (nested != UINT32_MAX)
+    if (nested == UINT32_MAX - 1u)
     {
-        *nativeStringSlot =
-            reinterpret_cast<const char *>(
-                DB_ConvertOffsetToPointerValue(nested));
+        // INSERT is not a supported XStringPtr form. Do not consume the
+        // following source bytes as though an inline XString were present.
         return;
     }
 
-    char *stringBuffer =
-        reinterpret_cast<char *>(AllocLoad_raw_byte());
-    *nativeStringSlot = stringBuffer;
-    Load_XStringCustom(&stringBuffer);
+    const uint32_t stringOffset = nested - 1u;
+    const uint32_t stringBlock = stringOffset >> 28;
+    const uint32_t stringBlockOffset = stringOffset & 0x0FFFFFFFu;
+    if (stringBlock >= ARRAY_COUNT(g_streamPosArray) ||
+        !g_streamBlocks[stringBlock].data ||
+        stringBlockOffset >= g_streamBlocks[stringBlock].size)
+    {
+        return;
+    }
+
+    const char *string = reinterpret_cast<const char *>(
+        g_streamBlocks[stringBlock].data + stringBlockOffset);
+    const uint32_t stringRemaining =
+        g_streamBlocks[stringBlock].size - stringBlockOffset;
+    if (!std::memchr(string, '\0', stringRemaining))
+        return;
+
+    *nativeStringSlot = string;
 #else
     Load_Stream(atStreamStart, (uint8_t *)varXStringPtr, 4);
     if (*varXStringPtr)
     {
         if (*varXStringPtr == (const char **)-1)
         {
-            *varXStringPtr = (const char **)AllocLoad_FxElemVisStateSample();
+            *varXStringPtr =
+                (const char **)AllocLoad_FxElemVisStateSample();
             varXString = *varXStringPtr;
             Load_XString(1);
         }
