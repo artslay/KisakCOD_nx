@@ -38,6 +38,7 @@
 #include <chrono>
 #include <cstdio>
 #include <gfx/gfx_backend.h>
+#include <gfx/opengl/gl_backend.h>
 extern void Switch_LogWrite(const char *msg);
 static inline uint64_t KisakRendererClock()
 {
