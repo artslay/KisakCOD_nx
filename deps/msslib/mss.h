@@ -350,8 +350,12 @@ extern "C" {
 #define DXDEF
 #define AILCALL //$__attribute__((cdecl))
 #define FAR
+#ifndef HIWORD
 #define HIWORD(ptr) (((U32)ptr)>>16)
+#endif
+#ifndef LOWORD
 #define LOWORD(ptr) ((U16)((U32)ptr))
+#endif
 #define WINAPI
 
 #define FOURCC U32
@@ -360,7 +364,9 @@ extern "C" {
               ((U32)(U8)(ch0) | ((U32)(U8)(ch1) << 8) |   \
               ((U32)(U8)(ch2) << 16) | ((U32)(U8)(ch3) << 24 ))
 
+#ifndef mmioFOURCC
 #define mmioFOURCC(w,x,y,z) MAKEFOURCC(w,x,y,z)
+#endif
 
 #define AILLIBCALLBACK //__attribute__((cdecl))
 
