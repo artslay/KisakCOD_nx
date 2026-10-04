@@ -5816,20 +5816,47 @@ static void Switch_LogShaderProgramOobIfNeeded(
 
 void __cdecl Load_GfxVertexShaderLoadDef(bool atStreamStart)
 {
-    Load_Stream(atStreamStart, (uint8_t *)varGfxVertexShaderLoadDef, 8);
 #ifdef __SWITCH__
-    const uint32_t serializedProgram = static_cast<uint32_t>(
-        reinterpret_cast<uintptr_t>(varGfxVertexShaderLoadDef->program));
-    const uint16_t serializedProgramSize =
-        varGfxVertexShaderLoadDef->programSize;
-    const uint16_t serializedLoadForRenderer =
-        varGfxVertexShaderLoadDef->loadForRenderer;
-#endif
+    if (atStreamStart)
+    {
+        struct SerializedGfxVertexShaderLoadDef
+        {
+            uint32_t program;
+            uint16_t programSize;
+            uint16_t loadForRenderer;
+        };
+        static_assert(sizeof(SerializedGfxVertexShaderLoadDef) == 8);
+
+        SerializedGfxVertexShaderLoadDef serialized{};
+        DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
+
+        varGfxVertexShaderLoadDef->program =
+            reinterpret_cast<uint32_t *>(
+                static_cast<uintptr_t>(serialized.program));
+        varGfxVertexShaderLoadDef->programSize =
+            serialized.programSize;
+        varGfxVertexShaderLoadDef->loadForRenderer =
+            serialized.loadForRenderer;
+    }
+
+    // When called from Load_MaterialVertexShader(), the complete serialized
+    // 16-byte MaterialVertexShader record has already been consumed. Do not
+    // read another 8-byte load-def header here; only consume the program blob.
     if (varGfxVertexShaderLoadDef->program)
     {
-        varGfxVertexShaderLoadDef->program = (uint32_t *)AllocLoad_FxElemVisStateSample();
+        varGfxVertexShaderLoadDef->program =
+            reinterpret_cast<uint32_t *>(
+                AllocLoad_FxElemVisStateSample());
         varDWORD = varGfxVertexShaderLoadDef->program;
-#ifdef __SWITCH__
+        const uint16_t serializedProgramSize =
+            varGfxVertexShaderLoadDef->programSize;
+        const uint16_t serializedLoadForRenderer =
+            varGfxVertexShaderLoadDef->loadForRenderer;
+        const uint32_t serializedProgram =
+            static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(
+                    varGfxVertexShaderLoadDef->program));
+
         Switch_LogShaderProgramOobIfNeeded(
             "vertex",
             serializedProgram,
@@ -5837,30 +5864,64 @@ void __cdecl Load_GfxVertexShaderLoadDef(bool atStreamStart)
             serializedLoadForRenderer);
         const char *previousStage = g_switchDbStage;
         g_switchDbStage = "material/vertex_shader_program";
-#endif
         Load_DWORDArray(1, varGfxVertexShaderLoadDef->programSize);
-#ifdef __SWITCH__
         g_switchDbStage = previousStage;
-#endif
     }
+#else
+    Load_Stream(atStreamStart, (uint8_t *)varGfxVertexShaderLoadDef, 8);
+    if (varGfxVertexShaderLoadDef->program)
+    {
+        varGfxVertexShaderLoadDef->program = (uint32_t *)AllocLoad_FxElemVisStateSample();
+        varDWORD = varGfxVertexShaderLoadDef->program;
+        Load_DWORDArray(1, varGfxVertexShaderLoadDef->programSize);
+    }
+#endif
 }
 
 void __cdecl Load_GfxPixelShaderLoadDef(bool atStreamStart)
 {
-    Load_Stream(atStreamStart, (uint8_t *)varGfxPixelShaderLoadDef, 8);
 #ifdef __SWITCH__
-    const uint32_t serializedProgram = static_cast<uint32_t>(
-        reinterpret_cast<uintptr_t>(varGfxPixelShaderLoadDef->program));
-    const uint16_t serializedProgramSize =
-        varGfxPixelShaderLoadDef->programSize;
-    const uint16_t serializedLoadForRenderer =
-        varGfxPixelShaderLoadDef->loadForRenderer;
-#endif
+    if (atStreamStart)
+    {
+        struct SerializedGfxPixelShaderLoadDef
+        {
+            uint32_t program;
+            uint16_t programSize;
+            uint16_t loadForRenderer;
+        };
+        static_assert(sizeof(SerializedGfxPixelShaderLoadDef) == 8);
+
+        SerializedGfxPixelShaderLoadDef serialized{};
+        DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
+
+        varGfxPixelShaderLoadDef->program =
+            reinterpret_cast<uint32_t *>(
+                static_cast<uintptr_t>(serialized.program));
+        varGfxPixelShaderLoadDef->programSize =
+            serialized.programSize;
+        varGfxPixelShaderLoadDef->loadForRenderer =
+            serialized.loadForRenderer;
+    }
+
+    // The parent MaterialPixelShader loader already consumed its 16-byte
+    // serialized record when atStreamStart is false here. Only the program
+    // payload remains in the stream at this point.
     if (varGfxPixelShaderLoadDef->program)
     {
-        varGfxPixelShaderLoadDef->program = (uint32_t *)AllocLoad_FxElemVisStateSample();
+        const uint16_t serializedProgramSize =
+            varGfxPixelShaderLoadDef->programSize;
+        const uint16_t serializedLoadForRenderer =
+            varGfxPixelShaderLoadDef->loadForRenderer;
+        const uint32_t serializedProgram =
+            static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(
+                    varGfxPixelShaderLoadDef->program));
+
+        varGfxPixelShaderLoadDef->program =
+            reinterpret_cast<uint32_t *>(
+                AllocLoad_FxElemVisStateSample());
         varDWORD = varGfxPixelShaderLoadDef->program;
-#ifdef __SWITCH__
+
         Switch_LogShaderProgramOobIfNeeded(
             "pixel",
             serializedProgram,
@@ -5868,12 +5929,18 @@ void __cdecl Load_GfxPixelShaderLoadDef(bool atStreamStart)
             serializedLoadForRenderer);
         const char *previousStage = g_switchDbStage;
         g_switchDbStage = "material/pixel_shader_program";
-#endif
         Load_DWORDArray(1, varGfxPixelShaderLoadDef->programSize);
-#ifdef __SWITCH__
         g_switchDbStage = previousStage;
-#endif
     }
+#else
+    Load_Stream(atStreamStart, (uint8_t *)varGfxPixelShaderLoadDef, 8);
+    if (varGfxPixelShaderLoadDef->program)
+    {
+        varGfxPixelShaderLoadDef->program = (uint32_t *)AllocLoad_FxElemVisStateSample();
+        varDWORD = varGfxPixelShaderLoadDef->program;
+        Load_DWORDArray(1, varGfxPixelShaderLoadDef->programSize);
+    }
+#endif
 }
 
 void __cdecl Load_MaterialVertexShaderProgram(bool atStreamStart)
