@@ -355,7 +355,6 @@ void __cdecl DB_LoadSwitchSerialized(void *dst, uint32_t size)
 
     uint8_t *streamPos = DB_GetStreamPos();
 
-    #endif
 
     if (traceMenu11Header)
     {

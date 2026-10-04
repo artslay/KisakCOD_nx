@@ -177,7 +177,6 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
     iassert(g_load.f);
     iassert(!g_load.stream.avail_out);
 
-    #endif
     g_load.stream.next_out = pos;
     g_load.stream.avail_out = size;
     while (1)
@@ -215,8 +214,6 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
         DB_ReadXFileStage();
     }
 
-#ifdef __SWITCH__
-    #endif
 }
 
 void DB_ReadXFileStage()
