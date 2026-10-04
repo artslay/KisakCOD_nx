@@ -737,15 +737,5 @@ void __cdecl Dvar_PrintDomain(uint8_t type, DvarLimits domain)
 bool __cdecl Dvar_HasLatchedValue(const dvar_s *dvar)
 {
     const int equal = Dvar_ValuesEqual(dvar->type, dvar->current, dvar->latched);
-
-#ifdef __SWITCH__
-    std::snprintf(
-        trace,
-        sizeof(trace),
-        "[KisakCOD][DVARDUMP] Dvar_ValuesEqual returned=%d\n",
-        equal);
-    Switch_LogWrite(trace);
-#endif
-
     return equal == 0;
 }
