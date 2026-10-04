@@ -1228,6 +1228,12 @@ void __cdecl R_BeginFrame()
     {
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/r_begin/enter";
+        if (!frontEndDataOut)
+        {
+            Switch_LogWrite("[KisakCOD][FRAME] frontEndDataOut was null; initializing first SMP frame\\n");
+            g_switchFrameStage = "frame/r_begin/init_frontend";
+            R_ToggleSmpFrame();
+        }
 #endif
         iassert( !rg.inFrame );
         rg.inFrame = 1;
