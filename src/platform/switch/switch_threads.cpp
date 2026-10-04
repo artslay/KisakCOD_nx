@@ -105,6 +105,12 @@ void __cdecl Sys_InitMainThread()
     threadId[THREAD_CONTEXT_MAIN] = Sys_GetCurrentThreadId();
     threadHandle[THREAD_CONTEXT_MAIN] = nullptr;
     g_switchThreadValues[0] = nullptr;
+
+    // Match the original thread bootstrap: va()/Com_Error()/trace code uses
+    // per-thread storage installed by Com_InitThreadData().
+    Com_InitThreadData(THREAD_CONTEXT_MAIN);
+
+    // Keep Switch's local jmp buffer for the existing libnx/bootstrap path.
     g_switchThreadValues[2] = &g_switchJmpBuffer;
     g_switchThreadStage = "main/ready";
 }
@@ -115,6 +121,11 @@ void __cdecl Sys_InitThread(ThreadContext_t context)
     g_threadContext = context;
     threadId[context] = Sys_GetCurrentThreadId();
     g_switchThreadValues[0] = g_values[context][0];
+
+    // Install va_info, per-thread Com_Error state and trace storage just like
+    // the native thread implementation. Keep the existing Switch jmp buffer
+    // after this because SV_ServerThread currently consumes Sys_GetValue(2).
+    Com_InitThreadData(context);
     g_switchThreadValues[2] = &g_switchJmpBuffer;
     g_switchThreadStage = "thread/ready";
 }
