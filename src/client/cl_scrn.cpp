@@ -6,6 +6,7 @@
 #include "cl_scrn.h"
 #include <gfx_d3d/r_font.h>
 #include <gfx_d3d/r_rendercmds.h>
+#include <qcommon/threads.h>
 #include "client.h"
 
 #ifdef __SWITCH__
@@ -38,7 +39,6 @@ static void Switch_EndRemoteFrameTrace()
 #include "cl_demo.h"
 #include <cgame/cg_view.h>
 #include <devgui/devgui.h>
-#include <qcommon/threads.h>
 #include <win32/win_local.h>
 #include <qcommon/cmd.h>
 #include <gfx_d3d/r_screenshot.h>
