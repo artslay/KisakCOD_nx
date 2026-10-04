@@ -14491,18 +14491,43 @@ static void Switch_TranslateWeaponDefSerialized(WeaponDef *weaponDef)
             trace,
             sizeof(trace),
             "[KisakCOD][WEAPON ROOT] asset=4728 stream=%u offset=%u after=%u "
-            "reticleCenter@540=%08x reticleSide@544=%08x shellFX@524/528/532/536=%08x/%08x/%08x/%08x\n",
+            "bounce@520=%08x reticle@540/544=%08x/%08x shellFX@524/528/532/536=%08x/%08x/%08x/%08x\n",
             static_cast<unsigned>(serializedStreamIndex),
             blockBase && rootAddress >= blockBase
                 ? static_cast<unsigned>(rootAddress - blockBase)
                 : UINT32_MAX,
             Switch_GetStreamCursorOffset(serializedStreamIndex),
+            Switch_ReadSerializedU32(serialized, 520),
             Switch_ReadSerializedU32(serialized, 540),
             Switch_ReadSerializedU32(serialized, 544),
             Switch_ReadSerializedU32(serialized, 524),
             Switch_ReadSerializedU32(serialized, 528),
             Switch_ReadSerializedU32(serialized, 532),
             Switch_ReadSerializedU32(serialized, 536));
+        Switch_LogWrite(trace);
+
+        int written = std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][WEAPON ROOT INLINE] offsets");
+        for (uint16_t pointerOffset : kSwitchWeaponDefPointerOffsets)
+        {
+            const uint32_t token =
+                Switch_ReadSerializedU32(serialized, pointerOffset);
+            if (token == UINT32_MAX || token == UINT32_MAX - 1u)
+            {
+                written += std::snprintf(
+                    trace + written,
+                    sizeof(trace) - static_cast<size_t>(written),
+                    " %u:%08x",
+                    static_cast<unsigned>(pointerOffset),
+                    token);
+            }
+        }
+        std::snprintf(
+            trace + written,
+            sizeof(trace) - static_cast<size_t>(written),
+            "\n");
         Switch_LogWrite(trace);
     }
 
