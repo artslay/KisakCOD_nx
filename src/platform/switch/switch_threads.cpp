@@ -58,6 +58,10 @@ static bool g_databaseCompleted = false;
 static SwitchEvent g_cinematicsThreadOutstandingRequestEvent;
 static SwitchEvent g_cinematicsHostOutstandingRequestEvent;
 
+// Worker command wake event. Native code waits on this for 1 ms while polling
+// the timeout predicate; use a real Switch event instead of a tight yield loop.
+static SwitchEvent g_workerCmdEvent;
+
 static bool WaitSwitchEvent(SwitchEvent &event, uint32_t timeoutMsec)
 {
     std::unique_lock<std::mutex> lock(event.mutex);
@@ -323,14 +327,24 @@ void __cdecl Sys_DatabaseCompleted2() { Sys_DatabaseCompleted(); }
 bool __cdecl Sys_IsDatabaseReady() { return true; }
 bool __cdecl Sys_IsDatabaseReady2() { return true; }
 void __cdecl Sys_WakeDatabase2() {}
-void __cdecl Sys_SetWorkerCmdEvent() {}
-void __cdecl Sys_ResetWorkerCmdEvent() {}
-int __cdecl Sys_WaitBackendEvent() { return 1; }
+void __cdecl Sys_SetWorkerCmdEvent()
+{
+    SetSwitchEvent(g_workerCmdEvent);
+}
+
+void __cdecl Sys_ResetWorkerCmdEvent()
+{
+    ResetSwitchEvent(g_workerCmdEvent);
+}
+
+int __cdecl Sys_WaitBackendEvent()
+{
+    return WaitSwitchEvent(g_workerCmdEvent, 0) ? 1 : 0;
+}
+
 void __cdecl Sys_WaitForWorkerCmd()
 {
-    // The Switch worker event is still poll-based; yield while the server start
-    // gate is closed instead of spinning continuously on one core.
-    std::this_thread::yield();
+    WaitSwitchEvent(g_workerCmdEvent, 1);
 }
 void __cdecl Sys_SetUpdateSpotLightEffectEvent() {}
 void __cdecl Sys_ResetUpdateSpotLightEffectEvent() {}
