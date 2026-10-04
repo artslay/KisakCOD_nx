@@ -6169,47 +6169,6 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
     // The upstream loader reads the serialized technique header directly at the current cursor.
     SerializedMaterialTechnique serialized{};
     const uint8_t *techniqueStart = DB_GetStreamPos();
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u)
-    {
-        const uint32_t streamOffset = Switch_GetStreamCursorOffset(4);
-        const uint8_t *block4 =
-            g_streamBlocks && g_streamBlocks[4].data
-                ? g_streamBlocks[4].data
-                : nullptr;
-        const uint32_t block4Size =
-            g_streamBlocks ? g_streamBlocks[4].size : 0u;
-        const uint32_t remaining =
-            block4 && streamOffset <= block4Size
-                ? block4Size - streamOffset
-                : 0u;
-        char trace[768];
-        int written = std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][TECH4728 RAW] index=%d stream=%u offset=%08x pos=%p remaining=%u bytes:",
-            g_switchMaterialTechniqueIndex,
-            static_cast<unsigned>(g_streamPosIndex),
-            streamOffset,
-            static_cast<const void *>(techniqueStart),
-            remaining);
-        const size_t dumpCount = remaining < 16u ? remaining : 16u;
-        for (size_t j = 0; j < dumpCount; ++j)
-        {
-            written += std::snprintf(
-                trace + written,
-                sizeof(trace) - static_cast<size_t>(written),
-                " %02x",
-                static_cast<unsigned>(block4[streamOffset + j]));
-        }
-        std::snprintf(
-            trace + written,
-            sizeof(trace) - static_cast<size_t>(written),
-            "\n");
-        Sys_Print(trace);
-    }
-#endif
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
 #ifdef __SWITCH__
@@ -6260,6 +6219,98 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
             sizeof(trace) - std::strlen(trace),
             "\n");
         Sys_Print(trace);
+    }
+#endif
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        const uint32_t endOffset = Switch_GetStreamCursorOffset(4);
+        const uint32_t startOffset =
+            endOffset >= sizeof(SerializedMaterialTechnique)
+                ? endOffset - sizeof(SerializedMaterialTechnique)
+                : 0u;
+        const uint8_t *block4 =
+            g_streamBlocks && g_streamBlocks[4].data
+                ? g_streamBlocks[4].data
+                : nullptr;
+        const uint32_t block4Size =
+            g_streamBlocks ? g_streamBlocks[4].size : 0u;
+
+        if (block4 && startOffset < block4Size)
+        {
+            char trace[1200];
+            int written = std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][TECH4728 CONTEXT] start=%08x bytes:",
+                startOffset);
+
+            const uint32_t dumpSize =
+                block4Size - startOffset < 64u
+                    ? block4Size - startOffset
+                    : 64u;
+            for (uint32_t j = 0; j < dumpSize; ++j)
+            {
+                written += std::snprintf(
+                    trace + written,
+                    sizeof(trace) - static_cast<size_t>(written),
+                    " %02x",
+                    static_cast<unsigned>(block4[startOffset + j]));
+                if (written >= static_cast<int>(sizeof(trace) - 16))
+                    break;
+            }
+
+            std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                "\n");
+            Sys_Print(trace);
+
+            char scan[768];
+            written = std::snprintf(
+                scan,
+                sizeof(scan),
+                "[KisakCOD][TECH4728 SCAN]");
+            for (uint32_t rel = 0;
+                 rel + sizeof(SerializedMaterialTechnique) <= 64u &&
+                 startOffset + rel + sizeof(SerializedMaterialTechnique) <= block4Size;
+                 rel += 4u)
+            {
+                const uint8_t *candidate = block4 + startOffset + rel;
+                uint32_t name = 0;
+                uint16_t flags = 0;
+                uint16_t passCount = 0;
+                std::memcpy(&name, candidate + 0, sizeof(name));
+                std::memcpy(&flags, candidate + 4, sizeof(flags));
+                std::memcpy(&passCount, candidate + 6, sizeof(passCount));
+
+                const bool plausibleName =
+                    !name ||
+                    name == UINT32_MAX ||
+                    name == UINT32_MAX - 1u ||
+                    ((name >> 28) <= 8u);
+                if (plausibleName && flags < 0x4000u && passCount <= 64u)
+                {
+                    written += std::snprintf(
+                        scan + written,
+                        sizeof(scan) - static_cast<size_t>(written),
+                        " rel=%02x name=%08x flags=%04x passes=%u",
+                        rel,
+                        name,
+                        static_cast<unsigned>(flags),
+                        static_cast<unsigned>(passCount));
+                    if (written >= static_cast<int>(sizeof(scan) - 64))
+                        break;
+                }
+            }
+
+            std::snprintf(
+                scan + written,
+                sizeof(scan) - static_cast<size_t>(written),
+                "\n");
+            Sys_Print(scan);
+        }
     }
 #endif
 
@@ -6590,6 +6641,29 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
 #ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        char trace[768];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TECHSET4728] stream0=%08x xfile=%llu name=%08x remap=%08x tok0=%08x tok1=%08x tok2=%08x tok3=%08x tok4=%08x tok5=%08x\n",
+            Switch_GetStreamCursorOffset(0),
+            static_cast<unsigned long long>(DB_GetXFileUncompressedOffset()),
+            serialized.name,
+            serialized.remappedTechniqueSet,
+            serialized.techniques[0],
+            serialized.techniques[1],
+            serialized.techniques[2],
+            serialized.techniques[3],
+            serialized.techniques[4],
+            serialized.techniques[5]);
+        Sys_Print(trace);
+    }
+#endif
+
+#ifdef __SWITCH__
     if (g_switchCurrentAssetRawType == 5u && g_switchCurrentAssetIndex == 1502)
     {
         const uint8_t *block4 =
@@ -6721,6 +6795,24 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
         Load_XStringCustom(&nameBuffer);
         varMaterialTechniqueSet->name = nameBuffer;
     }
+
+#ifdef __SWITCH__
+    if (traceAssetIndex == 4728 && traceRawType == 23u)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TECHSET4728 NAME] token=%08x stream4=%08x xfile=%llu text=%s\n",
+            serialized.name,
+            Switch_GetStreamCursorOffset(4),
+            static_cast<unsigned long long>(DB_GetXFileUncompressedOffset()),
+            varMaterialTechniqueSet->name
+                ? varMaterialTechniqueSet->name
+                : "<null>");
+        Sys_Print(trace);
+    }
+#endif
 
 #ifdef __SWITCH__
     if (traceRawType == 25u && traceAssetIndex == 4510)
