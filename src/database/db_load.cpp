@@ -5586,25 +5586,46 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
 
             if (traceUiImagePointer)
             {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][UI IMAGE] inline done asset=%d b0=%08x b4=%08x "
+                    "image=%p name=%p dstPtr=%p\n",
+                    g_switchCurrentAssetIndex,
+                    Switch_GetStreamCursorOffset(0),
+                    Switch_GetStreamCursorOffset(4),
+                    static_cast<void *>(nativeImage),
+                    static_cast<const void *>(nativeImage->name),
+                    static_cast<void *>(varGfxImagePtr));
+                Switch_LogWrite(trace);
+
+                g_switchDbStage = "image/ptr_store";
+            }
+
+            // Store the fully widened native pointer back into the runtime
+            // XAsset header slot only after all nested asset work is complete.
+#ifdef __SWITCH__
+            if (traceUiImagePointer)
+            {
                 char trace[256];
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][UI IMAGE] inline done asset=%d b0=%08x b4=%08x image=%p\n",
-                    g_switchCurrentAssetIndex,
-                    Switch_GetStreamCursorOffset(0),
-                    Switch_GetStreamCursorOffset(4),
-                    static_cast<void *>(nativeImage));
+                    "[KisakCOD][UI IMAGE] before ptr memcpy dst=%p src=%p\n",
+                    static_cast<void *>(varGfxImagePtr),
+                    static_cast<void *>(&imageHeader.image));
                 Switch_LogWrite(trace);
             }
-
-
-            // Store the fully widened native pointer back into the runtime
-            // XAsset header slot only after all serialized image reads are done.
+#endif
             std::memcpy(
                 reinterpret_cast<uint8_t *>(varGfxImagePtr),
                 &imageHeader.image,
                 sizeof(imageHeader.image));
+#ifdef __SWITCH__
+            if (traceUiImagePointer)
+                Switch_LogWrite("[KisakCOD][UI IMAGE] after ptr memcpy\n");
+#endif
 
 
             if (inserted)
