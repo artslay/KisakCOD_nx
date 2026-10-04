@@ -7905,11 +7905,9 @@ void __cdecl Load_Material(bool atStreamStart)
     }
 
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH MATERIAL] textures done\n");
-#endif
-
-#ifdef __SWITCH__
     g_switchDbStage = "material/constants";
+    if (traceUiMaterial)
+        Switch_LogWrite("[KisakCOD][UI MATERIAL] textures done\n");
 #endif
     if (varMaterial->constantTable)
     {
@@ -7930,11 +7928,9 @@ void __cdecl Load_Material(bool atStreamStart)
     }
 
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH MATERIAL] constants done\n");
-#endif
-
-#ifdef __SWITCH__
     g_switchDbStage = "material/statebits";
+    if (traceUiMaterial)
+        Switch_LogWrite("[KisakCOD][UI MATERIAL] constants done\n");
 #endif
     if (varMaterial->stateBitsTable)
     {
@@ -7955,11 +7951,9 @@ void __cdecl Load_Material(bool atStreamStart)
     }
 
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH MATERIAL] statebits done\n");
-#endif
-
-#ifdef __SWITCH__
     g_switchDbStage = "material/pop";
+    if (traceUiMaterial)
+        Switch_LogWrite("[KisakCOD][UI MATERIAL] statebits done\n");
 #endif
     DB_PopStreamPos();
 #else
