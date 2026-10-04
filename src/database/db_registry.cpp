@@ -3106,7 +3106,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][UI MATERIAL] registry name ptr=%p low=%08x header=%p type=%u\\n",
+            "[KisakCOD][UI MATERIAL] registry name ptr=%p low=%08x header=%p type=%u\n",
             static_cast<const void *>(name),
             static_cast<unsigned>(
                 reinterpret_cast<uintptr_t>(name)),
