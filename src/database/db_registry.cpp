@@ -3025,6 +3025,33 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 
 
 #ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 1126 &&
+        g_switchCurrentAssetRawType == 31u)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH RAWFILE] registry name=%p header=%p type=%u\n",
+            static_cast<const void *>(name),
+            static_cast<void *>(newEntry->entry.asset.header.data),
+            static_cast<unsigned>(type));
+        Switch_LogWrite(trace);
+
+        const uintptr_t nameValue = reinterpret_cast<uintptr_t>(name);
+        if (nameValue == UINTPTR_MAX ||
+            (nameValue && nameValue < 0x10000u))
+        {
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[SWITCH RAWFILE] registry INVALID NAME ptr=%p header=%p\n",
+                static_cast<const void *>(name),
+                static_cast<void *>(newEntry->entry.asset.header.data));
+            Switch_LogWrite(trace);
+        }
+    }
+
     if (type == ASSET_TYPE_LOADED_SOUND)
         Switch_LogWrite("[SWITCH LOADEDSOUND LINK] before name dereference\n");
 #endif
