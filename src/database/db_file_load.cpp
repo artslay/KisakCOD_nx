@@ -67,6 +67,12 @@ int32_t g_trackLoadProgress;
 
 #ifdef __SWITCH__
 const char * volatile g_switchDbStage = "idle";
+
+// State used by the asset-4728 source-read diagnostic in DB_LoadXFileData().
+// Keep this local to db_file_load.cpp: it is only bookkeeping for the trace.
+static int32_t g_switchWeapon4728LastAsset = -1;
+static uint64_t g_switchWeapon4728InflateBytes = 0;
+static uint32_t g_switchWeapon4728ReadCount = 0;
 #endif
 
 #ifdef __SWITCH__
