@@ -33,7 +33,7 @@ void *__cdecl R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeIn
     {
         char msg[192];
         snprintf(msg, sizeof(msg),
-            "[KisakCOD][SKINCACHE_INIT] size=%d loadForRenderer=%d out=%p\\n",
+            "[KisakCOD][SKINCACHE_INIT] size=%d loadForRenderer=%d out=%p\n",
             sizeInBytes,
             r_loadForRenderer ? r_loadForRenderer->current.enabled : -1,
             (void *)vb);
@@ -44,7 +44,7 @@ void *__cdecl R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeIn
     {
 #ifdef __SWITCH__
         if (sizeInBytes == 0x480000)
-            Switch_LogWrite("[KisakCOD][SKINCACHE_INIT] allocation skipped: r_loadForRenderer disabled\\n");
+            Switch_LogWrite("[KisakCOD][SKINCACHE_INIT] allocation skipped: r_loadForRenderer disabled\n");
 #endif
         return 0;
     }
@@ -55,7 +55,7 @@ void *__cdecl R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeIn
     {
         char msg[192];
         snprintf(msg, sizeof(msg),
-            "[KisakCOD][SKINCACHE_INIT] CreateVertexBuffer hr=%d result=%p device=%p\\n",
+            "[KisakCOD][SKINCACHE_INIT] CreateVertexBuffer hr=%d result=%p device=%p\n",
             hr, vb ? (void *)*vb : nullptr, (void *)dx.device);
         Switch_LogWrite(msg);
     }
@@ -180,7 +180,7 @@ void __cdecl R_InitDynamicVertexBufferState(GfxVertexBufferState *vb, int bytes)
     {
         char msg[192];
         snprintf(msg, sizeof(msg),
-            "[KisakCOD][SKINCACHE_INIT] state=%p buffer=%p verts=%p total=%d\\n",
+            "[KisakCOD][SKINCACHE_INIT] state=%p buffer=%p verts=%p total=%d\n",
             (void *)vb, (void *)vb->buffer, (void *)verts, vb->total);
         Switch_LogWrite(msg);
     }
