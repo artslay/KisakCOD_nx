@@ -348,7 +348,12 @@ void R_InitGlobalStructs() {
 void R_EndRegistration() {}
 void R_TrackStatistics(trStatistics_t *) {}
 void R_UpdateTeamColors(int, const float *, const float *) {}
-void R_ConfigureRenderer(const GfxConfiguration *config) { SetGfxConfig(config); }
+void R_ConfigureRenderer(const GfxConfiguration *config) {
+    SetGfxConfig(config);
+    // Match the shared renderer bootstrap: this allocates the double-buffered
+    // front-end command lists before the first frame is submitted.
+    R_InitRenderCommands();
+}
 void R_ComErrorCleanup() {}
 bool R_CheckLostDevice()
 {
