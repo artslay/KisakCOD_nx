@@ -21,7 +21,6 @@ extern uint32_t g_switchRawFileNameToken;
 extern uint32_t g_switchRawFileBufferToken;
 extern uint32_t g_switchRawFileB4BeforeName;
 extern uint32_t g_switchRawFileB4AfterName;
-extern uint32_t Switch_GetStreamCursorOffset(uint32_t index);
 #endif
 
 
@@ -361,7 +360,11 @@ void __cdecl DB_LoadSwitchSerialized(void *dst, uint32_t size)
         g_switchCurrentAssetIndex == 4728 &&
         g_switchCurrentAssetRawType == 23u &&
         g_streamPosIndex == 0 &&
-        Switch_GetStreamCursorOffset(0) == 2184u &&
+        g_streamBlocks &&
+        g_streamBlocks[0].data &&
+        streamPos >= g_streamBlocks[0].data &&
+        static_cast<uintptr_t>(
+            streamPos - g_streamBlocks[0].data) == 2184u &&
         size == 80u;
 
     if (traceWeapon4728MaterialSource)
