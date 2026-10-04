@@ -54,6 +54,9 @@ void __cdecl CL_InitUI()
     Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: after UI_Component_Init\n");
 #endif
     // LWSS END
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: before R_PopRemoteScreenUpdate\n");
+#endif
     remoteScreenUpdateNesting = R_PopRemoteScreenUpdate();
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: after R_PopRemoteScreenUpdate\n");
