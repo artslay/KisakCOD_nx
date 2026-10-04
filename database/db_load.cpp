@@ -246,10 +246,10 @@ static void Switch_TranslateGfxWorldSerialized(GfxWorld *out)
     Switch_SeedSerializedPointer(out->lightGrid.rowDataStart, serialized, 316);
     out->lightGrid.rawRowDataSize = Switch_ReadSerializedValue<int>(serialized, 320);
     Switch_SeedSerializedPointer(out->lightGrid.rawRowData, serialized, 324);
-    out->lightGrid.entryCount = Switch_ReadSerializedValue<int>(serialized, 328);
-    Switch_SeedSerializedPointer(out->lightGrid.entries, serialized, 332);
-    out->lightGrid.colorCount = Switch_ReadSerializedValue<int>(serialized, 336);
-    Switch_SeedSerializedPointer(out->lightGrid.colors, serialized, 340);
+    out->lightGrid.entryCount = Switch_ReadSerializedValue<int>(serialized, 312);
+    Switch_SeedSerializedPointer(out->lightGrid.entries, serialized, 316);
+    out->lightGrid.colorCount = Switch_ReadSerializedValue<int>(serialized, 320);
+    Switch_SeedSerializedPointer(out->lightGrid.colors, serialized, 324);
 
     Switch_SeedSerializedPointer(out->lightmapPrimaryTextures, serialized, 328);
     Switch_SeedSerializedPointer(out->lightmapSecondaryTextures, serialized, 332);
@@ -264,21 +264,25 @@ static void Switch_TranslateGfxWorldSerialized(GfxWorld *out)
     out->sun.hasValidData = Switch_ReadSerializedValue<bool>(serialized, 380);
     Switch_SeedSerializedPointer(out->sun.spriteMaterial, serialized, 384);
     Switch_SeedSerializedPointer(out->sun.flareMaterial, serialized, 388);
-    std::memcpy(&out->sun.spriteSize, serialized + 392, 16 * sizeof(float));
-    out->sun.flareMaxAlpha = Switch_ReadSerializedValue<float>(serialized, 424);
-    out->sun.flareFadeInTime = Switch_ReadSerializedValue<float>(serialized, 428);
-    out->sun.flareFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 432);
-    out->sun.blindMinDot = Switch_ReadSerializedValue<float>(serialized, 436);
-    out->sun.blindMaxDot = Switch_ReadSerializedValue<float>(serialized, 440);
-    out->sun.blindMaxDarken = Switch_ReadSerializedValue<float>(serialized, 444);
-    out->sun.blindFadeInTime = Switch_ReadSerializedValue<float>(serialized, 448);
-    out->sun.blindFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 452);
-    out->sun.glareMinDot = Switch_ReadSerializedValue<float>(serialized, 456);
-    out->sun.glareMaxDot = Switch_ReadSerializedValue<float>(serialized, 460);
-    out->sun.glareMaxLighten = Switch_ReadSerializedValue<float>(serialized, 464);
-    out->sun.glareFadeInTime = Switch_ReadSerializedValue<float>(serialized, 468);
-    out->sun.glareFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 472);
-    std::memcpy(out->sun.sunFxPosition, serialized + 476, sizeof(out->sun.sunFxPosition));
+    out->sun.spriteSize = Switch_ReadSerializedValue<float>(serialized, 392);
+    out->sun.flareMinSize = Switch_ReadSerializedValue<float>(serialized, 396);
+    out->sun.flareMinDot = Switch_ReadSerializedValue<float>(serialized, 400);
+    out->sun.flareMaxSize = Switch_ReadSerializedValue<float>(serialized, 404);
+    out->sun.flareMaxDot = Switch_ReadSerializedValue<float>(serialized, 408);
+    out->sun.flareMaxAlpha = Switch_ReadSerializedValue<float>(serialized, 412);
+    out->sun.flareFadeInTime = Switch_ReadSerializedValue<float>(serialized, 416);
+    out->sun.flareFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 420);
+    out->sun.blindMinDot = Switch_ReadSerializedValue<float>(serialized, 424);
+    out->sun.blindMaxDot = Switch_ReadSerializedValue<float>(serialized, 428);
+    out->sun.blindMaxDarken = Switch_ReadSerializedValue<float>(serialized, 432);
+    out->sun.blindFadeInTime = Switch_ReadSerializedValue<float>(serialized, 436);
+    out->sun.blindFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 440);
+    out->sun.glareMinDot = Switch_ReadSerializedValue<float>(serialized, 444);
+    out->sun.glareMaxDot = Switch_ReadSerializedValue<float>(serialized, 448);
+    out->sun.glareMaxLighten = Switch_ReadSerializedValue<float>(serialized, 452);
+    out->sun.glareFadeInTime = Switch_ReadSerializedValue<float>(serialized, 456);
+    out->sun.glareFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 460);
+    std::memcpy(out->sun.sunFxPosition, serialized + 464, sizeof(out->sun.sunFxPosition));
 
     Switch_SeedSerializedPointer(out->outdoorImage, serialized, 540);
     Switch_SeedSerializedPointer(out->cellCasterBits, serialized, 544);
@@ -1635,8 +1639,42 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
         // 0x00646574 becomes address 0x646574).
         if (serialized == UINT32_MAX - 1)
         {
-            Switch_LogWrite(
-                "[SWITCH XSTRINGPTR] unsupported outer alias token\n");
+            DB_AllocStreamPos(3);
+            const void **inserted = DB_InsertPointer();
+            uint32_t nested = 0;
+            DB_LoadSwitchSerialized(&nested, sizeof(nested));
+
+            const char **nativeStringSlot =
+                reinterpret_cast<const char **>(
+                    Hunk_Alloc(
+                        static_cast<uint32_t>(sizeof(const char *)),
+                        "SwitchXStringPtr",
+                        22));
+            if (!nativeStringSlot)
+                return;
+
+            *nativeStringSlot = nullptr;
+            *varXStringPtr = nativeStringSlot;
+
+            if (nested == UINT32_MAX)
+            {
+                char *stringBuffer =
+                    reinterpret_cast<char *>(AllocLoad_raw_byte());
+                if (stringBuffer)
+                {
+                    *nativeStringSlot = stringBuffer;
+                    Load_XStringCustom(&stringBuffer);
+                }
+            }
+            else if (nested && nested != UINT32_MAX - 1u)
+            {
+                *nativeStringSlot =
+                    reinterpret_cast<const char *>(
+                        DB_ConvertOffsetToPointerValue(nested));
+            }
+
+            if (inserted)
+                *inserted = *varXStringPtr;
             return;
         }
 
@@ -8056,6 +8094,28 @@ void __cdecl Load_GfxSurfaceArray(bool atStreamStart, int32_t count)
     GfxSurface *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 48u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxSurface *base = varGfxSurface;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxSurface = base + index;
+            Switch_TranslateGfxSurfaceSerialized(
+                varGfxSurface,
+                serialized.data() + static_cast<size_t>(index) * 48u);
+        }
+        varGfxSurface = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxSurface, 48 * count);
     var = varGfxSurface;
     for (i = 0; i < count; ++i)
@@ -8080,6 +8140,28 @@ void __cdecl Load_GfxLightmapArrayArray(bool atStreamStart, int32_t count)
     GfxLightmapArray *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 8u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxLightmapArray *base = varGfxLightmapArray;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxLightmapArray = base + index;
+            Switch_TranslateGfxLightmapArraySerialized(
+                varGfxLightmapArray,
+                serialized.data() + static_cast<size_t>(index) * 8u);
+        }
+        varGfxLightmapArray = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxLightmapArray, 8 * count);
     var = varGfxLightmapArray;
     for (i = 0; i < count; ++i)
@@ -8371,6 +8453,28 @@ void __cdecl Load_cbrushside_tArray(bool atStreamStart, int32_t count)
     cbrushside_t *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 12u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        cbrushside_t *base = varcbrushside_t;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varcbrushside_t = base + index;
+            Switch_Translatecbrushside_tSerialized(
+                varcbrushside_t,
+                serialized.data() + static_cast<size_t>(index) * 12u);
+        }
+        varcbrushside_t = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varcbrushside_t, 12 * count);
     var = varcbrushside_t;
     for (i = 0; i < count; ++i)
@@ -10772,6 +10876,28 @@ void __cdecl Load_DynEntityDefArray(bool atStreamStart, int32_t count)
     DynEntityDef *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 96u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        DynEntityDef *base = varDynEntityDef;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varDynEntityDef = base + index;
+            Switch_TranslateDynEntityDefSerialized(
+                varDynEntityDef,
+                serialized.data() + static_cast<size_t>(index) * 96u);
+        }
+        varDynEntityDef = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varDynEntityDef, 96 * count);
     var = varDynEntityDef;
     for (i = 0; i < count; ++i)
@@ -10897,6 +11023,28 @@ void __cdecl Load_cStaticModel_tArray(bool atStreamStart, int32_t count)
     cStaticModel_s *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 80u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        cStaticModel_s *base = varcStaticModel_t;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varcStaticModel_t = base + index;
+            Switch_TranslatecStaticModel_sSerialized(
+                varcStaticModel_t,
+                serialized.data() + static_cast<size_t>(index) * 80u);
+        }
+        varcStaticModel_t = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varcStaticModel_t, 80 * count);
     var = varcStaticModel_t;
     for (i = 0; i < count; ++i)
@@ -10930,6 +11078,28 @@ void __cdecl Load_cNode_tArray(bool atStreamStart, int32_t count)
     cNode_t *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 8u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        cNode_t *base = varcNode_t;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varcNode_t = base + index;
+            Switch_TranslatecNode_tSerialized(
+                varcNode_t,
+                serialized.data() + static_cast<size_t>(index) * 8u);
+        }
+        varcNode_t = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varcNode_t, 8 * count);
     var = varcNode_t;
     for (i = 0; i < count; ++i)
@@ -10997,6 +11167,28 @@ void __cdecl Load_cLeafBrushNode_tArray(bool atStreamStart, int32_t count)
     cLeafBrushNode_s *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 20u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        cLeafBrushNode_s *base = varcLeafBrushNode_t;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varcLeafBrushNode_t = base + index;
+            Switch_TranslatecLeafBrushNode_sSerialized(
+                varcLeafBrushNode_t,
+                serialized.data() + static_cast<size_t>(index) * 20u);
+        }
+        varcLeafBrushNode_t = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, &varcLeafBrushNode_t->axis, 20 * count);
     var = varcLeafBrushNode_t;
     for (i = 0; i < count; ++i)
@@ -11040,6 +11232,28 @@ void __cdecl Load_CollisionPartitionArray(bool atStreamStart, int32_t count)
     CollisionPartition *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 12u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        CollisionPartition *base = varCollisionPartition;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varCollisionPartition = base + index;
+            Switch_TranslateCollisionPartitionSerialized(
+                varCollisionPartition,
+                serialized.data() + static_cast<size_t>(index) * 12u);
+        }
+        varCollisionPartition = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, &varCollisionPartition->triCount, 12 * count);
     var = varCollisionPartition;
     for (i = 0; i < count; ++i)
@@ -11096,6 +11310,28 @@ void __cdecl Load_cbrush_tArray(bool atStreamStart, int32_t count)
     cbrush_t *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 80u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        cbrush_t *base = varcbrush_t;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varcbrush_t = base + index;
+            Switch_Translatecbrush_tSerialized(
+                varcbrush_t,
+                serialized.data() + static_cast<size_t>(index) * 80u);
+        }
+        varcbrush_t = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varcbrush_t, 80 * count);
     var = varcbrush_t;
     for (i = 0; i < count; ++i)
@@ -15043,6 +15279,28 @@ void __cdecl Load_GfxStaticModelDrawInstArray(bool atStreamStart, int32_t count)
     GfxStaticModelDrawInst *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 76u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxStaticModelDrawInst *base = varGfxStaticModelDrawInst;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxStaticModelDrawInst = base + index;
+            Switch_TranslateGfxStaticModelDrawInstSerialized(
+                varGfxStaticModelDrawInst,
+                serialized.data() + static_cast<size_t>(index) * 76u);
+        }
+        varGfxStaticModelDrawInst = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxStaticModelDrawInst, 76 * count);
     var = varGfxStaticModelDrawInst;
     for (i = 0; i < count; ++i)
@@ -15165,6 +15423,28 @@ void __cdecl Load_GfxAabbTreeArray(bool atStreamStart, int32_t count)
     GfxAabbTree *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 44u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxAabbTree *base = varGfxAabbTree;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxAabbTree = base + index;
+            Switch_TranslateGfxAabbTreeSerialized(
+                varGfxAabbTree,
+                serialized.data() + static_cast<size_t>(index) * 44u);
+        }
+        varGfxAabbTree = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxAabbTree, 44 * count);
     var = varGfxAabbTree;
     for (i = 0; i < count; ++i)
@@ -15209,6 +15489,28 @@ void __cdecl Load_GfxCellArray(bool atStreamStart, int32_t count)
     GfxCell *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 56u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxCell *base = varGfxCell;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxCell = base + index;
+            Switch_TranslateGfxCellSerialized(
+                varGfxCell,
+                serialized.data() + static_cast<size_t>(index) * 56u);
+        }
+        varGfxCell = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxCell, 56 * count);
     var = varGfxCell;
     for (i = 0; i < count; ++i)
@@ -15248,6 +15550,28 @@ void __cdecl Load_GfxPortalArray(bool atStreamStart, int32_t count)
     GfxPortal *var; // [esp+0h] [ebp-8h]
     int32_t i; // [esp+4h] [ebp-4h]
 
+    #ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint8_t> serialized(
+            static_cast<size_t>(count) * 68u);
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size()));
+        GfxPortal *base = varGfxPortal;
+        for (int32_t index = 0; index < count; ++index)
+        {
+            varGfxPortal = base + index;
+            Switch_TranslateGfxPortalSerialized(
+                varGfxPortal,
+                serialized.data() + static_cast<size_t>(index) * 68u);
+        }
+        varGfxPortal = base;
+    }
+    else
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varGfxPortal, 68 * count);
     var = varGfxPortal;
     for (i = 0; i < count; ++i)
