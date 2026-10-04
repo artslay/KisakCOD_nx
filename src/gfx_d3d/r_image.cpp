@@ -1253,8 +1253,12 @@ void __cdecl R_InitImages()
     {
         iassert(imageGlobals.totalMemory.platform[i] == 0);
     }
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] enter picmip\n");
+#endif
     R_SetPicmip();
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] returned picmip\n");
     Switch_LogWrite("[SWITCH RINIT] before R_InitCodeImages\n");
 #endif
     R_InitCodeImages();
