@@ -153,6 +153,7 @@ static uint32_t Switch_GetStreamCursorOffset(uint32_t streamIndex)
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern const char * volatile g_switchDbStage;
+extern uint64_t __cdecl DB_GetXFileUncompressedOffset();
 
 enum weapPositionAnimNum_t : __int32
 {
@@ -6537,10 +6538,28 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
         }
     }
 
+    const uint64_t xfileOffsetBefore =
+        DB_GetXFileUncompressedOffset();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
+    const uint64_t xfileOffsetAfter =
+        DB_GetXFileUncompressedOffset();
 
     if (g_switchCurrentAssetIndex == 4728)
     {
+        char rawTrace[768];
+        std::snprintf(
+            rawTrace,
+            sizeof(rawTrace),
+            "[KisakCOD][TECHSET4728 ACTUAL] xfile=%llu..%llu size=%u\n",
+            static_cast<unsigned long long>(xfileOffsetBefore),
+            static_cast<unsigned long long>(xfileOffsetAfter),
+            static_cast<unsigned>(sizeof(serialized)));
+        Sys_Print(rawTrace);
+        Switch_PrintRawBytes(
+            "[KisakCOD][TECHSET4728 ACTUAL RAW]",
+            reinterpret_cast<const uint8_t *>(&serialized),
+            sizeof(serialized));
+
         char trace[512];
         std::snprintf(
             trace,
@@ -7168,10 +7187,28 @@ void __cdecl Load_Material(bool atStreamStart)
         }
     }
 
+    const uint64_t xfileOffsetBefore =
+        DB_GetXFileUncompressedOffset();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
+    const uint64_t xfileOffsetAfter =
+        DB_GetXFileUncompressedOffset();
 
     if (g_switchCurrentAssetIndex == 4728)
     {
+        char rawTrace[768];
+        std::snprintf(
+            rawTrace,
+            sizeof(rawTrace),
+            "[KisakCOD][MATERIAL4728 ACTUAL] xfile=%llu..%llu size=%u\n",
+            static_cast<unsigned long long>(xfileOffsetBefore),
+            static_cast<unsigned long long>(xfileOffsetAfter),
+            static_cast<unsigned>(sizeof(serialized)));
+        Sys_Print(rawTrace);
+        Switch_PrintRawBytes(
+            "[KisakCOD][MATERIAL4728 ACTUAL RAW]",
+            reinterpret_cast<const uint8_t *>(&serialized),
+            sizeof(serialized));
+
         char trace[384];
         std::snprintf(
             trace,
