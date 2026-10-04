@@ -1848,8 +1848,8 @@ bool __cdecl FX_SpawnModelPhysics(
 #endif
     if (elem->physObjId)
     {
-        Phys_ObjSetCollisionFromXModel(visuals.model, PHYS_WORLD_FX, DynEnt_PhysObjFromId(elem->physObjId));
-        Phys_ObjSetAngularVelocity(DynEnt_PhysObjFromId(elem->physObjId), angularVelocity);
+        Phys_ObjSetCollisionFromXModel(visuals.model, PHYS_WORLD_FX, reinterpret_cast<dxBody *>(static_cast<uintptr_t>(elem->physObjId)));
+        Phys_ObjSetAngularVelocity(reinterpret_cast<dxBody *>(static_cast<uintptr_t>(elem->physObjId)), angularVelocity);
     }
     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
     return elem->physObjId != 0;
@@ -1975,7 +1975,7 @@ void __cdecl FX_FreeElem(FxSystem* system, uint16_t elemHandle, FxEffect* effect
     if (elemDef->elemType == 5 && (elemDef->flags & 0x8000000) != 0 && elem->item.physObjId)
     {
         Sys_EnterCriticalSection(CRITSECT_PHYSICS);
-        Phys_ObjDestroy(PHYS_WORLD_FX, DynEnt_PhysObjFromId(elem->item.physObjId));
+        Phys_ObjDestroy(PHYS_WORLD_FX, reinterpret_cast<dxBody *>(static_cast<uintptr_t>(elem->item.physObjId)));
         Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
     }
     elem->nextFree = 0;
