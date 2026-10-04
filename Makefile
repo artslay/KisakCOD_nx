@@ -21,9 +21,10 @@ CPPFLAGS    := -D__SWITCH__ -DKISAK_SWITCH -DKISAK_SP -DKISAK_OPENAL -DCINEMA -D
                -I$(DEVKITPRO)/libnx/include -I$(MESA_SDK)/include -I$(OPENAL_SDK)/include
 GIT_COMMIT  := $(shell git rev-parse --short=12 HEAD 2>/dev/null || printf "unknown")
 
-CXXFLAGS    := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-rtti -fno-plt -fno-semantic-interposition -std=gnu++20 -MMD -MP
+CXXFLAGS    := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-rtti -fno-plt -fno-semantic-interposition -std=gnu++20 -MMD -MP \
+               -Wno-int-to-pointer-cast -Wno-volatile -Wno-conversion-null -Wno-multichar -Wno-stringop-overflow
 CPPFLAGS    += -DGIT_COMMIT=\"$(GIT_COMMIT)\"
-CFLAGS      := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-plt -std=gnu++20 -MMD -MP
+CFLAGS      := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-plt -std=gnu17 -MMD -MP -Wno-old-style-definition
 LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libnx/lib -specs=$(DEVKITPRO)/libnx/switch.specs -Wl,--gc-sections,-Bsymbolic
 LIBS        := -lGL -lEGL -lglapi -lvulkan -lexpat -lopenal -lSDL2 -lnx -lm
 
