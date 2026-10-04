@@ -367,6 +367,20 @@ volatile uint32_t g_loadingAssets;
 XZoneInfoInternal g_zoneInfo[8];
 
 int32_t g_defaultAssetCount;
+#ifdef __SWITCH__
+/*
+ * The retail fastfiles use "null.wav" as the default LOADED_SOUND sentinel.
+ * Some Switch SP data sets contain references to this sentinel but no concrete
+ * LOADED_SOUND asset entry. Keep a native zero-length sound as the immutable
+ * default source so DB_CreateDefaultEntry can materialize the normal registry
+ * entry without requiring a physical WAV asset.
+ */
+static LoadedSound g_switchDefaultLoadedSound =
+{
+    "null.wav",
+    {}
+};
+#endif
 const char *g_defaultAssetName[ASSET_TYPE_COUNT] =
 {
     "",
@@ -1778,6 +1792,12 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, char *name)
 #endif
     asset.header = DB_FindXAssetDefaultHeaderInternal(type);
 #ifdef __SWITCH__
+    if (!asset.header.data && type == ASSET_TYPE_LOADED_SOUND)
+    {
+        asset.header.loadSnd = &g_switchDefaultLoadedSound;
+        Switch_LogWrite(
+            "[SWITCH SOUND DEFAULT] synthesizing silent null.wav default\n");
+    }
     if (type == ASSET_TYPE_SOUND || type == ASSET_TYPE_LOADED_SOUND)
     {
         char trace[256];
