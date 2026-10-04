@@ -251,7 +251,6 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
         DB_ReadXFileStage();
     }
 
-}
 #ifdef __SWITCH__
     if (switchTraceWeapon4728)
     {
@@ -287,6 +286,7 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
         Switch_LogWrite(trace);
     }
 #endif
+}
 
 void DB_ReadXFileStage()
 {
