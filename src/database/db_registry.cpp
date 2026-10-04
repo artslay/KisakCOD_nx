@@ -1693,27 +1693,6 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         if (assetEntryIndex >= 0x8000)
             return 0;
         assetEntry = &g_assetEntryPool[assetEntryIndex];
-#ifdef __SWITCH__
-        if (traceSoundDefault)
-        {
-            const XAssetType candidateType = assetEntry->entry.asset.type;
-            const char *candidateName = nullptr;
-            if (candidateType < ASSET_TYPE_COUNT && assetEntry->entry.asset.header.data)
-                candidateName = DB_GetXAssetName(&assetEntry->entry.asset);
-
-            char trace[384];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[SWITCH SOUND DEFAULT] candidate idx=%u type=%u name=%s nextHash=%u header=%p\n",
-                static_cast<unsigned>(assetEntryIndex),
-                static_cast<unsigned>(candidateType),
-                candidateName ? candidateName : "<null>",
-                static_cast<unsigned>(assetEntry->entry.nextHash),
-                static_cast<void *>(assetEntry->entry.asset.header.data));
-            Switch_LogWrite(trace);
-        }
-#endif
         if (assetEntry->entry.asset.type == type)
         {
             XAssetName = DB_GetXAssetName(&assetEntry->entry.asset);
