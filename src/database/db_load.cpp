@@ -5977,6 +5977,11 @@ static void Switch_LoadMaterialPassSerialized(
 
     if (serialized.vertexDecl == UINT32_MAX)
     {
+        // The original AllocLoad_FxElemVisStateSample() aligns the serialized
+        // inline declaration before Load_MaterialVertexDeclaration().
+        // Hunk_Alloc() only allocates the widened native destination, so the
+        // serialized stream cursor must be aligned explicitly here.
+        DB_AllocStreamPos(3);
         varMaterialPass->vertexDecl =
             reinterpret_cast<MaterialVertexDeclaration *>(Hunk_Alloc(
                 static_cast<uint32_t>(sizeof(MaterialVertexDeclaration)),
@@ -6028,6 +6033,12 @@ static void Switch_LoadMaterialPassSerialized(
             // converted without consuming the current stream.
             if (argsToken == UINT32_MAX)
             {
+                // The 32-bit loader obtains the inline args array through
+                // AllocLoad_FxElemVisStateSample(), which aligns stream 4
+                // before consuming the serialized argument records. Keep the
+                // same source-cursor alignment when the native array lives in
+                // Hunk memory on ARM64.
+                DB_AllocStreamPos(3);
                 varMaterialPass->args =
                     reinterpret_cast<MaterialShaderArgument *>(
                         Hunk_Alloc(
