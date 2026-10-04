@@ -13,12 +13,12 @@
 GfxBuffers gfxBuf;
 
 #ifdef __SWITCH__
-extern volatile int32_t g_switchSkinCacheLoadForRenderer;
-extern volatile uintptr_t g_switchSkinCachePool0;
-extern volatile uintptr_t g_switchSkinCachePool1;
-extern volatile uintptr_t g_switchSkinCacheLastBuffer;
-extern volatile int32_t g_switchSkinCacheCreateCalled;
-extern volatile int32_t g_switchSkinCacheCreateHr;
+volatile int32_t g_switchSkinCacheLoadForRenderer = -1;
+volatile uintptr_t g_switchSkinCachePool0 = 0;
+volatile uintptr_t g_switchSkinCachePool1 = 0;
+volatile uintptr_t g_switchSkinCacheLastBuffer = 0;
+volatile int32_t g_switchSkinCacheCreateCalled = 0;
+volatile int32_t g_switchSkinCacheCreateHr = 0;
 #endif
 
 void __cdecl TRACK_r_buffers()
