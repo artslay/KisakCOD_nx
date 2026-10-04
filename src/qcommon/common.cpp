@@ -1919,8 +1919,18 @@ void __cdecl Com_Frame_Try_Block_Function()
     g_switchFrameStage = "frame/set_anim_check_done";
 #endif
     minMsec = 1;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/read_maxfps";
+#endif
     maxFPS = com_maxfps->current.integer;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/read_maxfps_done";
+    g_switchFrameStage = "frame/adjust_maxfps";
+#endif
     Com_AdjustMaxFPS(&maxFPS);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/adjust_maxfps_done";
+#endif
     if (maxFPS > 0)
     {
 #ifdef KISAK_MP
