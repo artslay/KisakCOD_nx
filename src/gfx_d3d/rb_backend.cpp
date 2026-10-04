@@ -2999,9 +2999,13 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
         {
             {
                 PROF_SCOPED("WaitBackendEvent");
-                KISAK_NULLSUB();
+                KISAK_NULLSUB();#ifdef __SWITCH__
+                Switch_LogWrite("[KisakCOD][RTHREAD] backend event wait returned\n");
+#endif
                 R_ProcessWorkerCmdsWithTimeout(Sys_WaitBackendEvent, 1);
-            }
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][RTHREAD] entering renderer loop\n");
+#endif
 
             if (Sys_FinishRenderer())
             {
