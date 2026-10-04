@@ -5839,34 +5839,64 @@ void __cdecl Load_GfxVertexShaderLoadDef(bool atStreamStart)
             serialized.loadForRenderer;
     }
 
-    // When called from Load_MaterialVertexShader(), the complete serialized
-    // 16-byte MaterialVertexShader record has already been consumed. Do not
-    // read another 8-byte load-def header here; only consume the program blob.
+    // Load_MaterialVertexShader() already consumed its complete serialized
+    // 16-byte record. The program field is still a 32-bit fastfile token:
+    // -1/-2 mean the program bytes follow inline; a normal token is an
+    // offset/reference and must not consume the current stream.
     if (varGfxVertexShaderLoadDef->program)
     {
-        const uint16_t serializedProgramSize =
-            varGfxVertexShaderLoadDef->programSize;
-        const uint16_t serializedLoadForRenderer =
-            varGfxVertexShaderLoadDef->loadForRenderer;
-        const uint32_t serializedProgram =
+        const uint32_t programToken =
             static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(
                     varGfxVertexShaderLoadDef->program));
 
-        varGfxVertexShaderLoadDef->program =
-            reinterpret_cast<uint32_t *>(
-                AllocLoad_FxElemVisStateSample());
-        varDWORD = varGfxVertexShaderLoadDef->program;
+        if (programToken == UINT32_MAX)
+        {
+            const uint16_t programSize =
+                varGfxVertexShaderLoadDef->programSize;
+            varGfxVertexShaderLoadDef->program =
+                reinterpret_cast<uint32_t *>(
+                    AllocLoad_FxElemVisStateSample());
+            varDWORD = varGfxVertexShaderLoadDef->program;
 
-        Switch_LogShaderProgramOobIfNeeded(
-            "vertex",
-            serializedProgram,
-            serializedProgramSize,
-            serializedLoadForRenderer);
-        const char *previousStage = g_switchDbStage;
-        g_switchDbStage = "material/vertex_shader_program";
-        Load_DWORDArray(1, varGfxVertexShaderLoadDef->programSize);
-        g_switchDbStage = previousStage;
+            Switch_LogShaderProgramOobIfNeeded(
+                "vertex",
+                programToken,
+                programSize,
+                varGfxVertexShaderLoadDef->loadForRenderer);
+            const char *previousStage = g_switchDbStage;
+            g_switchDbStage = "material/vertex_shader_program";
+            Load_DWORDArray(1, programSize);
+            g_switchDbStage = previousStage;
+        }
+        else if (programToken == UINT32_MAX - 1u)
+        {
+            const void **inserted = DB_InsertPointer();
+            const uint16_t programSize =
+                varGfxVertexShaderLoadDef->programSize;
+            varGfxVertexShaderLoadDef->program =
+                reinterpret_cast<uint32_t *>(
+                    AllocLoad_FxElemVisStateSample());
+            varDWORD = varGfxVertexShaderLoadDef->program;
+
+            Switch_LogShaderProgramOobIfNeeded(
+                "vertex",
+                programToken,
+                programSize,
+                varGfxVertexShaderLoadDef->loadForRenderer);
+            const char *previousStage = g_switchDbStage;
+            g_switchDbStage = "material/vertex_shader_program";
+            Load_DWORDArray(1, programSize);
+            g_switchDbStage = previousStage;
+
+            *inserted = varGfxVertexShaderLoadDef->program;
+        }
+        else
+        {
+            varGfxVertexShaderLoadDef->program =
+                reinterpret_cast<uint32_t *>(
+                    DB_ConvertOffsetToPointerValue(programToken));
+        }
     }
 #else
     Load_Stream(atStreamStart, (uint8_t *)varGfxVertexShaderLoadDef, 8);
@@ -5904,34 +5934,63 @@ void __cdecl Load_GfxPixelShaderLoadDef(bool atStreamStart)
             serialized.loadForRenderer;
     }
 
-    // The parent MaterialPixelShader loader already consumed its 16-byte
-    // serialized record when atStreamStart is false here. Only the program
-    // payload remains in the stream at this point.
+    // Same rule as the vertex loader: only inline/following sentinels carry
+    // program bytes at the current cursor. Normal serialized offsets refer to
+    // an already-addressable payload and must not advance stream 4.
     if (varGfxPixelShaderLoadDef->program)
     {
-        const uint16_t serializedProgramSize =
-            varGfxPixelShaderLoadDef->programSize;
-        const uint16_t serializedLoadForRenderer =
-            varGfxPixelShaderLoadDef->loadForRenderer;
-        const uint32_t serializedProgram =
+        const uint32_t programToken =
             static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(
                     varGfxPixelShaderLoadDef->program));
 
-        varGfxPixelShaderLoadDef->program =
-            reinterpret_cast<uint32_t *>(
-                AllocLoad_FxElemVisStateSample());
-        varDWORD = varGfxPixelShaderLoadDef->program;
+        if (programToken == UINT32_MAX)
+        {
+            const uint16_t programSize =
+                varGfxPixelShaderLoadDef->programSize;
+            varGfxPixelShaderLoadDef->program =
+                reinterpret_cast<uint32_t *>(
+                    AllocLoad_FxElemVisStateSample());
+            varDWORD = varGfxPixelShaderLoadDef->program;
 
-        Switch_LogShaderProgramOobIfNeeded(
-            "pixel",
-            serializedProgram,
-            serializedProgramSize,
-            serializedLoadForRenderer);
-        const char *previousStage = g_switchDbStage;
-        g_switchDbStage = "material/pixel_shader_program";
-        Load_DWORDArray(1, varGfxPixelShaderLoadDef->programSize);
-        g_switchDbStage = previousStage;
+            Switch_LogShaderProgramOobIfNeeded(
+                "pixel",
+                programToken,
+                programSize,
+                varGfxPixelShaderLoadDef->loadForRenderer);
+            const char *previousStage = g_switchDbStage;
+            g_switchDbStage = "material/pixel_shader_program";
+            Load_DWORDArray(1, programSize);
+            g_switchDbStage = previousStage;
+        }
+        else if (programToken == UINT32_MAX - 1u)
+        {
+            const void **inserted = DB_InsertPointer();
+            const uint16_t programSize =
+                varGfxPixelShaderLoadDef->programSize;
+            varGfxPixelShaderLoadDef->program =
+                reinterpret_cast<uint32_t *>(
+                    AllocLoad_FxElemVisStateSample());
+            varDWORD = varGfxPixelShaderLoadDef->program;
+
+            Switch_LogShaderProgramOobIfNeeded(
+                "pixel",
+                programToken,
+                programSize,
+                varGfxPixelShaderLoadDef->loadForRenderer);
+            const char *previousStage = g_switchDbStage;
+            g_switchDbStage = "material/pixel_shader_program";
+            Load_DWORDArray(1, programSize);
+            g_switchDbStage = previousStage;
+
+            *inserted = varGfxPixelShaderLoadDef->program;
+        }
+        else
+        {
+            varGfxPixelShaderLoadDef->program =
+                reinterpret_cast<uint32_t *>(
+                    DB_ConvertOffsetToPointerValue(programToken));
+        }
     }
 #else
     Load_Stream(atStreamStart, (uint8_t *)varGfxPixelShaderLoadDef, 8);
