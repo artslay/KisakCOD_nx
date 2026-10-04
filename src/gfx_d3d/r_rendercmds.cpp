@@ -1308,19 +1308,40 @@ void R_UpdateFrontEndDvarOptions()
 {
     bool v0; // [esp+0h] [ebp-Ch]
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/light_tweaks";
+#endif
     if (R_LightTweaksModified())
         R_UpdateLightsFromDvars();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/sun";
+#endif
     if (r_sun_from_dvars->current.enabled && rgp.world)
         R_SetSunFromDvars(&rgp.world->sun);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/gpu_sync";
+#endif
     if (R_GpuSyncModified())
         R_UpdateGpuSyncType();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/test_lods";
+#endif
     R_SetTestLods();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/image_overrides";
+#endif
     rg.hasAnyImageOverrides = R_AreAnyImageOverridesActive();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/missing_lightgrid";
+#endif
     if (R_CheckDvarModified(r_showMissingLightGrid))
     {
         R_SyncRenderThread();
         R_ResetModelLighting();
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/fullbright";
+#endif
     if (r_fullbright->modified || r_debugShader->modified)
     {
         Dvar_ClearModified((dvar_s*)r_fullbright);
@@ -1328,9 +1349,18 @@ void R_UpdateFrontEndDvarOptions()
         R_SyncRenderThread();
         R_InitDrawMethod();
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/outdoor_feather";
+#endif
     if (R_CheckDvarModified(r_outdoorFeather))
         R_SetOutdoorFeatherConst();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/debug_bumpmap";
+#endif
     R_SetInputCodeConstantFromVec4(&gfxCmdBufInput, CONST_SRC_CODE_DEBUG_BUMPMAP, (float*)s_debugShaderConsts[r_debugShader->current.integer]);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/envmap";
+#endif
     if (R_CheckDvarModified(r_envMapOverride)
         || R_CheckDvarModified(r_envMapMinIntensity)
         || R_CheckDvarModified(r_envMapMaxIntensity)
@@ -1339,11 +1369,20 @@ void R_UpdateFrontEndDvarOptions()
     {
         R_EnvMapOverrideConstants();
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/distortion";
+#endif
     v0 = r_distortion->current.enabled && RETURN_ONE() == 1;
     if (rg.distortion != v0)
         R_SyncRenderThread();
     rg.distortion = v0;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/resolved_image";
+#endif
     R_SetInputCodeImageTexture(&gfxCmdBufInput, TEXTURE_SRC_CODE_RESOLVED_POST_SUN, v0 ? gfxRenderTargets[R_RENDERTARGET_RESOLVED_POST_SUN].image : 0);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/r_update/draw_flags";
+#endif
     rg.drawWorld = r_drawWorld->current.enabled;
     rg.drawBModels = r_drawBModels->current.enabled;
     rg.drawSModels = r_drawSModels->current.enabled;
