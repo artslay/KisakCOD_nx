@@ -6212,6 +6212,57 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
 #endif
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        const uint32_t streamOffset = Switch_GetStreamCursorOffset(4);
+        const uint8_t *block4 =
+            g_streamBlocks && g_streamBlocks[4].data
+                ? g_streamBlocks[4].data
+                : nullptr;
+        const uint32_t block4Size =
+            g_streamBlocks ? g_streamBlocks[4].size : 0u;
+        const uint32_t postOffset =
+            streamOffset >= sizeof(SerializedMaterialTechnique)
+                ? streamOffset - sizeof(SerializedMaterialTechnique)
+                : 0u;
+        char trace[768];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TECH4728 RAW POST] index=%d start=%08x end=%08x xfile=%llu header=%08x/%04x/%04x bytes:",
+            g_switchMaterialTechniqueIndex,
+            postOffset,
+            streamOffset,
+            static_cast<unsigned long long>(
+                DB_GetXFileUncompressedOffset()),
+            serialized.name,
+            static_cast<unsigned>(serialized.flags),
+            static_cast<unsigned>(serialized.passCount));
+        if (block4 &&
+            postOffset <= block4Size &&
+            block4Size - postOffset >= sizeof(SerializedMaterialTechnique))
+        {
+            for (size_t j = 0; j < sizeof(SerializedMaterialTechnique); ++j)
+            {
+                const int used = std::snprintf(
+                    trace + std::strlen(trace),
+                    sizeof(trace) - std::strlen(trace),
+                    " %02x",
+                    static_cast<unsigned>(block4[postOffset + j]));
+                if (used <= 0)
+                    break;
+            }
+        }
+        std::snprintf(
+            trace + std::strlen(trace),
+            sizeof(trace) - std::strlen(trace),
+            "\n");
+        Sys_Print(trace);
+    }
+#endif
+
     // MaterialTechnique has one trailing pass in its C++ type. Reserve only
     // the actual pass count from the serialized header instead of a worst-case
     // 64-pass buffer for every inline technique.
