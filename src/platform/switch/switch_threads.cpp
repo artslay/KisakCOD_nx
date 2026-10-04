@@ -362,7 +362,10 @@ void Sys_ClientMessageReceived() {}
 void Sys_ClearClientMessage() {}
 int Sys_SpawnServerThread(void (*function)(uint32_t))
 {
+    g_switchThreadStage = "spawnServer/before_create";
     Sys_CreateThread((void (__cdecl *)(uint32_t))function, THREAD_CONTEXT_SERVER);
+    g_switchThreadStage = "spawnServer/after_create";
+    g_switchThreadStage = "spawnServer/return";
     return 1;
 }
 void Sys_WaitClientMessageReceived() {}
