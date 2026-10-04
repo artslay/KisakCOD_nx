@@ -590,6 +590,7 @@ void __cdecl R_IssueRenderCommands(uint32_t type);
 void R_PerformanceCounters();
 bool R_UpdateSkinCacheUsage();
 char __cdecl R_HandOffToBackend(char type);
+bool __cdecl R_IsInRemoteScreenUpdate();
 void __cdecl R_ToggleSmpFrameCmd(char type);
 void __cdecl R_AbortRenderCommands();
 void __cdecl R_BeginClientCmdList2D();
