@@ -556,19 +556,19 @@ bool OpenGLBackend::InitContext(const GfxWindowParms* wndParms)
 
     char trace[1024];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][BOOT] EGL runtime: vendor=%s version=%s\\n",
+        "[KisakCOD][BOOT] EGL runtime: vendor=%s version=%s\n",
         eglVendor ? eglVendor : "unknown",
         eglVersion ? eglVersion : "unknown");
     Switch_LogWrite(trace);
 
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][BOOT] OpenGL runtime: vendor=%s renderer=%s\\n",
+        "[KisakCOD][BOOT] OpenGL runtime: vendor=%s renderer=%s\n",
         glVendor ? glVendor : "unknown",
         glRenderer ? glRenderer : "unknown");
     Switch_LogWrite(trace);
 
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][BOOT] OpenGL version: %s GLSL=%s\\n",
+        "[KisakCOD][BOOT] OpenGL version: %s GLSL=%s\n",
         glVersion ? glVersion : "unknown",
         glslVersion ? glslVersion : "unknown");
     Switch_LogWrite(trace);
