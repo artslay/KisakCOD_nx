@@ -455,12 +455,12 @@ void __cdecl DynEntCl_ProcessEntities(int32_t localClientNum)
                 dynEntPose = DynEnt_GetClientPose(dynEntId, DYNENT_DRAW_MODEL);
                 Phys_ObjGetInterpolatedState(
                     PHYS_WORLD_DYNENT,
-                    (dxBody *)dynEntClient->physObjId,
+                    DynEnt_PhysObjFromId(dynEntClient->physObjId),
                     origin,
                     dynEntPose->pose.quat);
-                if (Phys_ObjIsAsleep((dxBody *)dynEntClient->physObjId))
+                if (Phys_ObjIsAsleep(DynEnt_PhysObjFromId(dynEntClient->physObjId)))
                 {
-                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
+                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, DynEnt_PhysObjFromId(dynEntClient->physObjId));
                     dynEntClient->physObjId = 0;
                 }
                 if (!VecNCompareCustomEpsilon(origin, dynEntPose->pose.origin, 0.0099999998f, 3))
@@ -481,12 +481,12 @@ void __cdecl DynEntCl_ProcessEntities(int32_t localClientNum)
                 dynEntPosea = DynEnt_GetClientPose(dynEntId, DYNENT_DRAW_BRUSH);
                 Phys_ObjGetInterpolatedState(
                     PHYS_WORLD_DYNENT,
-                    (dxBody *)dynEntClient->physObjId,
+                    DynEnt_PhysObjFromId(dynEntClient->physObjId),
                     origin,
                     dynEntPosea->pose.quat);
-                if (Phys_ObjIsAsleep((dxBody *)dynEntClient->physObjId))
+                if (Phys_ObjIsAsleep(DynEnt_PhysObjFromId(dynEntClient->physObjId)))
                 {
-                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
+                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, DynEnt_PhysObjFromId(dynEntClient->physObjId));
                     dynEntClient->physObjId = 0;
                 }
                 if (!VecNCompareCustomEpsilon(origin, dynEntPosea->pose.origin, 0.0099999998f, 3))
@@ -524,7 +524,7 @@ void __cdecl DynEntCl_Shutdown(int32_t localClientNum)
             {
                 if (dynEntClient->physObjId)
                 {
-                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
+                    Phys_ObjDestroy(PHYS_WORLD_DYNENT, DynEnt_PhysObjFromId(dynEntClient->physObjId));
                     dynEntClient->physObjId = 0;
                     dynEntClient->flags &= ~1u;
                 }
@@ -536,7 +536,7 @@ void __cdecl DynEntCl_Shutdown(int32_t localClientNum)
             dynEntClienta = DynEnt_GetClientEntity(dynEntIda, DYNENT_DRAW_BRUSH);
             if ((dynEntClienta->flags & 1) != 0 && dynEntClienta->physObjId)
             {
-                Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClienta->physObjId);
+                Phys_ObjDestroy(PHYS_WORLD_DYNENT, DynEnt_PhysObjFromId(dynEntClienta->physObjId));
                 dynEntClienta->physObjId = 0;
                 dynEntClienta->flags &= ~1u;
             }
@@ -1192,12 +1192,12 @@ char __cdecl DynEntCl_DynEntImpactEvent(
         if (!dynEntClient->physObjId)
         {
             PhysObj = DynEntCl_CreatePhysObj(dynEntDef, &dynEntPose->pose);
-            dynEntClient->physObjId = static_cast<int32_t>(reinterpret_cast<uintptr_t>(PhysObj));
+            dynEntClient->physObjId = static_cast<DynEntityPhysObjId>(reinterpret_cast<uintptr_t>(PhysObj));
         }
         if (dynEntClient->physObjId)
             Phys_ObjBulletImpact(
                 PHYS_WORLD_DYNENT,
-                (dxBody *)dynEntClient->physObjId,
+                DynEnt_PhysObjFromId(dynEntClient->physObjId),
                 hitPos,
                 hitDir,
                 dynEnt_bulletForce->current.value,
@@ -1296,7 +1296,7 @@ void __cdecl DynEntCl_Damage(
         dynEntClient->flags &= 0xFFFCu;
         if (dynEntClient->physObjId)
         {
-            Phys_ObjDestroy(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId);
+            Phys_ObjDestroy(PHYS_WORLD_DYNENT, DynEnt_PhysObjFromId(dynEntClient->physObjId));
             dynEntClient->physObjId = 0;
         }
         DynEntCl_UnlinkEntity(dynEntId, drawType);
@@ -1493,18 +1493,18 @@ void __cdecl DynEntCl_ExplosionEvent(
                         if (!dynEntClient->physObjId)
                         {
                             PhysObj = DynEntCl_CreatePhysObj(dynEntDef, &dynEntPose->pose);
-                            dynEntClient->physObjId = static_cast<int32_t>(reinterpret_cast<uintptr_t>(PhysObj));
+                            dynEntClient->physObjId = static_cast<DynEntityPhysObjId>(reinterpret_cast<uintptr_t>(PhysObj));
                         }
                         if (dynEntClient->physObjId)
                         {
-                            Phys_ObjGetCenterOfMass((dxBody *)dynEntClient->physObjId, outPosition);
+                            Phys_ObjGetCenterOfMass(DynEnt_PhysObjFromId(dynEntClient->physObjId), outPosition);
                             v10 = flrand(-1.0, 1.0);
                             outPosition[0] = v10 * dynEnt_explodeSpinScale->current.value + outPosition[0];
                             v11 = flrand(-1.0, 1.0);
                             outPosition[1] = v11 * dynEnt_explodeSpinScale->current.value + outPosition[1];
                             v12 = flrand(-1.0, 1.0);
                             outPosition[2] = v12 * dynEnt_explodeSpinScale->current.value + outPosition[2];
-                            Phys_ObjAddForce(PHYS_WORLD_DYNENT, (dxBody *)dynEntClient->physObjId, outPosition, result);
+                            Phys_ObjAddForce(PHYS_WORLD_DYNENT, DynEnt_PhysObjFromId(dynEntClient->physObjId), outPosition, result);
                         }
                     }
                     if (DynEnt_GetEntityProps(dynEntDef->type)->destroyable)
@@ -1657,7 +1657,7 @@ void __cdecl DynEntCl_JitterEvent(
                 {
                     dynEntPosea = DynEnt_GetClientPose(dynEntList[i], drawType);
                     PhysObj = DynEntCl_CreatePhysObj(dynEntDef, &dynEntPosea->pose);
-                    ClientEntity->physObjId = static_cast<int32_t>(reinterpret_cast<uintptr_t>(PhysObj));
+                    ClientEntity->physObjId = static_cast<DynEntityPhysObjId>(reinterpret_cast<uintptr_t>(PhysObj));
                 }
             }
         }
@@ -1752,7 +1752,7 @@ void DynEntCl_WakeUpAroundPlayer(int localClientNum)
                 if (DynEnt_GetEntityProps(EntityDef->type)->usePhysics && !dynEntClient->physObjId)
                 {
                     ClientPose = DynEnt_GetClientPose(dynEntId, drawType);
-                    dynEntClient->physObjId = static_cast<int32_t>(reinterpret_cast<uintptr_t>(DynEntCl_CreatePhysObj(EntityDef, &ClientPose->pose)));
+                    dynEntClient->physObjId = static_cast<DynEntityPhysObjId>(reinterpret_cast<uintptr_t>(DynEntCl_CreatePhysObj(EntityDef, &ClientPose->pose)));
                 }
             }
 
