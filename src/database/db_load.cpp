@@ -15028,7 +15028,8 @@ void __cdecl Load_RawFile(bool atStreamStart)
 #ifdef __SWITCH__
     const bool switchRawFileTrace =
         g_switchCurrentAssetRawType == 31u &&
-        g_switchCurrentAssetIndex == 1531;
+        (g_switchCurrentAssetIndex == 1126 ||
+         g_switchCurrentAssetIndex == 1531);
     if (switchRawFileTrace)
         {
         char trace[128];
@@ -15178,6 +15179,23 @@ void __cdecl Load_RawFile(bool atStreamStart)
 #endif
     }
 #ifdef __SWITCH__
+#ifdef __SWITCH__
+    if (switchRawFileTrace)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH RAWFILE] pre-asset name=%p len=%d buffer=%p stream=%u b0=%08x b4=%08x\n",
+            static_cast<const void *>(varRawFile->name),
+            varRawFile->len,
+            static_cast<const void *>(varRawFile->buffer),
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4));
+        Switch_LogWrite(trace);
+    }
+#endif
     if (switchRawFileTrace)
         Switch_LogWrite("[SWITCH RAWFILE] before pop\n");
 #endif
