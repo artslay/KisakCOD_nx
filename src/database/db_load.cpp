@@ -4668,6 +4668,7 @@ static void Switch_LoadXRigidVertListRecord(
             if (switchTraceXModel)
                 g_switchDbStage = "xmodel/surf/vertlist/colltree_alloc";
 
+            DB_AllocStreamPos(3);
             dst->collisionTree =
                 reinterpret_cast<XSurfaceCollisionTree *>(
                     Hunk_Alloc(
@@ -5105,6 +5106,7 @@ void __cdecl Load_XSurface(bool atStreamStart)
     {
         if (vertListToken == UINT32_MAX)
         {
+            DB_AllocStreamPos(3);
             varXSurface->vertList =
                 reinterpret_cast<XRigidVertList *>(
                     Hunk_Alloc(
@@ -9648,6 +9650,7 @@ void __cdecl Load_XModel(bool atStreamStart)
     if (varXModel->surfs)
     {
 #ifdef __SWITCH__
+        DB_AllocStreamPos(3);
         varXModel->surfs =
             reinterpret_cast<XSurface *>(
                 Hunk_Alloc(
@@ -9678,6 +9681,7 @@ void __cdecl Load_XModel(bool atStreamStart)
     if (varXModel->materialHandles)
     {
 #ifdef __SWITCH__
+        DB_AllocStreamPos(3);
         varXModel->materialHandles =
             reinterpret_cast<Material **>(
                 Hunk_Alloc(
@@ -9708,6 +9712,7 @@ void __cdecl Load_XModel(bool atStreamStart)
     if (varXModel->collSurfs)
     {
 #ifdef __SWITCH__
+        DB_AllocStreamPos(3);
         varXModel->collSurfs =
             reinterpret_cast<XModelCollSurf_s *>(
                 Hunk_Alloc(
