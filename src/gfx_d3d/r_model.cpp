@@ -415,14 +415,17 @@ void __cdecl R_LockSkinnedCache()
             snprintf(
                 msg,
                 sizeof(msg),
-                "[KisakCOD][SKINCACHE] frontEnd=%p skinnedState=%p bufferField=%p buffer=%p device=%p\n",
+                "[KisakCOD][SKINCACHE] frontEnd=%p skinnedState=%p bufferField=%p buffer=%p device=%p loadForRenderer=%d pool0=%p pool1=%p\\n",
                 (void *)frontEndDataOut,
                 frontEndDataOut ? (void *)frontEndDataOut->skinnedCacheVb : nullptr,
                 frontEndDataOut && frontEndDataOut->skinnedCacheVb
                     ? (void *)&frontEndDataOut->skinnedCacheVb->buffer : nullptr,
                 frontEndDataOut && frontEndDataOut->skinnedCacheVb
                     ? (void *)frontEndDataOut->skinnedCacheVb->buffer : nullptr,
-                (void *)dx.device);
+                (void *)dx.device,
+                r_loadForRenderer ? r_loadForRenderer->current.enabled : -1,
+                (void *)gfxBuf.skinnedCacheVbPool[0].buffer,
+                (void *)gfxBuf.skinnedCacheVbPool[1].buffer);
             Switch_LogWrite(msg);
         }
 #endif
