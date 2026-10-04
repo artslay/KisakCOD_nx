@@ -1,4 +1,8 @@
 #include <universal/q_shared.h>
+
+#ifdef __SWITCH__
+extern thread_local const char *g_switchFrameStage;
+#endif
 #include "r_rendercmds.h"
 #include <qcommon/mem_track.h>
 #include <qcommon/threads.h>
@@ -1222,28 +1226,65 @@ void __cdecl R_BeginFrame()
 
     if (rg.registered)
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/r_begin/enter";
+#endif
         iassert( !rg.inFrame );
         rg.inFrame = 1;
         rg.lodParms.valid = 0;
         rg.correctedLodParms.valid = 0;
         if (Sys_IsMainThread())
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/r_begin/update_dvars";
+#endif
             R_UpdateFrontEndDvarOptions();
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/r_begin/update_dvars_done";
+#endif
+        }
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/r_begin/material_override";
+#endif
         Material_OverrideTechniqueSets();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/r_begin/material_override_done";
+#endif
         if (rgp.world && rgp.needSortMaterials)
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/r_begin/sort_materials";
+#endif
             rgp.needSortMaterials = 0;
             if (Sys_IsMainThread())
                 R_SyncRenderThread();
             Material_Sort();
             R_SortWorldSurfaces();
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/r_begin/sort_materials_done";
+#endif
         }
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/r_begin/flush_debug";
+#endif
         CL_FlushDebugClientData();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/r_begin/flush_debug_done";
+#endif
         v1 = r_skinCache->current.enabled && IsFastFileLoad();
         gfxBuf.skinCache = v1;
         v0 = v1 && r_fastSkin->current.enabled;
         gfxBuf.fastSkin = v0;
         if (gfxBuf.skinCache)
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/r_begin/lock_skin_cache";
+#endif
             R_LockSkinnedCache();
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/r_begin/lock_skin_cache_done";
+#endif
+        }
     }
 }
 
