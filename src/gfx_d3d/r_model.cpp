@@ -16,6 +16,10 @@
 #include <cgame/cg_local.h>
 #include "r_model_pose.h"
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 const int boxVerts[24][3] =
 {
   { 0, 0, 0 },
