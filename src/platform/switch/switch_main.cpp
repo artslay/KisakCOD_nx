@@ -12,7 +12,6 @@ extern void Com_InitParse();
 extern void Dvar_Init();
 extern void Switch_LogInit();
 extern void Switch_LogShutdown();
-extern void Switch_LogReleaseScreen();
 
 static void SwitchBootLog(const char *message)
 {
@@ -49,7 +48,6 @@ int main()
 
     SwitchBootLog("Stage 7/7: engine initialized");
     SwitchBootLog("Entering applet/frame loop");
-    Switch_LogReleaseScreen();
 
     while (appletMainLoop())
         Com_Frame();
