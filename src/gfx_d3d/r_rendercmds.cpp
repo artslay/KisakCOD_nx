@@ -1762,6 +1762,8 @@ void __cdecl R_EndRemoteScreenUpdate()
                 Switch_LogWrite("[KisakCOD][RENDER] R_EndRemoteScreenUpdate: renderer notify received\n");
 #endif
                 r_glob.screenUpdateNotify = 0;
+                iassert( r_glob.remoteScreenUpdateNesting > 0 );
+                --r_glob.remoteScreenUpdateNesting;
 #ifdef __SWITCH__
                 Switch_LogWrite("[KisakCOD][RENDER] R_EndRemoteScreenUpdate: waiting for final notify\n");
 #endif
@@ -1774,14 +1776,6 @@ void __cdecl R_EndRemoteScreenUpdate()
 #ifdef __SWITCH__
                 Switch_LogWrite("[KisakCOD][RENDER] R_EndRemoteScreenUpdate: final notify received\n");
 #endif
-                iassert( r_glob.remoteScreenUpdateNesting > 0 );
-                --r_glob.remoteScreenUpdateNesting;
-                while (!r_glob.screenUpdateNotify)
-                {
-                    ++g_mainThreadBlocked;
-                    NET_Sleep(1);
-                    --g_mainThreadBlocked;
-                }
                 r_glob.screenUpdateNotify = 0;
             }
             else
