@@ -1482,7 +1482,6 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][BOOT] after common initialization\n");
 #endif
-    Com_DvarDump(CON_CHANNEL_LOGFILEONLY, 0);
 }
 
 void __cdecl Com_Error_f()
