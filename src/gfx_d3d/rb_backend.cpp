@@ -3029,6 +3029,16 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
                     if (data)
                         RB_RenderCommandFrame((GfxBackEndData *)data);
                 }
+#ifdef __SWITCH__
+                // The remote-screen path calls SCR_UpdateScreen() directly instead of
+                // going through RB_RenderCommandFrame(), so it must establish the
+                // thread-local EGL context explicitly before any renderer GL work.
+                if (!Switch_GLBeginRenderContext())
+                {
+                    Com_Error(ERR_FATAL, "Switch remote render EGL context is not current");
+                    return;
+                }
+#endif
                 iassert(!r_glob.screenUpdateNotify);
                 r_glob.screenUpdateNotify = 1;
                 iassert(!r_glob.isRenderingRemoteUpdate);
