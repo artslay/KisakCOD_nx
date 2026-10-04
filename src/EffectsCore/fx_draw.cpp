@@ -921,7 +921,7 @@ void __cdecl FX_DrawElem_Model(FxDrawState *draw)
 void __cdecl FX_SetPlacementFromPhysics(const FxDrawState *draw, GfxPlacement *placement)
 {
     Sys_EnterCriticalSection(CRITSECT_PHYSICS);
-    Phys_ObjGetInterpolatedState(PHYS_WORLD_FX, DynEnt_PhysObjFromId(draw->elem->physObjId), placement->origin, placement->quat);
+    Phys_ObjGetInterpolatedState(PHYS_WORLD_FX, reinterpret_cast<dxBody *>(static_cast<uintptr_t>(draw->elem->physObjId)), placement->origin, placement->quat);
     Sys_LeaveCriticalSection(CRITSECT_PHYSICS);
 }
 
