@@ -156,7 +156,7 @@ void __cdecl FX_RestorePhysicsData(FxSystem *system, MemoryFile *memFile)
                 visuals = FX_GetElemVisuals(
                     elemDef,
                     (296 * elem->item.sequence + elem->item.msecBegin + (uint32_t)effect->randomSeed) % 0x1DF).model;
-                Phys_ObjSetCollisionFromXModel(visuals, PHYS_WORLD_FX, DynEnt_PhysObjFromId(elem->item.physObjId));
+                Phys_ObjSetCollisionFromXModel(visuals, PHYS_WORLD_FX, reinterpret_cast<dxBody *>(static_cast<uintptr_t>(elem->item.physObjId)));
             }
         }
     }
@@ -265,7 +265,7 @@ void __cdecl FX_SavePhysicsData(FxSystem *system, MemoryFile *memFile)
             elemDef = &effect->def->elemDefs[elem->item.defIndex];
             elemHandleNext = elem->item.nextElemHandleInEffect;
             if (elemDef->elemType == 5 && (elemDef->flags & 0x8000000) != 0)
-                Phys_ObjSave(DynEnt_PhysObjFromId(elem->item.physObjId), memFile);
+                Phys_ObjSave(reinterpret_cast<dxBody *>(static_cast<uintptr_t>(elem->item.physObjId)), memFile);
         }
     }
 }
