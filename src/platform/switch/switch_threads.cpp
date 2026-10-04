@@ -374,8 +374,6 @@ void Win_UpdateThreadLock() {}
 #ifdef KISAK_SP
 int Sys_WaitStartServer(uint32_t timeout)
 {
-    Sys_EnterCriticalSection(CRITSECT_START_SERVER);
-
     const bool ready = Sys_WaitForSingleObjectTimeout(&wakeServerEvent, timeout);
     int result = ready ? 1 : 0;
 
@@ -384,7 +382,6 @@ int Sys_WaitStartServer(uint32_t timeout)
     else if (ready)
         Sys_ResetEvent(&serverCompletedEvent);
 
-    Sys_LeaveCriticalSection(CRITSECT_START_SERVER);
     return result;
 }
 
@@ -433,7 +430,6 @@ int Sys_SpawnServerThread(void (*function)(uint32_t))
 
 void Sys_WaitClientMessageReceived()
 {
-    PROF_SCOPED("wait receive msg");
     Sys_WaitForSingleObject(&clientMessageReceived);
 }
 
@@ -444,7 +440,6 @@ void Sys_ServerSnapshotCompleted()
 
 bool Sys_WaitServerSnapshot()
 {
-    PROF_SCOPED("wait snapshot");
     return Sys_WaitForSingleObjectTimeout(&serverSnapshotEvent, 1);
 }
 
@@ -477,18 +472,12 @@ void Sys_WakeServer()
 
 void Sys_SleepServer()
 {
-    const bool ready = Sys_WaitForSingleObjectTimeout(&wakeServerEvent, 0);
-    if (ready)
-    {
-        Sys_EnterCriticalSection(CRITSECT_START_SERVER);
+    if (Sys_WaitForSingleObjectTimeout(&wakeServerEvent, 0))
         Sys_ResetEvent(&wakeServerEvent);
-        Sys_LeaveCriticalSection(CRITSECT_START_SERVER);
-    }
 }
 
 bool Sys_WaitServer()
 {
-    PROF_SCOPED("wait server");
     return Sys_WaitForSingleObjectTimeout(&serverCompletedEvent, 1);
 }
 void Sys_Sleep(uint32_t msec) { std::this_thread::sleep_for(std::chrono::milliseconds(msec)); }
