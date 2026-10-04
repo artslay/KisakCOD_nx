@@ -7043,60 +7043,9 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
                 static_cast<uintptr_t>(UINT32_MAX));
     }
 
-    // The serialized TechniqueSet header is read from the current inline
-    // stream (stream 0). Its nested fields are loaded from the virtual stream,
-    // matching the original PC loader's DB_PushStreamPos(4).
-#ifdef __SWITCH__
-    const uintptr_t traceStream0PosBeforePush =
-        reinterpret_cast<uintptr_t>(DB_GetStreamPos());
-    const uint32_t traceStream0IndexBeforePush = g_streamPosIndex;
-#endif
-    DB_PushStreamPos(4);
-#ifdef __SWITCH__
-    if (traceRawType == 23u && traceAssetIndex == 4728)
-    {
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][MATERIAL TECHSET HEADER] stream=%u start=%u after=%u pos=%p name=%08x remap=%08x tech0=%08x tech1=%08x tech2=%08x tech3=%08x childStream=%u childOffset=%u\n",
-            static_cast<unsigned>(techniqueSetHeaderStream),
-            techniqueSetHeaderOffset,
-            techniqueSetHeaderAfter,
-            static_cast<const void *>(techniqueSetStart),
-            serialized.name,
-            serialized.remappedTechniqueSet,
-            serialized.techniques[0],
-            serialized.techniques[1],
-            serialized.techniques[2],
-            serialized.techniques[3],
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(g_streamPosIndex));
-        Switch_LogWrite(trace);
-    }
-
-    if (traceRawType == 5u &&
-        traceAssetIndex == 1502)
-    {
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH DB FIND] techset stream switch asset=1502 before=%p stream0=%u after=%p stream4=%u base4=%p delta4=%lld\n",
-            reinterpret_cast<void *>(traceStream0PosBeforePush),
-            static_cast<unsigned>(traceStream0IndexBeforePush),
-            static_cast<void *>(DB_GetStreamPos()),
-            static_cast<unsigned>(g_streamPosIndex),
-            g_streamBlocks[4].data,
-            g_streamBlocks[4].data
-                ? static_cast<long long>(
-                      reinterpret_cast<uintptr_t>(DB_GetStreamPos()) -
-                      reinterpret_cast<uintptr_t>(g_streamBlocks[4].data))
-                : 0LL);
-        Switch_LogWrite(trace);
-    }
-#endif
-
+    // Material has already pushed the virtual block (stream 4). The inline
+    // TechniqueSet header, name and technique payload all advance the same
+    // active virtual-stream cursor, matching the iOS/OAT loader.
     // The original loader consumes the inline name of the TechniqueSet itself
     // before loading the 34 technique pointer records. Do not move this below
     // the technique loop: that would make the first bytes of the name string
@@ -7417,7 +7366,6 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
 #endif
 
-    DB_PopStreamPos();
 #else
     Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniqueSet, 148);
     DB_PushStreamPos(4);
@@ -7435,7 +7383,6 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
     uint32_t value; // [esp+4h] [ebp-8h]
 
     Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniqueSetPtr, 4);
-    DB_PushStreamPos(0);
     if (*varMaterialTechniqueSetPtr)
     {
         value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(*varMaterialTechniqueSetPtr));
@@ -7462,8 +7409,8 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
-            // The desktop inline allocation aligns stream 0; the Hunk-backed
-            // native object does not move or align the serialized cursor.
+            // The parent Material already has the virtual block active.
+            // Align the inline serialized object within that same block.
             DB_AllocStreamPos(3);
             if (traceCinematic)
                 Switch_LogWrite("[SWITCH DB FIND] techset ptr -> inline\n");
