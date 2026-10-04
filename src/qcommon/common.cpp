@@ -1116,6 +1116,9 @@ void __cdecl Com_Init(char* commandLine)
             R_EndRemoteScreenUpdate();
         }
     }
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] Com_Init: returning\n");
+#endif
 }
 
 bool shouldQuitOnError;

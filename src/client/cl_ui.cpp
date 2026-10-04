@@ -60,5 +60,8 @@ void __cdecl CL_InitUI()
 #endif
     cls.uiStarted = 1;
     R_PushRemoteScreenUpdate(remoteScreenUpdateNesting);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: after R_PushRemoteScreenUpdate\n");
+#endif
 }
 
