@@ -7835,6 +7835,23 @@ void __cdecl Load_Material(bool atStreamStart)
 
 #ifdef __SWITCH__
     Switch_LogWrite("[SWITCH MATERIAL] info done\n");
+    if (traceUiMaterial)
+    {
+        const uintptr_t materialName =
+            reinterpret_cast<uintptr_t>(varMaterial->info.name);
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI MATERIAL] name after Load_XString ptr=%p low=%08x stream=%u "
+            "b0=%08x b4=%08x\\n",
+            static_cast<const void *>(varMaterial->info.name),
+            static_cast<unsigned>(materialName),
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4));
+        Switch_LogWrite(trace);
+    }
 #endif
 
     varMaterialTechniqueSetPtr = &varMaterial->techniqueSet;
