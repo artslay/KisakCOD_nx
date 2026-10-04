@@ -8,6 +8,10 @@
 #include "r_utils.h"
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 
 //struct GfxBuffers gfxBuf   85b3aa20     gfx_d3d : r_buffers.obj
 GfxBuffers gfxBuf;
@@ -24,10 +28,38 @@ void *__cdecl R_AllocDynamicVertexBuffer(IDirect3DVertexBuffer9 **vb, int sizeIn
     iassert(vb);
     iassert(sizeInBytes > 0);
 
+#ifdef __SWITCH__
+    if (sizeInBytes == 0x480000)
+    {
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+            "[KisakCOD][SKINCACHE_INIT] size=%d loadForRenderer=%d out=%p\\n",
+            sizeInBytes,
+            r_loadForRenderer ? r_loadForRenderer->current.enabled : -1,
+            (void *)vb);
+        Switch_LogWrite(msg);
+    }
+#endif
     if (!r_loadForRenderer->current.enabled)
+    {
+#ifdef __SWITCH__
+        if (sizeInBytes == 0x480000)
+            Switch_LogWrite("[KisakCOD][SKINCACHE_INIT] allocation skipped: r_loadForRenderer disabled\\n");
+#endif
         return 0;
+    }
 
     hr = dx.device->CreateVertexBuffer(sizeInBytes, 520, 0, D3DPOOL_DEFAULT, vb, 0);
+#ifdef __SWITCH__
+    if (sizeInBytes == 0x480000)
+    {
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+            "[KisakCOD][SKINCACHE_INIT] CreateVertexBuffer hr=%d result=%p device=%p\\n",
+            hr, vb ? (void *)*vb : nullptr, (void *)dx.device);
+        Switch_LogWrite(msg);
+    }
+#endif
     if (hr < 0)
     {
         R_FatalInitError(va("DirectX didn't create a %i-byte dynamic vertex buffer: %s\n", sizeInBytes, R_ErrorDescription(hr)));
@@ -143,6 +175,16 @@ void __cdecl R_InitDynamicVertexBufferState(GfxVertexBufferState *vb, int bytes)
     vb->used = 0;
     vb->total = bytes;
     verts = (uint8_t *)R_AllocDynamicVertexBuffer(&vb->buffer, bytes);
+#ifdef __SWITCH__
+    if (bytes == 0x480000)
+    {
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+            "[KisakCOD][SKINCACHE_INIT] state=%p buffer=%p verts=%p total=%d\\n",
+            (void *)vb, (void *)vb->buffer, (void *)verts, vb->total);
+        Switch_LogWrite(msg);
+    }
+#endif
     iassert( verts == NULL );
     vb->verts = verts;
 }
