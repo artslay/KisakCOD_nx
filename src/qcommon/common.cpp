@@ -42,6 +42,7 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
+thread_local const char *g_switchFrameStage = "frame/idle";
 #endif
 
 
@@ -1914,6 +1915,9 @@ void __cdecl Com_Frame_Try_Block_Function()
                 minMsec = 1;
         }
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/win_thread_lock";
+#endif
     Win_UpdateThreadLock();
     iassert(minMsec > 0);
 
@@ -1929,7 +1933,13 @@ void __cdecl Com_Frame_Try_Block_Function()
         PROF_SCOPED("MaxFPSSpin");
         while (1)
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/maxfps/event_loop";
+#endif
             Com_EventLoop();
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/maxfps/time";
+#endif
             com_frameTime = Sys_Milliseconds();
             if (com_frameTime - com_lastFrameTime[lastFrameIndex] < 0)
                 com_lastFrameTime[lastFrameIndex] = com_frameTime;
@@ -1967,10 +1977,19 @@ void __cdecl Com_Frame_Try_Block_Function()
             msec = 1;
     }
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cbuf_execute";
+#endif
     Cbuf_Execute(0, CL_ControllerIndexFromClientNum(0));
     iassert(msec > 0);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/modify_msec";
+#endif
     msec = Com_ModifyMsec(msec);
     iassert(msec > 0);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/sv_frame";
+#endif
     msec = SV_Frame(msec);
 
 #ifdef KISAK_MP
@@ -1983,7 +2002,13 @@ void __cdecl Com_Frame_Try_Block_Function()
 
         {
             PROF_SCOPED("pre frame");
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cl_run_once";
+#endif
             CL_RunOncePerClientFrame(0, msec);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/preframe_event_loop";
+#endif
             Com_EventLoop();
 #ifdef KISAK_MP
             for (int localClientNum = 0; localClientNum < 1; ++localClientNum)
@@ -2008,6 +2033,9 @@ void __cdecl Com_Frame_Try_Block_Function()
         }
 
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cl_frame";
+#endif
             PROF_SCOPED("CL_Frame");
 #ifdef KISAK_MP
             for (int localClientNum = 0; localClientNum < 1; ++localClientNum)
@@ -2021,16 +2049,34 @@ void __cdecl Com_Frame_Try_Block_Function()
         dvar_modifiedFlags &= ~2u;
         Com_UpdateMenu();
 #endif
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr_update_screen";
+#endif
         SCR_UpdateScreen();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/ragdoll";
+#endif
         Ragdoll_Update(msec);
         iassert(Sys_IsMainThread());
 #ifdef KISAK_SP
         //SCR_UpdateRumble(); // KISAKTODO
 #endif
         deltaTime = cls.frametime * EQUAL_EPSILON;
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/devgui";
+#endif
         DevGui_Update(0, deltaTime);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/statmon";
+#endif
         Com_Statmon();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/wait_end";
+#endif
         R_WaitEndTime();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/try_block_done";
+#endif
     }
 
 #ifdef KISAK_SP
@@ -2188,11 +2234,26 @@ void __cdecl Com_AssetLoadUI()
 void __cdecl Com_CheckSyncFrame()
 {
     iassert( Sys_IsMainThread() );
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/check_sync";
+#endif
 #ifdef KISAK_SP
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/check_sync/savegame";
+#endif
     SV_WaitSaveGame();
 #endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/check_sync/remote_debugger";
+#endif
     Scr_UpdateRemoteDebugger();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/check_sync/db_update";
+#endif
     DB_Update();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/check_sync/done";
+#endif
 }
 
 void __cdecl Com_Frame()
@@ -2202,24 +2263,45 @@ void __cdecl Com_Frame()
 #endif
     void* Value; // eax
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/enter";
+#endif
     KISAK_NULLSUB();
     Value = Sys_GetValue(2);
 
     if (setjmp(*(jmp_buf *)Value))
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/setjmp_recover";
+#endif
         Profile_Recover(1);
     }
     else
     {
         Profile_Guard(1);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/check_sync";
+#endif
         Com_CheckSyncFrame();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/try_block";
+#endif
         {
             PROF_SCOPED("MainThread");
             Com_Frame_Try_Block_Function();
         }
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/increment";
+#endif
         ++com_frameNumber;
         Profile_Unguard(1);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/normal_done";
+#endif
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/com_error_check";
+#endif
     Sys_EnterCriticalSection(CRITSECT_COM_ERROR);
     if (com_errorEntered)
     {
