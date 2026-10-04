@@ -21,6 +21,7 @@ extern uint32_t g_switchRawFileNameToken;
 extern uint32_t g_switchRawFileBufferToken;
 extern uint32_t g_switchRawFileB4BeforeName;
 extern uint32_t g_switchRawFileB4AfterName;
+extern uint32_t Switch_GetStreamCursorOffset(uint32_t index);
 #endif
 
 
@@ -383,10 +384,7 @@ void __cdecl DB_LoadSwitchSerialized(void *dst, uint32_t size)
         std::snprintf(
             trace + written,
             sizeof(trace) - static_cast<size_t>(written),
-            " zlib_in=%llu out=%llu avail_in=%u\n",
-            static_cast<unsigned long long>(g_load.stream.total_in),
-            static_cast<unsigned long long>(g_load.stream.total_out),
-            static_cast<unsigned>(g_load.stream.avail_in));
+            "\n");
         Switch_LogWrite(trace);
     }
 #endif
@@ -428,11 +426,7 @@ void __cdecl DB_LoadSwitchSerialized(void *dst, uint32_t size)
         std::snprintf(
             trace + written,
             sizeof(trace) - static_cast<size_t>(written),
-            " zlib_in=%llu out=%llu avail_in=%u next_in=%p\n",
-            static_cast<unsigned long long>(g_load.stream.total_in),
-            static_cast<unsigned long long>(g_load.stream.total_out),
-            static_cast<unsigned>(g_load.stream.avail_in),
-            static_cast<const void *>(g_load.stream.next_in));
+            "\n");
         Switch_LogWrite(trace);
     }
 #endif
