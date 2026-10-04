@@ -1092,9 +1092,16 @@ void __cdecl Com_Init(char* commandLine)
         Sys_Error(va("Error during initialization:\n%s\n", com_errorMessage));
     }
     Com_Init_Try_Block_Function(commandLine);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] Com_Init: after try block\n");
+    Switch_LogWrite("[KisakCOD][BOOT] Com_Init: before startup commands\n");
+#endif
     v3 = (jmp_buf *)Sys_GetValue(2);
     if (!setjmp(*v3))
         Com_AddStartupCommands();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] Com_Init: after startup commands\n");
+#endif
     if (com_errorEntered)
         Com_ErrorCleanup();
 
@@ -1109,11 +1116,24 @@ void __cdecl Com_Init(char* commandLine)
             {
                 Sys_Error(va("Error during initialization:\n%s\n", com_errorMessage));
             }
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][BOOT] Com_Init: before final hunk-user startup\n");
+#endif
             if (!cls.rendererStarted)
                 CL_InitRenderer();
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][BOOT] Com_Init: after renderer check\n");
+            Switch_LogWrite("[KisakCOD][BOOT] Com_Init: before CL_StartHunkUsers\n");
+#endif
             R_BeginRemoteScreenUpdate();
             CL_StartHunkUsers();
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][BOOT] Com_Init: after CL_StartHunkUsers\n");
+#endif
             R_EndRemoteScreenUpdate();
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][BOOT] Com_Init: after final hunk-user startup\n");
+#endif
         }
     }
 }
