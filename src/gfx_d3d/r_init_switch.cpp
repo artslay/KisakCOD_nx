@@ -101,6 +101,10 @@ void R_BeginRegistration(vidConfig_t *out) {
     if (out)
         *out = vidConfig;
     s_registered = true;
+    // The shared renderer bootstrap enters this registration phase owning the
+    // main-thread/render-thread handoff. Switch bypasses the D3D hardware path,
+    // so initialize the ownership bit explicitly before releasing it.
+    r_glob.haveThreadOwnership = 1;
     r_glob.startedRenderThread = 1;
     R_ReleaseThreadOwnership();
 }
