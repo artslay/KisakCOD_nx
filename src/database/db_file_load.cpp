@@ -686,6 +686,13 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
     }
 
     XAsset *var = varXAsset;
+#ifdef __SWITCH__
+    g_switchPreviousAssetIndex = -1;
+    g_switchPreviousAssetRawType = 0;
+    g_switchPreviousAssetHeader = 0;
+    g_switchPreviousAssetB4Start = 0;
+    g_switchPreviousAssetB4End = 0;
+#endif
     for (int32_t i = 0; i < count; ++i)
     {
         const SerializedXAsset &serialized =
@@ -816,6 +823,13 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
 #endif
 
 #ifdef __SWITCH__
+        g_switchCurrentAssetB4Start =
+            (g_streamBlocks && g_streamBlocks[4].data &&
+             g_streamPosArray[4])
+                ? static_cast<int32_t>(
+                    g_streamPosArray[4] - g_streamBlocks[4].data)
+                : 0;
+
         uint32_t preStreamIndex = 0;
         const uint8_t *preStreamPos = nullptr;
         if (traceStreamWindow)
@@ -865,6 +879,18 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
         Load_XAssetHeader(0);
 
 #ifdef __SWITCH__
+        g_switchPreviousAssetIndex = i;
+        g_switchPreviousAssetRawType = serialized.type;
+        g_switchPreviousAssetHeader = serialized.header;
+        g_switchPreviousAssetB4Start =
+            static_cast<uint32_t>(g_switchCurrentAssetB4Start);
+        g_switchPreviousAssetB4End =
+            (g_streamBlocks && g_streamBlocks[4].data &&
+             g_streamPosArray[4])
+                ? static_cast<uint32_t>(
+                    g_streamPosArray[4] - g_streamBlocks[4].data)
+                : 0u;
+
         if (traceUiAsset)
         {
             const uint8_t *stream0Pos = g_streamPosIndex == 0
