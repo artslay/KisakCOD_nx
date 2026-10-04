@@ -1674,7 +1674,7 @@ void __cdecl MdlPrvDrawOverlayGamepad()
         if (g_mdlprv.system.walkaboutActive)
         {
             CG_DrawSmallDevStringColor(&scrPlaceFull, 300.0, 0.0, (char*)"Walkabout Mode", colorRed, 0); // alignment guess 0
-            ((void(__fastcall *)(ButtonNames, double))MdlPrvPrintHelpLine)(BTN_WALKABOUT_EXIT, 20.0);
+            ((void (*)(ButtonNames, double))MdlPrvPrintHelpLine)(BTN_WALKABOUT_EXIT, 20.0);
             return;
         }
         if (g_mdlprv.system.uiModeGPad == MDLPRVMODE_FREE)
