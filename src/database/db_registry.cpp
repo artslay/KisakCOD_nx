@@ -991,6 +991,26 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
         type == ASSET_TYPE_MATERIAL && name && !I_stricmp(name, "$default");
 #endif
 
+#ifdef __SWITCH__
+    const bool traceSoundDefaultLookup =
+        type == ASSET_TYPE_SOUND || type == ASSET_TYPE_LOADED_SOUND;
+    if (traceSoundDefaultLookup)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH SOUND DEFAULT] lookup type=%u name=%s hash=%u bucket=%u asset=%d raw=%u header=%08x\n",
+            static_cast<unsigned>(type),
+            name ? name : "<null>",
+            name ? DB_HashForName(name, type) : 0u,
+            name ? static_cast<unsigned>(db_hashTable[DB_HashForName(name, type)]) : 0u,
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<unsigned>(g_switchCurrentAssetHeader));
+        Switch_LogWrite(trace);
+    }
+#endif
 
     // Match the upstream DB hash access pattern: readers may inspect the table
     // concurrently, but creation/linking requires the write lock.
@@ -1043,6 +1063,8 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
 
 
 #ifdef __SWITCH__
+    if (traceSoundDefaultLookup)
+        Switch_LogWrite("[SWITCH SOUND DEFAULT] before DB_CreateDefaultEntry\n");
     if (traceDefaultMaterial)
         Switch_LogWrite("[SWITCH DBLOOKUP] before DB_CreateDefaultEntry\n");
 #endif
@@ -1671,6 +1693,27 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         if (assetEntryIndex >= 0x8000)
             return 0;
         assetEntry = &g_assetEntryPool[assetEntryIndex];
+#ifdef __SWITCH__
+        if (traceSoundDefault)
+        {
+            const XAssetType candidateType = assetEntry->entry.asset.type;
+            const char *candidateName = nullptr;
+            if (candidateType < ASSET_TYPE_COUNT && assetEntry->entry.asset.header.data)
+                candidateName = DB_GetXAssetName(&assetEntry->entry.asset);
+
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[SWITCH SOUND DEFAULT] candidate idx=%u type=%u name=%s nextHash=%u header=%p\n",
+                static_cast<unsigned>(assetEntryIndex),
+                static_cast<unsigned>(candidateType),
+                candidateName ? candidateName : "<null>",
+                static_cast<unsigned>(assetEntry->entry.nextHash),
+                static_cast<void *>(assetEntry->entry.asset.header.data));
+            Switch_LogWrite(trace);
+        }
+#endif
         if (assetEntry->entry.asset.type == type)
         {
             XAssetName = DB_GetXAssetName(&assetEntry->entry.asset);
@@ -1861,6 +1904,8 @@ XAssetHeader __cdecl DB_FindXAssetDefaultHeaderInternal(XAssetType type)
     XAssetEntryPoolEntry *assetEntry; // [esp+10h] [ebp-4h]
 #ifdef __SWITCH__
     uint32_t guard = 0;
+    const bool traceSoundDefault =
+        type == ASSET_TYPE_SOUND || type == ASSET_TYPE_LOADED_SOUND;
 #endif
 
     name = g_defaultAssetName[type];
@@ -1870,6 +1915,21 @@ XAssetHeader __cdecl DB_FindXAssetDefaultHeaderInternal(XAssetType type)
         g_switchDbStage = "asset/default_bucket";
 #endif
     const uint32_t bucket = db_hashTable[hash];
+#ifdef __SWITCH__
+    if (traceSoundDefault)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH SOUND DEFAULT] internal type=%u name=%s hash=%u bucket=%u\n",
+            static_cast<unsigned>(type),
+            name ? name : "<null>",
+            hash,
+            bucket);
+        Switch_LogWrite(trace);
+    }
+#endif
     for (assetEntryIndex = bucket; ; assetEntryIndex = assetEntry->entry.nextHash)
     {
         if (!assetEntryIndex)
