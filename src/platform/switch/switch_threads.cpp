@@ -337,10 +337,7 @@ void __cdecl Sys_ResetWorkerCmdEvent()
     ResetSwitchEvent(g_workerCmdEvent);
 }
 
-int __cdecl Sys_WaitBackendEvent()
-{
-    return WaitSwitchEvent(g_workerCmdEvent, 0) ? 1 : 0;
-}
+int __cdecl Sys_WaitBackendEvent() { return 1; }
 
 void __cdecl Sys_WaitForWorkerCmd()
 {
