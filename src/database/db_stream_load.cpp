@@ -355,6 +355,42 @@ void __cdecl DB_LoadSwitchSerialized(void *dst, uint32_t size)
 
     uint8_t *streamPos = DB_GetStreamPos();
 
+#ifdef __SWITCH__
+    const bool traceWeapon4728MaterialSource =
+        g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u &&
+        g_streamPosIndex == 0 &&
+        Switch_GetStreamCursorOffset(0) == 2184u &&
+        size == 80u;
+
+    if (traceWeapon4728MaterialSource)
+    {
+        char trace[512];
+        int written = std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][WEAPON4728 SOURCE] pre stream0=2184 bytes=");
+        const uint8_t *pre = streamPos;
+        for (size_t i = 0; i < 16 && written > 0 &&
+             static_cast<size_t>(written) < sizeof(trace); ++i)
+        {
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                "%02x",
+                static_cast<unsigned>(pre[i]));
+        }
+        std::snprintf(
+            trace + written,
+            sizeof(trace) - static_cast<size_t>(written),
+            " zlib_in=%llu out=%llu avail_in=%u\n",
+            static_cast<unsigned long long>(g_load.stream.total_in),
+            static_cast<unsigned long long>(g_load.stream.total_out),
+            static_cast<unsigned>(g_load.stream.avail_in));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     if (traceMenu11Header)
     {
         char trace[256];
@@ -370,6 +406,36 @@ void __cdecl DB_LoadSwitchSerialized(void *dst, uint32_t size)
     }
 
     DB_LoadXFileData(streamPos, size);
+
+#ifdef __SWITCH__
+    if (traceWeapon4728MaterialSource)
+    {
+        char trace[512];
+        int written = std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][WEAPON4728 SOURCE] post stream0=2184 bytes=");
+        const uint8_t *post = streamPos;
+        for (size_t i = 0; i < 16 && written > 0 &&
+             static_cast<size_t>(written) < sizeof(trace); ++i)
+        {
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                "%02x",
+                static_cast<unsigned>(post[i]));
+        }
+        std::snprintf(
+            trace + written,
+            sizeof(trace) - static_cast<size_t>(written),
+            " zlib_in=%llu out=%llu avail_in=%u next_in=%p\n",
+            static_cast<unsigned long long>(g_load.stream.total_in),
+            static_cast<unsigned long long>(g_load.stream.total_out),
+            static_cast<unsigned>(g_load.stream.avail_in),
+            static_cast<const void *>(g_load.stream.next_in));
+        Switch_LogWrite(trace);
+    }
+#endif
 
     if (traceMenu11Header)
     {
