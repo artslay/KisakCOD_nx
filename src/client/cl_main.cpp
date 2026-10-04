@@ -896,6 +896,9 @@ void __cdecl CL_InitRenderer()
 {
     iassert(!cls.rendererStarted);
     cls.rendererStarted = 1;
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][BOOT] Initializing graphics: OpenGL/EGL via Mesa Zink (Vulkan/NVK)\n");
+#endif
     R_BeginRegistration(&cls.vidConfig);
     ScrPlace_SetupUnsafeViewport(&scrPlaceFullUnsafe, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
     ScrPlace_SetupViewport(&scrPlaceFull, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
