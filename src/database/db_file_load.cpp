@@ -771,10 +771,10 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
 
         uint32_t runtimeType = serialized.type;
 #ifdef KISAK_SP
-        // SP inserts PixelShader at runtime enum index 4. The fastfile keeps
-        // the original serialized enum, so raw type 4 and every later type
-        // maps one slot higher in the native runtime enum.
-        if (runtimeType >= 4)
+        // SP inserts PixelShader after Material at runtime enum index 5.
+        // Serialized fastfiles keep the original enum, so only raw type 5
+        // and later values map one slot higher.
+        if (runtimeType >= 5)
             ++runtimeType;
 #endif
 
