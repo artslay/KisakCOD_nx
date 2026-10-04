@@ -83,7 +83,10 @@ EGLSurface s_surface = EGL_NO_SURFACE;
 EGLConfig s_config = nullptr;
 EGLContext s_databaseContext = EGL_NO_CONTEXT;
 EGLSurface s_databaseSurface = EGL_NO_SURFACE;
+EGLContext s_renderContext = EGL_NO_CONTEXT;
+EGLSurface s_mainSurface = EGL_NO_SURFACE;
 bool s_databaseContextLogged = false;
+bool s_renderContextLogged = false;
 }
 #endif
 
@@ -130,6 +133,12 @@ void OpenGLBackend::Shutdown()
         if (s_databaseSurface != EGL_NO_SURFACE)
             eglDestroySurface(s_display, s_databaseSurface);
 
+        if (s_renderContext != EGL_NO_CONTEXT)
+            eglDestroyContext(s_display, s_renderContext);
+
+        if (s_mainSurface != EGL_NO_SURFACE)
+            eglDestroySurface(s_display, s_mainSurface);
+
         eglMakeCurrent(s_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 
         if (s_context != EGL_NO_CONTEXT)
@@ -147,7 +156,10 @@ void OpenGLBackend::Shutdown()
     s_config = nullptr;
     s_databaseContext = EGL_NO_CONTEXT;
     s_databaseSurface = EGL_NO_SURFACE;
+    s_renderContext = EGL_NO_CONTEXT;
+    s_mainSurface = EGL_NO_SURFACE;
     s_databaseContextLogged = false;
+    s_renderContextLogged = false;
 #endif
 
     m_window = nullptr;
@@ -573,6 +585,37 @@ bool OpenGLBackend::InitContext(const GfxWindowParms* wndParms)
         glslVersion ? glslVersion : "unknown");
     Switch_LogWrite(trace);
 
+    // GL resources are created during renderer bootstrap on the main thread,
+    // while actual RB_* rendering and Present execute on the backend thread.
+    // Keep the bootstrap context current on a 1x1 pbuffer and give the backend
+    // thread a shared context that owns the real window surface.
+    static const EGLint pbufferAttributes[] =
+    {
+        EGL_WIDTH, 1,
+        EGL_HEIGHT, 1,
+        EGL_NONE
+    };
+    s_mainSurface = eglCreatePbufferSurface(s_display, s_config, pbufferAttributes);
+    if (s_mainSurface == EGL_NO_SURFACE)
+    {
+        m_lastError = "eglCreatePbufferSurface(main) failed";
+        return false;
+    }
+
+    s_renderContext = eglCreateContext(
+        s_display, s_config, s_context, contextAttributes);
+    if (s_renderContext == EGL_NO_CONTEXT)
+    {
+        m_lastError = "eglCreateContext(render) failed";
+        return false;
+    }
+
+    if (eglMakeCurrent(s_display, s_mainSurface, s_mainSurface, s_context) == EGL_FALSE)
+    {
+        m_lastError = "eglMakeCurrent(main pbuffer) failed";
+        return false;
+    }
+
     return true;
 #else
     m_lastError = "OpenGL backend is only initialized on Switch";
@@ -581,6 +624,44 @@ bool OpenGLBackend::InitContext(const GfxWindowParms* wndParms)
 }
 
 #ifdef __SWITCH__
+
+bool Switch_GLBeginRenderContext()
+{
+    if (s_display == EGL_NO_DISPLAY ||
+        s_renderContext == EGL_NO_CONTEXT ||
+        s_surface == EGL_NO_SURFACE)
+        return false;
+
+    if (eglBindAPI(EGL_OPENGL_API) != EGL_TRUE)
+        return false;
+
+    if (eglGetCurrentContext() == s_renderContext)
+        return true;
+
+    if (eglGetCurrentContext() != EGL_NO_CONTEXT)
+        return false;
+
+    const EGLBoolean current = eglMakeCurrent(
+        s_display,
+        s_surface,
+        s_surface,
+        s_renderContext);
+
+    if (current == EGL_TRUE && !s_renderContextLogged)
+    {
+        char trace[192];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[SWITCH GLCTX] render ready ctx=%p dpy=%p surf=%p\n",
+            (void *)s_renderContext,
+            (void *)s_display,
+            (void *)s_surface);
+        Switch_LogWrite(trace);
+        s_renderContextLogged = true;
+    }
+
+    return current == EGL_TRUE;
+}
 
 bool Switch_GLBeginDatabaseContext()
 {
