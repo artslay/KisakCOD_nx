@@ -62,14 +62,33 @@ static SwitchEvent g_cinematicsHostOutstandingRequestEvent;
 // the timeout predicate; use a real Switch event instead of a tight yield loop.
 static SwitchEvent g_workerCmdEvent;
 
+// Renderer synchronization mirrors the original Win32 SMP backend contract:
+// an atomic command-data handoff plus backend/ownership events.
+static SwitchEvent g_renderPausedEvent;
+static SwitchEvent g_renderCompletedEvent;
+static SwitchEvent g_noThreadOwnershipEvent;
+static SwitchEvent g_rendererRunningEvent;
+static SwitchEvent g_backendEvent[2];
+static std::atomic<void *> g_smpData{nullptr};
+static int32_t g_renderPausedCount = 0;
+static bool g_renderWakeLogged = false;
+static bool g_renderDataLogged = false;
+
 static bool WaitSwitchEvent(SwitchEvent &event, uint32_t timeoutMsec)
 {
     std::unique_lock<std::mutex> lock(event.mutex);
     const bool ready = event.cv.wait_for(
         lock, std::chrono::milliseconds(timeoutMsec), [&] { return event.signaled; });
-    if (ready)
+    if (ready && !event.manual)
         event.signaled = false;
     return ready;
+}
+
+static void InitSwitchEvent(SwitchEvent &event, bool manualReset, bool initialState)
+{
+    std::lock_guard<std::mutex> lock(event.mutex);
+    event.manual = manualReset;
+    event.signaled = initialState;
 }
 
 static void SetSwitchEvent(SwitchEvent &event)
@@ -229,10 +248,20 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
 
 char __cdecl Sys_SpawnRenderThread(void (__cdecl *function)(uint32_t))
 {
-    static void *renderCompleted = nullptr;
-    if (!renderCompleted) Sys_CreateEvent(true, true, &renderCompleted);
+    InitSwitchEvent(g_renderPausedEvent, false, false);
+    InitSwitchEvent(g_renderCompletedEvent, true, true);
+    InitSwitchEvent(g_noThreadOwnershipEvent, true, false);
+    InitSwitchEvent(g_rendererRunningEvent, true, true);
+    InitSwitchEvent(g_backendEvent[0], true, false);
+    InitSwitchEvent(g_backendEvent[1], false, false);
+
+    g_smpData.store(nullptr, std::memory_order_release);
+    g_renderPausedCount = 0;
+    g_renderWakeLogged = false;
+    g_renderDataLogged = false;
+
     Sys_CreateThread(function, THREAD_CONTEXT_BACKEND);
-    return 1;
+    return threadHandle[THREAD_CONTEXT_BACKEND] != nullptr ? 1 : 0;
 }
 
 char __cdecl Sys_SpawnDatabaseThread(void (__cdecl *function)(uint32_t))
@@ -337,7 +366,10 @@ void __cdecl Sys_ResetWorkerCmdEvent()
     ResetSwitchEvent(g_workerCmdEvent);
 }
 
-int __cdecl Sys_WaitBackendEvent() { return 1; }
+int __cdecl Sys_WaitBackendEvent()
+{
+    return WaitSwitchEvent(g_backendEvent[1], 0) ? 1 : 0;
+}
 
 void __cdecl Sys_WaitForWorkerCmd()
 {
@@ -349,19 +381,111 @@ void __cdecl Sys_WaitUpdateNonDependentEffectsCompleted() {}
 void __cdecl Sys_SetUpdateNonDependentEffectsEvent() {}
 void __cdecl Sys_ResetUpdateNonDependentEffectsEvent() {}
 void __cdecl Sys_SuspendOtherThreads() {}
-void __cdecl Sys_ReleaseThreadOwnership() {}
-void __cdecl Sys_WaitForMainThread() {}
-int __cdecl Sys_IsMainThreadReady() { return 1; }
-bool __cdecl Sys_FinishRenderer() { return true; }
-int __cdecl Sys_IsRendererReady() { return 1; }
-int __cdecl Sys_RendererReady() { return 1; }
-void *__cdecl Sys_RendererSleep() { return nullptr; }
-void __cdecl Sys_RenderCompleted() {}
-void __cdecl Sys_FrontEndSleep() {}
-void __cdecl Sys_WakeRenderer(void *) {}
-void __cdecl Sys_NotifyRenderer() {}
-void __cdecl Sys_StopRenderer() {}
-void __cdecl Sys_StartRenderer() {}
+void __cdecl Sys_ReleaseThreadOwnership()
+{
+    SetSwitchEvent(g_noThreadOwnershipEvent);
+}
+void __cdecl Sys_WaitForMainThread()
+{
+    std::unique_lock<std::mutex> lock(g_noThreadOwnershipEvent.mutex);
+    g_noThreadOwnershipEvent.cv.wait(
+        lock, [] { return g_noThreadOwnershipEvent.signaled; });
+}
+int __cdecl Sys_IsMainThreadReady()
+{
+    std::lock_guard<std::mutex> lock(g_noThreadOwnershipEvent.mutex);
+    return g_noThreadOwnershipEvent.signaled ? 1 : 0;
+}
+bool __cdecl Sys_FinishRenderer()
+{
+    std::lock_guard<std::mutex> lock(g_noThreadOwnershipEvent.mutex);
+    return !g_noThreadOwnershipEvent.signaled;
+}
+int __cdecl Sys_IsRendererReady()
+{
+    return g_smpData.load(std::memory_order_acquire) != nullptr;
+}
+int __cdecl Sys_RendererReady() { return Sys_IsRendererReady(); }
+void *__cdecl Sys_RendererSleep()
+{
+    void *data = g_smpData.exchange(nullptr, std::memory_order_acq_rel);
+    if (data && !g_renderDataLogged)
+    {
+        char trace[160];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[SWITCH RTHREAD] command data received data=%p\\n",
+            data);
+        Sys_Print(trace);
+        g_renderDataLogged = true;
+    }
+    return data;
+}
+void __cdecl Sys_RenderCompleted()
+{
+    SetSwitchEvent(g_renderCompletedEvent);
+    SetSwitchEvent(g_workerCmdEvent);
+}
+void __cdecl Sys_FrontEndSleep()
+{
+    {
+        std::unique_lock<std::mutex> lock(g_noThreadOwnershipEvent.mutex);
+        g_noThreadOwnershipEvent.cv.wait(
+            lock, [] { return g_noThreadOwnershipEvent.signaled; });
+        g_noThreadOwnershipEvent.signaled = false;
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(g_rendererRunningEvent.mutex);
+        g_rendererRunningEvent.cv.wait(
+            lock, [] { return g_rendererRunningEvent.signaled; });
+    }
+
+    SetSwitchEvent(g_backendEvent[1]);
+    --g_renderPausedCount;
+    WaitSwitchEvent(g_renderPausedEvent, UINT32_MAX - 1);
+}
+void __cdecl Sys_WakeRenderer(void *data)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_renderCompletedEvent.mutex);
+        g_renderCompletedEvent.signaled = false;
+    }
+
+    void *expected = nullptr;
+    const bool stored = g_smpData.compare_exchange_strong(
+        expected, data, std::memory_order_acq_rel, std::memory_order_acquire);
+    iassert(stored);
+
+    if (!g_renderWakeLogged)
+    {
+        char trace[160];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[SWITCH RTHREAD] command handoff data=%p\\n",
+            data);
+        Sys_Print(trace);
+        g_renderWakeLogged = true;
+    }
+
+    SetSwitchEvent(g_backendEvent[1]);
+    SetSwitchEvent(g_workerCmdEvent);
+}
+void __cdecl Sys_NotifyRenderer()
+{
+    SetSwitchEvent(g_backendEvent[1]);
+}
+void __cdecl Sys_StopRenderer()
+{
+    const int32_t newCount = ++g_renderPausedCount;
+    iassert(newCount <= 1);
+    ResetSwitchEvent(g_rendererRunningEvent);
+    SetSwitchEvent(g_renderPausedEvent);
+}
+void __cdecl Sys_StartRenderer()
+{
+    SetSwitchEvent(g_rendererRunningEvent);
+}
 bool __cdecl Sys_IsRenderThread() { return g_threadContext == THREAD_CONTEXT_BACKEND; }
 bool __cdecl Sys_IsDatabaseThread() { return g_threadContext == THREAD_CONTEXT_DATABASE; }
 bool __cdecl Sys_IsMainThread() { return g_threadContext == THREAD_CONTEXT_MAIN; }
