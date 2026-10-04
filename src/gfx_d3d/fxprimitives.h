@@ -150,7 +150,11 @@ struct FxElem // sizeof=0x28
     //$A58BA6DA60295001BBA5E9F807131CF1 ___u8;
     union
     {
+#ifdef KISAK_SWITCH
+        uintptr_t physObjId;
+#else
         int physObjId;
+#endif
         float origin[3];
     };
     //FxElem::<unnamed_type_u> u;
