@@ -72,7 +72,7 @@ int __cdecl Com_BuildPlayerProfilePath_Internal(
 bool __cdecl Com_HasPlayerProfile()
 {
     iassert( com_playerProfile );
-    return *(char *)com_playerProfile->current.integer != 0;
+    return com_playerProfile->current.string && com_playerProfile->current.string[0] != 0;
 }
 
 
