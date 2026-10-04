@@ -69,7 +69,13 @@ void R_CalcGammaRamp(GfxGammaRamp *ramp) {
 void R_GammaCorrect(uint8_t *, int) {}
 void SetGfxConfig(const GfxConfiguration *config) { if (config) gfxCfg = *config; }
 
-void R_InitThreads() { R_InitRenderThread(); }
+void R_InitThreads()
+{
+    // Match the shared renderer bootstrap now that Switch reports its real
+    // available CPU mask: start both the backend and renderer worker threads.
+    R_InitRenderThread();
+    R_InitWorkerThreads();
+}
 static int g_remoteScreenUpdateNesting = 0;
 
 
