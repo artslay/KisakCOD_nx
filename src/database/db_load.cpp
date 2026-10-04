@@ -15013,13 +15013,62 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
     {
         if (varWeaponDef->bounceSound == (snd_alias_list_t **)-1)
         {
-            varWeaponDef->bounceSound = (snd_alias_list_t **)AllocLoad_FxElemVisStateSample();
+#ifdef __SWITCH__
+            // bounceSound is a serialized array of 29 four-byte
+            // SndAliasCustom pointer tokens. On ARM64 each native union is
+            // pointer-sized (8 bytes), so the serialized packed array cannot
+            // be used directly as the native array. Consume all serialized
+            // tokens first, then process their nested payloads exactly like
+            // the original/iOS loader.
+            constexpr size_t kBounceSoundCount = 29;
+
+            uint32_t serializedTokens[kBounceSoundCount]{};
+            DB_LoadSwitchSerialized(
+                serializedTokens,
+                static_cast<uint32_t>(
+                    sizeof(serializedTokens)));
+
+            snd_alias_list_t **nativeBounce =
+                reinterpret_cast<snd_alias_list_t **>(
+                    Hunk_Alloc(
+                        static_cast<uint32_t>(
+                            sizeof(snd_alias_list_t *) *
+                            kBounceSoundCount),
+                        "SwitchWeaponBounceSound",
+                        22));
+            if (!nativeBounce)
+            {
+                varWeaponDef->bounceSound = nullptr;
+            }
+            else
+            {
+                for (size_t i = 0; i < kBounceSoundCount; ++i)
+                {
+                    nativeBounce[i] =
+                        reinterpret_cast<snd_alias_list_t *>(
+                            static_cast<uintptr_t>(
+                                serializedTokens[i]));
+                }
+
+                varWeaponDef->bounceSound = nativeBounce;
+                varsnd_alias_list_name = nativeBounce;
+                for (size_t i = 0; i < kBounceSoundCount; ++i)
+                {
+                    varsnd_alias_list_name = &nativeBounce[i];
+                    Load_snd_alias_list_name(0);
+                }
+            }
+#else
+            varWeaponDef->bounceSound =
+                (snd_alias_list_t **)AllocLoad_FxElemVisStateSample();
             varsnd_alias_list_name = varWeaponDef->bounceSound;
             Load_snd_alias_list_nameArray(1, 29);
+#endif
         }
         else
         {
-            DB_ConvertOffsetToPointer((uint32_t*)&varWeaponDef->bounceSound);
+            DB_ConvertOffsetToPointer(
+                (uint32_t *)&varWeaponDef->bounceSound);
         }
     }
     varFxEffectDefHandle = &varWeaponDef->viewShellEjectEffect;
