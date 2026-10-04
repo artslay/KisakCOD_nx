@@ -896,20 +896,58 @@ void __cdecl CL_InitRenderer()
 {
     iassert(!cls.rendererStarted);
     cls.rendererStarted = 1;
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] before R_BeginRegistration\n");
+#endif
     R_BeginRegistration(&cls.vidConfig);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] after R_BeginRegistration\n");
+    Switch_LogWrite("[KisakCOD][CLINIT] before ScrPlace_SetupUnsafeViewport\n");
+#endif
     ScrPlace_SetupUnsafeViewport(&scrPlaceFullUnsafe, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] after ScrPlace_SetupUnsafeViewport\n");
+    Switch_LogWrite("[KisakCOD][CLINIT] before ScrPlace_SetupViewport full\n");
+#endif
     ScrPlace_SetupViewport(&scrPlaceFull, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] after ScrPlace_SetupViewport full\n");
+    Switch_LogWrite("[KisakCOD][CLINIT] before ScrPlace_SetupViewport view\n");
+#endif
     ScrPlace_SetupViewport(scrPlaceView, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] after ScrPlace_SetupViewport view\n");
+    Switch_LogWrite("[KisakCOD][CLINIT] before Material_RegisterHandle white\n");
+#endif
     cls.whiteMaterial = Material_RegisterHandle("white", IMAGE_TRACK_UI);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] after Material_RegisterHandle white\n");
+    Switch_LogWrite("[KisakCOD][CLINIT] before Material_RegisterHandle console\n");
+#endif
     cls.consoleMaterial = Material_RegisterHandle("console", IMAGE_TRACK_UI);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] after Material_RegisterHandle console\n");
+    Switch_LogWrite("[KisakCOD][CLINIT] before R_RegisterFont console\n");
+#endif
     cls.consoleFont = R_RegisterFont("fonts/consoleFont", IMAGE_TRACK_UI);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] after R_RegisterFont console\n");
+#endif
     g_console_field_width = cls.vidConfig.displayWidth - 40;
     g_consoleField.charHeight = g_console_char_height;
     g_consoleField.widthInPixels = cls.vidConfig.displayWidth - 40;
     g_consoleField.fixedSize = 1;
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] before StatMon_Reset\n");
+#endif
     StatMon_Reset();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] after StatMon_Reset\n");
+    Switch_LogWrite("[KisakCOD][CLINIT] before Con_InitClientAssets\n");
+#endif
     Con_InitClientAssets();
 #ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CLINIT] after Con_InitClientAssets\n");
     // The renderer/EGL context is ready here. Release the startup console and
     // diagnostic log so the next frame is presented by the game renderer.
     Switch_LogShutdown();
