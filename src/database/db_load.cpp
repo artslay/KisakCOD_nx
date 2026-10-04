@@ -1535,11 +1535,10 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
     // that 4-byte stream allocation exactly like the original loader; the
     // native pointer-to-pointer lives separately in Hunk memory.
     const uint8_t *nestedStreamPos = DB_GetStreamPos();
-    // Load_XString(1) on the original 32-bit loader reads the nested
-    // serialized pointer at the current cursor without inserting alignment.
-    // Aligning here on AArch64 can skip 1-3 bytes between consecutive inline
-    // XStringPtr payloads and desynchronize every following virtual-stream
-    // read (notably the 29-entry WeaponDef bounceSound array).
+    // The outer -1 form reserves an aligned serialized pointer slot before
+    // Load_XString(1) reads its nested 32-bit token. This matches the original
+    // CoD4 loader and preserves the DWORD alignment of inline XStringPtr data.
+    DB_AllocStreamPos(3);
     uint32_t nested = 0;
     DB_LoadSwitchSerialized(&nested, sizeof(nested));
 
@@ -13697,8 +13696,57 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
 {
 #ifdef __SWITCH__
     iassert(atStreamStart);
+    const uint8_t *weaponStreamStart = DB_GetStreamPos();
+    const uint32_t weaponStreamStartOffset =
+        Switch_GetStreamCursorOffset(0);
+    const uint64_t weaponXfileStart =
+        DB_GetXFileUncompressedOffset();
+
     const uint8_t *weaponStreamEnd = DB_GetStreamPos();
     Switch_TranslateWeaponDefSerialized(varWeaponDef);
+
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        char trace[1200];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][WEAPON4728 ROOT] stream0=%08x->%08x array0=%p->%p xfile=%llu->%llu reticleRaw=%08x",
+            weaponStreamStartOffset,
+            Switch_GetStreamCursorOffset(0),
+            static_cast<const void *>(g_streamPosArray[0]),
+            static_cast<const void *>(DB_GetStreamPos()),
+            static_cast<unsigned long long>(weaponXfileStart),
+            static_cast<unsigned long long>(
+                DB_GetXFileUncompressedOffset()),
+            static_cast<unsigned>(
+                static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(
+                        varWeaponDef->reticleCenter))));
+        const uint8_t *rootTail =
+            weaponStreamStart &&
+            g_streamBlocks &&
+            g_streamBlocks[0].data
+                ? weaponStreamStart + 0
+                : nullptr;
+        (void)rootTail;
+        const uint8_t *translated =
+            reinterpret_cast<const uint8_t *>(varWeaponDef);
+        int written = std::snprintf(
+            trace + std::strlen(trace),
+            sizeof(trace) - std::strlen(trace),
+            " native=%p nativeSize=%zu",
+            static_cast<const void *>(translated),
+            sizeof(*varWeaponDef));
+        std::snprintf(
+            trace + std::strlen(trace),
+            sizeof(trace) - std::strlen(trace),
+            "\n");
+        Sys_Print(trace);
+    }
+#endif
     const bool switchTraceWeapon1506 =
         g_switchCurrentAssetIndex == 1506 &&
         g_switchCurrentAssetRawType == 23u;
@@ -14046,6 +14094,37 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
 #endif
     varMaterialHandle = &varWeaponDef->reticleCenter;
 #ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][WEAPON4728 RETICLE PRE] stream=%u b0=%08x array0Off=%08x b4=%08x xfile=%llu pos=%p token=%08x",
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            g_streamBlocks && g_streamBlocks[0].data &&
+                    g_streamPosArray[0] >= g_streamBlocks[0].data
+                ? static_cast<unsigned>(
+                      g_streamPosArray[0]
+                      - g_streamBlocks[0].data)
+                : UINT32_MAX,
+            Switch_GetStreamCursorOffset(4),
+            static_cast<unsigned long long>(
+                DB_GetXFileUncompressedOffset()),
+            static_cast<const void *>(DB_GetStreamPos()),
+            static_cast<unsigned>(
+                static_cast<uint32_t>(
+                    reinterpret_cast<uintptr_t>(
+                        varWeaponDef->reticleCenter))));
+        std::snprintf(
+            trace + std::strlen(trace),
+            sizeof(trace) - std::strlen(trace),
+            "\n");
+        Sys_Print(trace);
+    }
+#endif
     if (g_switchCurrentAssetIndex == 4728 &&
         g_switchCurrentAssetRawType == 23u)
     {
