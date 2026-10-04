@@ -635,6 +635,7 @@ void __cdecl DynEnt_LoadEntities(MemoryFile *memFile)
             MemFile_ReadData(memFile, sizeof(client->health), (uint8_t *)&client->health);
 
             uint8_t hasPhys = 0;
+            MemFile_ReadData(memFile, 1, &hasPhys);
 #else
         MemFile_ReadData(memFile, sizeof(DynEntityClient) * count, (uint8_t *)cm.dynEntClientList[drawType]);
 
