@@ -31,6 +31,7 @@ static SwitchEvent *AsEvent(void *p) { return static_cast<SwitchEvent *>(p); }
 static std::thread g_threads[THREAD_CONTEXT_COUNT];
 static std::atomic<bool> g_threadAlive[THREAD_CONTEXT_COUNT] = {};
 static thread_local ThreadContext_t g_threadContext = THREAD_CONTEXT_MAIN;
+static thread_local const char *g_switchThreadStage = "thread/bootstrap";
 
 #ifdef KISAK_SP
 int isDoingDatabaseInit = 0;
@@ -99,24 +100,33 @@ uint32_t __cdecl Sys_GetCurrentThreadId() { return ThreadId(); }
 
 void __cdecl Sys_InitMainThread()
 {
+    g_switchThreadStage = "main/init";
     g_threadContext = THREAD_CONTEXT_MAIN;
     threadId[THREAD_CONTEXT_MAIN] = Sys_GetCurrentThreadId();
     threadHandle[THREAD_CONTEXT_MAIN] = nullptr;
     g_switchThreadValues[0] = nullptr;
     g_switchThreadValues[2] = &g_switchJmpBuffer;
+    g_switchThreadStage = "main/ready";
 }
 
 void __cdecl Sys_InitThread(ThreadContext_t context)
 {
+    g_switchThreadStage = "thread/init";
     g_threadContext = context;
     threadId[context] = Sys_GetCurrentThreadId();
     g_switchThreadValues[0] = g_values[context][0];
     g_switchThreadValues[2] = &g_switchJmpBuffer;
+    g_switchThreadStage = "thread/ready";
 }
 
 extern "C" uint32_t Sys_GetSwitchThreadContext()
 {
     return static_cast<uint32_t>(g_threadContext);
+}
+
+extern "C" const char *Sys_GetSwitchThreadStage()
+{
+    return g_switchThreadStage ? g_switchThreadStage : "thread/unknown";
 }
 
 void __cdecl SetThreadName(uint32_t, const char *) {}
@@ -171,14 +181,32 @@ bool __cdecl Sys_WaitForSingleObjectTimeout(void **event, uint32_t msec)
 
 void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_t context)
 {
-    if (g_threads[context].joinable()) g_threads[context].join();
+    g_switchThreadStage = "create/check_context";
+    if (context < 0 || context >= THREAD_CONTEXT_COUNT)
+        std::abort();
+
+    g_switchThreadStage = "create/check_join";
+    if (g_threads[context].joinable())
+    {
+        g_switchThreadStage = "create/join_existing";
+        g_threads[context].join();
+    }
+
+    g_switchThreadStage = "create/set_alive";
     g_threadAlive[context] = true;
+
+    g_switchThreadStage = "create/thread_ctor";
     g_threads[context] = std::thread([function, context] {
         Sys_InitThread(context);
         function((uint32_t)context);
         g_threadAlive[context] = false;
     });
+    g_switchThreadStage = "create/thread_ctor_done";
+
+    g_switchThreadStage = "create/set_handle";
     threadHandle[context] = reinterpret_cast<HANDLE>(&g_threads[context]);
+
+    g_switchThreadStage = "create/done";
 }
 
 char __cdecl Sys_SpawnRenderThread(void (__cdecl *function)(uint32_t))
