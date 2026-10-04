@@ -389,6 +389,10 @@ void R_InitWorkerThreads()
 
 int R_InitWorkerCmds()
 {
+    // No worker command has been queued yet. The command processor uses
+    // INT_MAX as the idle sentinel; leaving this zero-initialized causes the
+    // server start wait to loop forever because WRKCMD_FIRST_FRONTEND is 0.
+    InterlockedExchange(&g_workerCmdMinType, INT_MAX);
     g_workerCmds[WRKCMD_UPDATE_FX_SPOT_LIGHT].buf = (uint8_t *)g_UpdateFxSpotLightBuf;
     g_workerCmds[WRKCMD_UPDATE_FX_SPOT_LIGHT].bufSize = 12;
     g_workerCmds[WRKCMD_UPDATE_FX_SPOT_LIGHT].dataSize = 12;
