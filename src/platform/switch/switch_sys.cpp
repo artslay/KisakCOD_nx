@@ -104,6 +104,12 @@ extern const char * volatile g_switchDbStage;
 extern void * volatile g_switchDbLastAssetResult;
 extern uint32_t volatile g_switchDbLastAssetType;
 extern void * volatile g_switchDbLastPreloadShaders;
+extern volatile int32_t g_switchSkinCacheLoadForRenderer;
+extern volatile uintptr_t g_switchSkinCachePool0;
+extern volatile uintptr_t g_switchSkinCachePool1;
+extern volatile uintptr_t g_switchSkinCacheLastBuffer;
+extern volatile int32_t g_switchSkinCacheCreateCalled;
+extern volatile int32_t g_switchSkinCacheCreateHr;
 }
 extern thread_local const char *g_switchFrameStage;
 extern "C" uint32_t Sys_GetSwitchThreadContext();
@@ -187,6 +193,17 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         g_switchDbLastAssetResult,
         g_switchDbLastAssetType,
         g_switchDbLastPreloadShaders);
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] skincache loadForRenderer=%d pool0=0x%016llx pool1=0x%016llx lastBuffer=0x%016llx createCalled=%d createHr=%d\\n",
+        g_switchSkinCacheLoadForRenderer,
+        static_cast<unsigned long long>(g_switchSkinCachePool0),
+        static_cast<unsigned long long>(g_switchSkinCachePool1),
+        static_cast<unsigned long long>(g_switchSkinCacheLastBuffer),
+        g_switchSkinCacheCreateCalled,
+        g_switchSkinCacheCreateHr);
+    Switch_LogCrashLine(line);
     Switch_LogCrashLine(line);
 
     for (int i = 0; i < 29; i += 2)
