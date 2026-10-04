@@ -803,7 +803,7 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
 #endif
 
         const bool traceStreamWindow =
-            (i >= 1490 && i <= 1506) ||
+            (i >= 1490 && i <= 1531) ||
             (i >= 4505 && i <= 4510);
 
 #ifdef __SWITCH__
@@ -829,12 +829,19 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
 #endif
 
 #ifdef __SWITCH__
-        g_switchCurrentAssetB4Start =
+        const uint32_t liveB4Before =
             (g_streamBlocks && g_streamBlocks[4].data &&
-             g_streamPosArray[4])
-                ? static_cast<int32_t>(
-                    g_streamPosArray[4] - g_streamBlocks[4].data)
-                : 0;
+             g_streamPosIndex == 4 && g_streamPos)
+                ? static_cast<uint32_t>(
+                    g_streamPos - g_streamBlocks[4].data)
+                : ((g_streamBlocks && g_streamBlocks[4].data &&
+                    g_streamPosArray[4])
+                    ? static_cast<uint32_t>(
+                        g_streamPosArray[4] - g_streamBlocks[4].data)
+                    : 0u);
+
+        g_switchCurrentAssetB4Start =
+            static_cast<int32_t>(liveB4Before);
 
         uint32_t preStreamIndex = 0;
         const uint8_t *preStreamPos = nullptr;
@@ -856,8 +863,12 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
                 serialized.header,
                 preStreamIndex,
                 static_cast<const void *>(preStreamPos),
-                switchBlockOffset(0, g_streamPosArray[0]),
-                switchBlockOffset(4, g_streamPosArray[4]),
+                switchBlockOffset(
+                    0,
+                    g_streamPosIndex == 0
+                        ? g_streamPos
+                        : g_streamPosArray[0]),
+                liveB4Before,
                 static_cast<unsigned long long>(g_load.stream.total_out));
             Switch_LogWrite(trace);
         }
@@ -890,12 +901,18 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
         g_switchPreviousAssetHeader = serialized.header;
         g_switchPreviousAssetB4Start =
             static_cast<uint32_t>(g_switchCurrentAssetB4Start);
-        g_switchPreviousAssetB4End =
+        const uint32_t liveB4After =
             (g_streamBlocks && g_streamBlocks[4].data &&
-             g_streamPosArray[4])
+             g_streamPosIndex == 4 && g_streamPos)
                 ? static_cast<uint32_t>(
-                    g_streamPosArray[4] - g_streamBlocks[4].data)
-                : 0u;
+                    g_streamPos - g_streamBlocks[4].data)
+                : ((g_streamBlocks && g_streamBlocks[4].data &&
+                    g_streamPosArray[4])
+                    ? static_cast<uint32_t>(
+                        g_streamPosArray[4] - g_streamBlocks[4].data)
+                    : 0u);
+
+        g_switchPreviousAssetB4End = liveB4After;
 
         if (traceUiAsset)
         {
@@ -939,8 +956,12 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
                 serialized.header,
                 postStreamIndex,
                 static_cast<const void *>(postStreamPos),
-                switchBlockOffset(0, g_streamPosArray[0]),
-                switchBlockOffset(4, g_streamPosArray[4]),
+                switchBlockOffset(
+                    0,
+                    postStreamIndex == 0
+                        ? postStreamPos
+                        : g_streamPosArray[0]),
+                liveB4After,
                 postStreamPos &&
                 preStreamPos &&
                 postStreamIndex == preStreamIndex
