@@ -171,6 +171,48 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
     iassert(g_load.f);
     iassert(!g_load.stream.avail_out);
 
+#ifdef __SWITCH__
+    const bool switchTraceWeapon4728 =
+        g_switchCurrentAssetIndex == 4728 &&
+        g_switchCurrentAssetRawType == 23u;
+    if (switchTraceWeapon4728 && g_switchWeapon4728LastAsset != 4728)
+    {
+        g_switchWeapon4728LastAsset = 4728;
+        g_switchWeapon4728InflateBytes = 0;
+        g_switchWeapon4728ReadCount = 0;
+    }
+    const uint64_t switchWeapon4728SeqBefore =
+        switchTraceWeapon4728 ? g_switchWeapon4728InflateBytes : 0;
+    const uint32_t switchWeapon4728Stream = g_streamPosIndex;
+    uint32_t switchWeapon4728Offset = UINT32_MAX;
+    if (switchTraceWeapon4728 &&
+        g_streamBlocks &&
+        switchWeapon4728Stream < ARRAY_COUNT(g_streamPosArray) &&
+        g_streamBlocks[switchWeapon4728Stream].data)
+    {
+        const uintptr_t base = reinterpret_cast<uintptr_t>(
+            g_streamBlocks[switchWeapon4728Stream].data);
+        const uintptr_t cur = reinterpret_cast<uintptr_t>(pos);
+        if (cur >= base &&
+            cur - base <= g_streamBlocks[switchWeapon4728Stream].size)
+            switchWeapon4728Offset = static_cast<uint32_t>(cur - base);
+    }
+    if (switchTraceWeapon4728)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH WEAPON4728] source read #%u pre seq=%llu stream=%u offset=%08x size=%u stage=%s\n",
+            static_cast<unsigned>(g_switchWeapon4728ReadCount),
+            static_cast<unsigned long long>(switchWeapon4728SeqBefore),
+            static_cast<unsigned>(switchWeapon4728Stream),
+            static_cast<unsigned>(switchWeapon4728Offset),
+            static_cast<unsigned>(size),
+            g_switchDbStage ? g_switchDbStage : "");
+        Switch_LogWrite(trace);
+    }
+#endif
 
     g_load.stream.next_out = pos;
     g_load.stream.avail_out = size;
@@ -210,6 +252,41 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
     }
 
 }
+#ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+    {
+        ++g_switchWeapon4728ReadCount;
+        g_switchWeapon4728InflateBytes += size;
+        const uint32_t dumpSize = size < 16u ? size : 16u;
+        char trace[384];
+        int written = std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH WEAPON4728] source read #%u post seq=%llu stream=%u offset=%08x first=",
+            static_cast<unsigned>(g_switchWeapon4728ReadCount - 1),
+            static_cast<unsigned long long>(g_switchWeapon4728InflateBytes),
+            static_cast<unsigned>(switchWeapon4728Stream),
+            static_cast<unsigned>(switchWeapon4728Offset));
+        const uint8_t *bytes = pos;
+        for (uint32_t i = 0;
+             i < dumpSize &&
+             written > 0 &&
+             static_cast<size_t>(written) < sizeof(trace);
+             ++i)
+        {
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                "%02x",
+                static_cast<unsigned>(bytes[i]));
+        }
+        std::snprintf(
+            trace + written,
+            sizeof(trace) - static_cast<size_t>(written),
+            "\n");
+        Switch_LogWrite(trace);
+    }
+#endif
 
 void DB_ReadXFileStage()
 {
