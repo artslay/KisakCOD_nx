@@ -2944,6 +2944,28 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 #endif
 #ifdef __SWITCH__
     g_switchDbStage = "asset/name";
+    if (g_switchCurrentAssetIndex == 1126 &&
+        g_switchCurrentAssetRawType == 31u)
+    {
+        const uint64_t headerValue =
+            *reinterpret_cast<const uint64_t *>(&newEntry->entry.asset.header);
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH RAWFILE] link pre-name asset=%d raw=%u type=%u "
+            "entry=%p headerPtr=%p header64=%016llx low=%08x high=%08x\n",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<unsigned>(newEntry->entry.asset.type),
+            static_cast<void *>(newEntry),
+            static_cast<void *>(&newEntry->entry.asset.header),
+            static_cast<unsigned long long>(headerValue),
+            static_cast<unsigned>(static_cast<uint32_t>(headerValue)),
+            static_cast<unsigned>(static_cast<uint32_t>(headerValue >> 32)));
+        Switch_LogWrite(trace);
+        g_switchDbStage = "asset/name_rawfile";
+    }
 #endif
     if (newEntry->entry.asset.type == ASSET_TYPE_IMAGE)
         name = newEntry->entry.asset.header.image->name;
