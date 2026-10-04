@@ -1535,7 +1535,11 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
     // that 4-byte stream allocation exactly like the original loader; the
     // native pointer-to-pointer lives separately in Hunk memory.
     const uint8_t *nestedStreamPos = DB_GetStreamPos();
-    DB_AllocStreamPos(3);
+    // Load_XString(1) on the original 32-bit loader reads the nested
+    // serialized pointer at the current cursor without inserting alignment.
+    // Aligning here on AArch64 can skip 1-3 bytes between consecutive inline
+    // XStringPtr payloads and desynchronize every following virtual-stream
+    // read (notably the 29-entry WeaponDef bounceSound array).
     uint32_t nested = 0;
     DB_LoadSwitchSerialized(&nested, sizeof(nested));
 
