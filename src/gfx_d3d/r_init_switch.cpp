@@ -212,6 +212,12 @@ void R_InitGraphicsApi() {
     dx.multiSampleType = D3DMULTISAMPLE_NONE;
     dx.multiSampleQuality = 0;
 
+    // The shared render-target bootstrap expects these metrics to be populated by
+    // the original D3D capability path before R_CreateForInitOrReset(). On Switch
+    // that path is intentionally bypassed, so provide the GL-compatible
+    // depth-shadow configuration explicitly.
+    R_SetShadowmapFormats_DX(0);
+
     // The Switch renderer uses an already-created OpenGL/Zink device, so the
     // Windows R_InitHardware path is not entered. Initialize the same
     // device-dependent render resources before R_InitSystems() registers the
@@ -267,8 +273,16 @@ char R_PreCreateWindow() { return 1; }
 void R_StoreDirect3DCaps(uint32_t) {}
 void R_GetDirect3DCaps(uint32_t, _D3DCAPS9 *) {}
 void R_SetShadowmapFormats_DX(uint32_t) {
-    gfxMetrics.shadowmapFormatPrimary = 0;
-    gfxMetrics.shadowmapFormatSecondary = 0;
+    // Match the original hardware-shadowmap path, but skip D3D capability
+    // probing because the Switch renderer uses the OpenGL compatibility device.
+    // The depth image is backed by GL_DEPTH24_STENCIL8 and the companion color
+    // surface uses GL_RGBA8 through D3DFMT_A8R8G8B8.
+    gfxMetrics.shadowmapFormatPrimary = D3DFMT_D24S8;
+    gfxMetrics.shadowmapFormatSecondary = D3DFMT_A8R8G8B8;
+    gfxMetrics.shadowmapBuildTechType = TECHNIQUE_BUILD_SHADOWMAP_DEPTH;
+    gfxMetrics.hasHardwareShadowmap = 1;
+    gfxMetrics.shadowmapSamplerState =
+        SAMPLER_CLAMP_V | SAMPLER_CLAMP_U | SAMPLER_FILTER_LINEAR;
 }
 uint32_t R_ChooseAdapter() { return 0; }
 void Sys_HideSplashWindow() {}
