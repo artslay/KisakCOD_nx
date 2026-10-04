@@ -10,6 +10,17 @@ extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 extern uint32_t g_switchCurrentAssetHeader;
 extern const char * volatile g_switchDbStage;
+extern int32_t g_switchCurrentAssetB4Start;
+extern int32_t g_switchPreviousAssetIndex;
+extern uint32_t g_switchPreviousAssetRawType;
+extern uint32_t g_switchPreviousAssetHeader;
+extern uint32_t g_switchPreviousAssetB4Start;
+extern uint32_t g_switchPreviousAssetB4End;
+extern int32_t g_switchRawFileLen;
+extern uint32_t g_switchRawFileNameToken;
+extern uint32_t g_switchRawFileBufferToken;
+extern uint32_t g_switchRawFileB4BeforeName;
+extern uint32_t g_switchRawFileB4AfterName;
 #endif
 
 
@@ -57,7 +68,9 @@ void __cdecl Load_Stream(bool atStreamStart, uint8_t *ptr, int32_t size)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[SWITCH STREAM READ OOB] stream=%u offset=%lld size=%d blockSize=%u pos=%p caller=%p asset=%d rawType=%u rawHeader=%08x stage=%s\n",
+                "[SWITCH STREAM READ OOB] stream=%u offset=%lld size=%d blockSize=%u pos=%p caller=%p asset=%d rawType=%u rawHeader=%08x stage=%s "
+                "assetB4Start=%08x prev=%d/%u/%08x prevB4=%08x->%08x "
+                "rawFile=len%d name=%08x buffer=%08x b4=%08x->%08x\n",
                 static_cast<unsigned>(streamIndex),
                 signedOffset,
                 size,
@@ -67,7 +80,18 @@ void __cdecl Load_Stream(bool atStreamStart, uint8_t *ptr, int32_t size)
                 g_switchCurrentAssetIndex,
                 static_cast<unsigned>(g_switchCurrentAssetRawType),
                 static_cast<unsigned>(g_switchCurrentAssetHeader),
-                g_switchDbStage ? g_switchDbStage : "");
+                g_switchDbStage ? g_switchDbStage : "",
+                static_cast<unsigned>(g_switchCurrentAssetB4Start),
+                g_switchPreviousAssetIndex,
+                static_cast<unsigned>(g_switchPreviousAssetRawType),
+                static_cast<unsigned>(g_switchPreviousAssetHeader),
+                static_cast<unsigned>(g_switchPreviousAssetB4Start),
+                static_cast<unsigned>(g_switchPreviousAssetB4End),
+                g_switchRawFileLen,
+                static_cast<unsigned>(g_switchRawFileNameToken),
+                static_cast<unsigned>(g_switchRawFileBufferToken),
+                static_cast<unsigned>(g_switchRawFileB4BeforeName),
+                static_cast<unsigned>(g_switchRawFileB4AfterName));
             Sys_Error("%s", trace);
             return;
         }
