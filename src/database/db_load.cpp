@@ -6935,7 +6935,7 @@ void __cdecl Load_MaterialTextureDefArray(bool atStreamStart, int32_t count)
             trace,
             sizeof(trace),
             "[KisakCOD][UI MATERIAL] texture array begin count=%d var=%p "
-            "i=%p ret=%p frame=%p\\n",
+            "i=%p ret=%p frame=%p\n",
             count,
             static_cast<void *>(var),
             static_cast<void *>(&i),
@@ -6962,7 +6962,7 @@ void __cdecl Load_MaterialTextureDefArray(bool atStreamStart, int32_t count)
                 trace,
                 sizeof(trace),
                 "[KisakCOD][UI MATERIAL] texture info returned i=%d/%d "
-                "var=%p defInfo=%p canary=%016llx/%016llx/%016llx/%016llx\\n",
+                "var=%p defInfo=%p canary=%016llx/%016llx/%016llx/%016llx\n",
                 i,
                 count,
                 static_cast<void *>(varMaterialTextureDef),
