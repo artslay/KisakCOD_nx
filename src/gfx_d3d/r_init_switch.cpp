@@ -211,23 +211,45 @@ void R_InitGraphicsApi() {
     dx.multiSampleQuality = 0;
 }
 void R_InitSystems() {
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH RINIT] before R_InitImages\n");
+#endif
     R_InitImages();
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH RINIT] R_InitImages complete\n");
+    Switch_LogWrite("[SWITCH RINIT] after R_InitImages\n");
+    Switch_LogWrite("[SWITCH RINIT] before Material_Init\n");
 #endif
 
     Material_Init();
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH RINIT] after Material_Init\n");
+    Switch_LogWrite("[SWITCH RINIT] before R_InitFonts\n");
+#endif
 
     R_InitFonts();
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH RINIT] after R_InitFonts\n");
+    Switch_LogWrite("[SWITCH RINIT] before R_InitLoadWater\n");
+#endif
 
     R_InitLoadWater();
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH RINIT] after R_InitLoadWater\n");
+    Switch_LogWrite("[SWITCH RINIT] before R_InitLightDefs\n");
+#endif
 
     R_InitLightDefs();
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH RINIT] after R_InitLightDefs\n");
+#endif
 
     R_ClearFogs();
 
     R_InitDebug();
 
+#ifdef __SWITCH__
+    Switch_LogWrite("[SWITCH RINIT] before registered=1\n");
+#endif
     rg.registered = 1;
 }
 char R_PreCreateWindow() { return 1; }
