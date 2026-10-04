@@ -6789,6 +6789,15 @@ void __cdecl Load_MaterialTextureDefInfo(bool atStreamStart)
     {
         varGfxImagePtr = (GfxImage **)varMaterialTextureDefInfo;
         Load_GfxImagePtr(atStreamStart);
+#ifdef __SWITCH__
+        if (g_switchCurrentAssetRawType == 4u &&
+            g_switchCurrentAssetIndex >= 0 &&
+            g_switchCurrentAssetIndex <= 3)
+        {
+            Switch_LogWrite("[KisakCOD][UI IMAGE] info caller returned\n");
+            g_switchDbStage = "image/info_return";
+        }
+#endif
 }
 }
 
@@ -6912,8 +6921,15 @@ void __cdecl Load_MaterialTextureDefArray(bool atStreamStart, int32_t count)
         varMaterialTextureDefInfo =
             reinterpret_cast<water_t **>(&varMaterialTextureDef->u);
         Load_MaterialTextureDefInfo(0);
-
-        
+#ifdef __SWITCH__
+        if (g_switchCurrentAssetRawType == 4u &&
+            g_switchCurrentAssetIndex >= 0 &&
+            g_switchCurrentAssetIndex <= 3)
+        {
+            Switch_LogWrite("[KisakCOD][UI MATERIAL] texture info returned\n");
+            g_switchDbStage = "image/info_return";
+        }
+#endif
     }
 #else
     Load_Stream(atStreamStart, (uint8_t *)var, 12 * count);
