@@ -6988,7 +6988,7 @@ void __cdecl Load_MaterialTextureDefArray(bool atStreamStart, int32_t count)
             trace,
             sizeof(trace),
             "[KisakCOD][UI MATERIAL] texture array end i=%d/%d "
-            "var=%p canary=%016llx/%016llx/%016llx/%016llx ret=%p frame=%p\\n",
+            "var=%p canary=%016llx/%016llx/%016llx/%016llx ret=%p frame=%p\n",
             i,
             count,
             static_cast<void *>(var),
@@ -7953,9 +7953,38 @@ void __cdecl Load_Material(bool atStreamStart)
 #ifdef __SWITCH__
     g_switchDbStage = "material/pop";
     if (traceUiMaterial)
-        Switch_LogWrite("[KisakCOD][UI MATERIAL] statebits done\n");
+    {
+        char trace[448];
+        const uint32_t stackIndex = g_streamPosStackIndex;
+        const uint32_t parentIndex =
+            stackIndex ? g_streamPosStack[stackIndex - 1].index : UINT32_MAX;
+        const uint8_t *savedPos =
+            stackIndex ? g_streamPosStack[stackIndex - 1].pos : nullptr;
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI MATERIAL] before material pop current=%u stack=%u "
+            "parent=%u curPos=%p savedPos=%p b0=%08x b4=%08x ret=%p frame=%p\n",
+            static_cast<unsigned>(g_streamPosIndex),
+            static_cast<unsigned>(stackIndex),
+            static_cast<unsigned>(parentIndex),
+            static_cast<void *>(g_streamPos),
+            static_cast<const void *>(savedPos),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            __builtin_return_address(0),
+            __builtin_frame_address(0));
+        Switch_LogWrite(trace);
+    }
 #endif
     DB_PopStreamPos();
+#ifdef __SWITCH__
+    if (traceUiMaterial)
+    {
+        g_switchDbStage = "material/pop_return";
+        Switch_LogWrite("[KisakCOD][UI MATERIAL] after material pop\n");
+    }
+#endif
 #else
     Load_Stream(atStreamStart, (uint8_t *)varMaterial, 80);
     DB_PushStreamPos(4);
