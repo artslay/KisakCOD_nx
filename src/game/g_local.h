@@ -410,7 +410,7 @@ void __cdecl PlayerCmd_EnableTurretDismount(scr_entref_t entref);
 void __cdecl PlayerCmd_UploadScore(scr_entref_t entref);
 void __cdecl PlayerCmd_UploadTime(scr_entref_t entref);
 void(__cdecl *__cdecl Player_GetMethod(const char **pName))(scr_entref_t);
-void __cdecl G_AddCommandNotify(volatile unsigned __int16 notify);
+void __cdecl G_AddCommandNotify(unsigned __int16 notify);
 
 
 // g_cmds
