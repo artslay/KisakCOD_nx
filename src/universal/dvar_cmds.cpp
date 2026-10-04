@@ -13,6 +13,11 @@
 
 #include <stringed/stringed_hooks.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 struct DvarDumpInfo // sizeof=0xC
 {                                       // ...
     int count;                          // ...
@@ -420,7 +425,29 @@ void __cdecl Com_DvarDump(int channel, const char *match)
         dumpInfo.count = 0;
         dumpInfo.channel = channel;
         dumpInfo.match = match;
+#ifdef __SWITCH__
+        {
+            char trace[160];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][DVARDUMP] before Dvar_ForEach dvarCount=%d\\n",
+                dvarCount);
+            Switch_LogWrite(trace);
+        }
+#endif
         Dvar_ForEach(Com_DvarDumpSingle, &dumpInfo);
+#ifdef __SWITCH__
+        {
+            char trace[160];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][DVARDUMP] after Dvar_ForEach count=%d\\n",
+                dumpInfo.count);
+            Switch_LogWrite(trace);
+        }
+#endif
         Com_sprintf(summary, 0x80u, "\n%i total dvars\n%i dvar indexes\n", dumpInfo.count, dvarCount);
 #ifndef KISAK_RADIANT
         Com_PrintMessage(channel, summary, 0);
@@ -437,6 +464,20 @@ void __cdecl Com_DvarDump(int channel, const char *match)
 
 void __cdecl Com_DvarDumpSingle(const dvar_s *dvar, void *userData)
 {
+#ifdef __SWITCH__
+    {
+        char trace[192];
+        const uint32_t callbackIndex = userData ? (*(uint32_t *)userData + 1u) : 0u;
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][DVARDUMP] callback=%u dvar=%p userData=%p\\n",
+            callbackIndex,
+            static_cast<const void *>(dvar),
+            userData);
+        Switch_LogWrite(trace);
+    }
+#endif
     const char *v2; // eax
     const char *v3; // eax
     const char *v4; // [esp-4h] [ebp-810h]
