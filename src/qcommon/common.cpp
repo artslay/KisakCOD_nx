@@ -1957,7 +1957,13 @@ void __cdecl Com_Frame_Try_Block_Function()
         PROF_SCOPED("MaxFPSSpin");
         while (1)
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/maxfps/event_loop";
+#endif
             Com_EventLoop();
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/maxfps/time";
+#endif
             com_frameTime = Sys_Milliseconds();
             if (com_frameTime - com_lastFrameTime[lastFrameIndex] < 0)
                 com_lastFrameTime[lastFrameIndex] = com_frameTime;
