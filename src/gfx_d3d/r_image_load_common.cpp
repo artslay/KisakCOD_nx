@@ -20,7 +20,7 @@ void __cdecl Image_GetPicmip(const GfxImage *image, Picmip *picmip)
     iassert(picmip);
 
     if (image->noPicmip)
-        *picmip = NULL;
+        *picmip = 0;
     else
         Image_PicmipForSemantic(image->semantic, picmip);
 }
