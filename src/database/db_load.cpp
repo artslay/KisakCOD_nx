@@ -15171,14 +15171,86 @@ void __cdecl Load_RawFile(bool atStreamStart)
 
 void __cdecl Load_RawFilePtr(bool atStreamStart)
 {
-    const void **inserted; // [esp+0h] [ebp-Ch]
-    uint32_t value; // [esp+4h] [ebp-8h]
+    const void **inserted = nullptr;
+
+#ifdef __SWITCH__
+    // XAssetHeader is native on ARM64, but the fastfile pointer token is only
+    // 4 bytes. Never let Load_Stream write a serialized token through a
+    // RawFile** lvalue.
+    uint32_t value = 0;
+    if (atStreamStart)
+    {
+        Load_Stream(
+            true,
+            reinterpret_cast<uint8_t *>(&value),
+            sizeof(value));
+    }
+    else
+    {
+        std::memcpy(
+            &value,
+            reinterpret_cast<const uint8_t *>(varRawFilePtr),
+            sizeof(value));
+    }
+
+    DB_PushStreamPos(0);
+
+    if (value)
+    {
+        if (value == UINT32_MAX || value == UINT32_MAX - 1u)
+        {
+            DB_AllocStreamPos(3);
+
+            RawFile *nativeRawFile =
+                reinterpret_cast<RawFile *>(
+                    Hunk_Alloc(
+                        static_cast<uint32_t>(sizeof(RawFile)),
+                        "SwitchRawFile",
+                        22));
+            std::memset(nativeRawFile, 0, sizeof(RawFile));
+
+            if (value == UINT32_MAX - 1u)
+                inserted = DB_InsertPointer();
+
+            *varRawFilePtr = nativeRawFile;
+            varRawFile = nativeRawFile;
+
+            Load_RawFile(true);
+
+            XAssetHeader rawHeader{};
+            rawHeader.rawfile = nativeRawFile;
+            Load_RawFileAsset(&rawHeader);
+            *varRawFilePtr = rawHeader.rawfile;
+
+            if (inserted)
+                *inserted = *varRawFilePtr;
+        }
+        else
+        {
+            // The token identifies a serialized alias slot, not a native
+            // RawFile object. Resolve it through the ARM64 alias table.
+            std::memcpy(
+                reinterpret_cast<uint8_t *>(varRawFilePtr),
+                &value,
+                sizeof(value));
+            DB_ConvertOffsetToAlias(varRawFilePtr);
+        }
+    }
+    else
+    {
+        *varRawFilePtr = nullptr;
+    }
+
+    DB_PopStreamPos();
+#else
+    uint32_t value;
 
     Load_Stream(atStreamStart, (uint8_t *)varRawFilePtr, 4);
     DB_PushStreamPos(0);
     if (*varRawFilePtr)
     {
-        value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(*varRawFilePtr));
+        value = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(*varRawFilePtr));
         if (value == -1 || value == -2)
         {
             *varRawFilePtr = (RawFile *)AllocLoad_FxElemVisStateSample();
@@ -15198,8 +15270,8 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
         }
     }
     DB_PopStreamPos();
+#endif
 }
-
 void __cdecl Mark_RawFilePtr()
 {
     if (*varRawFilePtr)
