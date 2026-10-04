@@ -7844,7 +7844,7 @@ void __cdecl Load_Material(bool atStreamStart)
             trace,
             sizeof(trace),
             "[KisakCOD][UI MATERIAL] name after Load_XString ptr=%p low=%08x stream=%u "
-            "b0=%08x b4=%08x\\n",
+            "b0=%08x b4=%08x\n",
             static_cast<const void *>(varMaterial->info.name),
             static_cast<unsigned>(materialName),
             static_cast<unsigned>(g_streamPosIndex),
