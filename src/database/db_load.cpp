@@ -14979,6 +14979,8 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
     varsnd_alias_list_name = &varWeaponDef->putawaySoundPlayer;
     Load_snd_alias_list_name(0);
 #ifdef __SWITCH__
+    if (switchTraceWeapon4728)
+        switchTraceWeapon4728Cursor("after sounds");
     if (switchTraceWeapon1506)
         Switch_LogWrite("[SWITCH WEAPON1506] primary sounds done\n");
 #endif
