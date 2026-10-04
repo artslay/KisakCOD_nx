@@ -178,32 +178,16 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
     iassert(!g_load.stream.avail_out);
 
 #ifdef __SWITCH__
-    const bool switchTraceWeapon4728 =
+    const bool traceWeapon4728MaterialRead =
         g_switchCurrentAssetIndex == 4728 &&
-        g_switchCurrentAssetRawType == 23u;
-    if (switchTraceWeapon4728 && g_switchWeapon4728LastAsset != 4728)
-    {
-        g_switchWeapon4728LastAsset = 4728;
-        g_switchWeapon4728InflateBytes = 0;
-        g_switchWeapon4728ReadCount = 0;
-    }
-    const uint64_t switchWeapon4728SeqBefore =
-        switchTraceWeapon4728 ? g_switchWeapon4728InflateBytes : 0;
-    const uint32_t switchWeapon4728Stream = g_streamPosIndex;
-    uint32_t switchWeapon4728Offset = UINT32_MAX;
-    if (switchTraceWeapon4728 &&
+        g_switchCurrentAssetRawType == 23u &&
+        g_streamPosIndex == 0 &&
         g_streamBlocks &&
-        switchWeapon4728Stream < ARRAY_COUNT(g_streamPosArray) &&
-        g_streamBlocks[switchWeapon4728Stream].data)
-    {
-        const uintptr_t base = reinterpret_cast<uintptr_t>(
-            g_streamBlocks[switchWeapon4728Stream].data);
-        const uintptr_t cur = reinterpret_cast<uintptr_t>(pos);
-        if (cur >= base &&
-            cur - base <= g_streamBlocks[switchWeapon4728Stream].size)
-            switchWeapon4728Offset = static_cast<uint32_t>(cur - base);
-    }
-    if (switchTraceWeapon4728)
+        g_streamBlocks[0].data &&
+        pos >= g_streamBlocks[0].data &&
+        static_cast<uintptr_t>(pos - g_streamBlocks[0].data) == 2184u &&
+        size == 80u;
+    if (traceWeapon4728MaterialRead)
     {
         const uintptr_t nextIn =
             reinterpret_cast<uintptr_t>(g_load.stream.next_in);
@@ -213,25 +197,20 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
             inputBase && nextIn >= inputBase
                 ? static_cast<long long>(nextIn - inputBase)
                 : -1LL;
-        char trace[512];
+        char trace[640];
         std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][WEAPON4728 ZLIB] #%u pre dstStream=%u dstOff=%08x size=%u totalIn=%llu totalOut=%llu availIn=%u nextInOff=%lld fileOff=%llu stage=%s\n",
-            static_cast<unsigned>(g_switchWeapon4728ReadCount),
-            static_cast<unsigned>(switchWeapon4728Stream),
-            static_cast<unsigned>(switchWeapon4728Offset),
-            static_cast<unsigned>(size),
+            trace, sizeof(trace),
+            "[KisakCOD][WEAPON4728 ZLIB] material pre "
+            "totalIn=%llu totalOut=%llu availIn=%u nextInOff=%lld "
+            "fileOff=%llu\n",
             static_cast<unsigned long long>(g_load.stream.total_in),
             static_cast<unsigned long long>(g_load.stream.total_out),
             static_cast<unsigned>(g_load.stream.avail_in),
             nextInOffset,
-            static_cast<unsigned long long>(g_load.switchFileOffset),
-            g_switchDbStage ? g_switchDbStage : "");
+            static_cast<unsigned long long>(g_load.switchFileOffset));
         Switch_LogWrite(trace);
     }
 #endif
-
     g_load.stream.next_out = pos;
     g_load.stream.avail_out = size;
     while (1)
@@ -270,11 +249,8 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
     }
 
 #ifdef __SWITCH__
-    if (switchTraceWeapon4728)
+    if (traceWeapon4728MaterialRead)
     {
-        ++g_switchWeapon4728ReadCount;
-        g_switchWeapon4728InflateBytes += size;
-        const uint32_t dumpSize = size < 16u ? size : 16u;
         const uintptr_t nextIn =
             reinterpret_cast<uintptr_t>(g_load.stream.next_in);
         const uintptr_t inputBase =
@@ -284,36 +260,28 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
                 ? static_cast<long long>(nextIn - inputBase)
                 : -1LL;
         char trace[640];
-        int written = std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][WEAPON4728 ZLIB] #%u post dstStream=%u dstOff=%08x size=%u totalIn=%llu totalOut=%llu availIn=%u nextInOff=%lld fileOff=%llu first=",
-            static_cast<unsigned>(g_switchWeapon4728ReadCount - 1),
-            static_cast<unsigned>(switchWeapon4728Stream),
-            static_cast<unsigned>(switchWeapon4728Offset),
-            static_cast<unsigned>(size),
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][WEAPON4728 ZLIB] material post "
+            "totalIn=%llu totalOut=%llu availIn=%u nextInOff=%lld "
+            "fileOff=%llu first=",
             static_cast<unsigned long long>(g_load.stream.total_in),
             static_cast<unsigned long long>(g_load.stream.total_out),
             static_cast<unsigned>(g_load.stream.avail_in),
             nextInOffset,
             static_cast<unsigned long long>(g_load.switchFileOffset));
         const uint8_t *bytes = pos;
-        for (uint32_t i = 0;
-             i < dumpSize &&
-             written > 0 &&
-             static_cast<size_t>(written) < sizeof(trace);
-             ++i)
+        for (uint32_t i = 0; i < 16; ++i)
         {
-            written += std::snprintf(
-                trace + written,
-                sizeof(trace) - static_cast<size_t>(written),
+            const int written = std::snprintf(
+                trace + std::strlen(trace),
+                sizeof(trace) - std::strlen(trace),
                 "%02x",
                 static_cast<unsigned>(bytes[i]));
+            if (written <= 0)
+                break;
         }
-        std::snprintf(
-            trace + written,
-            sizeof(trace) - static_cast<size_t>(written),
-            "\n");
+        std::strncat(trace, "\n", sizeof(trace) - std::strlen(trace) - 1);
         Switch_LogWrite(trace);
     }
 #endif
