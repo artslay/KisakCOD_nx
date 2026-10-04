@@ -42,7 +42,7 @@ static void SwitchLogVulkanRuntime()
     {
         char line[256];
         std::snprintf(line, sizeof(line),
-            "[KisakCOD][BOOT] Vulkan probe: vkCreateInstance failed (%d)",
+            "Vulkan probe: vkCreateInstance failed (%d)",
             static_cast<int>(createResult));
         SwitchBootLog(line);
         return;
@@ -54,7 +54,7 @@ static void SwitchLogVulkanRuntime()
     {
         char line[256];
         std::snprintf(line, sizeof(line),
-            "[KisakCOD][BOOT] Vulkan probe: no physical device (result=%d count=%u)",
+            "Vulkan probe: no physical device (result=%d count=%u)",
             static_cast<int>(result), deviceCount);
         SwitchBootLog(line);
         vkDestroyInstance(instance, nullptr);
@@ -68,7 +68,7 @@ static void SwitchLogVulkanRuntime()
     {
         char line[256];
         std::snprintf(line, sizeof(line),
-            "[KisakCOD][BOOT] Vulkan probe: device enumeration failed (%d)",
+            "Vulkan probe: device enumeration failed (%d)",
             static_cast<int>(result));
         SwitchBootLog(line);
         vkDestroyInstance(instance, nullptr);
@@ -80,14 +80,14 @@ static void SwitchLogVulkanRuntime()
 
     char line[512];
     std::snprintf(line, sizeof(line),
-        "[KisakCOD][BOOT] Vulkan GPU: %s (vendor=0x%04x device=0x%04x)",
+        "Vulkan GPU: %s (vendor=0x%04x device=0x%04x)",
         properties.deviceName,
         properties.vendorID,
         properties.deviceID);
     SwitchBootLog(line);
 
     std::snprintf(line, sizeof(line),
-        "[KisakCOD][BOOT] Vulkan API: %u.%u.%u driver=0x%08x",
+        "Vulkan API: %u.%u.%u driver=0x%08x",
         VK_VERSION_MAJOR(properties.apiVersion),
         VK_VERSION_MINOR(properties.apiVersion),
         VK_VERSION_PATCH(properties.apiVersion),
