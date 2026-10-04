@@ -249,6 +249,7 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
 
 char __cdecl Sys_SpawnRenderThread(void (__cdecl *function)(uint32_t))
 {
+    InitSwitchEvent(g_workerCmdEvent, true, false);
     InitSwitchEvent(g_renderPausedEvent, false, false);
     InitSwitchEvent(g_renderCompletedEvent, true, true);
     InitSwitchEvent(g_noThreadOwnershipEvent, true, false);
