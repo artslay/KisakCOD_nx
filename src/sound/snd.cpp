@@ -2096,7 +2096,7 @@ int __cdecl SND_PlayLocalSoundAlias(uint32_t localClientNum, const snd_alias_t *
         alias,
         0.0f,
         1.0f,
-        NULL,
+        0,
         g_snd.listeners[localClientNum].orient.origin,
         NULL,
         0,
