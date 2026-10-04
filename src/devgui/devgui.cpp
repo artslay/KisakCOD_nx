@@ -33,7 +33,7 @@ devguiGlob_t devguiGlob;
 
 void __cdecl TRACK_devgui()
 {
-    track_static_alloc_internal(&devguiGlob, 24080, "devguiGlob", 0);
+    track_static_alloc_internal(&devguiGlob, sizeof(devguiGlob_t), "devguiGlob", 0);
 }
 
 void __cdecl DevGui_AddDvar(const char *path, const dvar_s *dvar)
@@ -63,7 +63,7 @@ void __cdecl DevGui_AddDvar(const char *path, const dvar_s *dvar)
                 CON_CHANNEL_DEVGUI,
                 "Path '%s' can't be used for dvar '%s' because it is already used for something else.\n",
                 path,
-                (const char *)dvar);
+                dvar->name);
         }
     }
 }
@@ -79,7 +79,7 @@ devguiGlob_t *__cdecl DevGui_GetMenu(uint16_t handle)
             handle,
             1,
             600);
-    return (devguiGlob_t *)((char *)&devguiGlob + 40 * handle - 40);
+    return (devguiGlob_t *)((char *)&devguiGlob + sizeof(DevMenuItem) * (handle - 1));
 }
 
 uint16_t __cdecl DevGui_ConstructPath_r(uint16_t parent, const char *path)
@@ -168,8 +168,8 @@ uint16_t __cdecl DevGui_GetMenuHandle(DevMenuItem *menu)
 {
     uint16_t handle; // [esp+0h] [ebp-4h]
 
-    handle = ((char *)menu - (char *)&devguiGlob) / 40 + 1;
-    if ((uint16_t)(((char *)menu - (char *)&devguiGlob) / 40) == 0xFFFF || handle > 0x258u)
+    handle = ((char *)menu - (char *)&devguiGlob) / sizeof(DevMenuItem) + 1;
+    if ((uint16_t)(((char *)menu - (char *)&devguiGlob) / sizeof(DevMenuItem)) == 0xFFFF || handle > 0x258u)
         MyAssertHandler(
             ".\\devgui\\devgui.cpp",
             137,
@@ -178,7 +178,7 @@ uint16_t __cdecl DevGui_GetMenuHandle(DevMenuItem *menu)
             handle,
             1,
             600);
-    return ((char *)menu - (char *)&devguiGlob) / 40 + 1;
+    return ((char *)menu - (char *)&devguiGlob) / sizeof(DevMenuItem) + 1;
 }
 
 int32_t __cdecl DevGui_CompareMenus(const DevMenuItem *menu0, const DevMenuItem *menu1)
