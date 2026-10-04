@@ -5639,28 +5639,44 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
                     stackIndex ? g_streamPosStack[stackIndex - 1].index : UINT32_MAX;
                 const uint8_t *stackSavedPos =
                     stackIndex ? g_streamPosStack[stackIndex - 1].pos : nullptr;
-                uintptr_t currentOffset = 0;
-                uintptr_t savedOffset = 0;
-                const int32_t currentOwner =
-                    g_streamPos ? Switch_StreamOwner(g_streamPos, &currentOffset) : -1;
-                const int32_t savedOwner =
-                    stackSavedPos ? Switch_StreamOwner(stackSavedPos, &savedOffset) : -1;
+                const uintptr_t currentPos =
+                    reinterpret_cast<uintptr_t>(g_streamPos);
+                const uintptr_t savedPos =
+                    reinterpret_cast<uintptr_t>(stackSavedPos);
+                const uintptr_t currentBlockBase =
+                    g_streamBlocks && g_streamPosIndex < ARRAY_COUNT(g_streamPosArray) &&
+                    g_streamBlocks[g_streamPosIndex].data
+                        ? reinterpret_cast<uintptr_t>(
+                              g_streamBlocks[g_streamPosIndex].data)
+                        : 0;
+                const uintptr_t savedBlockBase =
+                    g_streamBlocks && stackTopIndex < ARRAY_COUNT(g_streamPosArray) &&
+                    g_streamBlocks[stackTopIndex].data
+                        ? reinterpret_cast<uintptr_t>(
+                              g_streamBlocks[stackTopIndex].data)
+                        : 0;
+                const uint32_t currentOffset =
+                    currentBlockBase && currentPos >= currentBlockBase
+                        ? static_cast<uint32_t>(currentPos - currentBlockBase)
+                        : UINT32_MAX;
+                const uint32_t savedOffset =
+                    savedBlockBase && savedPos >= savedBlockBase
+                        ? static_cast<uint32_t>(savedPos - savedBlockBase)
+                        : UINT32_MAX;
                 char trace[480];
                 std::snprintf(
                     trace,
                     sizeof(trace),
                     "[KisakCOD][UI IMAGE] before pop current=%u stack=%u topIndex=%u "
-                    "curPos=%p owner=%d off=%08x savedPos=%p owner=%d off=%08x "
+                    "curPos=%p off=%08x savedPos=%p off=%08x "
                     "b0=%08x b4=%08x\n",
                     static_cast<unsigned>(g_streamPosIndex),
                     static_cast<unsigned>(stackIndex),
                     static_cast<unsigned>(stackTopIndex),
                     static_cast<void *>(g_streamPos),
-                    currentOwner,
-                    static_cast<unsigned>(currentOffset),
+                    currentOffset,
                     static_cast<const void *>(stackSavedPos),
-                    savedOwner,
-                    static_cast<unsigned>(savedOffset),
+                    savedOffset,
                     Switch_GetStreamCursorOffset(0),
                     Switch_GetStreamCursorOffset(4));
                 Switch_LogWrite(trace);
