@@ -5844,10 +5844,6 @@ void __cdecl Load_GfxVertexShaderLoadDef(bool atStreamStart)
     // read another 8-byte load-def header here; only consume the program blob.
     if (varGfxVertexShaderLoadDef->program)
     {
-        varGfxVertexShaderLoadDef->program =
-            reinterpret_cast<uint32_t *>(
-                AllocLoad_FxElemVisStateSample());
-        varDWORD = varGfxVertexShaderLoadDef->program;
         const uint16_t serializedProgramSize =
             varGfxVertexShaderLoadDef->programSize;
         const uint16_t serializedLoadForRenderer =
@@ -5856,6 +5852,11 @@ void __cdecl Load_GfxVertexShaderLoadDef(bool atStreamStart)
             static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(
                     varGfxVertexShaderLoadDef->program));
+
+        varGfxVertexShaderLoadDef->program =
+            reinterpret_cast<uint32_t *>(
+                AllocLoad_FxElemVisStateSample());
+        varDWORD = varGfxVertexShaderLoadDef->program;
 
         Switch_LogShaderProgramOobIfNeeded(
             "vertex",
