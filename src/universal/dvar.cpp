@@ -1940,7 +1940,7 @@ int __cdecl Dvar_StringToEnum(const DvarLimits *domain, const char *string)
         MyAssertHandler(".\\universal\\dvar.cpp", 421, 0, "%s", "string");
     for (stringIndex = 0; stringIndex < domain->enumeration.stringCount; ++stringIndex)
     {
-        if (!I_stricmp(string, *(const char **)(domain->integer.max + 4 * stringIndex)))
+        if (!I_stricmp(string, domain->enumeration.strings[stringIndex]))
             return stringIndex;
     }
     stringIndexa = 0;
@@ -1955,7 +1955,7 @@ int __cdecl Dvar_StringToEnum(const DvarLimits *domain, const char *string)
     v3 = strlen(string);
     for (stringIndexb = 0; stringIndexb < domain->enumeration.stringCount; ++stringIndexb)
     {
-        if (!I_strnicmp(string, *(const char **)(domain->integer.max + 4 * stringIndexb), v3))
+        if (!I_strnicmp(string, domain->enumeration.strings[stringIndexb], v3))
             return stringIndexb;
     }
     return -1337;
