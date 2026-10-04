@@ -1026,15 +1026,68 @@ GfxImage *__cdecl Image_Alloc(
     if (name && !I_stricmp(name, "$white"))
         Switch_LogWrite("[SWITCH IMGBOOT] $white Hunk_Alloc begin\n");
 #endif
-    // GfxImage is 48 bytes on Switch (36 bytes on 32-bit PC).\n    // v5 + 37 was the serialized 32-bit allocation and under-allocates the\n    // native ARM64 object by 12 bytes before the inline name.\n    image = (GfxImage *)Hunk_Alloc(\n        static_cast<uint32_t>(sizeof(GfxImage) + v5 + 1),\n        "Image_Alloc",\n        22);
+        // GfxImage is 48 bytes on Switch (36 bytes on 32-bit PC).
+    // v5 + 37 was the serialized 32-bit allocation and under-allocates the
+    // native ARM64 object by 12 bytes before the inline name.
+    image = (GfxImage *)Hunk_Alloc(
+        static_cast<uint32_t>(sizeof(GfxImage) + v5 + 1),
+        "Image_Alloc",
+        22);
     iassert( image );
+#ifdef __SWITCH__
+    const bool traceWhite = name && name[0] == '$' &&
+        std::strcmp(name, "$white") == 0;
+    if (traceWhite)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH IMGBOOT] $white alloc image=%p size=%u struct=%u nameField=%u\n",
+            static_cast<void *>(image),
+            static_cast<unsigned>(sizeof(GfxImage) + v5 + 1),
+            static_cast<unsigned>(sizeof(GfxImage)),
+            static_cast<unsigned>(offsetof(GfxImage, name)));
+        Switch_LogWrite(trace);
+    }
+#endif
 #ifdef __SWITCH__
     if (name && !I_stricmp(name, "$white"))
         Switch_LogWrite("[SWITCH IMGBOOT] $white Hunk_Alloc done\n");
 #endif
     image->name = (const char *)&image[1];
+#ifdef __SWITCH__
+    if (traceWhite)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH IMGBOOT] $white name slot=%p image=%p\n",
+            static_cast<const void *>(image->name),
+            static_cast<void *>(image));
+        Switch_LogWrite(trace);
+    }
+#endif
     Image_Construct(name, v5 + 1, category, semantic, imageTrack, image);
-    imageGlobals.imageHashTable[Image_GetAvailableHashLocation(name)] = image;
+#ifdef __SWITCH__
+    if (traceWhite)
+        Switch_LogWrite("[SWITCH IMGBOOT] $white Image_Construct done\n");
+#endif
+    const int hashLocation = Image_GetAvailableHashLocation(name);
+#ifdef __SWITCH__
+    if (traceWhite)
+    {
+        char trace[160];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH IMGBOOT] $white hash slot=%d\n",
+            hashLocation);
+        Switch_LogWrite(trace);
+    }
+#endif
+    imageGlobals.imageHashTable[hashLocation] = image;
     return image;
 }
 void __cdecl Image_Free(GfxImage *image)
