@@ -9,6 +9,8 @@
 #include "r_buffers.h"
 #include "r_scene.h"
 #include "r_water.h"
+#include "r_staticmodelcache.h"
+#include "r_model_lighting.h"
 #include "r_light.h"
 #include "r_workercmds.h"
 #include "rb_state.h"
@@ -209,6 +211,13 @@ void R_InitGraphicsApi() {
     dx.depthStencilFormat = D3DFMT_D24S8;
     dx.multiSampleType = D3DMULTISAMPLE_NONE;
     dx.multiSampleQuality = 0;
+
+    // The Switch renderer uses an already-created OpenGL/Zink device, so the
+    // Windows R_InitHardware path is not entered. Initialize the same
+    // device-dependent render resources before R_InitSystems() registers the
+    // runtime renderer state.
+    if (!R_CreateForInitOrReset())
+        R_FatalInitError("Couldn't initialize renderer resources");
 }
 void R_InitSystems()
 {
@@ -280,7 +289,24 @@ char R_InitHardware(const GfxWindowParms *wnd) {
 }
 void R_StoreWindowSettings(const GfxWindowParms *) {}
 void R_InitGamma() {}
-char R_CreateForInitOrReset() { return 1; }
+char R_CreateForInitOrReset()
+{
+    R_InitRenderTargets();
+
+    if (!g_allocateMinimalResources)
+    {
+        R_InitRenderBuffers();
+        R_InitModelLightingImage();
+        R_InitStaticModelCache();
+    }
+
+    R_CreateDynamicBuffers();
+
+    if (!g_allocateMinimalResources)
+        R_CreateParticleCloudBuffer();
+
+    return 1;
+}
 
 IDirect3DQuery9 *RB_HW_AllocOcclusionQuery() { return nullptr; }
 char R_CreateDevice(const GfxWindowParms *) { return 1; }
