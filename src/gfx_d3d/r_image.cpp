@@ -1026,7 +1026,7 @@ GfxImage *__cdecl Image_Alloc(
     if (name && !I_stricmp(name, "$white"))
         Switch_LogWrite("[SWITCH IMGBOOT] $white Hunk_Alloc begin\n");
 #endif
-        // GfxImage is 48 bytes on Switch (36 bytes on 32-bit PC).
+    // GfxImage is 48 bytes on Switch (36 bytes on 32-bit PC).
     // v5 + 37 was the serialized 32-bit allocation and under-allocates the
     // native ARM64 object by 12 bytes before the inline name.
     image = (GfxImage *)Hunk_Alloc(
