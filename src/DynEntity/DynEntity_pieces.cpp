@@ -60,7 +60,7 @@ void __cdecl DynEntPieces_AddDrawSurfs()
             Sys_EnterCriticalSection(CRITSECT_PHYSICS);
             Phys_ObjGetInterpolatedState(
                 PHYS_WORLD_FX,
-                (dxBody *)g_breakablePieces[i].physObjId,
+                DynEnt_PhysObjFromId(g_breakablePieces[i].physObjId),
                 placement.base.origin,
                 placement.base.quat);
             placement.scale = 1.0;
@@ -106,7 +106,7 @@ bool __cdecl DynEntPieces_SpawnPhysicsModel(
     float forceDir[3]; // [esp+10h] [ebp-5Ch] BYREF
     float velocity[3]; // [esp+1Ch] [ebp-50h] BYREF
     float angularVelocity[3]; // [esp+28h] [ebp-44h] BYREF
-    int32_t physObjId; // [esp+34h] [ebp-38h]
+    DynEntityPhysObjId physObjId; // [esp+34h] [ebp-38h]
     float mins[3]; // [esp+38h] [ebp-34h] BYREF
     float quat[4]; // [esp+44h] [ebp-28h] BYREF
     float maxs[3]; // [esp+54h] [ebp-18h] BYREF
@@ -133,7 +133,7 @@ bool __cdecl DynEntPieces_SpawnPhysicsModel(
         angularVelocity[2] = dynEntPieces_angularVelocity->current.vector[2];
         velocity[2] = velocity[2] + model->physPreset->piecesUpwardVelocity;
         Sys_EnterCriticalSection(CRITSECT_PHYSICS);
-        physObjId = static_cast<int32_t>(reinterpret_cast<uintptr_t>(DynEntPieces_SpawnPhysObj(
+        physObjId = static_cast<DynEntityPhysObjId>(reinterpret_cast<uintptr_t>(DynEntPieces_SpawnPhysObj(
             model->name,
             mins,
             maxs,
@@ -148,7 +148,7 @@ bool __cdecl DynEntPieces_SpawnPhysicsModel(
             DynEntPieces_CalcForceDir(hitDir, model->physPreset->piecesSpreadFraction, forceDir);
             Phys_ObjBulletImpact(
                 PHYS_WORLD_DYNENT,
-                (dxBody *)physObjId,
+                DynEnt_PhysObjFromId(physObjId),
                 hitPos,
                 forceDir,
                 dynEntPieces_impactForce->current.value,
