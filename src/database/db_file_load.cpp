@@ -156,6 +156,11 @@ double __cdecl DB_GetLoadedFraction()
     return (float)((loadedBytesInternal + loadedBytesExternal) / (totalBytesInternal + totalBytesExternal));
 }
 
+uint64_t __cdecl DB_GetXFileUncompressedOffset()
+{
+    return static_cast<uint64_t>(g_load.stream.total_out);
+}
+
 void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
 {
     const char *v2; // eax
