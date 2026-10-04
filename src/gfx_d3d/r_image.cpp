@@ -309,7 +309,6 @@ static void R_GLUploadTexture(
 
 #endif
 
-
 static const char *g_imageProgNames[14] =
 {
   "$shadow_cookie",
@@ -1111,21 +1110,13 @@ IDirect3DSurface9 *__cdecl Image_GetSurface(GfxImage *image)
 
 void __cdecl R_SetPicmip()
 {
-#ifdef __SWITCH__
-#endif
     uint32_t texMemInMegs; // [esp+0h] [ebp-10h]
     uint32_t sysMemInMegs; // [esp+4h] [ebp-Ch]
     bool cappedPicmip; // [esp+Bh] [ebp-5h]
     int minPicmip; // [esp+Ch] [ebp-4h]
 
-#ifdef __SWITCH__
-#endif
     iassert( dx.device );
-#ifdef __SWITCH__
-#endif
     texMemInMegs = R_AvailableTextureMemory();
-#ifdef __SWITCH__
-#endif
 #ifdef __SWITCH__
     // sys_sysMB is not registered by the Switch port. Do not enter the shared
     // dvar read lock here; use the same 2048 MB budget as the Switch texture budget.
@@ -1133,15 +1124,9 @@ void __cdecl R_SetPicmip()
 #else
     sysMemInMegs = Dvar_GetInt("sys_sysMB");
 #endif
-#ifdef __SWITCH__
-#endif
     iassert( r_reflectionProbeGenerate );
-#ifdef __SWITCH__
-#endif
     if (r_reflectionProbeGenerate->current.enabled)
     {
-#ifdef __SWITCH__
-#endif
         Com_Printf(CON_CHANNEL_GFX, "Picmip is set to lowest quality for generating reflections.\n");
         imageGlobals.picmip = 2;
         imageGlobals.picmipBump = 2;
@@ -1159,8 +1144,6 @@ void __cdecl R_SetPicmip()
         else
         {
             Com_Printf(CON_CHANNEL_GFX, "Texture detail is set automatically.\n");
-#ifdef __SWITCH__
-#endif
             if (texMemInMegs < 0x1C2)
             {
                 if (texMemInMegs < 0x12C)
@@ -1226,12 +1209,8 @@ void __cdecl R_SetPicmip()
             Dvar_SetInt(r_picmip_spec, imageGlobals.picmipSpec);
 #endif
         }
-#ifdef __SWITCH__
-#endif
         if (!r_specular->current.enabled || !r_rendererInUse->current.integer)
             imageGlobals.picmipSpec = 3;
-#ifdef __SWITCH__
-#endif
         Com_Printf(
             CON_CHANNEL_GFX,
             "Using picmip %i on most textures, %i on normal maps, and %i on specular maps\n",
@@ -1253,28 +1232,10 @@ void __cdecl R_InitImages()
     {
         iassert(imageGlobals.totalMemory.platform[i] == 0);
     }
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] enter picmip\n");
-#endif
     R_SetPicmip();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] returned picmip\n");
-    Switch_LogWrite("[SWITCH RINIT] before R_InitCodeImages\n");
-#endif
     R_InitCodeImages();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after R_InitCodeImages\n");
-    Switch_LogWrite("[KisakCOD][RINIT] before RB_InitImages\n");
-#endif
     RB_InitImages();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after RB_InitImages\n");
-    Switch_LogWrite("[KisakCOD][RINIT] before R_InitRawImage\n");
-#endif
     R_InitRawImage();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after R_InitRawImage\n");
-#endif
     rg.waterFloatTime = rg.waterFloatTime + 1.0;
     rg.waterFloatTime = rg.waterFloatTime + 1.0;
 #ifdef KISAK_RADIANT
@@ -1291,66 +1252,20 @@ bool __cdecl Image_IsCodeImage(int track)
 
 void R_InitCodeImages()
 {
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] enter code images\n");
-    Switch_LogWrite("[KisakCOD][RINIT] before $white\n");
-#endif
     rgp.whiteImage = Image_Register("$white", TS_FUNCTION, IMAGE_TRACK_MISC);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after $white\n");
-#endif
     iassert(rgp.whiteImage);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] before $black\n");
-#endif
     rgp.blackImage = Image_Register("$black", TS_FUNCTION, IMAGE_TRACK_MISC);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after $black\n");
-#endif
     iassert(rgp.blackImage);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] before $black_3d\n");
-#endif
     rgp.blackImage3D = Image_Register("$black_3d", TS_FUNCTION, IMAGE_TRACK_MISC);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after $black_3d\n");
-#endif
     iassert(rgp.blackImage3D);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] before $black_cube\n");
-#endif
     rgp.blackImageCube = Image_Register("$black_cube", TS_FUNCTION, IMAGE_TRACK_MISC);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after $black_cube\n");
-#endif
     iassert(rgp.blackImageCube);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] before $gray\n");
-#endif
     rgp.grayImage = Image_Register("$gray", TS_FUNCTION, IMAGE_TRACK_MISC);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after $gray\n");
-#endif
     iassert(rgp.grayImage);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] before $identitynormalmap\n");
-#endif
     rgp.identityNormalMapImage = Image_Register("$identitynormalmap", TS_FUNCTION, IMAGE_TRACK_MISC);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after $identitynormalmap\n");
-#endif
     iassert(rgp.identityNormalMapImage);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] before $pixelcostcolorcode\n");
-#endif
     rgp.pixelCostColorCodeImage = Image_Register("$pixelcostcolorcode", TS_FUNCTION, IMAGE_TRACK_MISC);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] after $pixelcostcolorcode\n");
-#endif
     iassert(rgp.pixelCostColorCodeImage);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][RINIT] code images done\n");
-#endif
 }
 
 #ifdef KISAK_RADIANT
@@ -1712,7 +1627,6 @@ _D3DFORMAT __cdecl R_ImagePixelFormat(const GfxImage *image)
 #endif
 }
 
-
 void __cdecl Image_CreateCubeTexture_PC(GfxImage *image,uint16_t edgeLen,uint32_t mipmapCount,_D3DFORMAT imageFormat)
 {
     iassert(image&&!image->texture.basemap);image->width=edgeLen;image->height=edgeLen;image->depth=1;image->mapType=MAPTYPE_CUBE;
@@ -1722,7 +1636,6 @@ void __cdecl Image_CreateCubeTexture_PC(GfxImage *image,uint16_t edgeLen,uint32_
     HRESULT hr=dx.device->CreateCubeTexture(edgeLen,mipmapCount,0,imageFormat,D3DPOOL_MANAGED,(IDirect3DCubeTexture9**)&image->texture,0);if(hr<0)Com_Error(ERR_DROP,"CreateCubeTexture failed: %s",R_ErrorDescription(hr));
 #endif
 }
-
 
 void __cdecl Image_Create3DTexture_PC(GfxImage *image,uint16_t width,uint16_t height,uint16_t depth,uint32_t mipmapCount,int imageFlags,_D3DFORMAT imageFormat)
 {

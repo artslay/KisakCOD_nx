@@ -88,7 +88,6 @@ const MovieToPlayScriptOpInfo s_movieToPlayScriptOpInfo[18] =
   { MTPSOP_LITERAL, NULL, 0u, 1u }
 };
 
-
 clientConnection_t clientConnections[1];
 clientUIActive_t clientUIActives[1];
 clientActive_t clients[1];
@@ -897,60 +896,19 @@ void __cdecl CL_InitRenderer()
 {
     iassert(!cls.rendererStarted);
     cls.rendererStarted = 1;
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] before R_BeginRegistration\n");
-#endif
     R_BeginRegistration(&cls.vidConfig);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] after R_BeginRegistration\n");
-    Switch_LogWrite("[KisakCOD][CLINIT] before ScrPlace_SetupUnsafeViewport\n");
-#endif
     ScrPlace_SetupUnsafeViewport(&scrPlaceFullUnsafe, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] after ScrPlace_SetupUnsafeViewport\n");
-    Switch_LogWrite("[KisakCOD][CLINIT] before ScrPlace_SetupViewport full\n");
-#endif
     ScrPlace_SetupViewport(&scrPlaceFull, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] after ScrPlace_SetupViewport full\n");
-    Switch_LogWrite("[KisakCOD][CLINIT] before ScrPlace_SetupViewport view\n");
-#endif
     ScrPlace_SetupViewport(scrPlaceView, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] after ScrPlace_SetupViewport view\n");
-    Switch_LogWrite("[KisakCOD][CLINIT] before Material_RegisterHandle white\n");
-#endif
     cls.whiteMaterial = Material_RegisterHandle("white", IMAGE_TRACK_UI);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] after Material_RegisterHandle white\n");
-    Switch_LogWrite("[KisakCOD][CLINIT] before Material_RegisterHandle console\n");
-#endif
     cls.consoleMaterial = Material_RegisterHandle("console", IMAGE_TRACK_UI);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] after Material_RegisterHandle console\n");
-    Switch_LogWrite("[KisakCOD][CLINIT] before R_RegisterFont console\n");
-#endif
     cls.consoleFont = R_RegisterFont("fonts/consoleFont", IMAGE_TRACK_UI);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] after R_RegisterFont console\n");
-#endif
     g_console_field_width = cls.vidConfig.displayWidth - 40;
     g_consoleField.charHeight = g_console_char_height;
     g_consoleField.widthInPixels = cls.vidConfig.displayWidth - 40;
     g_consoleField.fixedSize = 1;
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] before StatMon_Reset\n");
-#endif
     StatMon_Reset();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] after StatMon_Reset\n");
-    Switch_LogWrite("[KisakCOD][CLINIT] before Con_InitClientAssets\n");
-#endif
     Con_InitClientAssets();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CLINIT] after Con_InitClientAssets\n");
-    Switch_LogWrite("[KisakCOD][CLINIT] leaving CL_InitRenderer\n");
-#endif
 }
 
 void CL_DevGuiDvar_f()
@@ -1106,7 +1064,6 @@ static void SetupGfxConfig(GfxConfiguration *config)
     config->threadContextCount = THREAD_CONTEXT_COUNT;
     config->critSectCount = CRITSECT_COUNT;
 }
-
 
 static void CL_SetFastFileNames(GfxConfiguration *config, bool dedicatedServer)
 {
@@ -1629,7 +1586,6 @@ void __cdecl CL_UpdateSound()
     SND_Update();
 }
 
-
 void __cdecl CL_ShutdownRenderer(int destroyWindow)
 {
     iassert(cls.rendererStarted || destroyWindow);
@@ -1809,7 +1765,6 @@ void __cdecl CL_DrawLogo()
         CL_StopLogo(0);
     }
 }
-
 
 cmd_function_s CL_ForwardToServer_f_VAR;
 cmd_function_s CL_Disconnect_f_VAR;
