@@ -467,7 +467,7 @@ void __cdecl Sys_Init()
 
     Com_Printf(
         CON_CHANNEL_SYSTEM,
-        "Switch CPU threads: %u (coreMask=0x%llx)\\n",
+        "Switch CPU threads: %u (coreMask=0x%llx)\n",
         s_cpuCount,
         static_cast<unsigned long long>(coreMask));
 }
