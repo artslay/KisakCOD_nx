@@ -2,6 +2,7 @@
 
 #ifdef __SWITCH__
 extern thread_local const char *g_switchFrameStage;
+extern void Switch_LogWrite(const char *msg);
 #endif
 #include "r_rendercmds.h"
 #include <qcommon/mem_track.h>
@@ -1230,7 +1231,7 @@ void __cdecl R_BeginFrame()
         g_switchFrameStage = "frame/r_begin/enter";
         if (!frontEndDataOut)
         {
-            Switch_LogWrite("[KisakCOD][FRAME] frontEndDataOut was null; initializing first SMP frame\\n");
+            Switch_LogWrite("[KisakCOD][FRAME] frontEndDataOut was null; initializing first SMP frame\n");
             g_switchFrameStage = "frame/r_begin/init_frontend";
             R_ToggleSmpFrame();
         }
