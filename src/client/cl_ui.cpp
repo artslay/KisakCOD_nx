@@ -8,6 +8,10 @@
 #include <ui/ui.h>
 #include <universal/com_sndalias.h>
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *text);
+#endif
+
 void __cdecl Key_KeynumToStringBuf(int keynum, char *buf, int buflen)
 {
     const char *v5; // r3
