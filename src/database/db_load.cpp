@@ -15077,13 +15077,16 @@ void __cdecl Load_RawFile(bool atStreamStart)
             char trace[256];
             std::snprintf(
                 trace, sizeof(trace),
-                "[SWITCH RAWFILE] raw name=%08x len=%d buffer=%08x pos=%p stream=%u array4=%p\n",
+                "[SWITCH RAWFILE] raw name=%08x len=%d buffer=%08x pos=%p stream=%u cursor4=%08x\n",
                 serialized.name,
                 serialized.len,
                 serialized.buffer,
                 static_cast<void *>(DB_GetStreamPos()),
                 static_cast<unsigned>(g_streamPosIndex),
-                static_cast<void *>(g_streamPosArray[4]));
+                (g_streamBlocks && g_streamBlocks[4].data &&
+                 g_streamPosIndex == 4 && g_streamPos)
+                    ? static_cast<unsigned>(g_streamPos - g_streamBlocks[4].data)
+                    : g_switchRawFileB4BeforeName);
             Switch_LogWrite(trace);
         }
 #endif
@@ -15091,13 +15094,13 @@ void __cdecl Load_RawFile(bool atStreamStart)
 
     DB_PushStreamPos(4);
     varXString = &varRawFile->name;
-    Load_XString(0);
 #ifdef __SWITCH__
     g_switchRawFileB4AfterName =
         (g_streamBlocks && g_streamBlocks[4].data &&
-         g_streamPosArray[4])
+         g_streamPosIndex == 4 &&
+         g_streamPos)
             ? static_cast<uint32_t>(
-                g_streamPosArray[4] - g_streamBlocks[4].data)
+                g_streamPos - g_streamBlocks[4].data)
             : g_switchRawFileB4BeforeName;
     if (switchRawFileTrace)
     {
