@@ -95,6 +95,8 @@ void R_BeginRegistration(vidConfig_t *out) {
     if (out)
         *out = vidConfig;
     s_registered = true;
+    r_glob.startedRenderThread = 1;
+    R_ReleaseThreadOwnership();
 }
 
 void R_Init() {
