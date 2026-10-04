@@ -3037,7 +3037,13 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
                 {
                     start = Sys_Milliseconds();
 #ifndef KISAK_RADIANT
+#ifdef __SWITCH__
+                    Switch_LogWrite("[KisakCOD][RTHREAD] remote update: before SCR_UpdateScreen\n");
+#endif
                     SCR_UpdateScreen();
+#ifdef __SWITCH__
+                    Switch_LogWrite("[KisakCOD][RTHREAD] remote update: after SCR_UpdateScreen\n");
+#endif
 #endif
                     wait = 33 - (Sys_Milliseconds() - start);
                     if (wait > 0)
@@ -3046,6 +3052,9 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
                 iassert(r_glob.isRenderingRemoteUpdate);
                 r_glob.isRenderingRemoteUpdate = 0;
                 iassert(!r_glob.screenUpdateNotify);
+#ifdef __SWITCH__
+                Switch_LogWrite("[KisakCOD][RTHREAD] remote update: final notify\n");
+#endif
                 r_glob.screenUpdateNotify = 1;
             }
             if (!data)
