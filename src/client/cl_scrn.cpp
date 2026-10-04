@@ -19,7 +19,7 @@ static bool Switch_ShouldTraceRemoteFrame()
     if (!g_switchRemoteFrameTraceActive
         && !g_switchRemoteFrameTraceUsed
         && Sys_IsRenderThread()
-        && r_glob.isRenderingRemoteUpdate)
+        && R_IsInRemoteScreenUpdate())
     {
         g_switchRemoteFrameTraceActive = true;
         g_switchRemoteFrameTraceUsed = true;
