@@ -67,6 +67,273 @@ static void Switch_LogRawDwords(
 }
 #endif
 
+
+#ifdef __SWITCH__
+
+template<typename T>
+static T Switch_ReadSerializedValue(const uint8_t *serialized, size_t offset)
+{
+    T value{};
+    std::memcpy(&value, serialized + offset, sizeof(T));
+    return value;
+}
+
+template<typename T>
+static void Switch_SeedSerializedPointer(T *&field, const uint8_t *serialized, size_t offset)
+{
+    field = reinterpret_cast<T *>(
+        static_cast<uintptr_t>(Switch_ReadSerializedValue<uint32_t>(serialized, offset)));
+}
+
+static void Switch_TranslateMapEntsSerialized(MapEnts *out)
+{
+    uint8_t serialized[12]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+    Switch_SeedSerializedPointer(out->entityString, serialized, 4);
+    out->numEntityChars = Switch_ReadSerializedValue<int>(serialized, 8);
+}
+
+static void Switch_TranslateComWorldSerialized(ComWorld *out)
+{
+    uint8_t serialized[16]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+    out->isInUse = Switch_ReadSerializedValue<int>(serialized, 4);
+    out->primaryLightCount = Switch_ReadSerializedValue<int>(serialized, 8);
+    Switch_SeedSerializedPointer(out->primaryLights, serialized, 12);
+}
+
+static void Switch_TranslateGameWorldSpSerialized(GameWorldSp *out)
+{
+    uint8_t serialized[44]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+    out->path.nodeCount = Switch_ReadSerializedValue<uint32_t>(serialized, 4);
+    Switch_SeedSerializedPointer(out->path.nodes, serialized, 8);
+    Switch_SeedSerializedPointer(out->path.basenodes, serialized, 12);
+    out->path.chainNodeCount = Switch_ReadSerializedValue<uint32_t>(serialized, 16);
+    Switch_SeedSerializedPointer(out->path.chainNodeForNode, serialized, 20);
+    Switch_SeedSerializedPointer(out->path.nodeForChainNode, serialized, 24);
+    out->path.visBytes = Switch_ReadSerializedValue<int>(serialized, 28);
+    Switch_SeedSerializedPointer(out->path.pathVis, serialized, 32);
+    out->path.nodeTreeCount = Switch_ReadSerializedValue<int>(serialized, 36);
+    Switch_SeedSerializedPointer(out->path.nodeTree, serialized, 40);
+}
+
+static void Switch_TranslateGameWorldMpSerialized(GameWorldMp *out)
+{
+    uint8_t serialized[4]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+}
+
+static void Switch_TranslateClipMapSerialized(clipMap_t *out)
+{
+    uint8_t serialized[284]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+    out->isInUse = Switch_ReadSerializedValue<int>(serialized, 4);
+    out->planeCount = Switch_ReadSerializedValue<int>(serialized, 8);
+    Switch_SeedSerializedPointer(out->planes, serialized, 12);
+    out->numStaticModels = Switch_ReadSerializedValue<uint32_t>(serialized, 16);
+    Switch_SeedSerializedPointer(out->staticModelList, serialized, 20);
+    out->numMaterials = Switch_ReadSerializedValue<uint32_t>(serialized, 24);
+    Switch_SeedSerializedPointer(out->materials, serialized, 28);
+    out->numBrushSides = Switch_ReadSerializedValue<uint32_t>(serialized, 32);
+    Switch_SeedSerializedPointer(out->brushsides, serialized, 36);
+    out->numBrushEdges = Switch_ReadSerializedValue<uint32_t>(serialized, 40);
+    Switch_SeedSerializedPointer(out->brushEdges, serialized, 44);
+    out->numNodes = Switch_ReadSerializedValue<uint32_t>(serialized, 48);
+    Switch_SeedSerializedPointer(out->nodes, serialized, 52);
+    out->numLeafs = Switch_ReadSerializedValue<uint32_t>(serialized, 56);
+    Switch_SeedSerializedPointer(out->leafs, serialized, 60);
+    out->leafbrushNodesCount = Switch_ReadSerializedValue<uint32_t>(serialized, 64);
+    Switch_SeedSerializedPointer(out->leafbrushNodes, serialized, 68);
+    out->numLeafBrushes = Switch_ReadSerializedValue<uint32_t>(serialized, 72);
+    Switch_SeedSerializedPointer(out->leafbrushes, serialized, 76);
+    out->numLeafSurfaces = Switch_ReadSerializedValue<uint32_t>(serialized, 80);
+    Switch_SeedSerializedPointer(out->leafsurfaces, serialized, 84);
+    out->vertCount = Switch_ReadSerializedValue<uint32_t>(serialized, 88);
+    Switch_SeedSerializedPointer(out->verts, serialized, 92);
+    out->triCount = Switch_ReadSerializedValue<int>(serialized, 96);
+    Switch_SeedSerializedPointer(out->triIndices, serialized, 100);
+    Switch_SeedSerializedPointer(out->triEdgeIsWalkable, serialized, 104);
+    out->borderCount = Switch_ReadSerializedValue<int>(serialized, 108);
+    Switch_SeedSerializedPointer(out->borders, serialized, 112);
+    out->partitionCount = Switch_ReadSerializedValue<int>(serialized, 116);
+    Switch_SeedSerializedPointer(out->partitions, serialized, 120);
+    out->aabbTreeCount = Switch_ReadSerializedValue<int>(serialized, 124);
+    Switch_SeedSerializedPointer(out->aabbTrees, serialized, 128);
+    out->numSubModels = Switch_ReadSerializedValue<uint32_t>(serialized, 132);
+    Switch_SeedSerializedPointer(out->cmodels, serialized, 136);
+    out->numBrushes = Switch_ReadSerializedValue<uint16_t>(serialized, 140);
+    Switch_SeedSerializedPointer(out->brushes, serialized, 144);
+    out->numClusters = Switch_ReadSerializedValue<int>(serialized, 148);
+    out->clusterBytes = Switch_ReadSerializedValue<int>(serialized, 152);
+    Switch_SeedSerializedPointer(out->visibility, serialized, 156);
+    out->vised = Switch_ReadSerializedValue<int>(serialized, 160);
+    Switch_SeedSerializedPointer(out->mapEnts, serialized, 164);
+    Switch_SeedSerializedPointer(out->box_brush, serialized, 168);
+    std::memcpy(&out->box_model, serialized + 172, sizeof(out->box_model));
+    out->dynEntCount[0] = Switch_ReadSerializedValue<uint16_t>(serialized, 244);
+    out->dynEntCount[1] = Switch_ReadSerializedValue<uint16_t>(serialized, 246);
+    Switch_SeedSerializedPointer(out->dynEntDefList[0], serialized, 248);
+    Switch_SeedSerializedPointer(out->dynEntDefList[1], serialized, 252);
+    Switch_SeedSerializedPointer(out->dynEntPoseList[0], serialized, 256);
+    Switch_SeedSerializedPointer(out->dynEntPoseList[1], serialized, 260);
+    Switch_SeedSerializedPointer(out->dynEntClientList[0], serialized, 264);
+    Switch_SeedSerializedPointer(out->dynEntClientList[1], serialized, 268);
+    Switch_SeedSerializedPointer(out->dynEntCollList[0], serialized, 272);
+    Switch_SeedSerializedPointer(out->dynEntCollList[1], serialized, 276);
+    out->checksum = Switch_ReadSerializedValue<uint32_t>(serialized, 280);
+}
+
+static void Switch_TranslateGfxWorldSerialized(GfxWorld *out)
+{
+    uint8_t serialized[732]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+    std::memset(out, 0, sizeof(*out));
+
+    Switch_SeedSerializedPointer(out->name, serialized, 0);
+    Switch_SeedSerializedPointer(out->baseName, serialized, 4);
+    out->planeCount = Switch_ReadSerializedValue<int>(serialized, 8);
+    out->nodeCount = Switch_ReadSerializedValue<int>(serialized, 12);
+    out->indexCount = Switch_ReadSerializedValue<int>(serialized, 16);
+    Switch_SeedSerializedPointer(out->indices, serialized, 20);
+    out->surfaceCount = Switch_ReadSerializedValue<int>(serialized, 24);
+    std::memcpy(&out->streamInfo, serialized + 28, sizeof(out->streamInfo));
+    out->skySurfCount = Switch_ReadSerializedValue<int>(serialized, 32);
+    Switch_SeedSerializedPointer(out->skyStartSurfs, serialized, 36);
+    Switch_SeedSerializedPointer(out->skyImage, serialized, 40);
+    out->skySamplerState = Switch_ReadSerializedValue<uint8_t>(serialized, 44);
+    out->vertexCount = Switch_ReadSerializedValue<uint32_t>(serialized, 48);
+    Switch_SeedSerializedPointer(out->vd.vertices, serialized, 52);
+    out->vertexLayerDataSize = Switch_ReadSerializedValue<uint32_t>(serialized, 60);
+    Switch_SeedSerializedPointer(out->vld.data, serialized, 64);
+    std::memcpy(&out->sunParse, serialized + 72, sizeof(out->sunParse));
+    Switch_SeedSerializedPointer(out->sunLight, serialized, 200);
+    std::memcpy(out->sunColorFromBsp, serialized + 204, sizeof(out->sunColorFromBsp));
+    out->sunPrimaryLightIndex = Switch_ReadSerializedValue<uint32_t>(serialized, 216);
+    out->primaryLightCount = Switch_ReadSerializedValue<uint32_t>(serialized, 220);
+    out->cullGroupCount = Switch_ReadSerializedValue<int>(serialized, 224);
+    out->reflectionProbeCount = Switch_ReadSerializedValue<uint32_t>(serialized, 228);
+    Switch_SeedSerializedPointer(out->reflectionProbes, serialized, 232);
+    Switch_SeedSerializedPointer(out->reflectionProbeTextures, serialized, 236);
+
+    out->dpvsPlanes.cellCount = Switch_ReadSerializedValue<int>(serialized, 240);
+    Switch_SeedSerializedPointer(out->dpvsPlanes.planes, serialized, 244);
+    Switch_SeedSerializedPointer(out->dpvsPlanes.nodes, serialized, 248);
+    Switch_SeedSerializedPointer(out->dpvsPlanes.sceneEntCellBits, serialized, 252);
+
+    out->cellBitsCount = Switch_ReadSerializedValue<int>(serialized, 256);
+    Switch_SeedSerializedPointer(out->cells, serialized, 260);
+    out->lightmapCount = Switch_ReadSerializedValue<int>(serialized, 264);
+    Switch_SeedSerializedPointer(out->lightmaps, serialized, 268);
+
+    out->lightGrid.hasLightRegions = Switch_ReadSerializedValue<uint8_t>(serialized, 272);
+    out->lightGrid.sunPrimaryLightIndex = Switch_ReadSerializedValue<uint32_t>(serialized, 276);
+    std::memcpy(out->lightGrid.mins, serialized + 280, sizeof(out->lightGrid.mins));
+    std::memcpy(out->lightGrid.maxs, serialized + 292, sizeof(out->lightGrid.maxs));
+    out->lightGrid.rowAxis = Switch_ReadSerializedValue<uint32_t>(serialized, 308);
+    out->lightGrid.colAxis = Switch_ReadSerializedValue<uint32_t>(serialized, 312);
+    Switch_SeedSerializedPointer(out->lightGrid.rowDataStart, serialized, 316);
+    out->lightGrid.rawRowDataSize = Switch_ReadSerializedValue<int>(serialized, 320);
+    Switch_SeedSerializedPointer(out->lightGrid.rawRowData, serialized, 324);
+    out->lightGrid.entryCount = Switch_ReadSerializedValue<int>(serialized, 328);
+    Switch_SeedSerializedPointer(out->lightGrid.entries, serialized, 332);
+    out->lightGrid.colorCount = Switch_ReadSerializedValue<int>(serialized, 336);
+    Switch_SeedSerializedPointer(out->lightGrid.colors, serialized, 340);
+
+    Switch_SeedSerializedPointer(out->lightmapPrimaryTextures, serialized, 328);
+    Switch_SeedSerializedPointer(out->lightmapSecondaryTextures, serialized, 332);
+    out->modelCount = Switch_ReadSerializedValue<int>(serialized, 336);
+    Switch_SeedSerializedPointer(out->models, serialized, 340);
+    std::memcpy(out->mins, serialized + 344, sizeof(out->mins));
+    std::memcpy(out->maxs, serialized + 356, sizeof(out->maxs));
+    out->checksum = Switch_ReadSerializedValue<uint32_t>(serialized, 368);
+    out->materialMemoryCount = Switch_ReadSerializedValue<int>(serialized, 372);
+    Switch_SeedSerializedPointer(out->materialMemory, serialized, 376);
+
+    out->sun.hasValidData = Switch_ReadSerializedValue<bool>(serialized, 380);
+    Switch_SeedSerializedPointer(out->sun.spriteMaterial, serialized, 384);
+    Switch_SeedSerializedPointer(out->sun.flareMaterial, serialized, 388);
+    std::memcpy(&out->sun.spriteSize, serialized + 392, 16 * sizeof(float));
+    out->sun.flareMaxAlpha = Switch_ReadSerializedValue<float>(serialized, 424);
+    out->sun.flareFadeInTime = Switch_ReadSerializedValue<float>(serialized, 428);
+    out->sun.flareFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 432);
+    out->sun.blindMinDot = Switch_ReadSerializedValue<float>(serialized, 436);
+    out->sun.blindMaxDot = Switch_ReadSerializedValue<float>(serialized, 440);
+    out->sun.blindMaxDarken = Switch_ReadSerializedValue<float>(serialized, 444);
+    out->sun.blindFadeInTime = Switch_ReadSerializedValue<float>(serialized, 448);
+    out->sun.blindFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 452);
+    out->sun.glareMinDot = Switch_ReadSerializedValue<float>(serialized, 456);
+    out->sun.glareMaxDot = Switch_ReadSerializedValue<float>(serialized, 460);
+    out->sun.glareMaxLighten = Switch_ReadSerializedValue<float>(serialized, 464);
+    out->sun.glareFadeInTime = Switch_ReadSerializedValue<float>(serialized, 468);
+    out->sun.glareFadeOutTime = Switch_ReadSerializedValue<float>(serialized, 472);
+    std::memcpy(out->sun.sunFxPosition, serialized + 476, sizeof(out->sun.sunFxPosition));
+
+    Switch_SeedSerializedPointer(out->outdoorImage, serialized, 540);
+    Switch_SeedSerializedPointer(out->cellCasterBits, serialized, 544);
+    Switch_SeedSerializedPointer(out->sceneDynModel, serialized, 548);
+    Switch_SeedSerializedPointer(out->sceneDynBrush, serialized, 552);
+    Switch_SeedSerializedPointer(out->primaryLightEntityShadowVis, serialized, 556);
+    Switch_SeedSerializedPointer(out->primaryLightDynEntShadowVis[0], serialized, 560);
+    Switch_SeedSerializedPointer(out->primaryLightDynEntShadowVis[1], serialized, 564);
+    Switch_SeedSerializedPointer(out->nonSunPrimaryLightForModelDynEnt, serialized, 568);
+    Switch_SeedSerializedPointer(out->shadowGeom, serialized, 572);
+    Switch_SeedSerializedPointer(out->lightRegion, serialized, 576);
+
+    out->dpvs.smodelCount = Switch_ReadSerializedValue<uint32_t>(serialized, 580);
+    out->dpvs.staticSurfaceCount = Switch_ReadSerializedValue<uint32_t>(serialized, 584);
+    out->dpvs.staticSurfaceCountNoDecal = Switch_ReadSerializedValue<uint32_t>(serialized, 588);
+    out->dpvs.litSurfsBegin = Switch_ReadSerializedValue<uint32_t>(serialized, 592);
+    out->dpvs.litSurfsEnd = Switch_ReadSerializedValue<uint32_t>(serialized, 596);
+    out->dpvs.decalSurfsBegin = Switch_ReadSerializedValue<uint32_t>(serialized, 600);
+    out->dpvs.decalSurfsEnd = Switch_ReadSerializedValue<uint32_t>(serialized, 604);
+    out->dpvs.emissiveSurfsBegin = Switch_ReadSerializedValue<uint32_t>(serialized, 608);
+    out->dpvs.emissiveSurfsEnd = Switch_ReadSerializedValue<uint32_t>(serialized, 612);
+    out->dpvs.smodelVisDataCount = Switch_ReadSerializedValue<uint32_t>(serialized, 616);
+    out->dpvs.surfaceVisDataCount = Switch_ReadSerializedValue<uint32_t>(serialized, 620);
+    Switch_SeedSerializedPointer(out->dpvs.smodelVisData[0], serialized, 624);
+    Switch_SeedSerializedPointer(out->dpvs.smodelVisData[1], serialized, 628);
+    Switch_SeedSerializedPointer(out->dpvs.smodelVisData[2], serialized, 632);
+    Switch_SeedSerializedPointer(out->dpvs.surfaceVisData[0], serialized, 636);
+    Switch_SeedSerializedPointer(out->dpvs.surfaceVisData[1], serialized, 640);
+    Switch_SeedSerializedPointer(out->dpvs.surfaceVisData[2], serialized, 644);
+    Switch_SeedSerializedPointer(out->dpvs.lodData, serialized, 648);
+    Switch_SeedSerializedPointer(out->dpvs.sortedSurfIndex, serialized, 652);
+    Switch_SeedSerializedPointer(out->dpvs.smodelInsts, serialized, 656);
+    Switch_SeedSerializedPointer(out->dpvs.surfaces, serialized, 660);
+    Switch_SeedSerializedPointer(out->dpvs.cullGroups, serialized, 664);
+    Switch_SeedSerializedPointer(out->dpvs.smodelDrawInsts, serialized, 668);
+    Switch_SeedSerializedPointer(out->dpvs.surfaceMaterials, serialized, 672);
+    Switch_SeedSerializedPointer(out->dpvs.surfaceCastsSunShadow, serialized, 676);
+    out->dpvs.usageCount = Switch_ReadSerializedValue<int>(serialized, 680);
+
+    out->dpvsDyn.dynEntClientWordCount[0] = Switch_ReadSerializedValue<uint32_t>(serialized, 684);
+    out->dpvsDyn.dynEntClientWordCount[1] = Switch_ReadSerializedValue<uint32_t>(serialized, 688);
+    out->dpvsDyn.dynEntClientCount[0] = Switch_ReadSerializedValue<uint32_t>(serialized, 692);
+    out->dpvsDyn.dynEntClientCount[1] = Switch_ReadSerializedValue<uint32_t>(serialized, 696);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntCellBits[0], serialized, 700);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntCellBits[1], serialized, 704);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[0][0], serialized, 708);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[0][1], serialized, 712);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[0][2], serialized, 716);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[1][0], serialized, 720);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[1][1], serialized, 724);
+    Switch_SeedSerializedPointer(out->dpvsDyn.dynEntVisData[1][2], serialized, 728);
+}
+
+#endif
+
 #ifdef __SWITCH__
 static uint32_t Switch_ReadSerializedU32(
     const uint8_t *serialized,
@@ -1299,15 +1566,34 @@ void __cdecl Load_XString(bool atStreamStart)
 
 void __cdecl Load_XStringArray(bool atStreamStart, int32_t count)
 {
-    const char **var; // [esp+0h] [ebp-8h]
-    int32_t i; // [esp+4h] [ebp-4h]
-
+#ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint32_t> serialized(static_cast<size_t>(count));
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size() * sizeof(uint32_t)));
+        const char **var = varXString;
+        for (int32_t i = 0; i < count; ++i)
+        {
+            varXString = var + i;
+            *varXString = reinterpret_cast<const char *>(
+                static_cast<uintptr_t>(serialized[static_cast<size_t>(i)]));
+            Load_XString(false);
+        }
+        return;
+    }
+#endif
+    const char **var;
+    int32_t i;
     Load_Stream(atStreamStart, (uint8_t *)varXString, 4 * count);
     var = varXString;
     for (i = 0; i < count; ++i)
     {
         varXString = var;
-        Load_XString(0);
+        Load_XString(false);
         ++var;
     }
 }
@@ -6387,15 +6673,34 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
 
 void __cdecl Load_MaterialTechniquePtrArray(bool atStreamStart, int32_t count)
 {
-    MaterialTechnique **var; // [esp+0h] [ebp-8h]
-    int32_t i; // [esp+4h] [ebp-4h]
-
+#ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint32_t> serialized(static_cast<size_t>(count));
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size() * sizeof(uint32_t)));
+        MaterialTechnique **var = varMaterialTechniquePtr;
+        for (int32_t i = 0; i < count; ++i)
+        {
+            varMaterialTechniquePtr = var + i;
+            *varMaterialTechniquePtr = reinterpret_cast<MaterialTechnique *>(
+                static_cast<uintptr_t>(serialized[static_cast<size_t>(i)]));
+            Load_MaterialTechniquePtr(false);
+        }
+        return;
+    }
+#endif
+    MaterialTechnique **var;
+    int32_t i;
     Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniquePtr, 4 * count);
     var = varMaterialTechniquePtr;
     for (i = 0; i < count; ++i)
     {
         varMaterialTechniquePtr = var;
-        Load_MaterialTechniquePtr(0);
+        Load_MaterialTechniquePtr(false);
         ++var;
     }
 }
@@ -8979,15 +9284,34 @@ void __cdecl Load_XModelPtr(bool atStreamStart)
 
 void __cdecl Load_XModelPtrArray(bool atStreamStart, int32_t count)
 {
-    XModel **var; // [esp+0h] [ebp-8h]
-    int32_t i; // [esp+4h] [ebp-4h]
-
+#ifdef __SWITCH__
+    if (atStreamStart)
+    {
+        if (count <= 0)
+            return;
+        std::vector<uint32_t> serialized(static_cast<size_t>(count));
+        DB_LoadSwitchSerialized(
+            serialized.data(),
+            static_cast<uint32_t>(serialized.size() * sizeof(uint32_t)));
+        XModel **var = varXModelPtr;
+        for (int32_t i = 0; i < count; ++i)
+        {
+            varXModelPtr = var + i;
+            *varXModelPtr = reinterpret_cast<XModel *>(
+                static_cast<uintptr_t>(serialized[static_cast<size_t>(i)]));
+            Load_XModelPtr(false);
+        }
+        return;
+    }
+#endif
+    XModel **var;
+    int32_t i;
     Load_Stream(atStreamStart, (uint8_t *)varXModelPtr, 4 * count);
     var = varXModelPtr;
     for (i = 0; i < count; ++i)
     {
         varXModelPtr = var;
-        Load_XModelPtr(0);
+        Load_XModelPtr(false);
         ++var;
     }
 }
@@ -9335,7 +9659,14 @@ void __cdecl Load_PathData(bool atStreamStart)
 
 void __cdecl Load_GameWorldSp(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateGameWorldSpSerialized(varGameWorldSp);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varGameWorldSp, 44);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varGameWorldSp, 44);
+#endif
     DB_PushStreamPos(4);
     varXString = &varGameWorldSp->name;
     Load_XString(0);
@@ -9346,7 +9677,14 @@ void __cdecl Load_GameWorldSp(bool atStreamStart)
 
 void __cdecl Load_GameWorldMp(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateGameWorldMpSerialized(varGameWorldMp);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varGameWorldMp, 4);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varGameWorldMp, 4);
+#endif
     DB_PushStreamPos(4);
     varXString = &varGameWorldMp->name;
     Load_XString(0);
@@ -10487,7 +10825,14 @@ void __cdecl Mark_DynEntityDefArray(int32_t count)
 
 void __cdecl Load_MapEnts(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateMapEntsSerialized(varMapEnts);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varMapEnts, 12);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varMapEnts, 12);
+#endif
     DB_PushStreamPos(4);
     varXString = &varMapEnts->name;
     Load_XString(0);
@@ -10768,7 +11113,14 @@ void __cdecl Load_LeafBrushArray(bool atStreamStart, int32_t count)
 
 void __cdecl Load_clipMap_t(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateClipMapSerialized(varclipMap_t);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varclipMap_t, 284);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varclipMap_t, 284);
+#endif
     DB_PushStreamPos(4);
     varXString = &varclipMap_t->name;
     Load_XString(0);
@@ -11077,7 +11429,14 @@ void __cdecl Load_ComPrimaryLightArray(bool atStreamStart, int32_t count)
 
 void __cdecl Load_ComWorld(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateComWorldSerialized(varComWorld);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varComWorld, 16);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varComWorld, 16);
+#endif
     DB_PushStreamPos(4);
     varXString = &varComWorld->name;
     Load_XString(0);
@@ -15312,7 +15671,14 @@ void __cdecl Load_GfxWorldDpvsPlanes(bool atStreamStart)
 
 void __cdecl Load_GfxWorld(bool atStreamStart)
 {
+    #ifdef __SWITCH__
+    if (atStreamStart)
+        Switch_TranslateGfxWorldSerialized(varGfxWorld);
+    else
+        Load_Stream(atStreamStart, (uint8_t *)varGfxWorld, 732);
+#else
     Load_Stream(atStreamStart, (uint8_t *)varGfxWorld, 732);
+#endif
     DB_PushStreamPos(4);
     varXString = &varGfxWorld->name;
     Load_XString(0);
