@@ -1895,11 +1895,29 @@ void __cdecl Com_Frame_Try_Block_Function()
 
     iassert(cmd_args.nesting == -1);
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/write_config";
+#endif
     Com_WriteConfiguration(0);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/write_config_done";
+#endif
 #ifdef KISAK_SP
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/check_start_demo";
+#endif
     CL_CheckStartPlayingDemo();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/check_start_demo_done";
+#endif
+#endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/set_anim_check";
 #endif
     SetAnimCheck(com_animCheck->current.enabled);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/set_anim_check_done";
+#endif
     minMsec = 1;
     maxFPS = com_maxfps->current.integer;
     Com_AdjustMaxFPS(&maxFPS);
