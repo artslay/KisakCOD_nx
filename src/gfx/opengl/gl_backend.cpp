@@ -202,7 +202,20 @@ void OpenGLBackend::Present()
 {
 #ifdef __SWITCH__
     if (s_display != EGL_NO_DISPLAY && s_surface != EGL_NO_SURFACE)
-        eglSwapBuffers(s_display, s_surface);
+    {
+        Switch_LogWrite("[KisakCOD][RTHREAD] OpenGLBackend::Present: before eglSwapBuffers\n");
+        const EGLBoolean result = eglSwapBuffers(s_display, s_surface);
+        if (result == EGL_TRUE)
+            Switch_LogWrite("[KisakCOD][RTHREAD] OpenGLBackend::Present: eglSwapBuffers returned ok\n");
+        else
+        {
+            char trace[160];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][RTHREAD] OpenGLBackend::Present: eglSwapBuffers failed err=0x%04x\n",
+                eglGetError());
+            Switch_LogWrite(trace);
+        }
+    }
 #endif
 }
 
