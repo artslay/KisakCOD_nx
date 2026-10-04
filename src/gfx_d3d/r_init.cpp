@@ -3015,13 +3015,6 @@ void R_InitGraphicsApi()
     iassert( (dx.device != NULL) == (dx.d3d9 != NULL) );
     if (dx.device)
     {
-        // The Switch graphics bootstrap hands R_InitGraphicsApi an already-created
-        // D3D9-compatible device. The normal R_InitHardware path would create the
-        // device and then initialize all device-dependent renderer resources. Keep
-        // that resource initialization here as well; the buffer contents themselves
-        // are not a reliable "already initialized" flag during renderer startup.
-        if (!R_CreateForInitOrReset())
-            R_FatalInitError("Couldn't initialize renderer resources");
         R_InitSystems();
     }
     else
