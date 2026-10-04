@@ -365,7 +365,9 @@ extern "C" {
               ((U32)(U8)(ch2) << 16) | ((U32)(U8)(ch3) << 24 ))
 
 #ifndef mmioFOURCC
+#ifndef mmioFOURCC
 #define mmioFOURCC(w,x,y,z) MAKEFOURCC(w,x,y,z)
+#endif
 #endif
 
 #define AILLIBCALLBACK //__attribute__((cdecl))
@@ -387,8 +389,12 @@ extern "C" {
 #define DXDEF
 #define AILCALL cdecl
 #define FAR
+#ifndef HIWORD
 #define HIWORD(ptr) (((U32)ptr)>>16)
+#endif
+#ifndef LOWORD
 #define LOWORD(ptr) ((U16)((U32)ptr))
+#endif
 
 #define FOURCC U32
 
@@ -396,7 +402,9 @@ extern "C" {
               ((U32)(U8)(ch0) | ((U32)(U8)(ch1) << 8) |   \
               ((U32)(U8)(ch2) << 16) | ((U32)(U8)(ch3) << 24 ))
 
+#ifndef mmioFOURCC
 #define mmioFOURCC(w,x,y,z) MAKEFOURCC(w,x,y,z)
+#endif
 
 #define AILLIBCALLBACK __pascal
 
@@ -623,8 +631,12 @@ typedef LPVOID AILLPDIRECTSOUNDBUFFER;
 
 #endif
 
+#ifndef HIWORD
 #define HIWORD(ptr) (((U32)ptr)>>16)
+#endif
+#ifndef LOWORD
 #define LOWORD(ptr) ((U16)((U32)ptr))
+#endif
 
 #define FOURCC U32
 
@@ -643,7 +655,9 @@ typedef LPVOID AILLPDIRECTSOUNDBUFFER;
 
 #endif
 
+#ifndef mmioFOURCC
 #define mmioFOURCC(w,x,y,z) MAKEFOURCC(w,x,y,z)
+#endif
 
 #define MSS_MAIN_DEF
 
@@ -675,8 +689,12 @@ typedef LPVOID AILLPDIRECTSOUNDBUFFER;
 #define MSS_DIR_UP "../"
 #define MSS_DIR_UP_TWO MSS_DIR_UP MSS_DIR_UP
 
+#ifndef HIWORD
 #define HIWORD(ptr) (((U32)ptr)>>16)
+#endif
+#ifndef LOWORD
 #define LOWORD(ptr) ((U16)((U32)ptr))
+#endif
 
 #define FOURCC U32
 
@@ -687,7 +705,9 @@ typedef LPVOID AILLPDIRECTSOUNDBUFFER;
               ((U32)(U8)(ch2) << 16) | ((U32)(U8)(ch3) << 24 ))
 #endif
 
+#ifndef mmioFOURCC
 #define mmioFOURCC(w,x,y,z) MAKEFOURCC(w,x,y,z)
+#endif
 
 #define MSS_MAIN_DEF
 
