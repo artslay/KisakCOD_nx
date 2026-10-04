@@ -1146,7 +1146,7 @@ void __cdecl AimAssist_DrawCenterBox(
     CL_DrawStretchPicPhysical(x, y, width, height, 0.0, 0.0, 1.0, 1.0, color, cgMedia.whiteMaterial);
 }
 
-void __cdecl AimAssist_DrawTargets(int64_t localClientNum, const float *color)
+void __cdecl AimAssist_DrawTargets(int32_t localClientNum, const float *color)
 {
     char *v2; // eax
     char *v3; // eax
@@ -1174,13 +1174,12 @@ void __cdecl AimAssist_DrawTargets(int64_t localClientNum, const float *color)
     float yd; // [esp+8Ch] [ebp-8h]
     float y_4; // [esp+90h] [ebp-4h]
 
-    //if (!HIDWORD(localClientNum))
-    //    MyAssertHandler(".\\aim_assist\\aim_assist.cpp", 1627, 0, "%s", "ps");
-    // TODO: Check that these are equivalent
-    iassert(HIDWORD(localClientNum));
     iassert(color);
 
-    int32_t weapIndex = AimAssist_GetWeaponIndex(localClientNum, (const playerState_s *)HIDWORD(localClientNum)); // [esp+78h] [ebp-1Ch]
+    const playerState_s *ps = &CG_GetLocalClientGlobals(localClientNum)->predictedPlayerState;
+    iassert(ps);
+
+    int32_t weapIndex = AimAssist_GetWeaponIndex(localClientNum, ps);
     if (weapIndex)
     {
         weapDef = BG_GetWeaponDef(weapIndex);
