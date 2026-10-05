@@ -3159,25 +3159,6 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 #endif
     hash = DB_HashForName(name, type);
 #ifdef __SWITCH__
-    if (type == ASSET_TYPE_SOUND &&
-        name &&
-        hash == DB_HashForName("null", ASSET_TYPE_SOUND))
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH SOUND NULL] link asset=%d raw=%u type=%u name=%s first=%02x hash=%u bucket=%u header=%p\n",
-            g_switchCurrentAssetIndex,
-            static_cast<unsigned>(g_switchCurrentAssetRawType),
-            static_cast<unsigned>(type),
-            name,
-            static_cast<unsigned>(static_cast<uint8_t>(*name)),
-            hash,
-            static_cast<unsigned>(db_hashTable[hash]),
-            static_cast<void *>(newEntry->entry.asset.header.data));
-        Switch_LogWrite(trace);
-    }
     if (type == ASSET_TYPE_TECHNIQUE_SET &&
         name &&
         !I_stricmp(name, "default"))
