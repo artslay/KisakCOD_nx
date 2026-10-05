@@ -139,14 +139,14 @@ bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag)
             trace,
             sizeof(trace),
             "[SWITCH UI ABI] Item_EnableShowViaDvar invalid enableDvar=%p "
-            "item=%p flag=%d low32=%08x high32=%08x\\n",
+            "item=%p flag=%d low32=%08x high32=%08x\n",
             static_cast<const void *>(item->enableDvar),
             static_cast<const void *>(item),
             flag,
             static_cast<unsigned>(
                 reinterpret_cast<uintptr_t>(item->enableDvar) & UINT64_C(0xffffffff)),
             static_cast<unsigned>(
-                static_cast<uintptr_t>(item->enableDvar) >> 32));
+                reinterpret_cast<uintptr_t>(item->enableDvar) >> 32));
         Switch_LogWrite(trace);
         return 1;
     }
@@ -158,14 +158,14 @@ bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag)
             trace,
             sizeof(trace),
             "[SWITCH UI ABI] Item_EnableShowViaDvar invalid dvarTest=%p "
-            "item=%p flag=%d low32=%08x high32=%08x\\n",
+            "item=%p flag=%d low32=%08x high32=%08x\n",
             static_cast<const void *>(item->dvarTest),
             static_cast<const void *>(item),
             flag,
             static_cast<unsigned>(
                 reinterpret_cast<uintptr_t>(item->dvarTest) & UINT64_C(0xffffffff)),
             static_cast<unsigned>(
-                static_cast<uintptr_t>(item->dvarTest) >> 32));
+                reinterpret_cast<uintptr_t>(item->dvarTest) >> 32));
         Switch_LogWrite(trace);
         return 1;
     }
