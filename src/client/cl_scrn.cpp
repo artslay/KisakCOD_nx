@@ -13,10 +13,10 @@
 extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 extern "C" void Switch_LogFrameTail();
-extern "C" volatile uintptr_t g_switchFrameTailReached;
-extern "C" volatile uintptr_t g_switchFrameAfterDrawReached;
-extern "C" volatile uintptr_t g_switchFrameDrawFieldAddress;
-extern "C" volatile uintptr_t g_switchFrameDrawFieldCaller;
+extern "C" thread_local volatile uintptr_t g_switchFrameTailReached;
+extern "C" thread_local volatile uintptr_t g_switchFrameAfterDrawReached;
+extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldAddress;
+extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldCaller;
 static thread_local bool g_switchRemoteFrameTraceActive = false;
 static thread_local bool g_switchRemoteFrameTraceUsed = false;
 
