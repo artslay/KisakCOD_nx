@@ -917,6 +917,7 @@ void __cdecl CL_Frame(int localClientNum, int msec)
                 ++switchMenuTraceCount;
             }
 #endif
+#ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu_done";
 #endif
         }
