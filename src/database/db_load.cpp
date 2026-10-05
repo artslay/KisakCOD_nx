@@ -17120,8 +17120,7 @@ void __cdecl Load_Font(bool atStreamStart)
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][FONT LOAD] asset=%d rawType=%u font=%p fontNameToken=%08x materialToken=%08x glowToken=%08x glyphToken=%08x resolvedName=%p material=%p glow=%p glyphs=%p px=%d glyphCount=%d
-",
+                    "[KisakCOD][FONT LOAD] asset=%d rawType=%u font=%p fontNameToken=%08x materialToken=%08x glowToken=%08x glyphToken=%08x resolvedName=%p material=%p glow=%p glyphs=%p px=%d glyphCount=%d\n",
                     g_switchCurrentAssetIndex,
                     static_cast<unsigned>(g_switchCurrentAssetRawType),
                     static_cast<void *>(varFont),

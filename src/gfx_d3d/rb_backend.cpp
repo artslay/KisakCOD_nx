@@ -2577,8 +2577,7 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][TEXT2D] SKIP unresolved font material cmd=%p font=%p fontName=%s material=%p glow=%p text=%s
-",
+            "[KisakCOD][TEXT2D] SKIP unresolved font material cmd=%p font=%p fontName=%s material=%p glow=%p text=%s\n",
             static_cast<const void *>(cmd),
             static_cast<const void *>(cmd->font),
             fontName ? fontName : "<null>",

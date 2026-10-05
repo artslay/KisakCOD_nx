@@ -84,8 +84,7 @@ Font_s *__cdecl R_RegisterFont_FastFile(const char *fontName)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][FONT] lookup name=%s font=%p loadedName=%s px=%d glyphs=%d material=%p glow=%p glyphData=%p
-",
+            "[KisakCOD][FONT] lookup name=%s font=%p loadedName=%s px=%d glyphs=%d material=%p glow=%p glyphData=%p\n",
             fontName ? fontName : "<null>",
             static_cast<void *>(font),
             loadedName ? loadedName : "<null>",
