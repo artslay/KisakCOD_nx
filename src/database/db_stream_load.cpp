@@ -231,30 +231,43 @@ void __cdecl DB_ConvertOffsetToAlias(void *data)
     }
 #ifdef __SWITCH__
     uintptr_t resolvedPointer = 0;
-    if (DB_ResolveSwitchPointerAlias(aliasSlot, &resolvedPointer))
+    const bool aliasFound =
+        DB_ResolveSwitchPointerAlias(aliasSlot, &resolvedPointer);
+
+    if (resolvedPointer)
     {
-        if (resolvedPointer)
-        {
-            *reinterpret_cast<uintptr_t *>(data) = resolvedPointer;
-        }
-        else
-        {
-            *reinterpret_cast<uintptr_t *>(data) = 0;
-            DB_AddSwitchPointerAliasFixup(
-                aliasSlot,
-                reinterpret_cast<uintptr_t *>(data));
-        }
+        *reinterpret_cast<uintptr_t *>(data) = resolvedPointer;
     }
     else
     {
-        // Alias tokens refer to the 4-byte insertion slot reserved by
-        // DB_InsertPointer. That stream slot cannot hold a native ARM64
-        // pointer, so retain a fixup against its address instead of treating
-        // the stream address itself as the asset pointer.
         *reinterpret_cast<uintptr_t *>(data) = 0;
         DB_AddSwitchPointerAliasFixup(
             aliasSlot,
             reinterpret_cast<uintptr_t *>(data));
+    }
+
+    if (g_switchCurrentAssetRawType == 19u &&
+        g_switchCurrentAssetIndex >= 1215 &&
+        g_switchCurrentAssetIndex <= 1221)
+    {
+        static uint32_t switchFontAliasResolveTraceCount = 0;
+        if (switchFontAliasResolveTraceCount < 32)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FONT ALIAS RESOLVE] asset=%d token=%08x aliasSlot=%p found=%u resolved=%p result=%p pending=%u\\n",
+                g_switchCurrentAssetIndex,
+                offset,
+                reinterpret_cast<const void *>(aliasSlot),
+                aliasFound ? 1u : 0u,
+                reinterpret_cast<const void *>(resolvedPointer),
+                reinterpret_cast<const void *>(*reinterpret_cast<uintptr_t *>(data)),
+                resolvedPointer ? 0u : 1u);
+            Switch_LogWrite(trace);
+            ++switchFontAliasResolveTraceCount;
+        }
     }
 #else
     const uint32_t aliasValue =
