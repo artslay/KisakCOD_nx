@@ -428,17 +428,82 @@ const char *__cdecl Dvar_ValueToString(const dvar_s *dvar, DvarValue value)
                 ".\\universal\\dvar.cpp",
                 346,
                 0,
-                "%s\n\t(value.integer) = %i",
+                "%s\\n\\t(value.integer) = %i",
                 "(value.integer >= 0 && value.integer < dvar->domain.enumeration.stringCount || value.integer == 0)",
                 value.integer);
         if (dvar->domain.enumeration.stringCount)
-            result = dvar->domain.enumeration.strings[value.integer];
+        {
+#ifdef __SWITCH__
+            if (!dvar->domain.enumeration.strings)
+                return "";
+            const uintptr_t stringsValue = reinterpret_cast<uintptr_t>(dvar->domain.enumeration.strings);
+            if (stringsValue < UINT64_C(0x100000000) || stringsValue >= (UINT64_C(1) << 39))
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[SWITCH DVAR ABI] invalid enum strings=%p dvar=%p type=%u count=%d index=%d\n",
+                    static_cast<const void *>(dvar->domain.enumeration.strings),
+                    static_cast<const void *>(dvar),
+                    static_cast<unsigned>(dvar->type),
+                    dvar->domain.enumeration.stringCount,
+                    value.integer);
+                Switch_LogWrite(trace);
+                return "";
+            }
+#endif
+            const char *enumString = dvar->domain.enumeration.strings[value.integer];
+#ifdef __SWITCH__
+            if (enumString)
+            {
+                const uintptr_t enumValue = reinterpret_cast<uintptr_t>(enumString);
+                if (enumValue < UINT64_C(0x100000000) || enumValue >= (UINT64_C(1) << 39))
+                {
+                    char trace[320];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[SWITCH DVAR ABI] invalid enum value=%p dvar=%p type=%u count=%d index=%d\n",
+                        static_cast<const void *>(enumString),
+                        static_cast<const void *>(dvar),
+                        static_cast<unsigned>(dvar->type),
+                        dvar->domain.enumeration.stringCount,
+                        value.integer);
+                    Switch_LogWrite(trace);
+                    return "";
+                }
+            }
+#endif
+            result = enumString;
+        }
         else
             result = "";
         break;
     case 7u:
         if (!value.integer)
-            MyAssertHandler(".\\universal\\dvar.cpp", 352, 0, "%s\n\t(dvar->name) = %s", "(value.string)", dvar->name);
+            MyAssertHandler(".\\universal\\dvar.cpp", 352, 0, "%s\\n\\t(dvar->name) = %s", "(value.string)", dvar->name);
+#ifdef __SWITCH__
+        if (value.string)
+        {
+            const uintptr_t stringValue = reinterpret_cast<uintptr_t>(value.string);
+            if (stringValue < UINT64_C(0x100000000) || stringValue >= (UINT64_C(1) << 39))
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[SWITCH DVAR ABI] invalid string=%p dvar=%p type=%u low32=%08x high32=%08x\n",
+                    static_cast<const void *>(value.string),
+                    static_cast<const void *>(dvar),
+                    static_cast<unsigned>(dvar->type),
+                    static_cast<unsigned>(reinterpret_cast<uintptr_t>(value.string) & UINT64_C(0xffffffff)),
+                    static_cast<unsigned>(reinterpret_cast<uintptr_t>(value.string) >> 32));
+                Switch_LogWrite(trace);
+                return "";
+            }
+        }
+#endif
         result = va("%s", value.string);
         break;
     case 8u:
