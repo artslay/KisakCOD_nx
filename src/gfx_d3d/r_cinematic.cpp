@@ -15,6 +15,10 @@
 #include <cgame/cg_local.h>
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 // #define CINEMA
 
 #ifdef CINEMA
