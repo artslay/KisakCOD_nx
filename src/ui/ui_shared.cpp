@@ -1055,6 +1055,7 @@ int __cdecl Menus_RemoveFromStack(UiContext *dc, menuDef_t *pMenu)
                 Switch_LogWrite("[KisakCOD][FRAME] main_text remove result=not_found\n");
 #endif
             return 0;
+        }
         if (dc->menuStack[i] == pMenu)
             break;
     }
