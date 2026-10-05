@@ -1433,8 +1433,39 @@ int __cdecl SND_PlaySoundAlias_Internal(
         if (SND_IsRestricted(alias0Channel))
             SND_StopEntityChannel(sndEnt, alias0Channel);
 
-        if (SND_IsNullSoundFile(alias0->soundFile))
+#ifdef __SWITCH__
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][SOUND] before SND_IsNullSoundFile alias=%p soundFile=%p flags=0x%08x\n",
+                static_cast<const void *>(alias0),
+                static_cast<const void *>(alias0->soundFile),
+                static_cast<unsigned>(alias0->flags));
+            Switch_LogWrite(trace);
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/null_check";
+        }
+#endif
+        const bool isNullSound = SND_IsNullSoundFile(alias0->soundFile);
+#ifdef __SWITCH__
+        {
+            char trace[128];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][SOUND] SND_IsNullSoundFile returned %u\n",
+                static_cast<unsigned>(isNullSound));
+            Switch_LogWrite(trace);
+        }
+#endif
+        if (isNullSound)
             return SND_PLAYBACKID_NOTPLAYED;
+
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][SOUND] before SND_ChoosePitchAndVolume\n");
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/choose_pitch";
+#endif
 
         SND_ChoosePitchAndVolume(alias0, alias1, lerp, volumeScale, &startAliasInfo.volume, &startAliasInfo.pitch);
         startAliasInfo.alias0 = alias0;
@@ -1450,6 +1481,19 @@ int __cdecl SND_PlaySoundAlias_Internal(
         startAliasInfo.timescale = useTimescale;
         startAliasInfo.system = system;
         v14 = (alias0->flags & 0xC0) >> 6;
+#ifdef __SWITCH__
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][SOUND] before backend type=%d soundFile=%p\n",
+                v14,
+                static_cast<const void *>(alias0->soundFile));
+            Switch_LogWrite(trace);
+        }
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/backend";
+#endif
         if (v14 == 1)
         {
             playbackId = SND_StartAliasSample(&startAliasInfo, pChannel);
@@ -2094,8 +2138,28 @@ char __cdecl SND_ValidateSoundAliasBlend(const snd_alias_t *alias0, const snd_al
 
 int __cdecl SND_PlayLocalSoundAlias(uint32_t localClientNum, const snd_alias_t *alias, snd_alias_system_t system)
 {
+#ifdef __SWITCH__
+    {
+        char trace[512];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][SOUND] local enter alias=%p name=%p soundFile=%p flags=0x%08x type=%u\n",
+            static_cast<const void *>(alias),
+            alias ? static_cast<const void *>(alias->aliasName) : nullptr,
+            alias ? static_cast<const void *>(alias->soundFile) : nullptr,
+            alias ? static_cast<unsigned>(alias->flags) : 0u,
+            alias ? static_cast<unsigned>((alias->flags & 0xC0) >> 6) : 0u);
+        Switch_LogWrite(trace);
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/internal";
+    }
+#endif
     bcassert(system, SASYS_COUNT);
     bcassert(localClientNum, ARRAY_COUNT(g_snd.listeners));
+
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][SOUND] before SND_PlaySoundAlias_Internal\n");
+#endif
 
     return SND_PlaySoundAlias_Internal(
         alias,
