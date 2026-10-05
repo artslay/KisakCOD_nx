@@ -33,6 +33,10 @@
 #include <game_mp/g_public_mp.h>
 #endif
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 enum DxCapsResponse : __int32
 {                                       // ...
     DX_CAPS_RESPONSE_QUIT = 0x0,  // ...
@@ -3746,7 +3750,13 @@ char __cdecl R_InitHardware(const GfxWindowParms *wndParms)
     KISAK_NULLSUB();
     if (!R_CreateForInitOrReset())
         return 0;
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] before R_Cinematic_Init\\n");
+#endif
     R_Cinematic_Init();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] after R_Cinematic_Init\\n");
+#endif
     Com_Printf(CON_CHANNEL_GFX, "Setting initial state...\n");
     RB_SetInitialState();
     R_InitGamma();
