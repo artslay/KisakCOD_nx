@@ -10,7 +10,7 @@
 #include "client.h"
 
 #ifdef __SWITCH__
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 static thread_local bool g_switchRemoteFrameTraceActive = false;
 static thread_local bool g_switchRemoteFrameTraceUsed = false;
@@ -300,6 +300,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
     }
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/draw_field/end";
+    Switch_LogWrite("[KisakCOD][SCRFRAME] body_exit\n");
 #endif
 }
 

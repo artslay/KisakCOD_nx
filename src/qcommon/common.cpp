@@ -42,7 +42,7 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
-thread_local const char *g_switchFrameStage = "frame/idle";
+thread_local const char * volatile g_switchFrameStage = "frame/idle";
 #endif
 
 
