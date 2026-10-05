@@ -42,12 +42,63 @@ static int dvarCount;
 bool isDvarSystemActive;
 bool isLoadingAutoExecGlobalFlag;
 
+#ifdef __SWITCH__
+static bool Switch_DvarBadStringPointer(const char *ptr)
+{
+    if (!ptr)
+        return false;
+
+    const uintptr_t value = reinterpret_cast<uintptr_t>(ptr);
+
+    // Valid engine user pointers on Switch are inside the 39-bit user
+    // address range. A 32-bit serialized pointer copied into a 64-bit field
+    // can retain unrelated upper 32 bits from the following serialized word.
+    return value < UINT64_C(0x100000000) ||
+           value >= (UINT64_C(1) << 39);
+}
+
+static void Switch_DvarLogBadStringPointer(
+    const char *where,
+    const char *field,
+    const void *owner,
+    const char *ptr)
+{
+    char trace[384];
+    const uintptr_t value = reinterpret_cast<uintptr_t>(ptr);
+
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[SWITCH DVAR ABI] invalid %s.%s=%p owner=%p low32=%08x high32=%08x\n",
+        where,
+        field,
+        static_cast<const void *>(ptr),
+        owner,
+        static_cast<unsigned>(value & UINT64_C(0xffffffff)),
+        static_cast<unsigned>(value >> 32));
+    Switch_LogWrite(trace);
+}
+#endif
+
 static int generateHashValue(const char* fname)
 {
     if (!fname)
     {
         Com_Error(ERR_DROP, "null name in generateHashValue");
     }
+
+#ifdef __SWITCH__
+    if (Switch_DvarBadStringPointer(fname))
+    {
+        Switch_DvarLogBadStringPointer(
+            "generateHashValue",
+            "fname",
+            nullptr,
+            fname);
+        return 0;
+    }
+#endif
+
     int hash = 0;
     for (int i = 0; fname[i]; ++i)
         hash += tolower(fname[i]) * (i + 119);
@@ -874,6 +925,18 @@ static dvar_s *__cdecl Dvar_FindMalleableVar(const char *dvarName)
 
     for (var = dvarHashTable[generateHashValue(dvarName)]; var; var = var->hashNext)
     {
+#ifdef __SWITCH__
+        if (Switch_DvarBadStringPointer(var->name))
+        {
+            Switch_DvarLogBadStringPointer(
+                "Dvar_FindMalleableVar",
+                "var->name",
+                var,
+                var->name);
+            InterlockedDecrement(&g_dvarCritSect.readCount);
+            return 0;
+        }
+#endif
         if (!I_stricmp(dvarName, var->name))
         {
             if (g_dvarCritSect.readCount <= 0)
