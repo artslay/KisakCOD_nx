@@ -858,7 +858,73 @@ void __cdecl CL_Frame(int localClientNum, int msec)
             UI_SetActiveMenu(0, UIMENU_MAIN);
         }
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/cl_frame/devgui";
+        g_switchFrameStage = "frame/cl_frame/is_running";
+        Switch_LogWrite("[KisakCOD][CLFRAME] before isRunning\\n");
+#endif
+        if (!clientUIActives[0].isRunning)
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cl_frame/is_running_done";
+            Switch_LogWrite("[KisakCOD][CLFRAME] isRunning=false\\n");
+#endif
+        }
+        else
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cl_frame/is_running_done";
+            Switch_LogWrite("[KisakCOD][CLFRAME] isRunning=true\\n");
+#endif
+        }
+
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/script_error";
+        Switch_LogWrite("[KisakCOD][CLFRAME] before scriptError\\n");
+#endif
+        if (cls.scriptError) {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cl_frame/script_error_clear";
+            Switch_LogWrite("[KisakCOD][CLFRAME] clearing scriptError\\n");
+#endif
+            cls.scriptError = 0;
+            g_switchFrameStage = "frame/cl_frame/script_error_set_menu";
+            Switch_LogWrite("[KisakCOD][CLFRAME] before scriptError UI_SetActiveMenu\\n");
+            UI_SetActiveMenu(0, UIMENU_MAIN);
+            g_switchFrameStage = "frame/cl_frame/script_error_set_menu_done";
+            Switch_LogWrite("[KisakCOD][CLFRAME] after scriptError UI_SetActiveMenu\\n");
+        }
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/script_error_done";
+        Switch_LogWrite("[KisakCOD][CLFRAME] scriptError done\\n");
+#endif
+
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/disconnected_check";
+        Switch_LogWrite("[KisakCOD][CLFRAME] before disconnected check\\n");
+#endif
+        if (clientUIActives[0].connectionState == CA_DISCONNECTED
+        && (clientUIActives[0].keyCatchers & KEYCATCH_UI) == 0
+            && !com_sv_running->current.enabled)
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cl_frame/stop_sounds";
+            Switch_LogWrite("[KisakCOD][CLFRAME] before SND_StopSounds\\n");
+#endif
+            SND_StopSounds(SND_STOP_ALL);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cl_frame/stop_sounds_done";
+            Switch_LogWrite("[KisakCOD][CLFRAME] after SND_StopSounds\\n");
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu";
+            Switch_LogWrite("[KisakCOD][CLFRAME] before disconnected UI_SetActiveMenu\\n");
+#endif
+            UI_SetActiveMenu(0, UIMENU_MAIN);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu_done";
+            Switch_LogWrite("[KisakCOD][CLFRAME] after disconnected UI_SetActiveMenu\\n");
+#endif
+        }
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/pre_devgui";
+        Switch_LogWrite("[KisakCOD][CLFRAME] before DevGuiFrame\\n");
 #endif
         CL_DevGuiFrame(0);
 #ifdef __SWITCH__
