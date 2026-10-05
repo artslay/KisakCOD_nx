@@ -276,7 +276,19 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/catcher_return";
 #endif
-        if (!refreshedUI && uiCatcherActive)
+        if (refreshedUI)
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/catcher_skip_refreshed";
+#endif
+        }
+        else if (!uiCatcherActive)
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/catcher_skip_inactive";
+#endif
+        }
+        else
             LABEL_14 :
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/draw_field/ui_refresh";
