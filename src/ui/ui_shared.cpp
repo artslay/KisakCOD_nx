@@ -79,6 +79,78 @@ static inline void Switch_UI_LogBadPointer(
         value);
     Switch_LogWrite(trace);
 }
+
+static inline bool Switch_UI_ValidateStatement(
+    const char *where,
+    const char *field,
+    const void *owner,
+    const statement_s *statement)
+{
+    if (!statement)
+        return false;
+
+    if (statement->numEntries < 0 || statement->numEntries > 4096)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH UI ABI] %s.%s owner=%p invalid numEntries=%d\n",
+            where,
+            field,
+            owner,
+            statement->numEntries);
+        Switch_LogWrite(trace);
+        return false;
+    }
+
+    if (!statement->numEntries)
+        return true;
+
+    if (Switch_UI_BadPointer(statement->entries))
+    {
+        Switch_UI_LogBadPointer(where, field, owner, statement->entries);
+        return false;
+    }
+
+    for (int i = 0; i < statement->numEntries; ++i)
+    {
+        const expressionEntry *entry = statement->entries[i];
+        if (Switch_UI_BadPointer(entry))
+        {
+            char indexedField[128];
+            std::snprintf(
+                indexedField,
+                sizeof(indexedField),
+                "%s.entries[%d]",
+                field,
+                i);
+            Switch_UI_LogBadPointer(where, indexedField, owner, entry);
+            return false;
+        }
+
+        if (entry->type &&
+            entry->data.operand.dataType == VAL_STRING &&
+            Switch_UI_BadPointer(entry->data.operand.internals.string))
+        {
+            char indexedField[160];
+            std::snprintf(
+                indexedField,
+                sizeof(indexedField),
+                "%s.entries[%d].string",
+                field,
+                i);
+            Switch_UI_LogBadPointer(
+                where,
+                indexedField,
+                entry,
+                entry->data.operand.internals.string);
+            return false;
+        }
+    }
+
+    return true;
+}
 #endif
 
 struct commandDef_t // sizeof=0x8
@@ -1503,6 +1575,9 @@ void __cdecl Item_MouseEnter(UiContext *dc, itemDef_s *item, float x, float y)
         r.vertAlign = textRect->vertAlign;
         if ((item->dvarFlags & 3) == 0 || Item_EnableShowViaDvar(item, 1))
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/visible";
+#endif
             if (Item_IsVisible(dc->localClientNum, item))
             {
                 localClientNum = dc->localClientNum;
@@ -5097,6 +5172,43 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         Switch_UI_LogBadPointer("Menu_Paint", "items", menu, menu->items);
         return 0;
     }
+    if (Switch_UI_BadPointer(menu->font))
+    {
+        Switch_UI_LogBadPointer("Menu_Paint", "font", menu, menu->font);
+        return 0;
+    }
+    if (Switch_UI_BadPointer(menu->onOpen))
+    {
+        Switch_UI_LogBadPointer("Menu_Paint", "onOpen", menu, menu->onOpen);
+        return 0;
+    }
+    if (Switch_UI_BadPointer(menu->onClose))
+    {
+        Switch_UI_LogBadPointer("Menu_Paint", "onClose", menu, menu->onClose);
+        return 0;
+    }
+    if (Switch_UI_BadPointer(menu->onESC))
+    {
+        Switch_UI_LogBadPointer("Menu_Paint", "onESC", menu, menu->onESC);
+        return 0;
+    }
+    if (Switch_UI_BadPointer(menu->onKey))
+    {
+        Switch_UI_LogBadPointer("Menu_Paint", "onKey", menu, menu->onKey);
+        return 0;
+    }
+    if (Switch_UI_BadPointer(menu->allowedBinding))
+    {
+        Switch_UI_LogBadPointer("Menu_Paint", "allowedBinding", menu, menu->allowedBinding);
+        return 0;
+    }
+    if (!Switch_UI_ValidateStatement("Menu_Paint", "visibleExp", menu, &menu->visibleExp) ||
+        !Switch_UI_ValidateStatement("Menu_Paint", "rectXExp", menu, &menu->rectXExp) ||
+        !Switch_UI_ValidateStatement("Menu_Paint", "rectYExp", menu, &menu->rectYExp))
+    {
+        return 0;
+    }
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/zonetext";
 #endif
     float fadeCycle; // [esp+1Ch] [ebp-14h]
     float v4; // [esp+20h] [ebp-10h]
@@ -5105,10 +5217,16 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
 
     PROF_SCOPED("Menu_Paint");
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/zonetext";
+#endif
     ZoneText(menu->window.name, strlen(menu->window.name));
 
     iassert(menu);
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/filter";
+#endif
     if (*(_BYTE *)ui_showMenuOnly->current.integer
         && menu->window.name
         && I_stricmp(menu->window.name, ui_showMenuOnly->current.string))
@@ -5116,12 +5234,21 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         return 0;
     }
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/visible";
+#endif
     if (!Menu_IsVisible(dc, menu))
         return 0;
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/sound";
+#endif
     if (menu->soundName)
         UI_PlayLocalSoundAliasByName(dc->localClientNum, menu->soundName);
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window";
+#endif
     if (menu->blurRadius != 0.0)
     {
         v5 = dc->blurRadiusOut * dc->blurRadiusOut + menu->blurRadius * menu->blurRadius;
@@ -5154,8 +5281,19 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     fadeCycle = (float)menu->fadeCycle;
     Window_Paint(dc, &menu->window, menu->fadeAmount, menu->fadeInAmount, menu->fadeClamp, fadeCycle);
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/items";
+#endif
     for (i = 0; i < menu->itemCount; ++i)
+    {
+#ifdef __SWITCH__
+        char itemStage[96];
+        std::snprintf(itemStage, sizeof(itemStage),
+                      "frame/scr/draw_field/loading_ui/menu/item_%d", i);
+        g_switchFrameStage = itemStage;
+#endif
         Item_Paint(dc, menu->items[i]);
+    }
 
     if (g_debugMode)
     {
@@ -5510,6 +5648,87 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
         Switch_UI_LogBadPointer("Item_Paint", "onKey", item, item->onKey);
         return;
     }
+    if (Switch_UI_BadPointer(item->mouseEnterText) ||
+        Switch_UI_BadPointer(item->mouseExitText) ||
+        Switch_UI_BadPointer(item->mouseEnter) ||
+        Switch_UI_BadPointer(item->mouseExit) ||
+        Switch_UI_BadPointer(item->action) ||
+        Switch_UI_BadPointer(item->onAccept) ||
+        Switch_UI_BadPointer(item->onFocus) ||
+        Switch_UI_BadPointer(item->leaveFocus) ||
+        Switch_UI_BadPointer(item->dvarTest) ||
+        Switch_UI_BadPointer(item->enableDvar) ||
+        Switch_UI_BadPointer(item->focusSound))
+    {
+        const void *badValue = nullptr;
+        const char *badField = "unknown";
+        if (Switch_UI_BadPointer(item->mouseEnterText)) { badField = "mouseEnterText"; badValue = item->mouseEnterText; }
+        else if (Switch_UI_BadPointer(item->mouseExitText)) { badField = "mouseExitText"; badValue = item->mouseExitText; }
+        else if (Switch_UI_BadPointer(item->mouseEnter)) { badField = "mouseEnter"; badValue = item->mouseEnter; }
+        else if (Switch_UI_BadPointer(item->mouseExit)) { badField = "mouseExit"; badValue = item->mouseExit; }
+        else if (Switch_UI_BadPointer(item->action)) { badField = "action"; badValue = item->action; }
+        else if (Switch_UI_BadPointer(item->onAccept)) { badField = "onAccept"; badValue = item->onAccept; }
+        else if (Switch_UI_BadPointer(item->onFocus)) { badField = "onFocus"; badValue = item->onFocus; }
+        else if (Switch_UI_BadPointer(item->leaveFocus)) { badField = "leaveFocus"; badValue = item->leaveFocus; }
+        else if (Switch_UI_BadPointer(item->dvarTest)) { badField = "dvarTest"; badValue = item->dvarTest; }
+        else if (Switch_UI_BadPointer(item->enableDvar)) { badField = "enableDvar"; badValue = item->enableDvar; }
+        else if (Switch_UI_BadPointer(item->focusSound)) { badField = "focusSound"; badValue = item->focusSound; }
+        Switch_UI_LogBadPointer("Item_Paint", badField, item, badValue);
+        return;
+    }
+    if (!Switch_UI_ValidateStatement("Item_Paint", "visibleExp", item, &item->visibleExp) ||
+        !Switch_UI_ValidateStatement("Item_Paint", "textExp", item, &item->textExp) ||
+        !Switch_UI_ValidateStatement("Item_Paint", "materialExp", item, &item->materialExp) ||
+        !Switch_UI_ValidateStatement("Item_Paint", "rectXExp", item, &item->rectXExp) ||
+        !Switch_UI_ValidateStatement("Item_Paint", "rectYExp", item, &item->rectYExp) ||
+        !Switch_UI_ValidateStatement("Item_Paint", "rectWExp", item, &item->rectWExp) ||
+        !Switch_UI_ValidateStatement("Item_Paint", "rectHExp", item, &item->rectHExp) ||
+        !Switch_UI_ValidateStatement("Item_Paint", "forecolorAExp", item, &item->forecolorAExp))
+    {
+        return;
+    }
+    switch (item->type)
+    {
+    case 6:
+        if (Switch_UI_BadPointer(item->typeData.listBox))
+        {
+            Switch_UI_LogBadPointer("Item_Paint", "typeData.listBox", item, item->typeData.listBox);
+            return;
+        }
+        break;
+    case 4:
+    case 9:
+    case 0x10:
+    case 0x11:
+    case 0x12:
+    case 0xB:
+    case 0xE:
+    case 0xA:
+    case 0:
+        if (Switch_UI_BadPointer(item->typeData.editField))
+        {
+            Switch_UI_LogBadPointer("Item_Paint", "typeData.editField", item, item->typeData.editField);
+            return;
+        }
+        break;
+    case 0xC:
+        if (Switch_UI_BadPointer(item->typeData.multi))
+        {
+            Switch_UI_LogBadPointer("Item_Paint", "typeData.multi", item, item->typeData.multi);
+            return;
+        }
+        break;
+    case 0xD:
+        if (Switch_UI_BadPointer(item->typeData.enumDvarName))
+        {
+            Switch_UI_LogBadPointer("Item_Paint", "typeData.enumDvarName", item, item->typeData.enumDvarName);
+            return;
+        }
+        break;
+    default:
+        break;
+    }
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/validated";
 #endif
     PROF_SCOPED("Item_Paint");
 
@@ -5523,6 +5742,9 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
     menuDef_t *parent; // [esp+48h] [ebp-4Ch]
     char lowerCaseName[68]; // [esp+4Ch] [ebp-48h] BYREF
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/enable";
+#endif
     parent = item->parent;
     if (item)
     {
@@ -5553,6 +5775,9 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                     item->window.rect.w = GetExpressionFloat(dc->localClientNum, &item->rectWExp);
                 if (item->rectHExp.numEntries)
                     item->window.rect.h = GetExpressionFloat(dc->localClientNum, &item->rectHExp);
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/material";
+#endif
                 if (item->window.style == 5)
                 {
                     String = (char *)Dvar_GetString(item->dvar);
@@ -5583,6 +5808,9 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                         1.0,
                         colorGreen);
                 }
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/payload";
+#endif
                 if (item->window.style != 5)
                 {
                     switch (item->type)
