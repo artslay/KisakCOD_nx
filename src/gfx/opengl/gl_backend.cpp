@@ -763,8 +763,7 @@ bool Switch_GLBeginRenderContext()
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][FRAME] Render context acquire FAIL err=0x%04x nowCtx=%p nowDraw=%p nowRead=%p wantedCtx=%p wantedDraw=%p main=%p thread=%u
-",
+                "[KisakCOD][FRAME] Render context acquire FAIL err=0x%04x nowCtx=%p nowDraw=%p nowRead=%p wantedCtx=%p wantedDraw=%p main=%p thread=%u\n",
                 static_cast<unsigned>(err),
                 (void *)nowContext,
                 (void *)nowDraw,
