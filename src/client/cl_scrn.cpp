@@ -156,6 +156,9 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
     connstate_t connectionState; // r31
     Material *v4; // r4
     const float *v5; // r3
+#ifdef __SWITCH__
+    bool uiCatcherActive = false;
+#endif
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/draw_field/begin";
@@ -269,7 +272,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/catcher_call";
 #endif
-        const bool uiCatcherActive = Key_IsCatcherActive(0, KEYCATCH_UI);
+        uiCatcherActive = Key_IsCatcherActive(0, KEYCATCH_UI);
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/catcher_return";
 #endif
