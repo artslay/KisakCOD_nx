@@ -292,22 +292,26 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/draw_field/catcher_skip_refreshed";
 #endif
+            goto LABEL_15;
         }
-        else if (!uiCatcherActive)
+        if (!uiCatcherActive)
         {
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/draw_field/catcher_skip_inactive";
 #endif
+            goto LABEL_15;
         }
-        else
-            LABEL_14 :
+
+LABEL_14:
 #ifdef __SWITCH__
-            g_switchFrameStage = "frame/scr/draw_field/ui_refresh";
+        g_switchFrameStage = "frame/scr/draw_field/ui_refresh";
 #endif
-            UI_Refresh();
+        UI_Refresh();
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/ui_refresh_done";
 #endif
+
+LABEL_15:;
     }
 #ifdef __SWITCH__
     g_switchFrameTailReached = 1;
