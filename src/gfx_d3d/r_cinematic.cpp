@@ -1004,7 +1004,15 @@ void __cdecl R_Cinematic_UpdateFrame()
 
     PROF_SCOPED("R_Cinematic_UpdateFrame");
 
+#ifdef __SWITCH__
+    if (Sys_IsRenderThread())
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: before cinematic critical section\n");
+#endif
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
+#ifdef __SWITCH__
+    if (Sys_IsRenderThread())
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: cinematic critical section acquired\n");
+#endif
     v0 = !cinematicGlob.fullSyncNextUpdate && (cinematicGlob.playbackFlags & 1) == 0;
     cinematicGlob.fullSyncNextUpdate = 0;
     if (g_cinematicThreadState == CINEMATIC_THREAD_STATE_FROM_HOST_GO)
@@ -1014,15 +1022,47 @@ void __cdecl R_Cinematic_UpdateFrame()
             0,
             "%s",
             "g_cinematicThreadState != CINEMATIC_THREAD_STATE_FROM_HOST_GO");
+#ifdef __SWITCH__
+    if (Sys_IsRenderThread())
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: before R_Cinematic_ThreadFinish\n");
+#endif
     if (R_Cinematic_ThreadFinish(v0))
     {
+#ifdef __SWITCH__
+        if (Sys_IsRenderThread())
+            Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: ThreadFinish returned true\n");
+#endif
         g_cinematicThreadState = CINEMATIC_THREAD_STATE_FROM_HOST_GO;
         Sys_ResetCinematicsThreadOutstandingRequestEvent();
         Sys_SetCinematicsHostOutstandingRequestEvent();
+#ifdef __SWITCH__
+        if (Sys_IsRenderThread())
+            Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: before second ThreadFinish\n");
+#endif
         R_Cinematic_ThreadFinish(v0);
+#ifdef __SWITCH__
+        if (Sys_IsRenderThread())
+            Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: second ThreadFinish returned\n");
+#endif
     }
+#ifdef __SWITCH__
+    else if (Sys_IsRenderThread())
+    {
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: ThreadFinish returned false\n");
+    }
+    if (Sys_IsRenderThread())
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: before UpdateRendererImages\n");
+#endif
     R_Cinematic_UpdateRendererImages();
+#ifdef __SWITCH__
+    if (Sys_IsRenderThread())
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: after UpdateRendererImages\n");
+#endif
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
+#ifdef __SWITCH__
+    if (Sys_IsRenderThread())
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: complete\n");
+#endif
 }
 
 void R_Cinematic_UpdateRendererImages()
