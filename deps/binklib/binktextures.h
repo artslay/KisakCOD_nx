@@ -67,6 +67,9 @@ Should drop in really quickly and it hides a ton of platform specific ugliness!
 */
 
 #include "bink.h"
+#ifdef __SWITCH__
+#include "gfx/opengl/d3d9_compat.h"
+#endif
 
 #if defined(__RADPS3__) || defined(__RADWII__) || defined(__RADNGC__)
   #define if_used_3d_device // no global 3D device handle on ps3, wii or ngc
@@ -132,9 +135,9 @@ typedef struct BINKTEXTURESET
 
   // this is specialized global data for each platform
 
-  #if defined( __RADNT__ )
+  #if defined( __RADNT__ ) || defined( __SWITCH__ )
   
-    // on windows, we need a second set of textures to draw with
+    // Windows and Switch use a second texture set for drawing.
     BINKFRAMETEXTURES tex_draw;
 
   #elif defined( __RADPS3__ )
@@ -187,9 +190,9 @@ RADDEFFUNC void Draw_Bink_textures( if_used_3d_device
 //=============================================================================
 
 
-#if defined(__RADNT__)
+#if defined(__RADNT__) || defined(__SWITCH__)
 
-  // On Windows, we need to use lock and unlock semantics for best performance
+  // Windows and Switch use CPU-visible textures for Bink decompression
 
   // Lock the textures for use by D3D
   RADDEFFUNC void Lock_Bink_textures( BINKTEXTURESET * set_textures );
