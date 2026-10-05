@@ -566,6 +566,22 @@ static uint32_t Switch_GetStreamCursorOffset(uint32_t streamIndex)
 extern void Switch_LogWrite(const char *msg);
 extern const char * volatile g_switchDbStage;
 
+static inline void Switch_LogWriteFiltered(const char *msg)
+{
+    if (msg &&
+        (std::strncmp(msg, "[SWITCH SOUND", 13) == 0 ||
+         std::strncmp(msg, "[SWITCH SOUNDFILE", 17) == 0 ||
+         std::strncmp(msg, "[SWITCH LOADEDSOUND", 19) == 0 ||
+         std::strncmp(msg, "[SWITCH MSS", 11) == 0 ||
+         std::strncmp(msg, "[SWITCH SNDCURVE", 16) == 0 ||
+         std::strncmp(msg, "[SWITCH SOUNDLIST", 17) == 0))
+        return;
+
+    Switch_LogWrite(msg);
+}
+
+#define Switch_LogWrite Switch_LogWriteFiltered
+
 enum weapPositionAnimNum_t : __int32
 {
     WEAP_POSITION_ANIM_INVALID = 0
