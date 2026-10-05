@@ -677,6 +677,32 @@ void __cdecl R_AddCmdDrawStretchPic(
         defaultMaterial = (Material *)Material_FromHandle(material);
     else
         defaultMaterial = rgp.defaultMaterial;
+
+#ifdef __SWITCH__
+    if (defaultMaterial && !defaultMaterial->techniqueSet)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI MATERIAL] NULL techniqueSet material=%p "
+            "name=%p default=%p defaultTechset=%p frame=%s\\n",
+            static_cast<void *>(defaultMaterial),
+            static_cast<const void *>(defaultMaterial->info.name),
+            static_cast<void *>(rgp.defaultMaterial),
+            rgp.defaultMaterial
+                ? static_cast<void *>(rgp.defaultMaterial->techniqueSet)
+                : nullptr,
+            g_switchFrameStage ? g_switchFrameStage : "");
+        Switch_LogWrite(trace);
+
+        if (rgp.defaultMaterial && rgp.defaultMaterial->techniqueSet)
+            defaultMaterial = rgp.defaultMaterial;
+        else
+            return;
+    }
+#endif
+
     actualMaterial = defaultMaterial;
     if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
     {
