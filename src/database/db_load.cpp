@@ -4219,10 +4219,14 @@ void __cdecl Load_snd_alias_list_ptr(bool atStreamStart)
         }
         else
         {
-            // The serialized sound-list pointer uses the same 32-bit alias
-            // mechanism as the desktop/iOS loader. On ARM64 the resolved
-            // snd_alias_list_t is a native object, so never leave this field
-            // pointing at its 32-bit serialized record in the stream buffer.
+            // Preserve the original 32-bit serialized token in the
+            // native pointer field before calling DB_ConvertOffsetToAlias().
+            // The Switch alias resolver intentionally reads the low 32 bits
+            // from this field, just like the original loader does after its
+            // 4-byte Load_Stream().
+            *varsnd_alias_list_ptr =
+                reinterpret_cast<snd_alias_list_t *>(
+                    static_cast<uintptr_t>(serialized));
             DB_ConvertOffsetToAlias(
                 reinterpret_cast<uint32_t *>(varsnd_alias_list_ptr));
         }
