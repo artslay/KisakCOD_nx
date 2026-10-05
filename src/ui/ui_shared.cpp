@@ -5224,7 +5224,7 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/filter";
 #endif
-    if (*(_BYTE *)ui_showMenuOnly->current.integer
+    if (ui_showMenuOnly->current.string[0]
         && menu->window.name
         && I_stricmp(menu->window.name, ui_showMenuOnly->current.string))
     {
