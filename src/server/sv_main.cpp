@@ -521,30 +521,24 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
     }
     Profile_Guard(1);
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][SERVER] thread entered\n");
 #endif
     Sys_InitServerEvents();
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][SERVER] after Sys_InitServerEvents\n");
 #endif
     while (1)
     {
         while (1)
         {
 #ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][SERVER] before Sys_ServerCompleted\n");
 #endif
             Sys_ServerCompleted();
 #ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][SERVER] after Sys_ServerCompleted\n");
-            Switch_LogWrite("[KisakCOD][SERVER] before R_ProcessWorkerCmds first\n");
 #endif
             {
                 PROF_SCOPED("wait start server");
                 R_ProcessWorkerCmdsWithTimeout(SV_CheckStartServer, 1);
             }
 #ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][SERVER] after R_ProcessWorkerCmds first\n");
 #endif
             if (!sv.restartServerThread)
                 break;
@@ -552,11 +546,9 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
             sv.restartServerThread = 0;
             sv.clientMessageTimeout = 0;
 #ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][SERVER] restart flag cleared\n");
 #endif
         }
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][SERVER] before SV_PreFrame\n");
 #endif
         v3 = Sys_Milliseconds();
         {
@@ -564,18 +556,15 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
             SV_PreFrame();
         }
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][SERVER] after SV_PreFrame\n");
 #endif
         CL_FlushDebugServerData();
         if (!CL_DemoPlaying())
         {
 #ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][SERVER] before G_RunFrame\n");
 #endif
             PROF_SCOPED("G_RunFrame");
             G_RunFrame(SV_FRAME_DO_ALL, 0);
 #ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][SERVER] after G_RunFrame\n");
 #endif
         }
         v3 = Sys_Milliseconds();
@@ -647,16 +636,13 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
 void __cdecl SV_InitServerThread()
 {
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] SV_InitServerThread: before Sys_SpawnServerThread\n");
 #endif
     const int spawned = Sys_SpawnServerThread(SV_ServerThread);
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] SV_InitServerThread: after Sys_SpawnServerThread\n");
 #endif
     if (!spawned)
         Sys_Error("Failed to create server thread");
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] SV_InitServerThread: returning\n");
 #endif
 }
 
