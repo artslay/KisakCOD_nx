@@ -813,8 +813,18 @@ void __cdecl CL_Frame(int localClientNum, int msec)
     int v24; // r3
 
     v14 = msec;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_frame/hunk_clear";
+#endif
     Hunk_CheckTempMemoryClear();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_frame/hunk_clear_done";
+    g_switchFrameStage = "frame/cl_frame/hunk_high_clear";
+#endif
     Hunk_CheckTempMemoryHighClear();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_frame/hunk_high_clear_done";
+#endif
     //PIXSetMarker(0xFFFFFFFF, "CL_Frame");
     if (clientUIActives[0].isRunning)
     {
@@ -873,12 +883,21 @@ void __cdecl CL_Frame(int localClientNum, int msec)
         }
         cls.realFrametime = v14;
         cls.realtime += cls.frametime;
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/time_done";
+#endif
         if ((clientUIActives[0].keyCatchers & KEYCATCH_UI) != 0)
         {
             v24 = CL_ControllerIndexFromClientNum(localClientNum);
             //CL_GamepadRepeatScrollingButtons(localClientNum, v24); // KISAKTODO
         }
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/set_cgame_time";
+#endif
         CL_SetCGameTime(localClientNum);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/set_cgame_time_done";
+#endif
     }
 }
 
