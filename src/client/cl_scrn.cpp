@@ -298,6 +298,9 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
         g_switchFrameStage = "frame/scr/draw_field/ui_refresh_done";
 #endif
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/end";
+#endif
 }
 
 float __cdecl CL_GetMenuBlurRadius(int localClientNum)
