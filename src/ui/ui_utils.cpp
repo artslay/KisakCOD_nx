@@ -174,6 +174,27 @@ bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag)
     if (!item->enableDvar || !*item->enableDvar || !item->dvarTest || !*item->dvarTest)
         return 1;
     testValue = Dvar_GetVariantString(item->dvarTest);
+#ifdef __SWITCH__
+    if (badUiStringPointer(testValue))
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH UI ABI] Item_EnableShowViaDvar invalid testValue=%p "
+            "item=%p flag=%d dvarTest=%s low32=%08x high32=%08x\n",
+            static_cast<const void *>(testValue),
+            static_cast<const void *>(item),
+            flag,
+            item->dvarTest ? item->dvarTest : "<null>",
+            static_cast<unsigned>(
+                reinterpret_cast<uintptr_t>(testValue) & UINT64_C(0xffffffff)),
+            static_cast<unsigned>(
+                reinterpret_cast<uintptr_t>(testValue) >> 32));
+        Switch_LogWrite(trace);
+        return 1;
+    }
+#endif
     p = item->enableDvar;
     do
     {
