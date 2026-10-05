@@ -40,6 +40,15 @@ void *captureData;
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
+
+static inline void Switch_LogWriteFiltered(const char *msg)
+{
+    if (msg && std::strncmp(msg, "[KisakCOD][UIMAIN]", 18) == 0)
+        return;
+    Switch_LogWrite(msg);
+}
+
+#define Switch_LogWrite Switch_LogWriteFiltered
 #endif
 
 struct commandDef_t // sizeof=0x8
