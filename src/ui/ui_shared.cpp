@@ -2436,6 +2436,32 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
             if (out[0] != 59 || out[1])
             {
                 v3 = 0;
+#ifdef __SWITCH__
+                if (traceMainOpen && !I_stricmp(out, "open"))
+                {
+                    char trace[2048];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[KisakCOD][FRAME] OPEN TABLE count=%zu stride=%zu addr=%p names=[%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s]\n",
+                        sizeof(commandList) / sizeof(commandList[0]),
+                        sizeof(commandDef_t),
+                        static_cast<const void *>(commandList),
+                        commandList[0].name,
+                        commandList[1].name,
+                        commandList[2].name,
+                        commandList[3].name,
+                        commandList[4].name,
+                        commandList[5].name,
+                        commandList[6].name,
+                        commandList[7].name,
+                        commandList[8].name,
+                        commandList[9].name,
+                        commandList[10].name,
+                        commandList[11].name);
+                    Switch_LogWrite(trace);
+                }
+#endif
 #ifdef KISAK_XBOX
                 for (i = 0; i < 0x2A; ++i)
 #else
@@ -2451,30 +2477,11 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
 #ifdef __SWITCH__
                         if (traceMainOpen && !I_stricmp(out, "open"))
                         {
-                            char trace[2048];
+                            char trace[512];
                             std::snprintf(
                                 trace,
                                 sizeof(trace),
-                                "[KisakCOD][FRAME] OPEN TABLE count=%zu stride=%zu addr=%p names=[%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s]\n",
-                                sizeof(commandList) / sizeof(commandList[0]),
-                                sizeof(commandDef_t),
-                                static_cast<const void *>(commandList),
-                                commandList[0].name,
-                                commandList[1].name,
-                                commandList[2].name,
-                                commandList[3].name,
-                                commandList[4].name,
-                                commandList[5].name,
-                                commandList[6].name,
-                                commandList[7].name,
-                                commandList[8].name,
-                                commandList[9].name,
-                                commandList[10].name,
-                                commandList[11].name);
-                            Switch_LogWrite(trace);
-                            std::snprintf(
-                                trace,
-                                sizeof(trace),
+
                                 "[KisakCOD][FRAME] Item_RunScript dispatch OPEN index=%u token='%s' p=%p item=%p parent=%s\n",
                                 static_cast<unsigned>(i),
                                 out,
