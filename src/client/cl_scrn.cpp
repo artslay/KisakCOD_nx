@@ -157,33 +157,75 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
     Material *v4; // r4
     const float *v5; // r3
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/begin";
+#endif
     R_BeginSharedCmdList();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/projection";
+#endif
     R_AddCmdProjectionSet2D();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/state";
+#endif
     if (!cls.uiStarted
         || (connectionState = clientUIActives[0].connectionState, clientUIActives[0].connectionState == CA_MAP_RESTART))
     {
     LABEL_2:
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/clear";
+#endif
         SCR_ClearScreen();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/clear_done";
+#endif
     }
     else
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/update_time";
+#endif
         UI_UpdateTime(cls.realtime);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/update_time_done";
+#endif
         if (!UI_IsFullscreen())
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/connection";
+#endif
             switch (connectionState)
             {
             case CA_DISCONNECTED:
                 goto LABEL_2;
             case CA_CINEMATIC:
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/cinematic_clear";
+#endif
                 SCR_ClearScreen();
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/cinematic_draw";
+#endif
                 SCR_DrawCinematic(0);
                 goto LABEL_12;
             case CA_LOGO:
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/logo_clear";
+#endif
                 SCR_ClearScreen();
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/logo_draw";
+#endif
                 CL_DrawLogo();
                 goto LABEL_12;
             case CA_LOADING:
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/loading_clear";
+#endif
                 SCR_ClearScreen();
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/loading_refresh";
+#endif
                 goto LABEL_14;
             case CA_ACTIVE:
                 goto LABEL_12;
@@ -191,14 +233,29 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
                 goto LABEL_11;
             }
         }
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/connection_fullscreen";
+#endif
         switch (connectionState)
         {
         case CA_DISCONNECTED:
         case CA_LOGO:
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/clear_alt";
+#endif
             SCR_ClearScreen();
         case CA_LOADING:
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/loading_clear_alt";
+#endif
             SCR_ClearScreen();
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/loading_ui";
+#endif
 			UI_Refresh();
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/loading_ui_done";
+#endif
             break;
         case CA_CINEMATIC:
         case CA_ACTIVE:
@@ -209,9 +266,18 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
             break;
         }
     LABEL_12:
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/catcher_check";
+#endif
         if (!refreshedUI && Key_IsCatcherActive(0, KEYCATCH_UI))
             LABEL_14 :
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/ui_refresh";
+#endif
             UI_Refresh();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/ui_refresh_done";
+#endif
     }
 }
 
