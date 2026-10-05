@@ -2508,14 +2508,44 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
         goto LABEL_10;
     case UIMENU_MAIN:
         Key_SetCatcher(0, KEYCATCH_UI);
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][UIMAIN] before Menus_OpenByName(main)\n");
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open";
+#endif
         Menus_OpenByName(&uiInfo.uiDC, "main");
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] after Menus_OpenByName(main)\n");
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/get_error_dvar";
+        Switch_LogWrite("[KisakCOD][UIMAIN] before Dvar_GetString(com_errorMessage)\n");
+#endif
         String = Dvar_GetString("com_errorMessage");
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/get_error_dvar_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] after Dvar_GetString(com_errorMessage)\n");
+#endif
         if (*String)
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/error_menu";
+            Switch_LogWrite("[KisakCOD][UIMAIN] com_errorMessage nonempty; before error_popmenu\n");
+#endif
             Menus_OpenByName(&uiInfo.uiDC, "error_popmenu");
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/error_menu_done";
+            Switch_LogWrite("[KisakCOD][UIMAIN] after error_popmenu\n");
+#endif
             CL_StopControllerRumbles();
         }
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/fade_sounds";
+        Switch_LogWrite("[KisakCOD][UIMAIN] before SND_FadeAllSounds\n");
+#endif
         SND_FadeAllSounds(1.0, 1000);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/fade_sounds_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] after SND_FadeAllSounds\n");
+#endif
         return 1;
     case UIMENU_INGAME:
         if (v4 == UIMENU_CONTROLLERREMOVED)
