@@ -257,7 +257,7 @@ void __cdecl DB_ConvertOffsetToAlias(void *data)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][FONT ALIAS RESOLVE] asset=%d token=%08x aliasSlot=%p found=%u resolved=%p result=%p pending=%u\\n",
+                "[KisakCOD][FONT ALIAS RESOLVE] asset=%d token=%08x aliasSlot=%p found=%u resolved=%p result=%p pending=%u\n",
                 g_switchCurrentAssetIndex,
                 offset,
                 reinterpret_cast<const void *>(aliasSlot),
