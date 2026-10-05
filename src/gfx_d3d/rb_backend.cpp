@@ -1711,6 +1711,9 @@ void __cdecl DrawText2D(
     glowMaterial = 0;
     material = Material_FromHandle(font->material);
     iassert( material );
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/base_material";
+#endif
     if ((renderFlags & 0x40) != 0 && (!fxMaterial || !fxMaterial->techniqueSet))
         MyAssertHandler(
             ".\\rb_backend.cpp",
@@ -1919,6 +1922,9 @@ void __cdecl DrawText2D(
                                             v32 = (0.75 + 1.0) * (xScale * (double)glyph->pixelWidth);
                                             v33 = (0.125 + 1.0) * (yScale * (double)glyph->pixelHeight);
                                             v34.packed = finalColor.packed;
+#ifdef __SWITCH__
+                                            g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/fog_test_glow";
+#endif
                                             if (Material_HasAnyFogableTechnique(glowMaterial))
                                                 R_WarnOncePerFrame(R_WARN_FOGABLE_2DTEXT, glowMaterial->info.name);
                                             else
@@ -1971,6 +1977,9 @@ void __cdecl DrawText2D(
                                         v41 = yRot;
                                         w = xScale * (double)glyph->pixelWidth;
                                         v43 = yScale * (double)glyph->pixelHeight;
+#ifdef __SWITCH__
+                                        g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/fog_test_base";
+#endif
                                         if (Material_HasAnyFogableTechnique(material))
                                             R_WarnOncePerFrame(R_WARN_FOGABLE_2DTEXT, material->info.name);
                                         else
@@ -2552,6 +2561,38 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
     const GfxCmdDrawText2D *cmd; // [esp+68h] [ebp-4h]
 
     cmd = (const GfxCmdDrawText2D *)execState->cmd;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/enter";
+    {
+        static uint32_t switchText2DTraceCount = 0;
+        if (switchText2DTraceCount < 12)
+        {
+            const uintptr_t fontPtr = reinterpret_cast<uintptr_t>(cmd->font);
+            const uintptr_t materialPtr =
+                cmd->font && fontPtr < (1ULL << 39)
+                    ? reinterpret_cast<uintptr_t>(cmd->font->material)
+                    : 0;
+            const char *materialName =
+                cmd->font && materialPtr && materialPtr < (1ULL << 39)
+                    ? cmd->font->material->info.name
+                    : nullptr;
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][TEXT2D] cmd=%p bytes=%u font=%p material=%p glow=%p text=%s matName=%s\n",
+                static_cast<const void *>(cmd),
+                static_cast<unsigned>(cmd->header.byteCount),
+                static_cast<const void *>(cmd->font),
+                reinterpret_cast<const void *>(materialPtr),
+                static_cast<const void *>(cmd->font ? cmd->font->glowMaterial : nullptr),
+                cmd->text[0] ? cmd->text : "<empty>",
+                materialName ? materialName : "<null>");
+            Switch_LogWrite(trace);
+            ++switchText2DTraceCount;
+        }
+    }
+#endif
     v1 = DEG2RAD( cmd->rotation );
     cosAngle = cos(v1);
     sinAngle = sin(v1);
