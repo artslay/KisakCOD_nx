@@ -81,8 +81,11 @@ static bool Switch_BadStringPointer(const char *ptr)
         return true;
 
     const uintptr_t value = reinterpret_cast<uintptr_t>(ptr);
-    return value < UINT64_C(0x100000000) ||
-           value >= (UINT64_C(1) << 39);
+
+    // Switch thread stacks may be mapped below 4 GiB.  A low address is
+    // therefore not evidence of a truncated 32-bit pointer.  Keep the
+    // diagnostic bound only at the upper end of the Switch user VA space.
+    return value >= (UINT64_C(1) << 39);
 }
 
 static void Switch_LogBadStringCompare(const char *s0, const char *s1, int n)
