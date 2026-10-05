@@ -2889,17 +2889,71 @@ void __cdecl RB_ExecuteRenderCommandsLoop(const void *cmds)
         ++switchCommandCount;
         switch (header->id)
         {
-        case RC_PROJECTION_SET:
-            g_switchFrameStage = "frame/scr/issue_commands/cmd21_projection";
+        case RC_SET_MATERIAL_COLOR:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd1_material_color";
+            break;
+        case RC_SAVE_SCREEN:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd2_save_screen";
+            break;
+        case RC_SAVE_SCREEN_SECTION:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd3_save_screen_section";
             break;
         case RC_CLEAR_SCREEN:
             g_switchFrameStage = "frame/scr/issue_commands/cmd4_clear";
             break;
+        case RC_SET_VIEWPORT:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd5_set_viewport";
+            break;
+        case RC_STRETCH_PIC:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd6_stretch_pic";
+            break;
+        case RC_STRETCH_PIC_FLIP_ST:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd7_stretch_pic_flip_st";
+            break;
+        case RC_STRETCH_PIC_ROTATE_XY:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd8_stretch_pic_rotate_xy";
+            break;
+        case RC_STRETCH_PIC_ROTATE_ST:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd9_stretch_pic_rotate_st";
+            break;
+        case RC_STRETCH_RAW:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd10_stretch_raw";
+            break;
+        case RC_DRAW_QUAD_PIC:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd11_quad_pic";
+            break;
+        case RC_DRAW_FULL_SCREEN_COLORED_QUAD:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd12_fullscreen_quad";
+            break;
+        case RC_DRAW_TEXT_2D:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d";
+            break;
+        case RC_DRAW_TEXT_3D:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd14_text3d";
+            break;
+        case RC_BLEND_SAVED_SCREEN_BLURRED:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd15_blend_blurred";
+            break;
+        case RC_BLEND_SAVED_SCREEN_FLASHED:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd16_blend_flashed";
+            break;
+        case RC_DRAW_POINTS:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd17_points";
+            break;
+        case RC_DRAW_LINES:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd18_lines";
+            break;
+        case RC_DRAW_TRIANGLES:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd19_triangles";
+            break;
         case RC_DRAW_PROFILE:
             g_switchFrameStage = "frame/scr/issue_commands/cmd20_profile";
             break;
+        case RC_PROJECTION_SET:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd21_projection";
+            break;
         default:
-            g_switchFrameStage = "frame/scr/issue_commands/cmd_other";
+            g_switchFrameStage = "frame/scr/issue_commands/cmd_unknown";
             break;
         }
 #endif
