@@ -6237,10 +6237,30 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
             else
                 Window_RemoveDynamicFlags(dc->localClientNum, &item->window, 4);
         }
-        if ((item->dvarFlags & 0xC) == 0 || Item_EnableShowViaDvar(item, 4))
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/enable/test";
+#endif
+        bool itemEnabled = (item->dvarFlags & 0xC) == 0;
+        if (!itemEnabled)
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/enable/call";
+#endif
+            itemEnabled = Item_EnableShowViaDvar(item, 4);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/enable/returned";
+#endif
+        }
+        if (itemEnabled)
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/forecolor";
+#endif
             if (item->forecolorAExp.numEntries)
                 item->window.foreColor[3] = GetExpressionFloat(dc->localClientNum, &item->forecolorAExp);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/visible";
+#endif
             if (Item_IsVisible(dc->localClientNum, item))
             {
                 if (item->rectXExp.numEntries)
