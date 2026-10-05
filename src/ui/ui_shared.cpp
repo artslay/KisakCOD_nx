@@ -1256,15 +1256,32 @@ void __cdecl Script_Open(UiContext *dc, itemDef_s *item, const char **args)
     if (String_Parse(args, name, 1024))
     {
 #ifdef __SWITCH__
+        const char *parentName =
+            item && item->parent && item->parent->window.name
+                ? item->parent->window.name
+                : "<none>";
         const bool traceMainTextOpen =
             item &&
             item->parent &&
             item->parent->window.name &&
             !I_stricmp(item->parent->window.name, "main") &&
             !I_stricmp(name, "main_text");
+        {
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] Script_Open parsed name='%s' parent='%s' item=%p args=%p targetMatch=%d\n",
+                name,
+                parentName,
+                static_cast<void *>(item),
+                static_cast<const void *>(args),
+                traceMainTextOpen ? 1 : 0);
+            Switch_LogWrite(trace);
+        }
         if (traceMainTextOpen)
         {
-            Switch_LogWrite("[KisakCOD][UIMAIN] Script_Open(main -> main_text) before Menus_OpenByName\n");
+            Switch_LogWrite("[KisakCOD][FRAME] Script_Open(main -> main_text) before Menus_OpenByName\n");
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/call";
         }
 #endif
@@ -2416,6 +2433,22 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
                     if (!I_stricmp(out, commandList[i].name))
                     {
 #ifdef __SWITCH__
+                        if (traceMainOpen && !I_stricmp(out, "open"))
+                        {
+                            char trace[512];
+                            std::snprintf(
+                                trace,
+                                sizeof(trace),
+                                "[KisakCOD][FRAME] Item_RunScript dispatch OPEN index=%u token='%s' p=%p item=%p parent=%s\n",
+                                static_cast<unsigned>(i),
+                                out,
+                                static_cast<const void *>(p),
+                                static_cast<void *>(item),
+                                item && item->parent && item->parent->window.name
+                                    ? item->parent->window.name
+                                    : "<none>");
+                            Switch_LogWrite(trace);
+                        }
                         if (traceMainOpen)
                         {
                             char trace[384];
@@ -3238,6 +3271,18 @@ int __cdecl Menus_OpenByName(UiContext *dc, const char *p)
 
     pMenu = Menus_FindByName(dc, p);
 #ifdef __SWITCH__
+    if (traceMainText)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] main_text Menus_OpenByName entered name='%s' dc=%p stack=%d\n",
+            p ? p : "<null>",
+            static_cast<void *>(dc),
+            dc ? dc->openMenuCount : -1);
+        Switch_LogWrite(trace);
+    }
     if (traceMainText)
     {
         int foundIndex = -1;
