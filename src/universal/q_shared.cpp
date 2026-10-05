@@ -114,6 +114,8 @@ static void Switch_LogBadStringCompare(const char *s0, const char *s1, int n)
 
 int I_strnicmp(const char* s0, const char* s1, int n)
 {
+    const char *base0 = s0;
+    const char *base1 = s1;
     int c1; // [esp+0h] [ebp-8h]
     int c0; // [esp+4h] [ebp-4h]
 
@@ -172,8 +174,8 @@ int I_strnicmp(const char* s0, const char* s1, int n)
                         static_cast<const void *>(s0),
                         static_cast<const void *>(s1),
                         n,
-                        static_cast<const void *>(s0),
-                        static_cast<const void *>(s1),
+                        static_cast<const void *>(base0),
+                        static_cast<const void *>(base1),
                         __builtin_return_address(0),
                         g_switchFrameStage);
                     Switch_LogWrite(trace);
