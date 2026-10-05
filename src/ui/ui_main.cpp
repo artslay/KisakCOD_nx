@@ -1310,6 +1310,22 @@ void __cdecl UI_Init()
     Menus_CloseAll(&uiInfo.uiDC);
     Dvar_RegisterBool("ui_multiplayer", 0, 0x40u, "True if the game is multiplayer");
     uiscript_debug = Dvar_RegisterInt("uiscript_debug", 0, 0, 2, 0, "spam debug info for the ui script");
+
+#ifdef __SWITCH__
+    {
+        MenuList *codeMenus = UI_LoadMenus((char *)"ui/code.txt", 3);
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] UI_Init menus=%d codeMenuList=%p open=%d active=%d\\n",
+            uiInfo.uiDC.menuCount,
+            static_cast<void *>(codeMenus),
+            uiInfo.uiDC.openMenuCount,
+            static_cast<int>(g_currentMenuType));
+        Switch_LogWrite(trace);
+    }
+#endif
 }
 
 void __cdecl UI_KeyEvent(int localClientNum, int key, int down)
