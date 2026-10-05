@@ -2920,6 +2920,36 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         }
 #endif
     }
+#ifdef __SWITCH__
+    if (traceMain)
+    {
+        menuDef_t *mainText = nullptr;
+        int mainTextItems = -1;
+        for (int traceIndex = 0; traceIndex < dc->menuCount; ++traceIndex)
+        {
+            menuDef_t *candidate = dc->Menus[traceIndex];
+            if (candidate && candidate->window.name &&
+                !I_stricmp(candidate->window.name, "main_text"))
+            {
+                mainText = candidate;
+                mainTextItems = candidate->itemCount;
+                break;
+            }
+        }
+        char trace[768];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] main before onOpen=%p text=%s stack=%d main_text=%p items=%d\n",
+            static_cast<const void *>(menu->onOpen),
+            menu->onOpen ? menu->onOpen : "<null>",
+            dc->openMenuCount,
+            static_cast<void *>(mainText),
+            mainTextItems);
+        Switch_LogWrite(trace);
+    }
+#endif
+
     if (menu->onOpen)
     {
 #ifdef __SWITCH__
