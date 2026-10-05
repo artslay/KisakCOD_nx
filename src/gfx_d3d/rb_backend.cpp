@@ -2562,6 +2562,38 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
 
     cmd = (const GfxCmdDrawText2D *)execState->cmd;
 #ifdef __SWITCH__
+    if (!cmd->font || !cmd->font->material)
+    {
+        const uintptr_t fontPtr = reinterpret_cast<uintptr_t>(cmd->font);
+        const uintptr_t namePtr =
+            cmd->font && fontPtr < (1ULL << 39)
+                ? reinterpret_cast<uintptr_t>(cmd->font->fontName)
+                : 0;
+        const char *fontName =
+            namePtr && namePtr < (1ULL << 39)
+                ? cmd->font->fontName
+                : nullptr;
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TEXT2D] SKIP unresolved font material cmd=%p font=%p fontName=%s material=%p glow=%p text=%s
+",
+            static_cast<const void *>(cmd),
+            static_cast<const void *>(cmd->font),
+            fontName ? fontName : "<null>",
+            cmd->font && fontPtr < (1ULL << 39)
+                ? static_cast<void *>(cmd->font->material)
+                : nullptr,
+            cmd->font && fontPtr < (1ULL << 39)
+                ? static_cast<void *>(cmd->font->glowMaterial)
+                : nullptr,
+            cmd->text[0] ? cmd->text : "<empty>");
+        g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/unresolved_material";
+        Switch_LogWrite(trace);
+        execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
+        return;
+    }
     g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/enter";
     {
         static uint32_t switchText2DTraceCount = 0;

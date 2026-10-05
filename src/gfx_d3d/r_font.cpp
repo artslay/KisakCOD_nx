@@ -1,4 +1,5 @@
 #include <universal/q_shared.h>
+#include <cstdio>
 #include "r_font.h"
 #include <stringed/stringed_hooks.h>
 #include <qcommon/mem_track.h>
@@ -65,7 +66,39 @@ Font_s *__cdecl R_RegisterFont(const char *name, int imageTrack)
 
 Font_s *__cdecl R_RegisterFont_FastFile(const char *fontName)
 {
-    return DB_FindXAssetHeader(ASSET_TYPE_FONT, fontName).font;
+    Font_s *font = DB_FindXAssetHeader(ASSET_TYPE_FONT, fontName).font;
+#ifdef __SWITCH__
+    static uint32_t switchFontTraceCount = 0;
+    if (switchFontTraceCount < 16)
+    {
+        const uintptr_t fontPtr = reinterpret_cast<uintptr_t>(font);
+        const uintptr_t namePtr =
+            font && fontPtr < (1ULL << 39)
+                ? reinterpret_cast<uintptr_t>(font->fontName)
+                : 0;
+        const char *loadedName =
+            namePtr && namePtr < (1ULL << 39)
+                ? font->fontName
+                : nullptr;
+        char trace[448];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FONT] lookup name=%s font=%p loadedName=%s px=%d glyphs=%d material=%p glow=%p glyphData=%p
+",
+            fontName ? fontName : "<null>",
+            static_cast<void *>(font),
+            loadedName ? loadedName : "<null>",
+            font && fontPtr < (1ULL << 39) ? font->pixelHeight : -1,
+            font && fontPtr < (1ULL << 39) ? font->glyphCount : -1,
+            font && fontPtr < (1ULL << 39) ? static_cast<void *>(font->material) : nullptr,
+            font && fontPtr < (1ULL << 39) ? static_cast<void *>(font->glowMaterial) : nullptr,
+            font && fontPtr < (1ULL << 39) ? static_cast<void *>(font->glyphs) : nullptr);
+        Switch_LogWrite(trace);
+        ++switchFontTraceCount;
+    }
+#endif
+    return font;
 }
 
 Font_s *__cdecl R_LoadFont(const char *fontName, int imageTrack)

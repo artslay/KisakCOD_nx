@@ -17112,6 +17112,34 @@ void __cdecl Load_Font(bool atStreamStart)
             static_cast<uintptr_t>(serialized.glowMaterial));
         Load_MaterialHandle(0);
 
+        {
+            static uint32_t switchFontLoadTraceCount = 0;
+            if (switchFontLoadTraceCount < 16)
+            {
+                char trace[512];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][FONT LOAD] asset=%d rawType=%u font=%p fontNameToken=%08x materialToken=%08x glowToken=%08x glyphToken=%08x resolvedName=%p material=%p glow=%p glyphs=%p px=%d glyphCount=%d
+",
+                    g_switchCurrentAssetIndex,
+                    static_cast<unsigned>(g_switchCurrentAssetRawType),
+                    static_cast<void *>(varFont),
+                    serialized.fontName,
+                    serialized.material,
+                    serialized.glowMaterial,
+                    serialized.glyphs,
+                    static_cast<const void *>(varFont->fontName),
+                    static_cast<void *>(varFont->material),
+                    static_cast<void *>(varFont->glowMaterial),
+                    static_cast<void *>(varFont->glyphs),
+                    varFont->pixelHeight,
+                    varFont->glyphCount);
+                Switch_LogWrite(trace);
+                ++switchFontLoadTraceCount;
+            }
+        }
+
         if (serialized.glyphs)
         {
             if (serialized.glyphs == UINT32_MAX)
