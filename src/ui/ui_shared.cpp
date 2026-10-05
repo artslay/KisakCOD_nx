@@ -2437,28 +2437,35 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
             {
                 v3 = 0;
 #ifdef __SWITCH__
-                if (traceMainOpen && !I_stricmp(out, "open"))
+                if (traceMainOpen)
                 {
-                    char trace[2048];
+                    const int literalCompare = I_stricmp(out, "open");
+                    const int tableCompare = commandList[7].name
+                        ? I_stricmp(out, commandList[7].name)
+                        : 999;
+                    const size_t outLength = std::strlen(out);
+                    char trace[768];
                     std::snprintf(
                         trace,
                         sizeof(trace),
-                        "[KisakCOD][FRAME] OPEN TABLE count=%zu stride=%zu addr=%p names=[%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s]\n",
+                        "[KisakCOD][FRAME] OPEN PROBE token='%s' len=%zu literalCmp=%d tableCmp=%d tablePtr=%p tableName=%s count=%zu stride=%zu addr=%p bytes=%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                        out,
+                        outLength,
+                        literalCompare,
+                        tableCompare,
+                        static_cast<const void *>(commandList[7].name),
+                        commandList[7].name ? commandList[7].name : "<null>",
                         sizeof(commandList) / sizeof(commandList[0]),
                         sizeof(commandDef_t),
                         static_cast<const void *>(commandList),
-                        commandList[0].name,
-                        commandList[1].name,
-                        commandList[2].name,
-                        commandList[3].name,
-                        commandList[4].name,
-                        commandList[5].name,
-                        commandList[6].name,
-                        commandList[7].name,
-                        commandList[8].name,
-                        commandList[9].name,
-                        commandList[10].name,
-                        commandList[11].name);
+                        static_cast<unsigned>(static_cast<uint8_t>(out[0])),
+                        static_cast<unsigned>(static_cast<uint8_t>(out[1])),
+                        static_cast<unsigned>(static_cast<uint8_t>(out[2])),
+                        static_cast<unsigned>(static_cast<uint8_t>(out[3])),
+                        static_cast<unsigned>(static_cast<uint8_t>(out[4])),
+                        static_cast<unsigned>(static_cast<uint8_t>(out[5])),
+                        static_cast<unsigned>(static_cast<uint8_t>(out[6])),
+                        static_cast<unsigned>(static_cast<uint8_t>(out[7])));
                     Switch_LogWrite(trace);
                 }
 #endif
