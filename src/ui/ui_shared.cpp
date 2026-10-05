@@ -5324,6 +5324,7 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
                 menu->window.rect.w,
                 menu->window.rect.h);
             Switch_LogWrite(trace);
+            ++switchMainPaintTraceCount;
         }
     }
 #endif
