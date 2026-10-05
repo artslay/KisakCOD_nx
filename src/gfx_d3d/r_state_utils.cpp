@@ -177,6 +177,11 @@ void __cdecl R_Set2D(GfxCmdBufSourceState *source)
         source->eyeOffset[2] = 0.0;
         source->eyeOffset[3] = 1.0;
 
+#ifdef __SWITCH__
+        if (gfxCmdBufState.prim.device)
+            gfxCmdBufState.prim.device->SetSwitchUnlitMode(true);
+#endif
+
         GfxViewport viewport;
         R_GetViewport(source, &viewport);
         R_CmdBufSet2D(source, &viewport);
@@ -281,6 +286,10 @@ void __cdecl R_Set3D(GfxCmdBufSourceState *source)
             source->eyeOffset[2] = source->viewParms.origin[2];
         }
         source->eyeOffset[3] = 1.0;
+#ifdef __SWITCH__
+        if (gfxCmdBufState.prim.device)
+            gfxCmdBufState.prim.device->SetSwitchUnlitMode(false);
+#endif
         R_CmdBufSet3D(source);
     }
 }
