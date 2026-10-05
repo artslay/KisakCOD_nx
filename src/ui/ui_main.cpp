@@ -1318,7 +1318,7 @@ void __cdecl UI_Init()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][FRAME] UI_Init menus=%d codeMenuList=%p open=%d active=%d\\n",
+            "[KisakCOD][FRAME] UI_Init menus=%d codeMenuList=%p open=%d active=%d\n",
             uiInfo.uiDC.menuCount,
             static_cast<void *>(codeMenus),
             uiInfo.uiDC.openMenuCount,
