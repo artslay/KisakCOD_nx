@@ -212,6 +212,67 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         g_switchSkinCacheCreateHr);
     Switch_LogCrashLine(line);
 
+    const uintptr_t pc = static_cast<uintptr_t>(ctx->pc.x);
+    const uintptr_t pcAligned = pc & ~static_cast<uintptr_t>(3);
+
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] pc_aligned=%p pc_delta=%llu\\n",
+        reinterpret_cast<void *>(pcAligned),
+        static_cast<unsigned long long>(pc - pcAligned));
+    Switch_LogCrashLine(line);
+
+    if (pcAligned >= 12)
+    {
+        // ARM64 instructions are 32-bit. Dump a small window around the
+        // faulting PC so the exact memory operand can be decoded directly
+        // from the crash log.
+        for (int offset = -12; offset <= 12; offset += 4)
+        {
+            const uintptr_t address =
+                pcAligned + static_cast<intptr_t>(offset);
+            const uint32_t instruction =
+                *reinterpret_cast<const volatile uint32_t *>(address);
+
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[KisakCOD][CRASH] insn[%+d] %p = 0x%08x\\n",
+                offset,
+                reinterpret_cast<void *>(address),
+                instruction);
+            Switch_LogCrashLine(line);
+        }
+    }
+
+    int farReg = -1;
+    int low32Reg = -1;
+    const uint64_t farValue = ctx->far.x;
+    const uint32_t farLow32 = static_cast<uint32_t>(farValue);
+
+    for (int i = 0; i < 29; ++i)
+    {
+        if (ctx->cpu_gprs[i].x == farValue && farReg < 0)
+            farReg = i;
+
+        if (static_cast<uint32_t>(ctx->cpu_gprs[i].x) == farLow32 &&
+            static_cast<uint32_t>(ctx->cpu_gprs[i].x >> 32) != 0 &&
+            low32Reg < 0)
+            low32Reg = i;
+    }
+
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] far_match_x=%d far_low32=0x%08x high32=0x%08x "
+        "low32_nonzero_high_reg=%d\\n",
+        farReg,
+        farLow32,
+        static_cast<uint32_t>(farValue >> 32),
+        low32Reg);
+    Switch_LogCrashLine(line);
+
     for (int i = 0; i < 29; i += 2)
     {
         if (i + 1 < 29)
@@ -219,7 +280,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
             std::snprintf(
                 line,
                 sizeof(line),
-                "[KisakCOD][CRASH] x%-2d=0x%016llx x%-2d=0x%016llx\n",
+                "[KisakCOD][CRASH] x%-2d=0x%016llx x%-2d=0x%016llx\\n",
                 i,
                 static_cast<unsigned long long>(ctx->cpu_gprs[i].x),
                 i + 1,
@@ -230,7 +291,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
             std::snprintf(
                 line,
                 sizeof(line),
-                "[KisakCOD][CRASH] x%-2d=0x%016llx\n",
+                "[KisakCOD][CRASH] x%-2d=0x%016llx\\n",
                 i,
                 static_cast<unsigned long long>(ctx->cpu_gprs[i].x));
         }
