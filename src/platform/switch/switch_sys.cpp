@@ -108,6 +108,10 @@ extern volatile int32_t g_switchSkinCacheCreateCalled;
 extern volatile int32_t g_switchSkinCacheCreateHr;
 }
 extern thread_local const char * volatile g_switchFrameStage;
+extern "C" volatile uintptr_t g_switchFrameTailReached;
+extern "C" volatile uintptr_t g_switchFrameAfterDrawReached;
+extern "C" volatile uintptr_t g_switchFrameDrawFieldAddress;
+extern "C" volatile uintptr_t g_switchFrameDrawFieldCaller;
 extern "C" uint32_t Sys_GetSwitchThreadContext();
 extern "C" const char *Sys_GetSwitchThreadStage();
 
@@ -169,11 +173,16 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         line,
         sizeof(line),
         "[KisakCOD][CRASH] thread_context=%u (%s) stage=%s\n"
-        "[KisakCOD][CRASH] frame_stage=%s\n",
+        "[KisakCOD][CRASH] frame_stage=%s tail_reached=%llu after_draw=%llu\n"
+        "[KisakCOD][CRASH] draw_field=%p caller=%p\n",
         threadContext,
         threadName,
         Sys_GetSwitchThreadStage(),
-        g_switchFrameStage ? g_switchFrameStage : "(null)");
+        g_switchFrameStage ? g_switchFrameStage : "(null)",
+        static_cast<unsigned long long>(g_switchFrameTailReached),
+        static_cast<unsigned long long>(g_switchFrameAfterDrawReached),
+        reinterpret_cast<void *>(g_switchFrameDrawFieldAddress),
+        reinterpret_cast<void *>(g_switchFrameDrawFieldCaller));
     Switch_LogCrashLine(line);
 
     std::snprintf(
@@ -234,6 +243,33 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         (void)::fsync(g_switchLogFd);
 
     appletRequestExitToSelf();
+}
+
+extern "C" volatile uintptr_t g_switchFrameTailReached = 0;
+extern "C" volatile uintptr_t g_switchFrameAfterDrawReached = 0;
+extern "C" volatile uintptr_t g_switchFrameDrawFieldAddress = 0;
+extern "C" volatile uintptr_t g_switchFrameDrawFieldCaller = 0;
+
+extern "C" void Switch_LogFrameTail()
+{
+    static constexpr char kMessage[] =
+        "[KisakCOD][SCRFRAME] body_exit_before_final_stage\\n";
+    const size_t len = sizeof(kMessage) - 1;
+    (void)::write(STDOUT_FILENO, kMessage, len);
+    if (g_switchLogFd >= 0)
+    {
+        size_t written = 0;
+        while (written < len)
+        {
+            const ssize_t n = ::write(
+                g_switchLogFd,
+                kMessage + written,
+                len - written);
+            if (n <= 0)
+                break;
+            written += static_cast<size_t>(n);
+        }
+    }
 }
 
 void Switch_LogWrite(const char *msg)
