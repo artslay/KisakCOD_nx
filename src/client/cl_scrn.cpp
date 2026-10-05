@@ -12,6 +12,11 @@
 #ifdef __SWITCH__
 extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
+extern "C" void Switch_LogFrameTail();
+extern "C" volatile uintptr_t g_switchFrameTailReached;
+extern "C" volatile uintptr_t g_switchFrameAfterDrawReached;
+extern "C" volatile uintptr_t g_switchFrameDrawFieldAddress;
+extern "C" volatile uintptr_t g_switchFrameDrawFieldCaller;
 static thread_local bool g_switchRemoteFrameTraceActive = false;
 static thread_local bool g_switchRemoteFrameTraceUsed = false;
 
@@ -161,6 +166,11 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #endif
 
 #ifdef __SWITCH__
+    g_switchFrameDrawFieldAddress =
+        reinterpret_cast<uintptr_t>(&SCR_DrawScreenField);
+    g_switchFrameDrawFieldCaller =
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    g_switchFrameTailReached = 0;
     g_switchFrameStage = "frame/scr/draw_field/begin";
 #endif
     R_BeginSharedCmdList();
@@ -299,7 +309,8 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #endif
     }
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][SCRFRAME] body_exit_before_final_stage\n");
+    g_switchFrameTailReached = 1;
+    Switch_LogFrameTail();
 #endif
 }
 
@@ -392,8 +403,12 @@ void SCR_UpdateFrame()
 #endif
     if (g_switchRemoteFrameTraceActive)
         Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before SCR_DrawScreenField\n");
+#ifdef __SWITCH__
+    g_switchFrameAfterDrawReached = 0;
+#endif
     SCR_DrawScreenField(refreshedUI);
 #ifdef __SWITCH__
+    g_switchFrameAfterDrawReached = 1;
     if (g_switchRemoteFrameTraceActive)
         Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after SCR_DrawScreenField\n");
     g_switchFrameStage = "frame/scr/draw_field_done";
