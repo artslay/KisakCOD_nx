@@ -1442,7 +1442,7 @@ int __cdecl SND_PlaySoundAlias_Internal(
         if (SND_IsRestricted(alias0Channel))
             SND_StopEntityChannel(sndEnt, alias0Channel);
 
-
+        const bool isNullSound = SND_IsNullSoundFile(alias0->soundFile);
         if (isNullSound)
             return SND_PLAYBACKID_NOTPLAYED;
 
