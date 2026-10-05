@@ -2864,6 +2864,10 @@ void __cdecl RB_ExecuteRenderCommandsLoop(const void *cmds)
     const GfxCmdHeader *header; // [esp+0h] [ebp-Ch]
     GfxRenderCommandExecState execState; // [esp+4h] [ebp-8h] BYREF
     const void *prevCmd; // [esp+8h] [ebp-4h]
+#ifdef __SWITCH__
+    uint32_t switchCommandCount = 0;
+    uint32_t switchCommandIds[6] = {};
+#endif
 
     iassert(!tess.indexCount);
 
