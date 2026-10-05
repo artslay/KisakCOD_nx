@@ -125,6 +125,11 @@ void __cdecl R_Cinematic_InitBinkVolumes()
 
 void __cdecl R_Cinematic_Init()
 {
+#ifdef __SWITCH__
+    Switch_LogWrite(g_cinematicThreadInitialized
+        ? "[KisakCOD][CINEMATIC] R_Cinematic_Init: entry initialized=true\\n"
+        : "[KisakCOD][CINEMATIC] R_Cinematic_Init: entry initialized=false\\n");
+#endif
     iassert(!g_cinematicThreadInitialized || g_cinematicThreadState == CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES);
 
     memset(&cinematicGlob, 0, sizeof(cinematicGlob));
@@ -137,12 +142,24 @@ void __cdecl R_Cinematic_Init()
 
     if (!g_cinematicThreadInitialized)
     {
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: spawning thread\\n");
+#endif
         g_cinematicThreadInitialized = 1;
         g_cinematicThreadState = CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES;
         Sys_SpawnCinematicsThread(R_Cinematic_Thread);
         KISAK_NULLSUB();
         cinematicGlob.atHighPriority = 1;
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: spawn returned\\n");
+#endif
     }
+#ifdef __SWITCH__
+    else
+    {
+        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: thread already initialized\\n");
+    }
+#endif
 }
 
 void R_Cinematic_ReserveMemory()
