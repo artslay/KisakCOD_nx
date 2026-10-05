@@ -17119,54 +17119,45 @@ void __cdecl Load_Font(bool atStreamStart)
         varFont->pixelHeight = serialized.pixelHeight;
         varFont->glyphCount = serialized.glyphCount;
 
-        // The 24-byte Font_s header contains the original serialized runtime
-        // fields, but the linker stores the actual XString/material/glyph
-        // references in stream 4 after the header. This mirrors the original
-        // 32-bit loader: read the header first, then consume the nested stream-4
-        // fields in order. Do not interpret serialized.material/glow/glyphs from
-        // the header as native runtime pointers.
         DB_PushStreamPos(4);
 
-        uint32_t fontNameToken = 0;
-        DB_LoadSwitchSerialized(&fontNameToken, sizeof(fontNameToken));
-        varXString = &varFont->fontName;
-        varFont->fontName = reinterpret_cast<const char *>(
-            static_cast<uintptr_t>(fontNameToken));
-        Load_XString(false);
+        if (!serialized.fontName)
+        {
+            varFont->fontName = nullptr;
+        }
+        else if (serialized.fontName == UINT32_MAX)
+        {
+            char *nameBuffer =
+                reinterpret_cast<char *>(AllocLoad_raw_byte());
+            Load_XStringCustom(&nameBuffer);
+            varFont->fontName = nameBuffer;
+        }
+        else
+        {
+            varFont->fontName =
+                reinterpret_cast<const char *>(
+                    DB_ConvertOffsetToPointerValue(serialized.fontName));
+        }
 
-        uint32_t materialToken = 0;
-        DB_LoadSwitchSerialized(&materialToken, sizeof(materialToken));
         varMaterialHandle = &varFont->material;
         varFont->material = reinterpret_cast<Material *>(
-            static_cast<uintptr_t>(materialToken));
-        Load_MaterialHandle(false);
+            static_cast<uintptr_t>(serialized.material));
+        Load_MaterialHandle(0);
 
-        uint32_t glowMaterialToken = 0;
-        DB_LoadSwitchSerialized(
-            &glowMaterialToken,
-            sizeof(glowMaterialToken));
         varMaterialHandle = &varFont->glowMaterial;
         varFont->glowMaterial = reinterpret_cast<Material *>(
-            static_cast<uintptr_t>(glowMaterialToken));
-        Load_MaterialHandle(false);
-
-        uint32_t glyphToken = 0;
-        DB_LoadSwitchSerialized(&glyphToken, sizeof(glyphToken));
+            static_cast<uintptr_t>(serialized.glowMaterial));
+        Load_MaterialHandle(0);
 
         {
             static uint32_t switchFontLoadTraceCount = 0;
             if (switchFontLoadTraceCount < 16)
             {
-                char trace[576];
+                char trace[512];
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][FONT LOAD] asset=%d rawType=%u font=%p "
-                    "headerNameToken=%08x headerMaterial=%08x "
-                    "headerGlow=%08x headerGlyph=%08x "
-                    "nameToken=%08x materialToken=%08x glowToken=%08x "
-                    "glyphToken=%08x name=%s material=%p glow=%p glyphs=%p "
-                    "px=%d glyphCount=%d\n",
+                    "[KisakCOD][FONT LOAD] asset=%d rawType=%u font=%p fontNameToken=%08x materialToken=%08x glowToken=%08x glyphToken=%08x resolvedName=%p material=%p glow=%p glyphs=%p px=%d glyphCount=%d\n",
                     g_switchCurrentAssetIndex,
                     static_cast<unsigned>(g_switchCurrentAssetRawType),
                     static_cast<void *>(varFont),
@@ -17174,11 +17165,7 @@ void __cdecl Load_Font(bool atStreamStart)
                     serialized.material,
                     serialized.glowMaterial,
                     serialized.glyphs,
-                    fontNameToken,
-                    materialToken,
-                    glowMaterialToken,
-                    glyphToken,
-                    varFont->fontName ? varFont->fontName : "<null>",
+                    static_cast<const void *>(varFont->fontName),
                     static_cast<void *>(varFont->material),
                     static_cast<void *>(varFont->glowMaterial),
                     static_cast<void *>(varFont->glyphs),
@@ -17189,21 +17176,19 @@ void __cdecl Load_Font(bool atStreamStart)
             }
         }
 
-        if (glyphToken)
+        if (serialized.glyphs)
         {
-            if (glyphToken == UINT32_MAX)
+            if (serialized.glyphs == UINT32_MAX)
             {
-                DB_AllocStreamPos(3);
-                varFont->glyphs =
-                    reinterpret_cast<Glyph *>(DB_GetStreamPos());
+                varFont->glyphs = reinterpret_cast<Glyph *>(
+                    AllocLoad_FxElemVisStateSample());
                 varGlyph = varFont->glyphs;
                 Load_GlyphArray(1, varFont->glyphCount);
             }
             else
             {
-                varFont->glyphs =
-                    reinterpret_cast<Glyph *>(
-                        DB_ConvertOffsetToPointerValue(glyphToken));
+                varFont->glyphs = reinterpret_cast<Glyph *>(
+                    DB_ConvertOffsetToPointerValue(serialized.glyphs));
             }
         }
 
