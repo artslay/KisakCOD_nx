@@ -2887,6 +2887,21 @@ void __cdecl RB_ExecuteRenderCommandsLoop(const void *cmds)
         if (switchCommandCount < 6)
             switchCommandIds[switchCommandCount] = header->id;
         ++switchCommandCount;
+        switch (header->id)
+        {
+        case RC_PROJECTION_SET:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd21_projection";
+            break;
+        case RC_CLEAR_SCREEN:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd4_clear";
+            break;
+        case RC_DRAW_PROFILE:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd20_profile";
+            break;
+        default:
+            g_switchFrameStage = "frame/scr/issue_commands/cmd_other";
+            break;
+        }
 #endif
         RB_RenderCommandTable[header->id](&execState);
         iassert(execState.cmd != prevCmd);
