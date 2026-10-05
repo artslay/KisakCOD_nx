@@ -203,22 +203,54 @@ void OpenGLBackend::Present()
 #ifdef __SWITCH__
     if (s_display != EGL_NO_DISPLAY && s_surface != EGL_NO_SURFACE)
     {
-        Switch_LogWrite("[KisakCOD][RTHREAD] OpenGLBackend::Present: before eglSwapBuffers\n");
+        static uint32_t presentDiagnostics = 0;
+        if (presentDiagnostics < 4)
+        {
+            GLint drawFbo = 0;
+            GLint viewport[4] = {};
+            const EGLContext currentContext = eglGetCurrentContext();
+            eglGetError();
+            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFbo);
+            glGetIntegerv(GL_VIEWPORT, viewport);
+            const GLenum glError = glGetError();
+
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] Present pre-swap ctx=%p fbo=%d viewport=%d,%d %dx%d glerr=0x%04x\n",
+                (void *)currentContext,
+                drawFbo,
+                viewport[0],
+                viewport[1],
+                viewport[2],
+                viewport[3],
+                static_cast<unsigned>(glError));
+            Switch_LogWrite(trace);
+            ++presentDiagnostics;
+        }
+
         const EGLBoolean result = eglSwapBuffers(s_display, s_surface);
+        char trace[160];
         if (result == EGL_TRUE)
-            Switch_LogWrite("[KisakCOD][RTHREAD] OpenGLBackend::Present: eglSwapBuffers returned ok\n");
+        {
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] Present eglSwapBuffers=OK\n");
+        }
         else
         {
-            char trace[160];
-            std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][RTHREAD] OpenGLBackend::Present: eglSwapBuffers failed err=0x%04x\n",
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] Present eglSwapBuffers=FAIL err=0x%04x\n",
                 eglGetError());
-            Switch_LogWrite(trace);
         }
+        Switch_LogWrite(trace);
     }
 #endif
 }
-
 void OpenGLBackend::BeginScene()
 {
 }
