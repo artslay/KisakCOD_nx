@@ -280,6 +280,14 @@ bool __cdecl Sys_SpawnWorkerThread(void (__cdecl *function)(uint32_t), uint32_t 
 
 char __cdecl Sys_SpawnCinematicsThread(void (__cdecl *function)(uint32_t))
 {
+    // Match the original engine's event contract:
+    //   g_cinematicsThreadOutstandingRequestEvent = manual-reset, signaled
+    //   g_cinematicsHostOutstandingRequestEvent  = manual-reset, reset
+    // The render thread uses the initially-signaled thread event to synchronize
+    // the cinematic thread's first host handoff.
+    InitSwitchEvent(g_cinematicsThreadOutstandingRequestEvent, true, true);
+    InitSwitchEvent(g_cinematicsHostOutstandingRequestEvent, true, false);
+
     Sys_CreateThread(function, THREAD_CONTEXT_CINEMATIC);
     return 1;
 }
