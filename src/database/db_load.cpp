@@ -3036,12 +3036,15 @@ void __cdecl Load_MssSound(bool atStreamStart)
 
         if (value < 0xFFFFFFFE)
         {
-            const uintptr_t aliasSlot =
-                DB_ConvertOffsetToPointerValue(value);
-            varMssSound->data = aliasSlot
-                ? reinterpret_cast<uint8_t *>(
-                    *reinterpret_cast<const uintptr_t *>(aliasSlot))
-                : nullptr;
+            // The fastfile stores this reference as a 32-bit serialized offset.
+            // The old Switch path treated the serialized insertion slot as a
+            // native uintptr_t* and read 8 bytes from it, which can consume
+            // adjacent serialized data and manufacture a sign-extended/bogus
+            // ARM64 pointer. Use the same Switch alias resolver as the other
+            // 32-bit serialized pointer fields; it reads only the 4-byte token
+            // and writes the resolved native pointer into the 64-bit field.
+            DB_ConvertOffsetToAlias(
+                reinterpret_cast<uint32_t *>(&varMssSound->data));
         }
         else
         {
