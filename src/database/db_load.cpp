@@ -8150,14 +8150,19 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
 {
     const void **inserted; // [esp+0h] [ebp-Ch]
     uint32_t value; // [esp+4h] [ebp-8h]
-    Load_Stream(atStreamStart, (uint8_t *)varMaterialHandle, 4);
 #ifdef __SWITCH__
+    // The containing Switch object may already have been translated from its
+    // serialized 32-bit layout. In that case atStreamStart=false must resolve
+    // the token already present in the native pointer field rather than
+    // consuming the following nested stream payload a second time.
+    if (atStreamStart)
+        Load_Stream(true, (uint8_t *)varMaterialHandle, 4);
     value = static_cast<uint32_t>(
         reinterpret_cast<uintptr_t>(*varMaterialHandle));
+#else
+    Load_Stream(atStreamStart, (uint8_t *)varMaterialHandle, 4);
 #endif
     DB_PushStreamPos(0);
-#ifdef __SWITCH__
-    #endif
     if (*varMaterialHandle)
     {
         value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(*varMaterialHandle));
@@ -12625,10 +12630,27 @@ void __cdecl Load_editFieldDef_t(bool atStreamStart)
 
 void __cdecl Load_editFieldDef_ptr(bool atStreamStart)
 {
+#ifdef __SWITCH__
+    if (atStreamStart)
+        Load_Stream(true, (uint8_t *)vareditFieldDef_ptr, 4);
+#else
     Load_Stream(atStreamStart, (uint8_t *)vareditFieldDef_ptr, 4);
+#endif
     if (*vareditFieldDef_ptr)
     {
+#ifdef __SWITCH__
+        const uint32_t serialized = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(*vareditFieldDef_ptr));
+        (void)serialized;
+        DB_AllocStreamPos(3);
+        *vareditFieldDef_ptr = reinterpret_cast<editFieldDef_s *>(
+            Hunk_Alloc(
+                static_cast<uint32_t>(sizeof(editFieldDef_s)),
+                "SwitchEditFieldDef",
+                22));
+#else
         *vareditFieldDef_ptr = (editFieldDef_s *)AllocLoad_FxElemVisStateSample();
+#endif
         vareditFieldDef_t = *vareditFieldDef_ptr;
         Load_editFieldDef_t(1);
     }
