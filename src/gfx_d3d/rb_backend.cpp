@@ -40,6 +40,7 @@
 #include <gfx/gfx_backend.h>
 #include <gfx/opengl/gl_backend.h>
 extern void Switch_LogWrite(const char *msg);
+extern thread_local const char *g_switchFrameStage;
 static inline uint64_t KisakRendererClock()
 {
     return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -2764,6 +2765,9 @@ GfxIndexBufferState *RB_SwapBuffers()
 
     iassert(dx.targetWindowIndex >= 0 && dx.targetWindowIndex < dx.windowCount);
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/issue/swap_present";
+#endif
     {
         PROF_SCOPED("Present");
 #ifdef __SWITCH__
@@ -2774,6 +2778,9 @@ GfxIndexBufferState *RB_SwapBuffers()
         hr = dx.windows[dx.targetWindowIndex].swapChain->Present(0, 0, 0, 0, 0);
 #endif
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/issue/swap_present_done";
+#endif
 
 #ifdef KISAK_RADIANT
     // One-shot-per-window present proof (multi-window layout debug): confirms each editor
@@ -2799,9 +2806,29 @@ GfxIndexBufferState *RB_SwapBuffers()
         Com_Error(ERR_FATAL, "Direct3DDevice9::Present failed: %s\n", R_ErrorDescription(hr));
     }
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/issue/swap_fence";
+#endif
     R_HW_InsertFence(&dx.swapFence);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/issue/swap_fence_done";
+#endif
     result = gfxBuf.dynamicIndexBuffer;
+#ifdef __SWITCH__
+    if (!result)
+    {
+        g_switchFrameStage = "frame/issue/dynamic_index_null";
+        Switch_LogWrite("[KisakCOD][RTHREAD] RB_SwapBuffers: dynamicIndexBuffer is null\\n");
+    }
+    else
+    {
+        g_switchFrameStage = "frame/issue/dynamic_index_reset";
+    }
+#endif
     gfxBuf.dynamicIndexBuffer->used = 0;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/issue/dynamic_index_reset_done";
+#endif
     return result;
 }
 
