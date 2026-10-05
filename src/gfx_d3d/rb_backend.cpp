@@ -2883,6 +2883,11 @@ void __cdecl RB_ExecuteRenderCommandsLoop(const void *cmds)
 
         iassert(header->id < (sizeof(RB_RenderCommandTable) / (sizeof(RB_RenderCommandTable[0]) * (sizeof(RB_RenderCommandTable) != 4 || sizeof(RB_RenderCommandTable[0]) <= 4))));
         iassert(RB_RenderCommandTable[header->id]);
+#ifdef __SWITCH__
+        if (switchCommandCount < 6)
+            switchCommandIds[switchCommandCount] = header->id;
+        ++switchCommandCount;
+#endif
         RB_RenderCommandTable[header->id](&execState);
         iassert(execState.cmd != prevCmd);
         prevCmd = execState.cmd;
