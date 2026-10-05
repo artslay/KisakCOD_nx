@@ -5316,6 +5316,24 @@ void __cdecl Window_Paint(
     float fadeClamp,
     float fadeCycle)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/enter";
+    if (Switch_UI_BadPointer(dc))
+    {
+        Switch_UI_LogBadPointer("Window_Paint", "dc", nullptr, dc);
+        return;
+    }
+    if (Switch_UI_BadPointer(w))
+    {
+        Switch_UI_LogBadPointer("Window_Paint", "window", dc, w);
+        return;
+    }
+    if (Switch_UI_BadPointer(w->background))
+    {
+        Switch_UI_LogBadPointer("Window_Paint", "background", w, w->background);
+        return;
+    }
+#endif
     PROF_SCOPED("Window_Paint");
 
     float *v6; // [esp+24h] [ebp-80h]
@@ -5343,6 +5361,9 @@ void __cdecl Window_Paint(
     fillRect_8 = w->rect.w;
     fillRect_12 = w->rect.h;
     scrPlace = &scrPlaceView[dc->localClientNum];
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/setup";
+#endif
     if (g_debugMode)
         UI_DrawRect(
             scrPlace,
@@ -5354,10 +5375,16 @@ void __cdecl Window_Paint(
             origRect->vertAlign,
             1.0,
             colorWhite);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/style";
+#endif
     if (w && (w->style || w->border))
     {
         if (w->border)
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/border";
+#endif
             fillRect = fillRect + w->borderSize;
             fillRect_4 = fillRect_4 + w->borderSize;
             fillRect_8 = fillRect_8 - (w->borderSize + 1.0);
@@ -5366,6 +5393,9 @@ void __cdecl Window_Paint(
         switch (w->style)
         {
         case 1:
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/style1";
+#endif
             if (w->background)
             {
                 localClientNum = dc->localClientNum;
@@ -5380,6 +5410,9 @@ void __cdecl Window_Paint(
                 flags = w->dynamicFlags[localClientNum];
                 Fade(&flags, &w->backColor[3], fadeClamp, &w->nextTime, (int)fadeCycle, 1, fadeAmount, fadeInAmount, dc);
                 Window_SetDynamicFlags(dc->localClientNum, w, flags);
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/style1/draw";
+#endif
                 UI_DrawHandlePic(
                     scrPlace,
                     fillRect,
@@ -5390,6 +5423,9 @@ void __cdecl Window_Paint(
                     origRect->vertAlign,
                     w->backColor,
                     w->background);
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/style1/after_draw";
+#endif
             }
             else
             {
@@ -5491,6 +5527,9 @@ void __cdecl Window_Paint(
         default:
             break;
         }
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/border_draw";
+#endif
         switch (w->border)
         {
         case 1:
