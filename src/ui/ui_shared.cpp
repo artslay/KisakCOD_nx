@@ -905,7 +905,14 @@ void __cdecl Menu_GainFocusDueToClose(UiContext *dc, menuDef_t *menu)
     if (Window_HasFocus(dc->localClientNum, &menu->window))
         MyAssertHandler(".\\ui\\ui_shared.cpp", 907, 0, "%s", "!Window_HasFocus( dc->localClientNum, &menu->window )");
     Window_AddDynamicFlags(dc->localClientNum, &menu->window, 2);
-    Menu_CallOnFocusDueToOpen(dc, menu);
+#ifdef __SWITCH__
+    if (traceMainText)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/focus";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) before Menu_CallOnFocusDueToOpen\n");
+    }
+#endif
+        Menu_CallOnFocusDueToOpen(dc, menu);
 }
 
 void __cdecl Menu_CallOnFocusDueToOpen(UiContext *dc, menuDef_t *menu)
@@ -1064,7 +1071,29 @@ void __cdecl Script_Open(UiContext *dc, itemDef_s *item, const char **args)
     char name[1028]; // [esp+0h] [ebp-408h] BYREF
 
     if (String_Parse(args, name, 1024))
+    {
+#ifdef __SWITCH__
+        const bool traceMainTextOpen =
+            item &&
+            item->parent &&
+            item->parent->window.name &&
+            !I_stricmp(item->parent->window.name, "main") &&
+            !I_stricmp(name, "main_text");
+        if (traceMainTextOpen)
+        {
+            Switch_LogWrite("[KisakCOD][UIMAIN] Script_Open(main -> main_text) before Menus_OpenByName\n");
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/call";
+        }
+#endif
         Menus_OpenByName(dc, name);
+#ifdef __SWITCH__
+        if (traceMainTextOpen)
+        {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/return";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Script_Open(main -> main_text) after Menus_OpenByName\n");
+        }
+#endif
+    }
 }
 
 void __cdecl Script_OpenForGameType(UiContext *dc, itemDef_s *item, const char **args)
@@ -2641,6 +2670,10 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         menu &&
         menu->window.name &&
         !I_stricmp(menu->window.name, "main");
+    const bool traceMainText =
+        menu &&
+        menu->window.name &&
+        !I_stricmp(menu->window.name, "main_text");
     if (traceMain)
     {
         char trace[320];
@@ -2656,6 +2689,22 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
             dc ? dc->menuCount : -1);
         Switch_LogWrite(trace);
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/entry";
+    }
+    else if (traceMainText)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UIMAIN] Menus_Open(main_text) entry menu=%p namePtr=%p itemCount=%d items=%p open=%d count=%d\n",
+            static_cast<void *>(menu),
+            static_cast<const void *>(menu->window.name),
+            menu->itemCount,
+            static_cast<void *>(menu->items),
+            dc ? dc->openMenuCount : -1,
+            dc ? dc->menuCount : -1);
+        Switch_LogWrite(trace);
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/entry";
     }
 #endif
 
@@ -2701,6 +2750,13 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
 #endif
     Menus_AddToStack(dc, menu);
 #ifdef __SWITCH__
+    if (traceMainText)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/stack_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) after Menus_AddToStack\n");
+    }
+#endif
+#ifdef __SWITCH__
     if (traceMain)
     {
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/stack_done";
@@ -2708,6 +2764,13 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
     }
 #endif
     Window_AddDynamicFlags(dc->localClientNum, &menu->window, 6);
+#ifdef __SWITCH__
+    if (traceMainText)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/flags_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) after Window_AddDynamicFlags\n");
+    }
+#endif
 #ifdef __SWITCH__
     if (traceMain)
     {
@@ -2723,6 +2786,14 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after Menu_CallOnFocusDueToOpen\n");
     }
 #endif
+#ifdef __SWITCH__
+    if (traceMainText)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/focus_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) after Menu_CallOnFocusDueToOpen\n");
+    }
+#endif
+    
     if (dc->isCursorVisible)
     {
 #ifdef __SWITCH__
@@ -2741,6 +2812,18 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
     if (menu->onOpen)
     {
 #ifdef __SWITCH__
+        if (traceMainText)
+        {
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UIMAIN] Menus_Open(main_text) before Item_RunScript(onOpen) script=%p value=%s\n",
+                static_cast<void *>(menu->onOpen),
+                menu->onOpen);
+            Switch_LogWrite(trace);
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/onopen";
+        }
         if (traceMain)
         {
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen";
@@ -2750,6 +2833,11 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         item.parent = menu;
         Item_RunScript(dc, &item, (char*)menu->onOpen);
 #ifdef __SWITCH__
+        if (traceMainText)
+        {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/onopen_done";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) after Item_RunScript(onOpen)\n");
+        }
         if (traceMain)
         {
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen_done";
@@ -2760,6 +2848,11 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
     if (menu->soundName)
     {
 #ifdef __SWITCH__
+        if (traceMainText)
+        {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) before UI_PlayLocalSoundAliasByName\n");
+        }
         if (traceMain)
         {
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/sound";
@@ -2768,6 +2861,11 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
 #endif
         UI_PlayLocalSoundAliasByName(dc->localClientNum, menu->soundName);
 #ifdef __SWITCH__
+        if (traceMainText)
+        {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound_done";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) after UI_PlayLocalSoundAliasByName\n");
+        }
         if (traceMain)
         {
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/sound_done";
@@ -2776,6 +2874,11 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
 #endif
     }
 #ifdef __SWITCH__
+    if (traceMainText)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) complete\n");
+    }
     if (traceMain)
     {
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/done";
