@@ -905,14 +905,24 @@ void __cdecl CL_Frame(int localClientNum, int msec)
 #ifdef __SWITCH__
             if (switchMenuTraceCount < 4)
             {
-                char trace[256];
+                const int openMenuCount = uiInfo.uiDC.openMenuCount;
+                const char *topMenu =
+                    openMenuCount > 0 && uiInfo.uiDC.menuStack[openMenuCount - 1] &&
+                    uiInfo.uiDC.menuStack[openMenuCount - 1]->window.name
+                        ? uiInfo.uiDC.menuStack[openMenuCount - 1]->window.name
+                        : "<none>";
+                const int fullscreen = Menus_AnyFullScreenVisible(&uiInfo.uiDC);
+                char trace[384];
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][FRAME] menu after state=%d catcher=0x%08x active=%d\n",
+                    "[KisakCOD][FRAME] menu after state=%d catcher=0x%08x active=%d open=%d fullscreen=%d top=%s\n",
                     (int)clientUIActives[0].connectionState,
                     clientUIActives[0].keyCatchers,
-                    (int)UI_GetActiveMenu(0));
+                    (int)UI_GetActiveMenu(0),
+                    openMenuCount,
+                    fullscreen,
+                    topMenu);
                 Switch_LogWrite(trace);
                 ++switchMenuTraceCount;
             }
