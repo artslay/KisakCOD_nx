@@ -25,6 +25,11 @@
 #include <database/database.h>
 #include <qcommon/com_playerprofile.h>
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+extern thread_local const char *g_switchFrameStage;
+#endif
+
 const dvar_t *ui_showList;
 const dvar_t *ui_isSaving;
 const dvar_t *ui_startupActiveController;
