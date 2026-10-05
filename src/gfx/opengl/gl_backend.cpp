@@ -794,6 +794,23 @@ bool Switch_GLBeginRenderContext()
 
     return current == EGL_TRUE;
 }
+void Switch_GLEndRenderContext()
+{
+    if (s_display == EGL_NO_DISPLAY ||
+        s_renderContext == EGL_NO_CONTEXT)
+        return;
+
+    if (eglGetCurrentContext() == s_renderContext)
+    {
+        glFlush();
+        eglMakeCurrent(
+            s_display,
+            EGL_NO_SURFACE,
+            EGL_NO_SURFACE,
+            EGL_NO_CONTEXT);
+    }
+}
+
 bool Switch_GLBeginDatabaseContext()
 {
     if (s_display == EGL_NO_DISPLAY ||
