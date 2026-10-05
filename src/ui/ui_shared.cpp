@@ -5240,20 +5240,12 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         static uint32_t switchMainPaintTraceCount = 0;
         if (switchMainPaintTraceCount < 4)
         {
-            uint32_t visibleItems = 0;
-            for (int traceItem = 0; traceItem < menu->itemCount; ++traceItem)
-            {
-                itemDef_s *traceDef = menu->items ? menu->items[traceItem] : nullptr;
-                if (traceDef && Item_IsVisible(dc->localClientNum, traceDef))
-                    ++visibleItems;
-            }
-            char trace[512];
+            char trace[384];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][FRAME] main paint items=%d visible=%u bg=%p style=%d border=%d flags=0x%08x rect=%.1f,%.1f %.1fx%.1f\n",
+                "[KisakCOD][FRAME] main paint previsible items=%d bg=%p style=%d border=%d flags=0x%08x rect=%.1f,%.1f %.1fx%.1f\n",
                 menu->itemCount,
-                visibleItems,
                 static_cast<void *>(menu->window.background),
                 menu->window.style,
                 menu->window.border,
@@ -5263,7 +5255,51 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
                 menu->window.rect.w,
                 menu->window.rect.h);
             Switch_LogWrite(trace);
-            ++switchMainPaintTraceCount;
+        }
+    }
+#endif
+
+    if (!Menu_IsVisible(dc, menu))
+    {
+#ifdef __SWITCH__
+        if (menu->window.name && !I_stricmp(menu->window.name, "main"))
+        {
+            static uint32_t switchMainInvisibleTraceCount = 0;
+            if (switchMainInvisibleTraceCount < 4)
+            {
+                Switch_LogWrite("[KisakCOD][FRAME] main Menu_IsVisible=0\n");
+                ++switchMainInvisibleTraceCount;
+            }
+        }
+#endif
+        return 0;
+    }
+
+#ifdef __SWITCH__
+    if (menu->window.name && !I_stricmp(menu->window.name, "main"))
+    {
+        static uint32_t switchMainVisibleTraceCount = 0;
+        if (switchMainVisibleTraceCount < 4)
+        {
+            uint32_t visibleItems = 0;
+            for (int traceItem = 0; traceItem < menu->itemCount; ++traceItem)
+            {
+                itemDef_s *traceDef = menu->items ? menu->items[traceItem] : nullptr;
+                if (traceDef && Item_IsVisible(dc->localClientNum, traceDef))
+                    ++visibleItems;
+            }
+            char trace[448];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] main Menu_IsVisible=1 items=%d visible=%u bg=%p style=%d flags=0x%08x\n",
+                menu->itemCount,
+                visibleItems,
+                static_cast<void *>(menu->window.background),
+                menu->window.style,
+                menu->window.dynamicFlags[dc->localClientNum]);
+            Switch_LogWrite(trace);
+            ++switchMainVisibleTraceCount;
         }
     }
 #endif
