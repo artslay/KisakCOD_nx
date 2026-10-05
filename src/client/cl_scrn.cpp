@@ -299,8 +299,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #endif
     }
 #ifdef __SWITCH__
-    g_switchFrameStage = "frame/scr/draw_field/end";
-    Switch_LogWrite("[KisakCOD][SCRFRAME] body_exit\n");
+    Switch_LogWrite("[KisakCOD][SCRFRAME] body_exit_before_final_stage\n");
 #endif
 }
 

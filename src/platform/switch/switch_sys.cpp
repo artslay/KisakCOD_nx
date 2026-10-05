@@ -107,7 +107,7 @@ extern volatile uintptr_t g_switchSkinCacheLastBuffer;
 extern volatile int32_t g_switchSkinCacheCreateCalled;
 extern volatile int32_t g_switchSkinCacheCreateHr;
 }
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 extern "C" uint32_t Sys_GetSwitchThreadContext();
 extern "C" const char *Sys_GetSwitchThreadStage();
 
