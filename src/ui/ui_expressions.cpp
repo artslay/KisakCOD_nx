@@ -316,7 +316,7 @@ char *__cdecl GetSourceString(Operand operand)
     char *result; // [esp+8h] [ebp-4h]
 
     if (operand.dataType == VAL_STRING)
-        return (char *)operand.internals.intVal;
+        return (char *)operand.internals.string;
     if ((uint32_t)currentTempOperand >= 0x10)
         MyAssertHandler(
             ".\\ui\\ui_expressions.cpp",
@@ -529,7 +529,7 @@ void __cdecl AddOperandToStack(OperandStack *dataStack, Operand *data)
             0,
             "%s",
             "data->dataType != VAL_STRING || data->internals.string");
-    v2.intVal = (int)data->internals;
+    v2 = data->internals;
     numOperandLists = dataStack->numOperandLists;
     dataStack->stack[numOperandLists].operands[0].dataType = data->dataType;
     dataStack->stack[numOperandLists].operands[0].internals = v2;
@@ -547,7 +547,7 @@ char __cdecl GetOperand(OperandStack *dataStack, Operand *data)
         list = &dataStack->stack[dataStack->numOperandLists - 1];
         if (list->operandCount == 1)
         {
-            v4.intVal = (int)list->operands[0].internals;
+            v4 = list->operands[0].internals;
             data->dataType = list->operands[0].dataType;
             data->internals = v4;
             --dataStack->numOperandLists;
@@ -576,7 +576,7 @@ char __cdecl GetOperand(OperandStack *dataStack, Operand *data)
         Com_PrintError(CON_CHANNEL_UI, "Error: Invalid operation - missing parameter inside function or parenthesis\n");
         dataStack->numOperandLists = 1;
         dataStack->stack[0].operandCount = 1;
-        v2.intVal = (int)dataStack->stack[0].operands[0].internals;
+        v2 = dataStack->stack[0].operands[0].internals;
         data->dataType = dataStack->stack[0].operands[0].dataType;
         data->internals = v2;
         data->dataType = VAL_INT;
