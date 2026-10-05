@@ -879,6 +879,23 @@ void __cdecl CL_Frame(int localClientNum, int msec)
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/stop_sounds";
 #endif
+#ifdef __SWITCH__
+            static uint32_t switchMenuTraceCount = 0;
+            if (switchMenuTraceCount < 4)
+            {
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][FRAME] menu before state=%d catcher=0x%08x running=%d sv=%d active=%d\n",
+                    (int)clientUIActives[0].connectionState,
+                    clientUIActives[0].keyCatchers,
+                    clientUIActives[0].isRunning,
+                    com_sv_running->current.enabled ? 1 : 0,
+                    (int)UI_GetActiveMenu(0));
+                Switch_LogWrite(trace);
+            }
+#endif
             SND_StopSounds(SND_STOP_ALL);
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/stop_sounds_done";
@@ -886,6 +903,20 @@ void __cdecl CL_Frame(int localClientNum, int msec)
 #endif
             UI_SetActiveMenu(0, UIMENU_MAIN);
 #ifdef __SWITCH__
+            if (switchMenuTraceCount < 4)
+            {
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][FRAME] menu after state=%d catcher=0x%08x active=%d\n",
+                    (int)clientUIActives[0].connectionState,
+                    clientUIActives[0].keyCatchers,
+                    (int)UI_GetActiveMenu(0));
+                Switch_LogWrite(trace);
+                ++switchMenuTraceCount;
+            }
+#endif
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu_done";
 #endif
         }
