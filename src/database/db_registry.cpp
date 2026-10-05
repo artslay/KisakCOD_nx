@@ -1051,10 +1051,11 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
         Switch_LogWrite("[SWITCH DBLOOKUP] before write lock\n");
 #endif
 #ifdef __SWITCH__
-    g_switchDbStage = "asset/lock";
+    g_switchDbStage = "asset/lock_enter";
 #endif
     Sys_LockWrite(&db_hashCritSect);
 #ifdef __SWITCH__
+    g_switchDbStage = "asset/lock_acquired";
     if (traceDefaultMaterial)
         Switch_LogWrite("[SWITCH DBLOOKUP] after write lock\n");
 #endif
