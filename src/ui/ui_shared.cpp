@@ -58,8 +58,10 @@ static inline bool Switch_UI_BadPointer(const void *ptr)
         return false;
 
     const uintptr_t value = reinterpret_cast<uintptr_t>(ptr);
-    return value < UINT64_C(0x100000000) ||
-           (value >> 32) == UINT64_C(0xFFFFFFFF);
+
+    // Valid Switch stacks and allocations may live below 4 GiB.  Only treat
+    // addresses outside the Switch user VA range as malformed here.
+    return value >= (UINT64_C(1) << 39);
 }
 
 static inline void Switch_UI_LogBadPointer(
