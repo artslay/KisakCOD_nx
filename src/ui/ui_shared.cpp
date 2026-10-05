@@ -3105,15 +3105,81 @@ void __cdecl Menu_LoseFocusDueToOpen(UiContext *dc, menuDef_t *menu)
 int __cdecl Menus_OpenByName(UiContext *dc, const char *p)
 {
     menuDef_t *pMenu; // [esp+0h] [ebp-4h]
+#ifdef __SWITCH__
+    static int switchMainTextOpenTraceCount;
+    const bool traceMainText =
+        p &&
+        !I_stricmp(p, "main_text") &&
+        switchMainTextOpenTraceCount < 2;
+#endif
 
     pMenu = Menus_FindByName(dc, p);
+#ifdef __SWITCH__
+    if (traceMainText)
+    {
+        int foundIndex = -1;
+        if (dc && pMenu)
+        {
+            for (int i = 0; i < dc->menuCount; ++i)
+            {
+                if (dc->Menus[i] == pMenu)
+                {
+                    foundIndex = i;
+                    break;
+                }
+            }
+        }
+
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] main_text lookup result=%p index=%d name=%s items=%d stackBefore=%d\n",
+            static_cast<void *>(pMenu),
+            foundIndex,
+            pMenu && pMenu->window.name ? pMenu->window.name : "<null>",
+            pMenu ? pMenu->itemCount : -1,
+            dc ? dc->openMenuCount : -1);
+        Switch_LogWrite(trace);
+    }
+#endif
     if (pMenu)
     {
         Menus_Open(dc, pMenu);
+#ifdef __SWITCH__
+        if (traceMainText)
+        {
+            char topName[64] = "<none>";
+            if (dc && dc->openMenuCount > 0)
+            {
+                menuDef_t *top = dc->menuStack[dc->openMenuCount - 1];
+                if (top && top->window.name)
+                    std::snprintf(topName, sizeof(topName), "%s", top->window.name);
+            }
+
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] main_text open returned stackAfter=%d top=%s visible=%d\n",
+                dc ? dc->openMenuCount : -1,
+                topName,
+                (dc && pMenu) ? Menu_IsVisible(dc, pMenu) : 0);
+            Switch_LogWrite(trace);
+            ++switchMainTextOpenTraceCount;
+        }
+#endif
         return 1;
     }
     else
     {
+#ifdef __SWITCH__
+        if (traceMainText)
+        {
+            Switch_LogWrite("[KisakCOD][FRAME] main_text lookup FAILED\n");
+            ++switchMainTextOpenTraceCount;
+        }
+#endif
         Com_PrintWarning(CON_CHANNEL_UI, "Could not find menu '%s'\n", p);
         return 0;
     }
