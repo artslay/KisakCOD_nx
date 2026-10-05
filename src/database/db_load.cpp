@@ -3753,6 +3753,13 @@ void __cdecl Load_snd_alias_t(bool atStreamStart)
             // Register the stream-object address against the native Hunk object
             // before consuming the inline record; later aliases can resolve the
             // same serialized pointer to this native object.
+            // AllocLoad_FxElemVisStateSample() aligned the serialized
+            // inline SoundFile to a 4-byte boundary before the original
+            // 32-bit loader consumed it. Preserve that stream position on
+            // ARM64; the serialized reference token is an aligned stream
+            // address, not the pre-alignment cursor.
+            DB_AllocStreamPos(3);
+
             const uintptr_t serializedSoundFile =
                 reinterpret_cast<uintptr_t>(DB_GetStreamPos());
 
