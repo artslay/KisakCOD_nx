@@ -40,6 +40,31 @@ void *captureData;
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
+
+static inline bool Switch_UI_LowPointer(const void *ptr)
+{
+    return ptr && reinterpret_cast<uintptr_t>(ptr) < 0x100000000ULL;
+}
+
+static void Switch_UI_LogPointer(
+    const char *where,
+    const char *field,
+    const void *owner,
+    const void *value,
+    int index)
+{
+    char trace[320];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[SWITCH UI ABI] where=%s field=%s owner=%p value=%p index=%d\n",
+        where,
+        field,
+        owner,
+        value,
+        index);
+    Switch_LogWrite(trace);
+}
 #endif
 
 struct commandDef_t // sizeof=0x8
@@ -5031,6 +5056,24 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
 
 char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
 {
+#ifdef __SWITCH__
+    static thread_local int switchMenuPaintIndex = -1;
+    if (Switch_UI_LowPointer(menu))
+    {
+        Switch_UI_LogPointer("Menu_Paint", "menu", nullptr, menu, switchMenuPaintIndex);
+        g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu_low";
+        return 0;
+    }
+    if (!menu)
+        return 0;
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu";
+    if (Switch_UI_LowPointer(menu->window.name))
+        Switch_UI_LogPointer("Menu_Paint", "window.name", menu, menu->window.name, switchMenuPaintIndex);
+    if (Switch_UI_LowPointer(menu->window.background))
+        Switch_UI_LogPointer("Menu_Paint", "window.background", menu, menu->window.background, switchMenuPaintIndex);
+    if (Switch_UI_LowPointer(menu->items))
+        Switch_UI_LogPointer("Menu_Paint", "items", menu, menu->items, switchMenuPaintIndex);
+#endif
     float fadeCycle; // [esp+1Ch] [ebp-14h]
     float v4; // [esp+20h] [ebp-10h]
     float v5; // [esp+24h] [ebp-Ch]
@@ -5088,7 +5131,17 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     Window_Paint(dc, &menu->window, menu->fadeAmount, menu->fadeInAmount, menu->fadeClamp, fadeCycle);
 
     for (i = 0; i < menu->itemCount; ++i)
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu_item";
+        if (Switch_UI_LowPointer(menu->items))
+            Switch_UI_LogPointer("Menu_Paint", "items", menu, menu->items, i);
+#endif
         Item_Paint(dc, menu->items[i]);
+    }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu_done";
+#endif
 
     if (g_debugMode)
     {
@@ -5407,6 +5460,29 @@ void __cdecl Fade(
 void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
 {
     PROF_SCOPED("Item_Paint");
+
+#ifdef __SWITCH__
+    if (Switch_UI_LowPointer(item))
+    {
+        Switch_UI_LogPointer("Item_Paint", "item", nullptr, item, -1);
+        g_switchFrameStage = "frame/scr/draw_field/loading_ui/item_low";
+        return;
+    }
+    if (!item)
+        return;
+    if (Switch_UI_LowPointer(item->parent))
+        Switch_UI_LogPointer("Item_Paint", "parent", item, item->parent, -1);
+    if (Switch_UI_LowPointer(item->window.name))
+        Switch_UI_LogPointer("Item_Paint", "window.name", item, item->window.name, -1);
+    if (Switch_UI_LowPointer(item->window.background))
+        Switch_UI_LogPointer("Item_Paint", "window.background", item, item->window.background, -1);
+    if (Switch_UI_LowPointer(item->text))
+        Switch_UI_LogPointer("Item_Paint", "text", item, item->text, -1);
+    if (Switch_UI_LowPointer(item->dvar))
+        Switch_UI_LogPointer("Item_Paint", "dvar", item, item->dvar, -1);
+    if (Switch_UI_LowPointer(item->onKey))
+        Switch_UI_LogPointer("Item_Paint", "onKey", item, item->onKey, -1);
+#endif
 
     //ZoneText(item->na)
     menuDef_t *v2; // esi
