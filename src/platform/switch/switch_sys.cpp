@@ -599,6 +599,16 @@ char *__cdecl Sys_DefaultInstallPath()
     return installPath;
 }
 
+char *__cdecl Sys_Cwd()
+{
+    static char cwd[PATH_MAX];
+    if (::getcwd(cwd, sizeof(cwd)) != nullptr && cwd[0] != '\0')
+        return cwd;
+
+    static char fallback[] = "sdmc:/switch/KisakCOD";
+    return fallback;
+}
+
 BOOL __cdecl Sys_RemoveDirTree(const char *path)
 {
     if (!path || !*path)
