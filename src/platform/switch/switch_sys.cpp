@@ -66,9 +66,7 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[SWITCH STREAM MISMATCH]",
         "[SWITCH STREAM ARRAY MISMATCH]",
         "[SWITCH STREAM REGRESS]",
-        "[SWITCH OFFSET INVALID]",
-        "[SWITCH SOUND]",
-        "[SWITCH SOUND NULL]"
+        "[SWITCH OFFSET INVALID]"
     };
 
     for (const char *prefix : kPrefixes)
@@ -325,7 +323,10 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][RTHREAD]",
         "[KisakCOD][CINEMATIC]",
         "[KisakCOD][RINIT]",
-        "[KisakCOD][VERTEXSHADER "
+        "[KisakCOD][VERTEXSHADER ",
+        "[KisakCOD][SOUND]",
+        "Couldn't play stream '",
+        "R_Cinematic_BinkOpen '"
     };
     for (const char *prefix : kSuppressedPrefixes)
     {
