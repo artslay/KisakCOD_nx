@@ -212,33 +212,22 @@ void OpenGLBackend::Present()
     if (eglBindAPI(EGL_OPENGL_API) != EGL_TRUE)
         return;
 
-    const EGLContext currentContext = eglGetCurrentContext();
-    if (currentContext == s_renderContext)
+    if (!Switch_GLBeginRenderContext())
     {
-        const EGLSurface currentDraw = eglGetCurrentSurface(EGL_DRAW);
-        if (currentDraw != s_surface)
+        const EGLint err = eglGetError();
+        static bool loggedContextFailure = false;
+        if (!loggedContextFailure)
         {
-            if (eglMakeCurrent(s_display, s_surface, s_surface, s_renderContext) != EGL_TRUE)
-            {
-                const EGLint err = eglGetError();
-                static bool loggedRebindFailure = false;
-                if (!loggedRebindFailure)
-                {
-                    char trace[224];
-                    std::snprintf(
-                        trace,
-                        sizeof(trace),
-                        "[KisakCOD][FRAME] Present rebind FAIL ctx=%p draw=%p surf=%p err=0x%04x\n",
-                        (void *)currentContext,
-                        (void *)currentDraw,
-                        (void *)s_surface,
-                        static_cast<unsigned>(err));
-                    Switch_LogWrite(trace);
-                    loggedRebindFailure = true;
-                }
-                return;
-            }
+            char trace[224];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] Present context FAIL err=0x%04x\n",
+                static_cast<unsigned>(err));
+            Switch_LogWrite(trace);
+            loggedContextFailure = true;
         }
+        return;
     }
 
     static uint32_t presentDiagnostics = 0;
@@ -718,12 +707,14 @@ bool Switch_GLBeginRenderContext()
     if (eglBindAPI(EGL_OPENGL_API) != EGL_TRUE)
         return false;
 
-    if (eglGetCurrentContext() == s_renderContext)
+    const EGLContext currentContext = eglGetCurrentContext();
+    const EGLSurface currentDraw = eglGetCurrentSurface(EGL_DRAW);
+    if (currentContext == s_renderContext && currentDraw == s_surface)
         return true;
 
-    if (eglGetCurrentContext() != EGL_NO_CONTEXT)
-        return false;
-
+    // A thread may already have an EGL context/surface pair from an earlier
+    // renderer or compatibility path. Do not reject that state: replace it
+    // explicitly with the backend pair required for game rendering/present.
     const EGLBoolean current = eglMakeCurrent(
         s_display,
         s_surface,
@@ -732,7 +723,7 @@ bool Switch_GLBeginRenderContext()
 
     if (current == EGL_TRUE && !s_renderContextLogged)
     {
-        char trace[192];
+        char trace[224];
         std::snprintf(
             trace, sizeof(trace),
             "[SWITCH GLCTX] render ready ctx=%p dpy=%p surf=%p\n",
