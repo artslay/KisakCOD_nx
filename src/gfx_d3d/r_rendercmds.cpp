@@ -284,7 +284,13 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
     if (Sys_IsRenderThread())
         Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: entered\n");
 #endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands/check_device";
+#endif
     const bool initialDeviceOk = R_CheckLostDevice();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands/check_device_done";
+#endif
 #ifdef __SWITCH__
     if (Sys_IsRenderThread())
         Switch_LogWrite(initialDeviceOk
@@ -299,8 +305,14 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
         if (Sys_IsRenderThread())
             Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before R_HandOffToBackend\n");
 #endif
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/issue_commands/handoff";
+#endif
         if (!R_HandOffToBackend(type))
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/issue_commands/handoff_sync";
+#endif
 #ifdef __SWITCH__
             if (Sys_IsRenderThread())
                 Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: synchronous backend path\n");
@@ -309,7 +321,13 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
                 R_PerformanceCounters();
             if (Sys_IsMainThread())
                 R_WaitFrontendWorkerCmds();
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/issue_commands/update_skin_cache";
+#endif
             R_UpdateSkinCacheUsage();
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/issue_commands/update_skin_cache_done";
+#endif
 #ifdef __SWITCH__
             if (Sys_IsRenderThread())
                 Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before second device check\n");
@@ -330,12 +348,18 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
                 if (Sys_IsRenderThread())
                     Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_BeginFrame\n");
 #endif
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/issue_commands/rb_begin_frame";
+#endif
                 RB_BeginFrame(frontEndDataOut);
 #ifdef __SWITCH__
                 if (Sys_IsRenderThread())
                     Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_BeginFrame\n");
                 if (Sys_IsRenderThread())
                     Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_Draw3D\n");
+#endif
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/issue_commands/rb_draw3d";
 #endif
                 RB_Draw3D();
 #ifdef __SWITCH__
@@ -344,12 +368,18 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
                 if (Sys_IsRenderThread())
                     Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_CallExecuteRenderCommands\n");
 #endif
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/issue_commands/rb_execute";
+#endif
                 RB_CallExecuteRenderCommands();
 #ifdef __SWITCH__
                 if (Sys_IsRenderThread())
                     Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_CallExecuteRenderCommands\n");
                 if (Sys_IsRenderThread())
                     Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_EndFrame\n");
+#endif
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/issue_commands/rb_end_frame";
 #endif
                 RB_EndFrame(frontEndDataOut->drawType);
 #ifdef __SWITCH__
@@ -361,10 +391,16 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
             if (Sys_IsRenderThread())
                 Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before R_UnlockSkinnedCache\n");
 #endif
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/issue_commands/unlock_skin_cache";
+#endif
             R_UnlockSkinnedCache();
 #ifdef __SWITCH__
             if (Sys_IsRenderThread())
                 Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after R_UnlockSkinnedCache\n");
+#endif
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/scr/issue_commands/toggle_smp_frame";
 #endif
             R_ToggleSmpFrame();
 #ifdef __SWITCH__
