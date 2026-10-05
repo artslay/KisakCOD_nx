@@ -9,6 +9,10 @@
 #include "r_draw_bsp.h"
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 
 
 void __cdecl R_SetVertexDecl(GfxCmdBufPrimState *primState, const MaterialVertexDeclaration *vertexDecl)
