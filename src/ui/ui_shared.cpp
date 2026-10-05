@@ -43,7 +43,12 @@ extern thread_local const char *g_switchFrameStage;
 
 static inline bool Switch_UI_LowPointer(const void *ptr)
 {
-    return ptr && reinterpret_cast<uintptr_t>(ptr) < 0x100000000ULL;
+    if (!ptr)
+        return false;
+
+    const uintptr_t value = reinterpret_cast<uintptr_t>(ptr);
+    return value < UINT64_C(0x100000000) ||
+           (value >> 32) == UINT64_C(0xFFFFFFFF);
 }
 
 static void Switch_UI_LogPointer(
@@ -5070,7 +5075,16 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         return 0;
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu";
     if (Switch_UI_LowPointer(menu->window.name))
+    {
         Switch_UI_LogPointer("Menu_Paint", "window.name", menu, menu->window.name, g_switchUiMenuPaintIndex);
+        if (menu->window.name &&
+            (reinterpret_cast<uintptr_t>(menu->window.name) >> 32) ==
+                UINT64_C(0xFFFFFFFF))
+        {
+            menu->window.name = "";
+            Switch_LogWrite("[SWITCH UI ABI] replaced sign-extended window.name with empty string\n");
+        }
+    }
     if (Switch_UI_LowPointer(menu->window.background))
         Switch_UI_LogPointer("Menu_Paint", "window.background", menu, menu->window.background, g_switchUiMenuPaintIndex);
     if (Switch_UI_LowPointer(menu->items))
