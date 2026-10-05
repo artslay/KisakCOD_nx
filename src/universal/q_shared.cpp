@@ -71,10 +71,56 @@ const char *__cdecl I_stristr(const char *s0, const char *substr)
     return 0;
 }
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+extern thread_local const char *g_switchFrameStage;
+
+static bool Switch_BadStringPointer(const char *ptr)
+{
+    if (!ptr)
+        return true;
+
+    const uintptr_t value = reinterpret_cast<uintptr_t>(ptr);
+    return value < UINT64_C(0x100000000) ||
+           value >= (UINT64_C(1) << 39);
+}
+
+static void Switch_LogBadStringCompare(const char *s0, const char *s1, int n)
+{
+    const uintptr_t v0 = reinterpret_cast<uintptr_t>(s0);
+    const uintptr_t v1 = reinterpret_cast<uintptr_t>(s1);
+    const void *caller = __builtin_return_address(0);
+
+    char trace[640];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[SWITCH STRING ABI] I_strnicmp invalid s0=%p low32=%08x high32=%08x s1=%p low32=%08x high32=%08x n=%d caller=%p frame=%s\\n",
+        static_cast<const void *>(s0),
+        static_cast<unsigned>(v0 & UINT64_C(0xffffffff)),
+        static_cast<unsigned>(v0 >> 32),
+        static_cast<const void *>(s1),
+        static_cast<unsigned>(v1 & UINT64_C(0xffffffff)),
+        static_cast<unsigned>(v1 >> 32),
+        n,
+        caller,
+        g_switchFrameStage ? g_switchFrameStage : "<null>");
+    Switch_LogWrite(trace);
+}
+#endif
+
 int I_strnicmp(const char* s0, const char* s1, int n)
 {
     int c1; // [esp+0h] [ebp-8h]
     int c0; // [esp+4h] [ebp-4h]
+
+#ifdef __SWITCH__
+    if (Switch_BadStringPointer(s0) || Switch_BadStringPointer(s1))
+    {
+        Switch_LogBadStringCompare(s0, s1, n);
+        return 1;
+    }
+#endif
 
     do
     {
