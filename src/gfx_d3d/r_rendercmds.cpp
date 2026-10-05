@@ -686,7 +686,7 @@ void __cdecl R_AddCmdDrawStretchPic(
             trace,
             sizeof(trace),
             "[KisakCOD][UI MATERIAL] NULL techniqueSet material=%p "
-            "name=%p default=%p defaultTechset=%p frame=%s\\n",
+            "name=%p default=%p defaultTechset=%p frame=%s\n",
             static_cast<void *>(defaultMaterial),
             static_cast<const void *>(defaultMaterial->info.name),
             static_cast<void *>(rgp.defaultMaterial),
