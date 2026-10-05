@@ -3023,7 +3023,8 @@ void __cdecl Load_MssSound(bool atStreamStart)
 
     DB_PushStreamPos(0);
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 7u &&
+    if (false &&
+        g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
         g_switchCurrentAssetIndex <= 1212)
         Switch_LogWrite("[SWITCH MSS] data begin\n");
@@ -3184,28 +3185,32 @@ void __cdecl Load_LoadedSound(bool atStreamStart)
     DB_PushStreamPos(4);
     varXString = &varLoadedSound->name;
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 7u &&
+    if (false &&
+        g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
         g_switchCurrentAssetIndex <= 1212)
         Switch_LogWrite("[SWITCH LOADEDSOUND] name begin\n");
 #endif
     Load_XString(0);
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 7u &&
+    if (false &&
+        g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
         g_switchCurrentAssetIndex <= 1212)
         Switch_LogWrite("[SWITCH LOADEDSOUND] name done\n");
 #endif
     varMssSound = &varLoadedSound->sound;
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 7u &&
+    if (false &&
+        g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
         g_switchCurrentAssetIndex <= 1212)
         Switch_LogWrite("[SWITCH LOADEDSOUND] mss begin\n");
 #endif
     Load_MssSound(0);
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 7u &&
+    if (false &&
+        g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
         g_switchCurrentAssetIndex <= 1212)
         Switch_LogWrite("[SWITCH LOADEDSOUND] mss done\n");
@@ -3227,10 +3232,7 @@ void __cdecl Load_LoadedSoundPtr(bool atStreamStart)
     const void **inserted; // [esp+0h] [ebp-Ch]
     uint32_t value; // [esp+4h] [ebp-8h]
 #ifdef __SWITCH__
-    const bool switchLoadedSoundTrace =
-        (g_switchCurrentAssetRawType == 7u &&
-         g_switchCurrentAssetIndex >= 1202 &&
-         g_switchCurrentAssetIndex <= 1212);
+    const bool switchLoadedSoundTrace = false;
     if (switchLoadedSoundTrace)
         Switch_LogWrite("[SWITCH LOADEDSOUND PTR] begin\n");
 #endif
@@ -3340,10 +3342,7 @@ void __cdecl Load_StreamedSound(bool atStreamStart)
 void __cdecl Load_SoundFileRef(bool atStreamStart)
 {
 #ifdef __SWITCH__
-    const bool switchSoundTrace =
-        (g_switchCurrentAssetRawType == 7u &&
-         g_switchCurrentAssetIndex >= 1202 &&
-         g_switchCurrentAssetIndex <= 1212);
+    const bool switchSoundTrace = false;
     if (switchSoundTrace)
     {
         char trace[192];
@@ -3381,10 +3380,7 @@ void __cdecl Load_SoundFileRef(bool atStreamStart)
 void __cdecl Load_SoundFile(bool atStreamStart)
 {
 #ifdef __SWITCH__
-    const bool switchSoundTrace =
-        (g_switchCurrentAssetRawType == 7u &&
-         g_switchCurrentAssetIndex >= 1202 &&
-         g_switchCurrentAssetIndex <= 1212);
+    const bool switchSoundTrace = false;
 #endif
 #ifdef __SWITCH__
     struct SerializedSoundFile
@@ -3465,10 +3461,7 @@ void __cdecl Load_SoundFile(bool atStreamStart)
 void __cdecl Load_SndCurve(bool atStreamStart)
 {
 #ifdef __SWITCH__
-    const bool switchSndCurveTrace =
-        (g_switchCurrentAssetRawType == 8u &&
-         g_switchCurrentAssetIndex >= 1200 &&
-         g_switchCurrentAssetIndex <= 1240);
+    const bool switchSndCurveTrace = false;
     if (switchSndCurveTrace)
     {
         char trace[128];
@@ -3652,10 +3645,7 @@ void __cdecl Load_snd_alias_t(bool atStreamStart)
     };
     static_assert(sizeof(SerializedSndAlias) == 92);
 
-    const bool switchSoundTrace =
-        (g_switchCurrentAssetRawType == 7u &&
-         g_switchCurrentAssetIndex >= 1202 &&
-         g_switchCurrentAssetIndex <= 1212);
+    const bool switchSoundTrace = false;
     if (switchSoundTrace && atStreamStart)
     {
         char trace[160];
@@ -4077,7 +4067,8 @@ void __cdecl Load_snd_alias_list_t(bool atStreamStart)
 
     DB_PushStreamPos(4);
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 7u &&
+    if (false &&
+        g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
         g_switchCurrentAssetIndex <= 1212)
         Switch_LogWrite("[SWITCH SOUNDLIST] name begin\n");
@@ -4085,7 +4076,8 @@ void __cdecl Load_snd_alias_list_t(bool atStreamStart)
     varXString = &varsnd_alias_list_t->aliasName;
     Load_XString(0);
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 7u &&
+    if (false &&
+        g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
         g_switchCurrentAssetIndex <= 1212)
         Switch_LogWrite("[SWITCH SOUNDLIST] name done\n");
@@ -4126,7 +4118,8 @@ void __cdecl Load_snd_alias_list_t(bool atStreamStart)
         }
     }
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 7u &&
+    if (false &&
+        g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
         g_switchCurrentAssetIndex <= 1212)
         Switch_LogWrite("[SWITCH SOUNDLIST] pop done\n");
@@ -4173,7 +4166,8 @@ void __cdecl Load_snd_alias_list_ptr(bool atStreamStart)
             sizeof(serialized));
     }
 
-    if (g_switchCurrentAssetRawType == 7u &&
+    if (false &&
+        g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
         g_switchCurrentAssetIndex <= 1212)
     {
@@ -4233,7 +4227,8 @@ void __cdecl Load_snd_alias_list_ptr(bool atStreamStart)
     }
     DB_PopStreamPos();
 #ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 7u &&
+    if (false &&
+        g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
         g_switchCurrentAssetIndex <= 1212)
         Switch_LogWrite("[SWITCH SOUND] ptr pop done\n");
