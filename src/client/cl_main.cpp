@@ -856,7 +856,13 @@ void __cdecl CL_Frame(int localClientNum, int msec)
             SND_StopSounds(SND_STOP_ALL);
             UI_SetActiveMenu(0, UIMENU_MAIN);
         }
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/devgui";
+#endif
         CL_DevGuiFrame(0);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/devgui_done";
+#endif
         //Profile_Begin(366);
         if (localClientNum)
             MyAssertHandler(
