@@ -52,8 +52,42 @@ extern uint32_t g_switchCurrentAssetHeader;
 #include <algorithm>
 #include <vector>
 #ifdef __SWITCH__
+static bool Switch_IsSignExtended32Pointer(const char *ptr)
+{
+    if (!ptr)
+        return false;
+
+    const uintptr_t value = reinterpret_cast<uintptr_t>(ptr);
+    return (value >> 32) == UINT64_C(0xFFFFFFFF);
+}
+
 static int Switch_IstricmpAssetName(const char *lhs, const char *rhs)
 {
+    const bool badLhs = Switch_IsSignExtended32Pointer(lhs);
+    const bool badRhs = Switch_IsSignExtended32Pointer(rhs);
+
+    if (badLhs || badRhs)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH DB NAME CORRUPT] lhs=%p rhs=%p asset=%d raw=%u
+",
+            static_cast<const void *>(lhs),
+            static_cast<const void *>(rhs),
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType));
+        Switch_LogWrite(trace);
+
+        // Do not dereference a sign-extended 32-bit serialized pointer.
+        // Treat it as a non-matching name so the caller can continue far
+        // enough to expose the owning asset instead of dying in this compare.
+        if (lhs == rhs)
+            return 0;
+        return badLhs ? 1 : -1;
+    }
+
     if (!lhs || !rhs)
     {
         if (lhs == rhs)
