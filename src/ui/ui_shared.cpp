@@ -2819,7 +2819,7 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
                 trace,
                 sizeof(trace),
                 "[KisakCOD][UIMAIN] Menus_Open(main_text) before Item_RunScript(onOpen) script=%p value=%s\n",
-                static_cast<void *>(menu->onOpen),
+                static_cast<const void *>(menu->onOpen),
                 menu->onOpen);
             Switch_LogWrite(trace);
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/onopen";
