@@ -912,6 +912,23 @@ void __cdecl Menus_Close(UiContext *dc, menuDef_t *menu)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 934, 0, "%s", "dc");
     if (!menu)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 935, 0, "%s", "menu");
+#ifdef __SWITCH__
+    const bool traceMainTextClose =
+        menu &&
+        menu->window.name &&
+        !I_stricmp(menu->window.name, "main_text");
+    if (traceMainTextClose)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] main_text Menus_Close entry menu=%p stack=%d\n",
+            static_cast<void *>(menu),
+            dc ? dc->openMenuCount : -1);
+        Switch_LogWrite(trace);
+    }
+#endif
     if (Menus_MenuIsInStack(dc, menu))
     {
         Menu_RunCloseScript(dc, menu);
@@ -952,6 +969,24 @@ void __cdecl Menus_Close(UiContext *dc, menuDef_t *menu)
             }
         }
     }
+#ifdef __SWITCH__
+    if (traceMainTextClose)
+    {
+        const char *topName =
+            dc->openMenuCount > 0 && dc->menuStack[dc->openMenuCount - 1] &&
+            dc->menuStack[dc->openMenuCount - 1]->window.name
+                ? dc->menuStack[dc->openMenuCount - 1]->window.name
+                : "<none>";
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] main_text Menus_Close result stack=%d top=%s\n",
+            dc->openMenuCount,
+            topName);
+        Switch_LogWrite(trace);
+    }
+#endif
     Window_RemoveDynamicFlags(dc->localClientNum, &menu->window, 6);
 }
 
@@ -990,10 +1025,35 @@ bool __cdecl Window_HasFocus(int localClientNum, const windowDef_t *w)
 int __cdecl Menus_RemoveFromStack(UiContext *dc, menuDef_t *pMenu)
 {
     int i; // [esp+4h] [ebp-4h]
+#ifdef __SWITCH__
+    const bool traceMainText =
+        pMenu &&
+        pMenu->window.name &&
+        !I_stricmp(pMenu->window.name, "main_text") &&
+        dc &&
+        dc->openMenuCount > 0;
+    if (traceMainText)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] main_text remove begin menu=%p stack=%d top=%p\n",
+            static_cast<void *>(pMenu),
+            dc->openMenuCount,
+            static_cast<void *>(dc->menuStack[dc->openMenuCount - 1]));
+        Switch_LogWrite(trace);
+    }
+#endif
 
     for (i = dc->openMenuCount - 1; ; --i)
     {
         if (i < 0)
+        {
+#ifdef __SWITCH__
+            if (traceMainText)
+                Switch_LogWrite("[KisakCOD][FRAME] main_text remove result=not_found\n");
+#endif
             return 0;
         if (dc->menuStack[i] == pMenu)
             break;
@@ -1004,6 +1064,24 @@ int __cdecl Menus_RemoveFromStack(UiContext *dc, menuDef_t *pMenu)
         dc->menuStack[i] = dc->menuStack[i + 1];
         ++i;
     }
+#ifdef __SWITCH__
+    if (traceMainText)
+    {
+        const char *topName =
+            dc->openMenuCount > 0 && dc->menuStack[dc->openMenuCount - 1] &&
+            dc->menuStack[dc->openMenuCount - 1]->window.name
+                ? dc->menuStack[dc->openMenuCount - 1]->window.name
+                : "<none>";
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] main_text remove done stack=%d top=%s\n",
+            dc->openMenuCount,
+            topName);
+        Switch_LogWrite(trace);
+    }
+#endif
     return 1;
 }
 
@@ -1193,6 +1271,17 @@ void __cdecl Script_Open(UiContext *dc, itemDef_s *item, const char **args)
 #ifdef __SWITCH__
         if (traceMainTextOpen)
         {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] main Script_Open target=main_text returned stack=%d top=%s\n",
+                dc ? dc->openMenuCount : -1,
+                (dc && dc->openMenuCount > 0 && dc->menuStack[dc->openMenuCount - 1] &&
+                 dc->menuStack[dc->openMenuCount - 1]->window.name)
+                    ? dc->menuStack[dc->openMenuCount - 1]->window.name
+                    : "<none>");
+            Switch_LogWrite(trace);
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/return";
             Switch_LogWrite("[KisakCOD][UIMAIN] Script_Open(main -> main_text) after Menus_OpenByName\n");
         }
@@ -3069,10 +3158,43 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
 
 void __cdecl Menus_AddToStack(UiContext *dc, menuDef_t *pMenu)
 {
+#ifdef __SWITCH__
+    static int switchMainTextStackTraceCount;
+    const bool traceMainText =
+        pMenu &&
+        pMenu->window.name &&
+        !I_stricmp(pMenu->window.name, "main_text") &&
+        switchMainTextStackTraceCount < 8;
+    if (traceMainText)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] main_text add begin menu=%p stack=%d\n",
+            static_cast<void *>(pMenu),
+            dc ? dc->openMenuCount : -1);
+        Switch_LogWrite(trace);
+    }
+#endif
     Menus_RemoveFromStack(dc, pMenu);
     if (dc->openMenuCount == 16)
         Com_Error(ERR_DROP, "Too many menus opened");
     dc->menuStack[dc->openMenuCount++] = pMenu;
+#ifdef __SWITCH__
+    if (traceMainText)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] main_text add done stack=%d top=%p\n",
+            dc->openMenuCount,
+            static_cast<void *>(dc->menuStack[dc->openMenuCount - 1]));
+        Switch_LogWrite(trace);
+        ++switchMainTextStackTraceCount;
+    }
+#endif
 }
 
 void __cdecl Menu_LoseFocusDueToOpen(UiContext *dc, menuDef_t *menu)
@@ -3110,7 +3232,7 @@ int __cdecl Menus_OpenByName(UiContext *dc, const char *p)
     const bool traceMainText =
         p &&
         !I_stricmp(p, "main_text") &&
-        switchMainTextOpenTraceCount < 2;
+        switchMainTextOpenTraceCount < 8;
 #endif
 
     pMenu = Menus_FindByName(dc, p);
