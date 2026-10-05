@@ -2217,7 +2217,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/entry";
-    Switch_LogWrite("[KisakCOD][UIMAIN] UI_RunMenuScript entry\\n");
+    Switch_LogWrite("[KisakCOD][UIMAIN] UI_RunMenuScript entry\n");
 #endif
     if (!String_Parse(args, out, sizeof(out)))
         return;
@@ -2227,7 +2227,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][UIMAIN] UI_RunMenuScript command='%s' args=%p actual=%p\\n",
+            "[KisakCOD][UIMAIN] UI_RunMenuScript command='%s' args=%p actual=%p\n",
             out,
             static_cast<const void *>(args ? *args : nullptr),
             static_cast<const void *>(actualScript));
@@ -2480,7 +2480,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
     if (!I_stricmp(out, "openMenuOnDvar") || !I_stricmp(out, "openMenuOnDvarNot"))
     {
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][UIMAIN] before UI_GetOpenOrCloseMenuOnDvarArgs\\n");
+        Switch_LogWrite("[KisakCOD][UIMAIN] before UI_GetOpenOrCloseMenuOnDvarArgs\n");
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/open_dvar/parse";
 #endif
         if ((unsigned __int8)UI_GetOpenOrCloseMenuOnDvarArgs(args, out, dvarName, testValue, menuName))
@@ -2490,7 +2490,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UIMAIN] openMenuOnDvar parsed dvar='%s' test='%s' menu='%s'\\n",
+                "[KisakCOD][UIMAIN] openMenuOnDvar parsed dvar='%s' test='%s' menu='%s'\n",
                 dvarName,
                 testValue,
                 menuName);
@@ -2500,17 +2500,17 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
             UI_OpenMenuOnDvar(out, menuName, dvarName, testValue);
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/open_dvar/test_done";
-            Switch_LogWrite("[KisakCOD][UIMAIN] UI_OpenMenuOnDvar returned\\n");
+            Switch_LogWrite("[KisakCOD][UIMAIN] UI_OpenMenuOnDvar returned\n");
 #endif
         }
 #ifdef __SWITCH__
         else
         {
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/open_dvar/parse_failed";
-            Switch_LogWrite("[KisakCOD][UIMAIN] UI_GetOpenOrCloseMenuOnDvarArgs returned false\\n");
+            Switch_LogWrite("[KisakCOD][UIMAIN] UI_GetOpenOrCloseMenuOnDvarArgs returned false\n");
         }
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/open_dvar/done";
-        Switch_LogWrite("[KisakCOD][UIMAIN] UI_RunMenuScript openMenuOnDvar branch done\\n");
+        Switch_LogWrite("[KisakCOD][UIMAIN] UI_RunMenuScript openMenuOnDvar branch done\n");
 #endif
         return;
     }
