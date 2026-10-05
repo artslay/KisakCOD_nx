@@ -15,6 +15,11 @@
 
 #include <algorithm>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #endif
