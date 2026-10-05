@@ -13,6 +13,7 @@
 #include "r_model_lighting.h"
 #include "r_light.h"
 #include "r_workercmds.h"
+#include "r_cinematic.h"
 #include "rb_state.h"
 #include "r_draw_method.h"
 #include <gfx/gfx_backend.h>
@@ -236,6 +237,14 @@ void R_InitGraphicsApi() {
     // runtime renderer state.
     if (!R_CreateForInitOrReset())
         R_FatalInitError("Couldn't initialize renderer resources");
+
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] before R_Cinematic_Init\n");
+#endif
+    R_Cinematic_Init();
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] after R_Cinematic_Init\n");
+#endif
 }
 void R_InitSystems()
 {
