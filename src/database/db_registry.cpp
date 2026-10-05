@@ -3483,6 +3483,26 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     }
 
     iassert(existingEntry);
+    if (type == ASSET_TYPE_SOUND &&
+        g_switchCurrentAssetIndex == 5661 &&
+        g_switchCurrentAssetRawType == 7u)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH SOUND NULL] after-find idx=%u new=%p existing=%p zone=%u inuse=%u nextOverride=%u nextHash=%u header=%p\n",
+            static_cast<unsigned>(existingEntryIndex),
+            static_cast<void *>(newEntry),
+            static_cast<void *>(existingEntry),
+            static_cast<unsigned>(existingEntry->entry.zoneIndex),
+            static_cast<unsigned>(existingEntry->entry.inuse),
+            static_cast<unsigned>(existingEntry->entry.nextOverride),
+            static_cast<unsigned>(existingEntry->entry.nextHash),
+            static_cast<void *>(existingEntry->entry.asset.header.data));
+        Switch_LogWrite(trace);
+    }
+
     if (existingEntry->entry.zoneIndex)
     {
         iassert(existingEntry->entry.zoneIndex != newEntry->entry.zoneIndex);
@@ -3536,8 +3556,20 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 
             if (existingEntry->entry.inuse)
             {
+#ifdef __SWITCH__
+                if (type == ASSET_TYPE_SOUND &&
+                    g_switchCurrentAssetIndex == 5661 &&
+                    g_switchCurrentAssetRawType == 7u)
+                    Switch_LogWrite("[SWITCH SOUND NULL] before Mark_XAsset\n");
+#endif
                 varXAsset = &existingEntry->entry.asset;
                 Mark_XAsset();
+#ifdef __SWITCH__
+                if (type == ASSET_TYPE_SOUND &&
+                    g_switchCurrentAssetIndex == 5661 &&
+                    g_switchCurrentAssetRawType == 7u)
+                    Switch_LogWrite("[SWITCH SOUND NULL] after Mark_XAsset\n");
+#endif
             }
 
             newEntry->entry.nextOverride = existingEntry->entry.nextOverride;
