@@ -10,6 +10,7 @@
 #include <cgame/cg_local.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <universal/profile.h>
 
 #ifdef KISAK_MP
@@ -35,6 +36,11 @@ struct itemDef_s *g_editItem;
 int g_debugMode;
 void(__cdecl *captureFunc)(UiContext *, void *);
 void *captureData;
+
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+extern thread_local const char *g_switchFrameStage;
+#endif
 
 struct commandDef_t // sizeof=0x8
 {                                       // ...
@@ -674,11 +680,75 @@ menuDef_t *__cdecl Menus_FindByName(const UiContext *dc, const char *p)
 {
     int i; // [esp+0h] [ebp-4h]
 
+#ifdef __SWITCH__
+    const bool traceMain = p && !I_stricmp(p, "main");
+    if (traceMain)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UIMAIN] Menus_FindByName entry dc=%p menuCount=%d name=%s\n",
+            static_cast<const void *>(dc),
+            dc ? dc->menuCount : -1,
+            p);
+        Switch_LogWrite(trace);
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_find/entry";
+    }
+#endif
+
     for (i = 0; i < dc->menuCount; ++i)
     {
-        if (!I_stricmp(dc->Menus[i]->window.name, p))
-            return dc->Menus[i];
+#ifdef __SWITCH__
+        if (traceMain)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UIMAIN] candidate[%d] ptr=%p\n",
+                i,
+                static_cast<const void *>(dc->Menus[i]));
+            Switch_LogWrite(trace);
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_find/candidate_ptr";
+        }
+#endif
+        menuDef_t *candidate = dc->Menus[i];
+#ifdef __SWITCH__
+        if (traceMain)
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_find/candidate_name";
+#endif
+        const char *candidateName = candidate->window.name;
+#ifdef __SWITCH__
+        if (traceMain)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UIMAIN] candidate[%d] namePtr=%p\n",
+                i,
+                static_cast<const void *>(candidateName));
+            Switch_LogWrite(trace);
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_find/compare";
+        }
+#endif
+        if (!I_stricmp(candidateName, p))
+        {
+#ifdef __SWITCH__
+            if (traceMain)
+                g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_find/found";
+#endif
+            return candidate;
+        }
     }
+#ifdef __SWITCH__
+    if (traceMain)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_find/not_found";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_FindByName main not found\n");
+    }
+#endif
     return 0;
 }
 
@@ -2490,10 +2560,44 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
     itemDef_s item; // [esp+Ch] [ebp-180h] BYREF
     int i; // [esp+188h] [ebp-4h]
 
+#ifdef __SWITCH__
+    const bool traceMain =
+        menu &&
+        menu->window.name &&
+        !I_stricmp(menu->window.name, "main");
+    if (traceMain)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UIMAIN] Menus_Open entry menu=%p namePtr=%p itemCount=%d items=%p open=%d count=%d\n",
+            static_cast<void *>(menu),
+            static_cast<const void *>(menu->window.name),
+            menu->itemCount,
+            static_cast<void *>(menu->items),
+            dc ? dc->openMenuCount : -1,
+            dc ? dc->menuCount : -1);
+        Switch_LogWrite(trace);
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/entry";
+    }
+#endif
+
     for (i = dc->openMenuCount - 1; i >= 0; --i)
         Menu_LoseFocusDueToOpen(dc, dc->menuStack[i]);
+#ifdef __SWITCH__
+    if (traceMain)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/lose_focus_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after lose-focus loop\n");
+    }
+#endif
     for (i = 0; i < dc->menuCount; ++i)
     {
+#ifdef __SWITCH__
+        if (traceMain)
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/check_menu";
+#endif
         v2 = dc->Menus[i];
         localClientNum = dc->localClientNum;
         if (dc->localClientNum)
@@ -2512,18 +2616,96 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
                 "%s",
                 "!(Window_GetDynamicFlags( dc->localClientNum, &dc->Menus[i]->window ) & WINDOWDYNAMIC_HASFOCUS)");
     }
+#ifdef __SWITCH__
+    if (traceMain)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/check_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after menu checks\n");
+    }
+#endif
     Menus_AddToStack(dc, menu);
+#ifdef __SWITCH__
+    if (traceMain)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/stack_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after Menus_AddToStack\n");
+    }
+#endif
     Window_AddDynamicFlags(dc->localClientNum, &menu->window, 6);
+#ifdef __SWITCH__
+    if (traceMain)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/flags_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after Window_AddDynamicFlags\n");
+    }
+#endif
     Menu_CallOnFocusDueToOpen(dc, menu);
+#ifdef __SWITCH__
+    if (traceMain)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/focus_done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after Menu_CallOnFocusDueToOpen\n");
+    }
+#endif
     if (dc->isCursorVisible)
+    {
+#ifdef __SWITCH__
+        if (traceMain)
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/mouse_move";
+#endif
         Menu_HandleMouseMove(dc, menu);
+#ifdef __SWITCH__
+        if (traceMain)
+        {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/mouse_done";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after Menu_HandleMouseMove\n");
+        }
+#endif
+    }
     if (menu->onOpen)
     {
+#ifdef __SWITCH__
+        if (traceMain)
+        {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open before Item_RunScript(onOpen)\n");
+        }
+#endif
         item.parent = menu;
         Item_RunScript(dc, &item, (char*)menu->onOpen);
+#ifdef __SWITCH__
+        if (traceMain)
+        {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen_done";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after Item_RunScript(onOpen)\n");
+        }
+#endif
     }
     if (menu->soundName)
+    {
+#ifdef __SWITCH__
+        if (traceMain)
+        {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/sound";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open before UI_PlayLocalSoundAliasByName\n");
+        }
+#endif
         UI_PlayLocalSoundAliasByName(dc->localClientNum, menu->soundName);
+#ifdef __SWITCH__
+        if (traceMain)
+        {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/sound_done";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after UI_PlayLocalSoundAliasByName\n");
+        }
+#endif
+    }
+#ifdef __SWITCH__
+    if (traceMain)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/done";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open complete\n");
+    }
+#endif
 }
 
 void __cdecl Menus_AddToStack(UiContext *dc, menuDef_t *pMenu)
