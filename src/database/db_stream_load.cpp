@@ -234,6 +234,55 @@ void __cdecl DB_ConvertOffsetToAlias(void *data)
     const bool aliasFound =
         DB_ResolveSwitchPointerAlias(aliasSlot, &resolvedPointer);
 
+    if (!aliasFound &&
+        g_switchCurrentAssetRawType == 19u &&
+        g_switchCurrentAssetIndex >= 1215 &&
+        g_switchCurrentAssetIndex <= 1221)
+    {
+        const uint32_t rawAliasValue =
+            *reinterpret_cast<const uint32_t *>(aliasSlot);
+        uintptr_t rawAliasTarget = 0;
+        const bool rawAliasValid =
+            rawAliasValue != 0 &&
+            rawAliasValue != UINT32_MAX &&
+            rawAliasValue != UINT32_MAX - 1 &&
+            (((rawAliasValue - 1u) >> 28) < 9u);
+
+        if (rawAliasValid)
+            rawAliasTarget =
+                DB_ConvertOffsetToPointerValue(rawAliasValue);
+
+        const uint8_t *slotBytes =
+            reinterpret_cast<const uint8_t *>(aliasSlot);
+        char trace[448];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FONT ALIAS SLOT] asset=%d token=%08x slot=%p raw=%08x rawTarget=%p bytes=%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+            g_switchCurrentAssetIndex,
+            offset,
+            reinterpret_cast<const void *>(aliasSlot),
+            rawAliasValue,
+            reinterpret_cast<const void *>(rawAliasTarget),
+            static_cast<unsigned>(slotBytes[0]),
+            static_cast<unsigned>(slotBytes[1]),
+            static_cast<unsigned>(slotBytes[2]),
+            static_cast<unsigned>(slotBytes[3]),
+            static_cast<unsigned>(slotBytes[4]),
+            static_cast<unsigned>(slotBytes[5]),
+            static_cast<unsigned>(slotBytes[6]),
+            static_cast<unsigned>(slotBytes[7]),
+            static_cast<unsigned>(slotBytes[8]),
+            static_cast<unsigned>(slotBytes[9]),
+            static_cast<unsigned>(slotBytes[10]),
+            static_cast<unsigned>(slotBytes[11]),
+            static_cast<unsigned>(slotBytes[12]),
+            static_cast<unsigned>(slotBytes[13]),
+            static_cast<unsigned>(slotBytes[14]),
+            static_cast<unsigned>(slotBytes[15]));
+        Switch_LogWrite(trace);
+    }
+
     if (resolvedPointer)
     {
         *reinterpret_cast<uintptr_t *>(data) = resolvedPointer;
