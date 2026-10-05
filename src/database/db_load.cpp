@@ -4219,12 +4219,12 @@ void __cdecl Load_snd_alias_list_ptr(bool atStreamStart)
         }
         else
         {
-            const uintptr_t aliasValue =
-                DB_ConvertOffsetToPointerValue(serialized);
-            std::memcpy(
-                reinterpret_cast<uint8_t *>(varsnd_alias_list_ptr),
-                &aliasValue,
-                sizeof(aliasValue));
+            // The serialized sound-list pointer uses the same 32-bit alias
+            // mechanism as the desktop/iOS loader. On ARM64 the resolved
+            // snd_alias_list_t is a native object, so never leave this field
+            // pointing at its 32-bit serialized record in the stream buffer.
+            DB_ConvertOffsetToAlias(
+                reinterpret_cast<uint32_t *>(varsnd_alias_list_ptr));
         }
     }
     DB_PopStreamPos();
