@@ -200,6 +200,7 @@ void OpenGLBackend::DestroyWindow()
 
 void OpenGLBackend::Present()
 {
+    // Switch EGL present synchronization.
 #ifdef __SWITCH__
     if (s_display != EGL_NO_DISPLAY && s_surface != EGL_NO_SURFACE)
     {
