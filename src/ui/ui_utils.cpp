@@ -7,6 +7,7 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern thread_local const char *g_switchFrameStage;
 #endif
 
 stringDef_s *g_strHandle[2048];
