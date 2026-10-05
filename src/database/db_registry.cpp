@@ -3185,6 +3185,21 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         Switch_LogWrite(trace);
     }
     g_switchDbStage = "asset/name_deref";
+    if (Switch_IsSignExtended32Pointer(name))
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH DB NAME DEREF CORRUPT] name=%p asset=%d raw=%u type=%u header=%p\n",
+            static_cast<const void *>(name),
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<unsigned>(type),
+            static_cast<void *>(newEntry->entry.asset.header.data));
+        Sys_Error("%s", trace);
+        return newEntry;
+    }
 #endif
     v2 = *name;
     isStubAsset = v2 == ',';
