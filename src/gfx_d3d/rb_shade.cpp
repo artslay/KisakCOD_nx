@@ -152,6 +152,25 @@ void RB_DrawTessSurface()
 
     iassert(tess.indexCount);
 
+#ifdef __SWITCH__
+    static uint32_t switchTessTraceCount = 0;
+    if (switchTessTraceCount < 8)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] tess draw verts=%u indices=%u material=%s passes=%u\n",
+            (unsigned)tess.vertexCount,
+            (unsigned)tess.indexCount,
+            gfxCmdBufState.material && gfxCmdBufState.material->info.name
+                ? gfxCmdBufState.material->info.name : "<null>",
+            gfxCmdBufState.technique ? (unsigned)gfxCmdBufState.technique->passCount : 0u);
+        Switch_LogWrite(trace);
+        ++switchTessTraceCount;
+    }
+#endif
+
     PROF_SCOPED("EndSurface_Standard");
 
     if (gfxCmdBufSourceState.viewportIsDirty)
