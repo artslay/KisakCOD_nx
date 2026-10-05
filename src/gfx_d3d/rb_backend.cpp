@@ -2818,7 +2818,6 @@ GfxIndexBufferState *RB_SwapBuffers()
     if (!result)
     {
         g_switchFrameStage = "frame/issue/dynamic_index_null";
-        Switch_LogWrite("[KisakCOD][RTHREAD] RB_SwapBuffers: dynamicIndexBuffer is null\\n");
     }
     else
     {
