@@ -830,13 +830,11 @@ void __cdecl CL_Frame(int localClientNum, int msec)
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/cl_frame/is_running";
-    Switch_LogWrite("[KisakCOD][CLFRAME] before isRunning\n");
 #endif
     if (clientUIActives[0].isRunning)
     {
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/is_running_done";
-        Switch_LogWrite("[KisakCOD][CLFRAME] isRunning=true\n");
 #endif
         //_R11 = 0;
         //_R8 = &cls.scriptError;
@@ -856,29 +854,23 @@ void __cdecl CL_Frame(int localClientNum, int msec)
 
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/script_error";
-        Switch_LogWrite("[KisakCOD][CLFRAME] before scriptError\n");
 #endif
         if (cls.scriptError) {
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/script_error_clear";
-            Switch_LogWrite("[KisakCOD][CLFRAME] clearing scriptError\n");
 #endif
             cls.scriptError = 0;
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/script_error_set_menu";
-            Switch_LogWrite("[KisakCOD][CLFRAME] before scriptError UI_SetActiveMenu\n");
 #endif
             UI_SetActiveMenu(0, UIMENU_MAIN);
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/script_error_set_menu_done";
-            Switch_LogWrite("[KisakCOD][CLFRAME] after scriptError UI_SetActiveMenu\n");
 #endif
         }
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/script_error_done";
-        Switch_LogWrite("[KisakCOD][CLFRAME] scriptError done\n");
         g_switchFrameStage = "frame/cl_frame/disconnected_check";
-        Switch_LogWrite("[KisakCOD][CLFRAME] before disconnected check\n");
 #endif
         if (clientUIActives[0].connectionState == CA_DISCONNECTED
         && (clientUIActives[0].keyCatchers & KEYCATCH_UI) == 0
@@ -886,24 +878,19 @@ void __cdecl CL_Frame(int localClientNum, int msec)
         {
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/stop_sounds";
-            Switch_LogWrite("[KisakCOD][CLFRAME] before SND_StopSounds\n");
 #endif
             SND_StopSounds(SND_STOP_ALL);
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/stop_sounds_done";
-            Switch_LogWrite("[KisakCOD][CLFRAME] after SND_StopSounds\n");
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu";
-            Switch_LogWrite("[KisakCOD][CLFRAME] before disconnected UI_SetActiveMenu\n");
 #endif
             UI_SetActiveMenu(0, UIMENU_MAIN);
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu_done";
-            Switch_LogWrite("[KisakCOD][CLFRAME] after disconnected UI_SetActiveMenu\n");
 #endif
         }
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/pre_devgui";
-        Switch_LogWrite("[KisakCOD][CLFRAME] before DevGuiFrame\n");
 #endif
         CL_DevGuiFrame(0);
 #ifdef __SWITCH__
@@ -968,7 +955,6 @@ void __cdecl CL_InitRenderer()
     iassert(!cls.rendererStarted);
     cls.rendererStarted = 1;
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] Initializing graphics: OpenGL/EGL via Mesa Zink (Vulkan/NVK)\n");
 #endif
     R_BeginRegistration(&cls.vidConfig);
     ScrPlace_SetupUnsafeViewport(&scrPlaceFullUnsafe, 0, 0, cls.vidConfig.displayWidth, cls.vidConfig.displayHeight);
@@ -1119,16 +1105,13 @@ void __cdecl CL_StartHunkUsers()
         {
             cls.devGuiStarted = 1;
 #ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][BOOT] CL_StartHunkUsers: before CL_InitDevGui\n");
 #endif
             CL_InitDevGui();
 #ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][BOOT] CL_StartHunkUsers: after CL_InitDevGui\n");
 #endif
             Sys_LoadingKeepAlive();
         }
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][BOOT] CL_StartHunkUsers: returning\n");
 #endif
     }
 }
