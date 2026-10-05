@@ -4,6 +4,10 @@
 #include <qcommon/threads.h>
 #include <universal/q_parse.h>
 #include <universal/profile.h>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 
 stringDef_s *g_strHandle[2048];
 
@@ -140,7 +144,7 @@ bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag)
             static_cast<const void *>(item),
             flag,
             static_cast<unsigned>(
-                static_cast<uintptr_t>(item->enableDvar) & UINT64_C(0xffffffff)),
+                reinterpret_cast<uintptr_t>(item->enableDvar) & UINT64_C(0xffffffff)),
             static_cast<unsigned>(
                 static_cast<uintptr_t>(item->enableDvar) >> 32));
         Switch_LogWrite(trace);
@@ -159,7 +163,7 @@ bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag)
             static_cast<const void *>(item),
             flag,
             static_cast<unsigned>(
-                static_cast<uintptr_t>(item->dvarTest) & UINT64_C(0xffffffff)),
+                reinterpret_cast<uintptr_t>(item->dvarTest) & UINT64_C(0xffffffff)),
             static_cast<unsigned>(
                 static_cast<uintptr_t>(item->dvarTest) >> 32));
         Switch_LogWrite(trace);
