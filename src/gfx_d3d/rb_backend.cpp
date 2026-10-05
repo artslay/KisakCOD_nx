@@ -2895,6 +2895,26 @@ void __cdecl RB_ExecuteRenderCommandsLoop(const void *cmds)
     }
     if (tess.indexCount)
         RB_EndTessSurface();
+#ifdef __SWITCH__
+    static uint32_t switchCommandTraceCount = 0;
+    if (switchCommandTraceCount < 4)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] commands count=%u ids=%u,%u,%u,%u,%u,%u\n",
+            switchCommandCount,
+            switchCommandIds[0],
+            switchCommandIds[1],
+            switchCommandIds[2],
+            switchCommandIds[3],
+            switchCommandIds[4],
+            switchCommandIds[5]);
+        Switch_LogWrite(trace);
+        ++switchCommandTraceCount;
+    }
+#endif
 }
 
 void __cdecl RB_Draw3D()
