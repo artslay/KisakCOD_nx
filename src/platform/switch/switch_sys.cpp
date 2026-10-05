@@ -108,10 +108,10 @@ extern volatile int32_t g_switchSkinCacheCreateCalled;
 extern volatile int32_t g_switchSkinCacheCreateHr;
 }
 extern thread_local const char * volatile g_switchFrameStage;
-extern "C" volatile uintptr_t g_switchFrameTailReached;
-extern "C" volatile uintptr_t g_switchFrameAfterDrawReached;
-extern "C" volatile uintptr_t g_switchFrameDrawFieldAddress;
-extern "C" volatile uintptr_t g_switchFrameDrawFieldCaller;
+extern "C" thread_local volatile uintptr_t g_switchFrameTailReached;
+extern "C" thread_local volatile uintptr_t g_switchFrameAfterDrawReached;
+extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldAddress;
+extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldCaller;
 extern "C" uint32_t Sys_GetSwitchThreadContext();
 extern "C" const char *Sys_GetSwitchThreadStage();
 
@@ -245,10 +245,10 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
     appletRequestExitToSelf();
 }
 
-extern "C" volatile uintptr_t g_switchFrameTailReached = 0;
-extern "C" volatile uintptr_t g_switchFrameAfterDrawReached = 0;
-extern "C" volatile uintptr_t g_switchFrameDrawFieldAddress = 0;
-extern "C" volatile uintptr_t g_switchFrameDrawFieldCaller = 0;
+extern "C" thread_local volatile uintptr_t g_switchFrameTailReached = 0;
+extern "C" thread_local volatile uintptr_t g_switchFrameAfterDrawReached = 0;
+extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldAddress = 0;
+extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldCaller = 0;
 
 void Switch_LogWrite(const char *msg)
 {
