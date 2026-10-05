@@ -2564,6 +2564,13 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
 #ifdef __SWITCH__
     if (!cmd->font || !cmd->font->material)
     {
+        static uint32_t switchUnresolvedText2DTraceCount = 0;
+        if (switchUnresolvedText2DTraceCount >= 24)
+        {
+            execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
+            return;
+        }
+
         const uintptr_t fontPtr = reinterpret_cast<uintptr_t>(cmd->font);
         const uintptr_t namePtr =
             cmd->font && fontPtr < (1ULL << 39)
@@ -2590,6 +2597,7 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
             cmd->text[0] ? cmd->text : "<empty>");
         g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/unresolved_material";
         Switch_LogWrite(trace);
+        ++switchUnresolvedText2DTraceCount;
         execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
         return;
     }
