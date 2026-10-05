@@ -110,6 +110,29 @@ int __cdecl Item_IsVisible(int localClientNum, itemDef_s *item)
 
 bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag)
 {
+#ifdef __SWITCH__
+    static thread_local int switchTraceCount = 0;
+    if (switchTraceCount < 8)
+    {
+        const uintptr_t enableValue = reinterpret_cast<uintptr_t>(item ? item->enableDvar : nullptr);
+        const uintptr_t testValuePtr = reinterpret_cast<uintptr_t>(item ? item->dvarTest : nullptr);
+        char trace[448];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] Item_EnableShowViaDvar entry item=%p flag=%d enableDvar=%p dvarTest=%p enableLow=%08x enableHigh=%08x testLow=%08x testHigh=%08x\n",
+            static_cast<const void *>(item),
+            flag,
+            item ? static_cast<const void *>(item->enableDvar) : nullptr,
+            item ? static_cast<const void *>(item->dvarTest) : nullptr,
+            static_cast<unsigned>(enableValue & UINT64_C(0xffffffff)),
+            static_cast<unsigned>(enableValue >> 32),
+            static_cast<unsigned>(testValuePtr & UINT64_C(0xffffffff)),
+            static_cast<unsigned>(testValuePtr >> 32));
+        Switch_LogWrite(trace);
+        ++switchTraceCount;
+    }
+#endif
     const char *testValue; // [esp+0h] [ebp-40Ch]
     char val[1024]; // [esp+4h] [ebp-408h] BYREF
     const char *p; // [esp+408h] [ebp-4h] BYREF
@@ -175,6 +198,24 @@ bool __cdecl Item_EnableShowViaDvar(const itemDef_s *item, int flag)
         return 1;
     testValue = Dvar_GetVariantString(item->dvarTest);
 #ifdef __SWITCH__
+    {
+        const uintptr_t value = reinterpret_cast<uintptr_t>(testValue);
+        if (switchTraceCount < 8)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] Item_EnableShowViaDvar result item=%p flag=%d testValue=%p low32=%08x high32=%08x\n",
+                static_cast<const void *>(item),
+                flag,
+                static_cast<const void *>(testValue),
+                static_cast<unsigned>(value & UINT64_C(0xffffffff)),
+                static_cast<unsigned>(value >> 32));
+            Switch_LogWrite(trace);
+            ++switchTraceCount;
+        }
+    }
     if (badUiStringPointer(testValue))
     {
         char trace[320];
