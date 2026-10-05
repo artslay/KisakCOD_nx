@@ -721,26 +721,34 @@ bool OpenGLBackend::InitContext(const GfxWindowParms* wndParms)
 bool Switch_GLBeginRenderContext()
 {
     if (s_display == EGL_NO_DISPLAY ||
-        s_renderContext == EGL_NO_CONTEXT ||
         s_surface == EGL_NO_SURFACE)
         return false;
 
     if (eglBindAPI(EGL_OPENGL_API) != EGL_TRUE)
         return false;
 
+    // Normal game frames currently execute synchronously on the main thread
+    // when the backend SMP path is not active. Remote-screen updates can still
+    // execute on THREAD_CONTEXT_BACKEND. Select the context from the actual
+    // thread, while always binding the real window surface for rendering.
+    const bool backendThread =
+        Sys_GetSwitchThreadContext() == THREAD_CONTEXT_BACKEND;
+    const EGLContext wantedContext =
+        backendThread ? s_renderContext : s_context;
+
+    if (wantedContext == EGL_NO_CONTEXT)
+        return false;
+
     const EGLContext currentContext = eglGetCurrentContext();
     const EGLSurface currentDraw = eglGetCurrentSurface(EGL_DRAW);
-    if (currentContext == s_renderContext && currentDraw == s_surface)
+    if (currentContext == wantedContext && currentDraw == s_surface)
         return true;
 
-    // A thread may already have an EGL context/surface pair from an earlier
-    // renderer or compatibility path. Do not reject that state: replace it
-    // explicitly with the backend pair required for game rendering/present.
     const EGLBoolean current = eglMakeCurrent(
         s_display,
         s_surface,
         s_surface,
-        s_renderContext);
+        wantedContext);
 
     if (current == EGL_FALSE)
     {
@@ -755,12 +763,13 @@ bool Switch_GLBeginRenderContext()
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][FRAME] Render context acquire FAIL err=0x%04x nowCtx=%p nowDraw=%p nowRead=%p wantedCtx=%p wantedDraw=%p main=%p thread=%u\n",
+                "[KisakCOD][FRAME] Render context acquire FAIL err=0x%04x nowCtx=%p nowDraw=%p nowRead=%p wantedCtx=%p wantedDraw=%p main=%p thread=%u
+",
                 static_cast<unsigned>(err),
                 (void *)nowContext,
                 (void *)nowDraw,
                 (void *)nowRead,
-                (void *)s_renderContext,
+                (void *)wantedContext,
                 (void *)s_surface,
                 (void *)s_mainSurface,
                 Sys_GetSwitchThreadContext());
@@ -769,12 +778,13 @@ bool Switch_GLBeginRenderContext()
         }
     }
 
-    if (current == EGL_TRUE && !s_renderContextLogged)
+    if (current == EGL_TRUE && backendThread && !s_renderContextLogged)
     {
         char trace[224];
         std::snprintf(
             trace, sizeof(trace),
-            "[SWITCH GLCTX] render ready ctx=%p dpy=%p surf=%p\n",
+            "[SWITCH GLCTX] render ready ctx=%p dpy=%p surf=%p
+",
             (void *)s_renderContext,
             (void *)s_display,
             (void *)s_surface);
@@ -784,7 +794,6 @@ bool Switch_GLBeginRenderContext()
 
     return current == EGL_TRUE;
 }
-
 bool Switch_GLBeginDatabaseContext()
 {
     if (s_display == EGL_NO_DISPLAY ||
