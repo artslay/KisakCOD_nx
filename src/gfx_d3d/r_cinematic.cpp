@@ -153,13 +153,30 @@ void R_Cinematic_ReserveMemory()
 void __cdecl  R_Cinematic_Thread(uint32_t threadContext)
 {
     iassert(threadContext == THREAD_CONTEXT_CINEMATIC);
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][CINEMATIC] thread entered
+");
+#endif
     while (1)
     {
+#ifdef __SWITCH__
+        Switch_LogWrite(
+            "[KisakCOD][CINEMATIC] before host wait state=%d\n",
+            (int)g_cinematicThreadState);
+#endif
         R_CinematicThread_WaitForHostEvent();
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][CINEMATIC] host event received
+");
+#endif
         R_Cinematic_UpdateFrame_Core2();
         g_cinematicThreadState = CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES;
         Sys_ResetCinematicsHostOutstandingRequestEvent();
         Sys_SetCinematicsThreadOutstandingRequestEvent();
+#ifdef __SWITCH__
+        Switch_LogWrite("[KisakCOD][CINEMATIC] thread event signaled state=%d\n",
+            (int)g_cinematicThreadState);
+#endif
     }
 }
 
@@ -1111,11 +1128,28 @@ void __cdecl R_Cinematic_SetRendererImagesToFrame(int frameToSetTo)
 
 char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay)
 {
+    uint32_t switchWaitSpins = 0;
+
+#ifdef __SWITCH__
+    if (Sys_IsRenderThread())
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: enter
+");
+#endif
+
     do
     {
         while (2)
         {
-            if (Sys_WaitForCinematicsThreadOutstandingRequestEventTimeout(1))
+            const bool waitReady = Sys_WaitForCinematicsThreadOutstandingRequestEventTimeout(1);
+#ifdef __SWITCH__
+            if (Sys_IsRenderThread() && (!waitReady || switchWaitSpins == 0))
+                Switch_LogWrite(
+                    "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: wait=%d state=%d midBink=%d\n",
+                    (int)waitReady,
+                    (int)g_cinematicThreadState,
+                    (int)midBinkIsOkay);
+#endif
+            if (waitReady)
             {
                 switch (g_cinematicThreadState)
                 {
@@ -1142,6 +1176,15 @@ char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay)
             }
             break;
         }
+        ++switchWaitSpins;
+#ifdef __SWITCH__
+        if (Sys_IsRenderThread() && (switchWaitSpins == 5 || (switchWaitSpins % 1000) == 0))
+            Switch_LogWrite(
+                "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: still waiting spins=%u state=%d midBink=%d\n",
+                switchWaitSpins,
+                (int)g_cinematicThreadState,
+                (int)midBinkIsOkay);
+#endif
     } while (!midBinkIsOkay || g_cinematicThreadState != CINEMATIC_THREAD_STATE_FROM_HOST_GO_BINK);
     return 0;
 }
