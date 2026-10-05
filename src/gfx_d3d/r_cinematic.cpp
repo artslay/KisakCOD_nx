@@ -127,8 +127,8 @@ void __cdecl R_Cinematic_Init()
 {
 #ifdef __SWITCH__
     Switch_LogWrite(g_cinematicThreadInitialized
-        ? "[KisakCOD][CINEMATIC] R_Cinematic_Init: entry initialized=true\\n"
-        : "[KisakCOD][CINEMATIC] R_Cinematic_Init: entry initialized=false\\n");
+        ? "[KisakCOD][CINEMATIC] R_Cinematic_Init: entry initialized=true\n"
+        : "[KisakCOD][CINEMATIC] R_Cinematic_Init: entry initialized=false\n");
 #endif
     iassert(!g_cinematicThreadInitialized || g_cinematicThreadState == CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES);
 
@@ -143,7 +143,7 @@ void __cdecl R_Cinematic_Init()
     if (!g_cinematicThreadInitialized)
     {
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: spawning thread\\n");
+        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: spawning thread\n");
 #endif
         g_cinematicThreadInitialized = 1;
         g_cinematicThreadState = CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES;
@@ -151,13 +151,13 @@ void __cdecl R_Cinematic_Init()
         KISAK_NULLSUB();
         cinematicGlob.atHighPriority = 1;
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: spawn returned\\n");
+        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: spawn returned\n");
 #endif
     }
 #ifdef __SWITCH__
     else
     {
-        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: thread already initialized\\n");
+        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: thread already initialized\n");
     }
 #endif
 }
