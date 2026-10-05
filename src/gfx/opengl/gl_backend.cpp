@@ -18,7 +18,7 @@
 #ifdef __SWITCH__
 namespace
 {
-struct KisakGLShader
+struct SwitchGLBackendShader
 {
     GLuint object = 0;
     GLenum stage = 0;
@@ -375,7 +375,7 @@ void* OpenGLBackend::CreateVertexShader(const void* bytecode, uint32_t size)
         m_lastError = "OpenGL vertex shader: " + error;
         return nullptr;
     }
-    return new KisakGLShader{object, GL_VERTEX_SHADER};
+    return new SwitchGLBackendShader{object, GL_VERTEX_SHADER};
 #else
     (void)bytecode; (void)size;
     return nullptr;
@@ -394,7 +394,7 @@ void* OpenGLBackend::CreatePixelShader(const void* bytecode, uint32_t size)
         m_lastError = "OpenGL pixel shader: " + error;
         return nullptr;
     }
-    return new KisakGLShader{object, GL_FRAGMENT_SHADER};
+    return new SwitchGLBackendShader{object, GL_FRAGMENT_SHADER};
 #else
     (void)bytecode; (void)size;
     return nullptr;
@@ -404,7 +404,7 @@ void* OpenGLBackend::CreatePixelShader(const void* bytecode, uint32_t size)
 void OpenGLBackend::ReleaseShader(void* shader)
 {
 #ifdef __SWITCH__
-    auto *s = static_cast<KisakGLShader *>(shader);
+    auto *s = static_cast<SwitchGLBackendShader *>(shader);
     if (s)
     {
         if (s->object)
@@ -423,7 +423,7 @@ void OpenGLBackend::ReleaseShader(void* shader)
 void OpenGLBackend::SetVertexShader(void* shader)
 {
 #ifdef __SWITCH__
-    auto *s = static_cast<KisakGLShader *>(shader);
+    auto *s = static_cast<SwitchGLBackendShader *>(shader);
     m_vertexShader = s ? s->object : 0;
     if (m_vertexShader && m_pixelShader)
     {
@@ -446,7 +446,7 @@ void OpenGLBackend::SetVertexShader(void* shader)
 void OpenGLBackend::SetPixelShader(void* shader)
 {
 #ifdef __SWITCH__
-    auto *s = static_cast<KisakGLShader *>(shader);
+    auto *s = static_cast<SwitchGLBackendShader *>(shader);
     m_pixelShader = s ? s->object : 0;
     if (m_vertexShader && m_pixelShader)
     {
