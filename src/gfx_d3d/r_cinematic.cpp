@@ -1136,7 +1136,8 @@ char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay)
         {
             const bool waitReady = Sys_WaitForCinematicsThreadOutstandingRequestEventTimeout(1);
 #ifdef __SWITCH__
-            if (Sys_IsRenderThread() && (!waitReady || switchWaitSpins == 0))
+            if (Sys_IsRenderThread() &&
+                (switchWaitSpins == 0 || (!waitReady && (switchWaitSpins % 1000) == 0)))
                 Switch_LogWrite(waitReady
                     ? "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: wait=true\n"
                     : "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: wait=false\n");
