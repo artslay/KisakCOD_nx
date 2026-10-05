@@ -742,6 +742,33 @@ bool Switch_GLBeginRenderContext()
         s_surface,
         s_renderContext);
 
+    if (current == EGL_FALSE)
+    {
+        static bool loggedContextFailure = false;
+        if (!loggedContextFailure)
+        {
+            const EGLint err = eglGetError();
+            const EGLContext nowContext = eglGetCurrentContext();
+            const EGLSurface nowDraw = eglGetCurrentSurface(EGL_DRAW);
+            const EGLSurface nowRead = eglGetCurrentSurface(EGL_READ);
+            char trace[352];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] Render context acquire FAIL err=0x%04x nowCtx=%p nowDraw=%p nowRead=%p wantedCtx=%p wantedDraw=%p main=%p thread=%u\n",
+                static_cast<unsigned>(err),
+                (void *)nowContext,
+                (void *)nowDraw,
+                (void *)nowRead,
+                (void *)s_renderContext,
+                (void *)s_surface,
+                (void *)s_mainSurface,
+                Sys_GetSwitchThreadContext());
+            Switch_LogWrite(trace);
+            loggedContextFailure = true;
+        }
+    }
+
     if (current == EGL_TRUE && !s_renderContextLogged)
     {
         char trace[224];
