@@ -782,8 +782,7 @@ bool Switch_GLBeginRenderContext()
         char trace[224];
         std::snprintf(
             trace, sizeof(trace),
-            "[SWITCH GLCTX] render ready ctx=%p dpy=%p surf=%p
-",
+            "[SWITCH GLCTX] render ready ctx=%p dpy=%p surf=%p\n",
             (void *)s_renderContext,
             (void *)s_display,
             (void *)s_surface);
