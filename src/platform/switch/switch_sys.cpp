@@ -60,19 +60,14 @@ static bool Switch_LogPrefixAllowed(const char *msg)
     if (!msg)
         return false;
 
-    // Keep only compact diagnostics needed to locate the current stream failure.
+    // Keep only diagnostics that are still relevant to the current asset/sound investigation.
     static constexpr const char *const kPrefixes[] =
     {
         "[SWITCH STREAM MISMATCH]",
         "[SWITCH STREAM ARRAY MISMATCH]",
         "[SWITCH STREAM REGRESS]",
         "[SWITCH OFFSET INVALID]",
-        "[SWITCH FX TRACE]",
-        "[SWITCH PHYSPRESET]",
-        "[SWITCH WEAPON4728]",
-        "[SWITCH SOUND NULL]",
-        "[SWITCH RINIT]",
-        "[SWITCH IMGBOOT]"
+        "[SWITCH SOUND NULL]"
     };
 
     for (const char *prefix : kPrefixes)
@@ -245,12 +240,15 @@ void Switch_LogWrite(const char *msg)
     if (!msg || !*msg)
         return;
 
-    // Keep the ARM64 fastfile probe readable on the Switch console.
-    // These older renderer/UI traces are not part of the current WeaponDef
-    // source-traversal diagnosis and can flood the deferred log buffer.
+    // Keep the Switch log focused on the current DB/sound investigation.
+    // These high-frequency renderer/UI/thread traces are diagnostic noise here.
     static constexpr const char *const kSuppressedPrefixes[] =
     {
         "[KisakCOD][UI ",
+        "[KisakCOD][UIMAIN]",
+        "[KisakCOD][RTHREAD]",
+        "[KisakCOD][CINEMATIC]",
+        "[KisakCOD][RINIT]",
         "[KisakCOD][VERTEXSHADER "
     };
     for (const char *prefix : kSuppressedPrefixes)
