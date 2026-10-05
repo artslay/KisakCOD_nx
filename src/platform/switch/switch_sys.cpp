@@ -66,7 +66,8 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[SWITCH STREAM MISMATCH]",
         "[SWITCH STREAM ARRAY MISMATCH]",
         "[SWITCH STREAM REGRESS]",
-        "[SWITCH OFFSET INVALID]"
+        "[SWITCH OFFSET INVALID]",
+        "[SWITCH IMAGE ANOMALY]"
     };
 
     for (const char *prefix : kPrefixes)
@@ -317,7 +318,7 @@ void Switch_LogWrite(const char *msg)
     // Keep the Switch log focused on the current DB/sound investigation.
     // These are known startup/UI diagnostics with no bearing on the current
     // asset ABI investigation. Do not hide actual image-loading failures.
-    if (std::strncmp(msg, "[KisakCOD][RENDER]", 19) == 0 ||
+    if (std::strncmp(msg, "[KisakCOD][RENDER]", 18) == 0 ||
         std::strncmp(msg, "unknown UI script ", 18) == 0 ||
         (std::strncmp(msg, "dvar '", 6) == 0 && std::strstr(msg, " doesn't exist") != nullptr) ||
         std::strstr(msg, "R_Cinematic_BinkOpen '") != nullptr)
