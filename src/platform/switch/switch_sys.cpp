@@ -315,6 +315,14 @@ void Switch_LogWrite(const char *msg)
         return;
 
     // Keep the Switch log focused on the current DB/sound investigation.
+    // These are known startup/UI diagnostics with no bearing on the current
+    // asset ABI investigation. Do not hide actual image-loading failures.
+    if (std::strncmp(msg, "[KisakCOD][RENDER]", 19) == 0 ||
+        std::strncmp(msg, "unknown UI script ", 18) == 0 ||
+        (std::strncmp(msg, "dvar '", 6) == 0 && std::strstr(msg, " doesn't exist") != nullptr) ||
+        std::strstr(msg, "R_Cinematic_BinkOpen '") != nullptr)
+        return;
+
     // These high-frequency renderer/UI/thread traces are diagnostic noise here.
     static constexpr const char *const kSuppressedPrefixes[] =
     {
