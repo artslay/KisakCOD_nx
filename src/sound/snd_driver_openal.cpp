@@ -24,6 +24,15 @@
 extern void Switch_LogWrite(const char *msg);
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
+
+static inline void Switch_LogWriteFiltered(const char *msg)
+{
+    if (msg && std::strncmp(msg, "[SWITCH SNDDATA]", 16) == 0)
+        return;
+    Switch_LogWrite(msg);
+}
+
+#define Switch_LogWrite Switch_LogWriteFiltered
 #endif
 
 
