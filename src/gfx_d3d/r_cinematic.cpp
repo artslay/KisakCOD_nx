@@ -154,8 +154,7 @@ void __cdecl  R_Cinematic_Thread(uint32_t threadContext)
 {
     iassert(threadContext == THREAD_CONTEXT_CINEMATIC);
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CINEMATIC] thread entered
-");
+    Switch_LogWrite("[KisakCOD][CINEMATIC] thread entered\\n");
 #endif
     while (1)
     {
@@ -164,8 +163,7 @@ void __cdecl  R_Cinematic_Thread(uint32_t threadContext)
 #endif
         R_CinematicThread_WaitForHostEvent();
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][CINEMATIC] host event received
-");
+        Switch_LogWrite("[KisakCOD][CINEMATIC] host event received\\n");
 #endif
         R_Cinematic_UpdateFrame_Core2();
         g_cinematicThreadState = CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES;
@@ -1129,8 +1127,7 @@ char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay)
 
 #ifdef __SWITCH__
     if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: enter
-");
+        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: enter\\n");
 #endif
 
     do
