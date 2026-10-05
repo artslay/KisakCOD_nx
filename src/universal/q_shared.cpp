@@ -154,6 +154,34 @@ int I_strnicmp(const char* s0, const char* s1, int n)
 
     do
     {
+#ifdef __SWITCH__
+        {
+            const uintptr_t current0 = reinterpret_cast<uintptr_t>(s0);
+            const uintptr_t current1 = reinterpret_cast<uintptr_t>(s1);
+            if ((current0 < UINT64_C(0x100000000) || current1 < UINT64_C(0x100000000)) &&
+                g_switchFrameStage)
+            {
+                static thread_local int lowPointerLoopTraceCount = 0;
+                if (lowPointerLoopTraceCount < 8)
+                {
+                    char trace[448];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[SWITCH STRING ABI] loop-pointer s0=%p s1=%p n=%d original0=%p original1=%p caller=%p frame=%s\\n",
+                        static_cast<const void *>(s0),
+                        static_cast<const void *>(s1),
+                        n,
+                        static_cast<const void *>(s0),
+                        static_cast<const void *>(s1),
+                        __builtin_return_address(0),
+                        g_switchFrameStage);
+                    Switch_LogWrite(trace);
+                    ++lowPointerLoopTraceCount;
+                }
+            }
+        }
+#endif
         c0 = *(uint8_t*)s0;
         c1 = *(uint8_t*)s1;
         ++s0;
