@@ -160,9 +160,7 @@ void __cdecl  R_Cinematic_Thread(uint32_t threadContext)
     while (1)
     {
 #ifdef __SWITCH__
-        Switch_LogWrite(
-            "[KisakCOD][CINEMATIC] before host wait state=%d\n",
-            (int)g_cinematicThreadState);
+        Switch_LogWrite("[KisakCOD][CINEMATIC] before host wait\n");
 #endif
         R_CinematicThread_WaitForHostEvent();
 #ifdef __SWITCH__
@@ -174,8 +172,7 @@ void __cdecl  R_Cinematic_Thread(uint32_t threadContext)
         Sys_ResetCinematicsHostOutstandingRequestEvent();
         Sys_SetCinematicsThreadOutstandingRequestEvent();
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][CINEMATIC] thread event signaled state=%d\n",
-            (int)g_cinematicThreadState);
+        Switch_LogWrite("[KisakCOD][CINEMATIC] thread event signaled\n");
 #endif
     }
 }
@@ -1143,11 +1140,9 @@ char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay)
             const bool waitReady = Sys_WaitForCinematicsThreadOutstandingRequestEventTimeout(1);
 #ifdef __SWITCH__
             if (Sys_IsRenderThread() && (!waitReady || switchWaitSpins == 0))
-                Switch_LogWrite(
-                    "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: wait=%d state=%d midBink=%d\n",
-                    (int)waitReady,
-                    (int)g_cinematicThreadState,
-                    (int)midBinkIsOkay);
+                Switch_LogWrite(waitReady
+                    ? "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: wait=true\n"
+                    : "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: wait=false\n");
 #endif
             if (waitReady)
             {
@@ -1180,10 +1175,7 @@ char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay)
 #ifdef __SWITCH__
         if (Sys_IsRenderThread() && (switchWaitSpins == 5 || (switchWaitSpins % 1000) == 0))
             Switch_LogWrite(
-                "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: still waiting spins=%u state=%d midBink=%d\n",
-                switchWaitSpins,
-                (int)g_cinematicThreadState,
-                (int)midBinkIsOkay);
+                "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: still waiting\n");
 #endif
     } while (!midBinkIsOkay || g_cinematicThreadState != CINEMATIC_THREAD_STATE_FROM_HOST_GO_BINK);
     return 0;
