@@ -3734,6 +3734,16 @@ void __cdecl Load_snd_alias_t(bool atStreamStart)
 
         if (value == UINT32_MAX)
         {
+            // The fastfile pointer names the serialized 12-byte SoundFile object
+            // that starts at the current stream cursor. On ARM64 the runtime
+            // SoundFile is larger because SoundFileRef is pointer-aligned to 8
+            // bytes, so references cannot keep pointing at the serialized bytes.
+            // Register the stream-object address against the native Hunk object
+            // before consuming the inline record; later aliases can resolve the
+            // same serialized pointer to this native object.
+            const uintptr_t serializedSoundFile =
+                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+
             varsnd_alias_t->soundFile =
                 reinterpret_cast<SoundFile *>(Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(SoundFile)),
@@ -3741,15 +3751,44 @@ void __cdecl Load_snd_alias_t(bool atStreamStart)
                     22));
             varSoundFile = varsnd_alias_t->soundFile;
             std::memset(varSoundFile, 0, sizeof(*varSoundFile));
+            DB_RegisterSwitchPointerAlias(
+                serializedSoundFile,
+                reinterpret_cast<uintptr_t>(varSoundFile));
             if (switchSoundTrace) Switch_LogWrite("[SWITCH SOUND] soundfile begin\n");
             Load_SoundFile(1);
             if (switchSoundTrace) Switch_LogWrite("[SWITCH SOUND] soundfile done\n");
         }
         else
         {
-            varsnd_alias_t->soundFile =
-                reinterpret_cast<SoundFile *>(
-                    DB_ConvertOffsetToPointerValue(value));
+            // Non-inline SoundFile references in the 32-bit fastfile point to
+            // another serialized SoundFile object. That stream address is not a
+            // valid ARM64 SoundFile*, so resolve it through the native-object
+            // alias registered when the inline object was loaded. A forward
+            // reference is kept as a normal Switch pointer fixup.
+            const uintptr_t serializedSoundFile =
+                DB_ConvertOffsetToPointerValue(value);
+            uintptr_t nativeSoundFile = 0;
+
+            if (serializedSoundFile &&
+                DB_ResolveSwitchPointerAlias(
+                    serializedSoundFile,
+                    &nativeSoundFile) &&
+                nativeSoundFile)
+            {
+                varsnd_alias_t->soundFile =
+                    reinterpret_cast<SoundFile *>(nativeSoundFile);
+            }
+            else
+            {
+                varsnd_alias_t->soundFile = nullptr;
+                if (serializedSoundFile)
+                {
+                    DB_AddSwitchPointerAliasFixup(
+                        serializedSoundFile,
+                        reinterpret_cast<uintptr_t *>(
+                            &varsnd_alias_t->soundFile));
+                }
+            }
         }
     }
 
@@ -3931,6 +3970,11 @@ void __cdecl Load_snd_alias_tArray(bool atStreamStart, int32_t count)
         varsnd_alias_t = &var[i];
         Load_snd_alias_t(false);
     }
+
+    // Resolve SoundFile references that may point forward within this
+    // snd_alias_t array now that all inline native SoundFile objects have been
+    // registered.
+    DB_FixupSwitchPointerAliases();
 
     g_switchCurrentSoundAliasIndex = -1;
 #else
