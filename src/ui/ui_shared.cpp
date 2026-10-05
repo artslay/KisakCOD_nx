@@ -1575,9 +1575,6 @@ void __cdecl Item_MouseEnter(UiContext *dc, itemDef_s *item, float x, float y)
         r.vertAlign = textRect->vertAlign;
         if ((item->dvarFlags & 3) == 0 || Item_EnableShowViaDvar(item, 1))
         {
-#ifdef __SWITCH__
-            g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/visible";
-#endif
             if (Item_IsVisible(dc->localClientNum, item))
             {
                 localClientNum = dc->localClientNum;
@@ -5287,10 +5284,7 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     for (i = 0; i < menu->itemCount; ++i)
     {
 #ifdef __SWITCH__
-        char itemStage[96];
-        std::snprintf(itemStage, sizeof(itemStage),
-                      "frame/scr/draw_field/loading_ui/menu/item_%d", i);
-        g_switchFrameStage = itemStage;
+        g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/item";
 #endif
         Item_Paint(dc, menu->items[i]);
     }
