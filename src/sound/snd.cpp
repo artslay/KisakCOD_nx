@@ -11,6 +11,12 @@
 #include <universal/profile.h>
 #include <win32/win_local.h>
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+extern thread_local const char *g_switchFrameStage;
+#endif
+
+
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
 #elif KISAK_SP
@@ -2112,10 +2118,45 @@ int __cdecl SND_PlayLocalSoundAliasByName(
 {
     snd_alias_t *alias; // [esp+0h] [ebp-4h]
 
+#ifdef __SWITCH__
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][SOUND] SND_PlayLocalSoundAliasByName enter aliasname=%p client=%u system=%u\\n",
+            static_cast<const void *>(aliasname),
+            static_cast<unsigned>(localClientNum),
+            static_cast<unsigned>(system));
+        Switch_LogWrite(trace);
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/pick";
+    }
+#endif
+
     if (aliasname && (alias = Com_PickSoundAlias(aliasname)) != 0)
+    {
+#ifdef __SWITCH__
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][SOUND] Com_PickSoundAlias returned alias=%p\\n",
+                static_cast<const void *>(alias));
+            Switch_LogWrite(trace);
+        }
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/play";
+#endif
         return SND_PlayLocalSoundAlias(localClientNum, alias, system);
+    }
     else
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/not_played";
+        Switch_LogWrite("[KisakCOD][SOUND] no sound alias; returning not played\\n");
+#endif
         return SND_PLAYBACKID_NOTPLAYED;
+    }
 }
 
 void __cdecl SND_ResetPauseSettingsToDefaults()
