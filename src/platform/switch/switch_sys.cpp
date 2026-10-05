@@ -218,7 +218,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
     std::snprintf(
         line,
         sizeof(line),
-        "[KisakCOD][CRASH] pc_aligned=%p pc_delta=%llu\\n",
+        "[KisakCOD][CRASH] pc_aligned=%p pc_delta=%llu\n",
         reinterpret_cast<void *>(pcAligned),
         static_cast<unsigned long long>(pc - pcAligned));
     Switch_LogCrashLine(line);
@@ -238,7 +238,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
             std::snprintf(
                 line,
                 sizeof(line),
-                "[KisakCOD][CRASH] insn[%+d] %p = 0x%08x\\n",
+                "[KisakCOD][CRASH] insn[%+d] %p = 0x%08x\n",
                 offset,
                 reinterpret_cast<void *>(address),
                 instruction);
@@ -266,7 +266,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         line,
         sizeof(line),
         "[KisakCOD][CRASH] far_match_x=%d far_low32=0x%08x high32=0x%08x "
-        "low32_nonzero_high_reg=%d\\n",
+        "low32_nonzero_high_reg=%d\n",
         farReg,
         farLow32,
         static_cast<uint32_t>(farValue >> 32),
@@ -280,7 +280,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
             std::snprintf(
                 line,
                 sizeof(line),
-                "[KisakCOD][CRASH] x%-2d=0x%016llx x%-2d=0x%016llx\\n",
+                "[KisakCOD][CRASH] x%-2d=0x%016llx x%-2d=0x%016llx\n",
                 i,
                 static_cast<unsigned long long>(ctx->cpu_gprs[i].x),
                 i + 1,
@@ -291,7 +291,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
             std::snprintf(
                 line,
                 sizeof(line),
-                "[KisakCOD][CRASH] x%-2d=0x%016llx\\n",
+                "[KisakCOD][CRASH] x%-2d=0x%016llx\n",
                 i,
                 static_cast<unsigned long long>(ctx->cpu_gprs[i].x));
         }
