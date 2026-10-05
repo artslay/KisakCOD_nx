@@ -2387,6 +2387,21 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
 #ifdef __SWITCH__
         if (traceMainOpen)
         {
+            char trace[640];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] Item_RunScript ENTER item=%p parent=%p parentName=%s script=%p first=%02x text=%s\n",
+                static_cast<void *>(item),
+                static_cast<void *>(item->parent),
+                item->parent && item->parent->window.name ? item->parent->window.name : "<none>",
+                static_cast<const void *>(s),
+                static_cast<unsigned>(static_cast<uint8_t>(*s)),
+                s);
+            Switch_LogWrite(trace);
+        }
+        if (traceMainOpen)
+        {
             char trace[512];
             std::snprintf(
                 trace,
@@ -2410,9 +2425,10 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][UIMAIN] Item_RunScript token='%s' p=%p\n",
+                    "[KisakCOD][FRAME] Item_RunScript TOKEN='%s' p=%p token0=%02x\n",
                     out,
-                    static_cast<const void *>(p));
+                    static_cast<const void *>(p),
+                    static_cast<unsigned>(static_cast<uint8_t>(out[0])));
                 Switch_LogWrite(trace);
                 g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/token";
             }
@@ -2479,7 +2495,18 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
                 {
 #ifdef __SWITCH__
                     if (traceMainOpen)
+                    {
+                        char trace[512];
+                        std::snprintf(
+                            trace,
+                            sizeof(trace),
+                            "[KisakCOD][FRAME] Item_RunScript FALLBACK token='%s' p=%p original=%p\n",
+                            out,
+                            static_cast<const void *>(p),
+                            static_cast<const void *>(s));
+                        Switch_LogWrite(trace);
                         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script";
+                    }
 #endif
                     UI_RunMenuScript(dc->localClientNum, &p, s);
 #ifdef __SWITCH__
