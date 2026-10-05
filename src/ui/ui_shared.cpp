@@ -2131,39 +2131,115 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
     uint32_t i; // [esp+180Ch] [ebp-8h]
     const char *p; // [esp+1810h] [ebp-4h] BYREF
 
+#ifdef __SWITCH__
+    const bool traceMainOpen =
+        item &&
+        item->parent &&
+        item->parent->window.name &&
+        !I_stricmp(item->parent->window.name, "main") &&
+        s &&
+        *s;
+#endif
+
     memset(dst, 0, sizeof(dst));
     if (item && s && *s)
     {
+#ifdef __SWITCH__
+        if (traceMainOpen)
+        {
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UIMAIN] Item_RunScript(main onOpen) scriptPtr=%p first=%02x script=%s\n",
+                static_cast<const void *>(s),
+                static_cast<unsigned>(static_cast<uint8_t>(*s)),
+                s);
+            Switch_LogWrite(trace);
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/script_begin";
+        }
+#endif
         I_strncat((char *)dst, 5120, s);
         p = (char *)dst;
         while (String_Parse((const char **)&p, out, 1024))
         {
+#ifdef __SWITCH__
+            if (traceMainOpen)
+            {
+                char trace[512];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][UIMAIN] Item_RunScript token='%s' p=%p\n",
+                    out,
+                    static_cast<const void *>(p));
+                Switch_LogWrite(trace);
+                g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/token";
+            }
+#endif
             if (out[0] != 59 || out[1])
             {
                 v3 = 0;
 #ifdef KISAK_XBOX
-				for (i = 0; i < 0x2A; ++i)
+                for (i = 0; i < 0x2A; ++i)
 #else
-
 #ifdef KISAK_SP
-				for (i = 0; i < 0x2E; ++i)// Fix for (nosavehide "saveandquit") PC
+                for (i = 0; i < 0x2E; ++i)// Fix for (nosavehide "saveandquit") PC
 #else
-				for (i = 0; i < 0x2A; ++i)
+                for (i = 0; i < 0x2A; ++i)
 #endif
-
 #endif
                 {
                     if (!I_stricmp(out, commandList[i].name))
                     {
+#ifdef __SWITCH__
+                        if (traceMainOpen)
+                        {
+                            char trace[384];
+                            std::snprintf(
+                                trace,
+                                sizeof(trace),
+                                "[KisakCOD][UIMAIN] dispatch command index=%u name='%s' p=%p\n",
+                                static_cast<unsigned>(i),
+                                commandList[i].name,
+                                static_cast<const void *>(p));
+                            Switch_LogWrite(trace);
+                            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/command";
+                        }
+#endif
                         commandList[i].handler(dc, item, (const char **)&p);
+#ifdef __SWITCH__
+                        if (traceMainOpen)
+                        {
+                            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/command_done";
+                            Switch_LogWrite("[KisakCOD][UIMAIN] command returned\n");
+                        }
+#endif
                         v3 = 1;
                         break;
                     }
                 }
                 if (!v3)
+                {
+#ifdef __SWITCH__
+                    if (traceMainOpen)
+                        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script";
+#endif
                     UI_RunMenuScript(dc->localClientNum, &p, s);
+#ifdef __SWITCH__
+                    if (traceMainOpen)
+                        Switch_LogWrite("[KisakCOD][UIMAIN] UI_RunMenuScript returned\n");
+#endif
+                }
             }
         }
+#ifdef __SWITCH__
+        if (traceMainOpen)
+        {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/done";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Item_RunScript complete\n");
+        }
+#endif
     }
 }
 
