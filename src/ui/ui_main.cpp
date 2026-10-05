@@ -1712,6 +1712,30 @@ void UI_LoadModsList()
 
 void __cdecl UI_Refresh()
 {
+#ifdef __SWITCH__
+    static uint32_t switchUiRefreshTraceCount = 0;
+    if (switchUiRefreshTraceCount < 6)
+    {
+        const int openMenuCount = uiInfo.uiDC.openMenuCount;
+        const char *topMenu =
+            openMenuCount > 0 && uiInfo.uiDC.menuStack[openMenuCount - 1] &&
+            uiInfo.uiDC.menuStack[openMenuCount - 1]->window.name
+                ? uiInfo.uiDC.menuStack[openMenuCount - 1]->window.name
+                : "<none>";
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] UI_Refresh open=%d fullscreen=%d top=%s active=%d catcher=0x%08x\n",
+            openMenuCount,
+            Menus_AnyFullScreenVisible(&uiInfo.uiDC),
+            topMenu,
+            (int)g_currentMenuType,
+            uiInfo.uiDC.localClientNum == 0 ? clientUIActives[0].keyCatchers : 0);
+        Switch_LogWrite(trace);
+        ++switchUiRefreshTraceCount;
+    }
+#endif
     UI_UpdateSaveUI();
     if (Menu_Count(&uiInfo.uiDC) > 0)
     {
