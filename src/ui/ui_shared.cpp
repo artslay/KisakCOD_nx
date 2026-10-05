@@ -905,14 +905,7 @@ void __cdecl Menu_GainFocusDueToClose(UiContext *dc, menuDef_t *menu)
     if (Window_HasFocus(dc->localClientNum, &menu->window))
         MyAssertHandler(".\\ui\\ui_shared.cpp", 907, 0, "%s", "!Window_HasFocus( dc->localClientNum, &menu->window )");
     Window_AddDynamicFlags(dc->localClientNum, &menu->window, 2);
-#ifdef __SWITCH__
-    if (traceMainText)
-    {
-        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/focus";
-        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) before Menu_CallOnFocusDueToOpen\n");
-    }
-#endif
-        Menu_CallOnFocusDueToOpen(dc, menu);
+    Menu_CallOnFocusDueToOpen(dc, menu);
 }
 
 void __cdecl Menu_CallOnFocusDueToOpen(UiContext *dc, menuDef_t *menu)
@@ -2776,6 +2769,13 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
     {
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/flags_done";
         Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after Window_AddDynamicFlags\n");
+    }
+#endif
+#ifdef __SWITCH__
+    if (traceMainText)
+    {
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/focus";
+        Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) before Menu_CallOnFocusDueToOpen\n");
     }
 #endif
     Menu_CallOnFocusDueToOpen(dc, menu);
