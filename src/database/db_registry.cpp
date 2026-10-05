@@ -72,8 +72,7 @@ static int Switch_IstricmpAssetName(const char *lhs, const char *rhs)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[SWITCH DB NAME CORRUPT] lhs=%p rhs=%p asset=%d raw=%u
-",
+            "[SWITCH DB NAME CORRUPT] lhs=%p rhs=%p asset=%d raw=%u\n",
             static_cast<const void *>(lhs),
             static_cast<const void *>(rhs),
             g_switchCurrentAssetIndex,
