@@ -28,6 +28,8 @@ struct SwitchEvent {
     bool manual = false;
 };
 
+extern void Switch_LogWrite(const char *msg);
+
 static SwitchEvent *AsEvent(void *p) { return static_cast<SwitchEvent *>(p); }
 static std::thread g_threads[THREAD_CONTEXT_COUNT];
 static std::atomic<bool> g_threadAlive[THREAD_CONTEXT_COUNT] = {};
@@ -216,6 +218,8 @@ bool __cdecl Sys_WaitForSingleObjectTimeout(void **event, uint32_t msec)
 
 void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_t context)
 {
+    if (context == THREAD_CONTEXT_CINEMATIC)
+        Switch_LogWrite("[KisakCOD][CINEMATIC] Sys_CreateThread begin\n");
     g_switchThreadStage = "create/check_context";
     if (context < 0 || context >= THREAD_CONTEXT_COUNT)
     {
@@ -235,11 +239,19 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
 
     g_switchThreadStage = "create/thread_ctor";
     g_threads[context] = std::thread([function, context] {
+        if (context == THREAD_CONTEXT_CINEMATIC)
+            Switch_LogWrite("[KisakCOD][CINEMATIC] thread lambda entered\n");
+        if (context == THREAD_CONTEXT_CINEMATIC)
+            Switch_LogWrite("[KisakCOD][CINEMATIC] before Sys_InitThread\n");
         Sys_InitThread(context);
+        if (context == THREAD_CONTEXT_CINEMATIC)
+            Switch_LogWrite("[KisakCOD][CINEMATIC] after Sys_InitThread\n");
         function((uint32_t)context);
         g_threadAlive[context] = false;
     });
     g_switchThreadStage = "create/thread_ctor_done";
+    if (context == THREAD_CONTEXT_CINEMATIC)
+        Switch_LogWrite("[KisakCOD][CINEMATIC] std::thread created\n");
 
     g_switchThreadStage = "create/set_handle";
     threadHandle[context] = reinterpret_cast<HANDLE>(&g_threads[context]);
@@ -280,15 +292,13 @@ bool __cdecl Sys_SpawnWorkerThread(void (__cdecl *function)(uint32_t), uint32_t 
 
 char __cdecl Sys_SpawnCinematicsThread(void (__cdecl *function)(uint32_t))
 {
-    // Match the original engine's event contract:
-    //   g_cinematicsThreadOutstandingRequestEvent = manual-reset, signaled
-    //   g_cinematicsHostOutstandingRequestEvent  = manual-reset, reset
-    // The render thread uses the initially-signaled thread event to synchronize
-    // the cinematic thread's first host handoff.
+    Switch_LogWrite("[KisakCOD][CINEMATIC] spawn begin\n");
     InitSwitchEvent(g_cinematicsThreadOutstandingRequestEvent, true, true);
     InitSwitchEvent(g_cinematicsHostOutstandingRequestEvent, true, false);
+    Switch_LogWrite("[KisakCOD][CINEMATIC] events initialized\n");
 
     Sys_CreateThread(function, THREAD_CONTEXT_CINEMATIC);
+    Switch_LogWrite("[KisakCOD][CINEMATIC] Sys_CreateThread returned\n");
     return 1;
 }
 
