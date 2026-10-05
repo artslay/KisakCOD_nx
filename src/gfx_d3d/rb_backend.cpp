@@ -2976,6 +2976,22 @@ void __cdecl RB_CallExecuteRenderCommands()
     int hr; // [esp+40h] [ebp-4h]
     
     PROF_SCOPED("ExecuteRenderCmds");
+#ifdef __SWITCH__
+    static uint32_t switchCommandFrameTraceCount = 0;
+    if (switchCommandFrameTraceCount < 4)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] backend drawType=0x%08x views=%u cmds=%p\n",
+            (unsigned)backEndData->drawType,
+            (unsigned)backEndData->viewInfoCount,
+            backEndData->cmds);
+        Switch_LogWrite(trace);
+        ++switchCommandFrameTraceCount;
+    }
+#endif
     if ((backEndData->drawType & 2) != 0)
     {
         if (g_primStats)
