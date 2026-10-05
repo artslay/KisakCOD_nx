@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <universal/q_shared.h>
 
 #ifdef __SWITCH__
@@ -5,6 +6,16 @@ extern thread_local const char *g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 #endif
 #include "r_rendercmds.h"
+#ifdef __SWITCH__
+static uint32_t Switch_DrawText2DCommandSize(uint32_t textLength)
+{
+    const uint32_t textOffset = static_cast<uint32_t>(offsetof(GfxCmdDrawText2D, text));
+    return (textOffset + textLength + 1u + 3u) & ~3u;
+}
+static_assert(offsetof(GfxCmdDrawText2D, text) == 92);
+static_assert(sizeof(GfxCmdDrawText2D) == 96);
+#endif
+
 #include <qcommon/mem_track.h>
 #include <qcommon/threads.h>
 #include "rb_logfile.h"
@@ -995,7 +1006,14 @@ GfxCmdDrawText2D *__cdecl AddBaseDrawTextCmd(
     if (!*text && cursorPos < 0)
         return 0;
     v13 = strlen(text);
-    cmd = (GfxCmdDrawText2D *)R_GetCommandBuffer(RC_DRAW_TEXT_2D, (v13 + 84) & 0xFFFFFFFC);
+    cmd = (GfxCmdDrawText2D *)R_GetCommandBuffer(
+        RC_DRAW_TEXT_2D,
+#ifdef __SWITCH__
+        Switch_DrawText2DCommandSize(v13)
+#else
+        (v13 + 84) & 0xFFFFFFFC
+#endif
+    );
     if (!cmd)
         return 0;
     cmd->x = x;
@@ -1205,7 +1223,14 @@ GfxCmdDrawText2D *__cdecl AddBaseDrawConsoleTextCmd(
     iassert( textPool );
     if (!charCount)
         return 0;
-    cmd = (GfxCmdDrawText2D *)R_GetCommandBuffer(RC_DRAW_TEXT_2D, (charCount + 84) & 0xFFFFFFFC);
+    cmd = (GfxCmdDrawText2D *)R_GetCommandBuffer(
+        RC_DRAW_TEXT_2D,
+#ifdef __SWITCH__
+        Switch_DrawText2DCommandSize(static_cast<uint32_t>(charCount))
+#else
+        (charCount + 84) & 0xFFFFFFFC
+#endif
+    );
     if (!cmd)
         return 0;
     cmd->x = x;
