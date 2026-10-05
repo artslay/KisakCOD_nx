@@ -153,11 +153,14 @@ static inline bool Switch_UI_ValidateStatement(
 }
 #endif
 
-struct commandDef_t // sizeof=0x8
+struct commandDef_t // 32-bit original sizeof=0x8; ARM64 Switch sizeof=0x10
 {                                       // ...
     const char *name;                   // ...
     void(__cdecl *handler)(UiContext *, itemDef_s *, const char **); // ...
 };
+#ifdef __SWITCH__
+static_assert(sizeof(commandDef_t) == 16, "Switch commandDef_t must be 16 bytes");
+#endif
 
 #ifdef KISAK_MP
 const commandDef_t commandList[42] =
@@ -2430,6 +2433,28 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
                     static_cast<const void *>(p),
                     static_cast<unsigned>(static_cast<uint8_t>(out[0])));
                 Switch_LogWrite(trace);
+                if (!I_stricmp(out, "open"))
+                {
+                    const char *cmdName = commandList[8].name;
+                    const uintptr_t cmdNameValue = reinterpret_cast<uintptr_t>(cmdName);
+                    const uintptr_t cmdHandlerValue =
+                        reinterpret_cast<uintptr_t>(commandList[8].handler);
+                    char openTrace[640];
+                    std::snprintf(
+                        openTrace,
+                        sizeof(openTrace),
+                        "[KisakCOD][FRAME] OPEN probe sizeof(commandDef_t)=%zu sizeof(char*)=%zu out=%p cmd[8].name=%p low32=%08x high32=%08x cmdName='%s' handler=%p cmp=%d\n",
+                        sizeof(commandDef_t),
+                        sizeof(const char *),
+                        static_cast<const void *>(out),
+                        static_cast<const void *>(cmdName),
+                        static_cast<unsigned>(cmdNameValue & UINT64_C(0xffffffff)),
+                        static_cast<unsigned>(cmdNameValue >> 32),
+                        cmdName ? cmdName : "<null>",
+                        reinterpret_cast<const void *>(commandList[8].handler),
+                        I_stricmp(out, cmdName));
+                    Switch_LogWrite(openTrace);
+                }
                 g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/token";
             }
 #endif
