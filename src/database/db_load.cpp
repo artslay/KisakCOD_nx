@@ -13140,6 +13140,12 @@ void __cdecl Load_itemDef_ptrArray(bool atStreamStart, int32_t count)
                     }
                 }
 
+                // itemDef_s::parent is runtime-owned. The serialized value is
+                // only the original 32-bit menu address/token, not an ARM64
+                // pointer. Restore the actual containing menu after loading.
+                if (*varitemDef_ptr)
+                    (*varitemDef_ptr)->parent = varmenuDef_t;
+
                 if (inserted)
                     *inserted = *varitemDef_ptr;
             }
@@ -13152,6 +13158,12 @@ void __cdecl Load_itemDef_ptrArray(bool atStreamStart, int32_t count)
                     reinterpret_cast<itemDef_s *>(
                         DB_ConvertOffsetToPointerValue(token));
                 *varitemDef_ptr = alias;
+
+                // An aliased item can also carry a stale serialized parent.
+                // Every item stored in this menu must use the native menu
+                // object as its runtime parent.
+                if (*varitemDef_ptr)
+                    (*varitemDef_ptr)->parent = varmenuDef_t;
 
                 if (traceMenu11)
                 {
