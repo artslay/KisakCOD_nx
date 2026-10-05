@@ -3672,57 +3672,100 @@ void __cdecl Mark_MaterialTechniqueSetAsset(MaterialTechniqueSet *techniqueSet)
 void __cdecl Load_GfxImageAsset(XAssetHeader *image)
 {
 #ifdef __SWITCH__
-    {
-        char trace[192];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IMAGE ABI] enter imageArg=%p hdr=%u asset=%u entry=%u pool=%u\n",
-            static_cast<void *>(image),
-            static_cast<unsigned>(sizeof(XAssetHeader)),
-            static_cast<unsigned>(sizeof(XAsset)),
-            static_cast<unsigned>(sizeof(XAssetEntry)),
-            static_cast<unsigned>(sizeof(XAssetEntryPoolEntry)));
-        Switch_LogWrite(trace);
-    }
-
     if (!image)
     {
-        Switch_LogWrite("[SWITCH IMAGE ABI] null header\n");
-        return;
+        Switch_LogWrite("[SWITCH IMAGE ANOMALY] null XAssetHeader\n");
     }
-
-    {
-        const uintptr_t imagePtr =
-            reinterpret_cast<uintptr_t>(image->image);
-        char trace[192];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IMAGE ABI] imagePtr=%p\n",
-            reinterpret_cast<void *>(imagePtr));
-        Switch_LogWrite(trace);
-    }
-
+    else
     {
         const GfxImage *gfxImage = image->image;
+        const uintptr_t imagePtr =
+            reinterpret_cast<uintptr_t>(gfxImage);
         const uintptr_t namePtr =
             gfxImage ? reinterpret_cast<uintptr_t>(gfxImage->name) : 0;
-        char trace[192];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IMAGE ABI] gfxImage=%p namePtr=%p\n",
-            static_cast<const void *>(gfxImage),
-            reinterpret_cast<const void *>(namePtr));
-        Switch_LogWrite(trace);
+
+        bool badNamePtr =
+            namePtr != 0 &&
+            (namePtr < UINT64_C(0x100000000) ||
+             (namePtr >> 32) == UINT64_C(0xFFFFFFFF));
+
+        bool badName = gfxImage == nullptr || namePtr == 0 || badNamePtr;
+        bool nameTerminated = false;
+        uint8_t nameBytes[16] = {};
+
+        if (!badName)
+        {
+            const unsigned char *p =
+                reinterpret_cast<const unsigned char *>(gfxImage->name);
+
+            for (size_t i = 0; i < sizeof(nameBytes); ++i)
+            {
+                const unsigned char ch = p[i];
+                nameBytes[i] = ch;
+
+                if (ch == 0)
+                {
+                    nameTerminated = true;
+                    break;
+                }
+
+                if (ch < 0x20 || ch > 0x7E)
+                {
+                    badName = true;
+                    break;
+                }
+            }
+
+            if (!nameTerminated && !badName)
+                badName = true;
+        }
+
+        if (badName)
+        {
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[SWITCH IMAGE ANOMALY] asset_index=%d raw_type=%u image=%p "
+                "name=%p reason=%s bytes=%02x %02x %02x %02x %02x %02x %02x %02x "
+                "%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                g_switchCurrentAssetIndex,
+                static_cast<unsigned>(g_switchCurrentAssetRawType),
+                reinterpret_cast<void *>(imagePtr),
+                reinterpret_cast<const void *>(namePtr),
+                gfxImage == nullptr
+                    ? "null-image"
+                    : namePtr == 0
+                        ? "null-name"
+                        : badNamePtr
+                            ? "invalid-name-ptr"
+                            : nameTerminated
+                                ? "non-ascii-name"
+                                : "unterminated-name",
+                static_cast<unsigned>(nameBytes[0]),
+                static_cast<unsigned>(nameBytes[1]),
+                static_cast<unsigned>(nameBytes[2]),
+                static_cast<unsigned>(nameBytes[3]),
+                static_cast<unsigned>(nameBytes[4]),
+                static_cast<unsigned>(nameBytes[5]),
+                static_cast<unsigned>(nameBytes[6]),
+                static_cast<unsigned>(nameBytes[7]),
+                static_cast<unsigned>(nameBytes[8]),
+                static_cast<unsigned>(nameBytes[9]),
+                static_cast<unsigned>(nameBytes[10]),
+                static_cast<unsigned>(nameBytes[11]),
+                static_cast<unsigned>(nameBytes[12]),
+                static_cast<unsigned>(nameBytes[13]),
+                static_cast<unsigned>(nameBytes[14]),
+                static_cast<unsigned>(nameBytes[15]));
+            Switch_LogWrite(trace);
+        }
     }
 #endif
 
     image->xmodelPieces =
         DB_AddXAsset(ASSET_TYPE_IMAGE, (XAssetHeader)image->xmodelPieces).xmodelPieces;
 }
-
 
 void __cdecl Mark_GfxImageAsset(GfxImage *image)
 {
