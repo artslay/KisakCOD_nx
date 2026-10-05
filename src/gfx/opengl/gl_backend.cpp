@@ -1,6 +1,7 @@
 #include "gl_backend.h"
 
 #ifdef __SWITCH__
+#include "qcommon/threads.h"
 #include <cstdio>
 #endif
 
