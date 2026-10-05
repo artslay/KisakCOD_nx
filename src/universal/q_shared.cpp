@@ -134,7 +134,13 @@ int I_strnicmp(const char* s0, const char* s1, int n)
         if ((v0 < UINT64_C(0x100000000) || v1 < UINT64_C(0x100000000)) &&
             g_switchFrameStage)
         {
+            static thread_local const char *lastLowPointerTraceStage = nullptr;
             static thread_local int lowPointerTraceCount = 0;
+            if (lastLowPointerTraceStage != g_switchFrameStage)
+            {
+                lastLowPointerTraceStage = g_switchFrameStage;
+                lowPointerTraceCount = 0;
+            }
             if (lowPointerTraceCount < 8)
             {
                 char trace[384];
@@ -163,7 +169,13 @@ int I_strnicmp(const char* s0, const char* s1, int n)
             if ((current0 < UINT64_C(0x100000000) || current1 < UINT64_C(0x100000000)) &&
                 g_switchFrameStage)
             {
+                static thread_local const char *lastLowPointerLoopStage = nullptr;
                 static thread_local int lowPointerLoopTraceCount = 0;
+                if (lastLowPointerLoopStage != g_switchFrameStage)
+                {
+                    lastLowPointerLoopStage = g_switchFrameStage;
+                    lowPointerLoopTraceCount = 0;
+                }
                 if (lowPointerLoopTraceCount < 8)
                 {
                     char trace[448];
