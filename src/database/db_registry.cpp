@@ -52,41 +52,8 @@ extern uint32_t g_switchCurrentAssetHeader;
 #include <algorithm>
 #include <vector>
 #ifdef __SWITCH__
-static bool Switch_IsSignExtended32Pointer(const char *ptr)
-{
-    if (!ptr)
-        return false;
-
-    const uintptr_t value = reinterpret_cast<uintptr_t>(ptr);
-    return (value >> 32) == UINT64_C(0xFFFFFFFF);
-}
-
 static int Switch_IstricmpAssetName(const char *lhs, const char *rhs)
 {
-    const bool badLhs = Switch_IsSignExtended32Pointer(lhs);
-    const bool badRhs = Switch_IsSignExtended32Pointer(rhs);
-
-    if (badLhs || badRhs)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH DB NAME CORRUPT] lhs=%p rhs=%p asset=%d raw=%u\n",
-            static_cast<const void *>(lhs),
-            static_cast<const void *>(rhs),
-            g_switchCurrentAssetIndex,
-            static_cast<unsigned>(g_switchCurrentAssetRawType));
-        Switch_LogWrite(trace);
-
-        // Do not dereference a sign-extended 32-bit serialized pointer.
-        // Treat it as a non-matching name so the caller can continue far
-        // enough to expose the owning asset instead of dying in this compare.
-        if (lhs == rhs)
-            return 0;
-        return badLhs ? 1 : -1;
-    }
-
     if (!lhs || !rhs)
     {
         if (lhs == rhs)
@@ -2913,11 +2880,8 @@ static __attribute__((noinline)) XAssetHeader __cdecl DB_AddXAsset_SwitchLocal(
 {
     XAssetEntryPoolEntry *existingEntry;
     XAssetEntryPoolEntry newEntry{};
-
-    // DB_LinkXAssetEntry() may inspect the prospective entry before it gets
-    // replaced with a pool allocation. Keep the same zone ownership that the
-    // normal DB_AllocXAssetEntry() path would assign.
     newEntry.entry.zoneIndex = static_cast<uint8_t>(g_zoneIndex);
+
     newEntry.entry.asset.type = type;
     newEntry.entry.asset.header = header;
 
@@ -3185,21 +3149,6 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         Switch_LogWrite(trace);
     }
     g_switchDbStage = "asset/name_deref";
-    if (Switch_IsSignExtended32Pointer(name))
-    {
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH DB NAME DEREF CORRUPT] name=%p asset=%d raw=%u type=%u header=%p\n",
-            static_cast<const void *>(name),
-            g_switchCurrentAssetIndex,
-            static_cast<unsigned>(g_switchCurrentAssetRawType),
-            static_cast<unsigned>(type),
-            static_cast<void *>(newEntry->entry.asset.header.data));
-        Sys_Error("%s", trace);
-        return newEntry;
-    }
 #endif
     v2 = *name;
     isStubAsset = v2 == ',';
@@ -3483,26 +3432,6 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     }
 
     iassert(existingEntry);
-    if (type == ASSET_TYPE_SOUND &&
-        g_switchCurrentAssetIndex == 5661 &&
-        g_switchCurrentAssetRawType == 7u)
-    {
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH SOUND NULL] after-find idx=%u new=%p existing=%p zone=%u inuse=%u nextOverride=%u nextHash=%u header=%p\n",
-            static_cast<unsigned>(existingEntryIndex),
-            static_cast<void *>(newEntry),
-            static_cast<void *>(existingEntry),
-            static_cast<unsigned>(existingEntry->entry.zoneIndex),
-            static_cast<unsigned>(existingEntry->entry.inuse),
-            static_cast<unsigned>(existingEntry->entry.nextOverride),
-            static_cast<unsigned>(existingEntry->entry.nextHash),
-            static_cast<void *>(existingEntry->entry.asset.header.data));
-        Switch_LogWrite(trace);
-    }
-
     if (existingEntry->entry.zoneIndex)
     {
         iassert(existingEntry->entry.zoneIndex != newEntry->entry.zoneIndex);
@@ -3556,20 +3485,8 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 
             if (existingEntry->entry.inuse)
             {
-#ifdef __SWITCH__
-                if (type == ASSET_TYPE_SOUND &&
-                    g_switchCurrentAssetIndex == 5661 &&
-                    g_switchCurrentAssetRawType == 7u)
-                    Switch_LogWrite("[SWITCH SOUND NULL] before Mark_XAsset\n");
-#endif
                 varXAsset = &existingEntry->entry.asset;
                 Mark_XAsset();
-#ifdef __SWITCH__
-                if (type == ASSET_TYPE_SOUND &&
-                    g_switchCurrentAssetIndex == 5661 &&
-                    g_switchCurrentAssetRawType == 7u)
-                    Switch_LogWrite("[SWITCH SOUND NULL] after Mark_XAsset\n");
-#endif
             }
 
             newEntry->entry.nextOverride = existingEntry->entry.nextOverride;
