@@ -92,10 +92,19 @@ int __cdecl Item_IsVisible(int localClientNum, itemDef_s *item)
 {
     PROF_SCOPED("Item_IsVisible");
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/visible/window";
+#endif
     if (!Window_IsVisible(localClientNum, &item->window))
         return 0;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/visible/dvar";
+#endif
     if ((item->dvarFlags & 0xC) != 0 && !Item_EnableShowViaDvar(item, 4))
         return 0;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/visible/expr";
+#endif
     if (!item->visibleExp.numEntries || IsExpressionTrue(localClientNum, &item->visibleExp))
         return 1;
     if (uiscript_debug->current.integer)
