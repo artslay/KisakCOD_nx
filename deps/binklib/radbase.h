@@ -56,6 +56,15 @@
       #define RADINLINE __inline
       #define RADRESTRICT __restrict
 
+    #elif defined(__SWITCH__)
+
+      #define __RADSWITCH__
+      #define __RAD32__
+      #define __RAD64__
+      #define __RADLITTLEENDIAN__
+      #define RADINLINE inline
+      #define RADRESTRICT __restrict
+
     #elif defined(HOLLYWOOD_REV) || defined(REVOLUTION) 
 
       #define __RADWII__
@@ -308,7 +317,7 @@
     #if (!defined(__RADDOS__) && !defined(__RADWIN__) && !defined(__RADMAC__) &&      \
          !defined(__RADNGC__) && !defined(__RADNDS__) && !defined(__RADXBOX__) &&     \
          !defined(__RADXENON__) && !defined(__RADLINUX__) && !defined(__RADPS2__) &&  \
-         !defined(__RADPSP__) && !defined(__RADPS3__)  && !defined(__RADSPU__) && !defined(__RADWII__))
+         !defined(__RADPSP__) && !defined(__RADPS3__)  && !defined(__RADSPU__) && !defined(__RADWII__) && !defined(__RADSWITCH__))
       #error "RAD.H did not detect your platform.  Define DOS, WINDOWS, WIN32, macintosh, powerpc, or appropriate console."
     #endif
 
@@ -320,6 +329,14 @@
 
     #if (defined(__RADNGC__) || defined(__RADWII__) || defined( __RADPS2__) || \
          defined(__RADPSP__) || defined(__RADPS3__) || defined(__RADSPU__) || defined(__RADNDS__))
+
+      #define RADLINK
+      #define RADEXPLINK
+      #define RADEXPFUNC RADDEFFUNC
+      #define RADASMLINK
+      #define PTR4
+
+    #elif defined(__RADSWITCH__)
 
       #define RADLINK
       #define RADEXPLINK
@@ -486,8 +503,8 @@
     #if defined(__RAD64__)
       // Remember that __RAD32__ will also be defined!
       // This can be either an X64, or maybe a Cell/PS3
-      #if defined(__RADX64__)
-        // x64 still has 32-bit ints!
+      #if defined(__RADX64__) || defined(__RADSWITCH__)
+        // 64-bit targets still use 32-bit integer storage.
         #define U32 unsigned int
         #define S32 signed int
         // But pointers are 64 bits.
@@ -498,11 +515,17 @@
           #define SINTa __w64 signed __int64
           #define UINTa __w64 unsigned __int64
         #else // non-vc.net compiler or /Wp64 turned off
-          #define UINTADDR unsigned __int64
-          #define INTADDR __int64
-
-          #define UINTa unsigned __int64
-          #define SINTa signed __int64
+          #if defined(__RADSWITCH__)
+            #define UINTADDR unsigned long long
+            #define INTADDR long long
+            #define UINTa unsigned long long
+            #define SINTa signed long long
+          #else
+            #define UINTADDR unsigned __int64
+            #define INTADDR __int64
+            #define UINTa unsigned __int64
+            #define SINTa signed __int64
+          #endif
         #endif
       #else
         #error Unknown 64-bit processor (see radbase.h)
