@@ -1118,7 +1118,6 @@ void __cdecl Com_Init(char* commandLine)
         }
     }
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] Com_Init: returning\n");
 #endif
 }
 
@@ -1420,21 +1419,17 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
         R_InitThreads();
         //KISAK_NULLSUB();
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][BOOT] before initial CL_InitRenderer\n");
 #endif
         CL_InitRenderer();
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][BOOT] after initial CL_InitRenderer\n");
 #endif
         //KISAK_NULLSUB();
         iassert(!cls.soundStarted);
         cls.soundStarted = 1;
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][BOOT] before SND_Init\n");
 #endif
         SND_Init();
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][BOOT] after SND_Init\n");
 #endif
     }
 
@@ -1442,11 +1437,9 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
     //Sys_LoadingKeepAlive();
     //Live_InitSigninState();
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] before SV_InitServerThread\n");
 #endif
     SV_InitServerThread();
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] after SV_InitServerThread\n");
 #endif
     //ui_skipMainLockout = Dvar_RegisterBool(
     //    "ui_skipMainLockout",
@@ -1466,25 +1459,21 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
 #endif
 
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] before COM_PlayIntroMovies\n");
 #endif
     COM_PlayIntroMovies();
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] after COM_PlayIntroMovies\n");
 #endif
     if (IsFastFileLoad())
     {
         PMem_EndAlloc(comInitAllocName, 1u);
         DB_SetInitializing(0);
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][BOOT] before end $init\n");
 #endif
         Com_Printf(CON_CHANNEL_SYSTEM, "end $init %d ms\n", Sys_Milliseconds() - initStartTime);
     }
     com_fullyInitialized = 1;
     Com_Printf(CON_CHANNEL_SYSTEM, "--- Common Initialization Complete ---\n");
 #ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] after common initialization\n");
 #endif
 }
 
