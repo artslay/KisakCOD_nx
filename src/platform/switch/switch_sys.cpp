@@ -67,6 +67,7 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[SWITCH STREAM ARRAY MISMATCH]",
         "[SWITCH STREAM REGRESS]",
         "[SWITCH OFFSET INVALID]",
+        "[SWITCH SOUND]",
         "[SWITCH SOUND NULL]"
     };
 
