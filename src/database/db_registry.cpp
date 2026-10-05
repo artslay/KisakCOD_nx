@@ -52,6 +52,17 @@ extern uint32_t g_switchCurrentAssetHeader;
 #include <algorithm>
 #include <vector>
 #ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+
+static inline void Switch_LogWriteFiltered(const char *msg)
+{
+    if (msg && std::strncmp(msg, "[SWITCH SOUND", 13) == 0)
+        return;
+    Switch_LogWrite(msg);
+}
+
+#define Switch_LogWrite Switch_LogWriteFiltered
+
 static int Switch_IstricmpAssetName(const char *lhs, const char *rhs)
 {
     if (!lhs || !rhs)
