@@ -2897,7 +2897,7 @@ void __cdecl RB_ExecuteRenderCommandsLoop(const void *cmds)
         RB_EndTessSurface();
 #ifdef __SWITCH__
     static uint32_t switchCommandTraceCount = 0;
-    if (switchCommandTraceCount < 4)
+    if (switchCommandTraceCount < 12)
     {
         char trace[320];
         std::snprintf(
@@ -2978,7 +2978,7 @@ void __cdecl RB_CallExecuteRenderCommands()
     PROF_SCOPED("ExecuteRenderCmds");
 #ifdef __SWITCH__
     static uint32_t switchCommandFrameTraceCount = 0;
-    if (switchCommandFrameTraceCount < 4)
+    if (switchCommandFrameTraceCount < 12)
     {
         char trace[256];
         std::snprintf(
