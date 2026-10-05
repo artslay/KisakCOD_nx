@@ -8216,7 +8216,44 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
         }
         else
         {
+#ifdef __SWITCH__
+            const uint32_t materialToken = value;
+            const uintptr_t materialAliasSlot =
+                DB_ConvertOffsetToPointerValue(materialToken);
+            uintptr_t materialAliasResolved = 0;
+            const bool materialAliasFound =
+                materialAliasSlot &&
+                DB_ResolveSwitchPointerAlias(
+                    materialAliasSlot,
+                    &materialAliasResolved);
+
             DB_ConvertOffsetToAlias((uint32_t *)varMaterialHandle);
+
+            if (g_switchCurrentAssetRawType == ASSET_TYPE_FONT &&
+                g_switchCurrentAssetIndex >= 1213 &&
+                g_switchCurrentAssetIndex <= 1221)
+            {
+                static uint32_t switchFontMaterialAliasTraceCount = 0;
+                if (switchFontMaterialAliasTraceCount < 24)
+                {
+                    char trace[384];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[KisakCOD][FONT ALIAS] asset=%d token=%08x aliasSlot=%p found=%u resolved=%p result=%p\n",
+                        g_switchCurrentAssetIndex,
+                        materialToken,
+                        reinterpret_cast<const void *>(materialAliasSlot),
+                        materialAliasFound ? 1u : 0u,
+                        reinterpret_cast<const void *>(materialAliasResolved),
+                        static_cast<void *>(*varMaterialHandle));
+                    Switch_LogWrite(trace);
+                    ++switchFontMaterialAliasTraceCount;
+                }
+            }
+#else
+            DB_ConvertOffsetToAlias((uint32_t *)varMaterialHandle);
+#endif
         }
     }
 #ifdef __SWITCH__
