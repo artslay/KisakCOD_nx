@@ -428,7 +428,7 @@ const char *__cdecl Dvar_ValueToString(const dvar_s *dvar, DvarValue value)
                 ".\\universal\\dvar.cpp",
                 346,
                 0,
-                "%s\n\\t(value.integer) = %i",
+                "%s\n\t(value.integer) = %i",
                 "(value.integer >= 0 && value.integer < dvar->domain.enumeration.stringCount || value.integer == 0)",
                 value.integer);
         if (dvar->domain.enumeration.stringCount)
@@ -482,7 +482,7 @@ const char *__cdecl Dvar_ValueToString(const dvar_s *dvar, DvarValue value)
         break;
     case 7u:
         if (!value.integer)
-            MyAssertHandler(".\\universal\\dvar.cpp", 352, 0, "%s\n\\t(dvar->name) = %s", "(value.string)", dvar->name);
+            MyAssertHandler(".\\universal\\dvar.cpp", 352, 0, "%s\n\t(dvar->name) = %s", "(value.string)", dvar->name);
 #ifdef __SWITCH__
         if (value.string)
         {
