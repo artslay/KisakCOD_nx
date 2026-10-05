@@ -5398,6 +5398,9 @@ void __cdecl Window_Paint(
 #endif
             if (w->background)
             {
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/style1/localclient";
+#endif
                 localClientNum = dc->localClientNum;
                 if (dc->localClientNum)
                     MyAssertHandler(
@@ -5407,8 +5410,17 @@ void __cdecl Window_Paint(
                         "localClientNum doesn't index MAX_POSSIBLE_LOCAL_CLIENTS\n\t%i not in [0, %i)",
                         localClientNum,
                         1);
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/style1/dynamic_flags";
+#endif
                 flags = w->dynamicFlags[localClientNum];
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/style1/fade";
+#endif
                 Fade(&flags, &w->backColor[3], fadeClamp, &w->nextTime, (int)fadeCycle, 1, fadeAmount, fadeInAmount, dc);
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/style1/set_flags";
+#endif
                 Window_SetDynamicFlags(dc->localClientNum, w, flags);
 #ifdef __SWITCH__
                 g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/style1/draw";
