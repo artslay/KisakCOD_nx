@@ -460,6 +460,39 @@ const void **__cdecl DB_InsertPointer()
 
     ++g_switchPointerInsertCount;
 
+#ifdef __SWITCH__
+    const uintptr_t block4Base =
+        g_streamBlocks && g_streamBlocks[4].data
+            ? reinterpret_cast<uintptr_t>(g_streamBlocks[4].data)
+            : 0;
+    const uintptr_t slotAddress =
+        reinterpret_cast<uintptr_t>(serializedSlot);
+    const uint32_t slotOffset =
+        block4Base && slotAddress >= block4Base &&
+                slotAddress - block4Base < g_streamBlocks[4].size
+            ? static_cast<uint32_t>(slotAddress - block4Base)
+            : UINT32_MAX;
+
+    if (slotOffset == 0x2ba64 ||
+        slotOffset == 0x2ba9c ||
+        slotOffset == 0x2c3dc ||
+        slotOffset == 0x2c41c)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FONT PTR INSERT] asset=%d slotOffset=%08x slot=%p nativeSlot=%p before=%p after=%p\n",
+            g_switchCurrentAssetIndex,
+            slotOffset,
+            static_cast<const void *>(serializedSlot),
+            static_cast<const void *>(pData),
+            reinterpret_cast<const void *>(beforePos),
+            static_cast<const void *>(g_streamPos));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     if (g_switchCurrentAssetIndex >= 1190 &&
         g_switchCurrentAssetIndex <= 1210)
     {
@@ -518,18 +551,60 @@ void __cdecl DB_RegisterSwitchPointerAlias(
     if (!serializedSlot || !nativePointer)
         return;
 
+    const uintptr_t block4Base =
+        g_streamBlocks && g_streamBlocks[4].data
+            ? reinterpret_cast<uintptr_t>(g_streamBlocks[4].data)
+            : 0;
+    const uint32_t slotOffset =
+        block4Base && serializedSlot >= block4Base &&
+                serializedSlot - block4Base < g_streamBlocks[4].size
+            ? static_cast<uint32_t>(serializedSlot - block4Base)
+            : UINT32_MAX;
+    const bool fontAliasSlot =
+        slotOffset == 0x2ba64 ||
+        slotOffset == 0x2ba9c ||
+        slotOffset == 0x2c3dc ||
+        slotOffset == 0x2c41c;
+
     for (SwitchPointerAliasEntry &entry : g_switchPointerAliasEntries)
     {
         if (entry.serializedSlot == serializedSlot)
         {
             entry.nativeSlot = nullptr;
             entry.nativePointer = nativePointer;
+            if (fontAliasSlot)
+            {
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][FONT PTR REGISTER] asset=%d slotOffset=%08x slot=%p native=%p existed=1\n",
+                    g_switchCurrentAssetIndex,
+                    slotOffset,
+                    reinterpret_cast<const void *>(serializedSlot),
+                    reinterpret_cast<const void *>(nativePointer));
+                Switch_LogWrite(trace);
+            }
             return;
         }
     }
 
     g_switchPointerAliasEntries.push_back(
         {serializedSlot, nullptr, nativePointer});
+
+    if (fontAliasSlot)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FONT PTR REGISTER] asset=%d slotOffset=%08x slot=%p native=%p existed=0\n",
+            g_switchCurrentAssetIndex,
+            slotOffset,
+            reinterpret_cast<const void *>(serializedSlot),
+            reinterpret_cast<const void *>(nativePointer));
+        Switch_LogWrite(trace);
+    }
 }
 
 void __cdecl DB_AddSwitchPointerAliasFixup(
