@@ -101,6 +101,7 @@ OpenGLBackend::~OpenGLBackend()
 extern void Switch_LogRaw(const char *msg);
 extern void Switch_LogWrite(const char *msg);
 extern void Switch_LogReleaseScreen();
+extern "C" uint32_t Sys_GetSwitchThreadContext();
 #endif
 
 bool OpenGLBackend::Init(const GfxWindowParms* wndParms)
@@ -235,6 +236,8 @@ void OpenGLBackend::Present()
     {
         const EGLContext boundContext = eglGetCurrentContext();
         const EGLSurface boundDraw = eglGetCurrentSurface(EGL_DRAW);
+        const EGLSurface boundRead = eglGetCurrentSurface(EGL_READ);
+        const uint32_t threadContext = Sys_GetSwitchThreadContext();
         GLint drawFbo = 0;
         GLint viewport[4] = {};
         glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFbo);
@@ -245,16 +248,19 @@ void OpenGLBackend::Present()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][FRAME] Present pre-swap ctx=%p draw=%p surf=%p fbo=%d viewport=%d,%d %dx%d glerr=0x%04x\n",
+            "[KisakCOD][FRAME] Present pre-swap ctx=%p draw=%p read=%p surf=%p render=%p fbo=%d viewport=%d,%d %dx%d glerr=0x%04x thread=%u\n",
             (void *)boundContext,
             (void *)boundDraw,
+            (void *)boundRead,
             (void *)s_surface,
+            (void *)s_renderContext,
             drawFbo,
             viewport[0],
             viewport[1],
             viewport[2],
             viewport[3],
-            static_cast<unsigned>(glError));
+            static_cast<unsigned>(glError),
+            threadContext);
         Switch_LogWrite(trace);
         ++presentDiagnostics;
     }
@@ -686,6 +692,21 @@ bool OpenGLBackend::InitContext(const GfxWindowParms* wndParms)
     {
         m_lastError = "eglMakeCurrent(main pbuffer) failed";
         return false;
+    }
+
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] EGL handles ctx=%p render=%p surf=%p main=%p dpy=%p thread=%u\n",
+            (void *)s_context,
+            (void *)s_renderContext,
+            (void *)s_surface,
+            (void *)s_mainSurface,
+            (void *)s_display,
+            Sys_GetSwitchThreadContext());
+        Switch_LogWrite(trace);
     }
 
     return true;
