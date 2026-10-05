@@ -267,9 +267,13 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
         }
     LABEL_12:
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/scr/draw_field/catcher_check";
+        g_switchFrameStage = "frame/scr/draw_field/catcher_call";
 #endif
-        if (!refreshedUI && Key_IsCatcherActive(0, KEYCATCH_UI))
+        const bool uiCatcherActive = Key_IsCatcherActive(0, KEYCATCH_UI);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/draw_field/catcher_return";
+#endif
+        if (!refreshedUI && uiCatcherActive)
             LABEL_14 :
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/draw_field/ui_refresh";
