@@ -253,7 +253,7 @@ extern "C" volatile uintptr_t g_switchFrameDrawFieldCaller = 0;
 extern "C" void Switch_LogFrameTail()
 {
     static constexpr char kMessage[] =
-        "[KisakCOD][SCRFRAME] body_exit_before_final_stage\\n";
+        "[KisakCOD][SCRFRAME] body_exit_before_final_stage\n";
     const size_t len = sizeof(kMessage) - 1;
     (void)::write(STDOUT_FILENO, kMessage, len);
     if (g_switchLogFd >= 0)
