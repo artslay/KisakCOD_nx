@@ -2124,7 +2124,7 @@ int __cdecl SND_PlayLocalSoundAliasByName(
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][SOUND] SND_PlayLocalSoundAliasByName enter aliasname=%p client=%u system=%u\\n",
+            "[KisakCOD][SOUND] SND_PlayLocalSoundAliasByName enter aliasname=%p client=%u system=%u\n",
             static_cast<const void *>(aliasname),
             static_cast<unsigned>(localClientNum),
             static_cast<unsigned>(system));
@@ -2141,7 +2141,7 @@ int __cdecl SND_PlayLocalSoundAliasByName(
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][SOUND] Com_PickSoundAlias returned alias=%p\\n",
+                "[KisakCOD][SOUND] Com_PickSoundAlias returned alias=%p\n",
                 static_cast<const void *>(alias));
             Switch_LogWrite(trace);
         }
@@ -2153,7 +2153,7 @@ int __cdecl SND_PlayLocalSoundAliasByName(
     {
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/not_played";
-        Switch_LogWrite("[KisakCOD][SOUND] no sound alias; returning not played\\n");
+        Switch_LogWrite("[KisakCOD][SOUND] no sound alias; returning not played\n");
 #endif
         return SND_PLAYBACKID_NOTPLAYED;
     }
