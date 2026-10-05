@@ -200,55 +200,92 @@ void OpenGLBackend::DestroyWindow()
 
 void OpenGLBackend::Present()
 {
-    // Switch EGL present synchronization.
 #ifdef __SWITCH__
-    if (s_display != EGL_NO_DISPLAY && s_surface != EGL_NO_SURFACE)
+    if (s_display == EGL_NO_DISPLAY || s_surface == EGL_NO_SURFACE)
+        return;
+
+    // EGL requires the surface passed to eglSwapBuffers() to be bound to the
+    // calling thread's current context. The game starts with the bootstrap
+    // context on the main thread, then presentation moves to the backend
+    // thread. Re-assert the backend context/surface pairing here so a stale
+    // per-thread EGL binding cannot turn every frame into EGL_BAD_SURFACE.
+    if (eglBindAPI(EGL_OPENGL_API) != EGL_TRUE)
+        return;
+
+    const EGLContext currentContext = eglGetCurrentContext();
+    if (currentContext == s_renderContext)
     {
-        static uint32_t presentDiagnostics = 0;
-        if (presentDiagnostics < 4)
+        const EGLSurface currentDraw = eglGetCurrentSurface(EGL_DRAW);
+        if (currentDraw != s_surface)
         {
-            GLint drawFbo = 0;
-            GLint viewport[4] = {};
-            const EGLContext currentContext = eglGetCurrentContext();
-            eglGetError();
-            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFbo);
-            glGetIntegerv(GL_VIEWPORT, viewport);
-            const GLenum glError = glGetError();
-
-            char trace[320];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][FRAME] Present pre-swap ctx=%p fbo=%d viewport=%d,%d %dx%d glerr=0x%04x\n",
-                (void *)currentContext,
-                drawFbo,
-                viewport[0],
-                viewport[1],
-                viewport[2],
-                viewport[3],
-                static_cast<unsigned>(glError));
-            Switch_LogWrite(trace);
-            ++presentDiagnostics;
+            if (eglMakeCurrent(s_display, s_surface, s_surface, s_renderContext) != EGL_TRUE)
+            {
+                const EGLint err = eglGetError();
+                static bool loggedRebindFailure = false;
+                if (!loggedRebindFailure)
+                {
+                    char trace[224];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[KisakCOD][FRAME] Present rebind FAIL ctx=%p draw=%p surf=%p err=0x%04x\n",
+                        (void *)currentContext,
+                        (void *)currentDraw,
+                        (void *)s_surface,
+                        static_cast<unsigned>(err));
+                    Switch_LogWrite(trace);
+                    loggedRebindFailure = true;
+                }
+                return;
+            }
         }
+    }
 
-        const EGLBoolean result = eglSwapBuffers(s_display, s_surface);
-        char trace[160];
-        if (result == EGL_TRUE)
+    static uint32_t presentDiagnostics = 0;
+    if (presentDiagnostics < 4)
+    {
+        const EGLContext boundContext = eglGetCurrentContext();
+        const EGLSurface boundDraw = eglGetCurrentSurface(EGL_DRAW);
+        GLint drawFbo = 0;
+        GLint viewport[4] = {};
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFbo);
+        glGetIntegerv(GL_VIEWPORT, viewport);
+        const GLenum glError = glGetError();
+
+        char trace[352];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME] Present pre-swap ctx=%p draw=%p surf=%p fbo=%d viewport=%d,%d %dx%d glerr=0x%04x\n",
+            (void *)boundContext,
+            (void *)boundDraw,
+            (void *)s_surface,
+            drawFbo,
+            viewport[0],
+            viewport[1],
+            viewport[2],
+            viewport[3],
+            static_cast<unsigned>(glError));
+        Switch_LogWrite(trace);
+        ++presentDiagnostics;
+    }
+
+    const EGLBoolean result = eglSwapBuffers(s_display, s_surface);
+    static bool loggedSwapFailure = false;
+    if (result == EGL_FALSE)
+    {
+        const EGLint err = eglGetError();
+        if (!loggedSwapFailure)
         {
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][FRAME] Present eglSwapBuffers=OK\n");
-        }
-        else
-        {
+            char trace[192];
             std::snprintf(
                 trace,
                 sizeof(trace),
                 "[KisakCOD][FRAME] Present eglSwapBuffers=FAIL err=0x%04x\n",
-                eglGetError());
+                static_cast<unsigned>(err));
+            Switch_LogWrite(trace);
+            loggedSwapFailure = true;
         }
-        Switch_LogWrite(trace);
     }
 #endif
 }
