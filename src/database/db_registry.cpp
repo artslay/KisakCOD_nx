@@ -2879,8 +2879,12 @@ static __attribute__((noinline)) XAssetHeader __cdecl DB_AddXAsset_SwitchLocal(
     XAssetHeader header)
 {
     XAssetEntryPoolEntry *existingEntry;
-    XAssetEntryPoolEntry newEntry;
+    XAssetEntryPoolEntry newEntry{};
 
+    // DB_LinkXAssetEntry() may inspect the prospective entry before it gets
+    // replaced with a pool allocation. Keep the same zone ownership that the
+    // normal DB_AllocXAssetEntry() path would assign.
+    newEntry.entry.zoneIndex = static_cast<uint8_t>(g_zoneIndex);
     newEntry.entry.asset.type = type;
     newEntry.entry.asset.header = header;
 
