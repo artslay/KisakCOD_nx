@@ -2923,6 +2923,19 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
     if (menu->onOpen)
     {
 #ifdef __SWITCH__
+        if (traceMain)
+        {
+            char trace[768];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] main onOpen ptr=%p text=%s before stack=%d\n",
+                static_cast<const void *>(menu->onOpen),
+                menu->onOpen,
+                dc->openMenuCount);
+            Switch_LogWrite(trace);
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen";
+        }
         if (traceMainText)
         {
             char trace[512];
@@ -2935,24 +2948,50 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
             Switch_LogWrite(trace);
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/onopen";
         }
-        if (traceMain)
-        {
-            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen";
-            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open before Item_RunScript(onOpen)\n");
-        }
 #endif
         item.parent = menu;
         Item_RunScript(dc, &item, (char*)menu->onOpen);
 #ifdef __SWITCH__
-        if (traceMainText)
-        {
-            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/onopen_done";
-            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) after Item_RunScript(onOpen)\n");
-        }
         if (traceMain)
         {
-            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen_done";
-            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after Item_RunScript(onOpen)\n");
+            const int openMenuCount = dc->openMenuCount;
+            const char *topName =
+                openMenuCount > 0 && dc->menuStack[openMenuCount - 1] &&
+                dc->menuStack[openMenuCount - 1]->window.name
+                    ? dc->menuStack[openMenuCount - 1]->window.name
+                    : "<none>";
+            menuDef_t *mainText = nullptr;
+            int mainTextItems = -1;
+            int mainTextFullScreen = -1;
+            for (int traceIndex = 0; traceIndex < dc->menuCount; ++traceIndex)
+            {
+                menuDef_t *candidate = dc->Menus[traceIndex];
+                if (candidate && candidate->window.name &&
+                    !I_stricmp(candidate->window.name, "main_text"))
+                {
+                    mainText = candidate;
+                    mainTextItems = candidate->itemCount;
+                    mainTextFullScreen = candidate->fullScreen;
+                    break;
+                }
+            }
+            char trace[768];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME] main onOpen returned stack=%d top=%s main_text=%p items=%d fullscreen=%d\n",
+                openMenuCount,
+                topName,
+                static_cast<void *>(mainText),
+                mainTextItems,
+                mainTextFullScreen);
+            Switch_LogWrite(trace);
+            g_switchFrameStage = "frame/cl_main/disconnected_set_menu/main_open/onopen_done";
+        }
+        if (traceMainText)
+        {
+            g_switchFrameStage = "frame/cl_main/disconnected_set_menu/main_open/main_text/onopen_done";
+            Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) after Item_RunScript(onOpen)\n");
         }
 #endif
     }
