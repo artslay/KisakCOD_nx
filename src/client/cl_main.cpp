@@ -33,6 +33,7 @@
 extern void Switch_LogShutdown();
 extern void Switch_LogRaw(const char *msg);
 extern void Switch_LogWrite(const char *msg);
+extern thread_local const char *g_switchFrameStage;
 #endif
 
 enum MovieToPlayScriptOp : __int32
