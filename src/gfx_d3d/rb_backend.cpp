@@ -2807,11 +2807,17 @@ GfxIndexBufferState *RB_SwapBuffers()
     }
 
 #ifdef __SWITCH__
+    // The Switch renderer is GL/Zink, not native D3D9. The legacy D3D9
+    // R_HW_InsertFence path assumes a live IDirect3DQuery9 fence, while the
+    // OpenGL backend intentionally has no D3D query object. eglSwapBuffers()
+    // has already completed presentation; use the backend's GL synchronization
+    // primitive instead.
     g_switchFrameStage = "frame/issue/swap_fence";
-#endif
-    R_HW_InsertFence(&dx.swapFence);
-#ifdef __SWITCH__
+    if (g_gfxBackend)
+        g_gfxBackend->WaitForGpu();
     g_switchFrameStage = "frame/issue/swap_fence_done";
+#else
+    R_HW_InsertFence(&dx.swapFence);
 #endif
     result = gfxBuf.dynamicIndexBuffer;
 #ifdef __SWITCH__
