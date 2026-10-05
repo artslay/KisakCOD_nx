@@ -1,6 +1,9 @@
 #include <universal/q_shared.h>
 #include <cstdio>
 #include "r_font.h"
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
 #include <stringed/stringed_hooks.h>
 #include <qcommon/mem_track.h>
 #include <universal/com_files.h>
