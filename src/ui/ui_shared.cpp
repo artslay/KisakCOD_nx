@@ -65,6 +65,9 @@ static void Switch_UI_LogPointer(
         index);
     Switch_LogWrite(trace);
 }
+
+static thread_local int g_switchUiMenuPaintIndex = -1;
+static thread_local int g_switchUiItemPaintIndex = -1;
 #endif
 
 struct commandDef_t // sizeof=0x8
@@ -5057,10 +5060,9 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
 char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
 {
 #ifdef __SWITCH__
-    static thread_local int switchMenuPaintIndex = -1;
     if (Switch_UI_LowPointer(menu))
     {
-        Switch_UI_LogPointer("Menu_Paint", "menu", nullptr, menu, switchMenuPaintIndex);
+        Switch_UI_LogPointer("Menu_Paint", "menu", nullptr, menu, g_switchUiMenuPaintIndex);
         g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu_low";
         return 0;
     }
@@ -5068,11 +5070,11 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         return 0;
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu";
     if (Switch_UI_LowPointer(menu->window.name))
-        Switch_UI_LogPointer("Menu_Paint", "window.name", menu, menu->window.name, switchMenuPaintIndex);
+        Switch_UI_LogPointer("Menu_Paint", "window.name", menu, menu->window.name, g_switchUiMenuPaintIndex);
     if (Switch_UI_LowPointer(menu->window.background))
-        Switch_UI_LogPointer("Menu_Paint", "window.background", menu, menu->window.background, switchMenuPaintIndex);
+        Switch_UI_LogPointer("Menu_Paint", "window.background", menu, menu->window.background, g_switchUiMenuPaintIndex);
     if (Switch_UI_LowPointer(menu->items))
-        Switch_UI_LogPointer("Menu_Paint", "items", menu, menu->items, switchMenuPaintIndex);
+        Switch_UI_LogPointer("Menu_Paint", "items", menu, menu->items, g_switchUiMenuPaintIndex);
 #endif
     float fadeCycle; // [esp+1Ch] [ebp-14h]
     float v4; // [esp+20h] [ebp-10h]
@@ -5136,6 +5138,9 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu_item";
         if (Switch_UI_LowPointer(menu->items))
             Switch_UI_LogPointer("Menu_Paint", "items", menu, menu->items, i);
+#endif
+#ifdef __SWITCH__
+        g_switchUiItemPaintIndex = i;
 #endif
         Item_Paint(dc, menu->items[i]);
     }
@@ -5464,24 +5469,24 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
 #ifdef __SWITCH__
     if (Switch_UI_LowPointer(item))
     {
-        Switch_UI_LogPointer("Item_Paint", "item", nullptr, item, -1);
+        Switch_UI_LogPointer("Item_Paint", "item", nullptr, item, g_switchUiItemPaintIndex);
         g_switchFrameStage = "frame/scr/draw_field/loading_ui/item_low";
         return;
     }
     if (!item)
         return;
     if (Switch_UI_LowPointer(item->parent))
-        Switch_UI_LogPointer("Item_Paint", "parent", item, item->parent, -1);
+        Switch_UI_LogPointer("Item_Paint", "parent", item, item->parent, g_switchUiItemPaintIndex);
     if (Switch_UI_LowPointer(item->window.name))
-        Switch_UI_LogPointer("Item_Paint", "window.name", item, item->window.name, -1);
+        Switch_UI_LogPointer("Item_Paint", "window.name", item, item->window.name, g_switchUiItemPaintIndex);
     if (Switch_UI_LowPointer(item->window.background))
-        Switch_UI_LogPointer("Item_Paint", "window.background", item, item->window.background, -1);
+        Switch_UI_LogPointer("Item_Paint", "window.background", item, item->window.background, g_switchUiItemPaintIndex);
     if (Switch_UI_LowPointer(item->text))
-        Switch_UI_LogPointer("Item_Paint", "text", item, item->text, -1);
+        Switch_UI_LogPointer("Item_Paint", "text", item, item->text, g_switchUiItemPaintIndex);
     if (Switch_UI_LowPointer(item->dvar))
-        Switch_UI_LogPointer("Item_Paint", "dvar", item, item->dvar, -1);
+        Switch_UI_LogPointer("Item_Paint", "dvar", item, item->dvar, g_switchUiItemPaintIndex);
     if (Switch_UI_LowPointer(item->onKey))
-        Switch_UI_LogPointer("Item_Paint", "onKey", item, item->onKey, -1);
+        Switch_UI_LogPointer("Item_Paint", "onKey", item, item->onKey, g_switchUiItemPaintIndex);
 #endif
 
     //ZoneText(item->na)
@@ -7254,8 +7259,14 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                 menua = dc->Menus[menuIndexa];
                 if (!menua)
                     MyAssertHandler(".\\ui\\ui_shared.cpp", 6139, 0, "%s", "menu");
-                if (!Menus_MenuIsInStack(dc, menua) && Menu_Paint(dc, menua) && showVisibleList)
-                    Menu_PaintAll_AppendToVisibleList(visibleList, 0x400u, (char *)menua->window.name);
+                if (!Menus_MenuIsInStack(dc, menua))
+                {
+#ifdef __SWITCH__
+                    g_switchUiMenuPaintIndex = menuIndexa;
+#endif
+                    if (Menu_Paint(dc, menua) && showVisibleList)
+                        Menu_PaintAll_AppendToVisibleList(visibleList, 0x400u, (char *)menua->window.name);
+                }
             }
         }
     }
@@ -7267,6 +7278,9 @@ void __cdecl Menu_PaintAll(UiContext *dc)
             menub = dc->menuStack[menuIndexb];
             if (!menub)
                 MyAssertHandler(".\\ui\\ui_shared.cpp", 6153, 0, "%s", "menu");
+#ifdef __SWITCH__
+            g_switchUiMenuPaintIndex = menuIndexb;
+#endif
             if (Menu_Paint(dc, menub) && showVisibleList)
                 Menu_PaintAll_AppendToVisibleList(visibleList, 0x400u, (char *)menub->window.name);
         }
