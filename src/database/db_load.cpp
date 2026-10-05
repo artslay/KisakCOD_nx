@@ -3732,6 +3732,18 @@ void __cdecl Load_snd_alias_t(bool atStreamStart)
         const uint32_t value = static_cast<uint32_t>(
             reinterpret_cast<uintptr_t>(varsnd_alias_t->soundFile));
 
+        if (switchSoundTrace)
+        {
+            char trace[224];
+            std::snprintf(trace, sizeof(trace),
+                "[SWITCH SOUND] soundfile token alias=%d value=%08x stream=%u pos=%p\n",
+                g_switchCurrentSoundAliasIndex,
+                static_cast<unsigned>(value),
+                static_cast<unsigned>(g_streamPosIndex),
+                static_cast<void *>(DB_GetStreamPos()));
+            Switch_LogWrite(trace);
+        }
+
         if (value == UINT32_MAX)
         {
             // The fastfile pointer names the serialized 12-byte SoundFile object
@@ -3754,6 +3766,16 @@ void __cdecl Load_snd_alias_t(bool atStreamStart)
             DB_RegisterSwitchPointerAlias(
                 serializedSoundFile,
                 reinterpret_cast<uintptr_t>(varSoundFile));
+            if (switchSoundTrace)
+            {
+                char trace[224];
+                std::snprintf(trace, sizeof(trace),
+                    "[SWITCH SOUND] soundfile inline alias=%d serialized=%p native=%p\n",
+                    g_switchCurrentSoundAliasIndex,
+                    reinterpret_cast<const void *>(serializedSoundFile),
+                    static_cast<void *>(varSoundFile));
+                Switch_LogWrite(trace);
+            }
             if (switchSoundTrace) Switch_LogWrite("[SWITCH SOUND] soundfile begin\n");
             Load_SoundFile(1);
             if (switchSoundTrace) Switch_LogWrite("[SWITCH SOUND] soundfile done\n");
@@ -3769,11 +3791,26 @@ void __cdecl Load_snd_alias_t(bool atStreamStart)
                 DB_ConvertOffsetToPointerValue(value);
             uintptr_t nativeSoundFile = 0;
 
-            if (serializedSoundFile &&
+            const bool resolved =
+                serializedSoundFile &&
                 DB_ResolveSwitchPointerAlias(
                     serializedSoundFile,
                     &nativeSoundFile) &&
-                nativeSoundFile)
+                nativeSoundFile;
+
+            if (switchSoundTrace)
+            {
+                char trace[256];
+                std::snprintf(trace, sizeof(trace),
+                    "[SWITCH SOUND] soundfile ref alias=%d slot=%p resolved=%u native=%p\n",
+                    g_switchCurrentSoundAliasIndex,
+                    reinterpret_cast<const void *>(serializedSoundFile),
+                    resolved ? 1u : 0u,
+                    reinterpret_cast<void *>(nativeSoundFile));
+                Switch_LogWrite(trace);
+            }
+
+            if (resolved)
             {
                 varsnd_alias_t->soundFile =
                     reinterpret_cast<SoundFile *>(nativeSoundFile);
