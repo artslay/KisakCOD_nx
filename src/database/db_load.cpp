@@ -5613,6 +5613,84 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         }
 
 #ifdef __SWITCH__
+        // Root-cause diagnostic for the first known failing image. This is
+        // exact-match only and does not alter loader behavior.
+        if (varGfxImage->name &&
+            std::strcmp(varGfxImage->name, "3") == 0)
+        {
+            const uintptr_t nameAddress =
+                reinterpret_cast<uintptr_t>(varGfxImage->name);
+            uint32_t nameBlock = UINT32_MAX;
+            uint32_t nameOffset = UINT32_MAX;
+            uint8_t bytes[32] = {};
+            size_t byteCount = 0;
+
+            if (g_streamBlocks)
+            {
+                for (uint32_t block = 0;
+                     block < ARRAY_COUNT(g_streamPosArray);
+                     ++block)
+                {
+                    if (!g_streamBlocks[block].data)
+                        continue;
+
+                    const uintptr_t base =
+                        reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+                    const uintptr_t end =
+                        base + g_streamBlocks[block].size;
+                    if (nameAddress < base || nameAddress >= end)
+                        continue;
+
+                    nameBlock = block;
+                    nameOffset =
+                        static_cast<uint32_t>(nameAddress - base);
+                    byteCount =
+                        g_streamBlocks[block].size - nameOffset;
+                    if (byteCount > sizeof(bytes))
+                        byteCount = sizeof(bytes);
+                    if (byteCount)
+                        std::memcpy(
+                            bytes,
+                            reinterpret_cast<const void *>(nameAddress),
+                            byteCount);
+                    break;
+                }
+            }
+
+            char trace[640];
+            int written = std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IMAGE ROOT] asset=%d rawType=%u nameToken=%08x "
+                "name=%p block=%u offset=%08x cursor4=%08x bytes:",
+                g_switchCurrentAssetIndex,
+                static_cast<unsigned>(g_switchCurrentAssetRawType),
+                serialized.name,
+                reinterpret_cast<const void *>(nameAddress),
+                nameBlock,
+                nameOffset,
+                Switch_GetStreamCursorOffset(4));
+
+            for (size_t i = 0;
+                 i < byteCount && written > 0 &&
+                 static_cast<size_t>(written) + 4 < sizeof(trace);
+                 ++i)
+            {
+                written += std::snprintf(
+                    trace + written,
+                    sizeof(trace) - static_cast<size_t>(written),
+                    " %02x",
+                    static_cast<unsigned>(bytes[i]));
+            }
+
+            std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                " text=%s\n",
+                varGfxImage->name);
+            Switch_LogWrite(trace);
+        }
+
         // A positive name offset can point to a later inline XString. The
         // target is a valid serialized reference, but its bytes are not in the
         // destination block yet. Let the image enter the normal delayed-image
