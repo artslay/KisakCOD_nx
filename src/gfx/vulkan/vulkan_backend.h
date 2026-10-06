@@ -136,7 +136,9 @@ public:
         VkFormat colorFormat,
         VkImage depthImage,
         VkImageView depthView,
-        VkFormat depthFormat);
+        VkFormat depthFormat,
+        uint32_t width,
+        uint32_t height);
 
     void EndRendering();
 
