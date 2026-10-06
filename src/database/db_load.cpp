@@ -5386,6 +5386,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         Switch_LogWrite(trace);
     }
 #endif
+    Load_Stream(1, (unsigned char*)varGfxImageLoadDef, 16);
 #ifdef __SWITCH__
     // Capture an invalid loaddef header before its resourceSize becomes an
     // enormous raw-stream read. This is restricted to image assets and does
@@ -5399,7 +5400,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][GFXIMAGE LOADDEF] asset=%d stream0=%08x end=%08x level=%u flags=%u dims=%d,%d,%d format=%08x resource=%08x raw=%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\\n",
+            "[KisakCOD][GFXIMAGE LOADDEF] asset=%d stream0=%08x end=%08x level=%u flags=%u dims=%d,%d,%d format=%08x resource=%08x raw=%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\\n",
             g_switchCurrentAssetIndex,
             Switch_GetStreamCursorOffset(0) - 16u,
             Switch_GetStreamCursorOffset(0),
@@ -5430,7 +5431,6 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
     }
 #endif
 
-    Load_Stream(1, (unsigned char*)varGfxImageLoadDef, 16);
 #ifdef __SWITCH__
     if (traceUiImagePayload)
     {
