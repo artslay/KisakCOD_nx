@@ -614,11 +614,50 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         return (uint32_t)-1;
 
     const std::string normalizedName = SwitchNormalizePath(filename);
+    const bool traceImage3 =
+        normalizedName == "images/3.iwi";
+
+    if (traceImage3)
+    {
+        const auto iwdIt = g_iwdEntries.find(normalizedName);
+        if (iwdIt != g_iwdEntries.end() &&
+            iwdIt->second.archiveIndex < g_iwdArchives.size())
+        {
+            const SwitchIwdEntry &entry = iwdIt->second;
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IWI ROOT] path=%s iwd=1 archive=%s size=%u\\n",
+                normalizedName.c_str(),
+                g_iwdArchives[entry.archiveIndex].path.c_str(),
+                static_cast<unsigned>(entry.size));
+            Switch_LogWrite(trace);
+        }
+        else
+        {
+            Switch_LogWrite(
+                "[KisakCOD][IWI ROOT] path=images/3.iwi iwd=0\\n");
+        }
+    }
+
     if (g_iwdEntries.find(normalizedName) != g_iwdEntries.end())
     {
         int iwdHandle = 0;
         if (Switch_OpenIwdFile(filename, &iwdHandle))
         {
+            if (traceImage3)
+            {
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][IWI ROOT] path=%s opened=iwd handle=%d size=%u\\n",
+                    normalizedName.c_str(),
+                    iwdHandle,
+                    static_cast<unsigned>(g_fsh[iwdHandle].fileSize));
+                Switch_LogWrite(trace);
+            }
             if (file)
                 *file = iwdHandle;
             return g_fsh[iwdHandle].fileSize;
@@ -635,7 +674,32 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
 
     FILE *fp = FS_FileOpenReadBinary(path);
     if (!fp)
+    {
+        if (traceImage3)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IWI ROOT] path=%s iwd=0 loose=0 osPath=%s\\n",
+                normalizedName.c_str(),
+                path);
+            Switch_LogWrite(trace);
+        }
         return (uint32_t)-1;
+    }
+
+    if (traceImage3)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][IWI ROOT] path=%s iwd=0 loose=1 osPath=%s\\n",
+            normalizedName.c_str(),
+            path);
+        Switch_LogWrite(trace);
+    }
 
     const int h = AllocHandle();
     if (!h)
