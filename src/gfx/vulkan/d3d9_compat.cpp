@@ -1490,7 +1490,7 @@ bool IDirect3DDevice9::BindUniformSet(
 bool IDirect3DDevice9::BindSamplerSet(
     VkPipelineBindPoint bindPoint,
     uint32_t setIndex,
-    const std::array<IDirect3DBaseTexture9*,16> &textures)
+    IDirect3DBaseTexture9 *const (&textures)[16])
 {
     VkDescriptorSetLayout layout = setIndex == 0
         ? m_backend->VSSamplerLayout() : m_backend->PSSamplerLayout();
