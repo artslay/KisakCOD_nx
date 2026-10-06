@@ -288,11 +288,21 @@ void R_InitGraphicsApi() {
     if (!g_gfxBackend->Init(nullptr))
         R_FatalInitError(g_gfxBackend->GetLastError());
 
+    // The fastfile loader allocates static vertex/index buffers immediately.
+    // Therefore the D3D9 compatibility device must exist before any zone is
+    // loaded. The previous order loaded code_post_gfx first and dereferenced
+    // a null dx.device in R_AllocStaticVertexBuffer().
+    if (!dx.device)
+        dx.device = new IDirect3DDevice9;
+
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][RINIT] compatibility device created before fastfiles\n");
+#endif
+
     // Match the original R_InitHardware bootstrap: queue code_post_gfx, ui and
     // common fastfiles before R_InitSystems starts resolving default assets.
     R_LoadGraphicsAssets();
 
-    if (!dx.device) dx.device = new IDirect3DDevice9;
     // RB_InitImages() runs before RB_SetInitialState() in the shared bootstrap.
     // Its sampler binding path still needs the device pointer in the command state.
     gfxCmdBufState.prim.device = dx.device;
