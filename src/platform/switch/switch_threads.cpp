@@ -161,6 +161,11 @@ extern "C" uint32_t Sys_GetSwitchThreadContext()
     return static_cast<uint32_t>(g_threadContext);
 }
 
+extern "C" void *Sys_GetSwitchErrorJmpBuffer()
+{
+    return &g_switchJmpBuffer;
+}
+
 extern "C" const char *Sys_GetSwitchThreadStage()
 {
     return g_switchThreadStage ? g_switchThreadStage : "thread/unknown";
