@@ -21,6 +21,9 @@ extern uint32_t g_switchRawFileNameToken;
 extern uint32_t g_switchRawFileBufferToken;
 extern uint32_t g_switchRawFileB4BeforeName;
 extern uint32_t g_switchRawFileB4AfterName;
+extern bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
+    uintptr_t serializedSlot,
+    uintptr_t *resolvedPointer);
 #endif
 
 
@@ -231,8 +234,12 @@ void __cdecl DB_ConvertOffsetToAlias(void *data)
     }
 #ifdef __SWITCH__
     uintptr_t resolvedPointer = 0;
-    const bool aliasFound =
+    bool aliasFound =
         DB_ResolveSwitchPointerAlias(aliasSlot, &resolvedPointer);
+    if (!aliasFound)
+        aliasFound = DB_TryResolveSwitchSerializedAliasChain(
+            aliasSlot,
+            &resolvedPointer);
 
     if (!aliasFound &&
         g_switchCurrentAssetRawType == 19u &&
