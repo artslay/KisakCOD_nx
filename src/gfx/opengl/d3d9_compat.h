@@ -1515,7 +1515,6 @@ public:
         }
 
         static const char source[] = R"(#version 430 core
-        static const char source[] = R"(#version 430 core
 layout(location=0) in vec4 aPosition;
 layout(location=4) in vec2 aTexCoord;
 layout(location=12) in vec4 aColor;
