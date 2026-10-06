@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstring>
 #include <cstdio>
+#include <cstdio>
 #include <malloc.h>
 #include <mutex>
 #include <thread>
