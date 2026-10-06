@@ -1,6 +1,7 @@
 #ifdef __SWITCH__
 #include <switch.h>
 #include <cstdio>
+#include <fcntl.h>
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
@@ -445,6 +446,16 @@ bool __cdecl FS_SwitchRootFileExists(const char *path)
 
     struct stat st{};
     return stat(resolved, &st) == 0 && S_ISREG(st.st_mode);
+}
+
+int __cdecl FS_SwitchOpenRootFd(const char *path)
+{
+    if (!path || !*path)
+        return -1;
+
+    char resolved[256];
+    std::snprintf(resolved, sizeof(resolved), "%s/%s", kSwitchRoot, path);
+    return ::open(resolved, O_RDONLY);
 }
 
 bool __cdecl FS_SwitchLanguageHasAssets(int iLanguage)
