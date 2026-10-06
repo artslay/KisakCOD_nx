@@ -583,7 +583,7 @@ _D3DFORMAT __cdecl R_InitFrameBufferRenderTarget()
 #ifdef __SWITCH__
     R_InitFrameBufferRenderTarget_Win32(&gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER]);
     R_ShareRenderTarget(R_RENDERTARGET_FRAME_BUFFER, R_RENDERTARGET_SCENE);
-    Com_Printf(CON_CHANNEL_GFX, "OpenGL frame buffer: %i x %i\n",
+    Com_Printf(CON_CHANNEL_GFX, "Vulkan frame buffer: %i x %i\n",
                vidConfig.displayWidth, vidConfig.displayHeight);
 
     if (!g_allocateMinimalResources)

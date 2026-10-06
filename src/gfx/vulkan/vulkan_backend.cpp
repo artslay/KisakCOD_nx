@@ -1361,7 +1361,8 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
 bool VulkanBackend::UploadImage2D(
     VkImage image, VkFormat format, VkImageAspectFlags aspect,
     uint32_t width, uint32_t height, uint32_t mipLevel,
-    const void *data, size_t bytes)
+    const void *data, size_t bytes,
+    VkImageLayout oldLayout, uint32_t baseArrayLayer)
 {
     if (!image || !data || !bytes)
         return false;
@@ -1436,7 +1437,7 @@ bool VulkanBackend::UploadImage2D(
 bool VulkanBackend::UploadImage3D(
     VkImage image, VkFormat format,
     uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevel,
-    const void *data, size_t bytes, VkImageLayout oldLayout, uint32_t baseArrayLayer)
+    const void *data, size_t bytes, VkImageLayout oldLayout)
 {
     if (!image || !data || !bytes)
         return false;

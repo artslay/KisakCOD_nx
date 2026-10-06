@@ -244,8 +244,7 @@ void R_VulkanUploadTexture(
         texture->SetSubresourceLayout(
             mipLevel, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     else
-        Switch_LogWrite("[KisakCOD][VK] texture upload failed
-");
+        Switch_LogWrite("[KisakCOD][VK] texture upload failed\n");
 }
 }
 #endif
