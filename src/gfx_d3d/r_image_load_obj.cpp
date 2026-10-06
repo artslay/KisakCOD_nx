@@ -441,10 +441,19 @@ char __cdecl Image_LoadFromFileWithReader(GfxImage *image, int(__cdecl *OpenFile
     iassert( !image->texture.basemap );
 #ifdef __SWITCH__
     {
-        char trace[160];
-        std::snprintf(trace,sizeof(trace),
-            "[SWITCH IWI] begin image=%p name=%p\n",
-            (void*)image,(const void*)image->name);
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH IWI] begin asset=%d rawType=%u image=%p name=%p first=%02x%02x%02x%02x\n",
+            g_switchCurrentAssetIndex,
+            g_switchCurrentAssetRawType,
+            static_cast<void *>(image),
+            static_cast<const void *>(image->name),
+            image->name ? static_cast<unsigned>(static_cast<unsigned char>(image->name[0])) : 0u,
+            image->name ? static_cast<unsigned>(static_cast<unsigned char>(image->name[1])) : 0u,
+            image->name ? static_cast<unsigned>(static_cast<unsigned char>(image->name[2])) : 0u,
+            image->name ? static_cast<unsigned>(static_cast<unsigned char>(image->name[3])) : 0u);
         Switch_LogWrite(trace);
     }
 #endif

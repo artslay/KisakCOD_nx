@@ -5502,23 +5502,42 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         
 
 #ifdef __SWITCH__
-        if (g_switchCurrentAssetRawType == 4u &&
-            (!varGfxImage->name || varGfxImage->name[0] == '\\0'))
+        if (g_switchCurrentAssetRawType == 7u)
         {
-            char trace[320];
+            char trace[448];
+            const char *resolvedName = varGfxImage->name;
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][IMAGE NAME EMPTY] asset=%d rawType=%u serializedName=%08x name=%p cat=%u delay=%u size=%ux%u\n",
+                "[KisakCOD][GFXIMAGE NAME] asset=%d rawType=%u serializedName=%08x name=%p first=%02x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x\n",
                 g_switchCurrentAssetIndex,
                 g_switchCurrentAssetRawType,
                 serialized.name,
-                static_cast<const void *>(varGfxImage->name),
+                static_cast<const void *>(resolvedName),
+                resolvedName ? static_cast<unsigned>(
+                    static_cast<unsigned char>(resolvedName[0])) : 0u,
                 static_cast<unsigned>(varGfxImage->category),
+                static_cast<unsigned>(varGfxImage->semantic),
                 static_cast<unsigned>(varGfxImage->delayLoadPixels),
                 static_cast<unsigned>(varGfxImage->width),
-                static_cast<unsigned>(varGfxImage->height));
+                static_cast<unsigned>(varGfxImage->height),
+                static_cast<unsigned>(g_streamPosIndex),
+                Switch_GetStreamCursorOffset(0),
+                Switch_GetStreamCursorOffset(4));
             Switch_LogRaw(trace);
+
+            if (!resolvedName || resolvedName[0] == '\0')
+            {
+                char emptyTrace[320];
+                std::snprintf(
+                    emptyTrace,
+                    sizeof(emptyTrace),
+                    "[KisakCOD][GFXIMAGE NAME EMPTY] asset=%d serializedName=%08x name=%p\n",
+                    g_switchCurrentAssetIndex,
+                    serialized.name,
+                    static_cast<const void *>(resolvedName));
+                Switch_LogRaw(emptyTrace);
+            }
         }
 #endif
 
