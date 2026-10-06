@@ -471,7 +471,7 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
                 if (hr != 0x88760868 && hr != 0x88760869)
                     Com_Error(
                         ERR_DROP,
-                        "Couldn't load image '%.*s'\\n",
+                        "Couldn't load image '%.*s'\n",
                         160,
                         image->name ? image->name : "<null>");
             }
