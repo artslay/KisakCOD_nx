@@ -5396,11 +5396,16 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
     {
         const uint8_t *raw =
             reinterpret_cast<const uint8_t *>(varGfxImageLoadDef);
-        char trace[512];
+        const uint8_t *before =
+            raw >= g_streamBlocks[0].data + 4
+                ? raw - 4
+                : raw;
+        const uint8_t *after = raw + 16;
+        char trace[640];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][GFXIMAGE LOADDEF] asset=%d stream0=%08x end=%08x level=%u flags=%u dims=%d,%d,%d format=%08x resource=%08x raw=%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+            "[KisakCOD][GFXIMAGE LOADDEF] asset=%d stream0=%08x end=%08x level=%u flags=%u dims=%d,%d,%d format=%08x resource=%08x raw=%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\\n",
             g_switchCurrentAssetIndex,
             Switch_GetStreamCursorOffset(0) - 16u,
             Switch_GetStreamCursorOffset(0),
@@ -5428,6 +5433,27 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             static_cast<unsigned>(raw[14]),
             static_cast<unsigned>(raw[15]));
         Switch_LogWrite(trace);
+
+        if (before <= raw &&
+            g_streamBlocks && g_streamBlocks[0].data &&
+            static_cast<size_t>(after - g_streamBlocks[0].data) + 8u <=
+                g_streamBlocks[0].size)
+        {
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][GFXIMAGE LOADDEF RANGE] asset=%d before=%02x %02x %02x %02x after=%02x %02x %02x %02x\\n",
+                g_switchCurrentAssetIndex,
+                static_cast<unsigned>(before[0]),
+                static_cast<unsigned>(before[1]),
+                static_cast<unsigned>(before[2]),
+                static_cast<unsigned>(before[3]),
+                static_cast<unsigned>(after[0]),
+                static_cast<unsigned>(after[1]),
+                static_cast<unsigned>(after[2]),
+                static_cast<unsigned>(after[3]));
+            Switch_LogWrite(trace);
+        }
     }
 #endif
 
