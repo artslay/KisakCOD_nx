@@ -68,7 +68,7 @@ Should drop in really quickly and it hides a ton of platform specific ugliness!
 
 #include "bink.h"
 #ifdef __SWITCH__
-#include "gfx/opengl/d3d9_compat.h"
+#include "gfx/vulkan/d3d9_compat.h"
 #endif
 
 #if defined(__RADPS3__) || defined(__RADWII__) || defined(__RADNGC__)
