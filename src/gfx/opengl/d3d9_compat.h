@@ -510,13 +510,22 @@ class IDirect3DDevice9
     IDirect3DPixelShader9 *m_pixelShader = nullptr;
     GLuint m_program = 0;
     GLint m_textureStageLocation = -1;
+    GLint m_textureStage1Location = -1;
+    GLint m_textureStage2Location = -1;
+    GLint m_textureStage3Location = -1;
+    GLint m_texture3Location = -1;
     GLint m_vsConstantsLocation = -1;
     GLint m_psConstantsLocation = -1;
     GLint m_screenSizeLocation = -1;
     GLint m_screenSpaceLocation = -1;
     GLint m_useTextureLocation = -1;
+    GLint m_cinematicTextureLocation = -1;
     bool m_switchUnlit = false;
     bool m_texture0Bound = false;
+    bool m_cinematicTexturesBound = false;
+    bool m_texture3Bound = false;
+    KisakGLTexture *m_boundTextures[16]{};
+
     float m_viewportWidth = 1280.0f;
     float m_viewportHeight = 720.0f;
     GLenum m_textureTargets[16]{};
@@ -544,6 +553,49 @@ class IDirect3DDevice9
         return shader;
     }
 
+    void UpdateCinematicTextureMode()
+    {
+        m_cinematicTexturesBound =
+            m_boundTextures[0] &&
+            m_boundTextures[1] &&
+            m_boundTextures[2] &&
+            m_boundTextures[0]->target == GL_TEXTURE_2D &&
+            m_boundTextures[1]->target == GL_TEXTURE_2D &&
+            m_boundTextures[2]->target == GL_TEXTURE_2D &&
+            m_boundTextures[0]->sourceFormat == D3DFMT_L8 &&
+            m_boundTextures[1]->sourceFormat == D3DFMT_L8 &&
+            m_boundTextures[2]->sourceFormat == D3DFMT_L8 &&
+            m_boundTextures[1]->width * 2u >= m_boundTextures[0]->width &&
+            m_boundTextures[2]->width * 2u >= m_boundTextures[0]->width &&
+            m_boundTextures[1]->height * 2u >= m_boundTextures[0]->height &&
+            m_boundTextures[2]->height * 2u >= m_boundTextures[0]->height;
+    }
+
+    void UpdateTextureUniforms()
+    {
+        if (!m_program)
+            return;
+
+        glUseProgram(m_program);
+
+        if (m_textureStageLocation >= 0)
+            glUniform1i(m_textureStageLocation, 0);
+        if (m_textureStage1Location >= 0)
+            glUniform1i(m_textureStage1Location, 1);
+        if (m_textureStage2Location >= 0)
+            glUniform1i(m_textureStage2Location, 2);
+        if (m_textureStage3Location >= 0)
+            glUniform1i(m_textureStage3Location, 3);
+        if (m_useTextureLocation >= 0)
+            glUniform1i(m_useTextureLocation, m_texture0Bound ? 1 : 0);
+        if (m_texture3Location >= 0)
+            glUniform1i(m_texture3Location, m_texture3Bound ? 1 : 0);
+        if (m_cinematicTextureLocation >= 0)
+            glUniform1i(
+                m_cinematicTextureLocation,
+                m_cinematicTexturesBound ? 1 : 0);
+    }
+
     void RebuildProgram()
     {
         if (!m_vertexShader || !m_pixelShader)
@@ -568,20 +620,36 @@ class IDirect3DDevice9
         glUseProgram(m_program);
 
         m_textureStageLocation = glGetUniformLocation(m_program, "uTexture0");
+        m_textureStage1Location = glGetUniformLocation(m_program, "uTexture1");
+        m_textureStage2Location = glGetUniformLocation(m_program, "uTexture2");
+        m_textureStage3Location = glGetUniformLocation(m_program, "uTexture3");
+        m_texture3Location = glGetUniformLocation(m_program, "uUseTexture3");
         m_vsConstantsLocation = glGetUniformLocation(m_program, "u_vsConstants[0]");
         m_psConstantsLocation = glGetUniformLocation(m_program, "u_psConstants[0]");
         m_screenSizeLocation = glGetUniformLocation(m_program, "uScreenSize");
         m_screenSpaceLocation = glGetUniformLocation(m_program, "uScreenSpace");
         m_useTextureLocation = glGetUniformLocation(m_program, "uUseTexture");
+        m_cinematicTextureLocation =
+            glGetUniformLocation(m_program, "uUseCinematicTexture");
 
         if (m_textureStageLocation >= 0)
             glUniform1i(m_textureStageLocation, 0);
+        if (m_textureStage1Location >= 0)
+            glUniform1i(m_textureStage1Location, 1);
+        if (m_textureStage2Location >= 0)
+            glUniform1i(m_textureStage2Location, 2);
+        if (m_textureStage3Location >= 0)
+            glUniform1i(m_textureStage3Location, 3);
         if (m_screenSizeLocation >= 0)
             glUniform2f(m_screenSizeLocation, m_viewportWidth, m_viewportHeight);
         if (m_screenSpaceLocation >= 0)
             glUniform1i(m_screenSpaceLocation, m_switchUnlit ? 1 : 0);
         if (m_useTextureLocation >= 0)
             glUniform1i(m_useTextureLocation, m_texture0Bound ? 1 : 0);
+        if (m_cinematicTextureLocation >= 0)
+            glUniform1i(
+                m_cinematicTextureLocation,
+                m_cinematicTexturesBound ? 1 : 0);
         if (m_vsConstantsLocation >= 0)
             glUniform4fv(m_vsConstantsLocation, 256, &m_vsConstants[0][0]);
         if (m_psConstantsLocation >= 0)
@@ -991,8 +1059,13 @@ public:
         if (stage >= 16)
             return E_FAIL;
         glActiveTexture(GL_TEXTURE0 + stage);
+        m_boundTextures[stage] =
+            tex ? static_cast<KisakGLTexture *>(tex) : nullptr;
+
         if (tex)
         {
+            if (stage == 3)
+                m_texture3Bound = tex->object != 0;
             m_textureTargets[stage] = tex->target;
             if (stage == 0)
                 m_texture0Bound = tex->object != 0;
@@ -1000,19 +1073,16 @@ public:
         }
         else
         {
+            if (stage == 3)
+                m_texture3Bound = false;
             m_textureTargets[stage] = GL_TEXTURE_2D;
             if (stage == 0)
                 m_texture0Bound = false;
             glBindTexture(GL_TEXTURE_2D, 0);
         }
-        if (m_program)
-        {
-            glUseProgram(m_program);
-            if (m_textureStageLocation >= 0)
-                glUniform1i(m_textureStageLocation, 0);
-            if (m_useTextureLocation >= 0)
-                glUniform1i(m_useTextureLocation, m_texture0Bound ? 1 : 0);
-        }
+
+        UpdateCinematicTextureMode();
+        UpdateTextureUniforms();
         return S_OK;
     }
 
@@ -1054,11 +1124,39 @@ in vec2 vTexCoord;
 in vec4 vColor;
 out vec4 FragColor;
 uniform sampler2D uTexture0;
+uniform sampler2D uTexture1;
+uniform sampler2D uTexture2;
+uniform sampler2D uTexture3;
 uniform vec4 u_psConstants[256];
 uniform bool uUseTexture;
+uniform bool uUseTexture3;
+uniform bool uUseCinematicTexture;
 void main()
 {
-    FragColor = vColor * (uUseTexture ? texture(uTexture0, vTexCoord) : vec4(1.0));
+    if (uUseCinematicTexture)
+    {
+        float y = texture(uTexture0, vTexCoord).r;
+        float cb = texture(uTexture1, vTexCoord).r - 0.5;
+        float cr = texture(uTexture2, vTexCoord).r - 0.5;
+
+        vec3 rgb = vec3(
+            y + 1.402000 * cr,
+            y - 0.344136 * cb - 0.714136 * cr,
+            y + 1.772000 * cb);
+
+        float alpha = 1.0;
+        if (uUseTexture3)
+            alpha = texture(uTexture3, vTexCoord).r;
+
+        FragColor = vec4(clamp(rgb, 0.0, 1.0), alpha) * vColor;
+    }
+    else
+    {
+        FragColor =
+            vColor * (uUseTexture
+                ? texture(uTexture0, vTexCoord)
+                : vec4(1.0));
+    }
 }
 )";
         const GLuint object = CompileShader(GL_FRAGMENT_SHADER, source);
