@@ -3246,6 +3246,9 @@ void __cdecl Load_LoadedSound(bool atStreamStart)
 void __cdecl Load_LoadedSoundPtr(bool atStreamStart)
 {
     const void **inserted; // [esp+0h] [ebp-Ch]
+#ifdef __SWITCH__
+    g_switchDbStage = "sound/loaded_ptr";
+#endif
     uint32_t value; // [esp+4h] [ebp-8h]
 #ifdef __SWITCH__
     const bool switchLoadedSoundTrace = false;
@@ -3396,6 +3399,7 @@ void __cdecl Load_SoundFileRef(bool atStreamStart)
 void __cdecl Load_SoundFile(bool atStreamStart)
 {
 #ifdef __SWITCH__
+    g_switchDbStage = "sound/file";
     const bool switchSoundTrace = false;
 #endif
 #ifdef __SWITCH__
@@ -3918,6 +3922,7 @@ void __cdecl Load_snd_alias_t(bool atStreamStart)
 void __cdecl Load_snd_alias_tArray(bool atStreamStart, int32_t count)
 {
 #ifdef __SWITCH__
+    g_switchDbStage = "sound/alias_array";
     struct SerializedSndAlias
     {
         uint32_t aliasName;
@@ -4048,6 +4053,7 @@ void __cdecl Load_snd_alias_tArray(bool atStreamStart, int32_t count)
 void __cdecl Load_snd_alias_list_t(bool atStreamStart)
 {
 #ifdef __SWITCH__
+    g_switchDbStage = "sound/list";
     struct SerializedSndAliasList
     {
         uint32_t aliasName;
@@ -4169,6 +4175,7 @@ void __cdecl Load_snd_alias_list_ptr(bool atStreamStart)
     uint32_t value; // [esp+4h] [ebp-8h]
 
 #ifdef __SWITCH__
+    g_switchDbStage = "sound/ptr";
     uint32_t serialized = 0;
     if (atStreamStart)
     {
