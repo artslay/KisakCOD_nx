@@ -411,6 +411,21 @@ static GfxImage *__cdecl Image_Load(char *name, uint8_t semantic, uint8_t imageT
 {
     GfxImage *image; // [esp+0h] [ebp-4h]
 
+#ifdef __SWITCH__
+    if (!name[0])
+    {
+        char trace[192];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][IMAGE LOAD EMPTY] name=%p semantic=%u track=%u\n",
+            static_cast<const void *>(name),
+            static_cast<unsigned>(semantic),
+            static_cast<unsigned>(imageTrack));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     if (*name == 36)
         return Image_LoadBuiltin(name, semantic, imageTrack);
     image = Image_Alloc(name, IMG_CATEGORY_LOAD_FROM_FILE, semantic, imageTrack);
