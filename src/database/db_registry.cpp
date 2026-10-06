@@ -481,6 +481,17 @@ struct SwitchFxReferenceFixup
 };
 
 static std::vector<SwitchFxReferenceFixup> g_switchFxReferenceFixups;
+
+#ifdef __SWITCH__
+struct SwitchDeferredImageAsset
+{
+    XAssetHeader *header;
+    GfxImage *image;
+};
+
+static std::vector<SwitchDeferredImageAsset> g_switchDeferredImageAssets;
+#endif
+
 static void DB_ResolveSwitchFxReferenceFixups();
 #endif
 static void(__cdecl *DB_DynamicCloneXAssetHandler[ASSET_TYPE_COUNT])(XAssetHeader, XAssetHeader, int) =
@@ -3763,9 +3774,66 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
     }
 #endif
 
+#ifdef __SWITCH__
+    // A positive GfxImage::name token can legitimately point forward into
+    // block 4, where a later inline XString will populate the bytes. The
+    // image object must not be registered under an empty name, otherwise the
+    // registry is permanently hashed under the wrong key.
+    if (image->image &&
+        image->image->delayLoadPixels &&
+        image->image->name &&
+        image->image->name[0] == '\0')
+    {
+        g_switchDeferredImageAssets.push_back(
+            {image, image->image});
+        return;
+    }
+#endif
+
     image->xmodelPieces =
         DB_AddXAsset(ASSET_TYPE_IMAGE, (XAssetHeader)image->xmodelPieces).xmodelPieces;
 }
+
+#ifdef __SWITCH__
+void __cdecl DB_FlushSwitchDeferredImageAssets()
+{
+    if (g_switchDeferredImageAssets.empty())
+        return;
+
+    size_t writeIndex = 0;
+    for (const SwitchDeferredImageAsset &deferred : g_switchDeferredImageAssets)
+    {
+        GfxImage *image = deferred.image;
+        XAssetHeader *header = deferred.header;
+
+        if (!image || !header)
+            continue;
+
+        if (!image->name || image->name[0] == '\0')
+        {
+            g_switchDeferredImageAssets[writeIndex++] = deferred;
+            continue;
+        }
+
+        const XAssetHeader result =
+            DB_AddXAsset(ASSET_TYPE_IMAGE, *header);
+        *header = result;
+
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][GFXIMAGE DEFERRED] registered image=%p name=%s ptr=%p remaining=%zu\n",
+            static_cast<void *>(image),
+            image->name,
+            static_cast<void *>(result.image),
+            g_switchDeferredImageAssets.size() - writeIndex - 1);
+        Switch_LogWrite(trace);
+    }
+
+    g_switchDeferredImageAssets.resize(writeIndex);
+}
+#endif
 
 void __cdecl Mark_GfxImageAsset(GfxImage *image)
 {
