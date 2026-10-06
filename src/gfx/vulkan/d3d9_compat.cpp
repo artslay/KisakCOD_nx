@@ -13,6 +13,7 @@
 #include <limits>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 extern "C" void Switch_LogWrite(const char *msg);
@@ -305,6 +306,8 @@ bool PatchFragmentShaderForAlphaTest(
     uint32_t boolType = 0;
     uint32_t intType = 0;
     bool foundOutputLocation0 = false;
+    bool addBoolType = false;
+    bool addIntType = false;
     std::unordered_set<uint32_t> usedSpecIds;
 
     for (size_t i = 5; i < words.size();)
@@ -332,14 +335,9 @@ bool PatchFragmentShaderForAlphaTest(
         {
             intType = ins[1];
         }
-        else if (op == SpvTypeFloat && wc >= 3 && ins[2] == 32)
+        else if (op == SpvTypeFloat && wc >= 3 && ins[2] == 32 && !floatType)
         {
-            if (!floatType)
-                floatType = ins[1];
-        }
-        else if (op == SpvTypePointer && wc >= 4 && ins[2] == SpvStorageClassOutput)
-        {
-            // Resolved below once the Location 0 OpVariable is known.
+            floatType = ins[1];
         }
         i += wc;
     }
@@ -356,7 +354,8 @@ bool PatchFragmentShaderForAlphaTest(
             return false;
         const uint32_t *ins = &words[i];
 
-        if (op == SpvOpDecorate && wc >= 4 && ins[2] == SpvDecorationLocation && ins[3] == 0)
+        if (op == SpvOpDecorate && wc >= 4 &&
+            ins[2] == SpvDecorationLocation && ins[3] == 0)
         {
             outputVarId = ins[1];
             foundOutputLocation0 = true;
@@ -409,12 +408,13 @@ bool PatchFragmentShaderForAlphaTest(
 
     if (!boolType)
     {
-        // Add the missing result type in the types/constants section.
         boolType = words[3]++;
+        addBoolType = true;
     }
     if (!intType)
     {
         intType = words[3]++;
+        addIntType = true;
     }
 
     // Pick non-conflicting specialization IDs.
@@ -433,37 +433,17 @@ bool PatchFragmentShaderForAlphaTest(
     const uint32_t funcSpec = newId();
     const uint32_t refSpec = newId();
 
-    // Constants 1..8, plus the specialization constants.
     uint32_t funcConst[9]{};
     for (uint32_t value = 1; value <= 8; ++value)
         funcConst[value] = newId();
 
+    std::vector<uint32_t> typeGlobals;
+    if (addBoolType)
+        SpirvAppend(typeGlobals, SpvOpTypeBool, {boolType});
+    if (addIntType)
+        SpirvAppend(typeGlobals, SpvOpTypeInt, {intType, 32, 1});
+
     std::vector<uint32_t> globals;
-    if (!boolType || !intType)
-        return false;
-
-    // New types are appended in the types/constants section only when absent.
-    bool hadBoolType = false;
-    bool hadIntType = false;
-    for (size_t i = 5; i < words.size();)
-    {
-        uint32_t wc = 0;
-        SpvOp op{};
-        if (!SpirvIsValidInstruction(words, i, &wc, &op))
-            return false;
-        const uint32_t *ins = &words[i];
-        if (op == SpvTypeBool && wc >= 2 && ins[1] == boolType)
-            hadBoolType = true;
-        if (op == SpvTypeInt && wc >= 4 && ins[1] == intType)
-            hadIntType = true;
-        i += wc;
-    }
-    if (!hadBoolType)
-        SpirvAppend(globals, SpvOpTypeBool, {boolType});
-    if (!hadIntType)
-        SpirvAppend(globals, SpvOpTypeInt, {intType, 32, 1});
-
-    // Specialization constants are scalar and pipeline-overridable.
     SpirvAppend(globals, SpvOpSpecConstant, {intType, funcSpec, 8});
     SpirvAppend(globals, SpvOpSpecConstant, {floatType, refSpec, 0});
     for (uint32_t value = 1; value <= 8; ++value)
@@ -473,8 +453,50 @@ bool PatchFragmentShaderForAlphaTest(
     SpirvAppend(decorations, SpvOpDecorate, {funcSpec, SpvDecorationSpecId, funcSpecDecoration});
     SpirvAppend(decorations, SpvOpDecorate, {refSpec, SpvDecorationSpecId, refSpecDecoration});
 
-    // Insert decorations before the type section, and types/constants before functions.
     size_t firstType = words.size();
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+        if (static_cast<uint32_t>(op) >= static_cast<uint32_t>(SpvOpTypeVoid) &&
+            static_cast<uint32_t>(op) <= static_cast<uint32_t>(SpvOpTypePipe))
+        {
+            firstType = i;
+            break;
+        }
+        i += wc;
+    }
+    if (firstType == words.size())
+        return false;
+
+    words.insert(words.begin() + firstType, decorations.begin(), decorations.end());
+    words.insert(
+        words.begin() + firstType + decorations.size(),
+        typeGlobals.begin(), typeGlobals.end());
+
+    // Constants must appear before global variables/functions, while the new
+    // types above must already be visible to them.
+    size_t firstVariableOrFunction = words.size();
+    for (size_t i = firstType + decorations.size() + typeGlobals.size(); i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+        if (op == SpvOpVariable || op == SpvOpFunction)
+        {
+            firstVariableOrFunction = i;
+            break;
+        }
+        i += wc;
+    }
+    if (firstVariableOrFunction == words.size())
+        return false;
+
+    words.insert(words.begin() + firstVariableOrFunction, globals.begin(), globals.end());
+
     size_t firstFunction = words.size();
     for (size_t i = 5; i < words.size();)
     {
@@ -482,10 +504,6 @@ bool PatchFragmentShaderForAlphaTest(
         SpvOp op{};
         if (!SpirvIsValidInstruction(words, i, &wc, &op))
             return false;
-        if (firstType == words.size() &&
-            static_cast<uint32_t>(op) >= static_cast<uint32_t>(SpvOpTypeVoid) &&
-            static_cast<uint32_t>(op) <= static_cast<uint32_t>(SpvOpTypePipe))
-            firstType = i;
         if (op == SpvOpFunction)
         {
             firstFunction = i;
@@ -493,27 +511,19 @@ bool PatchFragmentShaderForAlphaTest(
         }
         i += wc;
     }
-
-    if (firstType == words.size() || firstFunction == words.size())
+    if (firstFunction == words.size())
         return false;
 
-    words.insert(words.begin() + firstType, decorations.begin(), decorations.end());
-    const size_t functionShift =
-        decorations.size() + ((firstType < firstFunction) ? 0 : 0);
-    (void)functionShift;
-    firstFunction += decorations.size();
-    words.insert(words.begin() + firstFunction, globals.begin(), globals.end());
-
     // Rebuild the function stream and inject the test immediately before each
-    // store to the Location 0 output variable. This avoids reading an Output pointer,
-    // which Vulkan/SPIR-V forbids.
+    // store to the Location 0 output variable. This avoids reading an Output
+    // pointer, which Vulkan/SPIR-V forbids.
     std::vector<uint32_t> patched;
     patched.reserve(words.size() + 512);
-    patched.insert(patched.end(), words.begin(), words.begin() + firstFunction + globals.size());
+    patched.insert(patched.end(), words.begin(), words.begin() + firstFunction);
 
     bool inEntry = false;
     bool injected = false;
-    for (size_t i = firstFunction + globals.size(); i < words.size();)
+    for (size_t i = firstFunction; i < words.size();)
     {
         uint32_t wc = 0;
         SpvOp op{};
