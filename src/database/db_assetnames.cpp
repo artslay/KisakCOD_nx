@@ -43,11 +43,14 @@ const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(const XAssetHea
     DB_StringTableGetName,
     DB_StringTableGetName,
     DB_StringTableGetName,
+    DB_StringTableGetName,
 #ifdef KISAK_SP
     DB_PixelShaderGetName,
-#endif
 #ifdef __SWITCH__
     DB_TechniqueSetGetName,
+#else
+    DB_StringTableGetName,
+#endif
 #else
     DB_StringTableGetName,
 #endif
@@ -93,8 +96,10 @@ void(__cdecl *DB_XAssetSetNameHandler[ASSET_TYPE_COUNT])(XAssetHeader *, const c
     DB_StringTableSetName,
 #ifdef KISAK_SP
     DB_PixelShaderSetName,
-#endif
     DB_StringTableSetName,
+#else
+    DB_StringTableSetName,
+#endif
     DB_ImageSetName,
     DB_StringTableSetName,
     DB_StringTableSetName,
