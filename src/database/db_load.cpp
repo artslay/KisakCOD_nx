@@ -5502,41 +5502,40 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         
 
 #ifdef __SWITCH__
-        if (g_switchCurrentAssetRawType == 7u)
         {
-            char trace[448];
-            const char *resolvedName = varGfxImage->name;
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][GFXIMAGE NAME] asset=%d rawType=%u serializedName=%08x name=%p first=%02x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x\n",
-                g_switchCurrentAssetIndex,
-                g_switchCurrentAssetRawType,
-                serialized.name,
-                static_cast<const void *>(resolvedName),
-                resolvedName ? static_cast<unsigned>(
-                    static_cast<unsigned char>(resolvedName[0])) : 0u,
-                static_cast<unsigned>(varGfxImage->category),
-                static_cast<unsigned>(varGfxImage->semantic),
-                static_cast<unsigned>(varGfxImage->delayLoadPixels),
-                static_cast<unsigned>(varGfxImage->width),
-                static_cast<unsigned>(varGfxImage->height),
-                static_cast<unsigned>(g_streamPosIndex),
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4));
-            Switch_LogRaw(trace);
-
-            if (!resolvedName || resolvedName[0] == '\0')
+            // Nested GfxImage loads keep the parent's XAsset raw type. In
+            // particular, images reached from MaterialTextureDef are loaded
+            // while rawType==4, so a rawType==7-only probe misses the failing
+            // common images entirely.
+            const bool traceGfxImage =
+                g_switchCurrentAssetRawType == 4u ||
+                g_switchCurrentAssetRawType == 7u;
+            if (traceGfxImage)
             {
-                char emptyTrace[320];
+                char trace[448];
+                const char *resolvedName = varGfxImage->name;
+                const bool nameEmpty =
+                    !resolvedName || resolvedName[0] == '\0';
                 std::snprintf(
-                    emptyTrace,
-                    sizeof(emptyTrace),
-                    "[KisakCOD][GFXIMAGE NAME EMPTY] asset=%d serializedName=%08x name=%p\n",
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][GFXIMAGE NAME] asset=%d rawType=%u serializedName=%08x name=%p first=%02x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\n",
                     g_switchCurrentAssetIndex,
+                    g_switchCurrentAssetRawType,
                     serialized.name,
-                    static_cast<const void *>(resolvedName));
-                Switch_LogRaw(emptyTrace);
+                    static_cast<const void *>(resolvedName),
+                    resolvedName ? static_cast<unsigned>(
+                        static_cast<unsigned char>(resolvedName[0])) : 0u,
+                    static_cast<unsigned>(varGfxImage->category),
+                    static_cast<unsigned>(varGfxImage->semantic),
+                    static_cast<unsigned>(varGfxImage->delayLoadPixels),
+                    static_cast<unsigned>(varGfxImage->width),
+                    static_cast<unsigned>(varGfxImage->height),
+                    static_cast<unsigned>(g_streamPosIndex),
+                    Switch_GetStreamCursorOffset(0),
+                    Switch_GetStreamCursorOffset(4),
+                    nameEmpty ? 1u : 0u);
+                Switch_LogWrite(trace);
             }
         }
 #endif
