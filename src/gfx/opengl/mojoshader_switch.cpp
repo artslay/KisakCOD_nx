@@ -126,19 +126,25 @@ bool Switch_TranslateD3DShader(
     {
         std::ostringstream message;
         message << "MojoShader parse failed";
-        if (parsed->error_count > 0 && parsed->errors && parsed->errors[0].error)
-            message << ": " << parsed->errors[0].error;
+        if (parsed->error_count > 0 && parsed->errors)
+        {
+            if (parsed->errors[0].error)
+                message << ": " << parsed->errors[0].error;
+            message << " position=" << parsed->errors[0].error_position
+                    << " errors=" << parsed->error_count;
+        }
         error = message.str();
 
         static uint32_t failureLogCount = 0;
         if (failureLogCount < 32)
         {
-            char trace[640];
+            char trace[768];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][SHADER] MojoShader parse fallback: %s\n",
-                error.c_str());
+                "[KisakCOD][SHADER] MojoShader parse failed: %s bytes=%u\n",
+                error.c_str(),
+                size);
             extern void Switch_LogWrite(const char *msg);
             Switch_LogWrite(trace);
             ++failureLogCount;
