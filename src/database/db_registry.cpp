@@ -100,7 +100,7 @@ static int Switch_IstricmpAssetName(const char *lhs, const char *rhs)
 
 #ifdef __SWITCH__
 #include <thread>
-#include <gfx/opengl/gl_backend.h>
+// Vulkan-only Switch renderer; no OpenGL backend dependency.
 #endif
 
 #include <setjmp.h>
