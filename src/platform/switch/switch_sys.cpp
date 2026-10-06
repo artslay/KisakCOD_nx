@@ -323,7 +323,8 @@ void Switch_LogWrite(const char *msg)
         std::strstr(msg, "R_Cinematic_BinkOpen '") != nullptr)
         return;
 
-    // These high-frequency renderer/UI/thread traces are diagnostic noise here.
+    // Keep the runtime log compact. Detailed loader traces remain in source
+    // for targeted debugging, but are disabled by default.
     static constexpr const char *const kSuppressedPrefixes[] =
     {
         "[KisakCOD][UI ",
@@ -345,6 +346,14 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][FONT MATERIAL ALIAS]",
         "[KisakCOD][TECHSET4026]",
         "[KisakCOD][WATCHDOG]",
+        "[KisakCOD][DELAY IMAGE]",
+        "[KisakCOD][DELAY IMAGES]",
+        "[KisakCOD][IMAGE3 ADD]",
+        "[KisakCOD][FONT TECH ASSET SLOT]",
+        "[KisakCOD][MATERIAL ",
+        "Switch PMem alloc begin:",
+        "Switch PMem alloc end:",
+        "Trying to load file ",
         "Couldn't play stream '",
         "R_Cinematic_BinkOpen '"
     };
