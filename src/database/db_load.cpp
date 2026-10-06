@@ -5547,283 +5547,115 @@ void __cdecl Load_GfxImage(bool atStreamStart)
 
         DB_PushStreamPos(4);
 
-        if (!serialized.name)
-        {
-            varGfxImage->name = nullptr;
-        }
-        else if (serialized.name == UINT32_MAX)
-        {
-            // The XString is inline at the current virtual-stream cursor.
-            char *nameBuffer =
-                reinterpret_cast<char *>(AllocLoad_raw_byte());
-            Load_XStringCustom(&nameBuffer);
-            varGfxImage->name = nameBuffer;
-        }
-        else
-        {
-            const uintptr_t nameAddress =
-                DB_ConvertOffsetToPointerValue(serialized.name);
-
-            // Some PC fastfiles deduplicate XStrings through a serialized
-            // pointer slot. When that slot contains -1 and ends exactly at
-            // the current cursor, the string payload follows inline at the
-            // cursor. The 32-bit loader's Load_XString(0) consumes that
-            // payload; the ARM64 loader must reproduce the same cursor and
-            // pointer semantics explicitly.
-            bool loadedAliasedInlineName = false;
-#ifdef __SWITCH__
-            if (nameAddress && g_streamBlocks && g_streamBlocks[4].data)
-            {
-                const uintptr_t block4Base =
-                    reinterpret_cast<uintptr_t>(g_streamBlocks[4].data);
-                const uintptr_t block4End =
-                    block4Base + g_streamBlocks[4].size;
-                const uintptr_t cursorAddress =
-                    reinterpret_cast<uintptr_t>(DB_GetStreamPos());
-
-                if (nameAddress >= block4Base &&
-                    nameAddress + sizeof(uint32_t) <= block4End &&
-                    cursorAddress >= block4Base &&
-                    cursorAddress <= block4End)
-                {
-                    uint32_t marker = 0;
-                    std::memcpy(
-                        &marker,
-                        reinterpret_cast<const void *>(nameAddress),
-                        sizeof(marker));
-
-                    if (marker == UINT32_MAX &&
-                        nameAddress + sizeof(uint32_t) == cursorAddress)
-                    {
-                        char *nameBuffer =
-                            reinterpret_cast<char *>(AllocLoad_raw_byte());
-                        Load_XStringCustom(&nameBuffer);
-                        varGfxImage->name = nameBuffer;
-                        loadedAliasedInlineName = true;
-                    }
-                }
-            }
-#endif
-
-            if (!loadedAliasedInlineName)
-            {
-                varGfxImage->name =
-                    reinterpret_cast<const char *>(nameAddress);
-            }
-        }
+        // GfxImage::name is an XString serialized as a 32-bit token.
+        // Use the same Load_XString path as the original IW3 loader instead
+        // of maintaining a second ARM64-specific name decoder.
+        varGfxImage->name =
+            reinterpret_cast<const char *>(
+                static_cast<uintptr_t>(serialized.name));
+        varXString = &varGfxImage->name;
+        Load_XString(false);
 
 #ifdef __SWITCH__
-        // Root-cause diagnostic for the first known failing image. This is
-        // exact-match only and does not alter loader behavior.
-        if (varGfxImage->name &&
-            std::strcmp(varGfxImage->name, "3") == 0)
         {
-            const uintptr_t nameAddress =
-                reinterpret_cast<uintptr_t>(varGfxImage->name);
-            uint32_t nameBlock = UINT32_MAX;
-            uint32_t nameOffset = UINT32_MAX;
-            uint8_t bytes[32] = {};
-            size_t byteCount = 0;
-
-            if (g_streamBlocks)
-            {
-                for (uint32_t block = 0;
-                     block < ARRAY_COUNT(g_streamPosArray);
-                     ++block)
-                {
-                    if (!g_streamBlocks[block].data)
-                        continue;
-
-                    const uintptr_t base =
-                        reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
-                    const uintptr_t end =
-                        base + g_streamBlocks[block].size;
-                    if (nameAddress < base || nameAddress >= end)
-                        continue;
-
-                    nameBlock = block;
-                    nameOffset =
-                        static_cast<uint32_t>(nameAddress - base);
-                    byteCount =
-                        g_streamBlocks[block].size - nameOffset;
-                    if (byteCount > sizeof(bytes))
-                        byteCount = sizeof(bytes);
-                    if (byteCount)
-                        std::memcpy(
-                            bytes,
-                            reinterpret_cast<const void *>(nameAddress),
-                            byteCount);
-                    break;
-                }
-            }
-
-            char trace[640];
-            int written = std::snprintf(
+            const char *resolvedName = varGfxImage->name;
+            char trace[448];
+            std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][IMAGE ROOT] asset=%d rawType=%u nameToken=%08x "
-                "name=%p block=%u offset=%08x cursor4=%08x bytes:",
+                "[KisakCOD][GFXIMAGE NAME] asset=%d rawType=%u serializedName=%08x name=%p first=%02x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\\n",
                 g_switchCurrentAssetIndex,
-                static_cast<unsigned>(g_switchCurrentAssetRawType),
+                g_switchCurrentAssetRawType,
                 serialized.name,
-                reinterpret_cast<const void *>(nameAddress),
-                nameBlock,
-                nameOffset,
-                Switch_GetStreamCursorOffset(4));
-
-            for (size_t i = 0;
-                 i < byteCount && written > 0 &&
-                 static_cast<size_t>(written) + 4 < sizeof(trace);
-                 ++i)
-            {
-                written += std::snprintf(
-                    trace + written,
-                    sizeof(trace) - static_cast<size_t>(written),
-                    " %02x",
-                    static_cast<unsigned>(bytes[i]));
-            }
-
-            std::snprintf(
-                trace + written,
-                sizeof(trace) - static_cast<size_t>(written),
-                " text=%s\n",
-                varGfxImage->name);
+                static_cast<const void *>(resolvedName),
+                resolvedName ? static_cast<unsigned>(
+                    static_cast<unsigned char>(resolvedName[0])) : 0u,
+                static_cast<unsigned>(varGfxImage->category),
+                static_cast<unsigned>(varGfxImage->semantic),
+                static_cast<unsigned>(varGfxImage->delayLoadPixels),
+                static_cast<unsigned>(varGfxImage->width),
+                static_cast<unsigned>(varGfxImage->height),
+                static_cast<unsigned>(g_streamPosIndex),
+                Switch_GetStreamCursorOffset(0),
+                Switch_GetStreamCursorOffset(4),
+                (!resolvedName || resolvedName[0] == '\\0') ? 1u : 0u);
             Switch_LogWrite(trace);
-        }
 
-        // A positive name offset can point to a later inline XString. The
-        // target is a valid serialized reference, but its bytes are not in the
-        // destination block yet. Let the image enter the normal delayed-image
-        // path instead of opening "images/.iwi" with an empty name.
-        if (serialized.name != 0u &&
-            serialized.name != UINT32_MAX)
-        {
-            const uintptr_t nameAddress =
-                reinterpret_cast<uintptr_t>(varGfxImage->name);
-            const uintptr_t cursorAddress =
-                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
-            const uintptr_t block4Base =
-                g_streamBlocks && g_streamBlocks[4].data
-                    ? reinterpret_cast<uintptr_t>(g_streamBlocks[4].data)
-                    : 0;
-            const uint32_t nameOffset =
-                block4Base && nameAddress >= block4Base &&
-                        nameAddress - block4Base < g_streamBlocks[4].size
-                    ? static_cast<uint32_t>(nameAddress - block4Base)
-                    : UINT32_MAX;
-            const uint32_t cursorOffset =
-                block4Base && cursorAddress >= block4Base &&
-                        cursorAddress - block4Base <= g_streamBlocks[4].size
-                    ? static_cast<uint32_t>(cursorAddress - block4Base)
-                    : UINT32_MAX;
-
-            if (nameOffset != UINT32_MAX &&
-                cursorOffset != UINT32_MAX &&
-                nameOffset > cursorOffset &&
-                varGfxImage->name[0] == '\0')
+            if (resolvedName && std::strcmp(resolvedName, "3") == 0)
             {
-                varGfxImage->delayLoadPixels = true;
+                const uintptr_t nameAddress =
+                    reinterpret_cast<uintptr_t>(resolvedName);
+                uint32_t nameBlock = UINT32_MAX;
+                uint32_t nameOffset = UINT32_MAX;
+                uint8_t bytes[32] = {};
+                size_t byteCount = 0;
 
-                char trace[320];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][GFXIMAGE FORWARD NAME] asset=%d token=%08x offset=%08x cursor=%08x image=%p deferred=1\n",
-                    g_switchCurrentAssetIndex,
-                    serialized.name,
-                    nameOffset,
-                    cursorOffset,
-                    static_cast<void *>(varGfxImage));
-                Switch_LogWrite(trace);
-            }
-        }
-#endif
+                if (g_streamBlocks)
+                {
+                    for (uint32_t block = 0;
+                         block < ARRAY_COUNT(g_streamPosArray);
+                         ++block)
+                    {
+                        if (!g_streamBlocks[block].data)
+                            continue;
 
-        
+                        const uintptr_t base =
+                            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+                        const uintptr_t blockEnd =
+                            base + g_streamBlocks[block].size;
+                        if (nameAddress < base || nameAddress >= blockEnd)
+                            continue;
 
-#ifdef __SWITCH__
-        {
-            // Nested GfxImage loads keep the parent's XAsset raw type. In
-            // particular, images reached from MaterialTextureDef are loaded
-            // while rawType==4, so a rawType==7-only probe misses the failing
-            // common images entirely.
-            const bool traceGfxImage =
-                g_switchCurrentAssetRawType == 4u ||
-                g_switchCurrentAssetRawType == 7u;
-            if (traceGfxImage)
-            {
-                char trace[448];
-                const char *resolvedName = varGfxImage->name;
-                const bool nameEmpty =
-                    !resolvedName || resolvedName[0] == '\0';
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][GFXIMAGE NAME] asset=%d rawType=%u serializedName=%08x name=%p first=%02x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\n",
+                        nameBlock = block;
+                        nameOffset =
+                            static_cast<uint32_t>(nameAddress - base);
+                        byteCount =
+                            g_streamBlocks[block].size - nameOffset;
+                        if (byteCount > sizeof(bytes))
+                            byteCount = sizeof(bytes);
+                        if (byteCount)
+                            std::memcpy(
+                                bytes,
+                                reinterpret_cast<const void *>(nameAddress),
+                                byteCount);
+                        break;
+                    }
+                }
+
+                char detail[640];
+                int written = std::snprintf(
+                    detail,
+                    sizeof(detail),
+                    "[KisakCOD][IMAGE ROOT] asset=%d rawType=%u nameToken=%08x name=%p block=%u offset=%08x bytes:",
                     g_switchCurrentAssetIndex,
                     g_switchCurrentAssetRawType,
                     serialized.name,
-                    static_cast<const void *>(resolvedName),
-                    resolvedName ? static_cast<unsigned>(
-                        static_cast<unsigned char>(resolvedName[0])) : 0u,
-                    static_cast<unsigned>(varGfxImage->category),
-                    static_cast<unsigned>(varGfxImage->semantic),
-                    static_cast<unsigned>(varGfxImage->delayLoadPixels),
-                    static_cast<unsigned>(varGfxImage->width),
-                    static_cast<unsigned>(varGfxImage->height),
-                    static_cast<unsigned>(g_streamPosIndex),
-                    Switch_GetStreamCursorOffset(0),
-                    Switch_GetStreamCursorOffset(4),
-                    nameEmpty ? 1u : 0u);
-                Switch_LogWrite(trace);
+                    reinterpret_cast<const void *>(nameAddress),
+                    nameBlock,
+                    nameOffset);
 
-                if (nameEmpty && serialized.name != 0u &&
-                    serialized.name != UINT32_MAX &&
-                    g_streamBlocks)
+                for (size_t i = 0;
+                     i < byteCount && written > 0 &&
+                     static_cast<size_t>(written) + 4 < sizeof(detail);
+                     ++i)
                 {
-                    const uint32_t encoded = serialized.name - 1u;
-                    const uint32_t targetBlock = encoded >> 28;
-                    const uint32_t targetOffset = encoded & 0x0FFFFFFFu;
-                    if (targetBlock < ARRAY_COUNT(g_streamPosArray) &&
-                        g_streamBlocks[targetBlock].data &&
-                        targetOffset < g_streamBlocks[targetBlock].size)
-                    {
-                        const uint8_t *target =
-                            g_streamBlocks[targetBlock].data + targetOffset;
-                        char targetTrace[640];
-                        int written = std::snprintf(
-                            targetTrace,
-                            sizeof(targetTrace),
-                            "[KisakCOD][GFXIMAGE NAME TARGET] asset=%d token=%08x block=%u offset=%08x ptr=%p bytes:",
-                            g_switchCurrentAssetIndex,
-                            serialized.name,
-                            targetBlock,
-                            targetOffset,
-                            static_cast<const void *>(target));
-                        const uint32_t byteCount =
-                            g_streamBlocks[targetBlock].size - targetOffset < 32u
-                                ? g_streamBlocks[targetBlock].size - targetOffset
-                                : 32u;
-                        for (uint32_t i = 0; i < byteCount && written > 0 &&
-                             static_cast<size_t>(written) < sizeof(targetTrace); ++i)
-                        {
-                            written += std::snprintf(
-                                targetTrace + written,
-                                sizeof(targetTrace) - static_cast<size_t>(written),
-                                " %02x",
-                                static_cast<unsigned>(target[i]));
-                        }
-                        if (written > 0 &&
-                            static_cast<size_t>(written) < sizeof(targetTrace))
-                        {
-                            std::snprintf(
-                                targetTrace + written,
-                                sizeof(targetTrace) - static_cast<size_t>(written),
-                                "\n");
-                        }
-                        Switch_LogWrite(targetTrace);
-                    }
+                    written += std::snprintf(
+                        detail + written,
+                        sizeof(detail) - static_cast<size_t>(written),
+                        " %02x",
+                        static_cast<unsigned>(bytes[i]));
                 }
+
+                if (written > 0 &&
+                    static_cast<size_t>(written) < sizeof(detail))
+                {
+                    std::snprintf(
+                        detail + written,
+                        sizeof(detail) - static_cast<size_t>(written),
+                        " text=%s\\n",
+                        resolvedName);
+                }
+                Switch_LogWrite(detail);
             }
         }
 #endif
