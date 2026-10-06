@@ -571,7 +571,7 @@ bool VulkanBackend::CreateUniformRing()
 
     return CreateBuffer(
         m_uniformCapacity,
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &m_uniformRing, &m_uniformRingMemory,
         reinterpret_cast<void **>(&m_uniformMapped));
@@ -1447,6 +1447,8 @@ bool VulkanBackend::EnsureRendering(
         colorOldLayout,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_ASPECT_COLOR_BIT);
+    if (colorImage == CurrentSwapchainImage())
+        m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     if (depthImage && depthView)
     {
