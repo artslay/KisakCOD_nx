@@ -1658,6 +1658,9 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     }
 #endif
 
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/zone_scan";
+#endif
     g_zoneIndex = 0;
     for (i = 1; i < 0x21; ++i)
     {
@@ -1667,6 +1670,9 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
             break;
         }
     }
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/zone_scan_done";
+#endif
     if (!g_zoneIndex)
     {
 #ifdef __SWITCH__
@@ -1689,9 +1695,21 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     }
 
     zone = &g_zones[g_zoneIndex];
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/zone_ptr";
+#endif
     memset(zone, 0, sizeof(XZone));
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/zone_clear_done";
+#endif
     g_zoneHandles[g_zoneCount] = g_zoneIndex;
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/zone_handle_done";
+#endif
     I_strncpyz(zone->name, zoneName, sizeof(zone->name));
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/zone_name_done";
+#endif
     zone->flags = zoneFlags;
 #ifdef __SWITCH__
     g_switchDbStage = "internal/file_size";
@@ -1712,14 +1730,35 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
 #endif
     zone->modZone = false;
 
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/zone_meta_done";
+#endif
     ++g_zoneCount;
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/zone_count_done";
+#endif
     g_loadingZone = 1;
     g_mayRecoverLostAssets = 0;
     g_zoneAllocType = DB_GetZoneAllocType(zoneFlags);
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/alloc_type_done";
+#endif
 
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/pmem_begin";
+#endif
     PMem_BeginAlloc(zone->name, g_zoneAllocType);
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/pmem_begin_done";
+#endif
     zone->allocType = g_zoneAllocType;
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/reset_zone_size";
+#endif
     DB_ResetZoneSize((zoneFlags & DB_ZONE_GAME) != 0);
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/reset_zone_size_done";
+#endif
 #ifdef __SWITCH__
     // Keep the native FILE* in DB_LoadData::f; DB_ReadData() obtains its
     // descriptor with fileno() on the Switch path.
