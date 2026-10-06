@@ -1,5 +1,5 @@
 # Nintendo Switch build for KisakCOD.
-# Requires devkitPro/libnx and Mesa Switch OpenGL/EGL libraries.
+# Requires devkitPro/libnx and Mesa/NVK Switch Vulkan libraries.
 #
 # The source set is generated from the engine tree instead of duplicating the
 # old CMake source lists. Windows/D3D9 sources are deliberately excluded.
@@ -18,10 +18,11 @@ MESA_SDK    := $(CURDIR)/mesa-sdk/opt/devkitpro/portlibs/switch
 OPENAL_SDK   := $(DEVKITPRO)/portlibs/switch
 CPPFLAGS    := -D__SWITCH__ -DKISAK_SWITCH -DKISAK_SP -DKISAK_OPENAL -DCINEMA -DUSE_SEPARATE_BLIT_TEXTURE \
                -DSUPPORT_PROFILE_D3D=0 -DSUPPORT_PROFILE_BYTECODE=0 -DSUPPORT_PROFILE_HLSL=0 \
-               -DSUPPORT_PROFILE_GLSL=1 -DSUPPORT_PROFILE_GLSL120=0 -DSUPPORT_PROFILE_GLSLES=1 -DSUPPORT_PROFILE_GLSLES3=1 \
+               -DSUPPORT_PROFILE_GLSL=0 -DSUPPORT_PROFILE_GLSL120=0 -DSUPPORT_PROFILE_GLSLES=0 -DSUPPORT_PROFILE_GLSLES3=0 \
                -DSUPPORT_PROFILE_ARB1=0 -DSUPPORT_PROFILE_ARB1_NV=0 -DSUPPORT_PROFILE_METAL=0 \
-               -DSUPPORT_PROFILE_SPIRV=0 -DSUPPORT_PROFILE_GLSPIRV=0 -DMOJOSHADER_NO_VERSION_INCLUDE=1 \
-               -I$(CURDIR)/src -I$(CURDIR)/src/gfx -I$(CURDIR)/deps \
+               -DSUPPORT_PROFILE_SPIRV=1 -DSUPPORT_PROFILE_GLSPIRV=0 -DMOJOSHADER_NO_VERSION_INCLUDE=1 \
+               -DVK_USE_PLATFORM_VI_NN=1 \
+               -I$(CURDIR)/src -I$(CURDIR)/src/gfx -I$(CURDIR)/src/third_party/mojoshader -I$(CURDIR)/deps \
                -I$(DEVKITPRO)/libnx/include -I$(MESA_SDK)/include -I$(OPENAL_SDK)/include
 GIT_COMMIT  := $(shell git rev-parse --short=12 HEAD 2>/dev/null || printf "unknown")
 
@@ -30,7 +31,7 @@ CXXFLAGS    := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-rtti -fno
 CPPFLAGS    += -DGIT_COMMIT=\"$(GIT_COMMIT)\"
 CFLAGS      := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-plt -std=gnu17 -MMD -MP -Wno-old-style-definition
 LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libnx/lib -specs=$(DEVKITPRO)/libnx/switch.specs -Wl,--gc-sections,-Bsymbolic
-LIBS        := -lGL -lEGL -lglapi -lvulkan -lexpat -lopenal -lSDL2 -lavformat -lavcodec -lswresample -lswscale -lavutil -ldav1d -lbz2 -lz -lnx -lm
+LIBS        := -lvulkan -lexpat -lopenal -lSDL2 -lavformat -lavcodec -lswresample -lswscale -lavutil -ldav1d -lbz2 -lz -lnx -lm
 
 include $(DEVKITPRO)/libnx/switch_rules
 
@@ -76,7 +77,6 @@ C_SOURCES := $(shell find src -type f -name '*.c' \
 
 CPP_SOURCES += src/platform/switch/switch_main.cpp src/platform/switch/switch_fs.cpp src/platform/switch/switch_threads.cpp src/platform/switch/switch_timing.cpp src/platform/switch/switch_profile.cpp src/platform/switch/switch_sys.cpp src/platform/switch/switch_live_storage.cpp
 CPP_SOURCES += src/gfx_d3d/r_init_switch.cpp src/gfx_d3d/r_buffers.cpp src/gfx_d3d/r_state.cpp
-CPP_SOURCES += src/gfx/opengl/mojoshader_switch.cpp
 CPP_SOURCES += src/gfx_d3d/r_shade.cpp src/gfx_d3d/rb_shade.cpp src/gfx_d3d/r_material.cpp
 CPP_SOURCES += src/gfx_d3d/r_material_override.cpp src/gfx_d3d/r_material_switch.cpp src/gfx_d3d/rb_uploadshaders.cpp src/gfx_d3d/r_dvars.cpp
 CPP_SOURCES += src/gfx_d3d/r_image.cpp src/gfx_d3d/r_image_load_common.cpp src/gfx_d3d/r_image_load_obj.cpp src/gfx_d3d/r_image_utils.cpp src/gfx_d3d/r_image_wavelet.cpp src/gfx_d3d/r_imagedecode.cpp src/gfx_d3d/r_rendertarget.cpp
