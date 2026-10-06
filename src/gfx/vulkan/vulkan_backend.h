@@ -68,7 +68,7 @@ public:
     bool GetQueryResult(void *, uint64_t *) override { return false; }
 
     void WaitForGpu() override;
-    void Flush();
+    void Flush() override;
 
     VkDevice Device() const { return m_device; }
     VkPhysicalDevice PhysicalDevice() const { return m_physicalDevice; }
@@ -81,6 +81,7 @@ public:
     VkImageView DefaultDepthView() const { return m_defaultDepthView; }
     VkImage DefaultDepthImage() const { return m_defaultDepthImage; }
     VkImageLayout DefaultDepthLayout() const { return m_defaultDepthLayout; }
+    VkImageLayout CurrentSwapchainLayout() const { return m_swapchainIndex < m_swapchainLayouts.size() ? m_swapchainLayouts[m_swapchainIndex] : VK_IMAGE_LAYOUT_UNDEFINED; }
     VkPipelineLayout PipelineLayout() const { return m_pipelineLayout; }
     VkDescriptorPool DescriptorPool() const { return m_descriptorPool; }
     VkDescriptorSetLayout VSSamplerLayout() const { return m_vsSamplerLayout; }
