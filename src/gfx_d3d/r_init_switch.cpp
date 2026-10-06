@@ -508,10 +508,9 @@ bool R_CheckLostDevice()
 void R_MakeDedicated(const GfxConfiguration *config) { SetGfxConfig(config); }
 void R_UpdateGpuSyncType()
 {
-    if (!dx.gpuSync)
-        dx.gpuSync = r_gpuSync && !r_multiGpu->current.enabled
-            ? r_gpuSync->current.integer
-            : 0;
+    dx.gpuSync = (r_multiGpu && r_multiGpu->current.enabled)
+        ? 0
+        : (r_gpuSync ? r_gpuSync->current.integer : 0);
 }
 int R_IsHiDef() { return 1; }
 
