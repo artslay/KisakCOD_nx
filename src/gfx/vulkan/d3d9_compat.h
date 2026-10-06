@@ -231,6 +231,8 @@ struct KisakVkShader {
     std::vector<uint32_t> spirv;
     const void *linkedDeclaration=nullptr;
     const void *linkedPixelShader=nullptr;
+    uint32_t alphaFuncSpecId=0;
+    uint32_t alphaRefSpecId=0;
     void Release();
 };
 using IDirect3DVertexShader9 = KisakVkShader;

@@ -3,6 +3,7 @@
 #ifdef __SWITCH__
 
 #include "vulkan_backend.h"
+#include <spirv/spirv.h>
 
 #include <algorithm>
 #include <array>
@@ -267,6 +268,351 @@ uint64_t HashCombine(uint64_t value, uint64_t part)
 uint64_t PointerKey(const void *ptr)
 {
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ptr));
+}
+
+void SpirvAppend(std::vector<uint32_t> &out, SpvOp opcode, std::initializer_list<uint32_t> operands)
+{
+    out.push_back((static_cast<uint32_t>(operands.size()) + 1u) << 16 | static_cast<uint32_t>(opcode));
+    out.insert(out.end(), operands.begin(), operands.end());
+}
+
+bool SpirvIsValidInstruction(const std::vector<uint32_t> &words, size_t offset, uint32_t *wordCount, SpvOp *opcode)
+{
+    if (offset >= words.size())
+        return false;
+    const uint32_t first = words[offset];
+    const uint32_t count = first >> 16;
+    if (count == 0 || offset + count > words.size())
+        return false;
+    *wordCount = count;
+    *opcode = static_cast<SpvOp>(first & 0xFFFFu);
+    return true;
+}
+
+bool PatchFragmentShaderForAlphaTest(
+    std::vector<uint32_t> &words,
+    uint32_t *alphaFuncSpecId,
+    uint32_t *alphaRefSpecId)
+{
+    if (words.size() < 5 || words[0] != SpvMagicNumber)
+        return false;
+
+    uint32_t entryFunctionId = 0;
+    uint32_t outputVarId = 0;
+    uint32_t outputVarType = 0;
+    uint32_t outputValueType = 0;
+    uint32_t floatType = 0;
+    uint32_t boolType = 0;
+    uint32_t intType = 0;
+    bool foundOutputLocation0 = false;
+    std::unordered_set<uint32_t> usedSpecIds;
+
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+
+        const uint32_t *ins = &words[i];
+        if (op == SpvOpEntryPoint && wc >= 3 && ins[1] == SpvExecutionModelFragment)
+        {
+            entryFunctionId = ins[2];
+        }
+        else if (op == SpvOpDecorate && wc >= 4)
+        {
+            if (ins[2] == SpvDecorationSpecId)
+                usedSpecIds.insert(ins[3]);
+        }
+        else if (op == SpvTypeBool && wc >= 2)
+        {
+            boolType = ins[1];
+        }
+        else if (op == SpvTypeInt && wc >= 4 && ins[2] == 32 && ins[3] == 1)
+        {
+            intType = ins[1];
+        }
+        else if (op == SpvTypeFloat && wc >= 3 && ins[2] == 32)
+        {
+            if (!floatType)
+                floatType = ins[1];
+        }
+        else if (op == SpvTypePointer && wc >= 4 && ins[2] == SpvStorageClassOutput)
+        {
+            // Resolved below once the Location 0 OpVariable is known.
+        }
+        i += wc;
+    }
+
+    if (!entryFunctionId)
+        return false;
+
+    // Locate the fragment output at Location 0 and its pointee type.
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[i];
+
+        if (op == SpvOpDecorate && wc >= 4 && ins[2] == SpvDecorationLocation && ins[3] == 0)
+        {
+            outputVarId = ins[1];
+            foundOutputLocation0 = true;
+        }
+        i += wc;
+    }
+
+    // Prefer Location 0, but tolerate modules that omit an explicit location.
+    if (!foundOutputLocation0)
+    {
+        for (size_t i = 5; i < words.size();)
+        {
+            uint32_t wc = 0;
+            SpvOp op{};
+            if (!SpirvIsValidInstruction(words, i, &wc, &op))
+                return false;
+            const uint32_t *ins = &words[i];
+            if (op == SpvOpVariable && wc >= 4 && ins[3] == SpvStorageClassOutput)
+            {
+                outputVarId = ins[2];
+                break;
+            }
+            i += wc;
+        }
+    }
+
+    if (!outputVarId)
+        return false;
+
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[i];
+
+        if (op == SpvOpVariable && wc >= 4 && ins[2] == outputVarId)
+            outputVarType = ins[1];
+        else if (op == SpvTypePointer && wc >= 4 && ins[1] == outputVarType)
+            outputValueType = ins[3];
+        else if (op == SpvTypeVector && wc >= 4 && ins[1] == outputValueType && ins[3] == 4)
+            floatType = ins[2];
+
+        i += wc;
+    }
+
+    if (!outputVarType || !outputValueType || !floatType)
+        return false;
+
+    if (!boolType)
+    {
+        // Add the missing result type in the types/constants section.
+        boolType = words[3]++;
+    }
+    if (!intType)
+    {
+        intType = words[3]++;
+    }
+
+    // Pick non-conflicting specialization IDs.
+    uint32_t nextSpecId = 0x4B010000u;
+    while (usedSpecIds.count(nextSpecId))
+        ++nextSpecId;
+    const uint32_t funcSpecDecoration = nextSpecId++;
+    while (usedSpecIds.count(nextSpecId))
+        ++nextSpecId;
+    const uint32_t refSpecDecoration = nextSpecId++;
+
+    // Result IDs come from the module's bound.
+    uint32_t nextId = words[3];
+    auto newId = [&]() { return nextId++; };
+
+    const uint32_t funcSpec = newId();
+    const uint32_t refSpec = newId();
+
+    // Constants 1..8, plus the specialization constants.
+    uint32_t funcConst[9]{};
+    for (uint32_t value = 1; value <= 8; ++value)
+        funcConst[value] = newId();
+
+    std::vector<uint32_t> globals;
+    if (!boolType || !intType)
+        return false;
+
+    // New types are appended in the types/constants section only when absent.
+    bool hadBoolType = false;
+    bool hadIntType = false;
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[i];
+        if (op == SpvTypeBool && wc >= 2 && ins[1] == boolType)
+            hadBoolType = true;
+        if (op == SpvTypeInt && wc >= 4 && ins[1] == intType)
+            hadIntType = true;
+        i += wc;
+    }
+    if (!hadBoolType)
+        SpirvAppend(globals, SpvOpTypeBool, {boolType});
+    if (!hadIntType)
+        SpirvAppend(globals, SpvOpTypeInt, {intType, 32, 1});
+
+    // Specialization constants are scalar and pipeline-overridable.
+    SpirvAppend(globals, SpvOpSpecConstant, {intType, funcSpec, 8});
+    SpirvAppend(globals, SpvOpSpecConstant, {floatType, refSpec, 0});
+    for (uint32_t value = 1; value <= 8; ++value)
+        SpirvAppend(globals, SpvOpConstant, {intType, funcConst[value], value});
+
+    std::vector<uint32_t> decorations;
+    SpirvAppend(decorations, SpvOpDecorate, {funcSpec, SpvDecorationSpecId, funcSpecDecoration});
+    SpirvAppend(decorations, SpvOpDecorate, {refSpec, SpvDecorationSpecId, refSpecDecoration});
+
+    // Insert decorations before the type section, and types/constants before functions.
+    size_t firstType = words.size();
+    size_t firstFunction = words.size();
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+        if (firstType == words.size() &&
+            static_cast<uint32_t>(op) >= static_cast<uint32_t>(SpvOpTypeVoid) &&
+            static_cast<uint32_t>(op) <= static_cast<uint32_t>(SpvOpTypePipe))
+            firstType = i;
+        if (op == SpvOpFunction)
+        {
+            firstFunction = i;
+            break;
+        }
+        i += wc;
+    }
+
+    if (firstType == words.size() || firstFunction == words.size())
+        return false;
+
+    words.insert(words.begin() + firstType, decorations.begin(), decorations.end());
+    const size_t functionShift =
+        decorations.size() + ((firstType < firstFunction) ? 0 : 0);
+    (void)functionShift;
+    firstFunction += decorations.size();
+    words.insert(words.begin() + firstFunction, globals.begin(), globals.end());
+
+    // Rebuild the function stream and inject the test immediately before each
+    // store to the Location 0 output variable. This avoids reading an Output pointer,
+    // which Vulkan/SPIR-V forbids.
+    std::vector<uint32_t> patched;
+    patched.reserve(words.size() + 512);
+    patched.insert(patched.end(), words.begin(), words.begin() + firstFunction + globals.size());
+
+    bool inEntry = false;
+    bool injected = false;
+    for (size_t i = firstFunction + globals.size(); i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+
+        const uint32_t *ins = &words[i];
+        if (op == SpvOpFunction && wc >= 3 && ins[2] == entryFunctionId)
+            inEntry = true;
+
+        if (inEntry && op == SpvOpStore && wc >= 3 && ins[1] == outputVarId)
+        {
+            const uint32_t colorValue = ins[2];
+            const uint32_t alpha = newId();
+            const uint32_t less = newId();
+            const uint32_t equal = newId();
+            const uint32_t lessEqual = newId();
+            const uint32_t greater = newId();
+            const uint32_t notEqual = newId();
+            const uint32_t greaterEqual = newId();
+            const uint32_t pass2 = newId();
+            const uint32_t pass3 = newId();
+            const uint32_t pass4 = newId();
+            const uint32_t pass5 = newId();
+            const uint32_t pass6 = newId();
+            const uint32_t pass7 = newId();
+            const uint32_t f2 = newId();
+            const uint32_t f3 = newId();
+            const uint32_t f4 = newId();
+            const uint32_t f5 = newId();
+            const uint32_t f6 = newId();
+            const uint32_t f7 = newId();
+            const uint32_t f8 = newId();
+            const uint32_t passA = newId();
+            const uint32_t passB = newId();
+            const uint32_t passC = newId();
+            const uint32_t passD = newId();
+            const uint32_t passE = newId();
+            const uint32_t passF = newId();
+            const uint32_t pass = newId();
+            const uint32_t discard = newId();
+            const uint32_t killLabel = newId();
+            const uint32_t mergeLabel = newId();
+
+            SpirvAppend(patched, SpvOpCompositeExtract, {floatType, alpha, colorValue, 3});
+            SpirvAppend(patched, SpvOpFOrdLessThan, {boolType, less, alpha, refSpec});
+            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, equal, alpha, refSpec});
+            SpirvAppend(patched, SpvOpFOrdLessThanEqual, {boolType, lessEqual, alpha, refSpec});
+            SpirvAppend(patched, SpvOpFOrdGreaterThan, {boolType, greater, alpha, refSpec});
+            SpirvAppend(patched, SpvOpFOrdNotEqual, {boolType, notEqual, alpha, refSpec});
+            SpirvAppend(patched, SpvOpFOrdGreaterThanEqual, {boolType, greaterEqual, alpha, refSpec});
+
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f2, funcSpec, funcConst[2]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f3, funcSpec, funcConst[3]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f4, funcSpec, funcConst[4]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f5, funcSpec, funcConst[5]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f6, funcSpec, funcConst[6]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f7, funcSpec, funcConst[7]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f8, funcSpec, funcConst[8]});
+
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass2, f2, less});
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass3, f3, equal});
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass4, f4, lessEqual});
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass5, f5, greater});
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass6, f6, notEqual});
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass7, f7, greaterEqual});
+
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passA, pass2, pass3});
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passB, passA, pass4});
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passC, passB, pass5});
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passD, passC, pass6});
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passE, passD, pass7});
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passF, passE, f8});
+            SpirvAppend(patched, SpvOpLogicalNot, {boolType, discard, passF});
+
+            SpirvAppend(patched, SpvOpSelectionMerge, {mergeLabel, 0});
+            SpirvAppend(patched, SpvOpBranchConditional, {discard, killLabel, mergeLabel});
+            SpirvAppend(patched, SpvOpLabel, {killLabel});
+            SpirvAppend(patched, SpvOpKill, {});
+            SpirvAppend(patched, SpvOpLabel, {mergeLabel});
+
+            injected = true;
+        }
+
+        patched.insert(patched.end(), words.begin() + i, words.begin() + i + wc);
+
+        if (op == SpvOpFunctionEnd)
+            inEntry = false;
+        i += wc;
+    }
+
+    if (!injected)
+        return false;
+
+    words.swap(patched);
+    words[3] = nextId;
+    *alphaFuncSpecId = funcSpecDecoration;
+    *alphaRefSpecId = refSpecDecoration;
+    return true;
 }
 
 VulkanUniformLayout GetUniformLayout(const MOJOSHADER_parseData *parse)
@@ -1215,6 +1561,15 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_depthEnable);
     key = HashCombine(key, m_depthWrite);
     key = HashCombine(key, m_depthFunc);
+    key = HashCombine(key, m_alphaTest);
+    key = HashCombine(key, m_alphaFunc);
+    key = HashCombine(key, m_alphaRef);
+    uint32_t depthBiasBits = 0;
+    uint32_t slopeDepthBiasBits = 0;
+    std::memcpy(&depthBiasBits, &m_depthBias, sizeof(depthBiasBits));
+    std::memcpy(&slopeDepthBiasBits, &m_slopeDepthBias, sizeof(slopeDepthBiasBits));
+    key = HashCombine(key, depthBiasBits);
+    key = HashCombine(key, slopeDepthBiasBits);
     key = HashCombine(key, m_blendEnable);
     key = HashCombine(key, m_srcBlend);
     key = HashCombine(key, m_dstBlend);
@@ -1300,6 +1655,16 @@ bool IDirect3DDevice9::EnsurePipeline()
         const size_t psBytes =
             static_cast<size_t>(m_pixelShader->parseData->output_len - patchBytes);
 
+        std::vector<uint32_t> pixelSpirv(
+            reinterpret_cast<const uint32_t *>(m_pixelShader->parseData->output),
+            reinterpret_cast<const uint32_t *>(m_pixelShader->parseData->output) + psBytes / sizeof(uint32_t));
+        if (!PatchFragmentShaderForAlphaTest(
+                pixelSpirv,
+                &m_pixelShader->alphaFuncSpecId,
+                &m_pixelShader->alphaRefSpecId))
+            return false;
+        m_pixelShader->spirv = pixelSpirv;
+
         VkShaderModuleCreateInfo vsInfo{};
         vsInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         vsInfo.codeSize = vsBytes;
@@ -1307,8 +1672,8 @@ bool IDirect3DDevice9::EnsurePipeline()
 
         VkShaderModuleCreateInfo psInfo{};
         psInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        psInfo.codeSize = psBytes;
-        psInfo.pCode = reinterpret_cast<const uint32_t *>(m_pixelShader->parseData->output);
+        psInfo.codeSize = m_pixelShader->spirv.size() * sizeof(uint32_t);
+        psInfo.pCode = m_pixelShader->spirv.data();
 
         if (vkCreateShaderModule(m_backend->Device(), &vsInfo, nullptr, &m_vertexShader->module) != VK_SUCCESS ||
             vkCreateShaderModule(m_backend->Device(), &psInfo, nullptr, &m_pixelShader->module) != VK_SUCCESS)
@@ -1337,6 +1702,25 @@ bool IDirect3DDevice9::EnsurePipeline()
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     stages[1].module = m_pixelShader->module;
     stages[1].pName = "main";
+
+    struct AlphaSpecializationData
+    {
+        uint32_t func;
+        float ref;
+    } alphaSpecializationData{
+        m_alphaTest ? m_alphaFunc : 8u,
+        static_cast<float>(m_alphaRef) / 255.0f
+    };
+    const VkSpecializationMapEntry alphaSpecializationEntries[] = {
+        {m_pixelShader->alphaFuncSpecId, 0, sizeof(alphaSpecializationData.func)},
+        {m_pixelShader->alphaRefSpecId, sizeof(alphaSpecializationData.func), sizeof(alphaSpecializationData.ref)}
+    };
+    VkSpecializationInfo alphaSpecializationInfo{};
+    alphaSpecializationInfo.mapEntryCount = 2;
+    alphaSpecializationInfo.pMapEntries = alphaSpecializationEntries;
+    alphaSpecializationInfo.dataSize = sizeof(alphaSpecializationData);
+    alphaSpecializationInfo.pData = &alphaSpecializationData;
+    stages[1].pSpecializationInfo = &alphaSpecializationInfo;
 
     std::vector<VkVertexInputBindingDescription> bindings;
     for (uint32_t stream = 0; stream < 16; ++stream)
