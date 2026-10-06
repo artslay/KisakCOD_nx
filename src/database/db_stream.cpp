@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <climits>
 #include <vector>
+#include <unordered_map>
 #include <universal/q_shared.h>
 #include "database.h"
 
@@ -45,6 +46,7 @@ struct SwitchPointerAliasFixup
 };
 
 static std::vector<SwitchPointerAliasEntry> g_switchPointerAliasEntries;
+static std::unordered_map<uintptr_t, size_t> g_switchPointerAliasIndex;
 static std::vector<SwitchPointerAliasFixup> g_switchPointerAliasFixups;
 
 static int32_t Switch_StreamOwner(
@@ -227,7 +229,11 @@ void __cdecl DB_InitStreams(XZoneMemory *zoneMem)
     g_switchPointerInsertCount = 0;
     g_switchPointerInsertExtraBytes = 0;
     g_switchPointerAliasEntries.clear();
+    g_switchPointerAliasIndex.clear();
     g_switchPointerAliasFixups.clear();
+    g_switchPointerAliasEntries.reserve(16384);
+    g_switchPointerAliasIndex.reserve(16384);
+    g_switchPointerAliasFixups.reserve(4096);
 #endif
     for (i = 0; i < 9; ++i)
         g_streamPosArray[i] = zoneMem->blocks[i].data;
@@ -457,6 +463,8 @@ const void **__cdecl DB_InsertPointer()
 
     g_switchPointerAliasEntries.push_back(
         {reinterpret_cast<uintptr_t>(serializedSlot), pData, 0});
+    g_switchPointerAliasIndex[reinterpret_cast<uintptr_t>(serializedSlot)] =
+        g_switchPointerAliasEntries.size() - 1;
 
     ++g_switchPointerInsertCount;
 
@@ -525,23 +533,23 @@ bool __cdecl DB_ResolveSwitchPointerAlias(
     uintptr_t serializedSlot,
     uintptr_t *resolvedPointer)
 {
-    for (auto entry = g_switchPointerAliasEntries.rbegin();
-         entry != g_switchPointerAliasEntries.rend();
-         ++entry)
+    const auto it = g_switchPointerAliasIndex.find(serializedSlot);
+    if (it == g_switchPointerAliasIndex.end())
+        return false;
+
+    const size_t entryIndex = it->second;
+    if (entryIndex >= g_switchPointerAliasEntries.size())
+        return false;
+
+    const SwitchPointerAliasEntry &entry =
+        g_switchPointerAliasEntries[entryIndex];
+    if (resolvedPointer)
     {
-        if (entry->serializedSlot != serializedSlot)
-            continue;
-
-        if (resolvedPointer)
-        {
-            *resolvedPointer = entry->nativeSlot
-                ? reinterpret_cast<uintptr_t>(*entry->nativeSlot)
-                : entry->nativePointer;
-        }
-        return true;
+        *resolvedPointer = entry.nativeSlot
+            ? reinterpret_cast<uintptr_t>(*entry.nativeSlot)
+            : entry.nativePointer;
     }
-
-    return false;
+    return true;
 }
 
 bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
@@ -671,18 +679,24 @@ void __cdecl DB_RegisterSwitchPointerAliasSlot(
     if (!serializedSlot || !nativeSlot)
         return;
 
-    for (SwitchPointerAliasEntry &entry : g_switchPointerAliasEntries)
+    const auto it = g_switchPointerAliasIndex.find(serializedSlot);
+    if (it != g_switchPointerAliasIndex.end())
     {
-        if (entry.serializedSlot != serializedSlot)
-            continue;
-
-        if (!entry.nativePointer)
-            entry.nativeSlot = nativeSlot;
+        const size_t entryIndex = it->second;
+        if (entryIndex < g_switchPointerAliasEntries.size())
+        {
+            SwitchPointerAliasEntry &entry =
+                g_switchPointerAliasEntries[entryIndex];
+            if (!entry.nativePointer)
+                entry.nativeSlot = nativeSlot;
+        }
         return;
     }
 
     g_switchPointerAliasEntries.push_back(
         {serializedSlot, nativeSlot, 0});
+    g_switchPointerAliasIndex[serializedSlot] =
+        g_switchPointerAliasEntries.size() - 1;
 }
 
 void __cdecl DB_RegisterSwitchPointerAlias(
@@ -707,10 +721,14 @@ void __cdecl DB_RegisterSwitchPointerAlias(
         slotOffset == 0x2c3dc ||
         slotOffset == 0x2c41c;
 
-    for (SwitchPointerAliasEntry &entry : g_switchPointerAliasEntries)
+    const auto it = g_switchPointerAliasIndex.find(serializedSlot);
+    if (it != g_switchPointerAliasIndex.end())
     {
-        if (entry.serializedSlot == serializedSlot)
+        const size_t entryIndex = it->second;
+        if (entryIndex < g_switchPointerAliasEntries.size())
         {
+            SwitchPointerAliasEntry &entry =
+                g_switchPointerAliasEntries[entryIndex];
             entry.nativeSlot = nullptr;
             entry.nativePointer = nativePointer;
             if (fontAliasSlot)
@@ -726,12 +744,14 @@ void __cdecl DB_RegisterSwitchPointerAlias(
                     reinterpret_cast<const void *>(nativePointer));
                 Switch_LogWrite(trace);
             }
-            return;
         }
+        return;
     }
 
     g_switchPointerAliasEntries.push_back(
         {serializedSlot, nullptr, nativePointer});
+    g_switchPointerAliasIndex[serializedSlot] =
+        g_switchPointerAliasEntries.size() - 1;
 
     if (fontAliasSlot)
     {
