@@ -1,4 +1,5 @@
 #ifdef __SWITCH__
+#include <switch.h>
 #include <universal/q_shared.h>
 #include <qcommon/threads.h>
 #include <qcommon/qcommon.h>
