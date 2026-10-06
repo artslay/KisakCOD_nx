@@ -155,6 +155,17 @@ struct _D3DVERTEXELEMENT9 {
 
 struct _D3DLOCKED_RECT { void *pBits=nullptr; int Pitch=0; };
 
+struct VulkanUniformLayout
+{
+    uint32_t floatCount = 0;
+    uint32_t intCount = 0;
+    uint32_t boolCount = 0;
+    size_t floatOffset = 0;
+    size_t intOffset = 0;
+    size_t boolOffset = 0;
+    size_t size = 0;
+};
+
 struct KisakVkBuffer {
     VkBuffer buffer=VK_NULL_HANDLE;
     VkDeviceMemory memory=VK_NULL_HANDLE;
@@ -325,6 +336,13 @@ private:
     bool BindDescriptorSets();
     bool PrepareDraw();
     bool EnsurePipeline();
+    bool BindUniformSet(
+        VkPipelineBindPoint bindPoint, uint32_t setIndex,
+        const MOJOSHADER_parseData *parse,
+        const void *floatData, const void *intData, const void *boolData);
+    bool BindSamplerSet(
+        VkPipelineBindPoint bindPoint, uint32_t setIndex,
+        const std::array<IDirect3DBaseTexture9*,16> &textures);
 };
 
 #endif
