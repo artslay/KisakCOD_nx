@@ -408,7 +408,11 @@ char R_InitHardware(const GfxWindowParms *wnd) {
     return 1;
 }
 void R_StoreWindowSettings(const GfxWindowParms *) {}
-void R_InitGamma() {}
+void R_InitGamma()
+{
+    if (r_gamma)
+        Dvar_SetModified(const_cast<dvar_t *>(r_gamma));
+}
 char R_CreateForInitOrReset()
 {
     R_InitRenderTargets();
@@ -502,7 +506,13 @@ bool R_CheckLostDevice()
     return dx.device != nullptr;
 }
 void R_MakeDedicated(const GfxConfiguration *config) { SetGfxConfig(config); }
-void R_UpdateGpuSyncType() {}
+void R_UpdateGpuSyncType()
+{
+    if (!dx.gpuSync)
+        dx.gpuSync = r_gpuSync && !r_multiGpu->current.enabled
+            ? r_gpuSync->current.integer
+            : 0;
+}
 int R_IsHiDef() { return 1; }
 
 // r_texturemem.cpp is intentionally excluded from the Switch build because its
