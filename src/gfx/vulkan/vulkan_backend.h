@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
+#include <functional>
 #include <vulkan/vulkan.h>
 
 struct GfxWindowParms;
@@ -160,6 +162,7 @@ private:
     VkPresentModeKHR m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
     std::vector<VkImage> m_swapchainImages;
     std::vector<VkImageView> m_swapchainViews;
+    std::vector<VkImageLayout> m_swapchainLayouts;
 
     VkFormat m_depthFormat = VK_FORMAT_D24_UNORM_S8_UINT;
     VkImage m_defaultDepthImage = VK_NULL_HANDLE;
