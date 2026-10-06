@@ -168,7 +168,7 @@ static void Switch_LogInvalidOffsetOnce(
         if (!suppressionNoticeWritten)
         {
             Switch_LogWrite(
-                "[SWITCH OFFSET INVALID] further unique invalid-offset diagnostics suppressed\\n");
+                "[SWITCH OFFSET INVALID] further unique invalid-offset diagnostics suppressed\n");
             suppressionNoticeWritten = true;
         }
         return;
@@ -185,7 +185,7 @@ static void Switch_LogInvalidOffsetOnce(
     std::snprintf(
         trace,
         sizeof(trace),
-        "[SWITCH OFFSET INVALID] token=%08x block=%u offset=%08x size=%u assetIdx=%d rawType=%u rawHeader=%08x stream=%u pos=%p caller=%p\\n",
+        "[SWITCH OFFSET INVALID] token=%08x block=%u offset=%08x size=%u assetIdx=%d rawType=%u rawHeader=%08x stream=%u pos=%p caller=%p\n",
         token,
         block,
         blockOffset,
