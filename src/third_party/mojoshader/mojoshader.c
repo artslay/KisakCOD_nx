@@ -4003,7 +4003,9 @@ void MOJOSHADER_freePreshader(const MOJOSHADER_preshader *preshader)
 } // MOJOSHADER_freePreshader
 
 #if SUPPORT_PROFILE_SPIRV
-#include <spirv/spirv.h> /* SpvOp, SpvOpConvertUToF, SpvOpConvertSToF, SpvOpCopyObject */
+#if SUPPORT_PROFILE_SPIRV
+#include <spirv/spirv.h>
+#endif /* SpvOp, SpvOpConvertUToF, SpvOpConvertSToF, SpvOpCopyObject */
 #endif
 
 int MOJOSHADER_linkSPIRVShaders(const MOJOSHADER_parseData *vertex_spirv,

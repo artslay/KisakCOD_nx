@@ -1056,8 +1056,10 @@ size_t MOJOSHADER_printFloat(char *text, size_t maxlen, float arg)
 } // MOJOSHADER_printFloat
 
 #if SUPPORT_PROFILE_SPIRV
+#if SUPPORT_PROFILE_SPIRV
 #include "spirv/spirv.h"
 #include "spirv/GLSL.std.450.h"
+#endif
 void MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
                                       const MOJOSHADER_parseData *pixel,
                                       int is_glspirv)
