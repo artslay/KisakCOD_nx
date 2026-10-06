@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
+#include <unistd.h>
 
 #include <qcommon/qcommon.h>
 #include <qcommon/threads.h>
@@ -21,6 +22,28 @@ extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 extern uint32_t g_switchCurrentAssetHeader;
 extern const char * volatile g_switchDbStage;
+
+static int g_switchNxlinkSock = -1;
+
+static void SwitchInitNxlink()
+{
+    if (R_FAILED(socketInitializeDefault()))
+        return;
+
+    g_switchNxlinkSock = nxlinkStdio();
+    if (g_switchNxlinkSock < 0)
+        socketExit();
+}
+
+static void SwitchShutdownNxlink()
+{
+    if (g_switchNxlinkSock >= 0)
+    {
+        close(g_switchNxlinkSock);
+        g_switchNxlinkSock = -1;
+        socketExit();
+    }
+}
 
 static std::atomic<bool> g_switchProgressWatchdogStop{false};
 static std::thread g_switchProgressWatchdog;
@@ -148,6 +171,7 @@ static void SwitchLogVulkanRuntime()
 int main()
 {
     Switch_LogInit();
+    SwitchInitNxlink();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
@@ -184,6 +208,7 @@ int main()
     SwitchStopProgressWatchdog();
     SwitchBootLog("Applet loop stopped, shutting down");
     Switch_LogShutdown();
+    SwitchShutdownNxlink();
     Sys_Quit();
     return 0;
 }
