@@ -5499,6 +5499,55 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                     DB_ConvertOffsetToPointerValue(serialized.name));
         }
 
+#ifdef __SWITCH__
+        // A positive name offset can point to a later inline XString. The
+        // target is a valid serialized reference, but its bytes are not in the
+        // destination block yet. Let the image enter the normal delayed-image
+        // path instead of opening "images/.iwi" with an empty name.
+        if (serialized.name != 0u &&
+            serialized.name != UINT32_MAX)
+        {
+            const uintptr_t nameAddress =
+                reinterpret_cast<uintptr_t>(varGfxImage->name);
+            const uintptr_t cursorAddress =
+                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+            const uintptr_t block4Base =
+                g_streamBlocks && g_streamBlocks[4].data
+                    ? reinterpret_cast<uintptr_t>(g_streamBlocks[4].data)
+                    : 0;
+            const uint32_t nameOffset =
+                block4Base && nameAddress >= block4Base &&
+                        nameAddress - block4Base < g_streamBlocks[4].size
+                    ? static_cast<uint32_t>(nameAddress - block4Base)
+                    : UINT32_MAX;
+            const uint32_t cursorOffset =
+                block4Base && cursorAddress >= block4Base &&
+                        cursorAddress - block4Base <= g_streamBlocks[4].size
+                    ? static_cast<uint32_t>(cursorAddress - block4Base)
+                    : UINT32_MAX;
+
+            if (nameOffset != UINT32_MAX &&
+                cursorOffset != UINT32_MAX &&
+                nameOffset > cursorOffset &&
+                varGfxImage->name[0] == '\0')
+            {
+                varGfxImage->delayLoadPixels = true;
+
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][GFXIMAGE FORWARD NAME] asset=%d token=%08x offset=%08x cursor=%08x image=%p deferred=1\n",
+                    g_switchCurrentAssetIndex,
+                    serialized.name,
+                    nameOffset,
+                    cursorOffset,
+                    static_cast<void *>(varGfxImage));
+                Switch_LogWrite(trace);
+            }
+        }
+#endif
+
         
 
 #ifdef __SWITCH__
