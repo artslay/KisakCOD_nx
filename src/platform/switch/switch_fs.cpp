@@ -469,10 +469,17 @@ FILE *FS_SwitchOpenFile(const char *path)
 
 FILE *FS_SwitchOpenRootFile(const char *path)
 {
+    if (!path || !*path)
+        return nullptr;
+
     char resolved[256];
-    const char *base = fs_basepath ? fs_basepath->current.string : kSwitchRoot;
-    std::snprintf(resolved, sizeof(resolved), "%s/%s", base, path);
-    return FS_FileOpenReadBinary(resolved);
+    std::snprintf(resolved, sizeof(resolved), "%s/%s", kSwitchRoot, path);
+
+    // Root fastfiles are opened from the fixed Switch game root. Do not
+    // dereference fs_basepath here: DB_LoadXFile runs on the database thread,
+    // and a Dvar/string object is not part of the filesystem ABI required for
+    // this native Switch path.
+    return std::fopen(resolved, "rb");
 }
 
 bool __cdecl FS_Initialized() { return fs_searchpaths != nullptr; }
