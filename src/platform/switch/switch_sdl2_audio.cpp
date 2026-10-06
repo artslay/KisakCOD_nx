@@ -388,8 +388,6 @@ void SDL_PauseAudioDevice(SDL_AudioDeviceID deviceId, int pauseOn)
                 g_device);
         }
     }
-
-    return 0;
 }
 
 extern "C"
