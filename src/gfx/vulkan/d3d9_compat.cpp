@@ -166,6 +166,48 @@ VkSamplerAddressMode AddressMode(uint32_t value)
     }
 }
 
+VkPrimitiveTopology PrimitiveTopology(uint32_t value)
+{
+    switch (value)
+    {
+    case 1: return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    case 2: return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+    case 3: return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+    case 4: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    case 5: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    case 6: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+    default: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    }
+}
+
+uint32_t PrimitiveVertexCount(uint32_t primitiveType, uint32_t primitiveCount)
+{
+    switch (primitiveType)
+    {
+    case 1: return primitiveCount;
+    case 2: return primitiveCount * 2u;
+    case 3: return primitiveCount + 1u;
+    case 4: return primitiveCount * 3u;
+    case 5: return primitiveCount + 2u;
+    case 6: return primitiveCount + 2u;
+    default: return 0;
+    }
+}
+
+uint32_t PrimitiveIndexCount(uint32_t primitiveType, uint32_t primitiveCount)
+{
+    switch (primitiveType)
+    {
+    case 1: return primitiveCount;
+    case 2: return primitiveCount * 2u;
+    case 3: return primitiveCount + 1u;
+    case 4: return primitiveCount * 3u;
+    case 5: return primitiveCount + 2u;
+    case 6: return primitiveCount * 3u;
+    default: return 0;
+    }
+}
+
 VkFormat VertexFormat(uint8_t type)
 {
     switch (type)
@@ -236,7 +278,7 @@ VulkanUniformLayout GetUniformLayout(const MOJOSHADER_parseData *parse)
     for (int i = 0; i < parse->uniform_count; ++i)
     {
         const MOJOSHADER_uniform &u = parse->uniforms[i];
-        const uint32_t end = static_cast<uint32_t>(u.index) + std::max(1u, u.array_count);
+        const uint32_t end = static_cast<uint32_t>(u.index) + static_cast<uint32_t>(std::max(1, u.array_count));
         switch (u.type)
         {
         case MOJOSHADER_UNIFORM_FLOAT:
@@ -991,6 +1033,7 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
     case D3DRS_ZWRITEENABLE: m_depthWrite = value != 0; break;
     case D3DRS_ZFUNC: m_depthFunc = value; break;
     case D3DRS_ALPHABLENDENABLE: m_blendEnable = value != 0; break;
+    case D3DRS_SEPARATEALPHABLENDENABLE: m_separateAlphaBlend = value != 0; break;
     case D3DRS_SRCBLEND: m_srcBlend = value; break;
     case D3DRS_DESTBLEND: m_dstBlend = value; break;
     case D3DRS_SRCBLENDALPHA: m_srcBlendAlpha = value; break;
@@ -1179,6 +1222,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_dstBlendAlpha);
     key = HashCombine(key, m_blendOp);
     key = HashCombine(key, m_blendOpAlpha);
+    key = HashCombine(key, m_separateAlphaBlend);
+    key = HashCombine(key, static_cast<uint32_t>(m_topology));
     key = HashCombine(key, m_cullMode);
     key = HashCombine(key, m_scissor);
     key = HashCombine(key, m_colorWriteMask);
@@ -1340,7 +1385,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     VkPipelineInputAssemblyStateCreateInfo assembly{};
     assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    assembly.topology = m_topology;
     assembly.primitiveRestartEnable = VK_FALSE;
 
     VkPipelineViewportStateCreateInfo viewport{};
@@ -1398,9 +1443,12 @@ bool IDirect3DDevice9::EnsurePipeline()
     colorBlend.srcColorBlendFactor = BlendFactor(m_srcBlend);
     colorBlend.dstColorBlendFactor = BlendFactor(m_dstBlend);
     colorBlend.colorBlendOp = BlendOp(m_blendOp);
-    colorBlend.srcAlphaBlendFactor = BlendFactor(m_srcBlendAlpha);
-    colorBlend.dstAlphaBlendFactor = BlendFactor(m_dstBlendAlpha);
-    colorBlend.alphaBlendOp = BlendOp(m_blendOpAlpha);
+    colorBlend.srcAlphaBlendFactor = BlendFactor(
+        m_separateAlphaBlend ? m_srcBlendAlpha : m_srcBlend);
+    colorBlend.dstAlphaBlendFactor = BlendFactor(
+        m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend);
+    colorBlend.alphaBlendOp = BlendOp(
+        m_separateAlphaBlend ? m_blendOpAlpha : m_blendOp);
     colorBlend.colorWriteMask =
         ((m_colorWriteMask & 1) ? VK_COLOR_COMPONENT_R_BIT : 0) |
         ((m_colorWriteMask & 2) ? VK_COLOR_COMPONENT_G_BIT : 0) |
@@ -1502,15 +1550,30 @@ bool IDirect3DDevice9::PrepareDraw()
     VkFormat depthFormat = m_depth && m_depth->texture
         ? m_depth->texture->format : m_backend->DepthFormat();
 
+    const VkImageLayout colorOldLayout =
+        m_color && m_color->texture
+            ? m_color->texture->layout
+            : m_backend->CurrentSwapchainLayout();
+    const VkImageLayout depthOldLayout =
+        m_depth && m_depth->texture
+            ? m_depth->texture->layout
+            : m_backend->DefaultDepthLayout();
+
     if (!m_backend->EnsureRendering(
             colorImage, colorView, colorFormat,
             depthImage, depthView, depthFormat,
-            m_color && m_color->texture ? m_color->texture->width : 1280,
-            m_color && m_color->texture ? m_color->texture->height : 720))
+            colorOldLayout, depthOldLayout,
+            m_color && m_color->texture ? m_color->texture->width : m_viewport.Width,
+            m_color && m_color->texture ? m_color->texture->height : m_viewport.Height))
         return false;
 
     if (m_color && m_color->texture)
+    {
+        m_color->texture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         m_targetRendered = true;
+    }
+    if (m_depth && m_depth->texture)
+        m_depth->texture->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     if (!EnsurePipeline())
         return false;
@@ -1546,31 +1609,20 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     uint32_t primitiveType, uint32_t primitiveCount,
     const void *data, uint32_t stride)
 {
-    if (!data || !stride || !primitiveCount || primitiveType != D3DPT_TRIANGLELIST)
-        return E_FAIL;
-    if (!PrepareDraw())
+    const uint32_t vertexCount = PrimitiveVertexCount(primitiveType, primitiveCount);
+    if (!data || !stride || !vertexCount || !PrepareDraw())
         return E_FAIL;
 
-    const uint32_t vertexCount = primitiveCount * 3u;
     const VkDeviceSize bytes = static_cast<VkDeviceSize>(vertexCount) * stride;
-
-    VkBuffer buffer = VK_NULL_HANDLE;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    void *mapped = nullptr;
-    if (!m_backend->CreateBuffer(
-            bytes,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &buffer, &memory, &mapped))
+    VkDescriptorBufferInfo vertexInfo{};
+    if (!m_backend->AllocateUniform(data, static_cast<size_t>(bytes), &vertexInfo))
         return E_FAIL;
 
-    std::memcpy(mapped, data, static_cast<size_t>(bytes));
-
-    const VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(m_backend->CommandBuffer(), 0, 1, &buffer, &offset);
+    const VkDeviceSize offset = vertexInfo.offset;
+    vkCmdBindVertexBuffers(
+        m_backend->CommandBuffer(), 0, 1, &vertexInfo.buffer, &offset);
+    m_topology = PrimitiveTopology(primitiveType);
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
-
-    m_backend->DestroyBuffer(buffer, memory);
     return S_OK;
 }
 
@@ -1578,28 +1630,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     uint32_t primitiveType, int32_t baseVertexIndex, uint32_t minVertexIndex,
     uint32_t numVertices, uint32_t startIndex, uint32_t primitiveCount)
 {
-    if (primitiveType != D3DPT_TRIANGLELIST || !m_indices || !m_indices->buffer || !primitiveCount)
-        return E_FAIL;
-    if (!PrepareDraw())
+    const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
+    if (!m_indices || !m_indices->buffer || !indexCount || !PrepareDraw())
         return E_FAIL;
 
-    std::array<VkBuffer,16> buffers{};
-    std::array<VkDeviceSize,16> offsets{};
-    uint32_t count = 0;
-    for (uint32_t stream = 0; stream < 16; ++stream)
-    {
-        if (m_streams[stream].buffer && m_streams[stream].stride)
-        {
-            buffers[count] = m_streams[stream].buffer->buffer;
-            offsets[count] = m_streams[stream].offset;
-            ++count;
-        }
-    }
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        const uint32_t stream = buffers[i] ? i : i;
-        (void)stream;
-    }
+    m_topology = PrimitiveTopology(primitiveType);
 
     for (uint32_t stream = 0; stream < 16; ++stream)
     {
@@ -1616,7 +1651,6 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         m_backend->CommandBuffer(), m_indices->buffer,
         0, VK_INDEX_TYPE_UINT16);
 
-    const uint32_t indexCount = primitiveCount * 3u;
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
     (void)minVertexIndex;
@@ -1668,15 +1702,37 @@ HRESULT IDirect3DDevice9::TestCooperativeLevel()
 HRESULT IDirect3DDevice9::Clear(
     uint32_t, uint32_t, uint32_t flags, uint32_t color, float depth, uint32_t stencil)
 {
-    if (!PrepareDraw())
+    if (!m_backend || !m_backend->IsFrameActive())
         return E_FAIL;
+
+    if (m_backend->EnsureRendering(
+            m_color && m_color->texture ? m_color->texture->image : m_backend->CurrentSwapchainImage(),
+            m_color && m_color->texture ? m_color->texture->view : m_backend->CurrentSwapchainView(),
+            m_color && m_color->texture ? m_color->texture->format : m_backend->SwapchainFormat(),
+            m_depth && m_depth->texture ? m_depth->texture->image : m_backend->DefaultDepthImage(),
+            m_depth && m_depth->texture ? m_depth->texture->view : m_backend->DefaultDepthView(),
+            m_depth && m_depth->texture ? m_depth->texture->format : m_backend->DepthFormat(),
+            m_color && m_color->texture ? m_color->texture->layout : m_backend->CurrentSwapchainLayout(),
+            m_depth && m_depth->texture ? m_depth->texture->layout : m_backend->DefaultDepthLayout(),
+            m_color && m_color->texture ? m_color->texture->width : m_viewport.Width,
+            m_color && m_color->texture ? m_color->texture->height : m_viewport.Height))
+    {
+        if (m_color && m_color->texture)
+            m_color->texture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        if (m_depth && m_depth->texture)
+            m_depth->texture->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    }
+    else
+    {
+        return E_FAIL;
+    }
 
     std::array<VkClearAttachment,3> attachments{};
     uint32_t count = 0;
 
     if (flags & D3DCLEAR_TARGET)
     {
-        VkClearAttachment &a = attachments[count++];
+        auto &a = attachments[count++];
         a.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         a.colorAttachment = 0;
         a.clearValue.color.float32[0] = ((color >> 16) & 0xFFu) / 255.0f;
@@ -1686,13 +1742,13 @@ HRESULT IDirect3DDevice9::Clear(
     }
     if (flags & D3DCLEAR_ZBUFFER)
     {
-        VkClearAttachment &a = attachments[count++];
+        auto &a = attachments[count++];
         a.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         a.clearValue.depthStencil.depth = depth;
     }
     if (flags & D3DCLEAR_STENCIL)
     {
-        VkClearAttachment &a = attachments[count++];
+        auto &a = attachments[count++];
         a.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
         a.clearValue.depthStencil.stencil = stencil;
     }
@@ -1700,7 +1756,7 @@ HRESULT IDirect3DDevice9::Clear(
     if (count)
     {
         VkClearRect rect{};
-        rect.rect.offset = {0,0};
+        rect.rect.offset = {0, 0};
         rect.rect.extent = {
             m_color && m_color->texture ? m_color->texture->width : m_viewport.Width,
             m_color && m_color->texture ? m_color->texture->height : m_viewport.Height
@@ -1711,5 +1767,4 @@ HRESULT IDirect3DDevice9::Clear(
     }
     return S_OK;
 }
-
 #endif
