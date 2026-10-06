@@ -6796,9 +6796,24 @@ static void Switch_LoadMaterialPassSerialized(
         Switch_LogWrite(trace);
     }
 
-    if (serialized.vertexDecl == UINT32_MAX)
+    if (serialized.vertexDecl == UINT32_MAX ||
+        serialized.vertexDecl == UINT32_MAX - 1u)
     {
+        // The serialized pointer references the object that follows in the
+        // virtual stream. On ARM64 the runtime declaration is widened and
+        // moved to Hunk memory, so retain an alias from the serialized object
+        // address to the native object. Without that alias, later shared
+        // vertex-declaration references resolve back to the raw 100-byte
+        // serialized object whose D3D declaration pointers are all null.
         DB_AllocStreamPos(3);
+        const uintptr_t serializedVertexDecl =
+            reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+
+        const void **inserted =
+            serialized.vertexDecl == UINT32_MAX - 1u
+                ? DB_InsertPointer()
+                : nullptr;
+
         varMaterialPass->vertexDecl =
             reinterpret_cast<MaterialVertexDeclaration *>(Hunk_Alloc(
                 static_cast<uint32_t>(sizeof(MaterialVertexDeclaration)),
@@ -6806,12 +6821,25 @@ static void Switch_LoadMaterialPassSerialized(
         varMaterialVertexDeclaration = varMaterialPass->vertexDecl;
         Load_MaterialVertexDeclaration(1);
         Load_BuildVertexDecl(&varMaterialPass->vertexDecl);
+
+        DB_RegisterSwitchPointerAlias(
+            serializedVertexDecl,
+            reinterpret_cast<uintptr_t>(varMaterialPass->vertexDecl));
+
+        if (inserted)
+            *inserted = varMaterialPass->vertexDecl;
+
+        DB_FixupSwitchPointerAliases();
     }
     else if (serialized.vertexDecl)
     {
+        // Positive references may target a declaration that was already
+        // widened into native memory. Resolve through the Switch alias table
+        // instead of returning to the serialized stream object.
         varMaterialPass->vertexDecl =
             reinterpret_cast<MaterialVertexDeclaration *>(
-                DB_ConvertOffsetToPointerValue(serialized.vertexDecl));
+                static_cast<uintptr_t>(serialized.vertexDecl));
+        DB_ConvertOffsetToAlias(&varMaterialPass->vertexDecl);
     }
     else
         varMaterialPass->vertexDecl = nullptr;
