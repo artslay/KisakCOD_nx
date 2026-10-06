@@ -4,6 +4,7 @@
 
 #include <universal/q_shared.h>
 #include "cl_ui.h"
+#include <qcommon/cmd.h>
 #ifdef __SWITCH__
 extern bool com_introMoviePending;
 #endif
