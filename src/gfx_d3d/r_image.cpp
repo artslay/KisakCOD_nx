@@ -387,7 +387,7 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][DELAY IMAGE] #%u image=%p name=%p nameText=%s delay=%u\\n",
+            "[KisakCOD][DELAY IMAGE] #%u image=%p name=%p nameText=%s delay=%u\n",
             static_cast<unsigned>(switchDelayImageIndex),
             static_cast<void *>(image),
             image ? static_cast<const void *>(image->name) : nullptr,

@@ -5501,6 +5501,27 @@ void __cdecl Load_GfxImage(bool atStreamStart)
 
         
 
+#ifdef __SWITCH__
+        if (g_switchCurrentAssetRawType == 4u &&
+            (!varGfxImage->name || varGfxImage->name[0] == '\\0'))
+        {
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IMAGE NAME EMPTY] asset=%d rawType=%u serializedName=%08x name=%p cat=%u delay=%u size=%ux%u\n",
+                g_switchCurrentAssetIndex,
+                g_switchCurrentAssetRawType,
+                serialized.name,
+                static_cast<const void *>(varGfxImage->name),
+                static_cast<unsigned>(varGfxImage->category),
+                static_cast<unsigned>(varGfxImage->delayLoadPixels),
+                static_cast<unsigned>(varGfxImage->width),
+                static_cast<unsigned>(varGfxImage->height));
+            Switch_LogRaw(trace);
+        }
+#endif
+
         varGfxTextureLoad = &varGfxImage->texture;
         Load_GfxTextureLoad(0);
 

@@ -296,7 +296,7 @@ void __cdecl DB_LoadDelayedImages()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][DELAY IMAGES] begin zone=%s copies=%u\\n",
+            "[KisakCOD][DELAY IMAGES] begin zone=%s copies=%u\n",
             g_load.filename ? g_load.filename : "<null>",
             static_cast<unsigned>(g_copyInfoCount));
         Switch_LogWrite(trace);
