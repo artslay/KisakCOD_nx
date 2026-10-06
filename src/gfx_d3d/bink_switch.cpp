@@ -529,16 +529,18 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
         frame->linesize[0],
         width,
         height);
+    // FFmpeg YUV420P planes are Y, U(Cb), V(Cr), while the legacy
+    // Bink texture contract names the chroma planes Cr and Cb.
     Switch_BinkCopyPlane(
         &dst.cRPlane,
-        frame->data[1],
-        frame->linesize[1],
+        frame->data[2],
+        frame->linesize[2],
         chromaWidth,
         chromaHeight);
     Switch_BinkCopyPlane(
         &dst.cBPlane,
-        frame->data[2],
-        frame->linesize[2],
+        frame->data[1],
+        frame->linesize[1],
         chromaWidth,
         chromaHeight);
 
