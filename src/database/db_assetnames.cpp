@@ -29,6 +29,13 @@ static const char *__cdecl DB_LightDefGetName(const XAssetHeader *header)
     return header->lightDef->name;
 }
 
+#ifdef __SWITCH__
+static const char *__cdecl DB_TechniqueSetGetName(const XAssetHeader *header)
+{
+    return header->techniqueSet->name;
+}
+#endif
+
 const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(const XAssetHeader *) =
 {
     // KISAKTODO: these got Identical COMDAT folded into 1 function because name is usually the 1st field.
@@ -39,8 +46,11 @@ const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(const XAssetHea
 #ifdef KISAK_SP
     DB_PixelShaderGetName,
 #endif
+#ifdef __SWITCH__
+    DB_TechniqueSetGetName,
+#else
     DB_StringTableGetName,
-    DB_StringTableGetName,
+#endif
     DB_ImageGetName,
     DB_StringTableGetName,
     DB_StringTableGetName,
