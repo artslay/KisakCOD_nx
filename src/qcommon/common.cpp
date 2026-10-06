@@ -1283,6 +1283,9 @@ cmd_function_s Com_WriteConfig_f_VAR;
 cmd_function_s Com_WriteDefaults_f_VAR;
 
 static const char* comInitAllocName = "$init";
+#ifdef __SWITCH__
+static bool com_introMoviePending = false;
+#endif
 void __cdecl Com_Init_Try_Block_Function(char* commandLine)
 {
     int v1; // eax
@@ -1563,7 +1566,13 @@ void COM_PlayIntroMovies()
 #endif
         if (!com_introPlayed->current.enabled)
         {
+#ifdef __SWITCH__
+            // Defer the first cinematic command until the UI has finished
+            // starting in Com_StartHunkUsers().
+            com_introMoviePending = true;
+#else
             Cbuf_AddText(0, "cinematic IW_logo\n");
+#endif
             Dvar_SetString((dvar_s *)nextmap, (char *)"cinematic atvi; set nextmap cinematic cod_intro");
             Dvar_SetBool((dvar_s *)com_introPlayed, 1);
 #ifdef __SWITCH__
@@ -2377,6 +2386,17 @@ void Com_StartHunkUsers()
     Com_AssetLoadUI();
     MenuScreen = UI_GetMenuScreen();
     UI_SetActiveMenu(0, (uiMenuCommand_t)MenuScreen);
+#ifdef __SWITCH__
+    // The intro command is queued before UI startup. Execute it only after
+    // CL_StartHunkUsers has initialized the UI, so CIN_PlayCinematic can close
+    // the main menu and enter CA_CINEMATIC.
+    if (com_introMoviePending)
+    {
+        com_introMoviePending = false;
+        Switch_LogWrite("[KisakCOD][INTRO] executing pending IW_logo after UI startup\n");
+        Cmd_ExecuteSingleCommand(0, CL_ControllerIndexFromClientNum(0), (char*)"cinematic IW_logo");
+    }
+#endif
     IN_Frame();
     Com_EventLoop();
 }
