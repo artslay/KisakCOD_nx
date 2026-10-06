@@ -127,7 +127,6 @@ void __cdecl DB_CancelLoadXFile()
         if (!g_load.f)
             MyAssertHandler(".\\database\\db_file_load.cpp", 165, 0, "%s", "g_load.f");
 #ifdef __SWITCH__
-#ifdef __SWITCH__
         ::close(Switch_LoadFileFd());
 #else
         CloseHandle(g_load.f);
