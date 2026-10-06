@@ -85,12 +85,12 @@ uint32_t __cdecl RB_UploadMaterialPassVertexDecl(
     primState->vertDeclType = vertDeclType;
     R_SetVertexDecl(primState, vertexDecl);
 #ifdef __SWITCH__
-    // Switch uses the OpenGL backend; there is no D3D9 DrawPrimitiveUP path.
-    (void)primState;
-    (void)vertexDecl;
+    // The GL compatibility path has already installed the material vertex
+    // declaration above. There is no D3D9 DrawPrimitiveUP call to perform on
+    // Switch, but this pass was successfully prepared for the renderer.
     (void)data;
     (void)stride;
-    return 0;
+    return 1;
 #else
     dx.device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, data, stride);
     return 1;
