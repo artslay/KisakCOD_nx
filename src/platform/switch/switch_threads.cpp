@@ -516,11 +516,23 @@ bool __cdecl Sys_IsServerThread() { return g_threadContext == THREAD_CONTEXT_SER
 
 void __cdecl Sys_SetValue(int index, void *data)
 {
-    if (index >= 0 && index < 4) g_switchThreadValues[index] = data;
+    if (index >= 0 && index < 4)
+        g_switchThreadValues[index] = data;
 }
 void *__cdecl Sys_GetValue(int index)
 {
-    return (index >= 0 && index < 4) ? g_switchThreadValues[index] : nullptr;
+    if (index < 0 || index >= 4)
+        return nullptr;
+
+    // Slot 2 is the engine's per-thread Com_Error jump buffer. Keep it
+    // backed by Switch's real thread-local buffer even if shared engine
+    // initialization clears or has not populated the compatibility array.
+    // Both DB_Thread() and Com_Error() depend on this contract before any
+    // database asset work begins.
+    if (index == 2)
+        return &g_switchJmpBuffer;
+
+    return g_switchThreadValues[index];
 }
 
 void __cdecl Win_SetThreadLock(WinThreadLock) {}
