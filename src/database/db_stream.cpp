@@ -571,7 +571,7 @@ bool __cdecl DB_ResolveSwitchPointerAlias(
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[SWITCH ALIAS INVALID SLOT] serialized=%p slot=%p asset=%d rawType=%u stage=%s\\n",
+                "[SWITCH ALIAS INVALID SLOT] serialized=%p slot=%p asset=%d rawType=%u stage=%s\n",
                 reinterpret_cast<const void *>(serializedSlot),
                 reinterpret_cast<const void *>(nativeSlotAddress),
                 g_switchCurrentAssetIndex,
@@ -589,7 +589,7 @@ bool __cdecl DB_ResolveSwitchPointerAlias(
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[SWITCH ALIAS INVALID NATIVE] serialized=%p native=%p asset=%d rawType=%u stage=%s\\n",
+                "[SWITCH ALIAS INVALID NATIVE] serialized=%p native=%p asset=%d rawType=%u stage=%s\n",
                 reinterpret_cast<const void *>(serializedSlot),
                 reinterpret_cast<const void *>(nativeValue),
                 g_switchCurrentAssetIndex,
@@ -610,7 +610,7 @@ bool __cdecl DB_ResolveSwitchPointerAlias(
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[SWITCH ALIAS INVALID PTR] serialized=%p native=%p asset=%d rawType=%u stage=%s\\n",
+                "[SWITCH ALIAS INVALID PTR] serialized=%p native=%p asset=%d rawType=%u stage=%s\n",
                 reinterpret_cast<const void *>(serializedSlot),
                 reinterpret_cast<const void *>(entry.nativePointer),
                 g_switchCurrentAssetIndex,
@@ -956,7 +956,7 @@ void __cdecl DB_FixupSwitchPointerAliases()
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\\n",
+                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\n",
                     reinterpret_cast<const void *>(fixup->serializedSlot),
                     reinterpret_cast<const void *>(destination),
                     reinterpret_cast<const void *>(resolvedPointer),
