@@ -5373,43 +5373,48 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
     iassert(OFFSET_TO_GfxImageLoadDef_DATA == 16);
 
 #ifdef __SWITCH__
-    bool switchSkipImagePayload = false;
+    bool compactEmpty = false;
 #endif
 
-    Load_Stream(1, (unsigned char*)varGfxImageLoadDef, 16);
+    // The normal IW3/COD4 record has a 16-byte header. Some SP/common
+    // records, however, omit the serialized flags byte and therefore have a
+    // 15-byte zero-resource header:
+    // levelCount | dimensions[3] | format | resourceSize
+    // Read 15 bytes first so we never consume the following stream-0 byte
+    // when that compact form is present.
+    Load_Stream(1, (unsigned char*)varGfxImageLoadDef, 15);
 
 #ifdef __SWITCH__
     {
         const uint8_t *raw =
             reinterpret_cast<const uint8_t *>(varGfxImageLoadDef);
 
-        auto readU16LE = [](const uint8_t *p) -> uint16_t {
-            return static_cast<uint16_t>(
-                static_cast<uint16_t>(p[0]) |
-                (static_cast<uint16_t>(p[1]) << 8));
-        };
-        auto readU32LE = [](const uint8_t *p) -> uint32_t {
-            return static_cast<uint32_t>(p[0]) |
-                   (static_cast<uint32_t>(p[1]) << 8) |
-                   (static_cast<uint32_t>(p[2]) << 16) |
-                   (static_cast<uint32_t>(p[3]) << 24);
-        };
+        const uint16_t width =
+            static_cast<uint16_t>(raw[1]) |
+            (static_cast<uint16_t>(raw[2]) << 8);
+        const uint16_t height =
+            static_cast<uint16_t>(raw[3]) |
+            (static_cast<uint16_t>(raw[4]) << 8);
+        const uint16_t depth =
+            static_cast<uint16_t>(raw[5]) |
+            (static_cast<uint16_t>(raw[6]) << 8);
+        const uint32_t format =
+            static_cast<uint32_t>(raw[7]) |
+            (static_cast<uint32_t>(raw[8]) << 8) |
+            (static_cast<uint32_t>(raw[9]) << 16) |
+            (static_cast<uint32_t>(raw[10]) << 24);
+        const uint32_t resourceSize =
+            static_cast<uint32_t>(raw[11]) |
+            (static_cast<uint32_t>(raw[12]) << 8) |
+            (static_cast<uint32_t>(raw[13]) << 16) |
+            (static_cast<uint32_t>(raw[14]) << 24);
 
-        const uint16_t width = readU16LE(raw + 1);
-        const uint16_t height = readU16LE(raw + 3);
-        const uint16_t depth = readU16LE(raw + 5);
-        const uint32_t format = readU32LE(raw + 7);
-        const uint32_t resourceSize = readU32LE(raw + 11);
-
-        // An empty common-image record is serialized as:
-        // levelCount | dimensions[3] | format | resourceSize
-        // with the otherwise-zero flags byte omitted. The final byte in the
-        // 16-byte temporary slot is not part of resourceSize.
         const bool knownDxtFormat =
             format == 0x31545844u || // DXT1
             format == 0x33545844u || // DXT3
-            format == 0x35545844u;    // DXT5
-        const bool compactEmpty =
+            format == 0x35545844u;   // DXT5
+
+        compactEmpty =
             raw[0] == 0 &&
             width == varGfxImage->width &&
             height == varGfxImage->height &&
@@ -5430,13 +5435,12 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             varGfxImageLoadDef->format =
                 static_cast<_D3DFORMAT>(format);
             varGfxImageLoadDef->resourceSize = 0;
-            switchSkipImagePayload = true;
 
-            char trace[256];
+            char trace[192];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][GFXIMAGE LOADDEF COMPACT] asset=%d dims=%ux%ux%u format=%08x resource=0 cursor=%08x\\n",
+                "[KisakCOD][GFXIMAGE LOADDEF COMPACT] asset=%d dims=%ux%ux%u format=%08x cursor=%08x\\n",
                 g_switchCurrentAssetIndex,
                 static_cast<unsigned>(width),
                 static_cast<unsigned>(height),
@@ -5448,6 +5452,16 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
     }
 #endif
 
+    if (compactEmpty)
+        return;
+
+    // Complete the normal 16-byte header. At this point stream position is
+    // exactly 15 bytes past the header start.
+    Load_Stream(
+        1,
+        reinterpret_cast<unsigned char *>(varGfxImageLoadDef) + 15,
+        1);
+
     if (DB_GetStreamPos() != varGfxImageLoadDef->data)
         MyAssertHandler(
             "c:\\trees\\cod3\\src\\database\\../gfx_d3d/r_image_load_db.h",
@@ -5457,12 +5471,6 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             "DB_GetStreamPos() == reinterpret_cast< byte * >( varGfxImageLoadDef->data )");
 
     varbyte = &varGfxImageLoadDef->data[0];
-
-#ifdef __SWITCH__
-    if (switchSkipImagePayload)
-        return;
-#endif
-
     Load_byteArray(1, varGfxImageLoadDef->resourceSize);
 }
 
