@@ -90,7 +90,8 @@ public:
         uint32_t height,
         uint32_t mipLevel,
         const void *data,
-        size_t bytes);
+        size_t bytes,
+        VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED);
 
     bool UploadImage3D(
         VkImage image,
@@ -100,7 +101,8 @@ public:
         uint32_t depth,
         uint32_t mipLevel,
         const void *data,
-        size_t bytes);
+        size_t bytes,
+        VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED);
 
     void TransitionImage(
         VkImage image,
