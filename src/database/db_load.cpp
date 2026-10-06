@@ -5372,9 +5372,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             "atStreamStart");
     iassert(OFFSET_TO_GfxImageLoadDef_DATA == 16);
 
-#ifdef __SWITCH__
     bool compactEmpty = false;
-#endif
 
     // The normal IW3/COD4 record has a 16-byte header. Some SP/common
     // records, however, omit the serialized flags byte and therefore have a
