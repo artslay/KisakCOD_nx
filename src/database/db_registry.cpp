@@ -3030,6 +3030,27 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 #endif
 #ifdef __SWITCH__
     g_switchDbStage = "asset/name";
+    const bool switchTraceTechset4026 =
+        type == ASSET_TYPE_TECHNIQUE_SET &&
+        g_switchCurrentAssetIndex == 4026 &&
+        g_switchCurrentAssetRawType == 5u;
+    if (switchTraceTechset4026)
+    {
+        char trace[448];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TECHSET4026] registry-before-name entry=%p asset=%p "
+            "header=%p data=%p handler=%p sizeofTS=%zu stage=%s\n",
+            static_cast<void *>(newEntry),
+            static_cast<void *>(&newEntry->entry.asset),
+            static_cast<void *>(&newEntry->entry.asset.header),
+            newEntry->entry.asset.header.data,
+            reinterpret_cast<const void *>(DB_XAssetGetNameHandler[type]),
+            sizeof(MaterialTechniqueSet),
+            g_switchDbStage ? g_switchDbStage : "");
+        Switch_LogWrite(trace);
+    }
     if (g_switchCurrentAssetIndex == 1126 &&
         g_switchCurrentAssetRawType == 31u)
     {

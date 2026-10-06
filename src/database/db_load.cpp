@@ -7838,7 +7838,7 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][TECHSET4026] ptr-enter slot=%p value=%08x stream=%u pos=%p\\n",
+            "[KisakCOD][TECHSET4026] ptr-enter slot=%p value=%08x stream=%u pos=%p\n",
             static_cast<void *>(varMaterialTechniqueSetPtr),
             varMaterialTechniqueSetPtr
                 ? static_cast<unsigned>(
@@ -7932,7 +7932,7 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
                     trace,
                     sizeof(trace),
                     "[KisakCOD][TECHSET4026] payload-done obj=%p name=%p remap=%p tech0=%p "
-                    "size=%zu stream=%u pos=%p\\n",
+                    "size=%zu stream=%u pos=%p\n",
                     reinterpret_cast<void *>(obj),
                     obj ? static_cast<void *>(
                         const_cast<char *>(*reinterpret_cast<const char * const *>(obj)))
