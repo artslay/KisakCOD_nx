@@ -49,7 +49,7 @@ volatile int g_timeout = 0;
 #endif
 
 static void *g_values[THREAD_CONTEXT_COUNT][4] = {};
-static thread_local jmp_buf g_switchJmpBuffer;
+extern jmp_buf g_com_error[THREAD_CONTEXT_COUNT];
 static std::mutex g_databaseMutex;
 static std::condition_variable g_databaseCv;
 static bool g_databaseRequested = false;
@@ -136,8 +136,6 @@ void __cdecl Sys_InitMainThread()
     // per-thread storage installed by Com_InitThreadData().
     Com_InitThreadData(THREAD_CONTEXT_MAIN);
 
-    // Keep Switch's local jmp buffer for the existing libnx/bootstrap path.
-    g_switchThreadValues[2] = &g_switchJmpBuffer;
     g_switchThreadStage = "main/ready";
 }
 
@@ -148,11 +146,9 @@ void __cdecl Sys_InitThread(ThreadContext_t context)
     threadId[context] = Sys_GetCurrentThreadId();
     g_switchThreadValues[0] = g_values[context][0];
 
-    // Install va_info, per-thread Com_Error state and trace storage just like
-    // the native thread implementation. Keep the existing Switch jmp buffer
-    // after this because SV_ServerThread currently consumes Sys_GetValue(2).
+    // Install va_info, per-thread Com_Error state and trace storage using the
+    // engine's canonical per-context g_com_error[] buffer.
     Com_InitThreadData(context);
-    g_switchThreadValues[2] = &g_switchJmpBuffer;
     g_switchThreadStage = "thread/ready";
 }
 
@@ -163,7 +159,11 @@ extern "C" uint32_t Sys_GetSwitchThreadContext()
 
 extern "C" void *Sys_GetSwitchErrorJmpBuffer()
 {
-    return &g_switchJmpBuffer;
+    if (g_threadContext < 0 ||
+        static_cast<uint32_t>(g_threadContext) >= THREAD_CONTEXT_COUNT)
+        return nullptr;
+
+    return &g_com_error[g_threadContext];
 }
 
 extern "C" const char *Sys_GetSwitchThreadStage()
@@ -529,13 +529,13 @@ void *__cdecl Sys_GetValue(int index)
     if (index < 0 || index >= 4)
         return nullptr;
 
-    // Slot 2 is the engine's per-thread Com_Error jump buffer. Keep it
-    // backed by Switch's real thread-local buffer even if shared engine
-    // initialization clears or has not populated the compatibility array.
-    // Both DB_Thread() and Com_Error() depend on this contract before any
-    // database asset work begins.
-    if (index == 2)
-        return &g_switchJmpBuffer;
+    // Slot 2 is the engine's canonical per-context Com_Error jump buffer.
+    // Com_InitThreadData() stores &g_com_error[context] here; return the
+    // canonical buffer directly so DB_Thread()/Com_Error() share one ABI.
+    if (index == 2 &&
+        g_threadContext >= 0 &&
+        static_cast<uint32_t>(g_threadContext) < THREAD_CONTEXT_COUNT)
+        return &g_com_error[g_threadContext];
 
     return g_switchThreadValues[index];
 }
