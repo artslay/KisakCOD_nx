@@ -1358,6 +1358,18 @@ bool __cdecl Image_IsCodeImage(int track)
 
 void R_InitCodeImages()
 {
+#ifdef __SWITCH__
+    // R_InitImages runs on the real client renderer. r_loadForRenderer is
+    // normally already true; if a latched config left it disabled, builtin
+    // images would be created without GL resources and later fallback copies
+    // would have a null basemap. Restore the client-renderer invariant here.
+    if (r_loadForRenderer && !r_loadForRenderer->current.enabled)
+    {
+        Dvar_SetBool(r_loadForRenderer, 1);
+        Dvar_MakeLatchedValueCurrent(const_cast<dvar_s *>(r_loadForRenderer));
+    }
+#endif
+
     rgp.whiteImage = Image_Register("$white", TS_FUNCTION, IMAGE_TRACK_MISC);
     iassert(rgp.whiteImage);
     rgp.blackImage = Image_Register("$black", TS_FUNCTION, IMAGE_TRACK_MISC);
@@ -1372,6 +1384,45 @@ void R_InitCodeImages()
     iassert(rgp.identityNormalMapImage);
     rgp.pixelCostColorCodeImage = Image_Register("$pixelcostcolorcode", TS_FUNCTION, IMAGE_TRACK_MISC);
     iassert(rgp.pixelCostColorCodeImage);
+
+#ifdef __SWITCH__
+    // Be defensive about renderer startup ordering: regenerate only a builtin
+    // texture whose native image object is present but whose GPU resource is
+    // still empty. This uses the normal builtin constructors, not a fake
+    // fallback texture.
+    if (r_loadForRenderer && r_loadForRenderer->current.enabled)
+    {
+        if (rgp.whiteImage && !rgp.whiteImage->texture.basemap &&
+            !rgp.whiteImage->cardMemory.platform[PICMIP_PLATFORM_USED])
+            Image_LoadWhite(rgp.whiteImage);
+        if (rgp.blackImage && !rgp.blackImage->texture.basemap &&
+            !rgp.blackImage->cardMemory.platform[PICMIP_PLATFORM_USED])
+            Image_LoadBlack(rgp.blackImage);
+        if (rgp.identityNormalMapImage &&
+            !rgp.identityNormalMapImage->texture.basemap &&
+            !rgp.identityNormalMapImage->cardMemory.platform[PICMIP_PLATFORM_USED])
+            Image_LoadIdentityNormalMap(rgp.identityNormalMapImage);
+    }
+
+    {
+        char trace[448];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CODE IMAGES] loadForRenderer=%u white=%p/%p black=%p/%p normal=%p/%p glAllocs=%u\\n",
+            r_loadForRenderer ? r_loadForRenderer->current.enabled : 0u,
+            static_cast<void *>(rgp.whiteImage),
+            rgp.whiteImage ? static_cast<void *>(rgp.whiteImage->texture.basemap) : nullptr,
+            static_cast<void *>(rgp.blackImage),
+            rgp.blackImage ? static_cast<void *>(rgp.blackImage->texture.basemap) : nullptr,
+            static_cast<void *>(rgp.identityNormalMapImage),
+            rgp.identityNormalMapImage
+                ? static_cast<void *>(rgp.identityNormalMapImage->texture.basemap)
+                : nullptr,
+            static_cast<unsigned>(s_switchGLAllocTraceCount));
+        Switch_LogWrite(trace);
+    }
+#endif
 }
 
 #ifdef KISAK_RADIANT
