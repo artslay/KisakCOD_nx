@@ -1610,7 +1610,10 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     const void *data, uint32_t stride)
 {
     const uint32_t vertexCount = PrimitiveVertexCount(primitiveType, primitiveCount);
-    if (!data || !stride || !vertexCount || !PrepareDraw())
+    if (!data || !stride || !vertexCount)
+        return E_FAIL;
+    m_topology = PrimitiveTopology(primitiveType);
+    if (!PrepareDraw())
         return E_FAIL;
 
     const VkDeviceSize bytes = static_cast<VkDeviceSize>(vertexCount) * stride;
@@ -1621,7 +1624,6 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     const VkDeviceSize offset = vertexInfo.offset;
     vkCmdBindVertexBuffers(
         m_backend->CommandBuffer(), 0, 1, &vertexInfo.buffer, &offset);
-    m_topology = PrimitiveTopology(primitiveType);
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
     return S_OK;
 }
@@ -1631,10 +1633,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     uint32_t numVertices, uint32_t startIndex, uint32_t primitiveCount)
 {
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
-    if (!m_indices || !m_indices->buffer || !indexCount || !PrepareDraw())
+    if (!m_indices || !m_indices->buffer || !indexCount)
         return E_FAIL;
-
     m_topology = PrimitiveTopology(primitiveType);
+    if (!PrepareDraw())
+        return E_FAIL;
 
     for (uint32_t stream = 0; stream < 16; ++stream)
     {
