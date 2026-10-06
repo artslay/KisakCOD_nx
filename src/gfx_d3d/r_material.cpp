@@ -32,16 +32,18 @@ MaterialTechniqueSet *__cdecl Material_FindTechniqueSet_LoadObj(
     const char *name,
     MtlTechSetNotFoundBehavior notFoundBehavior)
 {
-    (void)name;
-    (void)notFoundBehavior;
-    return nullptr;
+    // The Switch runtime has no legacy D3DX material parser. When a caller
+    // reaches the load-obj entry point, resolve an already-loaded fastfile
+    // technique set instead of returning a null material and killing the draw.
+    return Material_FindTechniqueSet_FastFile(name, notFoundBehavior);
 }
 
 Material *__cdecl Material_Register_LoadObj(const char *name, int imageTrack)
 {
-    (void)name;
     (void)imageTrack;
-    return nullptr;
+    // Resolve materials already present in the asset database. This preserves
+    // the same native Material object and keeps the ARM64 runtime ABI intact.
+    return Material_Register_FastFile(name);
 }
 #endif
 

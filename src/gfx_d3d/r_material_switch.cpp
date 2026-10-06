@@ -106,9 +106,14 @@ Material *__cdecl R_GetBspMaterial(uint32_t materialIndex)
 
 // Switch uses fastfile materials in the normal path. Keep the legacy loose-file
 // entry point linkable without pulling the D3DX9 parser into the target.
-Material *__cdecl Material_Load(char *, int)
+Material *__cdecl Material_Load(char *assetName, int imageTrack)
 {
-    return nullptr;
+    // Switch does not ship the Windows D3DX parser. Prefer the real fastfile
+    // material when the asset was loaded into the database.
+    (void)imageTrack;
+    if (!assetName || !*assetName)
+        return rgp.defaultMaterial;
+    return Material_Register_FastFile(assetName);
 }
 
 void __cdecl Material_Sort()
