@@ -4,6 +4,8 @@
 #ifdef __SWITCH__
 extern const char * volatile g_switchDbStage;
 extern char com_errorMessage[4096];
+extern const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(
+    const XAssetHeader *);
 #endif
 
 #include <qcommon/files.h>
@@ -3108,6 +3110,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         g_switchDbStage = "asset/name_return";
     }
 #endif
+#ifdef __SWITCH__
     if (type == ASSET_TYPE_FX &&
         g_switchCurrentAssetIndex >= 4505 &&
         g_switchCurrentAssetIndex <= 4510 &&
