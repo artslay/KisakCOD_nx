@@ -47,7 +47,13 @@ const dvar_t *r_fullscreen = nullptr;
 
 static bool s_registered = false;
 
-void TRACK_r_init() {}
+void TRACK_r_init()
+{
+    track_static_alloc_internal(&rgp, sizeof(rgp), "rgp", 18);
+    track_static_alloc_internal(&rg, sizeof(rg), "rg", 18);
+    track_static_alloc_internal(&vidConfig, sizeof(vidConfig), "vidConfig", 18);
+    track_static_alloc_internal(&dx, sizeof(dx), "dx", 18);
+}
 void R_SyncGpu(int(__cdecl *)(unsigned __int64)) { if (g_gfxBackend) g_gfxBackend->WaitForGpu(); }
 bool R_IsUsingAdaptiveGpuSync() { return false; }
 bool __cdecl RB_IsGpuFenceFinished()
@@ -61,12 +67,29 @@ void R_FatalInitError(const char *msg) { Com_Error(ERR_FATAL, "%s", msg ? msg : 
 void R_FatalLockError(HRESULT) { R_FatalInitError("renderer lock failed"); }
 const char *R_ErrorDescription(HRESULT hr) { return hr == S_OK ? "S_OK" : "Vulkan backend error"; }
 
-void R_SetColorMappings() {}
+void R_SetColorMappings()
+{
+    if (vidConfig.deviceSupportsGamma)
+    {
+        GfxGammaRamp gammaRamp;
+        R_CalcGammaRamp(&gammaRamp);
+        RB_SetGammaRamp(&gammaRamp);
+    }
+}
 void R_CalcGammaRamp(GfxGammaRamp *ramp) {
     if (!ramp) return;
     for (int i = 0; i < 256; ++i) ramp->entries[i] = static_cast<uint16_t>(i << 8);
 }
-void R_GammaCorrect(uint8_t *, int) {}
+void R_GammaCorrect(uint8_t *buffer, int bufSize)
+{
+    if (!buffer || bufSize <= 0)
+        return;
+
+    GfxGammaRamp gammaRamp;
+    R_CalcGammaRamp(&gammaRamp);
+    for (int i = 0; i < bufSize; ++i)
+        buffer[i] = static_cast<uint8_t>(255u * gammaRamp.entries[buffer[i]] / 0xFFFFu);
+}
 void SetGfxConfig(const GfxConfiguration *config) { if (config) gfxCfg = *config; }
 
 void R_InitThreads()
@@ -83,7 +106,20 @@ static int g_remoteScreenUpdateNesting = 0;
 
 
 
-void R_ShutdownMaterialUsage() {}
+void R_ShutdownMaterialUsage()
+{
+    for (uint32_t hashIndex = 0; hashIndex < ARRAY_COUNT(rg.materialUsage); ++hashIndex)
+    {
+        VertUsage *vertUsage = rg.materialUsage[hashIndex].verts;
+        while (vertUsage)
+        {
+            VertUsage *next = vertUsage->next;
+            Z_Free(reinterpret_cast<char *>(vertUsage), 0);
+            vertUsage = next;
+        }
+        rg.materialUsage[hashIndex].verts = nullptr;
+    }
+}
 
 void R_ShutdownDirect3D() {
     // The D3D9 compatibility device owns Vulkan pipelines/shader modules, so
@@ -97,8 +133,45 @@ void R_ShutdownDirect3D() {
     }
 }
 
-void R_ReleaseForShutdownOrReset() {}
-void R_UnloadWorld() {}
+void R_ReleaseForShutdownOrReset()
+{
+    R_ShutdownRenderTargets();
+    R_ShutdownModelLightingImage();
+    R_ShutdownStaticModelCache();
+    R_DestroyDynamicBuffers();
+    R_DestroyParticleCloudBuffer();
+    if (!g_allocateMinimalResources)
+        R_ShutdownRenderBuffers();
+
+    RB_FreeSunSpriteQueries();
+
+    if (dx.flushGpuQuery)
+    {
+        dx.flushGpuQuery->Release();
+        dx.flushGpuQuery = nullptr;
+    }
+
+    for (uint32_t i = 0; i < ARRAY_COUNT(dx.fencePool); ++i)
+    {
+        if (dx.fencePool[i])
+        {
+            dx.fencePool[i]->Release();
+            dx.fencePool[i] = nullptr;
+        }
+    }
+
+    if (gfxAssets.pixelCountQuery)
+    {
+        gfxAssets.pixelCountQuery->Release();
+        gfxAssets.pixelCountQuery = nullptr;
+    }
+}
+void R_UnloadWorld()
+{
+    iassert(IsFastFileLoad());
+    if (rgp.world)
+        Sys_Error("Cannot unload bsp while it is in use");
+}
 void R_BeginRegistration(vidConfig_t *out) {
     iassert(!rg.registered);
     R_Init();
@@ -378,16 +451,42 @@ void R_InitGlobalStructs() {
     gfxMetrics.canMipCubemaps = true;
     g_disableRendering = 0;
 }
-void R_EndRegistration() {}
-void R_TrackStatistics(trStatistics_t *) {}
-void R_UpdateTeamColors(int, const float *, const float *) {}
+void R_EndRegistration()
+{
+    iassert(rg.registered);
+    if (!IsFastFileLoad())
+    {
+        R_SyncRenderThread();
+        RB_TouchAllImages();
+    }
+}
+void R_TrackStatistics(trStatistics_t *stats)
+{
+    rg.stats = stats;
+}
+void R_UpdateTeamColors(int team, const float *color_allies, const float *color_axis)
+{
+    rg.team = team;
+    Byte4PackRgba(color_allies, reinterpret_cast<uint8_t *>(&rg.color_allies));
+    Byte4PackRgba(color_axis, reinterpret_cast<uint8_t *>(&rg.color_axis));
+}
 void R_ConfigureRenderer(const GfxConfiguration *config) {
     SetGfxConfig(config);
     // Match the shared renderer bootstrap: this allocates the double-buffered
     // front-end command lists before the first frame is submitted.
     R_InitRenderCommands();
 }
-void R_ComErrorCleanup() {}
+void R_ComErrorCleanup()
+{
+    iassert(Sys_IsMainThread());
+    R_AbortRenderCommands();
+    R_SyncRenderThread();
+    if (dx.inScene && dx.device)
+    {
+        dx.device->EndScene();
+        dx.inScene = 0;
+    }
+}
 bool R_CheckLostDevice()
 {
     // Vulkan on Switch has no D3D-style lost-device/reset cycle.
@@ -412,7 +511,11 @@ uint32_t __cdecl R_DetectCurrentTextureMemory()
     return R_AvailableTextureMemory();
 }
 
-void R_ShutdownStreams() {}
+void R_ShutdownStreams()
+{
+    if (dx.device && !dx.deviceLost)
+        R_ClearAllStreamSources(&gfxCmdBufState.prim);
+}
 
 void R_Shutdown(int destroyWindow) {
     (void)destroyWindow;
