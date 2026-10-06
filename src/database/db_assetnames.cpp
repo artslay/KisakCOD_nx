@@ -3,6 +3,9 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
+extern const char * volatile g_switchDbStage;
+extern int32_t g_switchCurrentAssetIndex;
+extern uint32_t g_switchCurrentAssetRawType;
 #endif
 #include <game/g_bsp.h>
 
@@ -289,54 +292,38 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
     const char *name; // [esp+0h] [ebp-4h]
 
 #ifdef __SWITCH__
-    if (type == ASSET_TYPE_TECHNIQUE_SET)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH TECHSET NAME] enter type=%d header=%p data=%p handler=%p\n",
-            type,
-            static_cast<const void *>(header),
-            header ? header->data : nullptr,
-            (type >= 0 && type < ASSET_TYPE_COUNT)
-                ? reinterpret_cast<const void *>(DB_XAssetGetNameHandler[type])
-                : nullptr);
-        Switch_LogWrite(trace);
-    }
+    const bool switchTraceTechset4026 =
+        type == ASSET_TYPE_TECHNIQUE_SET &&
+        g_switchCurrentAssetIndex == 4026 &&
+        g_switchCurrentAssetRawType == 5u;
+
+    if (switchTraceTechset4026)
+        g_switchDbStage = "asset/name_header_enter";
 #endif
 
     iassert(header);
 
 #ifdef __SWITCH__
-    if (type == ASSET_TYPE_TECHNIQUE_SET)
-        Switch_LogWrite("[SWITCH TECHSET NAME] after header assert\n");
-    if (type == ASSET_TYPE_IMAGE)
-    {
-        char trace[224];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IMAGE NAME] pre handler header=%p data=%p image=%p name=%p handler=%p\n",
-            static_cast<const void *>(header),
-            header ? header->data : nullptr,
-            header ? static_cast<const void *>(header->image) : nullptr,
-            header && header->image ? static_cast<const void *>(header->image->name) : nullptr,
-            reinterpret_cast<const void *>(DB_XAssetGetNameHandler[type]));
-        Switch_LogWrite(trace);
-    }
+    if (switchTraceTechset4026)
+        g_switchDbStage = "asset/name_header_header_ok";
 #endif
 
     iassert(header->data);
 
 #ifdef __SWITCH__
-    if (type == ASSET_TYPE_TECHNIQUE_SET)
-        Switch_LogWrite("[SWITCH TECHSET NAME] after data assert\n");
-    if (type == ASSET_TYPE_IMAGE)
-        Switch_LogWrite("[SWITCH IMAGE NAME] after data assert\n");
+    if (switchTraceTechset4026)
+        g_switchDbStage = "asset/name_header_data_ok";
 
     // SP LightDef has no generic name handler at slot 18.
     // Resolve the native ARM64 object directly before checking the table.
+    if (type == ASSET_TYPE_LIGHT_DEF)
+    {
+        return DB_LightDefGetName(header);
+    }
+
+    if (switchTraceTechset4026)
+        g_switchDbStage = "asset/name_header_pre_handler";
+#else
     if (type == ASSET_TYPE_LIGHT_DEF)
     {
         return DB_LightDefGetName(header);
@@ -345,53 +332,20 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
 
     iassert(DB_XAssetGetNameHandler[type]);
 
-#ifdef __SWITCH__
-    if (type == ASSET_TYPE_TECHNIQUE_SET)
-        Switch_LogWrite("[SWITCH TECHSET NAME] after handler assert\n");
-    if (type == ASSET_TYPE_IMAGE)
-        Switch_LogWrite("[SWITCH IMAGE NAME] after handler assert\n");
-#endif
-
     name = DB_XAssetGetNameHandler[type](header);
 
 #ifdef __SWITCH__
-    if (type == ASSET_TYPE_IMAGE)
-    {
-        char trace[128];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IMAGE NAME] handler returned=%p\n",
-            static_cast<const void *>(name));
-        Switch_LogWrite(trace);
-    }
-#endif
-
-#ifdef __SWITCH__
-    if (type == ASSET_TYPE_TECHNIQUE_SET)
-    {
-        char trace[128];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH TECHSET NAME] handler returned name=%p\n",
-            static_cast<const void *>(name));
-        Switch_LogWrite(trace);
-    }
+    if (switchTraceTechset4026)
+        g_switchDbStage = "asset/name_header_handler_return";
 #endif
 
     iassert(name);
 
 #ifdef __SWITCH__
-    if (type == ASSET_TYPE_TECHNIQUE_SET)
-        Switch_LogWrite("[SWITCH TECHSET NAME] after name assert\n");
+    if (switchTraceTechset4026)
+        g_switchDbStage = "asset/name_header_return";
 #endif
 
-    //if (!name)
-    //{
-    //    MyAssertHandler(".\\database\\db_assetnames.cpp", 594, 0, "%s\n\t%s", "name",
-    //      va("Name not found for asset type %s\n", g_assetNames[type]));
-    //}
     return name;
 }
 
