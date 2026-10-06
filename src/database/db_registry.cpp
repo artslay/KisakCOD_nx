@@ -1487,9 +1487,12 @@ void __cdecl  DB_Thread(uint32_t threadContext)
     iassert(threadContext == THREAD_CONTEXT_DATABASE);
 
 #ifdef __SWITCH__
-    // The database context is fixed at 8 in the SP engine. Use its canonical
-    // Com_Error jump buffer directly so setjmp cannot receive a null pointer.
+    // Keep the DB stage around the thread bootstrap so a Switch exception can
+    // distinguish setjmp from the database wait/load path. The previous crash
+    // was reported as "idle", which was too early/ambiguous to identify.
+    g_switchDbStage = "thread/entry";
     Sys_SetValue(2, g_com_error[THREAD_CONTEXT_DATABASE]);
+    g_switchDbStage = "thread/setjmp";
     if (setjmp(g_com_error[THREAD_CONTEXT_DATABASE]))
 #else
     jmp_buf *Value; // eax
@@ -1518,10 +1521,19 @@ void __cdecl  DB_Thread(uint32_t threadContext)
 #endif
 #endif
     }
+#ifdef __SWITCH__
+    g_switchDbStage = "thread/profile";
+#endif
     Profile_Guard(1);
     while (1)
     {
+#ifdef __SWITCH__
+        g_switchDbStage = "thread/wait_start";
+#endif
         Sys_WaitStartDatabase();
+#ifdef __SWITCH__
+        g_switchDbStage = "thread/load";
+#endif
         DB_TryLoadXFile();
     }
 }
