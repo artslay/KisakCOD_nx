@@ -5400,7 +5400,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][GFXIMAGE LOADDEF] asset=%d stream0=%08x end=%08x level=%u flags=%u dims=%d,%d,%d format=%08x resource=%08x raw=%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\\n",
+            "[KisakCOD][GFXIMAGE LOADDEF] asset=%d stream0=%08x end=%08x level=%u flags=%u dims=%d,%d,%d format=%08x resource=%08x raw=%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
             g_switchCurrentAssetIndex,
             Switch_GetStreamCursorOffset(0) - 16u,
             Switch_GetStreamCursorOffset(0),
