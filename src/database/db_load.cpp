@@ -7828,6 +7828,27 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
 
 void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
 {
+#ifdef __SWITCH__
+    const bool traceTechset4026 =
+        g_switchCurrentAssetIndex == 4026 &&
+        g_switchCurrentAssetRawType == 5u;
+    if (traceTechset4026)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TECHSET4026] ptr-enter slot=%p value=%08x stream=%u pos=%p\\n",
+            static_cast<void *>(varMaterialTechniqueSetPtr),
+            varMaterialTechniqueSetPtr
+                ? static_cast<unsigned>(
+                    reinterpret_cast<uintptr_t>(*varMaterialTechniqueSetPtr))
+                : 0u,
+            static_cast<unsigned>(g_streamPosIndex),
+            static_cast<void *>(DB_GetStreamPos()));
+        Switch_LogWrite(trace);
+    }
+#endif
     const void **inserted; // [esp+0h] [ebp-Ch]
     uint32_t value; // [esp+4h] [ebp-8h]
 
@@ -7902,6 +7923,28 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
                 inserted = 0;
             Load_MaterialTechniqueSet(1);
 #ifdef __SWITCH__
+            if (traceTechset4026)
+            {
+                const uintptr_t obj =
+                    reinterpret_cast<uintptr_t>(*varMaterialTechniqueSetPtr);
+                char trace[640];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][TECHSET4026] payload-done obj=%p name=%p remap=%p tech0=%p "
+                    "size=%zu stream=%u pos=%p\\n",
+                    reinterpret_cast<void *>(obj),
+                    obj ? static_cast<void *>(
+                        const_cast<char *>(*reinterpret_cast<const char * const *>(obj)))
+                        : nullptr,
+                    obj ? *reinterpret_cast<void **>(obj + 16) : nullptr,
+                    obj ? *reinterpret_cast<void **>(obj + 24) : nullptr,
+                    sizeof(MaterialTechniqueSet),
+                    static_cast<unsigned>(g_streamPosIndex),
+                    static_cast<void *>(DB_GetStreamPos()));
+                Switch_LogWrite(trace);
+                g_switchDbStage = "techset4026/asset-call";
+            }
             Switch_LogWrite("[SWITCH MATERIAL] techset payload done\n");
 #endif
             Load_MaterialTechniqueSetAsset((XAssetHeader *)varMaterialTechniqueSetPtr);
