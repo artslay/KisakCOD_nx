@@ -78,6 +78,7 @@ static void SwitchShutdownNxlink()
 
 extern "C" void userAppInit()
 {
+    Switch_LogInit();
     SwitchInitNxlink();
 }
 
@@ -211,7 +212,6 @@ static void SwitchLogVulkanRuntime()
 
 int main()
 {
-    Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
