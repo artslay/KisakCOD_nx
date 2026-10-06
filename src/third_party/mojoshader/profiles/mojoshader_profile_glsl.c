@@ -154,12 +154,10 @@ const char *make_GLSL_destarg_assign(Context *ctx, char *buf,
     // CENTROID only allowed in DCL opcodes, which shouldn't come through here.
     assert((arg->result_mod & MOD_CENTROID) == 0);
 
-    if (ctx->predicated)
-    {
-        fail(ctx, "predicated destinations unsupported");  // !!! FIXME
-        *buf = '\0';
-        return buf;
-    } // if
+    // D3D9 predicated instructions become a normal GLSL branch.
+    // parse_predicated_token() guarantees a predicate register with a
+    // replicated swizzle, so selecting its swizzled component is sufficient
+    // for both VS and PS predicate values emitted by this profile.
 
     char operation[256];
     va_list ap;
@@ -206,10 +204,41 @@ const char *make_GLSL_destarg_assign(Context *ctx, char *buf,
     const char *leftparen = (need_parens) ? "(" : "";
     const char *rightparen = (need_parens) ? ")" : "";
 
-    snprintf(buf, buflen, "%s_%s%s%s = %s%s%s%s%s%s;",
+    char assignment[1024];
+    snprintf(assignment, sizeof(assignment),
+             "%s_%s%s%s = %s%s%s%s%s%s;",
              ctx->shader_type_str, regtype_str, regnum_str, writemask_str,
              clampleft, leftparen, operation, rightparen, result_shift_str,
              clampright);
+
+    if (!ctx->predicated)
+    {
+        snprintf(buf, buflen, "%s", assignment);
+        return buf;
+    }
+
+    char predicate_var[64];
+    get_GLSL_varname_in_buf(
+        ctx,
+        ctx->predicate_arg.regtype,
+        ctx->predicate_arg.regnum,
+        predicate_var,
+        sizeof(predicate_var));
+
+    const char predicate_component =
+        swizzle_channels[ctx->predicate_arg.swizzle_x];
+    const char *predicate_not =
+        (ctx->predicate_arg.src_mod == SRCMOD_NOT) ? "!" : "";
+
+    snprintf(
+        buf,
+        buflen,
+        "if (%s%s.%c) { %s }",
+        predicate_not,
+        predicate_var,
+        predicate_component,
+        assignment);
+
     // !!! FIXME: make sure the scratch buffer was large enough.
     return buf;
 } // make_GLSL_destarg_assign
@@ -653,12 +682,53 @@ void emit_GLSL_finalize(Context *ctx)
     output_blank_line(ctx);
     pop_output(ctx);
 
-    // If we had a relative addressing of REG_TYPE_INPUT, we need to build
-    //  an array for it at the start of main(). GLSL doesn't let you specify
-    //  arrays of attributes.
-    //vec4 blah_array[BIGGEST_ARRAY];
-    if (ctx->have_relative_input_registers) // !!! FIXME
-        fail(ctx, "Relative addressing of input registers not supported.");
+    // GLSL doesn't allow arrays of stage input variables, so collect the
+    // D3D input registers that this shader uses into a local array. Relative
+    // input addressing is legal in vs_3_0 and then becomes ordinary dynamic
+    // indexing of this local array.
+    if (ctx->have_relative_input_registers)
+    {
+        int max_input = -1;
+        for (RegisterList *item = ctx->used_registers.next;
+             item != NULL;
+             item = item->next)
+        {
+            if (item->regtype == REG_TYPE_INPUT &&
+                item->regnum > max_input)
+                max_input = item->regnum;
+        }
+
+        if (max_input >= 0)
+        {
+            push_output(ctx, &ctx->mainline_intro);
+            output_line(
+                ctx,
+                "vec4 vertex_input_array[%d];",
+                max_input + 1);
+
+            for (RegisterList *item = ctx->used_registers.next;
+                 item != NULL;
+                 item = item->next)
+            {
+                if (item->regtype != REG_TYPE_INPUT)
+                    continue;
+
+                char input_name[64];
+                get_GLSL_varname_in_buf(
+                    ctx,
+                    REG_TYPE_INPUT,
+                    item->regnum,
+                    input_name,
+                    sizeof(input_name));
+                output_line(
+                    ctx,
+                    "vertex_input_array[%d] = %s;",
+                    item->regnum,
+                    input_name);
+            }
+            pop_output(ctx);
+        }
+    }
 
     push_output(ctx, &ctx->preflight);
     output_GLSL_uniform_array(ctx, REG_TYPE_CONST, ctx->uniform_float4_count);
