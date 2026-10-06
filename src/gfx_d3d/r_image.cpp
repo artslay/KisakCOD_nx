@@ -27,293 +27,227 @@ extern uint32_t g_switchCurrentAssetRawType;
 #include <algorithm>
 
 #ifdef __SWITCH__
-#include <EGL/egl.h>
+#include <vulkan/vulkan.h>
+#include "gfx/vulkan/d3d9_compat.h"
+#include "gfx/vulkan/vulkan_backend.h"
 extern void Switch_LogWrite(const char *msg);
-#endif
 
-#ifdef __SWITCH__
-static bool R_GLImageFormat(_D3DFORMAT f, GLenum &i, GLenum &u, GLenum &t, bool &compressed)
+namespace
 {
-    compressed = false;
-    switch (f) {
-    case D3DFMT_A8R8G8B8: case D3DFMT_X8R8G8B8: i=GL_RGBA8; u=GL_BGRA; t=GL_UNSIGNED_BYTE; return true;
-    case D3DFMT_A8: case D3DFMT_L8: i=GL_R8; u=GL_RED; t=GL_UNSIGNED_BYTE; return true;
-    case D3DFMT_A8L8: i=GL_RG8; u=GL_RG; t=GL_UNSIGNED_BYTE; return true;
-    case D3DFMT_R32F: i=GL_R32F; u=GL_RED; t=GL_FLOAT; return true;
-    case D3DFMT_G16R16F: i=GL_RG16F; u=GL_RG; t=GL_HALF_FLOAT; return true;
-    case D3DFMT_D16: i=GL_DEPTH_COMPONENT16; u=GL_DEPTH_COMPONENT; t=GL_UNSIGNED_SHORT; return true;
-    case D3DFMT_D24S8: i=GL_DEPTH24_STENCIL8; u=GL_DEPTH_STENCIL; t=GL_UNSIGNED_INT_24_8; return true;
-    case D3DFMT_D24X8: i=GL_DEPTH_COMPONENT24; u=GL_DEPTH_COMPONENT; t=GL_UNSIGNED_INT; return true;
-    case D3DFMT_DXT1: i=GL_COMPRESSED_RGBA_S3TC_DXT1_EXT; compressed=true; return true;
-    case D3DFMT_DXT3: i=GL_COMPRESSED_RGBA_S3TC_DXT3_EXT; compressed=true; return true;
-    case D3DFMT_DXT5: i=GL_COMPRESSED_RGBA_S3TC_DXT5_EXT; compressed=true; return true;
-    default: return false;
+enum class VulkanTextureKind : uint8_t
+{
+    Texture2D,
+    Texture3D,
+    Cube
+};
+
+struct VulkanImageFormat
+{
+    VkFormat format = VK_FORMAT_UNDEFINED;
+    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+    uint32_t bytesPerPixel = 4;
+    uint32_t blockBytes = 0;
+    bool compressed = false;
+    bool depth = false;
+};
+
+VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
+{
+    switch (format)
+    {
+    case D3DFMT_A8R8G8B8:
+    case D3DFMT_X8R8G8B8:
+        return {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_A8B8G8R8:
+        return {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_A8:
+    case D3DFMT_L8:
+        return {VK_FORMAT_R8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 1, 0, false, false};
+    case D3DFMT_A8L8:
+        return {VK_FORMAT_R8G8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
+    case D3DFMT_R5G6B5:
+        return {VK_FORMAT_R5G6B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
+    case D3DFMT_R32F:
+        return {VK_FORMAT_R32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_G16R16F:
+        return {VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_D16:
+    case D3DFMT_D16_LOCKABLE:
+        return {VK_FORMAT_D16_UNORM, VK_IMAGE_ASPECT_DEPTH_BIT, 2, 0, false, true};
+    case D3DFMT_D24S8:
+        return {VK_FORMAT_D24_UNORM_S8_UINT,
+                VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                4, 0, false, true};
+    case D3DFMT_D24X8:
+        return {VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
+    case D3DFMT_DXT1:
+        return {VK_FORMAT_BC1_RGBA_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 8, true, false};
+    case D3DFMT_DXT3:
+        return {VK_FORMAT_BC2_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
+    case D3DFMT_DXT5:
+        return {VK_FORMAT_BC3_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
+    default:
+        return {};
     }
 }
-static uint32_t R_GLFullMipCount(uint32_t w,uint32_t h,uint32_t d){uint32_t n=1;while(w>1||h>1||d>1){w=std::max(1u,w>>1);h=std::max(1u,h>>1);d=std::max(1u,d>>1);++n;}return n;}
-static uint32_t s_switchGLAllocTraceCount = 0;
-static uint32_t s_switchGLUploadTraceCount = 0;
-static void R_GLAllocTexture(
-    KisakGLTexture *x,
-    GLenum target,
-    uint32_t w,
-    uint32_t h,
-    uint32_t d,
+
+size_t R_VulkanImageLevelSize(_D3DFORMAT format, uint32_t width, uint32_t height, uint32_t depth)
+{
+    const VulkanImageFormat info = R_VulkanImageFormat(format);
+    if (info.compressed)
+    {
+        const uint32_t blocksX = std::max(1u, (width + 3u) / 4u);
+        const uint32_t blocksY = std::max(1u, (height + 3u) / 4u);
+        return static_cast<size_t>(blocksX) * blocksY * info.blockBytes * depth;
+    }
+    return static_cast<size_t>(width) * height * depth * info.bytesPerPixel;
+}
+
+uint32_t R_VulkanFullMipCount(uint32_t width, uint32_t height, uint32_t depth)
+{
+    uint32_t levels = 1;
+    while (width > 1 || height > 1 || depth > 1)
+    {
+        width = std::max(1u, width >> 1);
+        height = std::max(1u, height >> 1);
+        depth = std::max(1u, depth >> 1);
+        ++levels;
+    }
+    return levels;
+}
+
+bool R_VulkanAllocTexture(
+    KisakVkTexture *texture,
+    VulkanTextureKind kind,
+    uint32_t width,
+    uint32_t height,
+    uint32_t depth,
     uint32_t levels,
-    _D3DFORMAT f)
+    _D3DFORMAT sourceFormat,
+    int imageFlags)
 {
-    GLenum i, u, t;
-    bool compressed;
+    if (!texture || !width || !height || !depth || !levels)
+        return false;
 
-    if (!R_GLImageFormat(f, i, u, t, compressed))
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!backend)
+        return false;
+
+    const VulkanImageFormat info = R_VulkanImageFormat(sourceFormat);
+    if (info.format == VK_FORMAT_UNDEFINED)
+        return false;
+
+    texture->width = width;
+    texture->height = height;
+    texture->depth = depth;
+    texture->mipLevels = levels;
+    texture->arrayLayers = kind == VulkanTextureKind::Cube ? 6u : 1u;
+    texture->sourceFormat = sourceFormat;
+    texture->format = info.format;
+    texture->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    texture->subresourceLayouts.assign(
+        static_cast<size_t>(texture->arrayLayers) * levels,
+        VK_IMAGE_LAYOUT_UNDEFINED);
+
+    VkImageUsageFlags usage =
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_SAMPLED_BIT;
+
+    if (imageFlags & IMG_FLAG_RENDER_TARGET)
     {
-        char trace[128];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[SWITCH GLTEX] unsupported format=%08x\n",
-            (unsigned)f);
-        Switch_LogWrite(trace);
-        return;
-    }
-
-    x->target = target;
-    x->sourceFormat = f;
-    x->internalFormat = i;
-    x->uploadFormat = u;
-    x->uploadType = t;
-    x->width = w;
-    x->height = h;
-    x->depth = d;
-    x->mipLevels = levels;
-
-    const EGLDisplay eglDisplay = eglGetCurrentDisplay();
-    const EGLContext eglContext = eglGetCurrentContext();
-    const EGLSurface eglSurface = eglGetCurrentSurface(EGL_DRAW);
-    const GLenum glErrorBefore = glGetError();
-
-    glGenTextures(1, &x->object);
-
-    const GLenum glErrorAfterGen = glGetError();
-
-    if (eglDisplay == EGL_NO_DISPLAY ||
-        eglContext == EGL_NO_CONTEXT ||
-        eglSurface == EGL_NO_SURFACE ||
-        x->object == 0 ||
-        glErrorBefore != GL_NO_ERROR ||
-        glErrorAfterGen != GL_NO_ERROR)
-    {
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[SWITCH GLTEX DIAG] ctx=%p dpy=%p surf=%p target=%x format=%08x size=%ux%ux%u levels=%u object=%u gl_pre=%04x gl_gen=%04x egl=%04x\n",
-            (void *)eglContext,
-            (void *)eglDisplay,
-            (void *)eglSurface,
-            (unsigned)target,
-            (unsigned)f,
-            (unsigned)w,
-            (unsigned)h,
-            (unsigned)d,
-            (unsigned)levels,
-            (unsigned)x->object,
-            (unsigned)glErrorBefore,
-            (unsigned)glErrorAfterGen,
-            (unsigned)eglGetError());
-        Switch_LogWrite(trace);
-    }
-
-    const bool traceAlloc = s_switchGLAllocTraceCount < 24;
-    const uint32_t traceAllocIndex = s_switchGLAllocTraceCount++;
-    if (traceAlloc)
-    {
-        char trace[240];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[SWITCH GLCRASH] alloc%u bind begin object=%u target=%x format=%08x size=%ux%ux%u levels=%u compressed=%u\n",
-            (unsigned)traceAllocIndex,
-            (unsigned)x->object,
-            (unsigned)target,
-            (unsigned)f,
-            (unsigned)w,
-            (unsigned)h,
-            (unsigned)d,
-            (unsigned)levels,
-            compressed ? 1u : 0u);
-        Switch_LogWrite(trace);
-    }
-
-    glBindTexture(target, x->object);
-    const GLenum bindError = glGetError();
-    if (traceAlloc)
-    {
-        char trace[128];
-        std::snprintf(trace, sizeof(trace),
-            "[SWITCH GLCRASH] alloc%u bind end gl=%04x\n",
-            (unsigned)traceAllocIndex, (unsigned)bindError);
-        Switch_LogWrite(trace);
-    }
-    glTexParameteri(target, GL_TEXTURE_MIN_FILTER,
-        levels > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
-    glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-    if (target == GL_TEXTURE_3D || target == GL_TEXTURE_CUBE_MAP)
-        glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_REPEAT);
-
-    for (uint32_t l = 0; l < levels; ++l)
-    {
-        const uint32_t lw = std::max(1u, w >> l);
-        const uint32_t lh = std::max(1u, h >> l);
-        const uint32_t ld = std::max(1u, d >> l);
-
-        if (compressed)
-        {
-            // Compressed DXT formats do not have a meaningful external
-            // format/type pair for glTexImage*. Allocate immutable storage
-            // instead; the actual blocks are uploaded by glCompressedTexSubImage*.
-            if (traceAlloc)
-                Switch_LogWrite("[SWITCH GLCRASH] storage begin\n");
-
-            if (target == GL_TEXTURE_3D)
-                glTexStorage3D(GL_TEXTURE_3D, levels, i, w, h, d);
-            else if (target == GL_TEXTURE_CUBE_MAP)
-                glTexStorage2D(GL_TEXTURE_CUBE_MAP, levels, i, w, h);
-            else
-                glTexStorage2D(target, levels, i, w, h);
-
-            const GLenum storageError = glGetError();
-            if (traceAlloc)
-            {
-                char trace[128];
-                std::snprintf(trace, sizeof(trace),
-                    "[SWITCH GLCRASH] storage end gl=%04x\n",
-                    (unsigned)storageError);
-                Switch_LogWrite(trace);
-            }
-            break;
-        }
-
-        if (target == GL_TEXTURE_3D)
-            glTexImage3D(target, l, (GLint)i, lw, lh, ld, 0, u, t, nullptr);
-        else if (target == GL_TEXTURE_CUBE_MAP)
-        {
-            for (uint32_t face = 0; face < 6; ++face)
-                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
-                    l, (GLint)i, lw, lh, 0, u, t, nullptr);
-        }
+        if (info.depth)
+            usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         else
-            glTexImage2D(target, l, (GLint)i, lw, lh, 0, u, t, nullptr);
+            usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     }
-}
 
-static void R_GLUploadTexture(
-    const GfxImage *image,
-    _D3DFORMAT f,
-    _D3DCUBEMAP_FACES face,
-    uint32_t l,
-    const uint8_t *src)
-{
-    auto *x = image->texture.basemap;
-    if (!x || !src)
-        return;
-
-    GLenum i, u, t;
-    bool compressed;
-    if (!R_GLImageFormat(f, i, u, t, compressed))
-        return;
-
-    const bool traceUpload = s_switchGLUploadTraceCount < 24;
-    const uint32_t traceUploadIndex = s_switchGLUploadTraceCount++;
-
-    if (traceUpload)
+    bool created = false;
+    if (kind == VulkanTextureKind::Cube)
     {
-        char trace[240];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[SWITCH GLCRASH] upload%u begin image=%s object=%u target=%x format=%08x mip=%u size=%ux%ux%u\n",
-            (unsigned)traceUploadIndex,
-            image->name ? image->name : "<null>",
-            (unsigned)x->object,
-            (unsigned)x->target,
-            (unsigned)f,
-            (unsigned)l,
-            (unsigned)(std::max(1u, (uint32_t)image->width >> l)),
-            (unsigned)(std::max(1u, (uint32_t)image->height >> l)),
-            (unsigned)(std::max(1u, (uint32_t)image->depth >> l)));
-        Switch_LogWrite(trace);
+        created = !info.depth && !info.compressed
+            ? backend->CreateImageCube(width, height, levels, info.format, usage,
+                                       &texture->image, &texture->memory, &texture->view)
+            : backend->CreateImageCube(width, height, levels, info.format, usage,
+                                       &texture->image, &texture->memory, &texture->view);
     }
-
-    glBindTexture(x->target, x->object);
-    const GLenum glBindError = glGetError();
-
-    const uint32_t w = std::max(1u, (uint32_t)image->width >> l);
-    const uint32_t h = std::max(1u, (uint32_t)image->height >> l);
-    const uint32_t d = std::max(1u, (uint32_t)image->depth >> l);
-
-    if (compressed)
+    else if (kind == VulkanTextureKind::Texture3D)
     {
-        const uint32_t blockBytes = f == D3DFMT_DXT1 ? 8 : 16;
-        const uint32_t size =
-            ((w + 3) / 4) * ((h + 3) / 4) * blockBytes * d;
-
-        if (x->target == GL_TEXTURE_CUBE_MAP)
-            glCompressedTexSubImage2D(
-                GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
-                l, 0, 0, w, h, i, size, src);
-        else if (x->target == GL_TEXTURE_3D)
-            glCompressedTexSubImage3D(
-                GL_TEXTURE_3D,
-                l, 0, 0, 0, w, h, d, i, size, src);
-        else
-            glCompressedTexSubImage2D(
-                GL_TEXTURE_2D,
-                l, 0, 0, w, h, i, size, src);
+        created = backend->CreateImage3D(
+            width, height, depth, levels, info.format, usage,
+            &texture->image, &texture->memory, &texture->view);
     }
-    else if (x->target == GL_TEXTURE_3D)
-        glTexSubImage3D(
-            GL_TEXTURE_3D, l, 0, 0, 0, w, h, d, u, t, src);
-    else if (x->target == GL_TEXTURE_CUBE_MAP)
-        glTexSubImage2D(
-            GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
-            l, 0, 0, w, h, u, t, src);
     else
-        glTexSubImage2D(
-            GL_TEXTURE_2D, l, 0, 0, w, h, u, t, src);
+    {
+        created = backend->CreateImage2D(
+            width, height, levels, info.format, usage, info.aspect,
+            &texture->image, &texture->memory, &texture->view);
+    }
 
-    const GLenum glUploadError = glGetError();
-    if (traceUpload)
+    if (!created)
     {
-        char trace[128];
-        std::snprintf(trace, sizeof(trace),
-            "[SWITCH GLCRASH] upload%u end bind=%04x upload=%04x\n",
-            (unsigned)traceUploadIndex,
-            (unsigned)glBindError,
-            (unsigned)glUploadError);
-        Switch_LogWrite(trace);
+        texture->image = VK_NULL_HANDLE;
+        texture->memory = VK_NULL_HANDLE;
+        texture->view = VK_NULL_HANDLE;
+        return false;
     }
-    if (glBindError != GL_NO_ERROR || glUploadError != GL_NO_ERROR)
-    {
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[SWITCH GLTEX FAIL] image=%s object=%u target=%x format=%08x mip=%u size=%ux%ux%u bytes=%u bind=%04x upload=%04x\n",
-            image->name ? image->name : "<null>",
-            (unsigned)x->object,
-            (unsigned)x->target,
-            (unsigned)f,
-            (unsigned)l,
-            (unsigned)w,
-            (unsigned)h,
-            (unsigned)((w + 3) / 4 * ((h + 3) / 4) * (f == D3DFMT_DXT1 ? 8 : 16) * d),
-            (unsigned)glBindError,
-            (unsigned)glUploadError);
-        Switch_LogWrite(trace);
-    }
+
+    return true;
 }
 
-#endif
+void R_VulkanUploadTexture(
+    const GfxImage *image,
+    _D3DFORMAT format,
+    _D3DCUBEMAP_FACES face,
+    uint32_t mipLevel,
+    const uint8_t *source)
+{
+    if (!image || !source || !image->texture.basemap)
+        return;
 
+    auto *texture = image->texture.basemap;
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!backend)
+        return;
+
+    const VulkanImageFormat info = R_VulkanImageFormat(format);
+    if (info.format == VK_FORMAT_UNDEFINED)
+        return;
+
+    const uint32_t width = std::max(1u, static_cast<uint32_t>(image->width) >> mipLevel);
+    const uint32_t height = std::max(1u, static_cast<uint32_t>(image->height) >> mipLevel);
+    const uint32_t depth = std::max(1u, static_cast<uint32_t>(image->depth) >> mipLevel);
+    const uint32_t layer =
+        image->mapType == MAPTYPE_CUBE ? static_cast<uint32_t>(face) : 0u;
+
+    const VkImageLayout oldLayout = texture->GetSubresourceLayout(mipLevel, layer);
+    const size_t bytes = R_VulkanImageLevelSize(format, width, height, depth);
+
+    bool uploaded = false;
+    if (image->mapType == MAPTYPE_3D)
+    {
+        uploaded = backend->UploadImage3D(
+            texture->image, texture->format,
+            width, height, depth, mipLevel,
+            source, bytes, oldLayout);
+    }
+    else
+    {
+        uploaded = backend->UploadImage2D(
+            texture->image, texture->format, info.aspect,
+            width, height, mipLevel,
+            source, bytes, oldLayout, layer);
+    }
+
+    if (uploaded)
+        texture->SetSubresourceLayout(
+            mipLevel, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    else
+        Switch_LogWrite("[KisakCOD][VK] texture upload failed
+");
+}
+}
+#endif
 static const char *g_imageProgNames[14] =
 {
   "$shadow_cookie",
