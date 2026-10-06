@@ -606,9 +606,9 @@
       #define S16 signed int
     #endif
 
-    #if defined( __RADXENON__ ) || defined( __RADPS3__ )  || defined( __RADSPU__ )|| defined( __RADWII__ )
-      // on next gen platforms always turn off lower case types 
-      //   (so we can eventually remove them)
+    #if defined( __RADXENON__ ) || defined( __RADPS3__ )  || defined( __RADSPU__ )|| defined( __RADWII__ ) || defined( __RADSWITCH__ )
+      // Keep generic lowercase aliases away from modern Switch system headers.
+      // In particular, u64/f64 collide with Vulkan structure member names.
       #undef RAD_NO_LOWERCASE_TYPES  // prevents redef warning
       #define RAD_NO_LOWERCASE_TYPES
     #endif
