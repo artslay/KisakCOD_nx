@@ -620,25 +620,32 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
     if (traceImage3)
     {
         const auto iwdIt = g_iwdEntries.find(normalizedName);
+        char trace[512];
+
         if (iwdIt != g_iwdEntries.end() &&
             iwdIt->second.archiveIndex < g_iwdArchives.size())
         {
             const SwitchIwdEntry &entry = iwdIt->second;
-            char trace[384];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][IWI ROOT] path=%s iwd=1 archive=%s size=%u\n",
+                "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=1 archive=%s size=%u\n",
+                filename,
                 normalizedName.c_str(),
                 g_iwdArchives[entry.archiveIndex].path.c_str(),
                 static_cast<unsigned>(entry.size));
-            Switch_LogWrite(trace);
         }
         else
         {
-            Switch_LogWrite(
-                "[KisakCOD][IWI ROOT] path=images/3.iwi iwd=0\n");
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=0 archive=none\n",
+                filename,
+                normalizedName.c_str());
         }
+
+        Switch_LogWrite(trace);
     }
 
     if (g_iwdEntries.find(normalizedName) != g_iwdEntries.end())
@@ -648,11 +655,12 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         {
             if (traceImage3)
             {
-                char trace[256];
+                char trace[384];
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][IWI ROOT] path=%s opened=iwd handle=%d size=%u\n",
+                    "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=1 opened=iwd handle=%d size=%u\n",
+                    filename,
                     normalizedName.c_str(),
                     iwdHandle,
                     static_cast<unsigned>(g_fsh[iwdHandle].fileSize));
@@ -661,6 +669,18 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
             if (file)
                 *file = iwdHandle;
             return g_fsh[iwdHandle].fileSize;
+        }
+
+        if (traceImage3)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=1 opened=iwd=0\n",
+                filename,
+                normalizedName.c_str());
+            Switch_LogWrite(trace);
         }
     }
 
