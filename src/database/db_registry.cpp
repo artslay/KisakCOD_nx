@@ -1694,12 +1694,16 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     I_strncpyz(zone->name, zoneName, sizeof(zone->name));
     zone->flags = zoneFlags;
 #ifdef __SWITCH__
-    struct stat zoneStat{};
-    const int zoneFd = ::fileno(zoneFile);
-    zone->fileSize = zoneFd >= 0 && ::fstat(zoneFd, &zoneStat) == 0 &&
-        zoneStat.st_size > 0
-        ? static_cast<uint32_t>(zoneStat.st_size)
-        : 0;
+    g_switchDbStage = "internal/file_size";
+    long saved = std::ftell(zoneFile);
+    std::fseek(zoneFile, 0, SEEK_END);
+    const long endPos = std::ftell(zoneFile);
+    if (endPos >= 0)
+        zone->fileSize = static_cast<uint32_t>(endPos);
+    else
+        zone->fileSize = 0;
+    std::fseek(zoneFile, saved >= 0 ? saved : 0, SEEK_SET);
+    g_switchDbStage = "internal/file_size_done";
 #else
     long saved = ftell(zoneFile);
     fseek(zoneFile, 0, SEEK_END);
