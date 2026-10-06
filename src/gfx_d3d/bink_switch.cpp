@@ -1,65 +1,600 @@
 #ifdef __SWITCH__
 
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
+
+#include <SDL2/SDL.h>
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavutil/error.h>
+#include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
+}
+
 #include "binklib/bink.h"
 
-// The original Bink runtime is a proprietary platform-specific binary and is not
-// available for the Switch ARM64 port. Keep the public Bink ABI available so the
-// renderer can initialize and gracefully skip movies until a real decoder is added.
-//
-// Important: BinkGetError() must stay empty. The engine calls R_Cinematic_CheckBinkError()
-// after many Bink calls and treats a non-empty error string as an assertion failure.
+extern void Switch_LogWrite(const char *msg);
+
+struct SwitchBinkState
+{
+    AVFormatContext *format;
+    AVCodecContext *codec;
+    AVStream *videoStream;
+    AVFrame *frame;
+    AVFrame *convertedFrame;
+    AVPacket *packet;
+    SwsContext *sws;
+    int videoStreamIndex;
+    bool inputEof;
+    bool decodeFailed;
+    bool paused;
+    bool convertedAllocated;
+    uint32_t decodedFrames;
+    uint32_t fpsNum;
+    uint32_t fpsDen;
+    uint32_t startTicks;
+};
+
+static char g_switchBinkError[256] = "";
+
+static SwitchBinkState *Switch_BinkState(HBINK bink)
+{
+    return bink ? reinterpret_cast<SwitchBinkState *>(bink->ioptr) : nullptr;
+}
+
+static void Switch_BinkSetError(const char *message)
+{
+    std::snprintf(
+        g_switchBinkError,
+        sizeof(g_switchBinkError),
+        "%s",
+        message ? message : "unknown error");
+}
+
+static void Switch_BinkSetAvError(int err, const char *where)
+{
+    char avError[128] = {};
+    av_strerror(err, avError, sizeof(avError));
+
+    std::snprintf(
+        g_switchBinkError,
+        sizeof(g_switchBinkError),
+        "%s: %s",
+        where ? where : "FFmpeg",
+        avError);
+}
+
+static void Switch_BinkFreeState(SwitchBinkState *state)
+{
+    if (!state)
+        return;
+
+    if (state->sws)
+        sws_freeContext(state->sws);
+
+    if (state->convertedFrame)
+    {
+        if (state->convertedAllocated)
+            av_freep(&state->convertedFrame->data[0]);
+        av_frame_free(&state->convertedFrame);
+    }
+
+    if (state->packet)
+        av_packet_free(&state->packet);
+    if (state->frame)
+        av_frame_free(&state->frame);
+    if (state->codec)
+        avcodec_free_context(&state->codec);
+    if (state->format)
+        avformat_close_input(&state->format);
+
+    delete state;
+}
+
+static bool Switch_BinkInitConvertedFrame(SwitchBinkState *state)
+{
+    if (!state || !state->codec)
+        return false;
+
+    if (state->codec->pix_fmt == AV_PIX_FMT_YUV420P)
+        return true;
+
+    state->convertedFrame = av_frame_alloc();
+    if (!state->convertedFrame)
+    {
+        Switch_BinkSetError("av_frame_alloc failed");
+        return false;
+    }
+
+    state->convertedFrame->format = AV_PIX_FMT_YUV420P;
+    state->convertedFrame->width = state->codec->width;
+    state->convertedFrame->height = state->codec->height;
+
+    const int allocated = av_image_alloc(
+        state->convertedFrame->data,
+        state->convertedFrame->linesize,
+        state->codec->width,
+        state->codec->height,
+        AV_PIX_FMT_YUV420P,
+        1);
+    if (allocated < 0)
+    {
+        Switch_BinkSetAvError(allocated, "av_image_alloc");
+        return false;
+    }
+
+    state->convertedAllocated = true;
+    return true;
+}
+
+static bool Switch_BinkDecodeNext(SwitchBinkState *state)
+{
+    if (!state || !state->codec || !state->frame)
+        return false;
+
+    for (;;)
+    {
+        int ret = avcodec_receive_frame(state->codec, state->frame);
+        if (ret == 0)
+            return true;
+
+        if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
+        {
+            Switch_BinkSetAvError(ret, "avcodec_receive_frame");
+            state->decodeFailed = true;
+            return false;
+        }
+
+        if (state->inputEof)
+            return false;
+
+        ret = av_read_frame(state->format, state->packet);
+        if (ret < 0)
+        {
+            state->inputEof = true;
+            ret = avcodec_send_packet(state->codec, nullptr);
+            if (ret < 0 && ret != AVERROR_EOF)
+            {
+                Switch_BinkSetAvError(ret, "avcodec_send_packet(eof)");
+                state->decodeFailed = true;
+                return false;
+            }
+            continue;
+        }
+
+        if (state->packet->stream_index != state->videoStreamIndex)
+        {
+            av_packet_unref(state->packet);
+            continue;
+        }
+
+        ret = avcodec_send_packet(state->codec, state->packet);
+        av_packet_unref(state->packet);
+
+        if (ret < 0 && ret != AVERROR(EAGAIN))
+        {
+            Switch_BinkSetAvError(ret, "avcodec_send_packet");
+            state->decodeFailed = true;
+            return false;
+        }
+    }
+}
+
+static bool Switch_BinkGetFrameForCopy(
+    SwitchBinkState *state,
+    const AVFrame **frameOut)
+{
+    if (!state || !frameOut)
+        return false;
+
+    if (state->codec->pix_fmt == AV_PIX_FMT_YUV420P)
+    {
+        *frameOut = state->frame;
+        return true;
+    }
+
+    if (!state->convertedFrame)
+        return false;
+
+    if (!state->sws)
+    {
+        state->sws = sws_getContext(
+            state->codec->width,
+            state->codec->height,
+            state->codec->pix_fmt,
+            state->codec->width,
+            state->codec->height,
+            AV_PIX_FMT_YUV420P,
+            SWS_BILINEAR,
+            nullptr,
+            nullptr,
+            nullptr);
+        if (!state->sws)
+        {
+            Switch_BinkSetError("sws_getContext failed");
+            return false;
+        }
+    }
+
+    sws_scale(
+        state->sws,
+        state->frame->data,
+        state->frame->linesize,
+        0,
+        state->codec->height,
+        state->convertedFrame->data,
+        state->convertedFrame->linesize);
+
+    *frameOut = state->convertedFrame;
+    return true;
+}
+
+static void Switch_BinkCopyPlane(
+    BINKPLANE *plane,
+    const uint8_t *src,
+    int srcPitch,
+    uint32_t width,
+    uint32_t height)
+{
+    if (!plane || !plane->Buffer || !src || !width || !height)
+        return;
+
+    const uint32_t dstPitch =
+        plane->BufferPitch ? plane->BufferPitch : width;
+
+    for (uint32_t y = 0; y < height; ++y)
+    {
+        std::memcpy(
+            plane->Buffer + static_cast<size_t>(y) * dstPitch,
+            src + static_cast<size_t>(y) * srcPitch,
+            width);
+    }
+}
 
 RADDEFFUNC char PTR4* RADEXPLINK BinkGetError(void)
 {
-    static char noError[] = "";
-    return noError;
+    return g_switchBinkError;
 }
 
-RADDEFFUNC HBINK RADEXPLINK BinkOpen(const char PTR4 *name, U32 flags)
+RADDEFFUNC HBINK RADEXPLINK BinkOpen(
+    const char PTR4 *name,
+    U32 flags)
 {
-    (void)name;
-    (void)flags;
-    return 0;
+    g_switchBinkError[0] = 0;
+
+    if (!name || !*name)
+    {
+        Switch_BinkSetError("empty filename");
+        return nullptr;
+    }
+
+    SwitchBinkState *state = new SwitchBinkState{};
+    if (!state)
+    {
+        Switch_BinkSetError("out of memory");
+        return nullptr;
+    }
+
+    int ret = avformat_open_input(
+        &state->format,
+        name,
+        nullptr,
+        nullptr);
+    if (ret < 0)
+    {
+        Switch_BinkSetAvError(ret, "avformat_open_input");
+        delete state;
+        return nullptr;
+    }
+
+    ret = avformat_find_stream_info(state->format, nullptr);
+    if (ret < 0)
+    {
+        Switch_BinkSetAvError(ret, "avformat_find_stream_info");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    state->videoStreamIndex = av_find_best_stream(
+        state->format,
+        AVMEDIA_TYPE_VIDEO,
+        -1,
+        -1,
+        nullptr,
+        0);
+    if (state->videoStreamIndex < 0)
+    {
+        Switch_BinkSetAvError(
+            state->videoStreamIndex,
+            "av_find_best_stream");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    state->videoStream =
+        state->format->streams[state->videoStreamIndex];
+    const AVCodecParameters *params = state->videoStream->codecpar;
+    const AVCodec *decoder = avcodec_find_decoder(params->codec_id);
+    if (!decoder)
+    {
+        Switch_BinkSetError("FFmpeg has no decoder for Bink video");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    state->codec = avcodec_alloc_context3(decoder);
+    if (!state->codec)
+    {
+        Switch_BinkSetError("avcodec_alloc_context3 failed");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    ret = avcodec_parameters_to_context(state->codec, params);
+    if (ret < 0)
+    {
+        Switch_BinkSetAvError(ret, "avcodec_parameters_to_context");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    ret = avcodec_open2(state->codec, decoder, nullptr);
+    if (ret < 0)
+    {
+        Switch_BinkSetAvError(ret, "avcodec_open2");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    state->frame = av_frame_alloc();
+    state->packet = av_packet_alloc();
+    if (!state->frame || !state->packet)
+    {
+        Switch_BinkSetError("FFmpeg frame/packet allocation failed");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    if (!Switch_BinkInitConvertedFrame(state))
+    {
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    AVRational frameRate = state->videoStream->avg_frame_rate;
+    if (frameRate.num <= 0 || frameRate.den <= 0)
+        frameRate = state->videoStream->r_frame_rate;
+    if (frameRate.num <= 0 || frameRate.den <= 0)
+    {
+        frameRate.num = 30;
+        frameRate.den = 1;
+    }
+
+    state->fpsNum = static_cast<uint32_t>(
+        std::min<int64_t>(
+            std::max<int64_t>(frameRate.num, 1),
+            UINT32_MAX));
+    state->fpsDen = static_cast<uint32_t>(
+        std::min<int64_t>(
+            std::max<int64_t>(frameRate.den, 1),
+            UINT32_MAX));
+    state->decodedFrames = 0;
+    state->startTicks = SDL_GetTicks();
+
+    HBINK bink = new BINK{};
+    if (!bink)
+    {
+        Switch_BinkSetError("out of memory");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    bink->Width = static_cast<U32>(state->codec->width);
+    bink->Height = static_cast<U32>(state->codec->height);
+
+    uint64_t frameCount = state->videoStream->nb_frames;
+    if (!frameCount && state->videoStream->duration > 0)
+    {
+        const AVRational tb = state->videoStream->time_base;
+        if (tb.num > 0 && tb.den > 0)
+        {
+            frameCount =
+                (static_cast<uint64_t>(state->videoStream->duration) *
+                 state->fpsNum *
+                 tb.num +
+                 static_cast<uint64_t>(state->fpsDen) * tb.den - 1) /
+                (static_cast<uint64_t>(state->fpsDen) * tb.den);
+        }
+    }
+
+    bink->Frames =
+        frameCount > 0 && frameCount < UINT32_MAX
+            ? static_cast<U32>(frameCount)
+            : UINT32_MAX - 1u;
+    bink->FrameNum = 1;
+    bink->LastFrameNum = 0;
+    bink->FrameRate = state->fpsNum;
+    bink->FrameRateDiv = state->fpsDen;
+    bink->OpenFlags = flags;
+    bink->Size = state->format->pb
+        ? static_cast<U32>(
+              std::max<int64_t>(
+                  0,
+                  std::min<int64_t>(
+                      UINT32_MAX,
+                      avio_size(state->format->pb))))
+        : 0;
+    bink->Paused = 0;
+    bink->videoon = 1;
+    bink->soundon = 0;
+    bink->ioptr = reinterpret_cast<U8 PTR4 *>(state);
+
+    char trace[384];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][CINEMATIC] FFmpeg BinkOpen name=%s size=%ux%u frames=%u fps=%u/%u\\n",
+        name,
+        static_cast<unsigned>(bink->Width),
+        static_cast<unsigned>(bink->Height),
+        static_cast<unsigned>(bink->Frames),
+        static_cast<unsigned>(bink->FrameRate),
+        static_cast<unsigned>(bink->FrameRateDiv));
+    Switch_LogWrite(trace);
+
+    return bink;
 }
 
 RADDEFFUNC void RADEXPLINK BinkClose(HBINK bink)
 {
-    (void)bink;
+    if (!bink)
+        return;
+
+    SwitchBinkState *state = Switch_BinkState(bink);
+    bink->ioptr = nullptr;
+    Switch_BinkFreeState(state);
+    delete bink;
 }
 
 RADDEFFUNC S32 RADEXPLINK BinkWait(HBINK bink)
 {
-    (void)bink;
-    return 0;
+    SwitchBinkState *state = Switch_BinkState(bink);
+    if (!state || state->paused)
+        return 1;
+
+    if (!state->decodedFrames)
+        return 0;
+
+    const uint64_t framePeriodMs =
+        (1000ull * state->fpsDen + state->fpsNum - 1) /
+        state->fpsNum;
+    const uint64_t targetMs =
+        static_cast<uint64_t>(state->decodedFrames) * framePeriodMs;
+    const uint32_t elapsed =
+        SDL_GetTicks() - state->startTicks;
+
+    return static_cast<uint64_t>(elapsed) < targetMs ? 1 : 0;
 }
 
 RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
 {
-    (void)bink;
+    SwitchBinkState *state = Switch_BinkState(bink);
+    if (!state || !bink || !bink->FrameBuffers)
+        return 1;
+
+    if (bink->FrameNum > bink->Frames)
+        return 1;
+
+    if (!Switch_BinkDecodeNext(state))
+    {
+        bink->Frames = bink->FrameNum;
+        return 1;
+    }
+
+    const AVFrame *frame = nullptr;
+    if (!Switch_BinkGetFrameForCopy(state, &frame))
+    {
+        bink->Frames = bink->FrameNum;
+        return 1;
+    }
+
+    BINKFRAMEBUFFERS *buffers = bink->FrameBuffers;
+    const uint32_t frameIndex = std::min<U32>(
+        buffers->FrameNum,
+        buffers->TotalFrames
+            ? buffers->TotalFrames - 1
+            : 0);
+
+    BINKFRAMEPLANESET &dst = buffers->Frames[frameIndex];
+    const uint32_t width = bink->Width;
+    const uint32_t height = bink->Height;
+    const uint32_t chromaWidth = (width + 1u) >> 1;
+    const uint32_t chromaHeight = (height + 1u) >> 1;
+
+    Switch_BinkCopyPlane(
+        &dst.YPlane,
+        frame->data[0],
+        frame->linesize[0],
+        width,
+        height);
+    Switch_BinkCopyPlane(
+        &dst.cRPlane,
+        frame->data[1],
+        frame->linesize[1],
+        chromaWidth,
+        chromaHeight);
+    Switch_BinkCopyPlane(
+        &dst.cBPlane,
+        frame->data[2],
+        frame->linesize[2],
+        chromaWidth,
+        chromaHeight);
+
+    ++state->decodedFrames;
+    bink->LastFrameNum = bink->FrameNum;
+    bink->FrameChangePercent = 100;
     return 0;
 }
 
 RADDEFFUNC void RADEXPLINK BinkNextFrame(HBINK bink)
 {
-    (void)bink;
+    SwitchBinkState *state = Switch_BinkState(bink);
+    if (!bink || !state || bink->FrameNum >= bink->Frames)
+        return;
+
+    ++bink->FrameNum;
+    if (bink->FrameBuffers && bink->FrameBuffers->TotalFrames > 0)
+    {
+        bink->FrameBuffers->FrameNum =
+            (bink->FrameBuffers->FrameNum + 1) %
+            bink->FrameBuffers->TotalFrames;
+    }
 }
 
 RADDEFFUNC S32 RADEXPLINK BinkPause(HBINK bink, S32 pause)
 {
-    (void)bink;
-    return pause;
+    SwitchBinkState *state = Switch_BinkState(bink);
+    if (state)
+        state->paused = pause != 0;
+    if (bink)
+        bink->Paused = pause ? 1u : 0u;
+    return state && state->paused ? 1 : 0;
 }
 
-RADDEFFUNC void RADEXPLINK BinkGetRealtime(HBINK bink, BINKREALTIME PTR4 *realtime, U32 frames)
+RADDEFFUNC void RADEXPLINK BinkGetRealtime(
+    HBINK bink,
+    BINKREALTIME PTR4 *realtime,
+    U32 frames)
 {
-    (void)bink;
     (void)frames;
-    if (realtime)
-        std::memset(realtime, 0, sizeof(*realtime));
+    if (!realtime)
+        return;
+
+    std::memset(realtime, 0, sizeof(*realtime));
+
+    SwitchBinkState *state = Switch_BinkState(bink);
+    if (!bink || !state)
+        return;
+
+    realtime->FrameNum = bink->FrameNum;
+    realtime->FrameRate = state->fpsNum;
+    realtime->FrameRateDiv = state->fpsDen;
+    realtime->Frames = 1;
+    realtime->FramesTime =
+        static_cast<U32>(
+            (1000ull * state->fpsDen + state->fpsNum - 1) /
+            state->fpsNum);
+    realtime->ReadBufferSize = 1;
+    realtime->ReadBufferUsed = 1;
 }
 
-RADDEFFUNC void RADEXPLINK BinkSetMemory(BINKMEMALLOC alloc, BINKMEMFREE freeFunc)
+RADDEFFUNC void RADEXPLINK BinkSetMemory(
+    BINKMEMALLOC alloc,
+    BINKMEMFREE freeFunc)
 {
     (void)alloc;
     (void)freeFunc;
@@ -70,17 +605,21 @@ RADDEFFUNC void RADEXPLINK BinkSetIOSize(U32 ioSize)
     (void)ioSize;
 }
 
-RADDEFFUNC void RADEXPLINK BinkSetSoundTrack(U32 totalTracks, U32 PTR4 *tracks)
+RADDEFFUNC void RADEXPLINK BinkSetSoundTrack(
+    U32 totalTracks,
+    U32 PTR4 *tracks)
 {
     (void)totalTracks;
     (void)tracks;
 }
 
-RADDEFFUNC S32 RADEXPLINK BinkSetSoundSystem(BINKSNDSYSOPEN open, UINTa param)
+RADDEFFUNC S32 RADEXPLINK BinkSetSoundSystem(
+    BINKSNDSYSOPEN open,
+    UINTa param)
 {
     (void)open;
     (void)param;
-    return 0;
+    return 1;
 }
 
 RADDEFFUNC void RADEXPLINK BinkSetMixBinVolumes(
@@ -97,24 +636,49 @@ RADDEFFUNC void RADEXPLINK BinkSetMixBinVolumes(
     (void)total;
 }
 
-RADDEFFUNC S32 RADEXPLINK BinkControlBackgroundIO(HBINK bink, U32 control)
+RADDEFFUNC S32 RADEXPLINK BinkControlBackgroundIO(
+    HBINK bink,
+    U32 control)
 {
     (void)bink;
     (void)control;
-    return 0;
+    return 1;
 }
 
-RADDEFFUNC void RADEXPLINK BinkGetFrameBuffersInfo(HBINK bink, BINKFRAMEBUFFERS *buffers)
+RADDEFFUNC void RADEXPLINK BinkGetFrameBuffersInfo(
+    HBINK bink,
+    BINKFRAMEBUFFERS *buffers)
 {
-    (void)bink;
-    if (buffers)
-        std::memset(buffers, 0, sizeof(*buffers));
+    if (!buffers)
+        return;
+
+    std::memset(buffers, 0, sizeof(*buffers));
+
+    if (!bink || !Switch_BinkState(bink))
+        return;
+
+    buffers->TotalFrames = BINKMAXFRAMEBUFFERS;
+    buffers->YABufferWidth = bink->Width;
+    buffers->YABufferHeight = bink->Height;
+    buffers->cRcBBufferWidth = (bink->Width + 1u) >> 1;
+    buffers->cRcBBufferHeight = (bink->Height + 1u) >> 1;
+    buffers->FrameNum = 0;
+
+    for (U32 i = 0; i < BINKMAXFRAMEBUFFERS; ++i)
+    {
+        buffers->Frames[i].YPlane.Allocate = 1;
+        buffers->Frames[i].cRPlane.Allocate = 1;
+        buffers->Frames[i].cBPlane.Allocate = 1;
+        buffers->Frames[i].APlane.Allocate = 0;
+    }
 }
 
-RADDEFFUNC void RADEXPLINK BinkRegisterFrameBuffers(HBINK bink, BINKFRAMEBUFFERS *buffers)
+RADDEFFUNC void RADEXPLINK BinkRegisterFrameBuffers(
+    HBINK bink,
+    BINKFRAMEBUFFERS *buffers)
 {
-    (void)bink;
-    (void)buffers;
+    if (bink)
+        bink->FrameBuffers = buffers;
 }
 
 #endif
