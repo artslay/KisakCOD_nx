@@ -1,6 +1,9 @@
 #include <cstdio>
 #include <switch.h>
 #include <vulkan/vulkan.h>
+#include <atomic>
+#include <chrono>
+#include <thread>
 
 #include <qcommon/qcommon.h>
 #include <qcommon/threads.h>
@@ -13,6 +16,51 @@ extern void Com_InitParse();
 extern void Dvar_Init();
 extern void Switch_LogInit();
 extern void Switch_LogShutdown();
+extern void Switch_LogWrite(const char *msg);
+extern int32_t g_switchCurrentAssetIndex;
+extern uint32_t g_switchCurrentAssetRawType;
+extern uint32_t g_switchCurrentAssetHeader;
+extern const char * volatile g_switchDbStage;
+
+static std::atomic<bool> g_switchProgressWatchdogStop{false};
+static std::thread g_switchProgressWatchdog;
+
+static void SwitchProgressWatchdogMain()
+{
+    uint32_t tick = 0;
+    while (!g_switchProgressWatchdogStop.load(std::memory_order_acquire))
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        if (g_switchProgressWatchdogStop.load(std::memory_order_acquire))
+            break;
+
+        char line[384];
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][WATCHDOG] t=%us asset=%d rawType=%u header=%08x stage=%s\\n",
+            ++tick * 5u,
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<unsigned>(g_switchCurrentAssetHeader),
+            g_switchDbStage ? g_switchDbStage : "(null)");
+        Switch_LogWrite(line);
+    }
+}
+
+static void SwitchStartProgressWatchdog()
+{
+    g_switchProgressWatchdogStop.store(false, std::memory_order_release);
+    g_switchProgressWatchdog = std::thread(SwitchProgressWatchdogMain);
+}
+
+static void SwitchStopProgressWatchdog()
+{
+    g_switchProgressWatchdogStop.store(true, std::memory_order_release);
+    if (g_switchProgressWatchdog.joinable())
+        g_switchProgressWatchdog.join();
+}
+
 
 static void SwitchBootLog(const char *message)
 {
@@ -123,7 +171,9 @@ int main()
     SwitchBootLog("Graphics: probing Vulkan runtime");
     SwitchLogVulkanRuntime();
     SwitchBootLog("Graphics: starting engine renderer");
+    SwitchStartProgressWatchdog();
     Com_Init((char*)"");
+    SwitchStopProgressWatchdog();
 
     SwitchBootLog("Stage 7/7: engine initialized");
     SwitchBootLog("Entering applet/frame loop");
@@ -131,6 +181,7 @@ int main()
     while (appletMainLoop())
         Com_Frame();
 
+    SwitchStopProgressWatchdog();
     SwitchBootLog("Applet loop stopped, shutting down");
     Switch_LogShutdown();
     Sys_Quit();
