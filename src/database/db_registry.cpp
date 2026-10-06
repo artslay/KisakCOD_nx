@@ -3842,7 +3842,7 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][GFXIMAGE DEFERRED] registered image=%p name=%s ptr=%p remaining=%zu\\n",
+            "[KisakCOD][GFXIMAGE DEFERRED] registered image=%p name=%s ptr=%p remaining=%zu\n",
             static_cast<void *>(image),
             image->name ? image->name : "<null>",
             static_cast<void *>(result.image),
