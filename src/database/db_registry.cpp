@@ -3043,8 +3043,8 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
             newEntry->entry.asset.header.techniqueSet;
         const char *directName4026 =
             techset4026 ? techset4026->name : nullptr;
-        const void *nameHandler4026 =
-            DB_XAssetGetNameHandler[type];
+        const uintptr_t nameHandler4026 =
+            reinterpret_cast<uintptr_t>(DB_XAssetGetNameHandler[type]);
         std::snprintf(
             trace,
             sizeof(trace),
