@@ -440,6 +440,7 @@ bool VulkanBackend::CreateSwapchain()
     m_swapchainImages.resize(count);
     vkGetSwapchainImagesKHR(m_device, m_swapchain, &count, m_swapchainImages.data());
     m_swapchainViews.resize(count);
+    m_swapchainLayouts.assign(count, VK_IMAGE_LAYOUT_UNDEFINED);
 
     for (uint32_t i = 0; i < count; ++i)
     {
@@ -594,6 +595,7 @@ void VulkanBackend::DestroySwapchain()
         if (view) vkDestroyImageView(m_device, view, nullptr);
     m_swapchainViews.clear();
     m_swapchainImages.clear();
+    m_swapchainLayouts.clear();
     if (m_swapchain)
         vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
     m_swapchain = VK_NULL_HANDLE;
@@ -644,7 +646,7 @@ bool VulkanBackend::BeginFrame()
     m_frameActive = true;
     m_renderingActive = false;
 
-    if (m_defaultDepthImage)
+    if (m_defaultDepthImage && m_defaultDepthLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         TransitionImage(
             m_defaultDepthImage,
             m_defaultDepthLayout,
@@ -663,11 +665,56 @@ bool VulkanBackend::EndFrame()
     EndRendering();
 
     VkImage swapImage = CurrentSwapchainImage();
-    TransitionImage(
-        swapImage,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        VK_IMAGE_ASPECT_COLOR_BIT);
+    if (m_presentSourceImage)
+    {
+        TransitionImage(
+            m_presentSourceImage,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+
+        TransitionImage(
+            swapImage,
+            m_swapchainLayouts[m_swapchainIndex],
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+
+        VkImageBlit blit{};
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.layerCount = 1;
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.layerCount = 1;
+        blit.srcOffsets[0] = {0, 0, 0};
+        blit.srcOffsets[1] = {
+            static_cast<int32_t>(m_presentSourceWidth),
+            static_cast<int32_t>(m_presentSourceHeight), 1};
+        blit.dstOffsets[0] = {0, 0, 0};
+        blit.dstOffsets[1] = {
+            static_cast<int32_t>(m_width),
+            static_cast<int32_t>(m_height), 1};
+
+        vkCmdBlitImage(
+            m_commandBuffer,
+            m_presentSourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &blit, VK_FILTER_LINEAR);
+
+        TransitionImage(
+            swapImage,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+        m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    }
+    else
+    {
+        TransitionImage(
+            swapImage,
+            m_swapchainLayouts[m_swapchainIndex],
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+        m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    }
 
     if (vkEndCommandBuffer(m_commandBuffer) != VK_SUCCESS)
     {
@@ -1261,11 +1308,13 @@ bool VulkanBackend::EnsureRendering(
     if (m_renderingActive)
         return true;
 
+    VkImageLayout colorOldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (colorImage == CurrentSwapchainImage())
+        colorOldLayout = m_swapchainLayouts[m_swapchainIndex];
+
     TransitionImage(
         colorImage,
-        colorImage == CurrentSwapchainImage()
-            ? VK_IMAGE_LAYOUT_UNDEFINED
-            : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        colorOldLayout,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_ASPECT_COLOR_BIT);
 
