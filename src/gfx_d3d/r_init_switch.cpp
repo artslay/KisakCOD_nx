@@ -300,8 +300,8 @@ void R_GetDirect3DCaps(uint32_t, _D3DCAPS9 *) {}
 void R_SetShadowmapFormats_DX(uint32_t) {
     // Match the original hardware-shadowmap path, but skip D3D capability
     // probing because the Switch renderer uses the Vulkan compatibility device.
-    // The depth image is backed by GL_DEPTH24_STENCIL8 and the companion color
-    // surface uses GL_RGBA8 through D3DFMT_A8R8G8B8.
+    // The depth image is backed by the Vulkan depth-stencil format and the companion color
+    // surface uses a Vulkan RGBA-compatible format through D3DFMT_A8R8G8B8.
     gfxMetrics.shadowmapFormatPrimary = D3DFMT_D24S8;
     gfxMetrics.shadowmapFormatSecondary = D3DFMT_A8R8G8B8;
     gfxMetrics.shadowmapBuildTechType = TECHNIQUE_BUILD_SHADOWMAP_DEPTH;
