@@ -1293,15 +1293,16 @@ int32_t __cdecl DB_FileSize(const char *zoneName, int32_t isMod)
     else
         DB_BuildOSPath(zoneName, sizeof(filename), filename);
 
-    const int fd = FS_SwitchOpenRootFd(filename);
-    if (fd < 0)
+    FILE *file = FS_SwitchOpenRootFile(filename);
+    if (!file)
         return 0;
 
     struct stat st{};
-    const int result = ::fstat(fd, &st) == 0
+    const int fd = ::fileno(file);
+    const int result = fd >= 0 && ::fstat(fd, &st) == 0
         ? (st.st_size > 0 ? static_cast<int32_t>(st.st_size) : 0)
         : 0;
-    ::close(fd);
+    std::fclose(file);
     return result;
 #else
     int32_t size;
@@ -1641,15 +1642,14 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
 #endif
     DB_BuildOSPath(zoneName, sizeof(filename), filename);
 #ifdef __SWITCH__
-    g_switchDbStage = "internal/open";
-#endif
-#ifdef __SWITCH__
-    const int zoneFd = FS_SwitchOpenRootFd(filename);
-    if (zoneFd < 0)
+    g_switchDbStage = "internal/open_call";
+    zoneFile = FS_SwitchOpenRootFile(filename);
+    if (!zoneFile)
     {
         Com_PrintWarning(CON_CHANNEL_FILES, "WARNING: Could not find zone '%s'\n", filename);
         return 0;
     }
+    g_switchDbStage = "internal/open_done";
 #else
     zoneFile = FS_SwitchOpenRootFile(filename);
     if (!zoneFile)
@@ -1671,7 +1671,7 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     if (!g_zoneIndex)
     {
 #ifdef __SWITCH__
-        ::close(zoneFd);
+        std::fclose(zoneFile);
 #else
         fclose(zoneFile);
 #endif
@@ -1696,7 +1696,8 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     zone->flags = zoneFlags;
 #ifdef __SWITCH__
     struct stat zoneStat{};
-    zone->fileSize = ::fstat(zoneFd, &zoneStat) == 0 &&
+    const int zoneFd = ::fileno(zoneFile);
+    zone->fileSize = zoneFd >= 0 && ::fstat(zoneFd, &zoneStat) == 0 &&
         zoneStat.st_size > 0
         ? static_cast<uint32_t>(zoneStat.st_size)
         : 0;
@@ -1721,7 +1722,7 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     // historical opaque file-handle field.
     DB_LoadXFile(
         filename,
-        reinterpret_cast<void *>(static_cast<intptr_t>(zoneFd) + 1),
+        static_cast<void *>(zoneFile),
         zone->name,
         &zone->mem,
         0,
