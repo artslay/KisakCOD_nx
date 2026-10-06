@@ -1681,7 +1681,7 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     if (!*zoneName)
     {
 #ifdef __SWITCH__
-        ::close(zoneFd);
+        std::fclose(zoneFile);
 #else
         fclose(zoneFile);
 #endif
@@ -1718,8 +1718,8 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     zone->allocType = g_zoneAllocType;
     DB_ResetZoneSize((zoneFlags & DB_ZONE_GAME) != 0);
 #ifdef __SWITCH__
-    // Encode fd+1 as a non-null void* because DB_LoadData::f retains the
-    // historical opaque file-handle field.
+    // Keep the native FILE* in DB_LoadData::f; DB_ReadData() obtains its
+    // descriptor with fileno() on the Switch path.
     DB_LoadXFile(
         filename,
         static_cast<void *>(zoneFile),
