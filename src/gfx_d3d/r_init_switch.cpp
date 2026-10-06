@@ -25,7 +25,6 @@ extern void Switch_LogWrite(const char *msg);
 
 // These are implemented by the shared renderer dvar/command modules.
 extern void __cdecl R_RegisterDvars();
-#include <gfx/opengl/gl_backend.h>
 
 #ifdef __SWITCH__
 
@@ -60,7 +59,7 @@ bool __cdecl RB_IsGpuFenceFinished()
 }
 void R_FatalInitError(const char *msg) { Com_Error(ERR_FATAL, "%s", msg ? msg : "renderer init failed"); }
 void R_FatalLockError(HRESULT) { R_FatalInitError("renderer lock failed"); }
-const char *R_ErrorDescription(HRESULT hr) { return hr == S_OK ? "S_OK" : "OpenGL backend error"; }
+const char *R_ErrorDescription(HRESULT hr) { return hr == S_OK ? "S_OK" : "Vulkan backend error"; }
 
 void R_SetColorMappings() {}
 void R_CalcGammaRamp(GfxGammaRamp *ramp) {
@@ -194,10 +193,10 @@ static void R_LoadGraphicsAssets()
 
 void R_InitGraphicsApi() {
     if (!g_gfxBackend)
-        g_gfxBackend = CreateOpenGLBackend();
+        g_gfxBackend = CreateVulkanBackend();
 
     if (!g_gfxBackend)
-        R_FatalInitError("CreateOpenGLBackend failed");
+        R_FatalInitError("CreateVulkanBackend failed");
 
     if (!g_gfxBackend->Init(nullptr))
         R_FatalInitError(g_gfxBackend->GetLastError());
@@ -227,11 +226,11 @@ void R_InitGraphicsApi() {
 
     // The shared render-target bootstrap expects these metrics to be populated by
     // the original D3D capability path before R_CreateForInitOrReset(). On Switch
-    // that path is intentionally bypassed, so provide the GL-compatible
+    // that path is intentionally bypassed, so provide the Vulkan-compatible
     // depth-shadow configuration explicitly.
     R_SetShadowmapFormats_DX(0);
 
-    // The Switch renderer uses an already-created OpenGL/Zink device, so the
+    // The Switch renderer uses an already-created Vulkan/Mesa device, so the
     // Windows R_InitHardware path is not entered. Initialize the same
     // device-dependent render resources before R_InitSystems() registers the
     // runtime renderer state.
@@ -295,7 +294,7 @@ void R_StoreDirect3DCaps(uint32_t) {}
 void R_GetDirect3DCaps(uint32_t, _D3DCAPS9 *) {}
 void R_SetShadowmapFormats_DX(uint32_t) {
     // Match the original hardware-shadowmap path, but skip D3D capability
-    // probing because the Switch renderer uses the OpenGL compatibility device.
+    // probing because the Switch renderer uses the Vulkan compatibility device.
     // The depth image is backed by GL_DEPTH24_STENCIL8 and the companion color
     // surface uses GL_RGBA8 through D3DFMT_A8R8G8B8.
     gfxMetrics.shadowmapFormatPrimary = D3DFMT_D24S8;
@@ -386,7 +385,7 @@ void R_ConfigureRenderer(const GfxConfiguration *config) {
 void R_ComErrorCleanup() {}
 bool R_CheckLostDevice()
 {
-    // OpenGL on Switch has no D3D-style lost-device/reset cycle.
+    // Vulkan on Switch has no D3D-style lost-device/reset cycle.
     // Keep the original return contract: true means rendering may proceed.
     return dx.device != nullptr;
 }
