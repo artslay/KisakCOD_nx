@@ -1,5 +1,4 @@
 #ifdef __SWITCH__
-#include <switch.h>
 #include <universal/q_shared.h>
 #include <qcommon/threads.h>
 #include <qcommon/qcommon.h>
@@ -32,21 +31,7 @@ struct SwitchEvent {
 extern void Switch_LogWrite(const char *msg);
 
 static SwitchEvent *AsEvent(void *p) { return static_cast<SwitchEvent *>(p); }
-struct SwitchThreadArgs
-{
-    void (__cdecl *function)(uint32_t);
-    ThreadContext_t context;
-};
-
-// libnx requires an explicit page-aligned stack size when stack_mem is null.
-// Fastfile loading can recurse through several loader layers, so keep a full
-// 1 MiB native stack per engine thread rather than relying on std::thread's
-// platform-dependent default.
-static constexpr size_t SWITCH_ENGINE_THREAD_STACK_SIZE = 0x100000;
-
-static Thread g_threads[THREAD_CONTEXT_COUNT] = {};
-static SwitchThreadArgs g_threadArgs[THREAD_CONTEXT_COUNT] = {};
-static bool g_threadCreated[THREAD_CONTEXT_COUNT] = {};
+static std::thread g_threads[THREAD_CONTEXT_COUNT];
 static std::atomic<bool> g_threadAlive[THREAD_CONTEXT_COUNT] = {};
 static thread_local ThreadContext_t g_threadContext = THREAD_CONTEXT_MAIN;
 static thread_local const char *g_switchThreadStage = "thread/bootstrap";
@@ -227,30 +212,10 @@ bool __cdecl Sys_WaitForSingleObjectTimeout(void **event, uint32_t msec)
     return ready;
 }
 
-static void SwitchThreadEntry(void *arg)
-{
-    auto *args = static_cast<SwitchThreadArgs *>(arg);
-    const ThreadContext_t context = args->context;
-
-    if (context == THREAD_CONTEXT_CINEMATIC)
-        Switch_LogWrite("[KisakCOD][CINEMATIC] native thread entry\n");
-    if (context == THREAD_CONTEXT_CINEMATIC)
-        Switch_LogWrite("[KisakCOD][CINEMATIC] before Sys_InitThread\n");
-
-    Sys_InitThread(context);
-
-    if (context == THREAD_CONTEXT_CINEMATIC)
-        Switch_LogWrite("[KisakCOD][CINEMATIC] after Sys_InitThread\n");
-
-    args->function(static_cast<uint32_t>(context));
-    g_threadAlive[context] = false;
-}
-
 void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_t context)
 {
     if (context == THREAD_CONTEXT_CINEMATIC)
         Switch_LogWrite("[KisakCOD][CINEMATIC] Sys_CreateThread begin\n");
-
     g_switchThreadStage = "create/check_context";
     if (context < 0 || context >= THREAD_CONTEXT_COUNT)
     {
@@ -259,83 +224,33 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
     }
 
     g_switchThreadStage = "create/check_join";
-    if (g_threadCreated[context])
+    if (g_threads[context].joinable())
     {
         g_switchThreadStage = "create/join_existing";
-        Result waitRc = threadWaitForExit(&g_threads[context]);
-        if (R_FAILED(waitRc))
-        {
-            char trace[160];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][THREAD] wait failed context=%d rc=0x%08x\n",
-                static_cast<int>(context),
-                static_cast<unsigned>(waitRc));
-            Switch_LogWrite(trace);
-        }
-        threadClose(&g_threads[context]);
-        g_threadCreated[context] = false;
+        g_threads[context].join();
     }
 
     g_switchThreadStage = "create/set_alive";
     g_threadAlive[context] = true;
-    g_threadArgs[context].function = function;
-    g_threadArgs[context].context = context;
 
     g_switchThreadStage = "create/thread_ctor";
-    Result createRc = threadCreate(
-        &g_threads[context],
-        SwitchThreadEntry,
-        &g_threadArgs[context],
-        nullptr,
-        SWITCH_ENGINE_THREAD_STACK_SIZE,
-        0x3B,
-        -2);
-    if (R_FAILED(createRc))
-    {
+    g_threads[context] = std::thread([function, context] {
+        if (context == THREAD_CONTEXT_CINEMATIC)
+            Switch_LogWrite("[KisakCOD][CINEMATIC] thread lambda entered\n");
+        if (context == THREAD_CONTEXT_CINEMATIC)
+            Switch_LogWrite("[KisakCOD][CINEMATIC] before Sys_InitThread\n");
+        Sys_InitThread(context);
+        if (context == THREAD_CONTEXT_CINEMATIC)
+            Switch_LogWrite("[KisakCOD][CINEMATIC] after Sys_InitThread\n");
+        function((uint32_t)context);
         g_threadAlive[context] = false;
-        char trace[160];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][THREAD] create failed context=%d rc=0x%08x\n",
-            static_cast<int>(context),
-            static_cast<unsigned>(createRc));
-        Switch_LogWrite(trace);
-        g_switchThreadStage = "create/failed";
-        threadHandle[context] = nullptr;
-        return;
-    }
-
+    });
     g_switchThreadStage = "create/thread_ctor_done";
-    g_threadCreated[context] = true;
     if (context == THREAD_CONTEXT_CINEMATIC)
-        Switch_LogWrite("[KisakCOD][CINEMATIC] native thread created\n");
-
-    g_switchThreadStage = "create/thread_start";
-    Result startRc = threadStart(&g_threads[context]);
-    if (R_FAILED(startRc))
-    {
-        g_threadAlive[context] = false;
-        threadClose(&g_threads[context]);
-        g_threadCreated[context] = false;
-        char trace[160];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][THREAD] start failed context=%d rc=0x%08x\n",
-            static_cast<int>(context),
-            static_cast<unsigned>(startRc));
-        Switch_LogWrite(trace);
-        g_switchThreadStage = "create/failed";
-        threadHandle[context] = nullptr;
-        return;
-    }
+        Switch_LogWrite("[KisakCOD][CINEMATIC] std::thread created\n");
 
     g_switchThreadStage = "create/set_handle";
-    threadHandle[context] = reinterpret_cast<HANDLE>(
-        static_cast<uintptr_t>(g_threads[context].handle));
+    threadHandle[context] = reinterpret_cast<HANDLE>(&g_threads[context]);
 
     g_switchThreadStage = "create/done";
 }
@@ -362,7 +277,7 @@ char __cdecl Sys_SpawnRenderThread(void (__cdecl *function)(uint32_t))
 char __cdecl Sys_SpawnDatabaseThread(void (__cdecl *function)(uint32_t))
 {
     Sys_CreateThread(function, THREAD_CONTEXT_DATABASE);
-    return g_threadCreated[THREAD_CONTEXT_DATABASE] ? 1 : 0;
+    return 1;
 }
 
 bool __cdecl Sys_SpawnWorkerThread(void (__cdecl *function)(uint32_t), uint32_t index)
