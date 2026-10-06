@@ -436,8 +436,18 @@ struct IDirect3DSurface9
         if (!lockedRect || !texture || texture->target != GL_TEXTURE_2D || !texture->width || !texture->height)
             return E_FAIL;
 
-        const size_t pitch = static_cast<size_t>(texture->width) * 4u;
-        lockShadow.resize(pitch * static_cast<size_t>(texture->height));
+        const uint32_t levelWidth = std::max(1u, texture->width >> level);
+        const uint32_t levelHeight = std::max(1u, texture->height >> level);
+        size_t bytesPerPixel = 4;
+        if (texture->uploadFormat == GL_RED || texture->uploadFormat == GL_ALPHA)
+            bytesPerPixel = 1;
+        else if (texture->uploadFormat == GL_RG)
+            bytesPerPixel = 2;
+        else if (texture->uploadType == GL_UNSIGNED_SHORT_5_6_5)
+            bytesPerPixel = 2;
+
+        const size_t pitch = static_cast<size_t>(levelWidth) * bytesPerPixel;
+        lockShadow.resize(pitch * static_cast<size_t>(levelHeight));
         lockedRect->pBits = lockShadow.data();
         lockedRect->Pitch = static_cast<int>(pitch);
         lockShadowActive = true;
@@ -449,15 +459,18 @@ struct IDirect3DSurface9
         if (!texture || !lockShadowActive || texture->target != GL_TEXTURE_2D)
             return E_FAIL;
 
+        const uint32_t levelWidth = std::max(1u, texture->width >> level);
+        const uint32_t levelHeight = std::max(1u, texture->height >> level);
         glBindTexture(GL_TEXTURE_2D, texture->object);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexSubImage2D(
             GL_TEXTURE_2D,
             static_cast<GLint>(level),
             0, 0,
-            static_cast<GLsizei>(texture->width),
-            static_cast<GLsizei>(texture->height),
-            GL_RGBA,
-            GL_UNSIGNED_BYTE,
+            static_cast<GLsizei>(levelWidth),
+            static_cast<GLsizei>(levelHeight),
+            texture->uploadFormat,
+            texture->uploadType,
             lockShadow.data());
 
         lockShadowActive = false;
@@ -835,7 +848,11 @@ public:
         if (m_depth)
             m_depth->Release();
         if (m_fbo)
+        {
+            if (m_color || m_depth)
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glDeleteFramebuffers(1, &m_fbo);
+        }
         if (m_blitReadFbo)
             glDeleteFramebuffers(1, &m_blitReadFbo);
         if (m_blitDrawFbo)
@@ -1431,18 +1448,14 @@ void main()
 
         RebuildVertexLayout();
 
-        // R_SetStreamSource already points the VAO at the dynamic vertex allocation.
-        // The normal SP tess path therefore uses baseVertexIndex == 0.
-        if (baseVertexIndex != 0)
-            return E_FAIL;
-
         (void)minVertexIndex;
         (void)numVertices;
-        glDrawElements(
+        glDrawElementsBaseVertex(
             GL_TRIANGLES,
             (GLsizei)(primitiveCount * 3),
             GL_UNSIGNED_SHORT,
-            reinterpret_cast<const void*>(uintptr_t(startIndex * sizeof(uint16_t))));
+            reinterpret_cast<const void*>(uintptr_t(startIndex * sizeof(uint16_t))),
+            static_cast<GLint>(baseVertexIndex));
         return S_OK;
     }
 

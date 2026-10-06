@@ -347,10 +347,18 @@ void OpenGLBackend::Present()
 }
 void OpenGLBackend::BeginScene()
 {
+#ifdef __SWITCH__
+    if (Switch_GLBeginRenderContext() && !m_vertexArrayObject)
+        glGenVertexArrays(1, &m_vertexArrayObject);
+#else
+#endif
 }
 
 void OpenGLBackend::EndScene()
 {
+#ifdef __SWITCH__
+    glFlush();
+#endif
 }
 
 void OpenGLBackend::Clear(float r, float g, float b, float a)
