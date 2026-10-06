@@ -807,9 +807,53 @@ bool VulkanBackend::EndFrame()
     return true;
 }
 
-bool VulkanBackend::Present()
+void VulkanBackend::Present()
 {
-    return EndFrame();
+    if (!EndFrame())
+        return;
+}
+
+void VulkanBackend::BeginScene()
+{
+    BeginFrame();
+}
+
+void VulkanBackend::EndScene()
+{
+    EndRendering();
+}
+
+void VulkanBackend::Clear(float r, float g, float b, float a)
+{
+    if (!m_frameActive)
+        return;
+    if (!EnsureRendering(
+            CurrentSwapchainImage(), CurrentSwapchainView(), m_swapchainFormat,
+            m_defaultDepthImage, m_defaultDepthView, m_depthFormat,
+            m_swapchainLayouts[m_swapchainIndex], m_defaultDepthLayout,
+            m_width, m_height))
+        return;
+
+    VkClearAttachment color{};
+    color.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    color.colorAttachment = 0;
+    color.clearValue.color.float32[0] = r;
+    color.clearValue.color.float32[1] = g;
+    color.clearValue.color.float32[2] = b;
+    color.clearValue.color.float32[3] = a;
+
+    VkClearRect rect{};
+    rect.rect.extent = {m_width, m_height};
+    rect.layerCount = 1;
+    vkCmdClearAttachments(m_commandBuffer, 1, &color, 1, &rect);
+}
+
+bool VulkanBackend::GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_t *format) const
+{
+    if (width) *width = m_width;
+    if (height) *height = m_height;
+    if (format) *format = static_cast<uint32_t>(m_swapchainFormat);
+    return m_swapchain != VK_NULL_HANDLE;
 }
 
 void VulkanBackend::WaitForGpu()
@@ -1438,10 +1482,6 @@ bool VulkanBackend::EnsureRendering(
     if (m_renderingActive)
         return true;
 
-    VkImageLayout colorOldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (colorImage == CurrentSwapchainImage())
-        colorOldLayout = m_swapchainLayouts[m_swapchainIndex];
-
     TransitionImage(
         colorImage,
         colorOldLayout,
@@ -1454,9 +1494,7 @@ bool VulkanBackend::EnsureRendering(
     {
         TransitionImage(
             depthImage,
-            depthImage == m_defaultDepthImage
-                ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-                : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            depthOldLayout,
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             DepthAspect(depthFormat));
     }
