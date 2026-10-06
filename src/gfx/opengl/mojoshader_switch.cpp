@@ -24,11 +24,26 @@ static std::string ReplaceAll(std::string source, const char *from, const char *
 static void NormalizeMojoGLSL(std::string &source)
 {
     if (source.rfind("#version 300 es", 0) == 0)
-        source.replace(0, std::strlen("#version 300 es"), "#version 430 core");
+        source.replace(
+            0,
+            std::strlen("#version 300 es"),
+            "#version 430 core");
 
     source = ReplaceAll(source, "highp ", "");
     source = ReplaceAll(source, "mediump ", "");
     source = ReplaceAll(source, "lowp ", "");
+
+    // glsles3 emits precision qualifiers that have no place in desktop GLSL 4.30.
+    std::istringstream input(source);
+    std::ostringstream output;
+    std::string line;
+    while (std::getline(input, line))
+    {
+        if (line.rfind("precision ", 0) == 0)
+            continue;
+        output << line << '\n';
+    }
+    source = output.str();
 }
 
 static bool ParseUniformDefine(
@@ -114,6 +129,21 @@ bool Switch_TranslateD3DShader(
         if (parsed->error_count > 0 && parsed->errors && parsed->errors[0].error)
             message << ": " << parsed->errors[0].error;
         error = message.str();
+
+        static uint32_t failureLogCount = 0;
+        if (failureLogCount < 32)
+        {
+            char trace[640];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][SHADER] MojoShader parse fallback: %s\n",
+                error.c_str());
+            extern void Switch_LogWrite(const char *msg);
+            Switch_LogWrite(trace);
+            ++failureLogCount;
+        }
+
         MOJOSHADER_freeParseData(parsed);
         return false;
     }
