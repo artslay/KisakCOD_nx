@@ -1734,7 +1734,17 @@ void __cdecl Image_CreateCubeTexture_PC(GfxImage *image,uint16_t edgeLen,uint32_
 {
     iassert(image&&!image->texture.basemap);image->width=edgeLen;image->height=edgeLen;image->depth=1;image->mapType=MAPTYPE_CUBE;
 #ifdef __SWITCH__
-    if(!gfxMetrics.canMipCubemaps)mipmapCount=1;if(!mipmapCount)mipmapCount=R_GLFullMipCount(edgeLen,edgeLen,1);auto *x=new KisakGLTexture;R_GLAllocTexture(x,GL_TEXTURE_CUBE_MAP,edgeLen,edgeLen,1,mipmapCount,imageFormat);image->texture.cubemap=x;
+    if (!mipmapCount)
+        mipmapCount = R_VulkanFullMipCount(edgeLen, edgeLen, 1);
+    auto *x = new KisakVkTexture;
+    if (!R_VulkanAllocTexture(
+            x, VulkanTextureKind::Cube, edgeLen, edgeLen, 1,
+            mipmapCount, imageFormat, 0))
+    {
+        delete x;
+        Com_Error(ERR_DROP, "CreateCubeTexture failed: Vulkan allocation failed");
+    }
+    image->texture.cubemap = x;
 #else
     HRESULT hr=dx.device->CreateCubeTexture(edgeLen,mipmapCount,0,imageFormat,D3DPOOL_MANAGED,(IDirect3DCubeTexture9**)&image->texture,0);if(hr<0)Com_Error(ERR_DROP,"CreateCubeTexture failed: %s",R_ErrorDescription(hr));
 #endif
@@ -1744,7 +1754,17 @@ void __cdecl Image_Create3DTexture_PC(GfxImage *image,uint16_t width,uint16_t he
 {
     iassert(image&&!image->texture.basemap);image->width=width;image->height=height;image->depth=depth;image->mapType=MAPTYPE_3D;
 #ifdef __SWITCH__
-    if(!mipmapCount)mipmapCount=R_GLFullMipCount(width,height,depth);auto *x=new KisakGLTexture;R_GLAllocTexture(x,GL_TEXTURE_3D,width,height,depth,mipmapCount,imageFormat);image->texture.volmap=x;
+    if (!mipmapCount)
+        mipmapCount = R_VulkanFullMipCount(width, height, depth);
+    auto *x = new KisakVkTexture;
+    if (!R_VulkanAllocTexture(
+            x, VulkanTextureKind::Texture3D, width, height, depth,
+            mipmapCount, imageFormat, imageFlags))
+    {
+        delete x;
+        Com_Error(ERR_DROP, "Create3DTexture failed: Vulkan allocation failed");
+    }
+    image->texture.volmap = x;
 #else
     uint32_t usage=Image_GetUsage(imageFlags,imageFormat);HRESULT hr=dx.device->CreateVolumeTexture(width,height,depth,mipmapCount,0,imageFormat,(_D3DPOOL)(usage==0),(IDirect3DVolumeTexture9**)&image->texture,0);if(hr<0)Com_Error(ERR_DROP,"Create3DTexture failed: %s",R_ErrorDescription(hr));
 #endif
@@ -1786,7 +1806,17 @@ void __cdecl Image_Create2DTexture_PC(GfxImage *image,uint16_t width,uint16_t he
 {
     iassert(image&&!image->texture.basemap);image->width=width;image->height=height;image->depth=1;image->mapType=MAPTYPE_2D;
 #ifdef __SWITCH__
-    if(!mipmapCount)mipmapCount=R_GLFullMipCount(width,height,1);auto *x=new KisakGLTexture;R_GLAllocTexture(x,GL_TEXTURE_2D,width,height,1,mipmapCount,imageFormat);image->texture.map=x;
+    if (!mipmapCount)
+        mipmapCount = R_VulkanFullMipCount(width, height, 1);
+    auto *x = new KisakVkTexture;
+    if (!R_VulkanAllocTexture(
+            x, VulkanTextureKind::Texture2D, width, height, 1,
+            mipmapCount, imageFormat, imageFlags))
+    {
+        delete x;
+        Com_Error(ERR_DROP, "Create2DTexture failed: Vulkan allocation failed");
+    }
+    image->texture.map = x;
 #else
     uint32_t usage=Image_GetUsage(imageFlags,imageFormat);HRESULT hr=dx.device->CreateTexture(width,height,mipmapCount,usage,imageFormat,(_D3DPOOL)(usage==0),(IDirect3DTexture9**)&image->texture,0);if(hr<0)Com_Error(ERR_DROP,"Create2DTexture failed: %s",R_ErrorDescription(hr));
 #endif
