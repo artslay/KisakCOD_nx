@@ -1474,6 +1474,7 @@ void VulkanBackend::ClearPresentSource()
 bool VulkanBackend::EnsureRendering(
     VkImage colorImage, VkImageView colorView, VkFormat colorFormat,
     VkImage depthImage, VkImageView depthView, VkFormat depthFormat,
+    VkImageLayout colorOldLayout, VkImageLayout depthOldLayout,
     uint32_t width, uint32_t height)
 {
     if (!m_frameActive || !colorImage || !colorView || colorFormat == VK_FORMAT_UNDEFINED)
