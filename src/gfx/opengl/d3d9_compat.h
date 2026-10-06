@@ -1013,7 +1013,37 @@ class IDirect3DDevice9
                             }
                         }
                     }
-                    glUniform4iv(location, uniform.array_count, values.data());
+                    glUniform4iv(
+                        location,
+                        uniform.array_count,
+                        values.data());
+                }
+                else if (uniform.type == MOJOSHADER_UNIFORM_BOOL)
+                {
+                    std::vector<int> values(
+                        static_cast<size_t>(uniform.array_count),
+                        0);
+                    for (int row = 0; row < uniform.array_count; ++row)
+                    {
+                        for (int k = 0;
+                             k < shader->parseData->constant_count;
+                             ++k)
+                        {
+                            const auto &constant =
+                                shader->parseData->constants[k];
+                            if (constant.type == MOJOSHADER_UNIFORM_BOOL &&
+                                constant.index == uniform.index + row)
+                            {
+                                values[static_cast<size_t>(row)] =
+                                    constant.value.b ? 1 : 0;
+                                break;
+                            }
+                        }
+                    }
+                    glUniform1iv(
+                        location,
+                        uniform.array_count,
+                        values.data());
                 }
             }
         };
