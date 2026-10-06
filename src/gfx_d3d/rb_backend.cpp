@@ -1712,39 +1712,6 @@ void __cdecl DrawText2D(
     material = Material_FromHandle(font->material);
     iassert( material );
 #ifdef __SWITCH__
-    {
-        static uint32_t switchTextMaterialTraceCount = 0;
-        if (switchTextMaterialTraceCount < 16)
-        {
-            const uintptr_t materialPtr = reinterpret_cast<uintptr_t>(material);
-            const char *materialName =
-                materialPtr && materialPtr < (1ULL << 39)
-                    ? material->info.name
-                    : nullptr;
-            if (materialName &&
-                (I_stricmp(materialName, "fonts/gamefonts_pc") == 0 ||
-                 I_stricmp(materialName, "fonts/devfonts") == 0))
-            {
-                char trace[512];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][TEXT MATERIAL] where=base ptr=%p name=%s tech=%p tex=%p texCount=%u const=%p constCount=%u state=%p stateCount=%u stateFlags=%02x\n",
-                    static_cast<const void *>(material),
-                    materialName,
-                    static_cast<void *>(material->techniqueSet),
-                    static_cast<void *>(material->textureTable),
-                    static_cast<unsigned>(material->textureCount),
-                    static_cast<void *>(material->constantTable),
-                    static_cast<unsigned>(material->constantCount),
-                    static_cast<void *>(material->stateBitsTable),
-                    static_cast<unsigned>(material->stateBitsCount),
-                    static_cast<unsigned>(material->stateFlags));
-                Switch_LogWrite(trace);
-                ++switchTextMaterialTraceCount;
-            }
-        }
-    }
     g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/base_material";
 #endif
     if ((renderFlags & 0x40) != 0 && (!fxMaterial || !fxMaterial->techniqueSet))
@@ -2648,35 +2615,6 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
         return;
     }
     g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/enter";
-    {
-        static uint32_t switchText2DTraceCount = 0;
-        if (switchText2DTraceCount < 12)
-        {
-            const uintptr_t fontPtr = reinterpret_cast<uintptr_t>(cmd->font);
-            const uintptr_t materialPtr =
-                cmd->font && fontPtr < (1ULL << 39)
-                    ? reinterpret_cast<uintptr_t>(cmd->font->material)
-                    : 0;
-            const char *materialName =
-                cmd->font && materialPtr && materialPtr < (1ULL << 39)
-                    ? cmd->font->material->info.name
-                    : nullptr;
-            char trace[512];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][TEXT2D] cmd=%p bytes=%u font=%p material=%p glow=%p text=%s matName=%s\n",
-                static_cast<const void *>(cmd),
-                static_cast<unsigned>(cmd->header.byteCount),
-                static_cast<const void *>(cmd->font),
-                reinterpret_cast<const void *>(materialPtr),
-                static_cast<const void *>(cmd->font ? cmd->font->glowMaterial : nullptr),
-                cmd->text[0] ? cmd->text : "<empty>",
-                materialName ? materialName : "<null>");
-            Switch_LogWrite(trace);
-            ++switchText2DTraceCount;
-        }
-    }
 #endif
     v1 = DEG2RAD( cmd->rotation );
     cosAngle = cos(v1);
