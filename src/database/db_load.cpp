@@ -7956,6 +7956,30 @@ void __cdecl Load_Material(bool atStreamStart)
 
 #ifdef __SWITCH__
     Switch_LogWrite("[SWITCH MATERIAL] info done\n");
+    const char *switchMaterialNameForTrace = varMaterial->info.name;
+    const bool traceSwitchFontMaterial =
+        switchMaterialNameForTrace &&
+        (I_stricmp(switchMaterialNameForTrace, "fonts/gamefonts_pc") == 0 ||
+         I_stricmp(switchMaterialNameForTrace, "fonts/devfonts") == 0 ||
+         I_stricmp(switchMaterialNameForTrace, "fonts/gamefonts_pc_glow") == 0 ||
+         I_stricmp(switchMaterialNameForTrace, "fonts/devfonts_glow") == 0);
+    if (traceSwitchFontMaterial)
+    {
+        char trace[480];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FONT MATERIAL LOAD] name=%s serializedTex=%08x/%u serializedConst=%08x/%u serializedState=%08x/%u native=%p\n",
+            switchMaterialNameForTrace,
+            serialized.textureTable,
+            static_cast<unsigned>(serialized.textureCount),
+            serialized.constantTable,
+            static_cast<unsigned>(serialized.constantCount),
+            serialized.stateBitsTable,
+            static_cast<unsigned>(serialized.stateBitsCount),
+            static_cast<void *>(varMaterial));
+        Switch_LogWrite(trace);
+    }
     if (traceUiMaterial)
     {
         const uintptr_t materialName =
@@ -8031,6 +8055,23 @@ void __cdecl Load_Material(bool atStreamStart)
 
 #ifdef __SWITCH__
     g_switchDbStage = "material/constants";
+    if (traceSwitchFontMaterial)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FONT MATERIAL LOAD] tables-after-textures name=%s tech=%p tex=%p/%u const=%p/%u state=%p/%u\n",
+            switchMaterialNameForTrace ? switchMaterialNameForTrace : "<null>",
+            static_cast<void *>(varMaterial->techniqueSet),
+            static_cast<void *>(varMaterial->textureTable),
+            static_cast<unsigned>(varMaterial->textureCount),
+            static_cast<void *>(varMaterial->constantTable),
+            static_cast<unsigned>(varMaterial->constantCount),
+            static_cast<void *>(varMaterial->stateBitsTable),
+            static_cast<unsigned>(varMaterial->stateBitsCount));
+        Switch_LogWrite(trace);
+    }
     if (traceUiMaterial)
         Switch_LogWrite("[KisakCOD][UI MATERIAL] textures done\n");
 #endif
