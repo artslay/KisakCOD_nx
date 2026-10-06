@@ -122,16 +122,36 @@ bool Switch_TranslateD3DShader(
     result.source.assign(parsed->output, static_cast<size_t>(parsed->output_len));
     NormalizeMojoGLSL(result.source);
 
+    const bool vertexShader =
+        parsed->shader_type == MOJOSHADER_TYPE_VERTEX;
     std::istringstream lines(result.source);
     std::string line;
     while (std::getline(lines, line))
     {
-        ParseUniformDefine(line, "vs_c", "vs_uniforms_vec4", result.floatUniformIndex);
-        ParseUniformDefine(line, "vs_i", "vs_uniforms_ivec4", result.intUniformIndex);
-        ParseUniformDefine(line, "vs_b", "vs_uniforms_bool", result.boolUniformIndex);
-        ParseUniformDefine(line, "ps_c", "ps_uniforms_vec4", result.floatUniformIndex);
-        ParseUniformDefine(line, "ps_i", "ps_uniforms_ivec4", result.intUniformIndex);
-        ParseUniformDefine(line, "ps_b", "ps_uniforms_bool", result.boolUniformIndex);
+        if (vertexShader)
+        {
+            ParseUniformDefine(
+                line, "vs_c", "vs_uniforms_vec4",
+                result.floatUniformIndex);
+            ParseUniformDefine(
+                line, "vs_i", "vs_uniforms_ivec4",
+                result.intUniformIndex);
+            ParseUniformDefine(
+                line, "vs_b", "vs_uniforms_bool",
+                result.boolUniformIndex);
+        }
+        else
+        {
+            ParseUniformDefine(
+                line, "ps_c", "ps_uniforms_vec4",
+                result.floatUniformIndex);
+            ParseUniformDefine(
+                line, "ps_i", "ps_uniforms_ivec4",
+                result.intUniformIndex);
+            ParseUniformDefine(
+                line, "ps_b", "ps_uniforms_bool",
+                result.boolUniformIndex);
+        }
     }
 
     return true;
