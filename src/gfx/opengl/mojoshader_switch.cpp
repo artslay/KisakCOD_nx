@@ -159,7 +159,7 @@ bool Switch_TranslateD3DShader(
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][SHADER] MojoShader translated type=%s model=%d_%d instructions=%d uniforms=%d samplers=%d attributes=%d output=%d bytes=%u\\n",
+            "[KisakCOD][SHADER] MojoShader translated type=%s model=%d_%d instructions=%d uniforms=%d samplers=%d attributes=%d output=%d bytes=%u\n",
             parsed->shader_type == MOJOSHADER_TYPE_VERTEX ? "vs" : "ps",
             parsed->major_ver,
             parsed->minor_ver,
