@@ -31,8 +31,10 @@ CXXFLAGS    := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-rtti -fno
 CPPFLAGS    += -DGIT_COMMIT=\"$(GIT_COMMIT)\"
 CFLAGS      := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-plt -std=gnu17 -MMD -MP -Wno-old-style-definition
 LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libnx/lib -specs=$(DEVKITPRO)/libnx/switch.specs -Wl,--gc-sections,-Bsymbolic
-# OpenAL Soft in devkitPro is built with its SDL2 playback backend, so SDL2 remains a runtime audio dependency.
-LIBS        := -lvulkan -lexpat -lopenal -lavformat -lavcodec -lswresample -lswscale -lavutil -ldav1d -lbz2 -lz -lnx -lm -lSDL2
+# OpenAL Soft in devkitPro uses SDL2 for audio. SDL2's Switch objects need
+# Mesa EGL and libnx after the SDL2 archive during static linking. This does
+# not enable the engine's graphics backend; rendering remains Vulkan-only.
+LIBS        := -lvulkan -lexpat -lopenal -lavformat -lavcodec -lswresample -lswscale -lavutil -ldav1d -lbz2 -lz -lm -lSDL2 -lEGL -lnx
 
 include $(DEVKITPRO)/libnx/switch_rules
 
