@@ -227,20 +227,9 @@ uint64_t PointerKey(const void *ptr)
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ptr));
 }
 
-struct UniformLayout
+VulkanUniformLayout GetUniformLayout(const MOJOSHADER_parseData *parse)
 {
-    uint32_t floatCount = 0;
-    uint32_t intCount = 0;
-    uint32_t boolCount = 0;
-    size_t floatOffset = 0;
-    size_t intOffset = 0;
-    size_t boolOffset = 0;
-    size_t size = 0;
-};
-
-UniformLayout GetUniformLayout(const MOJOSHADER_parseData *parse)
-{
-    UniformLayout layout{};
+    VulkanUniformLayout layout{};
     if (!parse)
         return layout;
 
@@ -1046,12 +1035,12 @@ bool IDirect3DDevice9::BindUniformSet(
     const MOJOSHADER_parseData *parse,
     const void *floatData,
     const void *intData,
-    const void *boolData,
-    UniformLayout layout)
+    const void *boolData)
 {
     if (!parse)
         return false;
 
+    const VulkanUniformLayout layout = GetUniformLayout(parse);
     const size_t size = std::max<size_t>(16, layout.size);
     std::vector<uint8_t> bytes(size);
     if (layout.floatCount)
@@ -1102,9 +1091,7 @@ bool IDirect3DDevice9::BindUniformSet(
 bool IDirect3DDevice9::BindSamplerSet(
     VkPipelineBindPoint bindPoint,
     uint32_t setIndex,
-    VkShaderStageFlagBits,
-    const std::array<IDirect3DBaseTexture9*,16> &textures,
-    const MOJOSHADER_parseData *parse)
+    const std::array<IDirect3DBaseTexture9*,16> &textures)
 {
     VkDescriptorSetLayout layout = setIndex == 0
         ? m_backend->VSSamplerLayout() : m_backend->PSSamplerLayout();
@@ -1168,7 +1155,6 @@ bool IDirect3DDevice9::BindSamplerSet(
     vkCmdBindDescriptorSets(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
         setIndex, 1, &set, 0, nullptr);
-    (void)parse;
     return true;
 }
 
@@ -1235,33 +1221,39 @@ bool IDirect3DDevice9::EnsurePipeline()
             MOJOSHADER_vertexAttribute attr{};
             switch (element.Type)
             {
-            case D3DDECLTYPE_UBYTE4: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_UBYTE4; break;
-            case D3DDECLTYPE_UBYTE4N: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_UBYTE4N; break;
+            case D3DDECLTYPE_FLOAT1: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_SINGLE; break;
+            case D3DDECLTYPE_FLOAT2: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR2; break;
+            case D3DDECLTYPE_FLOAT3: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR3; break;
+            case D3DDECLTYPE_FLOAT4: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR4; break;
+            case D3DDECLTYPE_D3DCOLOR: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_COLOR; break;
+            case D3DDECLTYPE_UBYTE4: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_BYTE4; break;
             case D3DDECLTYPE_SHORT2: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_SHORT2; break;
             case D3DDECLTYPE_SHORT4: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_SHORT4; break;
-            case D3DDECLTYPE_SHORT2N: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_SHORT2N; break;
-            case D3DDECLTYPE_SHORT4N: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_SHORT4N; break;
-            case D3DDECLTYPE_USHORT2N: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_USHORT2N; break;
-            case D3DDECLTYPE_USHORT4N: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_USHORT4N; break;
-            default: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_FLOAT4; break;
+            case D3DDECLTYPE_SHORT2N: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_NORMALIZEDSHORT2; break;
+            case D3DDECLTYPE_SHORT4N: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_NORMALIZEDSHORT4; break;
+            case D3DDECLTYPE_FLOAT16_2: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_HALFVECTOR2; break;
+            case D3DDECLTYPE_FLOAT16_4: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_HALFVECTOR4; break;
+            default: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR4; break;
             }
             attr.usage = static_cast<MOJOSHADER_usage>(std::min<uint32_t>(element.Usage, MOJOSHADER_USAGE_TOTAL - 1));
             attr.usageIndex = element.UsageIndex;
             attributes.push_back(attr);
         }
 
-        MOJOSHADER_linkSPIRVShaders(
+        const int patchBytes = MOJOSHADER_linkSPIRVShaders(
             m_vertexShader->parseData,
             m_pixelShader->parseData,
             attributes.data(),
             static_cast<int>(attributes.size()));
+        if (patchBytes <= 0 ||
+            m_vertexShader->parseData->output_len <= patchBytes ||
+            m_pixelShader->parseData->output_len <= patchBytes)
+            return false;
 
         const size_t vsBytes =
-            static_cast<size_t>(m_vertexShader->parseData->output_len) -
-            sizeof(SpirvPatchTable);
+            static_cast<size_t>(m_vertexShader->parseData->output_len - patchBytes);
         const size_t psBytes =
-            static_cast<size_t>(m_pixelShader->parseData->output_len) -
-            sizeof(SpirvPatchTable);
+            static_cast<size_t>(m_pixelShader->parseData->output_len - patchBytes);
 
         VkShaderModuleCreateInfo vsInfo{};
         vsInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1473,23 +1465,19 @@ bool IDirect3DDevice9::BindDescriptorSets()
         return false;
 
     if (!BindSamplerSet(
-            VK_PIPELINE_BIND_POINT_GRAPHICS, 0, VK_SHADER_STAGE_VERTEX_BIT,
-            m_textures, m_vertexShader->parseData))
+            VK_PIPELINE_BIND_POINT_GRAPHICS, 0, m_textures))
         return false;
     if (!BindSamplerSet(
-            VK_PIPELINE_BIND_POINT_GRAPHICS, 2, VK_SHADER_STAGE_FRAGMENT_BIT,
-            m_textures, m_pixelShader->parseData))
+            VK_PIPELINE_BIND_POINT_GRAPHICS, 2, m_textures))
         return false;
 
     if (!BindUniformSet(
             VK_PIPELINE_BIND_POINT_GRAPHICS, 1, m_vertexShader->parseData,
-            m_vsFloat.data(), m_vsInt.data(), m_vsBool.data(),
-            GetUniformLayout(m_vertexShader->parseData)))
+            m_vsFloat.data(), m_vsInt.data(), m_vsBool.data()))
         return false;
     if (!BindUniformSet(
             VK_PIPELINE_BIND_POINT_GRAPHICS, 3, m_pixelShader->parseData,
-            m_psFloat.data(), m_psInt.data(), m_psBool.data(),
-            GetUniformLayout(m_pixelShader->parseData)))
+            m_psFloat.data(), m_psInt.data(), m_psBool.data()))
         return false;
 
     return true;
