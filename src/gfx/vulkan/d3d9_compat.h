@@ -186,12 +186,28 @@ struct KisakVkTexture {
     VkDeviceMemory memory=VK_NULL_HANDLE;
     VkFormat format=VK_FORMAT_R8G8B8A8_UNORM;
     VkImageLayout layout=VK_IMAGE_LAYOUT_UNDEFINED;
-    uint32_t width=0, height=0, depth=1, mipLevels=1;
+    uint32_t width=0, height=0, depth=1, mipLevels=1, arrayLayers=1;
     _D3DFORMAT sourceFormat=D3DFMT_UNKNOWN;
+    std::vector<VkImageLayout> subresourceLayouts;
     uint32_t refs=1;
     std::vector<uint8_t> lockShadow;
     bool lockShadowActive=false;
     void AddRef() { ++refs; }
+    VkImageLayout GetSubresourceLayout(uint32_t level, uint32_t layer=0) const
+    {
+        const size_t index = static_cast<size_t>(layer) * mipLevels + level;
+        return index < subresourceLayouts.size()
+            ? subresourceLayouts[index] : layout;
+    }
+    void SetSubresourceLayout(uint32_t level, uint32_t layer, VkImageLayout newLayout)
+    {
+        const size_t index = static_cast<size_t>(layer) * mipLevels + level;
+        if (index >= subresourceLayouts.size())
+            subresourceLayouts.resize(static_cast<size_t>(arrayLayers) * mipLevels,
+                                      VK_IMAGE_LAYOUT_UNDEFINED);
+        subresourceLayouts[index] = newLayout;
+        layout = newLayout;
+    }
     HRESULT LockRect(uint32_t level, _D3DLOCKED_RECT *lockedRect, const tagRECT*, uint32_t);
     HRESULT UnlockRect(uint32_t level);
     HRESULT LockBox(uint32_t level, _D3DLOCKED_BOX *lockedBox, const _D3DBOX*, uint32_t);
