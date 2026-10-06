@@ -580,6 +580,11 @@ class IDirect3DDevice9
     GLint m_screenSpaceLocation = -1;
     GLint m_useTextureLocation = -1;
     GLint m_cinematicTextureLocation = -1;
+    GLint m_fallbackWvpLocation = -1;
+    GLint m_fallbackHasWvpLocation = -1;
+    GLint m_alphaTestEnabledLocation = -1;
+    GLint m_alphaFuncLocation = -1;
+    GLint m_alphaRefLocation = -1;
     bool m_switchUnlit = false;
     bool m_texture0Bound = false;
     bool m_cinematicTexturesBound = false;
@@ -593,6 +598,27 @@ class IDirect3DDevice9
     uint32_t m_dstBlend = 1;
     uint32_t m_srcBlendAlpha = 2;
     uint32_t m_dstBlendAlpha = 1;
+    uint32_t m_blendOp = 1;
+    bool m_separateAlphaBlend = true;
+    bool m_alphaTestEnabled = false;
+    uint32_t m_alphaFunc = 8;
+    uint32_t m_alphaRef = 0;
+    uint32_t m_stencilFail = 1;
+    uint32_t m_stencilZFail = 1;
+    uint32_t m_stencilPass = 1;
+    uint32_t m_stencilFunc = 8;
+    uint32_t m_stencilRef = 0;
+    uint32_t m_stencilMask = 0xFFFFFFFFu;
+    uint32_t m_stencilWriteMask = 0xFFFFFFFFu;
+    uint32_t m_backStencilFail = 1;
+    uint32_t m_backStencilZFail = 1;
+    uint32_t m_backStencilPass = 1;
+    uint32_t m_backStencilFunc = 8;
+    bool m_twoSidedStencil = false;
+    float m_depthBias = 0.0f;
+    float m_slopeScaleDepthBias = 0.0f;
+    bool m_hasFallbackWvp = false;
+    std::array<float, 16> m_fallbackWvp{};
     std::array<std::array<float, 4>, 256> m_vsConstants{};
     std::array<std::array<float, 4>, 256> m_psConstants{};
     IDirect3DSurface9 *m_color = nullptr;
@@ -656,6 +682,81 @@ class IDirect3DDevice9
                 m_cinematicTexturesBound ? 1 : 0);
     }
 
+    static GLenum CompareFunc(uint32_t value)
+    {
+        switch (value)
+        {
+        case 1: return GL_NEVER;
+        case 2: return GL_LESS;
+        case 3: return GL_EQUAL;
+        case 4: return GL_LEQUAL;
+        case 5: return GL_GREATER;
+        case 6: return GL_NOTEQUAL;
+        case 7: return GL_GEQUAL;
+        case 8: return GL_ALWAYS;
+        default: return GL_ALWAYS;
+        }
+    }
+
+    static GLenum StencilOp(uint32_t value)
+    {
+        switch (value)
+        {
+        case 1: return GL_KEEP;
+        case 2: return GL_ZERO;
+        case 3: return GL_REPLACE;
+        case 4: return GL_INCR;
+        case 5: return GL_DECR;
+        case 6: return GL_INVERT;
+        case 7: return GL_INCR_WRAP;
+        case 8: return GL_DECR_WRAP;
+        default: return GL_KEEP;
+        }
+    }
+
+    void ApplyStencilFace(GLenum face, uint32_t fail, uint32_t zfail, uint32_t pass,
+                          uint32_t func)
+    {
+        glStencilOpSeparate(
+            face,
+            StencilOp(fail),
+            StencilOp(zfail),
+            StencilOp(pass));
+        glStencilFuncSeparate(
+            face,
+            CompareFunc(func),
+            static_cast<GLint>(m_stencilRef),
+            m_stencilMask);
+        glStencilMaskSeparate(face, m_stencilWriteMask);
+    }
+
+    void UpdateFallbackStateUniforms()
+    {
+        if (!m_program)
+            return;
+        glUseProgram(m_program);
+        if (m_fallbackWvpLocation >= 0)
+            glUniformMatrix4fv(m_fallbackWvpLocation, 1, GL_TRUE, m_fallbackWvp.data());
+        if (m_fallbackHasWvpLocation >= 0)
+            glUniform1i(m_fallbackHasWvpLocation, m_hasFallbackWvp ? 1 : 0);
+        if (m_alphaTestEnabledLocation >= 0)
+            glUniform1i(m_alphaTestEnabledLocation, m_alphaTestEnabled ? 1 : 0);
+        if (m_alphaFuncLocation >= 0)
+            glUniform1i(m_alphaFuncLocation, static_cast<GLint>(m_alphaFunc));
+        if (m_alphaRefLocation >= 0)
+            glUniform1f(m_alphaRefLocation, static_cast<float>(m_alphaRef) / 255.0f);
+    }
+
+    HRESULT SetSwitchFallbackWorldViewProjection(const float *matrix)
+    {
+        if (!matrix)
+            return E_FAIL;
+        std::memcpy(m_fallbackWvp.data(), matrix, sizeof(m_fallbackWvp));
+        m_hasFallbackWvp = true;
+        UpdateFallbackStateUniforms();
+        return S_OK;
+    }
+
     void RebuildProgram()
     {
         if (!m_vertexShader || !m_pixelShader)
@@ -691,6 +792,16 @@ class IDirect3DDevice9
         m_useTextureLocation = glGetUniformLocation(m_program, "uUseTexture");
         m_cinematicTextureLocation =
             glGetUniformLocation(m_program, "uUseCinematicTexture");
+        m_fallbackWvpLocation =
+            glGetUniformLocation(m_program, "uFallbackWorldViewProjection");
+        m_fallbackHasWvpLocation =
+            glGetUniformLocation(m_program, "uHasFallbackWorldViewProjection");
+        m_alphaTestEnabledLocation =
+            glGetUniformLocation(m_program, "uAlphaTestEnabled");
+        m_alphaFuncLocation =
+            glGetUniformLocation(m_program, "uAlphaFunc");
+        m_alphaRefLocation =
+            glGetUniformLocation(m_program, "uAlphaRef");
 
         if (m_textureStageLocation >= 0)
             glUniform1i(m_textureStageLocation, 0);
@@ -714,6 +825,7 @@ class IDirect3DDevice9
             glUniform4fv(m_vsConstantsLocation, 256, &m_vsConstants[0][0]);
         if (m_psConstantsLocation >= 0)
             glUniform4fv(m_psConstantsLocation, 256, &m_psConstants[0][0]);
+        UpdateFallbackStateUniforms();
     }
 
     void BindRenderTargets()
@@ -1163,11 +1275,18 @@ out vec4 vColor;
 uniform vec4 u_vsConstants[256];
 uniform vec2 uScreenSize;
 uniform bool uScreenSpace;
+uniform mat4 uFallbackWorldViewProjection;
+uniform bool uHasFallbackWorldViewProjection;
 void main()
 {
     vec2 clip = vec2((aPosition.x / max(uScreenSize.x, 1.0)) * 2.0 - 1.0,
                      1.0 - (aPosition.y / max(uScreenSize.y, 1.0)) * 2.0);
-    gl_Position = uScreenSpace ? vec4(clip, aPosition.z, aPosition.w) : aPosition;
+    vec4 transformedPosition = uHasFallbackWorldViewProjection
+        ? transpose(uFallbackWorldViewProjection) * aPosition
+        : aPosition;
+    gl_Position = uScreenSpace
+        ? vec4(clip, aPosition.z, aPosition.w)
+        : transformedPosition;
     vTexCoord = aTexCoord;
     vColor = aColor;
 }
@@ -1195,6 +1314,9 @@ uniform vec4 u_psConstants[256];
 uniform bool uUseTexture;
 uniform bool uUseTexture3;
 uniform bool uUseCinematicTexture;
+uniform bool uAlphaTestEnabled;
+uniform int uAlphaFunc;
+uniform float uAlphaRef;
 void main()
 {
     if (uUseCinematicTexture)
@@ -1220,6 +1342,21 @@ void main()
             vColor * (uUseTexture
                 ? texture(uTexture0, vTexCoord)
                 : vec4(1.0));
+    }
+
+    if (uAlphaTestEnabled)
+    {
+        float a = FragColor.a;
+        bool pass = true;
+        if (uAlphaFunc == 1) pass = false;
+        else if (uAlphaFunc == 2) pass = a < uAlphaRef;
+        else if (uAlphaFunc == 3) pass = a == uAlphaRef;
+        else if (uAlphaFunc == 4) pass = a <= uAlphaRef;
+        else if (uAlphaFunc == 5) pass = a > uAlphaRef;
+        else if (uAlphaFunc == 6) pass = a != uAlphaRef;
+        else if (uAlphaFunc == 7) pass = a >= uAlphaRef;
+        if (!pass)
+            discard;
     }
 }
 )";
@@ -1299,6 +1436,19 @@ void main()
         return S_OK;
     }
 
+    static GLenum SamplerAddressMode(uint32_t value)
+    {
+        switch (value)
+        {
+        case 1: return GL_REPEAT;              // D3DTADDRESS_WRAP
+        case 2: return GL_MIRRORED_REPEAT;     // D3DTADDRESS_MIRROR
+        case 3: return GL_CLAMP_TO_EDGE;       // D3DTADDRESS_CLAMP
+        case 4: return GL_CLAMP_TO_BORDER;     // D3DTADDRESS_BORDER
+        case 5: return GL_MIRROR_CLAMP_TO_EDGE;// D3DTADDRESS_MIRRORONCE
+        default: return GL_REPEAT;
+        }
+    }
+
     HRESULT SetSamplerState(uint32_t stage, uint32_t state, uint32_t value)
     {
         if (stage >= 16)
@@ -1314,13 +1464,13 @@ void main()
             glTexParameteri(target, GL_TEXTURE_MAG_FILTER, value == D3DTEXF_POINT ? GL_NEAREST : GL_LINEAR);
             break;
         case D3DSAMP_ADDRESSU:
-            glTexParameteri(target, GL_TEXTURE_WRAP_S, value == 1 ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+            glTexParameteri(target, GL_TEXTURE_WRAP_S, SamplerAddressMode(value));
             break;
         case D3DSAMP_ADDRESSV:
-            glTexParameteri(target, GL_TEXTURE_WRAP_T, value == 1 ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+            glTexParameteri(target, GL_TEXTURE_WRAP_T, SamplerAddressMode(value));
             break;
         case D3DSAMP_ADDRESSW:
-            glTexParameteri(target, GL_TEXTURE_WRAP_R, value == 1 ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+            glTexParameteri(target, GL_TEXTURE_WRAP_R, SamplerAddressMode(value));
             break;
         default:
             break;
@@ -1361,8 +1511,8 @@ void main()
         {
         case 2: return GL_FUNC_SUBTRACT;
         case 3: return GL_FUNC_REVERSE_SUBTRACT;
-        case 5: return GL_MIN;
-        case 6: return GL_MAX;
+        case 4: return GL_MIN;
+        case 5: return GL_MAX;
         default: return GL_FUNC_ADD;
         }
     }
@@ -1392,6 +1542,9 @@ void main()
         case D3DRS_ZWRITEENABLE:
             glDepthMask(value ? GL_TRUE : GL_FALSE);
             break;
+        case D3DRS_ZFUNC:
+            glDepthFunc(CompareFunc(value));
+            break;
         case D3DRS_ALPHABLENDENABLE:
             if (value) glEnable(GL_BLEND); else glDisable(GL_BLEND);
             break;
@@ -1404,6 +1557,7 @@ void main()
             ApplyBlendFactors();
             break;
         case D3DRS_BLENDOP:
+            m_blendOp = value;
             glBlendEquation(BlendOperation(value));
             break;
         case D3DRS_SRCBLENDALPHA:
@@ -1415,20 +1569,122 @@ void main()
             ApplyBlendFactors();
             break;
         case D3DRS_BLENDOPALPHA:
-            glBlendEquationSeparate(GL_FUNC_ADD, BlendOperation(value));
+            glBlendEquationSeparate(
+                BlendOperation(m_blendOp),
+                BlendOperation(value));
+            break;
+        case D3DRS_SEPARATEALPHABLENDENABLE:
+            m_separateAlphaBlend = value != 0;
+            ApplyBlendFactors();
             break;
         case D3DRS_ALPHATESTENABLE:
+            m_alphaTestEnabled = value != 0;
+            UpdateFallbackStateUniforms();
+            break;
+        case D3DRS_ALPHAFUNC:
+            m_alphaFunc = value;
+            UpdateFallbackStateUniforms();
+            break;
+        case D3DRS_ALPHAREF:
+            m_alphaRef = value & 0xFFu;
+            UpdateFallbackStateUniforms();
+            break;
+        case D3DRS_COLORWRITEENABLE:
+            glColorMask(
+                (value & 1) ? GL_TRUE : GL_FALSE,
+                (value & 2) ? GL_TRUE : GL_FALSE,
+                (value & 4) ? GL_TRUE : GL_FALSE,
+                (value & 8) ? GL_TRUE : GL_FALSE);
             break;
         case D3DRS_CULLMODE:
             if (value == 1) { glEnable(GL_CULL_FACE); glCullFace(GL_FRONT); }
             else if (value == 2) { glEnable(GL_CULL_FACE); glCullFace(GL_BACK); }
             else glDisable(GL_CULL_FACE);
             break;
-        case D3DRS_ZFUNC:
-            glDepthFunc(value == 1 ? GL_NEVER : value == 2 ? GL_LESS : value == 3 ? GL_EQUAL : GL_LEQUAL);
-            break;
         case D3DRS_FILLMODE:
             glPolygonMode(GL_FRONT_AND_BACK, value == D3DFILL_WIREFRAME ? GL_LINE : GL_FILL);
+            break;
+        case D3DRS_DEPTHBIAS:
+            std::memcpy(&m_depthBias, &value, sizeof(m_depthBias));
+            glPolygonOffset(m_slopeScaleDepthBias, m_depthBias);
+            break;
+        case D3DRS_SLOPESCALEDEPTHBIAS:
+            std::memcpy(&m_slopeScaleDepthBias, &value, sizeof(m_slopeScaleDepthBias));
+            glPolygonOffset(m_slopeScaleDepthBias, m_depthBias);
+            break;
+        case D3DRS_STENCILENABLE:
+            if (value) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
+            break;
+        case D3DRS_STENCILFAIL:
+            m_stencilFail = value;
+            ApplyStencilFace(GL_FRONT, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            if (!m_twoSidedStencil)
+                ApplyStencilFace(GL_BACK, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            break;
+        case D3DRS_STENCILZFAIL:
+            m_stencilZFail = value;
+            ApplyStencilFace(GL_FRONT, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            if (!m_twoSidedStencil)
+                ApplyStencilFace(GL_BACK, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            break;
+        case D3DRS_STENCILPASS:
+            m_stencilPass = value;
+            ApplyStencilFace(GL_FRONT, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            if (!m_twoSidedStencil)
+                ApplyStencilFace(GL_BACK, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            break;
+        case D3DRS_STENCILFUNC:
+            m_stencilFunc = value;
+            ApplyStencilFace(GL_FRONT, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            if (!m_twoSidedStencil)
+                ApplyStencilFace(GL_BACK, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            break;
+        case D3DRS_STENCILREF:
+            m_stencilRef = value;
+            ApplyStencilFace(GL_FRONT, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            ApplyStencilFace(GL_BACK, m_backStencilFail, m_backStencilZFail, m_backStencilPass, m_backStencilFunc);
+            break;
+        case D3DRS_STENCILMASK:
+            m_stencilMask = value;
+            ApplyStencilFace(GL_FRONT, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            ApplyStencilFace(GL_BACK, m_backStencilFail, m_backStencilZFail, m_backStencilPass, m_backStencilFunc);
+            break;
+        case D3DRS_STENCILWRITEMASK:
+            m_stencilWriteMask = value;
+            ApplyStencilFace(GL_FRONT, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            ApplyStencilFace(GL_BACK, m_backStencilFail, m_backStencilZFail, m_backStencilPass, m_backStencilFunc);
+            break;
+        case D3DRS_TWOSIDEDSTENCILMODE:
+            m_twoSidedStencil = value != 0;
+            if (m_twoSidedStencil)
+            {
+                ApplyStencilFace(GL_FRONT, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+                ApplyStencilFace(GL_BACK, m_backStencilFail, m_backStencilZFail, m_backStencilPass, m_backStencilFunc);
+            }
+            else
+            {
+                ApplyStencilFace(GL_BACK, m_stencilFail, m_stencilZFail, m_stencilPass, m_stencilFunc);
+            }
+            break;
+        case D3DRS_CCW_STENCILFAIL:
+            m_backStencilFail = value;
+            if (m_twoSidedStencil)
+                ApplyStencilFace(GL_BACK, m_backStencilFail, m_backStencilZFail, m_backStencilPass, m_backStencilFunc);
+            break;
+        case D3DRS_CCW_STENCILZFAIL:
+            m_backStencilZFail = value;
+            if (m_twoSidedStencil)
+                ApplyStencilFace(GL_BACK, m_backStencilFail, m_backStencilZFail, m_backStencilPass, m_backStencilFunc);
+            break;
+        case D3DRS_CCW_STENCILPASS:
+            m_backStencilPass = value;
+            if (m_twoSidedStencil)
+                ApplyStencilFace(GL_BACK, m_backStencilFail, m_backStencilZFail, m_backStencilPass, m_backStencilFunc);
+            break;
+        case D3DRS_CCW_STENCILFUNC:
+            m_backStencilFunc = value;
+            if (m_twoSidedStencil)
+                ApplyStencilFace(GL_BACK, m_backStencilFail, m_backStencilZFail, m_backStencilPass, m_backStencilFunc);
             break;
         default:
             break;
