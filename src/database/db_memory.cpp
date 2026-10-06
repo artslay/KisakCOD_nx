@@ -4,6 +4,7 @@
 #include <universal/physicalmemory.h>
 #include <qcommon/qcommon.h>
 #include <gfx_d3d/r_buffers.h>
+#include <cstdio>
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
@@ -98,7 +99,7 @@ void __cdecl DB_AllocXZoneMemory(
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][DB MEM] enter blockSize=%p filename=%p zoneMem=%p allocType=%u\\n",
+            "[KisakCOD][DB MEM] enter blockSize=%p filename=%p zoneMem=%p allocType=%u\n",
             static_cast<void *>(blockSize),
             static_cast<const void *>(filename),
             static_cast<void *>(zoneMem),
