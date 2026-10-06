@@ -183,6 +183,8 @@ public:
         VkImage depthImage,
         VkImageView depthView,
         VkFormat depthFormat,
+        VkImageLayout colorOldLayout,
+        VkImageLayout depthOldLayout,
         uint32_t width,
         uint32_t height);
 
