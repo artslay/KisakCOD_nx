@@ -344,9 +344,22 @@ bool VulkanBackend::CreateDevice()
     const char *extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
     VkPhysicalDeviceFeatures features{};
-    features.samplerAnisotropy = VK_FALSE;
+    VkPhysicalDeviceDynamicRenderingFeatures dynamicRendering{};
+    dynamicRendering.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    dynamicRendering.dynamicRendering = VK_TRUE;
+
+    VkPhysicalDeviceFeatures2 features2{};
+    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    features2.pNext = &dynamicRendering;
+    vkGetPhysicalDeviceFeatures2(m_physicalDevice, &features2);
+    if (!dynamicRendering.dynamicRendering)
+    {
+        SetError("Vulkan dynamic rendering is unavailable");
+        return false;
+    }
 
     VkDeviceCreateInfo info{};
+    info.pNext = &dynamicRendering;
     info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     info.queueCreateInfoCount = 1;
     info.pQueueCreateInfos = &queue;
