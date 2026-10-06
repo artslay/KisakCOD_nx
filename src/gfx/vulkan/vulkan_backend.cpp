@@ -1054,6 +1054,83 @@ bool VulkanBackend::CreateImage2D(
     return true;
 }
 
+bool VulkanBackend::CreateImageCube(
+    uint32_t width, uint32_t height, uint32_t mipLevels,
+    VkFormat format, VkImageUsageFlags usage,
+    VkImage *image, VkDeviceMemory *memory, VkImageView *view)
+{
+    if (!image || !memory || !view || !width || !height || !mipLevels)
+        return false;
+
+    VkImageCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    info.imageType = VK_IMAGE_TYPE_2D;
+    info.format = format;
+    info.extent = {width, height, 1};
+    info.mipLevels = mipLevels;
+    info.arrayLayers = 6;
+    info.samples = VK_SAMPLE_COUNT_1_BIT;
+    info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    info.usage = usage;
+    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    if (vkCreateImage(m_device, &info, nullptr, image) != VK_SUCCESS)
+        return false;
+
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(m_device, *image, &requirements);
+    const uint32_t type = FindMemoryType(
+        requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (type == UINT32_MAX)
+    {
+        vkDestroyImage(m_device, *image, nullptr);
+        *image = VK_NULL_HANDLE;
+        return false;
+    }
+
+    VkMemoryAllocateInfo alloc{};
+    alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc.allocationSize = requirements.size;
+    alloc.memoryTypeIndex = type;
+    if (vkAllocateMemory(m_device, &alloc, nullptr, memory) != VK_SUCCESS)
+    {
+        vkDestroyImage(m_device, *image, nullptr);
+        *image = VK_NULL_HANDLE;
+        return false;
+    }
+
+    if (vkBindImageMemory(m_device, *image, *memory, 0) != VK_SUCCESS)
+    {
+        vkFreeMemory(m_device, *memory, nullptr);
+        vkDestroyImage(m_device, *image, nullptr);
+        *memory = VK_NULL_HANDLE;
+        *image = VK_NULL_HANDLE;
+        return false;
+    }
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = *image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+    viewInfo.format = format;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.levelCount = mipLevels;
+    viewInfo.subresourceRange.layerCount = 6;
+
+    if (vkCreateImageView(m_device, &viewInfo, nullptr, view) != VK_SUCCESS)
+    {
+        vkFreeMemory(m_device, *memory, nullptr);
+        vkDestroyImage(m_device, *image, nullptr);
+        *memory = VK_NULL_HANDLE;
+        *image = VK_NULL_HANDLE;
+        return false;
+    }
+
+    return true;
+}
+
 bool VulkanBackend::CreateImage3D(
     uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevels,
     VkFormat format, VkImageUsageFlags usage,
@@ -1313,6 +1390,7 @@ bool VulkanBackend::UploadImage2D(
         toTransfer.subresourceRange.aspectMask = aspect;
         toTransfer.subresourceRange.levelCount = 1;
         toTransfer.subresourceRange.baseMipLevel = mipLevel;
+        toTransfer.subresourceRange.baseArrayLayer = baseArrayLayer;
         toTransfer.subresourceRange.layerCount = 1;
 
         vkCmdPipelineBarrier(
@@ -1324,6 +1402,7 @@ bool VulkanBackend::UploadImage2D(
         VkBufferImageCopy copy{};
         copy.imageSubresource.aspectMask = aspect;
         copy.imageSubresource.mipLevel = mipLevel;
+        copy.imageSubresource.baseArrayLayer = baseArrayLayer;
         copy.imageSubresource.layerCount = 1;
         copy.imageExtent = {width, height, 1};
 
@@ -1340,6 +1419,7 @@ bool VulkanBackend::UploadImage2D(
         toShader.subresourceRange.aspectMask = aspect;
         toShader.subresourceRange.baseMipLevel = mipLevel;
         toShader.subresourceRange.levelCount = 1;
+        toShader.subresourceRange.baseArrayLayer = baseArrayLayer;
         toShader.subresourceRange.layerCount = 1;
         vkCmdPipelineBarrier(
             command,
@@ -1356,7 +1436,7 @@ bool VulkanBackend::UploadImage2D(
 bool VulkanBackend::UploadImage3D(
     VkImage image, VkFormat format,
     uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevel,
-    const void *data, size_t bytes, VkImageLayout oldLayout)
+    const void *data, size_t bytes, VkImageLayout oldLayout, uint32_t baseArrayLayer)
 {
     if (!image || !data || !bytes)
         return false;
