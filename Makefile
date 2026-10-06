@@ -31,7 +31,7 @@ CXXFLAGS    := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-rtti -fno
 CPPFLAGS    += -DGIT_COMMIT=\"$(GIT_COMMIT)\"
 CFLAGS      := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-plt -std=gnu17 -MMD -MP -Wno-old-style-definition
 LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libnx/lib -specs=$(DEVKITPRO)/libnx/switch.specs -Wl,--gc-sections,-Bsymbolic
-LIBS        := -lvulkan -lexpat -lopenal -lSDL2 -lavformat -lavcodec -lswresample -lswscale -lavutil -ldav1d -lbz2 -lz -lnx -lm
+LIBS        := -lvulkan -lexpat -lopenal -lavformat -lavcodec -lswresample -lswscale -lavutil -ldav1d -lbz2 -lz -lnx -lm
 
 include $(DEVKITPRO)/libnx/switch_rules
 
@@ -93,6 +93,7 @@ CPP_SOURCES += src/gfx_d3d/r_sky.cpp src/gfx_d3d/r_shadowcookie.cpp src/gfx_d3d/
 CPP_SOURCES += src/gfx_d3d/r_workercmds.cpp src/gfx_d3d/r_workercmds_common.cpp src/gfx_d3d/r_spotshadow.cpp src/gfx_d3d/r_sunshadow.cpp
 CPP_SOURCES += src/gfx_d3d/rb_fog.cpp src/gfx_d3d/r_fog.cpp src/gfx_d3d/r_draw_sunshadow.cpp
 CPP_SOURCES += src/gfx_d3d/rb_backend.cpp
+CPP_SOURCES += src/gfx_d3d/rb_imagetouch.cpp
 CPP_SOURCES += src/gfx_d3d/r_cmdbuf.cpp src/gfx_d3d/rb_stats.cpp src/gfx_d3d/rb_drawprofile.cpp src/gfx_d3d/rb_draw3d.cpp
 CPP_SOURCES += src/gfx_d3d/rb_pixelcost.cpp src/gfx_d3d/r_pixelcost_load_obj.cpp src/gfx_d3d/rb_sky.cpp
 CPP_SOURCES += src/gfx_d3d/r_water.cpp src/gfx_d3d/r_water_load_obj.cpp

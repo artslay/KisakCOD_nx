@@ -16,7 +16,7 @@
 #include <unordered_set>
 #include <vector>
 
-extern "C" void Switch_LogWrite(const char *msg);
+extern void Switch_LogWrite(const char *msg);
 
 namespace
 {

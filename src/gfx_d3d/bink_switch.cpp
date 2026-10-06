@@ -2,10 +2,9 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
-
-#include <SDL2/SDL.h>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -383,7 +382,9 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
             std::max<int64_t>(frameRate.den, 1),
             UINT32_MAX));
     state->decodedFrames = 0;
-    state->startTicks = SDL_GetTicks();
+    state->startTicks = static_cast<uint32_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
 
     HBINK bink = new BINK{};
     if (!bink)
@@ -475,7 +476,10 @@ RADDEFFUNC S32 RADEXPLINK BinkWait(HBINK bink)
     const uint64_t targetMs =
         static_cast<uint64_t>(state->decodedFrames) * framePeriodMs;
     const uint32_t elapsed =
-        SDL_GetTicks() - state->startTicks;
+        static_cast<uint32_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count()) -
+        state->startTicks;
 
     return static_cast<uint64_t>(elapsed) < targetMs ? 1 : 0;
 }
