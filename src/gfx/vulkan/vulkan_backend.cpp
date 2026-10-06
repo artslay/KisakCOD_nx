@@ -1248,7 +1248,7 @@ bool VulkanBackend::UploadImage2D(
     {
         VkImageMemoryBarrier toTransfer{};
         toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        toTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        toTransfer.oldLayout = oldLayout;
         toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         toTransfer.srcAccessMask = 0;
         toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -1299,7 +1299,7 @@ bool VulkanBackend::UploadImage2D(
 bool VulkanBackend::UploadImage3D(
     VkImage image, VkFormat format,
     uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevel,
-    const void *data, size_t bytes)
+    const void *data, size_t bytes, VkImageLayout oldLayout)
 {
     if (!image || !data || !bytes)
         return false;
@@ -1319,7 +1319,7 @@ bool VulkanBackend::UploadImage3D(
     {
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.oldLayout = oldLayout;
         barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.image = image;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
