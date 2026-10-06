@@ -5440,7 +5440,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][GFXIMAGE LOADDEF COMPACT] asset=%d dims=%ux%ux%u format=%08x cursor=%08x\\n",
+                "[KisakCOD][GFXIMAGE LOADDEF COMPACT] asset=%d dims=%ux%ux%u format=%08x cursor=%08x\n",
                 g_switchCurrentAssetIndex,
                 static_cast<unsigned>(width),
                 static_cast<unsigned>(height),
