@@ -142,6 +142,7 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         !CreateCommandResources() ||
         !CreateDescriptorResources() ||
         !CreateUniformRing() ||
+        !CreateDummyTexture() ||
         !CreateSync())
     {
         Shutdown();
@@ -157,9 +158,18 @@ void VulkanBackend::Shutdown()
     if (m_device)
         vkDeviceWaitIdle(m_device);
 
+    if (m_dummySampler) vkDestroySampler(m_device, m_dummySampler, nullptr);
+    m_dummySampler = VK_NULL_HANDLE;
+    if (m_dummyImage)
+        DestroyImage(m_dummyImage, m_dummyMemory, m_dummyImageView);
+    m_dummyImage = VK_NULL_HANDLE;
+    m_dummyMemory = VK_NULL_HANDLE;
+    m_dummyImageView = VK_NULL_HANDLE;
+
     for (VkSampler sampler : m_samplers)
         if (sampler) vkDestroySampler(m_device, sampler, nullptr);
     m_samplers.clear();
+    m_samplerCache.clear();
 
     if (m_descriptorPool) vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
     if (m_pipelineLayout) vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
@@ -567,6 +577,40 @@ bool VulkanBackend::CreateUniformRing()
         reinterpret_cast<void **>(&m_uniformMapped));
 }
 
+bool VulkanBackend::CreateDummyTexture()
+{
+    if (!CreateImage2D(
+            1, 1, 1, VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            &m_dummyImage, &m_dummyMemory, &m_dummyImageView))
+    {
+        SetError("Failed to create Vulkan dummy texture");
+        return false;
+    }
+
+    const uint32_t white = 0xffffffffu;
+    if (!UploadImage2D(
+            m_dummyImage, VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_ASPECT_COLOR_BIT, 1, 1, 0, &white, sizeof(white)))
+    {
+        SetError("Failed to upload Vulkan dummy texture");
+        return false;
+    }
+
+    m_dummySampler = GetSampler(
+        VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    if (!m_dummySampler)
+    {
+        SetError("Failed to create Vulkan dummy sampler");
+        return false;
+    }
+    return true;
+}
+
 bool VulkanBackend::CreateSync()
 {
     VkSemaphoreCreateInfo semaphore{};
@@ -665,6 +709,11 @@ bool VulkanBackend::EndFrame()
     EndRendering();
 
     VkImage swapImage = CurrentSwapchainImage();
+    if (!swapImage || m_swapchainLayouts.size() <= m_swapchainIndex)
+    {
+        SetError("Invalid swapchain image state");
+        return false;
+    }
     if (m_presentSourceImage)
     {
         TransitionImage(
@@ -935,6 +984,78 @@ bool VulkanBackend::CreateImage2D(
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = aspect;
+    viewInfo.subresourceRange.levelCount = mipLevels;
+    viewInfo.subresourceRange.layerCount = 1;
+    if (vkCreateImageView(m_device, &viewInfo, nullptr, view) != VK_SUCCESS)
+    {
+        vkFreeMemory(m_device, *memory, nullptr);
+        vkDestroyImage(m_device, *image, nullptr);
+        *memory = VK_NULL_HANDLE;
+        *image = VK_NULL_HANDLE;
+        return false;
+    }
+    return true;
+}
+
+bool VulkanBackend::CreateImage3D(
+    uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevels,
+    VkFormat format, VkImageUsageFlags usage,
+    VkImage *image, VkDeviceMemory *memory, VkImageView *view)
+{
+    if (!image || !memory || !view)
+        return false;
+
+    VkImageCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    info.imageType = VK_IMAGE_TYPE_3D;
+    info.format = format;
+    info.extent = {width, height, depth};
+    info.mipLevels = mipLevels;
+    info.arrayLayers = 1;
+    info.samples = VK_SAMPLE_COUNT_1_BIT;
+    info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    info.usage = usage;
+    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (vkCreateImage(m_device, &info, nullptr, image) != VK_SUCCESS)
+        return false;
+
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(m_device, *image, &requirements);
+    const uint32_t type = FindMemoryType(
+        requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (type == UINT32_MAX)
+    {
+        vkDestroyImage(m_device, *image, nullptr);
+        *image = VK_NULL_HANDLE;
+        return false;
+    }
+
+    VkMemoryAllocateInfo alloc{};
+    alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc.allocationSize = requirements.size;
+    alloc.memoryTypeIndex = type;
+    if (vkAllocateMemory(m_device, &alloc, nullptr, memory) != VK_SUCCESS)
+    {
+        vkDestroyImage(m_device, *image, nullptr);
+        *image = VK_NULL_HANDLE;
+        return false;
+    }
+    if (vkBindImageMemory(m_device, *image, *memory, 0) != VK_SUCCESS)
+    {
+        vkFreeMemory(m_device, *memory, nullptr);
+        vkDestroyImage(m_device, *image, nullptr);
+        *memory = VK_NULL_HANDLE;
+        *image = VK_NULL_HANDLE;
+        return false;
+    }
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = *image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+    viewInfo.format = format;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 1;
     if (vkCreateImageView(m_device, &viewInfo, nullptr, view) != VK_SUCCESS)
@@ -1236,9 +1357,6 @@ VkSampler VulkanBackend::GetSampler(
     VkFilter minFilter, VkFilter magFilter, VkSamplerMipmapMode mipMode,
     VkSamplerAddressMode addressU, VkSamplerAddressMode addressV, VkSamplerAddressMode addressW)
 {
-    VkPhysicalDeviceFeatures features{};
-    vkGetPhysicalDeviceFeatures(m_physicalDevice, &features);
-
     VkSamplerCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     info.magFilter = magFilter;
@@ -1250,11 +1368,22 @@ VkSampler VulkanBackend::GetSampler(
     info.minLod = 0.0f;
     info.maxLod = VK_LOD_CLAMP_NONE;
 
+    const uint64_t key =
+        (static_cast<uint64_t>(minFilter)      << 0)  |
+        (static_cast<uint64_t>(magFilter)      << 4)  |
+        (static_cast<uint64_t>(mipMode)        << 8)  |
+        (static_cast<uint64_t>(addressU)       << 12) |
+        (static_cast<uint64_t>(addressV)       << 16) |
+        (static_cast<uint64_t>(addressW)       << 20);
+    const auto found = m_samplerCache.find(key);
+    if (found != m_samplerCache.end())
+        return found->second;
+
     VkSampler sampler = VK_NULL_HANDLE;
     if (vkCreateSampler(m_device, &info, nullptr, &sampler) != VK_SUCCESS)
         return VK_NULL_HANDLE;
     m_samplers.push_back(sampler);
-    (void)features;
+    m_samplerCache.emplace(key, sampler);
     return sampler;
 }
 
@@ -1300,7 +1429,8 @@ void VulkanBackend::ClearPresentSource()
 
 bool VulkanBackend::EnsureRendering(
     VkImage colorImage, VkImageView colorView, VkFormat colorFormat,
-    VkImage depthImage, VkImageView depthView, VkFormat depthFormat)
+    VkImage depthImage, VkImageView depthView, VkFormat depthFormat,
+    uint32_t width, uint32_t height)
 {
     if (!m_frameActive || !colorImage || !colorView || colorFormat == VK_FORMAT_UNDEFINED)
         return false;
@@ -1348,7 +1478,7 @@ bool VulkanBackend::EnsureRendering(
 
     VkRenderingInfo rendering{};
     rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    rendering.renderArea.extent = {m_width, m_height};
+    rendering.renderArea.extent = {width, height};
     rendering.layerCount = 1;
     rendering.colorAttachmentCount = 1;
     rendering.pColorAttachments = &color;
