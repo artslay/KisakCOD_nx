@@ -1020,6 +1020,30 @@ class IDirect3DDevice9
 
         bindShaderUniforms(m_vertexShader, true);
         bindShaderUniforms(m_pixelShader, false);
+
+        if (m_vertexShader->parseData)
+        {
+            for (uint32_t reg = 0; reg < 256; ++reg)
+            {
+                if (m_vsFloatLocations[reg] >= 0)
+                    glUniform4fv(
+                        m_vsFloatLocations[reg],
+                        1,
+                        &m_vsConstants[reg][0]);
+            }
+        }
+        if (m_pixelShader->parseData)
+        {
+            for (uint32_t reg = 0; reg < 256; ++reg)
+            {
+                if (m_psFloatLocations[reg] >= 0)
+                    glUniform4fv(
+                        m_psFloatLocations[reg],
+                        1,
+                        &m_psConstants[reg][0]);
+            }
+        }
+
         UpdateFallbackStateUniforms();
     }
 

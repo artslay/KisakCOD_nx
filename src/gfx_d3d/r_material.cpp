@@ -809,14 +809,14 @@ void __cdecl Material_ReleasePassResources(MaterialPass *pass)
     iassert(pass->pixelShader);
     if (pass->pixelShader->prog.ps)
     {
-        delete pass->pixelShader->prog.ps;
+        pass->pixelShader->prog.ps->Release();
         pass->pixelShader->prog.ps = nullptr;
     }
 
     iassert(pass->vertexShader);
     if (pass->vertexShader->prog.vs)
     {
-        delete pass->vertexShader->prog.vs;
+        pass->vertexShader->prog.vs->Release();
         pass->vertexShader->prog.vs = nullptr;
     }
 
