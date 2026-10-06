@@ -417,14 +417,63 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
             {
 #ifdef __SWITCH__
                 g_switchDbStage = "delayed_images/default_texture";
+                char trace[640];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][IMAGE DELAY FAIL] #%u image=%p namePtr=%p name=%.*s "
+                    "map=%u semantic=%u category=%u size=%ux%ux%u loadDef=%p "
+                    "resource=%u card=%u\n",
+                    static_cast<unsigned>(switchDelayImageIndex),
+                    static_cast<void *>(image),
+                    image ? static_cast<const void *>(image->name) : nullptr,
+                    160,
+                    (image && image->name) ? image->name : "<null>",
+                    image ? static_cast<unsigned>(image->mapType) : 0u,
+                    image ? static_cast<unsigned>(image->semantic) : 0u,
+                    image ? static_cast<unsigned>(image->category) : 0u,
+                    image ? static_cast<unsigned>(image->width) : 0u,
+                    image ? static_cast<unsigned>(image->height) : 0u,
+                    image ? static_cast<unsigned>(image->depth) : 0u,
+                    image ? static_cast<void *>(image->texture.loadDef) : nullptr,
+                    (image && image->texture.loadDef)
+                        ? static_cast<unsigned>(image->texture.loadDef->resourceSize)
+                        : 0u,
+                    image ? static_cast<unsigned>(image->cardMemory.platform[0]) : 0u);
+                Switch_LogWrite(trace);
 #endif
                 Image_AssignDefaultTexture(image);
             }
             if (!image->texture.basemap)
             {
                 HRESULT hr = dx.device->TestCooperativeLevel();
+#ifdef __SWITCH__
+                char trace[448];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][IMAGE DELAY FATAL] #%u image=%p namePtr=%p "
+                    "name=%.*s hr=%08x basemap=%p whiteTex=%p normalTex=%p blackTex=%p\n",
+                    static_cast<unsigned>(switchDelayImageIndex),
+                    static_cast<void *>(image),
+                    image ? static_cast<const void *>(image->name) : nullptr,
+                    160,
+                    (image && image->name) ? image->name : "<null>",
+                    static_cast<unsigned>(hr),
+                    image ? static_cast<void *>(image->texture.basemap) : nullptr,
+                    rgp.whiteImage ? static_cast<void *>(rgp.whiteImage->texture.basemap) : nullptr,
+                    rgp.identityNormalMapImage
+                        ? static_cast<void *>(rgp.identityNormalMapImage->texture.basemap)
+                        : nullptr,
+                    rgp.blackImage ? static_cast<void *>(rgp.blackImage->texture.basemap) : nullptr);
+                Switch_LogWrite(trace);
+#endif
                 if (hr != 0x88760868 && hr != 0x88760869)
-                    Com_Error(ERR_DROP, "Couldn't load image '%s'\n", image->name);
+                    Com_Error(
+                        ERR_DROP,
+                        "Couldn't load image '%.*s'\\n",
+                        160,
+                        image->name ? image->name : "<null>");
             }
         }
 #ifdef __SWITCH__
