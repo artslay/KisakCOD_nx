@@ -126,7 +126,9 @@ void AudioThreadMain(SwitchSdlAudioDevice *device)
 extern "C"
 int SDL_InitSubSystem(Uint32 flags)
 {
-    if ((flags & SDL_INIT_AUDIO) == 0)
+    constexpr Uint32 kSDLInitAudio = 0x00000010u;
+
+    if ((flags & kSDLInitAudio) == 0)
     {
         ClearError();
         return 0;
@@ -365,12 +367,12 @@ SDL_AudioDeviceID SDL_OpenAudioDevice(
 }
 
 extern "C"
-int SDL_PauseAudioDevice(SDL_AudioDeviceID deviceId, int pauseOn)
+void SDL_PauseAudioDevice(SDL_AudioDeviceID deviceId, int pauseOn)
 {
     std::lock_guard<std::mutex> lock(g_deviceMutex);
 
     if (deviceId != 1 || !g_device)
-        return -1;
+        return;
 
     g_device->paused.store(
         pauseOn != 0,
