@@ -49,8 +49,8 @@ using _D3DFORMAT = uint32_t;
 constexpr _D3DFORMAT D3DFMT_X8R8G8B8 = 22;
 constexpr uint32_t D3DLOCK_NOOVERWRITE = 0x1000;
 constexpr uint32_t D3DLOCK_DISCARD = 0x2000;
-constexpr uint32_t D3DISSUE_BEGIN = 0x1;
-constexpr uint32_t D3DISSUE_END = 0x2;
+constexpr uint32_t D3DISSUE_END = 0x1;
+constexpr uint32_t D3DISSUE_BEGIN = 0x2;
 
 struct _D3DLOCKED_BOX
 {
@@ -72,6 +72,7 @@ struct _D3DBOX
 struct _D3DDISPLAYMODE { uint32_t Width=0, Height=0; uint32_t RefreshRate=60; _D3DFORMAT Format=D3DFMT_X8R8G8B8; };
 
 constexpr HRESULT S_OK = 0;
+constexpr HRESULT S_FALSE = 1;
 constexpr HRESULT E_FAIL = -1;
 
 // D3D9 format values are kept for asset compatibility; Switch maps them to GL.
@@ -525,12 +526,12 @@ struct IDirect3DQuery9
         GLuint available = GL_FALSE;
         glGetQueryObjectuiv(object, GL_QUERY_RESULT_AVAILABLE, &available);
         if (!available)
-            return E_FAIL;
+            return S_FALSE;
 
+        GLuint value = 0;
+        glGetQueryObjectuiv(object, GL_QUERY_RESULT, &value);
         if (data && size)
         {
-            GLuint64 value = 0;
-            glGetQueryObjectui64v(object, GL_QUERY_RESULT, &value);
             const uint32_t copySize =
                 std::min<uint32_t>(size, sizeof(value));
             std::memcpy(data, &value, copySize);
@@ -1433,6 +1434,80 @@ void main()
             break;
         }
         return S_OK;
+    }
+
+    HRESULT DrawPrimitiveUP(
+        uint32_t primitiveType,
+        uint32_t primitiveCount,
+        const void *data,
+        uint32_t stride)
+    {
+        if (!data || !stride || !primitiveCount)
+            return E_FAIL;
+        if (primitiveType != D3DPT_TRIANGLELIST)
+            return E_FAIL;
+
+        if (!m_decl)
+            return E_FAIL;
+
+        if (!m_vao)
+            glGenVertexArrays(1, &m_vao);
+        glBindVertexArray(m_vao);
+
+        GLuint tempVbo = 0;
+        glGenBuffers(1, &tempVbo);
+        glBindBuffer(GL_ARRAY_BUFFER, tempVbo);
+        const size_t vertexCount = static_cast<size_t>(primitiveCount) * 3u;
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(vertexCount * stride),
+            data,
+            GL_STREAM_DRAW);
+
+        for (GLuint attrib = 0; attrib < 16; ++attrib)
+            glDisableVertexAttribArray(attrib);
+
+        for (const auto &e : m_decl->elements)
+        {
+            if (e.Stream != 0)
+                continue;
+
+            GLint components = 0;
+            GLenum glType = GL_FLOAT;
+            bool normalized = false;
+            if (!VertexTypeInfo(e.Type, components, glType, normalized))
+                continue;
+
+            GLuint attrib = 0;
+            switch (e.Usage)
+            {
+            case 0: attrib = 0; break;
+            case 1: attrib = 1; break;
+            case 2: attrib = 2; break;
+            case 3: attrib = 3; break;
+            case 5: attrib = 4 + e.UsageIndex; break;
+            case 10: attrib = 12 + e.UsageIndex; break;
+            default: continue;
+            }
+            if (attrib >= 16)
+                continue;
+
+            glEnableVertexAttribArray(attrib);
+            glVertexAttribPointer(
+                attrib,
+                components,
+                glType,
+                normalized ? GL_TRUE : GL_FALSE,
+                static_cast<GLsizei>(stride),
+                reinterpret_cast<const void *>(
+                    static_cast<uintptr_t>(e.Offset)));
+        }
+
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertexCount));
+
+        glDeleteBuffers(1, &tempVbo);
+        RebuildVertexLayout();
+        return glGetError() == GL_NO_ERROR ? S_OK : E_FAIL;
     }
 
     HRESULT DrawIndexedPrimitive(
