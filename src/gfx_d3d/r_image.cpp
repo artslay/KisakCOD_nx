@@ -376,6 +376,26 @@ void __cdecl TRACK_r_image()
 void __cdecl R_DelayLoadImage(XAssetHeader header)
 {
     GfxImage *image = header.image;
+#ifdef __SWITCH__
+    static uint32_t switchDelayImageCount = 0;
+    const uint32_t switchDelayImageIndex = switchDelayImageCount++;
+    const bool switchTraceDelayImage =
+        switchDelayImageIndex < 16 || (switchDelayImageIndex % 128u) == 0;
+    if (switchTraceDelayImage)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][DELAY IMAGE] #%u image=%p name=%p nameText=%s delay=%u\\n",
+            static_cast<unsigned>(switchDelayImageIndex),
+            static_cast<void *>(image),
+            image ? static_cast<const void *>(image->name) : nullptr,
+            (image && image->name) ? image->name : "<null>",
+            image ? static_cast<unsigned>(image->delayLoadPixels) : 0u);
+        Switch_LogWrite(trace);
+    }
+#endif
     if (image->delayLoadPixels)
     {
         image->delayLoadPixels = false;
