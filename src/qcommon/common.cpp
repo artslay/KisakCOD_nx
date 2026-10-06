@@ -1284,7 +1284,7 @@ cmd_function_s Com_WriteDefaults_f_VAR;
 
 static const char* comInitAllocName = "$init";
 #ifdef __SWITCH__
-static bool com_introMoviePending = false;
+bool com_introMoviePending = false;
 #endif
 void __cdecl Com_Init_Try_Block_Function(char* commandLine)
 {
@@ -2386,17 +2386,6 @@ void Com_StartHunkUsers()
     Com_AssetLoadUI();
     MenuScreen = UI_GetMenuScreen();
     UI_SetActiveMenu(0, (uiMenuCommand_t)MenuScreen);
-#ifdef __SWITCH__
-    // The intro command is queued before UI startup. Execute it only after
-    // CL_StartHunkUsers has initialized the UI, so CIN_PlayCinematic can close
-    // the main menu and enter CA_CINEMATIC.
-    if (com_introMoviePending)
-    {
-        com_introMoviePending = false;
-        Switch_LogWrite("[KisakCOD][INTRO] executing pending IW_logo after UI startup\n");
-        Cmd_ExecuteSingleCommand(0, CL_ControllerIndexFromClientNum(0), (char*)"cinematic IW_logo");
-    }
-#endif
     IN_Frame();
     Com_EventLoop();
 }
