@@ -192,6 +192,7 @@ bool R_VulkanAllocTexture(
         return false;
     }
 
+    ++s_switchVulkanAllocTraceCount;
     return true;
 }
 
@@ -1353,7 +1354,7 @@ void R_InitCodeImages()
             rgp.identityNormalMapImage
                 ? static_cast<void *>(rgp.identityNormalMapImage->texture.basemap)
                 : nullptr,
-            static_cast<unsigned>(s_switchGLAllocTraceCount));
+            static_cast<unsigned>(s_switchVulkanAllocTraceCount));
         Switch_LogWrite(trace);
     }
 #endif
