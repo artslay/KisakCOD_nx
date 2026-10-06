@@ -2962,7 +2962,7 @@ static __attribute__((noinline)) XAssetHeader __cdecl DB_AddXAsset_SwitchLocal(
             static_cast<void *>(header.image),
             static_cast<const void *>(header.image->name),
             header.image->name,
-            static_cast<void *>(resultImage),
+            static_cast<const void *>(resultImage),
             resultImage ? static_cast<const void *>(resultImage->name) : nullptr,
             (resultImage && resultImage->name) ? resultImage->name : "<null>",
             resultImage == header.image ? 1u : 0u);
