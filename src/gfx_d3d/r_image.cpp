@@ -916,7 +916,7 @@ uint32_t __cdecl Image_CountMipmapsForFile(const GfxImageFileHeader *fileHeader)
 void __cdecl Image_UploadData(const GfxImage *image,_D3DFORMAT format,_D3DCUBEMAP_FACES face,uint32_t mipLevel,uint8_t *src)
 {
 #ifdef __SWITCH__
-    if(image->mapType!=MAPTYPE_CUBE||!mipLevel||gfxMetrics.canMipCubemaps) R_GLUploadTexture(image,format,face,mipLevel,src);
+    R_VulkanUploadTexture(image, format, face, mipLevel, src);
 #else
     if(image->mapType!=MAPTYPE_CUBE||!mipLevel||gfxMetrics.canMipCubemaps){if(image->mapType==MAPTYPE_3D)Image_Upload3D_CopyData_PC(image,format,mipLevel,src);else Image_Upload2D_CopyData_PC(image,format,face,mipLevel,src);}
 #endif
@@ -1343,7 +1343,7 @@ void R_InitCodeImages()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CODE IMAGES] loadForRenderer=%u white=%p/%p black=%p/%p normal=%p/%p glAllocs=%u\n",
+            "[KisakCOD][CODE IMAGES] loadForRenderer=%u white=%p/%p black=%p/%p normal=%p/%p vulkanAllocs=%u\n",
             r_loadForRenderer ? r_loadForRenderer->current.enabled : 0u,
             static_cast<void *>(rgp.whiteImage),
             rgp.whiteImage ? static_cast<void *>(rgp.whiteImage->texture.basemap) : nullptr,
