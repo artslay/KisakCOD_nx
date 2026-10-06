@@ -121,13 +121,20 @@ void R_ShutdownMaterialUsage()
     }
 }
 
-void R_ShutdownDirect3D() {
-    // The D3D9 compatibility device owns Vulkan pipelines/shader modules, so
-    // destroy it before tearing down the Vulkan device underneath it.
+void R_ShutdownDirect3D()
+{
+    // Release renderer-owned Vulkan resources while the compatibility device
+    // and Vulkan backend are still alive. This mirrors the original D3D9
+    // shutdown ordering and prevents dangling GPU resources after device loss.
+    R_Cinematic_Shutdown();
+    R_ReleaseForShutdownOrReset();
+
     delete dx.device;
     dx.device = nullptr;
     dx.d3d9 = nullptr;
-    if (g_gfxBackend) {
+
+    if (g_gfxBackend)
+    {
         g_gfxBackend->Shutdown();
         g_gfxBackend.reset();
     }
