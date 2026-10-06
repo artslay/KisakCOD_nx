@@ -758,10 +758,14 @@ void __cdecl DB_FixupSwitchPointerAliases()
     while (fixup != g_switchPointerAliasFixups.end())
     {
         uintptr_t resolvedPointer = 0;
-        if (!DB_ResolveSwitchPointerAlias(
+        bool resolved = DB_ResolveSwitchPointerAlias(
+            fixup->serializedSlot,
+            &resolvedPointer);
+        if (!resolved || !resolvedPointer)
+            resolved = DB_TryResolveSwitchSerializedAliasChain(
                 fixup->serializedSlot,
-                &resolvedPointer) ||
-            !resolvedPointer)
+                &resolvedPointer);
+        if (!resolved || !resolvedPointer)
         {
             Switch_TryResolveFontMaterialAlias(
                 fixup->serializedSlot,
