@@ -38,7 +38,7 @@ static void SwitchProgressWatchdogMain()
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][WATCHDOG] t=%us asset=%d rawType=%u header=%08x stage=%s\\n",
+            "[KisakCOD][WATCHDOG] t=%us asset=%d rawType=%u header=%08x stage=%s\n",
             ++tick * 5u,
             g_switchCurrentAssetIndex,
             static_cast<unsigned>(g_switchCurrentAssetRawType),
