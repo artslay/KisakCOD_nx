@@ -495,10 +495,9 @@ void __cdecl DB_LoadXFileInternal()
             "\n");
 
         Switch_LogWrite(trace);
-#ifdef __SWITCH__
-        g_switchDbStage = "file/xfile_header_done";
-#endif
     }
+    g_switchDbStage = "file/xfile_header_done";
+#endif
     if (g_trackLoadProgress)
     {
 #ifdef __SWITCH__
