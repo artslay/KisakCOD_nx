@@ -274,6 +274,8 @@ struct IDirect3DQuery9 {
 struct IDirect3D9 {};
 
 class VulkanBackend;
+class IDirect3DDevice9;
+using LPDIRECT3DDEVICE9 = IDirect3DDevice9 *;
 
 class IDirect3DDevice9 {
 public:
