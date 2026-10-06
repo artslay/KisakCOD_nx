@@ -3447,6 +3447,27 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
 {
     uint32_t drawType; // [esp+28h] [ebp-8h]
     bool allowRendering; // [esp+2Fh] [ebp-1h]
+#ifdef __SWITCH__
+    static uint32_t switchFrameTraceCount = 0;
+    const uint32_t switchFrameTraceId = switchFrameTraceCount++;
+    if (switchFrameTraceId < 4)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME TRACE] enter id=%u thread=%u data=%p drawType=0x%08x views=%u cmds=%p disable=%d target=%d\\n",
+            switchFrameTraceId,
+            Sys_GetSwitchThreadContext(),
+            static_cast<const void *>(data),
+            data ? static_cast<unsigned>(data->drawType) : 0u,
+            data ? static_cast<unsigned>(data->viewInfoCount) : 0u,
+            data ? data->cmds : nullptr,
+            g_disableRendering,
+            gfxCmdBufState.renderTargetId);
+        Switch_LogWrite(trace);
+    }
+#endif
 
     //Profile_EndInternal(0);
     drawType = 0;
@@ -3482,6 +3503,21 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
         KISAK_NULLSUB();
         RB_EndFrame(drawType);
     }
+#ifdef __SWITCH__
+    if (switchFrameTraceId < 4)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME TRACE] leave id=%u target=%d drawType=0x%08x disable=%d\\n",
+            switchFrameTraceId,
+            gfxCmdBufState.renderTargetId,
+            static_cast<unsigned>(drawType),
+            g_disableRendering);
+        Switch_LogWrite(trace);
+    }
+#endif
     //Profile_Begin(172);
 }
 
