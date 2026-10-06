@@ -545,6 +545,9 @@ static void DB_Init();
 static void __cdecl DB_InitPoolHeader(XAssetType type);
 static void __cdecl DB_LoadXZone(XZoneInfo *zoneInfo, uint32_t zoneCount);
 static void __cdecl DB_LoadZone_f();
+#ifdef __SWITCH__
+extern jmp_buf g_com_error[THREAD_CONTEXT_COUNT];
+#endif
 static void __cdecl  DB_Thread(uint32_t threadContext);
 static void DB_TryLoadXFile();
 static int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags);
@@ -1481,12 +1484,19 @@ void __cdecl DB_InitThread()
 
 void __cdecl  DB_Thread(uint32_t threadContext)
 {
-    jmp_buf *Value; // eax
-
     iassert(threadContext == THREAD_CONTEXT_DATABASE);
+
+#ifdef __SWITCH__
+    // The database context is fixed at 8 in the SP engine. Use its canonical
+    // Com_Error jump buffer directly so setjmp cannot receive a null pointer.
+    Sys_SetValue(2, g_com_error[THREAD_CONTEXT_DATABASE]);
+    if (setjmp(g_com_error[THREAD_CONTEXT_DATABASE]))
+#else
+    jmp_buf *Value; // eax
     Value = (jmp_buf *)Sys_GetValue(2);
 
     if (setjmp(*Value))
+#endif
     {
         Profile_Recover(1);
 #ifdef __SWITCH__
