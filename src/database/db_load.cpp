@@ -5386,6 +5386,50 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         Switch_LogWrite(trace);
     }
 #endif
+#ifdef __SWITCH__
+    // Capture an invalid loaddef header before its resourceSize becomes an
+    // enormous raw-stream read. This is restricted to image assets and does
+    // not alter the loader's normal data path.
+    if (g_switchCurrentAssetRawType == 4u &&
+        static_cast<uint32_t>(varGfxImageLoadDef->resourceSize) > 0x1000000u)
+    {
+        const uint8_t *raw =
+            reinterpret_cast<const uint8_t *>(varGfxImageLoadDef);
+        char trace[512];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][GFXIMAGE LOADDEF] asset=%d stream0=%08x end=%08x level=%u flags=%u dims=%d,%d,%d format=%08x resource=%08x raw=%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\\n",
+            g_switchCurrentAssetIndex,
+            Switch_GetStreamCursorOffset(0) - 16u,
+            Switch_GetStreamCursorOffset(0),
+            static_cast<unsigned>(varGfxImageLoadDef->levelCount),
+            static_cast<unsigned>(varGfxImageLoadDef->flags),
+            static_cast<int>(varGfxImageLoadDef->dimensions[0]),
+            static_cast<int>(varGfxImageLoadDef->dimensions[1]),
+            static_cast<int>(varGfxImageLoadDef->dimensions[2]),
+            static_cast<unsigned>(varGfxImageLoadDef->format),
+            static_cast<unsigned>(varGfxImageLoadDef->resourceSize),
+            static_cast<unsigned>(raw[0]),
+            static_cast<unsigned>(raw[1]),
+            static_cast<unsigned>(raw[2]),
+            static_cast<unsigned>(raw[3]),
+            static_cast<unsigned>(raw[4]),
+            static_cast<unsigned>(raw[5]),
+            static_cast<unsigned>(raw[6]),
+            static_cast<unsigned>(raw[7]),
+            static_cast<unsigned>(raw[8]),
+            static_cast<unsigned>(raw[9]),
+            static_cast<unsigned>(raw[10]),
+            static_cast<unsigned>(raw[11]),
+            static_cast<unsigned>(raw[12]),
+            static_cast<unsigned>(raw[13]),
+            static_cast<unsigned>(raw[14]),
+            static_cast<unsigned>(raw[15]));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     Load_Stream(1, (unsigned char*)varGfxImageLoadDef, 16);
 #ifdef __SWITCH__
     if (traceUiImagePayload)
