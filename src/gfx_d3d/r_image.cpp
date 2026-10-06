@@ -1717,50 +1717,6 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
     // resource is available. Do not let a missing loose image become fatal
     // merely because the shared builtin texture is empty. Recreate the same
     // 1x1 fallback locally so the image remains renderable.
-    if (r_loadForRenderer && r_loadForRenderer->current.enabled)
-    {
-        const uint16_t savedWidth = image->width;
-        const uint16_t savedHeight = image->height;
-        const uint16_t savedDepth = image->depth;
-        const CardMemory savedCardMemory = image->cardMemory;
-
-        uint8_t pixel[4] = {255, 255, 255, 255};
-        if (image->semantic == TS_NORMAL_MAP)
-        {
-            pixel[0] = 128;
-            pixel[1] = 128;
-            pixel[2] = 255;
-            pixel[3] = 128;
-        }
-        else if (image->semantic == TS_SPECULAR_MAP)
-        {
-            pixel[0] = 0;
-            pixel[1] = 0;
-            pixel[2] = 0;
-            pixel[3] = 255;
-        }
-
-        // Image_Setup requires an empty card-memory slot. Preserve the
-        // serialized image metadata because the normal duplicate-texture
-        // fallback does not replace width/height/depth with 1x1.
-        image->cardMemory.platform[0] = 0;
-        image->cardMemory.platform[1] = 0;
-        Image_Generate2D(
-            image,
-            pixel,
-            1,
-            1,
-            D3DFMT_A8R8G8B8);
-
-        const bool generated = image->texture.basemap != nullptr;
-        image->width = savedWidth;
-        image->height = savedHeight;
-        image->depth = savedDepth;
-        image->cardMemory = savedCardMemory;
-
-        if (generated)
-            return 1;
-    }
 #endif
 
     return 0;
