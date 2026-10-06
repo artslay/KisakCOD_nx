@@ -17,6 +17,10 @@ ARCH        := -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
 MESA_SDK    := $(CURDIR)/mesa-sdk/opt/devkitpro/portlibs/switch
 OPENAL_SDK   := $(DEVKITPRO)/portlibs/switch
 CPPFLAGS    := -D__SWITCH__ -DKISAK_SWITCH -DKISAK_SP -DKISAK_OPENAL -DCINEMA -DUSE_SEPARATE_BLIT_TEXTURE \
+               -DSUPPORT_PROFILE_D3D=0 -DSUPPORT_PROFILE_BYTECODE=0 -DSUPPORT_PROFILE_HLSL=0 \
+               -DSUPPORT_PROFILE_GLSL=1 -DSUPPORT_PROFILE_GLSL120=0 -DSUPPORT_PROFILE_GLSLES=1 -DSUPPORT_PROFILE_GLSLES3=1 \
+               -DSUPPORT_PROFILE_ARB1=0 -DSUPPORT_PROFILE_ARB1_NV=0 -DSUPPORT_PROFILE_METAL=0 \
+               -DSUPPORT_PROFILE_SPIRV=0 -DSUPPORT_PROFILE_GLSPIRV=0 -DMOJOSHADER_NO_VERSION_INCLUDE=1 \
                -I$(CURDIR)/src -I$(CURDIR)/src/gfx -I$(CURDIR)/deps \
                -I$(DEVKITPRO)/libnx/include -I$(MESA_SDK)/include -I$(OPENAL_SDK)/include
 GIT_COMMIT  := $(shell git rev-parse --short=12 HEAD 2>/dev/null || printf "unknown")
@@ -72,6 +76,7 @@ C_SOURCES := $(shell find src -type f -name '*.c' \
 
 CPP_SOURCES += src/platform/switch/switch_main.cpp src/platform/switch/switch_fs.cpp src/platform/switch/switch_threads.cpp src/platform/switch/switch_timing.cpp src/platform/switch/switch_profile.cpp src/platform/switch/switch_sys.cpp src/platform/switch/switch_live_storage.cpp
 CPP_SOURCES += src/gfx_d3d/r_init_switch.cpp src/gfx_d3d/r_buffers.cpp src/gfx_d3d/r_state.cpp
+CPP_SOURCES += src/gfx/opengl/mojoshader_switch.cpp
 CPP_SOURCES += src/gfx_d3d/r_shade.cpp src/gfx_d3d/rb_shade.cpp src/gfx_d3d/r_material.cpp
 CPP_SOURCES += src/gfx_d3d/r_material_override.cpp src/gfx_d3d/r_material_switch.cpp src/gfx_d3d/rb_uploadshaders.cpp src/gfx_d3d/r_dvars.cpp
 CPP_SOURCES += src/gfx_d3d/r_image.cpp src/gfx_d3d/r_image_load_common.cpp src/gfx_d3d/r_image_load_obj.cpp src/gfx_d3d/r_image_utils.cpp src/gfx_d3d/r_image_wavelet.cpp src/gfx_d3d/r_imagedecode.cpp src/gfx_d3d/r_rendertarget.cpp
