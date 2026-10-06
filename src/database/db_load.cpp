@@ -5738,7 +5738,7 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
                 &nativeImage,
                 sizeof(nativeImage));
 
-            Load_GfxImageAsset(varGfxImagePtr);
+            Load_GfxImageAsset(reinterpret_cast<XAssetHeader *>(varGfxImagePtr));
 
             if (traceUiImagePointer)
             {
