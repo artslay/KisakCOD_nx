@@ -1444,7 +1444,7 @@ void main()
         case 2: return GL_MIRRORED_REPEAT;     // D3DTADDRESS_MIRROR
         case 3: return GL_CLAMP_TO_EDGE;       // D3DTADDRESS_CLAMP
         case 4: return GL_CLAMP_TO_BORDER;     // D3DTADDRESS_BORDER
-        case 5: return GL_MIRROR_CLAMP_TO_EDGE;// D3DTADDRESS_MIRRORONCE
+        case 5: return GL_CLAMP_TO_EDGE;       // D3DTADDRESS_MIRRORONCE (closest core-GL equivalent)
         default: return GL_REPEAT;
         }
     }
@@ -1498,11 +1498,20 @@ void main()
 
     void ApplyBlendFactors()
     {
-        glBlendFuncSeparate(
-            BlendFactor(m_srcBlend),
-            BlendFactor(m_dstBlend),
-            BlendFactor(m_srcBlendAlpha),
-            BlendFactor(m_dstBlendAlpha));
+        if (m_separateAlphaBlend)
+        {
+            glBlendFuncSeparate(
+                BlendFactor(m_srcBlend),
+                BlendFactor(m_dstBlend),
+                BlendFactor(m_srcBlendAlpha),
+                BlendFactor(m_dstBlendAlpha));
+        }
+        else
+        {
+            glBlendFunc(
+                BlendFactor(m_srcBlend),
+                BlendFactor(m_dstBlend));
+        }
     }
 
     static GLenum BlendOperation(uint32_t value)
