@@ -1016,6 +1016,9 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
         // slot is filled when that asset finishes loading, so retry pending
         // references after each top-level record.
         DB_FixupSwitchPointerAliases();
+#ifdef __SWITCH__
+        DB_FlushSwitchDeferredImageAssets();
+#endif
 
         if (i == 1507 && serialized.type == ASSET_TYPE_XANIMPARTS)
             Switch_LogWrite("[SWITCH XANIM1507] after Load_XAssetHeader\n");
