@@ -1712,6 +1712,39 @@ void __cdecl DrawText2D(
     material = Material_FromHandle(font->material);
     iassert( material );
 #ifdef __SWITCH__
+    {
+        static uint32_t switchTextMaterialTraceCount = 0;
+        if (switchTextMaterialTraceCount < 16)
+        {
+            const uintptr_t materialPtr = reinterpret_cast<uintptr_t>(material);
+            const char *materialName =
+                materialPtr && materialPtr < (1ULL << 39)
+                    ? material->info.name
+                    : nullptr;
+            if (materialName &&
+                (I_stricmp(materialName, "fonts/gamefonts_pc") == 0 ||
+                 I_stricmp(materialName, "fonts/devfonts") == 0))
+            {
+                char trace[512];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][TEXT MATERIAL] where=base ptr=%p name=%s tech=%p tex=%p texCount=%u const=%p constCount=%u state=%p stateCount=%u stateFlags=%02x\n",
+                    static_cast<const void *>(material),
+                    materialName,
+                    static_cast<void *>(material->techniqueSet),
+                    static_cast<void *>(material->textureTable),
+                    static_cast<unsigned>(material->textureCount),
+                    static_cast<void *>(material->constantTable),
+                    static_cast<unsigned>(material->constantCount),
+                    static_cast<void *>(material->stateBitsTable),
+                    static_cast<unsigned>(material->stateBitsCount),
+                    static_cast<unsigned>(material->stateFlags));
+                Switch_LogWrite(trace);
+                ++switchTextMaterialTraceCount;
+            }
+        }
+    }
     g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/base_material";
 #endif
     if ((renderFlags & 0x40) != 0 && (!fxMaterial || !fxMaterial->techniqueSet))
@@ -1978,11 +2011,20 @@ void __cdecl DrawText2D(
                                         w = xScale * (double)glyph->pixelWidth;
                                         v43 = yScale * (double)glyph->pixelHeight;
 #ifdef __SWITCH__
-                                        g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/fog_test_base";
+                                        g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/fog_test_base/call";
 #endif
-                                        if (Material_HasAnyFogableTechnique(material))
+                                        const bool baseMaterialFogable =
+                                            Material_HasAnyFogableTechnique(material);
+#ifdef __SWITCH__
+                                        g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/fog_test_base/return";
+#endif
+                                        if (baseMaterialFogable)
                                             R_WarnOncePerFrame(R_WARN_FOGABLE_2DTEXT, material->info.name);
                                         else
+                                        {
+#ifdef __SWITCH__
+                                            g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/draw_base";
+#endif
                                             RB_DrawStretchPicRotate(
                                                 material,
                                                 v40,
@@ -2041,6 +2083,10 @@ void __cdecl DrawText2D(
                                             cosAngle,
                                             v39.packed,
                                             GFX_PRIM_STATS_HUD);
+#ifdef __SWITCH__
+                                            g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/draw_base/return";
+#endif
+                                        }
                                 }
                                 if ((renderFlags & 2) != 0 && count == cursorPos)
                                 {
