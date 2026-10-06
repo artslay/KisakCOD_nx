@@ -290,12 +290,29 @@ void __cdecl DB_LoadDelayedImages()
 {
     uint32_t copyIter; // [esp+0h] [ebp-4h]
 
+#ifdef __SWITCH__
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][DELAY IMAGES] begin zone=%s copies=%u\\n",
+            g_load.filename ? g_load.filename : "<null>",
+            static_cast<unsigned>(g_copyInfoCount));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(__cdecl *)(XAssetHeader, void *))R_DelayLoadImage, 0, 0);
     for (copyIter = 0; copyIter < g_copyInfoCount; ++copyIter)
     {
         if (g_copyInfo[copyIter]->asset.type == ASSET_TYPE_IMAGE)
             R_DelayLoadImage(g_copyInfo[copyIter]->asset.header);
     }
+
+#ifdef __SWITCH__
+    Switch_LogWrite("[KisakCOD][DELAY IMAGES] end\n");
+#endif
 }
 
 void __cdecl DB_FinishGeometryBlocks(XZoneMemory *zoneMem)
