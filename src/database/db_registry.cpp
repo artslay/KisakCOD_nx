@@ -1773,7 +1773,13 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
 #else
     DB_LoadXFile(filename, zoneFile, zone->name, &zone->mem, 0, g_fileBuf, g_zoneAllocType);
 #endif
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/db_load_return";
+#endif
     DB_LoadXFileInternal();
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/db_file_done";
+#endif
     PMem_EndAlloc(zone->name, g_zoneAllocType);
     g_loadingZone = 0;
     g_mayRecoverLostAssets = 1;
