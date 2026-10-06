@@ -5563,7 +5563,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][GFXIMAGE NAME] asset=%d rawType=%u serializedName=%08x name=%p first=%02x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\\n",
+                "[KisakCOD][GFXIMAGE NAME] asset=%d rawType=%u serializedName=%08x name=%p first=%02x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\n",
                 g_switchCurrentAssetIndex,
                 g_switchCurrentAssetRawType,
                 serialized.name,
@@ -5578,7 +5578,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 static_cast<unsigned>(g_streamPosIndex),
                 Switch_GetStreamCursorOffset(0),
                 Switch_GetStreamCursorOffset(4),
-                (!resolvedName || resolvedName[0] == '\\0') ? 1u : 0u);
+                (!resolvedName || resolvedName[0] == '\0') ? 1u : 0u);
             Switch_LogWrite(trace);
 
             if (resolvedName && std::strcmp(resolvedName, "3") == 0)
@@ -5652,7 +5652,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                     std::snprintf(
                         detail + written,
                         sizeof(detail) - static_cast<size_t>(written),
-                        " text=%s\\n",
+                        " text=%s\n",
                         resolvedName);
                 }
                 Switch_LogWrite(detail);
