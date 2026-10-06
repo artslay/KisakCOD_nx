@@ -3043,8 +3043,9 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
             newEntry->entry.asset.header.techniqueSet;
         const char *directName4026 =
             techset4026 ? techset4026->name : nullptr;
-        const uintptr_t nameHandler4026 =
-            reinterpret_cast<uintptr_t>(DB_XAssetGetNameHandler[type]);
+        const void *nameHandler4026 =
+            reinterpret_cast<const void *>(
+                reinterpret_cast<uintptr_t>(DB_XAssetGetNameHandler[type]));
         std::snprintf(
             trace,
             sizeof(trace),
@@ -3099,16 +3100,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         name = DB_GetXAssetName(&newEntry->entry.asset);
 #ifdef __SWITCH__
     if (switchTraceTechset4026)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][TECHSET4026] registry-after-name name=%p\n",
-            static_cast<const void *>(name));
-        Switch_LogWrite(trace);
         g_switchDbStage = "asset/name_return";
-    }
 #endif
 #ifdef __SWITCH__
     if (type == ASSET_TYPE_FX &&
