@@ -437,7 +437,7 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][CINEMATIC] FFmpeg BinkOpen name=%s size=%ux%u frames=%u fps=%u/%u\\n",
+        "[KisakCOD][CINEMATIC] FFmpeg BinkOpen name=%s size=%ux%u frames=%u fps=%u/%u\n",
         name,
         static_cast<unsigned>(bink->Width),
         static_cast<unsigned>(bink->Height),
@@ -498,6 +498,14 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
     const AVFrame *frame = nullptr;
     if (!Switch_BinkGetFrameForCopy(state, &frame))
     {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CINEMATIC] FFmpeg frame conversion failed: %s\n",
+            g_switchBinkError[0] ? g_switchBinkError : "unknown error");
+        Switch_LogWrite(trace);
+        g_switchBinkError[0] = 0;
         bink->Frames = bink->FrameNum;
         return 1;
     }
