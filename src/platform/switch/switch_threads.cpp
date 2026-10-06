@@ -38,6 +38,12 @@ struct SwitchThreadArgs
     ThreadContext_t context;
 };
 
+// libnx requires an explicit page-aligned stack size when stack_mem is null.
+// Fastfile loading can recurse through several loader layers, so keep a full
+// 1 MiB native stack per engine thread rather than relying on std::thread's
+// platform-dependent default.
+static constexpr size_t SWITCH_ENGINE_THREAD_STACK_SIZE = 0x100000;
+
 static Thread g_threads[THREAD_CONTEXT_COUNT] = {};
 static SwitchThreadArgs g_threadArgs[THREAD_CONTEXT_COUNT] = {};
 static bool g_threadCreated[THREAD_CONTEXT_COUNT] = {};
@@ -283,7 +289,7 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
         SwitchThreadEntry,
         &g_threadArgs[context],
         nullptr,
-        0,
+        SWITCH_ENGINE_THREAD_STACK_SIZE,
         0x3B,
         -2);
     if (R_FAILED(createRc))
