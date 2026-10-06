@@ -237,6 +237,9 @@ bool __cdecl DB_ResolveSwitchPointerAlias(
 void __cdecl DB_RegisterSwitchPointerAlias(
     uintptr_t serializedSlot,
     uintptr_t nativePointer);
+void __cdecl DB_RegisterSwitchPointerAliasSlot(
+    uintptr_t serializedSlot,
+    const void **nativeSlot);
 void __cdecl DB_AddSwitchPointerAliasFixup(
     uintptr_t serializedSlot,
     uintptr_t *destination);
