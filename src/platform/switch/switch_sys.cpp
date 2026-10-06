@@ -66,7 +66,6 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[SWITCH STREAM MISMATCH]",
         "[SWITCH STREAM ARRAY MISMATCH]",
         "[SWITCH STREAM REGRESS]",
-        "[SWITCH OFFSET INVALID]",
         "[SWITCH IMAGE ANOMALY]"
     };
 
@@ -334,6 +333,18 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][RINIT]",
         "[KisakCOD][VERTEXSHADER ",
         "[KisakCOD][SOUND]",
+        "[KisakCOD][GFXIMAGE NAME]",
+        "[KisakCOD][GFXIMAGE FORWARD NAME]",
+        "[KisakCOD][GFXIMAGE NAME TARGET]",
+        "[KisakCOD][GFXIMAGE DEFERRED NAME]",
+        "[KisakCOD][GFXIMAGE DEFERRED]",
+        "[KisakCOD][GFXIMAGE LOADDEF COMPACT]",
+        "[KisakCOD][FONT LOAD]",
+        "[KisakCOD][FONT1215]",
+        "[KisakCOD][FONT MATERIAL LOAD]",
+        "[KisakCOD][FONT MATERIAL ALIAS]",
+        "[KisakCOD][TECHSET4026]",
+        "[KisakCOD][WATCHDOG]",
         "Couldn't play stream '",
         "R_Cinematic_BinkOpen '"
     };
