@@ -18,6 +18,7 @@
 #define __declspec(x)
 #endif
 
+#include <cstdio>
 struct HINSTANCE__ {};
 struct tagRECT
 {
