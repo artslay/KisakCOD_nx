@@ -5364,32 +5364,21 @@ void __cdecl Load_GfxRawTextureArray(bool atStreamStart, int32_t count)
 void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
 {
     if (!atStreamStart)
-        MyAssertHandler("c:\\trees\\cod3\\src\\database\\../gfx_d3d/r_image_load_db.h", 2614, 0, "%s", "atStreamStart");
+        MyAssertHandler(
+            "c:\\trees\\cod3\\src\\database\\../gfx_d3d/r_image_load_db.h",
+            2614,
+            0,
+            "%s",
+            "atStreamStart");
     iassert(OFFSET_TO_GfxImageLoadDef_DATA == 16);
+
 #ifdef __SWITCH__
-    const bool traceUiImagePayload =
-        g_switchCurrentAssetRawType == 4u &&
-        g_switchCurrentAssetIndex >= 0 &&
-        g_switchCurrentAssetIndex <= 3;
-    if (traceUiImagePayload)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][UI IMAGE] loaddef begin asset=%d stream=%u b0=%08x b4=%08x pos=%p\n",
-            g_switchCurrentAssetIndex,
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<void *>(DB_GetStreamPos()));
-        Switch_LogWrite(trace);
-    }
-#endif
     bool switchSkipImagePayload = false;
-    if (g_switchCurrentAssetRawType == 4u &&
-        g_switchCurrentAssetIndex >= 0 &&
-        g_switchCurrentAssetIndex < INT32_MAX)
+#endif
+
+    Load_Stream(1, (unsigned char*)varGfxImageLoadDef, 16);
+
+#ifdef __SWITCH__
     {
         const uint8_t *raw =
             reinterpret_cast<const uint8_t *>(varGfxImageLoadDef);
@@ -5412,17 +5401,14 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         const uint32_t format = readU32LE(raw + 7);
         const uint32_t resourceSize = readU32LE(raw + 11);
 
-        // Some CoD4/SP common-image records use a compact zero-resource form:
-        // levelCount, dimensions[3], format and resourceSize are packed without
-        // the unused flags byte. The observed record is:
-        //   00 | 0001 0001 0001 | DXT1 | 00000000 | 3a
-        // The final byte is padding/next metadata and must not become part of
-        // resourceSize. Recognize this only when the dimensions match the
-        // already-translated GfxImage and the resource is explicitly empty.
+        // An empty common-image record is serialized as:
+        // levelCount | dimensions[3] | format | resourceSize
+        // with the otherwise-zero flags byte omitted. The final byte in the
+        // 16-byte temporary slot is not part of resourceSize.
         const bool knownDxtFormat =
-            format == 0x31545844u || // D3DFMT_DXT1
-            format == 0x33545844u || // D3DFMT_DXT3
-            format == 0x35545844u;    // D3DFMT_DXT5
+            format == 0x31545844u || // DXT1
+            format == 0x33545844u || // DXT3
+            format == 0x35545844u;    // DXT5
         const bool compactEmpty =
             raw[0] == 0 &&
             width == varGfxImage->width &&
@@ -5433,7 +5419,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
 
         if (compactEmpty)
         {
-            varGfxImageLoadDef->levelCount = 0;
+            varGfxImageLoadDef->levelCount = raw[0];
             varGfxImageLoadDef->flags = 0;
             varGfxImageLoadDef->dimensions[0] =
                 static_cast<__int16>(width);
@@ -5450,7 +5436,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][GFXIMAGE LOADDEF COMPACT] asset=%d dims=%ux%ux%u format=%08x resource=0 cursor=%08x\n",
+                "[KisakCOD][GFXIMAGE LOADDEF COMPACT] asset=%d dims=%ux%ux%u format=%08x resource=0 cursor=%08x\\n",
                 g_switchCurrentAssetIndex,
                 static_cast<unsigned>(width),
                 static_cast<unsigned>(height),
@@ -5461,88 +5447,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         }
     }
 #endif
-    if (g_switchCurrentAssetRawType == 4u &&
-        static_cast<uint32_t>(varGfxImageLoadDef->resourceSize) > 0x1000000u)
-    {
-        const uint8_t *raw =
-            reinterpret_cast<const uint8_t *>(varGfxImageLoadDef);
-        const uint8_t *before =
-            raw >= g_streamBlocks[0].data + 4
-                ? raw - 4
-                : raw;
-        const uint8_t *after = raw + 16;
-        char trace[640];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][GFXIMAGE LOADDEF] asset=%d stream0=%08x end=%08x level=%u flags=%u dims=%d,%d,%d format=%08x resource=%08x raw=%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\\n",
-            g_switchCurrentAssetIndex,
-            Switch_GetStreamCursorOffset(0) - 16u,
-            Switch_GetStreamCursorOffset(0),
-            static_cast<unsigned>(varGfxImageLoadDef->levelCount),
-            static_cast<unsigned>(varGfxImageLoadDef->flags),
-            static_cast<int>(varGfxImageLoadDef->dimensions[0]),
-            static_cast<int>(varGfxImageLoadDef->dimensions[1]),
-            static_cast<int>(varGfxImageLoadDef->dimensions[2]),
-            static_cast<unsigned>(varGfxImageLoadDef->format),
-            static_cast<unsigned>(varGfxImageLoadDef->resourceSize),
-            static_cast<unsigned>(raw[0]),
-            static_cast<unsigned>(raw[1]),
-            static_cast<unsigned>(raw[2]),
-            static_cast<unsigned>(raw[3]),
-            static_cast<unsigned>(raw[4]),
-            static_cast<unsigned>(raw[5]),
-            static_cast<unsigned>(raw[6]),
-            static_cast<unsigned>(raw[7]),
-            static_cast<unsigned>(raw[8]),
-            static_cast<unsigned>(raw[9]),
-            static_cast<unsigned>(raw[10]),
-            static_cast<unsigned>(raw[11]),
-            static_cast<unsigned>(raw[12]),
-            static_cast<unsigned>(raw[13]),
-            static_cast<unsigned>(raw[14]),
-            static_cast<unsigned>(raw[15]));
-        Switch_LogWrite(trace);
 
-        if (before <= raw &&
-            g_streamBlocks && g_streamBlocks[0].data &&
-            static_cast<size_t>(after - g_streamBlocks[0].data) + 8u <=
-                g_streamBlocks[0].size)
-        {
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][GFXIMAGE LOADDEF RANGE] asset=%d before=%02x %02x %02x %02x after=%02x %02x %02x %02x\\n",
-                g_switchCurrentAssetIndex,
-                static_cast<unsigned>(before[0]),
-                static_cast<unsigned>(before[1]),
-                static_cast<unsigned>(before[2]),
-                static_cast<unsigned>(before[3]),
-                static_cast<unsigned>(after[0]),
-                static_cast<unsigned>(after[1]),
-                static_cast<unsigned>(after[2]),
-                static_cast<unsigned>(after[3]));
-            Switch_LogWrite(trace);
-        }
-    }
-#endif
-
-#ifdef __SWITCH__
-    if (traceUiImagePayload)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][UI IMAGE] loaddef header asset=%d resourceSize=%u stream=%u b0=%08x b4=%08x\n",
-            g_switchCurrentAssetIndex,
-            varGfxImageLoadDef->resourceSize,
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4));
-        Switch_LogWrite(trace);
-    }
-#endif
     if (DB_GetStreamPos() != varGfxImageLoadDef->data)
         MyAssertHandler(
             "c:\\trees\\cod3\\src\\database\\../gfx_d3d/r_image_load_db.h",
@@ -5550,11 +5455,14 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             0,
             "%s",
             "DB_GetStreamPos() == reinterpret_cast< byte * >( varGfxImageLoadDef->data )");
+
     varbyte = &varGfxImageLoadDef->data[0];
+
 #ifdef __SWITCH__
     if (switchSkipImagePayload)
         return;
 #endif
+
     Load_byteArray(1, varGfxImageLoadDef->resourceSize);
 }
 
