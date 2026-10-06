@@ -152,6 +152,28 @@ bool Switch_TranslateD3DShader(
     result.source.assign(parsed->output, static_cast<size_t>(parsed->output_len));
     NormalizeMojoGLSL(result.source);
 
+    static uint32_t successLogCount = 0;
+    if (successLogCount < 32)
+    {
+        char trace[512];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][SHADER] MojoShader translated type=%s model=%d_%d instructions=%d uniforms=%d samplers=%d attributes=%d output=%d bytes=%u\\n",
+            parsed->shader_type == MOJOSHADER_TYPE_VERTEX ? "vs" : "ps",
+            parsed->major_ver,
+            parsed->minor_ver,
+            parsed->instruction_count,
+            parsed->uniform_count,
+            parsed->sampler_count,
+            parsed->attribute_count,
+            parsed->output_count,
+            size);
+        extern void Switch_LogWrite(const char *msg);
+        Switch_LogWrite(trace);
+        ++successLogCount;
+    }
+
     const bool vertexShader =
         parsed->shader_type == MOJOSHADER_TYPE_VERTEX;
     std::istringstream lines(result.source);
