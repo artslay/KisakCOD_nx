@@ -2138,7 +2138,10 @@ MaterialVertexShader *__cdecl Material_LoadVertexShader(char *shaderName, int sh
     mtlShader->name = (const char*)&mtlShader[1] + programSize;
     memcpy((void*)mtlShader->name, shaderName, nameSize);
     memcpy(program, shader->GetBufferPointer(), programSize);
-    hr = dx.device->CreateVertexShader((const DWORD*)program, &mtlShader->prog.vs);
+    hr = dx.device->CreateVertexShader(
+        (const DWORD*)program,
+        programSize,
+        &mtlShader->prog.vs);
     if (hr >= 0)
     {
         mtlShader->prog.loadDef.loadForRenderer = renderer;
@@ -2336,7 +2339,10 @@ MaterialPixelShader *__cdecl Material_LoadPixelShader(char *shaderName, int shad
     memcpy((void*)mtlShader->name, shaderName, nameSize);
     memcpy(program, shader->GetBufferPointer(), programSize);
 
-    hr = dx.device->CreatePixelShader((const DWORD*)program, &mtlShader->prog.ps);
+    hr = dx.device->CreatePixelShader(
+        (const DWORD*)program,
+        programSize,
+        &mtlShader->prog.ps);
 
     if (hr >= 0)
     {
