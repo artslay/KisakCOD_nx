@@ -1719,6 +1719,11 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
     // 1x1 fallback locally so the image remains renderable.
     if (r_loadForRenderer && r_loadForRenderer->current.enabled)
     {
+        const uint16_t savedWidth = image->width;
+        const uint16_t savedHeight = image->height;
+        const uint16_t savedDepth = image->depth;
+        const CardMemory savedCardMemory = image->cardMemory;
+
         uint8_t pixel[4] = {255, 255, 255, 255};
         if (image->semantic == TS_NORMAL_MAP)
         {
@@ -1735,6 +1740,11 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
             pixel[3] = 255;
         }
 
+        // Image_Setup requires an empty card-memory slot. Preserve the
+        // serialized image metadata because the normal duplicate-texture
+        // fallback does not replace width/height/depth with 1x1.
+        image->cardMemory.platform[0] = 0;
+        image->cardMemory.platform[1] = 0;
         Image_Generate2D(
             image,
             pixel,
@@ -1742,7 +1752,13 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
             1,
             D3DFMT_A8R8G8B8);
 
-        if (image->texture.basemap)
+        const bool generated = image->texture.basemap != nullptr;
+        image->width = savedWidth;
+        image->height = savedHeight;
+        image->depth = savedDepth;
+        image->cardMemory = savedCardMemory;
+
+        if (generated)
             return 1;
     }
 #endif
