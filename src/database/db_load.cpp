@@ -7695,7 +7695,18 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
     const void **inserted; // [esp+0h] [ebp-Ch]
     uint32_t value; // [esp+4h] [ebp-8h]
 
+#ifdef __SWITCH__
+    // Material's serialized 80-byte header has already been decoded by
+    // Load_Material() before this helper is called with atStreamStart=false.
+    // Do not consume another 32-bit value from stream 4 in that case: those
+    // bytes belong to the nested TechniqueSet payload and would overwrite the
+    // native pointer token with unrelated data (often zero).
+    if (atStreamStart)
+        Load_Stream(true, reinterpret_cast<uint8_t *>(varMaterialTechniqueSetPtr), 4);
+    // The pointer slot lives in the active virtual stream, but an inline
+#else
     Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniqueSetPtr, 4);
+#endif
 #ifdef __SWITCH__
     // The pointer slot lives in the active virtual stream, but an inline
     // TechniqueSet's serialized 148-byte object header lives in stream 0.
