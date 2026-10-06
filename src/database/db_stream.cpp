@@ -544,6 +544,67 @@ bool __cdecl DB_ResolveSwitchPointerAlias(
     return false;
 }
 
+bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
+    uintptr_t serializedSlot,
+    uintptr_t *resolvedPointer)
+{
+    if (!serializedSlot || !resolvedPointer || !g_streamBlocks)
+        return false;
+
+    uintptr_t current = serializedSlot;
+    uintptr_t visited[8] = {};
+    constexpr size_t MaxDepth = ARRAY_COUNT(visited);
+
+    for (size_t depth = 0; depth < MaxDepth; ++depth)
+    {
+        for (size_t i = 0; i < depth; ++i)
+        {
+            if (visited[i] == current)
+                return false;
+        }
+        visited[depth] = current;
+
+        if (DB_ResolveSwitchPointerAlias(current, resolvedPointer) &&
+            *resolvedPointer)
+            return true;
+
+        uintptr_t blockOffset = 0;
+        const int32_t block = Switch_StreamOwner(
+            reinterpret_cast<const uint8_t *>(current),
+            &blockOffset);
+        if (block < 0 ||
+            static_cast<uint32_t>(block) >= ARRAY_COUNT(g_streamPosArray))
+            return false;
+
+        const XBlock &streamBlock = g_streamBlocks[block];
+        if (!streamBlock.data ||
+            blockOffset > streamBlock.size ||
+            streamBlock.size - blockOffset < sizeof(uint32_t))
+            return false;
+
+        const uint32_t raw =
+            *reinterpret_cast<const uint32_t *>(current);
+        if (!raw ||
+            raw == UINT32_MAX ||
+            raw == UINT32_MAX - 1u)
+            return false;
+
+        const uint32_t targetBlock = (raw - 1u) >> 28;
+        if (targetBlock >= ARRAY_COUNT(g_streamPosArray))
+            return false;
+
+        const uint32_t targetOffset = (raw - 1u) & 0x0FFFFFFFu;
+        if (!g_streamBlocks[targetBlock].data ||
+            targetOffset >= g_streamBlocks[targetBlock].size)
+            return false;
+
+        current = reinterpret_cast<uintptr_t>(
+            &g_streamBlocks[targetBlock].data[targetOffset]);
+    }
+
+    return false;
+}
+
 void __cdecl DB_RegisterSwitchPointerAlias(
     uintptr_t serializedSlot,
     uintptr_t nativePointer)
