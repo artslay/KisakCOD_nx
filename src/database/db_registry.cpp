@@ -3046,7 +3046,6 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
             static_cast<void *>(&newEntry->entry.asset),
             static_cast<void *>(&newEntry->entry.asset.header),
             newEntry->entry.asset.header.data,
-            reinterpret_cast<const void *>(DB_XAssetGetNameHandler[type]),
             sizeof(MaterialTechniqueSet),
             g_switchDbStage ? g_switchDbStage : "");
         Switch_LogWrite(trace);
