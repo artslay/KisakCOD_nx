@@ -1551,11 +1551,24 @@ void COM_PlayIntroMovies()
     if (!com_dedicated->current.integer)
 #endif
     {
+#ifdef __SWITCH__
+        char trace[192];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][INTRO] com_introPlayed=%u action=%s\n",
+            com_introPlayed && com_introPlayed->current.enabled ? 1u : 0u,
+            com_introPlayed && com_introPlayed->current.enabled ? "skip" : "queue IW_logo");
+        Switch_LogWrite(trace);
+#endif
         if (!com_introPlayed->current.enabled)
         {
             Cbuf_AddText(0, "cinematic IW_logo\n");
             Dvar_SetString((dvar_s *)nextmap, (char *)"cinematic atvi; set nextmap cinematic cod_intro");
             Dvar_SetBool((dvar_s *)com_introPlayed, 1);
+#ifdef __SWITCH__
+            Switch_LogWrite("[KisakCOD][INTRO] queued IW_logo -> atvi -> cod_intro\n");
+#endif
         }
     }
 }
