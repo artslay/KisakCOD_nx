@@ -474,6 +474,9 @@ const char *__cdecl R_DescribeFormat(_D3DFORMAT format)
     case D3DFMT_D24X8:
         result = "24-bit depth without stencil";
         break;
+    case D3DFMT_D15S1:
+        result = "15-bit depth with 1-bit stencil";
+        break;
     default:
         result = va("unknown format 0x%08x", format);
         break;

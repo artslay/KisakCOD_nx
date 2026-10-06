@@ -184,17 +184,7 @@ LABEL_17:
 void __cdecl Image_Upload3D_CopyData_PC(const GfxImage *image,_D3DFORMAT format,uint32_t mipLevel,uint8_t *src)
 {
 #ifdef __SWITCH__
-    if(!image||!image->texture.volmap||!src)return;
-    auto *x=image->texture.volmap;GLenum internalFmt,uploadFmt,uploadType;bool compressed=false;
-    switch(format){
-    case D3DFMT_A8R8G8B8:case D3DFMT_X8R8G8B8:internalFmt=GL_RGBA8;uploadFmt=GL_BGRA;uploadType=GL_UNSIGNED_BYTE;break;
-    case D3DFMT_A8:case D3DFMT_L8:internalFmt=GL_R8;uploadFmt=GL_RED;uploadType=GL_UNSIGNED_BYTE;break;
-    case D3DFMT_A8L8:internalFmt=GL_RG8;uploadFmt=GL_RG;uploadType=GL_UNSIGNED_BYTE;break;
-    case D3DFMT_R32F:internalFmt=GL_R32F;uploadFmt=GL_RED;uploadType=GL_FLOAT;break;
-    case D3DFMT_G16R16F:internalFmt=GL_RG16F;uploadFmt=GL_RG;uploadType=GL_HALF_FLOAT;break;
-    default:return;}
-    glBindTexture(GL_TEXTURE_3D,x->object);uint32_t w=std::max(1u,(uint32_t)image->width>>mipLevel),h=std::max(1u,(uint32_t)image->height>>mipLevel),d=std::max(1u,(uint32_t)image->depth>>mipLevel);
-    glTexSubImage3D(GL_TEXTURE_3D,mipLevel,0,0,0,w,h,d,uploadFmt,uploadType,src);
+    Image_UploadData(image, format, D3DCUBEMAP_FACE_POSITIVE_X, mipLevel, src);
 #else
     /* original D3D9 implementation */
     int width = image->width >> mipLevel > 1 ? image->width >> mipLevel : 1;
@@ -213,18 +203,7 @@ void __cdecl Image_Upload3D_CopyData_PC(const GfxImage *image,_D3DFORMAT format,
 void __cdecl Image_Upload2D_CopyData_PC(const GfxImage *image,_D3DFORMAT format,_D3DCUBEMAP_FACES face,uint32_t mipLevel,uint8_t *src)
 {
 #ifdef __SWITCH__
-    if(!image||!image->texture.basemap||!src)return;
-    auto *x=image->texture.basemap;glBindTexture(x->target,x->object);
-    uint32_t w=std::max(1u,(uint32_t)image->width>>mipLevel),h=std::max(1u,(uint32_t)image->height>>mipLevel);
-    GLenum internalFmt=0,uploadFmt=0,uploadType=GL_UNSIGNED_BYTE;bool compressed=false;
-    switch(format){
-    case D3DFMT_A8R8G8B8:case D3DFMT_X8R8G8B8:internalFmt=GL_RGBA8;uploadFmt=GL_BGRA;break;
-    case D3DFMT_A8:case D3DFMT_L8:internalFmt=GL_R8;uploadFmt=GL_RED;break;
-    case D3DFMT_A8L8:internalFmt=GL_RG8;uploadFmt=GL_RG;break;
-    case D3DFMT_R32F:internalFmt=GL_R32F;uploadFmt=GL_RED;uploadType=GL_FLOAT;break;
-    default:return;}
-    if(x->target==GL_TEXTURE_CUBE_MAP)glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,mipLevel,0,0,w,h,uploadFmt,uploadType,src);
-    else glTexSubImage2D(GL_TEXTURE_2D,mipLevel,0,0,w,h,uploadFmt,uploadType,src);
+    Image_UploadData(image, format, face, mipLevel, src);
 #else
     uint32_t width=image->width>>mipLevel>1?image->width>>mipLevel:1,height=image->height>>mipLevel>1?image->height>>mipLevel:1;
     _D3DLOCKED_RECT lockedRect{};HRESULT hr= image->mapType==MAPTYPE_2D ? image->texture.map->LockRect(mipLevel,&lockedRect,nullptr,0) : image->texture.cubemap->LockRect(face,mipLevel,&lockedRect,nullptr,0);

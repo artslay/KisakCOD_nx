@@ -304,10 +304,13 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
     appletRequestExitToSelf();
 }
 
-extern "C" thread_local volatile uintptr_t g_switchFrameTailReached = 0;
-extern "C" thread_local volatile uintptr_t g_switchFrameAfterDrawReached = 0;
-extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldAddress = 0;
-extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldCaller = 0;
+extern "C"
+{
+thread_local volatile uintptr_t g_switchFrameTailReached = 0;
+thread_local volatile uintptr_t g_switchFrameAfterDrawReached = 0;
+thread_local volatile uintptr_t g_switchFrameDrawFieldAddress = 0;
+thread_local volatile uintptr_t g_switchFrameDrawFieldCaller = 0;
+}
 
 void Switch_LogWrite(const char *msg)
 {
@@ -354,7 +357,6 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][FRAME]",
         "[KisakCOD][FONT]",
         "[KisakCOD][FONT FALLBACK]",
-        "[KisakCOD][GL TARGET]",
         "[KisakCOD][CODE IMAGES]",
         "[SWITCH IMAGEFAIL]",
         "Switch PMem alloc begin:",

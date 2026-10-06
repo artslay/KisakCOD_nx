@@ -34,6 +34,8 @@ extern void Switch_LogWrite(const char *msg);
 
 namespace
 {
+uint32_t s_switchVulkanAllocTraceCount = 0;
+
 enum class VulkanTextureKind : uint8_t
 {
     Texture2D,
