@@ -219,6 +219,113 @@ uintptr_t __cdecl DB_ConvertOffsetToPointerValue(uint32_t offset)
     return resolved;
 }
 
+#ifdef __SWITCH__
+static bool Switch_IsSerializedAssetName(uintptr_t address)
+{
+    if (!address || !g_streamBlocks)
+        return false;
+
+    for (uint32_t block = 0; block < ARRAY_COUNT(g_streamPosArray); ++block)
+    {
+        if (!g_streamBlocks[block].data)
+            continue;
+
+        const uintptr_t base =
+            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+        const uintptr_t end = base + g_streamBlocks[block].size;
+        if (address < base || address >= end)
+            continue;
+
+        const uint8_t *string =
+            reinterpret_cast<const uint8_t *>(address);
+        const size_t remaining =
+            g_streamBlocks[block].size - static_cast<size_t>(address - base);
+        const size_t limit = remaining < 256u ? remaining : 256u;
+
+        for (size_t i = 0; i < limit; ++i)
+        {
+            const uint8_t c = string[i];
+            if (c == 0)
+                return i != 0;
+            if (c < 0x21u || c > 0x7Eu)
+                return false;
+        }
+
+        return false;
+    }
+
+    return false;
+}
+
+uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress)
+{
+    if (!serializedAddress || !g_streamBlocks)
+        return 0;
+
+    uintptr_t current = serializedAddress;
+    uintptr_t visited[8] = {};
+
+    for (size_t depth = 0; depth < ARRAY_COUNT(visited); ++depth)
+    {
+        for (size_t i = 0; i < depth; ++i)
+        {
+            if (visited[i] == current)
+                return 0;
+        }
+        visited[depth] = current;
+
+        uintptr_t nativePointer = 0;
+        if (DB_ResolveSwitchPointerAlias(current, &nativePointer) &&
+            nativePointer)
+        {
+            current = nativePointer;
+            continue;
+        }
+
+        if (Switch_IsSerializedAssetName(current))
+            return current;
+
+        bool owned = false;
+        const uint8_t *slot = nullptr;
+        size_t remaining = 0;
+        for (uint32_t block = 0; block < ARRAY_COUNT(g_streamPosArray); ++block)
+        {
+            if (!g_streamBlocks[block].data)
+                continue;
+
+            const uintptr_t base =
+                reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+            const uintptr_t end = base + g_streamBlocks[block].size;
+            if (current < base || current >= end)
+                continue;
+
+            const size_t offset = static_cast<size_t>(current - base);
+            if (g_streamBlocks[block].size - offset < sizeof(uint32_t))
+                return 0;
+
+            slot = reinterpret_cast<const uint8_t *>(current);
+            remaining = g_streamBlocks[block].size - offset;
+            owned = true;
+            break;
+        }
+
+        if (!owned || !slot || remaining < sizeof(uint32_t))
+            return 0;
+
+        uint32_t raw = 0;
+        std::memcpy(&raw, slot, sizeof(raw));
+        if (!raw || raw == UINT32_MAX || raw == UINT32_MAX - 1u)
+            return 0;
+
+        current = DB_ConvertOffsetToPointerValue(raw);
+        if (!current)
+            return 0;
+    }
+
+    return 0;
+}
+#endif
+
 void __cdecl DB_ConvertOffsetToAlias(void *data)
 {
     const uint32_t offset = *reinterpret_cast<const uint32_t *>(data);

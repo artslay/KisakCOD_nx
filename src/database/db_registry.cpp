@@ -3821,11 +3821,18 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
         if (!image || !slot)
             continue;
 
-        if (!image->name || image->name[0] == '\0')
+        const uintptr_t serializedNameAddress =
+            reinterpret_cast<uintptr_t>(image->name);
+        const uintptr_t resolvedName =
+            DB_ResolveSwitchSerializedString(serializedNameAddress);
+
+        if (!resolvedName)
         {
             g_switchDeferredImageAssets[writeIndex++] = deferred;
             continue;
         }
+
+        image->name = reinterpret_cast<const char *>(resolvedName);
 
         const XAssetHeader result =
             DB_AddXAsset(ASSET_TYPE_IMAGE, (XAssetHeader)image);

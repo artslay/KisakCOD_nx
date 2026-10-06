@@ -254,6 +254,9 @@ void __cdecl Load_Stream(bool atStreamStart, uint8_t *ptr, int32_t size);
 void __cdecl Load_DelayStream();
 void __cdecl DB_ConvertOffsetToAlias(void *data);
 uintptr_t __cdecl DB_ConvertOffsetToPointerValue(uint32_t offset);
+#ifdef __SWITCH__
+uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress);
+#endif
 void __cdecl DB_ConvertOffsetToPointer(void *data);
 void __cdecl DB_LoadSwitchSerialized(void *dst, uint32_t size);
 void __cdecl Load_XStringCustom(char **str);
