@@ -1,4 +1,9 @@
 #include <universal/q_shared.h>
+#ifdef __SWITCH__
+extern const char * volatile g_switchDbStage;
+extern int32_t g_switchCurrentAssetIndex;
+extern uint32_t g_switchCurrentAssetRawType;
+#endif
 #include "r_image.h"
 #include <qcommon/threads.h>
 #include <qcommon/mem_track.h>
@@ -377,6 +382,7 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
 {
     GfxImage *image = header.image;
 #ifdef __SWITCH__
+    g_switchDbStage = "delayed_images/item";
     static uint32_t switchDelayImageCount = 0;
     const uint32_t switchDelayImageIndex = switchDelayImageCount++;
     const bool switchTraceDelayImage =
@@ -404,8 +410,16 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
         image->cardMemory.platform[1] = 0;
         if (r_loadForRenderer->current.enabled && !dx.deviceLost)
         {
+#ifdef __SWITCH__
+            g_switchDbStage = "delayed_images/image_load";
+#endif
             if (!Image_LoadFromFile(image))
+            {
+#ifdef __SWITCH__
+                g_switchDbStage = "delayed_images/default_texture";
+#endif
                 Image_AssignDefaultTexture(image);
+            }
             if (!image->texture.basemap)
             {
                 HRESULT hr = dx.device->TestCooperativeLevel();
@@ -413,8 +427,14 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
                     Com_Error(ERR_DROP, "Couldn't load image '%s'\n", image->name);
             }
         }
+#ifdef __SWITCH__
+        g_switchDbStage = "delayed_images/external_data";
+#endif
         DB_LoadedExternalData(externalDataSize);
     }
+#ifdef __SWITCH__
+    g_switchDbStage = "delayed_images/item_done";
+#endif
 }
 
 void __cdecl R_GetImageList(ImageList *imageList)
@@ -426,6 +446,23 @@ void __cdecl R_GetImageList(ImageList *imageList)
 
 void __cdecl R_AddImageToList(XAssetHeader header, ImageList* imageList)
 {
+#ifdef __SWITCH__
+    if (imageList && imageList->count >= ARRAY_COUNT(imageList->image))
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH IMAGE LIST OVERFLOW] count=%u capacity=%zu asset=%d rawType=%u header=%p stage=%s\n",
+            static_cast<unsigned>(imageList->count),
+            static_cast<size_t>(ARRAY_COUNT(imageList->image)),
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<void *>(header.image),
+            g_switchDbStage ? g_switchDbStage : "");
+        Switch_LogWrite(trace);
+    }
+#endif
     iassert( imageList->count < ARRAY_COUNT( imageList->image ) );
     imageList->image[imageList->count++] = header.image;
 }

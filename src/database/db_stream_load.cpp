@@ -145,7 +145,7 @@ uintptr_t __cdecl DB_ConvertOffsetToPointerValue(uint32_t offset)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[SWITCH OFFSET INVALID] token=%08x block=%u offset=%08x size=0 assetIdx=%d rawType=%u rawHeader=%08x stream=%u pos=%p\n",
+            "[SWITCH OFFSET INVALID] token=%08x block=%u offset=%08x size=0 assetIdx=%d rawType=%u rawHeader=%08x stream=%u pos=%p caller=%p stage=%s\n",
             offset,
             block,
             blockOffset,
@@ -153,7 +153,9 @@ uintptr_t __cdecl DB_ConvertOffsetToPointerValue(uint32_t offset)
             g_switchCurrentAssetRawType,
             g_switchCurrentAssetHeader,
             g_streamPosIndex,
-            static_cast<void *>(DB_GetStreamPos()));
+            static_cast<void *>(DB_GetStreamPos()),
+            __builtin_return_address(0),
+            g_switchDbStage ? g_switchDbStage : "");
         Switch_LogWrite(trace);
         return 0;
     }
@@ -165,7 +167,7 @@ uintptr_t __cdecl DB_ConvertOffsetToPointerValue(uint32_t offset)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[SWITCH OFFSET INVALID] token=%08x block=%u offset=%08x size=%u assetIdx=%d rawType=%u rawHeader=%08x stream=%u pos=%p\n",
+            "[SWITCH OFFSET INVALID] token=%08x block=%u offset=%08x size=%u assetIdx=%d rawType=%u rawHeader=%08x stream=%u pos=%p caller=%p stage=%s\n",
             offset,
             block,
             blockOffset,

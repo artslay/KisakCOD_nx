@@ -514,9 +514,12 @@ void __cdecl DB_LoadXFileInternal()
 #endif
     Load_DelayStream();
 #ifdef __SWITCH__
-    g_switchDbStage = "delayed_images";
+    g_switchDbStage = "delayed_images/enum";
 #endif
     DB_LoadDelayedImages();
+#ifdef __SWITCH__
+    g_switchDbStage = "delayed_images/complete";
+#endif
     iassert(g_load.compressBufferStart);
     Com_Printf(CON_CHANNEL_FILES, "Loaded zone '%s'\n", g_load.filename);
 #ifdef __SWITCH__
