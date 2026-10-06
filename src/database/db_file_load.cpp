@@ -187,6 +187,9 @@ double __cdecl DB_GetLoadedFraction()
 
 void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
 {
+#ifdef __SWITCH__
+    g_switchDbStage = "file/data_begin";
+#endif
     const char *v2; // eax
     uint32_t err; // [esp+0h] [ebp-4h]
 
@@ -200,7 +203,13 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
     {
         if (!g_load.stream.avail_in)
             goto LABEL_19;
+#ifdef __SWITCH__
+        g_switchDbStage = "file/data_inflate";
+#endif
         err = DB_AuthLoad_Inflate(&g_load.stream, 2);
+#ifdef __SWITCH__
+        g_switchDbStage = "file/data_inflate_done";
+#endif
         if (err >= 2)
         {
             KISAK_NULLSUB();
@@ -255,6 +264,9 @@ void DB_ReadXFileStage()
 
 int32_t __cdecl DB_ReadData()
 {
+#ifdef __SWITCH__
+    g_switchDbStage = "file/read_data";
+#endif
     uint8_t *fileBuffer; // [esp+0h] [ebp-4h]
 
     if (!g_load.compressBufferStart)
@@ -271,6 +283,9 @@ int32_t __cdecl DB_ReadData()
 
     fileBuffer = g_load.compressBufferStart;
     const int fd = Switch_LoadFileFd();
+#ifdef __SWITCH__
+    g_switchDbStage = "file/read_fd";
+#endif
     g_load.switchFileEof = false;
     g_load.switchFileError = false;
 
@@ -281,6 +296,9 @@ int32_t __cdecl DB_ReadData()
     }
 
     const ssize_t bytesRead = ::read(fd, fileBuffer, 0x40000);
+#ifdef __SWITCH__
+    g_switchDbStage = "file/read_done";
+#endif
     if (bytesRead < 0)
     {
         g_load.switchFileError = true;
@@ -377,8 +395,12 @@ void __cdecl DB_LoadXFileInternal()
     char magic[8]; // [esp+48h] [ebp-Ch] BYREF
 
     iassert(g_load.f);
+#ifdef __SWITCH__
+    g_switchDbStage = "file/read_stage";
+#endif
     DB_ReadXFileStage();
 #ifdef __SWITCH__
+    g_switchDbStage = "file/read_stage_done";
     if (!g_load.stream.avail_in)
         Com_Error(ERR_DROP, "Fastfile for zone '%s' is empty.", g_load.filename);
 #else
@@ -386,6 +408,9 @@ void __cdecl DB_LoadXFileInternal()
         Com_Error(ERR_DROP, "Fastfile for zone '%s' is empty.", g_load.filename);
     DB_WaitXFileStage();
     DB_ReadXFileStage();
+#endif
+#ifdef __SWITCH__
+    g_switchDbStage = "file/magic_check";
 #endif
     if (g_load.stream.avail_in < 8)
         MyAssertHandler(".\\database\\db_file_load.cpp", 598, 0, "%s", "sizeof( magic ) <= g_load.stream.avail_in");
@@ -420,7 +445,13 @@ void __cdecl DB_LoadXFileInternal()
                 5);
     }
     fileIsSecure = memcmp(magic, "IWffu100", 8u) != 0;
+#ifdef __SWITCH__
+    g_switchDbStage = "file/inflate_init";
+#endif
     err = DB_AuthLoad_InflateInit(&g_load.stream, fileIsSecure);
+#ifdef __SWITCH__
+    g_switchDbStage = "file/inflate_init_done";
+#endif
     failureReason = 0;
     if (fileIsSecure)
         failureReason = "authenticated file not supported";
@@ -433,6 +464,9 @@ void __cdecl DB_LoadXFileInternal()
         Com_Error(ERR_DROP, "Fastfile for zone '%s' could not be loaded (%s)", g_load.filename, failureReason);
     }
     
+#ifdef __SWITCH__
+    g_switchDbStage = "file/xfile_header";
+#endif
     DB_LoadXFileData((uint8_t *)&file, sizeof(XFile));
 #ifdef __SWITCH__
     {
@@ -461,8 +495,10 @@ void __cdecl DB_LoadXFileInternal()
             "\n");
 
         Switch_LogWrite(trace);
-    }
+#ifdef __SWITCH__
+        g_switchDbStage = "file/xfile_header_done";
 #endif
+    }
     if (g_trackLoadProgress)
     {
 #ifdef __SWITCH__
@@ -482,9 +518,17 @@ void __cdecl DB_LoadXFileInternal()
             g_loadedExternalBytes = 0;
         }
     }
+#ifdef __SWITCH__
+    g_switchDbStage = "file/zone_alloc";
+#endif
     DB_AllocXZoneMemory(file.blockSize, g_load.filename, g_load.zoneMem, g_load.allocType);
+#ifdef __SWITCH__
+    g_switchDbStage = "file/zone_alloc_done";
+#endif
     DB_InitStreams(g_load.zoneMem);
 #ifdef __SWITCH__
+    g_switchDbStage = "file/streams_init_done";
+
     if (g_load.filename && I_stricmp(g_load.filename, "ui") == 0)
     {
         char trace[512];
@@ -1157,6 +1201,9 @@ void __cdecl DB_LoadXFile(
     g_load.filename = filename;
     g_load.zoneMem = zoneMem;
     g_load.interrupt = interrupt;
+#ifdef __SWITCH__
+    g_switchDbStage = "file/load_context_set";
+#endif
     g_load.allocType = allocType;
     if (g_load.compressBufferStart)
         MyAssertHandler(".\\database\\db_file_load.cpp", 762, 0, "%s", "!g_load.compressBufferStart");
