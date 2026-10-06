@@ -487,7 +487,7 @@ static std::vector<SwitchFxReferenceFixup> g_switchFxReferenceFixups;
 #ifdef __SWITCH__
 struct SwitchDeferredImageAsset
 {
-    XAssetHeader *header;
+    GfxImage **slot;
     GfxImage *image;
 };
 
@@ -3797,7 +3797,7 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
         image->image->name[0] == '\0')
     {
         g_switchDeferredImageAssets.push_back(
-            {image, image->image});
+            {reinterpret_cast<GfxImage **>(image), image->image});
         return;
     }
 #endif
@@ -3816,9 +3816,9 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
     for (const SwitchDeferredImageAsset &deferred : g_switchDeferredImageAssets)
     {
         GfxImage *image = deferred.image;
-        XAssetHeader *header = deferred.header;
+        GfxImage **slot = deferred.slot;
 
-        if (!image || !header)
+        if (!image || !slot)
             continue;
 
         if (!image->name || image->name[0] == '\0')
@@ -3828,8 +3828,8 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
         }
 
         const XAssetHeader result =
-            DB_AddXAsset(ASSET_TYPE_IMAGE, *header);
-        *header = result;
+            DB_AddXAsset(ASSET_TYPE_IMAGE, (XAssetHeader)image);
+        *slot = result.image;
 
         char trace[256];
         std::snprintf(
