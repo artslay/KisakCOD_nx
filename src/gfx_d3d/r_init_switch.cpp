@@ -1,4 +1,5 @@
 #include <universal/q_shared.h>
+#include <qcommon/mem_track.h>
 #include "r_init.h"
 #include "r_material.h"
 #include "r_fog.h"
