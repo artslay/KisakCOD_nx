@@ -743,8 +743,7 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][FONT TECH ASSET SLOT] serialized=%p index=%d rawType=%u header=%08x nativeSlot=%p
-",
+                    "[KisakCOD][FONT TECH ASSET SLOT] serialized=%p index=%d rawType=%u header=%08x nativeSlot=%p\n",
                     reinterpret_cast<const void *>(serializedSlot),
                     i,
                     static_cast<unsigned>(serializedAssets[static_cast<size_t>(i)].type),
