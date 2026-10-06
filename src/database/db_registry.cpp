@@ -13,6 +13,7 @@ extern const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(
 #include <cstdio>
 extern FILE *FS_SwitchOpenFile(const char *path);
 extern FILE *FS_SwitchOpenRootFile(const char *path);
+extern bool FS_SwitchRootFileExists(const char *path);
 #endif
 #include <qcommon/mem_track.h>
 
@@ -636,13 +637,11 @@ static const char *DB_GetSwitchZoneLanguage(const char *zoneName)
         {
             char path[256];
             Com_sprintf(path, sizeof(path), "zone/%s/%s.ff", languageName, marker);
-            FILE *file = FS_SwitchOpenRootFile(path);
-            if (!file)
+            if (!FS_SwitchRootFileExists(path))
             {
                 hasLocalizedFastfile = false;
                 break;
             }
-            fclose(file);
         }
 
         if (hasLocalizedFastfile)
@@ -664,11 +663,8 @@ static const char *DB_GetSwitchZoneLanguage(const char *zoneName)
 
         char path[256];
         Com_sprintf(path, sizeof(path), "zone/%s/%s.ff", languageName, zoneName);
-        FILE *file = FS_SwitchOpenRootFile(path);
-        if (!file)
+        if (!FS_SwitchRootFileExists(path))
             continue;
-
-        fclose(file);
         I_strncpyz(startupLanguage, languageName, sizeof(startupLanguage));
         if (loc_language)
             Dvar_SetInt((dvar_s *)loc_language, i);
