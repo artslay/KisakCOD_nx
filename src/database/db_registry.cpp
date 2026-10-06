@@ -3917,7 +3917,79 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
             continue;
         }
 
-        image->name = reinterpret_cast<const char *>(resolvedName);
+        const char *finalName =
+            reinterpret_cast<const char *>(resolvedName);
+
+        // Deferred image names can resolve into a stream block that is later
+        // consumed by Load_DelayStream(). Keep such names alive in Hunk memory;
+        // otherwise the image is registered correctly now (for example name="3")
+        // and then its GfxImage::name silently becomes dangling/garbage before
+        // R_DelayLoadImage() runs.
+        uint32_t nameBlock = UINT32_MAX;
+        uint32_t nameOffset = 0;
+        if (g_streamBlocks)
+        {
+            const uintptr_t nameAddress = resolvedName;
+            for (uint32_t block = 0; block < ARRAY_COUNT(g_streamPosArray); ++block)
+            {
+                if (!g_streamBlocks[block].data)
+                    continue;
+
+                const uintptr_t base =
+                    reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+                const uintptr_t end =
+                    base + g_streamBlocks[block].size;
+                if (nameAddress >= base && nameAddress < end)
+                {
+                    nameBlock = block;
+                    nameOffset = static_cast<uint32_t>(nameAddress - base);
+                    break;
+                }
+            }
+        }
+
+        if (nameBlock != UINT32_MAX)
+        {
+            const size_t remaining =
+                g_streamBlocks[nameBlock].size - nameOffset;
+            const void *nul = std::memchr(
+                finalName,
+                '\0',
+                remaining);
+            if (nul)
+            {
+                const size_t nameSize =
+                    static_cast<const char *>(nul) - finalName + 1;
+                char *stableName =
+                    static_cast<char *>(Hunk_Alloc(
+                        static_cast<uint32_t>(nameSize),
+                        "SwitchDeferredImageName",
+                        22));
+                if (stableName)
+                {
+                    std::memcpy(stableName, finalName, nameSize);
+                    finalName = stableName;
+                }
+            }
+        }
+
+        image->name = finalName;
+
+#ifdef __SWITCH__
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][GFXIMAGE DEFERRED NAME] image=%p name=%s sourceBlock=%u sourceOffset=%08x stable=%u\n",
+                static_cast<void *>(image),
+                finalName ? finalName : "<null>",
+                nameBlock,
+                static_cast<unsigned>(nameOffset),
+                finalName != reinterpret_cast<const char *>(resolvedName) ? 1u : 0u);
+            Switch_LogWrite(trace);
+        }
+#endif
 
         const XAssetHeader result =
             DB_AddXAsset(ASSET_TYPE_IMAGE, (XAssetHeader)image);
