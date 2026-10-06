@@ -669,7 +669,7 @@ class IDirect3DDevice9
             glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
 
             char log[2048];
-            log[0] = '\\0';
+            log[0] = '\0';
             if (logLength > 1)
             {
                 const GLsizei capacity =
@@ -678,7 +678,7 @@ class IDirect3DDevice9
                 glGetShaderInfoLog(
                     shader, capacity, &written, log);
                 log[std::min<GLsizei>(
-                    written, static_cast<GLsizei>(sizeof(log) - 1))] = '\\0';
+                    written, static_cast<GLsizei>(sizeof(log) - 1))] = '\0';
             }
 
             extern void Switch_LogWrite(const char *msg);
@@ -686,7 +686,7 @@ class IDirect3DDevice9
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][SHADER] GLSL compile failed stage=%s: %s\\n",
+                "[KisakCOD][SHADER] GLSL compile failed stage=%s: %s\n",
                 stage == GL_VERTEX_SHADER ? "vs" : "ps",
                 log);
             Switch_LogWrite(trace);
@@ -866,7 +866,7 @@ class IDirect3DDevice9
             glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
 
             char log[2048];
-            log[0] = '\\0';
+            log[0] = '\0';
             if (logLength > 1)
             {
                 const GLsizei capacity =
@@ -875,7 +875,7 @@ class IDirect3DDevice9
                 glGetProgramInfoLog(
                     program, capacity, &written, log);
                 log[std::min<GLsizei>(
-                    written, static_cast<GLsizei>(sizeof(log) - 1))] = '\\0';
+                    written, static_cast<GLsizei>(sizeof(log) - 1))] = '\0';
             }
 
             extern void Switch_LogWrite(const char *msg);
@@ -883,7 +883,7 @@ class IDirect3DDevice9
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][SHADER] GLSL link failed: %s\\n",
+                "[KisakCOD][SHADER] GLSL link failed: %s\n",
                 log);
             Switch_LogWrite(trace);
 
@@ -1634,7 +1634,7 @@ public:
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][SHADER] VS bytecode rejected by MojoShader/GLSL, bytes=%u error=%s\\n",
+                "[KisakCOD][SHADER] VS bytecode rejected by MojoShader/GLSL, bytes=%u error=%s\n",
                 bytecodeSize,
                 translationError.empty() ? "unknown" : translationError.c_str());
             Switch_LogWrite(trace);
@@ -1715,7 +1715,7 @@ void main()
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][SHADER] PS bytecode rejected by MojoShader/GLSL, bytes=%u error=%s\\n",
+                "[KisakCOD][SHADER] PS bytecode rejected by MojoShader/GLSL, bytes=%u error=%s\n",
                 bytecodeSize,
                 translationError.empty() ? "unknown" : translationError.c_str());
             Switch_LogWrite(trace);
