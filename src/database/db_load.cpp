@@ -7777,7 +7777,7 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
             // DB_InsertPointer separately tracks the serialized pointer slot.
             DB_RegisterSwitchPointerAlias(
                 serializedTechniqueSet,
-                reinterpret_cast<uintptr_t>(varMaterialTechniqueSet));
+                reinterpret_cast<uintptr_t>(*varMaterialTechniqueSetPtr));
 
             if (inserted)
                 *inserted = *varMaterialTechniqueSetPtr;
