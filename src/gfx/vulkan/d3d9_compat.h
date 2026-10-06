@@ -111,6 +111,7 @@ constexpr uint32_t D3DRS_ZFUNC = 23;
 constexpr uint32_t D3DRS_ALPHAREF = 24;
 constexpr uint32_t D3DRS_ALPHAFUNC = 25;
 constexpr uint32_t D3DRS_ALPHABLENDENABLE = 27;
+constexpr uint32_t D3DRS_ADAPTIVETESS_Y = 62;
 constexpr uint32_t D3DRS_STENCILENABLE = 52;
 constexpr uint32_t D3DRS_STENCILFAIL = 53;
 constexpr uint32_t D3DRS_STENCILZFAIL = 54;

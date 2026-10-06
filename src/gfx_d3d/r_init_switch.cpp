@@ -26,6 +26,9 @@ extern void Switch_LogWrite(const char *msg);
 
 // These are implemented by the shared renderer dvar/command modules.
 extern void __cdecl R_RegisterDvars();
+extern const dvar_t *r_gamma;
+extern const dvar_t *r_gpuSync;
+extern const dvar_t *r_multiGpu;
 
 #ifdef __SWITCH__
 
@@ -151,8 +154,6 @@ void R_ReleaseForShutdownOrReset()
     if (!g_allocateMinimalResources)
         R_ShutdownRenderBuffers();
 
-    RB_FreeSunSpriteQueries();
-
     if (dx.flushGpuQuery)
     {
         dx.flushGpuQuery->Release();
@@ -178,7 +179,7 @@ void R_UnloadWorld()
 {
     iassert(IsFastFileLoad());
     if (rgp.world)
-        Sys_Error("Cannot unload bsp while it is in use");
+        Com_Error(ERR_FATAL, "Cannot unload bsp while it is in use");
 }
 void R_BeginRegistration(vidConfig_t *out) {
     iassert(!rg.registered);

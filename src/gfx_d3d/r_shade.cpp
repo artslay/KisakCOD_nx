@@ -135,14 +135,6 @@ void __cdecl R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const M
         else
             data = (const float *)R_GetCodeMatrix(context.source, routingData->u.codeConst.index, routingData->u.codeConst.firstRow);
         R_HW_SetVertexShaderConstant(context.state->prim.device, routingData->dest, data, routingData->u.codeConst.rowCount);
-#ifdef __SWITCH__
-        if (routingData->u.codeConst.index == CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX &&
-            routingData->u.codeConst.firstRow == 0 &&
-            routingData->u.codeConst.rowCount >= 4)
-        {
-            context.state->prim.device->SetSwitchFallbackWorldViewProjection(data);
-        }
-#endif
     }
 }
 
