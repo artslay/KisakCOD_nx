@@ -3961,7 +3961,7 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
                 const size_t nameSize =
                     static_cast<const char *>(nul) - finalName + 1;
                 char *stableName =
-                    static_cast<char *>(Hunk_Alloc(
+                    reinterpret_cast<char *>(Hunk_Alloc(
                         static_cast<uint32_t>(nameSize),
                         "SwitchDeferredImageName",
                         22));
