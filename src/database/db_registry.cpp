@@ -2949,6 +2949,26 @@ static __attribute__((noinline)) XAssetHeader __cdecl DB_AddXAsset_SwitchLocal(
     XAssetHeader result = existingEntry->entry.asset.header;
 
 #ifdef __SWITCH__
+    if (type == ASSET_TYPE_IMAGE &&
+        header.image && header.image->name &&
+        !I_stricmp(header.image->name, "3"))
+    {
+        char trace[448];
+        const GfxImage *resultImage = result.image;
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][IMAGE3 ADD] input=%p inputName=%p/%s result=%p resultName=%p/%s same=%u\n",
+            static_cast<void *>(header.image),
+            static_cast<const void *>(header.image->name),
+            header.image->name,
+            static_cast<void *>(resultImage),
+            resultImage ? static_cast<const void *>(resultImage->name) : nullptr,
+            (resultImage && resultImage->name) ? resultImage->name : "<null>",
+            resultImage == header.image ? 1u : 0u);
+        Switch_LogWrite(trace);
+    }
+
     g_switchDbLastAssetResult = result.data;
     g_switchDbLastAssetType = static_cast<uint32_t>(type);
     g_switchDbStage = "asset/unlock";
@@ -3995,14 +4015,16 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
             DB_AddXAsset(ASSET_TYPE_IMAGE, (XAssetHeader)image);
         *slot = result.image;
 
-        char trace[256];
+        char trace[384];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][GFXIMAGE DEFERRED] registered image=%p name=%s ptr=%p remaining=%zu\n",
+            "[KisakCOD][GFXIMAGE DEFERRED] registered image=%p name=%s ptr=%p resultNamePtr=%p resultName=%s remaining=%zu\n",
             static_cast<void *>(image),
             image->name ? image->name : "<null>",
             static_cast<void *>(result.image),
+            result.image ? static_cast<const void *>(result.image->name) : nullptr,
+            (result.image && result.image->name) ? result.image->name : "<null>",
             g_switchDeferredImageAssets.size() - writeIndex - 1);
         Switch_LogWrite(trace);
     }
