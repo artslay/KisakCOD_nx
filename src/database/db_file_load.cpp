@@ -2,6 +2,7 @@
 #include "database.h"
 
 #ifdef __SWITCH__
+#include <cstdio>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <cstdint>
@@ -18,7 +19,6 @@
 #include <gfx_d3d/r_buffers.h>
 
 #ifdef __SWITCH__
-extern int __cdecl FS_SwitchOpenRootFd(const char *path);
 extern void Switch_LogWrite(const char *msg);
 extern uint8_t *AllocLoad_raw_byte();
 extern const char *varConstChar;
