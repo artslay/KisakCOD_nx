@@ -8573,35 +8573,69 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
             const uintptr_t materialAliasSlot =
                 DB_ConvertOffsetToPointerValue(materialToken);
             uintptr_t materialAliasResolved = 0;
-            const bool materialAliasFound =
-                materialAliasSlot &&
-                DB_ResolveSwitchPointerAlias(
-                    materialAliasSlot,
-                    &materialAliasResolved);
+            bool materialAliasFound = false;
 
-            DB_ConvertOffsetToAlias((uint32_t *)varMaterialHandle);
+            const bool traceSwitchFontMaterialAlias =
+                g_switchCurrentAssetRawType == ASSET_TYPE_FONT &&
+                g_switchCurrentAssetIndex >= 1215 &&
+                g_switchCurrentAssetIndex <= 1221;
 
-            if (g_switchCurrentAssetRawType == ASSET_TYPE_FONT &&
-                g_switchCurrentAssetIndex >= 1213 &&
-                g_switchCurrentAssetIndex <= 1221)
+            if (traceSwitchFontMaterialAlias)
+                g_switchDbStage = "font/material_alias";
+
+            if (materialAliasSlot)
             {
-                static uint32_t switchFontMaterialAliasTraceCount = 0;
-                if (switchFontMaterialAliasTraceCount < 24)
+                materialAliasFound =
+                    DB_ResolveSwitchPointerAlias(
+                        materialAliasSlot,
+                        &materialAliasResolved);
+
+                if (!materialAliasFound)
                 {
-                    char trace[384];
-                    std::snprintf(
-                        trace,
-                        sizeof(trace),
-                        "[KisakCOD][FONT ALIAS] asset=%d token=%08x aliasSlot=%p found=%u resolved=%p result=%p\n",
-                        g_switchCurrentAssetIndex,
-                        materialToken,
-                        reinterpret_cast<const void *>(materialAliasSlot),
-                        materialAliasFound ? 1u : 0u,
-                        reinterpret_cast<const void *>(materialAliasResolved),
-                        static_cast<void *>(*varMaterialHandle));
-                    Switch_LogWrite(trace);
-                    ++switchFontMaterialAliasTraceCount;
+                    uintptr_t chainResolved = 0;
+                    if (DB_TryResolveSwitchSerializedAliasChain(
+                            materialAliasSlot,
+                            &chainResolved) &&
+                        chainResolved >= 0x10000u)
+                    {
+                        materialAliasResolved = chainResolved;
+                        materialAliasFound = true;
+                    }
                 }
+            }
+
+            if (materialAliasFound &&
+                materialAliasResolved >= 0x10000u)
+            {
+                *varMaterialHandle =
+                    reinterpret_cast<Material *>(materialAliasResolved);
+            }
+            else
+            {
+                *varMaterialHandle = nullptr;
+                if (materialAliasSlot)
+                {
+                    DB_AddSwitchPointerAliasFixup(
+                        materialAliasSlot,
+                        reinterpret_cast<uintptr_t *>(varMaterialHandle));
+                }
+            }
+
+            if (traceSwitchFontMaterialAlias)
+            {
+                char trace[448];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][FONT ALIAS] asset=%d token=%08x aliasSlot=%p found=%u resolved=%p result=%p stage=%s\n",
+                    g_switchCurrentAssetIndex,
+                    materialToken,
+                    reinterpret_cast<const void *>(materialAliasSlot),
+                    materialAliasFound ? 1u : 0u,
+                    reinterpret_cast<const void *>(materialAliasResolved),
+                    static_cast<void *>(*varMaterialHandle),
+                    g_switchDbStage ? g_switchDbStage : "");
+                Switch_LogWrite(trace);
             }
 #else
             DB_ConvertOffsetToAlias((uint32_t *)varMaterialHandle);

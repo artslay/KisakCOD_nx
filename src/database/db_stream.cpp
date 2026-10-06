@@ -543,15 +543,36 @@ bool __cdecl DB_ResolveSwitchPointerAlias(
 
     const SwitchPointerAliasEntry &entry =
         g_switchPointerAliasEntries[entryIndex];
-    if (resolvedPointer)
+
+    if (entry.nativeSlot)
     {
-        *resolvedPointer = entry.nativeSlot
-            ? reinterpret_cast<uintptr_t>(*entry.nativeSlot)
-            : entry.nativePointer;
+        // A native alias slot must live in Hunk/native memory. Never
+        // dereference a corrupted low address; on Switch such values are
+        // serialized 32-bit data, not valid ARM64 pointers.
+        const uintptr_t nativeSlotAddress =
+            reinterpret_cast<uintptr_t>(entry.nativeSlot);
+        if (nativeSlotAddress < 0x10000u)
+            return false;
+
+        const uintptr_t nativeValue =
+            reinterpret_cast<uintptr_t>(*entry.nativeSlot);
+        if (nativeValue < 0x10000u)
+            return false;
+
+        if (resolvedPointer)
+            *resolvedPointer = nativeValue;
     }
+    else
+    {
+        if (entry.nativePointer < 0x10000u)
+            return false;
+
+        if (resolvedPointer)
+            *resolvedPointer = entry.nativePointer;
+    }
+
     return true;
 }
-
 bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
     uintptr_t serializedSlot,
     uintptr_t *resolvedPointer)

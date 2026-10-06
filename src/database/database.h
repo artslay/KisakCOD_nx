@@ -243,6 +243,9 @@ void __cdecl DB_RegisterSwitchPointerAliasSlot(
 void __cdecl DB_AddSwitchPointerAliasFixup(
     uintptr_t serializedSlot,
     uintptr_t *destination);
+bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
+    uintptr_t serializedSlot,
+    uintptr_t *resolvedPointer);
 void __cdecl DB_FixupSwitchPointerAliases();
 #ifdef __SWITCH__
 void __cdecl DB_FlushSwitchDeferredImageAssets();
