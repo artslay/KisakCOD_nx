@@ -3041,7 +3041,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
             trace,
             sizeof(trace),
             "[KisakCOD][TECHSET4026] registry-before-name entry=%p asset=%p "
-            "header=%p data=%p handler=%p sizeofTS=%zu stage=%s\n",
+            "header=%p data=%p sizeofTS=%zu stage=%s\n",
             static_cast<void *>(newEntry),
             static_cast<void *>(&newEntry->entry.asset),
             static_cast<void *>(&newEntry->entry.asset.header),
