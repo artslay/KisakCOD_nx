@@ -42,9 +42,6 @@ constexpr _D3DTEXTUREFILTERTYPE D3DTEXF_LINEAR = static_cast<_D3DTEXTUREFILTERTY
 #endif
 #include <GL/gl.h>
 #include <GL/glext.h>
-#ifdef __SWITCH__
-extern void Switch_LogWrite(const char *msg);
-#endif
 
 
 using HRESULT = int32_t;
@@ -928,27 +925,6 @@ public:
         if (m_color)
             m_color->AddRef();
         BindRenderTargets();
-#ifdef __SWITCH__
-        static uint32_t traceCount = 0;
-        if (traceCount < 12)
-        {
-            GLint fbo = -1;
-            GLint viewport[4] = {};
-            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &fbo);
-            glGetIntegerv(GL_VIEWPORT, viewport);
-            char trace[320];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][GL TARGET] n=%u surface=%p default=%u fbo=%d viewport=%d,%d %dx%d depth=%p\\n",
-                traceCount++,
-                static_cast<void *>(surface),
-                surface && surface->defaultFramebuffer ? 1u : 0u,
-                fbo,
-                viewport[0], viewport[1], viewport[2], viewport[3],
-                static_cast<void *>(m_depth));
-            Switch_LogWrite(trace);
-        }
-#endif
         return S_OK;
     }
 
@@ -1335,33 +1311,6 @@ void main()
             (GLsizei)(primitiveCount * 3),
             GL_UNSIGNED_SHORT,
             reinterpret_cast<const void*>(uintptr_t(startIndex * sizeof(uint16_t))));
-#ifdef __SWITCH__
-        static uint32_t drawTraceCount = 0;
-        if (drawTraceCount < 16)
-        {
-            GLint fbo = -1;
-            GLint viewport[4] = {};
-            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &fbo);
-            glGetIntegerv(GL_VIEWPORT, viewport);
-            const GLenum error = glGetError();
-            char trace[352];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][GL DRAW] n=%u tris=%u startIndex=%u program=%u vao=%u ib=%u tex0=%u unlit=%u fbo=%d viewport=%d,%d %dx%d glerr=0x%04x\\n",
-                drawTraceCount++,
-                primitiveCount,
-                startIndex,
-                static_cast<unsigned>(m_program),
-                static_cast<unsigned>(m_vao),
-                m_indices ? static_cast<unsigned>(m_indices->object) : 0u,
-                m_texture0Bound ? 1u : 0u,
-                m_switchUnlit ? 1u : 0u,
-                fbo,
-                viewport[0], viewport[1], viewport[2], viewport[3],
-                static_cast<unsigned>(error));
-            Switch_LogWrite(trace);
-        }
-#endif
         return S_OK;
     }
 
