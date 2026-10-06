@@ -20,6 +20,9 @@ enum ThreadOwner : __int32
 uint32_t __cdecl Sys_GetCpuCount();
 void __cdecl Sys_InitMainThread();
 uint32_t __cdecl Sys_GetCurrentThreadId();
+#ifdef __SWITCH__
+extern "C" uint32_t Sys_GetSwitchThreadContext();
+#endif
 void __cdecl Sys_InitThread(ThreadContext_t threadContext);
 char __cdecl Sys_SpawnRenderThread(void(__cdecl* function)(uint32_t));
 void __cdecl Sys_CreateEvent(bool manualReset, bool initialState, void** event);
