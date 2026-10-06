@@ -722,8 +722,7 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
                 reinterpret_cast<uintptr_t>(
                     serializedAssetBase + sizeof(SerializedXAsset) * static_cast<size_t>(i) + 4u);
             const void **nativeSlot =
-                reinterpret_cast<const void **>(
-                    &varXAsset[i].header.data);
+                const_cast<const void **>(&varXAsset[i].header.data);
 
             DB_RegisterSwitchPointerAliasSlot(
                 serializedSlot,
