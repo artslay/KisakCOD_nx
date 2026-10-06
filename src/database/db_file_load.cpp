@@ -662,6 +662,8 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
     std::vector<SerializedXAsset> serializedAssets(
         count > 0 ? static_cast<size_t>(count) : 0u);
 
+    uint8_t *serializedAssetBase = nullptr;
+
     if (count > 0)
     {
         // Load_XAssetArray normally obtains its stream alignment through
@@ -685,6 +687,7 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
         // Keep the original serialized XAsset records in block 4. Other
         // serialized pointers/offsets may legally refer back into this array.
         uint8_t *serializedStreamPos = DB_GetStreamPos();
+        serializedAssetBase = serializedStreamPos;
         const uint32_t serializedSize = static_cast<uint32_t>(
             sizeof(SerializedXAsset) * static_cast<size_t>(count));
         DB_LoadXFileData(serializedStreamPos, serializedSize);
@@ -698,6 +701,56 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
 
     XAsset *var = varXAsset;
 #ifdef __SWITCH__
+    // Forward references are represented by an alias token pointing at the
+    // serialized XAsset header slot of the future asset. The native Switch
+    // XAsset array lives separately from that serialized block, so register
+    // the correspondence before loading any individual asset.
+    if (count > 0 && serializedAssetBase)
+    {
+        std::memset(
+            varXAsset,
+            0,
+            sizeof(XAsset) * static_cast<size_t>(count));
+
+        for (int32_t i = 0; i < count; ++i)
+        {
+            const uint32_t header = serializedAssets[static_cast<size_t>(i)].header;
+            if (header != UINT32_MAX && header != UINT32_MAX - 1u)
+                continue;
+
+            const uintptr_t serializedSlot =
+                reinterpret_cast<uintptr_t>(
+                    serializedAssetBase + sizeof(SerializedXAsset) * static_cast<size_t>(i) + 4u);
+            const void **nativeSlot =
+                reinterpret_cast<const void **>(
+                    &varXAsset[i].header.data);
+
+            DB_RegisterSwitchPointerAliasSlot(
+                serializedSlot,
+                nativeSlot);
+
+            uintptr_t slotOffset = 0;
+            const int32_t slotBlock = Switch_StreamOwner(
+                reinterpret_cast<const uint8_t *>(serializedSlot),
+                &slotOffset);
+            if (slotBlock == 4 && slotOffset == 0x6f8)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][FONT TECH ASSET SLOT] serialized=%p index=%d rawType=%u header=%08x nativeSlot=%p
+",
+                    reinterpret_cast<const void *>(serializedSlot),
+                    i,
+                    static_cast<unsigned>(serializedAssets[static_cast<size_t>(i)].type),
+                    header,
+                    static_cast<const void *>(nativeSlot));
+                Switch_LogWrite(trace);
+            }
+        }
+    }
+
     g_switchPreviousAssetIndex = -1;
     g_switchPreviousAssetRawType = 0;
     g_switchPreviousAssetHeader = 0;
