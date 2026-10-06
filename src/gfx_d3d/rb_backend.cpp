@@ -3327,7 +3327,6 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
 #endif
                     SCR_UpdateScreen();
 #ifdef __SWITCH__
-                    Switch_GLEndRenderContext();
                     Switch_LogWrite("[KisakCOD][RTHREAD] remote update: after SCR_UpdateScreen\n");
 #endif
 #endif
@@ -3352,9 +3351,6 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
         if (data)
         {
             RB_RenderCommandFrame((GfxBackEndData *)data);
-#ifdef __SWITCH__
-            Switch_GLEndRenderContext();
-#endif
             goto LABEL_39;
         }
         KISAK_NULLSUB();
@@ -3412,13 +3408,6 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
         allowRendering = 0;
     if (allowRendering)
     {
-#ifdef __SWITCH__
-        if (!Switch_GLBeginRenderContext())
-        {
-            Com_Error(ERR_FATAL, "Switch Vulkan render context is unavailable");
-            return;
-        }
-#endif
         KISAK_NULLSUB();
         RB_BeginFrame(data);
         RB_Draw3D();
