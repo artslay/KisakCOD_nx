@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <unordered_map>
 #include <vulkan/vulkan.h>
 
 struct GfxWindowParms;
@@ -36,6 +37,15 @@ public:
     VkImageView DefaultDepthView() const { return m_defaultDepthView; }
     VkImage DefaultDepthImage() const { return m_defaultDepthImage; }
     VkImageLayout DefaultDepthLayout() const { return m_defaultDepthLayout; }
+    VkPipelineLayout PipelineLayout() const { return m_pipelineLayout; }
+    VkDescriptorPool DescriptorPool() const { return m_descriptorPool; }
+    VkDescriptorSetLayout VSSamplerLayout() const { return m_vsSamplerLayout; }
+    VkDescriptorSetLayout VSUniformLayout() const { return m_vsUniformLayout; }
+    VkDescriptorSetLayout PSSamplerLayout() const { return m_psSamplerLayout; }
+    VkDescriptorSetLayout PSUniformLayout() const { return m_psUniformLayout; }
+    VkImage DummyImage() const { return m_dummyImage; }
+    VkImageView DummyImageView() const { return m_dummyImageView; }
+    VkSampler DummySampler() const { return m_dummySampler; }
 
     uint32_t FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties) const;
 
@@ -61,6 +71,16 @@ public:
         VkImageView *view);
 
     void DestroyImage(VkImage image, VkDeviceMemory memory, VkImageView view);
+    bool CreateImage3D(
+        uint32_t width,
+        uint32_t height,
+        uint32_t depth,
+        uint32_t mipLevels,
+        VkFormat format,
+        VkImageUsageFlags usage,
+        VkImage *image,
+        VkDeviceMemory *memory,
+        VkImageView *view);
 
     bool UploadImage2D(
         VkImage image,
@@ -200,6 +220,11 @@ private:
     uint32_t m_presentSourceHeight = 0;
 
     std::vector<VkSampler> m_samplers;
+    std::unordered_map<uint64_t, VkSampler> m_samplerCache;
+    VkImage m_dummyImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_dummyMemory = VK_NULL_HANDLE;
+    VkImageView m_dummyImageView = VK_NULL_HANDLE;
+    VkSampler m_dummySampler = VK_NULL_HANDLE;
     std::string m_lastError;
 };
 
