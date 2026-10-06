@@ -1606,6 +1606,19 @@ public:
             Switch_TranslateD3DShader(
                 bytecode, bytecodeSize, translated, translationError))
         {
+            if (!translated.parseData ||
+                translated.parseData->shader_type != MOJOSHADER_TYPE_VERTEX)
+            {
+                translationError =
+                    "MojoShader returned a non-vertex shader for VS creation";
+                if (translated.parseData)
+                    MOJOSHADER_freeParseData(translated.parseData);
+                translated.parseData = nullptr;
+            }
+        }
+
+        if (bytecodeSize && translated.parseData)
+        {
             const GLuint object =
                 CompileShader(GL_VERTEX_SHADER, translated.source.c_str());
             if (object)
@@ -1687,6 +1700,19 @@ void main()
         if (bytecodeSize &&
             Switch_TranslateD3DShader(
                 bytecode, bytecodeSize, translated, translationError))
+        {
+            if (!translated.parseData ||
+                translated.parseData->shader_type != MOJOSHADER_TYPE_PIXEL)
+            {
+                translationError =
+                    "MojoShader returned a non-pixel shader for PS creation";
+                if (translated.parseData)
+                    MOJOSHADER_freeParseData(translated.parseData);
+                translated.parseData = nullptr;
+            }
+        }
+
+        if (bytecodeSize && translated.parseData)
         {
             const GLuint object =
                 CompileShader(GL_FRAGMENT_SHADER, translated.source.c_str());
