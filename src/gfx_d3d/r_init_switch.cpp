@@ -126,13 +126,13 @@ void R_Init() {
 char R_InitRendererForWindow(HWND) { R_Init(); return 1; }
 HWND R_CreateSwapChains(int, GfxWindowParms *, int) { return nullptr; }
 char R_BeginRegistration_R_InitHardware(GfxWindowParms *wnd) { return R_InitHardware(wnd); }
-char R_TestDevice() { return 1; }
+char R_TestDevice() { return g_gfxBackend && g_gfxBackend->TestCooperativeLevel(); }
 void R_SetupTargetWindow(int) {}
 void R_InitEditor() {}
 char R_SetupRendertarget_CheckDevice(HWND__ *) { return 1; }
 bool R_IsRegisteredRenderWindow(HWND__ *) { return s_registered; }
 void R_CheckTargetWindow(HWND__ *) {}
-void R_SortMaterials() {}
+void R_SortMaterials() { Material_Sort(); }
 void R_Hwnd_Resize(HWND__ *, int width, int height) {
     if (g_gfxBackend) g_gfxBackend->SetViewport(0, 0, width, height);
 }
@@ -343,11 +343,19 @@ char R_CreateForInitOrReset()
     return 1;
 }
 
-IDirect3DQuery9 *RB_HW_AllocOcclusionQuery() { return nullptr; }
-char R_CreateDevice(const GfxWindowParms *) { return 1; }
+IDirect3DQuery9 *RB_HW_AllocOcclusionQuery() { return new IDirect3DQuery9(); }
+char R_CreateDevice(const GfxWindowParms *) {
+    if (!dx.device)
+        dx.device = new IDirect3DDevice9;
+    return dx.device != nullptr;
+}
 void R_SetD3DPresentParameters(_D3DPRESENT_PARAMETERS_ *, const GfxWindowParms *) {}
 void R_SetupAntiAliasing(const GfxWindowParms *) {}
-HRESULT R_CreateDeviceInternal(HWND__ *, uint32_t, _D3DPRESENT_PARAMETERS_ *) { return S_OK; }
+HRESULT R_CreateDeviceInternal(HWND__ *, uint32_t, _D3DPRESENT_PARAMETERS_ *) {
+    if (!dx.device)
+        dx.device = new IDirect3DDevice9;
+    return dx.device ? S_OK : E_FAIL;
+}
 int R_GetDeviceType() { return 0; }
 void R_SetWndParms(GfxWindowParms *wnd) {
     if (!wnd) return;

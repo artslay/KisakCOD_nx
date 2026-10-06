@@ -111,5 +111,10 @@ private:
     static constexpr uint32_t MAX_RENDER_TARGETS = 8;
     uint32_t m_renderTargets[MAX_RENDER_TARGETS] = {};
     uint32_t m_renderTargetTextures[MAX_RENDER_TARGETS] = {};
+    void* m_renderTargetObjects[MAX_RENDER_TARGETS] = {};
     uint32_t m_currentRenderTarget = 0;
+
+    bool m_texture0Bound = false;
+    int32_t m_texture0Location = -1;
+    int32_t m_useTextureLocation = -1;
 };

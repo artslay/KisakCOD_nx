@@ -467,22 +467,68 @@ struct IDirect3DSurface9
 
 struct IDirect3DQuery9
 {
+    GLuint object = 0;
+    GLenum target = GL_ANY_SAMPLES_PASSED;
+    bool begun = false;
     bool issued = false;
 
-    HRESULT Issue(uint32_t)
+    IDirect3DQuery9()
     {
-        glFinish();
-        issued = true;
-        return S_OK;
+        glGenQueries(1, &object);
     }
 
-    HRESULT GetData(void *, uint32_t, uint32_t)
+    HRESULT Issue(uint32_t flags)
     {
-        return issued ? S_OK : S_OK;
+        if (!object)
+            return E_FAIL;
+
+        if (flags == D3DISSUE_BEGIN)
+        {
+            if (begun)
+                return E_FAIL;
+            glBeginQuery(target, object);
+            begun = true;
+            return S_OK;
+        }
+
+        if (flags == D3DISSUE_END)
+        {
+            if (!begun)
+                return E_FAIL;
+            glEndQuery(target);
+            begun = false;
+            issued = true;
+            return S_OK;
+        }
+
+        return E_FAIL;
+    }
+
+    HRESULT GetData(void *data, uint32_t size, uint32_t)
+    {
+        if (!issued || !object)
+            return E_FAIL;
+
+        GLuint available = GL_FALSE;
+        glGetQueryObjectuiv(object, GL_QUERY_RESULT_AVAILABLE, &available);
+        if (!available)
+            return E_FAIL;
+
+        if (data && size)
+        {
+            GLuint64 value = 0;
+            glGetQueryObjectui64v(object, GL_QUERY_RESULT, &value);
+            const uint32_t copySize =
+                std::min<uint32_t>(size, sizeof(value));
+            std::memcpy(data, &value, copySize);
+        }
+        return S_OK;
     }
 
     void Release()
     {
+        if (object)
+            glDeleteQueries(1, &object);
         delete this;
     }
 };

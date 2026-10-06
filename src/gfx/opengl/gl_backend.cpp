@@ -1,4 +1,6 @@
 #include "gl_backend.h"
+#include <vector>
+#include <algorithm>
 
 #ifdef __SWITCH__
 #include "qcommon/threads.h"
@@ -24,6 +26,51 @@ struct SwitchGLBackendShader
     GLenum stage = 0;
 };
 
+struct SwitchGLBackendBuffer
+{
+    GLuint object = 0;
+    GLenum target = GL_ARRAY_BUFFER;
+    std::vector<uint8_t> shadow;
+    bool mapped = false;
+
+    SwitchGLBackendBuffer(GLenum bufferTarget, uint32_t size)
+        : target(bufferTarget), shadow(size)
+    {
+        glGenBuffers(1, &object);
+        glBindBuffer(target, object);
+        glBufferData(
+            target,
+            static_cast<GLsizeiptr>(size),
+            nullptr,
+            GL_DYNAMIC_DRAW);
+    }
+};
+
+struct SwitchGLBackendTexture
+{
+    GLuint object = 0;
+    GLenum target = GL_TEXTURE_2D;
+    GLenum internalFormat = GL_RGBA8;
+    GLenum uploadFormat = GL_RGBA;
+    GLenum uploadType = GL_UNSIGNED_BYTE;
+    uint32_t width = 0;
+    uint32_t height = 0;
+};
+
+struct SwitchGLBackendRenderTarget
+{
+    GLuint fbo = 0;
+    SwitchGLBackendTexture *texture = nullptr;
+};
+
+struct SwitchGLBackendQuery
+{
+    GLuint object = 0;
+    GLenum target = GL_ANY_SAMPLES_PASSED;
+    bool begun = false;
+    bool issued = false;
+};
+
 static const char *kFallbackVertexShader = R"(#version 430 core
 layout(location=0) in vec4 aPosition;
 layout(location=4) in vec2 aTexCoord;
@@ -38,7 +85,12 @@ in vec2 vTexCoord;
 in vec4 vColor;
 out vec4 FragColor;
 uniform sampler2D uTexture0;
-void main() { FragColor = vColor; }
+uniform bool uUseTexture0;
+void main()
+{
+    vec4 texel = uUseTexture0 ? texture(uTexture0, vTexCoord) : vec4(1.0);
+    FragColor = vColor * texel;
+}
 )";
 
 static GLuint CompileGLShader(GLenum stage, const char *source, std::string &error)
@@ -127,8 +179,20 @@ bool OpenGLBackend::Init(const GfxWindowParms* wndParms)
 void OpenGLBackend::Shutdown()
 {
 #ifdef __SWITCH__
+    // Delete GL objects while an EGL context is still current.
     if (s_display != EGL_NO_DISPLAY)
     {
+        if (Switch_GLBeginRenderContext())
+        {
+            if (m_currentProgram)
+                glDeleteProgram(m_currentProgram);
+            if (m_vertexShader)
+                glDeleteShader(m_vertexShader);
+            if (m_pixelShader)
+                glDeleteShader(m_pixelShader);
+            if (m_vertexArrayObject)
+                glDeleteVertexArrays(1, &m_vertexArrayObject);
+        }
         if (s_databaseContext != EGL_NO_CONTEXT)
             eglDestroyContext(s_display, s_databaseContext);
 
@@ -166,10 +230,6 @@ void OpenGLBackend::Shutdown()
 
     m_window = nullptr;
 #ifdef __SWITCH__
-    if (m_currentProgram) glDeleteProgram(m_currentProgram);
-    if (m_vertexShader) glDeleteShader(m_vertexShader);
-    if (m_pixelShader) glDeleteShader(m_pixelShader);
-#endif
     m_vertexArrayObject = 0;
     m_currentProgram = 0;
     m_vertexShader = 0;
@@ -306,62 +366,356 @@ void OpenGLBackend::Clear(float r, float g, float b, float a)
 #endif
 }
 
+static GLenum SwitchGLPrimitive(uint32_t primitiveType)
+{
+    switch (primitiveType)
+    {
+    case 1: return GL_POINTS;
+    case 2: return GL_LINES;
+    case 3: return GL_LINE_STRIP;
+    case 4: return GL_TRIANGLES;
+    case 5: return GL_TRIANGLE_STRIP;
+    case 6: return GL_TRIANGLE_FAN;
+    default: return GL_TRIANGLES;
+    }
+}
+
+static GLenum SwitchGLBlendFactor(uint32_t value)
+{
+    switch (value)
+    {
+    case 1: return GL_ZERO;
+    case 2: return GL_ONE;
+    case 3: return GL_SRC_COLOR;
+    case 4: return GL_ONE_MINUS_SRC_COLOR;
+    case 5: return GL_SRC_ALPHA;
+    case 6: return GL_ONE_MINUS_SRC_ALPHA;
+    case 7: return GL_DST_ALPHA;
+    case 8: return GL_ONE_MINUS_DST_ALPHA;
+    case 9: return GL_DST_COLOR;
+    case 10: return GL_ONE_MINUS_DST_COLOR;
+    default: return GL_ONE;
+    }
+}
+
 void OpenGLBackend::DrawPrimitive(uint32_t primitiveType, uint32_t startVertex, uint32_t primitiveCount)
 {
-    (void)primitiveType;
-    (void)startVertex;
-    (void)primitiveCount;
+#ifdef __SWITCH__
+    if (!m_vertexArrayObject)
+        glGenVertexArrays(1, &m_vertexArrayObject);
+    glBindVertexArray(m_vertexArrayObject);
+    const GLenum mode = SwitchGLPrimitive(primitiveType);
+    GLsizei vertexCount = static_cast<GLsizei>(primitiveCount * 3u);
+    if (primitiveType == 1)
+        vertexCount = static_cast<GLsizei>(primitiveCount);
+    else if (primitiveType == 2)
+        vertexCount = static_cast<GLsizei>(primitiveCount * 2u);
+    else if (primitiveType == 3 || primitiveType == 5)
+        vertexCount = static_cast<GLsizei>(primitiveCount + 1u);
+    if (vertexCount > 0)
+        glDrawArrays(mode, static_cast<GLint>(startVertex), vertexCount);
+#else
+    (void)primitiveType; (void)startVertex; (void)primitiveCount;
+#endif
 }
 
 void OpenGLBackend::DrawIndexedPrimitive(uint32_t primitiveType, uint32_t minIndex, uint32_t numVertices,
                                          uint32_t startIndex, uint32_t primitiveCount)
 {
-    (void)primitiveType;
+#ifdef __SWITCH__
+    if (!m_vertexArrayObject)
+        glGenVertexArrays(1, &m_vertexArrayObject);
+    glBindVertexArray(m_vertexArrayObject);
+    if (!primitiveCount)
+        return;
+    GLsizei indexCount = 0;
+    switch (primitiveType)
+    {
+    case 2: indexCount = static_cast<GLsizei>(primitiveCount * 2u); break;
+    case 3: indexCount = static_cast<GLsizei>(primitiveCount + 1u); break;
+    case 4: indexCount = static_cast<GLsizei>(primitiveCount * 3u); break;
+    case 5: indexCount = static_cast<GLsizei>(primitiveCount + 2u); break;
+    case 6: indexCount = static_cast<GLsizei>(primitiveCount * 3u); break;
+    default: return;
+    }
     (void)minIndex;
     (void)numVertices;
-    (void)startIndex;
-    (void)primitiveCount;
+    glDrawElements(
+        SwitchGLPrimitive(primitiveType),
+        indexCount,
+        GL_UNSIGNED_SHORT,
+        reinterpret_cast<const void *>(
+            static_cast<uintptr_t>(startIndex * sizeof(uint16_t))));
+#else
+    (void)primitiveType; (void)minIndex; (void)numVertices; (void)startIndex; (void)primitiveCount;
+#endif
 }
 
 void* OpenGLBackend::CreateVertexBuffer(uint32_t size, uint32_t usage)
 {
-    (void)size;
+#ifdef __SWITCH__
     (void)usage;
+    return new SwitchGLBackendBuffer(GL_ARRAY_BUFFER, size);
+#else
+    (void)size; (void)usage;
     return nullptr;
+#endif
 }
 
 void* OpenGLBackend::CreateIndexBuffer(uint32_t size, uint32_t usage)
 {
-    (void)size;
+#ifdef __SWITCH__
     (void)usage;
+    return new SwitchGLBackendBuffer(GL_ELEMENT_ARRAY_BUFFER, size);
+#else
+    (void)size; (void)usage;
     return nullptr;
+#endif
 }
 
-void OpenGLBackend::ReleaseVertexBuffer(void* buffer) { (void)buffer; }
-void OpenGLBackend::ReleaseIndexBuffer(void* buffer) { (void)buffer; }
-void* OpenGLBackend::LockVertexBuffer(void* buffer, uint32_t flags) { (void)buffer; (void)flags; return nullptr; }
-void OpenGLBackend::UnlockVertexBuffer(void* buffer) { (void)buffer; }
-void* OpenGLBackend::LockIndexBuffer(void* buffer, uint32_t flags) { (void)buffer; (void)flags; return nullptr; }
-void OpenGLBackend::UnlockIndexBuffer(void* buffer) { (void)buffer; }
+void OpenGLBackend::ReleaseVertexBuffer(void* buffer)
+{
+#ifdef __SWITCH__
+    auto *b = static_cast<SwitchGLBackendBuffer *>(buffer);
+    if (!b) return;
+    if (b->object) glDeleteBuffers(1, &b->object);
+    delete b;
+#else
+    (void)buffer;
+#endif
+}
+
+void OpenGLBackend::ReleaseIndexBuffer(void* buffer)
+{
+    ReleaseVertexBuffer(buffer);
+}
+
+void* OpenGLBackend::LockVertexBuffer(void* buffer, uint32_t flags)
+{
+#ifdef __SWITCH__
+    auto *b = static_cast<SwitchGLBackendBuffer *>(buffer);
+    if (!b) return nullptr;
+    if (flags & 0x2000u)
+    {
+        std::fill(b->shadow.begin(), b->shadow.end(), 0);
+        glBindBuffer(b->target, b->object);
+        glBufferData(
+            b->target,
+            static_cast<GLsizeiptr>(b->shadow.size()),
+            nullptr,
+            GL_DYNAMIC_DRAW);
+    }
+    b->mapped = true;
+    return b->shadow.empty() ? nullptr : b->shadow.data();
+#else
+    (void)buffer; (void)flags;
+    return nullptr;
+#endif
+}
+
+void OpenGLBackend::UnlockVertexBuffer(void* buffer)
+{
+#ifdef __SWITCH__
+    auto *b = static_cast<SwitchGLBackendBuffer *>(buffer);
+    if (!b || !b->mapped) return;
+    glBindBuffer(b->target, b->object);
+    if (!b->shadow.empty())
+        glBufferSubData(
+            b->target,
+            0,
+            static_cast<GLsizeiptr>(b->shadow.size()),
+            b->shadow.data());
+    b->mapped = false;
+#else
+    (void)buffer;
+#endif
+}
+
+void* OpenGLBackend::LockIndexBuffer(void* buffer, uint32_t flags)
+{
+    return LockVertexBuffer(buffer, flags);
+}
+
+void OpenGLBackend::UnlockIndexBuffer(void* buffer)
+{
+    UnlockVertexBuffer(buffer);
+}
+
+static bool SwitchGLTextureFormat(uint32_t format, GLenum &internalFormat, GLenum &uploadFormat, GLenum &uploadType)
+{
+    switch (format)
+    {
+    case 1:  // D3DFMT_A8
+    case 50: // D3DFMT_L8
+        internalFormat = GL_R8; uploadFormat = GL_RED; uploadType = GL_UNSIGNED_BYTE; return true;
+    case 51: // D3DFMT_A8L8
+        internalFormat = GL_RG8; uploadFormat = GL_RG; uploadType = GL_UNSIGNED_BYTE; return true;
+    case 23: // D3DFMT_R5G6B5
+        internalFormat = GL_RGB565; uploadFormat = GL_RGB; uploadType = GL_UNSIGNED_SHORT_5_6_5; return true;
+    case 21: // D3DFMT_A8R8G8B8
+    case 22: // D3DFMT_X8R8G8B8
+    case 32: // D3DFMT_A8B8G8R8
+    default:
+        internalFormat = GL_RGBA8; uploadFormat = GL_RGBA; uploadType = GL_UNSIGNED_BYTE; return true;
+    }
+}
 
 void* OpenGLBackend::CreateTexture(uint32_t width, uint32_t height, uint32_t format)
 {
+#ifdef __SWITCH__
+    if (!width || !height)
+        return nullptr;
+    auto *tex = new SwitchGLBackendTexture;
+    if (!SwitchGLTextureFormat(format, tex->internalFormat, tex->uploadFormat, tex->uploadType))
+    {
+        delete tex;
+        return nullptr;
+    }
+    tex->width = width;
+    tex->height = height;
+    glGenTextures(1, &tex->object);
+    glBindTexture(tex->target, tex->object);
+    glTexParameteri(tex->target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(tex->target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(tex->target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(tex->target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(
+        tex->target, 0, static_cast<GLint>(tex->internalFormat),
+        static_cast<GLsizei>(width), static_cast<GLsizei>(height),
+        0, tex->uploadFormat, tex->uploadType, nullptr);
+    return tex;
+#else
     (void)width; (void)height; (void)format;
     return nullptr;
+#endif
 }
 
-void OpenGLBackend::ReleaseTexture(void* texture) { (void)texture; }
-void OpenGLBackend::SetTexture(uint32_t stage, void* texture) { (void)stage; (void)texture; }
+void OpenGLBackend::ReleaseTexture(void* texture)
+{
+#ifdef __SWITCH__
+    auto *tex = static_cast<SwitchGLBackendTexture *>(texture);
+    if (!tex) return;
+    if (tex->object) glDeleteTextures(1, &tex->object);
+    delete tex;
+#else
+    (void)texture;
+#endif
+}
+
+void OpenGLBackend::SetTexture(uint32_t stage, void* texture)
+{
+#ifdef __SWITCH__
+    if (stage >= 16)
+        return;
+    glActiveTexture(GL_TEXTURE0 + stage);
+    auto *tex = static_cast<SwitchGLBackendTexture *>(texture);
+    glBindTexture(
+        tex ? tex->target : GL_TEXTURE_2D,
+        tex ? tex->object : 0);
+    if (stage == 0)
+    {
+        m_texture0Bound = tex && tex->object != 0;
+        if (m_currentProgram)
+        {
+            glUseProgram(m_currentProgram);
+            if (m_useTextureLocation >= 0)
+                glUniform1i(m_useTextureLocation, m_texture0Bound ? 1 : 0);
+        }
+    }
+#else
+    (void)stage; (void)texture;
+#endif
+}
 
 void* OpenGLBackend::CreateRenderTarget(uint32_t width, uint32_t height, uint32_t format)
 {
+#ifdef __SWITCH__
+    auto *tex = static_cast<SwitchGLBackendTexture *>(
+        CreateTexture(width, height, format));
+    if (!tex)
+        return nullptr;
+
+    auto *rt = new SwitchGLBackendRenderTarget;
+    rt->texture = tex;
+    glGenFramebuffers(1, &rt->fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, rt->fbo);
+    glFramebufferTexture2D(
+        GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT0,
+        tex->target,
+        tex->object,
+        0);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        glDeleteFramebuffers(1, &rt->fbo);
+        ReleaseTexture(tex);
+        delete rt;
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return nullptr;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return rt;
+#else
     (void)width; (void)height; (void)format;
     return nullptr;
+#endif
 }
 
-void OpenGLBackend::ReleaseRenderTarget(void* rt) { (void)rt; }
-void OpenGLBackend::SetRenderTarget(uint32_t rtIndex, void* rt) { (void)rtIndex; (void)rt; }
-void* OpenGLBackend::GetRenderTarget(uint32_t rtIndex) { (void)rtIndex; return nullptr; }
+void OpenGLBackend::ReleaseRenderTarget(void* rt)
+{
+#ifdef __SWITCH__
+    auto *target = static_cast<SwitchGLBackendRenderTarget *>(rt);
+    if (!target) return;
+    if (target->fbo) glDeleteFramebuffers(1, &target->fbo);
+    ReleaseTexture(target->texture);
+    for (uint32_t i = 0; i < MAX_RENDER_TARGETS; ++i)
+    {
+        if (m_renderTargetObjects[i] == rt)
+        {
+            m_renderTargetObjects[i] = nullptr;
+            m_renderTargets[i] = 0;
+            m_renderTargetTextures[i] = 0;
+        }
+    }
+    delete target;
+#else
+    (void)rt;
+#endif
+}
+
+void OpenGLBackend::SetRenderTarget(uint32_t rtIndex, void* rt)
+{
+#ifdef __SWITCH__
+    if (rtIndex >= MAX_RENDER_TARGETS)
+        return;
+    auto *target = static_cast<SwitchGLBackendRenderTarget *>(rt);
+    m_renderTargetObjects[rtIndex] = rt;
+    m_currentRenderTarget = rtIndex;
+    m_renderTargets[rtIndex] = target ? target->fbo : 0;
+    m_renderTargetTextures[rtIndex] =
+        target && target->texture ? target->texture->object : 0;
+    glBindFramebuffer(
+        GL_FRAMEBUFFER,
+        target ? target->fbo : 0);
+#else
+    (void)rtIndex; (void)rt;
+#endif
+}
+
+void* OpenGLBackend::GetRenderTarget(uint32_t rtIndex)
+{
+#ifdef __SWITCH__
+    if (rtIndex >= MAX_RENDER_TARGETS)
+        return nullptr;
+    return m_renderTargetObjects[rtIndex];
+#else
+    (void)rtIndex;
+    return nullptr;
+#endif
+}
 
 void* OpenGLBackend::CreateVertexShader(const void* bytecode, uint32_t size)
 {
@@ -437,6 +791,12 @@ void OpenGLBackend::SetVertexShader(void* shader)
         if (m_currentProgram) glDeleteProgram(m_currentProgram);
         m_currentProgram = program;
         glUseProgram(m_currentProgram);
+        m_texture0Location = glGetUniformLocation(m_currentProgram, "uTexture0");
+        m_useTextureLocation = glGetUniformLocation(m_currentProgram, "uUseTexture0");
+        if (m_texture0Location >= 0)
+            glUniform1i(m_texture0Location, 0);
+        if (m_useTextureLocation >= 0)
+            glUniform1i(m_useTextureLocation, m_texture0Bound ? 1 : 0);
     }
 #else
     (void)shader;
@@ -460,6 +820,12 @@ void OpenGLBackend::SetPixelShader(void* shader)
         if (m_currentProgram) glDeleteProgram(m_currentProgram);
         m_currentProgram = program;
         glUseProgram(m_currentProgram);
+        m_texture0Location = glGetUniformLocation(m_currentProgram, "uTexture0");
+        m_useTextureLocation = glGetUniformLocation(m_currentProgram, "uUseTexture0");
+        if (m_texture0Location >= 0)
+            glUniform1i(m_texture0Location, 0);
+        if (m_useTextureLocation >= 0)
+            glUniform1i(m_useTextureLocation, m_texture0Bound ? 1 : 0);
     }
 #else
     (void)shader;
@@ -488,8 +854,14 @@ void OpenGLBackend::SetScissorRect(uint32_t x, uint32_t y, uint32_t width, uint3
 
 void OpenGLBackend::SetBlendState(uint32_t srcBlend, uint32_t destBlend)
 {
-    (void)srcBlend;
-    (void)destBlend;
+#ifdef __SWITCH__
+    glEnable(GL_BLEND);
+    glBlendFunc(
+        SwitchGLBlendFactor(srcBlend),
+        SwitchGLBlendFactor(destBlend));
+#else
+    (void)srcBlend; (void)destBlend;
+#endif
 }
 
 void OpenGLBackend::SetDepthState(bool depthEnable, bool depthWrite)
@@ -509,25 +881,97 @@ void OpenGLBackend::SetDepthState(bool depthEnable, bool depthWrite)
 
 void OpenGLBackend::SetCullMode(uint32_t cullMode)
 {
+#ifdef __SWITCH__
+    switch (cullMode)
+    {
+    case 1:
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_FRONT);
+        break;
+    case 2:
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        break;
+    default:
+        glDisable(GL_CULL_FACE);
+        break;
+    }
+#else
     (void)cullMode;
+#endif
 }
 
 void* OpenGLBackend::CreateQuery(uint32_t queryType)
 {
+#ifdef __SWITCH__
+    auto *query = new SwitchGLBackendQuery;
+    // D3D9 query types are consumed as completion/occlusion fences in the
+    // compatibility path; ANY_SAMPLES_PASSED provides a real asynchronous GL query.
+    (void)queryType;
+    glGenQueries(1, &query->object);
+    return query;
+#else
     (void)queryType;
     return nullptr;
+#endif
 }
 
-void OpenGLBackend::ReleaseQuery(void* query) { (void)query; }
-void OpenGLBackend::BeginQuery(void* query) { (void)query; }
-void OpenGLBackend::EndQuery(void* query) { (void)query; }
+void OpenGLBackend::ReleaseQuery(void* query)
+{
+#ifdef __SWITCH__
+    auto *q = static_cast<SwitchGLBackendQuery *>(query);
+    if (!q) return;
+    if (q->object) glDeleteQueries(1, &q->object);
+    delete q;
+#else
+    (void)query;
+#endif
+}
+
+void OpenGLBackend::BeginQuery(void* query)
+{
+#ifdef __SWITCH__
+    auto *q = static_cast<SwitchGLBackendQuery *>(query);
+    if (!q || !q->object || q->begun) return;
+    glBeginQuery(q->target, q->object);
+    q->begun = true;
+#else
+    (void)query;
+#endif
+}
+
+void OpenGLBackend::EndQuery(void* query)
+{
+#ifdef __SWITCH__
+    auto *q = static_cast<SwitchGLBackendQuery *>(query);
+    if (!q || !q->object || !q->begun) return;
+    glEndQuery(q->target);
+    q->begun = false;
+    q->issued = true;
+#else
+    (void)query;
+#endif
+}
 
 bool OpenGLBackend::GetQueryResult(void* query, uint64_t* result)
 {
-    (void)query;
+#ifdef __SWITCH__
+    auto *q = static_cast<SwitchGLBackendQuery *>(query);
+    if (!q || !q->object || !q->issued)
+        return false;
+    GLuint available = GL_FALSE;
+    glGetQueryObjectuiv(q->object, GL_QUERY_RESULT_AVAILABLE, &available);
+    if (!available)
+        return false;
+    GLuint64 value = 0;
+    glGetQueryObjectui64v(q->object, GL_QUERY_RESULT, &value);
     if (result)
-        *result = 0;
+        *result = static_cast<uint64_t>(value);
+    return true;
+#else
+    (void)query; (void)result;
     return false;
+#endif
 }
 
 void OpenGLBackend::WaitForGpu()
@@ -905,9 +1349,16 @@ void Switch_GLEndDatabaseContext()
 bool OpenGLBackend::InitCapabilities()
 {
 #ifdef __SWITCH__
+    GLint maxTextureSize = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
     m_backBufferWidth = 1280;
     m_backBufferHeight = 720;
-    m_backBufferFormat = 0;
+    m_backBufferFormat = 21;
+    if (maxTextureSize < 2048)
+    {
+        m_lastError = "OpenGL driver exposes insufficient texture size";
+        return false;
+    }
 
     return true;
 #else
