@@ -365,7 +365,7 @@ private:
         const void *floatData, const void *intData, const void *boolData);
     bool BindSamplerSet(
         VkPipelineBindPoint bindPoint, uint32_t setIndex,
-        const std::array<IDirect3DBaseTexture9*,16> &textures);
+        IDirect3DBaseTexture9 *const (&textures)[16]);
 };
 
 #endif
