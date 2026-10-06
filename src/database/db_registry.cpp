@@ -1543,16 +1543,54 @@ void DB_TryLoadXFile()
     uint32_t j; // [esp+0h] [ebp-8h]
     uint32_t zoneInfoCount; // [esp+4h] [ebp-4h]
 
+#ifdef __SWITCH__
+    g_switchDbStage = "load/enter";
+#endif
     if (g_zoneInfoCount)
     {
         zoneInfoCount = g_zoneInfoCount;
+#ifdef __SWITCH__
+        {
+            char trace[192];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][DB LOAD] count=%u loading=%u\n",
+                static_cast<unsigned>(zoneInfoCount),
+                static_cast<unsigned>(g_loadingAssets));
+            Switch_LogWrite(trace);
+        }
+        if (zoneInfoCount > 8)
+        {
+            g_switchDbStage = "load/count_invalid";
+            Com_Error(ERR_DROP, "Invalid database zone count %u", zoneInfoCount);
+        }
+        g_switchDbStage = "load/count_ok";
+#endif
         g_zoneInfoCount = 0;
         if (g_loadingZone)
             MyAssertHandler(".\\database\\db_registry.cpp", 3764, 0, "%s", "!g_loadingZone");
         for (j = 0; j < zoneInfoCount; ++j)
         {
+#ifdef __SWITCH__
+            {
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][DB LOAD] zone[%u] name=%s flags=%x\n",
+                    static_cast<unsigned>(j),
+                    g_zoneInfo[j].name,
+                    static_cast<unsigned>(g_zoneInfo[j].flags));
+                Switch_LogWrite(trace);
+            }
+            g_switchDbStage = "load/call_internal";
+#endif
             if (!DB_TryLoadXFileInternal(g_zoneInfo[j].name, g_zoneInfo[j].flags))
                 __atomic_sub_fetch(&g_loadingAssets, 1u, __ATOMIC_SEQ_CST);
+#ifdef __SWITCH__
+            g_switchDbStage = "load/internal_done";
+#endif
         }
         if (g_loadingZone)
             MyAssertHandler(".\\database\\db_registry.cpp", 3772, 0, "%s", "!g_loadingZone");
@@ -1572,8 +1610,13 @@ void DB_TryLoadXFile()
     {
         MyAssertHandler(".\\database\\db_registry.cpp", 3759, 0, "%s", "!g_loadingAssets");
     }
+#ifdef __SWITCH__
+    else
+    {
+        g_switchDbStage = "load/no_pending";
+    }
+#endif
 }
-
 int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
 {
     char filename[256];
@@ -1581,10 +1624,25 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     uint32_t i;
     FILE *zoneFile;
 
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/enter";
+    if (!zoneName || !*zoneName)
+    {
+        g_switchDbStage = "internal/bad_name";
+        Com_Error(ERR_DROP, "Invalid empty fastfile name");
+    }
+    g_switchDbStage = "internal/printf";
+#endif
     Com_Printf(CON_CHANNEL_DONT_FILTER, "Trying to load file %s with flags %x\n", zoneName, zoneFlags);
     iassert(!g_zoneInfoCount);
 
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/build_path";
+#endif
     DB_BuildOSPath(zoneName, sizeof(filename), filename);
+#ifdef __SWITCH__
+    g_switchDbStage = "internal/open";
+#endif
     zoneFile = FS_SwitchOpenRootFile(filename);
     if (!zoneFile)
     {
