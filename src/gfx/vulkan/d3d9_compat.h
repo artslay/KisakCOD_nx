@@ -203,6 +203,8 @@ struct KisakVkShader {
     VkShaderStageFlagBits stage=VK_SHADER_STAGE_VERTEX_BIT;
     const MOJOSHADER_parseData *parseData=nullptr;
     std::vector<uint32_t> spirv;
+    const void *linkedDeclaration=nullptr;
+    const void *linkedPixelShader=nullptr;
     void Release();
 };
 using IDirect3DVertexShader9 = KisakVkShader;
