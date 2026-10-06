@@ -115,6 +115,16 @@ public:
         VkDeviceMemory *memory,
         VkImageView *view);
 
+    bool CreateImageCube(
+        uint32_t width,
+        uint32_t height,
+        uint32_t mipLevels,
+        VkFormat format,
+        VkImageUsageFlags usage,
+        VkImage *image,
+        VkDeviceMemory *memory,
+        VkImageView *view);
+
     void DestroyImage(VkImage image, VkDeviceMemory memory, VkImageView view);
     bool CreateImage3D(
         uint32_t width,
@@ -136,7 +146,8 @@ public:
         uint32_t mipLevel,
         const void *data,
         size_t bytes,
-        VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED);
+        VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        uint32_t baseArrayLayer = 0);
 
     bool UploadImage3D(
         VkImage image,
