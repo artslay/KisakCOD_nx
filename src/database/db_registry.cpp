@@ -11,9 +11,13 @@ extern const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(
 #include <qcommon/files.h>
 #ifdef __SWITCH__
 #include <cstdio>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <cstdint>
 extern FILE *FS_SwitchOpenFile(const char *path);
 extern FILE *FS_SwitchOpenRootFile(const char *path);
 extern bool FS_SwitchRootFileExists(const char *path);
+extern int __cdecl FS_SwitchOpenRootFd(const char *path);
 #endif
 #include <qcommon/mem_track.h>
 
@@ -1289,16 +1293,16 @@ int32_t __cdecl DB_FileSize(const char *zoneName, int32_t isMod)
     else
         DB_BuildOSPath(zoneName, sizeof(filename), filename);
 
-    FILE *zoneFile = FS_SwitchOpenRootFile(filename);
-    if (!zoneFile)
+    const int fd = FS_SwitchOpenRootFd(filename);
+    if (fd < 0)
         return 0;
 
-    long saved = std::ftell(zoneFile);
-    std::fseek(zoneFile, 0, SEEK_END);
-    long size = std::ftell(zoneFile);
-    std::fseek(zoneFile, saved, SEEK_SET);
-    std::fclose(zoneFile);
-    return size > 0 ? static_cast<int32_t>(size) : 0;
+    struct stat st{};
+    const int result = ::fstat(fd, &st) == 0
+        ? (st.st_size > 0 ? static_cast<int32_t>(st.st_size) : 0)
+        : 0;
+    ::close(fd);
+    return result;
 #else
     int32_t size;
     void *zoneFile;
@@ -1639,12 +1643,21 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
 #ifdef __SWITCH__
     g_switchDbStage = "internal/open";
 #endif
+#ifdef __SWITCH__
+    const int zoneFd = FS_SwitchOpenRootFd(filename);
+    if (zoneFd < 0)
+    {
+        Com_PrintWarning(CON_CHANNEL_FILES, "WARNING: Could not find zone '%s'\n", filename);
+        return 0;
+    }
+#else
     zoneFile = FS_SwitchOpenRootFile(filename);
     if (!zoneFile)
     {
         Com_PrintWarning(CON_CHANNEL_FILES, "WARNING: Could not find zone '%s'\n", filename);
         return 0;
     }
+#endif
 
     g_zoneIndex = 0;
     for (i = 1; i < 0x21; ++i)
@@ -1657,13 +1670,21 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     }
     if (!g_zoneIndex)
     {
+#ifdef __SWITCH__
+        ::close(zoneFd);
+#else
         fclose(zoneFile);
+#endif
         Com_Error(ERR_DROP, "ERROR: Max zone count exceeded");
         return 0;
     }
     if (!*zoneName)
     {
+#ifdef __SWITCH__
+        ::close(zoneFd);
+#else
         fclose(zoneFile);
+#endif
         Com_Error(ERR_DROP, "ERROR: Empty fastfile name");
         return 0;
     }
@@ -1673,10 +1694,18 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     g_zoneHandles[g_zoneCount] = g_zoneIndex;
     I_strncpyz(zone->name, zoneName, sizeof(zone->name));
     zone->flags = zoneFlags;
+#ifdef __SWITCH__
+    struct stat zoneStat{};
+    zone->fileSize = ::fstat(zoneFd, &zoneStat) == 0 &&
+        zoneStat.st_size > 0
+        ? static_cast<uint32_t>(zoneStat.st_size)
+        : 0;
+#else
     long saved = ftell(zoneFile);
     fseek(zoneFile, 0, SEEK_END);
     zone->fileSize = static_cast<uint32_t>(ftell(zoneFile));
     fseek(zoneFile, saved, SEEK_SET);
+#endif
     zone->modZone = false;
 
     ++g_zoneCount;
@@ -1687,11 +1716,22 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
     PMem_BeginAlloc(zone->name, g_zoneAllocType);
     zone->allocType = g_zoneAllocType;
     DB_ResetZoneSize((zoneFlags & DB_ZONE_GAME) != 0);
+#ifdef __SWITCH__
+    // Encode fd+1 as a non-null void* because DB_LoadData::f retains the
+    // historical opaque file-handle field.
+    DB_LoadXFile(
+        filename,
+        reinterpret_cast<void *>(static_cast<intptr_t>(zoneFd) + 1),
+        zone->name,
+        &zone->mem,
+        0,
+        g_fileBuf,
+        g_zoneAllocType);
+#else
     DB_LoadXFile(filename, zoneFile, zone->name, &zone->mem, 0, g_fileBuf, g_zoneAllocType);
+#endif
     DB_LoadXFileInternal();
     PMem_EndAlloc(zone->name, g_zoneAllocType);
-
-    fclose(zoneFile);
     g_loadingZone = 0;
     g_mayRecoverLostAssets = 1;
     Com_Printf(CON_CHANNEL_SYSTEM, "Loaded fastfile %s (%u bytes)\n", zone->name, zone->fileSize);
