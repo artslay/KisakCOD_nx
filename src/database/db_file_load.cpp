@@ -729,11 +729,15 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
                 serializedSlot,
                 nativeSlot);
 
-            uintptr_t slotOffset = 0;
-            const int32_t slotBlock = Switch_StreamOwner(
-                reinterpret_cast<const uint8_t *>(serializedSlot),
-                &slotOffset);
-            if (slotBlock == 4 && slotOffset == 0x6f8)
+            const uintptr_t block4Base =
+                g_streamBlocks && g_streamBlocks[4].data
+                    ? reinterpret_cast<uintptr_t>(g_streamBlocks[4].data)
+                    : 0;
+            const uintptr_t slotOffset =
+                block4Base && serializedSlot >= block4Base
+                    ? serializedSlot - block4Base
+                    : UINTPTR_MAX;
+            if (slotOffset == 0x6f8)
             {
                 char trace[384];
                 std::snprintf(
