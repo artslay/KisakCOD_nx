@@ -4,6 +4,9 @@
 
 #include <universal/q_shared.h>
 #include "cl_ui.h"
+#ifdef __SWITCH__
+extern bool com_introMoviePending;
+#endif
 #include "client.h"
 #include <ui/ui.h>
 #include <universal/com_sndalias.h>
@@ -62,6 +65,14 @@ void __cdecl CL_InitUI()
     Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: after R_PopRemoteScreenUpdate\n");
 #endif
     cls.uiStarted = 1;
+#ifdef __SWITCH__
+    if (com_introMoviePending)
+    {
+        com_introMoviePending = false;
+        Switch_LogWrite("[KisakCOD][INTRO] executing pending IW_logo after UI startup\n");
+        Cmd_ExecuteSingleCommand(0, CL_ControllerIndexFromClientNum(0), (char*)"cinematic IW_logo");
+    }
+#endif
     R_PushRemoteScreenUpdate(remoteScreenUpdateNesting);
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: after R_PushRemoteScreenUpdate\n");
