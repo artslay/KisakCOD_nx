@@ -17,7 +17,6 @@ extern const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(
 extern FILE *FS_SwitchOpenFile(const char *path);
 extern FILE *FS_SwitchOpenRootFile(const char *path);
 extern bool FS_SwitchRootFileExists(const char *path);
-extern int __cdecl FS_SwitchOpenRootFd(const char *path);
 #endif
 #include <qcommon/mem_track.h>
 
