@@ -36,6 +36,7 @@ uint32_t g_switchRawFileNameToken = 0;
 uint32_t g_switchRawFileBufferToken = 0;
 uint32_t g_switchRawFileB4BeforeName = 0;
 uint32_t g_switchRawFileB4AfterName = 0;
+uint32_t g_switchSerializedXModelNameToken = 0;
 
 static void Switch_LogRawDwords(
     const char *tag,
@@ -9853,6 +9854,7 @@ void __cdecl Load_XModel(bool atStreamStart)
     Switch_TranslateXModelSerialized(
         varXModel,
         &switchSerializedNameToken);
+    g_switchSerializedXModelNameToken = switchSerializedNameToken;
     if (switchTraceXModel)
     {
         char trace[512];
@@ -9860,8 +9862,7 @@ void __cdecl Load_XModel(bool atStreamStart)
             trace,
             sizeof(trace),
             "[SWITCH XMODEL RAW] asset=%d nameToken=%08x model=%p name=%p "
-            "bones=%u roots=%u surfs=%u coll=%d physPreset=%p physGeoms=%p
-",
+            "bones=%u roots=%u surfs=%u coll=%d physPreset=%p physGeoms=%p\n",
             g_switchCurrentAssetIndex,
             switchSerializedNameToken,
             static_cast<void *>(varXModel),
@@ -10236,13 +10237,12 @@ void __cdecl Load_XModelPtr(bool atStreamStart)
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[SWITCH XMODEL ASSET] pre-add asset=%d model=%p name=%p low=%08x rawNameToken=%08x
-",
+                    "[SWITCH XMODEL ASSET] pre-add asset=%d model=%p name=%p low=%08x rawNameToken=%08x\n",
                     g_switchCurrentAssetIndex,
                     static_cast<void *>(*varXModelPtr),
-                    static_cast<const void *>(modelName),
+                    reinterpret_cast<const void *>(modelName),
                     static_cast<unsigned>(modelName),
-                    switchSerializedNameToken);
+                    g_switchSerializedXModelNameToken);
                 Switch_LogWrite(trace);
                 g_switchDbStage = "xmodel/asset";
             }

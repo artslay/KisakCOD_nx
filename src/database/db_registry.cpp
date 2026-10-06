@@ -3216,7 +3216,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     {
         const uintptr_t nameValue = reinterpret_cast<uintptr_t>(name);
         const uintptr_t modelValue =
-            newEntry->entry.asset.header.xmodel
+            newEntry->entry.asset.header.model
                 ? reinterpret_cast<uintptr_t>(
                       newEntry->entry.asset.header.xmodel->name)
                 : 0;
@@ -3253,9 +3253,8 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
             trace,
             sizeof(trace),
             "[SWITCH XMODEL4083 NAME] headerModel=%p modelName=%p registryName=%p "
-            "modelLow=%08x registryLow=%08x rawHeader=%08x stream=%u offset=%08x inStream=%u
-",
-            static_cast<void *>(newEntry->entry.asset.header.xmodel),
+            "modelLow=%08x registryLow=%08x rawHeader=%08x stream=%u offset=%08x inStream=%u\n",
+            static_cast<void *>(newEntry->entry.asset.header.model),
             reinterpret_cast<const void *>(modelValue),
             reinterpret_cast<const void *>(nameValue),
             static_cast<unsigned>(modelValue),
