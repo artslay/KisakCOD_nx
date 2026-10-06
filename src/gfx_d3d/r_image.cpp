@@ -1703,11 +1703,51 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
 #endif
     if (image->mapType != MAPTYPE_2D)
         return 0;
+    const GfxImage *defaultImage = rgp.whiteImage;
     if (image->semantic == TS_NORMAL_MAP)
-        return R_DuplicateTexture(image, rgp.identityNormalMapImage);
-    if (image->semantic == TS_SPECULAR_MAP)
-        return R_DuplicateTexture(image, rgp.blackImage);
-    return R_DuplicateTexture(image, rgp.whiteImage);
+        defaultImage = rgp.identityNormalMapImage;
+    else if (image->semantic == TS_SPECULAR_MAP)
+        defaultImage = rgp.blackImage;
+
+    if (R_DuplicateTexture(image, defaultImage))
+        return 1;
+
+#ifdef __SWITCH__
+    // The code images can exist as native registry objects before their GL
+    // resource is available. Do not let a missing loose image become fatal
+    // merely because the shared builtin texture is empty. Recreate the same
+    // 1x1 fallback locally so the image remains renderable.
+    if (r_loadForRenderer && r_loadForRenderer->current.enabled)
+    {
+        uint8_t pixel[4] = {255, 255, 255, 255};
+        if (image->semantic == TS_NORMAL_MAP)
+        {
+            pixel[0] = 128;
+            pixel[1] = 128;
+            pixel[2] = 255;
+            pixel[3] = 128;
+        }
+        else if (image->semantic == TS_SPECULAR_MAP)
+        {
+            pixel[0] = 0;
+            pixel[1] = 0;
+            pixel[2] = 0;
+            pixel[3] = 255;
+        }
+
+        Image_Generate2D(
+            image,
+            pixel,
+            1,
+            1,
+            D3DFMT_A8R8G8B8);
+
+        if (image->texture.basemap)
+            return 1;
+    }
+#endif
+
+    return 0;
 }
 
 void __cdecl Image_Rebuild(GfxImage *image)
