@@ -106,11 +106,6 @@ static inline int Switch_LoadFileFd()
         reinterpret_cast<intptr_t>(g_load.f)) - 1;
 }
 
-static inline void *Switch_EncodeFileFd(int fd)
-{
-    return reinterpret_cast<void*>(
-        static_cast<intptr_t>(fd) + 1);
-}
 #endif
 
 
@@ -134,9 +129,6 @@ void __cdecl DB_CancelLoadXFile()
 #ifdef __SWITCH__
 #ifdef __SWITCH__
         ::close(Switch_LoadFileFd());
-#else
-        fclose(static_cast<FILE *>(g_load.f));
-#endif
 #else
         CloseHandle(g_load.f);
 #endif
