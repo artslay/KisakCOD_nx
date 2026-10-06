@@ -1,6 +1,5 @@
 #pragma once
 #include "rb_backend.h"
-#include "rb_backend.h"
 
 #define CONST_SRC_MATRIX_INVERSE_BIT 1
 #define CONST_SRC_MATRIX_TRANSPOSE_BIT 2

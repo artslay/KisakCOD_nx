@@ -3,7 +3,7 @@
 #include <universal/q_shared.h>
 
 #ifdef __SWITCH__
-#include <gfx/opengl/d3d9_compat.h>
+#include <gfx/vulkan/d3d9_compat.h>
 #else
 #include <d3d9.h>
 #endif
