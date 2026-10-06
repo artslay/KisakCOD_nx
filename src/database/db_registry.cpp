@@ -3823,8 +3823,9 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
                 }
             }
 
-            if (!nameTerminated && !badName)
-                badName = true;
+            // The diagnostic buffer is only 16 bytes long. A valid asset name
+            // may be longer than that preview, so absence of a NUL here is
+            // not evidence that the name is unterminated.
         }
 
         if (badName)
