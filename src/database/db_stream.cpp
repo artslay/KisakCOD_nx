@@ -664,6 +664,27 @@ bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
     return false;
 }
 
+void __cdecl DB_RegisterSwitchPointerAliasSlot(
+    uintptr_t serializedSlot,
+    const void **nativeSlot)
+{
+    if (!serializedSlot || !nativeSlot)
+        return;
+
+    for (SwitchPointerAliasEntry &entry : g_switchPointerAliasEntries)
+    {
+        if (entry.serializedSlot != serializedSlot)
+            continue;
+
+        if (!entry.nativePointer)
+            entry.nativeSlot = nativeSlot;
+        return;
+    }
+
+    g_switchPointerAliasEntries.push_back(
+        {serializedSlot, nativeSlot, 0});
+}
+
 void __cdecl DB_RegisterSwitchPointerAlias(
     uintptr_t serializedSlot,
     uintptr_t nativePointer)
