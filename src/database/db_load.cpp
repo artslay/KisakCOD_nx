@@ -5536,6 +5536,54 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                     Switch_GetStreamCursorOffset(4),
                     nameEmpty ? 1u : 0u);
                 Switch_LogWrite(trace);
+
+                if (nameEmpty && serialized.name != 0u &&
+                    serialized.name != UINT32_MAX &&
+                    g_streamBlocks)
+                {
+                    const uint32_t encoded = serialized.name - 1u;
+                    const uint32_t targetBlock = encoded >> 28;
+                    const uint32_t targetOffset = encoded & 0x0FFFFFFFu;
+                    if (targetBlock < ARRAY_COUNT(g_streamPosArray) &&
+                        g_streamBlocks[targetBlock].data &&
+                        targetOffset < g_streamBlocks[targetBlock].size)
+                    {
+                        const uint8_t *target =
+                            g_streamBlocks[targetBlock].data + targetOffset;
+                        char targetTrace[640];
+                        int written = std::snprintf(
+                            targetTrace,
+                            sizeof(targetTrace),
+                            "[KisakCOD][GFXIMAGE NAME TARGET] asset=%d token=%08x block=%u offset=%08x ptr=%p bytes:",
+                            g_switchCurrentAssetIndex,
+                            serialized.name,
+                            targetBlock,
+                            targetOffset,
+                            static_cast<const void *>(target));
+                        const uint32_t byteCount =
+                            g_streamBlocks[targetBlock].size - targetOffset < 32u
+                                ? g_streamBlocks[targetBlock].size - targetOffset
+                                : 32u;
+                        for (uint32_t i = 0; i < byteCount && written > 0 &&
+                             static_cast<size_t>(written) < sizeof(targetTrace); ++i)
+                        {
+                            written += std::snprintf(
+                                targetTrace + written,
+                                sizeof(targetTrace) - static_cast<size_t>(written),
+                                " %02x",
+                                static_cast<unsigned>(target[i]));
+                        }
+                        if (written > 0 &&
+                            static_cast<size_t>(written) < sizeof(targetTrace))
+                        {
+                            std::snprintf(
+                                targetTrace + written,
+                                sizeof(targetTrace) - static_cast<size_t>(written),
+                                "\n");
+                        }
+                        Switch_LogWrite(targetTrace);
+                    }
+                }
             }
         }
 #endif
