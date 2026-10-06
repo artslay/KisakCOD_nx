@@ -332,9 +332,35 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
 
     iassert(DB_XAssetGetNameHandler[type]);
 
+#ifdef __SWITCH__
+    if (type == ASSET_TYPE_FONT &&
+        g_switchCurrentAssetIndex >= 1215 &&
+        g_switchCurrentAssetIndex <= 1221 &&
+        g_switchCurrentAssetRawType == 19u)
+    {
+        const Font_s *font = header->font;
+        const uintptr_t fontName =
+            font ? reinterpret_cast<uintptr_t>(font->fontName) : 0;
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FONT1215] name_handler font=%p fontName=%p low=%08x\n",
+            static_cast<const void *>(font),
+            reinterpret_cast<const void *>(fontName),
+            static_cast<unsigned>(fontName));
+        Switch_LogWrite(trace);
+        g_switchDbStage = "font/name_handler";
+    }
+#endif
     name = DB_XAssetGetNameHandler[type](header);
 
 #ifdef __SWITCH__
+    if (type == ASSET_TYPE_FONT &&
+        g_switchCurrentAssetIndex >= 1215 &&
+        g_switchCurrentAssetIndex <= 1221 &&
+        g_switchCurrentAssetRawType == 19u)
+        g_switchDbStage = "font/name_handler_return";
     if (switchTraceTechset4026)
         g_switchDbStage = "asset/name_header_handler_return";
 #endif

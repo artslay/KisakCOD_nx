@@ -5768,7 +5768,9 @@ void __cdecl Load_GfxImage(bool atStreamStart)
 
         
 
+        g_switchDbStage = "font/pop";
         DB_PopStreamPos();
+        g_switchDbStage = "font/done";
         return;
     }
 #endif
@@ -17462,6 +17464,7 @@ void __cdecl Load_Font(bool atStreamStart)
         static_assert(sizeof(SerializedFont) == 24);
 
         SerializedFont serialized{};
+        g_switchDbStage = "font/header";
         DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
         std::memset(varFont, 0, sizeof(Font_s));
@@ -17469,8 +17472,30 @@ void __cdecl Load_Font(bool atStreamStart)
         varFont->pixelHeight = serialized.pixelHeight;
         varFont->glyphCount = serialized.glyphCount;
 
+        if (g_switchCurrentAssetIndex >= 1215 &&
+            g_switchCurrentAssetIndex <= 1221 &&
+            g_switchCurrentAssetRawType == 19u)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FONT1215] header font=%p name=%08x material=%08x glow=%08x glyph=%08x px=%d glyphCount=%d stream=%u pos=%p\n",
+                static_cast<void *>(varFont),
+                serialized.fontName,
+                serialized.material,
+                serialized.glowMaterial,
+                serialized.glyphs,
+                serialized.pixelHeight,
+                serialized.glyphCount,
+                static_cast<unsigned>(g_streamPosIndex),
+                static_cast<void *>(DB_GetStreamPos()));
+            Switch_LogWrite(trace);
+        }
+
         DB_PushStreamPos(4);
 
+        g_switchDbStage = "font/name";
         if (!serialized.fontName)
         {
             varFont->fontName = nullptr;
@@ -17489,11 +17514,13 @@ void __cdecl Load_Font(bool atStreamStart)
                     DB_ConvertOffsetToPointerValue(serialized.fontName));
         }
 
+        g_switchDbStage = "font/material";
         varMaterialHandle = &varFont->material;
         varFont->material = reinterpret_cast<Material *>(
             static_cast<uintptr_t>(serialized.material));
         Load_MaterialHandle(0);
 
+        g_switchDbStage = "font/glow";
         varMaterialHandle = &varFont->glowMaterial;
         varFont->glowMaterial = reinterpret_cast<Material *>(
             static_cast<uintptr_t>(serialized.glowMaterial));
@@ -17526,6 +17553,7 @@ void __cdecl Load_Font(bool atStreamStart)
             }
         }
 
+        g_switchDbStage = "font/glyphs";
         if (serialized.glyphs)
         {
             if (serialized.glyphs == UINT32_MAX)

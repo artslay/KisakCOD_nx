@@ -3061,6 +3061,31 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         g_switchDbStage = "asset/name_rawfile";
     }
 #endif
+#ifdef __SWITCH__
+    if (type == ASSET_TYPE_FONT &&
+        g_switchCurrentAssetIndex >= 1215 &&
+        g_switchCurrentAssetIndex <= 1221 &&
+        g_switchCurrentAssetRawType == 19u)
+    {
+        const Font_s *font = newEntry->entry.asset.header.font;
+        const uintptr_t fontName =
+            font ? reinterpret_cast<uintptr_t>(font->fontName) : 0;
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FONT1215] registry_pre font=%p fontName=%p low=%08x material=%p glow=%p glyphs=%p stage=%s\n",
+            static_cast<const void *>(font),
+            reinterpret_cast<const void *>(fontName),
+            static_cast<unsigned>(fontName),
+            font ? static_cast<void *>(font->material) : nullptr,
+            font ? static_cast<void *>(font->glowMaterial) : nullptr,
+            font ? static_cast<void *>(font->glyphs) : nullptr,
+            g_switchDbStage ? g_switchDbStage : "");
+        Switch_LogWrite(trace);
+        g_switchDbStage = "font/registry_name";
+    }
+#endif
     if (newEntry->entry.asset.type == ASSET_TYPE_IMAGE)
         name = newEntry->entry.asset.header.image->name;
     else
