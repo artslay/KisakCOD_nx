@@ -131,6 +131,75 @@ void __cdecl Load_DelayStream()
         DB_LoadXFileData((unsigned char*)g_streamDelayArray[index].ptr, g_streamDelayArray[index].size);
 }
 
+#ifdef __SWITCH__
+struct SwitchInvalidOffsetTraceKey
+{
+    uint32_t token;
+    uint32_t block;
+    uint32_t blockOffset;
+    uint32_t blockSize;
+    uint32_t rawType;
+};
+
+static void Switch_LogInvalidOffsetOnce(
+    uint32_t token,
+    uint32_t block,
+    uint32_t blockOffset,
+    uint32_t blockSize,
+    uintptr_t caller)
+{
+    static SwitchInvalidOffsetTraceKey seen[32] = {};
+    static uint32_t seenCount = 0;
+    static bool suppressionNoticeWritten = false;
+
+    for (uint32_t i = 0; i < seenCount; ++i)
+    {
+        const SwitchInvalidOffsetTraceKey &entry = seen[i];
+        if (entry.token == token &&
+            entry.block == block &&
+            entry.blockOffset == blockOffset &&
+            entry.blockSize == blockSize &&
+            entry.rawType == g_switchCurrentAssetRawType)
+            return;
+    }
+
+    if (seenCount >= 32u)
+    {
+        if (!suppressionNoticeWritten)
+        {
+            Switch_LogWrite(
+                "[SWITCH OFFSET INVALID] further unique invalid-offset diagnostics suppressed\\n");
+            suppressionNoticeWritten = true;
+        }
+        return;
+    }
+
+    SwitchInvalidOffsetTraceKey &entry = seen[seenCount++];
+    entry.token = token;
+    entry.block = block;
+    entry.blockOffset = blockOffset;
+    entry.blockSize = blockSize;
+    entry.rawType = g_switchCurrentAssetRawType;
+
+    char trace[320];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[SWITCH OFFSET INVALID] token=%08x block=%u offset=%08x size=%u assetIdx=%d rawType=%u rawHeader=%08x stream=%u pos=%p caller=%p\\n",
+        token,
+        block,
+        blockOffset,
+        blockSize,
+        g_switchCurrentAssetIndex,
+        static_cast<unsigned>(g_switchCurrentAssetRawType),
+        static_cast<unsigned>(g_switchCurrentAssetHeader),
+        static_cast<unsigned>(g_streamPosIndex),
+        static_cast<void *>(DB_GetStreamPos()),
+        reinterpret_cast<const void *>(caller));
+    Switch_LogWrite(trace);
+}
+#endif
+
 uintptr_t __cdecl DB_ConvertOffsetToPointerValue(uint32_t offset)
 {
     iassert(offset && offset != UINT32_MAX && offset != UINT32_MAX - 1);
@@ -141,43 +210,24 @@ uintptr_t __cdecl DB_ConvertOffsetToPointerValue(uint32_t offset)
 #ifdef __SWITCH__
     if (block >= ARRAY_COUNT(g_streamPosArray))
     {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH OFFSET INVALID] token=%08x block=%u offset=%08x size=0 assetIdx=%d rawType=%u rawHeader=%08x stream=%u pos=%p caller=%p stage=%s\n",
+        Switch_LogInvalidOffsetOnce(
             offset,
             block,
             blockOffset,
-            g_switchCurrentAssetIndex,
-            g_switchCurrentAssetRawType,
-            g_switchCurrentAssetHeader,
-            g_streamPosIndex,
-            static_cast<void *>(DB_GetStreamPos()),
-            __builtin_return_address(0),
-            g_switchDbStage ? g_switchDbStage : "");
-        Switch_LogWrite(trace);
+            0u,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
         return 0;
     }
 
     if (!g_streamBlocks[block].data ||
         blockOffset >= g_streamBlocks[block].size)
     {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH OFFSET INVALID] token=%08x block=%u offset=%08x size=%u assetIdx=%d rawType=%u rawHeader=%08x stream=%u pos=%p caller=%p stage=%s\n",
+        Switch_LogInvalidOffsetOnce(
             offset,
             block,
             blockOffset,
             g_streamBlocks[block].size,
-            g_switchCurrentAssetIndex,
-            g_switchCurrentAssetRawType,
-            g_switchCurrentAssetHeader,
-            g_streamPosIndex,
-            static_cast<void *>(DB_GetStreamPos()));
-        Switch_LogWrite(trace);
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
         return 0;
     }
 #endif
