@@ -1512,13 +1512,7 @@ void __cdecl  DB_Thread(uint32_t threadContext)
     while (1)
     {
         Sys_WaitStartDatabase();
-#ifdef __SWITCH__
-        Switch_GLBeginDatabaseContext();
-#endif
         DB_TryLoadXFile();
-#ifdef __SWITCH__
-        Switch_GLEndDatabaseContext();
-#endif
     }
 }
 
