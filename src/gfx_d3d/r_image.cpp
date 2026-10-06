@@ -1409,7 +1409,7 @@ void R_InitCodeImages()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CODE IMAGES] loadForRenderer=%u white=%p/%p black=%p/%p normal=%p/%p glAllocs=%u\\n",
+            "[KisakCOD][CODE IMAGES] loadForRenderer=%u white=%p/%p black=%p/%p normal=%p/%p glAllocs=%u\n",
             r_loadForRenderer ? r_loadForRenderer->current.enabled : 0u,
             static_cast<void *>(rgp.whiteImage),
             rgp.whiteImage ? static_cast<void *>(rgp.whiteImage->texture.basemap) : nullptr,
