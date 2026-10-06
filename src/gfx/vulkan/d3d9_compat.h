@@ -316,6 +316,7 @@ private:
     D3DVIEWPORT9 m_viewport{0,0,1280,720,0.0f,1.0f};
     bool m_switchUnlit=false;
     bool m_depthEnable=true, m_depthWrite=true, m_blendEnable=false;
+    bool m_separateAlphaBlend=false;
     uint32_t m_srcBlend=2, m_dstBlend=1, m_srcBlendAlpha=2, m_dstBlendAlpha=1;
     uint32_t m_blendOp=1, m_blendOpAlpha=1, m_cullMode=2, m_depthFunc=3;
     bool m_alphaTest=false;
