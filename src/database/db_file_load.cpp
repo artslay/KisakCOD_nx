@@ -102,8 +102,8 @@ extern XAssetList g_varXAssetList;
 #ifdef __SWITCH__
 static inline int Switch_LoadFileFd()
 {
-    return static_cast<int>(
-        reinterpret_cast<intptr_t>(g_load.f)) - 1;
+    FILE *file = static_cast<FILE *>(g_load.f);
+    return file ? ::fileno(file) : -1;
 }
 
 #endif
@@ -127,7 +127,9 @@ void __cdecl DB_CancelLoadXFile()
         if (!g_load.f)
             MyAssertHandler(".\\database\\db_file_load.cpp", 165, 0, "%s", "g_load.f");
 #ifdef __SWITCH__
-        ::close(Switch_LoadFileFd());
+        FILE *file = static_cast<FILE *>(g_load.f);
+        if (file)
+            std::fclose(file);
 #else
         CloseHandle(g_load.f);
 #endif
