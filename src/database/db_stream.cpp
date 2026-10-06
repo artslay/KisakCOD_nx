@@ -624,16 +624,90 @@ void __cdecl DB_AddSwitchPointerAliasFixup(
     g_switchPointerAliasFixups.push_back({serializedSlot, destination});
 }
 
+static bool Switch_TryResolveFontMaterialAlias(
+    uintptr_t serializedSlot,
+    uintptr_t *resolvedPointer)
+{
+    if (!serializedSlot || !resolvedPointer || !g_streamBlocks)
+        return false;
+
+    uintptr_t blockOffset = 0;
+    const int32_t block = Switch_StreamOwner(
+        reinterpret_cast<const uint8_t *>(serializedSlot),
+        &blockOffset);
+
+    if (block < 0 ||
+        static_cast<uint32_t>(block) >= ARRAY_COUNT(g_streamPosArray))
+        return false;
+
+    const XBlock &streamBlock = g_streamBlocks[block];
+    if (!streamBlock.data ||
+        blockOffset >= streamBlock.size ||
+        streamBlock.size - blockOffset < 7)
+        return false;
+
+    const char *name =
+        reinterpret_cast<const char *>(serializedSlot);
+
+    // Some 32-bit fastfile font material pointers are linker aliases that
+    // reuse the storage of the material name string itself. On ARM64 that
+    // alias cannot be treated as a pointer-to-pointer: the target bytes are
+    // literally "fonts/...". Resolve such aliases by material name once the
+    // referenced material asset is available.
+    static const char prefix[] = "fonts/";
+    for (size_t i = 0; i < sizeof(prefix) - 1; ++i)
+    {
+        if (name[i] != prefix[i])
+            return false;
+    }
+
+    const size_t remaining = streamBlock.size - blockOffset;
+    size_t length = 0;
+    while (length < remaining && length < 127 && name[length] != '\0')
+        ++length;
+
+    if (length == 0 || length >= remaining || length >= 127)
+        return false;
+
+    Material *material =
+        DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name).material;
+    if (!material)
+        return false;
+
+    *resolvedPointer = reinterpret_cast<uintptr_t>(material);
+
+    char trace[384];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][FONT MATERIAL ALIAS] slot=%p name=%s material=%p asset=%d rawType=%u\n",
+        reinterpret_cast<const void *>(serializedSlot),
+        name,
+        static_cast<void *>(material),
+        g_switchCurrentAssetIndex,
+        static_cast<unsigned>(g_switchCurrentAssetRawType));
+    Switch_LogWrite(trace);
+
+    return true;
+}
+
 void __cdecl DB_FixupSwitchPointerAliases()
 {
     auto fixup = g_switchPointerAliasFixups.begin();
     while (fixup != g_switchPointerAliasFixups.end())
     {
         uintptr_t resolvedPointer = 0;
-        if (DB_ResolveSwitchPointerAlias(
+        if (!DB_ResolveSwitchPointerAlias(
                 fixup->serializedSlot,
-                &resolvedPointer) &&
-            resolvedPointer)
+                &resolvedPointer) ||
+            !resolvedPointer)
+        {
+            Switch_TryResolveFontMaterialAlias(
+                fixup->serializedSlot,
+                &resolvedPointer);
+        }
+
+        if (resolvedPointer)
         {
             *fixup->destination = resolvedPointer;
             fixup = g_switchPointerAliasFixups.erase(fixup);
@@ -643,5 +717,4 @@ void __cdecl DB_FixupSwitchPointerAliases()
             ++fixup;
         }
     }
-}
-#endif
+}#endif
