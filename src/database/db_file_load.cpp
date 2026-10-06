@@ -2,6 +2,9 @@
 #include "database.h"
 
 #ifdef __SWITCH__
+#include <unistd.h>
+#include <sys/stat.h>
+#include <cstdint>
 #endif
 
 #include <qcommon/threads.h>
@@ -15,6 +18,7 @@
 #include <gfx_d3d/r_buffers.h>
 
 #ifdef __SWITCH__
+extern int __cdecl FS_SwitchOpenRootFd(const char *path);
 extern void Switch_LogWrite(const char *msg);
 extern uint8_t *AllocLoad_raw_byte();
 extern const char *varConstChar;
@@ -42,6 +46,8 @@ struct DB_LoadData // sizeof=0x68
 #ifdef __SWITCH__
     uint64_t switchFileOffset;
     uint32_t switchLastRead;
+    bool switchFileEof;
+    bool switchFileError;
 #else
     OVERLAPPED overlapped;
 #endif
@@ -93,6 +99,20 @@ extern uint32_t g_switchPreviousAssetB4End;
 
 extern XAssetList g_varXAssetList;
 
+#ifdef __SWITCH__
+static inline int Switch_LoadFileFd()
+{
+    return static_cast<int>(
+        reinterpret_cast<intptr_t>(g_load.f)) - 1;
+}
+
+static inline void *Switch_EncodeFileFd(int fd)
+{
+    return reinterpret_cast<void*>(
+        static_cast<intptr_t>(fd) + 1);
+}
+#endif
+
 
 // --- file-local forward declarations (moved out of database.h) ---
 static void __cdecl DB_CancelLoadXFile();
@@ -112,7 +132,11 @@ void __cdecl DB_CancelLoadXFile()
         if (!g_load.f)
             MyAssertHandler(".\\database\\db_file_load.cpp", 165, 0, "%s", "g_load.f");
 #ifdef __SWITCH__
+#ifdef __SWITCH__
+        ::close(Switch_LoadFileFd());
+#else
         fclose(static_cast<FILE *>(g_load.f));
+#endif
 #else
         CloseHandle(g_load.f);
 #endif
@@ -221,10 +245,11 @@ void DB_ReadXFileStage()
     if (g_load.f)
     {
 #ifdef __SWITCH__
-        // Do not prefetch while zlib still owns the current input window.
+        // Switch fastfiles use a native descriptor, not stdio. EOF is normal;
+        // only a real descriptor read error should abort the load.
         if (!g_load.stream.avail_in &&
             !DB_ReadData() &&
-            !feof(static_cast<FILE *>(g_load.f)))
+            g_load.switchFileError)
             Com_Error(ERR_DROP, "Read error of file '%s'", g_load.filename);
 #else
         if (g_load.outstandingReads)
@@ -252,16 +277,31 @@ int32_t __cdecl DB_ReadData()
         return 1;
 
     fileBuffer = g_load.compressBufferStart;
-    FILE *file = static_cast<FILE *>(g_load.f);
-    if (std::fseek(file, static_cast<long>(g_load.switchFileOffset), SEEK_SET) != 0)
-        return 0;
+    const int fd = Switch_LoadFileFd();
+    g_load.switchFileEof = false;
+    g_load.switchFileError = false;
 
-    g_load.switchLastRead = static_cast<uint32_t>(
-        std::fread(fileBuffer, 1, 0x40000, file));
+    if (::lseek(fd, static_cast<off_t>(g_load.switchFileOffset), SEEK_SET) < 0)
+    {
+        g_load.switchFileError = true;
+        return 0;
+    }
+
+    const ssize_t bytesRead = ::read(fd, fileBuffer, 0x40000);
+    if (bytesRead < 0)
+    {
+        g_load.switchFileError = true;
+        return 0;
+    }
+
+    g_load.switchLastRead = static_cast<uint32_t>(bytesRead);
     g_load.switchFileOffset += g_load.switchLastRead;
 
     if (!g_load.switchLastRead)
+    {
+        g_load.switchFileEof = true;
         return 0;
+    }
 
     g_load.stream.next_in = fileBuffer;
     g_load.stream.avail_in = g_load.switchLastRead;
@@ -433,11 +473,11 @@ void __cdecl DB_LoadXFileInternal()
     if (g_trackLoadProgress)
     {
 #ifdef __SWITCH__
-        FILE *switchFile = static_cast<FILE *>(g_load.f);
-        long saved = std::ftell(switchFile);
-        std::fseek(switchFile, 0, SEEK_END);
-        fileSize = static_cast<int32_t>(std::ftell(switchFile));
-        std::fseek(switchFile, saved, SEEK_SET);
+        struct stat switchFileStat{};
+        if (::fstat(Switch_LoadFileFd(), &switchFileStat) != 0)
+            fileSize = 0;
+        else
+            fileSize = static_cast<int32_t>(switchFileStat.st_size);
 #else
         fileSize = GetFileSize(g_load.f, 0);
 #endif
