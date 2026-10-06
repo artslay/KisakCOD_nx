@@ -67,8 +67,8 @@ C_SOURCES := $(shell find src -type f -name '*.c' \
     ! -name '*_mp.c' \
     ! -name 'maketree.c')
 
-# zlib is required by the engine's archive/zip loader.
-C_SOURCES += $(shell find deps/zlib -type f -name '*.c' ! -name 'maketree.c')
+# FFmpeg and the Switch portlibs provide zlib. Do not compile the bundled
+# copy as well, otherwise libz.a and deps/zlib export duplicate symbols.
 
 CPP_SOURCES += src/platform/switch/switch_main.cpp src/platform/switch/switch_fs.cpp src/platform/switch/switch_threads.cpp src/platform/switch/switch_timing.cpp src/platform/switch/switch_profile.cpp src/platform/switch/switch_sys.cpp src/platform/switch/switch_live_storage.cpp
 CPP_SOURCES += src/gfx_d3d/r_init_switch.cpp src/gfx_d3d/r_buffers.cpp src/gfx_d3d/r_state.cpp
