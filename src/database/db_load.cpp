@@ -5487,6 +5487,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         }
         else if (serialized.name == UINT32_MAX)
         {
+            // The XString is inline at the current virtual-stream cursor.
             char *nameBuffer =
                 reinterpret_cast<char *>(AllocLoad_raw_byte());
             Load_XStringCustom(&nameBuffer);
@@ -5494,9 +5495,55 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         }
         else
         {
-            varGfxImage->name =
-                reinterpret_cast<const char *>(
-                    DB_ConvertOffsetToPointerValue(serialized.name));
+            const uintptr_t nameAddress =
+                DB_ConvertOffsetToPointerValue(serialized.name);
+
+            // Some PC fastfiles deduplicate XStrings through a serialized
+            // pointer slot. When that slot contains -1 and ends exactly at
+            // the current cursor, the string payload follows inline at the
+            // cursor. The 32-bit loader's Load_XString(0) consumes that
+            // payload; the ARM64 loader must reproduce the same cursor and
+            // pointer semantics explicitly.
+            bool loadedAliasedInlineName = false;
+#ifdef __SWITCH__
+            if (nameAddress && g_streamBlocks && g_streamBlocks[4].data)
+            {
+                const uintptr_t block4Base =
+                    reinterpret_cast<uintptr_t>(g_streamBlocks[4].data);
+                const uintptr_t block4End =
+                    block4Base + g_streamBlocks[4].size;
+                const uintptr_t cursorAddress =
+                    reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+
+                if (nameAddress >= block4Base &&
+                    nameAddress + sizeof(uint32_t) <= block4End &&
+                    cursorAddress >= block4Base &&
+                    cursorAddress <= block4End)
+                {
+                    uint32_t marker = 0;
+                    std::memcpy(
+                        &marker,
+                        reinterpret_cast<const void *>(nameAddress),
+                        sizeof(marker));
+
+                    if (marker == UINT32_MAX &&
+                        nameAddress + sizeof(uint32_t) == cursorAddress)
+                    {
+                        char *nameBuffer =
+                            reinterpret_cast<char *>(AllocLoad_raw_byte());
+                        Load_XStringCustom(&nameBuffer);
+                        varGfxImage->name = nameBuffer;
+                        loadedAliasedInlineName = true;
+                    }
+                }
+            }
+#endif
+
+            if (!loadedAliasedInlineName)
+            {
+                varGfxImage->name =
+                    reinterpret_cast<const char *>(nameAddress);
+            }
         }
 
 #ifdef __SWITCH__
