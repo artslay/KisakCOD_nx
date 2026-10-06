@@ -1484,7 +1484,11 @@ void __cdecl  DB_Thread(uint32_t threadContext)
     jmp_buf *Value; // eax
 
     iassert(threadContext == THREAD_CONTEXT_DATABASE);
+#ifdef __SWITCH__
+    Value = reinterpret_cast<jmp_buf *>(Sys_GetSwitchErrorJmpBuffer());
+#else
     Value = (jmp_buf *)Sys_GetValue(2);
+#endif
     
     if (setjmp(*Value))
     {
