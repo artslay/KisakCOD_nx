@@ -8,7 +8,7 @@ struct vidConfig_t;
 
 /**
  * Abstract graphics backend interface
- * Implementations: DirectX9Backend, OpenGLBackend
+ * Implementation: VulkanBackend
  */
 class IGfxBackend
 {
@@ -95,4 +95,4 @@ extern std::unique_ptr<IGfxBackend> g_gfxBackend;
 
 // Factory function
 std::unique_ptr<IGfxBackend> CreateDirectX9Backend();
-std::unique_ptr<IGfxBackend> CreateOpenGLBackend();
+std::unique_ptr<IGfxBackend> CreateVulkanBackend();
