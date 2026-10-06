@@ -56,7 +56,7 @@ public:
     void SetVertexShader(void *) override {}
     void SetPixelShader(void *) override {}
     void SetViewport(uint32_t x, uint32_t y, uint32_t width, uint32_t height) override
-    { m_width = width ? width : m_width; m_height = height ? height : m_height; (void)x; (void)y; }
+    { (void)x; (void)y; (void)width; (void)height; }
     void SetScissorRect(uint32_t, uint32_t, uint32_t, uint32_t) override {}
     void SetBlendState(uint32_t, uint32_t) override {}
     void SetDepthState(bool, bool) override {}
