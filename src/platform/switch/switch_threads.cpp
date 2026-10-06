@@ -157,15 +157,6 @@ extern "C" uint32_t Sys_GetSwitchThreadContext()
     return static_cast<uint32_t>(g_threadContext);
 }
 
-extern "C" void *Sys_GetSwitchErrorJmpBuffer()
-{
-    if (g_threadContext < 0 ||
-        static_cast<uint32_t>(g_threadContext) >= THREAD_CONTEXT_COUNT)
-        return nullptr;
-
-    return &g_com_error[g_threadContext];
-}
-
 extern "C" const char *Sys_GetSwitchThreadStage()
 {
     return g_switchThreadStage ? g_switchThreadStage : "thread/unknown";
