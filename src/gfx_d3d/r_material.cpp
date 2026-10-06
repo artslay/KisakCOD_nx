@@ -321,7 +321,10 @@ void __cdecl Load_CreateMaterialPixelShader(GfxPixelShaderLoadDef *loadDef, Mate
     if (r_loadForRenderer->current.enabled)
     {
         ProfLoad_Begin("Create Switch pixel shader");
-        dx.device->CreatePixelShader(loadDef->program, &mtlShader->prog.ps);
+        dx.device->CreatePixelShader(
+            loadDef->program,
+            static_cast<uint32_t>(loadDef->programSize) * sizeof(uint32_t),
+            &mtlShader->prog.ps);
         ProfLoad_End();
     }
     else
@@ -349,7 +352,10 @@ void __cdecl Load_CreateMaterialVertexShader(GfxVertexShaderLoadDef *loadDef, Ma
     if (r_loadForRenderer->current.enabled)
     {
         ProfLoad_Begin("Create Switch vertex shader");
-        dx.device->CreateVertexShader(loadDef->program, &mtlShader->prog.vs);
+        dx.device->CreateVertexShader(
+            loadDef->program,
+            static_cast<uint32_t>(loadDef->programSize) * sizeof(uint32_t),
+            &mtlShader->prog.vs);
         ProfLoad_End();
     }
     else

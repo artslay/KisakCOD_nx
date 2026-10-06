@@ -7,6 +7,7 @@
 #include <cstring>
 #include <array>
 #include <algorithm>
+#include "mojoshader_switch.h"
 
 #ifndef __cdecl
 #define __cdecl
@@ -247,6 +248,26 @@ struct KisakGLShader
 {
     GLuint object = 0;
     GLenum stage = 0;
+    const MOJOSHADER_parseData *parseData = nullptr;
+    std::array<int, 256> floatUniformIndex{};
+    std::array<int, 256> intUniformIndex{};
+    std::array<int, 256> boolUniformIndex{};
+
+    KisakGLShader()
+    {
+        floatUniformIndex.fill(-1);
+        intUniformIndex.fill(-1);
+        boolUniformIndex.fill(-1);
+    }
+
+    void Release()
+    {
+        if (object)
+            glDeleteShader(object);
+        if (parseData)
+            MOJOSHADER_freeParseData(parseData);
+        delete this;
+    }
 };
 
 using IDirect3DVertexShader9 = KisakGLShader;
@@ -621,6 +642,12 @@ class IDirect3DDevice9
     std::array<float, 16> m_fallbackWvp{};
     std::array<std::array<float, 4>, 256> m_vsConstants{};
     std::array<std::array<float, 4>, 256> m_psConstants{};
+    std::array<GLint, 256> m_vsFloatLocations{};
+    std::array<GLint, 256> m_psFloatLocations{};
+    std::array<GLint, 256> m_vsIntLocations{};
+    std::array<GLint, 256> m_psIntLocations{};
+    std::array<GLint, 256> m_vsBoolLocations{};
+    std::array<GLint, 256> m_psBoolLocations{};
     IDirect3DSurface9 *m_color = nullptr;
     IDirect3DSurface9 *m_depth = nullptr;
 
@@ -762,7 +789,39 @@ class IDirect3DDevice9
         if (!m_vertexShader || !m_pixelShader)
             return;
 
+        m_vsFloatLocations.fill(-1);
+        m_psFloatLocations.fill(-1);
+        m_vsIntLocations.fill(-1);
+        m_psIntLocations.fill(-1);
+        m_vsBoolLocations.fill(-1);
+        m_psBoolLocations.fill(-1);
+
         const GLuint program = glCreateProgram();
+
+        if (m_vertexShader->parseData)
+        {
+            for (int i = 0; i < m_vertexShader->parseData->attribute_count; ++i)
+            {
+                const auto &attr = m_vertexShader->parseData->attributes[i];
+                GLint location = -1;
+                switch (attr.usage)
+                {
+                case MOJOSHADER_USAGE_POSITION:     location = 0; break;
+                case MOJOSHADER_USAGE_BLENDWEIGHT:  location = 1; break;
+                case MOJOSHADER_USAGE_BLENDINDICES: location = 2; break;
+                case MOJOSHADER_USAGE_NORMAL:       location = 3; break;
+                case MOJOSHADER_USAGE_TEXCOORD:     location = 4 + attr.index; break;
+                case MOJOSHADER_USAGE_COLOR:        location = 12 + attr.index; break;
+                default: break;
+                }
+                if (location >= 0 && location < 16 && attr.name)
+                    glBindAttribLocation(
+                        program,
+                        static_cast<GLuint>(location),
+                        attr.name);
+            }
+        }
+
         glAttachShader(program, m_vertexShader->object);
         glAttachShader(program, m_pixelShader->object);
         glLinkProgram(program);
@@ -825,6 +884,142 @@ class IDirect3DDevice9
             glUniform4fv(m_vsConstantsLocation, 256, &m_vsConstants[0][0]);
         if (m_psConstantsLocation >= 0)
             glUniform4fv(m_psConstantsLocation, 256, &m_psConstants[0][0]);
+
+        auto bindShaderUniforms = [this](const KisakGLShader *shader, bool vertex)
+        {
+            if (!shader || !shader->parseData)
+                return;
+
+            const char *prefix = vertex ? "vs" : "ps";
+            char name[96];
+
+            for (uint32_t reg = 0; reg < 256; ++reg)
+            {
+                const int floatIndex = shader->floatUniformIndex[reg];
+                if (floatIndex >= 0)
+                {
+                    std::snprintf(
+                        name, sizeof(name),
+                        "%s_uniforms_vec4[%d]", prefix, floatIndex);
+                    const GLint location =
+                        glGetUniformLocation(m_program, name);
+                    if (vertex)
+                        m_vsFloatLocations[reg] = location;
+                    else
+                        m_psFloatLocations[reg] = location;
+                }
+
+                const int intIndex = shader->intUniformIndex[reg];
+                if (intIndex >= 0)
+                {
+                    std::snprintf(
+                        name, sizeof(name),
+                        "%s_uniforms_ivec4[%d]", prefix, intIndex);
+                    const GLint location =
+                        glGetUniformLocation(m_program, name);
+                    if (vertex)
+                        m_vsIntLocations[reg] = location;
+                    else
+                        m_psIntLocations[reg] = location;
+                }
+
+                const int boolIndex = shader->boolUniformIndex[reg];
+                if (boolIndex >= 0)
+                {
+                    std::snprintf(
+                        name, sizeof(name),
+                        "%s_uniforms_bool[%d]", prefix, boolIndex);
+                    const GLint location =
+                        glGetUniformLocation(m_program, name);
+                    if (vertex)
+                        m_vsBoolLocations[reg] = location;
+                    else
+                        m_psBoolLocations[reg] = location;
+                }
+            }
+
+            for (int i = 0; i < shader->parseData->sampler_count; ++i)
+            {
+                const auto &sampler = shader->parseData->samplers[i];
+                if (!sampler.name)
+                    continue;
+                const GLint location =
+                    glGetUniformLocation(m_program, sampler.name);
+                if (location >= 0)
+                    glUniform1i(location, sampler.index);
+            }
+
+            for (int i = 0; i < shader->parseData->uniform_count; ++i)
+            {
+                const auto &uniform = shader->parseData->uniforms[i];
+                if (!uniform.constant || !uniform.name ||
+                    uniform.array_count <= 0)
+                    continue;
+
+                const GLint location =
+                    glGetUniformLocation(m_program, uniform.name);
+                if (location < 0)
+                    continue;
+
+                if (uniform.type == MOJOSHADER_UNIFORM_FLOAT)
+                {
+                    std::vector<float> values(
+                        static_cast<size_t>(uniform.array_count) * 4u,
+                        0.0f);
+                    for (int row = 0; row < uniform.array_count; ++row)
+                    {
+                        for (int k = 0;
+                             k < shader->parseData->constant_count;
+                             ++k)
+                        {
+                            const auto &constant =
+                                shader->parseData->constants[k];
+                            if (constant.type == MOJOSHADER_UNIFORM_FLOAT &&
+                                constant.index == uniform.index + row)
+                            {
+                                std::memcpy(
+                                    &values[
+                                        static_cast<size_t>(row) * 4u],
+                                    constant.value.f,
+                                    sizeof(constant.value.f));
+                                break;
+                            }
+                        }
+                    }
+                    glUniform4fv(location, uniform.array_count, values.data());
+                }
+                else if (uniform.type == MOJOSHADER_UNIFORM_INT)
+                {
+                    std::vector<int> values(
+                        static_cast<size_t>(uniform.array_count) * 4u,
+                        0);
+                    for (int row = 0; row < uniform.array_count; ++row)
+                    {
+                        for (int k = 0;
+                             k < shader->parseData->constant_count;
+                             ++k)
+                        {
+                            const auto &constant =
+                                shader->parseData->constants[k];
+                            if (constant.type == MOJOSHADER_UNIFORM_INT &&
+                                constant.index == uniform.index + row)
+                            {
+                                std::memcpy(
+                                    &values[
+                                        static_cast<size_t>(row) * 4u],
+                                    constant.value.i,
+                                    sizeof(constant.value.i));
+                                break;
+                            }
+                        }
+                    }
+                    glUniform4iv(location, uniform.array_count, values.data());
+                }
+            }
+        };
+
+        bindShaderUniforms(m_vertexShader, true);
+        bindShaderUniforms(m_pixelShader, false);
         UpdateFallbackStateUniforms();
     }
 
@@ -1262,10 +1457,40 @@ public:
         return S_OK;
     }
 
-    HRESULT CreateVertexShader(const void*, IDirect3DVertexShader9 **out)
+    HRESULT CreateVertexShader(const void *bytecode, uint32_t bytecodeSize,
+                                  IDirect3DVertexShader9 **out)
     {
         if (!out)
             return E_FAIL;
+
+        SwitchMojoShaderResult translated;
+        std::string translationError;
+        if (bytecodeSize &&
+            Switch_TranslateD3DShader(
+                bytecode, bytecodeSize, translated, translationError))
+        {
+            const GLuint object =
+                CompileShader(GL_VERTEX_SHADER, translated.source.c_str());
+            if (object)
+            {
+                auto *shader = new IDirect3DVertexShader9;
+                shader->object = object;
+                shader->stage = GL_VERTEX_SHADER;
+                shader->parseData = translated.parseData;
+                shader->floatUniformIndex =
+                    translated.floatUniformIndex;
+                shader->intUniformIndex =
+                    translated.intUniformIndex;
+                shader->boolUniformIndex =
+                    translated.boolUniformIndex;
+                *out = shader;
+                return S_OK;
+            }
+
+            MOJOSHADER_freeParseData(translated.parseData);
+        }
+
+        static const char source[] = R"(#version 430 core
         static const char source[] = R"(#version 430 core
 layout(location=0) in vec4 aPosition;
 layout(location=4) in vec2 aTexCoord;
@@ -1294,14 +1519,45 @@ void main()
         const GLuint object = CompileShader(GL_VERTEX_SHADER, source);
         if (!object)
             return E_FAIL;
-        *out = new IDirect3DVertexShader9{object, GL_VERTEX_SHADER};
+        auto *shader = new IDirect3DVertexShader9;
+        shader->object = object;
+        shader->stage = GL_VERTEX_SHADER;
+        *out = shader;
         return S_OK;
     }
 
-    HRESULT CreatePixelShader(const void*, IDirect3DPixelShader9 **out)
+    HRESULT CreatePixelShader(const void *bytecode, uint32_t bytecodeSize,
+                              IDirect3DPixelShader9 **out)
     {
         if (!out)
             return E_FAIL;
+
+        SwitchMojoShaderResult translated;
+        std::string translationError;
+        if (bytecodeSize &&
+            Switch_TranslateD3DShader(
+                bytecode, bytecodeSize, translated, translationError))
+        {
+            const GLuint object =
+                CompileShader(GL_FRAGMENT_SHADER, translated.source.c_str());
+            if (object)
+            {
+                auto *shader = new IDirect3DPixelShader9;
+                shader->object = object;
+                shader->stage = GL_FRAGMENT_SHADER;
+                shader->parseData = translated.parseData;
+                shader->floatUniformIndex =
+                    translated.floatUniformIndex;
+                shader->intUniformIndex =
+                    translated.intUniformIndex;
+                shader->boolUniformIndex =
+                    translated.boolUniformIndex;
+                *out = shader;
+                return S_OK;
+            }
+
+            MOJOSHADER_freeParseData(translated.parseData);
+        }
         static const char source[] = R"(#version 430 core
 in vec2 vTexCoord;
 in vec4 vColor;
@@ -1363,8 +1619,21 @@ void main()
         const GLuint object = CompileShader(GL_FRAGMENT_SHADER, source);
         if (!object)
             return E_FAIL;
-        *out = new IDirect3DPixelShader9{object, GL_FRAGMENT_SHADER};
+        auto *shader = new IDirect3DPixelShader9;
+        shader->object = object;
+        shader->stage = GL_FRAGMENT_SHADER;
+        *out = shader;
         return S_OK;
+    }
+
+    HRESULT CreateVertexShader(const void *bytecode, IDirect3DVertexShader9 **out)
+    {
+        return CreateVertexShader(bytecode, 0, out);
+    }
+
+    HRESULT CreatePixelShader(const void *bytecode, IDirect3DPixelShader9 **out)
+    {
+        return CreatePixelShader(bytecode, 0, out);
     }
 
     HRESULT SetVertexShader(IDirect3DVertexShader9 *shader)
@@ -1385,11 +1654,34 @@ void main()
     {
         if (!data || dest + rowCount > m_vsConstants.size())
             return E_FAIL;
-        std::memcpy(&m_vsConstants[dest], data, rowCount * sizeof(m_vsConstants[0]));
-        if (m_program && m_vsConstantsLocation >= 0)
+
+        std::memcpy(
+            &m_vsConstants[dest],
+            data,
+            rowCount * sizeof(m_vsConstants[0]));
+
+        if (!m_program)
+            return S_OK;
+
+        glUseProgram(m_program);
+        if (m_vertexShader && m_vertexShader->parseData)
         {
-            glUseProgram(m_program);
-            glUniform4fv(m_vsConstantsLocation, 256, &m_vsConstants[0][0]);
+            for (uint32_t i = 0; i < rowCount; ++i)
+            {
+                const uint32_t reg = dest + i;
+                if (m_vsFloatLocations[reg] >= 0)
+                    glUniform4fv(
+                        m_vsFloatLocations[reg],
+                        1,
+                        &m_vsConstants[reg][0]);
+            }
+        }
+        else if (m_vsConstantsLocation >= 0)
+        {
+            glUniform4fv(
+                m_vsConstantsLocation,
+                256,
+                &m_vsConstants[0][0]);
         }
         return S_OK;
     }
@@ -1398,11 +1690,34 @@ void main()
     {
         if (!data || dest + rowCount > m_psConstants.size())
             return E_FAIL;
-        std::memcpy(&m_psConstants[dest], data, rowCount * sizeof(m_psConstants[0]));
-        if (m_program && m_psConstantsLocation >= 0)
+
+        std::memcpy(
+            &m_psConstants[dest],
+            data,
+            rowCount * sizeof(m_psConstants[0]));
+
+        if (!m_program)
+            return S_OK;
+
+        glUseProgram(m_program);
+        if (m_pixelShader && m_pixelShader->parseData)
         {
-            glUseProgram(m_program);
-            glUniform4fv(m_psConstantsLocation, 256, &m_psConstants[0][0]);
+            for (uint32_t i = 0; i < rowCount; ++i)
+            {
+                const uint32_t reg = dest + i;
+                if (m_psFloatLocations[reg] >= 0)
+                    glUniform4fv(
+                        m_psFloatLocations[reg],
+                        1,
+                        &m_psConstants[reg][0]);
+            }
+        }
+        else if (m_psConstantsLocation >= 0)
+        {
+            glUniform4fv(
+                m_psConstantsLocation,
+                256,
+                &m_psConstants[0][0]);
         }
         return S_OK;
     }
