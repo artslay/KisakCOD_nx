@@ -86,10 +86,15 @@ static int g_remoteScreenUpdateNesting = 0;
 void R_ShutdownMaterialUsage() {}
 
 void R_ShutdownDirect3D() {
-    if (g_gfxBackend) g_gfxBackend->Shutdown();
+    // The D3D9 compatibility device owns Vulkan pipelines/shader modules, so
+    // destroy it before tearing down the Vulkan device underneath it.
     delete dx.device;
     dx.device = nullptr;
     dx.d3d9 = nullptr;
+    if (g_gfxBackend) {
+        g_gfxBackend->Shutdown();
+        g_gfxBackend.reset();
+    }
 }
 
 void R_ReleaseForShutdownOrReset() {}
