@@ -555,6 +555,11 @@ bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
     uintptr_t visited[8] = {};
     constexpr size_t MaxDepth = ARRAY_COUNT(visited);
 
+    const bool traceFontTechniqueAlias =
+        g_switchCurrentAssetRawType == 19u &&
+        g_switchCurrentAssetIndex >= 1213 &&
+        g_switchCurrentAssetIndex <= 1214;
+
     for (size_t depth = 0; depth < MaxDepth; ++depth)
     {
         for (size_t i = 0; i < depth; ++i)
@@ -564,14 +569,68 @@ bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
         }
         visited[depth] = current;
 
-        if (DB_ResolveSwitchPointerAlias(current, resolvedPointer) &&
-            *resolvedPointer)
-            return true;
-
         uintptr_t blockOffset = 0;
         const int32_t block = Switch_StreamOwner(
             reinterpret_cast<const uint8_t *>(current),
             &blockOffset);
+
+        if (traceFontTechniqueAlias)
+        {
+            uintptr_t initialOffset = 0;
+            const int32_t initialBlock = Switch_StreamOwner(
+                reinterpret_cast<const uint8_t *>(serializedSlot),
+                &initialOffset);
+            if (initialBlock == 4 && initialOffset == 0x6f8)
+            {
+                const uint32_t rawForTrace =
+                    (block >= 0 &&
+                     static_cast<uint32_t>(block) < ARRAY_COUNT(g_streamPosArray) &&
+                     blockOffset <= g_streamBlocks[block].size &&
+                     g_streamBlocks[block].size - blockOffset >= sizeof(uint32_t))
+                        ? *reinterpret_cast<const uint32_t *>(current)
+                        : 0u;
+                char trace[384];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][FONT TECH ALIAS] depth=%u current=%p block=%d offset=%08x raw=%08x aliases=%zu\n",
+                    static_cast<unsigned>(depth),
+                    reinterpret_cast<const void *>(current),
+                    block,
+                    static_cast<unsigned>(blockOffset),
+                    rawForTrace,
+                    g_switchPointerAliasEntries.size());
+                Switch_LogWrite(trace);
+            }
+        }
+
+        uintptr_t directResolved = 0;
+        if (DB_ResolveSwitchPointerAlias(current, &directResolved) &&
+            directResolved)
+        {
+            if (traceFontTechniqueAlias)
+            {
+                uintptr_t initialOffset = 0;
+                const int32_t initialBlock = Switch_StreamOwner(
+                    reinterpret_cast<const uint8_t *>(serializedSlot),
+                    &initialOffset);
+                if (initialBlock == 4 && initialOffset == 0x6f8)
+                {
+                    char trace[384];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[KisakCOD][FONT TECH ALIAS] resolved depth=%u slot=%p native=%p\n",
+                        static_cast<unsigned>(depth),
+                        reinterpret_cast<const void *>(current),
+                        reinterpret_cast<const void *>(directResolved));
+                    Switch_LogWrite(trace);
+                }
+            }
+            *resolvedPointer = directResolved;
+            return true;
+        }
+
         if (block < 0 ||
             static_cast<uint32_t>(block) >= ARRAY_COUNT(g_streamPosArray))
             return false;
