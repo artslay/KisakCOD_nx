@@ -164,6 +164,7 @@ private:
     bool CreateDescriptorResources();
     bool CreateUniformRing();
     bool CreateSync();
+    bool CreateDummyTexture();
     void DestroySwapchain();
     void DestroyDefaultDepth();
     void SetError(const char *message);
