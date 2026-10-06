@@ -8,6 +8,8 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
+extern int32_t g_switchCurrentAssetIndex;
+extern uint32_t g_switchCurrentAssetRawType;
 #endif
 
 uint8_t *s_imageLoadBuf;
