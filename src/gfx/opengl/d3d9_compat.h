@@ -642,6 +642,10 @@ class IDirect3DDevice9
     std::array<float, 16> m_fallbackWvp{};
     std::array<std::array<float, 4>, 256> m_vsConstants{};
     std::array<std::array<float, 4>, 256> m_psConstants{};
+    std::array<std::array<int32_t, 4>, 256> m_vsIntConstants{};
+    std::array<std::array<int32_t, 4>, 256> m_psIntConstants{};
+    std::array<int32_t, 256> m_vsBoolConstants{};
+    std::array<int32_t, 256> m_psBoolConstants{};
     std::array<GLint, 256> m_vsFloatLocations{};
     std::array<GLint, 256> m_psFloatLocations{};
     std::array<GLint, 256> m_vsIntLocations{};
@@ -656,13 +660,41 @@ class IDirect3DDevice9
         const GLuint shader = glCreateShader(stage);
         glShaderSource(shader, 1, &source, nullptr);
         glCompileShader(shader);
+
         GLint ok = GL_FALSE;
         glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
         if (!ok)
         {
+            GLint logLength = 0;
+            glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
+
+            char log[2048];
+            log[0] = '\\0';
+            if (logLength > 1)
+            {
+                const GLsizei capacity =
+                    static_cast<GLsizei>(sizeof(log) - 1);
+                GLsizei written = 0;
+                glGetShaderInfoLog(
+                    shader, capacity, &written, log);
+                log[std::min<GLsizei>(
+                    written, static_cast<GLsizei>(sizeof(log) - 1))] = '\\0';
+            }
+
+            extern void Switch_LogWrite(const char *msg);
+            char trace[2304];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][SHADER] GLSL compile failed stage=%s: %s\\n",
+                stage == GL_VERTEX_SHADER ? "vs" : "ps",
+                log);
+            Switch_LogWrite(trace);
+
             glDeleteShader(shader);
             return 0;
         }
+
         return shader;
     }
 
@@ -830,6 +862,31 @@ class IDirect3DDevice9
         glGetProgramiv(program, GL_LINK_STATUS, &ok);
         if (!ok)
         {
+            GLint logLength = 0;
+            glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
+
+            char log[2048];
+            log[0] = '\\0';
+            if (logLength > 1)
+            {
+                const GLsizei capacity =
+                    static_cast<GLsizei>(sizeof(log) - 1);
+                GLsizei written = 0;
+                glGetProgramInfoLog(
+                    program, capacity, &written, log);
+                log[std::min<GLsizei>(
+                    written, static_cast<GLsizei>(sizeof(log) - 1))] = '\\0';
+            }
+
+            extern void Switch_LogWrite(const char *msg);
+            char trace[2304];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][SHADER] GLSL link failed: %s\\n",
+                log);
+            Switch_LogWrite(trace);
+
             glDeleteProgram(program);
             return;
         }
@@ -1071,6 +1128,32 @@ class IDirect3DDevice9
                         m_psFloatLocations[reg],
                         1,
                         &m_psConstants[reg][0]);
+                if (m_psIntLocations[reg] >= 0)
+                    glUniform4iv(
+                        m_psIntLocations[reg],
+                        1,
+                        &m_psIntConstants[reg][0]);
+                if (m_psBoolLocations[reg] >= 0)
+                    glUniform1iv(
+                        m_psBoolLocations[reg],
+                        1,
+                        &m_psBoolConstants[reg]);
+            }
+        }
+        if (m_vertexShader->parseData)
+        {
+            for (uint32_t reg = 0; reg < 256; ++reg)
+            {
+                if (m_vsIntLocations[reg] >= 0)
+                    glUniform4iv(
+                        m_vsIntLocations[reg],
+                        1,
+                        &m_vsIntConstants[reg][0]);
+                if (m_vsBoolLocations[reg] >= 0)
+                    glUniform1iv(
+                        m_vsBoolLocations[reg],
+                        1,
+                        &m_vsBoolConstants[reg]);
             }
         }
 
@@ -1544,6 +1627,20 @@ public:
             MOJOSHADER_freeParseData(translated.parseData);
         }
 
+        if (bytecodeSize)
+        {
+            extern void Switch_LogWrite(const char *msg);
+            char trace[1024];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][SHADER] VS bytecode rejected by MojoShader/GLSL, bytes=%u error=%s\\n",
+                bytecodeSize,
+                translationError.empty() ? "unknown" : translationError.c_str());
+            Switch_LogWrite(trace);
+            return E_FAIL;
+        }
+
         static const char source[] = R"(#version 430 core
 layout(location=0) in vec4 aPosition;
 layout(location=4) in vec2 aTexCoord;
@@ -1611,6 +1708,20 @@ void main()
 
             MOJOSHADER_freeParseData(translated.parseData);
         }
+        if (bytecodeSize)
+        {
+            extern void Switch_LogWrite(const char *msg);
+            char trace[1024];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][SHADER] PS bytecode rejected by MojoShader/GLSL, bytes=%u error=%s\\n",
+                bytecodeSize,
+                translationError.empty() ? "unknown" : translationError.c_str());
+            Switch_LogWrite(trace);
+            return E_FAIL;
+        }
+
         static const char source[] = R"(#version 430 core
 in vec2 vTexCoord;
 in vec4 vColor;
@@ -1771,6 +1882,126 @@ void main()
                 m_psConstantsLocation,
                 256,
                 &m_psConstants[0][0]);
+        }
+        return S_OK;
+    }
+
+    HRESULT SetVertexShaderConstantI(
+        uint32_t dest, const int32_t *data, uint32_t count)
+    {
+        if (!data || dest + count > m_vsIntConstants.size())
+            return E_FAIL;
+
+        std::memcpy(
+            &m_vsIntConstants[dest],
+            data,
+            count * sizeof(m_vsIntConstants[0]));
+
+        if (!m_program)
+            return S_OK;
+
+        glUseProgram(m_program);
+        if (m_vertexShader && m_vertexShader->parseData)
+        {
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                const uint32_t reg = dest + i;
+                if (m_vsIntLocations[reg] >= 0)
+                    glUniform4iv(
+                        m_vsIntLocations[reg],
+                        1,
+                        &m_vsIntConstants[reg][0]);
+            }
+        }
+        return S_OK;
+    }
+
+    HRESULT SetPixelShaderConstantI(
+        uint32_t dest, const int32_t *data, uint32_t count)
+    {
+        if (!data || dest + count > m_psIntConstants.size())
+            return E_FAIL;
+
+        std::memcpy(
+            &m_psIntConstants[dest],
+            data,
+            count * sizeof(m_psIntConstants[0]));
+
+        if (!m_program)
+            return S_OK;
+
+        glUseProgram(m_program);
+        if (m_pixelShader && m_pixelShader->parseData)
+        {
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                const uint32_t reg = dest + i;
+                if (m_psIntLocations[reg] >= 0)
+                    glUniform4iv(
+                        m_psIntLocations[reg],
+                        1,
+                        &m_psIntConstants[reg][0]);
+            }
+        }
+        return S_OK;
+    }
+
+    HRESULT SetVertexShaderConstantB(
+        uint32_t dest, const int32_t *data, uint32_t count)
+    {
+        if (!data || dest + count > m_vsBoolConstants.size())
+            return E_FAIL;
+
+        std::memcpy(
+            &m_vsBoolConstants[dest],
+            data,
+            count * sizeof(m_vsBoolConstants[0]));
+
+        if (!m_program)
+            return S_OK;
+
+        glUseProgram(m_program);
+        if (m_vertexShader && m_vertexShader->parseData)
+        {
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                const uint32_t reg = dest + i;
+                if (m_vsBoolLocations[reg] >= 0)
+                    glUniform1iv(
+                        m_vsBoolLocations[reg],
+                        1,
+                        &m_vsBoolConstants[reg]);
+            }
+        }
+        return S_OK;
+    }
+
+    HRESULT SetPixelShaderConstantB(
+        uint32_t dest, const int32_t *data, uint32_t count)
+    {
+        if (!data || dest + count > m_psBoolConstants.size())
+            return E_FAIL;
+
+        std::memcpy(
+            &m_psBoolConstants[dest],
+            data,
+            count * sizeof(m_psBoolConstants[0]));
+
+        if (!m_program)
+            return S_OK;
+
+        glUseProgram(m_program);
+        if (m_pixelShader && m_pixelShader->parseData)
+        {
+            for (uint32_t i = 0; i < count; ++i)
+            {
+                const uint32_t reg = dest + i;
+                if (m_psBoolLocations[reg] >= 0)
+                    glUniform1iv(
+                        m_psBoolLocations[reg],
+                        1,
+                        &m_psBoolConstants[reg]);
+            }
         }
         return S_OK;
     }
