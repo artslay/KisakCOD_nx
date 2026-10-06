@@ -717,4 +717,5 @@ void __cdecl DB_FixupSwitchPointerAliases()
             ++fixup;
         }
     }
-}#endif
+}
+#endif
