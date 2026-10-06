@@ -3812,136 +3812,45 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
     if (g_switchDeferredImageAssets.empty())
         return;
 
-    const size_t pendingCount = g_switchDeferredImageAssets.size();
-    {
-        char trace[192];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][DBPROGRESS] deferred-flush begin pending=%zu asset=%d rawType=%u\n",
-            pendingCount,
-            g_switchCurrentAssetIndex,
-            static_cast<unsigned>(g_switchCurrentAssetRawType));
-        Switch_LogWrite(trace);
-    }
-
     size_t writeIndex = 0;
-    size_t deferredIndex = 0;
     for (const SwitchDeferredImageAsset &deferred : g_switchDeferredImageAssets)
     {
         GfxImage *image = deferred.image;
         GfxImage **slot = deferred.slot;
 
-        {
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][DBPROGRESS] deferred[%zu/%zu] begin image=%p slot=%p name=%p\n",
-                deferredIndex,
-                pendingCount,
-                static_cast<void *>(image),
-                static_cast<void *>(slot),
-                image ? static_cast<const void *>(image->name) : nullptr);
-            Switch_LogWrite(trace);
-        }
-
         if (!image || !slot)
-        {
-            ++deferredIndex;
             continue;
-        }
 
         const uintptr_t serializedNameAddress =
             reinterpret_cast<uintptr_t>(image->name);
-
-        {
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][DBPROGRESS] deferred[%zu] resolve-begin name=%p\n",
-                deferredIndex,
-                reinterpret_cast<const void *>(serializedNameAddress));
-            Switch_LogWrite(trace);
-        }
-
         const uintptr_t resolvedName =
             DB_ResolveSwitchSerializedString(serializedNameAddress);
-
-        {
-            char trace[320];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][DBPROGRESS] deferred[%zu] resolve-end resolved=%p\n",
-                deferredIndex,
-                reinterpret_cast<const void *>(resolvedName));
-            Switch_LogWrite(trace);
-        }
 
         if (!resolvedName)
         {
             g_switchDeferredImageAssets[writeIndex++] = deferred;
-            ++deferredIndex;
             continue;
         }
 
         image->name = reinterpret_cast<const char *>(resolvedName);
 
-        {
-            char trace[320];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][DBPROGRESS] deferred[%zu] add-begin name=%s image=%p\n",
-                deferredIndex,
-                image->name ? image->name : "<null>",
-                static_cast<void *>(image));
-            Switch_LogWrite(trace);
-        }
-
         const XAssetHeader result =
             DB_AddXAsset(ASSET_TYPE_IMAGE, (XAssetHeader)image);
-
-        {
-            char trace[320];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][DBPROGRESS] deferred[%zu] add-end result=%p\n",
-                deferredIndex,
-                static_cast<void *>(result.image));
-            Switch_LogWrite(trace);
-        }
-
         *slot = result.image;
 
         char trace[256];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][GFXIMAGE DEFERRED] registered image=%p name=%s ptr=%p remaining=%zu\n",
+            "[KisakCOD][GFXIMAGE DEFERRED] registered image=%p name=%s ptr=%p remaining=%zu\\n",
             static_cast<void *>(image),
             image->name ? image->name : "<null>",
             static_cast<void *>(result.image),
             g_switchDeferredImageAssets.size() - writeIndex - 1);
         Switch_LogWrite(trace);
-
-        ++deferredIndex;
     }
 
     g_switchDeferredImageAssets.resize(writeIndex);
-
-    {
-        char trace[192];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][DBPROGRESS] deferred-flush end remaining=%zu\n",
-            writeIndex);
-        Switch_LogWrite(trace);
-    }
 }
 #endif
 
