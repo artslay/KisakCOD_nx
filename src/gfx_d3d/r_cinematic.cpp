@@ -791,8 +791,14 @@ bool __cdecl R_Cinematic_BinkOpen(
     }
     else
     {
+#ifdef __SWITCH__
+        // Switch SD-card paths use forward slashes.
+        _snprintf(filepath[0], 0x100u, "%s/main/video/%s.%s", cwd, filename, "bik");
+        _snprintf(filepath[1], 0x100u, "%s/raw/video/%s.%s", cwd, filename, "bik");
+#else
         _snprintf(filepath[0], 0x100u, "%s\\main\\video\\%s.%s", cwd, filename, "bik");
         _snprintf(filepath[1], 0x100u, "%s\\raw\\video\\%s.%s", cwd, filename, "bik");
+#endif
     }
     if (R_Cinematic_BinkOpenPath(filepath[0], playbackFlags, errText, errTextSize))
         return 1;
