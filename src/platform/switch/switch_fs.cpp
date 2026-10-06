@@ -628,7 +628,7 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][IWI ROOT] path=%s iwd=1 archive=%s size=%u\\n",
+                "[KisakCOD][IWI ROOT] path=%s iwd=1 archive=%s size=%u\n",
                 normalizedName.c_str(),
                 g_iwdArchives[entry.archiveIndex].path.c_str(),
                 static_cast<unsigned>(entry.size));
@@ -637,7 +637,7 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         else
         {
             Switch_LogWrite(
-                "[KisakCOD][IWI ROOT] path=images/3.iwi iwd=0\\n");
+                "[KisakCOD][IWI ROOT] path=images/3.iwi iwd=0\n");
         }
     }
 
@@ -652,7 +652,7 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][IWI ROOT] path=%s opened=iwd handle=%d size=%u\\n",
+                    "[KisakCOD][IWI ROOT] path=%s opened=iwd handle=%d size=%u\n",
                     normalizedName.c_str(),
                     iwdHandle,
                     static_cast<unsigned>(g_fsh[iwdHandle].fileSize));
@@ -681,7 +681,7 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][IWI ROOT] path=%s iwd=0 loose=0 osPath=%s\\n",
+                "[KisakCOD][IWI ROOT] path=%s iwd=0 loose=0 osPath=%s\n",
                 normalizedName.c_str(),
                 path);
             Switch_LogWrite(trace);
@@ -695,7 +695,7 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][IWI ROOT] path=%s iwd=0 loose=1 osPath=%s\\n",
+            "[KisakCOD][IWI ROOT] path=%s iwd=0 loose=1 osPath=%s\n",
             normalizedName.c_str(),
             path);
         Switch_LogWrite(trace);
