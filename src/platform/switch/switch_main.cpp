@@ -4,9 +4,6 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
-#include <unistd.h>
-#include <errno.h>
-#include <arpa/inet.h>
 
 #include <qcommon/qcommon.h>
 #include <qcommon/threads.h>
@@ -24,68 +21,6 @@ extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 extern uint32_t g_switchCurrentAssetHeader;
 extern const char * volatile g_switchDbStage;
-
-static int g_switchNxlinkSock = -1;
-
-static void SwitchInitNxlink()
-{
-    const Result initResult = socketInitializeDefault();
-    if (R_FAILED(initResult))
-    {
-        char line[256];
-        std::snprintf(
-            line, sizeof(line),
-            "[KisakCOD][NXLINK] socketInitializeDefault failed rc=%08x errno=%d\\n",
-            initResult, errno);
-        Switch_LogWrite(line);
-        return;
-    }
-
-    g_switchNxlinkSock = nxlinkStdio();
-
-    char line[384];
-    if (g_switchNxlinkSock >= 0)
-    {
-        struct in_addr host = __nxlink_host;
-        std::snprintf(
-            line, sizeof(line),
-            "[KisakCOD][NXLINK] connected host=%s fd=%d stdout=on stderr=on\\n",
-            inet_ntoa(host), g_switchNxlinkSock);
-        Switch_LogWrite(line);
-    }
-    else
-    {
-        struct in_addr host = __nxlink_host;
-        std::snprintf(
-            line, sizeof(line),
-            "[KisakCOD][NXLINK] connect failed host=%s fd=%d errno=%d\\n",
-            host.s_addr ? inet_ntoa(host) : "(unset)",
-            g_switchNxlinkSock, errno);
-        Switch_LogWrite(line);
-        socketExit();
-    }
-}
-
-static void SwitchShutdownNxlink()
-{
-    if (g_switchNxlinkSock >= 0)
-    {
-        close(g_switchNxlinkSock);
-        g_switchNxlinkSock = -1;
-        socketExit();
-    }
-}
-
-extern "C" void userAppInit()
-{
-    Switch_LogInit();
-    SwitchInitNxlink();
-}
-
-extern "C" void userAppExit()
-{
-    SwitchShutdownNxlink();
-}
 
 static std::atomic<bool> g_switchProgressWatchdogStop{false};
 static std::thread g_switchProgressWatchdog;
@@ -212,6 +147,7 @@ static void SwitchLogVulkanRuntime()
 
 int main()
 {
+    Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
