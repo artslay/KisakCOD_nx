@@ -38,7 +38,6 @@
 #include <chrono>
 #include <cstdio>
 #include <gfx/gfx_backend.h>
-#include <gfx/opengl/gl_backend.h>
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
 static inline uint64_t KisakRendererClock()
@@ -2871,11 +2870,8 @@ GfxIndexBufferState *RB_SwapBuffers()
     }
 
 #ifdef __SWITCH__
-    // The Switch renderer is GL/Zink, not native D3D9. The legacy D3D9
-    // R_HW_InsertFence path assumes a live IDirect3DQuery9 fence, while the
-    // OpenGL backend intentionally has no D3D query object. eglSwapBuffers()
-    // has already completed presentation; use the backend's GL synchronization
-    // primitive instead.
+    // The Vulkan backend owns presentation and GPU synchronization on Switch.
+    // Wait here so the renderer's legacy frame fence semantics remain intact.
     g_switchFrameStage = "frame/issue/swap_fence";
     if (g_gfxBackend)
         g_gfxBackend->WaitForGpu();
@@ -3297,7 +3293,7 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
                 {
                     RB_RenderCommandFrame((GfxBackEndData*)data);
 #ifdef __SWITCH__
-                    Switch_GLEndRenderContext();
+                    
 #endif
                 }
                 Sys_StopRenderer();
@@ -3322,9 +3318,9 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
                     start = Sys_Milliseconds();
 #ifndef KISAK_RADIANT
 #ifdef __SWITCH__
-                    if (!Switch_GLBeginRenderContext())
+                    if (!true)
                     {
-                        Com_Error(ERR_FATAL, "Switch remote render EGL context is not current");
+                        Com_Error(ERR_FATAL, "Switch Vulkan render context is unavailable");
                         return;
                     }
                     Switch_LogWrite("[KisakCOD][RTHREAD] remote update: before SCR_UpdateScreen\n");
@@ -3419,7 +3415,7 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
 #ifdef __SWITCH__
         if (!Switch_GLBeginRenderContext())
         {
-            Com_Error(ERR_FATAL, "Switch render EGL context is not current");
+            Com_Error(ERR_FATAL, "Switch Vulkan render context is unavailable");
             return;
         }
 #endif
