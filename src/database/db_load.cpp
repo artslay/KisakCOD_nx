@@ -7993,11 +7993,13 @@ void __cdecl Load_Material(bool atStreamStart)
         const uint32_t textureTableValue =
             static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(varMaterial->textureTable));
-        if (textureTableValue == UINT32_MAX)
+        if (textureTableValue == UINT32_MAX ||
+            textureTableValue == UINT32_MAX - 1u)
         {
 #ifdef __SWITCH__
-            // Match the DWORD alignment of the original inline table
-            // allocation; Hunk_Alloc only creates the native ARM64 array.
+            // Both serialized -1 (FOLLOWING) and -2 (INSERT) denote an inline
+            // table payload. The native ARM64 table is expanded from the
+            // serialized 12-byte records below.
             DB_AllocStreamPos(3);
             varMaterial->textureTable =
                 reinterpret_cast<MaterialTextureDef *>(
@@ -8037,7 +8039,8 @@ void __cdecl Load_Material(bool atStreamStart)
         const uint32_t constantTableValue =
             static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(varMaterial->constantTable));
-        if (constantTableValue == UINT32_MAX)
+        if (constantTableValue == UINT32_MAX ||
+            constantTableValue == UINT32_MAX - 1u)
         {
             varMaterial->constantTable =
                 (MaterialConstantDef *)AllocLoad_GfxPackedVertex0();
@@ -8060,7 +8063,8 @@ void __cdecl Load_Material(bool atStreamStart)
         const uint32_t stateBitsTableValue =
             static_cast<uint32_t>(
                 reinterpret_cast<uintptr_t>(varMaterial->stateBitsTable));
-        if (stateBitsTableValue == UINT32_MAX)
+        if (stateBitsTableValue == UINT32_MAX ||
+            stateBitsTableValue == UINT32_MAX - 1u)
         {
             varMaterial->stateBitsTable =
                 (GfxStateBits *)AllocLoad_FxElemVisStateSample();
