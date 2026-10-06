@@ -48,6 +48,20 @@ struct SwitchPointerAliasFixup
 static std::vector<SwitchPointerAliasEntry> g_switchPointerAliasEntries;
 static std::unordered_map<uintptr_t, size_t> g_switchPointerAliasIndex;
 static std::vector<SwitchPointerAliasFixup> g_switchPointerAliasFixups;
+static bool Switch_IsInvalidNativePointer(uintptr_t pointer)
+{
+    if (pointer < static_cast<uintptr_t>(0x10000u))
+        return true;
+
+    // Native Switch allocations used by the database do not use the range
+    // produced by sign-widening a 32-bit serialized token. Reject values of
+    // the form 0x00000001xxxxxxxx when bit31 is set (for example
+    // 0x00000001ffff0208 from the current crash).
+    const uint32_t high = static_cast<uint32_t>(pointer >> 32);
+    const uint32_t low = static_cast<uint32_t>(pointer);
+    return high == 1u && (low & 0x80000000u) != 0;
+}
+
 
 static int32_t Switch_StreamOwner(
     const uint8_t *pos,
@@ -551,21 +565,60 @@ bool __cdecl DB_ResolveSwitchPointerAlias(
         // serialized 32-bit data, not valid ARM64 pointers.
         const uintptr_t nativeSlotAddress =
             reinterpret_cast<uintptr_t>(entry.nativeSlot);
-        if (nativeSlotAddress < 0x10000u)
+        if (Switch_IsInvalidNativePointer(nativeSlotAddress))
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[SWITCH ALIAS INVALID SLOT] serialized=%p slot=%p asset=%d rawType=%u stage=%s\\n",
+                reinterpret_cast<const void *>(serializedSlot),
+                reinterpret_cast<const void *>(nativeSlotAddress),
+                g_switchCurrentAssetIndex,
+                static_cast<unsigned>(g_switchCurrentAssetRawType),
+                g_switchDbStage ? g_switchDbStage : "");
+            Switch_LogWrite(trace);
             return false;
+        }
 
         const uintptr_t nativeValue =
             reinterpret_cast<uintptr_t>(*entry.nativeSlot);
-        if (nativeValue < 0x10000u)
+        if (Switch_IsInvalidNativePointer(nativeValue))
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[SWITCH ALIAS INVALID NATIVE] serialized=%p native=%p asset=%d rawType=%u stage=%s\\n",
+                reinterpret_cast<const void *>(serializedSlot),
+                reinterpret_cast<const void *>(nativeValue),
+                g_switchCurrentAssetIndex,
+                static_cast<unsigned>(g_switchCurrentAssetRawType),
+                g_switchDbStage ? g_switchDbStage : "");
+            Switch_LogWrite(trace);
             return false;
+        }
 
         if (resolvedPointer)
             *resolvedPointer = nativeValue;
     }
     else
     {
-        if (entry.nativePointer < 0x10000u)
+        if (Switch_IsInvalidNativePointer(entry.nativePointer))
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[SWITCH ALIAS INVALID PTR] serialized=%p native=%p asset=%d rawType=%u stage=%s\\n",
+                reinterpret_cast<const void *>(serializedSlot),
+                reinterpret_cast<const void *>(entry.nativePointer),
+                g_switchCurrentAssetIndex,
+                static_cast<unsigned>(g_switchCurrentAssetRawType),
+                g_switchDbStage ? g_switchDbStage : "");
+            Switch_LogWrite(trace);
             return false;
+        }
 
         if (resolvedPointer)
             *resolvedPointer = entry.nativePointer;
@@ -895,8 +948,29 @@ void __cdecl DB_FixupSwitchPointerAliases()
 
         if (resolvedPointer)
         {
-            *fixup->destination = resolvedPointer;
-            fixup = g_switchPointerAliasFixups.erase(fixup);
+            const uintptr_t destination =
+                reinterpret_cast<uintptr_t>(fixup->destination);
+            if (Switch_IsInvalidNativePointer(destination))
+            {
+                char trace[384];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\\n",
+                    reinterpret_cast<const void *>(fixup->serializedSlot),
+                    reinterpret_cast<const void *>(destination),
+                    reinterpret_cast<const void *>(resolvedPointer),
+                    g_switchCurrentAssetIndex,
+                    static_cast<unsigned>(g_switchCurrentAssetRawType),
+                    g_switchDbStage ? g_switchDbStage : "");
+                Switch_LogWrite(trace);
+                fixup = g_switchPointerAliasFixups.erase(fixup);
+            }
+            else
+            {
+                *fixup->destination = resolvedPointer;
+                fixup = g_switchPointerAliasFixups.erase(fixup);
+            }
         }
         else
         {

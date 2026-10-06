@@ -1018,9 +1018,14 @@ void __cdecl Load_XAssetArrayCustom(int32_t count)
         // Resolve aliases that appeared before their inline asset. The native
         // slot is filled when that asset finishes loading, so retry pending
         // references after each top-level record.
+#ifdef __SWITCH__
+        g_switchDbStage = "asset/fixup";
+#endif
         DB_FixupSwitchPointerAliases();
 #ifdef __SWITCH__
+        g_switchDbStage = "asset/deferred_images";
         DB_FlushSwitchDeferredImageAssets();
+        g_switchDbStage = "asset/complete";
 #endif
 
         if (i == 1507 && serialized.type == ASSET_TYPE_XANIMPARTS)
