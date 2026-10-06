@@ -435,6 +435,18 @@ static void SwitchPath(char *dst, size_t dstSize, const char *base, const char *
 }
 
 #ifdef __SWITCH__
+bool __cdecl FS_SwitchRootFileExists(const char *path)
+{
+    if (!path || !*path)
+        return false;
+
+    char resolved[256];
+    std::snprintf(resolved, sizeof(resolved), "%s/%s", kSwitchRoot, path);
+
+    struct stat st{};
+    return stat(resolved, &st) == 0 && S_ISREG(st.st_mode);
+}
+
 bool __cdecl FS_SwitchLanguageHasAssets(int iLanguage)
 {
     if (iLanguage < 0 || iLanguage >= 15)
