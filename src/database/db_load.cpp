@@ -7390,9 +7390,10 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     {
         if (serialized.remappedTechniqueSet == UINT32_MAX)
         {
-            // The original loader does not recursively load this field here;
-            // preserve it as null on Switch until a use of the remap is needed.
-            varMaterialTechniqueSet->remappedTechniqueSet = nullptr;
+            // The serialized -1 value denotes the inline/current TechniqueSet.
+            // Runtime Material_GetTechniqueSet() dereferences remappedTechniqueSet,
+            // so the native ARM64 object must self-map instead of retaining null.
+            varMaterialTechniqueSet->remappedTechniqueSet = varMaterialTechniqueSet;
         }
         else
         {
