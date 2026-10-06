@@ -950,8 +950,8 @@ bool VulkanBackend::CreateBuffer(
 
     if (vkBindBufferMemory(m_device, *buffer, *memory, 0) != VK_SUCCESS)
     {
-        vkFreeMemory(m_device, *memory, nullptr);
         vkDestroyBuffer(m_device, *buffer, nullptr);
+        vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
         *buffer = VK_NULL_HANDLE;
         return false;
@@ -1047,8 +1047,8 @@ bool VulkanBackend::CreateImage2D(
     viewInfo.subresourceRange.layerCount = 1;
     if (vkCreateImageView(m_device, &viewInfo, nullptr, view) != VK_SUCCESS)
     {
-        vkFreeMemory(m_device, *memory, nullptr);
         vkDestroyImage(m_device, *image, nullptr);
+        vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
         return false;
