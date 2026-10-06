@@ -5,6 +5,11 @@
 #include <qcommon/qcommon.h>
 #include <gfx_d3d/r_buffers.h>
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+extern const char * volatile g_switchDbStage;
+#endif
+
 int32_t g_block_mem_type[9] =
 { 0, 1, 1, 2, 1, 1, 2, 2, 2 };
 
@@ -87,13 +92,36 @@ void __cdecl DB_AllocXZoneMemory(
     uint8_t *buf; // [esp+2Ch] [ebp-8h]
     uint32_t size; // [esp+30h] [ebp-4h]
 
+#ifdef __SWITCH__
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][DB MEM] enter blockSize=%p filename=%p zoneMem=%p allocType=%u\\n",
+            static_cast<void *>(blockSize),
+            static_cast<const void *>(filename),
+            static_cast<void *>(zoneMem),
+            static_cast<unsigned>(allocType));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     for (blockIndex = 0; blockIndex < 9; ++blockIndex)
     {
-        iassert(zoneMem->blocks[blockIndex].size == 0);
+#ifdef __SWITCH__
+        g_switchDbStage = "file/zone_alloc/block_check";
+#endif
+        iassert(zoneMem && zoneMem->blocks[blockIndex].size == 0);
+#ifdef __SWITCH__
+        g_switchDbStage = "file/zone_alloc/block_size";
+#endif
         size = blockSize[blockIndex];
         if (size)
         {
 #ifdef __SWITCH__
+            g_switchDbStage = "file/zone_alloc/before_log";
+#endif
             Com_Printf(CON_CHANNEL_SYSTEM,
                 "Switch PMem alloc begin: zone=%s block=%u name=%s size=%u type=%u allocType=%u\n",
                 filename,
@@ -102,6 +130,8 @@ void __cdecl DB_AllocXZoneMemory(
                 size,
                 static_cast<unsigned>(g_block_mem_type[blockIndex]),
                 allocType);
+#ifdef __SWITCH__
+            g_switchDbStage = "file/zone_alloc/before_memalloc";
 #endif
             buf = DB_MemAlloc(size, g_block_mem_type[blockIndex], allocType);
 #ifdef __SWITCH__
@@ -124,6 +154,9 @@ void __cdecl DB_AllocXZoneMemory(
             }
             zoneMem->blocks[blockIndex].size = size;
             zoneMem->blocks[blockIndex].data = buf;
+#ifdef __SWITCH__
+            g_switchDbStage = "file/zone_alloc/block_done";
+#endif
         }
     }
     if (zoneMem->vertexBuffer)
