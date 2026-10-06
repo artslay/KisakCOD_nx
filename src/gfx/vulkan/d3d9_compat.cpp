@@ -327,15 +327,15 @@ bool PatchFragmentShaderForAlphaTest(
             if (ins[2] == SpvDecorationSpecId)
                 usedSpecIds.insert(ins[3]);
         }
-        else if (op == SpvTypeBool && wc >= 2)
+        else if (op == SpvOpTypeBool && wc >= 2)
         {
             boolType = ins[1];
         }
-        else if (op == SpvTypeInt && wc >= 4 && ins[2] == 32 && ins[3] == 1)
+        else if (op == SpvOpTypeInt && wc >= 4 && ins[2] == 32 && ins[3] == 1)
         {
             intType = ins[1];
         }
-        else if (op == SpvTypeFloat && wc >= 3 && ins[2] == 32 && !floatType)
+        else if (op == SpvOpTypeFloat && wc >= 3 && ins[2] == 32 && !floatType)
         {
             floatType = ins[1];
         }
@@ -395,9 +395,9 @@ bool PatchFragmentShaderForAlphaTest(
 
         if (op == SpvOpVariable && wc >= 4 && ins[2] == outputVarId)
             outputVarType = ins[1];
-        else if (op == SpvTypePointer && wc >= 4 && ins[1] == outputVarType)
+        else if (op == SpvOpTypePointer && wc >= 4 && ins[1] == outputVarType)
             outputValueType = ins[3];
-        else if (op == SpvTypeVector && wc >= 4 && ins[1] == outputValueType && ins[3] == 4)
+        else if (op == SpvOpTypeVector && wc >= 4 && ins[1] == outputValueType && ins[3] == 4)
             floatType = ins[2];
 
         i += wc;
@@ -1193,7 +1193,7 @@ HRESULT IDirect3DDevice9::CreateVertexShader(
     if (!out || !bytecode || !bytecodeSize)
         return E_FAIL;
 
-    MOJOSHADER_parseData *parse = MOJOSHADER_parse(
+    const MOJOSHADER_parseData *parse = MOJOSHADER_parse(
         MOJOSHADER_PROFILE_SPIRV,
         "main",
         static_cast<const unsigned char *>(bytecode),
@@ -1224,7 +1224,7 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
     if (!out || !bytecode || !bytecodeSize)
         return E_FAIL;
 
-    MOJOSHADER_parseData *parse = MOJOSHADER_parse(
+    const MOJOSHADER_parseData *parse = MOJOSHADER_parse(
         MOJOSHADER_PROFILE_SPIRV,
         "main",
         static_cast<const unsigned char *>(bytecode),
