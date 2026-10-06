@@ -3037,18 +3037,36 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     if (switchTraceTechset4026)
     {
         char trace[448];
+        const MaterialTechniqueSet *techset4026 =
+            newEntry->entry.asset.header.techniqueSet;
+        const char *directName4026 =
+            techset4026 ? techset4026->name : nullptr;
+        const void *nameHandler4026 =
+            DB_XAssetGetNameHandler[type];
         std::snprintf(
             trace,
             sizeof(trace),
             "[KisakCOD][TECHSET4026] registry-before-name entry=%p asset=%p "
-            "header=%p data=%p sizeofTS=%zu stage=%s\n",
+            "header=%p data=%p type=%u handler=%p techset=%p directName=%p "
+            "directRemap=%p directTech2=%p sizeofTS=%zu stage=%s\n",
             static_cast<void *>(newEntry),
             static_cast<void *>(&newEntry->entry.asset),
             static_cast<void *>(&newEntry->entry.asset.header),
             newEntry->entry.asset.header.data,
+            static_cast<unsigned>(type),
+            nameHandler4026,
+            static_cast<const void *>(techset4026),
+            static_cast<const void *>(directName4026),
+            techset4026
+                ? static_cast<const void *>(techset4026->remappedTechniqueSet)
+                : nullptr,
+            techset4026
+                ? static_cast<const void *>(techset4026->techniques[2])
+                : nullptr,
             sizeof(MaterialTechniqueSet),
             g_switchDbStage ? g_switchDbStage : "");
         Switch_LogWrite(trace);
+        g_switchDbStage = "asset/name_call";
     }
     if (g_switchCurrentAssetIndex == 1126 &&
         g_switchCurrentAssetRawType == 31u)
@@ -3078,6 +3096,18 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     else
         name = DB_GetXAssetName(&newEntry->entry.asset);
 #ifdef __SWITCH__
+    if (switchTraceTechset4026)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TECHSET4026] registry-after-name name=%p\n",
+            static_cast<const void *>(name));
+        Switch_LogWrite(trace);
+        g_switchDbStage = "asset/name_return";
+    }
+#endif
     if (type == ASSET_TYPE_FX &&
         g_switchCurrentAssetIndex >= 4505 &&
         g_switchCurrentAssetIndex <= 4510 &&
