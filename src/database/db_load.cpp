@@ -5729,13 +5729,16 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
             Load_GfxImage(1);
 
 
-            // Keep the native pointer in a local variable.  Do not reload it
-            // from the serialized/native slot after Load_GfxImage(), because
-            // that slot may only have contained the original 32-bit sentinel.
-            XAssetHeader imageHeader{};
-            imageHeader.image = nativeImage;
+            // Publish the widened native pointer into the stable runtime
+            // slot before asset registration. Load_GfxImageAsset() may defer
+            // registration until the forward name is resolved; the deferred
+            // queue must never retain the address of a stack-local header.
+            std::memcpy(
+                reinterpret_cast<uint8_t *>(varGfxImagePtr),
+                &nativeImage,
+                sizeof(nativeImage));
 
-            Load_GfxImageAsset(&imageHeader);
+            Load_GfxImageAsset(varGfxImagePtr);
 
             if (traceUiImagePointer)
             {
@@ -5756,33 +5759,11 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
                 g_switchDbStage = "image/ptr_store";
             }
 
-            // Store the fully widened native pointer back into the runtime
-            // XAsset header slot only after all nested asset work is complete.
-#ifdef __SWITCH__
-            if (traceUiImagePointer)
-            {
-                char trace[256];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][UI IMAGE] before ptr memcpy dst=%p src=%p\n",
-                    static_cast<void *>(varGfxImagePtr),
-                    static_cast<void *>(&imageHeader.image));
-                Switch_LogWrite(trace);
-            }
-#endif
-            std::memcpy(
-                reinterpret_cast<uint8_t *>(varGfxImagePtr),
-                &imageHeader.image,
-                sizeof(imageHeader.image));
-#ifdef __SWITCH__
-            if (traceUiImagePointer)
-                Switch_LogWrite("[KisakCOD][UI IMAGE] after ptr memcpy\n");
-#endif
-
-
+            // The stable runtime slot already contains the widened native
+            // pointer. If this was an INSERT reference, publish that pointer
+            // through the normal DB_InsertPointer destination as well.
             if (inserted)
-                *inserted = imageHeader.image;
+                *inserted = *varGfxImagePtr;
 
 #ifdef __SWITCH__
             if (traceUiImagePointer)
