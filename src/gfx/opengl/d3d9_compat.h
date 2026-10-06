@@ -997,12 +997,6 @@ public:
             if (stage == 0)
                 m_texture0Bound = tex->object != 0;
             glBindTexture(tex->target, tex->object);
-            if (stage != 0)
-            {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(tex->target, tex->object);
-                glActiveTexture(GL_TEXTURE0 + stage);
-            }
         }
         else
         {
@@ -1010,12 +1004,6 @@ public:
             if (stage == 0)
                 m_texture0Bound = false;
             glBindTexture(GL_TEXTURE_2D, 0);
-            if (stage != 0)
-            {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, 0);
-                glActiveTexture(GL_TEXTURE0 + stage);
-            }
         }
         if (m_program)
         {
