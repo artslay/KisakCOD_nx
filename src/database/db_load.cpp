@@ -5386,11 +5386,81 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         Switch_LogWrite(trace);
     }
 #endif
-    Load_Stream(1, (unsigned char*)varGfxImageLoadDef, 16);
-#ifdef __SWITCH__
-    // Capture an invalid loaddef header before its resourceSize becomes an
-    // enormous raw-stream read. This is restricted to image assets and does
-    // not alter the loader's normal data path.
+    bool switchSkipImagePayload = false;
+    if (g_switchCurrentAssetRawType == 4u &&
+        g_switchCurrentAssetIndex >= 0 &&
+        g_switchCurrentAssetIndex < INT32_MAX)
+    {
+        const uint8_t *raw =
+            reinterpret_cast<const uint8_t *>(varGfxImageLoadDef);
+
+        auto readU16LE = [](const uint8_t *p) -> uint16_t {
+            return static_cast<uint16_t>(
+                static_cast<uint16_t>(p[0]) |
+                (static_cast<uint16_t>(p[1]) << 8));
+        };
+        auto readU32LE = [](const uint8_t *p) -> uint32_t {
+            return static_cast<uint32_t>(p[0]) |
+                   (static_cast<uint32_t>(p[1]) << 8) |
+                   (static_cast<uint32_t>(p[2]) << 16) |
+                   (static_cast<uint32_t>(p[3]) << 24);
+        };
+
+        const uint16_t width = readU16LE(raw + 1);
+        const uint16_t height = readU16LE(raw + 3);
+        const uint16_t depth = readU16LE(raw + 5);
+        const uint32_t format = readU32LE(raw + 7);
+        const uint32_t resourceSize = readU32LE(raw + 11);
+
+        // Some CoD4/SP common-image records use a compact zero-resource form:
+        // levelCount, dimensions[3], format and resourceSize are packed without
+        // the unused flags byte. The observed record is:
+        //   00 | 0001 0001 0001 | DXT1 | 00000000 | 3a
+        // The final byte is padding/next metadata and must not become part of
+        // resourceSize. Recognize this only when the dimensions match the
+        // already-translated GfxImage and the resource is explicitly empty.
+        const bool knownDxtFormat =
+            format == 0x31545844u || // D3DFMT_DXT1
+            format == 0x33545844u || // D3DFMT_DXT3
+            format == 0x35545844u;    // D3DFMT_DXT5
+        const bool compactEmpty =
+            raw[0] == 0 &&
+            width == varGfxImage->width &&
+            height == varGfxImage->height &&
+            depth == varGfxImage->depth &&
+            knownDxtFormat &&
+            resourceSize == 0;
+
+        if (compactEmpty)
+        {
+            varGfxImageLoadDef->levelCount = 0;
+            varGfxImageLoadDef->flags = 0;
+            varGfxImageLoadDef->dimensions[0] =
+                static_cast<__int16>(width);
+            varGfxImageLoadDef->dimensions[1] =
+                static_cast<__int16>(height);
+            varGfxImageLoadDef->dimensions[2] =
+                static_cast<__int16>(depth);
+            varGfxImageLoadDef->format =
+                static_cast<_D3DFORMAT>(format);
+            varGfxImageLoadDef->resourceSize = 0;
+            switchSkipImagePayload = true;
+
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][GFXIMAGE LOADDEF COMPACT] asset=%d dims=%ux%ux%u format=%08x resource=0 cursor=%08x\n",
+                g_switchCurrentAssetIndex,
+                static_cast<unsigned>(width),
+                static_cast<unsigned>(height),
+                static_cast<unsigned>(depth),
+                static_cast<unsigned>(format),
+                Switch_GetStreamCursorOffset(0));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     if (g_switchCurrentAssetRawType == 4u &&
         static_cast<uint32_t>(varGfxImageLoadDef->resourceSize) > 0x1000000u)
     {
@@ -5481,6 +5551,10 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             "%s",
             "DB_GetStreamPos() == reinterpret_cast< byte * >( varGfxImageLoadDef->data )");
     varbyte = &varGfxImageLoadDef->data[0];
+#ifdef __SWITCH__
+    if (switchSkipImagePayload)
+        return;
+#endif
     Load_byteArray(1, varGfxImageLoadDef->resourceSize);
 }
 
