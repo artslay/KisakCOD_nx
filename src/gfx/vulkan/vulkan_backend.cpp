@@ -158,7 +158,7 @@ void VulkanBackend::Shutdown()
     if (m_device)
         vkDeviceWaitIdle(m_device);
 
-    if (m_dummySampler) vkDestroySampler(m_device, m_dummySampler, nullptr);
+    // Dummy sampler is owned by m_samplers; destroy it only there.
     m_dummySampler = VK_NULL_HANDLE;
     if (m_dummyImage)
         DestroyImage(m_dummyImage, m_dummyMemory, m_dummyImageView);
@@ -180,8 +180,10 @@ void VulkanBackend::Shutdown()
 
     if (m_uniformMapped && m_uniformRingMemory)
         vkUnmapMemory(m_device, m_uniformRingMemory);
-    if (m_uniformRing) vkDestroyBuffer(m_device, m_uniformRing, nullptr);
-    if (m_uniformRingMemory) vkFreeMemory(m_device, m_uniformRingMemory, nullptr);
+    if (m_uniformRing)
+        vkDestroyBuffer(m_device, m_uniformRing, nullptr);
+    if (m_uniformRingMemory)
+        vkFreeMemory(m_device, m_uniformRingMemory, nullptr);
 
     if (m_sync.imageAvailable) vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
     if (m_sync.renderFinished) vkDestroySemaphore(m_device, m_sync.renderFinished, nullptr);
@@ -959,8 +961,8 @@ bool VulkanBackend::CreateBuffer(
     {
         if (vkMapMemory(m_device, *memory, 0, size, 0, mapped) != VK_SUCCESS)
         {
-            vkFreeMemory(m_device, *memory, nullptr);
             vkDestroyBuffer(m_device, *buffer, nullptr);
+            vkFreeMemory(m_device, *memory, nullptr);
             *memory = VK_NULL_HANDLE;
             *buffer = VK_NULL_HANDLE;
             return false;
@@ -972,8 +974,8 @@ bool VulkanBackend::CreateBuffer(
 
 void VulkanBackend::DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory)
 {
-    if (memory) vkFreeMemory(m_device, memory, nullptr);
     if (buffer) vkDestroyBuffer(m_device, buffer, nullptr);
+    if (memory) vkFreeMemory(m_device, memory, nullptr);
 }
 
 bool VulkanBackend::CreateImage2D(
@@ -1028,8 +1030,8 @@ bool VulkanBackend::CreateImage2D(
 
     if (vkBindImageMemory(m_device, *image, *memory, 0) != VK_SUCCESS)
     {
-        vkFreeMemory(m_device, *memory, nullptr);
         vkDestroyImage(m_device, *image, nullptr);
+        vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
         return false;
@@ -1194,8 +1196,8 @@ bool VulkanBackend::CreateImage3D(
     viewInfo.subresourceRange.layerCount = 1;
     if (vkCreateImageView(m_device, &viewInfo, nullptr, view) != VK_SUCCESS)
     {
-        vkFreeMemory(m_device, *memory, nullptr);
         vkDestroyImage(m_device, *image, nullptr);
+        vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
         return false;
@@ -1206,8 +1208,8 @@ bool VulkanBackend::CreateImage3D(
 void VulkanBackend::DestroyImage(VkImage image, VkDeviceMemory memory, VkImageView view)
 {
     if (view) vkDestroyImageView(m_device, view, nullptr);
-    if (memory) vkFreeMemory(m_device, memory, nullptr);
     if (image) vkDestroyImage(m_device, image, nullptr);
+    if (memory) vkFreeMemory(m_device, memory, nullptr);
 }
 
 void VulkanBackend::TransitionImage(
