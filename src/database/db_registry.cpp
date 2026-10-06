@@ -3218,7 +3218,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         const uintptr_t modelValue =
             newEntry->entry.asset.header.model
                 ? reinterpret_cast<uintptr_t>(
-                      newEntry->entry.asset.header.xmodel->name)
+                      newEntry->entry.asset.header.model->name)
                 : 0;
 
         bool nameInStream = false;
