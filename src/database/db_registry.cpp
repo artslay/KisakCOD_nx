@@ -3209,6 +3209,66 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     }
     g_switchDbStage = "asset/name_deref";
 #endif
+#ifdef __SWITCH__
+    if (type == ASSET_TYPE_XMODEL &&
+        g_switchCurrentAssetIndex == 4083 &&
+        g_switchCurrentAssetRawType == 3u)
+    {
+        const uintptr_t nameValue = reinterpret_cast<uintptr_t>(name);
+        const uintptr_t modelValue =
+            newEntry->entry.asset.header.xmodel
+                ? reinterpret_cast<uintptr_t>(
+                      newEntry->entry.asset.header.xmodel->name)
+                : 0;
+
+        bool nameInStream = false;
+        uint32_t nameStream = UINT32_MAX;
+        uint32_t nameOffset = UINT32_MAX;
+
+        if (nameValue && g_streamBlocks)
+        {
+            for (uint32_t i = 0;
+                 i < ARRAY_COUNT(g_streamPosArray);
+                 ++i)
+            {
+                if (!g_streamBlocks[i].data)
+                    continue;
+                const uintptr_t base =
+                    reinterpret_cast<uintptr_t>(g_streamBlocks[i].data);
+                const uintptr_t end =
+                    base + g_streamBlocks[i].size;
+                if (nameValue >= base && nameValue < end)
+                {
+                    nameInStream = true;
+                    nameStream = i;
+                    nameOffset =
+                        static_cast<uint32_t>(nameValue - base);
+                    break;
+                }
+            }
+        }
+
+        char trace[448];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[SWITCH XMODEL4083 NAME] headerModel=%p modelName=%p registryName=%p "
+            "modelLow=%08x registryLow=%08x rawHeader=%08x stream=%u offset=%08x inStream=%u
+",
+            static_cast<void *>(newEntry->entry.asset.header.xmodel),
+            reinterpret_cast<const void *>(modelValue),
+            reinterpret_cast<const void *>(nameValue),
+            static_cast<unsigned>(modelValue),
+            static_cast<unsigned>(nameValue),
+            static_cast<unsigned>(g_switchCurrentAssetHeader),
+            static_cast<unsigned>(nameStream),
+            static_cast<unsigned>(nameOffset),
+            nameInStream ? 1u : 0u);
+        Switch_LogWrite(trace);
+
+        g_switchDbStage = "xmodel/name_deref";
+    }
+#endif
     v2 = *name;
     isStubAsset = v2 == ',';
     if (v2 == ',')
