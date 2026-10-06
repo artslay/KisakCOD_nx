@@ -7742,6 +7742,8 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
             // The parent Material already has the virtual block active.
             // Align the inline serialized object within that same block.
             DB_AllocStreamPos(3);
+            const uintptr_t serializedTechniqueSet =
+                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
             if (traceCinematic)
                 Switch_LogWrite("[SWITCH DB FIND] techset ptr -> inline\n");
             Switch_LogWrite("[SWITCH MATERIAL] techset inline begin\n");
@@ -7767,8 +7769,26 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
             Switch_LogWrite("[SWITCH MATERIAL] techset payload done\n");
 #endif
             Load_MaterialTechniqueSetAsset((XAssetHeader *)varMaterialTechniqueSetPtr);
+#ifdef __SWITCH__
+            // A serialized -1 FOLLOWING TechniqueSet has no DB_InsertPointer
+            // slot. Positive references can nevertheless target its stream-0
+            // object address, so register the widened ARM64 object here.
+            // -2 INSERT references are also mapped to the same object start;
+            // DB_InsertPointer separately tracks the serialized pointer slot.
+            DB_RegisterSwitchPointerAlias(
+                serializedTechniqueSet,
+                reinterpret_cast<uintptr_t>(varMaterialTechniqueSet));
+
             if (inserted)
                 *inserted = *varMaterialTechniqueSetPtr;
+
+            // A material loaded before this TechniqueSet may have a forward
+            // reference waiting in the Switch pointer-fixup list.
+            DB_FixupSwitchPointerAliases();
+#else
+            if (inserted)
+                *inserted = *varMaterialTechniqueSetPtr;
+#endif
         }
         else
         {
@@ -7898,6 +7918,7 @@ void __cdecl Load_Material(bool atStreamStart)
             Switch_GetStreamCursorOffset(4),
             serialized.name,
             serialized.techniqueSet,
+            serialized.techniqueSet,
             serialized.textureTable,
             static_cast<unsigned>(serialized.textureCount),
             serialized.constantTable,
@@ -7980,7 +8001,7 @@ void __cdecl Load_Material(bool atStreamStart)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][FONT MATERIAL LOAD] name=%s serializedTex=%08x/%u serializedConst=%08x/%u serializedState=%08x/%u native=%p\n",
+            "[KisakCOD][FONT MATERIAL LOAD] name=%s serializedTech=%08x serializedTex=%08x/%u serializedConst=%08x/%u serializedState=%08x/%u native=%p\n",
             switchMaterialNameForTrace,
             serialized.textureTable,
             static_cast<unsigned>(serialized.textureCount),
