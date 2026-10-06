@@ -71,6 +71,47 @@ Font_s *__cdecl R_RegisterFont_FastFile(const char *fontName)
 {
     Font_s *font = DB_FindXAssetHeader(ASSET_TYPE_FONT, fontName).font;
 #ifdef __SWITCH__
+    // The serialized Font_s stores Material* handles as 32-bit zone aliases.
+    // DB_AddXAsset() can replace the temporary loader object with the canonical
+    // Font_s from the native asset pool, so unresolved aliases on the temporary
+    // object must not be the final source of truth. The retail code_post_gfx
+    // zone contains the two actual font materials used by the nine standard
+    // fonts: fonts/gamefonts_pc(_glow) and fonts/devfonts(_glow).
+    if (font && font->material == nullptr)
+    {
+        const bool devFont =
+            fontName &&
+            (!I_stricmp(fontName, "fonts/bigdevfont") ||
+             !I_stricmp(fontName, "fonts/smalldevfont"));
+
+        const char *materialName =
+            devFont ? "fonts/devfonts" : "fonts/gamefonts_pc";
+        const char *glowMaterialName =
+            devFont ? "fonts/devfonts_glow" : "fonts/gamefonts_pc_glow";
+
+        Material *material =
+            DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, materialName).material;
+        Material *glowMaterial =
+            DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, glowMaterialName).material;
+
+        if (material)
+            font->material = material;
+        if (glowMaterial)
+            font->glowMaterial = glowMaterial;
+
+        char trace[448];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FONT FALLBACK] name=%s font=%p material=%p glow=%p dev=%u\n",
+            fontName ? fontName : "<null>",
+            static_cast<void *>(font),
+            static_cast<void *>(font->material),
+            static_cast<void *>(font->glowMaterial),
+            devFont ? 1u : 0u);
+        Switch_LogWrite(trace);
+    }
+
     static uint32_t switchFontTraceCount = 0;
     if (switchFontTraceCount < 16)
     {
