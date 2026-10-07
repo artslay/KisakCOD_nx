@@ -5721,21 +5721,33 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                     if (marker == UINT32_MAX &&
                         nameAddress + sizeof(uint32_t) == cursorAddress)
                     {
-                        // This is a serialized XString slot that already
-                        // points at an inline string location in stream 4.
-                        // Load_XString(0) must not consume a new byte from the
-                        // global fastfile stream here: doing so steals the
-                        // first byte of the following stream-0 object.
+                        // The image name is the explicit FOLLOWING (-1) form:
+                        // the four bytes immediately before the current stream-4
+                        // cursor are the marker and the string begins exactly
+                        // at the cursor. Do not resolve this through the generic
+                        // serialized-offset resolver. The bytes of the string
+                        // may not be populated yet, so queue the image until
+                        // Load_DelayStream() has materialized block 4.
                         const uintptr_t inlineNameAddress =
                             nameAddress + sizeof(uint32_t);
-                        const uintptr_t resolvedInlineName =
-                            DB_ResolveSwitchSerializedString(inlineNameAddress);
                         varGfxImage->name =
-                            reinterpret_cast<const char *>(
-                                resolvedInlineName
-                                    ? resolvedInlineName
-                                    : inlineNameAddress);
+                            reinterpret_cast<const char *>(inlineNameAddress);
+                        varGfxImage->delayLoadPixels = true;
                         loadedAliasedInlineName = true;
+
+                        char trace[384];
+                        std::snprintf(
+                            trace,
+                            sizeof(trace),
+                            "[KisakCOD][IMAGE INLINE NAME] asset=%d marker=%08x "
+                            "nameOffset=%08x cursor=%08x deferred=1\n",
+                            g_switchCurrentAssetIndex,
+                            marker,
+                            static_cast<unsigned>(
+                                inlineNameAddress - block4Base),
+                            static_cast<unsigned>(
+                                cursorAddress - block4Base));
+                        Switch_LogWrite(trace);
                     }
                 }
             }
