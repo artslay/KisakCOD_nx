@@ -5674,20 +5674,24 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         DB_PushStreamPos(4);
 
 #ifdef __SWITCH__
-        const bool traceImageStringProbe =
-            g_switchCurrentAssetRawType == ASSET_TYPE_IMAGE &&
-            g_switchCurrentAssetIndex >= 100 &&
-            g_switchCurrentAssetIndex <= 400;
+        static uint32_t switchDelayedImageStringProbeCount = 0;
+        const bool traceDelayedImageString =
+            serialized.delayLoadPixels != 0 &&
+            switchDelayedImageStringProbeCount < 64u;
 
-        if (traceImageStringProbe)
+        if (traceDelayedImageString)
         {
+            ++switchDelayedImageStringProbeCount;
+
             uintptr_t mappedName = 0;
             uint32_t mappedBlock = UINT32_MAX;
-            uint32_t mappedOffset = 0;
+            uint32_t mappedOffset = UINT32_MAX;
+
             if (serialized.name != 0 &&
                 serialized.name != UINT32_MAX)
             {
                 mappedName = DB_ConvertOffsetToPointerValue(serialized.name);
+
                 if (mappedName && g_streamBlocks)
                 {
                     for (uint32_t block = 0;
@@ -5701,6 +5705,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                             reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
                         const uintptr_t end =
                             base + g_streamBlocks[block].size;
+
                         if (mappedName >= base && mappedName < end)
                         {
                             mappedBlock = block;
@@ -5712,52 +5717,68 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 }
             }
 
-            char trace[768];
+            char trace[1024];
             int written = std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][XSTRING PROBE] asset=%d token=%08x cursor=%p b4=%08x mapped=%p block=%u offset=%08x",
+                "[KisakCOD][XSTRING DELAY PROBE] asset=%d rawType=%u "
+                "delay=%u token=%08x cursorB4=%08x mapped=%p block=%u "
+                "offset=%08x",
                 g_switchCurrentAssetIndex,
+                static_cast<unsigned>(g_switchCurrentAssetRawType),
+                static_cast<unsigned>(serialized.delayLoadPixels),
                 serialized.name,
-                static_cast<void *>(DB_GetStreamPos()),
                 Switch_GetStreamCursorOffset(4),
                 reinterpret_cast<const void *>(mappedName),
                 mappedBlock,
                 mappedOffset);
 
-            if (serialized.name == UINT32_MAX &&
-                g_streamBlocks &&
-                g_streamBlocks[4].data)
+            if (mappedBlock != UINT32_MAX)
             {
-                const uintptr_t cursor =
-                    reinterpret_cast<uintptr_t>(DB_GetStreamPos());
-                const uintptr_t base =
-                    reinterpret_cast<uintptr_t>(g_streamBlocks[4].data);
-                const uintptr_t end =
-                    base + g_streamBlocks[4].size;
-                if (cursor >= base && cursor < end)
+                const uint8_t *bytes =
+                    reinterpret_cast<const uint8_t *>(mappedName);
+                const uint32_t remaining =
+                    g_streamBlocks[mappedBlock].size - mappedOffset;
+                const uint32_t count =
+                    remaining < 16u ? remaining : 16u;
+
+                written += std::snprintf(
+                    trace + written,
+                    sizeof(trace) - static_cast<size_t>(written),
+                    " bytes:");
+
+                for (uint32_t i = 0;
+                     i < count &&
+                     static_cast<size_t>(written) + 4 < sizeof(trace);
+                     ++i)
                 {
-                    const size_t off =
-                        static_cast<size_t>(cursor - base);
-                    const size_t remaining =
-                        g_streamBlocks[4].size - off;
-                    const size_t count =
-                        remaining < 16u ? remaining : 16u;
-                    const uint8_t *bytes =
-                        reinterpret_cast<const uint8_t *>(cursor);
+                    written += std::snprintf(
+                        trace + written,
+                        sizeof(trace) - static_cast<size_t>(written),
+                        " %02x",
+                        static_cast<unsigned>(bytes[i]));
+                }
+
+                if (mappedBlock == 4u && mappedOffset > 0u)
+                {
+                    const uint8_t *baseBytes =
+                        g_streamBlocks[mappedBlock].data;
+                    const uint32_t beforeCount =
+                        mappedOffset < 8u ? mappedOffset : 8u;
 
                     written += std::snprintf(
                         trace + written,
                         sizeof(trace) - static_cast<size_t>(written),
-                        " inlineBytes=");
-                    for (size_t i = 0; i < count &&
-                         static_cast<size_t>(written) + 4 < sizeof(trace); ++i)
+                        " before:");
+
+                    for (uint32_t i = beforeCount; i > 0u; --i)
                     {
                         written += std::snprintf(
                             trace + written,
                             sizeof(trace) - static_cast<size_t>(written),
                             " %02x",
-                            static_cast<unsigned>(bytes[i]));
+                            static_cast<unsigned>(
+                                baseBytes[mappedOffset - i]));
                     }
                 }
             }
