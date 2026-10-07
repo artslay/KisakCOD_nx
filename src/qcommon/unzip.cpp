@@ -730,9 +730,9 @@ static int unzlocal_GetCurrentFileInfoInternal (unzFile file,
   return UNZ_OK if there is no problem.
 */
 extern int unzGetCurrentFileInfo (	unzFile file, unz_file_info *pfile_info,
-									char *szFileName, uLong fileNameBufferSize,
-									void *extraField, uLong extraFieldBufferSize,
-									char *szComment, uLong commentBufferSize)
+									char *szFileName, uint32_t fileNameBufferSize,
+									void *extraField, uint32_t extraFieldBufferSize,
+									char *szComment, uint32_t commentBufferSize)
 {
 	return unzlocal_GetCurrentFileInfoInternal(file,pfile_info,NULL,
 												szFileName,fileNameBufferSize,
