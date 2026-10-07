@@ -10662,12 +10662,54 @@ void __cdecl Mark_pathnode_tArray(int32_t count)
 
 void __cdecl Load_PathData(bool atStreamStart)
 {
+#ifdef __SWITCH__
+    const bool traceGw1529 =
+        g_switchCurrentAssetIndex == 1529 &&
+        g_switchCurrentAssetRawType == 1u;
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varPathData, 40);
+#ifdef __SWITCH__
+    if (traceGw1529)
+    {
+        char trace[512];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][GW1529] path begin b0=%08x b4=%08x "
+            "nodes=%u nodeToken=%08x baseToken=%08x chainCount=%u "
+            "chainFor=%08x nodeFor=%08x visBytes=%d pathVis=%08x "
+            "treeCount=%d tree=%08x\n",
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            varPathData->nodeCount,
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varPathData->nodes)),
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varPathData->basenodes)),
+            varPathData->chainNodeCount,
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varPathData->chainNodeForNode)),
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varPathData->nodeForChainNode)),
+            varPathData->visBytes,
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varPathData->pathVis)),
+            varPathData->nodeTreeCount,
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varPathData->nodeTree)));
+        Switch_LogRaw(trace);
+    }
+#endif
     if (varPathData->nodes)
     {
         varPathData->nodes = (pathnode_t *)AllocLoad_FxElemVisStateSample();
         varpathnode_t = varPathData->nodes;
         Load_pathnode_tArray(1, varPathData->nodeCount);
+#ifdef __SWITCH__
+        if (traceGw1529)
+        {
+            char trace[256];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][GW1529] after nodes b0=%08x b4=%08x count=%u\n",
+                Switch_GetStreamCursorOffset(0),
+                Switch_GetStreamCursorOffset(4),
+                varPathData->nodeCount);
+            Switch_LogRaw(trace);
+        }
+#endif
     }
     DB_PushStreamPos(1);
     if (varPathData->basenodes)
@@ -10677,29 +10719,82 @@ void __cdecl Load_PathData(bool atStreamStart)
         Load_pathbasenode_tArray(1, varPathData->nodeCount);
     }
     DB_PopStreamPos();
+#ifdef __SWITCH__
+    if (traceGw1529)
+    {
+        char trace[256];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][GW1529] after basenodes b0=%08x b4=%08x\n",
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4));
+        Switch_LogRaw(trace);
+    }
+#endif
     if (varPathData->chainNodeForNode)
     {
         varPathData->chainNodeForNode = (uint16_t *)AllocLoad_XBlendInfo();
         varUnsignedShort = varPathData->chainNodeForNode;
         Load_UnsignedShortArray(1, varPathData->nodeCount);
+#ifdef __SWITCH__
+        if (traceGw1529)
+        {
+            char trace[256];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][GW1529] after chainFor b0=%08x\n",
+                Switch_GetStreamCursorOffset(0));
+            Switch_LogRaw(trace);
+        }
+#endif
     }
     if (varPathData->nodeForChainNode)
     {
         varPathData->nodeForChainNode = (uint16_t *)AllocLoad_XBlendInfo();
         varUnsignedShort = varPathData->nodeForChainNode;
         Load_UnsignedShortArray(1, varPathData->nodeCount);
+#ifdef __SWITCH__
+        if (traceGw1529)
+        {
+            char trace[256];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][GW1529] after nodeFor b0=%08x\n",
+                Switch_GetStreamCursorOffset(0));
+            Switch_LogRaw(trace);
+        }
+#endif
     }
     if (varPathData->pathVis)
     {
         varPathData->pathVis = AllocLoad_raw_byte();
         varbyte = varPathData->pathVis;
         Load_byteArray(1, varPathData->visBytes);
+#ifdef __SWITCH__
+        if (traceGw1529)
+        {
+            char trace[256];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][GW1529] after pathVis b0=%08x bytes=%d\n",
+                Switch_GetStreamCursorOffset(0),
+                varPathData->visBytes);
+            Switch_LogRaw(trace);
+        }
+#endif
     }
     if (varPathData->nodeTree)
     {
         varPathData->nodeTree = (pathnode_tree_t *)AllocLoad_FxElemVisStateSample();
         varpathnode_tree_t = varPathData->nodeTree;
         Load_pathnode_tree_tArray(1, varPathData->nodeTreeCount);
+#ifdef __SWITCH__
+        if (traceGw1529)
+        {
+            char trace[256];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][GW1529] after nodeTree b0=%08x count=%d\n",
+                Switch_GetStreamCursorOffset(0),
+                varPathData->nodeTreeCount);
+            Switch_LogRaw(trace);
+        }
+#endif
     }
 }
 
@@ -10713,11 +10808,36 @@ void __cdecl Load_GameWorldSp(bool atStreamStart)
 #else
     Load_Stream(atStreamStart, (uint8_t *)varGameWorldSp, 44);
 #endif
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 1529 &&
+        g_switchCurrentAssetRawType == 1u)
+    {
+        char trace[256];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][GW1529] header done b0=%08x b4=%08x name=%08x\n",
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(varGameWorldSp->name)));
+        Switch_LogRaw(trace);
+    }
+#endif
     DB_PushStreamPos(4);
     varXString = &varGameWorldSp->name;
     Load_XString(0);
     varPathData = &varGameWorldSp->path;
     Load_PathData(0);
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 1529 &&
+        g_switchCurrentAssetRawType == 1u)
+    {
+        char trace[256];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][GW1529] path done b0=%08x b4=%08x\n",
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4));
+        Switch_LogRaw(trace);
+    }
+#endif
     DB_PopStreamPos();
 }
 
