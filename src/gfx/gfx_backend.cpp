@@ -10,5 +10,8 @@ std::unique_ptr<IGfxBackend> CreateVulkanBackend()
 
 std::unique_ptr<IGfxBackend> CreateDirectX9Backend()
 {
-    return nullptr;
+    // The Switch port has a single hardware renderer: Vulkan.
+    // Keep the legacy factory symbol for shared call sites, but never
+    // return a null graphics backend on the Switch build.
+    return CreateVulkanBackend();
 }
