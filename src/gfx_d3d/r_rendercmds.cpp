@@ -773,7 +773,7 @@ void __cdecl R_AddCmdDrawStretchPic(
         actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
-    cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_FIRST_NONCRITICAL, 44);
+    cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_FIRST_NONCRITICAL, sizeof(GfxCmdStretchPic));
     if (cmd)
     {
         cmd->material = actualMaterial;
@@ -875,7 +875,7 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
         actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
-    cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_STRETCH_PIC_FLIP_ST, 44);
+    cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_STRETCH_PIC_FLIP_ST, sizeof(GfxCmdStretchPic));
     if (cmd)
     {
         cmd->material = actualMaterial;
@@ -907,7 +907,7 @@ void __cdecl R_AddCmdDrawStretchPicRotateXY(
     Material *defaultMaterial; // [esp+4h] [ebp-8h]
     GfxCmdStretchPicRotateXY *cmd; // [esp+8h] [ebp-4h]
 
-    cmd = (GfxCmdStretchPicRotateXY *)R_GetCommandBuffer(RC_STRETCH_PIC_ROTATE_XY, 48);
+    cmd = (GfxCmdStretchPicRotateXY *)R_GetCommandBuffer(RC_STRETCH_PIC_ROTATE_XY, sizeof(GfxCmdStretchPicRotateXY));
     if (cmd)
     {
         if (material)
@@ -945,7 +945,7 @@ void __cdecl R_AddCmdDrawStretchPicRotateST(
     Material *defaultMaterial; // [esp+4h] [ebp-8h]
     GfxCmdStretchPicRotateST *cmd; // [esp+8h] [ebp-4h]
 
-    cmd = (GfxCmdStretchPicRotateST *)R_GetCommandBuffer(RC_STRETCH_PIC_ROTATE_ST, 52);
+    cmd = (GfxCmdStretchPicRotateST *)R_GetCommandBuffer(RC_STRETCH_PIC_ROTATE_ST, sizeof(GfxCmdStretchPicRotateST));
     if (cmd)
     {
         if (material)
@@ -1364,7 +1364,7 @@ void __cdecl R_AddCmdDrawQuadPic(const float (*verts)[2], const float *color, Ma
     int cornerIndex; // [esp+Ch] [ebp-8h]
     GfxCmdDrawQuadPic *cmd; // [esp+10h] [ebp-4h]
 
-    cmd = (GfxCmdDrawQuadPic *)R_GetCommandBuffer(RC_DRAW_QUAD_PIC, 44);
+    cmd = (GfxCmdDrawQuadPic *)R_GetCommandBuffer(RC_DRAW_QUAD_PIC, sizeof(GfxCmdDrawQuadPic));
     if (cmd)
     {
         if (material)
