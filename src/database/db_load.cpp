@@ -7996,10 +7996,46 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
     else
     {
-        varMaterialTechniqueSet->remappedTechniqueSet =
-            reinterpret_cast<MaterialTechniqueSet *>(
-                DB_ConvertOffsetToPointerValue(
-                    serialized.remappedTechniqueSet));
+        // Positive remap references are 32-bit serialized aliases. Resolve them
+        // through the widened Switch alias table rather than leaving a pointer
+        // into the serialized fastfile block.
+        const uintptr_t aliasSlot =
+            DB_ConvertOffsetToPointerValue(
+                serialized.remappedTechniqueSet);
+        uintptr_t resolvedPointer = 0;
+
+        if (aliasSlot)
+        {
+            bool resolved =
+                DB_ResolveSwitchPointerAlias(
+                    aliasSlot,
+                    &resolvedPointer);
+            if (!resolved)
+            {
+                resolved = DB_TryResolveSwitchSerializedAliasChain(
+                    aliasSlot,
+                    &resolvedPointer);
+            }
+
+            if (resolved && resolvedPointer >= 0x10000u)
+            {
+                varMaterialTechniqueSet->remappedTechniqueSet =
+                    reinterpret_cast<MaterialTechniqueSet *>(
+                        resolvedPointer);
+            }
+            else
+            {
+                varMaterialTechniqueSet->remappedTechniqueSet = nullptr;
+                DB_AddSwitchPointerAliasFixup(
+                    aliasSlot,
+                    reinterpret_cast<uintptr_t *>(
+                        &varMaterialTechniqueSet->remappedTechniqueSet));
+            }
+        }
+        else
+        {
+            varMaterialTechniqueSet->remappedTechniqueSet = nullptr;
+        }
     }
 
 #ifdef __SWITCH__
