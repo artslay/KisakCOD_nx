@@ -1999,9 +1999,13 @@ bool IDirect3DDevice9::EnsurePipeline()
     raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     raster.polygonMode = VK_POLYGON_MODE_FILL;
     raster.lineWidth = 1.0f;
+    // D3D9 cull values are: NONE=1, CW=0, CCW=2. With the
+    // Switch Vulkan coordinate convention used by the shader path, the
+    // corresponding Vulkan front-face is clockwise, so D3D9 CCW culling
+    // removes the Vulkan back faces, not the front faces.
     raster.cullMode = m_cullMode == 1
         ? VK_CULL_MODE_NONE
-        : (m_cullMode == 2 ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_BACK_BIT);
+        : (m_cullMode == 2 ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_FRONT_BIT);
     raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
     raster.depthBiasEnable = (m_depthBias != 0.0f || m_slopeDepthBias != 0.0f) ? VK_TRUE : VK_FALSE;
     raster.depthBiasConstantFactor = m_depthBias;
