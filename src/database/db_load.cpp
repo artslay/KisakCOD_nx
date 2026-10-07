@@ -5406,8 +5406,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         std::memcpy(&format, loaded + 8, sizeof(format));
         std::memcpy(&resourceSize, loaded + 12, sizeof(resourceSize));
 
-        char trace[512];
-        std::snprintf(
+        int written = std::snprintf(
             trace,
             sizeof(trace),
             "[KisakCOD][GFX LOADDEF] asset=%d rawType=%u start=%08x "
@@ -5436,46 +5435,15 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         std::snprintf(
             trace + written,
             sizeof(trace) - static_cast<size_t>(written),
-            "\\n");
-        Switch_LogRaw(trace);
-    }
-#endif
-
-
-
-
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex == 1530 &&
-        g_switchCurrentAssetRawType == ASSET_TYPE_MATERIAL)
-    {
-        const uint8_t *loaded = reinterpret_cast<const uint8_t *>(
-            varGfxImageLoadDef);
-        char trace[768];
-        int written = std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][GFX LOADDEF POST] asset=%d stream=%u offset=%08x ptr=%p fieldResource=%08x bytes:",
-            g_switchCurrentAssetIndex,
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            static_cast<const void *>(loaded),
-            static_cast<uint32_t>(varGfxImageLoadDef->resourceSize));
-        for (size_t i = 0; i < 16 && written > 0 &&
-             static_cast<size_t>(written) + 4 < sizeof(trace); ++i)
-        {
-            written += std::snprintf(
-                trace + written,
-                sizeof(trace) - static_cast<size_t>(written),
-                " %02x",
-                static_cast<unsigned>(loaded[i]));
-        }
-        std::snprintf(
-            trace + written,
-            sizeof(trace) - static_cast<size_t>(written),
             "\n");
         Switch_LogRaw(trace);
     }
 #endif
+
+
+
+
+
 
     if (DB_GetStreamPos() != varGfxImageLoadDef->data)
         MyAssertHandler(
