@@ -386,6 +386,9 @@ bool PatchFragmentShaderForAlphaTest(
     if (!outputVarId)
         return false;
 
+    // SPIR-V declarations are ordered with types before global variables, so
+    // resolve the output variable type first and follow its pointer/vector types
+    // in separate passes rather than relying on declaration order.
     for (size_t i = 5; i < words.size();)
     {
         uint32_t wc = 0;
@@ -395,16 +398,57 @@ bool PatchFragmentShaderForAlphaTest(
         const uint32_t *ins = &words[i];
 
         if (op == SpvOpVariable && wc >= 4 && ins[2] == outputVarId)
+        {
             outputVarType = ins[1];
-        else if (op == SpvOpTypePointer && wc >= 4 && ins[1] == outputVarType)
-            outputValueType = ins[3];
-        else if (op == SpvOpTypeVector && wc >= 4 && ins[1] == outputValueType && ins[3] == 4)
-            floatType = ins[2];
+            break;
+        }
 
         i += wc;
     }
 
-    if (!outputVarType || !outputValueType || !floatType)
+    if (!outputVarType)
+        return false;
+
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[i];
+
+        if (op == SpvOpTypePointer && wc >= 4 && ins[1] == outputVarType)
+        {
+            outputValueType = ins[3];
+            break;
+        }
+
+        i += wc;
+    }
+
+    if (!outputValueType)
+        return false;
+
+    // The fragment output used by CoD4 is expected to be a four-component
+    // 32-bit floating-point vector. Resolve its scalar type from the vector.
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[i];
+
+        if (op == SpvOpTypeVector && wc >= 4 && ins[1] == outputValueType && ins[3] == 4)
+        {
+            floatType = ins[2];
+            break;
+        }
+
+        i += wc;
+    }
+
+    if (!floatType)
         return false;
 
     if (!boolType)
