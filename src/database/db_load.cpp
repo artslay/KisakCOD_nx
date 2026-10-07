@@ -5380,93 +5380,12 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             "atStreamStart");
     iassert(OFFSET_TO_GfxImageLoadDef_DATA == 16);
 
-    bool compactEmpty = false;
-
-    // The normal IW3/COD4 record has a 16-byte header. Some SP/common
-    // records, however, omit the serialized flags byte and therefore have a
-    // 15-byte zero-resource header:
-    // levelCount | dimensions[3] | format | resourceSize
-    // Read 15 bytes first so we never consume the following stream-0 byte
-    // when that compact form is present.
-    Load_Stream(1, (unsigned char*)varGfxImageLoadDef, 15);
-
-#ifdef __SWITCH__
-    {
-        const uint8_t *raw =
-            reinterpret_cast<const uint8_t *>(varGfxImageLoadDef);
-
-        const uint16_t width =
-            static_cast<uint16_t>(raw[1]) |
-            (static_cast<uint16_t>(raw[2]) << 8);
-        const uint16_t height =
-            static_cast<uint16_t>(raw[3]) |
-            (static_cast<uint16_t>(raw[4]) << 8);
-        const uint16_t depth =
-            static_cast<uint16_t>(raw[5]) |
-            (static_cast<uint16_t>(raw[6]) << 8);
-        const uint32_t format =
-            static_cast<uint32_t>(raw[7]) |
-            (static_cast<uint32_t>(raw[8]) << 8) |
-            (static_cast<uint32_t>(raw[9]) << 16) |
-            (static_cast<uint32_t>(raw[10]) << 24);
-        const uint32_t resourceSize =
-            static_cast<uint32_t>(raw[11]) |
-            (static_cast<uint32_t>(raw[12]) << 8) |
-            (static_cast<uint32_t>(raw[13]) << 16) |
-            (static_cast<uint32_t>(raw[14]) << 24);
-
-        const bool knownDxtFormat =
-            format == 0x31545844u || // DXT1
-            format == 0x33545844u || // DXT3
-            format == 0x35545844u;   // DXT5
-
-        compactEmpty =
-            raw[0] == 0 &&
-            width == varGfxImage->width &&
-            height == varGfxImage->height &&
-            depth == varGfxImage->depth &&
-            knownDxtFormat &&
-            resourceSize == 0;
-
-        if (compactEmpty)
-        {
-            varGfxImageLoadDef->levelCount = raw[0];
-            varGfxImageLoadDef->flags = 0;
-            varGfxImageLoadDef->dimensions[0] =
-                static_cast<__int16>(width);
-            varGfxImageLoadDef->dimensions[1] =
-                static_cast<__int16>(height);
-            varGfxImageLoadDef->dimensions[2] =
-                static_cast<__int16>(depth);
-            varGfxImageLoadDef->format =
-                static_cast<_D3DFORMAT>(format);
-            varGfxImageLoadDef->resourceSize = 0;
-
-            char trace[192];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][GFXIMAGE LOADDEF COMPACT] asset=%d dims=%ux%ux%u format=%08x cursor=%08x\n",
-                g_switchCurrentAssetIndex,
-                static_cast<unsigned>(width),
-                static_cast<unsigned>(height),
-                static_cast<unsigned>(depth),
-                static_cast<unsigned>(format),
-                Switch_GetStreamCursorOffset(0));
-            Switch_LogWrite(trace);
-        }
-    }
-#endif
-
-    if (compactEmpty)
-        return;
-
-    // Complete the normal 16-byte header. At this point stream position is
-    // exactly 15 bytes past the header start.
-    Load_Stream(
-        1,
-        reinterpret_cast<unsigned char *>(varGfxImageLoadDef) + 15,
-        1);
+    // GfxImageLoadDef has a fixed 16-byte serialized header. The fastfile is
+    // produced from the 32-bit CoD4 layout, so stream consumption must remain
+    // exactly 16 bytes even on the ARM64 runtime. The previous Switch-specific
+    // 15-byte "compact" heuristic left the cursor one byte early and shifted
+    // every following stream-0 object.
+    Load_Stream(1, (unsigned char *)varGfxImageLoadDef, 16);
 
     if (DB_GetStreamPos() != varGfxImageLoadDef->data)
         MyAssertHandler(
