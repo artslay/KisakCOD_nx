@@ -243,15 +243,8 @@ void R_VulkanUploadTexture(
     }
 
     if (uploaded)
-    {
         texture->SetSubresourceLayout(
             mipLevel, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        // All uploaded mips are sampled from the same image object. Keep the
-        // aggregate layout tracker in sync so BindSamplerSet() never issues
-        // an invalid UNDEFINED -> SHADER_READ_ONLY barrier for an initialized
-        // image after per-mip uploads have completed.
-        texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    }
     else
         Switch_LogWrite("[KisakCOD][VK] texture upload failed\n");
 }
