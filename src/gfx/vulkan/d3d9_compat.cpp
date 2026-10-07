@@ -976,32 +976,58 @@ HRESULT IDirect3DDevice9::StretchRect(
     IDirect3DSurface9 *destination, const tagRECT *destinationRect,
     _D3DTEXTUREFILTERTYPE filter)
 {
-    if (!m_backend || !source || !destination || !source->texture || !destination->texture)
+    if (!m_backend || !source || !destination || !destination->texture)
         return E_FAIL;
 
     m_backend->EndRendering();
 
     KisakVkTexture *src = source->texture;
     KisakVkTexture *dst = destination->texture;
-    const uint32_t srcW = src->width;
-    const uint32_t srcH = src->height;
+
+    VkImage srcImage = VK_NULL_HANDLE;
+    VkImageLayout srcOldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    uint32_t srcW = 0;
+    uint32_t srcH = 0;
+    if (src)
+    {
+        srcImage = src->image;
+        srcOldLayout = src->layout;
+        srcW = src->width;
+        srcH = src->height;
+    }
+    else if (source->defaultFramebuffer)
+    {
+        srcImage = m_backend->CurrentSwapchainImage();
+        srcOldLayout = m_backend->CurrentSwapchainLayout();
+        uint32_t srcFormat = 0;
+        if (!m_backend->GetBackBufferDesc(&srcW, &srcH, &srcFormat) || !srcImage)
+            return E_FAIL;
+    }
+    else
+    {
+        return E_FAIL;
+    }
+
     const uint32_t dstW = dst->width;
     const uint32_t dstH = dst->height;
+    const tagRECT sr = sourceRect
+        ? *sourceRect
+        : tagRECT{0, 0, static_cast<int32_t>(srcW), static_cast<int32_t>(srcH)};
+    const tagRECT dr = destinationRect
+        ? *destinationRect
+        : tagRECT{0, 0, static_cast<int32_t>(dstW), static_cast<int32_t>(dstH)};
 
-    const tagRECT sr = sourceRect ? *sourceRect : tagRECT{0,0,static_cast<int32_t>(srcW),static_cast<int32_t>(srcH)};
-    const tagRECT dr = destinationRect ? *destinationRect : tagRECT{0,0,static_cast<int32_t>(dstW),static_cast<int32_t>(dstH)};
-
-    if (src->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+    if (srcOldLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
     {
-        m_backend->TransitionImage(src->image, src->layout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                   VK_IMAGE_ASPECT_COLOR_BIT);
-        src->layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        m_backend->TransitionImage(
+            srcImage, srcOldLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
     }
     if (dst->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
     {
-        m_backend->TransitionImage(dst->image, dst->layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                   VK_IMAGE_ASPECT_COLOR_BIT);
-        dst->layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        m_backend->TransitionImage(
+            dst->image, dst->layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     VkImageBlit blit{};
@@ -1016,12 +1042,30 @@ HRESULT IDirect3DDevice9::StretchRect(
 
     vkCmdBlitImage(
         m_backend->CommandBuffer(),
-        src->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1, &blit,
         filter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR);
 
-    dst->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    // StretchRect produces a valid texture for subsequent shader sampling.
+    dst->SetSubresourceLayout(
+        destination->level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    // The source remains the render target it was before the copy. In
+    // particular, restore the swapchain to COLOR_ATTACHMENT_OPTIMAL when a
+    // save-screen operation copied the active framebuffer.
+    if (srcOldLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+    {
+        m_backend->TransitionImage(
+            srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcOldLayout,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+    }
+
+    if (src)
+        src->SetSubresourceLayout(source->level, 0, srcOldLayout);
+    else if (source->defaultFramebuffer)
+        m_backend->SetCurrentSwapchainLayout(srcOldLayout);
+
     return S_OK;
 }
 
