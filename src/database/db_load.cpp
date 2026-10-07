@@ -7983,23 +7983,23 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
 #endif
 
-    varMaterialTechniqueSet->remappedTechniqueSet = nullptr;
-    if (serialized.remappedTechniqueSet)
+    // A native MaterialTechniqueSet must always have an effective remap target.
+    // The authored fastfile field may be zero when no explicit remap is stored;
+    // on the original runtime that state is equivalent to using the TechniqueSet
+    // itself. Leaving the widened ARM64 pointer null makes Material_GetTechniqueSet()
+    // dereference +0x10 from a null remap target during 2D text/material checks.
+    if (!serialized.remappedTechniqueSet ||
+        serialized.remappedTechniqueSet == UINT32_MAX)
     {
-        if (serialized.remappedTechniqueSet == UINT32_MAX)
-        {
-            // The serialized -1 value denotes the inline/current TechniqueSet.
-            // Runtime Material_GetTechniqueSet() dereferences remappedTechniqueSet,
-            // so the native ARM64 object must self-map instead of retaining null.
-            varMaterialTechniqueSet->remappedTechniqueSet = varMaterialTechniqueSet;
-        }
-        else
-        {
-            varMaterialTechniqueSet->remappedTechniqueSet =
-                reinterpret_cast<MaterialTechniqueSet *>(
-                    DB_ConvertOffsetToPointerValue(
-                        serialized.remappedTechniqueSet));
-        }
+        varMaterialTechniqueSet->remappedTechniqueSet =
+            varMaterialTechniqueSet;
+    }
+    else
+    {
+        varMaterialTechniqueSet->remappedTechniqueSet =
+            reinterpret_cast<MaterialTechniqueSet *>(
+                DB_ConvertOffsetToPointerValue(
+                    serialized.remappedTechniqueSet));
     }
 
 #ifdef __SWITCH__
