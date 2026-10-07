@@ -1043,6 +1043,17 @@ void VulkanBackend::Flush()
         vkQueueWaitIdle(m_graphicsQueue);
 }
 
+bool VulkanBackend::GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_t *format) const
+{
+    if (width)
+        *width = m_width;
+    if (height)
+        *height = m_height;
+    if (format)
+        *format = static_cast<uint32_t>(m_swapchainFormat);
+    return m_swapchain != VK_NULL_HANDLE && !m_swapchainImages.empty();
+}
+
 VkImage VulkanBackend::CurrentSwapchainImage() const
 {
     return (m_swapchainIndex < m_swapchainImages.size())
