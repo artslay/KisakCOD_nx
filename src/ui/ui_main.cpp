@@ -273,16 +273,6 @@ void __cdecl UI_DrawHighlightRect(
     const float *hiColor,
     const float *loColor)
 {
-#ifdef __SWITCH__
-    // Border styles 5/6 are implemented by the legacy renderer as four
-    // flat white quads. On the Switch Vulkan path those quads become the
-    // hard translucent bounding boxes visible around menu items. The real
-    // background material already carries the intended soft/smoky fade, so
-    // suppress the legacy hard highlight border without touching text,
-    // background materials, or non-Switch renderers.
-    return;
-#endif
-
     float v10; // [esp+8h] [ebp-D8h]
     float v11; // [esp+10h] [ebp-D0h]
     float v12; // [esp+14h] [ebp-CCh]
