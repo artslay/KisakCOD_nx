@@ -46,7 +46,6 @@ static void Switch_LogRawDwords(
     for (uint32_t offset = 0; offset < size; offset += 16)
     {
         char trace[256];
-        char trace[512];
         int written = std::snprintf(
             trace,
             sizeof(trace),
@@ -5401,6 +5400,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         uint16_t dim2 = 0;
         uint32_t format = 0;
         uint32_t resourceSize = 0;
+        char trace[512];
         std::memcpy(&dim0, loaded + 2, sizeof(dim0));
         std::memcpy(&dim1, loaded + 4, sizeof(dim1));
         std::memcpy(&dim2, loaded + 6, sizeof(dim2));
