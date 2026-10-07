@@ -187,9 +187,6 @@ void __cdecl R_LoadCaseTextures();   // editor-only (idb 0x513690); loads bin/ca
 void __cdecl R_ImageList_f();
 bool __cdecl Image_IsCodeImage(int track);
 bool __cdecl imagecompare(GfxImage *image1, GfxImage *image2);
-#ifdef __SWITCH__
-bool __cdecl Image_IsValidExternalName(const char *name);
-#endif
 _D3DFORMAT __cdecl R_ImagePixelFormat(const GfxImage *image);
 
 char __cdecl Image_LoadFromFile(GfxImage *image);
