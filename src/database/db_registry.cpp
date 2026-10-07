@@ -3956,7 +3956,7 @@ void __cdecl Mark_MaterialTechniqueSetAsset(MaterialTechniqueSet *techniqueSet)
     DB_GetXAsset(ASSET_TYPE_TECHNIQUE_SET, (XAssetHeader)techniqueSet);
 }
 
-void __cdecl #ifdef __SWITCH__
+#ifdef __SWITCH__
 static bool Switch_IsStreamAsciiImageName(
     uintptr_t address,
     uint32_t *blockOut,
