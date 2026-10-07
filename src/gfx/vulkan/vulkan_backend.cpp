@@ -1031,6 +1031,12 @@ bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
     return true;
 }
 
+void VulkanBackend::WaitForGpu()
+{
+    if (m_device && m_graphicsQueue)
+        vkQueueWaitIdle(m_graphicsQueue);
+}
+
 void VulkanBackend::Flush()
 {
     if (m_device && m_graphicsQueue)
