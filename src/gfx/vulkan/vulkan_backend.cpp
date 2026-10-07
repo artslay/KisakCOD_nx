@@ -1178,7 +1178,8 @@ bool VulkanBackend::CreateImage2D(
     VkImageAspectFlags aspect,
     VkImage *image,
     VkDeviceMemory *memory,
-    VkImageView *view)
+    VkImageView *view,
+    VkComponentMapping components)
 {
     VkImageCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1234,6 +1235,7 @@ bool VulkanBackend::CreateImage2D(
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = aspect;
+    viewInfo.components = components;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 1;
     if (vkCreateImageView(m_device, &viewInfo, nullptr, view) != VK_SUCCESS)
@@ -1250,7 +1252,8 @@ bool VulkanBackend::CreateImage2D(
 bool VulkanBackend::CreateImageCube(
     uint32_t width, uint32_t height, uint32_t mipLevels,
     VkFormat format, VkImageUsageFlags usage,
-    VkImage *image, VkDeviceMemory *memory, VkImageView *view)
+    VkImage *image, VkDeviceMemory *memory, VkImageView *view,
+    VkComponentMapping components)
 {
     if (!image || !memory || !view || !width || !height || !mipLevels)
         return false;
@@ -1309,6 +1312,7 @@ bool VulkanBackend::CreateImageCube(
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.components = components;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 6;
 
@@ -1327,7 +1331,8 @@ bool VulkanBackend::CreateImageCube(
 bool VulkanBackend::CreateImage3D(
     uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevels,
     VkFormat format, VkImageUsageFlags usage,
-    VkImage *image, VkDeviceMemory *memory, VkImageView *view)
+    VkImage *image, VkDeviceMemory *memory, VkImageView *view,
+    VkComponentMapping components)
 {
     if (!image || !memory || !view)
         return false;
@@ -1383,6 +1388,7 @@ bool VulkanBackend::CreateImage3D(
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.components = components;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 1;
     if (vkCreateImageView(m_device, &viewInfo, nullptr, view) != VK_SUCCESS)
