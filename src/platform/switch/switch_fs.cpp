@@ -62,7 +62,7 @@ struct SwitchIwdArchive
 struct SwitchIwdEntry
 {
     uint16_t archiveIndex = 0;
-    unsigned long infoPosition = 0;
+    uint32_t infoPosition = 0;
     uint32_t size = 0;
     uint32_t nextDuplicate = UINT32_MAX;
 };
