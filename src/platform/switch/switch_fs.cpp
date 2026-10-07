@@ -207,9 +207,8 @@ static std::string Switch_GetStartupLanguage(const char *game)
     std::snprintf(
         path,
         sizeof(path),
-        "%s/%s/localization.txt",
-        base,
-        game && *game ? game : "main");
+        "%s/localization.txt",
+        base);
 
     FILE *file = FS_FileOpenReadBinary(path);
     if (file)
