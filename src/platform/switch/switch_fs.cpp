@@ -770,8 +770,37 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         }
     }
 
-    // Switch package layout keeps loose game files in game/main.
-    // Fastfiles are handled separately from game/zone/<language>.
+    // IWI assets are packed in main/*.iwd on Switch. Do not treat an
+    // IWI miss as a loose-file lookup: there are no loose IWI assets in the
+    // packaged layout, and the original engine resolves packed IWI files
+    // through its IWD search paths.
+    const bool isIwi =
+        normalizedName.size() >= 4 &&
+        normalizedName.compare(
+            normalizedName.size() - 4,
+            4,
+            ".iwi") == 0;
+
+    if (isIwi)
+    {
+        if (traceImage3)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IWI ROOT] packed lookup failed raw=%s normalized=%s entries=%zu archives=%zu\n",
+                filename,
+                normalizedName.c_str(),
+                g_iwdEntryRecords.size(),
+                g_iwdArchives.size());
+            Switch_LogWrite(trace);
+        }
+        return (uint32_t)-1;
+    }
+
+    // Non-IWI loose files use game/main only. Fastfiles are loaded from
+    // game/zone/<language> by the database loader and do not belong here.
     char path[256];
     FILE *fp = nullptr;
 
