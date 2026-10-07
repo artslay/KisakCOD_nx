@@ -1736,6 +1736,11 @@ void __cdecl R_SetSampler(
             RB_LogPrint(va("---------- texture %i: %s\n", samplerIndex, image->name));
         }
         R_HW_SetSamplerTexture(context.state->prim.device, samplerIndex, &image->texture);
+#ifdef __SWITCH__
+        extern thread_local const GfxImage *g_switchLastSamplerImages[16];
+        if (samplerIndex < 16)
+            g_switchLastSamplerImages[samplerIndex] = image;
+#endif
     }
     iassert((samplerState & (SAMPLER_FILTER_MASK | SAMPLER_MIPMAP_MASK)) != 0);
     if (context.state->refSamplerState[samplerIndex] != samplerState)
