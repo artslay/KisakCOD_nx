@@ -1378,12 +1378,9 @@ static void spv_assign_destarg(Context *ctx, SpirvResult value)
 
 static void spv_emit_vs_main_end(Context* ctx)
 {
-    if (!shader_is_vertex(ctx))
-        return;
-
 #if SUPPORT_PROFILE_GLSPIRV
 #if defined(MOJOSHADER_DEPTH_CLIPPING) || defined(MOJOSHADER_FLIP_RENDERTARGET)
-    if (!ctx->profile_supports_glspirv)
+    if (!ctx->profile_supports_glspirv || !shader_is_vertex(ctx))
         return;
 
     uint32 tid_void = spv_get_type(ctx, STI_VOID);
@@ -1456,7 +1453,6 @@ static void spv_emit_vs_main_end(Context* ctx)
     spv_output_name(ctx, id_func, "vs_epilogue");
 #endif // defined(MOJOSHADER_DEPTH_CLIPPING) || defined(MOJOSHADER_FLIP_RENDERTARGET)
 #endif // SUPPORT_PROFILE_GLSPIRV
-
 } // spv_emit_vs_main_end
 
 static void spv_emit_func_lit(Context *ctx)
@@ -1588,36 +1584,6 @@ static void spv_emit_func_end(Context *ctx)
     } // if
 #endif // defined(MOJOSHADER_DEPTH_CLIPPING) || defined(MOJOSHADER_FLIP_RENDERTARGET)
 #endif // SUPPORT_PROFILE_GLSPIRV
-
-    if (shader_is_vertex(ctx) && ctx->spirv.mode == SPIRV_MODE_VK)
-    {
-        RegisterList *reg = NULL;
-        for (RegisterList *it = ctx->used_registers.next; it != NULL; it = it->next)
-        {
-            if (it->usage == MOJOSHADER_USAGE_POSITION &&
-                (it->regtype == REG_TYPE_RASTOUT || it->regtype == REG_TYPE_OUTPUT))
-            {
-                reg = it;
-                break;
-            }
-        }
-
-        if (reg && reg->spirv.iddecl)
-        {
-            const SpirvResult output = spv_loadreg(ctx, reg);
-            const uint32 tid_float = spv_get_type(ctx, STI_FLOAT);
-            const uint32 id_neg_one = spv_getscalarf(ctx, -1.0f);
-            const uint32 id_old_y = spv_bumpid(ctx);
-            const uint32 id_new_y = spv_bumpid(ctx);
-            const uint32 id_new_output = spv_bumpid(ctx);
-
-            spv_emit(ctx, 5, SpvOpCompositeExtract, tid_float, id_old_y, output.id, 1);
-            spv_emit(ctx, 5, SpvOpFMul, tid_float, id_new_y, id_old_y, id_neg_one);
-            spv_emit(ctx, 6, SpvOpCompositeInsert, output.tid, id_new_output,
-                id_new_y, output.id, 1);
-            spv_emit(ctx, 3, SpvOpStore, reg->spirv.iddecl, id_new_output);
-        }
-    }
 
     spv_emit(ctx, 1, SpvOpReturn);
     spv_emit(ctx, 1, SpvOpFunctionEnd);
