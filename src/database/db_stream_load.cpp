@@ -315,81 +315,62 @@ uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress)
         return 0;
 
     uintptr_t current = serializedAddress;
-    uintptr_t visited[8] = {};
 
-    for (size_t depth = 0; depth < ARRAY_COUNT(visited); ++depth)
+    // XString fields are already resolved from a 32-bit fastfile offset to
+    // their stream address by DB_ConvertOffsetToPointerValue(). Do not treat
+    // the first four bytes at that address as another offset: those bytes are
+    // string data unless the address is explicitly an inline-XString slot.
+    // Following arbitrary data here was producing false names such as "3"
+    // from a byte pattern ff 00 00 00 (raw offset 0xff).
+    uintptr_t nativePointer = 0;
+    if (DB_ResolveSwitchPointerAlias(current, &nativePointer) &&
+        nativePointer)
     {
-        for (size_t i = 0; i < depth; ++i)
-        {
-            if (visited[i] == current)
-                return 0;
-        }
-        visited[depth] = current;
+        current = nativePointer;
+    }
 
-        uintptr_t nativePointer = 0;
-        if (DB_ResolveSwitchPointerAlias(current, &nativePointer) &&
-            nativePointer)
-        {
-            current = nativePointer;
+    if (Switch_IsSerializedAssetName(current))
+        return current;
+
+    for (uint32_t block = 0;
+         block < ARRAY_COUNT(g_streamPosArray);
+         ++block)
+    {
+        if (!g_streamBlocks[block].data)
             continue;
-        }
 
-        if (Switch_IsSerializedAssetName(current))
-            return current;
+        const uintptr_t base =
+            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+        const uintptr_t end =
+            base + g_streamBlocks[block].size;
+        if (current < base || current >= end)
+            continue;
 
-        bool owned = false;
-        const uint8_t *slot = nullptr;
-        size_t remaining = 0;
-        for (uint32_t block = 0; block < ARRAY_COUNT(g_streamPosArray); ++block)
-        {
-            if (!g_streamBlocks[block].data)
-                continue;
-
-            const uintptr_t base =
-                reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
-            const uintptr_t end = base + g_streamBlocks[block].size;
-            if (current < base || current >= end)
-                continue;
-
-            const size_t offset = static_cast<size_t>(current - base);
-            if (g_streamBlocks[block].size - offset < sizeof(uint32_t))
-                return 0;
-
-            slot = reinterpret_cast<const uint8_t *>(current);
-            remaining = g_streamBlocks[block].size - offset;
-            owned = true;
-            break;
-        }
-
-        if (!owned || !slot || remaining < sizeof(uint32_t))
+        const size_t offset =
+            static_cast<size_t>(current - base);
+        const size_t remaining =
+            g_streamBlocks[block].size - offset;
+        if (remaining < sizeof(uint32_t))
             return 0;
 
         uint32_t raw = 0;
-        std::memcpy(&raw, slot, sizeof(raw));
+        std::memcpy(
+            &raw,
+            reinterpret_cast<const void *>(current),
+            sizeof(raw));
 
-        if (raw == UINT32_MAX)
+        // The only serialized indirection used here is the explicit inline
+        // XString marker: -1 followed by the inline string bytes.
+        if (raw == UINT32_MAX &&
+            remaining > sizeof(uint32_t))
         {
-            // A serialized XString may be represented by a pointer slot
-            // containing -1 followed immediately by the inline string bytes.
-            // Resolve the string in place; do not consume anything from the
-            // global stream cursor.
-            if (remaining <= sizeof(uint32_t))
-                return 0;
-
             const uintptr_t inlineAddress =
                 current + sizeof(uint32_t);
             if (Switch_IsSerializedAssetName(inlineAddress))
                 return inlineAddress;
-
-            return 0;
         }
 
-        if (!raw || raw == UINT32_MAX - 1u)
-            return 0;
-
-        current = DB_ConvertOffsetToPointerValue(raw);
-        if (!current)
-            return 0;
+        return 0;
     }
 
     return 0;
