@@ -1,6 +1,10 @@
 #include "d3d9_compat.h"
 
 #ifdef __SWITCH__
+#include "../../gfx_d3d/r_gfx.h"
+#endif
+
+#ifdef __SWITCH__
 
 #include "vulkan_backend.h"
 #include <spirv/spirv.h>
