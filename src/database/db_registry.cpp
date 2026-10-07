@@ -2083,6 +2083,19 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, char *name)
     }
 #endif
     DB_SetXAssetName(&newEntry->asset, SL_ConvertToString(SL_GetString(name, 4)));
+
+#ifdef __SWITCH__
+    // A default image is a registry fallback, not an external .iwi asset.
+    // DB_SetXAssetName() intentionally gives the fallback the requested
+    // logical name, but carrying the default image's delayed-load metadata
+    // would make R_DelayLoadImage() try images/<requested>.iwi.
+    if (type == ASSET_TYPE_IMAGE && newEntry->asset.header.image)
+    {
+        newEntry->asset.header.image->delayLoadPixels = 0;
+        newEntry->asset.header.image->cardMemory.platform[0] = 0;
+        newEntry->asset.header.image->cardMemory.platform[1] = 0;
+    }
+#endif
 #ifdef __SWITCH__
     if (traceDefaultTechset)
     {
