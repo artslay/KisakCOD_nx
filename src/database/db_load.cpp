@@ -5440,7 +5440,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             static_cast<unsigned>(g_switchCurrentAssetRawType),
             static_cast<unsigned>(g_streamPosIndex),
             Switch_GetStreamCursorOffset(0),
-            static_cast<void *>(cursor),
+            static_cast<const void *>(cursor),
             resourceSize,
             rotatedResourceSize);
         for (size_t i = 0; i < sizeof(before) && written > 0 &&
