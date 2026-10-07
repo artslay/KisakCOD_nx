@@ -634,6 +634,7 @@ bool VulkanBackend::CreateDummyTexture()
 
     m_dummySampler = GetSampler(
         VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        true,
         VK_SAMPLER_ADDRESS_MODE_REPEAT,
         VK_SAMPLER_ADDRESS_MODE_REPEAT,
         VK_SAMPLER_ADDRESS_MODE_REPEAT);
