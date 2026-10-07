@@ -18,6 +18,7 @@
 #include "rb_state.h"
 #include "r_draw_method.h"
 #include <gfx/gfx_backend.h>
+#include "../gfx/vulkan/vulkan_backend.h"
 #include <database/database.h>
 #ifdef __SWITCH__
 #include <cstdio>
