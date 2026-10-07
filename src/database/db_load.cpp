@@ -5472,7 +5472,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
                 sizeof(trace) - static_cast<size_t>(written),
                 "\n");
         }
-        Switch_LogWrite(trace);
+        Switch_LogRaw(trace);
     }
 #endif
 
