@@ -17,6 +17,7 @@
 #include "r_cinematic.h"
 #include "rb_state.h"
 #include "r_draw_method.h"
+#include "r_dvars.h"
 #include <gfx/gfx_backend.h>
 #include "../gfx/vulkan/vulkan_backend.h"
 #include <database/database.h>
