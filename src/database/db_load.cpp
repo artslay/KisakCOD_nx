@@ -5645,6 +5645,68 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                     reinterpret_cast<const char *>(
                         resolvedName ? resolvedName : nameAddress);
             }
+
+#ifdef __SWITCH__
+            // A positive GfxImage name token can point into stream-4 data that
+            // has not reached the stream cursor yet. At this point the target
+            // may still contain zeroes or the serialized -1 XString marker, so
+            // treating it as the final name would register images under an
+            // empty string or under the marker bytes ("я..."). Defer the
+            // external pixel load until the real string data has been loaded.
+            if (!loadedAliasedInlineName &&
+                serialized.name != 0u &&
+                serialized.name != UINT32_MAX &&
+                nameAddress &&
+                g_streamBlocks &&
+                g_streamBlocks[4].data)
+            {
+                const uintptr_t block4Base =
+                    reinterpret_cast<uintptr_t>(g_streamBlocks[4].data);
+                const uintptr_t block4End =
+                    block4Base + g_streamBlocks[4].size;
+                const uintptr_t cursorAddress =
+                    reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+
+                if (nameAddress >= block4Base &&
+                    nameAddress + sizeof(uint32_t) <= block4End &&
+                    cursorAddress >= block4Base &&
+                    cursorAddress <= block4End &&
+                    nameAddress > cursorAddress)
+                {
+                    uint32_t firstWord = 0;
+                    std::memcpy(
+                        &firstWord,
+                        reinterpret_cast<const void *>(nameAddress),
+                        sizeof(firstWord));
+
+                    const bool nameReady =
+                        varGfxImage->name &&
+                        varGfxImage->name[0] >= 0x21 &&
+                        varGfxImage->name[0] <= 0x7E;
+
+                    if (!nameReady ||
+                        firstWord == UINT32_MAX)
+                    {
+                        varGfxImage->delayLoadPixels = true;
+
+                        char trace[384];
+                        std::snprintf(
+                            trace,
+                            sizeof(trace),
+                            "[KisakCOD][GFXIMAGE FORWARD NAME] asset=%d token=%08x target=%08x cursor=%08x first=%08x image=%p deferred=1\n",
+                            g_switchCurrentAssetIndex,
+                            serialized.name,
+                            static_cast<unsigned>(
+                                nameAddress - block4Base),
+                            static_cast<unsigned>(
+                                cursorAddress - block4Base),
+                            firstWord,
+                            static_cast<void *>(varGfxImage));
+                        Switch_LogWrite(trace);
+                    }
+                }
+            }
+#endif
         }
 
 #ifdef __SWITCH__
