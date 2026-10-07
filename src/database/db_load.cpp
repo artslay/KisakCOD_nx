@@ -1748,16 +1748,8 @@ void __cdecl Load_XString(bool atStreamStart)
         }
         else
         {
-            const uintptr_t resolved =
-                DB_ConvertOffsetToPointerValue(serialized);
-            if (resolved)
-            {
-                // A non-inline XString may point at a serialized alias slot.
-                // Only the resolved string address is a valid native name.
-                const uintptr_t stringResolved =
-                    DB_ResolveSwitchSerializedString(resolved);
-                *varXString = reinterpret_cast<const char *>(stringResolved);
-            }
+            *varXString = reinterpret_cast<const char *>(
+                DB_ConvertOffsetToPointerValue(serialized));
         }
     }
 #else
