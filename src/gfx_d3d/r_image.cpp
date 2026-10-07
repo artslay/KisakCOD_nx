@@ -116,9 +116,17 @@ VkComponentMapping R_VulkanComponentMapping(_D3DFORMAT format)
 
     switch (format)
     {
+    case D3DFMT_X8R8G8B8:
+        // D3D9 X8R8G8B8 has an unused X byte; sampling it still produces
+        // alpha = 1.0. Vulkan's BGRA view would otherwise expose that padding
+        // byte as alpha and can make otherwise opaque images translucent.
+        mapping.a = VK_COMPONENT_SWIZZLE_ONE;
+        break;
     case D3DFMT_L8:
+        // D3D9 L8 is luminance with an implicit alpha of 1.0.
         mapping.g = VK_COMPONENT_SWIZZLE_R;
         mapping.b = VK_COMPONENT_SWIZZLE_R;
+        mapping.a = VK_COMPONENT_SWIZZLE_ONE;
         break;
     case D3DFMT_A8:
         mapping.r = VK_COMPONENT_SWIZZLE_ONE;
