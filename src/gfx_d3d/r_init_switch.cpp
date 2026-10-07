@@ -60,7 +60,7 @@ void TRACK_r_init()
     track_static_alloc_internal(&dx, sizeof(dx), "dx", 18);
 }
 void R_SyncGpu(int(__cdecl *)(unsigned __int64)) { if (g_gfxBackend) g_gfxBackend->WaitForGpu(); }
-bool R_IsUsingAdaptiveGpuSync() { return false; }
+bool R_IsUsingAdaptiveGpuSync() { return dx.gpuSync == 1; }
 bool __cdecl RB_IsGpuFenceFinished()
 {
     if (!dx.flushGpuQuery || !dx.flushGpuQueryIssued)
@@ -419,7 +419,104 @@ char R_InitHardware(const GfxWindowParms *wnd) {
     R_InitSystems();
     return 1;
 }
-void R_StoreWindowSettings(const GfxWindowParms *) {}
+void R_StoreWindowSettings(const GfxWindowParms *wnd)
+{
+    iassert(r_aspectRatio);
+
+    if (wnd)
+    {
+        vidConfig.sceneWidth = wnd->sceneWidth;
+        vidConfig.sceneHeight = wnd->sceneHeight;
+        vidConfig.displayWidth = wnd->displayWidth;
+        vidConfig.displayHeight = wnd->displayHeight;
+        vidConfig.displayFrequency = wnd->hz > 0 ? wnd->hz : 60;
+        vidConfig.isFullscreen = wnd->fullscreen;
+    }
+
+    if (vidConfig.sceneWidth <= 0)
+        vidConfig.sceneWidth = vidConfig.displayWidth;
+    if (vidConfig.sceneHeight <= 0)
+        vidConfig.sceneHeight = vidConfig.displayHeight;
+    if (vidConfig.displayWidth <= 0)
+        vidConfig.displayWidth = vidConfig.sceneWidth;
+    if (vidConfig.displayHeight <= 0)
+        vidConfig.displayHeight = vidConfig.sceneHeight;
+    if (vidConfig.displayFrequency <= 0)
+        vidConfig.displayFrequency = 60;
+
+    switch (r_aspectRatio->current.integer)
+    {
+    case GFX_ASPECT_RATIO_AUTO:
+    {
+        const int displayWidth = vidConfig.displayWidth;
+        const int displayHeight = vidConfig.displayHeight;
+
+        if (displayWidth > 0 && displayHeight > 0)
+        {
+            const int ratio16x =
+                SnapFloatToInt(
+                    static_cast<float>(displayHeight) * 16.0f /
+                    static_cast<float>(displayWidth));
+
+            if (ratio16x == 10)
+                vidConfig.aspectRatioWindow = 1.6f;
+            else if (ratio16x >= 10)
+                vidConfig.aspectRatioWindow = 1.3333334f;
+            else
+                vidConfig.aspectRatioWindow = 1.7777778f;
+        }
+        break;
+    }
+
+    case GFX_ASPECT_RATIO_STANDARD:
+        vidConfig.aspectRatioWindow = 1.3333334f;
+        break;
+
+    case GFX_ASPECT_RATIO_WIDE_16_10:
+        vidConfig.aspectRatioWindow = 1.6f;
+        break;
+
+    case GFX_ASPECT_RATIO_WIDE_16_9:
+        vidConfig.aspectRatioWindow = 1.7777778f;
+        break;
+
+    default:
+        MyAssertHandler(
+            ".\\r_init_switch.cpp",
+            0,
+            1,
+            "unhandled aspect ratio %i",
+            r_aspectRatio->current.integer);
+        break;
+    }
+
+    if (com_wideScreen)
+    {
+        Dvar_SetBool(
+            const_cast<dvar_t *>(com_wideScreen),
+            vidConfig.aspectRatioWindow != 1.3333334f);
+    }
+
+    if (vidConfig.sceneWidth > 0)
+    {
+        vidConfig.aspectRatioScenePixel =
+            static_cast<float>(vidConfig.sceneHeight) *
+            vidConfig.aspectRatioWindow /
+            static_cast<float>(vidConfig.sceneWidth);
+    }
+
+    if (vidConfig.isFullscreen && vidConfig.displayWidth > 0)
+    {
+        vidConfig.aspectRatioDisplayPixel =
+            static_cast<float>(vidConfig.displayHeight) *
+            vidConfig.aspectRatioWindow /
+            static_cast<float>(vidConfig.displayWidth);
+    }
+    else
+    {
+        vidConfig.aspectRatioDisplayPixel = 1.0f;
+    }
+}
 void R_InitGamma()
 {
     if (r_gamma)
@@ -460,7 +557,7 @@ HRESULT R_CreateDeviceInternal(HWND__ *, uint32_t, _D3DPRESENT_PARAMETERS_ *) {
         dx.device = new IDirect3DDevice9;
     return dx.device ? S_OK : E_FAIL;
 }
-int R_GetDeviceType() { return 0; }
+int R_GetDeviceType() { return 1; }
 void R_SetWndParms(GfxWindowParms *wnd) {
     if (!wnd) return;
     wnd->sceneWidth = vidConfig.sceneWidth;
