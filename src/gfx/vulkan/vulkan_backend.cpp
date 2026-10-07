@@ -763,6 +763,16 @@ bool VulkanBackend::EndFrame()
             swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &blit, VK_FILTER_LINEAR);
 
+        // The compatibility render target remains owned by the D3D surface
+        // and is tracked as COLOR_ATTACHMENT_OPTIMAL. Restore that layout
+        // after the present blit so the next frame does not render through a
+        // stale layout tracker.
+        TransitionImage(
+            m_presentSourceImage,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+
         TransitionImage(
             swapImage,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,

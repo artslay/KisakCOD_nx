@@ -1019,7 +1019,9 @@ HRESULT IDirect3DDevice9::EndScene()
         m_backend->QueuePresentSource(
             texture->image, texture->view, texture->format,
             texture->width, texture->height);
-        texture->layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        // EndFrame() owns the present-source transition. Keep the texture
+        // tracker at COLOR_ATTACHMENT_OPTIMAL until that transition is
+        // recorded, then restore the same layout after the blit.
     }
     else
     {
