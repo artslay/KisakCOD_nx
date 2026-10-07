@@ -373,6 +373,28 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
         Switch_LogWrite(trace);
     }
 #endif
+#ifdef __SWITCH__
+    // Empty image names and shader code constants are never valid external
+    // IWI filenames. They can occur on ARM64 when a missing/unsupported image
+    // resolves through the default asset path. Fall back to the renderer's
+    // normal default texture instead of probing images/.iwi or
+    // images/codeMeshArg.iwi.
+    const bool switchInvalidIwiName =
+        !image ||
+        !image->name ||
+        !image->name[0] ||
+        !I_stricmp(image->name, "codeMeshArg");
+    if (switchInvalidIwiName && image && image->delayLoadPixels)
+    {
+        image->delayLoadPixels = false;
+        image->cardMemory.platform[0] = 0;
+        image->cardMemory.platform[1] = 0;
+        Image_AssignDefaultTexture(image);
+        g_switchDbStage = "delayed_images/invalid_name_fallback";
+        return;
+    }
+#endif
+
     if (image->delayLoadPixels)
     {
         image->delayLoadPixels = false;
