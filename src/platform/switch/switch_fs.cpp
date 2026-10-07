@@ -784,7 +784,7 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][IWI ROOT] raw=%s normalized=%s opened=iwd handle=%d size=%u\\n",
+                    "[KisakCOD][IWI ROOT] raw=%s normalized=%s opened=iwd handle=%d size=%u\n",
                     filename,
                     normalizedName.c_str(),
                     iwdHandle,
@@ -802,7 +802,7 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][IWI ROOT] raw=%s normalized=%s opened=iwd=0\\n",
+                "[KisakCOD][IWI ROOT] raw=%s normalized=%s opened=iwd=0\n",
                 filename,
                 normalizedName.c_str());
             Switch_LogWrite(trace);
