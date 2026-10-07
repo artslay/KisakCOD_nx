@@ -263,7 +263,7 @@ const char * gzerror OF((gzFile file, int *errnum));
 /* ===========================================================================
    Reads a long in LSB order from the given gz_stream. Sets 
 */
-static int unzlocal_getShort (ZIP_FILE* fin, uLong *pX)
+static int unzlocal_getShort (ZIP_FILE* fin, uint32_t *pX)
 {
 	short	v;
 
@@ -273,7 +273,7 @@ static int unzlocal_getShort (ZIP_FILE* fin, uLong *pX)
 	return UNZ_OK;
 }
 
-static int unzlocal_getLong (ZIP_FILE *fin, uLong *pX)
+static int unzlocal_getLong (ZIP_FILE *fin, uint32_t *pX)
 {
 	int		v;
 
@@ -426,14 +426,14 @@ extern unzFile unzOpen (const char* path)
 {
 	unz_s us = {};
 	unz_s *s;
-	uLong central_pos,uL;
+	uint32_t central_pos,uL;
 	ZIP_FILE * fin ;
 
-	uLong number_disk;          /* number of the current dist, used for 
+	uint32_t number_disk;          /* number of the current dist, used for 
 								   spaning ZIP, unsupported, always 0*/
-	uLong number_disk_with_CD;  /* number the the disk with central dir, used
+	uint32_t number_disk_with_CD;  /* number the the disk with central dir, used
 								   for spaning ZIP, unsupported, always 0*/
-	uLong number_entry_CD;      /* total number of entries in
+	uint32_t number_entry_CD;      /* total number of entries in
 	                               the central dir 
 	                               (same than number_entry on nospan) */
 
@@ -580,7 +580,7 @@ static int unzlocal_GetCurrentFileInfoInternal (unzFile file,
 	unz_file_info file_info = {};
 	unz_file_info_internal file_info_internal = {};
 	int err=UNZ_OK;
-	uLong uMagic;
+	uint32_t uMagic;
 	long lSeek=0;
 
 	if (file==NULL)
@@ -888,9 +888,9 @@ static int unzlocal_CheckCurrentFileCoherencyHeader (unz_s* s, uInt* piSizeVar,
 													uLong *poffset_local_extrafield,
 													uInt *psize_local_extrafield)
 {
-	uLong uMagic,uData,uFlags;
-	uLong size_filename;
-	uLong size_extra_field;
+	uint32_t uMagic,uData,uFlags;
+	uint32_t size_filename;
+	uint32_t size_extra_field;
 	int err=UNZ_OK;
 
 	*piSizeVar = 0;
