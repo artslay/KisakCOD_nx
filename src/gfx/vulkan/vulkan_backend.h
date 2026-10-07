@@ -61,11 +61,11 @@ public:
     void SetBlendState(uint32_t, uint32_t) override {}
     void SetDepthState(bool, bool) override {}
     void SetCullMode(uint32_t) override {}
-    void *CreateQuery(uint32_t) override { return nullptr; }
-    void ReleaseQuery(void *) override {}
-    void BeginQuery(void *) override {}
-    void EndQuery(void *) override {}
-    bool GetQueryResult(void *, uint64_t *) override { return false; }
+    void *CreateQuery(uint32_t queryType) override;
+    void ReleaseQuery(void *query) override;
+    void BeginQuery(void *query) override;
+    void EndQuery(void *query) override;
+    bool GetQueryResult(void *query, uint64_t *result) override;
 
     void WaitForGpu() override;
     void Flush() override;
@@ -289,6 +289,15 @@ private:
     VkDeviceMemory m_dummyMemory = VK_NULL_HANDLE;
     VkImageView m_dummyImageView = VK_NULL_HANDLE;
     VkSampler m_dummySampler = VK_NULL_HANDLE;
+
+    struct Query
+    {
+        VkQueryPool pool = VK_NULL_HANDLE;
+        VkQueryType type = VK_QUERY_TYPE_OCCLUSION;
+        bool active = false;
+        bool issued = false;
+    };
+
     std::string m_lastError;
 };
 

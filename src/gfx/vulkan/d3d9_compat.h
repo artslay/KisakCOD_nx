@@ -250,6 +250,8 @@ using IDirect3DVolumeTexture9 = KisakVkTexture;
 using IDirect3DCubeTexture9 = KisakVkTexture;
 using LPDIRECT3DTEXTURE9 = IDirect3DTexture9*;
 
+class VulkanBackend;
+
 struct IDirect3DSurface9 {
     KisakVkTexture *texture=nullptr;
     uint32_t level=0;
@@ -261,20 +263,19 @@ struct IDirect3DSurface9 {
     HRESULT UnlockRect();
 };
 
+constexpr uint32_t D3DQUERYTYPE_EVENT = 8;
+constexpr uint32_t D3DQUERYTYPE_OCCLUSION = 9;
+
 struct IDirect3DQuery9 {
-    bool begun=false, issued=false;
-    HRESULT Issue(uint32_t flags) {
-        if (flags==D3DISSUE_BEGIN) { if (begun) return E_FAIL; begun=true; return S_OK; }
-        if (flags==D3DISSUE_END) { if (!begun) return E_FAIL; begun=false; issued=true; return S_OK; }
-        return E_FAIL;
-    }
-    HRESULT GetData(void *data, uint32_t size, uint32_t) {
-        if (!issued) return S_FALSE;
-        uint64_t value=1;
-        if (data && size) std::memcpy(data, &value, std::min<uint32_t>(size, sizeof(value)));
-        return S_OK;
-    }
-    void Release() { delete this; }
+    VulkanBackend *backend = nullptr;
+    void *query = nullptr;
+    bool begun = false;
+    bool issued = false;
+
+    static IDirect3DQuery9 *Create(VulkanBackend *backend, uint32_t queryType);
+    HRESULT Issue(uint32_t flags);
+    HRESULT GetData(void *data, uint32_t size, uint32_t flags);
+    void Release();
 };
 
 struct IDirect3D9 {};

@@ -848,6 +848,122 @@ void VulkanBackend::EndScene()
     EndRendering();
 }
 
+void *VulkanBackend::CreateQuery(uint32_t queryType)
+{
+    VkQueryType vkType = VK_QUERY_TYPE_OCCLUSION;
+
+    if (queryType == 8) // D3DQUERYTYPE_EVENT
+    {
+        VkPhysicalDeviceProperties props{};
+        vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
+        if (props.limits.timestampPeriod <= 0.0f || props.limits.timestampValidBits == 0)
+            return nullptr;
+        vkType = VK_QUERY_TYPE_TIMESTAMP;
+    }
+    else if (queryType != 9) // D3DQUERYTYPE_OCCLUSION
+    {
+        return nullptr;
+    }
+
+    auto *query = new Query;
+    query->type = vkType;
+
+    VkQueryPoolCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    info.queryType = vkType;
+    info.queryCount = 1;
+
+    if (vkCreateQueryPool(m_device, &info, nullptr, &query->pool) != VK_SUCCESS)
+    {
+        delete query;
+        return nullptr;
+    }
+
+    return query;
+}
+
+void VulkanBackend::ReleaseQuery(void *queryPtr)
+{
+    auto *query = static_cast<Query *>(queryPtr);
+    if (!query)
+        return;
+
+    if (m_device && m_graphicsQueue)
+        vkQueueWaitIdle(m_graphicsQueue);
+
+    if (query->pool)
+        vkDestroyQueryPool(m_device, query->pool, nullptr);
+    delete query;
+}
+
+void VulkanBackend::BeginQuery(void *queryPtr)
+{
+    auto *query = static_cast<Query *>(queryPtr);
+    if (!query || !m_commandBuffer || !m_frameActive)
+        return;
+
+    vkCmdResetQueryPool(m_commandBuffer, query->pool, 0, 1);
+    query->active = false;
+    query->issued = false;
+
+    if (query->type == VK_QUERY_TYPE_OCCLUSION)
+    {
+        vkCmdBeginQuery(m_commandBuffer, query->pool, 0, 0);
+        query->active = true;
+    }
+}
+
+void VulkanBackend::EndQuery(void *queryPtr)
+{
+    auto *query = static_cast<Query *>(queryPtr);
+    if (!query || !m_commandBuffer || !m_frameActive)
+        return;
+
+    if (query->type == VK_QUERY_TYPE_OCCLUSION)
+    {
+        if (!query->active)
+            return;
+        vkCmdEndQuery(m_commandBuffer, query->pool, 0);
+        query->active = false;
+    }
+    else if (query->type == VK_QUERY_TYPE_TIMESTAMP)
+    {
+        vkCmdWriteTimestamp(
+            m_commandBuffer,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            query->pool,
+            0);
+    }
+
+    query->issued = true;
+}
+
+bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
+{
+    auto *query = static_cast<Query *>(queryPtr);
+    if (!query || !query->pool || !query->issued)
+        return false;
+
+    uint64_t values[2]{};
+    const VkResult status = vkGetQueryPoolResults(
+        m_device,
+        query->pool,
+        0,
+        1,
+        sizeof(values),
+        values,
+        sizeof(uint64_t),
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+
+    if (status != VK_SUCCESS || values[1] == 0)
+        return false;
+
+    if (result)
+        *result = values[0];
+    return true;
+}
+
+
 void VulkanBackend::Clear(float r, float g, float b, float a)
 {
     if (!m_frameActive)

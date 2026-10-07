@@ -443,7 +443,10 @@ char R_CreateForInitOrReset()
     return 1;
 }
 
-IDirect3DQuery9 *RB_HW_AllocOcclusionQuery() { return new IDirect3DQuery9(); }
+IDirect3DQuery9 *RB_HW_AllocOcclusionQuery()
+{
+    return IDirect3DQuery9::Create(GetVulkanBackend(), D3DQUERYTYPE_OCCLUSION);
+}
 char R_CreateDevice(const GfxWindowParms *) {
     if (!dx.device)
         dx.device = new IDirect3DDevice9;

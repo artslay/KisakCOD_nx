@@ -872,6 +872,72 @@ HRESULT IDirect3DSurface9::UnlockRect()
     return texture->UnlockRect(level);
 }
 
+
+IDirect3DQuery9 *IDirect3DQuery9::Create(VulkanBackend *backend, uint32_t queryType)
+{
+    if (!backend)
+        return nullptr;
+
+    void *query = backend->CreateQuery(queryType);
+    if (!query)
+        return nullptr;
+
+    auto *result = new IDirect3DQuery9;
+    result->backend = backend;
+    result->query = query;
+    return result;
+}
+
+HRESULT IDirect3DQuery9::Issue(uint32_t flags)
+{
+    if (!backend || !query)
+        return E_FAIL;
+
+    if (flags == D3DISSUE_BEGIN)
+    {
+        if (begun)
+            return E_FAIL;
+        backend->BeginQuery(query);
+        begun = true;
+        issued = false;
+        return S_OK;
+    }
+
+    if (flags == D3DISSUE_END)
+    {
+        if (begun || !issued)
+        {
+            backend->EndQuery(query);
+            begun = false;
+            issued = true;
+            return S_OK;
+        }
+        return E_FAIL;
+    }
+
+    return E_FAIL;
+}
+
+HRESULT IDirect3DQuery9::GetData(void *data, uint32_t size, uint32_t)
+{
+    uint64_t result = 0;
+    if (!backend || !query || !backend->GetQueryResult(query, &result))
+        return S_FALSE;
+
+    if (data && size)
+        std::memcpy(data, &result, std::min<uint32_t>(size, sizeof(result)));
+    return S_OK;
+}
+
+void IDirect3DQuery9::Release()
+{
+    if (backend && query)
+        backend->ReleaseQuery(query);
+    backend = nullptr;
+    query = nullptr;
+    delete this;
+}
+
 IDirect3DDevice9::IDirect3DDevice9()
 {
     m_backend = GetVulkanBackend();
