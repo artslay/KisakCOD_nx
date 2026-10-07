@@ -173,6 +173,7 @@ public:
         VkFilter minFilter,
         VkFilter magFilter,
         VkSamplerMipmapMode mipMode,
+        bool mipmapped,
         VkSamplerAddressMode addressU,
         VkSamplerAddressMode addressV,
         VkSamplerAddressMode addressW);
