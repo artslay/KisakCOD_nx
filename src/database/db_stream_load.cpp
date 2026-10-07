@@ -379,10 +379,7 @@ uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress)
             const uintptr_t inlineAddress =
                 current + sizeof(uint32_t);
             if (Switch_IsSerializedAssetName(inlineAddress))
-            {
-                *resolvedPointer = inlineAddress;
-                return true;
-            }
+                return inlineAddress;
 
             return 0;
         }
