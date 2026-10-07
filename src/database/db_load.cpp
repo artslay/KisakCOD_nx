@@ -5658,7 +5658,6 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 Switch_LogWrite(detail);
             }
         }
-#endif
 
         varGfxTextureLoad = &varGfxImage->texture;
         Load_GfxTextureLoad(0);
