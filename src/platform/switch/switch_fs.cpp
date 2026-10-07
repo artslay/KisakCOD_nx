@@ -393,37 +393,33 @@ static bool Switch_OpenIwdFile(const char *filename, int *fileHandle)
         if (!clone)
             return false;
 
-        if (unzSetCurrentFileInfoPosition(clone, entry.infoPosition) != UNZ_OK)
+        if (unzSetCurrentFileInfoPosition(clone, entry.infoPosition) == UNZ_OK &&
+            unzOpenCurrentFile(clone) == UNZ_OK)
         {
-            unzClose(clone);
-            return false;
+            const int h = AllocHandle();
+            if (!h)
+            {
+                unzCloseCurrentFile(clone);
+                unzClose(clone);
+                return false;
+            }
+
+            g_zipHandles[h].file = clone;
+            g_zipHandles[h].size = entry.size;
+            g_fsh[h].fileSize = static_cast<int>(entry.size);
+            g_fsh[h].streamed = 0;
+            g_fsh[h].zipFile = nullptr;
+            I_strncpyz(g_fsh[h].name, filename, sizeof(g_fsh[h].name));
+
+            if (fileHandle)
+                *fileHandle = h;
+            return true;
         }
 
-        if (unzOpenCurrentFile(clone) != UNZ_OK)
-        {
-            unzClose(clone);
-            return false;
+        // An indexed central-directory position can be invalid even though the
+        // archive contains the requested file. Fall through to a fresh scan.
+        unzClose(clone);
         }
-
-        const int h = AllocHandle();
-        if (!h)
-        {
-            unzCloseCurrentFile(clone);
-            unzClose(clone);
-            return false;
-        }
-
-        g_zipHandles[h].file = clone;
-        g_zipHandles[h].size = entry.size;
-        g_fsh[h].fileSize = static_cast<int>(entry.size);
-        g_fsh[h].streamed = 0;
-        g_fsh[h].zipFile = nullptr;
-        I_strncpyz(g_fsh[h].name, filename, sizeof(g_fsh[h].name));
-
-        if (fileHandle)
-            *fileHandle = h;
-        return true;
-    }
 
     // The compact index is the fast path, but a few minizip entries can fail
     // to provide a stable info-position while an IWD is being indexed. Do not
@@ -481,10 +477,23 @@ static bool Switch_OpenIwdFile(const char *filename, int *fileHandle)
             continue;
         }
 
+        unsigned long matchedInfoPosition = 0;
+        const bool haveInfoPosition =
+            unzGetCurrentFileInfoPosition(scan, &matchedInfoPosition) == UNZ_OK;
+
         if (unzOpenCurrentFile(scan) != UNZ_OK)
         {
             unzClose(scan);
             continue;
+        }
+
+        if (haveInfoPosition)
+        {
+            SwitchIwdEntry cachedEntry;
+            cachedEntry.archiveIndex = archiveIndex;
+            cachedEntry.infoPosition = matchedInfoPosition;
+            cachedEntry.size = matchedSize;
+            g_iwdEntries[normalizedName] = cachedEntry;
         }
 
         const int h = AllocHandle();
@@ -501,17 +510,6 @@ static bool Switch_OpenIwdFile(const char *filename, int *fileHandle)
         g_fsh[h].streamed = 0;
         g_fsh[h].zipFile = nullptr;
         I_strncpyz(g_fsh[h].name, filename, sizeof(g_fsh[h].name));
-
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][IWD FALLBACK] raw=%s normalized=%s archive=%s size=%u\\n",
-            filename,
-            normalizedName.c_str(),
-            archive.path.c_str(),
-            static_cast<unsigned>(matchedSize));
-        Switch_LogWrite(trace);
 
         if (fileHandle)
             *fileHandle = h;
@@ -774,7 +772,8 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         Switch_LogWrite(trace);
     }
 
-    if (g_iwdEntries.find(normalizedName) != g_iwdEntries.end())
+    // Always try the IWD resolver. It uses the compact index first and
+    // scans the real archive when the index has no usable record.
     {
         int iwdHandle = 0;
         if (Switch_OpenIwdFile(filename, &iwdHandle))
@@ -785,7 +784,7 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=1 opened=iwd handle=%d size=%u\n",
+                    "[KisakCOD][IWI ROOT] raw=%s normalized=%s opened=iwd handle=%d size=%u\\n",
                     filename,
                     normalizedName.c_str(),
                     iwdHandle,
@@ -803,7 +802,7 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=1 opened=iwd=0\n",
+                "[KisakCOD][IWI ROOT] raw=%s normalized=%s opened=iwd=0\\n",
                 filename,
                 normalizedName.c_str());
             Switch_LogWrite(trace);
