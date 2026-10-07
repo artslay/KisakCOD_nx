@@ -457,6 +457,7 @@ char __cdecl Image_LoadFromFileWithReader(GfxImage *image, int(__cdecl *OpenFile
     iassert( image->category == IMG_CATEGORY_LOAD_FROM_FILE );
     iassert( !image->texture.basemap );
 
+#ifdef __SWITCH__
     {
         char trace[320];
         std::snprintf(
