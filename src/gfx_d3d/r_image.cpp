@@ -849,6 +849,22 @@ GfxImage *__cdecl Image_FindExisting_FastFile(const char *name)
 
 GfxImage *__cdecl Image_Register(const char *imageName, uint8_t semantic, int imageTrack)
 {
+#ifdef __SWITCH__
+    // These are not texture asset names. They are malformed/empty references
+    // reaching the external-image registration path on the ARM64 loader.
+    // In particular, codeMeshArg is a material shader code source, not an IWI.
+    // Resolve such references to the real renderer white image before any
+    // Image_Load/FS lookup can construct images/.iwi.
+    if (!imageName ||
+        !imageName[0] ||
+        !I_stricmp(imageName, "codeMeshArg"))
+    {
+        if (rgp.whiteImage)
+            return rgp.whiteImage;
+        return Image_Register_FastFile("$white");
+    }
+#endif
+
     if (IsFastFileLoad())
         return (GfxImage *)Image_Register_FastFile(imageName);
     else
