@@ -5608,10 +5608,20 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                     if (marker == UINT32_MAX &&
                         nameAddress + sizeof(uint32_t) == cursorAddress)
                     {
-                        char *nameBuffer =
-                            reinterpret_cast<char *>(AllocLoad_raw_byte());
-                        Load_XStringCustom(&nameBuffer);
-                        varGfxImage->name = nameBuffer;
+                        // This is a serialized XString slot that already
+                        // points at an inline string location in stream 4.
+                        // Load_XString(0) must not consume a new byte from the
+                        // global fastfile stream here: doing so steals the
+                        // first byte of the following stream-0 object.
+                        const uintptr_t inlineNameAddress =
+                            nameAddress + sizeof(uint32_t);
+                        const uintptr_t resolvedInlineName =
+                            DB_ResolveSwitchSerializedString(inlineNameAddress);
+                        varGfxImage->name =
+                            reinterpret_cast<const char *>(
+                                resolvedInlineName
+                                    ? resolvedInlineName
+                                    : inlineNameAddress);
                         loadedAliasedInlineName = true;
                     }
                 }
