@@ -2459,7 +2459,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             texture0 ? static_cast<unsigned>(texture0->sourceFormat) : 0u,
             texture0 ? static_cast<unsigned>(texture0->format) : 0u,
             texture0 ? static_cast<unsigned>(texture0->layout) : 0u,
-            attrText, declText);
+            vsConstText, psConstText, attrText, declText);
         Switch_LogWrite(msg);
         ++switchDrawTraceCount;
     }
