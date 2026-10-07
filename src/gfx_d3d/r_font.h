@@ -5,8 +5,8 @@
 struct Glyph // sizeof=0x18
 {
     uint16_t letter;
-    char x0;
-    char y0;
+    int8_t x0;
+    int8_t y0;
     uint8_t dx;
     uint8_t pixelWidth;
     uint8_t pixelHeight;
