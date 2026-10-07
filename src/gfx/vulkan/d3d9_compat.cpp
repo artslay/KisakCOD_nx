@@ -1643,6 +1643,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                 minFilter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR,
                 magFilter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR,
                 mipFilter == D3DTEXF_POINT ? VK_SAMPLER_MIPMAP_MODE_NEAREST : VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                mipFilter != D3DTEXF_NONE,
                 AddressMode(m_samplerState[i][D3DSAMP_ADDRESSU]),
                 AddressMode(m_samplerState[i][D3DSAMP_ADDRESSV]),
                 AddressMode(m_samplerState[i][D3DSAMP_ADDRESSW]));
