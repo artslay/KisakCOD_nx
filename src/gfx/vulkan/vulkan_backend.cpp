@@ -724,6 +724,7 @@ bool VulkanBackend::BeginFrame()
 
     m_frameActive = true;
     m_renderingActive = false;
+    m_backbufferClearedThisFrame = false;
 
     if (m_defaultDepthImage && m_defaultDepthLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         TransitionImage(
@@ -1795,12 +1796,27 @@ bool VulkanBackend::EnsureRendering(
             DepthAspect(depthFormat));
     }
 
+    const bool clearUninitializedColor = colorOldLayout == VK_IMAGE_LAYOUT_UNDEFINED;
+    const bool clearBackbuffer = colorImage == CurrentSwapchainImage() && !m_backbufferClearedThisFrame;
+
     VkRenderingAttachmentInfo color{};
     color.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     color.imageView = colorView;
     color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    color.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    color.loadOp = (clearUninitializedColor || clearBackbuffer)
+        ? VK_ATTACHMENT_LOAD_OP_CLEAR
+        : VK_ATTACHMENT_LOAD_OP_LOAD;
     color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    if (color.loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
+    {
+        // D3D9 render targets do not guarantee meaningful contents before the
+        // first write. Make first-use Vulkan targets deterministic and ensure
+        // the first backbuffer rendering cannot inherit the previous frame.
+        color.clearValue.color.float32[0] = 0.0f;
+        color.clearValue.color.float32[1] = 0.0f;
+        color.clearValue.color.float32[2] = 0.0f;
+        color.clearValue.color.float32[3] = 1.0f;
+    }
 
     VkRenderingAttachmentInfo depth{};
     depth.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -1808,8 +1824,15 @@ bool VulkanBackend::EnsureRendering(
     {
         depth.imageView = depthView;
         depth.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        depth.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        depth.loadOp = depthOldLayout == VK_IMAGE_LAYOUT_UNDEFINED
+            ? VK_ATTACHMENT_LOAD_OP_CLEAR
+            : VK_ATTACHMENT_LOAD_OP_LOAD;
         depth.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        if (depth.loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
+        {
+            depth.clearValue.depthStencil.depth = 1.0f;
+            depth.clearValue.depthStencil.stencil = 0;
+        }
     }
 
     VkRenderingInfo rendering{};
@@ -1823,6 +1846,8 @@ bool VulkanBackend::EnsureRendering(
 
     vkCmdBeginRendering(m_commandBuffer, &rendering);
     m_renderingActive = true;
+    if (clearBackbuffer)
+        m_backbufferClearedThisFrame = true;
     (void)depthFormat;
     return true;
 }
