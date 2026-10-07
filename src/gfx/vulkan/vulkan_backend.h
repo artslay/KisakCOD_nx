@@ -82,6 +82,11 @@ public:
     VkImage DefaultDepthImage() const { return m_defaultDepthImage; }
     VkImageLayout DefaultDepthLayout() const { return m_defaultDepthLayout; }
     VkImageLayout CurrentSwapchainLayout() const { return m_swapchainIndex < m_swapchainLayouts.size() ? m_swapchainLayouts[m_swapchainIndex] : VK_IMAGE_LAYOUT_UNDEFINED; }
+    void SetCurrentSwapchainLayout(VkImageLayout layout)
+    {
+        if (m_swapchainIndex < m_swapchainLayouts.size())
+            m_swapchainLayouts[m_swapchainIndex] = layout;
+    }
     VkPipelineLayout PipelineLayout() const { return m_pipelineLayout; }
     VkDescriptorPool DescriptorPool() const { return m_descriptorPool; }
     VkDescriptorSetLayout VSSamplerLayout() const { return m_vsSamplerLayout; }
