@@ -5721,34 +5721,36 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                     if (marker == UINT32_MAX &&
                         nameAddress + sizeof(uint32_t) == cursorAddress)
                     {
-                        // FOLLOWING (-1) means the actual XString bytes begin
-                        // exactly at the current stream-4 cursor. Consume the
-                        // inline string just like the explicit serialized -1
-                        // XString form above; merely pointing name at the
-                        // cursor is not enough because Load_GfxTextureLoad()
-                        // must start after the terminating NUL.
-                        char *inlineName =
-                            reinterpret_cast<char *>(DB_GetStreamPos());
-                        Load_XStringCustom(&inlineName);
-                        varGfxImage->name = inlineName;
+                        // This is an indirect FOLLOWING XString slot. The
+                        // pointer points at a serialized -1 marker immediately
+                        // before the current stream-4 destination cursor, but
+                        // the string bytes are not necessarily part of the
+                        // current source-read sequence. Do not call
+                        // Load_XStringCustom() here: that would consume bytes
+                        // belonging to the next asset substructure (as seen
+                        // when the first GfxImageLoadDef byte was lost).
+                        const uintptr_t inlineNameAddress =
+                            nameAddress + sizeof(uint32_t);
+                        varGfxImage->name =
+                            reinterpret_cast<const char *>(inlineNameAddress);
+                        varGfxImage->delayLoadPixels = true;
                         loadedAliasedInlineName = true;
 
-                        char trace[416];
+                        char trace[448];
                         std::snprintf(
                             trace,
                             sizeof(trace),
                             "[KisakCOD][IMAGE INLINE NAME] asset=%d marker=%08x "
-                            "nameOffset=%08x cursor=%08x consumed_end=%08x delay=%u name=%s\n",
+                            "nameOffset=%08x cursor=%08x deferred=1 first=%02x\n",
                             g_switchCurrentAssetIndex,
                             marker,
                             static_cast<unsigned>(
-                                reinterpret_cast<uintptr_t>(inlineName) -
-                                block4Base),
+                                inlineNameAddress - block4Base),
                             static_cast<unsigned>(
                                 cursorAddress - block4Base),
-                            Switch_GetStreamCursorOffset(4),
-                            static_cast<unsigned>(varGfxImage->delayLoadPixels),
-                            inlineName);
+                            static_cast<unsigned>(
+                                reinterpret_cast<const unsigned char *>(
+                                    inlineNameAddress)[0]));
                         Switch_LogWrite(trace);
                     }
                 }
@@ -5798,7 +5800,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                     nameAddress + sizeof(uint32_t) <= block4End &&
                     cursorAddress >= block4Base &&
                     cursorAddress <= block4End &&
-                    nameAddress > cursorAddress)
+                    nameAddress >= cursorAddress)
                 {
                     uint32_t firstWord = 0;
                     std::memcpy(
