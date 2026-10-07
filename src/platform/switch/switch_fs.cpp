@@ -378,51 +378,148 @@ static bool Switch_OpenIwdFile(const char *filename, int *fileHandle)
 {
     const std::string normalizedName = SwitchNormalizePath(filename);
     const auto it = g_iwdEntries.find(normalizedName);
-    if (it == g_iwdEntries.end())
-        return false;
 
-    const SwitchIwdEntry &entry = it->second;
-    if (entry.archiveIndex >= g_iwdArchives.size())
-        return false;
-
-    SwitchIwdArchive &archive = g_iwdArchives[entry.archiveIndex];
-    if (!archive.file)
-        return false;
-
-    unzFile clone = unzReOpen(archive.path.c_str(), archive.file);
-    if (!clone)
-        return false;
-
-    if (unzSetCurrentFileInfoPosition(clone, entry.infoPosition) != UNZ_OK)
+    if (it != g_iwdEntries.end())
     {
-        unzClose(clone);
-        return false;
+        const SwitchIwdEntry &entry = it->second;
+        if (entry.archiveIndex >= g_iwdArchives.size())
+            return false;
+
+        SwitchIwdArchive &archive = g_iwdArchives[entry.archiveIndex];
+        if (!archive.file)
+            return false;
+
+        unzFile clone = unzReOpen(archive.path.c_str(), archive.file);
+        if (!clone)
+            return false;
+
+        if (unzSetCurrentFileInfoPosition(clone, entry.infoPosition) != UNZ_OK)
+        {
+            unzClose(clone);
+            return false;
+        }
+
+        if (unzOpenCurrentFile(clone) != UNZ_OK)
+        {
+            unzClose(clone);
+            return false;
+        }
+
+        const int h = AllocHandle();
+        if (!h)
+        {
+            unzCloseCurrentFile(clone);
+            unzClose(clone);
+            return false;
+        }
+
+        g_zipHandles[h].file = clone;
+        g_zipHandles[h].size = entry.size;
+        g_fsh[h].fileSize = static_cast<int>(entry.size);
+        g_fsh[h].streamed = 0;
+        g_fsh[h].zipFile = nullptr;
+        I_strncpyz(g_fsh[h].name, filename, sizeof(g_fsh[h].name));
+
+        if (fileHandle)
+            *fileHandle = h;
+        return true;
     }
 
-    if (unzOpenCurrentFile(clone) != UNZ_OK)
+    // The compact index is the fast path, but a few minizip entries can fail
+    // to provide a stable info-position while an IWD is being indexed. Do not
+    // turn those entries into permanent "missing" assets: on an index miss,
+    // rescan the archives directly and open the matching entry from the same
+    // clone used for the scan.
+    for (uint16_t archiveIndex = 0;
+         archiveIndex < g_iwdArchives.size();
+         ++archiveIndex)
     {
-        unzClose(clone);
-        return false;
+        SwitchIwdArchive &archive = g_iwdArchives[archiveIndex];
+        if (!archive.file)
+            continue;
+
+        unzFile scan = unzReOpen(archive.path.c_str(), archive.file);
+        if (!scan)
+            continue;
+
+        bool matched = false;
+        uint32_t matchedSize = 0;
+
+        if (unzGoToFirstFile(scan) == UNZ_OK)
+        {
+            do
+            {
+                char name[256] = {};
+                unz_file_info info = {};
+
+                if (unzGetCurrentFileInfo(
+                        scan,
+                        &info,
+                        name,
+                        sizeof(name),
+                        nullptr,
+                        0,
+                        nullptr,
+                        0) != UNZ_OK)
+                {
+                    continue;
+                }
+
+                if (SwitchNormalizePath(name) == normalizedName)
+                {
+                    matched = true;
+                    matchedSize =
+                        static_cast<uint32_t>(info.uncompressed_size);
+                    break;
+                }
+            } while (unzGoToNextFile(scan) == UNZ_OK);
+        }
+
+        if (!matched)
+        {
+            unzClose(scan);
+            continue;
+        }
+
+        if (unzOpenCurrentFile(scan) != UNZ_OK)
+        {
+            unzClose(scan);
+            continue;
+        }
+
+        const int h = AllocHandle();
+        if (!h)
+        {
+            unzCloseCurrentFile(scan);
+            unzClose(scan);
+            return false;
+        }
+
+        g_zipHandles[h].file = scan;
+        g_zipHandles[h].size = matchedSize;
+        g_fsh[h].fileSize = static_cast<int>(matchedSize);
+        g_fsh[h].streamed = 0;
+        g_fsh[h].zipFile = nullptr;
+        I_strncpyz(g_fsh[h].name, filename, sizeof(g_fsh[h].name));
+
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][IWD FALLBACK] raw=%s normalized=%s archive=%s size=%u
+",
+            filename,
+            normalizedName.c_str(),
+            archive.path.c_str(),
+            static_cast<unsigned>(matchedSize));
+        Switch_LogWrite(trace);
+
+        if (fileHandle)
+            *fileHandle = h;
+        return true;
     }
 
-    const int h = AllocHandle();
-    if (!h)
-    {
-        unzCloseCurrentFile(clone);
-        unzClose(clone);
-        return false;
-    }
-
-    g_zipHandles[h].file = clone;
-    g_zipHandles[h].size = entry.size;
-    g_fsh[h].fileSize = static_cast<int>(entry.size);
-    g_fsh[h].streamed = 0;
-    g_fsh[h].zipFile = nullptr;
-    I_strncpyz(g_fsh[h].name, filename, sizeof(g_fsh[h].name));
-
-    if (fileHandle)
-        *fileHandle = h;
-    return true;
+    return false;
 }
 
 
