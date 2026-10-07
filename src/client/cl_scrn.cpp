@@ -139,11 +139,7 @@ void CL_DrawScreen()
     if (clientUIActives[0].connectionState == CA_ACTIVE)
     {
         //Profile_Begin(349);
-        if (g_switchRemoteFrameTraceActive)
-            Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before debug overlays\n");
         CG_DrawFullScreenDebugOverlays(0);
-        if (g_switchRemoteFrameTraceActive)
-            Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after debug overlays\n");
         //Profile_EndInternal(0);
     }
     R_AddCmdDrawProfile();
@@ -364,32 +360,20 @@ void SCR_UpdateFrame()
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/r_begin";
 #endif
-    if (Switch_ShouldTraceRemoteFrame())
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before R_BeginFrame\n");
     R_BeginFrame();
 #ifdef __SWITCH__
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after R_BeginFrame\n");
     g_switchFrameStage = "frame/scr/r_begin_done";
     g_switchFrameStage = "frame/scr/snd_fx";
 #endif
     //Profile_EndInternal(0);
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before SND_InitFXSounds\n");
     SND_InitFXSounds();
 #ifdef __SWITCH__
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after SND_InitFXSounds\n");
     g_switchFrameStage = "frame/scr/snd_fx_done";
     g_switchFrameStage = "frame/scr/cgame_render";
 #endif
     //Profile_Begin(20);
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before CL_CGameRendering\n");
     refreshedUI = CL_CGameRendering();
 #ifdef __SWITCH__
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after CL_CGameRendering\n");
     g_switchFrameStage = "frame/scr/cgame_render_done";
 #endif
     if (Sys_IsMainThread() && !refreshedUI)
@@ -405,16 +389,12 @@ void SCR_UpdateFrame()
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/draw_field";
 #endif
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before SCR_DrawScreenField\n");
 #ifdef __SWITCH__
     g_switchFrameAfterDrawReached = 0;
 #endif
     SCR_DrawScreenField(refreshedUI);
 #ifdef __SWITCH__
     g_switchFrameAfterDrawReached = 1;
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after SCR_DrawScreenField\n");
     g_switchFrameStage = "frame/scr/draw_field_done";
 #endif
     if (clientUIActives[0].connectionState == CA_ACTIVE)
@@ -432,45 +412,25 @@ void SCR_UpdateFrame()
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/profile";
 #endif
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before R_AddCmdDrawProfile\n");
     R_AddCmdDrawProfile();
 #ifdef __SWITCH__
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after R_AddCmdDrawProfile\n");
     g_switchFrameStage = "frame/scr/console";
 #endif
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before Con_DrawConsole\n");
     Con_DrawConsole(0);
 #ifdef __SWITCH__
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after Con_DrawConsole\n");
     g_switchFrameStage = "frame/scr/devgui";
 #endif
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before DevGui_Draw\n");
     DevGui_Draw(0);
 #ifdef __SWITCH__
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after DevGui_Draw\n");
     g_switchFrameStage = "frame/scr/end_frame";
 #endif
     //Profile_EndInternal(0);
     //Profile_Begin(21);
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before R_EndFrame\n");
     R_EndFrame();
 #ifdef __SWITCH__
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after R_EndFrame\n");
     g_switchFrameStage = "frame/scr/issue_commands";
 #endif
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: before R_IssueRenderCommands\n");
     R_IssueRenderCommands(0xFFFFFFFF);
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: after R_IssueRenderCommands\n");
 #ifdef __SWITCH__
     if (g_switchRemoteFrameTraceActive)
         Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: complete\n");
@@ -499,13 +459,9 @@ void __cdecl SCR_UpdateScreen()
         if (clientUIActives[0].connectionState == CA_LOADING)
         {
 #ifdef __SWITCH__
-            if (g_switchRemoteFrameTraceActive)
-                Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateScreen: before Sys_LoadingKeepAlive\n");
 #endif
             Sys_LoadingKeepAlive();
 #ifdef __SWITCH__
-            if (g_switchRemoteFrameTraceActive)
-                Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateScreen: after Sys_LoadingKeepAlive\n");
 #endif
         }
         if (scr_initialized)
