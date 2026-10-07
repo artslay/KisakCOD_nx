@@ -314,105 +314,62 @@ uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress)
     if (!serializedAddress || !g_streamBlocks)
         return 0;
 
-    uintptr_t current = serializedAddress;
-    uintptr_t visited[8] = {};
-    constexpr size_t MaxDepth = ARRAY_COUNT(visited);
-
-    for (size_t depth = 0; depth < MaxDepth; ++depth)
+    uintptr_t nativePointer = 0;
+    if (DB_ResolveSwitchPointerAlias(serializedAddress, &nativePointer) &&
+        nativePointer)
     {
-        for (size_t i = 0; i < depth; ++i)
-        {
-            if (visited[i] == current)
-                return 0;
-        }
-        visited[depth] = current;
+        if (Switch_IsSerializedAssetName(nativePointer))
+            return nativePointer;
+    }
 
-        uintptr_t nativePointer = 0;
-        if (DB_ResolveSwitchPointerAlias(current, &nativePointer) &&
-            nativePointer)
-        {
-            current = nativePointer;
-            if (Switch_IsSerializedAssetName(current))
-                return current;
-            return current;
-        }
+    // XString names are either direct serialized offsets into stream data or
+    // the explicit -1 inline form. Do NOT interpret arbitrary four bytes at a
+    // string address as another serialized offset: ordinary string data can
+    // happen to look like a valid offset (for example 0x00000009), which
+    // creates false names such as "3".
+    for (uint32_t block = 0;
+         block < ARRAY_COUNT(g_streamPosArray);
+         ++block)
+    {
+        if (!g_streamBlocks[block].data)
+            continue;
 
-        // A real XString must win over any interpretation of its first four
-        // bytes as a serialized offset. This prevents ordinary names whose
-        // bytes happen to decode as a valid block/offset from being followed.
-        if (Switch_IsSerializedAssetName(current))
-            return current;
+        const uintptr_t base =
+            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+        const uintptr_t end =
+            base + g_streamBlocks[block].size;
+        if (serializedAddress < base || serializedAddress >= end)
+            continue;
 
-        int32_t ownerBlock = -1;
-        uintptr_t ownerOffset = 0;
-        for (uint32_t block = 0;
-             block < ARRAY_COUNT(g_streamPosArray);
-             ++block)
-        {
-            if (!g_streamBlocks[block].data)
-                continue;
-
-            const uintptr_t base =
-                reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
-            const uintptr_t end =
-                base + g_streamBlocks[block].size;
-            if (current >= base && current < end)
-            {
-                ownerBlock = static_cast<int32_t>(block);
-                ownerOffset = current - base;
-                break;
-            }
-        }
-
-        if (ownerBlock < 0)
-            return 0;
-
-        const XBlock &block = g_streamBlocks[ownerBlock];
-        if (ownerOffset > block.size ||
-            block.size - ownerOffset < sizeof(uint32_t))
+        const size_t offset =
+            static_cast<size_t>(serializedAddress - base);
+        const size_t remaining =
+            g_streamBlocks[block].size - offset;
+        if (remaining < sizeof(uint32_t))
             return 0;
 
         uint32_t raw = 0;
         std::memcpy(
             &raw,
-            reinterpret_cast<const void *>(current),
+            reinterpret_cast<const void *>(serializedAddress),
             sizeof(raw));
 
-        // -1 is the explicit inline XString form: the bytes immediately after
-        // the marker contain the string. -2 is an INSERT marker, not a string
-        // chain, and must not be consumed as another indirection.
-        if (raw == UINT32_MAX)
+        if (raw == UINT32_MAX &&
+            remaining > sizeof(uint32_t))
         {
-            if (block.size - ownerOffset > sizeof(uint32_t))
-            {
-                const uintptr_t inlineAddress =
-                    current + sizeof(uint32_t);
-                if (Switch_IsSerializedAssetName(inlineAddress))
-                    return inlineAddress;
-            }
-            return 0;
+            const uintptr_t inlineAddress =
+                serializedAddress + sizeof(uint32_t);
+            if (Switch_IsSerializedAssetName(inlineAddress))
+                return inlineAddress;
         }
 
-        if (raw == UINT32_MAX - 1u || raw == 0)
-            return 0;
-
-        const uint32_t targetBlock = (raw - 1u) >> 28;
-        const uint32_t targetOffset = (raw - 1u) & 0x0FFFFFFFu;
-        if (targetBlock >= ARRAY_COUNT(g_streamPosArray) ||
-            !g_streamBlocks[targetBlock].data ||
-            targetOffset >= g_streamBlocks[targetBlock].size)
-            return 0;
-
-        // Some CoD4 XStrings are stored as a pointer slot whose contents are
-        // another serialized 32-bit XString token. Follow that chain only
-        // after proving the current address is not already a valid string.
-        current = reinterpret_cast<uintptr_t>(
-            &g_streamBlocks[targetBlock].data[targetOffset]);
+        return Switch_IsSerializedAssetName(serializedAddress)
+            ? serializedAddress
+            : 0;
     }
 
     return 0;
-}
-#endif
+}#endif
 
 void __cdecl DB_ConvertOffsetToAlias(void *data)
 {
