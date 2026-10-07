@@ -5936,6 +5936,26 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         }
 
 #ifdef __SWITCH__
+        if (traceImageStringProbe)
+        {
+            const char *probeName = varGfxImage->name;
+            char trace[768];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][XSTRING PROBE RESULT] asset=%d token=%08x name=%p text=%s cursor=%p b4=%08x delay=%u\n",
+                g_switchCurrentAssetIndex,
+                serialized.name,
+                static_cast<const void *>(probeName),
+                probeName ? probeName : "<null>",
+                static_cast<void *>(DB_GetStreamPos()),
+                Switch_GetStreamCursorOffset(4),
+                static_cast<unsigned>(varGfxImage->delayLoadPixels));
+            Switch_LogRaw(trace);
+        }
+#endif
+
+#ifdef __SWITCH__
         {
             const char *resolvedName = varGfxImage->name;
             char trace[448];
