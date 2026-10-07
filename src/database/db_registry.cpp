@@ -4259,7 +4259,17 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
                 &directOffset);
 
         uintptr_t resolvedName = directName;
-        if (!directNameIsStreamString)
+        if (directNameIsStreamString)
+        {
+            // Switch_IsStreamAsciiImageName can recover a serialized XString
+            // that was converted one byte into the string. The helper reports
+            // the corrected block/offset; use that corrected address instead
+            // of retaining the original +1 pointer.
+            resolvedName =
+                reinterpret_cast<uintptr_t>(
+                    &g_streamBlocks[directBlock].data[directOffset]);
+        }
+        else
         {
             resolvedName =
                 DB_ResolveSwitchSerializedString(directName);
