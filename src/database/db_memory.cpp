@@ -93,20 +93,7 @@ void __cdecl DB_AllocXZoneMemory(
     uint8_t *buf; // [esp+2Ch] [ebp-8h]
     uint32_t size; // [esp+30h] [ebp-4h]
 
-#ifdef __SWITCH__
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][DB MEM] enter blockSize=%p filename=%p zoneMem=%p allocType=%u\n",
-            static_cast<void *>(blockSize),
-            static_cast<const void *>(filename),
-            static_cast<void *>(zoneMem),
-            static_cast<unsigned>(allocType));
-        Switch_LogWrite(trace);
-    }
-#endif
+
 
     for (blockIndex = 0; blockIndex < 9; ++blockIndex)
     {
