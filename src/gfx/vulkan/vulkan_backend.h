@@ -285,6 +285,7 @@ private:
     bool m_initialized = false;
     bool m_frameActive = false;
     bool m_renderingActive = false;
+    bool m_backbufferClearedThisFrame = false;
 
     VkImage m_presentSourceImage = VK_NULL_HANDLE;
     VkImageView m_presentSourceView = VK_NULL_HANDLE;
