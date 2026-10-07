@@ -1457,13 +1457,6 @@ static void spv_emit_vs_main_end(Context* ctx)
 #endif // defined(MOJOSHADER_DEPTH_CLIPPING) || defined(MOJOSHADER_FLIP_RENDERTARGET)
 #endif // SUPPORT_PROFILE_GLSPIRV
 
-    /*
-     * The Vulkan profile uses D3D9 clip-space conventions for translated
-     * shaders. Apply the Y inversion in the vertex main function itself.
-     * This path is emitted from spv_emit_func_end(), so it needs no extra
-     * context ID/state that only exists in GLSPIRV builds.
-     */
-    (void)ctx;
 } // spv_emit_vs_main_end
 
 static void spv_emit_func_lit(Context *ctx)
