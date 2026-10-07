@@ -1748,8 +1748,15 @@ void __cdecl Load_XString(bool atStreamStart)
         }
         else
         {
-            *varXString = reinterpret_cast<const char *>(
-                DB_ConvertOffsetToPointerValue(serialized));
+            const uintptr_t resolved =
+                DB_ConvertOffsetToPointerValue(serialized);
+            if (resolved)
+            {
+                const uintptr_t stringResolved =
+                    DB_ResolveSwitchSerializedString(resolved);
+                *varXString = reinterpret_cast<const char *>(
+                    stringResolved ? stringResolved : resolved);
+            }
         }
     }
 #else
