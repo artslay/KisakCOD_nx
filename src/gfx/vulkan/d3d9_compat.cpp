@@ -19,6 +19,10 @@
 
 extern void Switch_LogWrite(const char *msg);
 
+#ifdef __SWITCH__
+thread_local const GfxImage *g_switchLastSamplerImages[16]{};
+#endif
+
 namespace
 {
 struct TextureFormatInfo
@@ -2423,14 +2427,21 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 psConstUsed += std::min<size_t>(static_cast<size_t>(pw), sizeof(psConstText) - psConstUsed - 1);
         }
 
+        const GfxImage *boundImage0 =
+            g_switchLastSamplerImages[0];
+        const uint32_t sampler0Min = m_samplerState[0][D3DSAMP_MINFILTER];
+        const uint32_t sampler0Mag = m_samplerState[0][D3DSAMP_MAGFILTER];
+        const uint32_t sampler0Mip = m_samplerState[0][D3DSAMP_MIPFILTER];
         std::snprintf(
             msg, sizeof(msg),
             "[KisakCOD][VK DRAW] #%u prim=%u tris=%u verts=%u start=%u base=%d "
             "stream0=%p off=%u stride=%u viewport=%u,%u %ux%u scissor=%d %d,%d %dx%d "
             "v0=(%.3f,%.3f,%.3f,%.3f) v1=(%.3f,%.3f,%.3f,%.3f) "
             "v2=(%.3f,%.3f,%.3f,%.3f) v3=(%.3f,%.3f,%.3f,%.3f) "
-            "color0=%08x uv0=(%.3f,%.3f) normal0=%08x "
+            "uv0=(%.3f,%.3f) uv1=(%.3f,%.3f) uv2=(%.3f,%.3f) uv3=(%.3f,%.3f) "
+            "color0=%08x normal0=%08x "
             "tex0=%p %ux%u srcfmt=%u vkfmt=%u layout=%u "
+            "image0=%p name0=%s sampler0=%u/%u/%u addr=%u/%u/%u "
             "vsConst=%s psConst=%s "
             "attrs=%s decl=%s\n",
             static_cast<unsigned>(switchDrawTraceCount),
@@ -2450,8 +2461,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             static_cast<double>(vertices[2].z), static_cast<double>(vertices[2].w),
             static_cast<double>(vertices[3].x), static_cast<double>(vertices[3].y),
             static_cast<double>(vertices[3].z), static_cast<double>(vertices[3].w),
-            vertices[0].color,
             static_cast<double>(vertices[0].s), static_cast<double>(vertices[0].t),
+            static_cast<double>(vertices[1].s), static_cast<double>(vertices[1].t),
+            static_cast<double>(vertices[2].s), static_cast<double>(vertices[2].t),
+            static_cast<double>(vertices[3].s), static_cast<double>(vertices[3].t),
+            vertices[0].color,
             vertices[0].normal,
             static_cast<const void *>(texture0),
             texture0 ? texture0->width : 0u,
@@ -2459,6 +2473,12 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             texture0 ? static_cast<unsigned>(texture0->sourceFormat) : 0u,
             texture0 ? static_cast<unsigned>(texture0->format) : 0u,
             texture0 ? static_cast<unsigned>(texture0->layout) : 0u,
+            static_cast<const void *>(boundImage0),
+            (boundImage0 && boundImage0->name) ? boundImage0->name : "<none>",
+            sampler0Min, sampler0Mag, sampler0Mip,
+            m_samplerState[0][D3DSAMP_ADDRESSU],
+            m_samplerState[0][D3DSAMP_ADDRESSV],
+            m_samplerState[0][D3DSAMP_ADDRESSW],
             vsConstText, psConstText, attrText, declText);
         Switch_LogWrite(msg);
         ++switchDrawTraceCount;
