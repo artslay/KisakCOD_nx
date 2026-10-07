@@ -1549,17 +1549,7 @@ void DB_TryLoadXFile()
     if (g_zoneInfoCount)
     {
         zoneInfoCount = g_zoneInfoCount;
-#ifdef __SWITCH__
-        {
-            char trace[192];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][DB LOAD] count=%u loading=%u\n",
-                static_cast<unsigned>(zoneInfoCount),
-                static_cast<unsigned>(g_loadingAssets));
-            Switch_LogWrite(trace);
-        }
+
         if (zoneInfoCount > 8)
         {
             g_switchDbStage = "load/count_invalid";
@@ -1572,18 +1562,7 @@ void DB_TryLoadXFile()
             MyAssertHandler(".\\database\\db_registry.cpp", 3764, 0, "%s", "!g_loadingZone");
         for (j = 0; j < zoneInfoCount; ++j)
         {
-#ifdef __SWITCH__
-            {
-                char trace[256];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][DB LOAD] zone[%u] name=%s flags=%x\n",
-                    static_cast<unsigned>(j),
-                    g_zoneInfo[j].name,
-                    static_cast<unsigned>(g_zoneInfo[j].flags));
-                Switch_LogWrite(trace);
-            }
+
             g_switchDbStage = "load/call_internal";
 #endif
             if (!DB_TryLoadXFileInternal(g_zoneInfo[j].name, g_zoneInfo[j].flags))
