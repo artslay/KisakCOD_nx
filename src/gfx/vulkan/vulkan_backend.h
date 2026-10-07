@@ -118,7 +118,8 @@ public:
         VkImageAspectFlags aspect,
         VkImage *image,
         VkDeviceMemory *memory,
-        VkImageView *view);
+        VkImageView *view,
+        VkComponentMapping components = {});
 
     bool CreateImageCube(
         uint32_t width,

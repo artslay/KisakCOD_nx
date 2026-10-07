@@ -105,6 +105,39 @@ size_t R_VulkanImageLevelSize(_D3DFORMAT format, uint32_t width, uint32_t height
     return static_cast<size_t>(width) * height * depth * info.bytesPerPixel;
 }
 
+VkComponentMapping R_VulkanComponentMapping(_D3DFORMAT format)
+{
+    VkComponentMapping mapping{
+        VK_COMPONENT_SWIZZLE_IDENTITY,
+        VK_COMPONENT_SWIZZLE_IDENTITY,
+        VK_COMPONENT_SWIZZLE_IDENTITY,
+        VK_COMPONENT_SWIZZLE_IDENTITY
+    };
+
+    switch (format)
+    {
+    case D3DFMT_L8:
+        mapping.g = VK_COMPONENT_SWIZZLE_R;
+        mapping.b = VK_COMPONENT_SWIZZLE_R;
+        break;
+    case D3DFMT_A8:
+        mapping.r = VK_COMPONENT_SWIZZLE_ONE;
+        mapping.g = VK_COMPONENT_SWIZZLE_ONE;
+        mapping.b = VK_COMPONENT_SWIZZLE_ONE;
+        mapping.a = VK_COMPONENT_SWIZZLE_R;
+        break;
+    case D3DFMT_A8L8:
+        mapping.g = VK_COMPONENT_SWIZZLE_R;
+        mapping.b = VK_COMPONENT_SWIZZLE_R;
+        mapping.a = VK_COMPONENT_SWIZZLE_G;
+        break;
+    default:
+        break;
+    }
+
+    return mapping;
+}
+
 uint32_t R_VulkanFullMipCount(uint32_t width, uint32_t height, uint32_t depth)
 {
     uint32_t levels = 1;
@@ -175,15 +208,17 @@ bool R_VulkanAllocTexture(
     }
     else if (kind == VulkanTextureKind::Texture3D)
     {
+        const VkComponentMapping components = R_VulkanComponentMapping(sourceFormat);
         created = backend->CreateImage3D(
             width, height, depth, levels, info.format, usage,
-            &texture->image, &texture->memory, &texture->view);
+            &texture->image, &texture->memory, &texture->view, components);
     }
     else
     {
+        const VkComponentMapping components = R_VulkanComponentMapping(sourceFormat);
         created = backend->CreateImage2D(
             width, height, levels, info.format, usage, info.aspect,
-            &texture->image, &texture->memory, &texture->view);
+            &texture->image, &texture->memory, &texture->view, components);
     }
 
     if (!created)
