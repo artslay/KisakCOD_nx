@@ -2146,6 +2146,50 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         return E_FAIL;
     }
     m_topology = PrimitiveTopology(primitiveType);
+#ifdef __SWITCH__
+    static uint32_t switchDrawTraceCount = 0;
+    if (switchDrawTraceCount < 8)
+    {
+        char msg[1024];
+        const auto &stream0 = m_streams[0];
+        const uint8_t *vertexBytes =
+            (stream0.buffer && stream0.offset < stream0.buffer->shadow.size())
+                ? stream0.buffer->shadow.data() + stream0.offset
+                : nullptr;
+        float vx = 0.0f, vy = 0.0f, vz = 0.0f, vw = 0.0f;
+        uint32_t vcolor = 0;
+        float vs = 0.0f, vt = 0.0f;
+        if (vertexBytes && stream0.buffer->shadow.size() - stream0.offset >= 28)
+        {
+            std::memcpy(&vx, vertexBytes + 0, sizeof(vx));
+            std::memcpy(&vy, vertexBytes + 4, sizeof(vy));
+            std::memcpy(&vz, vertexBytes + 8, sizeof(vz));
+            std::memcpy(&vw, vertexBytes + 12, sizeof(vw));
+            std::memcpy(&vcolor, vertexBytes + 16, sizeof(vcolor));
+            std::memcpy(&vs, vertexBytes + 20, sizeof(vs));
+            std::memcpy(&vt, vertexBytes + 24, sizeof(vt));
+        }
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK DRAW] #%u prim=%u tris=%u verts=%u start=%u base=%d "
+            "stream0=%p off=%u stride=%u v0=(%.3f,%.3f,%.3f,%.3f) "
+            "color=%08x uv=(%.3f,%.3f) tex0=%p %ux%u fmt=%u layout=%u\n",
+            static_cast<unsigned>(switchDrawTraceCount),
+            primitiveType, primitiveCount, numVertices, startIndex, baseVertexIndex,
+            static_cast<void *>(stream0.buffer),
+            stream0.offset, stream0.stride,
+            static_cast<double>(vx), static_cast<double>(vy),
+            static_cast<double>(vz), static_cast<double>(vw), vcolor,
+            static_cast<double>(vs), static_cast<double>(vt),
+            static_cast<void *>(m_textures[0]),
+            m_textures[0] ? m_textures[0]->width : 0u,
+            m_textures[0] ? m_textures[0]->height : 0u,
+            m_textures[0] ? static_cast<unsigned>(m_textures[0]->format) : 0u,
+            m_textures[0] ? static_cast<unsigned>(m_textures[0]->layout) : 0u);
+        Switch_LogWrite(msg);
+        ++switchDrawTraceCount;
+    }
+#endif
     if (!PrepareDraw())
         return E_FAIL;
 
