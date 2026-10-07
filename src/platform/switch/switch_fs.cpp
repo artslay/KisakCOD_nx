@@ -292,62 +292,18 @@ static void Switch_IndexIwdArchives(const char *game)
     const char *gameName = game && *game ? game : "main";
     const std::string selectedLanguage = Switch_GetStartupLanguage(gameName);
 
-    char gamePath[256];
-    std::snprintf(
-        gamePath,
-        sizeof(gamePath),
-        "%s/%s",
-        base,
-        gameName);
+    // Match the original CoD4 search-path order. Directories added later are
+    // searched first at runtime, so they are indexed later and take precedence.
+    std::vector<std::string> searchDirectories = {
+        "devraw_shared",
+        "devraw",
+        "raw_shared",
+        "raw",
+        std::string(gameName) + "_shared",
+        gameName
+    };
 
-    DIR *directory = opendir(gamePath);
-    if (!directory)
-    {
-        char trace[192];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IWD] game directory missing path=%s\n",
-            gamePath);
-        Switch_LogWrite(trace);
-        return;
-    }
-
-    std::vector<std::string> regularArchives;
-    std::vector<std::string> localizedArchives;
-
-    while (dirent *entry = readdir(directory))
-    {
-        if (!entry->d_name || entry->d_name[0] == '.')
-            continue;
-
-        const std::string normalizedName = SwitchNormalizePath(entry->d_name);
-        if (normalizedName.size() < 4 ||
-            normalizedName.compare(
-                normalizedName.size() - 4,
-                4,
-                ".iwd") != 0)
-            continue;
-
-        char localizedLanguage[64] = {};
-        const bool localized = Switch_GetLocalizedIwdLanguage(
-            normalizedName.c_str(),
-            localizedLanguage,
-            sizeof(localizedLanguage));
-
-        if (localized)
-        {
-            if (I_stricmp(localizedLanguage, selectedLanguage.c_str()) != 0)
-                continue;
-            localizedArchives.emplace_back(entry->d_name);
-        }
-        else
-        {
-            regularArchives.emplace_back(entry->d_name);
-        }
-    }
-
-    closedir(directory);
+    int archiveCount = 0;
 
     auto archiveSort = [](const std::string &a, const std::string &b)
     {
@@ -356,39 +312,98 @@ static void Switch_IndexIwdArchives(const char *game)
         return na < nb;
     };
 
-    std::sort(regularArchives.begin(), regularArchives.end(), archiveSort);
-    std::sort(localizedArchives.begin(), localizedArchives.end(), archiveSort);
-
-    int archiveCount = 0;
-
-    auto indexArchives = [&](const std::vector<std::string> &archives)
+    for (const std::string &directoryName : searchDirectories)
     {
-        for (const std::string &archiveName : archives)
-        {
-            char archivePath[256];
-            std::snprintf(
-                archivePath,
-                sizeof(archivePath),
-                "%s/%s/%s",
-                base,
-                gameName,
-                archiveName.c_str());
+        char directoryPath[256];
+        std::snprintf(
+            directoryPath,
+            sizeof(directoryPath),
+            "%s/%s",
+            base,
+            directoryName.c_str());
 
-            struct stat st = {};
-            if (stat(archivePath, &st) != 0 || !S_ISREG(st.st_mode))
+        DIR *directory = opendir(directoryPath);
+        if (!directory)
+            continue;
+
+        std::vector<std::string> regularArchives;
+        std::vector<std::string> localizedArchives;
+
+        while (dirent *entry = readdir(directory))
+        {
+            if (!entry->d_name || entry->d_name[0] == '.')
                 continue;
 
-            Switch_IndexIwdArchive(archivePath);
-            ++archiveCount;
+            const std::string normalizedName =
+                SwitchNormalizePath(entry->d_name);
+            if (normalizedName.size() < 4 ||
+                normalizedName.compare(
+                    normalizedName.size() - 4,
+                    4,
+                    ".iwd") != 0)
+                continue;
+
+            char localizedLanguage[64] = {};
+            const bool localized = Switch_GetLocalizedIwdLanguage(
+                normalizedName.c_str(),
+                localizedLanguage,
+                sizeof(localizedLanguage));
+
+            if (localized)
+            {
+                if (I_stricmp(
+                        localizedLanguage,
+                        selectedLanguage.c_str()) != 0)
+                    continue;
+                localizedArchives.emplace_back(entry->d_name);
+            }
+            else
+            {
+                regularArchives.emplace_back(entry->d_name);
+            }
         }
-    };
 
-    // Keep normal IWDs first so selected localized archives have precedence
-    // over ordinary assets, matching the original search-path semantics.
-    indexArchives(regularArchives);
-    indexArchives(localizedArchives);
+        closedir(directory);
 
-    char trace[224];
+        std::sort(
+            regularArchives.begin(),
+            regularArchives.end(),
+            archiveSort);
+        std::sort(
+            localizedArchives.begin(),
+            localizedArchives.end(),
+            archiveSort);
+
+        auto indexArchives = [&](const std::vector<std::string> &archives)
+        {
+            for (const std::string &archiveName : archives)
+            {
+                char archivePath[256];
+                std::snprintf(
+                    archivePath,
+                    sizeof(archivePath),
+                    "%s/%s/%s",
+                    base,
+                    directoryName.c_str(),
+                    archiveName.c_str());
+
+                struct stat st = {};
+                if (stat(archivePath, &st) != 0 || !S_ISREG(st.st_mode))
+                    continue;
+
+                Switch_IndexIwdArchive(archivePath);
+                ++archiveCount;
+            }
+        };
+
+        // Within each search path, normal IWDs are loaded first so the
+        // selected localized IWDs have the same higher precedence as the
+        // original filesystem.
+        indexArchives(regularArchives);
+        indexArchives(localizedArchives);
+    }
+
+    char trace[256];
     std::snprintf(
         trace,
         sizeof(trace),
