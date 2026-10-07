@@ -64,6 +64,7 @@ struct SwitchIwdEntry
     uint16_t archiveIndex = 0;
     unsigned long infoPosition = 0;
     uint32_t size = 0;
+    uint32_t nextDuplicate = UINT32_MAX;
 };
 
 struct SwitchZipHandle
@@ -73,7 +74,8 @@ struct SwitchZipHandle
 };
 
 static std::vector<SwitchIwdArchive> g_iwdArchives;
-static std::unordered_map<std::string, SwitchIwdEntry> g_iwdEntries;
+static std::vector<SwitchIwdEntry> g_iwdEntryRecords;
+static std::unordered_map<std::string, uint32_t> g_iwdEntries;
 static SwitchZipHandle g_zipHandles[65] = {};
 
 static int AllocHandle();
@@ -106,6 +108,7 @@ static void Switch_ClearIwdIndex()
             unzClose(archive.file);
     }
     g_iwdArchives.clear();
+    g_iwdEntryRecords.clear();
     g_iwdEntries.clear();
 }
 
@@ -123,7 +126,12 @@ static void Switch_IndexIwdArchive(const char *archivePath)
 
     unz_global_info globalInfo = {};
     if (unzGetGlobalInfo(archiveFile, &globalInfo) == UNZ_OK)
-        g_iwdEntries.reserve(g_iwdEntries.size() + globalInfo.number_entry);
+    {
+        g_iwdEntryRecords.reserve(
+            g_iwdEntryRecords.size() + globalInfo.number_entry);
+        g_iwdEntries.reserve(
+            g_iwdEntries.size() + globalInfo.number_entry);
+    }
 
     int entryCount = 0;
     if (unzGoToFirstFile(archiveFile) == UNZ_OK)
@@ -159,10 +167,22 @@ static void Switch_IndexIwdArchive(const char *archivePath)
             entry.infoPosition = infoPosition;
             entry.size = static_cast<uint32_t>(info.uncompressed_size);
 
-            // iw_XX files are added as separate search paths. Since later
-            // search paths are inserted at the head, higher numbered archives
-            // have precedence when the same asset exists more than once.
-            g_iwdEntries[normalizedName] = entry;
+            // Keep every packed copy of a qpath. The original filesystem
+            // keeps each IWD as a separate search path, so a duplicate must
+            // not overwrite the earlier record. The newest record is the
+            // head of the duplicate chain and therefore has precedence.
+            const uint32_t entryIndex =
+                static_cast<uint32_t>(g_iwdEntryRecords.size());
+            const auto existing = g_iwdEntries.find(normalizedName);
+            if (existing != g_iwdEntries.end())
+                entry.nextDuplicate = existing->second;
+
+            g_iwdEntryRecords.push_back(entry);
+            if (existing != g_iwdEntries.end())
+                existing->second = entryIndex;
+            else
+                g_iwdEntries.emplace(normalizedName, entryIndex);
+
             ++entryCount;
         } while (unzGoToNextFile(archiveFile) == UNZ_OK);
     }
@@ -654,16 +674,18 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         char trace[512];
 
         if (iwdIt != g_iwdEntries.end() &&
-            iwdIt->second.archiveIndex < g_iwdArchives.size())
+            iwdIt->second < g_iwdEntryRecords.size())
         {
-            const SwitchIwdEntry &entry = iwdIt->second;
+            const SwitchIwdEntry &entry = g_iwdEntryRecords[iwdIt->second];
             std::snprintf(
                 trace,
                 sizeof(trace),
                 "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=1 archive=%s size=%u\n",
                 filename,
                 normalizedName.c_str(),
-                g_iwdArchives[entry.archiveIndex].path.c_str(),
+                entry.archiveIndex < g_iwdArchives.size()
+                    ? g_iwdArchives[entry.archiveIndex].path.c_str()
+                    : "invalid",
                 static_cast<unsigned>(entry.size));
         }
         else
@@ -680,12 +702,31 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
     }
 
     // Resolve only through the startup-built IWD index. No per-file archive
-    // rescans are performed here.
+    // rescans are performed here. Duplicate qpaths are tried in the same
+    // search-path order represented by the index, so one bad duplicate cannot
+    // hide a valid copy in another IWD.
     {
         const auto iwdIt = g_iwdEntries.find(normalizedName);
         int iwdHandle = 0;
-        if (iwdIt != g_iwdEntries.end() &&
-            Switch_OpenIwdFile(filename, iwdIt->second, &iwdHandle))
+        bool openedIwd = false;
+
+        if (iwdIt != g_iwdEntries.end())
+        {
+            uint32_t entryIndex = iwdIt->second;
+            while (entryIndex != UINT32_MAX &&
+                   entryIndex < g_iwdEntryRecords.size())
+            {
+                const SwitchIwdEntry &entry = g_iwdEntryRecords[entryIndex];
+                if (Switch_OpenIwdFile(filename, entry, &iwdHandle))
+                {
+                    openedIwd = true;
+                    break;
+                }
+                entryIndex = entry.nextDuplicate;
+            }
+        }
+
+        if (openedIwd)
         {
             if (traceImage3)
             {
