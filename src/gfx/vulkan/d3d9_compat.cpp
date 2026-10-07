@@ -2394,6 +2394,35 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 
         const KisakVkTexture *texture0 = m_textures[0];
 
+        char vsConstText[448]{};
+        char psConstText[448]{};
+        size_t vsConstUsed = 0;
+        size_t psConstUsed = 0;
+        for (uint32_t ci = 0; ci < 8; ++ci)
+        {
+            const int vw = std::snprintf(
+                vsConstText + vsConstUsed, sizeof(vsConstText) - vsConstUsed,
+                "%sc%u=(%.4f,%.4f,%.4f,%.4f)",
+                ci ? " " : "", ci,
+                static_cast<double>(m_vsFloat[ci][0]),
+                static_cast<double>(m_vsFloat[ci][1]),
+                static_cast<double>(m_vsFloat[ci][2]),
+                static_cast<double>(m_vsFloat[ci][3]));
+            if (vw > 0)
+                vsConstUsed += std::min<size_t>(static_cast<size_t>(vw), sizeof(vsConstText) - vsConstUsed - 1);
+
+            const int pw = std::snprintf(
+                psConstText + psConstUsed, sizeof(psConstText) - psConstUsed,
+                "%sc%u=(%.4f,%.4f,%.4f,%.4f)",
+                ci ? " " : "", ci,
+                static_cast<double>(m_psFloat[ci][0]),
+                static_cast<double>(m_psFloat[ci][1]),
+                static_cast<double>(m_psFloat[ci][2]),
+                static_cast<double>(m_psFloat[ci][3]));
+            if (pw > 0)
+                psConstUsed += std::min<size_t>(static_cast<size_t>(pw), sizeof(psConstText) - psConstUsed - 1);
+        }
+
         std::snprintf(
             msg, sizeof(msg),
             "[KisakCOD][VK DRAW] #%u prim=%u tris=%u verts=%u start=%u base=%d "
@@ -2402,6 +2431,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             "v2=(%.3f,%.3f,%.3f,%.3f) v3=(%.3f,%.3f,%.3f,%.3f) "
             "color0=%08x uv0=(%.3f,%.3f) normal0=%08x "
             "tex0=%p %ux%u srcfmt=%u vkfmt=%u layout=%u "
+            "vsConst=%s psConst=%s "
             "attrs=%s decl=%s\n",
             static_cast<unsigned>(switchDrawTraceCount),
             primitiveType, primitiveCount, numVertices, startIndex, baseVertexIndex,
