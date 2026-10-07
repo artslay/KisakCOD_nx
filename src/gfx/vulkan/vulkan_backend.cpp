@@ -16,6 +16,8 @@
 #endif
 #include <vulkan/vulkan_vi.h>
 
+extern void Switch_LogWrite(const char *msg);
+
 namespace
 {
 VulkanBackend *g_backend = nullptr;
