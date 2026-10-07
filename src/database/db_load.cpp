@@ -5547,16 +5547,84 @@ void __cdecl Load_GfxImage(bool atStreamStart)
 
         DB_PushStreamPos(4);
 
-        // GfxImage::name is an XString serialized as a 32-bit token.
-        // Load_XString performs the normal 32-bit offset -> stream-pointer
-        // conversion. The GfxImage object itself is handled separately by the
-        // pointer-alias registration above.
-        varGfxImage->name =
-            reinterpret_cast<const char *>(
-                static_cast<uintptr_t>(serialized.name));
-        varXString = &varGfxImage->name;
-        Load_XString(false);
+        // GfxImage names use the 32-bit XString representation from the
+        // fastfile. A positive name token normally points directly at the
+        // serialized string, but CoD4 also stores deduplicated XStrings as a
+        // pointer-slot whose contents are -1 followed by the inline string.
+        // Do not pass that slot through Load_XString: that would make the
+        // slot's 0xFFFFFFFF bytes become the image name ("я...").
+        if (!serialized.name)
+        {
+            varGfxImage->name = nullptr;
+        }
+        else if (serialized.name == UINT32_MAX)
+        {
+            char *nameBuffer =
+                reinterpret_cast<char *>(AllocLoad_raw_byte());
+            Load_XStringCustom(&nameBuffer);
+            varGfxImage->name = nameBuffer;
+        }
+        else
+        {
+            const uintptr_t nameAddress =
+                DB_ConvertOffsetToPointerValue(serialized.name);
 
+            bool loadedAliasedInlineName = false;
+
+#ifdef __SWITCH__
+            if (nameAddress && g_streamBlocks && g_streamBlocks[4].data)
+            {
+                const uintptr_t block4Base =
+                    reinterpret_cast<uintptr_t>(g_streamBlocks[4].data);
+                const uintptr_t block4End =
+                    block4Base + g_streamBlocks[4].size;
+                const uintptr_t cursorAddress =
+                    reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+
+                if (nameAddress >= block4Base &&
+                    nameAddress + sizeof(uint32_t) <= block4End &&
+                    cursorAddress >= block4Base &&
+                    cursorAddress <= block4End)
+                {
+                    uint32_t marker = 0;
+                    std::memcpy(
+                        &marker,
+                        reinterpret_cast<const void *>(nameAddress),
+                        sizeof(marker));
+
+                    if (marker == UINT32_MAX &&
+                        nameAddress + sizeof(uint32_t) == cursorAddress)
+                    {
+                        char *nameBuffer =
+                            reinterpret_cast<char *>(AllocLoad_raw_byte());
+                        Load_XStringCustom(&nameBuffer);
+                        varGfxImage->name = nameBuffer;
+                        loadedAliasedInlineName = true;
+                    }
+                }
+            }
+#endif
+
+            if (!loadedAliasedInlineName)
+            {
+                uintptr_t resolvedName = 0;
+
+#ifdef __SWITCH__
+                // If the token targets another serialized pointer slot, resolve
+                // that chain only here, for GfxImage names. The resolver first
+                // recognizes real ASCII stream strings, so ordinary direct
+                // XStrings are left untouched.
+                resolvedName =
+                    DB_ResolveSwitchSerializedString(nameAddress);
+#endif
+
+                varGfxImage->name =
+                    reinterpret_cast<const char *>(
+                        resolvedName ? resolvedName : nameAddress);
+            }
+        }
+
+#ifdef __SWITCH__
         {
             const char *resolvedName = varGfxImage->name;
             char trace[448];
@@ -5658,6 +5726,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 Switch_LogWrite(detail);
             }
         }
+#endif
 
         varGfxTextureLoad = &varGfxImage->texture;
         Load_GfxTextureLoad(0);
