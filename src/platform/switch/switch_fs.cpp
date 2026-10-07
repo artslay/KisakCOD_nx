@@ -682,8 +682,10 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
     // Resolve only through the startup-built IWD index. No per-file archive
     // rescans are performed here.
     {
+        const auto iwdIt = g_iwdEntries.find(normalizedName);
         int iwdHandle = 0;
-        if (Switch_OpenIwdFile(filename, &iwdHandle))
+        if (iwdIt != g_iwdEntries.end() &&
+            Switch_OpenIwdFile(filename, iwdIt->second, &iwdHandle))
         {
             if (traceImage3)
             {
