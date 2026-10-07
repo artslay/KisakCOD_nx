@@ -369,7 +369,8 @@ uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress)
     }
 
     return 0;
-}#endif
+}
+#endif
 
 void __cdecl DB_ConvertOffsetToAlias(void *data)
 {
