@@ -5332,6 +5332,22 @@ void __cdecl Load_GfxTextureLoad(bool atStreamStart)
     IDirect3DBaseTexture9 *value; // [esp+4h] [ebp-8h]
 
     Load_Stream(atStreamStart, (unsigned char*)varGfxTextureLoad, 4);
+#ifdef __SWITCH__
+    if (g_switchCurrentAssetIndex == 1530 &&
+        g_switchCurrentAssetRawType == ASSET_TYPE_MATERIAL)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][IMAGE1530 TEX] prepush b0=%08x b4=%08x token=%08x\n",
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            static_cast<unsigned>(
+                reinterpret_cast<uintptr_t>(varGfxTextureLoad->basemap)));
+        Switch_LogRaw(trace);
+    }
+#endif
     DB_PushStreamPos(0);
     if (varGfxTextureLoad->basemap)
     {
@@ -5523,6 +5539,25 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         varGfxImage->delayLoadPixels = serialized.delayLoadPixels != 0;
         
 
+#ifdef __SWITCH__
+        if (g_switchCurrentAssetIndex == 1530 &&
+            g_switchCurrentAssetRawType == ASSET_TYPE_MATERIAL)
+        {
+            char trace[448];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IMAGE1530] header texture=%08x name=%08x "
+                "b0=%08x b4=%08x image=%p\n",
+                serialized.texture,
+                serialized.name,
+                Switch_GetStreamCursorOffset(0),
+                Switch_GetStreamCursorOffset(4),
+                static_cast<void *>(varGfxImage));
+            Switch_LogRaw(trace);
+        }
+#endif
+
         DB_PushStreamPos(4);
 
         // GfxImage names use the 32-bit XString representation from the
@@ -5703,6 +5738,22 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 }
                 Switch_LogWrite(detail);
             }
+        }
+#endif
+
+#ifdef __SWITCH__
+        if (g_switchCurrentAssetIndex == 1530 &&
+            g_switchCurrentAssetRawType == ASSET_TYPE_MATERIAL)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IMAGE1530] after-name b0=%08x b4=%08x name=%p\n",
+                Switch_GetStreamCursorOffset(0),
+                Switch_GetStreamCursorOffset(4),
+                static_cast<const void *>(varGfxImage->name));
+            Switch_LogRaw(trace);
         }
 #endif
 
