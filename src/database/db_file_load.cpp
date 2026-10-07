@@ -590,6 +590,11 @@ void __cdecl DB_LoadXFileInternal()
 #endif
     Load_DelayStream();
 #ifdef __SWITCH__
+    // Forward GfxImage XStrings may only become concrete after the complete
+    // delayed stream has been materialized. Retry queued image assets once
+    // before the renderer starts opening the corresponding IWI files.
+    g_switchDbStage = "delayed_images/fixup";
+    DB_FlushSwitchDeferredImageAssets();
     g_switchDbStage = "delayed_images/enum";
 #endif
     DB_LoadDelayedImages();
