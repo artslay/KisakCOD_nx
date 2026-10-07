@@ -292,8 +292,15 @@ private:
 
     struct Query
     {
+        enum class Kind
+        {
+            Event,
+            Occlusion
+        };
+
+        Kind kind = Kind::Occlusion;
+        VkEvent event = VK_NULL_HANDLE;
         VkQueryPool pool = VK_NULL_HANDLE;
-        VkQueryType type = VK_QUERY_TYPE_OCCLUSION;
         bool active = false;
         bool issued = false;
     };

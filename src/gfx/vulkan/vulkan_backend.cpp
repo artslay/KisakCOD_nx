@@ -848,37 +848,39 @@ void VulkanBackend::EndScene()
     EndRendering();
 }
 
+
 void *VulkanBackend::CreateQuery(uint32_t queryType)
 {
-    VkQueryType vkType = VK_QUERY_TYPE_OCCLUSION;
+    auto *query = new Query;
+
+    VkResult result = VK_SUCCESS;
 
     if (queryType == 8) // D3DQUERYTYPE_EVENT
     {
-        uint32_t queueCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueCount, nullptr);
-        std::vector<VkQueueFamilyProperties> queues(queueCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueCount, queues.data());
+        query->kind = Query::Kind::Event;
 
-        if (m_graphicsQueueFamily >= queues.size() ||
-            queues[m_graphicsQueueFamily].timestampValidBits == 0)
-            return nullptr;
-
-        vkType = VK_QUERY_TYPE_TIMESTAMP;
+        VkEventCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
+        result = vkCreateEvent(m_device, &info, nullptr, &query->event);
     }
-    else if (queryType != 9) // D3DQUERYTYPE_OCCLUSION
+    else if (queryType == 9) // D3DQUERYTYPE_OCCLUSION
     {
+        query->kind = Query::Kind::Occlusion;
+
+        VkQueryPoolCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        info.queryType = VK_QUERY_TYPE_OCCLUSION;
+        info.queryCount = 1;
+
+        result = vkCreateQueryPool(m_device, &info, nullptr, &query->pool);
+    }
+    else
+    {
+        delete query;
         return nullptr;
     }
 
-    auto *query = new Query;
-    query->type = vkType;
-
-    VkQueryPoolCreateInfo info{};
-    info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-    info.queryType = vkType;
-    info.queryCount = 1;
-
-    if (vkCreateQueryPool(m_device, &info, nullptr, &query->pool) != VK_SUCCESS)
+    if (result != VK_SUCCESS)
     {
         delete query;
         return nullptr;
@@ -896,6 +898,8 @@ void VulkanBackend::ReleaseQuery(void *queryPtr)
     if (m_device && m_graphicsQueue)
         vkQueueWaitIdle(m_graphicsQueue);
 
+    if (query->event)
+        vkDestroyEvent(m_device, query->event, nullptr);
     if (query->pool)
         vkDestroyQueryPool(m_device, query->pool, nullptr);
     delete query;
@@ -907,15 +911,18 @@ void VulkanBackend::BeginQuery(void *queryPtr)
     if (!query || !m_commandBuffer || !m_frameActive)
         return;
 
-    vkCmdResetQueryPool(m_commandBuffer, query->pool, 0, 1);
     query->active = false;
     query->issued = false;
 
-    if (query->type == VK_QUERY_TYPE_OCCLUSION)
+    if (query->kind == Query::Kind::Event)
     {
-        vkCmdBeginQuery(m_commandBuffer, query->pool, 0, 0);
-        query->active = true;
+        vkResetEvent(m_device, query->event);
+        return;
     }
+
+    vkCmdResetQueryPool(m_commandBuffer, query->pool, 0, 1);
+    vkCmdBeginQuery(m_commandBuffer, query->pool, 0, 0);
+    query->active = true;
 }
 
 void VulkanBackend::EndQuery(void *queryPtr)
@@ -924,30 +931,39 @@ void VulkanBackend::EndQuery(void *queryPtr)
     if (!query || !m_commandBuffer || !m_frameActive)
         return;
 
-    if (query->type == VK_QUERY_TYPE_OCCLUSION)
+    if (query->kind == Query::Kind::Event)
     {
-        if (!query->active)
-            return;
-        vkCmdEndQuery(m_commandBuffer, query->pool, 0);
-        query->active = false;
-    }
-    else if (query->type == VK_QUERY_TYPE_TIMESTAMP)
-    {
-        vkCmdWriteTimestamp(
+        vkCmdSetEvent(
             m_commandBuffer,
-            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            query->pool,
-            0);
+            query->event,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+        query->issued = true;
+        return;
     }
 
+    if (!query->active)
+        return;
+
+    vkCmdEndQuery(m_commandBuffer, query->pool, 0);
+    query->active = false;
     query->issued = true;
 }
 
 bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
 {
     auto *query = static_cast<Query *>(queryPtr);
-    if (!query || !query->pool || !query->issued)
+    if (!query || !query->issued)
         return false;
+
+    if (query->kind == Query::Kind::Event)
+    {
+        if (vkGetEventStatus(m_device, query->event) != VK_EVENT_SET)
+            return false;
+
+        if (result)
+            *result = 1;
+        return true;
+    }
 
     uint64_t values[2]{};
     const VkResult status = vkGetQueryPoolResults(
@@ -966,46 +982,6 @@ bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
     if (result)
         *result = values[0];
     return true;
-}
-
-
-void VulkanBackend::Clear(float r, float g, float b, float a)
-{
-    if (!m_frameActive)
-        return;
-    if (!EnsureRendering(
-            CurrentSwapchainImage(), CurrentSwapchainView(), m_swapchainFormat,
-            m_defaultDepthImage, m_defaultDepthView, m_depthFormat,
-            m_swapchainLayouts[m_swapchainIndex], m_defaultDepthLayout,
-            m_width, m_height))
-        return;
-
-    VkClearAttachment color{};
-    color.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    color.colorAttachment = 0;
-    color.clearValue.color.float32[0] = r;
-    color.clearValue.color.float32[1] = g;
-    color.clearValue.color.float32[2] = b;
-    color.clearValue.color.float32[3] = a;
-
-    VkClearRect rect{};
-    rect.rect.extent = {m_width, m_height};
-    rect.layerCount = 1;
-    vkCmdClearAttachments(m_commandBuffer, 1, &color, 1, &rect);
-}
-
-bool VulkanBackend::GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_t *format) const
-{
-    if (width) *width = m_width;
-    if (height) *height = m_height;
-    if (format) *format = static_cast<uint32_t>(m_swapchainFormat);
-    return m_swapchain != VK_NULL_HANDLE;
-}
-
-void VulkanBackend::WaitForGpu()
-{
-    if (m_device)
-        vkDeviceWaitIdle(m_device);
 }
 
 void VulkanBackend::Flush()
