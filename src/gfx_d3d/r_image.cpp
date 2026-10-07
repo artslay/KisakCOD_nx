@@ -1686,10 +1686,24 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
         return 1;
 
 #ifdef __SWITCH__
-    // The code images can exist as native registry objects before their GL
-    // resource is available. Do not let a missing loose image become fatal
-    // merely because the shared builtin texture is empty. Recreate the same
-    // 1x1 fallback locally so the image remains renderable.
+    // The shared builtin may exist without a GPU resource. In that state the
+    // original duplicate path cannot produce a fallback. The delayed-image
+    // caller has already cleared cardMemory, so construct the 1x1 builtin
+    // texture directly on the failed image instead of depending on rgp.*.
+    if (r_loadForRenderer && r_loadForRenderer->current.enabled &&
+        !image->texture.basemap &&
+        image->cardMemory.platform[PICMIP_PLATFORM_USED] == 0)
+    {
+        if (image->semantic == TS_NORMAL_MAP)
+            Image_LoadIdentityNormalMap(image);
+        else if (image->semantic == TS_SPECULAR_MAP)
+            Image_LoadBlack(image);
+        else
+            Image_LoadWhite(image);
+
+        if (image->texture.basemap)
+            return 1;
+    }
 #endif
 
     return 0;
