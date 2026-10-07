@@ -1685,6 +1685,7 @@ bool VulkanBackend::UploadImage3D(
 
 VkSampler VulkanBackend::GetSampler(
     VkFilter minFilter, VkFilter magFilter, VkSamplerMipmapMode mipMode,
+    bool mipmapped,
     VkSamplerAddressMode addressU, VkSamplerAddressMode addressV, VkSamplerAddressMode addressW)
 {
     VkSamplerCreateInfo info{};
@@ -1696,15 +1697,16 @@ VkSampler VulkanBackend::GetSampler(
     info.addressModeV = addressV;
     info.addressModeW = addressW;
     info.minLod = 0.0f;
-    info.maxLod = VK_LOD_CLAMP_NONE;
+    info.maxLod = mipmapped ? VK_LOD_CLAMP_NONE : 0.0f;
 
     const uint64_t key =
         (static_cast<uint64_t>(minFilter)      << 0)  |
         (static_cast<uint64_t>(magFilter)      << 4)  |
         (static_cast<uint64_t>(mipMode)        << 8)  |
-        (static_cast<uint64_t>(addressU)       << 12) |
-        (static_cast<uint64_t>(addressV)       << 16) |
-        (static_cast<uint64_t>(addressW)       << 20);
+        (static_cast<uint64_t>(mipmapped ? 1u : 0u) << 12) |
+        (static_cast<uint64_t>(addressU)       << 13) |
+        (static_cast<uint64_t>(addressV)       << 17) |
+        (static_cast<uint64_t>(addressW)       << 21);
     const auto found = m_samplerCache.find(key);
     if (found != m_samplerCache.end())
         return found->second;
