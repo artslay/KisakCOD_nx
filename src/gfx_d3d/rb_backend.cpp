@@ -2745,9 +2745,10 @@ void __cdecl RB_BeginFrame(const GfxBackEndData *data)
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("dx.device->BeginScene()\n");
 #ifdef __SWITCH__
-            if (g_gfxBackend)
-                g_gfxBackend->BeginScene();
-            hr = S_OK;
+            // Keep the D3D9 compatibility device in the frame lifecycle.
+            // It owns the active render target and records an offscreen target
+            // as the Vulkan present source during EndScene().
+            hr = dx.device->BeginScene();
 #else
             hr = dx.device->BeginScene();
 #endif
@@ -3191,9 +3192,9 @@ void __cdecl RB_CallExecuteRenderCommands()
                 RB_LogPrint("dx.device->EndScene()\n");
             //hr = ((int(__thiscall *)(IDirect3DDevice9 *, IDirect3DDevice9 *))dx.device->EndScene)(dx.device, dx.device);
 #ifdef __SWITCH__
-            if (g_gfxBackend)
-                g_gfxBackend->EndScene();
-            hr = S_OK;
+            // EndScene must go through the D3D9 compatibility layer so it can
+            // queue the active offscreen render target for Vulkan presentation.
+            hr = dx.device->EndScene();
 #else
             hr = dx.device->EndScene();
 #endif
