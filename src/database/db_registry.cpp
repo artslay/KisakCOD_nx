@@ -4005,25 +4005,96 @@ static bool Switch_IsStreamAsciiImageName(
         const unsigned char *name =
             reinterpret_cast<const unsigned char *>(address);
 
-        if (blockOut)
-            *blockOut = block;
-        if (offsetOut)
-            *offsetOut = static_cast<uint32_t>(offset);
-
         if (!limit)
             return false;
 
-        for (size_t i = 0; i < limit; ++i)
+        size_t stringLength = 0;
+        for (; stringLength < limit; ++stringLength)
         {
-            const unsigned char ch = name[i];
+            const unsigned char ch = name[stringLength];
             if (ch == 0)
-                return i != 0;
+                break;
 
             if (ch < 0x21 || ch > 0x7E)
                 return false;
         }
 
-        return false;
+        if (stringLength == 0 || stringLength == limit)
+            return false;
+
+        // Some 32-bit serialized XString offsets land in the middle of the
+        // string after conversion to a 64-bit native pointer. Recover the
+        // string start only when the printable run is preceded by a NUL (or
+        // starts at the beginning of the stream block), so binary data is not
+        // mistaken for an image name.
+        size_t normalizedOffset = offset;
+        if (normalizedOffset != 0)
+        {
+            const unsigned char *baseBytes =
+                reinterpret_cast<const unsigned char *>(g_streamBlocks[block].data);
+            while (normalizedOffset > 0)
+            {
+                const unsigned char previous =
+                    baseBytes[normalizedOffset - 1u];
+
+                if (previous < 0x21 || previous > 0x7E)
+                    break;
+
+                --normalizedOffset;
+            }
+
+            if (normalizedOffset != offset &&
+                (normalizedOffset == 0 ||
+                 baseBytes[normalizedOffset - 1u] == 0))
+            {
+                address = base +
+                    static_cast<uintptr_t>(normalizedOffset);
+                name = reinterpret_cast<const unsigned char *>(address);
+
+                const size_t normalizedRemaining =
+                    g_streamBlocks[block].size - normalizedOffset;
+                const size_t normalizedLimit =
+                    normalizedRemaining < 256u ? normalizedRemaining : 256u;
+
+                size_t normalizedLength = 0;
+                for (; normalizedLength < normalizedLimit; ++normalizedLength)
+                {
+                    const unsigned char ch = name[normalizedLength];
+                    if (ch == 0)
+                        break;
+
+                    if (ch < 0x21 || ch > 0x7E)
+                        return false;
+                }
+
+                if (normalizedLength == 0 ||
+                    normalizedLength == normalizedLimit)
+                    return false;
+
+#ifdef __SWITCH__
+                if (normalizedOffset != offset)
+                {
+                    char trace[256];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[KisakCOD][XSTRING PREFIX FIX] block=%u exactOffset=%08x fixedOffset=%08x name=%s\\n",
+                        block,
+                        static_cast<unsigned>(offset),
+                        static_cast<unsigned>(normalizedOffset),
+                        reinterpret_cast<const char *>(name));
+                    Switch_LogWrite(trace);
+                }
+#endif
+            }
+        }
+
+        if (blockOut)
+            *blockOut = block;
+        if (offsetOut)
+            *offsetOut = static_cast<uint32_t>(normalizedOffset);
+
+        return true;
     }
 
     return false;
