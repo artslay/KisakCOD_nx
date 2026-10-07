@@ -462,8 +462,7 @@ char __cdecl Image_LoadFromFileWithReader(GfxImage *image, int(__cdecl *OpenFile
     // An empty name is a missing asset reference; codeMeshArg is a shader
     // sampler/code-source identifier, not an image. Both must use the normal
     // renderer fallback instead of reaching FS_FOpenFileReadDatabase().
-    if (!image->name ||
-        !image->name[0] ||
+    if (!Image_IsValidExternalName(image->name) ||
         !I_stricmp(image->name, "codeMeshArg"))
     {
         image->delayLoadPixels = false;
