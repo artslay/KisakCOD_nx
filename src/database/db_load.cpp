@@ -5518,57 +5518,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
     // every following stream-0 object.
     Load_Stream(1, (unsigned char *)varGfxImageLoadDef, 16);
 
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetIndex >= 1490 &&
-        g_switchCurrentAssetIndex <= 1530)
-    {
-        const uint8_t *loaded =
-            reinterpret_cast<const uint8_t *>(varGfxImageLoadDef);
-        uint16_t dim0 = 0;
-        uint16_t dim1 = 0;
-        uint16_t dim2 = 0;
-        uint32_t format = 0;
-        uint32_t resourceSize = 0;
-        char trace[512];
-        std::memcpy(&dim0, loaded + 2, sizeof(dim0));
-        std::memcpy(&dim1, loaded + 4, sizeof(dim1));
-        std::memcpy(&dim2, loaded + 6, sizeof(dim2));
-        std::memcpy(&format, loaded + 8, sizeof(format));
-        std::memcpy(&resourceSize, loaded + 12, sizeof(resourceSize));
 
-        int written = std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][GFX LOADDEF] asset=%d rawType=%u start=%08x "
-            "end=%08x level=%u flags=%02x dims=%ux%ux%u format=%08x "
-            "resource=%08x bytes:",
-            g_switchCurrentAssetIndex,
-            static_cast<unsigned>(g_switchCurrentAssetRawType),
-            Switch_GetStreamCursorOffset(0) - 16u,
-            Switch_GetStreamCursorOffset(0),
-            static_cast<unsigned>(loaded[0]),
-            static_cast<unsigned>(loaded[1]),
-            static_cast<unsigned>(dim0),
-            static_cast<unsigned>(dim1),
-            static_cast<unsigned>(dim2),
-            format,
-            resourceSize);
-        for (size_t j = 0; j < 16 && written > 0 &&
-             static_cast<size_t>(written) + 4 < sizeof(trace); ++j)
-        {
-            written += std::snprintf(
-                trace + written,
-                sizeof(trace) - static_cast<size_t>(written),
-                " %02x",
-                static_cast<unsigned>(loaded[j]));
-        }
-        std::snprintf(
-            trace + written,
-            sizeof(trace) - static_cast<size_t>(written),
-            "\n");
-        Switch_LogRaw(trace);
-    }
-#endif
 
 
 
@@ -5652,24 +5602,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         varGfxImage->delayLoadPixels = serialized.delayLoadPixels != 0;
         
 
-#ifdef __SWITCH__
-        if (g_switchCurrentAssetIndex == 1530 &&
-            g_switchCurrentAssetRawType == ASSET_TYPE_MATERIAL)
-        {
-            char trace[448];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][IMAGE1530] header texture=%08x name=%08x "
-                "b0=%08x b4=%08x image=%p\n",
-                serialized.texture,
-                serialized.name,
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4),
-                static_cast<void *>(varGfxImage));
-            Switch_LogRaw(trace);
-        }
-#endif
+
 
         DB_PushStreamPos(4);
 
@@ -5854,22 +5787,6 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                         varGfxImage->delayLoadPixels = true;
                         loadedAliasedInlineName = true;
 
-                        char trace[448];
-                        std::snprintf(
-                            trace,
-                            sizeof(trace),
-                            "[KisakCOD][IMAGE INLINE NAME] asset=%d marker=%08x "
-                            "nameOffset=%08x cursor=%08x deferred=1 first=%02x\n",
-                            g_switchCurrentAssetIndex,
-                            marker,
-                            static_cast<unsigned>(
-                                inlineNameAddress - block4Base),
-                            static_cast<unsigned>(
-                                cursorAddress - block4Base),
-                            static_cast<unsigned>(
-                                reinterpret_cast<const unsigned char *>(
-                                    inlineNameAddress)[0]));
-                        Switch_LogWrite(trace);
                     }
                 }
             }
@@ -6060,21 +5977,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         }
 #endif
 
-#ifdef __SWITCH__
-        if (g_switchCurrentAssetIndex == 1530 &&
-            g_switchCurrentAssetRawType == ASSET_TYPE_MATERIAL)
-        {
-            char trace[384];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][IMAGE1530] after-name b0=%08x b4=%08x name=%p\n",
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4),
-                static_cast<const void *>(varGfxImage->name));
-            Switch_LogRaw(trace);
-        }
-#endif
+
 
         varGfxTextureLoad = &varGfxImage->texture;
         Load_GfxTextureLoad(0);
