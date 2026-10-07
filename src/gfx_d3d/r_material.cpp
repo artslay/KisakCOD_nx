@@ -424,6 +424,11 @@ void __cdecl Load_BuildVertexDecl(MaterialVertexDeclaration **mtlVertDecl)
         if (r_loadForRenderer->current.enabled)
         {
             v1 = Material_BuildVertexDecl(data, (*mtlVertDecl)->streamCount, s_streamSourceInfo[vertDeclType]);
+#ifdef __SWITCH__
+            if (v1)
+                static_cast<KisakVkVertexDeclaration *>(v1)->switchVertDeclType =
+                    static_cast<uint8_t>(vertDeclType);
+#endif
             (*mtlVertDecl)->routing.decl[vertDeclType] = v1;
         }
         else

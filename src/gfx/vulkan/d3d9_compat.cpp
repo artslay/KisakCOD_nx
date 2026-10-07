@@ -1818,7 +1818,39 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (element.Stream >= 16)
             continue;
 
-        const VkFormat format = VertexFormat(element.Type);
+        // The generic declaration is used with materialCommands_t::verts,
+        // whose concrete runtime type is GfxVertex:
+        //   xyzw @0 (float4), packed BGRA color @16, float2 texCoord @20.
+        // The legacy D3D table encodes the same routing using FLOAT3/FLOAT4/FLOAT1
+        // because those source entries are also reused by packed world vertices.
+        // Preserve the original D3D declaration, but use the actual Switch
+        // memory representation when building the Vulkan vertex input state.
+        VkFormat format = VertexFormat(element.Type);
+        if (m_decl->switchVertDeclType == 0 &&
+            element.Stream == 0)
+        {
+            if (element.Offset == 0 &&
+                element.Usage == 0 &&
+                element.Type == D3DDECLTYPE_FLOAT3)
+            {
+                format = VK_FORMAT_R32G32B32A32_SFLOAT;
+            }
+            else if (element.Offset == 16 &&
+                     element.Usage == 10 &&
+                     element.UsageIndex == 0 &&
+                     element.Type == D3DDECLTYPE_FLOAT4)
+            {
+                format = VK_FORMAT_B8G8R8A8_UNORM;
+            }
+            else if (element.Offset == 20 &&
+                     element.Usage == 5 &&
+                     element.UsageIndex == 0 &&
+                     element.Type == D3DDECLTYPE_FLOAT1)
+            {
+                format = VK_FORMAT_R32G32_SFLOAT;
+            }
+        }
+
         if (format == VK_FORMAT_UNDEFINED)
         {
             char msg[160];

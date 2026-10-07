@@ -223,6 +223,10 @@ using IDirect3DIndexBuffer9 = KisakVkBuffer;
 
 struct KisakVkVertexDeclaration {
     std::vector<_D3DVERTEXELEMENT9> elements;
+    // Material_BuildVertexDecl records the engine vertex declaration type so
+    // Vulkan can distinguish the generic GfxVertex 2D layout from packed
+    // world-vertex layouts that intentionally share the D3D source table.
+    uint8_t switchVertDeclType = 0xFF;
 };
 using IDirect3DVertexDeclaration9 = KisakVkVertexDeclaration;
 
