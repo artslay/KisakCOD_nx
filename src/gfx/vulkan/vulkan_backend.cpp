@@ -767,15 +767,10 @@ bool VulkanBackend::EndFrame()
         blit.srcSubresource.layerCount = 1;
         blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         blit.dstSubresource.layerCount = 1;
-        // The D3D9 compatibility viewport uses an upper-left origin via
-        // a negative Vulkan viewport height. The rendered offscreen image is
-        // therefore vertically inverted in framebuffer space. Flip Y at the
-        // presentation blit so the swapchain receives the original D3D9
-        // orientation without changing the known-good draw viewport.
-        blit.srcOffsets[0] = {
-            0, static_cast<int32_t>(m_presentSourceHeight), 0};
+        blit.srcOffsets[0] = {0, 0, 0};
         blit.srcOffsets[1] = {
-            static_cast<int32_t>(m_presentSourceWidth), 0, 1};
+            static_cast<int32_t>(m_presentSourceWidth),
+            static_cast<int32_t>(m_presentSourceHeight), 1};
         blit.dstOffsets[0] = {0, 0, 0};
         blit.dstOffsets[1] = {
             static_cast<int32_t>(m_width),
