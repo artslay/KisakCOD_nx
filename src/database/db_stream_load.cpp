@@ -309,95 +309,6 @@ static bool Switch_IsSerializedAssetName(uintptr_t address)
     return false;
 }
 
-static uintptr_t Switch_NormalizeSerializedAssetName(uintptr_t address)
-{
-    if (!address || !g_streamBlocks)
-        return 0;
-
-    for (uint32_t block = 0;
-         block < ARRAY_COUNT(g_streamPosArray);
-         ++block)
-    {
-        if (!g_streamBlocks[block].data)
-            continue;
-
-        const uintptr_t base =
-            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
-        const uintptr_t end =
-            base + g_streamBlocks[block].size;
-        if (address < base || address >= end)
-            continue;
-
-        const size_t offset =
-            static_cast<size_t>(address - base);
-        const size_t remaining =
-            g_streamBlocks[block].size - offset;
-        const size_t limit =
-            remaining < 256u ? remaining : 256u;
-        const uint8_t *string =
-            reinterpret_cast<const uint8_t *>(address);
-
-        size_t length = 0;
-        for (; length < limit; ++length)
-        {
-            const uint8_t c = string[length];
-            if (c == 0)
-                break;
-            if (c < 0x21u || c > 0x7Eu)
-                return 0;
-        }
-
-        if (length == 0 || length == limit)
-            return 0;
-
-        // Some 32-bit CoD4 XString offsets arrive one byte inside the
-        // serialized string on the 64-bit Switch path. Recover the true
-        // beginning only when the preceding printable run is itself
-        // preceded by NUL, which prevents arbitrary binary fields from being
-        // reinterpreted as asset names.
-        size_t normalizedOffset = offset;
-        if (block == 4u)
-        {
-            const uint8_t *baseBytes =
-                reinterpret_cast<const uint8_t *>(g_streamBlocks[block].data);
-
-            while (normalizedOffset > 0)
-            {
-                const uint8_t previous =
-                    baseBytes[normalizedOffset - 1u];
-                if (previous < 0x21u || previous > 0x7Eu)
-                    break;
-                --normalizedOffset;
-            }
-
-            if (normalizedOffset != offset &&
-                (normalizedOffset == 0u ||
-                 baseBytes[normalizedOffset - 1u] == 0))
-            {
-                const uintptr_t normalized =
-                    base + static_cast<uintptr_t>(normalizedOffset);
-
-                char trace[256];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][XSTRING PREFIX FIX] block=%u exactOffset=%08x fixedOffset=%08x name=%s\n",
-                    block,
-                    static_cast<unsigned>(offset),
-                    static_cast<unsigned>(normalizedOffset),
-                    reinterpret_cast<const char *>(normalized));
-                Switch_LogWrite(trace);
-
-                return normalized;
-            }
-        }
-
-        return address;
-    }
-
-    return 0;
-}
-
 uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress)
 {
     if (!serializedAddress || !g_streamBlocks)
@@ -408,7 +319,7 @@ uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress)
         nativePointer)
     {
         if (Switch_IsSerializedAssetName(nativePointer))
-            return Switch_NormalizeSerializedAssetName(nativePointer);
+            return nativePointer;
     }
 
     // XString names are either direct serialized offsets into stream data or
@@ -449,13 +360,12 @@ uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress)
             const uintptr_t inlineAddress =
                 serializedAddress + sizeof(uint32_t);
             if (Switch_IsSerializedAssetName(inlineAddress))
-                return Switch_NormalizeSerializedAssetName(inlineAddress);
+                return inlineAddress;
         }
 
-        if (Switch_IsSerializedAssetName(serializedAddress))
-            return Switch_NormalizeSerializedAssetName(serializedAddress);
-
-        return 0;
+        return Switch_IsSerializedAssetName(serializedAddress)
+            ? serializedAddress
+            : 0;
     }
 
     return 0;
