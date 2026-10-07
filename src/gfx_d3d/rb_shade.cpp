@@ -164,11 +164,13 @@ void RB_DrawTessSurface()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][FRAME] tess draw verts=%u indices=%u material=%s passes=%u\n",
+            "[KisakCOD][FRAME] tess draw verts=%u indices=%u material=%p name=%p passes=%u\n",
             (unsigned)tess.vertexCount,
             (unsigned)tess.indexCount,
-            gfxCmdBufState.material && gfxCmdBufState.material->info.name
-                ? gfxCmdBufState.material->info.name : "<null>",
+            static_cast<const void *>(gfxCmdBufState.material),
+            gfxCmdBufState.material
+                ? static_cast<const void *>(gfxCmdBufState.material->info.name)
+                : nullptr,
             gfxCmdBufState.technique ? (unsigned)gfxCmdBufState.technique->passCount : 0u);
         Switch_LogWrite(trace);
         ++switchTessTraceCount;
