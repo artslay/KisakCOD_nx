@@ -397,8 +397,7 @@ bool PatchFragmentShaderForAlphaTest(
             return false;
         const uint32_t *ins = &words[i];
 
-        if (op == SpvOpVariable && wc >= 4 && ins[2] == outputVarId)
-        {
+        if (op == SpvOpVariable && wc >= 4 && ins[2] == outputVarId)        {
             outputVarType = ins[1];
             break;
         }
@@ -797,8 +796,7 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
 HRESULT KisakVkTexture::LockBox(
     uint32_t level, _D3DLOCKED_BOX *lockedBox, const _D3DBOX *, uint32_t)
 {
-    if (!lockedBox || level >= mipLevels || depth == 1 || !width || !height)
-        return E_FAIL;
+    if (!lockedBox || level >= mipLevels || depth == 1 || !width || !height)        return E_FAIL;
 
     const uint32_t levelWidth = std::max(1u, width >> level);
     const uint32_t levelHeight = std::max(1u, height >> level);
@@ -1197,8 +1195,7 @@ HRESULT IDirect3DDevice9::CreateVertexDeclaration(
         decl->elements.push_back(*e);
 
     *out = decl;
-    return S_OK;
-}
+    return S_OK;}
 
 HRESULT IDirect3DDevice9::SetVertexDeclaration(IDirect3DVertexDeclaration9 *decl)
 {
@@ -1597,8 +1594,7 @@ bool IDirect3DDevice9::BindSamplerSet(
     vkUpdateDescriptorSets(m_backend->Device(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     vkCmdBindDescriptorSets(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
-        setIndex, 1, &set, 0, nullptr);
-    return true;
+        setIndex, 1, &set, 0, nullptr);    return true;
 }
 
 bool IDirect3DDevice9::EnsurePipeline()
@@ -1675,8 +1671,36 @@ bool IDirect3DDevice9::EnsurePipeline()
         attributes.reserve(m_decl->elements.size());
         for (const auto &element : m_decl->elements)
         {
+            // The engine's generic declaration table is a routing table, not a
+            // byte-for-byte description of materialCommands_t::verts on Switch.
+            // Make the shader linker see the actual GfxVertex component types.
+            uint8_t shaderElementType = element.Type;
+            if (m_decl->switchVertDeclType == 0 && element.Stream == 0)
+            {
+                if (element.Offset == 0 &&
+                    element.Usage == 0 &&
+                    element.Type == D3DDECLTYPE_FLOAT3)
+                {
+                    shaderElementType = D3DDECLTYPE_FLOAT4;
+                }
+                else if (element.Offset == 16 &&
+                         element.Usage == 10 &&
+                         element.UsageIndex == 0 &&
+                         element.Type == D3DDECLTYPE_FLOAT4)
+                {
+                    shaderElementType = D3DDECLTYPE_D3DCOLOR;
+                }
+                else if (element.Offset == 20 &&
+                         element.Usage == 5 &&
+                         element.UsageIndex == 0 &&
+                         element.Type == D3DDECLTYPE_FLOAT1)
+                {
+                    shaderElementType = D3DDECLTYPE_FLOAT2;
+                }
+            }
+
             MOJOSHADER_vertexAttribute attr{};
-            switch (element.Type)
+            switch (shaderElementType)
             {
             case D3DDECLTYPE_FLOAT1: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_SINGLE; break;
             case D3DDECLTYPE_FLOAT2: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR2; break;
@@ -1997,8 +2021,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     info.pStages = stages;
     info.pVertexInputState = &vertexInput;
     info.pInputAssemblyState = &assembly;
-    info.pViewportState = &viewport;
-    info.pRasterizationState = &raster;
+    info.pViewportState = &viewport;    info.pRasterizationState = &raster;
     info.pMultisampleState = &multisample;
     info.pDepthStencilState = &depth;
     info.pColorBlendState = &blend;
@@ -2397,8 +2420,7 @@ HRESULT IDirect3DDevice9::Clear(
         a.clearValue.color.float32[2] = (color & 0xFFu) / 255.0f;
         a.clearValue.color.float32[3] = ((color >> 24) & 0xFFu) / 255.0f;
     }
-    if (flags & D3DCLEAR_ZBUFFER)
-    {
+    if (flags & D3DCLEAR_ZBUFFER)    {
         auto &a = attachments[count++];
         a.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         a.clearValue.depthStencil.depth = depth;
