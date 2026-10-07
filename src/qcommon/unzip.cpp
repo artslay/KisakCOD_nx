@@ -424,7 +424,7 @@ extern unzFile unzReOpen (const char* path, unzFile file)
 */
 extern unzFile unzOpen (const char* path)
 {
-	unz_s us;
+	unz_s us = {};
 	unz_s *s;
 	uLong central_pos,uL;
 	ZIP_FILE * fin ;
@@ -577,8 +577,8 @@ static int unzlocal_GetCurrentFileInfoInternal (unzFile file,
 												  uLong commentBufferSize)
 {
 	unz_s* s;
-	unz_file_info file_info;
-	unz_file_info_internal file_info_internal;
+	unz_file_info file_info = {};
+	unz_file_info_internal file_info_internal = {};
 	int err=UNZ_OK;
 	uLong uMagic;
 	long lSeek=0;
@@ -809,7 +809,7 @@ extern int unzGetCurrentFileInfoPosition (unzFile file, unsigned long *pos )
   Set the position of the info of the current file in the zip.
   return UNZ_OK if there is no problem
 */
-extern int unzSetCurrentFileInfoPosition (unzFile file, unsigned long pos )
+extern int unzSetCurrentFileInfoPosition (unzFile file, uint32_t pos )
 {
 	unz_s* s;	
 	int err;
@@ -823,7 +823,7 @@ extern int unzSetCurrentFileInfoPosition (unzFile file, unsigned long pos )
 											   &s->cur_file_info_internal,
 											   NULL,0,NULL,0,NULL,0);
 	s->current_file_ok = (err == UNZ_OK);
-	return UNZ_OK;
+	return err;
 }
 
 /*
