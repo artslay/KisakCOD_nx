@@ -140,7 +140,7 @@ static void Switch_IndexIwdArchive(const char *archivePath)
         {
             char name[256] = {};
             unz_file_info info = {};
-            unsigned long infoPosition = 0;
+            uint32_t infoPosition = 0;
 
             if (unzGetCurrentFileInfo(
                     archiveFile,
