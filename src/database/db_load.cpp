@@ -11115,13 +11115,6 @@ void __cdecl Load_GameWorldSpPtr(bool atStreamStart)
                 *inserted = *varGameWorldSpPtr;
         }
         else
-                inserted = 0;
-            Load_GameWorldSp(1);
-            Load_GameWorldSpAsset((XAssetHeader *)varGameWorldSpPtr);
-            if (inserted)
-                *inserted = *varGameWorldSpPtr;
-        }
-        else
         {
             DB_ConvertOffsetToAlias((uint32_t *)varGameWorldSpPtr);
         }
