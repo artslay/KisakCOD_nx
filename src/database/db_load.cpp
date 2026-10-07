@@ -5557,21 +5557,6 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         varXString = &varGfxImage->name;
         Load_XString(false);
 
-#ifdef __SWITCH__
-        // Image names are the one XString path where a serialized pointer
-        // alias can legitimately be used. Keep the normal XString result for
-        // all other assets, but resolve an image-name alias when present.
-        if (varGfxImage->name)
-        {
-            const uintptr_t directName =
-                reinterpret_cast<uintptr_t>(varGfxImage->name);
-            const uintptr_t aliasResolved =
-                DB_ResolveSwitchSerializedString(directName);
-            if (aliasResolved)
-                varGfxImage->name =
-                    reinterpret_cast<const char *>(aliasResolved);
-        }
-
         {
             const char *resolvedName = varGfxImage->name;
             char trace[448];
