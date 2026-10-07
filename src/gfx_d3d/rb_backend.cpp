@@ -923,17 +923,91 @@ void __cdecl RB_SaveScreenSectionCmd(GfxRenderCommandExecState *execState)
     if (tess.indexCount)
         RB_EndTessSurface();
 
-    R_ResolveSection(gfxCmdBufContext, gfxRenderTargets[R_RENDERTARGET_SAVED_SCREEN].image);
+    R_ResolveSection(
+        gfxCmdBufContext,
+        gfxRenderTargets[R_RENDERTARGET_SAVED_SCREEN].image,
+        cmd->s0,
+        cmd->t0,
+        cmd->ds,
+        cmd->dt);
     rgp.savedScreenTimes[cmd->screenTimerId] = gfxCmdBufSourceState.sceneDef.time;
 
     execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
 }
 
-void __cdecl R_ResolveSection(GfxCmdBufContext context, GfxImage *image)
+void __cdecl R_ResolveSection(
+    GfxCmdBufContext context,
+    GfxImage *image,
+    float s0,
+    float t0,
+    float ds,
+    float dt)
 {
     iassert(image);
-    if (!alwaysfails)
-        MyAssertHandler(".\\rb_backend.cpp", 706, 0, "R_ResolveSection(): Not implemented on win32.");
+    iassert(context.state);
+    iassert(context.state->prim.device);
+    iassert(ds >= 0.0f && dt >= 0.0f);
+
+    const GfxRenderTargetId renderTargetId =
+        context.state->renderTargetId;
+    iassert(renderTargetId < R_RENDERTARGET_COUNT);
+
+    GfxRenderTarget &renderTarget = gfxRenderTargets[renderTargetId];
+    iassert(renderTarget.surface.color);
+
+    IDirect3DSurface9 *imageSurface = Image_GetSurface(image);
+    iassert(imageSurface);
+
+    const int renderWidth = static_cast<int>(renderTarget.width);
+    const int renderHeight = static_cast<int>(renderTarget.height);
+    const int imageWidth = static_cast<int>(image->width);
+    const int imageHeight = static_cast<int>(image->height);
+
+    int left = SnapFloatToInt(s0);
+    int top = SnapFloatToInt(t0);
+    int right = SnapFloatToInt(s0 + ds);
+    int bottom = SnapFloatToInt(t0 + dt);
+
+    left = std::max(0, std::min(left, renderWidth));
+    top = std::max(0, std::min(top, renderHeight));
+    right = std::max(left, std::min(right, renderWidth));
+    bottom = std::max(top, std::min(bottom, renderHeight));
+
+    right = std::min(right, imageWidth);
+    bottom = std::min(bottom, imageHeight);
+
+    if (right <= left || bottom <= top)
+    {
+        imageSurface->Release();
+        return;
+    }
+
+    tagRECT sourceRect;
+    sourceRect.left = left;
+    sourceRect.top = top;
+    sourceRect.right = right;
+    sourceRect.bottom = bottom;
+
+    tagRECT destinationRect = sourceRect;
+
+    const HRESULT hr =
+        context.state->prim.device->StretchRect(
+            renderTarget.surface.color,
+            &sourceRect,
+            imageSurface,
+            &destinationRect,
+            D3DTEXF_LINEAR);
+
+    imageSurface->Release();
+
+    if (hr < 0)
+    {
+        ++g_disableRendering;
+        Com_Error(
+            ERR_FATAL,
+            ".\\rb_backend.cpp: R_ResolveSection failed: %s\\n",
+            R_ErrorDescription(hr));
+    }
 }
 
 void __cdecl RB_BlendSavedScreenBlurredCmd(GfxRenderCommandExecState *execState)
