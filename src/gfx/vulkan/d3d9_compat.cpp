@@ -2152,28 +2152,12 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     {
         char msg[1024];
         const auto &stream0 = m_streams[0];
-        const uint8_t *vertexBytes =
-            (stream0.buffer && stream0.offset < stream0.buffer->shadow.size())
-                ? stream0.buffer->shadow.data() + stream0.offset
-                : nullptr;
-        float vx = 0.0f, vy = 0.0f, vz = 0.0f, vw = 0.0f;
-        uint32_t vcolor = 0;
-        float vs = 0.0f, vt = 0.0f;
-        if (vertexBytes && stream0.buffer->shadow.size() - stream0.offset >= 28)
-        {
-            std::memcpy(&vx, vertexBytes + 0, sizeof(vx));
-            std::memcpy(&vy, vertexBytes + 4, sizeof(vy));
-            std::memcpy(&vz, vertexBytes + 8, sizeof(vz));
-            std::memcpy(&vw, vertexBytes + 12, sizeof(vw));
-            std::memcpy(&vcolor, vertexBytes + 16, sizeof(vcolor));
-            std::memcpy(&vs, vertexBytes + 20, sizeof(vs));
-            std::memcpy(&vt, vertexBytes + 24, sizeof(vt));
-        }
         struct SwitchVertexProbe
         {
             float x, y, z, w;
-            uint32_t normal, color;
+            uint32_t color;
             float s, t;
+            uint32_t normal;
         } vertices[4]{};
 
         for (uint32_t vi = 0; vi < 4; ++vi)
@@ -2208,13 +2192,41 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             }
         }
 
+        char declText[384]{};
+        size_t declUsed = 0;
+        if (m_decl)
+        {
+            for (size_t di = 0;
+                 di < m_decl->elements.size() && declUsed + 56 < sizeof(declText);
+                 ++di)
+            {
+                const auto &e = m_decl->elements[di];
+                const int written = std::snprintf(
+                    declText + declUsed, sizeof(declText) - declUsed,
+                    "%se%d:s%u/o%u/t%u/u%u/%u",
+                    di ? "," : "",
+                    static_cast<int>(di),
+                    static_cast<unsigned>(e.Stream),
+                    static_cast<unsigned>(e.Offset),
+                    static_cast<unsigned>(e.Type),
+                    static_cast<unsigned>(e.Usage),
+                    static_cast<unsigned>(e.UsageIndex));
+                if (written > 0)
+                    declUsed += static_cast<size_t>(written);
+            }
+        }
+
+        const KisakVkTexture *texture0 = m_textures[0];
+
         std::snprintf(
             msg, sizeof(msg),
             "[KisakCOD][VK DRAW] #%u prim=%u tris=%u verts=%u start=%u base=%d "
             "stream0=%p off=%u stride=%u viewport=%u,%u %ux%u scissor=%d %d,%d %dx%d "
             "v0=(%.3f,%.3f,%.3f,%.3f) v1=(%.3f,%.3f,%.3f,%.3f) "
             "v2=(%.3f,%.3f,%.3f,%.3f) v3=(%.3f,%.3f,%.3f,%.3f) "
-            "c0=%08x uv0=(%.3f,%.3f) tex0=%p %ux%u fmt=%u layout=%u attrs=%s\n",
+            "color0=%08x uv0=(%.3f,%.3f) normal0=%08x "
+            "tex0=%p %ux%u srcfmt=%u vkfmt=%u layout=%u "
+            "attrs=%s decl=%s\n",
             static_cast<unsigned>(switchDrawTraceCount),
             primitiveType, primitiveCount, numVertices, startIndex, baseVertexIndex,
             static_cast<void *>(stream0.buffer),
@@ -2234,12 +2246,14 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             static_cast<double>(vertices[3].z), static_cast<double>(vertices[3].w),
             vertices[0].color,
             static_cast<double>(vertices[0].s), static_cast<double>(vertices[0].t),
-            static_cast<void *>(m_textures[0]),
-            m_textures[0] ? m_textures[0]->width : 0u,
-            m_textures[0] ? m_textures[0]->height : 0u,
-            m_textures[0] ? static_cast<unsigned>(m_textures[0]->format) : 0u,
-            m_textures[0] ? static_cast<unsigned>(m_textures[0]->layout) : 0u,
-            attrText);
+            vertices[0].normal,
+            static_cast<const void *>(texture0),
+            texture0 ? texture0->width : 0u,
+            texture0 ? texture0->height : 0u,
+            texture0 ? static_cast<unsigned>(texture0->sourceFormat) : 0u,
+            texture0 ? static_cast<unsigned>(texture0->format) : 0u,
+            texture0 ? static_cast<unsigned>(texture0->layout) : 0u,
+            attrText, declText);
         Switch_LogWrite(msg);
         ++switchDrawTraceCount;
     }
