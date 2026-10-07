@@ -1457,37 +1457,13 @@ static void spv_emit_vs_main_end(Context* ctx)
 #endif // defined(MOJOSHADER_DEPTH_CLIPPING) || defined(MOJOSHADER_FLIP_RENDERTARGET)
 #endif // SUPPORT_PROFILE_GLSPIRV
 
-    if (ctx->spirv.mode == SPIRV_MODE_VK)
-    {
-        RegisterList *reg = NULL;
-        for (RegisterList *it = ctx->used_registers.next; it != NULL; it = it->next)
-        {
-            if (it->usage == MOJOSHADER_USAGE_POSITION &&
-                (it->regtype == REG_TYPE_RASTOUT || it->regtype == REG_TYPE_OUTPUT))
-            {
-                reg = it;
-                break;
-            }
-        }
-
-        if (!reg || !reg->spirv.iddecl)
-            return;
-
-        const SpirvResult output = spv_loadreg(ctx, reg);
-        const uint32 tid_float = spv_get_type(ctx, STI_FLOAT);
-        const uint32 id_neg_one = spv_getscalarf(ctx, -1.0f);
-        const uint32 id_old_y = spv_bumpid(ctx);
-        const uint32 id_new_y = spv_bumpid(ctx);
-        const uint32 id_new_output = spv_bumpid(ctx);
-
-        push_output(ctx, &ctx->mainline);
-        spv_emit(ctx, 5, SpvOpCompositeExtract, tid_float, id_old_y, output.id, 1);
-        spv_emit(ctx, 5, SpvOpFMul, tid_float, id_new_y, id_old_y, id_neg_one);
-        spv_emit(ctx, 6, SpvOpCompositeInsert, output.tid, id_new_output,
-            id_new_y, output.id, 1);
-        spv_emit(ctx, 3, SpvOpStore, reg->spirv.iddecl, id_new_output);
-        pop_output(ctx);
-    }
+    /*
+     * The Vulkan profile uses D3D9 clip-space conventions for translated
+     * shaders. Apply the Y inversion in the vertex main function itself.
+     * This path is emitted from spv_emit_func_end(), so it needs no extra
+     * context ID/state that only exists in GLSPIRV builds.
+     */
+    (void)ctx;
 } // spv_emit_vs_main_end
 
 static void spv_emit_func_lit(Context *ctx)
@@ -1620,9 +1596,7 @@ static void spv_emit_func_end(Context *ctx)
 #endif // defined(MOJOSHADER_DEPTH_CLIPPING) || defined(MOJOSHADER_FLIP_RENDERTARGET)
 #endif // SUPPORT_PROFILE_GLSPIRV
 
-    if (shader_is_vertex(ctx) &&
-        ctx->spirv.mode == SPIRV_MODE_VK &&
-        ctx->spirv.id_vs_main_end == 0)
+    if (shader_is_vertex(ctx) && ctx->spirv.mode == SPIRV_MODE_VK)
     {
         RegisterList *reg = NULL;
         for (RegisterList *it = ctx->used_registers.next; it != NULL; it = it->next)
@@ -1635,15 +1609,20 @@ static void spv_emit_func_end(Context *ctx)
             }
         }
 
-        if (reg)
+        if (reg && reg->spirv.iddecl)
         {
-            ctx->spirv.id_vs_main_end = spv_bumpid(ctx);
-            const uint32 tid_void = spv_get_type(ctx, STI_VOID);
-            const uint32 id_res = spv_bumpid(ctx);
+            const SpirvResult output = spv_loadreg(ctx, reg);
+            const uint32 tid_float = spv_get_type(ctx, STI_FLOAT);
+            const uint32 id_neg_one = spv_getscalarf(ctx, -1.0f);
+            const uint32 id_old_y = spv_bumpid(ctx);
+            const uint32 id_new_y = spv_bumpid(ctx);
+            const uint32 id_new_output = spv_bumpid(ctx);
 
-            push_output(ctx, &ctx->mainline);
-            spv_emit(ctx, 4, SpvOpFunctionCall, tid_void, id_res, ctx->spirv.id_vs_main_end);
-            pop_output(ctx);
+            spv_emit(ctx, 5, SpvOpCompositeExtract, tid_float, id_old_y, output.id, 1);
+            spv_emit(ctx, 5, SpvOpFMul, tid_float, id_new_y, id_old_y, id_neg_one);
+            spv_emit(ctx, 6, SpvOpCompositeInsert, output.tid, id_new_output,
+                id_new_y, output.id, 1);
+            spv_emit(ctx, 3, SpvOpStore, reg->spirv.iddecl, id_new_output);
         }
     }
 
