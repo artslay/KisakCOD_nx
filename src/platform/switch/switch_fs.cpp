@@ -63,6 +63,7 @@ struct SwitchIwdEntry
 {
     uint16_t archiveIndex = 0;
     unsigned long infoPosition = 0;
+    uint32_t fileOrdinal = 0;
     uint32_t size = 0;
 };
 
@@ -122,6 +123,7 @@ static void Switch_IndexIwdArchive(const char *archivePath)
     g_iwdArchives.push_back(std::move(archive));
 
     int entryCount = 0;
+    uint32_t fileOrdinal = 0;
     if (unzGoToFirstFile(archiveFile) == UNZ_OK)
     {
         do
@@ -129,6 +131,7 @@ static void Switch_IndexIwdArchive(const char *archivePath)
             char name[256] = {};
             unz_file_info info = {};
             unsigned long infoPosition = 0;
+            const uint32_t currentOrdinal = fileOrdinal++;
 
             if (unzGetCurrentFileInfo(
                     archiveFile,
@@ -141,8 +144,10 @@ static void Switch_IndexIwdArchive(const char *archivePath)
                     0) != UNZ_OK)
                 continue;
 
-            if (unzGetCurrentFileInfoPosition(archiveFile, &infoPosition) != UNZ_OK)
-                continue;
+            const bool haveInfoPosition =
+                unzGetCurrentFileInfoPosition(
+                    archiveFile,
+                    &infoPosition) == UNZ_OK;
 
             const std::string normalizedName = SwitchNormalizePath(name);
             if (normalizedName.empty() || normalizedName.back() == '/')
@@ -150,7 +155,8 @@ static void Switch_IndexIwdArchive(const char *archivePath)
 
             SwitchIwdEntry entry;
             entry.archiveIndex = archiveIndex;
-            entry.infoPosition = infoPosition;
+            entry.infoPosition = haveInfoPosition ? infoPosition : 0;
+            entry.fileOrdinal = currentOrdinal;
             entry.size = static_cast<uint32_t>(info.uncompressed_size);
 
             // iw_XX files are added as separate search paths. Since later
@@ -378,145 +384,108 @@ static bool Switch_OpenIwdFile(const char *filename, int *fileHandle)
 {
     const std::string normalizedName = SwitchNormalizePath(filename);
     const auto it = g_iwdEntries.find(normalizedName);
+    if (it == g_iwdEntries.end())
+        return false;
 
-    if (it != g_iwdEntries.end())
+    const SwitchIwdEntry &entry = it->second;
+    if (entry.archiveIndex >= g_iwdArchives.size())
+        return false;
+
+    SwitchIwdArchive &archive = g_iwdArchives[entry.archiveIndex];
+    if (!archive.file)
+        return false;
+
+    unzFile clone = unzReOpen(archive.path.c_str(), archive.file);
+    if (!clone)
+        return false;
+
+    bool selected = false;
+
+    // Primary lookup: the exact central-directory position captured at startup.
+    if (entry.infoPosition != 0 &&
+        unzSetCurrentFileInfoPosition(clone, entry.infoPosition) == UNZ_OK)
     {
-        const SwitchIwdEntry &entry = it->second;
-        if (entry.archiveIndex >= g_iwdArchives.size())
-            return false;
-
-        SwitchIwdArchive &archive = g_iwdArchives[entry.archiveIndex];
-        if (!archive.file)
-            return false;
-
-        unzFile clone = unzReOpen(archive.path.c_str(), archive.file);
-        if (!clone)
-            return false;
-
-        if (unzSetCurrentFileInfoPosition(clone, entry.infoPosition) == UNZ_OK &&
-            unzOpenCurrentFile(clone) == UNZ_OK)
+        char name[256] = {};
+        unz_file_info info = {};
+        if (unzGetCurrentFileInfo(
+                clone,
+                &info,
+                name,
+                sizeof(name),
+                nullptr,
+                0,
+                nullptr,
+                0) == UNZ_OK &&
+            SwitchNormalizePath(name) == normalizedName)
         {
-            const int h = AllocHandle();
-            if (!h)
+            selected = true;
+        }
+    }
+
+    // Some entries do not expose a stable info position. The startup index also
+    // stores their ordinal, so resolve that entry directly without scanning for
+    // its filename or rescanning the archive.
+    if (!selected)
+    {
+        if (unzGoToFirstFile(clone) != UNZ_OK)
+        {
+            unzClose(clone);
+            return false;
+        }
+
+        for (uint32_t i = 0; i < entry.fileOrdinal; ++i)
+        {
+            if (unzGoToNextFile(clone) != UNZ_OK)
             {
-                unzCloseCurrentFile(clone);
                 unzClose(clone);
                 return false;
             }
-
-            g_zipHandles[h].file = clone;
-            g_zipHandles[h].size = entry.size;
-            g_fsh[h].fileSize = static_cast<int>(entry.size);
-            g_fsh[h].streamed = 0;
-            g_fsh[h].zipFile = nullptr;
-            I_strncpyz(g_fsh[h].name, filename, sizeof(g_fsh[h].name));
-
-            if (fileHandle)
-                *fileHandle = h;
-            return true;
         }
 
-        // An indexed central-directory position can be invalid even though the
-        // archive contains the requested file. Fall through to a fresh scan.
-        unzClose(clone);
-        }
-
-    // The compact index is the fast path, but a few minizip entries can fail
-    // to provide a stable info-position while an IWD is being indexed. Do not
-    // turn those entries into permanent "missing" assets: on an index miss,
-    // rescan the archives directly and open the matching entry from the same
-    // clone used for the scan.
-    for (uint16_t archiveIndex = 0;
-         archiveIndex < g_iwdArchives.size();
-         ++archiveIndex)
-    {
-        SwitchIwdArchive &archive = g_iwdArchives[archiveIndex];
-        if (!archive.file)
-            continue;
-
-        unzFile scan = unzReOpen(archive.path.c_str(), archive.file);
-        if (!scan)
-            continue;
-
-        bool matched = false;
-        uint32_t matchedSize = 0;
-
-        if (unzGoToFirstFile(scan) == UNZ_OK)
+        char name[256] = {};
+        unz_file_info info = {};
+        if (unzGetCurrentFileInfo(
+                clone,
+                &info,
+                name,
+                sizeof(name),
+                nullptr,
+                0,
+                nullptr,
+                0) != UNZ_OK ||
+            SwitchNormalizePath(name) != normalizedName)
         {
-            do
-            {
-                char name[256] = {};
-                unz_file_info info = {};
-
-                if (unzGetCurrentFileInfo(
-                        scan,
-                        &info,
-                        name,
-                        sizeof(name),
-                        nullptr,
-                        0,
-                        nullptr,
-                        0) != UNZ_OK)
-                {
-                    continue;
-                }
-
-                if (SwitchNormalizePath(name) == normalizedName)
-                {
-                    matched = true;
-                    matchedSize =
-                        static_cast<uint32_t>(info.uncompressed_size);
-                    break;
-                }
-            } while (unzGoToNextFile(scan) == UNZ_OK);
-        }
-
-        if (!matched)
-        {
-            unzClose(scan);
-            continue;
-        }
-
-        unsigned long matchedInfoPosition = 0;
-        const bool haveInfoPosition =
-            unzGetCurrentFileInfoPosition(scan, &matchedInfoPosition) == UNZ_OK;
-
-        if (unzOpenCurrentFile(scan) != UNZ_OK)
-        {
-            unzClose(scan);
-            continue;
-        }
-
-        if (haveInfoPosition)
-        {
-            SwitchIwdEntry cachedEntry;
-            cachedEntry.archiveIndex = archiveIndex;
-            cachedEntry.infoPosition = matchedInfoPosition;
-            cachedEntry.size = matchedSize;
-            g_iwdEntries[normalizedName] = cachedEntry;
-        }
-
-        const int h = AllocHandle();
-        if (!h)
-        {
-            unzCloseCurrentFile(scan);
-            unzClose(scan);
+            unzClose(clone);
             return false;
         }
 
-        g_zipHandles[h].file = scan;
-        g_zipHandles[h].size = matchedSize;
-        g_fsh[h].fileSize = static_cast<int>(matchedSize);
-        g_fsh[h].streamed = 0;
-        g_fsh[h].zipFile = nullptr;
-        I_strncpyz(g_fsh[h].name, filename, sizeof(g_fsh[h].name));
-
-        if (fileHandle)
-            *fileHandle = h;
-        return true;
+        selected = true;
     }
 
-    return false;
+    if (!selected || unzOpenCurrentFile(clone) != UNZ_OK)
+    {
+        unzClose(clone);
+        return false;
+    }
+
+    const int h = AllocHandle();
+    if (!h)
+    {
+        unzCloseCurrentFile(clone);
+        unzClose(clone);
+        return false;
+    }
+
+    g_zipHandles[h].file = clone;
+    g_zipHandles[h].size = entry.size;
+    g_fsh[h].fileSize = static_cast<int>(entry.size);
+    g_fsh[h].streamed = 0;
+    g_fsh[h].zipFile = nullptr;
+    I_strncpyz(g_fsh[h].name, filename, sizeof(g_fsh[h].name));
+
+    if (fileHandle)
+        *fileHandle = h;
+    return true;
 }
 
 
@@ -772,8 +741,8 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         Switch_LogWrite(trace);
     }
 
-    // Always try the IWD resolver. It uses the compact index first and
-    // scans the real archive when the index has no usable record.
+    // Resolve only through the startup-built IWD index. No per-file archive
+    // rescans are performed here.
     {
         int iwdHandle = 0;
         if (Switch_OpenIwdFile(filename, &iwdHandle))
