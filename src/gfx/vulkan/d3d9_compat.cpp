@@ -2006,7 +2006,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     raster.cullMode = m_cullMode == 1
         ? VK_CULL_MODE_NONE
         : (m_cullMode == 2 ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_FRONT_BIT);
-    raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
     raster.depthBiasEnable = (m_depthBias != 0.0f || m_slopeDepthBias != 0.0f) ? VK_TRUE : VK_FALSE;
     raster.depthBiasConstantFactor = m_depthBias;
     raster.depthBiasSlopeFactor = m_slopeDepthBias;
