@@ -137,6 +137,119 @@ static void Switch_TranslateGameWorldSpSerialized(GameWorldSp *out)
     Switch_SeedSerializedPointer(out->path.nodeTree, serialized, 40);
 }
 
+static uintptr_t Switch_TranslatePathNodePointer(
+    uint32_t token,
+    const uint8_t *serializedBase,
+    uint32_t serializedStride,
+    uint32_t serializedCount,
+    pathnode_t *nativeBase)
+{
+    if (!token || token == UINT32_MAX || token == UINT32_MAX - 1u)
+        return 0;
+
+    const uintptr_t serializedAddress =
+        DB_ConvertOffsetToPointerValue(token);
+    if (!serializedAddress)
+        return 0;
+
+    const uintptr_t base =
+        reinterpret_cast<uintptr_t>(serializedBase);
+    const uintptr_t end =
+        base + static_cast<uintptr_t>(serializedStride) *
+            static_cast<uintptr_t>(serializedCount);
+
+    if (serializedAddress < base || serializedAddress >= end)
+        return 0;
+
+    const uintptr_t delta = serializedAddress - base;
+    if ((delta % serializedStride) != 0)
+        return 0;
+
+    const uint32_t index =
+        static_cast<uint32_t>(delta / serializedStride);
+    if (index >= serializedCount)
+        return 0;
+
+    return reinterpret_cast<uintptr_t>(&nativeBase[index]);
+}
+
+static void Switch_TranslatePathNodeArray(
+    pathnode_t *nativeBase,
+    const uint8_t *serialized,
+    uint32_t count)
+{
+    constexpr uint32_t SerializedPathNodeSize = 128u;
+    constexpr uint32_t SerializedConstantSize = 68u;
+    constexpr uint32_t SerializedDynamicSize = 32u;
+    constexpr uint32_t SerializedTransientOffset = 100u;
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const uint8_t *src =
+            serialized + static_cast<size_t>(i) * SerializedPathNodeSize;
+        pathnode_t *dst = &nativeBase[i];
+        std::memset(dst, 0, sizeof(*dst));
+
+        std::memcpy(
+            reinterpret_cast<uint8_t *>(&dst->constant),
+            src,
+            SerializedConstantSize);
+
+        uint32_t linksToken = 0;
+        std::memcpy(&linksToken, src + 64u, sizeof(linksToken));
+        dst->constant.Links = linksToken
+            ? reinterpret_cast<pathlink_s *>(
+                  DB_ConvertOffsetToPointerValue(linksToken))
+            : nullptr;
+
+        std::memcpy(
+            reinterpret_cast<uint8_t *>(&dst->dynamic),
+            src + SerializedConstantSize,
+            SerializedDynamicSize);
+
+        std::memcpy(
+            &dst->transient.iSearchFrame,
+            src + SerializedTransientOffset,
+            sizeof(dst->transient.iSearchFrame));
+
+        uint32_t pNextToken = 0;
+        uint32_t pPrevToken = 0;
+        uint32_t pParentToken = 0;
+        std::memcpy(&pNextToken, src + 104u, sizeof(pNextToken));
+        std::memcpy(&pPrevToken, src + 108u, sizeof(pPrevToken));
+        std::memcpy(&pParentToken, src + 112u, sizeof(pParentToken));
+
+        dst->transient.pNextOpen =
+            reinterpret_cast<pathnode_t *>(
+                Switch_TranslatePathNodePointer(
+                    pNextToken,
+                    serialized,
+                    SerializedPathNodeSize,
+                    count,
+                    nativeBase));
+        dst->transient.pPrevOpen =
+            reinterpret_cast<pathnode_t *>(
+                Switch_TranslatePathNodePointer(
+                    pPrevToken,
+                    serialized,
+                    SerializedPathNodeSize,
+                    count,
+                    nativeBase));
+        dst->transient.pParent =
+            reinterpret_cast<pathnode_t *>(
+                Switch_TranslatePathNodePointer(
+                    pParentToken,
+                    serialized,
+                    SerializedPathNodeSize,
+                    count,
+                    nativeBase));
+
+        std::memcpy(&dst->transient.fCost, src + 116u, sizeof(float));
+        std::memcpy(&dst->transient.fHeuristic, src + 120u, sizeof(float));
+        std::memcpy(&dst->transient.costFactor, src + 124u, sizeof(float));
+    }
+}
+
 static void Switch_TranslateGameWorldMpSerialized(GameWorldMp *out)
 {
     uint8_t serialized[4]{};
@@ -10767,9 +10880,43 @@ void __cdecl Load_PathData(bool atStreamStart)
 #endif
     if (varPathData->nodes)
     {
+#ifdef __SWITCH__
+        const uint32_t nodeCount = varPathData->nodeCount;
+        constexpr uint32_t SerializedPathNodeSize = 128u;
+        const uint64_t serializedSize64 =
+            static_cast<uint64_t>(nodeCount) * SerializedPathNodeSize;
+        if (serializedSize64 > UINT32_MAX)
+            Com_Error(ERR_FATAL, "PathData node array is too large");
+
+        const uint32_t serializedSize =
+            static_cast<uint32_t>(serializedSize64);
+        std::vector<uint8_t> serializedNodes(serializedSize);
+        if (serializedSize)
+            DB_LoadSwitchSerialized(
+                serializedNodes.data(),
+                serializedSize);
+
+        pathnode_t *nativeNodes =
+            reinterpret_cast<pathnode_t *>(
+                Hunk_Alloc(
+                    static_cast<uint32_t>(
+                        sizeof(pathnode_t) * static_cast<size_t>(nodeCount)),
+                    "SwitchPathNodes",
+                    22));
+        if (!nativeNodes)
+            Com_Error(ERR_FATAL, "SwitchPathNodes allocation failed");
+
+        Switch_TranslatePathNodeArray(
+            nativeNodes,
+            serializedNodes.data(),
+            nodeCount);
+        varPathData->nodes = nativeNodes;
+        varpathnode_t = nativeNodes;
+#else
         varPathData->nodes = (pathnode_t *)AllocLoad_FxElemVisStateSample();
         varpathnode_t = varPathData->nodes;
         Load_pathnode_tArray(1, varPathData->nodeCount);
+#endif
 #ifdef __SWITCH__
         if (traceGw1529)
         {
@@ -10941,11 +11088,33 @@ void __cdecl Load_GameWorldSpPtr(bool atStreamStart)
         value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(*varGameWorldSpPtr));
         if (value == -1 || value == -2)
         {
-            *varGameWorldSpPtr = (GameWorldSp *)AllocLoad_FxElemVisStateSample();
+#ifdef __SWITCH__
+            // Serialized GameWorldSp is 44 bytes; native ARM64 GameWorldSp is
+            // larger because its pointers are 64-bit. Keep the native object
+            // out of the serialized stream block.
+            *varGameWorldSpPtr =
+                reinterpret_cast<GameWorldSp *>(
+                    Hunk_Alloc(
+                        static_cast<uint32_t>(sizeof(GameWorldSp)),
+                        "SwitchGameWorldSp",
+                        22));
+            if (!*varGameWorldSpPtr)
+                Com_Error(ERR_FATAL, "SwitchGameWorldSp allocation failed");
+#else
+            *varGameWorldSpPtr =
+                (GameWorldSp *)AllocLoad_FxElemVisStateSample();
+#endif
             varGameWorldSp = *varGameWorldSpPtr;
             if (value == -2)
                 inserted = DB_InsertPointer();
             else
+                inserted = 0;
+            Load_GameWorldSp(1);
+            Load_GameWorldSpAsset((XAssetHeader *)varGameWorldSpPtr);
+            if (inserted)
+                *inserted = *varGameWorldSpPtr;
+        }
+        else
                 inserted = 0;
             Load_GameWorldSp(1);
             Load_GameWorldSpAsset((XAssetHeader *)varGameWorldSpPtr);
