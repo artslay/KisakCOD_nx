@@ -832,6 +832,53 @@ bool VulkanBackend::EndFrame()
     return true;
 }
 
+void VulkanBackend::Clear(float r, float g, float b, float a)
+{
+    if (!m_initialized)
+        return;
+
+    if (!m_frameActive && !BeginFrame())
+        return;
+
+    const bool hasPresentSource = m_presentSourceImage && m_presentSourceView;
+    const VkImage colorImage = hasPresentSource ? m_presentSourceImage : CurrentSwapchainImage();
+    const VkImageView colorView = hasPresentSource ? m_presentSourceView : CurrentSwapchainView();
+    const VkFormat colorFormat = hasPresentSource ? m_presentSourceFormat : m_swapchainFormat;
+    const VkImageLayout colorLayout = hasPresentSource
+        ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        : CurrentSwapchainLayout();
+    const uint32_t width = hasPresentSource ? m_presentSourceWidth : m_width;
+    const uint32_t height = hasPresentSource ? m_presentSourceHeight : m_height;
+
+    if (!EnsureRendering(
+            colorImage,
+            colorView,
+            colorFormat,
+            VK_NULL_HANDLE,
+            VK_NULL_HANDLE,
+            VK_FORMAT_UNDEFINED,
+            colorLayout,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            width,
+            height))
+        return;
+
+    VkClearAttachment attachment{};
+    attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    attachment.colorAttachment = 0;
+    attachment.clearValue.color.float32[0] = r;
+    attachment.clearValue.color.float32[1] = g;
+    attachment.clearValue.color.float32[2] = b;
+    attachment.clearValue.color.float32[3] = a;
+
+    VkClearRect rect{};
+    rect.rect.offset = {0, 0};
+    rect.rect.extent = {width, height};
+    rect.layerCount = 1;
+
+    vkCmdClearAttachments(m_commandBuffer, 1, &attachment, 1, &rect);
+}
+
 void VulkanBackend::Present()
 {
     if (!EndFrame())
