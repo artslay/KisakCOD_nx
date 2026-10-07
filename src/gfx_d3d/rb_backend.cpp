@@ -247,23 +247,6 @@ void __cdecl RB_DrawStretchPic(
 {
     uint16_t vertCount; // [esp+24h] [ebp-4h]
 
-#ifdef __SWITCH__
-    // The CoD4 menu's button fade is followed by an 8px translucent
-    // "default" tail. On Vulkan that tail becomes the hard/red vertical edge
-    // visible at the right side of the button. Suppress only this narrow
-    // translucent 2D quad; keep all other default-material UI draws intact.
-    if (material && material->textureCount && material->textureTable &&
-        material->textureTable[0].u.image &&
-        material->textureTable[0].u.image->name &&
-        !I_stricmp(material->textureTable[0].u.image->name, "default") &&
-        w > 0.0f && w <= 16.0f &&
-        h >= 24.0f && h <= 40.0f &&
-        ((color >> 24) & 0xFFu) <= 0x40u)
-    {
-        return;
-    }
-#endif
-
     iassert(gfxCmdBufSourceState.viewMode == VIEW_MODE_2D);
 
     RB_SetTessTechnique(material, TECHNIQUE_UNLIT);
