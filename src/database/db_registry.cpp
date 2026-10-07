@@ -4018,7 +4018,7 @@ static bool Switch_IsStreamAsciiImageName(
 }
 #endif
 
-Load_GfxImageAsset(XAssetHeader *image)
+void __cdecl Load_GfxImageAsset(XAssetHeader *image)
 {
 #ifdef __SWITCH__
     if (!image)
