@@ -5380,6 +5380,102 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             "atStreamStart");
     iassert(OFFSET_TO_GfxImageLoadDef_DATA == 16);
 
+#ifdef __SWITCH__
+    // Keep the first failing image fully observable without changing stream
+    // consumption. In particular, 0x3a000000 is the byte-rotated form of
+    // 0x0000003a: if that appears here, the cursor arrived one byte late.
+    if (g_switchCurrentAssetIndex == 1530 &&
+        g_switchCurrentAssetRawType == ASSET_TYPE_MATERIAL)
+    {
+        const uint8_t *cursor = DB_GetStreamPos();
+        uint8_t raw[16] = {};
+        uint8_t before[8] = {};
+        if (cursor &&
+            g_streamBlocks &&
+            g_streamBlocks[0].data)
+        {
+            const uintptr_t base =
+                reinterpret_cast<uintptr_t>(g_streamBlocks[0].data);
+            const uintptr_t pos = reinterpret_cast<uintptr_t>(cursor);
+            const uint32_t blockSize = g_streamBlocks[0].size;
+            if (pos >= base && pos <= base + blockSize)
+            {
+                const uint32_t offset =
+                    static_cast<uint32_t>(pos - base);
+                const uint32_t remaining = blockSize - offset;
+                const uint32_t rawCount = remaining < sizeof(raw)
+                    ? remaining
+                    : static_cast<uint32_t>(sizeof(raw));
+                if (rawCount)
+                    std::memcpy(raw, cursor, rawCount);
+
+                const uint32_t beforeCount =
+                    offset < sizeof(before) ? offset : sizeof(before);
+                if (beforeCount)
+                    std::memcpy(
+                        before + (sizeof(before) - beforeCount),
+                        cursor - beforeCount,
+                        beforeCount);
+            }
+        }
+
+        const uint32_t resourceSize =
+            static_cast<uint32_t>(raw[12]) |
+            (static_cast<uint32_t>(raw[13]) << 8) |
+            (static_cast<uint32_t>(raw[14]) << 16) |
+            (static_cast<uint32_t>(raw[15]) << 24);
+        const uint32_t rotatedResourceSize =
+            static_cast<uint32_t>(raw[15]) |
+            (static_cast<uint32_t>(raw[12]) << 8) |
+            (static_cast<uint32_t>(raw[13]) << 16) |
+            (static_cast<uint32_t>(raw[14]) << 24);
+
+        char trace[768];
+        int written = std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][GFX LOADDEF RAW] asset=%d rawType=%u stream=%u offset=%08x "
+            "cursor=%p resource=%08x rotated=%08x before:",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            static_cast<void *>(cursor),
+            resourceSize,
+            rotatedResourceSize);
+        for (size_t i = 0; i < sizeof(before) && written > 0 &&
+             static_cast<size_t>(written) + 4 < sizeof(trace); ++i)
+        {
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                " %02x",
+                static_cast<unsigned>(before[i]));
+        }
+        if (written > 0 && static_cast<size_t>(written) < sizeof(trace))
+        {
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                " raw:");
+            for (size_t i = 0; i < sizeof(raw) && written > 0 &&
+                 static_cast<size_t>(written) + 4 < sizeof(trace); ++i)
+            {
+                written += std::snprintf(
+                    trace + written,
+                    sizeof(trace) - static_cast<size_t>(written),
+                    " %02x",
+                    static_cast<unsigned>(raw[i]));
+            }
+            std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                "\\n");
+        }
+        Switch_LogWrite(trace);
+    }
+#endif
+
     // GfxImageLoadDef has a fixed 16-byte serialized header. The fastfile is
     // produced from the 32-bit CoD4 layout, so stream consumption must remain
     // exactly 16 bytes even on the ARM64 runtime. The previous Switch-specific
