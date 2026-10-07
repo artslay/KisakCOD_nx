@@ -46,6 +46,7 @@ static void Switch_LogRawDwords(
     for (uint32_t offset = 0; offset < size; offset += 16)
     {
         char trace[256];
+        char trace[512];
         int written = std::snprintf(
             trace,
             sizeof(trace),
