@@ -1473,18 +1473,18 @@ static void spv_emit_vs_main_end(Context* ctx)
         if (!reg || !reg->spirv.iddecl)
             return;
 
+        const SpirvResult output = spv_loadreg(ctx, reg);
         const uint32 tid_float = spv_get_type(ctx, STI_FLOAT);
-        const uint32 tid_vec4 = spv_get_type(ctx, STI_VEC4);
         const uint32 id_neg_one = spv_getscalarf(ctx, -1.0f);
         const uint32 id_old_y = spv_bumpid(ctx);
         const uint32 id_new_y = spv_bumpid(ctx);
         const uint32 id_new_output = spv_bumpid(ctx);
 
         push_output(ctx, &ctx->mainline);
-        spv_emit(ctx, 5, SpvOpCompositeExtract, tid_float, id_old_y, reg->spirv.iddecl, 1);
+        spv_emit(ctx, 5, SpvOpCompositeExtract, tid_float, id_old_y, output.id, 1);
         spv_emit(ctx, 5, SpvOpFMul, tid_float, id_new_y, id_old_y, id_neg_one);
-        spv_emit(ctx, 6, SpvOpCompositeInsert, tid_vec4, id_new_output,
-            id_new_y, reg->spirv.iddecl, 1);
+        spv_emit(ctx, 6, SpvOpCompositeInsert, output.tid, id_new_output,
+            id_new_y, output.id, 1);
         spv_emit(ctx, 3, SpvOpStore, reg->spirv.iddecl, id_new_output);
         pop_output(ctx);
     }
