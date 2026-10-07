@@ -5470,7 +5470,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             std::snprintf(
                 trace + written,
                 sizeof(trace) - static_cast<size_t>(written),
-                "\\n");
+                "\n");
         }
         Switch_LogWrite(trace);
     }
