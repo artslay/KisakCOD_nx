@@ -2239,11 +2239,7 @@ bool IDirect3DDevice9::PrepareDraw()
             !I_stricmp(name, "gradient_fadein") ||
             !I_stricmp(name, "images/gradient_fadein") ||
             !I_stricmp(name, "gradient_fadein.iwi") ||
-            !I_stricmp(name, "images/gradient_fadein.iwi") ||
-            !I_stricmp(name, "button_highlight_end") ||
-            !I_stricmp(name, "images/button_highlight_end") ||
-            !I_stricmp(name, "button_highlight_end.iwi") ||
-            !I_stricmp(name, "images/button_highlight_end.iwi");
+            !I_stricmp(name, "images/gradient_fadein.iwi");
         if (switchUiGradient)
         {
             m_blendEnable = true;
