@@ -1550,6 +1550,7 @@ void DB_TryLoadXFile()
     {
         zoneInfoCount = g_zoneInfoCount;
 
+#ifdef __SWITCH__
         if (zoneInfoCount > 8)
         {
             g_switchDbStage = "load/count_invalid";
@@ -1562,7 +1563,7 @@ void DB_TryLoadXFile()
             MyAssertHandler(".\\database\\db_registry.cpp", 3764, 0, "%s", "!g_loadingZone");
         for (j = 0; j < zoneInfoCount; ++j)
         {
-
+#ifdef __SWITCH__
             g_switchDbStage = "load/call_internal";
 #endif
             if (!DB_TryLoadXFileInternal(g_zoneInfo[j].name, g_zoneInfo[j].flags))
