@@ -854,10 +854,15 @@ void *VulkanBackend::CreateQuery(uint32_t queryType)
 
     if (queryType == 8) // D3DQUERYTYPE_EVENT
     {
-        VkPhysicalDeviceProperties props{};
-        vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
-        if (props.limits.timestampPeriod <= 0.0f || props.limits.timestampValidBits == 0)
+        uint32_t queueCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueCount, nullptr);
+        std::vector<VkQueueFamilyProperties> queues(queueCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueCount, queues.data());
+
+        if (m_graphicsQueueFamily >= queues.size() ||
+            queues[m_graphicsQueueFamily].timestampValidBits == 0)
             return nullptr;
+
         vkType = VK_QUERY_TYPE_TIMESTAMP;
     }
     else if (queryType != 9) // D3DQUERYTYPE_OCCLUSION
