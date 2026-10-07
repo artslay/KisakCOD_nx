@@ -366,7 +366,28 @@ uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress)
 
         uint32_t raw = 0;
         std::memcpy(&raw, slot, sizeof(raw));
-        if (!raw || raw == UINT32_MAX || raw == UINT32_MAX - 1u)
+
+        if (raw == UINT32_MAX)
+        {
+            // A serialized XString may be represented by a pointer slot
+            // containing -1 followed immediately by the inline string bytes.
+            // Resolve the string in place; do not consume anything from the
+            // global stream cursor.
+            if (remaining <= sizeof(uint32_t))
+                return 0;
+
+            const uintptr_t inlineAddress =
+                current + sizeof(uint32_t);
+            if (Switch_IsSerializedAssetName(inlineAddress))
+            {
+                *resolvedPointer = inlineAddress;
+                return true;
+            }
+
+            return 0;
+        }
+
+        if (!raw || raw == UINT32_MAX - 1u)
             return 0;
 
         current = DB_ConvertOffsetToPointerValue(raw);
