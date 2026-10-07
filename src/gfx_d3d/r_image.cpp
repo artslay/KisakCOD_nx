@@ -285,28 +285,7 @@ void R_VulkanUploadTexture(
 }
 }
 #endif
-#ifdef __SWITCH__
-bool __cdecl Image_IsValidExternalName(const char *name)
-{
-    if (!name)
-        return false;
 
-    // CoD4 image names are ASCII asset identifiers. Rejecting non-ASCII and
-    // control bytes at this boundary prevents a corrupted ARM64 string/offset
-    // from becoming an IWI pathname or reaching strlen()/Image_Construct().
-    for (size_t i = 0; i < 128; ++i)
-    {
-        const unsigned char c = static_cast<unsigned char>(name[i]);
-        if (c == 0)
-            return i != 0;
-        if (c < 0x20u || c > 0x7Eu)
-            return false;
-    }
-
-    // No terminator within the bounded asset-name window.
-    return false;
-}
-#endif
 
 static const char *g_imageProgNames[14] =
 {
@@ -396,27 +375,7 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
         Switch_LogWrite(trace);
     }
 #endif
-#ifdef __SWITCH__
-    // Empty image names and shader code constants are never valid external
-    // IWI filenames. They can occur on ARM64 when a missing/unsupported image
-    // resolves through the default asset path. Fall back to the renderer's
-    // normal default texture instead of probing images/.iwi or
-    // images/codeMeshArg.iwi.
-    const bool switchInvalidIwiName =
-        !image ||
-        !image->name ||
-        !image->name[0] ||
-        !I_stricmp(image->name, "codeMeshArg");
-    if (switchInvalidIwiName && image && image->delayLoadPixels)
-    {
-        image->delayLoadPixels = false;
-        image->cardMemory.platform[0] = 0;
-        image->cardMemory.platform[1] = 0;
-        Image_AssignDefaultTexture(image);
-        g_switchDbStage = "delayed_images/invalid_name_fallback";
-        return;
-    }
-#endif
+
 
     if (image->delayLoadPixels)
     {
@@ -872,56 +831,6 @@ GfxImage *__cdecl Image_FindExisting_FastFile(const char *name)
 
 GfxImage *__cdecl Image_Register(const char *imageName, uint8_t semantic, int imageTrack)
 {
-#ifdef __SWITCH__
-    // These are not texture asset names. They are malformed/empty references
-    // reaching the external-image registration path on the ARM64 loader.
-    // In particular, codeMeshArg is a material shader code source, not an IWI.
-    // Resolve such references to the real renderer white image before any
-    // Image_Load/FS lookup can construct images/.iwi.
-    if (!Image_IsValidExternalName(imageName) ||
-        !I_stricmp(imageName, "codeMeshArg"))
-    {
-        static uint32_t switchInvalidImageNameTraceCount = 0;
-        if (switchInvalidImageNameTraceCount < 8)
-        {
-            char trace[384];
-            int written = std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][IMAGE NAME REJECT] ptr=%p fast=%u asset=%d rawType=%u stage=%s bytes:",
-                static_cast<const void *>(imageName),
-                IsFastFileLoad() ? 1u : 0u,
-                g_switchCurrentAssetIndex,
-                static_cast<unsigned>(g_switchCurrentAssetRawType),
-                g_switchDbStage ? g_switchDbStage : "");
-            for (size_t i = 0;
-                 i < 16 &&
-                 written > 0 &&
-                 static_cast<size_t>(written) + 4 < sizeof(trace);
-                 ++i)
-            {
-                written += std::snprintf(
-                    trace + written,
-                    sizeof(trace) - static_cast<size_t>(written),
-                    " %02x",
-                    static_cast<unsigned>(
-                        static_cast<unsigned char>(imageName[i])));
-            }
-            if (written > 0 && static_cast<size_t>(written) < sizeof(trace))
-                std::snprintf(
-                    trace + written,
-                    sizeof(trace) - static_cast<size_t>(written),
-                    "\n");
-            Switch_LogWrite(trace);
-            ++switchInvalidImageNameTraceCount;
-        }
-
-        if (rgp.whiteImage)
-            return rgp.whiteImage;
-        return Image_Register_FastFile("$white");
-    }
-#endif
-
     if (IsFastFileLoad())
         return (GfxImage *)Image_Register_FastFile(imageName);
     else
