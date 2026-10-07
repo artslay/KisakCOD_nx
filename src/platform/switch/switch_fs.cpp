@@ -506,8 +506,7 @@ static bool Switch_OpenIwdFile(const char *filename, int *fileHandle)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][IWD FALLBACK] raw=%s normalized=%s archive=%s size=%u
-",
+            "[KisakCOD][IWD FALLBACK] raw=%s normalized=%s archive=%s size=%u\\n",
             filename,
             normalizedName.c_str(),
             archive.path.c_str(),
