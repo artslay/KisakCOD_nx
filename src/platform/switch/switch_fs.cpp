@@ -63,7 +63,6 @@ struct SwitchIwdEntry
 {
     uint16_t archiveIndex = 0;
     unsigned long infoPosition = 0;
-    uint32_t fileOrdinal = 0;
     uint32_t size = 0;
 };
 
@@ -122,8 +121,11 @@ static void Switch_IndexIwdArchive(const char *archivePath)
     const uint16_t archiveIndex = static_cast<uint16_t>(g_iwdArchives.size());
     g_iwdArchives.push_back(std::move(archive));
 
+    unz_global_info globalInfo = {};
+    if (unzGetGlobalInfo(archiveFile, &globalInfo) == UNZ_OK)
+        g_iwdEntries.reserve(g_iwdEntries.size() + globalInfo.number_entry);
+
     int entryCount = 0;
-    uint32_t fileOrdinal = 0;
     if (unzGoToFirstFile(archiveFile) == UNZ_OK)
     {
         do
@@ -131,7 +133,6 @@ static void Switch_IndexIwdArchive(const char *archivePath)
             char name[256] = {};
             unz_file_info info = {};
             unsigned long infoPosition = 0;
-            const uint32_t currentOrdinal = fileOrdinal++;
 
             if (unzGetCurrentFileInfo(
                     archiveFile,
@@ -144,10 +145,10 @@ static void Switch_IndexIwdArchive(const char *archivePath)
                     0) != UNZ_OK)
                 continue;
 
-            const bool haveInfoPosition =
-                unzGetCurrentFileInfoPosition(
+            if (unzGetCurrentFileInfoPosition(
                     archiveFile,
-                    &infoPosition) == UNZ_OK;
+                    &infoPosition) != UNZ_OK)
+                continue;
 
             const std::string normalizedName = SwitchNormalizePath(name);
             if (normalizedName.empty() || normalizedName.back() == '/')
@@ -155,8 +156,7 @@ static void Switch_IndexIwdArchive(const char *archivePath)
 
             SwitchIwdEntry entry;
             entry.archiveIndex = archiveIndex;
-            entry.infoPosition = haveInfoPosition ? infoPosition : 0;
-            entry.fileOrdinal = currentOrdinal;
+            entry.infoPosition = infoPosition;
             entry.size = static_cast<uint32_t>(info.uncompressed_size);
 
             // iw_XX files are added as separate search paths. Since later
@@ -380,89 +380,27 @@ static void Switch_IndexIwdArchives(const char *game)
     Switch_LogWrite(trace);
 }
 
-static bool Switch_OpenIwdFile(const char *filename, int *fileHandle)
+static bool Switch_OpenIwdFile(
+    const char *filename,
+    const SwitchIwdEntry &entry,
+    int *fileHandle)
 {
-    const std::string normalizedName = SwitchNormalizePath(filename);
-    const auto it = g_iwdEntries.find(normalizedName);
-    if (it == g_iwdEntries.end())
-        return false;
-
-    const SwitchIwdEntry &entry = it->second;
     if (entry.archiveIndex >= g_iwdArchives.size())
         return false;
 
     SwitchIwdArchive &archive = g_iwdArchives[entry.archiveIndex];
-    if (!archive.file)
+    if (!archive.file || entry.infoPosition == 0)
         return false;
 
     unzFile clone = unzReOpen(archive.path.c_str(), archive.file);
     if (!clone)
         return false;
 
-    bool selected = false;
-
-    // Primary lookup: the exact central-directory position captured at startup.
-    if (entry.infoPosition != 0 &&
-        unzSetCurrentFileInfoPosition(clone, entry.infoPosition) == UNZ_OK)
-    {
-        char name[256] = {};
-        unz_file_info info = {};
-        if (unzGetCurrentFileInfo(
-                clone,
-                &info,
-                name,
-                sizeof(name),
-                nullptr,
-                0,
-                nullptr,
-                0) == UNZ_OK &&
-            SwitchNormalizePath(name) == normalizedName)
-        {
-            selected = true;
-        }
-    }
-
-    // Some entries do not expose a stable info position. The startup index also
-    // stores their ordinal, so resolve that entry directly without scanning for
-    // its filename or rescanning the archive.
-    if (!selected)
-    {
-        if (unzGoToFirstFile(clone) != UNZ_OK)
-        {
-            unzClose(clone);
-            return false;
-        }
-
-        for (uint32_t i = 0; i < entry.fileOrdinal; ++i)
-        {
-            if (unzGoToNextFile(clone) != UNZ_OK)
-            {
-                unzClose(clone);
-                return false;
-            }
-        }
-
-        char name[256] = {};
-        unz_file_info info = {};
-        if (unzGetCurrentFileInfo(
-                clone,
-                &info,
-                name,
-                sizeof(name),
-                nullptr,
-                0,
-                nullptr,
-                0) != UNZ_OK ||
-            SwitchNormalizePath(name) != normalizedName)
-        {
-            unzClose(clone);
-            return false;
-        }
-
-        selected = true;
-    }
-
-    if (!selected || unzOpenCurrentFile(clone) != UNZ_OK)
+    // Match the original CoD4 fast path:
+    // hash/index lookup -> saved ZIP central-directory position -> open.
+    // Do not scan the archive or re-read the filename at runtime.
+    if (unzSetCurrentFileInfoPosition(clone, entry.infoPosition) != UNZ_OK ||
+        unzOpenCurrentFile(clone) != UNZ_OK)
     {
         unzClose(clone);
         return false;
