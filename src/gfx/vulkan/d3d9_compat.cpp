@@ -9,6 +9,7 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -1560,7 +1561,10 @@ bool IDirect3DDevice9::BindSamplerSet(
 bool IDirect3DDevice9::EnsurePipeline()
 {
     if (!m_backend || !m_vertexShader || !m_pixelShader || !m_decl)
+    {
+        Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=missing backend_vs_ps_decl\n");
         return false;
+    }
 
     uint64_t key = 0x12345678abcdef00ull;
     key = HashCombine(key, PointerKey(m_vertexShader));
@@ -1658,7 +1662,16 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (patchBytes <= 0 ||
             m_vertexShader->parseData->output_len <= patchBytes ||
             m_pixelShader->parseData->output_len <= patchBytes)
+        {
+            char msg[192];
+            std::snprintf(msg, sizeof(msg),
+                "[KisakCOD][VK DRAW] pipeline_fail=shader_link patch=%d vs=%d ps=%d\n",
+                patchBytes,
+                m_vertexShader->parseData ? m_vertexShader->parseData->output_len : 0,
+                m_pixelShader->parseData ? m_pixelShader->parseData->output_len : 0);
+            Switch_LogWrite(msg);
             return false;
+        }
 
         const size_t vsBytes =
             static_cast<size_t>(m_vertexShader->parseData->output_len - patchBytes);
@@ -1672,7 +1685,10 @@ bool IDirect3DDevice9::EnsurePipeline()
                 pixelSpirv,
                 &m_pixelShader->alphaFuncSpecId,
                 &m_pixelShader->alphaRefSpecId))
+        {
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
             return false;
+        }
         m_pixelShader->spirv = pixelSpirv;
 
         VkShaderModuleCreateInfo vsInfo{};
@@ -1685,9 +1701,19 @@ bool IDirect3DDevice9::EnsurePipeline()
         psInfo.codeSize = m_pixelShader->spirv.size() * sizeof(uint32_t);
         psInfo.pCode = m_pixelShader->spirv.data();
 
-        if (vkCreateShaderModule(m_backend->Device(), &vsInfo, nullptr, &m_vertexShader->module) != VK_SUCCESS ||
-            vkCreateShaderModule(m_backend->Device(), &psInfo, nullptr, &m_pixelShader->module) != VK_SUCCESS)
+        const VkResult vsResult =
+            vkCreateShaderModule(m_backend->Device(), &vsInfo, nullptr, &m_vertexShader->module);
+        const VkResult psResult =
+            vsResult == VK_SUCCESS
+                ? vkCreateShaderModule(m_backend->Device(), &psInfo, nullptr, &m_pixelShader->module)
+                : vsResult;
+        if (vsResult != VK_SUCCESS || psResult != VK_SUCCESS)
         {
+            char msg[160];
+            std::snprintf(msg, sizeof(msg),
+                "[KisakCOD][VK DRAW] pipeline_fail=shader_module vs=%d ps=%d\n",
+                static_cast<int>(vsResult), static_cast<int>(psResult));
+            Switch_LogWrite(msg);
             if (m_vertexShader->module)
                 vkDestroyShaderModule(m_backend->Device(), m_vertexShader->module, nullptr);
             m_vertexShader->module = VK_NULL_HANDLE;
@@ -1751,7 +1777,14 @@ bool IDirect3DDevice9::EnsurePipeline()
 
         const VkFormat format = VertexFormat(element.Type);
         if (format == VK_FORMAT_UNDEFINED)
+        {
+            char msg[160];
+            std::snprintf(msg, sizeof(msg),
+                "[KisakCOD][VK DRAW] pipeline_fail=vertex_format stream=%u offset=%u type=%u\n",
+                element.Stream, element.Offset, element.Type);
+            Switch_LogWrite(msg);
             return false;
+        }
 
         uint32_t location = UINT32_MAX;
         for (int i = 0; i < m_vertexShader->parseData->attribute_count; ++i)
@@ -1763,7 +1796,15 @@ bool IDirect3DDevice9::EnsurePipeline()
                 break;
         }
         if (location == UINT32_MAX)
+        {
+            char msg[192];
+            std::snprintf(msg, sizeof(msg),
+                "[KisakCOD][VK DRAW] pipeline_fail=vertex_attr stream=%u offset=%u usage=%u index=%u attrs=%d\n",
+                element.Stream, element.Offset, element.Usage, element.UsageIndex,
+                m_vertexShader->parseData ? m_vertexShader->parseData->attribute_count : 0);
+            Switch_LogWrite(msg);
             return false;
+        }
 
         vertexAttrs.push_back({
             location, element.Stream, format, element.Offset
@@ -1891,9 +1932,17 @@ bool IDirect3DDevice9::EnsurePipeline()
     info.renderPass = VK_NULL_HANDLE;
 
     VkPipeline pipeline = VK_NULL_HANDLE;
-    if (vkCreateGraphicsPipelines(
-            m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline) != VK_SUCCESS)
+    const VkResult pipelineResult = vkCreateGraphicsPipelines(
+        m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+    if (pipelineResult != VK_SUCCESS)
+    {
+        char msg[160];
+        std::snprintf(msg, sizeof(msg),
+            "[KisakCOD][VK DRAW] pipeline_fail=graphics_pipeline vk=%d\n",
+            static_cast<int>(pipelineResult));
+        Switch_LogWrite(msg);
         return false;
+    }
 
     m_pipelines.emplace(key, pipeline);
     m_pipelineDirty = false;
@@ -1928,7 +1977,10 @@ bool IDirect3DDevice9::BindDescriptorSets()
 bool IDirect3DDevice9::PrepareDraw()
 {
     if (!m_backend || !m_backend->IsFrameActive())
+    {
+        Switch_LogWrite("[KisakCOD][VK DRAW] fail=frame_inactive\n");
         return false;
+    }
 
     VkImage colorImage = m_color && m_color->texture
         ? m_color->texture->image : m_backend->CurrentSwapchainImage();
@@ -1959,7 +2011,10 @@ bool IDirect3DDevice9::PrepareDraw()
             colorOldLayout, depthOldLayout,
             m_color && m_color->texture ? m_color->texture->width : m_viewport.Width,
             m_color && m_color->texture ? m_color->texture->height : m_viewport.Height))
+    {
+        Switch_LogWrite("[KisakCOD][VK DRAW] fail=ensure_rendering\n");
         return false;
+    }
 
     if (m_color && m_color->texture)
     {
@@ -1970,7 +2025,10 @@ bool IDirect3DDevice9::PrepareDraw()
         m_depth->texture->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     if (!EnsurePipeline())
+    {
+        Switch_LogWrite("[KisakCOD][VK DRAW] fail=pipeline\n");
         return false;
+    }
 
     VkViewport viewport{};
     viewport.x = static_cast<float>(m_viewport.X);
@@ -1996,7 +2054,12 @@ bool IDirect3DDevice9::PrepareDraw()
     };
     vkCmdSetScissor(m_backend->CommandBuffer(), 0, 1, &scissor);
 
-    return BindDescriptorSets();
+    if (!BindDescriptorSets())
+    {
+        Switch_LogWrite("[KisakCOD][VK DRAW] fail=descriptor_sets\n");
+        return false;
+    }
+    return true;
 }
 
 HRESULT IDirect3DDevice9::DrawPrimitiveUP(
@@ -2028,7 +2091,18 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 {
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
     if (!m_indices || !m_indices->buffer || !indexCount)
+    {
+        char msg[256];
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK DRAW] fail=indices prim=%u count=%u indices=%p buffer=%p start=%u base=%d\n",
+            primitiveType, primitiveCount,
+            static_cast<void *>(m_indices),
+            m_indices ? static_cast<void *>(reinterpret_cast<uintptr_t>(m_indices->buffer)) : nullptr,
+            startIndex, baseVertexIndex);
+        Switch_LogWrite(msg);
         return E_FAIL;
+    }
     m_topology = PrimitiveTopology(primitiveType);
     if (!PrepareDraw())
         return E_FAIL;
