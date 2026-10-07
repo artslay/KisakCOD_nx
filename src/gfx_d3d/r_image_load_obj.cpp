@@ -456,7 +456,23 @@ char __cdecl Image_LoadFromFileWithReader(GfxImage *image, int(__cdecl *OpenFile
     iassert( image );
     iassert( image->category == IMG_CATEGORY_LOAD_FROM_FILE );
     iassert( !image->texture.basemap );
+
 #ifdef __SWITCH__
+    // Never construct an external IWI path for an invalid logical image name.
+    // An empty name is a missing asset reference; codeMeshArg is a shader
+    // sampler/code-source identifier, not an image. Both must use the normal
+    // renderer fallback instead of reaching FS_FOpenFileReadDatabase().
+    if (!image->name ||
+        !image->name[0] ||
+        !I_stricmp(image->name, "codeMeshArg"))
+    {
+        image->delayLoadPixels = false;
+        image->cardMemory.platform[0] = 0;
+        image->cardMemory.platform[1] = 0;
+        Image_AssignDefaultTexture(image);
+        return 1;
+    }
+
     {
         char trace[320];
         std::snprintf(
