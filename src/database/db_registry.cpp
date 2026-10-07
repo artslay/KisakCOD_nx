@@ -2085,6 +2085,18 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, char *name)
     DB_SetXAssetName(&newEntry->asset, SL_ConvertToString(SL_GetString(name, 4)));
 
 #ifdef __SWITCH__
+    // DB_CreateDefaultEntry clones the native builtin image (normally
+    // $white). A default image owns an already-created GPU resource and is
+    // not an external fastfile image, so it must never enter the delayed IWI
+    // loader. Keep the requested logical asset name for registry lookups, but
+    // clear only the serialized delayed-pixel state.
+    if (type == ASSET_TYPE_IMAGE && newEntry->asset.header.image)
+    {
+        newEntry->asset.header.image->delayLoadPixels = false;
+        newEntry->asset.header.image->cardMemory.platform[0] = 0;
+        newEntry->asset.header.image->cardMemory.platform[1] = 0;
+    }
+
     if (traceDefaultTechset)
     {
         g_switchDbStage = "asset/default_done";
