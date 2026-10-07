@@ -400,30 +400,6 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
             {
 #ifdef __SWITCH__
                 g_switchDbStage = "delayed_images/default_texture";
-                char trace[640];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][IMAGE DELAY FAIL] #%u image=%p namePtr=%p name=%.*s "
-                    "map=%u semantic=%u category=%u size=%ux%ux%u loadDef=%p "
-                    "resource=%u card=%u\n",
-                    static_cast<unsigned>(switchDelayImageIndex),
-                    static_cast<void *>(image),
-                    image ? static_cast<const void *>(image->name) : nullptr,
-                    160,
-                    (image && image->name) ? image->name : "<null>",
-                    image ? static_cast<unsigned>(image->mapType) : 0u,
-                    image ? static_cast<unsigned>(image->semantic) : 0u,
-                    image ? static_cast<unsigned>(image->category) : 0u,
-                    image ? static_cast<unsigned>(image->width) : 0u,
-                    image ? static_cast<unsigned>(image->height) : 0u,
-                    image ? static_cast<unsigned>(image->depth) : 0u,
-                    image ? static_cast<void *>(image->texture.loadDef) : nullptr,
-                    (image && image->texture.loadDef)
-                        ? static_cast<unsigned>(image->texture.loadDef->resourceSize)
-                        : 0u,
-                    image ? static_cast<unsigned>(image->cardMemory.platform[0]) : 0u);
-                Switch_LogWrite(trace);
 #endif
                 Image_AssignDefaultTexture(image);
             }
