@@ -5548,8 +5548,9 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         DB_PushStreamPos(4);
 
         // GfxImage::name is an XString serialized as a 32-bit token.
-        // Use the same Load_XString path as the original IW3 loader instead
-        // of maintaining a second ARM64-specific name decoder.
+        // Load_XString performs the normal 32-bit offset -> stream-pointer
+        // conversion. The GfxImage object itself is handled separately by the
+        // pointer-alias registration above.
         varGfxImage->name =
             reinterpret_cast<const char *>(
                 static_cast<uintptr_t>(serialized.name));
@@ -5739,6 +5740,9 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
             // inline image header in stream 0. Hunk_Alloc below only reserves
             // the widened native destination, so preserve stream alignment.
             DB_AllocStreamPos(3);
+            const uintptr_t serializedImageAddress =
+                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+
             GfxImage *nativeImage =
                 reinterpret_cast<GfxImage *>(Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(GfxImage)),
@@ -5762,6 +5766,15 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
                 reinterpret_cast<uint8_t *>(varGfxImagePtr),
                 &nativeImage,
                 sizeof(nativeImage));
+
+            // A FOLLOWING GfxImage is materialized into a native ARM64 object.
+            // Positive serialized references still carry the original stream
+            // address, so register that object address as an alias before any
+            // later asset can resolve it.
+            DB_RegisterSwitchPointerAlias(
+                serializedImageAddress,
+                reinterpret_cast<uintptr_t>(nativeImage));
+            DB_FixupSwitchPointerAliases();
 
             Load_GfxImageAsset(reinterpret_cast<XAssetHeader *>(varGfxImagePtr));
 
