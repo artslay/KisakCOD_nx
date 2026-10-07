@@ -439,6 +439,23 @@ bool VulkanBackend::CreateSwapchain()
     if (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
         usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
+    // Do not inherit a display rotation into the game framebuffer when the
+    // surface supports identity. D3D9/CoD4 renders in the logical 1280x720
+    // orientation; propagating ROTATE_180 here would mirror and vertically
+    // invert the entire presented frame.
+    VkSurfaceTransformFlagBitsKHR preTransform = caps.currentTransform;
+    if (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+
+    char transformLog[192];
+    std::snprintf(
+        transformLog, sizeof(transformLog),
+        "[KisakCOD][VK] surface_transform current=0x%x supported=0x%x selected=0x%x\\n",
+        static_cast<unsigned>(caps.currentTransform),
+        static_cast<unsigned>(caps.supportedTransforms),
+        static_cast<unsigned>(preTransform));
+    Switch_LogWrite(transformLog);
+
     VkSwapchainCreateInfoKHR info{};
     info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     info.surface = m_surface;
@@ -449,7 +466,7 @@ bool VulkanBackend::CreateSwapchain()
     info.imageArrayLayers = 1;
     info.imageUsage = usage;
     info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    info.preTransform = caps.currentTransform;
+    info.preTransform = preTransform;
     info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     info.presentMode = m_presentMode;
     info.clipped = VK_TRUE;
