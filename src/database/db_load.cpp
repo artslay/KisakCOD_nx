@@ -5380,6 +5380,15 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
             "atStreamStart");
     iassert(OFFSET_TO_GfxImageLoadDef_DATA == 16);
 
+
+
+    // GfxImageLoadDef has a fixed 16-byte serialized header. The fastfile is
+    // produced from the 32-bit CoD4 layout, so stream consumption must remain
+    // exactly 16 bytes even on the ARM64 runtime. The previous Switch-specific
+    // 15-byte "compact" heuristic left the cursor one byte early and shifted
+    // every following stream-0 object.
+    Load_Stream(1, (unsigned char *)varGfxImageLoadDef, 16);
+
 #ifdef __SWITCH__
     // Keep the first failing image fully observable without changing stream
     // consumption. In particular, 0x3a000000 is the byte-rotated form of
@@ -5508,13 +5517,6 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         Switch_LogRaw(trace);
     }
 #endif
-
-    // GfxImageLoadDef has a fixed 16-byte serialized header. The fastfile is
-    // produced from the 32-bit CoD4 layout, so stream consumption must remain
-    // exactly 16 bytes even on the ARM64 runtime. The previous Switch-specific
-    // 15-byte "compact" heuristic left the cursor one byte early and shifted
-    // every following stream-0 object.
-    Load_Stream(1, (unsigned char *)varGfxImageLoadDef, 16);
 
     if (DB_GetStreamPos() != varGfxImageLoadDef->data)
         MyAssertHandler(
