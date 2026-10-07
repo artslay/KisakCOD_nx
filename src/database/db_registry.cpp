@@ -3956,7 +3956,69 @@ void __cdecl Mark_MaterialTechniqueSetAsset(MaterialTechniqueSet *techniqueSet)
     DB_GetXAsset(ASSET_TYPE_TECHNIQUE_SET, (XAssetHeader)techniqueSet);
 }
 
-void __cdecl Load_GfxImageAsset(XAssetHeader *image)
+void __cdecl #ifdef __SWITCH__
+static bool Switch_IsStreamAsciiImageName(
+    uintptr_t address,
+    uint32_t *blockOut,
+    uint32_t *offsetOut)
+{
+    if (blockOut)
+        *blockOut = UINT32_MAX;
+    if (offsetOut)
+        *offsetOut = 0;
+
+    if (!address || !g_streamBlocks)
+        return false;
+
+    for (uint32_t block = 0;
+         block < ARRAY_COUNT(g_streamPosArray);
+         ++block)
+    {
+        if (!g_streamBlocks[block].data)
+            continue;
+
+        const uintptr_t base =
+            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+        const uintptr_t end =
+            base + g_streamBlocks[block].size;
+        if (address < base || address >= end)
+            continue;
+
+        const size_t offset =
+            static_cast<size_t>(address - base);
+        const size_t remaining =
+            g_streamBlocks[block].size - offset;
+        const size_t limit =
+            remaining < 256u ? remaining : 256u;
+        const unsigned char *name =
+            reinterpret_cast<const unsigned char *>(address);
+
+        if (blockOut)
+            *blockOut = block;
+        if (offsetOut)
+            *offsetOut = static_cast<uint32_t>(offset);
+
+        if (!limit)
+            return false;
+
+        for (size_t i = 0; i < limit; ++i)
+        {
+            const unsigned char ch = name[i];
+            if (ch == 0)
+                return i != 0;
+
+            if (ch < 0x21 || ch > 0x7E)
+                return false;
+        }
+
+        return false;
+    }
+
+    return false;
+}
+#endif
+
+Load_GfxImageAsset(XAssetHeader *image)
 {
 #ifdef __SWITCH__
     if (!image)
@@ -4052,17 +4114,28 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
 #endif
 
 #ifdef __SWITCH__
-    // A positive GfxImage::name token can legitimately point forward into
-    // block 4, where a later inline XString will populate the bytes. The
-    // image object must not be registered under an empty name, otherwise the
-    // registry is permanently hashed under the wrong key.
-    if (image->image &&
-        image->image->delayLoadPixels &&
-        image->image->name &&
-        image->image->name[0] == '\0')
+    // All delayed images are consumed by DB_LoadDelayedImages() only after
+    // Load_DelayStream(). Their XString names normally live in stream block 4,
+    // so the native image must not retain that stream-backed pointer.
+    if (image->image && image->image->delayLoadPixels)
     {
-        g_switchDeferredImageAssets.push_back(
-            {reinterpret_cast<GfxImage **>(image), image->image});
+        const GfxImage *gfxImage = image->image;
+        bool alreadyQueued = false;
+        for (const SwitchDeferredImageAsset &pending :
+             g_switchDeferredImageAssets)
+        {
+            if (pending.image == gfxImage)
+            {
+                alreadyQueued = true;
+                break;
+            }
+        }
+
+        if (!alreadyQueued)
+        {
+            g_switchDeferredImageAssets.push_back(
+                {reinterpret_cast<GfxImage **>(image), image->image});
+        }
         return;
     }
 #endif
@@ -4086,15 +4159,37 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
         if (!image || !slot)
             continue;
 
-        const uintptr_t serializedNameAddress =
+        const uintptr_t directName =
             reinterpret_cast<uintptr_t>(image->name);
-        const uintptr_t resolvedName =
-            DB_ResolveSwitchSerializedString(serializedNameAddress);
 
-        if (!resolvedName)
+        // A direct XString result is authoritative when it already points at
+        // a printable string in the serialized stream. Do not feed such a
+        // string through the generic pointer-alias table: that table contains
+        // object aliases too, and an image-name address can otherwise be
+        // rewritten to a native object pointer.
+        uint32_t directBlock = UINT32_MAX;
+        uint32_t directOffset = 0;
+        const bool directNameIsStreamString =
+            Switch_IsStreamAsciiImageName(
+                directName,
+                &directBlock,
+                &directOffset);
+
+        uintptr_t resolvedName = directName;
+        if (!directNameIsStreamString)
         {
-            g_switchDeferredImageAssets[writeIndex++] = deferred;
-            continue;
+            resolvedName =
+                DB_ResolveSwitchSerializedString(directName);
+
+            if (!resolvedName ||
+                !Switch_IsStreamAsciiImageName(
+                    resolvedName,
+                    nullptr,
+                    nullptr))
+            {
+                g_switchDeferredImageAssets[writeIndex++] = deferred;
+                continue;
+            }
         }
 
         const char *finalName =
@@ -4105,27 +4200,18 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
         // otherwise the image is registered correctly now (for example name="3")
         // and then its GfxImage::name silently becomes dangling/garbage before
         // R_DelayLoadImage() runs.
-        uint32_t nameBlock = UINT32_MAX;
-        uint32_t nameOffset = 0;
-        if (g_streamBlocks)
+        uint32_t nameBlock = directNameIsStreamString
+            ? directBlock
+            : UINT32_MAX;
+        uint32_t nameOffset = directNameIsStreamString
+            ? directOffset
+            : 0;
+        if (nameBlock == UINT32_MAX)
         {
-            const uintptr_t nameAddress = resolvedName;
-            for (uint32_t block = 0; block < ARRAY_COUNT(g_streamPosArray); ++block)
-            {
-                if (!g_streamBlocks[block].data)
-                    continue;
-
-                const uintptr_t base =
-                    reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
-                const uintptr_t end =
-                    base + g_streamBlocks[block].size;
-                if (nameAddress >= base && nameAddress < end)
-                {
-                    nameBlock = block;
-                    nameOffset = static_cast<uint32_t>(nameAddress - base);
-                    break;
-                }
-            }
+            Switch_IsStreamAsciiImageName(
+                resolvedName,
+                &nameBlock,
+                &nameOffset);
         }
 
         if (nameBlock != UINT32_MAX)
