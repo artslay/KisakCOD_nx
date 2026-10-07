@@ -452,7 +452,7 @@ bool VulkanBackend::CreateSwapchain()
     char transformLog[192];
     std::snprintf(
         transformLog, sizeof(transformLog),
-        "[KisakCOD][VK] surface_transform current=0x%x supported=0x%x selected=0x%x\\n",
+        "[KisakCOD][VK] surface_transform current=0x%x supported=0x%x selected=0x%x\n",
         static_cast<unsigned>(caps.currentTransform),
         static_cast<unsigned>(caps.supportedTransforms),
         static_cast<unsigned>(preTransform));
