@@ -129,7 +129,8 @@ public:
         VkImageUsageFlags usage,
         VkImage *image,
         VkDeviceMemory *memory,
-        VkImageView *view);
+        VkImageView *view,
+        VkComponentMapping components = {});
 
     void DestroyImage(VkImage image, VkDeviceMemory memory, VkImageView view);
     bool CreateImage3D(
@@ -141,7 +142,8 @@ public:
         VkImageUsageFlags usage,
         VkImage *image,
         VkDeviceMemory *memory,
-        VkImageView *view);
+        VkImageView *view,
+        VkComponentMapping components = {});
 
     bool UploadImage2D(
         VkImage image,
