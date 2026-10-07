@@ -793,7 +793,7 @@ extern int unzGoToNextFile (unzFile file)
   Get the position of the info of the current file in the zip.
   return UNZ_OK if there is no problem
 */
-extern int unzGetCurrentFileInfoPosition (unzFile file, unsigned long *pos )
+extern int unzGetCurrentFileInfoPosition (unzFile file, uint32_t *pos )
 {
 	unz_s* s;	
 
