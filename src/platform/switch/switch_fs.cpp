@@ -774,15 +774,60 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         }
     }
 
-    char path[256];
-    SwitchPath(
-        path,
-        sizeof(path),
-        fs_basepath ? fs_basepath->current.string : kSwitchRoot,
-        fs_gamedir,
-        filename);
+    // Search loose files using the same precedence as the original
+    // CoD4 filesystem: the active game directory first, then *_shared, raw,
+    // raw_shared, devraw, and devraw_shared.
+    static const char *const kLooseSearchDirs[] = {
+        nullptr,
+        nullptr,
+        "raw",
+        "raw_shared",
+        "devraw",
+        "devraw_shared"
+    };
 
-    FILE *fp = FS_FileOpenReadBinary(path);
+    char path[256];
+    FILE *fp = nullptr;
+
+    const char *gameName = fs_gamedir[0] ? fs_gamedir : "main";
+    char sharedDir[128];
+    std::snprintf(
+        sharedDir,
+        sizeof(sharedDir),
+        "%s_shared",
+        gameName);
+
+    const char *resolvedDirs[6] = {
+        gameName,
+        sharedDir,
+        kLooseSearchDirs[2],
+        kLooseSearchDirs[3],
+        kLooseSearchDirs[4],
+        kLooseSearchDirs[5]
+    };
+
+    const char *base = fs_basepath && fs_basepath->current.string[0]
+        ? fs_basepath->current.string
+        : kSwitchRoot;
+
+    for (const char *searchDir : resolvedDirs)
+    {
+        if (!searchDir || !*searchDir)
+            continue;
+
+        std::snprintf(
+            path,
+            sizeof(path),
+            "%s/%s/%s",
+            base,
+            searchDir,
+            filename);
+
+        fp = FS_FileOpenReadBinary(path);
+        if (fp)
+            break;
+    }
+
     if (!fp)
     {
         if (traceImage3)
