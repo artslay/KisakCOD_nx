@@ -2006,9 +2006,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     raster.cullMode = m_cullMode == 1
         ? VK_CULL_MODE_NONE
         : (m_cullMode == 2 ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_FRONT_BIT);
-    // The SPIR-V vertex epilogue flips clip-space Y to Vulkan orientation,
-    // which reverses triangle winding relative to the D3D9 shader output.
-    raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    // Keep D3D9 clockwise winding. The Vulkan viewport below uses a
+    // negative height to perform the D3D9 upper-left Y transform.
+    raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
     raster.depthBiasEnable = (m_depthBias != 0.0f || m_slopeDepthBias != 0.0f) ? VK_TRUE : VK_FALSE;
     raster.depthBiasConstantFactor = m_depthBias;
     raster.depthBiasSlopeFactor = m_slopeDepthBias;
@@ -2202,13 +2202,13 @@ bool IDirect3DDevice9::PrepareDraw()
     }
 
     VkViewport viewport{};
-    // MojoShader's Vulkan SPIR-V vertex epilogue flips D3D clip-space Y.
-    // Keep the Vulkan viewport conventional so viewport/scissor coordinates
-    // retain their D3D9 upper-left origin semantics.
+    // D3D9 maps NDC +Y toward the top of the render target. Vulkan's
+    // conventional viewport maps +Y toward the bottom, so use the Vulkan
+    // negative-height viewport to preserve the original D3D9 transform.
     viewport.x = static_cast<float>(m_viewport.X);
-    viewport.y = static_cast<float>(m_viewport.Y);
+    viewport.y = static_cast<float>(m_viewport.Y + m_viewport.Height);
     viewport.width = static_cast<float>(m_viewport.Width);
-    viewport.height = static_cast<float>(m_viewport.Height);
+    viewport.height = -static_cast<float>(m_viewport.Height);
     viewport.minDepth = m_viewport.MinZ;
     viewport.maxDepth = m_viewport.MaxZ;
     vkCmdSetViewport(m_backend->CommandBuffer(), 0, 1, &viewport);
