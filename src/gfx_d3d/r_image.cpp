@@ -1361,21 +1361,19 @@ void R_InitCodeImages()
     iassert(rgp.pixelCostColorCodeImage);
 
 #ifdef __SWITCH__
-    // Be defensive about renderer startup ordering: regenerate only a builtin
-    // texture whose native image object is present but whose GPU resource is
-    // still empty. This uses the normal builtin constructors, not a fake
-    // fallback texture.
+    // The fastfile can already contain the builtin image objects. In that case
+    // Image_Register_FastFile returns the existing object instead of calling the
+    // builtin constructor, so cardMemory can be nonzero while the Switch GPU
+    // resource is still null. Rebuild the builtin texture whenever its basemap
+    // is missing; cardMemory alone is not a valid readiness test.
     if (r_loadForRenderer && r_loadForRenderer->current.enabled)
     {
-        if (rgp.whiteImage && !rgp.whiteImage->texture.basemap &&
-            !rgp.whiteImage->cardMemory.platform[PICMIP_PLATFORM_USED])
+        if (rgp.whiteImage && !rgp.whiteImage->texture.basemap)
             Image_LoadWhite(rgp.whiteImage);
-        if (rgp.blackImage && !rgp.blackImage->texture.basemap &&
-            !rgp.blackImage->cardMemory.platform[PICMIP_PLATFORM_USED])
+        if (rgp.blackImage && !rgp.blackImage->texture.basemap)
             Image_LoadBlack(rgp.blackImage);
         if (rgp.identityNormalMapImage &&
-            !rgp.identityNormalMapImage->texture.basemap &&
-            !rgp.identityNormalMapImage->cardMemory.platform[PICMIP_PLATFORM_USED])
+            !rgp.identityNormalMapImage->texture.basemap)
             Image_LoadIdentityNormalMap(rgp.identityNormalMapImage);
     }
 
