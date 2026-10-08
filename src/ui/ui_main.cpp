@@ -1000,6 +1000,14 @@ bool __cdecl UI_DvarValueTest(const char *cmd, const char *dvarName, const char 
                     "Number of player profiles");
             dvar = ui_playerProfileCount;
         }
+        else if (!I_stricmp(dvarName, "ui_playerProfileAlreadyChosen"))
+        {
+            dvar = Dvar_RegisterBool(
+                "ui_playerProfileAlreadyChosen",
+                0,
+                DVAR_NOFLAG,
+                "True when the player profile selection has already been chosen");
+        }
     }
 
     if (!dvar)
