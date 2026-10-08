@@ -64,6 +64,28 @@ uiInfo_s uiInfo;
 sharedUiInfo_t sharedUiInfo;
 SaveTimeGlob ui_saveTimeGlob;
 
+#ifdef __SWITCH__
+/*
+ * Profile names are UI-owned strings. Keep a dedicated native buffer for
+ * them on Switch instead of putting them through the generic UI string hash
+ * allocator. This guarantees that the feeder always receives a stable
+ * NUL-terminated byte string after profile creation and filesystem reload.
+ */
+static char g_switchPlayerProfileNames[64][32];
+
+static const char *UI_SwitchStorePlayerProfileName(int index, const char *name)
+{
+    if (index < 0 || index >= 64 || !name)
+        return "";
+
+    I_strncpyz(
+        g_switchPlayerProfileNames[index],
+        name,
+        sizeof(g_switchPlayerProfileNames[index]));
+    return g_switchPlayerProfileNames[index];
+}
+#endif
+
 uiMenuCommand_t g_currentMenuType;
 
 
@@ -2178,9 +2200,15 @@ void UI_AddPlayerProfiles()
     uiInfo->playerProfileStatus.sortDir = 1;
     profileList = FS_ListFiles("profiles", "/", FS_LIST_ALL, &profileCount);
 
-    for (profileIndex = 0; profileIndex < profileCount; ++profileIndex)
+    for (profileIndex = 0; profileIndex < profileCount && uiInfo->playerProfileCount < 64; ++profileIndex)
     {
-        uiInfo->playerProfileName[uiInfo->playerProfileCount++] = String_Alloc(profileList[profileIndex]);
+#ifdef __SWITCH__
+        uiInfo->playerProfileName[uiInfo->playerProfileCount] =
+            UI_SwitchStorePlayerProfileName(uiInfo->playerProfileCount, profileList[profileIndex]);
+#else
+        uiInfo->playerProfileName[uiInfo->playerProfileCount] = String_Alloc(profileList[profileIndex]);
+#endif
+        ++uiInfo->playerProfileCount;
     }
 
     FS_FreeFileList(profileList);
@@ -2237,7 +2265,13 @@ void UI_CreatePlayerProfile()
             }
             if (Com_NewPlayerProfile(name))
             {
+#ifdef __SWITCH__
+                uiInfo->playerProfileName[uiInfo->playerProfileCount] =
+                    UI_SwitchStorePlayerProfileName(uiInfo->playerProfileCount, name);
+                ++uiInfo->playerProfileCount;
+#else
                 uiInfo->playerProfileName[uiInfo->playerProfileCount++] = String_Alloc(name);
+#endif
                 UI_SortPlayerProfiles(0);
                 Dvar_SetInt(ui_playerProfileCount, uiInfo->playerProfileCount);
                 curSelected = UI_GetPlayerProfileListIndexFromName(name);
