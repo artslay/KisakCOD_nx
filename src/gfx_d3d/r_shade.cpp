@@ -538,28 +538,6 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     context.state->prim.device->SetSwitchUnlitMode(context.state->techType == TECHNIQUE_UNLIT);
 #endif
     R_SetState(context.state, stateBits);
-#ifdef __SWITCH__
-    // CoD4 UI shader materials carry their opacity in the vertex color and, for
-    // assets such as gradient_fadein/button_highlight_end, in the sampled texture
-    // alpha. The authored D3D9 state is not reliable on the widened Switch path,
-    // so preserve straight alpha for every screen-space UNLIT pass. Opaque texels
-    // (alpha=1) are unchanged, while the UI fade is allowed to become progressively
-    // transparent toward its texture edge.
-    if (context.source->viewMode == VIEW_MODE_2D &&
-        context.state->techType == TECHNIQUE_UNLIT)
-    {
-        IDirect3DDevice9 *device = context.state->prim.device;
-        device->SetRenderState(D3DRS_ALPHABLENDENABLE, 1);
-        device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, 0);
-        device->SetRenderState(D3DRS_SRCBLEND, 5);       // SRC_ALPHA
-        device->SetRenderState(D3DRS_DESTBLEND, 6);     // INV_SRC_ALPHA
-        device->SetRenderState(D3DRS_BLENDOP, 1);       // ADD
-        device->SetRenderState(D3DRS_SRCBLENDALPHA, 5); // SRC_ALPHA
-        device->SetRenderState(D3DRS_DESTBLENDALPHA, 6); // INV_SRC_ALPHA
-        device->SetRenderState(D3DRS_BLENDOPALPHA, 1);   // ADD
-        device->SetRenderState(D3DRS_ALPHATESTENABLE, 0);
-    }
-#endif
     if (r_logFile->current.integer)
     {
         RB_LogPrint("---------- R_SetupPass\n");
