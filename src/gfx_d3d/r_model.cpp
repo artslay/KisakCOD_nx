@@ -283,10 +283,13 @@ int __cdecl R_SkinXModel(
     __int16 gfxEntIndex)
 {
     uint32_t startSurfPos; // [esp+2Ch] [ebp-E58h]
-    XSurface* xsurf; // [esp+38h] [ebp-E4Ch]
+    XSurface *xsurf; // [esp+38h] [ebp-E4Ch]
     int surfaceIndex; // [esp+40h] [ebp-E44h]
-    uint16_t* surfPos; // [esp+44h] [ebp-E40h]
-    uint8_t surfBuf[3580]; // [esp+48h] [ebp-E3Ch] BYREF
+    uint8_t *surfPos; // [esp+44h] [ebp-E40h]
+    // Each runtime surface is native-size on Switch (not the original
+    // 32-bit serialized 28-byte record). Keep enough space for the largest
+    // expected XModel surface list while retaining a compact stack buffer.
+    alignas(GfxModelRigidSurface) uint8_t surfBuf[sizeof(GfxModelRigidSurface) * 128]; // BYREF
     uint32_t hidePartBits[4]; // [esp+E4Ch] [ebp-38h] BYREF
     //XSurface* surfaces; // [esp+E5Ch] [ebp-28h]
     XSurface* surfaces; // [esp+E60h] [ebp-24h] BYREF
@@ -321,7 +324,7 @@ int __cdecl R_SkinXModel(
     if (obj)
         DObjGetHidePartBits(obj, hidePartBits);
 
-    surfPos = (uint16_t*)surfBuf;
+    surfPos = surfBuf;
     for (surfaceIndex = 0; surfaceIndex < surfaceCount; ++surfaceIndex)
     {
         xsurf = surfaces + surfaceIndex;
@@ -331,23 +334,30 @@ int __cdecl R_SkinXModel(
             | xsurf->partBits[1] & hidePartBits[1]
             | xsurf->partBits[0] & hidePartBits[0])
         {
-            *(_DWORD*)surfPos = -3;
-            surfPos += 2;
+            // Hidden surfaces keep the original one-word sentinel record.
+            *reinterpret_cast<int32_t *>(surfPos) = -3;
+            surfPos += sizeof(int32_t);
         }
         else
         {
-            if (!xsurf->deformed && IsFastFileLoad())
-                startSurfPos = -2;
-            else
-                startSurfPos = -1;
-            *(_DWORD*)surfPos = startSurfPos;
-            // @Correctness
-            *reinterpret_cast<uint32_t *>(surfPos + 4) = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(xsurf));
-            surfPos[7] = gfxEntIndex;
-            surfPos[8] = 0;
-            qmemcpy(surfPos + 12, placement, 0x1Cu);
-            *((float*)surfPos + 13) = val;
-            surfPos += 28;
+            GfxModelRigidSurface *modelSurf =
+                reinterpret_cast<GfxModelRigidSurface *>(surfPos);
+
+            std::memset(modelSurf, 0, sizeof(*modelSurf));
+            modelSurf->surf.skinnedCachedOffset =
+                (!xsurf->deformed && IsFastFileLoad()) ? -2 : -1;
+            modelSurf->surf.xsurf = xsurf;
+            modelSurf->surf.info.baseMat = nullptr;
+            modelSurf->surf.info.boneIndex = 0;
+            modelSurf->surf.info.boneCount = 0;
+            modelSurf->surf.info.gfxEntIndex =
+                static_cast<uint16_t>(gfxEntIndex);
+            modelSurf->surf.info.lightingHandle = 0;
+            modelSurf->surf.skinnedVert = nullptr;
+            modelSurf->placement.base = *placement;
+            modelSurf->placement.scale = val;
+
+            surfPos += sizeof(GfxModelRigidSurface);
         }
     }
     startSurfPos = InterlockedExchangeAdd(&frontEndDataOut->surfPos, (char*)surfPos - (char*)surfBuf);
