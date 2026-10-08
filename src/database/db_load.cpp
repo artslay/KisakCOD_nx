@@ -8822,8 +8822,13 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
         if (value == -1 || value == -2)
         {
 #ifdef __SWITCH__
+            // Preserve the serialized address of an inline Material so later
+            // positive MaterialHandle references resolve to the widened native
+            // object instead of falling back to the wrong/default material.
             DB_AllocStreamPos(3);
-                        *varMaterialHandle = reinterpret_cast<Material *>(
+            const uintptr_t serializedMaterialAddress =
+                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+            *varMaterialHandle = reinterpret_cast<Material *>(
                 Hunk_Alloc(
                     static_cast<uint32_t>(sizeof(Material)),
                     "SwitchMaterial",
@@ -8844,6 +8849,11 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
 #ifdef __SWITCH__
             g_switchDbStage = "material/asset_return";
             Switch_LogWrite("[SWITCH MATERIAL] asset done\n");
+
+            DB_RegisterSwitchPointerAlias(
+                serializedMaterialAddress,
+                reinterpret_cast<uintptr_t>(*varMaterialHandle));
+            DB_FixupSwitchPointerAliases();
 #endif
             if (inserted)
             {
