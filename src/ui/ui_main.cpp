@@ -2245,6 +2245,12 @@ void UI_CreatePlayerProfile()
                 name[writePos++] = static_cast<char>(ch);
             }
             name[writePos] = '\0';
+
+            if (!name[0])
+            {
+                Menus_OpenByName(&::uiInfo.uiDC, "profile_create_fail_popmenu");
+                return;
+            }
         }
 #endif
 
