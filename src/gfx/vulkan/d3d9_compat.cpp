@@ -2227,42 +2227,6 @@ bool IDirect3DDevice9::PrepareDraw()
             ? m_depth->texture->layout
             : m_backend->DefaultDepthLayout();
 
-#ifdef __SWITCH__
-    // UI gradient assets carry their intended opacity in the texture and/or
-    // vertex alpha. Do not depend on material state classification here:
-    // the menu gradient must use straight-alpha composition.
-    const GfxImage *switchUiImage = g_switchLastSamplerImages[0];
-    if (switchUiImage && switchUiImage->name)
-    {
-        const char *name = switchUiImage->name;
-        // These two original CoD4 menu materials are translucent 2D
-        // UI assets. Keep their authored geometry/colors; only restore the
-        // D3D9 straight-alpha blend state that the Switch path needs.
-        const bool switchUiAlphaMaterial =
-            !I_stricmp(name, "gradient_fadein") ||
-            !I_stricmp(name, "images/gradient_fadein") ||
-            !I_stricmp(name, "gradient_fadein.iwi") ||
-            !I_stricmp(name, "images/gradient_fadein.iwi") ||
-            !I_stricmp(name, "button_highlight_end") ||
-            !I_stricmp(name, "images/button_highlight_end") ||
-            !I_stricmp(name, "button_highlight_end.iwi") ||
-            !I_stricmp(name, "images/button_highlight_end.iwi");
-        if (switchUiAlphaMaterial)
-        {
-            m_blendEnable = true;
-            m_separateAlphaBlend = false;
-            m_srcBlend = 5; // SRC_ALPHA
-            m_dstBlend = 6; // INV_SRC_ALPHA
-            m_blendOp = 1; // ADD
-            m_srcBlendAlpha = 5;
-            m_dstBlendAlpha = 6;
-            m_blendOpAlpha = 1;
-            m_alphaTest = false;
-            m_pipelineDirty = true;
-        }
-    }
-#endif
-
     if (!m_backend->EnsureRendering(
             colorImage, colorView, colorFormat,
             depthImage, depthView, depthFormat,

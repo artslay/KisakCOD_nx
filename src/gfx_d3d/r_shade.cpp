@@ -538,6 +538,37 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     context.state->prim.device->SetSwitchUnlitMode(context.state->techType == TECHNIQUE_UNLIT);
 #endif
     R_SetState(context.state, stateBits);
+#ifdef __SWITCH__
+    // The original CoD4 menu uses these authored 2D materials for the
+    // translucent button body and its narrow right-hand cap. Restore only
+    // their D3D9 straight-alpha state; do not alter the UI geometry.
+    const char *switchUiMaterialName = material->info.name;
+    const bool switchUiAlphaMaterial =
+        switchUiMaterialName &&
+        (!I_stricmp(switchUiMaterialName, "gradient_fadein") ||
+         !I_stricmp(switchUiMaterialName, "images/gradient_fadein") ||
+         !I_stricmp(switchUiMaterialName, "gradient_fadein.iwi") ||
+         !I_stricmp(switchUiMaterialName, "images/gradient_fadein.iwi") ||
+         !I_stricmp(switchUiMaterialName, "button_highlight_end") ||
+         !I_stricmp(switchUiMaterialName, "images/button_highlight_end") ||
+         !I_stricmp(switchUiMaterialName, "button_highlight_end.iwi") ||
+         !I_stricmp(switchUiMaterialName, "images/button_highlight_end.iwi"));
+    if (context.source->viewMode == VIEW_MODE_2D &&
+        context.state->techType == TECHNIQUE_UNLIT &&
+        switchUiAlphaMaterial)
+    {
+        IDirect3DDevice9 *device = context.state->prim.device;
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, 1);
+        device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, 0);
+        device->SetRenderState(D3DRS_SRCBLEND, 5);        // SRC_ALPHA
+        device->SetRenderState(D3DRS_DESTBLEND, 6);       // INV_SRC_ALPHA
+        device->SetRenderState(D3DRS_BLENDOP, 1);         // ADD
+        device->SetRenderState(D3DRS_SRCBLENDALPHA, 5);  // SRC_ALPHA
+        device->SetRenderState(D3DRS_DESTBLENDALPHA, 6); // INV_SRC_ALPHA
+        device->SetRenderState(D3DRS_BLENDOPALPHA, 1);    // ADD
+        device->SetRenderState(D3DRS_ALPHATESTENABLE, 0);
+    }
+#endif
     if (r_logFile->current.integer)
     {
         RB_LogPrint("---------- R_SetupPass\n");
