@@ -2063,14 +2063,17 @@ bool IDirect3DDevice9::EnsurePipeline()
     raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     raster.polygonMode = VK_POLYGON_MODE_FILL;
     raster.lineWidth = 1.0f;
-    // D3D9 cull values are: NONE=1, CW=0, CCW=2. With the
-    // Switch Vulkan coordinate convention used by the shader path, the
-    // corresponding Vulkan front-face is clockwise, so D3D9 CCW culling
-    // removes the Vulkan back faces, not the front faces.
+    // D3D9 cull values are: NONE=1, CW=2, CCW=3.
+    // The negative Vulkan viewport preserves the D3D9 top-left origin,
+    // which flips the winding seen by Vulkan. Therefore clockwise NDC
+    // triangles are the Vulkan front faces.
+    //
+    // D3DCULL_CW means "cull clockwise" => Vulkan culls FRONT.
+    // D3DCULL_CCW means "cull counter-clockwise" => Vulkan culls BACK.
     raster.cullMode = m_cullMode == 1
         ? VK_CULL_MODE_NONE
-        : (m_cullMode == 2 ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_FRONT_BIT);
-    raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        : (m_cullMode == 2 ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_BACK_BIT);
+    raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
     raster.depthBiasEnable = (m_depthBias != 0.0f || m_slopeDepthBias != 0.0f) ? VK_TRUE : VK_FALSE;
     raster.depthBiasConstantFactor = m_depthBias;
     raster.depthBiasSlopeFactor = m_slopeDepthBias;
