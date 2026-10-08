@@ -7243,13 +7243,12 @@ static void Switch_LoadMaterialPassSerialized(
             // record to a native 16-byte ARM64 record because its union may
             // contain a 64-bit literal-constant pointer.
             DB_AllocStreamPos(3);
-            const uintptr_t serializedArgs =
-                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
-
             const void **inserted =
                 serialized.args == UINT32_MAX - 1u
                     ? DB_InsertPointer()
                     : nullptr;
+            const uintptr_t serializedArgs =
+                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
 
             varMaterialPass->args =
                 reinterpret_cast<MaterialShaderArgument *>(Hunk_Alloc(
