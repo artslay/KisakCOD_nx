@@ -7139,10 +7139,25 @@ const char *__cdecl Item_DvarEnum_Setting(itemDef_s *item)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 3159, 0, "%s", "item");
     if (item->type != 13)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 3160, 0, "%s\n\t(item->type) = %i", "(item->type == 13)", item->type);
-    if (!item->typeData.listBox)
+    if (!item->typeData.enumDvarName)
         return "<dvarEnumList not set>";
+
     enumDvar = Dvar_FindVar(item->typeData.enumDvarName);
-    if (enumDvar->type != 6)
+    if (!enumDvar)
+    {
+#ifdef __SWITCH__
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI ENUM] paint missing dvar=%s item=%s\n",
+            item->typeData.enumDvarName,
+            item->window.name ? item->window.name : "<unnamed>");
+        Switch_LogWrite(trace);
+#endif
+        return "<missing enum dvar>";
+    }
+    if (enumDvar->type != DVAR_TYPE_ENUM)
         return "<not an enum dvar>";
     if (!enumDvar->domain.enumeration.stringCount)
         return "";
