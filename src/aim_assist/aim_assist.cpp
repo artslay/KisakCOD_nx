@@ -1071,6 +1071,67 @@ void __cdecl AimAssist_ApplyMeleeCharge(const AimInput *input, AimOutput *output
     }
 }
 
+void __cdecl AimAssist_UpdateGamePadInput(const AimInput *input, AimOutput *output)
+{
+    PROF_SCOPED("AimAssist_UpdateGamePadInput");
+
+    iassert(input);
+    iassert(input->ps);
+    iassert(output);
+
+    output->pitch = input->pitch;
+    output->yaw = input->yaw;
+    output->meleeChargeYaw = 0.0f;
+    output->meleeChargeDist = 0;
+
+    if (!aaGlobArray[input->localClientNum].initialized)
+        return;
+
+    AimAssist_UpdateTweakables(input);
+    AimAssist_UpdateAdsLerp(input);
+
+    AimAssistGlobals *aaGlob = &aaGlobArray[input->localClientNum];
+
+    const bool ads =
+        (input->buttons & BUTTON_ADS) != 0 ||
+        input->ps->fWeaponPosFrac > 0.0f;
+
+    const float pitchRate = ads
+        ? aim_turnrate_pitch_ads->current.value
+        : aim_turnrate_pitch->current.value;
+    const float yawRate = ads
+        ? aim_turnrate_yaw_ads->current.value
+        : aim_turnrate_yaw->current.value;
+
+    const float dt = input->deltaTime > 0.0f ? input->deltaTime : 0.0f;
+
+    output->pitch += input->pitchAxis * pitchRate * dt;
+    output->yaw += input->yawAxis * yawRate * dt;
+
+    if (aim_accel_turnrate_enabled->current.enabled)
+    {
+        const float accel = aim_accel_turnrate_lerp->current.value * dt;
+        (void)accel;
+    }
+
+    // SP aim-assist dvars are disabled by default in this port, but preserve
+    // the existing melee processing for controller input.
+    AimAssist_ApplyAutoMelee(input, output);
+    AimAssist_ApplyMeleeCharge(input, output);
+
+    if (output->pitch > 85.0f)
+        output->pitch = 85.0f;
+    else if (output->pitch < -85.0f)
+        output->pitch = -85.0f;
+
+    while (output->yaw >= 180.0f)
+        output->yaw -= 360.0f;
+    while (output->yaw < -180.0f)
+        output->yaw += 360.0f;
+
+    (void)aaGlob;
+}
+
 void __cdecl AimAssist_UpdateMouseInput(const AimInput *input, AimOutput *output)
 {
     PROF_SCOPED("AimAssist_UpdateMouseInput");
