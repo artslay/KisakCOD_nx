@@ -221,6 +221,10 @@ void __cdecl R_DrawTessTechnique(GfxCmdBufContext context, const GfxDrawPrimArgs
         R_PixelCost_BeginSurface(context);
 
     iassert(context.state->prim.vertDeclType == VERTDECL_GENERIC);
+#ifdef __SWITCH__
+    context.state->prim.device->SetSwitchUi2DMode(
+        context.source->viewMode == VIEW_MODE_2D);
+#endif
     R_CheckVertexDataOverflow(32 * tess.vertexCount);
     vertexOffset = R_SetVertexData(context.state, &tess.verts, tess.vertexCount, 32);
     for (passIndex = 0; passIndex < technique->passCount; ++passIndex)
