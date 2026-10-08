@@ -505,9 +505,17 @@ GfxDrawSurf *__cdecl R_AddBModelSurfaces(
 
 const XSurface *__cdecl R_GetXSurface(uint32_t *modelSurf, surfaceType_t surfType)
 {
-    iassert( modelSurf );
-    iassert( R_IsModelSurfaceType( surfType ) );
+    iassert(modelSurf);
+    iassert(R_IsModelSurfaceType(surfType));
+
+#ifdef KISAK_SWITCH
+    // modelSurf points into the native Switch runtime surface buffer.
+    // The 32-bit implementation read word[1], but xsurf is an actual
+    // 64-bit pointer on Switch and lives inside GfxModelRigidSurface::surf.
+    return reinterpret_cast<const GfxModelRigidSurface *>(modelSurf)->surf.xsurf;
+#else
     return (const XSurface *)modelSurf[1];
+#endif
 }
 
 void __cdecl R_AddXModelSurfacesCamera(
