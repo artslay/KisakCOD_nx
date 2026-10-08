@@ -633,6 +633,15 @@ bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
     if (!serializedSlot || !resolvedPointer || !g_streamBlocks)
         return false;
 
+    // A serialized pointer reference may be indirect through one or more
+    // 32-bit alias slots. Once an offset lands on an actual serialized object,
+    // however, its first DWORD is object data (for MaterialShader this is the
+    // name token), not another pointer slot. Following arbitrary object DWORDs
+    // is what can turn a valid object reference into a pointer to plain text.
+    //
+    // Permit a second hop only when the intermediate target is itself a
+    // registered alias slot. This preserves real slot->slot->object chains
+    // while preventing object-header data from being interpreted as aliases.
     uintptr_t current = serializedSlot;
     uintptr_t visited[8] = {};
     constexpr size_t MaxDepth = ARRAY_COUNT(visited);
@@ -651,11 +660,6 @@ bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
         }
         visited[depth] = current;
 
-        uintptr_t blockOffset = 0;
-        const int32_t block = Switch_StreamOwner(
-            reinterpret_cast<const uint8_t *>(current),
-            &blockOffset);
-
         if (traceFontTechniqueAlias)
         {
             uintptr_t initialOffset = 0;
@@ -664,22 +668,27 @@ bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
                 &initialOffset);
             if (initialBlock == 4 && initialOffset == 0x6f8)
             {
+                uintptr_t currentOffset = 0;
+                const int32_t currentBlock = Switch_StreamOwner(
+                    reinterpret_cast<const uint8_t *>(current),
+                    &currentOffset);
                 const uint32_t rawForTrace =
-                    (block >= 0 &&
-                     static_cast<uint32_t>(block) < ARRAY_COUNT(g_streamPosArray) &&
-                     blockOffset <= g_streamBlocks[block].size &&
-                     g_streamBlocks[block].size - blockOffset >= sizeof(uint32_t))
+                    (currentBlock >= 0 &&
+                     static_cast<uint32_t>(currentBlock) < ARRAY_COUNT(g_streamPosArray) &&
+                     currentOffset <= g_streamBlocks[currentBlock].size &&
+                     g_streamBlocks[currentBlock].size - currentOffset >= sizeof(uint32_t))
                         ? *reinterpret_cast<const uint32_t *>(current)
                         : 0u;
                 char trace[384];
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][FONT TECH ALIAS] depth=%u current=%p block=%d offset=%08x raw=%08x aliases=%zu\n",
+                    "[KisakCOD][FONT TECH ALIAS] depth=%u current=%p block=%d offset=%08x raw=%08x aliases=%zu
+",
                     static_cast<unsigned>(depth),
                     reinterpret_cast<const void *>(current),
-                    block,
-                    static_cast<unsigned>(blockOffset),
+                    currentBlock,
+                    static_cast<unsigned>(currentOffset),
                     rawForTrace,
                     g_switchPointerAliasEntries.size());
                 Switch_LogWrite(trace);
@@ -690,29 +699,24 @@ bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
         if (DB_ResolveSwitchPointerAlias(current, &directResolved) &&
             directResolved)
         {
-            if (traceFontTechniqueAlias)
-            {
-                uintptr_t initialOffset = 0;
-                const int32_t initialBlock = Switch_StreamOwner(
-                    reinterpret_cast<const uint8_t *>(serializedSlot),
-                    &initialOffset);
-                if (initialBlock == 4 && initialOffset == 0x6f8)
-                {
-                    char trace[384];
-                    std::snprintf(
-                        trace,
-                        sizeof(trace),
-                        "[KisakCOD][FONT TECH ALIAS] resolved depth=%u slot=%p native=%p\n",
-                        static_cast<unsigned>(depth),
-                        reinterpret_cast<const void *>(current),
-                        reinterpret_cast<const void *>(directResolved));
-                    Switch_LogWrite(trace);
-                }
-            }
             *resolvedPointer = directResolved;
             return true;
         }
 
+        // The initial address is a serialized pointer slot even when it has
+        // not yet acquired a native alias. After the first hop, only continue
+        // through addresses that are explicitly registered as alias slots.
+        if (depth > 0)
+        {
+            if (g_switchPointerAliasIndex.find(current) ==
+                g_switchPointerAliasIndex.end())
+                return false;
+        }
+
+        uintptr_t blockOffset = 0;
+        const int32_t block = Switch_StreamOwner(
+            reinterpret_cast<const uint8_t *>(current),
+            &blockOffset);
         if (block < 0 ||
             static_cast<uint32_t>(block) >= ARRAY_COUNT(g_streamPosArray))
             return false;
