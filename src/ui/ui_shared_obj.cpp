@@ -4593,9 +4593,8 @@ char __cdecl parse_expression_internal(int handle, statement_s *statement, int m
                 if (type == 1)
                 {
                     v4 = statement->entries[statement->numEntries - 1];
-                    v5.intVal = (int)v4->data.operand.internals;
                     lastOperand.dataType = v4->data.operand.dataType;
-                    lastOperand.internals = v5;
+                    lastOperand.internals = v4->data.operand.internals;
                     //ValueAsString = GetValueAsString((Operand)__PAIR64__(v5.intVal, lastOperand.dataType));
                     ValueAsString = GetValueAsString(lastOperand);
                     Com_PrintError(CON_CHANNEL_SYSTEM, "Probably UI Expression error: %s(...\n", ValueAsString);
