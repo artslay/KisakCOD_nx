@@ -11,6 +11,7 @@
 #include <universal/profile.h>
 #include <universal/timing.h>
 #include <win32/win_local.h>
+#include "switch_gamepad.h"
 
 extern void Com_InitParse();
 extern void Dvar_Init();
@@ -168,6 +169,8 @@ int main()
     Profile_Init();
 
     SwitchBootLog("Stage 6/7: initializing game engine");
+    Switch_GamepadInit();
+    SwitchBootLog("Input: Switch gamepad initialized");
     SwitchBootLog("Graphics: probing Vulkan runtime");
     SwitchLogVulkanRuntime();
     SwitchBootLog("Graphics: starting engine renderer");
@@ -183,6 +186,7 @@ int main()
 
     SwitchStopProgressWatchdog();
     SwitchBootLog("Applet loop stopped, shutting down");
+    Switch_GamepadShutdown();
     Switch_LogShutdown();
     Sys_Quit();
     return 0;
