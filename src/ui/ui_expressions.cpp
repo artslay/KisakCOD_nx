@@ -2255,9 +2255,8 @@ void __cdecl RunCommaOp(int localClientNum, OperandStack *dataStack, OperandList
         operand = 0;
         for (list1Operand = 0; list1Operand < list1->operandCount; ++list1Operand)
         {
-            v4.intVal = (int)list1->operands[list1Operand].internals;
             finalList[operand].dataType = list1->operands[list1Operand].dataType;
-            finalList[operand].internals = v4;
+            finalList[operand].internals = list1->operands[list1Operand].internals;
             if (finalList[operand].dataType == VAL_STRING && !finalList[operand].internals.string)
                 MyAssertHandler(
                     ".\\ui\\ui_expressions.cpp",
@@ -2269,9 +2268,8 @@ void __cdecl RunCommaOp(int localClientNum, OperandStack *dataStack, OperandList
         }
         for (list2Operand = 0; list2Operand < list2->operandCount; ++list2Operand)
         {
-            v5.intVal = (int)list2->operands[list2Operand].internals;
             finalList[operand].dataType = list2->operands[list2Operand].dataType;
-            finalList[operand].internals = v5;
+            finalList[operand].internals = list2->operands[list2Operand].internals;
             if (finalList[operand].dataType == VAL_STRING && !finalList[operand].internals.string)
                 MyAssertHandler(
                     ".\\ui\\ui_expressions.cpp",
