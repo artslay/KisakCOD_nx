@@ -271,6 +271,7 @@ int __cdecl WriteSaveToDevice(unsigned char *data, struct SaveHeader const *save
 #ifdef KISAK_XBOX
 	g_saveDevice_lastSaveSucceeded = true;
 #else
+#ifdef __SWITCH__
 	if (!FS_RenameChecked(
 			(char*)"save/temp.svg",
 			fs_gamedir,
@@ -285,7 +286,13 @@ int __cdecl WriteSaveToDevice(unsigned char *data, struct SaveHeader const *save
 			saveHeader->filename);
 		return -1;
 	}
-
+#else
+	FS_Rename(
+		(char*)"save/temp.svg",
+		fs_gamedir,
+		(char*)saveHeader->filename,
+		(char*)"players");
+#endif
 	g_saveDevice_lastSaveSucceeded = true;
 #endif
 	return 0;
