@@ -2461,6 +2461,13 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 
         const GfxImage *boundImage0 =
             g_switchLastSamplerImages[0];
+        extern thread_local const Material *g_switchLastSamplerMaterials[16];
+        extern thread_local uint32_t g_switchLastSamplerNameHashes[16];
+        extern thread_local uint8_t g_switchLastSamplerSemantics[16];
+        const Material *boundMaterial0 = g_switchLastSamplerMaterials[0];
+        const uint32_t boundMaterialNameHash0 = g_switchLastSamplerNameHashes[0];
+        const unsigned boundMaterialSemantic0 =
+            static_cast<unsigned>(g_switchLastSamplerSemantics[0]);
         const uint32_t sampler0Min = m_samplerState[0][D3DSAMP_MINFILTER];
         const uint32_t sampler0Mag = m_samplerState[0][D3DSAMP_MAGFILTER];
         const uint32_t sampler0Mip = m_samplerState[0][D3DSAMP_MIPFILTER];
@@ -2474,6 +2481,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             "color0=%08x normal0=%08x "
             "tex0=%p %ux%u srcfmt=%u vkfmt=%u layout=%u "
             "image0=%p name0=%s sampler0=%u/%u/%u addr=%u/%u/%u "
+            "smat0=%p smatName0=%s smatHash0=%08x smatSem0=%u "
             "vsConst=%s psConst=%s "
             "attrs=%s decl=%s\n",
             static_cast<unsigned>(switchDrawTraceCount),
@@ -2511,6 +2519,10 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             m_samplerState[0][D3DSAMP_ADDRESSU],
             m_samplerState[0][D3DSAMP_ADDRESSV],
             m_samplerState[0][D3DSAMP_ADDRESSW],
+            static_cast<const void *>(boundMaterial0),
+            (boundMaterial0 && boundMaterial0->info.name) ? boundMaterial0->info.name : "<none>",
+            boundMaterialNameHash0,
+            boundMaterialSemantic0,
             vsConstText, psConstText, attrText, declText);
         Switch_LogWrite(msg);
         ++switchDrawTraceCount;
