@@ -538,6 +538,38 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     context.state->prim.device->SetSwitchUnlitMode(context.state->techType == TECHNIQUE_UNLIT);
 #endif
     R_SetState(context.state, stateBits);
+#ifdef __SWITCH__
+    // The stock CoD4 menu uses straight-alpha composition for these authored
+    // 2D materials. Their serialized D3D9 state is not reliable after the
+    // 32-bit asset ABI is widened to the Switch ARM64 runtime, so restore only
+    // the original material-specific alpha state here.
+    const char *switchUiMaterialName = material->info.name;
+    const bool switchUiAlphaMaterial =
+        switchUiMaterialName &&
+        (!I_stricmp(switchUiMaterialName, "gradient_fadein") ||
+         !I_stricmp(switchUiMaterialName, "images/gradient_fadein") ||
+         !I_stricmp(switchUiMaterialName, "gradient_fadein.iwi") ||
+         !I_stricmp(switchUiMaterialName, "images/gradient_fadein.iwi") ||
+         !I_stricmp(switchUiMaterialName, "button_highlight_end") ||
+         !I_stricmp(switchUiMaterialName, "images/button_highlight_end") ||
+         !I_stricmp(switchUiMaterialName, "button_highlight_end.iwi") ||
+         !I_stricmp(switchUiMaterialName, "images/button_highlight_end.iwi"));
+    if (context.source->viewMode == VIEW_MODE_2D &&
+        context.state->techType == TECHNIQUE_UNLIT &&
+        switchUiAlphaMaterial)
+    {
+        IDirect3DDevice9 *device = context.state->prim.device;
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, 1);
+        device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, 0);
+        device->SetRenderState(D3DRS_SRCBLEND, 5);        // SRC_ALPHA
+        device->SetRenderState(D3DRS_DESTBLEND, 6);       // INV_SRC_ALPHA
+        device->SetRenderState(D3DRS_BLENDOP, 1);         // ADD
+        device->SetRenderState(D3DRS_SRCBLENDALPHA, 5);  // SRC_ALPHA
+        device->SetRenderState(D3DRS_DESTBLENDALPHA, 6); // INV_SRC_ALPHA
+        device->SetRenderState(D3DRS_BLENDOPALPHA, 1);   // ADD
+        device->SetRenderState(D3DRS_ALPHATESTENABLE, 0);
+    }
+#endif
     if (r_logFile->current.integer)
     {
         RB_LogPrint("---------- R_SetupPass\n");
@@ -615,6 +647,19 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
     else
     {
         image = texDef->u.image;
+#ifdef __SWITCH__
+        // CoD4's original button highlight end is a real image asset. On the
+        // widened Switch material path this material can otherwise retain the
+        // generic 16x16 default image, producing the hard vertical UI edge.
+        if (material->info.name &&
+            !I_stricmp(material->info.name, "button_highlight_end"))
+        {
+            GfxImage *buttonHighlightEnd =
+                Image_FindExisting_FastFile("button_highlight_end");
+            if (buttonHighlightEnd && buttonHighlightEnd->width > 0)
+                image = buttonHighlightEnd;
+        }
+#endif
     }
 
     if (rg.hasAnyImageOverrides)
