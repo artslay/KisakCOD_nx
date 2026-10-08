@@ -14,6 +14,9 @@
 #include <devgui/devgui.h>
 #include <ui/ui.h>
 #include <gfx_d3d/r_dvars.h>
+#ifdef __SWITCH__
+#include <platform/switch/switch_gamepad.h>
+#endif
 
 const dvar_t *cl_stanceHoldTime;
 const dvar_t *cl_analog_attack_threshold;
@@ -1065,8 +1068,9 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         cmd->pitchmove = v19;
         cmd->yawmove = ClampChar((int)(float)((float)up * (float)v3) + yawmove);
         v21 = CL_ControllerIndexFromClientNum(0);
-        ProfileSettings = Gamer//Profile_GetProfileSettings(v21);
-            int invertSign = ProfileSettings->invertPitch ? 1 : -1;
+        // Profile_GetProfileSettings is not part of the Switch profile layer yet.
+        // Keep the original default pitch direction until that profile API is wired.
+        const int invertSign = -1;
         v24 = (float)invertSign * v2;
         if (kb[KEY_SPEED].active == (clients[0].usingAds == 0))
             cmd->buttons |= BUTTON_ADS;
@@ -1604,9 +1608,8 @@ void __cdecl CL_CreateCmd(usercmd_s *result)
         CL_CmdButtons(result);
         CL_KeyMove(result);
         CL_MouseMove(result);
-        // KISAKTODO
-        //if (GPad_IsActive(CL_ControllerIndexFromClientNum(0)))
-        //    CL_GamepadMove(result);
+        if (GPad_IsActive(CL_ControllerIndexFromClientNum(0)))
+            CL_GamepadMove(result);
         if (clients[0].viewangles[0] - oldAngles <= 90.0)
         {
             if (oldAngles - clients[0].viewangles[0] > 90.0)
@@ -1750,6 +1753,9 @@ void PausedModelPreviewerGamepad()
 
 void __cdecl CL_Input(int localClientNum)
 {
+#ifdef __SWITCH__
+    Switch_GamepadFrame();
+#endif
     if (CL_AllowInput())
     {
         IN_Frame();
@@ -1764,6 +1770,9 @@ void __cdecl CL_Input(int localClientNum)
 
 void __cdecl CL_ShutdownInput()
 {
+#ifdef __SWITCH__
+    Switch_GamepadShutdown();
+#endif
     Cmd_RemoveCommand("mouseMove");
     Cmd_RemoveCommand("remoteKey");
     Cmd_RemoveCommand("centerview");
@@ -2026,6 +2035,9 @@ void __cdecl CL_InitInput()
     cl_freemove = Dvar_RegisterInt("cl_freemove", 0, 0, 3, 0x80u, "Fly about the level");
     //cl_freemoveScale = Dvar_RegisterFloat("cl_freemoveScale", 1.0, 0.0, 5.0, v3, v2);
     cl_freemoveScale = Dvar_RegisterFloat("cl_freemoveScale", 1.0, 0.0, 5.0, 0, 0);
+#ifdef __SWITCH__
+    Switch_GamepadInit();
+#endif
 }
 
 
