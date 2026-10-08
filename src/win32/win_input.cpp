@@ -516,9 +516,6 @@ Called every frame, even if not generating commands
 */
 void __cdecl IN_Frame()
 {
-#ifdef __SWITCH__
-	Switch_GamepadFrame();
-#endif
 	if (Dvar_GetBool("ClickToContinue"))
 		PostMessageA(g_wv.hWnd, 0x201u, 1u, 0);
 	if (s_wmv.mouseInitialized)
