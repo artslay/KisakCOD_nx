@@ -545,9 +545,9 @@ struct menuDef_t // sizeof=0x11C
 
 #ifdef KISAK_SWITCH
 static_assert(sizeof(windowDef_t) == 0xA8, "Switch windowDef_t ABI changed");
-static_assert(sizeof(expressionEntry) == 0x10, "Switch expressionEntry ABI changed");
+static_assert(sizeof(expressionEntry) == 0x18, "Switch expressionEntry ABI changed");
 static_assert(sizeof(ItemKeyHandler) == 0x18, "Switch ItemKeyHandler ABI changed");
-static_assert(sizeof(listBoxDef_s) == 0x15C, "Switch listBoxDef_s ABI changed");
+static_assert(sizeof(listBoxDef_s) == 0x160, "Switch listBoxDef_s ABI changed");
 static_assert(sizeof(editFieldDef_s) == 0x20, "Switch editFieldDef_s ABI changed");
 static_assert(sizeof(multiDef_s) == 0x288, "Switch multiDef_s ABI changed");
 static_assert(sizeof(itemDef_s) == 0x210, "Switch itemDef_s ABI changed");
