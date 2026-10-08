@@ -457,6 +457,39 @@ static bool Switch_OpenIwdFile(
 }
 
 
+static bool Switch_IsProfilePath(const char *qpath)
+{
+    if (!qpath)
+        return false;
+
+    while (*qpath == '/' || *qpath == '\\')
+        ++qpath;
+
+    return !std::strncmp(qpath, "profiles/", 9) ||
+           !std::strcmp(qpath, "profiles");
+}
+
+static void SwitchProfilePath(char *dst, size_t dstSize, const char *qpath)
+{
+    if (!dst || !dstSize)
+        return;
+
+    while (*qpath == '/' || *qpath == '\\')
+        ++qpath;
+
+    std::snprintf(
+        dst,
+        dstSize,
+        "%s/players/%s",
+        kSwitchRoot,
+        qpath);
+    for (char *p = dst; *p; ++p)
+    {
+        if (*p == '\\')
+            *p = '/';
+    }
+}
+
 static void SwitchPath(char *dst, size_t dstSize, const char *base, const char *game, const char *qpath)
 {
     if (!base || !*base) base = kSwitchRoot;
@@ -675,6 +708,46 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         return (uint32_t)-1;
 
     const std::string normalizedName = SwitchNormalizePath(filename);
+
+    // Player profiles are persistent writable data stored outside the
+    // game/main search path at players/profiles. Keep the engine's existing
+    // logical "profiles/..." namespace, but resolve it to the Switch profile
+    // storage location before checking IWD/loose game assets.
+    if (Switch_IsProfilePath(normalizedName.c_str()))
+    {
+        char profilePath[256];
+        SwitchProfilePath(profilePath, sizeof(profilePath), normalizedName.c_str());
+        FILE *profileFile = FS_FileOpenReadBinary(profilePath);
+        if (!profileFile)
+        {
+            if (file)
+                *file = 0;
+            return (uint32_t)-1;
+        }
+
+        const int h = AllocHandle();
+        if (!h)
+        {
+            std::fclose(profileFile);
+            if (file)
+                *file = 0;
+            return (uint32_t)-1;
+        }
+
+        g_fsh[h].handleFiles.file.o = profileFile;
+        std::fseek(profileFile, 0, SEEK_END);
+        const long size = std::ftell(profileFile);
+        std::fseek(profileFile, 0, SEEK_SET);
+        g_fsh[h].fileSize = size >= 0 ? static_cast<int>(size) : 0;
+        g_fsh[h].streamed = 0;
+        g_fsh[h].zipFile = nullptr;
+        I_strncpyz(g_fsh[h].name, normalizedName.c_str(), sizeof(g_fsh[h].name));
+
+        if (file)
+            *file = h;
+        return g_fsh[h].fileSize;
+    }
+
     const bool traceImage3 =
         normalizedName == "images/3.iwi";
 
@@ -1056,6 +1129,14 @@ int __cdecl FS_FileExists(char *file)
         return 0;
 
     const std::string normalizedName = SwitchNormalizePath(file);
+    if (Switch_IsProfilePath(normalizedName.c_str()))
+    {
+        char profilePath[256];
+        SwitchProfilePath(profilePath, sizeof(profilePath), normalizedName.c_str());
+        struct stat st {};
+        return stat(profilePath, &st) == 0 && S_ISREG(st.st_mode);
+    }
+
     if (g_iwdEntries.find(normalizedName) != g_iwdEntries.end())
         return 1;
 
@@ -1229,10 +1310,141 @@ void __cdecl FS_Shutdown()
     Switch_ClearIwdIndex();
     FS_ShutdownSearchPaths();
 }
-void __cdecl FS_FreeFileList(const char **) {}
+static std::vector<const char *> g_switchProfileFileListPointers;
+static std::vector<std::string> g_switchProfileFileListNames;
+
+static bool Switch_ListExtensionMatches(const char *name, const char *extension)
+{
+    if (!extension || !*extension || !std::strcmp(extension, "/"))
+        return true;
+
+    const size_t nameLen = std::strlen(name);
+    const size_t extLen = std::strlen(extension);
+    return nameLen >= extLen &&
+           !std::strcmp(name + nameLen - extLen, extension);
+}
+
+void __cdecl FS_FreeFileList(const char **list)
+{
+    if (list == g_switchProfileFileListPointers.data())
+    {
+        g_switchProfileFileListPointers.clear();
+        g_switchProfileFileListNames.clear();
+    }
+}
+
 int __cdecl FS_GetModList(char *, int) { return 0; }
-int __cdecl FS_GetFileList(const char *, const char *, FsListBehavior_e, char *buf, int size) { if(size) *buf=0; return 0; }
-const char **__cdecl FS_ListFiles(const char *, const char *, FsListBehavior_e, int *num) { if(num)*num=0; return nullptr; }
+
+int __cdecl FS_GetFileList(
+    const char *path,
+    const char *extension,
+    FsListBehavior_e behavior,
+    char *buf,
+    int size)
+{
+    (void)behavior;
+    if (!buf || size <= 0)
+        return 0;
+
+    const char **files = FS_ListFiles(path, extension, behavior, nullptr);
+    int used = 0;
+    if (files)
+    {
+        for (const char **p = files; *p; ++p)
+        {
+            const int len = static_cast<int>(std::strlen(*p)) + 1;
+            if (used + len > size)
+                break;
+            std::memcpy(buf + used, *p, len);
+            used += len;
+        }
+    }
+
+    if (used < size)
+        buf[used] = '\0';
+
+    return used;
+}
+
+const char **__cdecl FS_ListFiles(
+    const char *path,
+    const char *extension,
+    FsListBehavior_e behavior,
+    int *num)
+{
+    (void)behavior;
+
+    if (num)
+        *num = 0;
+
+    if (!path || !*path)
+        return nullptr;
+
+    const std::string normalizedPath = SwitchNormalizePath(path);
+
+    // The SP profile system uses "profiles" as a logical filesystem
+    // directory, while the actual writable directory is players/profiles.
+    if (normalizedPath != "profiles")
+        return nullptr;
+
+    char profileDir[256];
+    SwitchProfilePath(profileDir, sizeof(profileDir), "profiles");
+
+    DIR *directory = ::opendir(profileDir);
+    if (!directory)
+        return nullptr;
+
+    std::vector<std::string> names;
+    while (dirent *entry = ::readdir(directory))
+    {
+        if (!entry || !entry->d_name[0] ||
+            !std::strcmp(entry->d_name, ".") ||
+            !std::strcmp(entry->d_name, ".."))
+            continue;
+
+        char childPath[512];
+        std::snprintf(
+            childPath,
+            sizeof(childPath),
+            "%s/%s",
+            profileDir,
+            entry->d_name);
+
+        struct stat st {};
+        if (::stat(childPath, &st) != 0)
+            continue;
+
+        // FS_ListFiles("profiles", "/", ...) is used by the profile UI and
+        // means "list profile directories", not files such as active.txt.
+        if (!S_ISDIR(st.st_mode))
+            continue;
+
+        if (!Switch_ListExtensionMatches(entry->d_name, extension))
+            continue;
+
+        names.emplace_back(entry->d_name);
+    }
+    ::closedir(directory);
+
+    std::sort(names.begin(), names.end(), [](const std::string &a, const std::string &b)
+    {
+        return I_stricmp(a.c_str(), b.c_str()) < 0;
+    });
+
+    g_switchProfileFileListNames = std::move(names);
+    g_switchProfileFileListPointers.clear();
+    g_switchProfileFileListPointers.reserve(
+        g_switchProfileFileListNames.size() + 1);
+
+    for (const std::string &name : g_switchProfileFileListNames)
+        g_switchProfileFileListPointers.push_back(name.c_str());
+    g_switchProfileFileListPointers.push_back(nullptr);
+
+    if (num)
+        *num = static_cast<int>(g_switchProfileFileListNames.size());
+
+    return g_switchProfileFileListPointers.data();
+}
 const char **__cdecl FS_ListFilesInLocation(const char *, const char *, FsListBehavior_e, int *num, int) { if(num)*num=0; return nullptr; }
 char *__cdecl FS_ReferencedIwdPureChecksums() { static char s[4] = ""; return s; }
 char *__cdecl FS_ReferencedIwdNames() { static char s[4] = ""; return s; }
