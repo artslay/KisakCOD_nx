@@ -2461,10 +2461,10 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 
         const GfxImage *boundImage0 =
             g_switchLastSamplerImages[0];
-        extern thread_local const Material *g_switchLastSamplerMaterials[16];
+        extern thread_local const char *g_switchLastSamplerMaterialNames[16];
         extern thread_local uint32_t g_switchLastSamplerNameHashes[16];
         extern thread_local uint8_t g_switchLastSamplerSemantics[16];
-        const Material *boundMaterial0 = g_switchLastSamplerMaterials[0];
+        const char *boundMaterialName0 = g_switchLastSamplerMaterialNames[0];
         const uint32_t boundMaterialNameHash0 = g_switchLastSamplerNameHashes[0];
         const unsigned boundMaterialSemantic0 =
             static_cast<unsigned>(g_switchLastSamplerSemantics[0]);
@@ -2519,8 +2519,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             m_samplerState[0][D3DSAMP_ADDRESSU],
             m_samplerState[0][D3DSAMP_ADDRESSV],
             m_samplerState[0][D3DSAMP_ADDRESSW],
-            static_cast<const void *>(boundMaterial0),
-            (boundMaterial0 && boundMaterial0->info.name) ? boundMaterial0->info.name : "<none>",
+            nullptr,
+            boundMaterialName0 ? boundMaterialName0 : "<none>",
             boundMaterialNameHash0,
             boundMaterialSemantic0,
             vsConstText, psConstText, attrText, declText);
