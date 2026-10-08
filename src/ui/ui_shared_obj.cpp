@@ -3695,17 +3695,26 @@ bool __cdecl Eval_EvaluationStep(Eval *eval)
             && eval->opStack[4 * eval->valStackPos + 1016] == EVAL_OP_COLON
             && eval->opStack[4 * eval->valStackPos + 1020] == EVAL_OP_COLON)
         {
-            length[0] = strlen((const char *)eval->opStack[4 * eval->valStackPos + 1018]);
-            length[1] = strlen((const char *)eval->opStack[4 * eval->valStackPos + 1022]);
+            // The decompiled code addresses the EvalValue payload through
+            // opStack because the two arrays overlap in the original 32-bit
+            // layout. On ARM64 the payload contains an actual 64-bit char*,
+            // so read/write it through valStack rather than truncating it to
+            // an EvalOperatorType.
+            char *leftString =
+                eval->valStack[eval->valStackPos - 2].u.s;
+            char *rightString =
+                eval->valStack[eval->valStackPos - 1].u.s;
+            length[0] = strlen(leftString);
+            length[1] = strlen(rightString);
             s = (char *)malloc(length[0] + length[1] + 1);
-            memcpy((uint8_t *)s, (uint8_t *)eval->opStack[4 * eval->valStackPos + 1018], length[0]);
+            memcpy((uint8_t *)s, (uint8_t *)leftString, length[0]);
             memcpy(
                 (uint8_t *)&s[length[0]],
-                (uint8_t *)eval->opStack[4 * eval->valStackPos + 1022],
+                (uint8_t *)rightString,
                 length[1] + 1);
-            free((void *)eval->opStack[4 * eval->valStackPos + 1018]);
-            free((void *)eval->opStack[4 * eval->valStackPos + 1022]);
-            eval->opStack[4 * eval->valStackPos + 1018] = (EvalOperatorType)((uintptr_t)s);
+            free(leftString);
+            free(rightString);
+            eval->valStack[eval->valStackPos - 2].u.s = s;
         }
         else
         {
@@ -3901,10 +3910,10 @@ bool __cdecl Eval_EvaluationStep(Eval *eval)
             && eval->opStack[4 * eval->valStackPos + 1020] == EVAL_OP_COLON)
         {
             same = _stricmp(
-                (const char *)eval->opStack[4 * eval->valStackPos + 1018],
-                (const char *)eval->opStack[4 * eval->valStackPos + 1022]) == 0;
-            free((void *)eval->opStack[4 * eval->valStackPos + 1018]);
-            free((void *)eval->opStack[4 * eval->valStackPos + 1022]);
+                eval->valStack[eval->valStackPos - 2].u.s,
+                eval->valStack[eval->valStackPos - 1].u.s) == 0;
+            free(eval->valStack[eval->valStackPos - 2].u.s);
+            free(eval->valStack[eval->valStackPos - 1].u.s);
             eval->opStack[4 * eval->valStackPos + 1016] = EVAL_OP_RPAREN;
             eval->opStack[4 * eval->valStackPos + 1018] = (EvalOperatorType)same;
         }
@@ -3929,10 +3938,10 @@ bool __cdecl Eval_EvaluationStep(Eval *eval)
             && eval->opStack[4 * eval->valStackPos + 1020] == EVAL_OP_COLON)
         {
             v16 = _stricmp(
-                (const char *)eval->opStack[4 * eval->valStackPos + 1018],
-                (const char *)eval->opStack[4 * eval->valStackPos + 1022]) == 0;
-            free((void *)eval->opStack[4 * eval->valStackPos + 1018]);
-            free((void *)eval->opStack[4 * eval->valStackPos + 1022]);
+                eval->valStack[eval->valStackPos - 2].u.s,
+                eval->valStack[eval->valStackPos - 1].u.s) == 0;
+            free(eval->valStack[eval->valStackPos - 2].u.s);
+            free(eval->valStack[eval->valStackPos - 1].u.s);
             eval->opStack[4 * eval->valStackPos + 1016] = EVAL_OP_RPAREN;
             eval->opStack[4 * eval->valStackPos + 1018] = (EvalOperatorType)!v16;
         }
