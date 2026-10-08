@@ -537,7 +537,7 @@ const char *__cdecl Dvar_ValueToString(const dvar_s *dvar, DvarValue value)
             result = "";
         break;
     case 7u:
-        if (!value.integer)
+        if (!value.string)
             MyAssertHandler(".\\universal\\dvar.cpp", 352, 0, "%s\n\t(dvar->name) = %s", "(value.string)", dvar->name);
 #ifdef __SWITCH__
         if (value.string)
