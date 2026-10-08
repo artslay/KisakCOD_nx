@@ -400,6 +400,21 @@ static void Switch_ResolveSerializedPointer(
     const uintptr_t serializedAddress =
         reinterpret_cast<uintptr_t>(*pointer);
 
+    // This helper is also called on fields that may already contain a real
+    // native ARM64 object after an inline load or an earlier alias fixup.
+    // Only serialized stream addresses need DB alias resolution; never turn a
+    // valid native Hunk pointer into nullptr merely because it has no alias
+    // entry.
+    if (!Switch_IsSerializedAddress(serializedAddress))
+    {
+        if (serializedAddress < 0x10000u ||
+            (serializedAddress & (alignof(T) - 1u)) != 0)
+        {
+            *pointer = nullptr;
+        }
+        return;
+    }
+
     // Serialized fastfiles are 32-bit, while the Switch runtime is ARM64.
     // Reject impossible native pointers before they can reach the renderer.
     // This also catches stale serialized/text data accidentally interpreted
