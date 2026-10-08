@@ -438,7 +438,7 @@ void __cdecl Dvar_MakeLatchedValueCurrent(dvar_s *dvar);
 void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source);
 void __cdecl Dvar_AssignCurrentStringValue(dvar_s *dvar, DvarValue *dest, const char *string);
 void __cdecl Dvar_SetLatchedValue(dvar_s *dvar, DvarValue value);
-void __cdecl Dvar_AssignLatchedStringValue(dvar_s *dvar, DvarValue *dest, char *string);
+void __cdecl Dvar_AssignLatchedStringValue(dvar_s *dvar, DvarValue *dest, const char *string);
 void __cdecl Dvar_ClearLatchedValue(dvar_s *dvar);
 void __cdecl Dvar_ReinterpretDvar(
     dvar_s *dvar,
