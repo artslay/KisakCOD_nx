@@ -2746,25 +2746,29 @@ static void __cdecl DB_RemoveWindowFocus(windowDef_t *window)
 static void __cdecl DB_DynamicCloneMenu(XAssetHeader from, XAssetHeader to, int32_t swag)
 {
     (void)swag;
-    windowDef_t *toWindow;
-    windowDef_t *fromWindow;
 
-    to.xmodelPieces[6].pieces = from.xmodelPieces[6].pieces;
-    for (int32_t toIndex = 0; toIndex < (int)(uintptr_t)to.xmodelPieces[13].pieces; ++toIndex)
+    if (!from.menu || !to.menu || !from.menu->items || !to.menu->items)
+        return;
+
+    for (int32_t toIndex = 0; toIndex < to.menu->itemCount; ++toIndex)
     {
-        toWindow = *reinterpret_cast<windowDef_t **>(static_cast<uintptr_t>(static_cast<uint32_t>(to.xmodelPieces[23].numpieces)) + sizeof(windowDef_t *) * static_cast<uintptr_t>(toIndex));
+        windowDef_t *toWindow = to.menu->items[toIndex];
+        if (!toWindow)
+            continue;
+
         if (toWindow->name)
         {
-            for (int32_t fromIndex = 0; fromIndex < (int)(uintptr_t)from.xmodelPieces[13].pieces; ++fromIndex)
+            for (int32_t fromIndex = 0; fromIndex < from.menu->itemCount; ++fromIndex)
             {
-                fromWindow = *reinterpret_cast<windowDef_t **>(static_cast<uintptr_t>(static_cast<uint32_t>(from.xmodelPieces[23].numpieces)) + sizeof(windowDef_t *) * static_cast<uintptr_t>(fromIndex));
-                if (fromWindow->name && !strcmp(fromWindow->name, toWindow->name))
+                windowDef_t *fromWindow = from.menu->items[fromIndex];
+                if (fromWindow && fromWindow->name && !strcmp(fromWindow->name, toWindow->name))
                 {
                     toWindow->dynamicFlags[0] = fromWindow->dynamicFlags[0];
                     break;
                 }
             }
         }
+
         DB_RemoveWindowFocus(toWindow);
     }
 }
