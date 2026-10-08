@@ -726,36 +726,26 @@ void __cdecl R_AddCmdDrawStretchPic(
         defaultMaterial = rgp.defaultMaterial;
 
     actualMaterial = defaultMaterial;
-#ifdef __SWITCH__
-    // This is a screen-space 2D draw. The stock D3D9 safety filter rejects
-    // materials that expose any lit/fogable technique, but that classification
-    // is not reliable for the Switch fastfile UI materials. Substituting
-    // rgp.defaultMaterial produces the gray/green checker and removes the
-    // authored alpha/chamfer mask.
-    if (gfxCmdBufSourceState.viewMode != VIEW_MODE_2D)
-#endif
+    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
     {
-        if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+        if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
-            if ((defaultMaterial->stateFlags & 0x10) != 0)
-            {
-                Name = Material_GetName(material);
-                Com_PrintWarning(
-                    CON_CHANNEL_GFX,
-                    "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it uses the depth buffer. Set materialType to 2d.\\n",
-                    Name);
-                actualMaterial = rgp.defaultMaterial;
-            }
-        }
-        else
-        {
-            v10 = Material_GetName(material);
+            Name = Material_GetName(material);
             Com_PrintWarning(
                 CON_CHANNEL_GFX,
-                "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\\n",
-                v10);
+                "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it uses the depth buffer. Set materialType to 2d.\n",
+                Name);
             actualMaterial = rgp.defaultMaterial;
         }
+    }
+    else
+    {
+        v10 = Material_GetName(material);
+        Com_PrintWarning(
+            CON_CHANNEL_GFX,
+            "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
+            v10);
+        actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
     cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_FIRST_NONCRITICAL, sizeof(GfxCmdStretchPic));
@@ -838,36 +828,26 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
     else
         defaultMaterial = rgp.defaultMaterial;
     actualMaterial = defaultMaterial;
-#ifdef __SWITCH__
-    // This is a screen-space 2D draw. The stock D3D9 safety filter rejects
-    // materials that expose any lit/fogable technique, but that classification
-    // is not reliable for the Switch fastfile UI materials. Substituting
-    // rgp.defaultMaterial produces the gray/green checker and removes the
-    // authored alpha/chamfer mask.
-    if (gfxCmdBufSourceState.viewMode != VIEW_MODE_2D)
-#endif
+    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
     {
-        if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+        if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
-            if ((defaultMaterial->stateFlags & 0x10) != 0)
-            {
-                Name = Material_GetName(material);
-                Com_PrintWarning(
-                    CON_CHANNEL_GFX,
-                    "R_AddCmdDrawStretchPicFlipST: NOT DRAWING WITH MATERIAL \"%s\", because it uses the depth buffer. Set materialType to 2d.\\n",
-                    Name);
-                actualMaterial = rgp.defaultMaterial;
-            }
-        }
-        else
-        {
-            v10 = Material_GetName(material);
+            Name = Material_GetName(material);
             Com_PrintWarning(
                 CON_CHANNEL_GFX,
-                "R_AddCmdDrawStretchPicFlipST: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\\n",
-                v10);
+                "R_AddCmdDrawStretchPicFlipST: NOT DRAWING WITH MATERIAL \"%s\", because it uses the depth buffer. Set materialType to 2d.\n",
+                Name);
             actualMaterial = rgp.defaultMaterial;
         }
+    }
+    else
+    {
+        v10 = Material_GetName(material);
+        Com_PrintWarning(
+            CON_CHANNEL_GFX,
+            "R_AddCmdDrawStretchPicFlipST: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
+            v10);
+        actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
     cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_STRETCH_PIC_FLIP_ST, sizeof(GfxCmdStretchPic));
