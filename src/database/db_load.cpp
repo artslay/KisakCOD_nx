@@ -8869,17 +8869,14 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
         else
         {
 #ifdef __SWITCH__
-            const uint32_t materialToken = value;
-            const uintptr_t materialAliasSlot =
-                DB_ConvertOffsetToPointerValue(materialToken);
-            uintptr_t materialAliasResolved = 0;
-            bool materialAliasFound = false;
-
-            const bool traceSwitchFontMaterialAlias =
-                g_switchCurrentAssetRawType == ASSET_TYPE_FONT &&
-                g_switchCurrentAssetIndex >= 1215 &&
-                g_switchCurrentAssetIndex <= 1221;
-
+            // Positive MaterialHandle values are serialized fastfile pointer aliases.
+            // Resolve them through the normal DB alias/fixup path; the fastfile
+            // owns the Material object relationship and no name-based/default
+            // substitute belongs in this loader.
+            DB_ConvertOffsetToAlias(varMaterialHandle);
+#else
+            DB_ConvertOffsetToAlias((uint32_t *)varMaterialHandle);
+#endif
             if (traceSwitchFontMaterialAlias)
                 g_switchDbStage = "font/material_alias";
 
