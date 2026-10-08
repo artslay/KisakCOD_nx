@@ -6627,6 +6627,11 @@ void __cdecl Load_MaterialVertexShader(bool atStreamStart)
 
     varMaterialVertexShaderProgram = &varMaterialVertexShader->prog;
     Load_MaterialVertexShaderProgram(0);
+
+    DB_RegisterSwitchPointerAlias(
+        reinterpret_cast<uintptr_t>(vertexShaderStart),
+        reinterpret_cast<uintptr_t>(varMaterialVertexShader));
+    DB_FixupSwitchPointerAliases();
 #else
     Load_Stream(atStreamStart, (uint8_t *)varMaterialVertexShader, 16);
     varXString = &varMaterialVertexShader->name;
@@ -6664,9 +6669,32 @@ void __cdecl Load_MaterialVertexShaderPtr(bool atStreamStart)
                 *inserted = *varMaterialVertexShaderPtr;
         }
         else
-            *varMaterialVertexShaderPtr =
-                reinterpret_cast<MaterialVertexShader *>(
-                    DB_ConvertOffsetToPointerValue(value));
+        {
+            const uintptr_t serializedSlot =
+                DB_ConvertOffsetToPointerValue(value);
+            uintptr_t resolvedPointer = 0;
+            bool resolved =
+                serializedSlot &&
+                DB_ResolveSwitchPointerAlias(
+                    serializedSlot, &resolvedPointer);
+            if (!resolved && serializedSlot)
+                resolved = DB_TryResolveSwitchSerializedAliasChain(
+                    serializedSlot, &resolvedPointer);
+
+            if (resolved && resolvedPointer)
+                *varMaterialVertexShaderPtr =
+                    reinterpret_cast<MaterialVertexShader *>(resolvedPointer);
+            else
+            {
+                *varMaterialVertexShaderPtr =
+                    reinterpret_cast<MaterialVertexShader *>(serializedSlot);
+                if (serializedSlot)
+                    DB_AddSwitchPointerAliasFixup(
+                        serializedSlot,
+                        reinterpret_cast<uintptr_t *>(
+                            varMaterialVertexShaderPtr));
+            }
+        }
 #else
         if (*varMaterialVertexShaderPtr == (MaterialVertexShader *)-1)
         {
@@ -6754,6 +6782,11 @@ void __cdecl Load_MaterialPixelShader(bool atStreamStart)
     }
     Load_MaterialPixelShaderProgram(0);
     Switch_LogWrite("[SWITCH PIXELSHADER] after program\n");
+
+    DB_RegisterSwitchPointerAlias(
+        reinterpret_cast<uintptr_t>(pixelShaderStart),
+        reinterpret_cast<uintptr_t>(varMaterialPixelShader));
+    DB_FixupSwitchPointerAliases();
 #else
     Load_Stream(atStreamStart, (uint8_t *)varMaterialPixelShader, 16);
     varXString = &varMaterialPixelShader->name;
@@ -6845,9 +6878,32 @@ void __cdecl Load_MaterialPixelShaderPtr(bool atStreamStart)
                 *inserted = *varMaterialPixelShaderPtr;
         }
         else
-            *varMaterialPixelShaderPtr =
-                reinterpret_cast<MaterialPixelShader *>(
-                    DB_ConvertOffsetToPointerValue(value));
+        {
+            const uintptr_t serializedSlot =
+                DB_ConvertOffsetToPointerValue(value);
+            uintptr_t resolvedPointer = 0;
+            bool resolved =
+                serializedSlot &&
+                DB_ResolveSwitchPointerAlias(
+                    serializedSlot, &resolvedPointer);
+            if (!resolved && serializedSlot)
+                resolved = DB_TryResolveSwitchSerializedAliasChain(
+                    serializedSlot, &resolvedPointer);
+
+            if (resolved && resolvedPointer)
+                *varMaterialPixelShaderPtr =
+                    reinterpret_cast<MaterialPixelShader *>(resolvedPointer);
+            else
+            {
+                *varMaterialPixelShaderPtr =
+                    reinterpret_cast<MaterialPixelShader *>(serializedSlot);
+                if (serializedSlot)
+                    DB_AddSwitchPointerAliasFixup(
+                        serializedSlot,
+                        reinterpret_cast<uintptr_t *>(
+                            varMaterialPixelShaderPtr));
+            }
+        }
 #else
         if (*varMaterialPixelShaderPtr == (MaterialPixelShader *)-1)
         {
