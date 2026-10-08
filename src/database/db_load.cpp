@@ -8920,29 +8920,52 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
                 // material fallback while keeping the original UI asset.
                 if (materialAliasSlot)
                 {
-                    uint32_t serializedMaterialName = 0;
+                    // materialAliasSlot is the serialized pointer slot, not
+                    // the Material object itself. Follow its 32-bit target
+                    // once before inspecting the Material header.
+                    uint32_t serializedMaterialObject = 0;
                     std::memcpy(
-                        &serializedMaterialName,
+                        &serializedMaterialObject,
                         reinterpret_cast<const void *>(materialAliasSlot),
-                        sizeof(serializedMaterialName));
+                        sizeof(serializedMaterialObject));
+
+                    uintptr_t materialObject = 0;
+                    if (serializedMaterialObject &&
+                        serializedMaterialObject != UINT32_MAX &&
+                        serializedMaterialObject != UINT32_MAX - 1u)
+                    {
+                        materialObject =
+                            DB_ConvertOffsetToPointerValue(
+                                serializedMaterialObject);
+                    }
 
                     const char *materialName = nullptr;
-                    if (serializedMaterialName &&
-                        serializedMaterialName != UINT32_MAX &&
-                        serializedMaterialName != UINT32_MAX - 1u)
+                    if (materialObject)
                     {
-                        const uintptr_t nameAddress =
-                            DB_ConvertOffsetToPointerValue(
-                                serializedMaterialName);
-                        materialName =
-                            reinterpret_cast<const char *>(nameAddress);
-                    }
-                    else if (serializedMaterialName == UINT32_MAX)
-                    {
-                        // Load_Material() consumes an XString -1 immediately
-                        // after the 80-byte serialized Material header.
-                        materialName = reinterpret_cast<const char *>(
-                            materialAliasSlot + 80u);
+                        uint32_t serializedMaterialName = 0;
+                        std::memcpy(
+                            &serializedMaterialName,
+                            reinterpret_cast<const void *>(materialObject),
+                            sizeof(serializedMaterialName));
+
+                        if (serializedMaterialName &&
+                            serializedMaterialName != UINT32_MAX &&
+                            serializedMaterialName != UINT32_MAX - 1u)
+                        {
+                            const uintptr_t nameAddress =
+                                DB_ConvertOffsetToPointerValue(
+                                    serializedMaterialName);
+                            materialName =
+                                reinterpret_cast<const char *>(nameAddress);
+                        }
+                        else if (serializedMaterialName == UINT32_MAX)
+                        {
+                            // Load_Material() consumes an XString -1
+                            // immediately after the 80-byte serialized
+                            // Material header.
+                            materialName = reinterpret_cast<const char *>(
+                                materialObject + 80u);
+                        }
                     }
 
                     if (materialName && *materialName)
