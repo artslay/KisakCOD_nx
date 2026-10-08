@@ -46,6 +46,18 @@ ShadowCookieCmd g_shadowCookieBuf[1];
 
 WorkerCmds g_workerCmds[WRKCMD_COUNT];
 
+#ifdef KISAK_SWITCH
+static_assert(sizeof(FxCmd) == 24, "Switch FxCmd ABI");
+static_assert(sizeof(DpvsDynamicCellCmd) == 16, "Switch DpvsDynamicCellCmd ABI");
+static_assert(sizeof(DpvsStaticCellCmd) == 24, "Switch DpvsStaticCellCmd ABI");
+static_assert(sizeof(DpvsEntityCmd) == 32, "Switch DpvsEntityCmd ABI");
+static_assert(sizeof(SceneEntCmd) == 8, "Switch SceneEntCmd ABI");
+static_assert(sizeof(GfxSpotShadowEntCmd) == 16, "Switch GfxSpotShadowEntCmd ABI");
+static_assert(sizeof(ShadowCookieCmd) == 32, "Switch ShadowCookieCmd ABI");
+static_assert(sizeof(FxGenerateVertsCmd) == 88, "Switch FxGenerateVertsCmd ABI");
+static_assert(sizeof(SkinXModelCmd) == 40, "Switch SkinXModelCmd ABI");
+#endif
+
 int __cdecl R_FXNonDependentOrSpotLightPending(void* args)
 {
     return R_FXSpotLightPending() || R_FXNonDependentPending();
@@ -68,12 +80,12 @@ int __cdecl R_EndFenceBusy(void *args)
 
 void __cdecl TRACK_r_workercmds()
 {
-    track_static_alloc_internal(g_GfxEntityBoundsBuf, 1024, "g_GfxEntityBoundsBuf", 18);
-    track_static_alloc_internal(g_SkinGfxEntityBuf, 4096, "g_SkinGfxEntityBuf", 18);
-    track_static_alloc_internal(g_UpdateFxNonDependentBuf, 12, "g_UpdateFxNonDependentBuf", 18);
-    track_static_alloc_internal(g_UpdateFxRemainingBuf, 12, "g_UpdateFxRemainingBuf", 18);
-    track_static_alloc_internal(g_skinCachedStaticModelBuf, 2048, "g_skinCachedStaticModelBuf", 18);
-    track_static_alloc_internal(g_SkinXModelBuf, 28672, "g_SkinXModelBuf", 18);
+    track_static_alloc_internal(g_GfxEntityBoundsBuf, sizeof(g_GfxEntityBoundsBuf), "g_GfxEntityBoundsBuf", 18);
+    track_static_alloc_internal(g_SkinGfxEntityBuf, sizeof(g_SkinGfxEntityBuf), "g_SkinGfxEntityBuf", 18);
+    track_static_alloc_internal(g_UpdateFxNonDependentBuf, sizeof(g_UpdateFxNonDependentBuf), "g_UpdateFxNonDependentBuf", 18);
+    track_static_alloc_internal(g_UpdateFxRemainingBuf, sizeof(g_UpdateFxRemainingBuf), "g_UpdateFxRemainingBuf", 18);
+    track_static_alloc_internal(g_skinCachedStaticModelBuf, sizeof(g_skinCachedStaticModelBuf), "g_skinCachedStaticModelBuf", 18);
+    track_static_alloc_internal(g_SkinXModelBuf, sizeof(g_SkinXModelBuf), "g_SkinXModelBuf", 18);
     track_static_alloc_internal(g_workerCmds, 2176, "g_workerCmds", 18);
 }
 
