@@ -21,6 +21,23 @@ static HidAnalogStickState g_rightStick = {};
 static bool g_initialized = false;
 static bool g_connected = false;
 
+// These are only used as the "key" argument consumed by IN_KeyDown/IN_KeyUp.
+// They must be non-zero and unique so multiple held controller actions can
+// coexist in the engine's kbutton_t state.
+enum : int
+{
+    SWITCH_KEY_A        = 0x7001,
+    SWITCH_KEY_B        = 0x7002,
+    SWITCH_KEY_X        = 0x7003,
+    SWITCH_KEY_ZR       = 0x7004,
+    SWITCH_KEY_ZL       = 0x7005,
+    SWITCH_KEY_R        = 0x7006,
+    SWITCH_KEY_L        = 0x7007,
+    SWITCH_KEY_LSTICK   = 0x7008,
+    SWITCH_KEY_RSTICK   = 0x7009,
+    SWITCH_KEY_DPAD_UP  = 0x700A
+};
+
 static float NormalizeStick(int32_t value)
 {
     constexpr float kStickMax = 32767.0f;
@@ -51,15 +68,42 @@ static void SendKeyEdge(u64 mask, int key)
         CL_KeyEvent(0, key, 0, Sys_Milliseconds());
 }
 
-static void SendActionEdge(
+static void SendCommandEdge(
     u64 mask,
-    void (*down)(),
-    void (*up)())
+    int key,
+    const char *downCommand,
+    const char *upCommand)
 {
     if (Pressed(mask))
-        down();
+    {
+        char command[96];
+        std::snprintf(
+            command,
+            sizeof(command),
+            "%s %d %u\n",
+            downCommand,
+            key,
+            static_cast<unsigned>(Sys_Milliseconds()));
+        Cmd_ExecuteSingleCommand(
+            0,
+            CL_ControllerIndexFromClientNum(0),
+            command);
+    }
     else if (Released(mask))
-        up();
+    {
+        char command[96];
+        std::snprintf(
+            command,
+            sizeof(command),
+            "%s %d %u\n",
+            upCommand,
+            key,
+            static_cast<unsigned>(Sys_Milliseconds()));
+        Cmd_ExecuteSingleCommand(
+            0,
+            CL_ControllerIndexFromClientNum(0),
+            command);
+    }
 }
 
 static u64 ButtonMask(GPadButton button)
@@ -108,11 +152,9 @@ void Switch_GamepadFrame()
     g_leftStick = padGetStickPos(&g_pad, 0);
     g_rightStick = padGetStickPos(&g_pad, 1);
 
-    // Match the engine's controller-active concept to the actual libnx pad
-    // connection state, not whether a button or stick happens to be moving.
     g_connected = padIsConnected(&g_pad);
 
-    // UI navigation is fed through the engine's normal key path.
+    // UI navigation uses the engine's regular keyboard/key-event path.
     SendKeyEdge(HidNpadButton_Up, K_UPARROW);
     SendKeyEdge(HidNpadButton_Down, K_DOWNARROW);
     SendKeyEdge(HidNpadButton_Left, K_LEFTARROW);
@@ -121,26 +163,26 @@ void Switch_GamepadFrame()
     SendKeyEdge(HidNpadButton_B, K_ESCAPE);
     SendKeyEdge(HidNpadButton_Plus, K_ESCAPE);
 
-    // Use the engine's existing controller input handlers directly. This keeps
-    // the original kbutton_t semantics instead of synthesizing console
-    // commands with a fake key id.
-    SendActionEdge(HidNpadButton_A, IN_UpDown, IN_UpUp);
-    SendActionEdge(HidNpadButton_B, IN_Stance_Down, IN_Stance_Up);
-    SendActionEdge(HidNpadButton_X, IN_UseReload_Down, IN_UseReload_Up);
-    SendActionEdge(HidNpadButton_ZR, IN_Attack_Down, IN_Attack_Up);
-    SendActionEdge(HidNpadButton_ZL, IN_SpeedDown, IN_SpeedUp);
-    SendActionEdge(HidNpadButton_R, IN_Frag_Down, IN_Frag_Up);
-    SendActionEdge(HidNpadButton_L, IN_Smoke_Down, IN_Smoke_Up);
-    SendActionEdge(HidNpadButton_StickL, IN_SprintDown, IN_SprintUp);
-    SendActionEdge(HidNpadButton_StickR, IN_Melee_Down, IN_Melee_Up);
+    // The gameplay input handlers are command callbacks in the original
+    // engine. Execute those registered callbacks with a unique non-zero
+    // controller key id so IN_KeyDown()/IN_KeyUp() see valid Cmd_Argv(1/2).
+    SendCommandEdge(HidNpadButton_A,      SWITCH_KEY_A,      "+moveup",      "-moveup");
+    SendCommandEdge(HidNpadButton_B,      SWITCH_KEY_B,      "+stance",      "-stance");
+    SendCommandEdge(HidNpadButton_X,      SWITCH_KEY_X,      "+usereload",   "-usereload");
+    SendCommandEdge(HidNpadButton_ZR,     SWITCH_KEY_ZR,     "+attack",      "-attack");
+    SendCommandEdge(HidNpadButton_ZL,     SWITCH_KEY_ZL,     "+speed",       "-speed");
+    SendCommandEdge(HidNpadButton_R,      SWITCH_KEY_R,      "+frag",        "-frag");
+    SendCommandEdge(HidNpadButton_L,      SWITCH_KEY_L,      "+smoke",       "-smoke");
+    SendCommandEdge(HidNpadButton_StickL, SWITCH_KEY_LSTICK, "+sprint",      "-sprint");
+    SendCommandEdge(HidNpadButton_StickR, SWITCH_KEY_RSTICK, "+melee",       "-melee");
 
     // Y is the original CoD controller next-weapon action.
     if (Pressed(HidNpadButton_Y))
         Cbuf_AddText(0, "weapnext\n");
 
-    // D-pad up is night vision during gameplay; the UI still receives the
-    // corresponding UPARROW event above.
-    SendActionEdge(HidNpadButton_Up, IN_NightVisionDown, IN_NightVisionUp);
+    // Keep D-pad up available for gameplay night vision while the same
+    // physical direction also produces the normal UI UPARROW event.
+    SendCommandEdge(HidNpadButton_Up, SWITCH_KEY_DPAD_UP, "+nightvision", "-nightvision");
 }
 
 void Switch_GamepadShutdown()
