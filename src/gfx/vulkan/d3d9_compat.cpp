@@ -1525,6 +1525,16 @@ HRESULT IDirect3DDevice9::SetSwitchUnlitMode(bool enabled)
     return S_OK;
 }
 
+HRESULT IDirect3DDevice9::SetSwitchUi2DMode(bool enabled)
+{
+    if (m_switchUi2D != enabled)
+    {
+        m_switchUi2D = enabled;
+        m_pipelineDirty = true;
+    }
+    return S_OK;
+}
+
 HRESULT IDirect3DDevice9::SetSamplerState(uint32_t stage, uint32_t state, uint32_t value)
 {
     if (stage >= 16 || state >= 16)
@@ -1752,6 +1762,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_blendOp);
     key = HashCombine(key, m_blendOpAlpha);
     key = HashCombine(key, m_separateAlphaBlend);
+    key = HashCombine(key, m_switchUi2D);
     key = HashCombine(key, static_cast<uint32_t>(m_topology));
     key = HashCombine(key, m_cullMode);
     key = HashCombine(key, m_scissor);
@@ -2098,16 +2109,33 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 
     VkPipelineColorBlendAttachmentState colorBlend{};
-    colorBlend.blendEnable = m_blendEnable ? VK_TRUE : VK_FALSE;
-    colorBlend.srcColorBlendFactor = BlendFactor(m_srcBlend);
-    colorBlend.dstColorBlendFactor = BlendFactor(m_dstBlend);
-    colorBlend.colorBlendOp = BlendOp(m_blendOp);
-    colorBlend.srcAlphaBlendFactor = BlendFactor(
-        m_separateAlphaBlend ? m_srcBlendAlpha : m_srcBlend);
-    colorBlend.dstAlphaBlendFactor = BlendFactor(
-        m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend);
-    colorBlend.alphaBlendOp = BlendOp(
-        m_separateAlphaBlend ? m_blendOpAlpha : m_blendOp);
+    if (m_switchUi2D)
+    {
+        // CoD4's authored menu is straight-alpha 2D. On Switch the original
+        // D3D9 material state can arrive through a widened 32->64-bit asset
+        // path, so the Vulkan backend gets the semantic rule directly instead
+        // of trusting a potentially-corrupted serialized blend bitfield.
+        colorBlend.blendEnable = VK_TRUE;
+        colorBlend.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlend.colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlend.alphaBlendOp = VK_BLEND_OP_ADD;
+    }
+    else
+    {
+        colorBlend.blendEnable = m_blendEnable ? VK_TRUE : VK_FALSE;
+        colorBlend.srcColorBlendFactor = BlendFactor(m_srcBlend);
+        colorBlend.dstColorBlendFactor = BlendFactor(m_dstBlend);
+        colorBlend.colorBlendOp = BlendOp(m_blendOp);
+        colorBlend.srcAlphaBlendFactor = BlendFactor(
+            m_separateAlphaBlend ? m_srcBlendAlpha : m_srcBlend);
+        colorBlend.dstAlphaBlendFactor = BlendFactor(
+            m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend);
+        colorBlend.alphaBlendOp = BlendOp(
+            m_separateAlphaBlend ? m_blendOpAlpha : m_blendOp);
+    }
     colorBlend.colorWriteMask =
         ((m_colorWriteMask & 1) ? VK_COLOR_COMPONENT_R_BIT : 0) |
         ((m_colorWriteMask & 2) ? VK_COLOR_COMPONENT_G_BIT : 0) |
