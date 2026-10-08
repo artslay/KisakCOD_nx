@@ -142,23 +142,21 @@ void Switch_GamepadFrame()
     SendKeyEdge(HidNpadButton_B, K_ESCAPE);
     SendKeyEdge(HidNpadButton_Plus, K_ESCAPE);
 
-    // The XBox/PS3 SP control model already exists in cl_input.cpp:
-    // A = jump, B = stance, X = use/reload, RT = fire, LT = ADS,
-    // LB = smoke, RB = frag, LS = sprint, RS = melee.
-    SendActionEdge(HidNpadButton_A, IN_UpDown, IN_UpUp);
-    SendActionEdge(HidNpadButton_B, IN_Stance_Down, IN_Stance_Up);
-    SendActionEdge(HidNpadButton_X, IN_UseReload_Down, IN_UseReload_Up);
-    SendActionEdge(HidNpadButton_ZR, IN_Attack_Down, IN_Attack_Up);
-    SendActionEdge(HidNpadButton_ZL, IN_SpeedDown, IN_SpeedUp);
-    SendActionEdge(HidNpadButton_R, IN_Frag_Down, IN_Frag_Up);
-    SendActionEdge(HidNpadButton_L, IN_Smoke_Down, IN_Smoke_Up);
-    SendActionEdge(HidNpadButton_StickL, IN_SprintDown, IN_SprintUp);
-    SendActionEdge(HidNpadButton_StickR, IN_Melee_Down, IN_Melee_Up);
+    // Feed controller actions through the command handlers registered by
+    // CL_InitInput(), exactly like the normal +command/-command path.
+    SendCommandEdge(HidNpadButton_A, "+moveup", "-moveup");
+    SendCommandEdge(HidNpadButton_B, "+stance", "-stance");
+    SendCommandEdge(HidNpadButton_X, "+usereload", "-usereload");
+    SendCommandEdge(HidNpadButton_ZR, "+attack", "-attack");
+    SendCommandEdge(HidNpadButton_ZL, "+speed", "-speed");
+    SendCommandEdge(HidNpadButton_R, "+frag", "-frag");
+    SendCommandEdge(HidNpadButton_L, "+smoke", "-smoke");
+    SendCommandEdge(HidNpadButton_StickL, "+sprint", "-sprint");
+    SendCommandEdge(HidNpadButton_StickR, "+melee", "-melee");
 
-    // Y is the original CoD4 "next weapon" action. Keep it edge-triggered
-    // because it is a command rather than a held button.
-    if (Pressed(HidNpadButton_Y))
-        Cbuf_AddText(0, "weapnext\n");
+    // Y uses the existing stance hold path. Holding it for cl_stanceHoldTime
+    // transitions from crouch to prone through CL_StanceButtonUpdate().
+    SendCommandEdge(HidNpadButton_Y, "+stance", "-stance");
 
     // D-pad up is night vision during gameplay; the UI still receives the
     // corresponding UPARROW event above.
