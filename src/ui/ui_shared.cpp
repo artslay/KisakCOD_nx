@@ -5979,45 +5979,6 @@ void __cdecl Window_Paint(
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/border_draw";
 #endif
-#ifdef __SWITCH__
-        // The gradient button is authored with a chamfered highlight contour.
-        // Some menu items carry no serialized border enum after the 32-bit UI
-        // object is widened on Switch, so recover the contour from the actual
-        // gradient material instead of drawing a plain rectangle.
-        const bool switchChamferedGradient =
-            w->border == 0 &&
-            w->background &&
-            w->background->info.name &&
-            !I_stricmp(w->background->info.name, "gradient_fadein");
-
-        if (switchChamferedGradient)
-        {
-            const float outlineSize =
-                w->borderSize > 0.0f ? w->borderSize : 1.0f;
-            const float switchHiColor[4] =
-            {
-                1.0f, 1.0f, 1.0f,
-                w->borderColor[3] > 0.0f ? w->borderColor[3] : 0.18f
-            };
-            const float switchLoColor[4] =
-            {
-                0.78f, 0.78f, 0.78f,
-                switchHiColor[3] * 0.65f
-            };
-
-            UI_DrawHighlightRect(
-                scrPlace,
-                origRect->x,
-                origRect->y,
-                origRect->w,
-                origRect->h,
-                origRect->horzAlign,
-                origRect->vertAlign,
-                outlineSize,
-                switchHiColor,
-                switchLoColor);
-        }
-#endif
         switch (w->border)
         {
         case 1:
