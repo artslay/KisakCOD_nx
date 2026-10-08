@@ -5621,7 +5621,7 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI MENU] name=%s fullScreen=%d items=%d background=%p\\n",
+                "[KisakCOD][UI MENU] name=%s fullScreen=%d items=%d background=%p\n",
                 menuName,
                 menu->fullScreen ? 1 : 0,
                 menu->itemCount,
@@ -6401,7 +6401,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                             std::snprintf(
                                 trace,
                                 sizeof(trace),
-                                "[KisakCOD][UI ITEM] menu=%s item=%s style=%d background=%p\\n",
+                                "[KisakCOD][UI ITEM] menu=%s item=%s style=%d background=%p\n",
                                 menuName,
                                 itemName,
                                 item->window.style,
