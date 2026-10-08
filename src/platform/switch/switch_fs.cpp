@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
+#include <cerrno>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -457,38 +458,116 @@ static bool Switch_OpenIwdFile(
 }
 
 
-static bool Switch_IsProfilePath(const char *qpath)
+static std::string SwitchNormalizeProfilePath(const char *path)
 {
-    if (!qpath)
-        return false;
+    std::string normalized;
+    if (!path)
+        return normalized;
 
-    while (*qpath == '/' || *qpath == '\\')
-        ++qpath;
+    normalized.reserve(std::strlen(path));
+    bool previousSeparator = false;
+    for (const unsigned char *p = reinterpret_cast<const unsigned char *>(path); *p; ++p)
+    {
+        char c = static_cast<char>(*p);
+        if (c == '\\')
+            c = '/';
 
-    return !std::strncmp(qpath, "profiles/", 9) ||
-           !std::strcmp(qpath, "profiles");
+        if (c == '/')
+        {
+            if (previousSeparator)
+                continue;
+            previousSeparator = true;
+        }
+        else
+        {
+            previousSeparator = false;
+        }
+
+        normalized.push_back(c);
+    }
+
+    while (!normalized.empty() && normalized.front() == '/')
+        normalized.erase(normalized.begin());
+    while (!normalized.empty() && normalized.back() == '/')
+        normalized.pop_back();
+
+    return normalized;
 }
 
-static void SwitchProfilePath(char *dst, size_t dstSize, const char *qpath)
+static bool Switch_IsSafeProfilePath(const std::string &path)
+{
+    if (path.empty())
+        return false;
+
+    const size_t prefixLength = 9;
+    if (path.size() < prefixLength ||
+        I_strnicmp(path.c_str(), "profiles/", prefixLength) != 0)
+    {
+        if (I_stricmp(path.c_str(), "profiles") != 0)
+            return false;
+    }
+
+    size_t start = 0;
+    while (start < path.size())
+    {
+        size_t end = path.find('/', start);
+        if (end == std::string::npos)
+            end = path.size();
+
+        if (end == start)
+            return false;
+
+        const std::string component = path.substr(start, end - start);
+        if (component == "." || component == ".." ||
+            component.find(':') != std::string::npos)
+        {
+            return false;
+        }
+
+        start = end + 1;
+    }
+
+    return true;
+}
+
+static bool Switch_IsProfilePath(const char *qpath)
+{
+    const std::string normalized = SwitchNormalizeProfilePath(qpath);
+    if (normalized.empty())
+        return false;
+
+    return I_stricmp(normalized.c_str(), "profiles") == 0 ||
+           (normalized.size() > 9 &&
+            I_strnicmp(normalized.c_str(), "profiles/", 9) == 0);
+}
+
+static bool SwitchProfilePath(char *dst, size_t dstSize, const char *qpath)
 {
     if (!dst || !dstSize)
-        return;
+        return false;
 
-    while (*qpath == '/' || *qpath == '\\')
-        ++qpath;
+    const std::string normalized = SwitchNormalizeProfilePath(qpath);
+    if (!Switch_IsSafeProfilePath(normalized))
+    {
+        dst[0] = '\0';
+        return false;
+    }
 
     std::snprintf(
         dst,
         dstSize,
         "%s/players/%s",
         kSwitchRoot,
-        qpath);
-    for (char *p = dst; *p; ++p)
-    {
-        if (*p == '\\')
-            *p = '/';
-    }
+        normalized.c_str());
+    return std::strlen(dst) < dstSize;
 }
+
+static bool SwitchBuildPath(
+    char *dst,
+    size_t dstSize,
+    const char *base,
+    const char *game,
+    const char *qpath);
 
 static void SwitchPath(char *dst, size_t dstSize, const char *base, const char *game, const char *qpath)
 {
@@ -497,6 +576,20 @@ static void SwitchPath(char *dst, size_t dstSize, const char *base, const char *
     while (*qpath == '/' || *qpath == '\\') ++qpath;
     std::snprintf(dst, dstSize, "%s/%s/%s", base, game, qpath);
     for (char *p = dst; *p; ++p) if (*p == '\\') *p = '/';
+}
+
+static bool SwitchBuildPath(
+    char *dst,
+    size_t dstSize,
+    const char *base,
+    const char *game,
+    const char *qpath)
+{
+    if (Switch_IsProfilePath(qpath))
+        return SwitchProfilePath(dst, dstSize, qpath);
+
+    SwitchPath(dst, dstSize, base, game, qpath);
+    return std::strlen(dst) < dstSize;
 }
 
 #ifdef __SWITCH__
@@ -686,16 +779,75 @@ void __cdecl FS_BuildOSPath(const char *base, const char *game, const char *qpat
 
 int __cdecl FS_CreatePath(char *path)
 {
+    if (!path || !*path)
+        return 1;
+
+    if (std::strstr(path, "..") || std::strstr(path, "::"))
+        return 1;
+
     char tmp[256];
     I_strncpyz(tmp, path, sizeof(tmp));
-    for (char *p = tmp + 1; *p; ++p) {
-        if (*p == '/') {
-            *p = 0;
-            mkdir(tmp, 0777);
+
+    for (char *p = tmp; *p; ++p)
+        if (*p == '\\')
             *p = '/';
-        }
+
+    size_t length = std::strlen(tmp);
+    if (!length)
+        return 1;
+
+    // A trailing separator denotes a directory path (used by
+    // Com_NewPlayerProfile); otherwise only create the parent directory.
+    const bool wantFullDirectory = tmp[length - 1] == '/';
+    size_t end = wantFullDirectory
+        ? length
+        : (std::strrchr(tmp, '/') ? static_cast<size_t>(std::strrchr(tmp, '/') - tmp) : 0);
+
+    if (end == 0)
+        return 0;
+
+    // Skip the "sdmc:/" prefix when iterating path components.
+    size_t start = 0;
+    const char *scheme = std::strchr(tmp, ':');
+    if (scheme)
+    {
+        const char *slash = std::strchr(scheme + 1, '/');
+        if (slash)
+            start = static_cast<size_t>(slash - tmp) + 1;
     }
-    mkdir(tmp, 0777);
+
+    if (end <= start)
+        return 0;
+
+    for (size_t pos = start; pos < end; ++pos)
+    {
+        if (tmp[pos] != '/')
+            continue;
+
+        tmp[pos] = '\0';
+        if (tmp[start] != '\0')
+        {
+            if (::mkdir(tmp, 0777) != 0 && errno != EEXIST)
+                return 1;
+
+            struct stat st {};
+            if (::stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode))
+                return 1;
+        }
+        tmp[pos] = '/';
+    }
+
+    tmp[end] = '\0';
+    if (tmp[start] != '\0')
+    {
+        if (::mkdir(tmp, 0777) != 0 && errno != EEXIST)
+            return 1;
+
+        struct stat st {};
+        if (::stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode))
+            return 1;
+    }
+
     return 0;
 }
 
@@ -710,13 +862,18 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
     const std::string normalizedName = SwitchNormalizePath(filename);
 
     // Player profiles are persistent writable data stored outside the
-    // game/main search path at players/profiles. Keep the engine's existing
-    // logical "profiles/..." namespace, but resolve it to the Switch profile
-    // storage location before checking IWD/loose game assets.
-    if (Switch_IsProfilePath(normalizedName.c_str()))
+    // game/main search path at players/profiles. Preserve profile-name case:
+    // SwitchNormalizePath() intentionally lowercases packed asset qpaths.
+    if (Switch_IsProfilePath(filename))
     {
         char profilePath[256];
-        SwitchProfilePath(profilePath, sizeof(profilePath), normalizedName.c_str());
+        if (!SwitchProfilePath(profilePath, sizeof(profilePath), filename))
+        {
+            if (file)
+                *file = 0;
+            return (uint32_t)-1;
+        }
+
         FILE *profileFile = FS_FileOpenReadBinary(profilePath);
         if (!profileFile)
         {
@@ -1129,10 +1286,11 @@ int __cdecl FS_FileExists(char *file)
         return 0;
 
     const std::string normalizedName = SwitchNormalizePath(file);
-    if (Switch_IsProfilePath(normalizedName.c_str()))
+    if (Switch_IsProfilePath(file))
     {
         char profilePath[256];
-        SwitchProfilePath(profilePath, sizeof(profilePath), normalizedName.c_str());
+        if (!SwitchProfilePath(profilePath, sizeof(profilePath), file))
+            return 0;
         struct stat st {};
         return stat(profilePath, &st) == 0 && S_ISREG(st.st_mode);
     }
@@ -1162,8 +1320,14 @@ int __cdecl FS_FOpenFileWrite(const char *filename)
 int __cdecl FS_FOpenFileWriteToDirForThread(const char *filename, const char *dir, FsThread)
 {
     char path[256];
-    SwitchPath(path, sizeof(path), fs_homepath ? fs_homepath->current.string : kSwitchRoot, dir, filename);
-    FS_CreatePath(path);
+    if (!SwitchBuildPath(
+            path,
+            sizeof(path),
+            fs_homepath ? fs_homepath->current.string : kSwitchRoot,
+            dir,
+            filename) ||
+        FS_CreatePath(path))
+        return 0;
     FILE *fp = FS_FileOpenWriteBinary(path);
     if (!fp) return 0;
     int h = AllocHandle();
@@ -1186,8 +1350,14 @@ int __cdecl FS_FOpenTextFileWrite(const char *filename)
 int __cdecl FS_FOpenFileAppend(const char *filename)
 {
     char path[256];
-    SwitchPath(path, sizeof(path), fs_homepath ? fs_homepath->current.string : kSwitchRoot, fs_gamedir, filename);
-    FS_CreatePath(path);
+    if (!SwitchBuildPath(
+            path,
+            sizeof(path),
+            fs_homepath ? fs_homepath->current.string : kSwitchRoot,
+            fs_gamedir,
+            filename) ||
+        FS_CreatePath(path))
+        return 0;
     FILE *fp = FS_FileOpenAppendText(path);
     if (!fp) return 0;
     int h = AllocHandle();
@@ -1218,14 +1388,26 @@ int __cdecl FS_WriteFileToDir(const char *filename, const char *dir, char *buffe
 bool __cdecl FS_Delete(const char *filename)
 {
     char path[256];
-    SwitchPath(path, sizeof(path), fs_homepath ? fs_homepath->current.string : kSwitchRoot, fs_gamedir, filename);
+    if (!SwitchBuildPath(
+            path,
+            sizeof(path),
+            fs_homepath ? fs_homepath->current.string : kSwitchRoot,
+            fs_gamedir,
+            filename))
+        return false;
     return std::remove(path) == 0;
 }
 
 bool __cdecl FS_DeleteInDir(char *filename, char *dir)
 {
     char path[256];
-    SwitchPath(path, sizeof(path), fs_homepath ? fs_homepath->current.string : kSwitchRoot, dir, filename);
+    if (!SwitchBuildPath(
+            path,
+            sizeof(path),
+            fs_homepath ? fs_homepath->current.string : kSwitchRoot,
+            dir,
+            filename))
+        return false;
     return std::remove(path) == 0;
 }
 
@@ -1273,12 +1455,45 @@ void __cdecl FS_CopyFile(char *from, char *to)
 }
 
 void __cdecl FS_Remove(const char *path) { std::remove(path); }
-void __cdecl FS_Rename(char *from, char *fromDir, char *to, char *toDir)
+bool __cdecl FS_RenameChecked(char *from, char *fromDir, char *to, char *toDir)
 {
     char a[256], b[256];
-    SwitchPath(a,sizeof(a),fs_homepath ? fs_homepath->current.string : kSwitchRoot,fromDir,from);
-    SwitchPath(b,sizeof(b),fs_homepath ? fs_homepath->current.string : kSwitchRoot,toDir,to);
-    std::rename(a,b);
+    if (!SwitchBuildPath(
+            a,
+            sizeof(a),
+            fs_homepath ? fs_homepath->current.string : kSwitchRoot,
+            fromDir,
+            from) ||
+        !SwitchBuildPath(
+            b,
+            sizeof(b),
+            fs_homepath ? fs_homepath->current.string : kSwitchRoot,
+            toDir,
+            to))
+    {
+        return false;
+    }
+
+    if (std::rename(a, b) != 0)
+    {
+        char trace[640];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PROFILE FS] rename failed: %s -> %s errno=%d\n",
+            a,
+            b,
+            errno);
+        Switch_LogWrite(trace);
+        return false;
+    }
+
+    return true;
+}
+
+void __cdecl FS_Rename(char *from, char *fromDir, char *to, char *toDir)
+{
+    (void)FS_RenameChecked(from, fromDir, to, toDir);
 }
 void __cdecl FS_SV_Rename(char *from, char *to) { std::rename(from,to); }
 
@@ -1382,19 +1597,20 @@ const char **__cdecl FS_ListFiles(
     if (!path || !*path)
         return nullptr;
 
-    const std::string normalizedPath = SwitchNormalizePath(path);
-
-    // The SP profile system uses "profiles" as a logical filesystem
-    // directory, while the actual writable directory is players/profiles.
-    if (normalizedPath != "profiles")
+    const std::string normalizedPath = SwitchNormalizeProfilePath(path);
+    if (!Switch_IsProfilePath(normalizedPath.c_str()))
         return nullptr;
 
     char profileDir[256];
-    SwitchProfilePath(profileDir, sizeof(profileDir), "profiles");
+    if (!SwitchProfilePath(profileDir, sizeof(profileDir), normalizedPath.c_str()))
+        return nullptr;
 
     DIR *directory = ::opendir(profileDir);
     if (!directory)
         return nullptr;
+
+    const bool isDirSearch =
+        extension && !std::strcmp(extension, "/");
 
     std::vector<std::string> names;
     while (dirent *entry = ::readdir(directory))
@@ -1416,22 +1632,32 @@ const char **__cdecl FS_ListFiles(
         if (::stat(childPath, &st) != 0)
             continue;
 
-        // FS_ListFiles("profiles", "/", ...) is used by the profile UI and
-        // means "list profile directories", not files such as active.txt.
-        if (!S_ISDIR(st.st_mode))
-            continue;
+        if (isDirSearch)
+        {
+            // The stock FS uses extension="/" to enumerate directories.
+            if (!S_ISDIR(st.st_mode))
+                continue;
+        }
+        else
+        {
+            if (!S_ISREG(st.st_mode))
+                continue;
 
-        if (!Switch_ListExtensionMatches(entry->d_name, extension))
-            continue;
+            if (!Switch_ListExtensionMatches(entry->d_name, extension))
+                continue;
+        }
 
         names.emplace_back(entry->d_name);
     }
     ::closedir(directory);
 
-    std::sort(names.begin(), names.end(), [](const std::string &a, const std::string &b)
-    {
-        return I_stricmp(a.c_str(), b.c_str()) < 0;
-    });
+    std::sort(
+        names.begin(),
+        names.end(),
+        [](const std::string &a, const std::string &b)
+        {
+            return I_stricmp(a.c_str(), b.c_str()) < 0;
+        });
 
     g_switchProfileFileListNames = std::move(names);
     g_switchProfileFileListPointers.clear();
