@@ -3033,7 +3033,7 @@ void __cdecl Item_TextField_BeginEdit(int localClientNum, itemDef_s *item)
             g_editItem = item;
             Key_SetOverstrikeMode(localClientNum, 1);
             (void)Item_TextField_HandleKey(
-                nullptr,
+                &uiInfo.uiDC,
                 item,
                 K_ENTER);
         }
