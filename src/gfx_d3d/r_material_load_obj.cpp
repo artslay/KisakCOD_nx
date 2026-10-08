@@ -4716,6 +4716,101 @@ void __cdecl Material_GetInfo(Material *handle, MaterialInfo *matInfo)
 
 Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name)
 {
+    iassert(mtlCopy);
+    iassert(name);
+
+#ifdef __SWITCH__
+    // Material is a native ARM64 runtime object on Switch. The legacy PC
+    // implementation below stores pointer fields through uint32_t and assumes
+    // a fixed 0x50-byte object; both operations truncate native pointers.
+    // UI_ParseMenuMaterial() relies on this function for the named $-materials,
+    // so corrupt copies show up as flat/default UI panels and garbage textures.
+    uint16_t hashIndex[3] = {};
+    bool exists = false;
+
+    Material_GetHashIndex(name, hashIndex, &exists);
+    if (exists)
+    {
+        Material *existing = rg.materialHashTable[hashIndex[0]];
+        const char *nameBackup = existing->info.name;
+
+        std::memcpy(existing, mtlCopy, sizeof(Material));
+        existing->info.name = nameBackup;
+        rgp.needSortMaterials = 1;
+        return existing;
+    }
+
+    const size_t nameLength = std::strlen(name);
+    const size_t materialBytes = sizeof(Material);
+    uint8_t *memory = Material_Alloc(
+        static_cast<uint32_t>(materialBytes + nameLength + 1));
+
+    std::memset(
+        memory,
+        0,
+        materialBytes + nameLength + 1);
+
+    Material *mtlNew = reinterpret_cast<Material *>(memory);
+    std::memcpy(mtlNew, mtlCopy, sizeof(Material));
+
+    char *nameStorage = reinterpret_cast<char *>(memory + materialBytes);
+    std::memcpy(nameStorage, name, nameLength + 1);
+    mtlNew->info.name = nameStorage;
+
+    if (mtlCopy->stateBitsCount)
+    {
+        const size_t bytes =
+            sizeof(GfxStateBits) * static_cast<size_t>(mtlCopy->stateBitsCount);
+        mtlNew->stateBitsTable =
+            reinterpret_cast<GfxStateBits *>(Material_Alloc(
+                static_cast<uint32_t>(bytes)));
+        std::memcpy(
+            mtlNew->stateBitsTable,
+            mtlCopy->stateBitsTable,
+            bytes);
+    }
+    else
+    {
+        mtlNew->stateBitsTable = nullptr;
+    }
+
+    if (mtlCopy->textureCount)
+    {
+        const size_t bytes =
+            sizeof(MaterialTextureDef) * static_cast<size_t>(mtlCopy->textureCount);
+        mtlNew->textureTable =
+            reinterpret_cast<MaterialTextureDef *>(Material_Alloc(
+                static_cast<uint32_t>(bytes)));
+        std::memcpy(
+            mtlNew->textureTable,
+            mtlCopy->textureTable,
+            bytes);
+    }
+    else
+    {
+        mtlNew->textureTable = nullptr;
+    }
+
+    if (mtlCopy->constantCount)
+    {
+        const size_t bytes =
+            sizeof(MaterialConstantDef) * static_cast<size_t>(mtlCopy->constantCount);
+        mtlNew->constantTable =
+            reinterpret_cast<MaterialConstantDef *>(Material_Alloc(
+                static_cast<uint32_t>(bytes)));
+        std::memcpy(
+            mtlNew->constantTable,
+            mtlCopy->constantTable,
+            bytes);
+    }
+    else
+    {
+        mtlNew->constantTable = nullptr;
+    }
+
+    Material_Add(mtlNew, hashIndex[0]);
+    return mtlNew;
+#else
     uint32_t v3; // [esp+8h] [ebp-30h]
     const char *nameBackup; // [esp+18h] [ebp-20h]
     Material *mtlNewa; // [esp+1Ch] [ebp-1Ch]
@@ -4726,8 +4821,6 @@ Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name)
     uint32_t textureTableSize; // [esp+30h] [ebp-8h]
     uint32_t stateBitsTableSize; // [esp+34h] [ebp-4h]
 
-    iassert( mtlCopy );
-    iassert( name );
     Material_GetHashIndex(name, hashIndex, &exists);
     if (exists)
     {
@@ -4738,31 +4831,30 @@ Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name)
         rgp.needSortMaterials = 1;
         return mtlNewa;
     }
-    else
+
+    v3 = strlen(name);
+    mtlNew = Material_Alloc(v3 + 81);
+    memcpy(mtlNew, mtlCopy, 0x50u);
+    *(_DWORD *)mtlNew = (uint32)mtlNew + 80;
+    memcpy(*(uint8_t **)mtlNew, (uint8_t *)name, v3 + 1);
+    stateBitsTableSize = 8 * mtlCopy->stateBitsCount;
+    *((_DWORD *)mtlNew + 19) = (uint32)Material_Alloc(stateBitsTableSize);
+    memcpy(*((uint8_t **)mtlNew + 19), (uint8_t *)mtlCopy->stateBitsTable, stateBitsTableSize);
+    if (mtlCopy->textureTable)
     {
-        v3 = strlen(name);
-        mtlNew = Material_Alloc(v3 + 81);
-        memcpy(mtlNew, mtlCopy, 0x50u);
-        *(_DWORD *)mtlNew = (uint32)mtlNew + 80;
-        memcpy(*(uint8_t **)mtlNew, (uint8_t *)name, v3 + 1);
-        stateBitsTableSize = 8 * mtlCopy->stateBitsCount;
-        *((_DWORD *)mtlNew + 19) = (uint32)Material_Alloc(stateBitsTableSize);
-        memcpy(*((uint8_t **)mtlNew + 19), (uint8_t *)mtlCopy->stateBitsTable, stateBitsTableSize);
-        if (mtlCopy->textureTable)
-        {
-            textureTableSize = 12 * mtlCopy->textureCount;
-            *((_DWORD *)mtlNew + 17) = (uint32)Material_Alloc(textureTableSize);
-            memcpy(*((uint8_t **)mtlNew + 17), (uint8_t *)mtlCopy->textureTable, textureTableSize);
-        }
-        if (mtlCopy->constantTable)
-        {
-            constantTableSize = 32 * mtlCopy->constantCount;
-            *((_DWORD *)mtlNew + 18) = (uint32)Material_Alloc(constantTableSize);
-            memcpy(*((uint8_t **)mtlNew + 18), (uint8_t *)mtlCopy->constantTable, constantTableSize);
-        }
-        Material_Add((Material *)mtlNew, hashIndex[0]);
-        return (Material *)mtlNew;
+        textureTableSize = 12 * mtlCopy->textureCount;
+        *((_DWORD *)mtlNew + 17) = (uint32)Material_Alloc(textureTableSize);
+        memcpy(*((uint8_t **)mtlNew + 17), (uint8_t *)mtlCopy->textureTable, textureTableSize);
     }
+    if (mtlCopy->constantTable)
+    {
+        constantTableSize = 32 * mtlCopy->constantCount;
+        *((_DWORD *)mtlNew + 18) = (uint32)Material_Alloc(constantTableSize);
+        memcpy(*((uint8_t **)mtlNew + 18), (uint8_t *)mtlCopy->constantTable, constantTableSize);
+    }
+    Material_Add((Material *)mtlNew, hashIndex[0]);
+    return (Material *)mtlNew;
+#endif
 }
 
 Material *__cdecl R_GetBspMaterial(uint32_t materialIndex)
