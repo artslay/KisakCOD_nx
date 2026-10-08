@@ -1004,7 +1004,7 @@ bool __cdecl UI_DvarValueTest(const char *cmd, const char *dvarName, const char 
 
     if (!dvar)
     {
-        Com_Printf(CON_CHANNEL_UI, "%s: cannot find dvar %s\\n", cmd, dvarName);
+        Com_Printf(CON_CHANNEL_UI, "%s: cannot find dvar %s\n", cmd, dvarName);
         return 0;
     }
 
