@@ -8396,6 +8396,12 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
 
 #ifdef __SWITCH__
+    // Resolve any forward technique references that were waiting on an inline
+    // MaterialTechnique registered later in this set. Unresolved destinations
+    // remain null until their alias becomes available; they must never expose
+    // the serialized stream address to renderer code.
+    DB_FixupSwitchPointerAliases();
+
     if (traceRawType == 5u &&
         traceAssetIndex >= 1501 &&
         traceAssetIndex <= 1502)
