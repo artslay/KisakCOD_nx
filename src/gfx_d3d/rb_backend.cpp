@@ -259,10 +259,31 @@ void __cdecl RB_DrawStretchPic(
     tess.indices[tess.indexCount + 3] = vertCount + 2;
     tess.indices[tess.indexCount + 4] = vertCount;
     tess.indices[tess.indexCount + 5] = vertCount + 1;
-    R_SetVertex2d(&tess.verts[tess.vertexCount], x, y, s0, t0, color);
-    R_SetVertex2d(&tess.verts[tess.vertexCount + 1], x + w, y, s1, t0, color);
-    R_SetVertex2d(&tess.verts[tess.vertexCount + 2], x + w, y + h, s1, t1, color);
-    R_SetVertex2d(&tess.verts[tess.vertexCount + 3], x, y + h, s0, t1, color);
+#ifdef __SWITCH__
+    // The menu button's final ~8px is a real translucent cap. Keep the full
+    // geometry, but fade its alpha across the cap so it remains visible without
+    // becoming a hard vertical line after straight-alpha blending is enabled.
+    uint32_t leftColor = color;
+    uint32_t rightColor = color;
+    if (material && material->textureCount && material->textureTable &&
+        material->textureTable[0].u.image &&
+        material->textureTable[0].u.image->name &&
+        !I_stricmp(material->textureTable[0].u.image->name, "default") &&
+        w > 0.0f && w <= 16.0f &&
+        h >= 24.0f && h <= 40.0f)
+    {
+        const uint32_t alpha = (color >> 24) & 0xFFu;
+        const uint32_t fadedAlpha = (alpha * 3u) / 4u;
+        rightColor = (color & 0x00FFFFFFu) | (fadedAlpha << 24);
+    }
+#else
+    const uint32_t leftColor = color;
+    const uint32_t rightColor = color;
+#endif
+    R_SetVertex2d(&tess.verts[tess.vertexCount], x, y, s0, t0, leftColor);
+    R_SetVertex2d(&tess.verts[tess.vertexCount + 1], x + w, y, s1, t0, rightColor);
+    R_SetVertex2d(&tess.verts[tess.vertexCount + 2], x + w, y + h, s1, t1, rightColor);
+    R_SetVertex2d(&tess.verts[tess.vertexCount + 3], x, y + h, s0, t1, leftColor);
     tess.vertexCount += 4;
     tess.indexCount += 6;
 }
