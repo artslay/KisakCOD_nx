@@ -297,13 +297,6 @@ static void Switch_ResolveSerializedPointer(
     if (serializedAddress < 0x10000u ||
         (serializedAddress & (alignof(T) - 1u)) != 0)
     {
-        if (r_logFile && r_logFile->current.integer)
-        {
-            RB_LogPrint(
-                "Switch_ResolveSerializedPointer(%s): rejecting invalid pointer %p\n",
-                kind ? kind : "unknown",
-                reinterpret_cast<void *>(serializedAddress));
-        }
         *pointer = nullptr;
         return;
     }
@@ -327,13 +320,6 @@ static void Switch_ResolveSerializedPointer(
             (resolvedPointer & (alignof(T) - 1u)) != 0 ||
             Switch_IsSerializedAddress(resolvedPointer))
         {
-            if (r_logFile && r_logFile->current.integer)
-            {
-                RB_LogPrint(
-                    "Switch_ResolveSerializedPointer(%s): rejecting invalid resolved pointer %p\n",
-                    kind ? kind : "unknown",
-                    reinterpret_cast<void *>(resolvedPointer));
-            }
             *pointer = nullptr;
             return;
         }
@@ -352,15 +338,10 @@ static void Switch_ResolveSerializedPointer(
     {
         // An unresolved value outside all serialized stream blocks is not a
         // valid object address. Do not expose it to the render thread.
-        if (r_logFile && r_logFile->current.integer)
-        {
-            RB_LogPrint(
-                "Switch_ResolveSerializedPointer(%s): unresolved non-stream pointer %p\n",
-                kind ? kind : "unknown",
-                reinterpret_cast<void *>(serializedAddress));
-        }
         *pointer = nullptr;
     }
+
+    (void)kind;
 }
 
 static void Switch_ResolveNativeTechniquePointers(MaterialTechniqueSet *techSet)
