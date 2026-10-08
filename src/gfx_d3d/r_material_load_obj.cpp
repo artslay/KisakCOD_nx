@@ -4734,27 +4734,27 @@ Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name)
         Material *existing = rg.materialHashTable[hashIndex[0]];
         const char *nameBackup = existing->info.name;
 
-        std::memcpy(existing, mtlCopy, sizeof(Material));
+        memcpy(existing, mtlCopy, sizeof(Material));
         existing->info.name = nameBackup;
         rgp.needSortMaterials = 1;
         return existing;
     }
 
-    const size_t nameLength = std::strlen(name);
+    const size_t nameLength = strlen(name);
     const size_t materialBytes = sizeof(Material);
     uint8_t *memory = Material_Alloc(
         static_cast<uint32_t>(materialBytes + nameLength + 1));
 
-    std::memset(
+    memset(
         memory,
         0,
         materialBytes + nameLength + 1);
 
     Material *mtlNew = reinterpret_cast<Material *>(memory);
-    std::memcpy(mtlNew, mtlCopy, sizeof(Material));
+    memcpy(mtlNew, mtlCopy, sizeof(Material));
 
     char *nameStorage = reinterpret_cast<char *>(memory + materialBytes);
-    std::memcpy(nameStorage, name, nameLength + 1);
+    memcpy(nameStorage, name, nameLength + 1);
     mtlNew->info.name = nameStorage;
 
     if (mtlCopy->stateBitsCount)
@@ -4764,7 +4764,7 @@ Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name)
         mtlNew->stateBitsTable =
             reinterpret_cast<GfxStateBits *>(Material_Alloc(
                 static_cast<uint32_t>(bytes)));
-        std::memcpy(
+        memcpy(
             mtlNew->stateBitsTable,
             mtlCopy->stateBitsTable,
             bytes);
@@ -4781,7 +4781,7 @@ Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name)
         mtlNew->textureTable =
             reinterpret_cast<MaterialTextureDef *>(Material_Alloc(
                 static_cast<uint32_t>(bytes)));
-        std::memcpy(
+        memcpy(
             mtlNew->textureTable,
             mtlCopy->textureTable,
             bytes);
@@ -4798,7 +4798,7 @@ Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name)
         mtlNew->constantTable =
             reinterpret_cast<MaterialConstantDef *>(Material_Alloc(
                 static_cast<uint32_t>(bytes)));
-        std::memcpy(
+        memcpy(
             mtlNew->constantTable,
             mtlCopy->constantTable,
             bytes);
