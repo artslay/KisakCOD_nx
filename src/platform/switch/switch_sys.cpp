@@ -368,7 +368,7 @@ void Switch_LogWrite(const char *msg)
     };
     const bool keepUiMaterialDiag =
         std::strncmp(msg, "[KisakCOD][UI MENU]", 19) == 0 ||
-        std::strncmp(msg, "[KisakCOD][UI MATERIAL]", 23) == 0 ||
+        std::strncmp(msg, "[KisakCOD][UI BIND]", 20) == 0 ||
         std::strncmp(msg, "[KisakCOD][UI ITEM]", 19) == 0;
 
     for (const char *prefix : kSuppressedPrefixes)
