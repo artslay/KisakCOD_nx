@@ -52,6 +52,41 @@ static inline void Switch_LogWriteFiltered(const char *msg)
 #endif
 
 #ifdef __SWITCH__
+static inline void Switch_UI_LogMaterial(
+    const char *where,
+    const char *ownerName,
+    const Material *material)
+{
+    if (!material)
+        return;
+
+    const char *materialName = material->info.name ? material->info.name : "<null>";
+    const MaterialTextureDef *tex = material->textureTable;
+    const GfxImage *image = tex && material->textureCount ? tex[0].u.image : nullptr;
+    const char *imageName = image && image->name ? image->name : "<null>";
+
+    char trace[640];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][UI MATERIAL] %s owner=%s material=%p name=%s textures=%u "
+        "image0=%p image0Name=%s techSet=%p stateBits=%p stateCount=%u flags=0x%02x\n",
+        where,
+        ownerName ? ownerName : "<null>",
+        static_cast<const void *>(material),
+        materialName,
+        static_cast<unsigned>(material->textureCount),
+        static_cast<const void *>(image),
+        imageName,
+        static_cast<const void *>(material->techniqueSet),
+        static_cast<const void *>(material->stateBitsTable),
+        static_cast<unsigned>(material->stateBitsCount),
+        static_cast<unsigned>(material->stateFlags));
+    Switch_LogWrite(trace);
+}
+#endif
+
+#ifdef __SWITCH__
 static inline bool Switch_UI_BadPointer(const void *ptr)
 {
     if (!ptr)
@@ -5576,6 +5611,20 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     }
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/zonetext";
 #endif
+#ifdef __SWITCH__
+    if (menu->window.name && !I_stricmp(menu->window.name, "main"))
+    {
+        static uint32_t switchMainMaterialTraceCount = 0;
+        if (switchMainMaterialTraceCount < 4)
+        {
+            Switch_UI_LogMaterial(
+                "main/menu_background",
+                menu->window.name,
+                menu->window.background);
+            ++switchMainMaterialTraceCount;
+        }
+    }
+#endif
     float fadeCycle; // [esp+1Ch] [ebp-14h]
     float v4; // [esp+20h] [ebp-10h]
     float v5; // [esp+24h] [ebp-Ch]
@@ -6312,6 +6361,19 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                         colorGreen);
                 }
 #ifdef __SWITCH__
+                if (item->parent && item->parent->window.name &&
+                    !I_stricmp(item->parent->window.name, "main"))
+                {
+                    static uint32_t switchMainItemMaterialTraceCount = 0;
+                    if (switchMainItemMaterialTraceCount < 16)
+                    {
+                        Switch_UI_LogMaterial(
+                            "main/item_background",
+                            item->window.name,
+                            item->window.background);
+                        ++switchMainItemMaterialTraceCount;
+                    }
+                }
                 g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/payload";
 #endif
                 if (item->window.style != 5)
