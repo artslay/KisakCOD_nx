@@ -6642,12 +6642,24 @@ void __cdecl Load_MaterialVertexShader(bool atStreamStart)
 }
 void __cdecl Load_MaterialVertexShaderPtr(bool atStreamStart)
 {
-    Load_Stream(atStreamStart, (uint8_t *)varMaterialVertexShaderPtr, 4);
-    if (*varMaterialVertexShaderPtr)
-    {
 #ifdef __SWITCH__
-        const uint32_t value = static_cast<uint32_t>(
+    uint32_t value = 0;
+    if (atStreamStart)
+    {
+        Load_Stream(
+            true,
+            reinterpret_cast<uint8_t *>(&value),
+            sizeof(value));
+    }
+    else
+    {
+        value = static_cast<uint32_t>(
             reinterpret_cast<uintptr_t>(*varMaterialVertexShaderPtr));
+    }
+
+    *varMaterialVertexShaderPtr = nullptr;
+    if (value)
+    {
         if (value == UINT32_MAX || value == UINT32_MAX - 1u)
         {
             // -1 = inline object, -2 = inline object plus an insertion alias.
@@ -6695,6 +6707,7 @@ void __cdecl Load_MaterialVertexShaderPtr(bool atStreamStart)
                             varMaterialVertexShaderPtr));
             }
         }
+    }
 #else
         if (*varMaterialVertexShaderPtr == (MaterialVertexShader *)-1)
         {
@@ -6851,12 +6864,24 @@ static void Load_MaterialPixelShaderHandle(bool atStreamStart)
 
 void __cdecl Load_MaterialPixelShaderPtr(bool atStreamStart)
 {
-    Load_Stream(atStreamStart, (uint8_t *)varMaterialPixelShaderPtr, 4);
-    if (*varMaterialPixelShaderPtr)
-    {
 #ifdef __SWITCH__
-        const uint32_t value = static_cast<uint32_t>(
+    uint32_t value = 0;
+    if (atStreamStart)
+    {
+        Load_Stream(
+            true,
+            reinterpret_cast<uint8_t *>(&value),
+            sizeof(value));
+    }
+    else
+    {
+        value = static_cast<uint32_t>(
             reinterpret_cast<uintptr_t>(*varMaterialPixelShaderPtr));
+    }
+
+    *varMaterialPixelShaderPtr = nullptr;
+    if (value)
+    {
         if (value == UINT32_MAX || value == UINT32_MAX - 1u)
         {
             // -1 = inline object, -2 = inline object plus an insertion alias.
@@ -6904,6 +6929,7 @@ void __cdecl Load_MaterialPixelShaderPtr(bool atStreamStart)
                             varMaterialPixelShaderPtr));
             }
         }
+    }
 #else
         if (*varMaterialPixelShaderPtr == (MaterialPixelShader *)-1)
         {
@@ -7419,6 +7445,65 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
     const uint8_t *techniqueStart = DB_GetStreamPos();
     DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
+#ifdef __SWITCH__
+    // A real CoD4 technique has only a small number of passes. 0xffff here
+    // means the cursor is not at a MaterialTechnique header; accepting it
+    // would turn the next Load_MaterialPassArray into a 65,535-entry read.
+    if (serialized.passCount > 64u)
+    {
+        int techniqueIndex = -1;
+        if (varMaterialTechniqueSet &&
+            varMaterialTechniquePtr >= varMaterialTechniqueSet->techniques &&
+            varMaterialTechniquePtr <
+                varMaterialTechniqueSet->techniques + TECHNIQUE_COUNT)
+        {
+            techniqueIndex = static_cast<int>(
+                varMaterialTechniquePtr - varMaterialTechniqueSet->techniques);
+        }
+
+        char trace[640];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL TECHNIQUE INVALID] asset=%d rawType=%u stream=%u offset=%u start=%p index=%d name=%08x flags=%04x passCount=%04x after=%p bytes=",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<unsigned>(techniqueHeaderStream),
+            techniqueHeaderOffset,
+            static_cast<const void *>(techniqueStart),
+            techniqueIndex,
+            serialized.name,
+            static_cast<unsigned>(serialized.flags),
+            static_cast<unsigned>(serialized.passCount),
+            static_cast<void *>(DB_GetStreamPos()));
+
+        const uint8_t *raw =
+            reinterpret_cast<const uint8_t *>(&serialized);
+        int written = static_cast<int>(std::strlen(trace));
+        for (size_t i = 0; i < sizeof(serialized) && written < 600; ++i)
+        {
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                "%02x",
+                static_cast<unsigned>(raw[i]));
+        }
+        std::snprintf(
+            trace + written,
+            sizeof(trace) - static_cast<size_t>(written),
+            "\n");
+        Switch_LogWrite(trace);
+        Sys_Error(
+            "Invalid MaterialTechnique passCount=%u asset=%d index=%d stream=%u offset=%u",
+            static_cast<unsigned>(serialized.passCount),
+            g_switchCurrentAssetIndex,
+            techniqueIndex,
+            static_cast<unsigned>(techniqueHeaderStream),
+            techniqueHeaderOffset);
+        return;
+    }
+#endif
+
     
     // MaterialTechnique has one trailing pass in its C++ type. Reserve only
     // the actual pass count from the serialized header instead of a worst-case
@@ -7750,14 +7835,24 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
 {
 #ifdef __SWITCH__
     const void **inserted = nullptr;
-#endif
-    Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniquePtr, 4);
-    if (*varMaterialTechniquePtr)
+    uint32_t value = 0;
+
+    if (atStreamStart)
     {
-#ifdef __SWITCH__
-        const uint32_t value =
-            static_cast<uint32_t>(
-                reinterpret_cast<uintptr_t>(*varMaterialTechniquePtr));
+        Load_Stream(
+            true,
+            reinterpret_cast<uint8_t *>(&value),
+            sizeof(value));
+    }
+    else
+    {
+        value = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(*varMaterialTechniquePtr));
+    }
+
+    *varMaterialTechniquePtr = nullptr;
+    if (value)
+    {
         if (value == UINT32_MAX || value == UINT32_MAX - 1u)
         {
             // Mirror the serialized-header alignment previously supplied by
@@ -7812,6 +7907,7 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
                 }
             }
         }
+    }
 #else
         if (*varMaterialTechniquePtr == (MaterialTechnique *)-1)
         {
