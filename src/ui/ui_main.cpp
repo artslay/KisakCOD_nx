@@ -2199,6 +2199,27 @@ void UI_CreatePlayerProfile()
         I_strncpyz(name, ui_playerProfileNameNew->current.string, 32);
         Dvar_SetString((dvar_s *)ui_playerProfileNameNew, (char *)"");
 
+#ifdef __SWITCH__
+        /*
+         * CoD4 profile names are filename-like single-byte strings. The
+         * Switch software keyboard can return UTF-8, but the legacy UI font
+         * path consumes one byte per character. Strip non-ASCII/control/path
+         * bytes here so the newly created profile is displayed identically
+         * in the profile feeder and remains a valid profile directory name.
+         */
+        {
+            unsigned int writePos = 0;
+            for (unsigned int readPos = 0; readPos < sizeof(name) - 1 && name[readPos]; ++readPos)
+            {
+                const unsigned char ch = static_cast<unsigned char>(name[readPos]);
+                if (ch < 0x20 || ch > 0x7E || ch == '/' || ch == '\\')
+                    continue;
+                name[writePos++] = static_cast<char>(ch);
+            }
+            name[writePos] = '\0';
+        }
+#endif
+
         uiInfo_s *uiInfo = &::uiInfo;
         if (uiInfo->playerProfileCount == 64)
         {
