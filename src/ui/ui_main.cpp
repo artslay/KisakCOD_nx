@@ -953,7 +953,8 @@ int __cdecl UI_GetOpenOrCloseMenuOnDvarArgs(
 
 bool __cdecl UI_DvarValueTest(const char *cmd, const char *dvarName, const char *testValue, bool wantMatch)
 {
-    const char *VariantString; // r3
+    const dvar_t *dvar;
+    const char *variantString;
 
     if (!cmd)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\ui\\ui_main.cpp", 1609, 0, "%s", "cmd");
@@ -961,16 +962,54 @@ bool __cdecl UI_DvarValueTest(const char *cmd, const char *dvarName, const char 
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\ui\\ui_main.cpp", 1610, 0, "%s", "dvarName");
     if (!testValue)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\ui\\ui_main.cpp", 1611, 0, "%s", "testValue");
-    if (Dvar_FindVar(dvarName))
+
+    dvar = Dvar_FindVar(dvarName);
+
+    // Stock SP menus evaluate these profile dvars while the UI zone is
+    // loading. Materialize the known menu dependencies at the point of use
+    // when they are not present yet, and use the returned pointer directly.
+    if (!dvar)
     {
-        VariantString = Dvar_GetVariantString(dvarName);
-        return (__PAIR64__(wantMatch, I_stricmp(testValue, VariantString)) - 1) >> 32 == 0;
+        if (!I_stricmp(dvarName, "ui_sp_unlock"))
+        {
+            dvar = Dvar_RegisterBool(
+                "ui_sp_unlock",
+                0,
+                DVAR_NOFLAG,
+                "Single-player unlock state");
+        }
+        else if (!I_stricmp(dvarName, "com_playerProfile"))
+        {
+            if (!com_playerProfile)
+                com_playerProfile = Dvar_RegisterString(
+                    "com_playerProfile",
+                    "",
+                    DVAR_ROM,
+                    "Player profile");
+            dvar = com_playerProfile;
+        }
+        else if (!I_stricmp(dvarName, "ui_playerProfileCount"))
+        {
+            if (!ui_playerProfileCount)
+                ui_playerProfileCount = Dvar_RegisterInt(
+                    "ui_playerProfileCount",
+                    0,
+                    0,
+                    0x7FFFFFFF,
+                    0x40u,
+                    "Number of player profiles");
+            dvar = ui_playerProfileCount;
+        }
     }
-    else
+
+    if (!dvar)
     {
-        Com_Printf(CON_CHANNEL_UI, "%s: cannot find dvar %s\n", cmd, dvarName);
+        Com_Printf(CON_CHANNEL_UI, "%s: cannot find dvar %s\\n", cmd, dvarName);
         return 0;
     }
+
+    variantString = Dvar_ValueToString(dvar, dvar->current);
+    return (__PAIR64__(wantMatch, I_stricmp(testValue, variantString)) - 1) >> 32 == 0;
 }
 
 void __cdecl UI_OpenMenuOnDvar(const char *cmd, const char *menuName, const char *dvarName, const char *testValue)
