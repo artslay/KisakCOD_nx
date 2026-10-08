@@ -315,7 +315,12 @@ int  R_SkinSceneDObjModels(
                 }
                 else
                 {
-                    surfPos2->oldSkinnedCachedOffset = static_cast<int>(reinterpret_cast<uintptr_t>(&frontEndDataOut->tempSkinBuf[sizeof(GfxPackedVertex) * surfPos2->skinnedCachedOffset + firstSurf]));
+                    surfPos2->skinnedVert =
+                        reinterpret_cast<GfxPackedVertex *>(
+                            &frontEndDataOut->tempSkinBuf[
+                                sizeof(GfxPackedVertex) *
+                                    surfPos2->skinnedCachedOffset +
+                                firstSurf]);
                     surfPos2->skinnedCachedOffset = -1;
                     ++surfPos2;
                 }
