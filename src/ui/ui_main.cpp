@@ -273,6 +273,13 @@ void __cdecl UI_DrawHighlightRect(
     const float *hiColor,
     const float *loColor)
 {
+#ifdef __SWITCH__
+    // The legacy highlight is four flat white quads. On the Vulkan UI path
+    // those quads become the hard translucent boxes around menu entries,
+    // including the solid vertical right edge. The actual button/background
+    // material already provides the intended soft smoky transition.
+    return;
+#endif
     float v10; // [esp+8h] [ebp-D8h]
     float v11; // [esp+10h] [ebp-D0h]
     float v12; // [esp+14h] [ebp-CCh]
