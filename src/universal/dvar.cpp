@@ -893,9 +893,9 @@ int __cdecl Dvar_ValuesEqual(uint8_t type, DvarValue val0, DvarValue val1)
         result = val0.integer == val1.integer;
         break;
     case 7u:
-        if (!val0.integer)
+        if (!val0.string)
             MyAssertHandler(".\\universal\\dvar.cpp", 853, 0, "%s", "val0.string");
-        if (!val1.integer)
+        if (!val1.string)
             MyAssertHandler(".\\universal\\dvar.cpp", 854, 0, "%s", "val1.string");
         result = strcmp(val0.string, val1.string) == 0;
         break;
