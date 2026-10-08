@@ -2906,7 +2906,12 @@ char *__cdecl UI_ReplaceConversionInts(
         v11 = numInts;
         do
         {
-            sprintf(v10, "%d", *(const char **)((char *)args + v9)); // TODO: Fix this
+            int replaceValue = 0;
+            std::memcpy(
+                &replaceValue,
+                replaceInts + static_cast<size_t>(args - v13.args) * sizeof(replaceValue),
+                sizeof(replaceValue));
+            sprintf(v10, "%d", replaceValue);
             --v11;
             *args = v10;
             v10 += 32;
