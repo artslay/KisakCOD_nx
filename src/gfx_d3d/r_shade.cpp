@@ -10,6 +10,11 @@
 #include "r_water.h"
 #include "r_image.h"
 
+#ifdef __SWITCH__
+extern thread_local uint32_t g_switchLastSamplerNameHashes[16];
+extern thread_local uint8_t g_switchLastSamplerSemantics[16];
+#endif
+
 
 int __cdecl R_ReserveIndexData(GfxCmdBufPrimState *state, int triCount)
 {
@@ -639,6 +644,13 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
     if (rg.hasAnyImageOverrides)
         R_OverrideImage(&image, texDef);
 
+#ifdef __SWITCH__
+    if (arg->dest < 16)
+    {
+        g_switchLastSamplerNameHashes[arg->dest] = texDef->nameHash;
+        g_switchLastSamplerSemantics[arg->dest] = texDef->semantic;
+    }
+#endif
     R_SetSampler(context, arg->dest, texDef->samplerState, image);
     return texDef;
 }
