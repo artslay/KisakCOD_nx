@@ -8420,19 +8420,33 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
     }
 #endif
     const void **inserted; // [esp+0h] [ebp-Ch]
-    uint32_t value; // [esp+4h] [ebp-8h]
+    uint32_t value = 0;
 
 #ifdef __SWITCH__
-    // Material's serialized 80-byte header has already been decoded by
-    // Load_Material() before this helper is called with atStreamStart=false.
-    // Do not consume another 32-bit value from stream 4 in that case: those
-    // bytes belong to the nested TechniqueSet payload and would overwrite the
-    // native pointer token with unrelated data (often zero).
+    // Fastfiles always store this pointer token as a 32-bit value. Never read
+    // it directly into the native 64-bit pointer slot: doing so leaves half of
+    // the ARM64 pointer unchanged and can produce values such as
+    // 0x00030003ababab00.
     if (atStreamStart)
-        Load_Stream(true, reinterpret_cast<uint8_t *>(varMaterialTechniqueSetPtr), 4);
+    {
+        Load_Stream(
+            true,
+            reinterpret_cast<uint8_t *>(&value),
+            sizeof(value));
+    }
+    else
+    {
+        value = static_cast<uint32_t>(
+            reinterpret_cast<uintptr_t>(*varMaterialTechniqueSetPtr));
+    }
+
+    *varMaterialTechniqueSetPtr = nullptr;
+
     // The pointer slot lives in the active virtual stream, but an inline
 #else
     Load_Stream(atStreamStart, (uint8_t *)varMaterialTechniqueSetPtr, 4);
+    value = static_cast<uint32_t>(
+        reinterpret_cast<uintptr_t>(*varMaterialTechniqueSetPtr));
 #endif
 #ifdef __SWITCH__
     // The pointer slot lives in the active virtual stream, but an inline
@@ -8440,9 +8454,8 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
     // Load_MaterialTechniqueSet() then switches to stream 4 for its children.
     DB_PushStreamPos(0);
 #endif
-    if (*varMaterialTechniqueSetPtr)
+    if (value)
     {
-        value = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(*varMaterialTechniqueSetPtr));
 #ifdef __SWITCH__
         const bool traceCinematic =
             g_switchCurrentAssetRawType == 5u &&
