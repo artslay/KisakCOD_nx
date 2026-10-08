@@ -6,9 +6,6 @@
 #include <universal/q_shared.h>
 #include "../client/client.h"
 #include "win_local.h"
-#ifdef __SWITCH__
-#include <platform/switch/switch_gamepad.h>
-#endif
 #include <gfx_d3d/r_dvars.h>
 
 #ifdef KISAK_MP
