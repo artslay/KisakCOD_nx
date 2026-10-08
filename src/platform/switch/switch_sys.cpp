@@ -16,6 +16,7 @@
 #include <qcommon/qcommon.h>
 #include <qcommon/threads.h>
 #include <win32/win_local.h>
+#include "switch_gamepad.h"
 
 static const auto g_sysStart = std::chrono::steady_clock::now();
 static std::recursive_mutex g_sysCritical[32];
@@ -797,6 +798,7 @@ void __cdecl IN_ActivateMouse(int)
 
 void __cdecl IN_Frame()
 {
+    Switch_GamepadFrame();
 }
 
 void __cdecl IN_Activate(qboolean active)
