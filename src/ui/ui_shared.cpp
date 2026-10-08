@@ -69,7 +69,7 @@ static inline void Switch_UI_LogMaterial(
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][UI MATERIAL] %s owner=%s material=%p name=%s textures=%u "
+        "[KisakCOD][UI BIND] %s owner=%s material=%p name=%s textures=%u "
         "image0=%p image0Name=%s techSet=%p stateBits=%p stateCount=%u flags=0x%02x\n",
         where,
         ownerName ? ownerName : "<null>",
