@@ -1095,12 +1095,6 @@ sleeps msec or until net socket is ready
 ====================
 */
 // LWSS: Done
-void NET_Sleep( int msec ) 
-{
-	Sleep(msec);
-}
-
-
 /*
 ====================
 NET_Restart_f
