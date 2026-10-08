@@ -683,8 +683,7 @@ bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][FONT TECH ALIAS] depth=%u current=%p block=%d offset=%08x raw=%08x aliases=%zu
-",
+                    "[KisakCOD][FONT TECH ALIAS] depth=%u current=%p block=%d offset=%08x raw=%08x aliases=%zu\n",
                     static_cast<unsigned>(depth),
                     reinterpret_cast<const void *>(current),
                     currentBlock,
