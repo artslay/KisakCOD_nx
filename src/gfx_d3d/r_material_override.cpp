@@ -289,8 +289,26 @@ static void Switch_ResolveSerializedPointer(
 
     const uintptr_t serializedAddress =
         reinterpret_cast<uintptr_t>(*pointer);
-    uintptr_t resolvedPointer = 0;
 
+    // Serialized fastfiles are 32-bit, while the Switch runtime is ARM64.
+    // Reject impossible native pointers before they can reach the renderer.
+    // This also catches stale serialized/text data accidentally interpreted
+    // as a pointer (for example the crash's ASCII-looking FAR/X0 value).
+    if (serializedAddress < 0x10000u ||
+        (serializedAddress & (alignof(T) - 1u)) != 0)
+    {
+        if (r_logFile && r_logFile->current.integer)
+        {
+            RB_LogPrint(
+                "Switch_ResolveSerializedPointer(%s): rejecting invalid pointer %p\n",
+                kind ? kind : "unknown",
+                reinterpret_cast<void *>(serializedAddress));
+        }
+        *pointer = nullptr;
+        return;
+    }
+
+    uintptr_t resolvedPointer = 0;
     bool resolved =
         DB_ResolveSwitchPointerAlias(
             serializedAddress,
@@ -305,18 +323,44 @@ static void Switch_ResolveSerializedPointer(
 
     if (resolved && resolvedPointer)
     {
+        if (resolvedPointer < 0x10000u ||
+            (resolvedPointer & (alignof(T) - 1u)) != 0 ||
+            Switch_IsSerializedAddress(resolvedPointer))
+        {
+            if (r_logFile && r_logFile->current.integer)
+            {
+                RB_LogPrint(
+                    "Switch_ResolveSerializedPointer(%s): rejecting invalid resolved pointer %p\n",
+                    kind ? kind : "unknown",
+                    reinterpret_cast<void *>(resolvedPointer));
+            }
+            *pointer = nullptr;
+            return;
+        }
+
         *pointer = reinterpret_cast<T *>(resolvedPointer);
     }
     else if (Switch_IsSerializedAddress(serializedAddress))
     {
-        // Keep a forward serialized reference fixable if the native object is
-        // registered after this remapped technique set is exposed.
+        // Keep forward serialized references fixable until the native object
+        // has been registered in the Switch alias table.
         DB_AddSwitchPointerAliasFixup(
             serializedAddress,
             reinterpret_cast<uintptr_t *>(pointer));
     }
-
-    (void)kind;
+    else
+    {
+        // An unresolved value outside all serialized stream blocks is not a
+        // valid object address. Do not expose it to the render thread.
+        if (r_logFile && r_logFile->current.integer)
+        {
+            RB_LogPrint(
+                "Switch_ResolveSerializedPointer(%s): unresolved non-stream pointer %p\n",
+                kind ? kind : "unknown",
+                reinterpret_cast<void *>(serializedAddress));
+        }
+        *pointer = nullptr;
+    }
 }
 
 static void Switch_ResolveNativeTechniquePointers(MaterialTechniqueSet *techSet)
