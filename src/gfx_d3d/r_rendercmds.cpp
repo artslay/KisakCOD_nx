@@ -751,7 +751,30 @@ void __cdecl R_AddCmdDrawStretchPic(
 #endif
 
     actualMaterial = defaultMaterial;
-    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+#ifdef __SWITCH__
+    // These are authored CoD4 2D menu materials. Their narrow cap contains
+    // the angled right edge visible in the original menu. Do not run them
+    // through the generic depth/fog fallback: doing so replaces the authored
+    // material with $default before the sampler resolver can bind
+    // button_highlight_end.
+    const char *switchRequestedMaterialName =
+        material ? Material_GetName(material) : nullptr;
+    const bool switchKeepOriginalUiMaterial =
+        switchRequestedMaterialName &&
+        (!I_stricmp(switchRequestedMaterialName, "button_highlight_end") ||
+         !I_stricmp(switchRequestedMaterialName, "images/button_highlight_end") ||
+         !I_stricmp(switchRequestedMaterialName, "button_highlight_end.iwi") ||
+         !I_stricmp(switchRequestedMaterialName, "images/button_highlight_end.iwi") ||
+         !I_stricmp(switchRequestedMaterialName, "gradient_fadein") ||
+         !I_stricmp(switchRequestedMaterialName, "images/gradient_fadein") ||
+         !I_stricmp(switchRequestedMaterialName, "gradient_fadein.iwi") ||
+         !I_stricmp(switchRequestedMaterialName, "images/gradient_fadein.iwi"));
+#else
+    const bool switchKeepOriginalUiMaterial = false;
+#endif
+
+    if (!switchKeepOriginalUiMaterial &&
+        (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial)))
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
@@ -763,7 +786,7 @@ void __cdecl R_AddCmdDrawStretchPic(
             actualMaterial = rgp.defaultMaterial;
         }
     }
-    else
+    else if (!switchKeepOriginalUiMaterial)
     {
         v10 = Material_GetName(material);
         Com_PrintWarning(
