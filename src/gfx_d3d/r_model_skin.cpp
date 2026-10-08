@@ -123,7 +123,8 @@ void R_SkinXModelCmd(_WORD *data)
 
         if (skinnedSurf->skinnedCachedOffset == -2)
         {
-            surfPos = (GfxModelSkinnedSurface *)((char *)surfPos + 56);
+            surfPos = reinterpret_cast<GfxModelSkinnedSurface *>(
+                (char *)surfPos + sizeof(GfxModelRigidSurface));
             continue;
         }
 
