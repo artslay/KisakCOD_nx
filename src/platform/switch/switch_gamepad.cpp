@@ -199,9 +199,4 @@ float CL_GamepadAxisValue(int localClientNum, int axis)
     }
 }
 
-int CL_ControllerIndexFromClientNum(int localClientNum)
-{
-    return localClientNum;
-}
-
 #endif
