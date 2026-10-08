@@ -553,13 +553,14 @@ static bool SwitchProfilePath(char *dst, size_t dstSize, const char *qpath)
         return false;
     }
 
-    std::snprintf(
+    const int written = std::snprintf(
         dst,
         dstSize,
         "%s/players/%s",
         kSwitchRoot,
         normalized.c_str());
-    return std::strlen(dst) < dstSize;
+
+    return written >= 0 && static_cast<size_t>(written) < dstSize;
 }
 
 static bool SwitchBuildPath(
