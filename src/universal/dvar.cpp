@@ -1652,7 +1652,7 @@ void __cdecl Dvar_SetLatchedValue(dvar_s *dvar, DvarValue value)
     }
 }
 
-void __cdecl Dvar_AssignLatchedStringValue(dvar_s *dvar, DvarValue *dest, char *string)
+void __cdecl Dvar_AssignLatchedStringValue(dvar_s *dvar, DvarValue *dest, const char *string)
 {
     if (!string)
         MyAssertHandler(".\\universal\\dvar.cpp", 254, 0, "%s", "string");
