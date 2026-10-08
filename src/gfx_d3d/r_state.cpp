@@ -10,6 +10,11 @@
 #include "r_utils.h"
 #include "r_reflection_probe.h"
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 //float const *const shadowmapClearColor 820ebb50     gfx_d3d : r_state.obj
 //BOOL g_renderTargetIsOverridden 85b5dd38     gfx_d3d : r_state.obj
 //uint32_t *s_decodeSamplerFilterState 85b5dcb8     gfx_d3d : r_state.obj
@@ -1742,8 +1747,10 @@ void __cdecl R_SetSampler(
             Image_FindExisting_FastFile("button_highlight_end");
         if (buttonHighlightEnd && buttonHighlightEnd != image)
         {
-            if (image == rgp.defaultImage ||
-                (image->name && !I_stricmp(image->name, "default")))
+            if (image->name &&
+                (!I_stricmp(image->name, "default") ||
+                 !I_stricmp(image->name, "images/default") ||
+                 !I_stricmp(image->name, "$default")))
             {
                 char trace[256];
                 std::snprintf(
