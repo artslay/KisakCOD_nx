@@ -230,8 +230,8 @@ char __cdecl Com_NewPlayerProfile(const char *profileName)
     if (!profileName || !profileName[0] ||
         !I_stricmp(profileName, ".") ||
         !I_stricmp(profileName, "..") ||
-        std::strchr(profileName, '/') ||
-        std::strchr(profileName, '\\'))
+        strchr(profileName, '/') ||
+        strchr(profileName, '\\'))
     {
         Com_Printf(
             CON_CHANNEL_SYSTEM,
