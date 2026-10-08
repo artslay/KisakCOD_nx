@@ -40,6 +40,7 @@ void *captureData;
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
+extern bool Switch_ShowSoftwareKeyboard(const char *initialText, unsigned int maxChars, char *outText, unsigned int outSize);
 
 static inline void Switch_LogWriteFiltered(const char *msg)
 {
@@ -2981,9 +2982,68 @@ void __cdecl Item_TextField_BeginEdit(int localClientNum, itemDef_s *item)
         if (item->parent->items[i] == item)
         {
             Menu_SetCursorItem(localClientNum, item->parent, i);
-            return;
+            break;
         }
     }
+
+#ifdef __SWITCH__
+    /*
+     * CoD4's edit-field path is keyboard/event based. On Switch there is no
+     * physical keyboard, so use the Horizon software keyboard as the text
+     * entry UI and then commit the resulting UTF-8 string through the normal
+     * dvar/onAccept path.
+     */
+    if (item->dvar)
+    {
+        char switchKeyboardText[1024] = {};
+        const char *currentText = Dvar_GetVariantString(item->dvar);
+        I_strncpyz(
+            switchKeyboardText,
+            currentText ? currentText : "",
+            sizeof(switchKeyboardText));
+
+        unsigned int maxChars = 255u;
+        if (editPtr && editPtr->maxChars > 0)
+            maxChars = static_cast<unsigned int>(editPtr->maxChars);
+        if (maxChars >= sizeof(switchKeyboardText))
+            maxChars = sizeof(switchKeyboardText) - 1;
+
+        const bool accepted = Switch_ShowSoftwareKeyboard(
+            switchKeyboardText,
+            maxChars,
+            switchKeyboardText,
+            sizeof(switchKeyboardText));
+
+        if (accepted)
+        {
+            Dvar_SetFromStringByName(item->dvar, switchKeyboardText);
+
+            const char *resultText = Dvar_GetVariantString(item->dvar);
+            item->cursorPos[localClientNum] =
+                resultText ? static_cast<unsigned int>(strlen(resultText)) : 0;
+
+            if (editPtr)
+                editPtr->paintOffset = 0;
+
+            /*
+             * Treat the software keyboard's OK button as the engine's normal
+             * Enter/accept action. This preserves existing onAccept scripts.
+             */
+            g_editingField = 1;
+            g_editItem = item;
+            Key_SetOverstrikeMode(localClientNum, 1);
+            (void)Item_TextField_HandleKey(
+                nullptr,
+                item,
+                K_ENTER);
+        }
+
+        g_editingField = 0;
+        g_editItem = nullptr;
+        Key_SetOverstrikeMode(localClientNum, 0);
+        return;
+    }
+#endif
 }
 
 void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
