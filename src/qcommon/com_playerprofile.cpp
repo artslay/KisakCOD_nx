@@ -148,12 +148,32 @@ char __cdecl Com_SetInitialPlayerProfile(int localClientNum)
 
     if (FS_ReadFile("profiles/active.txt", (void **)&activeProfileFile) < 0)
         return 0;
+
     parse = activeProfileFile;
     activeProfileName = Com_Parse(&parse);
-    FS_FreeFile(activeProfileFile);
-    if (!Com_IsValidPlayerProfileDir(activeProfileName->token))
+
+    if (!activeProfileName || !activeProfileName->token[0])
+    {
+        FS_FreeFile(activeProfileFile);
+#ifdef __SWITCH__
+        // Do not keep a corrupt/empty marker around and retry it on every boot.
+        FS_DeleteInDir((char *)"profiles/active.txt", (char *)"players");
+#endif
         return 0;
+    }
+
+    if (!Com_IsValidPlayerProfileDir(activeProfileName->token))
+    {
+        FS_FreeFile(activeProfileFile);
+#ifdef __SWITCH__
+        // The marker is stale when its directory has already disappeared.
+        FS_DeleteInDir((char *)"profiles/active.txt", (char *)"players");
+#endif
+        return 0;
+    }
+
     Com_SetPlayerProfile(localClientNum, activeProfileName->token);
+    FS_FreeFile(activeProfileFile);
     return 1;
 }
 
@@ -676,11 +696,21 @@ void __cdecl Com_ChangePlayerProfile(int localClientNum, char *profileName)
         I_strncpyz(cachedName, profileName, 64);
         if (Com_IsValidPlayerProfileDir(cachedName))
         {
-            FS_WriteFileToDir(
-                (char*)"profiles/active.txt",
-                (char*)"players",
-                cachedName,
-                &cachedName[strlen(cachedName) + 1] - &cachedName[1]);
+            const uint32_t activeNameLength =
+                static_cast<uint32_t>(strlen(cachedName));
+
+            if (!FS_WriteFileToDir(
+                    (char*)"profiles/active.txt",
+                    (char*)"players",
+                    cachedName,
+                    activeNameLength))
+            {
+                Com_PrintError(
+                    CON_CHANNEL_SYSTEM,
+                    "Unable to persist active player profile: %s\n",
+                    cachedName);
+            }
+
             Cmd_ExecuteSingleCommand(localClientNum, 0, (char*)"disconnect");
             Dvar_ResetDvars(0xFFFFu, DVAR_SOURCE_EXTERNAL);
             Com_SetPlayerProfile(localClientNum, cachedName);
