@@ -371,11 +371,6 @@ void __cdecl LiveStorage_ReadStatsFromDir(char *directory)
                 LiveStorage_HandleCorruptStats(path);
             if (!stat_version)
                 MyAssertHandler(".\\win32\\win_storage.cpp", 300, 0, "%s", "stat_version");
-            if (LiveStorage_GetStat(0, 299) != stat_version->current.integer)
-            {
-                LiveStorage_NoStatsFound();
-                Com_SetErrorMessage((char*)"MENU_RESETCUSTOMCLASSES");
-            }
         }
         else
         {
@@ -629,80 +624,6 @@ int __cdecl LiveStorage_GetStat(int __formal, int index)
     return 0;
 }
 
-void __cdecl LiveStorage_SetStat(int __formal, int index, uint32_t value)
-{
-#ifdef KISAK_SP
-    iassert(0); // LWSS: do not use with SP!! Broken! Writes random addresses with crap!
-#endif
-    const char *v3; // eax
-
-	iassert(index >= 0 && index < 3499);
-	
-    // KISAK: reject it for real in addition to asserting
-    if ((uint32_t)index >= 3498)
-    {
-        Com_PrintError(CON_CHANNEL_CLIENT, "LiveStorage_SetStat: bad stat index %i\n", index);
-        return;
-    }
-    
-    if (!statData.statsFetched)
-    {
-        Com_Printf(CON_CHANNEL_CLIENT, "Tried to set stat index %i before we have obtained player stats\n", index);
-        return;
-    }
-    if (index >= 2000)
-    {
-        if (index >= 3498)
-        {
-            if (!alwaysfails)
-            {
-                v3 = va("Unhandled stat index %i", index);
-                MyAssertHandler(".\\win32\\win_storage.cpp", 445, 0, v3);
-            }
-        }
-        else
-        {
-            if (!debugStats)
-                MyAssertHandler(".\\win32\\win_storage.cpp", 434, 0, "%s", "debugStats");
-            if (debugStats->current.enabled)
-                Com_Printf(CON_CHANNEL_CLIENT, "Setting stat %i from %i to %i\n", index, *(int*)&statData.playerStats[4 * index - 5996], value);
-            if (*(int*)&statData.playerStats[4 * index - 5996] != value)
-            {
-                *(int*)&statData.playerStats[4 * index - 5996] = value;
-                goto LABEL_24;
-            }
-        }
-    }
-    else
-    {
-        if (value >= 0x100)
-        {
-            CL_DumpReliableCommands(0);
-            Com_Error(
-                ERR_SERVERDISCONNECT,
-                "Trying to set index %i (which is a byte value) to invalid value %i",
-                index,
-                value);
-        }
-        if (!debugStats)
-            MyAssertHandler(".\\win32\\win_storage.cpp", 420, 0, "%s", "debugStats");
-        if (debugStats->current.enabled)
-        {
-            //Com_Printf(CON_CHANNEL_CLIENT, "Setting stat %i from %i to %i\n", index, *(unsigned __int8 *)(index + 231835788), value);
-            Com_Printf(CON_CHANNEL_CLIENT, "Setting stat %i from %i to %i\n", index, statData.playerStats[index + 4], value);
-        }
-        
-        //if (*(unsigned __int8 *)(index + 231835788) != value)
-        if (statData.playerStats[index + 4] != value)
-        {
-            //*(_BYTE *)(index + 231835788) = value;
-            statData.playerStats[index + 4] = value;
-        LABEL_24:
-            LiveStorage_StatsWriteNeeded();
-        }
-    }
-}
-
 void __cdecl LiveStorage_TrySetStatForCmd(int index, uint32_t value)
 {
     if (LiveStorage_GetStat(0, index) != value)
@@ -710,11 +631,6 @@ void __cdecl LiveStorage_TrySetStatForCmd(int index, uint32_t value)
         LiveStorage_SetStat(0, index, value);
         LiveStorage_StatsWriteNeeded();
     }
-}
-
-void __cdecl LiveStorage_NewUser()
-{
-    memset(statData.playerStats, 0, sizeof(statData));
 }
 
 cmd_function_s LiveStorage_StatSetCmd_VAR;
