@@ -1733,11 +1733,58 @@ void __cdecl R_SetSampler(
     uint32_t decodedSamplerState; // [esp+Ch] [ebp-4h]
 
 #ifdef __SWITCH__
-    // The menu's narrow right-hand cap is an authored image asset. Some
-    // MaterialHandle paths can still hand the renderer the builtin 16x16
-    // default image even though button_highlight_end has already been loaded.
-    // Resolve that semantic here, after all shader-argument paths converge.
-    if (image &&
+    // The narrow right-hand menu cap is still coming through as the builtin
+    // 16x16 "default" image. Before changing any more asset-resolution code,
+    // capture the exact material that reaches the sampler. This is the last
+    // common point for every pixel-sampler path and tells us whether the bad
+    // draw has the intended material with a bad image, or already has the
+    // fallback material itself.
+    const bool switchImageIsDefault =
+        image &&
+        image->name &&
+        (!I_stricmp(image->name, "default") ||
+         !I_stricmp(image->name, "images/default") ||
+         !I_stricmp(image->name, "$default"));
+
+    if (switchImageIsDefault && context.state && context.state->material)
+    {
+        static uint32_t switchDefaultSamplerTraceCount = 0;
+        if (switchDefaultSamplerTraceCount < 32)
+        {
+            const Material *origMaterial = context.state->origMaterial;
+            const MaterialTechnique *technique = context.state->technique;
+            const MaterialPass *pass = context.state->pass;
+            char trace[640];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI DEFAULT BIND] #%u sampler=%u image=%p %ux%u "
+                "material=%p name=%s orig=%p origName=%s techType=%u "
+                "tech=%s pass=%s\n",
+                static_cast<unsigned>(switchDefaultSamplerTraceCount),
+                samplerIndex,
+                static_cast<const void *>(image),
+                image->width,
+                image->height,
+                static_cast<const void *>(context.state->material),
+                context.state->material->info.name
+                    ? context.state->material->info.name : "<null>",
+                static_cast<const void *>(origMaterial),
+                (origMaterial && origMaterial->info.name)
+                    ? origMaterial->info.name : "<null>",
+                static_cast<unsigned>(context.state->techType),
+                (technique && technique->name) ? technique->name : "<null>",
+                (pass && pass->pixelShader && pass->pixelShader->name)
+                    ? pass->pixelShader->name : "<null>");
+            Switch_LogWrite(trace);
+            ++switchDefaultSamplerTraceCount;
+        }
+    }
+
+    // If the renderer really does have the authored cap material here, use
+    // its real image rather than the generic default. This remains deliberately
+    // narrow and only triggers after the diagnostic above proves the material.
+    if (switchImageIsDefault &&
         context.state &&
         context.state->material &&
         context.state->material->info.name &&
@@ -1745,27 +1792,23 @@ void __cdecl R_SetSampler(
     {
         GfxImage *buttonHighlightEnd =
             Image_FindExisting_FastFile("button_highlight_end");
-        if (buttonHighlightEnd && buttonHighlightEnd != image)
+        if (buttonHighlightEnd &&
+            buttonHighlightEnd != image &&
+            buttonHighlightEnd->width > 0)
         {
-            if (image->name &&
-                (!I_stricmp(image->name, "default") ||
-                 !I_stricmp(image->name, "images/default") ||
-                 !I_stricmp(image->name, "$default")))
-            {
-                char trace[256];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][UI CAP] material=%s sampler=%u default=%p -> cap=%p (%ux%u)\n",
-                    context.state->material->info.name,
-                    samplerIndex,
-                    static_cast<const void *>(image),
-                    static_cast<const void *>(buttonHighlightEnd),
-                    buttonHighlightEnd->width,
-                    buttonHighlightEnd->height);
-                Switch_LogWrite(trace);
-                image = buttonHighlightEnd;
-            }
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI CAP] material=%s sampler=%u default=%p -> cap=%p (%ux%u)\n",
+                context.state->material->info.name,
+                samplerIndex,
+                static_cast<const void *>(image),
+                static_cast<const void *>(buttonHighlightEnd),
+                buttonHighlightEnd->width,
+                buttonHighlightEnd->height);
+            Switch_LogWrite(trace);
+            image = buttonHighlightEnd;
         }
     }
 #endif
