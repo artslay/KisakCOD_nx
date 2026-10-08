@@ -489,18 +489,6 @@ between a deactivate and an activate.
 ===========
 */
 // LWSS: Done
-void IN_Activate (qboolean active) {
-	in_appactive = active;
-
-	if (active)
-	{
-		IN_ActivateMouse(1);
-	}
-	else
-	{
-		IN_DeactivateMouse();
-	}
-}
 
 extern const dvar_t	*r_fullscreen;
 
