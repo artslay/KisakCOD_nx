@@ -7227,9 +7227,7 @@ static void Switch_LoadMaterialPassSerialized(
     varMaterialPixelShaderPtr = &varMaterialPass->pixelShader;
     Load_MaterialPixelShaderPtr(0);
 
-    varMaterialPass->args =
-        reinterpret_cast<MaterialShaderArgument *>(
-            static_cast<uintptr_t>(serialized.args));
+    varMaterialPass->args = nullptr;
     if (serialized.args)
     {
         const uint32_t count =
@@ -7237,9 +7235,17 @@ static void Switch_LoadMaterialPassSerialized(
                 varMaterialPass->stableArgCount +
                 varMaterialPass->perObjArgCount +
                 varMaterialPass->perPrimArgCount);
+
         if (count)
         {
-            DB_AllocStreamPos(3);
+            // MaterialShaderArgument is widened from the serialized 8-byte
+            // record to a native 16-byte ARM64 record because its union may
+            // contain a 64-bit literal-constant pointer. Keep the serialized
+            // array address as an alias key so positive references to this
+            // argument array resolve to the native allocation.
+            const uintptr_t serializedArgs =
+                reinterpret_cast<uintptr_t>(DB_AllocStreamPos(3));
+
             varMaterialPass->args =
                 reinterpret_cast<MaterialShaderArgument *>(Hunk_Alloc(
                     static_cast<uint32_t>(
@@ -7247,9 +7253,49 @@ static void Switch_LoadMaterialPassSerialized(
                     "SwitchMaterialShaderArguments", 22));
             varMaterialShaderArgument = varMaterialPass->args;
             Load_MaterialShaderArgumentArray(1, static_cast<int32_t>(count));
+
+            DB_RegisterSwitchPointerAlias(
+                serializedArgs,
+                reinterpret_cast<uintptr_t>(varMaterialPass->args));
+            DB_FixupSwitchPointerAliases();
         }
-        else
-            varMaterialPass->args = nullptr;
+    }
+
+    if (serialized.args &&
+        serialized.args != UINT32_MAX &&
+        serialized.args != UINT32_MAX - 1u)
+    {
+        const uintptr_t serializedSlot =
+            DB_ConvertOffsetToPointerValue(serialized.args);
+        uintptr_t resolvedPointer = 0;
+
+        bool resolved =
+            serializedSlot &&
+            DB_ResolveSwitchPointerAlias(
+                serializedSlot, &resolvedPointer);
+        if (!resolved && serializedSlot)
+        {
+            resolved =
+                DB_TryResolveSwitchSerializedAliasChain(
+                    serializedSlot, &resolvedPointer);
+        }
+
+        if (resolved && resolvedPointer)
+        {
+            varMaterialPass->args =
+                reinterpret_cast<MaterialShaderArgument *>(
+                    resolvedPointer);
+        }
+        else if (serializedSlot)
+        {
+            varMaterialPass->args =
+                reinterpret_cast<MaterialShaderArgument *>(
+                    serializedSlot);
+            DB_AddSwitchPointerAliasFixup(
+                serializedSlot,
+                reinterpret_cast<uintptr_t *>(
+                    &varMaterialPass->args));
+        }
     }
 }
 #endif
