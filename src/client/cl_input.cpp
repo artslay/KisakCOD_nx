@@ -998,8 +998,7 @@ int __cdecl CL_AllowInput()
 
 void __cdecl CL_GamepadMove(usercmd_s *cmd)
 {
-    // KISAKTODO
-#if 0
+#ifdef __SWITCH__
     double v2; // fp27
     double v3; // fp28
     double v4; // fp29
@@ -1020,7 +1019,6 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     char v19; // r3
     char yawmove; // r10
     int v21; // r3
-    GamerSettingState *ProfileSettings; // r3
     __int64 v23; // r11
     double v24; // fp31
     int buttons; // r10
@@ -1608,8 +1606,10 @@ void __cdecl CL_CreateCmd(usercmd_s *result)
         CL_CmdButtons(result);
         CL_KeyMove(result);
         CL_MouseMove(result);
+#ifdef __SWITCH__
         if (GPad_IsActive(CL_ControllerIndexFromClientNum(0)))
             CL_GamepadMove(result);
+#endif
         if (clients[0].viewangles[0] - oldAngles <= 90.0)
         {
             if (oldAngles - clients[0].viewangles[0] > 90.0)
