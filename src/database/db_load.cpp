@@ -7303,7 +7303,6 @@ static void Switch_LoadMaterialPassSerialized(
                     &varMaterialPass->args));
         }
     }
-    }
 }
 #endif
 
