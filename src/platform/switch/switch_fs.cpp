@@ -1348,6 +1348,7 @@ int __cdecl FS_GetFileList(
 
     const char **files = FS_ListFiles(path, extension, behavior, nullptr);
     int used = 0;
+    int count = 0;
     if (files)
     {
         for (const char **p = files; *p; ++p)
@@ -1357,13 +1358,14 @@ int __cdecl FS_GetFileList(
                 break;
             std::memcpy(buf + used, *p, len);
             used += len;
+            ++count;
         }
     }
 
     if (used < size)
         buf[used] = '\0';
 
-    return used;
+    return count;
 }
 
 const char **__cdecl FS_ListFiles(
