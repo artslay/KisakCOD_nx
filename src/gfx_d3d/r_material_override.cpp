@@ -439,10 +439,13 @@ static void Switch_ResolveSerializedPointer(
     else if (Switch_IsSerializedAddress(serializedAddress))
     {
         // Keep forward serialized references fixable until the native object
-        // has been registered in the Switch alias table.
+        // has been registered in the Switch alias table. The native field must
+        // not retain the serialized stream address while that fixup is pending:
+        // the render path is allowed to observe only native pointers.
         DB_AddSwitchPointerAliasFixup(
             serializedAddress,
             reinterpret_cast<uintptr_t *>(pointer));
+        *pointer = nullptr;
     }
     else
     {
