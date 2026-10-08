@@ -1530,13 +1530,23 @@ static std::vector<std::string> g_switchProfileFileListNames;
 
 static bool Switch_ListExtensionMatches(const char *name, const char *extension)
 {
-    if (!extension || !*extension || !std::strcmp(extension, "/"))
+    if (!name)
+        return false;
+
+    if (!extension || !*extension)
+        return true;
+
+    if (!std::strcmp(extension, "/"))
         return true;
 
     const size_t nameLen = std::strlen(name);
     const size_t extLen = std::strlen(extension);
-    return nameLen >= extLen &&
-           !std::strcmp(name + nameLen - extLen, extension);
+
+    // Match the stock FS_ListFilteredFiles semantics: "svg" means a
+    // filename whose final extension is ".svg", not just a suffix "svg".
+    return nameLen > extLen + 1 &&
+           name[nameLen - extLen - 1] == '.' &&
+           !I_stricmp(name + nameLen - extLen, extension);
 }
 
 void __cdecl FS_FreeFileList(const char **list)
