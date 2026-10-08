@@ -8912,61 +8912,15 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
             }
             else
             {
+                // Positive MaterialHandle values are serialized pointer aliases.
+                // Resolve them exactly like the other DB pointer assets and keep
+                // the reference pending when the target has not been registered
+                // yet. Do not call DB_FindXAssetHeader(name) here: that function
+                // creates a default material placeholder when the real asset has
+                // not reached the registry yet, permanently freezing this handle
+                // onto the wrong native Material object.
                 *varMaterialHandle = nullptr;
-
-                // Resolve a still-unregistered serialized Material through its
-                // own asset name. This is the loader equivalent of the normal
-                // DB material lookup and avoids a renderer-side default
-                // material fallback while keeping the original UI asset.
-                if (materialAliasSlot)
-                {
-                    // DB_ConvertOffsetToPointerValue(materialToken) already
-                    // resolves the serialized MaterialHandle to the serialized
-                    // Material object. Do not dereference it as another pointer:
-                    // the first DWORD of a serialized Material is its XString
-                    // name token.
-                    uint32_t serializedMaterialName = 0;
-                    std::memcpy(
-                        &serializedMaterialName,
-                        reinterpret_cast<const void *>(materialAliasSlot),
-                        sizeof(serializedMaterialName));
-
-                    const char *materialName = nullptr;
-                    if (serializedMaterialName &&
-                        serializedMaterialName != UINT32_MAX &&
-                        serializedMaterialName != UINT32_MAX - 1u)
-                    {
-                        const uintptr_t nameAddress =
-                            DB_ConvertOffsetToPointerValue(
-                                serializedMaterialName);
-                        materialName =
-                            reinterpret_cast<const char *>(nameAddress);
-                    }
-                    else if (serializedMaterialName == UINT32_MAX)
-                    {
-                        // Load_Material() consumes an XString -1 immediately
-                        // after the serialized 80-byte Material header.
-                        materialName = reinterpret_cast<const char *>(
-                            materialAliasSlot + 80u);
-                    }
-
-                    if (materialName && *materialName)
-                    {
-                        XAssetHeader materialHeader =
-                            DB_FindXAssetHeader(
-                                ASSET_TYPE_MATERIAL,
-                                materialName);
-                        if (materialHeader.material)
-                            *varMaterialHandle = materialHeader.material;
-                    }
-
-                    if (!*varMaterialHandle)
-                    {
-                        DB_AddSwitchPointerAliasFixup(
-                            materialAliasSlot,
-                            reinterpret_cast<uintptr_t *>(varMaterialHandle));
-                    }
-                }
+                DB_ConvertOffsetToAlias(varMaterialHandle);
             }
 
             if (traceSwitchFontMaterialAlias)
