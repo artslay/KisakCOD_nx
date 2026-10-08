@@ -5612,16 +5612,30 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/zonetext";
 #endif
 #ifdef __SWITCH__
-    if (menu->window.name && !I_stricmp(menu->window.name, "main"))
     {
-        static uint32_t switchMainMaterialTraceCount = 0;
-        if (switchMainMaterialTraceCount < 4)
+        static uint32_t switchMenuMaterialTraceCount = 0;
+        if (switchMenuMaterialTraceCount < 32)
         {
-            Switch_UI_LogMaterial(
-                "main/menu_background",
-                menu->window.name,
-                menu->window.background);
-            ++switchMainMaterialTraceCount;
+            const char *menuName = menu->window.name ? menu->window.name : "<null>";
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI MENU] name=%s fullScreen=%d items=%d background=%p\\n",
+                menuName,
+                menu->fullScreen ? 1 : 0,
+                menu->itemCount,
+                static_cast<const void *>(menu->window.background));
+            Switch_LogWrite(trace);
+
+            if (menu->window.background && !Switch_UI_BadPointer(menu->window.background))
+            {
+                Switch_UI_LogMaterial(
+                    "menu/background",
+                    menuName,
+                    menu->window.background);
+            }
+            ++switchMenuMaterialTraceCount;
         }
     }
 #endif
@@ -6361,17 +6375,40 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                         colorGreen);
                 }
 #ifdef __SWITCH__
-                if (item->parent && item->parent->window.name &&
-                    !I_stricmp(item->parent->window.name, "main"))
                 {
-                    static uint32_t switchMainItemMaterialTraceCount = 0;
-                    if (switchMainItemMaterialTraceCount < 16)
+                    static uint32_t switchItemMaterialTraceCount = 0;
+                    if (switchItemMaterialTraceCount < 64)
                     {
-                        Switch_UI_LogMaterial(
-                            "main/item_background",
-                            item->window.name,
-                            item->window.background);
-                        ++switchMainItemMaterialTraceCount;
+                        const char *menuName =
+                            item->parent && item->parent->window.name
+                                ? item->parent->window.name
+                                : "<null>";
+                        const char *itemName =
+                            item->window.name
+                                ? item->window.name
+                                : "<null>";
+                        if (item->window.background &&
+                            !Switch_UI_BadPointer(item->window.background))
+                        {
+                            Switch_UI_LogMaterial(
+                                "item/background",
+                                va("%s/%s", menuName, itemName),
+                                item->window.background);
+                        }
+                        else
+                        {
+                            char trace[320];
+                            std::snprintf(
+                                trace,
+                                sizeof(trace),
+                                "[KisakCOD][UI ITEM] menu=%s item=%s style=%d background=%p\\n",
+                                menuName,
+                                itemName,
+                                item->window.style,
+                                static_cast<const void *>(item->window.background));
+                            Switch_LogWrite(trace);
+                        }
+                        ++switchItemMaterialTraceCount;
                     }
                 }
                 g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/payload";
