@@ -279,6 +279,66 @@ static bool Switch_IsSerializedAddress(uintptr_t address)
     return false;
 }
 
+
+static bool Switch_IsValidTechniqueSetName(const char *name)
+{
+    if (!name)
+        return false;
+
+    const uintptr_t address =
+        reinterpret_cast<uintptr_t>(name);
+
+    if (address < 0x10000u)
+        return false;
+
+    // Hunk allocations are zero-filled, so this pattern cannot originate
+    // from a freshly allocated MaterialTechniqueSet name. It is the poisoned
+    // value observed in the renderer fault (0x00030003ababab00).
+    const uint32_t low = static_cast<uint32_t>(address);
+    if ((low & 0xFFFFFF00u) == 0xABABAB00u ||
+        (low & 0x00FFFFFFu) == 0x00ABABABu)
+        return false;
+
+    if (!Switch_IsSerializedAddress(address))
+        return true;
+
+    // Names backed directly by fastfile memory must be a printable,
+    // NUL-terminated string inside the containing stream block.
+    for (uint32_t i = 0; i < 9u; ++i)
+    {
+        const XBlock &block = g_streamBlocks[i];
+        if (!block.data || !block.size)
+            continue;
+
+        const uintptr_t begin =
+            reinterpret_cast<uintptr_t>(block.data);
+        const uintptr_t end = begin + block.size;
+        if (address < begin || address >= end)
+            continue;
+
+        const size_t remaining =
+            block.size - static_cast<size_t>(address - begin);
+        const size_t limit = remaining < 256u ? remaining : 256u;
+        const unsigned char *text =
+            reinterpret_cast<const unsigned char *>(address);
+
+        if (!limit)
+            return false;
+
+        for (size_t n = 0; n < limit; ++n)
+        {
+            const unsigned char ch = text[n];
+            if (ch == 0)
+                return n != 0;
+            if (ch < 0x20u || ch > 0x7Eu)
+                return false;
+        }
+        return false;
+    }
+
+    return false;
+}
+
 template <typename T>
 static void Switch_ResolveSerializedPointer(
     T **pointer,
@@ -389,6 +449,17 @@ void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
     char remapName[260]; // [esp+14h] [ebp-108h] BYREF
 
     iassert( techSet );
+#ifdef __SWITCH__
+    if (!Switch_IsValidTechniqueSetName(techSet->name))
+    {
+        // A stale/freed technique-set header must never reach strlen/strncmp
+        // in the remap code. Keep its own techniques available and make the
+        // effective remap target self-referential.
+        techSet->remappedTechniqueSet = techSet;
+        Switch_ResolveNativeTechniquePointers(techSet);
+        return;
+    }
+#endif
     Material_RemapTechniqueSetName(
         techSet->name,
         remapName,
@@ -440,6 +511,14 @@ void __cdecl Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
     char remapName[68]; // [esp+0h] [ebp-48h] BYREF
 
     iassert( techSet );
+#ifdef __SWITCH__
+    if (!Switch_IsValidTechniqueSetName(techSet->name))
+    {
+        techSet->remappedTechniqueSet = techSet;
+        Switch_ResolveNativeTechniquePointers(techSet);
+        return;
+    }
+#endif
     if (r_rendererInUse->current.integer || !strncmp(techSet->name, "sm2/", 4u))
     {
         techSet->remappedTechniqueSet = techSet;
@@ -480,6 +559,10 @@ bool __cdecl Material_WouldTechniqueSetBeOverridden(const MaterialTechniqueSet *
     uint32_t remapMask; // [esp+11Ch] [ebp-4h] BYREF
 
     iassert( techSet );
+#ifdef __SWITCH__
+    if (!Switch_IsValidTechniqueSetName(techSet->name))
+        return false;
+#endif
     Material_GetRemappedFeatures_RunTime(&remapMask, &remapValue);
     Material_RemapTechniqueSetName(techSet->name, remapName, remapMask, remapValue, s_materialFeatures, 0x14u);
     return strcmp(techSet->name, remapName) != 0;
