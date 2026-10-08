@@ -2387,6 +2387,20 @@ void Com_StartHunkUsers()
     Com_AssetLoadUI();
     MenuScreen = UI_GetMenuScreen();
     UI_SetActiveMenu(0, (uiMenuCommand_t)MenuScreen);
+
+#ifdef __SWITCH__
+    if (com_introMoviePending)
+    {
+        // COM_PlayIntroMovies() intentionally defers the first cinematic until
+        // the UI/renderer are fully initialized. Consume that pending request
+        // here, after the initial menu is active, so the menu background movie
+        // can render underneath the profile screen.
+        Cbuf_AddText(0, "cinematic IW_logo\\n");
+        com_introMoviePending = false;
+        Switch_LogWrite("[KisakCOD][INTRO] starting deferred IW_logo cinematic\\n");
+    }
+#endif
+
     IN_Frame();
     Com_EventLoop();
 }
