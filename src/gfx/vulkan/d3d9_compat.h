@@ -318,6 +318,7 @@ public:
     HRESULT SetPixelShaderConstantB(uint32_t,const int32_t*,uint32_t);
     HRESULT SetViewport(const D3DVIEWPORT9*);
     HRESULT SetSwitchUnlitMode(bool);
+    HRESULT SetSwitchUi2DMode(bool);
     HRESULT SetSamplerState(uint32_t,uint32_t,uint32_t);
     HRESULT SetScissorRect(const tagRECT*);
     HRESULT SetRenderState(uint32_t,uint32_t);
@@ -343,6 +344,7 @@ private:
     uint32_t m_samplerState[16][16]{};
     D3DVIEWPORT9 m_viewport{0,0,1280,720,0.0f,1.0f};
     bool m_switchUnlit=false;
+    bool m_switchUi2D=false;
     bool m_depthEnable=true, m_depthWrite=true, m_blendEnable=false;
     bool m_separateAlphaBlend=false;
     VkPrimitiveTopology m_topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
