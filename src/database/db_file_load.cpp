@@ -595,6 +595,14 @@ void __cdecl DB_LoadXFileInternal()
     // before the renderer starts opening the corresponding IWI files.
     g_switchDbStage = "delayed_images/fixup";
     DB_FlushSwitchDeferredImageAssets();
+
+    // Deferred image registration can publish native GfxImage objects that
+    // were not available when earlier MaterialTextureDef/MaterialHandle
+    // references were fixed. Run the normal alias pass once more after that
+    // registration, before the renderer can consume the zone.
+    g_switchDbStage = "delayed_images/alias_fixup";
+    DB_FixupSwitchPointerAliases();
+
     g_switchDbStage = "delayed_images/enum";
 #endif
     DB_LoadDelayedImages();
