@@ -8869,14 +8869,17 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
         else
         {
 #ifdef __SWITCH__
-            // Positive MaterialHandle values are serialized fastfile pointer aliases.
-            // Resolve them through the normal DB alias/fixup path; the fastfile
-            // owns the Material object relationship and no name-based/default
-            // substitute belongs in this loader.
-            DB_ConvertOffsetToAlias(varMaterialHandle);
-#else
-            DB_ConvertOffsetToAlias((uint32_t *)varMaterialHandle);
-#endif
+            const uint32_t materialToken = value;
+            const uintptr_t materialAliasSlot =
+                DB_ConvertOffsetToPointerValue(materialToken);
+            uintptr_t materialAliasResolved = 0;
+            bool materialAliasFound = false;
+
+            const bool traceSwitchFontMaterialAlias =
+                g_switchCurrentAssetRawType == ASSET_TYPE_FONT &&
+                g_switchCurrentAssetIndex >= 1215 &&
+                g_switchCurrentAssetIndex <= 1221;
+
             if (traceSwitchFontMaterialAlias)
                 g_switchDbStage = "font/material_alias";
 
@@ -8901,86 +8904,25 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
                 }
             }
 
-            *varMaterialHandle = nullptr;
-
-            // A positive MaterialHandle names the serialized Material object.
-            // The alias table is authoritative only when it resolves to a
-            // Material with the same serialized name. This prevents a stale
-            // pointer alias from silently turning the original UI material
-            // into the builtin default Material.
-            const char *serializedMaterialNamePtr = nullptr;
-            if (materialAliasSlot)
-            {
-                uint32_t serializedMaterialName = 0;
-                std::memcpy(
-                    &serializedMaterialName,
-                    reinterpret_cast<const void *>(materialAliasSlot),
-                    sizeof(serializedMaterialName));
-
-                if (serializedMaterialName &&
-                    serializedMaterialName != UINT32_MAX &&
-                    serializedMaterialName != UINT32_MAX - 1u)
-                {
-                    const uintptr_t nameAddress =
-                        DB_ConvertOffsetToPointerValue(serializedMaterialName);
-                    serializedMaterialNamePtr =
-                        reinterpret_cast<const char *>(nameAddress);
-                }
-                else if (serializedMaterialName == UINT32_MAX)
-                {
-                    // Load_Material() consumes an inline XString immediately
-                    // after the serialized 80-byte Material header.
-                    serializedMaterialNamePtr =
-                        reinterpret_cast<const char *>(materialAliasSlot + 80u);
-                }
-            }
-
             if (materialAliasFound &&
                 materialAliasResolved >= 0x10000u)
             {
-                Material *resolvedMaterial =
+                *varMaterialHandle =
                     reinterpret_cast<Material *>(materialAliasResolved);
-                const char *resolvedName = resolvedMaterial->info.name;
-
-                if ((!serializedMaterialNamePtr || !*serializedMaterialNamePtr) ||
-                    (resolvedName &&
-                     !I_stricmp(resolvedName, serializedMaterialNamePtr)))
-                {
-                    *varMaterialHandle = resolvedMaterial;
-                }
             }
-
-            // If the serialized alias is not currently registered, bridge it
-            // through the normal DB material registry, but never keep a newly
-            // created default placeholder in the live MaterialHandle. The
-            // placeholder is allowed to exist temporarily so DB_LinkXAssetEntry
-            // can replace its registry entry when the real asset arrives.
-            if (!*varMaterialHandle &&
-                serializedMaterialNamePtr &&
-                *serializedMaterialNamePtr)
+            else
             {
-                XAssetHeader materialHeader =
-                    DB_FindXAssetHeader(
-                        ASSET_TYPE_MATERIAL,
-                        serializedMaterialNamePtr);
-                if (materialHeader.material &&
-                    !DB_IsXAssetDefault(
-                        ASSET_TYPE_MATERIAL,
-                        serializedMaterialNamePtr))
-                {
-                    *varMaterialHandle = materialHeader.material;
-                }
+                // Positive MaterialHandle values are serialized pointer aliases.
+                // Resolve them exactly like the other DB pointer assets and keep
+                // the reference pending when the target has not been registered
+                // yet. Do not call DB_FindXAssetHeader(name) here: that function
+                // creates a default material placeholder when the real asset has
+                // not reached the registry yet, permanently freezing this handle
+                // onto the wrong native Material object.
+                *varMaterialHandle = nullptr;
+                DB_ConvertOffsetToAlias(varMaterialHandle);
             }
 
-            if (!*varMaterialHandle && materialAliasSlot)
-            {
-                // Keep the original serialized reference pending. It may be a
-                // forward Material reference whose native alias is registered
-                // later in this zone.
-                DB_AddSwitchPointerAliasFixup(
-                    materialAliasSlot,
-                    reinterpret_cast<uintptr_t *>(varMaterialHandle));
-            }
             if (traceSwitchFontMaterialAlias)
             {
                 char trace[448];
