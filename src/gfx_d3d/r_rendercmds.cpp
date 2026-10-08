@@ -727,30 +727,36 @@ void __cdecl R_AddCmdDrawStretchPic(
 
     actualMaterial = defaultMaterial;
 #ifdef __SWITCH__
-    if (gfxCmdBufSourceState.viewMode != VIEW_MODE_2D)
+    const char *switchMaterialName = Material_GetName(defaultMaterial);
+    const bool switchPreserveProfileBlur =
+        switchMaterialName &&
+        (!I_stricmp(switchMaterialName, "animbg_blur_back") ||
+         !I_stricmp(switchMaterialName, "animbg_blur_fogscroll") ||
+         !I_stricmp(switchMaterialName, "animbg_blur_front"));
+    if (!switchPreserveProfileBlur &&
+        (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial)))
+#else
+    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
 #endif
     {
-        if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+        if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
-            if ((defaultMaterial->stateFlags & 0x10) != 0)
-            {
-                Name = Material_GetName(material);
-                Com_PrintWarning(
-                    CON_CHANNEL_GFX,
-                    "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it uses the depth buffer. Set materialType to 2d.\n",
-                    Name);
-                actualMaterial = rgp.defaultMaterial;
-            }
-        }
-        else
-        {
-            v10 = Material_GetName(material);
+            Name = Material_GetName(material);
             Com_PrintWarning(
                 CON_CHANNEL_GFX,
-                "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
-                v10);
+                "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it uses the depth buffer. Set materialType to 2d.\n",
+                Name);
             actualMaterial = rgp.defaultMaterial;
         }
+    }
+    else
+    {
+        v10 = Material_GetName(material);
+        Com_PrintWarning(
+            CON_CHANNEL_GFX,
+            "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
+            v10);
+        actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
     cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_FIRST_NONCRITICAL, sizeof(GfxCmdStretchPic));
