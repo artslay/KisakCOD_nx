@@ -834,7 +834,7 @@ LABEL_15:
             if (*(uint32_t *)modelSurf == -2)
             {
                 surfType = SF_BEGIN_XMODEL;
-                surfSize = 56;
+                surfSize = sizeof(GfxModelRigidSurface);
             }
             else
             {
@@ -844,7 +844,7 @@ LABEL_15:
                     goto LABEL_22;
                 }
                 surfType = SF_XMODEL_SKINNED;
-                surfSize = 24;
+                surfSize = sizeof(GfxModelSkinnedSurface);
             }
             iassert(*material);
             iassert(rgp.sortedMaterials[(*material)->info.drawSurf.fields.materialSortedIndex] == *material);
@@ -856,8 +856,12 @@ LABEL_15:
                     R_WarnOncePerFrame(R_WARN_MAX_SCENE_DRAWSURFS, "R_AddDObjSurfacesCamera");
                     goto LABEL_45;
                 }
-                *((_WORD *)modelSurf + 7) = gfxEntIndex;
-                *((_WORD *)modelSurf + 8) = lightingHandle;
+                GfxModelSkinnedSurface *nativeSurf =
+                    reinterpret_cast<GfxModelSkinnedSurface *>(modelSurf);
+                nativeSurf->info.gfxEntIndex =
+                    static_cast<uint16_t>(gfxEntIndex);
+                nativeSurf->info.lightingHandle =
+                    static_cast<uint16_t>(lightingHandle);
                 surfId = modelSurf - (char *)frontEndDataOut;
                 iassert( !(surfId & 3) );
                 surfId = surfId >> 2;
