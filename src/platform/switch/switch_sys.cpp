@@ -367,7 +367,7 @@ void Switch_LogWrite(const char *msg)
         "R_Cinematic_BinkOpen '"
     };
     const bool keepUiMaterialDiag =
-        std::strncmp(msg, "[KisakCOD][UI MENU]", 20) == 0 ||
+        std::strncmp(msg, "[KisakCOD][UI MENU]", 19) == 0 ||
         std::strncmp(msg, "[KisakCOD][UI MATERIAL]", 23) == 0 ||
         std::strncmp(msg, "[KisakCOD][UI ITEM]", 19) == 0;
 
