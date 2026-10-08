@@ -113,7 +113,12 @@ int  R_SkinSceneDObjModels(
 
     PROF_SCOPED("R_SkinXModel");
 
+#ifdef KISAK_SWITCH
+    alignas(GfxModelRigidSurface)
+    unsigned char surfsBuffer[150 * sizeof(GfxModelRigidSurface)]{0};
+#else
     unsigned char surfsBuffer[150 * sizeof(GfxModelSkinnedSurface)]{0}; // ~3588
+#endif
     GfxModelSkinnedSurface *surfPos = (GfxModelSkinnedSurface *)surfsBuffer;
     GfxModelSurfaceInfo targBoneIndexHigh;
 
