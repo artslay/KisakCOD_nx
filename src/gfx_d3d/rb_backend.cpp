@@ -458,11 +458,54 @@ void __cdecl R_Resolve(GfxCmdBufContext context, GfxImage *image)
     } while (alwaysfails);
 }
 
+#ifdef __SWITCH__
+static const Material *Switch_ValidateRenderCommandMaterial(
+    const Material *material,
+    const GfxCmdHeader *header,
+    const char *commandName)
+{
+    const uintptr_t ptr = reinterpret_cast<uintptr_t>(material);
+    const bool validAddress =
+        ptr != 0 &&
+        ptr < (1ULL << 39) &&
+        (ptr & (alignof(Material) - 1)) == 0;
+
+    if (validAddress)
+        return material;
+
+    static uint32_t invalidMaterialTraceCount = 0;
+    if (invalidMaterialTraceCount < 32)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][RENDER CMD] invalid material cmd=%s header=%p id=%u bytes=%u material=%p fallback=%p\\n",
+            commandName ? commandName : "<unknown>",
+            static_cast<const void *>(header),
+            header ? static_cast<unsigned>(header->id) : 0u,
+            header ? static_cast<unsigned>(header->byteCount) : 0u,
+            static_cast<const void *>(material),
+            static_cast<const void *>(rgp.defaultMaterial));
+        Switch_LogWrite(trace);
+        ++invalidMaterialTraceCount;
+    }
+
+    return rgp.defaultMaterial;
+}
+#endif
+
 void __cdecl RB_StretchPicCmd(GfxRenderCommandExecState *execState)
 {
     GfxCmdStretchPic *cmd = (GfxCmdStretchPic *)execState->cmd;
+#ifdef __SWITCH__
+    const Material *material = Switch_ValidateRenderCommandMaterial(
+        cmd->material, &cmd->header, "stretch_pic");
+#else
+    const Material *material = cmd->material;
+#endif
 
-    RB_DrawStretchPic(cmd->material, cmd->x, cmd->y, cmd->w, cmd->h, cmd->s0, cmd->t0, cmd->s1, cmd->t1, cmd->color, GFX_PRIM_STATS_HUD);
+    RB_DrawStretchPic(material, cmd->x, cmd->y, cmd->w, cmd->h, cmd->s0, cmd->t0, cmd->s1, cmd->t1, cmd->color, GFX_PRIM_STATS_HUD);
     execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
 }
 
