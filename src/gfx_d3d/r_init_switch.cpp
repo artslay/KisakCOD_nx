@@ -568,7 +568,38 @@ void R_SetWndParms(GfxWindowParms *wnd) {
     wnd->hz = 60;
 }
 void R_Register() {
+    // r_init.cpp is excluded from the Switch build, so register the
+    // resolution/refresh enum dvars that the stock graphics menu expects.
+    static const char *const switchResolutionNames[] = {
+        "1280x720",
+        nullptr
+    };
+    static const char *const switchRefreshRateNames[] = {
+        "60 Hz",
+        nullptr
+    };
+
     R_RegisterDvars();
+
+    r_mode = Dvar_RegisterEnum(
+        "r_mode",
+        switchResolutionNames,
+        0,
+        DVAR_ARCHIVE | DVAR_LATCH,
+        "Switch display resolution");
+
+    r_displayRefresh = Dvar_RegisterEnum(
+        "r_displayRefresh",
+        switchRefreshRateNames,
+        0,
+        DVAR_ARCHIVE | DVAR_LATCH | DVAR_AUTOEXEC,
+        "Switch display refresh rate");
+
+    r_noborder = Dvar_RegisterBool(
+        "r_noborder",
+        false,
+        DVAR_ARCHIVE,
+        "Do not use a border in windowed mode");
 }
 void R_InitGlobalStructs() {
     vidConfig = {};
