@@ -557,6 +557,32 @@ bool __cdecl Material_IsDefault(const Material *material)
     return 0;
 }
 
+#ifdef __SWITCH__
+static Material *Switch_FindLoadedUiBackgroundMaterial(const char *name)
+{
+    if (!name)
+        return nullptr;
+
+    XAssetHeader assets[2048];
+    const int count = DB_GetAllXAssetOfType(
+        ASSET_TYPE_MATERIAL,
+        assets,
+        static_cast<int>(ARRAY_COUNT(assets)));
+
+    for (int i = 0; i < count; ++i)
+    {
+        Material *material = assets[i].material;
+        if (!material || !material->info.name)
+            continue;
+
+        if (!I_stricmp(material->info.name, name))
+            return material;
+    }
+
+    return nullptr;
+}
+#endif
+
 Material *__cdecl Material_Register_FastFile(const char *name)
 {
 #ifdef __SWITCH__
@@ -569,6 +595,38 @@ Material *__cdecl Material_Register_FastFile(const char *name)
 #ifdef __SWITCH__
     std::snprintf(trace, sizeof(trace), "[SWITCH MATERIAL TRACE] after DB_FindXAssetHeader name=%s material=%p\n", name, (void *)header.material);
     Switch_LogRaw(trace);
+
+    // The stock UI zone owns these three materials. If the normal name hash
+    // lookup has already produced the material-default stub, search the loaded
+    // material pool by canonical name before accepting the stub. This handles
+    // ARM64 registry/hash mismatches without altering non-UI material behavior.
+    const bool isProfileBlurMaterial =
+        name &&
+        (!I_stricmp(name, "animbg_blur_back") ||
+         !I_stricmp(name, "animbg_blur_fogscroll") ||
+         !I_stricmp(name, "animbg_blur_front"));
+
+    if (isProfileBlurMaterial &&
+        (header.material == rgp.defaultMaterial ||
+         (header.material && Material_IsDefault(header.material))))
+    {
+        Material *loaded =
+            Switch_FindLoadedUiBackgroundMaterial(name);
+
+        if (loaded &&
+            loaded != rgp.defaultMaterial &&
+            !Material_IsDefault(loaded))
+        {
+            header.material = loaded;
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[SWITCH UI MATERIAL] recovered %s from loaded material pool=%p\n",
+                name,
+                static_cast<void *>(loaded));
+            Switch_LogRaw(trace);
+        }
+    }
 #endif
     return header.material;
 }
