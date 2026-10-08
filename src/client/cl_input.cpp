@@ -1759,9 +1759,6 @@ void PausedModelPreviewerGamepad()
 
 void __cdecl CL_Input(int localClientNum)
 {
-#ifdef __SWITCH__
-    Switch_GamepadFrame();
-#endif
     if (CL_AllowInput())
     {
         IN_Frame();

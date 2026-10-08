@@ -6,6 +6,9 @@
 #include <universal/q_shared.h>
 #include "../client/client.h"
 #include "win_local.h"
+#ifdef __SWITCH__
+#include <platform/switch/switch_gamepad.h>
+#endif
 #include <gfx_d3d/r_dvars.h>
 
 #ifdef KISAK_MP
@@ -513,6 +516,9 @@ Called every frame, even if not generating commands
 */
 void __cdecl IN_Frame()
 {
+#ifdef __SWITCH__
+	Switch_GamepadFrame();
+#endif
 	if (Dvar_GetBool("ClickToContinue"))
 		PostMessageA(g_wv.hWnd, 0x201u, 1u, 0);
 	if (s_wmv.mouseInitialized)

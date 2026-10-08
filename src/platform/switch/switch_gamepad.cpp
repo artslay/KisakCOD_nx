@@ -107,16 +107,9 @@ void Switch_GamepadFrame()
     g_leftStick = padGetStickPos(&g_pad, 0);
     g_rightStick = padGetStickPos(&g_pad, 1);
 
-    // padUpdate() remains valid for handheld mode and connected standard pads.
-    // Consider the pad active whenever the standard input service is producing
-    // a non-zero button/axis state; this keeps the engine's existing GPad API
-    // meaningful without adding another controller-selection layer.
-    g_connected =
-        g_buttons != 0 ||
-        std::abs(g_leftStick.x) > 256 ||
-        std::abs(g_leftStick.y) > 256 ||
-        std::abs(g_rightStick.x) > 256 ||
-        std::abs(g_rightStick.y) > 256;
+    // Match the engine's controller-active concept to the actual libnx pad
+    // connection state, not whether a button or stick happens to be moving.
+    g_connected = padIsConnected(&g_pad);
 
     // UI navigation is fed through the engine's normal key path.
     SendKeyEdge(HidNpadButton_Up, K_UPARROW);
