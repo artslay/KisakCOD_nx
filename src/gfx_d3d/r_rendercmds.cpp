@@ -751,29 +751,6 @@ void __cdecl R_AddCmdDrawStretchPic(
 #endif
 
     actualMaterial = defaultMaterial;
-#ifdef __SWITCH__
-    // The original menu button cap is a screen-space UI material. Do not
-    // replace it with $default merely because its serialized state flags were
-    // widened incorrectly; that would turn the authored cap into a flat blue
-    // rectangle.
-    const char *switchUiMaterialName = defaultMaterial->info.name;
-    const bool switchOriginalUiMaterial =
-        switchUiMaterialName &&
-        (!I_stricmp(switchUiMaterialName, "gradient_fadein") ||
-         !I_stricmp(switchUiMaterialName, "images/gradient_fadein") ||
-         !I_stricmp(switchUiMaterialName, "gradient_fadein.iwi") ||
-         !I_stricmp(switchUiMaterialName, "images/gradient_fadein.iwi") ||
-         !I_stricmp(switchUiMaterialName, "button_highlight_end") ||
-         !I_stricmp(switchUiMaterialName, "images/button_highlight_end") ||
-         !I_stricmp(switchUiMaterialName, "button_highlight_end.iwi") ||
-         !I_stricmp(switchUiMaterialName, "images/button_highlight_end.iwi"));
-    if (switchOriginalUiMaterial)
-    {
-        // Keep the original material object. Its authored pass/texture is
-        // what the UI definition requested.
-    }
-    else
-#endif
     if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
