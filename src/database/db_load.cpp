@@ -8826,6 +8826,8 @@ void __cdecl Load_Material(bool atStreamStart)
             // table payload. The native ARM64 table is expanded from the
             // serialized 12-byte records below.
             DB_AllocStreamPos(3);
+            const uintptr_t serializedTextureTable =
+                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
             varMaterial->textureTable =
                 reinterpret_cast<MaterialTextureDef *>(
                     Hunk_Alloc(
@@ -8841,6 +8843,10 @@ void __cdecl Load_Material(bool atStreamStart)
                 sizeof(MaterialTextureDef) *
                     static_cast<size_t>(varMaterial->textureCount));
             Load_MaterialTextureDefArray(0, varMaterial->textureCount);
+            DB_RegisterSwitchPointerAlias(
+                serializedTextureTable,
+                reinterpret_cast<uintptr_t>(varMaterial->textureTable));
+            DB_FixupSwitchPointerAliases();
 #else
             varMaterial->textureTable =
                 (MaterialTextureDef *)AllocLoad_FxElemVisStateSample();
@@ -8850,7 +8856,38 @@ void __cdecl Load_Material(bool atStreamStart)
         }
         else
         {
+#ifdef __SWITCH__
+            const uintptr_t serializedSlot =
+                DB_ConvertOffsetToPointerValue(textureTableValue);
+            uintptr_t resolvedPointer = 0;
+            bool resolved =
+                serializedSlot &&
+                DB_ResolveSwitchPointerAlias(
+                    serializedSlot, &resolvedPointer);
+            if (!resolved && serializedSlot)
+                resolved = DB_TryResolveSwitchSerializedAliasChain(
+                    serializedSlot, &resolvedPointer);
+
+            if (resolved && resolvedPointer)
+            {
+                varMaterial->textureTable =
+                    reinterpret_cast<MaterialTextureDef *>(
+                        resolvedPointer);
+            }
+            else
+            {
+                varMaterial->textureTable =
+                    reinterpret_cast<MaterialTextureDef *>(
+                        serializedSlot);
+                if (serializedSlot)
+                    DB_AddSwitchPointerAliasFixup(
+                        serializedSlot,
+                        reinterpret_cast<uintptr_t *>(
+                            &varMaterial->textureTable));
+            }
+#else
             DB_ConvertOffsetToPointer((uint32_t *)&varMaterial->textureTable);
+#endif
         }
     }
 
