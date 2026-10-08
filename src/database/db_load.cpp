@@ -7228,7 +7228,8 @@ static void Switch_LoadMaterialPassSerialized(
     Load_MaterialPixelShaderPtr(0);
 
     varMaterialPass->args = nullptr;
-    if (serialized.args)
+    if (serialized.args == UINT32_MAX ||
+        serialized.args == UINT32_MAX - 1u)
     {
         const uint32_t count =
             static_cast<uint32_t>(
@@ -7240,11 +7241,15 @@ static void Switch_LoadMaterialPassSerialized(
         {
             // MaterialShaderArgument is widened from the serialized 8-byte
             // record to a native 16-byte ARM64 record because its union may
-            // contain a 64-bit literal-constant pointer. Keep the serialized
-            // array address as an alias key so positive references to this
-            // argument array resolve to the native allocation.
+            // contain a 64-bit literal-constant pointer.
+            DB_AllocStreamPos(3);
             const uintptr_t serializedArgs =
-                reinterpret_cast<uintptr_t>(DB_AllocStreamPos(3));
+                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+
+            const void **inserted =
+                serialized.args == UINT32_MAX - 1u
+                    ? DB_InsertPointer()
+                    : nullptr;
 
             varMaterialPass->args =
                 reinterpret_cast<MaterialShaderArgument *>(Hunk_Alloc(
@@ -7257,13 +7262,14 @@ static void Switch_LoadMaterialPassSerialized(
             DB_RegisterSwitchPointerAlias(
                 serializedArgs,
                 reinterpret_cast<uintptr_t>(varMaterialPass->args));
+
+            if (inserted)
+                *inserted = varMaterialPass->args;
+
             DB_FixupSwitchPointerAliases();
         }
     }
-
-    if (serialized.args &&
-        serialized.args != UINT32_MAX &&
-        serialized.args != UINT32_MAX - 1u)
+    else if (serialized.args)
     {
         const uintptr_t serializedSlot =
             DB_ConvertOffsetToPointerValue(serialized.args);
@@ -7296,6 +7302,7 @@ static void Switch_LoadMaterialPassSerialized(
                 reinterpret_cast<uintptr_t *>(
                     &varMaterialPass->args));
         }
+    }
     }
 }
 #endif
