@@ -368,6 +368,11 @@ struct MaterialTechnique // sizeof=0x1C
     uint16_t passCount;
     MaterialPass passArray[1];
 };
+
+#ifdef KISAK_SWITCH
+static_assert(sizeof(MaterialPass) == 0x28, "Switch MaterialPass ABI changed");
+static_assert(sizeof(MaterialTechnique) == 0x38, "Switch MaterialTechnique ABI changed");
+#endif
 struct WaterWritable // sizeof=0x4
 {                                       // ...
     float floatTime;
@@ -514,6 +519,10 @@ struct MaterialTechniqueSet // sizeof=0x94
     MaterialTechniqueSet *remappedTechniqueSet;
     MaterialTechnique *techniques[TECHNIQUE_COUNT];
 };
+
+#ifdef KISAK_SWITCH
+static_assert(sizeof(MaterialTechniqueSet) == 0x128, "Switch MaterialTechniqueSet ABI changed");
+#endif
 static_assert(sizeof(MaterialTechniqueSet) == 148);
 
 struct Material // sizeof=0x50
