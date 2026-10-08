@@ -463,7 +463,16 @@ const void **__cdecl DB_InsertPointer()
     const uintptr_t beforePos =
         reinterpret_cast<uintptr_t>(g_streamPos);
 
-    DB_PushStreamPos(4);
+    // DB_InsertPointer normally switches from the parent stream (typically
+    // stream 0) into stream 4 to reserve the serialized pointer slot. Several
+    // Switch loaders, however, call it while they are already decoding stream
+    // 4. Pushing the same stream index saves the current cursor and DB_PopStreamPos
+    // restores that old cursor, silently undoing the four-byte reservation.
+    // Keep the reservation on the active stream when it is already stream 4.
+    const bool alreadyStream4 = g_streamPosIndex == 4u;
+    if (!alreadyStream4)
+        DB_PushStreamPos(4);
+
     uint8_t *serializedSlot = DB_AllocStreamPos(3);
     DB_IncStreamPos(4);
 
@@ -530,7 +539,8 @@ const void **__cdecl DB_InsertPointer()
         Switch_LogWrite(trace);
     }
 
-    DB_PopStreamPos();
+    if (!alreadyStream4)
+        DB_PopStreamPos();
     return pData;
 #else
     const void **pData;
