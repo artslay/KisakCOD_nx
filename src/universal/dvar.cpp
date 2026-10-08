@@ -2128,7 +2128,7 @@ void __cdecl Dvar_UpdateValue(dvar_s *dvar, DvarValue value)
             shouldFree = Dvar_ShouldFreeCurrentString(dvar);
             if (shouldFree)
                 oldString.integer = dvar->current.integer;
-            Dvar_AssignCurrentStringValue(dvar, &currentString, (char *)value.integer);
+            Dvar_AssignCurrentStringValue(dvar, &currentString, value.string);
             dvar->current.integer = currentString.integer;
             if (Dvar_ShouldFreeLatchedString(dvar))
                 Dvar_FreeString(&dvar->latched);
