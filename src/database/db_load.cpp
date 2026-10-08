@@ -8359,23 +8359,94 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
 #ifdef __SWITCH__
             if (traceCinematic)
                 Switch_LogWrite("[SWITCH DB FIND] techset ptr -> alias\n");
+
+            // Positive TechniqueSet pointers in the fastfile can point at a
+            // 4-byte alias slot in stream 4. For an inline TechniqueSet the
+            // alias slot contains FOLLOWING/INSERT (-1/-2), while the actual
+            // 148-byte TechniqueSet payload follows in stream 0. The generic
+            // 32-bit DB_ConvertOffsetToAlias() cannot represent that widened
+            // relationship on ARM64, so materialize the inline object and
+            // register both sides of the alias.
             const uintptr_t aliasSlot = DB_ConvertOffsetToPointerValue(value);
-            const uint32_t *aliasWords =
-                reinterpret_cast<const uint32_t *>(aliasSlot);
-            char trace[256];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[SWITCH MATERIAL] techset alias slot=%p raw=%08x %08x\n",
-                reinterpret_cast<void *>(aliasSlot),
-                aliasWords[0],
-                aliasWords[1]);
-            Switch_LogWrite(trace);
-            DB_ConvertOffsetToAlias((uint32_t *)varMaterialTechniqueSetPtr);
-            std::snprintf(
-                trace, sizeof(trace),
-                "[SWITCH MATERIAL] techset alias result=%p\n",
-                reinterpret_cast<void *>(*varMaterialTechniqueSetPtr));
-            Switch_LogWrite(trace);
+            uintptr_t resolvedPointer = 0;
+
+            bool aliasFound =
+                aliasSlot &&
+                DB_ResolveSwitchPointerAlias(aliasSlot, &resolvedPointer);
+            if (!aliasFound && aliasSlot)
+                aliasFound =
+                    DB_TryResolveSwitchSerializedAliasChain(
+                        aliasSlot,
+                        &resolvedPointer);
+
+            if (aliasFound && resolvedPointer)
+            {
+                *varMaterialTechniqueSetPtr =
+                    reinterpret_cast<MaterialTechniqueSet *>(resolvedPointer);
+            }
+            else if (aliasSlot)
+            {
+                const uint32_t aliasValue =
+                    *reinterpret_cast<const uint32_t *>(aliasSlot);
+
+                if (aliasValue == UINT32_MAX ||
+                    aliasValue == UINT32_MAX - 1u)
+                {
+                    DB_AllocStreamPos(3);
+                    const uintptr_t serializedTechniqueSet =
+                        reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+
+                    *varMaterialTechniqueSetPtr =
+                        reinterpret_cast<MaterialTechniqueSet *>(
+                            Hunk_Alloc(
+                                static_cast<uint32_t>(
+                                    sizeof(MaterialTechniqueSet)),
+                                "SwitchMaterialTechniqueSet",
+                                22));
+                    varMaterialTechniqueSet =
+                        *varMaterialTechniqueSetPtr;
+                    std::memset(
+                        varMaterialTechniqueSet,
+                        0,
+                        sizeof(MaterialTechniqueSet));
+
+                    Load_MaterialTechniqueSet(1);
+                    Load_MaterialTechniqueSetAsset(
+                        (XAssetHeader *)varMaterialTechniqueSetPtr);
+
+                    DB_RegisterSwitchPointerAlias(
+                        serializedTechniqueSet,
+                        reinterpret_cast<uintptr_t>(
+                            *varMaterialTechniqueSetPtr));
+                    DB_RegisterSwitchPointerAlias(
+                        aliasSlot,
+                        reinterpret_cast<uintptr_t>(
+                            *varMaterialTechniqueSetPtr));
+                    DB_FixupSwitchPointerAliases();
+
+                    if (traceCinematic)
+                        Switch_LogWrite(
+                            "[SWITCH DB FIND] techset alias -> inline\n");
+                }
+                else
+                {
+                    // Normal positive alias: resolve it through the native
+                    // Switch alias table and keep it pending when its target
+                    // has not been loaded yet.
+                    *varMaterialTechniqueSetPtr =
+                        reinterpret_cast<MaterialTechniqueSet *>(
+                            resolvedPointer);
+                    if (!resolvedPointer)
+                        DB_AddSwitchPointerAliasFixup(
+                            aliasSlot,
+                            reinterpret_cast<uintptr_t *>(
+                                varMaterialTechniqueSetPtr));
+                }
+            }
+            else
+            {
+                *varMaterialTechniqueSetPtr = nullptr;
+            }
 #else
             DB_ConvertOffsetToAlias((uint32_t *)varMaterialTechniqueSetPtr);
 #endif
