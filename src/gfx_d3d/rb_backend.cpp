@@ -245,6 +245,22 @@ void __cdecl RB_DrawStretchPic(
     uint32_t color,
     GfxPrimStatsTarget statsTarget)
 {
+#ifdef __SWITCH__
+    // CoD4's button composition can emit a narrow translucent tail using the
+    // default material. The legacy D3D path blends it softly; on Vulkan it
+    // becomes a hard vertical edge. Suppress only that 8px-class tail.
+    if (material && material->textureCount && material->textureTable &&
+        material->textureTable[0].u.image &&
+        material->textureTable[0].u.image->name &&
+        !I_stricmp(material->textureTable[0].u.image->name, "default") &&
+        w > 0.0f && w <= 16.0f &&
+        h >= 24.0f && h <= 40.0f &&
+        ((color >> 24) & 0xFFu) <= 0x40u)
+    {
+        return;
+    }
+#endif
+
     uint16_t vertCount; // [esp+24h] [ebp-4h]
 
     iassert(gfxCmdBufSourceState.viewMode == VIEW_MODE_2D);
