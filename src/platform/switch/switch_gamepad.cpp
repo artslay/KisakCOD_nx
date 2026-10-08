@@ -51,36 +51,15 @@ static void SendKeyEdge(u64 mask, int key)
         CL_KeyEvent(0, key, 0, Sys_Milliseconds());
 }
 
-static void SendCommandEdge(u64 mask, const char *downCommand, const char *upCommand)
+static void SendActionEdge(
+    u64 mask,
+    void (*down)(),
+    void (*up)())
 {
     if (Pressed(mask))
-    {
-        char command[96];
-        std::snprintf(
-            command,
-            sizeof(command),
-            "%s 0 %u\n",
-            downCommand,
-            static_cast<unsigned>(Sys_Milliseconds()));
-        Cmd_ExecuteSingleCommand(
-            0,
-            CL_ControllerIndexFromClientNum(0),
-            command);
-    }
+        down();
     else if (Released(mask))
-    {
-        char command[96];
-        std::snprintf(
-            command,
-            sizeof(command),
-            "%s 0 %u\n",
-            upCommand,
-            static_cast<unsigned>(Sys_Milliseconds()));
-        Cmd_ExecuteSingleCommand(
-            0,
-            CL_ControllerIndexFromClientNum(0),
-            command);
-    }
+        up();
 }
 
 static u64 ButtonMask(GPadButton button)
@@ -142,25 +121,26 @@ void Switch_GamepadFrame()
     SendKeyEdge(HidNpadButton_B, K_ESCAPE);
     SendKeyEdge(HidNpadButton_Plus, K_ESCAPE);
 
-    // Feed controller actions through the command handlers registered by
-    // CL_InitInput(), exactly like the normal +command/-command path.
-    SendCommandEdge(HidNpadButton_A, "+moveup", "-moveup");
-    SendCommandEdge(HidNpadButton_B, "+stance", "-stance");
-    SendCommandEdge(HidNpadButton_X, "+usereload", "-usereload");
-    SendCommandEdge(HidNpadButton_ZR, "+attack", "-attack");
-    SendCommandEdge(HidNpadButton_ZL, "+speed", "-speed");
-    SendCommandEdge(HidNpadButton_R, "+frag", "-frag");
-    SendCommandEdge(HidNpadButton_L, "+smoke", "-smoke");
-    SendCommandEdge(HidNpadButton_StickL, "+sprint", "-sprint");
-    SendCommandEdge(HidNpadButton_StickR, "+melee", "-melee");
+    // Use the engine's existing controller input handlers directly. This keeps
+    // the original kbutton_t semantics instead of synthesizing console
+    // commands with a fake key id.
+    SendActionEdge(HidNpadButton_A, IN_UpDown, IN_UpUp);
+    SendActionEdge(HidNpadButton_B, IN_Stance_Down, IN_Stance_Up);
+    SendActionEdge(HidNpadButton_X, IN_UseReload_Down, IN_UseReload_Up);
+    SendActionEdge(HidNpadButton_ZR, IN_Attack_Down, IN_Attack_Up);
+    SendActionEdge(HidNpadButton_ZL, IN_SpeedDown, IN_SpeedUp);
+    SendActionEdge(HidNpadButton_R, IN_Frag_Down, IN_Frag_Up);
+    SendActionEdge(HidNpadButton_L, IN_Smoke_Down, IN_Smoke_Up);
+    SendActionEdge(HidNpadButton_StickL, IN_SprintDown, IN_SprintUp);
+    SendActionEdge(HidNpadButton_StickR, IN_Melee_Down, IN_Melee_Up);
 
-    // Y uses the existing stance hold path. Holding it for cl_stanceHoldTime
-    // transitions from crouch to prone through CL_StanceButtonUpdate().
-    SendCommandEdge(HidNpadButton_Y, "+stance", "-stance");
+    // Y is the original CoD controller next-weapon action.
+    if (Pressed(HidNpadButton_Y))
+        Cbuf_AddText(0, "weapnext\n");
 
     // D-pad up is night vision during gameplay; the UI still receives the
     // corresponding UPARROW event above.
-    SendCommandEdge(HidNpadButton_Up, "+nightvision", "-nightvision");
+    SendActionEdge(HidNpadButton_Up, IN_NightVisionDown, IN_NightVisionUp);
 }
 
 void Switch_GamepadShutdown()
