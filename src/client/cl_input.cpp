@@ -999,122 +999,79 @@ int __cdecl CL_AllowInput()
 void __cdecl CL_GamepadMove(usercmd_s *cmd)
 {
 #ifdef __SWITCH__
-    double v2; // fp27
-    double v3; // fp28
-    double v4; // fp29
-    double v5; // fp30
-    int v6; // r3
-    double Button; // fp26
-    int oldAngles; // r3
-    double side; // fp25
-    double forward; // fp24
-    double up; // fp31
-    double v12; // fp0
-    char v13; // r3
-    char forwardmove; // r10
-    char v15; // r3
-    char upmove; // r10
-    char v17; // r3
-    char pitchmove; // r10
-    char v19; // r3
-    char yawmove; // r10
-    int v21; // r3
-    __int64 v23; // r11
-    double v24; // fp31
-    int buttons; // r10
-    AimOutput v26; // [sp+60h] [-A0h] BYREF
-    AimInput v27; // [sp+70h] [-90h] BYREF
-
     if (cl_paused->current.integer == 1)
-        MyAssertHandler(
-            "c:\\trees\\cod3\\cod3src\\src\\client\\cl_input.cpp",
-            1127,
-            0,
-            "%s",
-            "cl_paused->current.integer != 1");
-    if ((clients[0].snap.ps.pm_flags & 0x800) == 0 || cl_freemove->current.integer == 2)
+        return;
+
+    const int controller = CL_ControllerIndexFromClientNum(0);
+    if (!GPad_IsActive(controller))
+        return;
+
+    const float pitchAxis = CL_GamepadAxisValue(0, 4);
+    const float yawAxis = -CL_GamepadAxisValue(0, 3);
+    const float forwardAxis = CL_GamepadAxisValue(0, 1);
+    const float rightAxis = CL_GamepadAxisValue(0, 0);
+    const float rightTrigger = GPad_GetButton(controller, GPAD_R_TRIG);
+
+    if (clients[0].snap.ps.pm_flags & 0x800)
     {
-        v2 = CL_GamepadAxisValue(0, 4);
-        v3 = -CL_GamepadAxisValue(0, 3);
-        v4 = CL_GamepadAxisValue(0, 1);
-        v5 = CL_GamepadAxisValue(0, 0);
-        v6 = CL_ControllerIndexFromClientNum(0);
-        Button = GPad_GetButton(v6, GPAD_R_TRIG);
-        oldAngles = CL_ControllerIndexFromClientNum(0);
-        side = GPad_GetButton(oldAngles, GPAD_L_TRIG);
-        forward = CL_GamepadAxisValue(0, 5);
-        up = 127.0;
-        if (I_fabs(v5) > 0.0 || I_fabs(v4) > 0.0)
-        {
-            if (I_fabs(v5) <= I_fabs(v4))
-                v12 = (float)((float)v5 / (float)v4);
-            else
-                v12 = (float)((float)v4 / (float)v5);
-            up = (float)((float)sqrtf((float)((float)((float)v12 * (float)v12) + (float)1.0)) * (float)127.0);
-        }
-        v13 = ClampChar((int)(float)((float)up * (float)v5) + cmd->rightmove);
-        forwardmove = cmd->forwardmove;
-        cmd->rightmove = v13;
-        v15 = ClampChar((int)(float)((float)up * (float)v4) + forwardmove);
-        upmove = cmd->upmove;
-        cmd->forwardmove = v15;
-        v17 = ClampChar((int)(float)((float)((float)up * (float)Button) - (float)((float)up * (float)side)) + upmove);
-        pitchmove = cmd->pitchmove;
-        cmd->upmove = v17;
-        v19 = ClampChar((int)(float)((float)up * (float)v2) + pitchmove);
-        yawmove = cmd->yawmove;
-        cmd->pitchmove = v19;
-        cmd->yawmove = ClampChar((int)(float)((float)up * (float)v3) + yawmove);
-        v21 = CL_ControllerIndexFromClientNum(0);
-        // Profile_GetProfileSettings is not part of the Switch profile layer yet.
-        // Keep the original default pitch direction until that profile API is wired.
-        const int invertSign = -1;
-        v24 = (float)invertSign * v2;
-
-        // This SP port does not provide AimAssist_UpdateGamePadInput().
-        // Apply the existing gamepad axes directly to the client's viewangles,
-        // using the engine's normal pitch/yaw speed dvars.
-        const float gamepadFrameScale = (float)cls.frametime * 0.001f;
-        clients[0].viewangles[0] +=
-            v24 * cl_pitchspeed->current.value * gamepadFrameScale;
-        clients[0].viewangles[1] +=
-            v3 * cl_yawspeed->current.value * gamepadFrameScale;
-
-        if (kb[KEY_SPEED].active == (clients[0].usingAds == 0))
-            cmd->buttons |= BUTTON_ADS;
-        if (!kb[KEY_BACK].active)
-        {
-            if (kb[KEY_SPRINT].active || kb[KEY_SPRINT].wasPressed)
-            {
-                cmd->buttons |= BUTTON_SPRINT;
-                kb[KEY_SPRINT].wasPressed = 0;
-            }
-            else
-            {
-                cmd->buttons &= ~BUTTON_SPRINT;
-            }
-        }
-        if (forward >= cl_analog_attack_threshold->current.value)
-            cmd->buttons |= BUTTON_ATTACK;
-        buttons = cmd->buttons;
-        v27.pitchAxis = v24;
-        v27.yawAxis = v3;
-        v27.forwardAxis = v4;
-        v27.rightAxis = v5;
-        v27.buttons = buttons;
-        v27.pitch = clients[0].viewangles[0];
-        v27.localClientNum = 0;
-        v27.pitchMax = clients[0].cgameMaxPitchSpeed;
-        v27.yaw = clients[0].viewangles[1];
-        v27.yawMax = clients[0].cgameMaxYawSpeed;
-        v27.deltaTime = (float)(unsigned int)cls.frametime * (float)0.001;
-        v27.ps = CG_GetPredictedPlayerState(0);
-        cmd->meleeChargeDist = 0;
-        cmd->meleeChargeYaw = 0.0;
+        if (cl_freemove->current.integer != 2)
+            return;
     }
+
+    const float magnitude = std::sqrt(
+        forwardAxis * forwardAxis +
+        rightAxis * rightAxis);
+
+    float moveScale = 127.0f;
+    if (magnitude > 1.0f)
+        moveScale /= magnitude;
+
+    cmd->rightmove = ClampChar(
+        static_cast<int>(rightAxis * moveScale + cmd->rightmove));
+    cmd->forwardmove = ClampChar(
+        static_cast<int>(forwardAxis * moveScale + cmd->forwardmove));
+
+    cmd->pitchmove = ClampChar(
+        static_cast<int>(pitchAxis * 127.0f) + cmd->pitchmove);
+    cmd->yawmove = ClampChar(
+        static_cast<int>(yawAxis * 127.0f) + cmd->yawmove);
+
+    if (GPad_GetButton(controller, GPAD_R_TRIG) >= cl_analog_attack_threshold->current.value ||
+        rightTrigger >= cl_analog_attack_threshold->current.value)
+        cmd->buttons |= BUTTON_ATTACK;
+
+    if (GPad_GetButton(controller, GPAD_L_TRIG) > 0.0f)
+        cmd->buttons |= BUTTON_ADS;
+
+    if (GPad_GetButton(controller, GPAD_L_STICK) > 0.0f)
+        cmd->buttons |= BUTTON_SPRINT;
+
+    AimInput aimInput{};
+    AimOutput aimOutput{};
+
+    aimInput.pitchAxis = pitchAxis;
+    aimInput.yawAxis = yawAxis;
+    aimInput.forwardAxis = forwardAxis;
+    aimInput.rightAxis = rightAxis;
+    aimInput.buttons = cmd->buttons;
+    aimInput.pitch = clients[0].viewangles[0];
+    aimInput.localClientNum = 0;
+    aimInput.pitchMax = clients[0].cgameMaxPitchSpeed;
+    aimInput.yaw = clients[0].viewangles[1];
+    aimInput.yawMax = clients[0].cgameMaxYawSpeed;
+    aimInput.deltaTime = static_cast<float>(cls.frametime) * 0.001f;
+    aimInput.ps = CG_GetPredictedPlayerState(0);
+
+    AimAssist_UpdateGamePadInput(&aimInput, &aimOutput);
+
+    clients[0].viewangles[0] = aimOutput.pitch;
+    clients[0].viewangles[1] = aimOutput.yaw;
+    cmd->meleeChargeDist = aimOutput.meleeChargeDist;
+    cmd->meleeChargeYaw = aimOutput.meleeChargeYaw;
+#else
+    (void)cmd;
 #endif
 }
-
 void __cdecl CL_GetMouseMovement(clientActive_t *cl, float *mx, float *my)
 {
     iassert(mx);
@@ -1613,8 +1570,7 @@ void __cdecl CL_CreateCmd(usercmd_s *result)
         CL_KeyMove(result);
         CL_MouseMove(result);
 #ifdef __SWITCH__
-        if (GPad_IsActive(CL_ControllerIndexFromClientNum(0)))
-            CL_GamepadMove(result);
+        CL_GamepadMove(result);
 #endif
         if (clients[0].viewangles[0] - oldAngles <= 90.0)
         {
@@ -1773,9 +1729,7 @@ void __cdecl CL_Input(int localClientNum)
 
 void __cdecl CL_ShutdownInput()
 {
-#ifdef __SWITCH__
-    Switch_GamepadShutdown();
-#endif
+
     Cmd_RemoveCommand("mouseMove");
     Cmd_RemoveCommand("remoteKey");
     Cmd_RemoveCommand("centerview");
@@ -2038,9 +1992,7 @@ void __cdecl CL_InitInput()
     cl_freemove = Dvar_RegisterInt("cl_freemove", 0, 0, 3, 0x80u, "Fly about the level");
     //cl_freemoveScale = Dvar_RegisterFloat("cl_freemoveScale", 1.0, 0.0, 5.0, v3, v2);
     cl_freemoveScale = Dvar_RegisterFloat("cl_freemoveScale", 1.0, 0.0, 5.0, 0, 0);
-#ifdef __SWITCH__
-    Switch_GamepadInit();
-#endif
+
 }
 
 
