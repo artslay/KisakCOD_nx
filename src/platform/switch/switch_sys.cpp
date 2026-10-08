@@ -508,6 +508,39 @@ void __cdecl Sys_LeaveCriticalSection(int section)
 
 int __cdecl Sys_IsRemoteDebugClient() { return 0; }
 
+bool Switch_ShowSoftwareKeyboard(
+    const char *initialText,
+    unsigned int maxChars,
+    char *outText,
+    unsigned int outSize)
+{
+    if (!outText || outSize < 2)
+        return false;
+
+    outText[0] = '\0';
+
+    SwkbdConfig config{};
+    Result rc = swkbdCreate(&config, 0);
+    if (R_FAILED(rc))
+        return false;
+
+    swkbdConfigMakePresetDefault(&config);
+    swkbdConfigSetInitialCursorPos(&config, 1);
+    swkbdConfigSetReturnButtonFlag(&config, 0);
+    swkbdConfigSetHeaderText(&config, "Enter text");
+
+    if (initialText && *initialText)
+        swkbdConfigSetInitialText(&config, initialText);
+
+    if (maxChars == 0 || maxChars >= outSize)
+        maxChars = outSize - 1;
+    swkbdConfigSetStringLenMax(&config, maxChars);
+
+    rc = swkbdShow(&config, outText, outSize);
+    swkbdClose(&config);
+    return R_SUCCEEDED(rc);
+}
+
 char *__cdecl Sys_GetClipboardData()
 {
     return nullptr;
