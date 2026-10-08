@@ -7,6 +7,10 @@
 #include <database/database.h>
 #include "rb_uploadshaders.h"
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 $4ABF24606230B73E4E420CE33A1F14B1 mtlOverrideGlob;
 
 const GfxMtlFeatureMap s_materialFeatures[20] =
