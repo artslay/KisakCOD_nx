@@ -4496,41 +4496,38 @@ void __cdecl Statement_AddEntry(statement_s *statement, expressionEntry *entry)
 
 void __cdecl Statement_AddOperator(statement_s *statement, operationEnum op)
 {
-    uint32_t *v2; // eax
-
-    v2 = (uint32_t*)Z_Malloc(12, "Statement_AddOperator", 34);
-    *v2 = 0;
-    v2[1] = op;
-    Statement_AddEntry(statement, (expressionEntry *)v2);
+    expressionEntry *entry = static_cast<expressionEntry *>(
+        Z_Malloc(sizeof(expressionEntry), "Statement_AddOperator", 34));
+    entry->type = 0;
+    entry->data.op = op;
+    Statement_AddEntry(statement, entry);
 }
 
 void __cdecl Statement_AddIntOperand(statement_s *statement, int val)
 {
-    uint32_t *v2; // eax
-
-    v2 = (uint32_t*)Z_Malloc(12, "Statement_AddIntOperand", 34);
-    *v2 = 1;
-    v2[1] = 0;
-    v2[2] = val;
-    Statement_AddEntry(statement, (expressionEntry *)v2);
+    expressionEntry *entry = static_cast<expressionEntry *>(
+        Z_Malloc(sizeof(expressionEntry), "Statement_AddIntOperand", 34));
+    entry->type = 1;
+    entry->data.operand.dataType = VAL_INT;
+    entry->data.operand.internals.intVal = val;
+    Statement_AddEntry(statement, entry);
 }
 
 void __cdecl Statement_AddFloatOperand(statement_s *statement, float val)
 {
-    uint32_t *v2; // eax
-
-    v2 = (uint32_t*)Z_Malloc(12, "Statement_AddFloatOperand", 34);
-    *v2 = 1;
-    v2[1] = 1;
-    *((float *)v2 + 2) = val;
-    Statement_AddEntry(statement, (expressionEntry *)v2);
+    expressionEntry *entry = static_cast<expressionEntry *>(
+        Z_Malloc(sizeof(expressionEntry), "Statement_AddFloatOperand", 34));
+    entry->type = 1;
+    entry->data.operand.dataType = VAL_FLOAT;
+    entry->data.operand.internals.floatVal = val;
+    Statement_AddEntry(statement, entry);
 }
 
 void __cdecl Statement_AddStringOperand(statement_s *statement, char *str)
 {
     expressionEntry *entry; // [esp+20h] [ebp-4h]
 
-    entry = (expressionEntry *)Z_Malloc(12, "Statement_AddStringOperand", 34);
+    entry = static_cast<expressionEntry *>(Z_Malloc(sizeof(expressionEntry), "Statement_AddStringOperand", 34));
     entry->type = 1;
     entry->data.op = OP_MULTIPLY;
     entry->data.operand.internals.string =
@@ -4952,7 +4949,8 @@ int __cdecl MenuParse_itemDef(menuDef_t *menu, int handle)
 
     if (menu->itemCount < 256)
     {
-        item = (itemDef_s *)UI_Alloc(0x174u, 4);
+        item = reinterpret_cast<itemDef_s *>(UI_Alloc(
+        sizeof(itemDef_s), static_cast<int>(alignof(itemDef_s))));
         Item_Init(item, menu->imageTrack);
         if (!Item_Parse(handle, item))
         {
@@ -4978,7 +4976,8 @@ int __cdecl MenuParse_execKey(menuDef_t *menu, int handle)
     keyindex = (uint8_t)keyname;
     if (!PC_Script_Parse(handle, &action))
         return 0;
-    handler = (ItemKeyHandler *)UI_Alloc(0xCu, 4);
+    handler = reinterpret_cast<ItemKeyHandler *>(UI_Alloc(
+        sizeof(ItemKeyHandler), static_cast<int>(alignof(ItemKeyHandler))));
     handler->key = keyindex;
     handler->action = action;
     handler->next = menu->onKey;
@@ -5184,7 +5183,8 @@ void __cdecl Item_ValidateTypeData(itemDef_s *item, int handle)
         switch (item->type)
         {
         case 6:
-            item->typeData.listBox = (listBoxDef_s *)UI_Alloc(0x154u, 4);
+            item->typeData.listBox = reinterpret_cast<listBoxDef_s *>(UI_Alloc(
+        sizeof(listBoxDef_s), static_cast<int>(alignof(listBoxDef_s))));
             break;
         case 4:
         case 9:
@@ -5195,7 +5195,8 @@ void __cdecl Item_ValidateTypeData(itemDef_s *item, int handle)
         case 0xA:
         case 0:
         case 0x11:
-            item->typeData.listBox = (listBoxDef_s *)UI_Alloc(0x20u, 4);
+            item->typeData.editField = reinterpret_cast<editFieldDef_s *>(UI_Alloc(
+        sizeof(editFieldDef_s), static_cast<int>(alignof(editFieldDef_s))));
             if (item->type == 4 || item->type == 16 || item->type == 9 || item->type == 18 || item->type == 17)
             {
                 editDef = Item_GetEditFieldDef(item);
@@ -5206,7 +5207,8 @@ void __cdecl Item_ValidateTypeData(itemDef_s *item, int handle)
             }
             break;
         case 0xC:
-            item->typeData.listBox = (listBoxDef_s *)UI_Alloc(0x188u, 4);
+            item->typeData.multi = reinterpret_cast<multiDef_s *>(UI_Alloc(
+        sizeof(multiDef_s), static_cast<int>(alignof(multiDef_s))));
             break;
         }
     }
@@ -6303,8 +6305,9 @@ void __cdecl Menu_PostParse(menuDef_t *menu)
 
     if (!menu)
         MyAssertHandler(".\\ui\\ui_shared_obj.cpp", 2653, 0, "%s", "menu");
-    size = 4 * menu->itemCount;
-    menu->items = (itemDef_s **)UI_Alloc(size, 4);
+    size = static_cast<uint32_t>(sizeof(itemDef_s *) * menu->itemCount);
+    menu->items = reinterpret_cast<itemDef_s **>(
+        UI_Alloc(size, static_cast<int>(alignof(itemDef_s *))));
     memcpy((uint8_t *)menu->items, (uint8_t *)g_load_0.items, size);
     if (menu->fullScreen)
     {
@@ -6320,7 +6323,8 @@ char __cdecl Menu_New(int handle, int imageTrack)
 {
     menuDef_t *menu; // [esp+0h] [ebp-4h]
 
-    menu = (menuDef_t *)UI_Alloc(0x11Cu, 4);
+    menu = reinterpret_cast<menuDef_t *>(UI_Alloc(
+        sizeof(menuDef_t), static_cast<int>(alignof(menuDef_t))));
     Menu_Init(menu, imageTrack);
     if (Menu_Parse(handle, menu))
     {
