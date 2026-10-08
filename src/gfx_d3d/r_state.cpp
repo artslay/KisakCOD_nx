@@ -14,6 +14,11 @@
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
 #endif
+#ifdef __SWITCH__
+thread_local const Material *g_switchLastSamplerMaterials[16]{};
+thread_local uint32_t g_switchLastSamplerNameHashes[16]{};
+thread_local uint8_t g_switchLastSamplerSemantics[16]{};
+#endif
 
 //float const *const shadowmapClearColor 820ebb50     gfx_d3d : r_state.obj
 //BOOL g_renderTargetIsOverridden 85b5dd38     gfx_d3d : r_state.obj
@@ -1823,6 +1828,11 @@ void __cdecl R_SetSampler(
         }
         R_HW_SetSamplerTexture(context.state->prim.device, samplerIndex, &image->texture);
 #ifdef __SWITCH__
+        g_switchLastSamplerMaterials[samplerIndex] = context.state->material;
+        g_switchLastSamplerNameHashes[samplerIndex] = context.state->material && context.state->material->textureTable
+            ? context.state->material->textureTable[0].nameHash : 0u;
+        g_switchLastSamplerSemantics[samplerIndex] = context.state->material && context.state->material->textureTable
+            ? context.state->material->textureTable[0].semantic : 0u;
         extern thread_local const GfxImage *g_switchLastSamplerImages[16];
         if (samplerIndex < 16)
             g_switchLastSamplerImages[samplerIndex] = image;
