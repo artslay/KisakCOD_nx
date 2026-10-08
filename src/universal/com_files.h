@@ -143,6 +143,10 @@ int __cdecl FS_SV_FOpenFileWrite(const char *filename);
 void __cdecl FS_SV_Rename(char *from, char *to);
 int __cdecl FS_SV_FileExists(char *file);
 
+#ifdef __SWITCH__
+bool __cdecl FS_RenameChecked(char *from, char *fromDir, char *to, char *toDir);
+#endif
+
 uint32_t __cdecl FS_FTell(int f);
 enum FsListBehavior_e : __int32
 {                                       // ...
