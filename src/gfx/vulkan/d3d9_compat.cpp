@@ -2235,12 +2235,19 @@ bool IDirect3DDevice9::PrepareDraw()
     if (switchUiImage && switchUiImage->name)
     {
         const char *name = switchUiImage->name;
-        const bool switchUiGradient =
+        // These two original CoD4 menu materials are translucent 2D
+        // UI assets. Keep their authored geometry/colors; only restore the
+        // D3D9 straight-alpha blend state that the Switch path needs.
+        const bool switchUiAlphaMaterial =
             !I_stricmp(name, "gradient_fadein") ||
             !I_stricmp(name, "images/gradient_fadein") ||
             !I_stricmp(name, "gradient_fadein.iwi") ||
-            !I_stricmp(name, "images/gradient_fadein.iwi");
-        if (switchUiGradient)
+            !I_stricmp(name, "images/gradient_fadein.iwi") ||
+            !I_stricmp(name, "button_highlight_end") ||
+            !I_stricmp(name, "images/button_highlight_end") ||
+            !I_stricmp(name, "button_highlight_end.iwi") ||
+            !I_stricmp(name, "images/button_highlight_end.iwi");
+        if (switchUiAlphaMaterial)
         {
             m_blendEnable = true;
             m_separateAlphaBlend = false;
