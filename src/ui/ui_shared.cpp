@@ -5979,6 +5979,35 @@ void __cdecl Window_Paint(
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/border_draw";
 #endif
+#ifdef __SWITCH__
+        // CoD4's highlighted gradient button uses the chamfered highlight border
+        // rather than a plain rectangular outline. The stock UI helper already
+        // emits the top strip with the diagonal cut; force that path for the
+        // authored gradient_fadein button decorations.
+        const bool switchChamferedGradient =
+            w->style == 3 &&
+            w->background &&
+            w->background->info.name &&
+            !I_stricmp(w->background->info.name, "gradient_fadein") &&
+            w->borderSize > 0.0f &&
+            w->borderColor[3] > 0.0f;
+
+        if (switchChamferedGradient)
+        {
+            UI_DrawHighlightRect(
+                scrPlace,
+                origRect->x,
+                origRect->y,
+                origRect->w,
+                origRect->h,
+                origRect->horzAlign,
+                origRect->vertAlign,
+                w->borderSize,
+                w->borderColor,
+                w->borderColor);
+        }
+        else
+#endif
         switch (w->border)
         {
         case 1:
