@@ -8913,11 +8913,54 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
             else
             {
                 *varMaterialHandle = nullptr;
+
+                // Resolve a still-unregistered serialized Material through its
+                // own asset name. This is the loader equivalent of the normal
+                // DB material lookup and avoids a renderer-side default
+                // material fallback while keeping the original UI asset.
                 if (materialAliasSlot)
                 {
-                    DB_AddSwitchPointerAliasFixup(
-                        materialAliasSlot,
-                        reinterpret_cast<uintptr_t *>(varMaterialHandle));
+                    uint32_t serializedMaterialName = 0;
+                    std::memcpy(
+                        &serializedMaterialName,
+                        reinterpret_cast<const void *>(materialAliasSlot),
+                        sizeof(serializedMaterialName));
+
+                    const char *materialName = nullptr;
+                    if (serializedMaterialName &&
+                        serializedMaterialName != UINT32_MAX &&
+                        serializedMaterialName != UINT32_MAX - 1u)
+                    {
+                        const uintptr_t nameAddress =
+                            DB_ConvertOffsetToPointerValue(
+                                serializedMaterialName);
+                        materialName =
+                            reinterpret_cast<const char *>(nameAddress);
+                    }
+                    else if (serializedMaterialName == UINT32_MAX)
+                    {
+                        // Load_Material() consumes an XString -1 immediately
+                        // after the 80-byte serialized Material header.
+                        materialName = reinterpret_cast<const char *>(
+                            materialAliasSlot + 80u);
+                    }
+
+                    if (materialName && *materialName)
+                    {
+                        XAssetHeader materialHeader =
+                            DB_FindXAssetHeader(
+                                ASSET_TYPE_MATERIAL,
+                                materialName);
+                        if (materialHeader.material)
+                            *varMaterialHandle = materialHeader.material;
+                    }
+
+                    if (!*varMaterialHandle)
+                    {
+                        DB_AddSwitchPointerAliasFixup(
+                            materialAliasSlot,
+                            reinterpret_cast<uintptr_t *>(varMaterialHandle));
+                    }
                 }
             }
 
