@@ -253,16 +253,59 @@ void __cdecl RB_DrawStretchPic(
     R_TrackPrims(&gfxCmdBufState, statsTarget);
     RB_CheckTessOverflow(4, 6);
     vertCount = tess.vertexCount;
-    tess.indices[tess.indexCount] = vertCount + 3;
-    tess.indices[tess.indexCount + 1] = vertCount;
-    tess.indices[tess.indexCount + 2] = vertCount + 2;
-    tess.indices[tess.indexCount + 3] = vertCount + 2;
-    tess.indices[tess.indexCount + 4] = vertCount;
-    tess.indices[tess.indexCount + 5] = vertCount + 1;
-    R_SetVertex2d(&tess.verts[tess.vertexCount], x, y, s0, t0, color);
-    R_SetVertex2d(&tess.verts[tess.vertexCount + 1], x + w, y, s1, t0, color);
-    R_SetVertex2d(&tess.verts[tess.vertexCount + 2], x + w, y + h, s1, t1, color);
-    R_SetVertex2d(&tess.verts[tess.vertexCount + 3], x, y + h, s0, t1, color);
+#ifdef __SWITCH__
+    const bool switchUiRightCap =
+        material &&
+        material->textureCount &&
+        material->textureTable &&
+        material->textureTable[0].u.image &&
+        material->textureTable[0].u.image->name &&
+        !I_stricmp(material->textureTable[0].u.image->name, "default") &&
+        w >= 7.0f && w <= 10.0f &&
+        h >= 28.0f && h <= 38.0f &&
+        ((color >> 24) & 0xFFu) <= 0x40u;
+
+    if (switchUiRightCap)
+    {
+        // This is the stock menu button's right cap. It is not a rectangular
+        // block: its upper-right corner is cut diagonally. Keep the authored
+        // alpha instead of deleting the cap, and fade only the outer top point.
+        const float cut = std::min(w, h * 0.26f);
+        const uint32_t alpha = (color >> 24) & 0xFFu;
+        const uint32_t fadedAlpha = alpha / 2u;
+        const uint32_t fadedColor =
+            (color & 0x00FFFFFFu) | (fadedAlpha << 24);
+
+        tess.indices[tess.indexCount] = vertCount + 3;
+        tess.indices[tess.indexCount + 1] = vertCount;
+        tess.indices[tess.indexCount + 2] = vertCount + 2;
+        tess.indices[tess.indexCount + 3] = vertCount + 2;
+        tess.indices[tess.indexCount + 4] = vertCount;
+        tess.indices[tess.indexCount + 5] = vertCount + 1;
+
+        R_SetVertex2d(&tess.verts[tess.vertexCount],
+                      x, y, s0, t0, color);
+        R_SetVertex2d(&tess.verts[tess.vertexCount + 1],
+                      x + w - cut, y, s1, t0, fadedColor);
+        R_SetVertex2d(&tess.verts[tess.vertexCount + 2],
+                      x + w, y + h, s1, t1, color);
+        R_SetVertex2d(&tess.verts[tess.vertexCount + 3],
+                      x, y + h, s0, t1, color);
+    }
+    else
+#endif
+    {
+        tess.indices[tess.indexCount] = vertCount + 3;
+        tess.indices[tess.indexCount + 1] = vertCount;
+        tess.indices[tess.indexCount + 2] = vertCount + 2;
+        tess.indices[tess.indexCount + 3] = vertCount + 2;
+        tess.indices[tess.indexCount + 4] = vertCount;
+        tess.indices[tess.indexCount + 5] = vertCount + 1;
+        R_SetVertex2d(&tess.verts[tess.vertexCount], x, y, s0, t0, color);
+        R_SetVertex2d(&tess.verts[tess.vertexCount + 1], x + w, y, s1, t0, color);
+        R_SetVertex2d(&tess.verts[tess.vertexCount + 2], x + w, y + h, s1, t1, color);
+        R_SetVertex2d(&tess.verts[tess.vertexCount + 3], x, y + h, s0, t1, color);
+    }
     tess.vertexCount += 4;
     tess.indexCount += 6;
 }
