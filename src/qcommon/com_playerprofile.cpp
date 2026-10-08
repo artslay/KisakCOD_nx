@@ -226,6 +226,35 @@ char __cdecl Com_NewPlayerProfile(const char *profileName)
     char profilePath[64]; // [esp+0h] [ebp-148h] BYREF
     char osPath[260]; // [esp+40h] [ebp-108h] BYREF
 
+#ifdef __SWITCH__
+    if (!profileName || !profileName[0] ||
+        !I_stricmp(profileName, ".") ||
+        !I_stricmp(profileName, "..") ||
+        std::strchr(profileName, '/') ||
+        std::strchr(profileName, '\\'))
+    {
+        Com_Printf(
+            CON_CHANNEL_SYSTEM,
+            "Invalid Switch profile name: %s\n",
+            profileName ? profileName : "(null)");
+        return 0;
+    }
+
+    for (const unsigned char *p = reinterpret_cast<const unsigned char *>(profileName);
+         *p;
+         ++p)
+    {
+        if (*p < 0x20 || *p > 0x7E || *p == ':' )
+        {
+            Com_Printf(
+                CON_CHANNEL_SYSTEM,
+                "Invalid Switch profile name: %s\n",
+                profileName);
+            return 0;
+        }
+    }
+#endif
+
     if (Com_IsValidPlayerProfileDir(profileName))
     {
         Com_Printf(CON_CHANNEL_SYSTEM, "Profile '%s' already exists\n", profileName);
