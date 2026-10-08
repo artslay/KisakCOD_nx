@@ -170,7 +170,18 @@ char __cdecl Com_DeletePlayerProfile(const char *profileName)
     if (!Sys_RemoveDirTree(osPath))
         return 0;
     if (!I_stricmp(profileName, com_playerProfile->current.string))
+    {
+#ifdef __SWITCH__
+        /*
+         * active.txt points at the currently selected profile. Once that
+         * profile is deleted the pointer must not survive into the next
+         * launch, otherwise Com_SetInitialPlayerProfile() will read a name
+         * whose directory no longer exists and fall back to startup configs.
+         */
+        FS_DeleteInDir((char *)"profiles/active.txt", (char *)"players");
+#endif
         Dvar_SetString((dvar_s *)com_playerProfile, (char *)"");
+    }
     return 1;
 }
 
