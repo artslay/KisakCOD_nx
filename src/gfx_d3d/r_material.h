@@ -325,11 +325,19 @@ struct MaterialPixelShaderProgram // sizeof=0xC
 
 static_assert(sizeof(MaterialPixelShaderProgram) == 12);
 
-struct MaterialPixelShader // sizeof=0x10
+struct MaterialPixelShader // sizeof=0x18 on Switch, 0x10 on 32-bit
 {                                       // ...
     const char *name;
     MaterialPixelShaderProgram prog;
 };
+
+#ifdef KISAK_SWITCH
+static_assert(sizeof(MaterialVertexShaderProgram) == 0x10, "Switch MaterialVertexShaderProgram ABI changed");
+static_assert(sizeof(MaterialVertexShader) == 0x18, "Switch MaterialVertexShader ABI changed");
+static_assert(sizeof(MaterialPixelShaderProgram) == 0x10, "Switch MaterialPixelShaderProgram ABI changed");
+static_assert(sizeof(MaterialPixelShader) == 0x18, "Switch MaterialPixelShader ABI changed");
+#endif
+
 struct MaterialArgumentCodeConst // sizeof=0x4
 {                                       // ...
     uint16_t index;
