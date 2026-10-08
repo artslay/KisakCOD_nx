@@ -258,6 +258,67 @@ void __cdecl AssertValidRemappedTechniqueSet(MaterialTechniqueSet *techSet)
 }
 
 #ifdef __SWITCH__
+static bool Switch_IsSerializedAddress(uintptr_t address)
+{
+    if (!address || !g_streamBlocks)
+        return false;
+
+    for (uint32_t i = 0; i < 9u; ++i)
+    {
+        const XBlock &block = g_streamBlocks[i];
+        if (!block.data || !block.size)
+            continue;
+
+        const uintptr_t begin =
+            reinterpret_cast<uintptr_t>(block.data);
+        const uintptr_t end = begin + block.size;
+        if (address >= begin && address < end)
+            return true;
+    }
+
+    return false;
+}
+
+template <typename T>
+static void Switch_ResolveSerializedPointer(
+    T **pointer,
+    const char *kind)
+{
+    if (!pointer || !*pointer)
+        return;
+
+    const uintptr_t serializedAddress =
+        reinterpret_cast<uintptr_t>(*pointer);
+    uintptr_t resolvedPointer = 0;
+
+    bool resolved =
+        DB_ResolveSwitchPointerAlias(
+            serializedAddress,
+            &resolvedPointer);
+    if (!resolved)
+    {
+        resolved =
+            DB_TryResolveSwitchSerializedAliasChain(
+                serializedAddress,
+                &resolvedPointer);
+    }
+
+    if (resolved && resolvedPointer)
+    {
+        *pointer = reinterpret_cast<T *>(resolvedPointer);
+    }
+    else if (Switch_IsSerializedAddress(serializedAddress))
+    {
+        // Keep a forward serialized reference fixable if the native object is
+        // registered after this remapped technique set is exposed.
+        DB_AddSwitchPointerAliasFixup(
+            serializedAddress,
+            reinterpret_cast<uintptr_t *>(pointer));
+    }
+
+    (void)kind;
+}
+
 static void Switch_ResolveNativeTechniquePointers(MaterialTechniqueSet *techSet)
 {
     if (!techSet)
@@ -271,33 +332,33 @@ static void Switch_ResolveNativeTechniquePointers(MaterialTechniqueSet *techSet)
 
     for (int i = 0; i < TECHNIQUE_COUNT; ++i)
     {
+        Switch_ResolveSerializedPointer(
+            &techSet->techniques[i],
+            "technique");
+
         MaterialTechnique *technique = techSet->techniques[i];
-        if (!technique)
+        if (!technique || Switch_IsSerializedAddress(
+                              reinterpret_cast<uintptr_t>(technique)))
             continue;
 
-        const uintptr_t serializedAddress =
-            reinterpret_cast<uintptr_t>(technique);
-        uintptr_t resolvedPointer = 0;
+        const uint32_t passCount =
+            static_cast<uint32_t>(technique->passCount);
+        if (passCount > 64u)
+            continue;
 
-        bool resolved =
-            DB_ResolveSwitchPointerAlias(
-                serializedAddress,
-                &resolvedPointer);
-        if (!resolved)
+        for (uint32_t passIndex = 0; passIndex < passCount; ++passIndex)
         {
-            resolved =
-                DB_TryResolveSwitchSerializedAliasChain(
-                    serializedAddress,
-                    &resolvedPointer);
+            MaterialPass *pass = &technique->passArray[passIndex];
+            Switch_ResolveSerializedPointer(
+                &pass->vertexShader,
+                "vertexShader");
+            Switch_ResolveSerializedPointer(
+                &pass->pixelShader,
+                "pixelShader");
         }
-
-        if (resolved && resolvedPointer)
-            techSet->techniques[i] =
-                reinterpret_cast<MaterialTechnique *>(resolvedPointer);
     }
 }
 #endif
-
 void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
 {
     char remapName[260]; // [esp+14h] [ebp-108h] BYREF
