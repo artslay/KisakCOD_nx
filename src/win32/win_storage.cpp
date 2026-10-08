@@ -604,26 +604,6 @@ void __cdecl LiveStorage_Encrypt(StatsFile *statsFile)
     xxtea_enc(statsFile->body.hash, 0x845u, key);
 }
 
-int __cdecl LiveStorage_GetStat(int __formal, int index)
-{
-    const char *v3; // eax
-
-    if ((uint32_t)index > 0xDAA)
-        MyAssertHandler(".\\win32\\win_storage.cpp", 375, 0, "%s\n\t(index) = %i", "(index >= 0 && index < 3499)", index);
-    if (!statData.statsFetched)
-        return 0;
-    if (index < 2000)
-        return statData.playerStats[index + 4];
-    if (index < 3498)
-        return *(uint32_t *)&statData.playerStats[4 * index - 5996];
-    if (!alwaysfails)
-    {
-        v3 = va("Unhandled stat index %i", index);
-        MyAssertHandler(".\\win32\\win_storage.cpp", 393, 0, v3);
-    }
-    return 0;
-}
-
 void __cdecl LiveStorage_TrySetStatForCmd(int index, uint32_t value)
 {
     if (LiveStorage_GetStat(0, index) != value)
