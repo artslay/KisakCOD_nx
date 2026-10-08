@@ -6295,6 +6295,78 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                     item->window.background = Material_RegisterHandle(lowerCaseName, item->imageTrack);
                 }
                 fadeCycle = (float)parent->fadeCycle;
+
+#ifdef __SWITCH__
+                // The main menu has a subtle neutral underlay between stacked
+                // button rows. Keep it behind the actual button artwork: only
+                // fill a genuine vertical gap to the next similarly-sized item.
+                if (parent->window.name &&
+                    !I_stricmp(parent->window.name, "main") &&
+                    item->window.rect.w > 0.0f &&
+                    item->window.rect.h > 0.0f)
+                {
+                    float currentRight =
+                        item->window.rect.x + item->window.rect.w;
+                    float nextY = 1.0e30f;
+                    float nextX = 0.0f;
+                    float nextRight = 0.0f;
+
+                    for (int gapItemIndex = 0;
+                         gapItemIndex < parent->itemCount;
+                         ++gapItemIndex)
+                    {
+                        itemDef_s *gapItem = parent->items[gapItemIndex];
+                        if (!gapItem || gapItem == item)
+                            continue;
+                        if (!Item_IsVisible(dc->localClientNum, gapItem))
+                            continue;
+
+                        const float candidateY = gapItem->window.rect.y;
+                        const float candidateRight =
+                            gapItem->window.rect.x + gapItem->window.rect.w;
+
+                        if (candidateY <= item->window.rect.y + item->window.rect.h + 0.01f ||
+                            candidateY >= nextY)
+                            continue;
+
+                        const float xDelta =
+                            std::fabs(gapItem->window.rect.x - item->window.rect.x);
+                        const float widthDelta =
+                            std::fabs(gapItem->window.rect.w - item->window.rect.w);
+                        if (xDelta > 1.0f || widthDelta > 1.0f)
+                            continue;
+
+                        nextY = candidateY;
+                        nextX = gapItem->window.rect.x;
+                        nextRight = candidateRight;
+                    }
+
+                    if (nextY < 1.0e29f)
+                    {
+                        const float gapTop =
+                            item->window.rect.y + item->window.rect.h;
+                        const float gapHeight = nextY - gapTop;
+                        const float gapLeft = std::max(item->window.rect.x, nextX);
+                        const float gapRight = std::min(currentRight, nextRight);
+
+                        if (gapHeight > 0.5f && gapRight > gapLeft)
+                        {
+                            const float switchMenuGapColor[4] =
+                                { 0.28f, 0.28f, 0.28f, 0.14f };
+                            UI_FillRect(
+                                &scrPlaceView[dc->localClientNum],
+                                gapLeft,
+                                gapTop,
+                                gapRight - gapLeft,
+                                gapHeight,
+                                item->window.rect.horzAlign,
+                                item->window.rect.vertAlign,
+                                switchMenuGapColor);
+                        }
+                    }
+                }
+#endif
+
                 Window_Paint(dc, &item->window, parent->fadeAmount, parent->fadeInAmount, parent->fadeClamp, fadeCycle);
                 if (g_debugMode)
                 {
