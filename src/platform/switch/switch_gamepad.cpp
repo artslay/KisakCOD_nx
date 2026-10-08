@@ -5,6 +5,7 @@
 #include <switch.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 
 #include <client/client.h>
@@ -50,15 +51,36 @@ static void SendKeyEdge(u64 mask, int key)
         CL_KeyEvent(0, key, 0, Sys_Milliseconds());
 }
 
-static void SendActionEdge(
-    u64 mask,
-    void (*down)(),
-    void (*up)())
+static void SendCommandEdge(u64 mask, const char *downCommand, const char *upCommand)
 {
     if (Pressed(mask))
-        down();
+    {
+        char command[96];
+        std::snprintf(
+            command,
+            sizeof(command),
+            "%s 0 %u\n",
+            downCommand,
+            static_cast<unsigned>(Sys_Milliseconds()));
+        Cmd_ExecuteSingleCommand(
+            0,
+            CL_ControllerIndexFromClientNum(0),
+            command);
+    }
     else if (Released(mask))
-        up();
+    {
+        char command[96];
+        std::snprintf(
+            command,
+            sizeof(command),
+            "%s 0 %u\n",
+            upCommand,
+            static_cast<unsigned>(Sys_Milliseconds()));
+        Cmd_ExecuteSingleCommand(
+            0,
+            CL_ControllerIndexFromClientNum(0),
+            command);
+    }
 }
 
 static u64 ButtonMask(GPadButton button)
@@ -140,10 +162,7 @@ void Switch_GamepadFrame()
 
     // D-pad up is night vision during gameplay; the UI still receives the
     // corresponding UPARROW event above.
-    if (Pressed(HidNpadButton_Up))
-        IN_NightVisionDown();
-    else if (Released(HidNpadButton_Up))
-        IN_NightVisionUp();
+    SendCommandEdge(HidNpadButton_Up, "+nightvision", "-nightvision");
 }
 
 void Switch_GamepadShutdown()
