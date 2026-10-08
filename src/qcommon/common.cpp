@@ -1679,6 +1679,13 @@ void Com_InitDvars()
         DVAR_ROM,
         "True if the game video is running in 16x9 aspect, false if 4x3.");
 
+    // Stock CoD4 profile menus use this transient script dvar before UI_Init
+    // finishes registering the UI-owned profile dvars.
+    Dvar_RegisterBool(
+        "ui_playerProfileAlreadyChosen",
+        0,
+        DVAR_NOFLAG,
+        "True when the player profile selection has already been chosen");
 }
 
 void __cdecl Com_StartupConfigs(int localClientNum)
