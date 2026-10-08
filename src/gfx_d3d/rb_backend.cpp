@@ -480,7 +480,7 @@ static const Material *Switch_ValidateRenderCommandMaterial(
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][RENDER CMD] invalid material cmd=%s header=%p id=%u bytes=%u material=%p fallback=%p\\n",
+            "[KisakCOD][RENDER CMD] invalid material cmd=%s header=%p id=%u bytes=%u material=%p fallback=%p\n",
             commandName ? commandName : "<unknown>",
             static_cast<const void *>(header),
             header ? static_cast<unsigned>(header->id) : 0u,
