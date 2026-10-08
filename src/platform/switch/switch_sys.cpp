@@ -366,6 +366,11 @@ void Switch_LogWrite(const char *msg)
         "Couldn't play stream '",
         "R_Cinematic_BinkOpen '"
     };
+    const bool keepUiMaterialDiag =
+        std::strncmp(msg, "[KisakCOD][UI MENU]", 20) == 0 ||
+        std::strncmp(msg, "[KisakCOD][UI MATERIAL]", 23) == 0 ||
+        std::strncmp(msg, "[KisakCOD][UI ITEM]", 19) == 0;
+
     for (const char *prefix : kSuppressedPrefixes)
     {
         const size_t len = std::strlen(prefix);
@@ -376,11 +381,6 @@ void Switch_LogWrite(const char *msg)
             break;
         }
     }
-
-    const bool keepUiMaterialDiag =
-        std::strncmp(msg, "[KisakCOD][UI MENU]", 20) == 0 ||
-        std::strncmp(msg, "[KisakCOD][UI MATERIAL]", 23) == 0 ||
-        std::strncmp(msg, "[KisakCOD][UI ITEM]", 19) == 0;
 
     const bool isSwitchDiag =
         std::strncmp(msg, "[SWITCH ", 8) == 0;
