@@ -967,7 +967,7 @@ GfxDrawSurf *__cdecl R_AddDObjSurfaces(
             if (*(uint32_t *)modelSurf == -2)
             {
                 surfType = SF_XMODEL_RIGID;
-                surfSize = 56;
+                surfSize = sizeof(GfxModelRigidSurface);
             }
             else
             {
@@ -981,7 +981,7 @@ GfxDrawSurf *__cdecl R_AddDObjSurfaces(
                     goto LABEL_18;
                 }
                 surfType = SF_XMODEL_SKINNED;
-                surfSize = 24;
+                surfSize = sizeof(GfxModelSkinnedSurface);
             }
             iassert(*material);
             iassert(rgp.sortedMaterials[(*material)->info.drawSurf.fields.materialSortedIndex] == *material);
