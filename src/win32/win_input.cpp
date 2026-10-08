@@ -234,17 +234,6 @@ static DIDATAFORMAT	df = {
 	rgodf,                      // and here they are
 };
 
-bool __cdecl IN_IsForegroundWindow()
-{
-	return GetForegroundWindow() == g_wv.hWnd;
-}
-
-void __cdecl IN_SetForegroundWindow()
-{
-	SetForegroundWindow(g_wv.hWnd);
-	SetFocus(g_wv.hWnd);
-}
-
 /*
 ============================================================
 
@@ -260,25 +249,6 @@ IN_ActivateMouse
 Called when the window gains focus or changes in some way
 ===========
 */
-void __cdecl IN_ActivateMouse(int force)
-{
-	if (s_wmv.mouseInitialized)
-	{
-		if (!r_fullscreen)
-			MyAssertHandler(".\\win32\\win_input.cpp", 330, 0, "%s", "r_fullscreen");
-		if (in_mouse->current.enabled)
-		{
-			if (force || !s_wmv.mouseActive)
-				s_wmv.mouseActive = IN_IsForegroundWindow() != 0;
-		}
-		else
-		{
-			s_wmv.mouseActive = 0;
-		}
-	}
-}
-
-
 /*
 ===========
 IN_DeactivateMouse
@@ -499,25 +469,6 @@ IN_Frame
 Called every frame, even if not generating commands
 ==================
 */
-void __cdecl IN_Frame()
-{
-	if (Dvar_GetBool("ClickToContinue"))
-		PostMessageA(g_wv.hWnd, 0x201u, 1u, 0);
-	if (s_wmv.mouseInitialized)
-	{
-		if (in_appactive)
-		{
-			IN_ActivateMouse(0);
-			IN_MouseMove();
-		}
-		else
-		{
-			IN_DeactivateMouse();
-		}
-	}
-}
-
-
 /*
 ===================
 IN_ClearStates
