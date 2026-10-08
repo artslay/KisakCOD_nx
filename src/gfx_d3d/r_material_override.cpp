@@ -228,6 +228,34 @@ void __cdecl AssertValidRemappedTechniqueSet(MaterialTechniqueSet *techSet)
         {
             if (!techSet->techniques[techTypeIter] && techSet->remappedTechniqueSet->techniques[techTypeIter])
             {
+#ifdef __SWITCH__
+                const MaterialTechnique *sourceTechnique =
+                    techSet->techniques[techTypeIter];
+                const MaterialTechnique *remappedTechnique =
+                    techSet->remappedTechniqueSet->techniques[techTypeIter];
+                char trace[512];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][TECHSET ASSERT] set=%p remapped=%p index=%u "
+                    "setName=%p remappedName=%p sourceTech=%p sourceTechName=%p "
+                    "remappedTech=%p remappedTechName=%p\n",
+                    static_cast<void *>(techSet),
+                    static_cast<void *>(techSet->remappedTechniqueSet),
+                    static_cast<unsigned>(techTypeIter),
+                    static_cast<const void *>(techSet->name),
+                    static_cast<const void *>(
+                        techSet->remappedTechniqueSet->name),
+                    static_cast<const void *>(sourceTechnique),
+                    sourceTechnique
+                        ? static_cast<const void *>(sourceTechnique->name)
+                        : nullptr,
+                    static_cast<const void *>(remappedTechnique),
+                    remappedTechnique
+                        ? static_cast<const void *>(remappedTechnique->name)
+                        : nullptr);
+                Switch_LogWrite(trace);
+#endif
                 name = techSet->remappedTechniqueSet->techniques[techTypeIter]->name;
                 if (techSet->techniques[techTypeIter])
                     v1 = va(
