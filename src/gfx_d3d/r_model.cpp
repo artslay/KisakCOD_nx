@@ -321,6 +321,20 @@ int __cdecl R_SkinXModel(
     int surfaceCount = XModelGetSurfaces(model, &surfaces, lodForDist);
     iassert(surfaceCount);
 
+#ifdef KISAK_SWITCH
+    // The original stack buffer was sized for the 32-bit 28-byte records.
+    // Native ARM64 GfxModelRigidSurface records are larger, so keep the
+    // established 128-surface bound explicit and reject impossible input.
+    if (surfaceCount > 128)
+    {
+        R_WarnOncePerFrame(
+            R_WARN_MAX_SCENE_SURFS_SIZE,
+            "R_SkinXModel: surfaceCount %i exceeds Switch runtime buffer capacity",
+            surfaceCount);
+        return 0;
+    }
+#endif
+
     if (obj)
         DObjGetHidePartBits(obj, hidePartBits);
 
