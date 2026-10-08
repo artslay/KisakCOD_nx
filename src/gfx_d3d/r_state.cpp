@@ -1727,6 +1727,42 @@ void __cdecl R_SetSampler(
 {
     uint32_t decodedSamplerState; // [esp+Ch] [ebp-4h]
 
+#ifdef __SWITCH__
+    // The menu's narrow right-hand cap is an authored image asset. Some
+    // MaterialHandle paths can still hand the renderer the builtin 16x16
+    // default image even though button_highlight_end has already been loaded.
+    // Resolve that semantic here, after all shader-argument paths converge.
+    if (image &&
+        context.state &&
+        context.state->material &&
+        context.state->material->info.name &&
+        !I_stricmp(context.state->material->info.name, "button_highlight_end"))
+    {
+        GfxImage *buttonHighlightEnd =
+            Image_FindExisting_FastFile("button_highlight_end");
+        if (buttonHighlightEnd && buttonHighlightEnd != image)
+        {
+            if (image == rgp.defaultImage ||
+                (image->name && !I_stricmp(image->name, "default")))
+            {
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][UI CAP] material=%s sampler=%u default=%p -> cap=%p (%ux%u)\n",
+                    context.state->material->info.name,
+                    samplerIndex,
+                    static_cast<const void *>(image),
+                    static_cast<const void *>(buttonHighlightEnd),
+                    buttonHighlightEnd->width,
+                    buttonHighlightEnd->height);
+                Switch_LogWrite(trace);
+                image = buttonHighlightEnd;
+            }
+        }
+    }
+#endif
+
     iassert(image);
     if (context.state->samplerTexture[samplerIndex] != &image->texture)
     {
