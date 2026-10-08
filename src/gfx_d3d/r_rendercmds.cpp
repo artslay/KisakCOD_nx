@@ -725,90 +725,8 @@ void __cdecl R_AddCmdDrawStretchPic(
     else
         defaultMaterial = rgp.defaultMaterial;
 
-#ifdef __SWITCH__
-    if (defaultMaterial && !defaultMaterial->techniqueSet)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][UI MATERIAL] NULL techniqueSet material=%p "
-            "name=%p default=%p defaultTechset=%p frame=%s\n",
-            static_cast<void *>(defaultMaterial),
-            static_cast<const void *>(defaultMaterial->info.name),
-            static_cast<void *>(rgp.defaultMaterial),
-            rgp.defaultMaterial
-                ? static_cast<void *>(rgp.defaultMaterial->techniqueSet)
-                : nullptr,
-            g_switchFrameStage ? g_switchFrameStage : "");
-        Switch_LogWrite(trace);
-
-        if (rgp.defaultMaterial && rgp.defaultMaterial->techniqueSet)
-            defaultMaterial = rgp.defaultMaterial;
-        else
-            return;
-    }
-#endif
-
     actualMaterial = defaultMaterial;
-#ifdef __SWITCH__
-    // These are authored CoD4 2D menu materials. Their narrow cap contains
-    // the angled right edge visible in the original menu. Do not run them
-    // through the generic depth/fog fallback: doing so replaces the authored
-    // material with $default before the sampler resolver can bind
-    // button_highlight_end.
-    const char *switchRequestedMaterialName =
-        material ? Material_GetName(material) : nullptr;
-    const bool switchKeepOriginalUiMaterial =
-        switchRequestedMaterialName &&
-        (!I_stricmp(switchRequestedMaterialName, "button_highlight_end") ||
-         !I_stricmp(switchRequestedMaterialName, "images/button_highlight_end") ||
-         !I_stricmp(switchRequestedMaterialName, "button_highlight_end.iwi") ||
-         !I_stricmp(switchRequestedMaterialName, "images/button_highlight_end.iwi") ||
-         !I_stricmp(switchRequestedMaterialName, "gradient_fadein") ||
-         !I_stricmp(switchRequestedMaterialName, "images/gradient_fadein") ||
-         !I_stricmp(switchRequestedMaterialName, "gradient_fadein.iwi") ||
-         !I_stricmp(switchRequestedMaterialName, "images/gradient_fadein.iwi"));
-
-    // Some serialized MaterialHandle references for the menu cap are still
-    // arriving as the builtin $default material. The command geometry tells
-    // us exactly which quad this is: CoD4's authored right cap is 8.25x33.
-    // Recover the actual material before the tessellation stage so the full
-    // authored material/state/texture is used, not merely a replacement image.
-    const bool switchNarrowMenuCap =
-        w >= 7.5f && w <= 9.0f &&
-        h >= 32.0f && h <= 34.0f;
-    if (switchNarrowMenuCap &&
-        (defaultMaterial == rgp.defaultMaterial ||
-         Material_IsDefault(defaultMaterial)))
-    {
-        Material *buttonHighlightEnd =
-            Material_Register_FastFile("button_highlight_end");
-        if (buttonHighlightEnd &&
-            buttonHighlightEnd != rgp.defaultMaterial &&
-            buttonHighlightEnd->techniqueSet)
-        {
-            defaultMaterial = buttonHighlightEnd;
-            actualMaterial = buttonHighlightEnd;
-
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][UI CAP MATERIAL] x=%.2f y=%.2f w=%.2f h=%.2f -> %s material=%p\n",
-                x, y, w, h,
-                buttonHighlightEnd->info.name
-                    ? buttonHighlightEnd->info.name : "<null>",
-                static_cast<void *>(buttonHighlightEnd));
-            Switch_LogWrite(trace);
-        }
-    }
-#else
-    const bool switchKeepOriginalUiMaterial = false;
-#endif
-
-    if (!switchKeepOriginalUiMaterial &&
-        (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial)))
+    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
@@ -820,7 +738,7 @@ void __cdecl R_AddCmdDrawStretchPic(
             actualMaterial = rgp.defaultMaterial;
         }
     }
-    else if (!switchKeepOriginalUiMaterial)
+    else
     {
         v10 = Material_GetName(material);
         Com_PrintWarning(
