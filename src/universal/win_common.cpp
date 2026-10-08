@@ -29,54 +29,6 @@ void Sys_InitializeCriticalSections()
 #endif
 }
 
-void Sys_EnterCriticalSection(int critSect)
-{
-    PROF_SCOPED("Sys_EnterCriticalSection");
-
-	iassert(critSect >= 0 && critSect < CRITSECT_COUNT);
-#if defined(_WIN32)
-	EnterCriticalSection(&s_criticalSections[critSect]);
-#else
-    s_criticalSections[critSect].lock();
-    // This is a ghetto hack to see if this is re-entrant
-    iassert(s_criticalSectionsCount[critSect] == 0);
-    s_criticalSectionsCount[critSect]++;
-#endif
-}
-
-void Sys_LeaveCriticalSection(int critSect)
-{
-	iassert(critSect >= 0 && critSect < CRITSECT_COUNT);
-#if defined(_WIN32)
-	LeaveCriticalSection(&s_criticalSections[critSect]);
-#else
-    s_criticalSectionsCount[critSect]--;
-    s_criticalSections[critSect].unlock();
-#endif
-}
-
-void Sys_LockWrite(FastCriticalSection* critSect)
-{
-    while (1)
-    {
-        if (critSect->readCount == 0)
-        {
-            if (InterlockedIncrement(&critSect->writeCount) == 1 && critSect->readCount == 0)
-            {
-                break;
-            }
-            InterlockedDecrement(&critSect->writeCount);
-        }
-        NET_Sleep(0);
-    }
-}
-
-void Sys_UnlockWrite(FastCriticalSection* critSect)
-{
-    iassert(critSect->writeCount > 0);
-    InterlockedDecrement(&critSect->writeCount);
-}
-
 int Sys_InterlockedIncrement(uint *addend)
 {
     return InterlockedIncrement(addend);
@@ -155,45 +107,6 @@ uint32_t Win_InitThreads()
 void __cdecl Sys_Mkdir(const char *path)
 {
     _mkdir(path);
-}
-
-BOOL __cdecl Sys_RemoveDirTree(const char *path)
-{
-    bool v2; // [esp+8h] [ebp-250h]
-    int handle; // [esp+1Ch] [ebp-23Ch]
-    char childPath[256]; // [esp+20h] [ebp-238h] BYREF
-    _finddata64i32_t find; // [esp+120h] [ebp-138h] BYREF
-    bool hasError; // [esp+252h] [ebp-6h]
-    bool hasTrailingSeparater; // [esp+253h] [ebp-5h]
-    int length; // [esp+254h] [ebp-4h]
-
-    length = strlen(path);
-    v2 = path[length - 1] == 92 || path[length - 1] == 47;
-    hasTrailingSeparater = v2;
-    if (v2)
-        Com_sprintf(childPath, 0x100u, "%s*", path);
-    else
-        Com_sprintf(childPath, 0x100u, "%s\\*", path);
-    handle = _findfirst64i32(childPath, &find);
-    if (handle == -1)
-        return _rmdir(path) != -1;
-    hasError = 0;
-    do
-    {
-        if (find.name[0] != 46 || find.name[1] && (find.name[1] != 46 || find.name[2]))
-        {
-            if (hasTrailingSeparater)
-                Com_sprintf(childPath, 0x100u, "%s%s", path, find.name);
-            else
-                Com_sprintf(childPath, 0x100u, "%s\\%s", path, find.name);
-            if ((find.attrib & 0x10) != 0)
-                hasError = !Sys_RemoveDirTree(childPath);
-            else
-                hasError = remove(childPath) == -1;
-        }
-    } while (!hasError && _findnext64i32(handle, &find) != -1);
-    _findclose(handle);
-    return !hasError && _rmdir(path) != -1;
 }
 
 void __cdecl Sys_ListFilteredFiles(
@@ -376,42 +289,9 @@ char **__cdecl Sys_ListFiles(
 
 
 char cwd[256];
-char *__cdecl Sys_Cwd()
-{
-    _getcwd(cwd, 255);
-    cwd[255] = 0;
-    return cwd;
-}
-
 const char *__cdecl Sys_DefaultCDPath()
 {
     return "";
 }
 
 char exePath[256];
-char *__cdecl Sys_DefaultInstallPath()
-{
-    char *v0; // eax
-    uint32_t len; // [esp+0h] [ebp-8h]
-    HINSTANCE__ *hinst; // [esp+4h] [ebp-4h]
-
-    if (!exePath[0])
-    {
-        if (IsDebuggerPresent())
-        {
-            v0 = Sys_Cwd();
-            I_strncpyz(exePath, v0, 256);
-        }
-        else
-        {
-            hinst = GetModuleHandleA(0);
-            len = GetModuleFileNameA(hinst, exePath, 0x100u);
-            if (len == 256)
-                len = 255;
-            while (len && exePath[len] != 92 && exePath[len] != 47 && exePath[len] != 58)
-                --len;
-            exePath[len] = 0;
-        }
-    }
-    return exePath;
-}
