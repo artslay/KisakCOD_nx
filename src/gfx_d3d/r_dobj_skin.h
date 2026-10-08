@@ -1,7 +1,7 @@
 #pragma once
 #include "r_scene.h"
 
-struct GfxModelSurfaceInfo // sizeof=0xC
+struct GfxModelSurfaceInfo // sizeof=0x10 on Switch, 0xC on 32-bit
 {                                       // ...
     const struct DObjAnimMat *baseMat;
     uint8_t boneIndex;
@@ -12,7 +12,7 @@ struct GfxModelSurfaceInfo // sizeof=0xC
     // padding byte
 };
 
-struct GfxModelSkinnedSurface // sizeof=0x18
+struct GfxModelSkinnedSurface // sizeof=0x28 on Switch, 0x18 on 32-bit
 {                                       // ...
     int skinnedCachedOffset;
     XSurface *xsurf;
@@ -24,16 +24,20 @@ struct GfxModelSkinnedSurface // sizeof=0x18
         int oldSkinnedCachedOffset;
     };
 };
-#ifndef KISAK_SWITCH
+#ifdef KISAK_SWITCH
+static_assert(sizeof(GfxModelSkinnedSurface) == 40, "Switch GfxModelSkinnedSurface ABI changed");
+#else
 static_assert(sizeof(GfxModelSkinnedSurface) == 24);
 #endif
 
-struct GfxModelRigidSurface // sizeof=0x38
+struct GfxModelRigidSurface // sizeof=0x48 on Switch, 0x38 on 32-bit
 {
     GfxModelSkinnedSurface surf;
     GfxScaledPlacement placement;
 };
-#ifndef KISAK_SWITCH
+#ifdef KISAK_SWITCH
+static_assert(sizeof(GfxModelRigidSurface) == 72, "Switch GfxModelRigidSurface ABI changed");
+#else
 static_assert(sizeof(GfxModelRigidSurface) == 56);
 #endif
 
