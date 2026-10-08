@@ -1563,9 +1563,9 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
         case 7u:
             if (!dvar->name)
                 MyAssertHandler(".\\universal\\dvar.cpp", 1020, 0, "%s", "dvar->name");
-            if (value.integer == dvar->current.integer
-                && value.integer != dvar->latched.integer
-                && value.integer != dvar->reset.integer)
+            if (value.string == dvar->current.string
+                && value.string != dvar->latched.string
+                && value.string != dvar->reset.string)
             {
                 MyAssertHandler(
                     ".\\universal\\dvar.cpp",
@@ -1600,7 +1600,7 @@ void __cdecl Dvar_AssignCurrentStringValue(dvar_s *dvar, DvarValue *dest, const 
 {
     if (!string)
         MyAssertHandler(".\\universal\\dvar.cpp", 242, 0, "%s", "string");
-    if (dvar->latched.integer && (string == dvar->latched.string || !strcmp(string, dvar->latched.string)))
+    if (dvar->latched.string && (string == dvar->latched.string || !strcmp(string, dvar->latched.string)))
     {
         Dvar_WeakCopyString(dvar->latched.string, dest);
     }
