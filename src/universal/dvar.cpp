@@ -1578,7 +1578,7 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
             shouldFreeString = Dvar_ShouldFreeCurrentString(dvar);
             if (shouldFreeString)
                 oldString.integer = dvar->current.integer;
-            Dvar_AssignCurrentStringValue(dvar, &currentString, (char*)value.string);
+            Dvar_AssignCurrentStringValue(dvar, &currentString, value.string);
             dvar->current.integer = currentString.integer;
             if (Dvar_ShouldFreeLatchedString(dvar))
                 Dvar_FreeString(&dvar->latched);
@@ -1596,7 +1596,7 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
     }
 }
 
-void __cdecl Dvar_AssignCurrentStringValue(dvar_s *dvar, DvarValue *dest, char *string)
+void __cdecl Dvar_AssignCurrentStringValue(dvar_s *dvar, DvarValue *dest, const char *string)
 {
     if (!string)
         MyAssertHandler(".\\universal\\dvar.cpp", 242, 0, "%s", "string");
