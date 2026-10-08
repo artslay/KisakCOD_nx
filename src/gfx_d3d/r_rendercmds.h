@@ -150,6 +150,13 @@ struct GfxCmdStretchPic // sizeof=0x2C
     GfxColor color;
 };
 
+#ifdef KISAK_SWITCH
+static_assert(sizeof(GfxCmdStretchPic) == 0x38, "Switch GfxCmdStretchPic ABI changed");
+static_assert(sizeof(GfxCmdStretchPicRotateXY) == 0x38, "Switch GfxCmdStretchPicRotateXY ABI changed");
+static_assert(sizeof(GfxCmdStretchPicRotateST) == 0x40, "Switch GfxCmdStretchPicRotateST ABI changed");
+static_assert(sizeof(GfxCmdDrawQuadPic) == 0x38, "Switch GfxCmdDrawQuadPic ABI changed");
+#endif
+
 struct GfxCmdClearScreen // sizeof=0x1C
 {
     GfxCmdHeader header;
