@@ -73,11 +73,6 @@ void __cdecl Sys_SendDebugReadBytes(int read)
 
 void __cdecl Sys_DebugSend(int channel, const char *buf, int len, const char *name);
 
-int __cdecl Sys_ReadDebugSocketMessageType(unsigned __int8 *type, int blocking)
-{
-	return Sys_ReadDebugSocketData((char*)type, 1, blocking);
-}
-
 BOOL __cdecl Sys_DebugCanSend()
 {
 	return g_debugWriteBytes - g_debugReadBytesRemote <= 40960;
