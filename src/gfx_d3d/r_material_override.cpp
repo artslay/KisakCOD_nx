@@ -404,8 +404,13 @@ static void Switch_ResolveSerializedPointer(
     // Reject impossible native pointers before they can reach the renderer.
     // This also catches stale serialized/text data accidentally interpreted
     // as a pointer (for example the crash's ASCII-looking FAR/X0 value).
+    // Serialized CoD4 fastfile objects retain the original 32-bit ABI,
+    // whose pointer/object alignment is 4 bytes. Do not require ARM64 native
+    // alignment here: a valid serialized MaterialTechnique/Shader may begin
+    // at a 4-byte-aligned address that is not 8-byte aligned. Native alignment
+    // is checked only after an alias has resolved to a real ARM64 object.
     if (serializedAddress < 0x10000u ||
-        (serializedAddress & (alignof(T) - 1u)) != 0)
+        (serializedAddress & 3u) != 0)
     {
         *pointer = nullptr;
         return;
