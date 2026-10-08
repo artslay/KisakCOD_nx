@@ -7,6 +7,7 @@
 #include <database/database.h>
 
 #include <algorithm>
+#include <cstring>
 #include "r_staticmodel.h"
 #include <DynEntity/DynEntity_client.h>
 #include "r_dvars.h"
