@@ -830,6 +830,32 @@ void __cdecl R_AddCmdDrawStretchPic(
         actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
+
+#ifdef __SWITCH__
+    // The main-menu background strips are authored as gradient_fadein with a
+    // very small 0.07 vertex alpha. On Switch the reconstructed 2D shader
+    // path can make that pass effectively disappear, leaving only the text
+    // and the selected cap. Keep the authored material/geometry, but give the
+    // unselected menu strips a visible minimum alpha. Highlighted strips
+    // (0.35) are left untouched.
+    const float *switchDrawColor = color;
+    float switchGradientColor[4];
+    if (switchRequestedMaterialName &&
+        !I_stricmp(switchRequestedMaterialName, "gradient_fadein") &&
+        color &&
+        color[3] > 0.0f &&
+        color[3] < 0.10f)
+    {
+        switchGradientColor[0] = color[0];
+        switchGradientColor[1] = color[1];
+        switchGradientColor[2] = color[2];
+        switchGradientColor[3] = 0.15f;
+        switchDrawColor = switchGradientColor;
+    }
+#else
+    const float *switchDrawColor = color;
+#endif
+
     cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_FIRST_NONCRITICAL, sizeof(GfxCmdStretchPic));
     if (cmd)
     {
@@ -842,7 +868,7 @@ void __cdecl R_AddCmdDrawStretchPic(
         cmd->t0 = t0;
         cmd->s1 = s1;
         cmd->t1 = t1;
-        R_ConvertColorToBytes(color, &cmd->color);
+        R_ConvertColorToBytes(switchDrawColor, &cmd->color);
     }
 }
 
