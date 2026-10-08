@@ -637,20 +637,6 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
     else
     {
         image = texDef->u.image;
-#ifdef __SWITCH__
-        // The stock CoD4 button highlight is a real image asset. On the widened
-        // Switch material path this material can arrive with its sampler still
-        // pointing at the generic 16x16 default image. Resolve the authored
-        // fastfile image explicitly so the angled right cap is preserved.
-        if (material->info.name &&
-            !I_stricmp(material->info.name, "button_highlight_end"))
-        {
-            GfxImage *buttonHighlightEnd =
-                Image_FindExisting_FastFile("button_highlight_end");
-            if (buttonHighlightEnd && buttonHighlightEnd->width > 0)
-                image = buttonHighlightEnd;
-        }
-#endif
     }
 
     if (rg.hasAnyImageOverrides)
