@@ -376,14 +376,13 @@ void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
     {
         techSet->remappedTechniqueSet = techSet;
     }
+#ifdef __SWITCH__
+    Switch_ResolveNativeTechniquePointers(techSet->remappedTechniqueSet);
+#endif
     else
     {
         AssertValidRemappedTechniqueSet(techSet);
     }
-
-#ifdef __SWITCH__
-    Switch_ResolveNativeTechniquePointers(techSet->remappedTechniqueSet);
-#endif
 }
 
 void __cdecl Material_OverrideTechniqueSets()
@@ -422,11 +421,11 @@ void __cdecl Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
         strncpy(&remapName[4], techSet->name, 0x3Cu);
         remapName[63] = 0;
         techSet->remappedTechniqueSet = Material_FindTechniqueSet(remapName, MTL_TECHSET_NOT_FOUND_RETURN_DEFAULT);
+#ifdef __SWITCH__
+        Switch_ResolveNativeTechniquePointers(techSet->remappedTechniqueSet);
+#endif
         AssertValidRemappedTechniqueSet(techSet);
     }
-#ifdef __SWITCH__
-    Switch_ResolveNativeTechniquePointers(techSet->remappedTechniqueSet);
-#endif
 }
 
 void __cdecl Material_DirtyTechniqueSetOverrides()
