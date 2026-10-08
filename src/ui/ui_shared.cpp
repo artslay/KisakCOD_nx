@@ -5726,6 +5726,80 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         Item_Paint(dc, menu->items[i]);
     }
 
+#ifdef __SWITCH__
+    // The CoD4 main menu has two intentional dark separator rectangles:
+    // one between Arcade Mode and Controls, and one between Settings/Options
+    // and Credits. They are plain rectangular backing elements, not angled
+    // caps. On Switch those spacer elements are missing from the reconstructed
+    // menu asset path, so restore only the actual large vertical gaps.
+    if (menu->window.name && !I_stricmp(menu->window.name, "main"))
+    {
+        itemDef_s *ordered[64];
+        int orderedCount = 0;
+
+        for (int itemIndex = 0;
+             itemIndex < menu->itemCount && orderedCount < 64;
+             ++itemIndex)
+        {
+            itemDef_s *itemDef = menu->items[itemIndex];
+            if (itemDef && Item_IsVisible(dc->localClientNum, itemDef))
+                ordered[orderedCount++] = itemDef;
+        }
+
+        // Small insertion sort by the already-updated screen-space Y.
+        for (int a = 1; a < orderedCount; ++a)
+        {
+            itemDef_s *key = ordered[a];
+            int b = a - 1;
+            while (b >= 0 &&
+                   ordered[b]->window.rect.y > key->window.rect.y)
+            {
+                ordered[b + 1] = ordered[b];
+                --b;
+            }
+            ordered[b + 1] = key;
+        }
+
+        const float separatorColor[4] = {0.0f, 0.0f, 0.0f, 0.55f};
+        int separatorCount = 0;
+
+        for (int itemIndex = 0;
+             itemIndex + 1 < orderedCount && separatorCount < 2;
+             ++itemIndex)
+        {
+            const rectDef_s &upper = ordered[itemIndex]->window.rect;
+            const rectDef_s &lower = ordered[itemIndex + 1]->window.rect;
+            const float upperBottom = upper.y + upper.h;
+            const float gap = lower.y - upperBottom;
+
+            // Normal menu rows touch/overlap. Only the two deliberate larger
+            // gaps are separator slots.
+            if (gap < 8.0f)
+                continue;
+
+            const float x = upper.x < lower.x ? upper.x : lower.x;
+            const float rightUpper = upper.x + upper.w;
+            const float rightLower = lower.x + lower.w;
+            const float right = rightUpper > rightLower ? rightUpper : rightLower;
+            const float width = right - x;
+
+            if (width <= 0.0f)
+                continue;
+
+            UI_FillRect(
+                &scrPlaceView[dc->localClientNum],
+                x,
+                upperBottom,
+                width,
+                gap,
+                upper.horzAlign,
+                upper.vertAlign,
+                separatorColor);
+            ++separatorCount;
+        }
+    }
+#endif
+
     if (g_debugMode)
     {
         if (!menu)
