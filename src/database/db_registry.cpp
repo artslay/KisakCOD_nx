@@ -2752,16 +2752,21 @@ static void __cdecl DB_DynamicCloneMenu(XAssetHeader from, XAssetHeader to, int3
 
     for (int32_t toIndex = 0; toIndex < to.menu->itemCount; ++toIndex)
     {
-        windowDef_t *toWindow = to.menu->items[toIndex];
-        if (!toWindow)
+        itemDef_s *toItem = to.menu->items[toIndex];
+        if (!toItem)
             continue;
 
+        windowDef_t *toWindow = &toItem->window;
         if (toWindow->name)
         {
             for (int32_t fromIndex = 0; fromIndex < from.menu->itemCount; ++fromIndex)
             {
-                windowDef_t *fromWindow = from.menu->items[fromIndex];
-                if (fromWindow && fromWindow->name && !strcmp(fromWindow->name, toWindow->name))
+                itemDef_s *fromItem = from.menu->items[fromIndex];
+                if (!fromItem)
+                    continue;
+
+                windowDef_t *fromWindow = &fromItem->window;
+                if (fromWindow->name && !strcmp(fromWindow->name, toWindow->name))
                 {
                     toWindow->dynamicFlags[0] = fromWindow->dynamicFlags[0];
                     break;
