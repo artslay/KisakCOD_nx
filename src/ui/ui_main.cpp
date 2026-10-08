@@ -721,15 +721,15 @@ void __cdecl UI_DrawSaveGameShot(rectDef_s *rect, double scale, float *color)
                 goto LABEL_14;
             sshotImage = uiInfo.sshotImage;
         }
-        v11 = v5 << 6;
-        if (*(const char **)((char *)&uiInfo.savegameList[0].imageName + v11))
+        const char *imageName = uiInfo.savegameList[v5].imageName;
+        if (imageName)
         {
-            sshotImage = Material_RegisterRawImage(*(const char **)((char *)&uiInfo.savegameList[0].imageName + v11), IMAGE_TRACK_UI);
+            sshotImage = Material_RegisterRawImage(imageName, IMAGE_TRACK_UI);
             uiInfo.sshotImage = sshotImage;
         }
-        if (!*(const char **)((char *)&uiInfo.savegameList[0].imageName + v11) || !sshotImage)
+        if (!imageName || !sshotImage)
             uiInfo.sshotImage = Material_RegisterHandle("unknownsave", IMAGE_TRACK_UI);
-        I_strncpyz(uiInfo.sshotImageName, *(const char **)((char *)&uiInfo.savegameList[0].imageName + v11), 64);
+        I_strncpyz(uiInfo.sshotImageName, imageName ? imageName : "", 64);
     }
     else
     {
