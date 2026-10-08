@@ -5980,20 +5980,31 @@ void __cdecl Window_Paint(
         g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/window/border_draw";
 #endif
 #ifdef __SWITCH__
-        // CoD4's highlighted gradient button uses the chamfered highlight border
-        // rather than a plain rectangular outline. The stock UI helper already
-        // emits the top strip with the diagonal cut; force that path for the
-        // authored gradient_fadein button decorations.
+        // The gradient button is authored with a chamfered highlight contour.
+        // Some menu items carry no serialized border enum after the 32-bit UI
+        // object is widened on Switch, so recover the contour from the actual
+        // gradient material instead of drawing a plain rectangle.
         const bool switchChamferedGradient =
-            w->style == 3 &&
+            w->border == 0 &&
             w->background &&
             w->background->info.name &&
-            !I_stricmp(w->background->info.name, "gradient_fadein") &&
-            w->borderSize > 0.0f &&
-            w->borderColor[3] > 0.0f;
+            !I_stricmp(w->background->info.name, "gradient_fadein");
 
         if (switchChamferedGradient)
         {
+            const float outlineSize =
+                w->borderSize > 0.0f ? w->borderSize : 1.0f;
+            const float switchHiColor[4] =
+            {
+                1.0f, 1.0f, 1.0f,
+                w->borderColor[3] > 0.0f ? w->borderColor[3] : 0.18f
+            };
+            const float switchLoColor[4] =
+            {
+                0.78f, 0.78f, 0.78f,
+                switchHiColor[3] * 0.65f
+            };
+
             UI_DrawHighlightRect(
                 scrPlace,
                 origRect->x,
@@ -6002,11 +6013,10 @@ void __cdecl Window_Paint(
                 origRect->h,
                 origRect->horzAlign,
                 origRect->vertAlign,
-                w->borderSize,
-                w->borderColor,
-                w->borderColor);
+                outlineSize,
+                switchHiColor,
+                switchLoColor);
         }
-        else
 #endif
         switch (w->border)
         {
