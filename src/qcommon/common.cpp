@@ -1678,6 +1678,19 @@ void Com_InitDvars()
         1,
         DVAR_ROM,
         "True if the game video is running in 16x9 aspect, false if 4x3.");
+
+    // UI menu scripts can evaluate these dvars before UI_Init() registers
+    // its normal UI-owned set. Keep the profile/menu dependencies available
+    // during early menu parsing.
+    Dvar_RegisterBool("ui_sp_unlock", 0, DVAR_NOFLAG, "Single-player unlock state");
+    Dvar_RegisterInt(
+        "ui_playerProfileCount",
+        0,
+        0,
+        0x7FFFFFFF,
+        DVAR_NOFLAG,
+        "Number of player profiles");
+    Dvar_RegisterString("com_playerProfile", "", DVAR_ROM, "Player profile");
 }
 
 void __cdecl Com_StartupConfigs(int localClientNum)
