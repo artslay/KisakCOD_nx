@@ -769,6 +769,40 @@ void __cdecl R_AddCmdDrawStretchPic(
          !I_stricmp(switchRequestedMaterialName, "images/gradient_fadein") ||
          !I_stricmp(switchRequestedMaterialName, "gradient_fadein.iwi") ||
          !I_stricmp(switchRequestedMaterialName, "images/gradient_fadein.iwi"));
+
+    // Some serialized MaterialHandle references for the menu cap are still
+    // arriving as the builtin $default material. The command geometry tells
+    // us exactly which quad this is: CoD4's authored right cap is 8.25x33.
+    // Recover the actual material before the tessellation stage so the full
+    // authored material/state/texture is used, not merely a replacement image.
+    const bool switchNarrowMenuCap =
+        w >= 7.5f && w <= 9.0f &&
+        h >= 32.0f && h <= 34.0f;
+    if (switchNarrowMenuCap &&
+        (defaultMaterial == rgp.defaultMaterial ||
+         Material_IsDefault(defaultMaterial)))
+    {
+        Material *buttonHighlightEnd =
+            Material_Register_FastFile("button_highlight_end");
+        if (buttonHighlightEnd &&
+            buttonHighlightEnd != rgp.defaultMaterial &&
+            buttonHighlightEnd->techniqueSet)
+        {
+            defaultMaterial = buttonHighlightEnd;
+            actualMaterial = buttonHighlightEnd;
+
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI CAP MATERIAL] x=%.2f y=%.2f w=%.2f h=%.2f -> %s material=%p\n",
+                x, y, w, h,
+                buttonHighlightEnd->info.name
+                    ? buttonHighlightEnd->info.name : "<null>",
+                static_cast<void *>(buttonHighlightEnd));
+            Switch_LogWrite(trace);
+        }
+    }
 #else
     const bool switchKeepOriginalUiMaterial = false;
 #endif
