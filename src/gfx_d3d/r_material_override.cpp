@@ -257,6 +257,47 @@ void __cdecl AssertValidRemappedTechniqueSet(MaterialTechniqueSet *techSet)
     }
 }
 
+#ifdef __SWITCH__
+static void Switch_ResolveNativeTechniquePointers(MaterialTechniqueSet *techSet)
+{
+    if (!techSet)
+        return;
+
+    // Technique-set entries can originate from 32-bit serialized pointer
+    // slots. A remap can copy or expose such a set after its original load
+    // fixups have already run. Normalize every entry here on the main thread
+    // before the render thread consumes the remapped set.
+    DB_FixupSwitchPointerAliases();
+
+    for (int i = 0; i < TECHNIQUE_COUNT; ++i)
+    {
+        MaterialTechnique *technique = techSet->techniques[i];
+        if (!technique)
+            continue;
+
+        const uintptr_t serializedAddress =
+            reinterpret_cast<uintptr_t>(technique);
+        uintptr_t resolvedPointer = 0;
+
+        bool resolved =
+            DB_ResolveSwitchPointerAlias(
+                serializedAddress,
+                &resolvedPointer);
+        if (!resolved)
+        {
+            resolved =
+                DB_TryResolveSwitchSerializedAliasChain(
+                    serializedAddress,
+                    &resolvedPointer);
+        }
+
+        if (resolved && resolvedPointer)
+            techSet->techniques[i] =
+                reinterpret_cast<MaterialTechnique *>(resolvedPointer);
+    }
+}
+#endif
+
 void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
 {
     char remapName[260]; // [esp+14h] [ebp-108h] BYREF
@@ -278,6 +319,10 @@ void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
     {
         AssertValidRemappedTechniqueSet(techSet);
     }
+
+#ifdef __SWITCH__
+    Switch_ResolveNativeTechniquePointers(techSet->remappedTechniqueSet);
+#endif
 }
 
 void __cdecl Material_OverrideTechniqueSets()
@@ -318,6 +363,9 @@ void __cdecl Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
         techSet->remappedTechniqueSet = Material_FindTechniqueSet(remapName, MTL_TECHSET_NOT_FOUND_RETURN_DEFAULT);
         AssertValidRemappedTechniqueSet(techSet);
     }
+#ifdef __SWITCH__
+    Switch_ResolveNativeTechniquePointers(techSet->remappedTechniqueSet);
+#endif
 }
 
 void __cdecl Material_DirtyTechniqueSetOverrides()
