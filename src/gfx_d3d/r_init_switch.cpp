@@ -570,11 +570,11 @@ void R_SetWndParms(GfxWindowParms *wnd) {
 void R_Register() {
     // r_init.cpp is excluded from the Switch build, so register the
     // resolution/refresh enum dvars that the stock graphics menu expects.
-    static const char *const switchResolutionNames[] = {
+    static const char *switchResolutionNames[] = {
         "1280x720",
         nullptr
     };
-    static const char *const switchRefreshRateNames[] = {
+    static const char *switchRefreshRateNames[] = {
         "60 Hz",
         nullptr
     };
