@@ -4995,7 +4995,8 @@ int __cdecl MenuParse_execKeyInt(menuDef_t *menu, int handle)
         return 0;
     if (!PC_Script_Parse(handle, &action))
         return 0;
-    handler = (ItemKeyHandler *)UI_Alloc(0xCu, 4);
+    handler = reinterpret_cast<ItemKeyHandler *>(UI_Alloc(
+        sizeof(ItemKeyHandler), static_cast<int>(alignof(ItemKeyHandler))));
     handler->key = keyname;
     handler->action = action;
     handler->next = menu->onKey;
@@ -5766,7 +5767,8 @@ int __cdecl ItemParse_execKey(itemDef_s *item, int handle)
     keyindex = (uint8_t)keyname;
     if (!PC_Script_Parse(handle, &action))
         return 0;
-    handler = (ItemKeyHandler *)UI_Alloc(0xCu, 4);
+    handler = reinterpret_cast<ItemKeyHandler *>(UI_Alloc(
+        sizeof(ItemKeyHandler), static_cast<int>(alignof(ItemKeyHandler))));
     handler->key = keyindex;
     handler->action = action;
     handler->next = item->onKey;
@@ -5784,7 +5786,8 @@ int __cdecl ItemParse_execKeyInt(itemDef_s *item, int handle)
         return 0;
     if (!PC_Script_Parse(handle, &action))
         return 0;
-    handler = (ItemKeyHandler *)UI_Alloc(0xCu, 4);
+    handler = reinterpret_cast<ItemKeyHandler *>(UI_Alloc(
+        sizeof(ItemKeyHandler), static_cast<int>(alignof(ItemKeyHandler))));
     handler->key = keyname;
     handler->action = action;
     handler->next = item->onKey;
