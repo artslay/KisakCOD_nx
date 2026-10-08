@@ -16,6 +16,7 @@ extern void Switch_LogWrite(const char *msg);
 #endif
 #ifdef __SWITCH__
 thread_local const Material *g_switchLastSamplerMaterials[16]{};
+thread_local const char *g_switchLastSamplerMaterialNames[16]{};
 thread_local uint32_t g_switchLastSamplerNameHashes[16]{};
 thread_local uint8_t g_switchLastSamplerSemantics[16]{};
 #endif
@@ -1829,6 +1830,8 @@ void __cdecl R_SetSampler(
         R_HW_SetSamplerTexture(context.state->prim.device, samplerIndex, &image->texture);
 #ifdef __SWITCH__
         g_switchLastSamplerMaterials[samplerIndex] = context.state->material;
+        g_switchLastSamplerMaterialNames[samplerIndex] =
+            context.state->material ? context.state->material->info.name : nullptr;
         g_switchLastSamplerNameHashes[samplerIndex] = context.state->material && context.state->material->textureTable
             ? context.state->material->textureTable[0].nameHash : 0u;
         g_switchLastSamplerSemantics[samplerIndex] = context.state->material && context.state->material->textureTable
