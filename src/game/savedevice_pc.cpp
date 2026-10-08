@@ -277,6 +277,7 @@ int __cdecl WriteSaveToDevice(unsigned char *data, struct SaveHeader const *save
 			(char*)saveHeader->filename,
 			(char*)"players"))
 	{
+		FS_DeleteInDir((char*)"save/temp.svg", fs_gamedir);
 		g_saveDevice_lastSaveSucceeded = false;
 		Com_PrintError(
 			CON_CHANNEL_FILES,
