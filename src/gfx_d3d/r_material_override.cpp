@@ -279,6 +279,24 @@ static bool Switch_IsSerializedAddress(uintptr_t address)
     return false;
 }
 
+static bool Switch_IsValidTechniqueSetPointer(
+    const MaterialTechniqueSet *techSet)
+{
+    const uintptr_t address =
+        reinterpret_cast<uintptr_t>(techSet);
+
+    if (address < 0x10000u ||
+        (address & (alignof(MaterialTechniqueSet) - 1u)) != 0)
+        return false;
+
+    const uint32_t low = static_cast<uint32_t>(address);
+    if ((low & 0xFFFFFF00u) == 0xABABAB00u ||
+        (low & 0x00FFFFFFu) == 0x00ABABABu)
+        return false;
+
+    return !Switch_IsSerializedAddress(address);
+}
+
 
 static bool Switch_IsValidTechniqueSetName(const char *name)
 {
@@ -406,7 +424,7 @@ static void Switch_ResolveSerializedPointer(
 
 static void Switch_ResolveNativeTechniquePointers(MaterialTechniqueSet *techSet)
 {
-    if (!techSet)
+    if (!Switch_IsValidTechniqueSetPointer(techSet))
         return;
 
     // Technique-set entries can originate from 32-bit serialized pointer
@@ -450,6 +468,8 @@ void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
 
     iassert( techSet );
 #ifdef __SWITCH__
+    if (!Switch_IsValidTechniqueSetPointer(techSet))
+        return;
     if (!Switch_IsValidTechniqueSetName(techSet->name))
     {
         // A stale/freed technique-set header must never reach strlen/strncmp
@@ -512,6 +532,8 @@ void __cdecl Material_OriginalRemapTechniqueSet(MaterialTechniqueSet *techSet)
 
     iassert( techSet );
 #ifdef __SWITCH__
+    if (!Switch_IsValidTechniqueSetPointer(techSet))
+        return;
     if (!Switch_IsValidTechniqueSetName(techSet->name))
     {
         techSet->remappedTechniqueSet = techSet;
