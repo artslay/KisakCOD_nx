@@ -271,8 +271,20 @@ int __cdecl WriteSaveToDevice(unsigned char *data, struct SaveHeader const *save
 #ifdef KISAK_XBOX
 	g_saveDevice_lastSaveSucceeded = true;
 #else
-	FS_Rename((char*)"save/temp.svg", fs_gamedir,
-		(char*)saveHeader->filename, (char*)"players");
+	if (!FS_RenameChecked(
+			(char*)"save/temp.svg",
+			fs_gamedir,
+			(char*)saveHeader->filename,
+			(char*)"players"))
+	{
+		g_saveDevice_lastSaveSucceeded = false;
+		Com_PrintError(
+			CON_CHANNEL_FILES,
+			"WriteSaveToDevice: failed to finalize '%s'\n",
+			saveHeader->filename);
+		return -1;
+	}
+
 	g_saveDevice_lastSaveSucceeded = true;
 #endif
 	return 0;
