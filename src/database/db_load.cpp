@@ -6718,7 +6718,6 @@ void __cdecl Load_MaterialVertexShaderPtr(bool atStreamStart)
         else
             DB_ConvertOffsetToPointer((uint32_t*)varMaterialVertexShaderPtr);
 #endif
-    }
 }
 void __cdecl Load_MaterialPixelShader(bool atStreamStart)
 {
@@ -6940,7 +6939,6 @@ void __cdecl Load_MaterialPixelShaderPtr(bool atStreamStart)
         else
             DB_ConvertOffsetToPointer((uint32_t*)varMaterialPixelShaderPtr);
 #endif
-    }
 }
 void __cdecl Load_MaterialVertexDeclaration(bool atStreamStart)
 {
@@ -7493,7 +7491,8 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
             sizeof(trace) - static_cast<size_t>(written),
             "\n");
         Switch_LogWrite(trace);
-        Sys_Error(
+        Com_Error(
+            ERR_FATAL,
             "Invalid MaterialTechnique passCount=%u asset=%d index=%d stream=%u offset=%u",
             static_cast<unsigned>(serialized.passCount),
             g_switchCurrentAssetIndex,
@@ -7920,7 +7919,6 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
             DB_ConvertOffsetToPointer((uint32_t*)varMaterialTechniquePtr);
         }
 #endif
-    }
 }
 
 void __cdecl Load_MaterialTechniquePtrArray(bool atStreamStart, int32_t count)
