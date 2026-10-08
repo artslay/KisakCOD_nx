@@ -4670,11 +4670,28 @@ int __cdecl Item_DvarEnum_CountSettings(itemDef_s *item)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 3053, 0, "%s\n\t(item->type) = %i", "(item->type == 13)", item->type);
     if (!item->typeData.listBox)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 3054, 0, "%s", "item->typeData.enumDvarName");
-    enumDvar = Dvar_FindVar(item->typeData.enumDvarName);
-    if (enumDvar->type == 6)
-        return enumDvar->domain.enumeration.stringCount;
-    else
+    if (!item->typeData.enumDvarName)
         return 0;
+
+    enumDvar = Dvar_FindVar(item->typeData.enumDvarName);
+    if (!enumDvar)
+    {
+#ifdef __SWITCH__
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI ENUM] missing dvar=%s item=%s\n",
+            item->typeData.enumDvarName,
+            item->window.name ? item->window.name : "<unnamed>");
+        Switch_LogWrite(trace);
+#endif
+        return 0;
+    }
+
+    if (enumDvar->type == DVAR_TYPE_ENUM)
+        return enumDvar->domain.enumeration.stringCount;
+    return 0;
 }
 
 int __cdecl Item_DvarEnum_EnumIndex(itemDef_s *item)
@@ -4684,16 +4701,22 @@ int __cdecl Item_DvarEnum_EnumIndex(itemDef_s *item)
     const dvar_s *enumDvar; // [esp+4h] [ebp-8h]
     const char *enumString; // [esp+8h] [ebp-4h]
 
-    enumDvar = Dvar_FindVar(item->typeData.enumDvarName);
-    if (enumDvar->type != 6)
+    if (!item || !item->typeData.enumDvarName)
         return 0;
+
+    enumDvar = Dvar_FindVar(item->typeData.enumDvarName);
+    if (!enumDvar || enumDvar->type != DVAR_TYPE_ENUM)
+        return 0;
+
     enumString = Dvar_GetVariantString(item->dvar);
     enumIndex = atoi(enumString);
     if (enumIndex >= 0 && enumIndex < enumDvar->domain.enumeration.stringCount)
         return enumIndex;
+
     for (enumIndexa = 0; enumIndexa < enumDvar->domain.enumeration.stringCount; ++enumIndexa)
     {
-        if (!I_stricmp(enumString, *(const char **)(enumDvar->domain.integer.max + 4 * enumIndexa)))
+        const char *candidate = enumDvar->domain.enumeration.strings[enumIndexa];
+        if (candidate && !I_stricmp(enumString, candidate))
             return enumIndexa;
     }
     return 0;
