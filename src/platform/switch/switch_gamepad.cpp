@@ -9,6 +9,7 @@
 
 #include <client/client.h>
 #include <client/cl_input.h>
+#include <qcommon/cmd.h>
 #include <ui/keycodes.h>
 
 static PadState g_pad;
@@ -103,8 +104,8 @@ void Switch_GamepadFrame()
     g_previousButtons = g_buttons;
     padUpdate(&g_pad);
     g_buttons = padGetButtons(&g_pad);
-    g_leftStick = padGetStickPos(&g_pad, JoystickPosition_Left);
-    g_rightStick = padGetStickPos(&g_pad, JoystickPosition_Right);
+    g_leftStick = padGetStickPos(&g_pad, 0);
+    g_rightStick = padGetStickPos(&g_pad, 1);
 
     // padUpdate() remains valid for handheld mode and connected standard pads.
     // Consider the pad active whenever the standard input service is producing

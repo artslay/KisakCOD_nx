@@ -1070,6 +1070,16 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         // Keep the original default pitch direction until that profile API is wired.
         const int invertSign = -1;
         v24 = (float)invertSign * v2;
+
+        // This SP port does not provide AimAssist_UpdateGamePadInput().
+        // Apply the existing gamepad axes directly to the client's viewangles,
+        // using the engine's normal pitch/yaw speed dvars.
+        const float gamepadFrameScale = (float)cls.frametime * 0.001f;
+        clients[0].viewangles[0] +=
+            v24 * cl_pitchspeed->current.value * gamepadFrameScale;
+        clients[0].viewangles[1] +=
+            v3 * cl_yawspeed->current.value * gamepadFrameScale;
+
         if (kb[KEY_SPEED].active == (clients[0].usingAds == 0))
             cmd->buttons |= BUTTON_ADS;
         if (!kb[KEY_BACK].active)
@@ -1099,12 +1109,8 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         v27.yawMax = clients[0].cgameMaxYawSpeed;
         v27.deltaTime = (float)(unsigned int)cls.frametime * (float)0.001;
         v27.ps = CG_GetPredictedPlayerState(0);
-        AimAssist_UpdateGamePadInput(&v27, &v26);
-        clients[0].viewangles[0] = v26.pitch;
-        clients[0].viewangles[1] = v26.yaw;
-        cmd->meleeChargeDist = v26.meleeChargeDist;
-        cmd->meleeChargeYaw = v26.meleeChargeYaw;
-        CG_ModelPreviewerHandleGamepadEvents(0, v4, v5, v24, v3);
+        cmd->meleeChargeDist = 0;
+        cmd->meleeChargeYaw = 0.0;
     }
 #endif
 }
