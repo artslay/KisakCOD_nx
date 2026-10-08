@@ -7366,6 +7366,15 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
         Load_XStringCustom(&nameBuffer);
         varMaterialTechnique->name = nameBuffer;
     }
+
+    // The fastfile pointer token identifies this serialized technique object.
+    // On Switch the runtime object is widened, so every future positive
+    // reference must resolve to the native object rather than the serialized
+    // stream bytes.
+    DB_RegisterSwitchPointerAlias(
+        reinterpret_cast<uintptr_t>(techniqueStart),
+        reinterpret_cast<uintptr_t>(varMaterialTechnique));
+    DB_FixupSwitchPointerAliases();
 #else
     if (!atStreamStart)
         MyAssertHandler("c:\trees\cod3\src\database\../gfx_d3d/r_material_load_db.h", 5470, 0, "%s", "atStreamStart");
@@ -7656,9 +7665,45 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
         }
         else
         {
-            *varMaterialTechniquePtr =
-                reinterpret_cast<MaterialTechnique *>(
-                    DB_ConvertOffsetToPointerValue(value));
+            const uintptr_t serializedSlot =
+                DB_ConvertOffsetToPointerValue(value);
+            uintptr_t resolvedPointer = 0;
+
+            bool resolved =
+                serializedSlot &&
+                DB_ResolveSwitchPointerAlias(
+                    serializedSlot,
+                    &resolvedPointer);
+            if (!resolved && serializedSlot)
+            {
+                resolved =
+                    DB_TryResolveSwitchSerializedAliasChain(
+                        serializedSlot,
+                        &resolvedPointer);
+            }
+
+            if (resolved && resolvedPointer)
+            {
+                *varMaterialTechniquePtr =
+                    reinterpret_cast<MaterialTechnique *>(
+                        resolvedPointer);
+            }
+            else
+            {
+                // Keep the serialized address only as a temporary placeholder.
+                // A later inline technique load registers the widened native
+                // object and DB_FixupSwitchPointerAliases() replaces this slot.
+                *varMaterialTechniquePtr =
+                    reinterpret_cast<MaterialTechnique *>(
+                        serializedSlot);
+                if (serializedSlot)
+                {
+                    DB_AddSwitchPointerAliasFixup(
+                        serializedSlot,
+                        reinterpret_cast<uintptr_t *>(
+                            varMaterialTechniquePtr));
+                }
+            }
         }
 #else
         if (*varMaterialTechniquePtr == (MaterialTechnique *)-1)
@@ -8110,9 +8155,42 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
         }
         else
         {
-            varMaterialTechniqueSet->techniques[i] =
-                reinterpret_cast<MaterialTechnique *>(
-                    DB_ConvertOffsetToPointerValue(value));
+            const uintptr_t serializedSlot =
+                DB_ConvertOffsetToPointerValue(value);
+            uintptr_t resolvedPointer = 0;
+
+            bool resolved =
+                serializedSlot &&
+                DB_ResolveSwitchPointerAlias(
+                    serializedSlot,
+                    &resolvedPointer);
+            if (!resolved && serializedSlot)
+            {
+                resolved =
+                    DB_TryResolveSwitchSerializedAliasChain(
+                        serializedSlot,
+                        &resolvedPointer);
+            }
+
+            if (resolved && resolvedPointer)
+            {
+                varMaterialTechniqueSet->techniques[i] =
+                    reinterpret_cast<MaterialTechnique *>(
+                        resolvedPointer);
+            }
+            else
+            {
+                varMaterialTechniqueSet->techniques[i] =
+                    reinterpret_cast<MaterialTechnique *>(
+                        serializedSlot);
+                if (serializedSlot)
+                {
+                    DB_AddSwitchPointerAliasFixup(
+                        serializedSlot,
+                        reinterpret_cast<uintptr_t *>(
+                            &varMaterialTechniqueSet->techniques[i]));
+                }
+            }
         }
     }
 
