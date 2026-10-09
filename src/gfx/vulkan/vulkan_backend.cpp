@@ -157,6 +157,10 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
 
 void VulkanBackend::Shutdown()
 {
+    // Stop any in-flight cinematic upload before destroying Vulkan resources.
+    // ImmediateSubmit takes these locks in the same order.
+    std::lock_guard<std::mutex> immediateLock(m_immediateMutex);
+    std::lock_guard<std::mutex> queueLock(m_queueMutex);
     if (m_device)
         vkDeviceWaitIdle(m_device);
 
@@ -190,6 +194,8 @@ void VulkanBackend::Shutdown()
     if (m_sync.imageAvailable) vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
     if (m_sync.renderFinished) vkDestroySemaphore(m_device, m_sync.renderFinished, nullptr);
     if (m_sync.fence) vkDestroyFence(m_device, m_sync.fence, nullptr);
+    if (m_immediateCommandPool)
+        vkDestroyCommandPool(m_device, m_immediateCommandPool, nullptr);
     if (m_commandPool) vkDestroyCommandPool(m_device, m_commandPool, nullptr);
 
     DestroyDefaultDepth();
@@ -205,6 +211,7 @@ void VulkanBackend::Shutdown()
     m_physicalDevice = VK_NULL_HANDLE;
     m_graphicsQueue = VK_NULL_HANDLE;
     m_commandPool = VK_NULL_HANDLE;
+    m_immediateCommandPool = VK_NULL_HANDLE;
     m_commandBuffer = VK_NULL_HANDLE;
     m_descriptorPool = VK_NULL_HANDLE;
     m_pipelineLayout = VK_NULL_HANDLE;
@@ -550,6 +557,18 @@ bool VulkanBackend::CreateCommandResources()
         SetError("vkAllocateCommandBuffers failed");
         return false;
     }
+
+    VkCommandPoolCreateInfo immediatePool = pool;
+    if (vkCreateCommandPool(
+            m_device,
+            &immediatePool,
+            nullptr,
+            &m_immediateCommandPool) != VK_SUCCESS)
+    {
+        SetError("vkCreateCommandPool for immediate uploads failed");
+        return false;
+    }
+
     return true;
 }
 
@@ -828,7 +847,12 @@ bool VulkanBackend::EndFrame()
     submit.signalSemaphoreCount = 1;
     submit.pSignalSemaphores = &m_sync.renderFinished;
 
-    if (vkQueueSubmit(m_graphicsQueue, 1, &submit, m_sync.fence) != VK_SUCCESS)
+    VkResult submitResult;
+    {
+        std::lock_guard<std::mutex> queueLock(m_queueMutex);
+        submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, m_sync.fence);
+    }
+    if (submitResult != VK_SUCCESS)
     {
         SetError("vkQueueSubmit failed");
         return false;
@@ -842,7 +866,11 @@ bool VulkanBackend::EndFrame()
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &m_swapchainIndex;
 
-    const VkResult result = vkQueuePresentKHR(m_graphicsQueue, &present);
+    VkResult result;
+    {
+        std::lock_guard<std::mutex> queueLock(m_queueMutex);
+        result = vkQueuePresentKHR(m_graphicsQueue, &present);
+    }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
         SetError("vkQueuePresentKHR failed");
@@ -964,7 +992,10 @@ void VulkanBackend::ReleaseQuery(void *queryPtr)
         return;
 
     if (m_device && m_graphicsQueue)
+    {
+        std::lock_guard<std::mutex> queueLock(m_queueMutex);
         vkQueueWaitIdle(m_graphicsQueue);
+    }
 
     if (query->event)
         vkDestroyEvent(m_device, query->event, nullptr);
@@ -1055,13 +1086,19 @@ bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
 void VulkanBackend::WaitForGpu()
 {
     if (m_device && m_graphicsQueue)
+    {
+        std::lock_guard<std::mutex> queueLock(m_queueMutex);
         vkQueueWaitIdle(m_graphicsQueue);
+    }
 }
 
 void VulkanBackend::Flush()
 {
     if (m_device && m_graphicsQueue)
+    {
+        std::lock_guard<std::mutex> queueLock(m_queueMutex);
         vkQueueWaitIdle(m_graphicsQueue);
+    }
 }
 
 bool VulkanBackend::GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_t *format) const
@@ -1513,12 +1550,18 @@ void VulkanBackend::TransitionImage(
 
 bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &fn)
 {
-    if (!m_device || !fn)
+    if (!m_device || !m_graphicsQueue || !m_immediateCommandPool || !fn)
         return false;
+
+    // Cinematic texture uploads run on the cinematic worker, while normal
+    // rendering records into m_commandPool. Keep immediate commands on their
+    // own pool and serialize their lifetime; Vulkan command pools are not
+    // externally synchronized across threads.
+    std::lock_guard<std::mutex> immediateLock(m_immediateMutex);
 
     VkCommandBufferAllocateInfo alloc{};
     alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc.commandPool = m_commandPool;
+    alloc.commandPool = m_immediateCommandPool;
     alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     alloc.commandBufferCount = 1;
 
@@ -1526,36 +1569,43 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
     if (vkAllocateCommandBuffers(m_device, &alloc, &command) != VK_SUCCESS)
         return false;
 
+    VkFence fence = VK_NULL_HANDLE;
+    bool submitted = false;
     VkCommandBufferBeginInfo begin{};
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    if (vkBeginCommandBuffer(command, &begin) != VK_SUCCESS)
-        return false;
 
-    fn(command);
-
-    if (vkEndCommandBuffer(command) != VK_SUCCESS)
-        return false;
-
-    VkFence fence = VK_NULL_HANDLE;
-    VkFenceCreateInfo fenceInfo{};
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    if (vkCreateFence(m_device, &fenceInfo, nullptr, &fence) != VK_SUCCESS)
-        return false;
-
-    VkSubmitInfo submit{};
-    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &command;
-    if (vkQueueSubmit(m_graphicsQueue, 1, &submit, fence) != VK_SUCCESS)
+    if (vkBeginCommandBuffer(command, &begin) == VK_SUCCESS)
     {
-        vkDestroyFence(m_device, fence, nullptr);
-        return false;
+        fn(command);
+        if (vkEndCommandBuffer(command) == VK_SUCCESS)
+        {
+            VkFenceCreateInfo fenceInfo{};
+            fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            if (vkCreateFence(m_device, &fenceInfo, nullptr, &fence) == VK_SUCCESS)
+            {
+                VkSubmitInfo submit{};
+                submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                submit.commandBufferCount = 1;
+                submit.pCommandBuffers = &command;
+
+                VkResult submitResult;
+                {
+                    std::lock_guard<std::mutex> queueLock(m_queueMutex);
+                    submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, fence);
+                }
+                if (submitResult == VK_SUCCESS &&
+                    vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX) == VK_SUCCESS)
+                {
+                    submitted = true;
+                }
+                vkDestroyFence(m_device, fence, nullptr);
+            }
+        }
     }
-    vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
-    vkDestroyFence(m_device, fence, nullptr);
-    vkFreeCommandBuffers(m_device, m_commandPool, 1, &command);
-    return true;
+
+    vkFreeCommandBuffers(m_device, m_immediateCommandPool, 1, &command);
+    return submitted;
 }
 
 bool VulkanBackend::UploadImage2D(
