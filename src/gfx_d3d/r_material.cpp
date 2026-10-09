@@ -634,7 +634,7 @@ Material *__cdecl Material_Register_FastFile(const char *name)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][MATERIAL RECOVER] name=%s material=%p\\n",
+                "[KisakCOD][MATERIAL RECOVER] name=%s material=%p\n",
                 name,
                 static_cast<void *>(loaded));
             Switch_LogRaw(trace);
@@ -644,7 +644,7 @@ Material *__cdecl Material_Register_FastFile(const char *name)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][MATERIAL MISS] name=%s registered=%u\\n",
+                "[KisakCOD][MATERIAL MISS] name=%s registered=%u\n",
                 name,
                 static_cast<unsigned>(rgp.materialCount));
             Switch_LogRaw(trace);
