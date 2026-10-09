@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <mutex>
 #include <unordered_map>
 #include <vulkan/vulkan.h>
 #include "gfx/gfx_backend.h"
@@ -263,8 +264,13 @@ private:
     VkImageView m_defaultDepthView = VK_NULL_HANDLE;
     VkImageLayout m_defaultDepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
+    // Frame rendering and background cinematic uploads use independent pools.
+    // Vulkan requires external synchronization for command-pool and queue host access.
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
+    VkCommandPool m_immediateCommandPool = VK_NULL_HANDLE;
     VkCommandBuffer m_commandBuffer = VK_NULL_HANDLE;
+    std::mutex m_immediateMutex;
+    std::mutex m_queueMutex;
     FrameSync m_sync{};
 
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
