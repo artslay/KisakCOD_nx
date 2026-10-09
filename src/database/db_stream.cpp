@@ -1082,20 +1082,22 @@ void __cdecl DB_ResolvePendingSwitchMaterialNameAliases()
             continue;
         }
 
-        Material *material =
-            Material_FindLoadedRendererMaterialByName(fixup.name);
-        if (!material)
+        // Prefer the completed database asset table so an old renderer-list
+        // entry cannot win over the material belonging to the active fastfile.
+        Material *material = nullptr;
+        for (int i = 0; i < count; ++i)
         {
-            for (int i = 0; i < count; ++i)
-            {
-                Material *candidate = assets[i].material;
-                if (!candidate || !candidate->info.name ||
-                    I_stricmp(candidate->info.name, fixup.name))
-                    continue;
-                material = candidate;
-                break;
-            }
+            Material *candidate = assets[i].material;
+            if (!candidate || !candidate->info.name ||
+                I_stricmp(candidate->info.name, fixup.name))
+                continue;
+            material = candidate;
+            break;
         }
+
+        // Built-in renderer materials may not have a DB XAsset entry.
+        if (!material)
+            material = Material_FindLoadedRendererMaterialByName(fixup.name);
 
         if (material)
         {
