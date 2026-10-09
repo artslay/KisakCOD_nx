@@ -752,7 +752,7 @@ void __cdecl R_AddCmdDrawStretchPic(
             Name = Material_GetName(material);
             Com_PrintWarning(
                 CON_CHANNEL_GFX,
-                "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \\"%s\\", because it uses the depth buffer. Set materialType to 2d.\\n",
+                "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it uses the depth buffer. Set materialType to 2d.\n",
                 Name);
             actualMaterial = rgp.defaultMaterial;
         }
@@ -762,7 +762,7 @@ void __cdecl R_AddCmdDrawStretchPic(
         v10 = Material_GetName(material);
         Com_PrintWarning(
             CON_CHANNEL_GFX,
-            "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \\"%s\\", because it has a fogable technique.\\n",
+            "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
             v10);
         actualMaterial = rgp.defaultMaterial;
     }
