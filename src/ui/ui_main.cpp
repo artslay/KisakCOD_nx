@@ -1782,6 +1782,7 @@ void UI_LoadModsList()
 void __cdecl UI_Refresh()
 {
 #ifdef __SWITCH__
+    g_switchFrameStage = "ui/refresh/entry";
     static uint32_t switchUiRefreshTraceCount = 0;
     if (switchUiRefreshTraceCount < 6)
     {
@@ -1805,10 +1806,22 @@ void __cdecl UI_Refresh()
         ++switchUiRefreshTraceCount;
     }
 #endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "ui/refresh/update_save_ui";
+#endif
     UI_UpdateSaveUI();
+#ifdef __SWITCH__
+    g_switchFrameStage = "ui/refresh/menu_count";
+#endif
     if (Menu_Count(&uiInfo.uiDC) > 0)
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "ui/refresh/menu_paint";
+#endif
         Menu_PaintAll(&uiInfo.uiDC);
+#ifdef __SWITCH__
+        g_switchFrameStage = "ui/refresh/menu_paint_done";
+#endif
         if (g_currentMenuType == UIMENU_PREGAME)
         {
             if (Menu_IsMenuOpenAndVisible(0, "pregame"))
@@ -1827,11 +1840,17 @@ void __cdecl UI_Refresh()
                 float h = scrPlaceFull.scaleVirtualToReal[1] * 32.0 / scrPlaceFull.scaleVirtualToFull[1];
                 float y = uiInfo.uiDC.cursor.y - h * 0.5;
                 float x = uiInfo.uiDC.cursor.x - w * 0.5;
+#ifdef __SWITCH__
+                g_switchFrameStage = "ui/refresh/draw_cursor";
+#endif
                 UI_DrawHandlePic(&scrPlaceView[0], x, y, w, h, 4, 4, 0, sharedUiInfo.assets.cursor);
             }
         }
         // LWSS END
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "ui/refresh/return";
+#endif
 }
 
 int __cdecl UI_OwnerDrawWidth(int ownerDraw, Font_s *font, double scale)
