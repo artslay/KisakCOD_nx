@@ -3511,8 +3511,10 @@ int __cdecl Menus_OpenByName(UiContext *dc, const char *p)
     {
         Menus_Open(dc, pMenu);
 #ifdef __SWITCH__
+        g_switchFrameStage = "ui/menus_open_by_name/after_menus_open";
         if (traceMainText)
         {
+            g_switchFrameStage = "ui/menus_open_by_name/trace_stack";
             char topName[64] = "<none>";
             if (dc && dc->openMenuCount > 0)
             {
@@ -3525,13 +3527,14 @@ int __cdecl Menus_OpenByName(UiContext *dc, const char *p)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][FRAME] main_text open returned stackAfter=%d top=%s visible=%d\n",
+                "[KisakCOD][FRAME] main_text open returned stackAfter=%d top=%s visibilityProbe=skipped\n",
                 dc ? dc->openMenuCount : -1,
-                topName,
-                (dc && pMenu) ? Menu_IsVisible(dc, pMenu) : 0);
+                topName);
+            g_switchFrameStage = "ui/menus_open_by_name/trace_log";
             Switch_LogWrite(trace);
             ++switchMainTextOpenTraceCount;
         }
+        g_switchFrameStage = "ui/menus_open_by_name/return";
 #endif
         return 1;
     }
