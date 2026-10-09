@@ -255,7 +255,7 @@ static bool Switch_BinkDecodeNext(SwitchBinkState *state)
             return false;
 
         ret = av_read_frame(state->format, state->packet);
-        if (ret < 0)
+        if (ret == AVERROR_EOF)
         {
             state->inputEof = true;
             ret = avcodec_send_packet(state->codec, nullptr);
@@ -266,6 +266,16 @@ static bool Switch_BinkDecodeNext(SwitchBinkState *state)
                 return false;
             }
             continue;
+        }
+        if (ret < 0)
+        {
+            // A damaged/truncated file or an underlying IO failure is not a
+            // successful end-of-stream. The old code treated every negative
+            // av_read_frame result as EOF, making BinkDoFrame finish normally
+            // even when no video frame had been decoded.
+            Switch_BinkSetAvError(ret, "av_read_frame");
+            state->decodeFailed = true;
+            return false;
         }
 
         if (state->packet->stream_index != state->videoStreamIndex)
@@ -709,6 +719,21 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
 
     if (!Switch_BinkDecodeNext(state))
     {
+        char trace[512];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][BINK FRAME] stop frame=%u decoded=%u eof=%d decodeFailed=%d error=%s\n",
+            static_cast<unsigned>(bink->FrameNum),
+            static_cast<unsigned>(state->decodedFrames),
+            state->inputEof ? 1 : 0,
+            state->decodeFailed ? 1 : 0,
+            g_switchBinkError[0] ? g_switchBinkError : "(none)");
+        Switch_LogWrite(trace);
+        // Runtime codec errors must be logged here rather than propagated via
+        // BinkGetError(), because the engine asserts that API errors are empty
+        // after each frame operation.
+        g_switchBinkError[0] = 0;
         bink->Frames = bink->FrameNum;
         return 1;
     }
@@ -763,13 +788,17 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
         chromaHeight);
 
     // Do not charge file opening, FFmpeg stream probing, or Vulkan texture
-    // creation against the movie's playback clock. Those operations happen
-    // before the first frame is displayed and can take longer than several
-    // frame periods on Switch. Starting the clock in BinkOpen makes BinkWait
-    // report that every early frame is overdue, so the engine drains frames
-    // as fast as it can and the cinematic appears to be skipped.
+    // creation against the movie's playback clock.
     if (state->decodedFrames == 0)
     {
+        char trace[192];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][BINK FRAME] first frame decoded size=%ux%u\n",
+            static_cast<unsigned>(bink->Width),
+            static_cast<unsigned>(bink->Height));
+        Switch_LogWrite(trace);
         state->startTicks = static_cast<uint32_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count());
