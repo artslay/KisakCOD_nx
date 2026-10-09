@@ -5745,19 +5745,41 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
 #endif
 #ifdef __SWITCH__
     {
-        static uint32_t switchMenuMaterialTraceCount = 0;
-        if (switchMenuMaterialTraceCount < 32)
+        const char *menuName = menu->window.name ? menu->window.name : "<null>";
+        const bool traceMenu =
+            !I_stricmp(menuName, "main_text") ||
+            !I_stricmp(menuName, "main") ||
+            !I_stricmp(menuName, "options_graphics");
+
+        // Trace each relevant menu once. The old global-per-frame counter was
+        // exhausted by repeated main_text paints before it reached later menus.
+        static char switchTracedMenuNames[8][64] = {};
+        static uint32_t switchTracedMenuCount = 0;
+        bool alreadyTraced = false;
+        if (traceMenu)
         {
-            const char *menuName = menu->window.name ? menu->window.name : "<null>";
-            char trace[256];
+            for (uint32_t i = 0; i < switchTracedMenuCount; ++i)
+            {
+                if (!I_stricmp(switchTracedMenuNames[i], menuName))
+                {
+                    alreadyTraced = true;
+                    break;
+                }
+            }
+        }
+
+        if (traceMenu && !alreadyTraced && switchTracedMenuCount < 8)
+        {
+            char trace[320];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI MENU] name=%s fullScreen=%d items=%d background=%p\n",
+                "[KisakCOD][UI MENU] name=%s fullScreen=%d items=%d background=%p style=%d\\n",
                 menuName,
                 menu->fullScreen ? 1 : 0,
                 menu->itemCount,
-                static_cast<const void *>(menu->window.background));
+                static_cast<const void *>(menu->window.background),
+                menu->window.style);
             Switch_LogWrite(trace);
 
             if (menu->window.background && !Switch_UI_BadPointer(menu->window.background))
@@ -5767,7 +5789,8 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
                     menuName,
                     menu->window.background);
             }
-            ++switchMenuMaterialTraceCount;
+            I_strncpyz(switchTracedMenuNames[switchTracedMenuCount], menuName, 64);
+            ++switchTracedMenuCount;
         }
     }
 #endif
@@ -6508,17 +6531,29 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                 }
 #ifdef __SWITCH__
                 {
-                    static uint32_t switchItemMaterialTraceCount = 0;
-                    if (switchItemMaterialTraceCount < 64)
+                    const char *menuName =
+                        item->parent && item->parent->window.name
+                            ? item->parent->window.name
+                            : "<null>";
+                    const char *itemName =
+                        item->window.name ? item->window.name : "<null>";
+                    const bool isRelevantMenu =
+                        !I_stricmp(menuName, "main_text") ||
+                        !I_stricmp(menuName, "main") ||
+                        !I_stricmp(menuName, "options_graphics");
+                    const bool hasFocus =
+                        Window_HasFocus(dc->localClientNum, &item->window);
+
+                    // Trace selected or shader-backed items rather than letting
+                    // generic text items exhaust one global diagnostic counter.
+                    static uint32_t switchRelevantItemTraceCount = 0;
+                    const bool traceItem =
+                        isRelevantMenu &&
+                        (item->window.style == 3 ||
+                         hasFocus ||
+                         item->materialExp.numEntries != 0);
+                    if (traceItem && switchRelevantItemTraceCount < 128)
                     {
-                        const char *menuName =
-                            item->parent && item->parent->window.name
-                                ? item->parent->window.name
-                                : "<null>";
-                        const char *itemName =
-                            item->window.name
-                                ? item->window.name
-                                : "<null>";
                         if (item->window.background &&
                             !Switch_UI_BadPointer(item->window.background))
                         {
@@ -6527,20 +6562,28 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                                 va("%s/%s", menuName, itemName),
                                 item->window.background);
                         }
-                        else
-                        {
-                            char trace[320];
-                            std::snprintf(
-                                trace,
-                                sizeof(trace),
-                                "[KisakCOD][UI ITEM] menu=%s item=%s style=%d background=%p\n",
-                                menuName,
-                                itemName,
-                                item->window.style,
-                                static_cast<const void *>(item->window.background));
-                            Switch_LogWrite(trace);
-                        }
-                        ++switchItemMaterialTraceCount;
+
+                        char trace[640];
+                        std::snprintf(
+                            trace,
+                            sizeof(trace),
+                            "[KisakCOD][UI ITEM STATE] menu=%s item=%s type=%d style=%d bg=%p matExp=%d dvar=%p text=%s focus=%d flags=0x%08x rect=%.1f,%.1f %.1fx%.1f\\n",
+                            menuName,
+                            itemName,
+                            item->type,
+                            item->window.style,
+                            static_cast<const void *>(item->window.background),
+                            item->materialExp.numEntries,
+                            static_cast<const void *>(item->dvar),
+                            item->text ? item->text : "<null>",
+                            hasFocus ? 1 : 0,
+                            item->window.dynamicFlags[dc->localClientNum],
+                            item->window.rect.x,
+                            item->window.rect.y,
+                            item->window.rect.w,
+                            item->window.rect.h);
+                        Switch_LogWrite(trace);
+                        ++switchRelevantItemTraceCount;
                     }
                 }
                 g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/payload";
