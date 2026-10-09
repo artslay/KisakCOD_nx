@@ -2597,6 +2597,7 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/done";
             Switch_LogWrite("[KisakCOD][UIMAIN] Item_RunScript complete\n");
         }
+        g_switchFrameStage = "ui/item_run_script/return";
 #endif
     }
 }
@@ -3054,6 +3055,7 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
     int i; // [esp+188h] [ebp-4h]
 
 #ifdef __SWITCH__
+    g_switchFrameStage = "ui/menus_open/entry";
     const bool traceMain =
         menu &&
         menu->window.name &&
@@ -3096,8 +3098,15 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
     }
 #endif
 
-    for (i = dc->openMenuCount - 1; i >= 0; --i)
+#ifdef __SWITCH__
+    g_switchFrameStage = "ui/menus_open/lose_focus_loop";
+#endif
+    for (i = dc->openMenuCount - 1; i >= 0; --i) {
+#ifdef __SWITCH__
+        g_switchFrameStage = "ui/menus_open/lose_focus_call";
+#endif
         Menu_LoseFocusDueToOpen(dc, dc->menuStack[i]);
+    }
 #ifdef __SWITCH__
     if (traceMain)
     {
@@ -3105,9 +3114,13 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after lose-focus loop\n");
     }
 #endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "ui/menus_open/registry_check";
+#endif
     for (i = 0; i < dc->menuCount; ++i)
     {
 #ifdef __SWITCH__
+        g_switchFrameStage = "ui/menus_open/registry_check_item";
         if (traceMain)
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/check_menu";
 #endif
@@ -3136,6 +3149,9 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after menu checks\n");
     }
 #endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "ui/menus_open/add_to_stack";
+#endif
     Menus_AddToStack(dc, menu);
 #ifdef __SWITCH__
     if (traceMainText)
@@ -3150,6 +3166,9 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/stack_done";
         Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open after Menus_AddToStack\n");
     }
+#endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "ui/menus_open/add_window_flags";
 #endif
     Window_AddDynamicFlags(dc->localClientNum, &menu->window, 6);
 #ifdef __SWITCH__
@@ -3173,6 +3192,9 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open(main_text) before Menu_CallOnFocusDueToOpen\n");
     }
 #endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "ui/menus_open/call_on_focus";
+#endif
     Menu_CallOnFocusDueToOpen(dc, menu);
 #ifdef __SWITCH__
     if (traceMain)
@@ -3194,6 +3216,9 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
 #ifdef __SWITCH__
         if (traceMain)
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/mouse_move";
+#endif
+#ifdef __SWITCH__
+        g_switchFrameStage = "ui/menus_open/mouse_move";
 #endif
         Menu_HandleMouseMove(dc, menu);
 #ifdef __SWITCH__
@@ -3234,6 +3259,9 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
     }
 #endif
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "ui/menus_open/on_open_test";
+#endif
     if (menu->onOpen)
     {
 #ifdef __SWITCH__
@@ -3264,6 +3292,8 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         }
 #endif
         item.parent = menu;
+        g_switchFrameStage = "ui/menus_open/on_open_script";
+#endif
         Item_RunScript(dc, &item, (char*)menu->onOpen);
 #ifdef __SWITCH__
         if (traceMain)
@@ -3290,6 +3320,7 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
 #endif
     }
 #ifdef __SWITCH__
+    g_switchFrameStage = "ui/menus_open/sound_test";
     // The crash handler reports this thread-local stage. Keep the boundary
     // between the completed onOpen script and the optional menu sound explicit:
     // a fault here must not be mistaken for a fastfile or technique-set failure.
@@ -3314,6 +3345,7 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
             Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open before UI_PlayLocalSoundAliasByName\n");
         }
 #endif
+        g_switchFrameStage = "ui/menus_open/play_sound";
         UI_PlayLocalSoundAliasByName(dc->localClientNum, menu->soundName);
 #ifdef __SWITCH__
         if (traceMainText)
@@ -3345,6 +3377,9 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/done";
         Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open complete\n");
     }
+#endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "ui/menus_open/return";
 #endif
 }
 
