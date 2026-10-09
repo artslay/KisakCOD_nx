@@ -243,6 +243,10 @@ void __cdecl DB_RegisterSwitchPointerAliasSlot(
 void __cdecl DB_AddSwitchPointerAliasFixup(
     uintptr_t serializedSlot,
     uintptr_t *destination);
+bool __cdecl DB_AddSwitchMaterialNameAliasFixup(
+    uintptr_t serializedName,
+    uintptr_t *destination);
+void __cdecl DB_ResolvePendingSwitchMaterialNameAliases();
 bool __cdecl DB_TryResolveSwitchSerializedAliasChain(
     uintptr_t serializedSlot,
     uintptr_t *resolvedPointer);
