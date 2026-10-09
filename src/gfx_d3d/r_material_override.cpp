@@ -516,6 +516,32 @@ static void Switch_ResolveNativeTechniquePointers(MaterialTechniqueSet *techSet)
         }
     }
 }
+
+static bool Switch_IsTechniqueSetRemapCompatible(
+    const MaterialTechniqueSet *source,
+    const MaterialTechniqueSet *target,
+    uint32_t *missingSourceTechnique)
+{
+    if (!Switch_IsValidTechniqueSetPointer(source) ||
+        !Switch_IsValidTechniqueSetPointer(target))
+        return false;
+
+    for (uint32_t i = 0; i < TECHNIQUE_COUNT; ++i)
+    {
+        // AssertValidRemappedTechniqueSet enforces this exact invariant:
+        // remapping may remove techniques, but must not introduce a technique
+        // where the source set has no implementation. Reject such feature
+        // remaps before any renderer path can consume an invalid pairing.
+        if (!source->techniques[i] && target->techniques[i])
+        {
+            if (missingSourceTechnique)
+                *missingSourceTechnique = i;
+            return false;
+        }
+    }
+
+    return true;
+}
 #endif
 void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
 {
@@ -542,16 +568,60 @@ void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
         mtlOverrideGlob.remapValue,
         s_materialFeatures,
         0x14u);
-    if (!strcmp(techSet->name, remapName)
-        || (techSet->remappedTechniqueSet = Material_FindTechniqueSet(remapName, MTL_TECHSET_NOT_FOUND_RETURN_NULL)) == 0)
+    MaterialTechniqueSet *remappedTechniqueSet = nullptr;
+    if (strcmp(techSet->name, remapName))
+        remappedTechniqueSet =
+            Material_FindTechniqueSet(
+                remapName,
+                MTL_TECHSET_NOT_FOUND_RETURN_NULL);
+
+#ifdef __SWITCH__
+    if (remappedTechniqueSet &&
+        remappedTechniqueSet != techSet)
+    {
+        Switch_ResolveNativeTechniquePointers(remappedTechniqueSet);
+
+        uint32_t missingSourceTechnique = UINT32_MAX;
+        if (!Switch_IsTechniqueSetRemapCompatible(
+                techSet,
+                remappedTechniqueSet,
+                &missingSourceTechnique))
+        {
+            static uint32_t switchRejectedRemapTraceCount = 0;
+            if (switchRejectedRemapTraceCount < 64)
+            {
+                char trace[448];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][TECHSET REMAP REJECT] source=%s target=%s index=%u sourceTech=%p targetTech=%p\n",
+                    techSet->name ? techSet->name : "<null>",
+                    remappedTechniqueSet->name
+                        ? remappedTechniqueSet->name : "<null>",
+                    static_cast<unsigned>(missingSourceTechnique),
+                    missingSourceTechnique < TECHNIQUE_COUNT
+                        ? static_cast<const void *>(
+                              techSet->techniques[missingSourceTechnique])
+                        : nullptr,
+                    missingSourceTechnique < TECHNIQUE_COUNT
+                        ? static_cast<const void *>(
+                              remappedTechniqueSet->techniques[missingSourceTechnique])
+                        : nullptr);
+                Switch_LogWrite(trace);
+                ++switchRejectedRemapTraceCount;
+            }
+            remappedTechniqueSet = nullptr;
+        }
+    }
+#endif
+
+    if (!remappedTechniqueSet)
     {
         techSet->remappedTechniqueSet = techSet;
     }
     else
     {
-#ifdef __SWITCH__
-        Switch_ResolveNativeTechniquePointers(techSet->remappedTechniqueSet);
-#endif
+        techSet->remappedTechniqueSet = remappedTechniqueSet;
         AssertValidRemappedTechniqueSet(techSet);
     }
 #ifdef __SWITCH__
