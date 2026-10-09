@@ -726,26 +726,7 @@ void __cdecl R_AddCmdDrawStretchPic(
         defaultMaterial = rgp.defaultMaterial;
 
     actualMaterial = defaultMaterial;
-#ifdef __SWITCH__
-    const char *switchMaterialName = Material_GetName(defaultMaterial);
-    const bool switchPreserveProfileBlur =
-        switchMaterialName &&
-        (!I_stricmp(switchMaterialName, "animbg_blur_back") ||
-         !I_stricmp(switchMaterialName, "animbg_blur_fogscroll") ||
-         !I_stricmp(switchMaterialName, "animbg_blur_front"));
-    // The profile-blur path is rejected below before any technique
-    // lookup; the engine default is already a known-safe 2D material.
-    const bool switchHasUnlitTechnique =
-        switchPreserveProfileBlur ||
-        Material_IsDefault(defaultMaterial) ||
-        Material_GetTechnique(defaultMaterial, TECHNIQUE_UNLIT) != nullptr;
-    if (!switchPreserveProfileBlur &&
-        (Material_IsDefault(defaultMaterial) ||
-         (switchHasUnlitTechnique &&
-          !Material_HasAnyFogableTechnique(defaultMaterial))))
-#else
-    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
-#endif
+if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
@@ -759,25 +740,11 @@ void __cdecl R_AddCmdDrawStretchPic(
     }
     else
     {
-#ifdef __SWITCH__
-        const char *rejectReason =
-            switchPreserveProfileBlur
-                ? "because the profile blur is filtered on the 2D path"
-                : !switchHasUnlitTechnique
-                    ? "because it has no unlit technique"
-                    : "because it has a fogable technique";
-        Com_PrintWarning(
-            CON_CHANNEL_GFX,
-            "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", %s.\n",
-            Material_GetName(defaultMaterial),
-            rejectReason);
-#else
-        v10 = Material_GetName(material);
+v10 = Material_GetName(material);
         Com_PrintWarning(
             CON_CHANNEL_GFX,
             "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
             v10);
-#endif
         actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
@@ -861,26 +828,7 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
     else
         defaultMaterial = rgp.defaultMaterial;
     actualMaterial = defaultMaterial;
-#ifdef __SWITCH__
-    const char *switchMaterialName = Material_GetName(defaultMaterial);
-    const bool switchPreserveProfileBlur =
-        switchMaterialName &&
-        (!I_stricmp(switchMaterialName, "animbg_blur_back") ||
-         !I_stricmp(switchMaterialName, "animbg_blur_fogscroll") ||
-         !I_stricmp(switchMaterialName, "animbg_blur_front"));
-    // The profile-blur path is rejected below before any technique
-    // lookup; the engine default is already a known-safe 2D material.
-    const bool switchHasUnlitTechnique =
-        switchPreserveProfileBlur ||
-        Material_IsDefault(defaultMaterial) ||
-        Material_GetTechnique(defaultMaterial, TECHNIQUE_UNLIT) != nullptr;
-    if (!switchPreserveProfileBlur &&
-        (Material_IsDefault(defaultMaterial) ||
-         (switchHasUnlitTechnique &&
-          !Material_HasAnyFogableTechnique(defaultMaterial))))
-#else
-    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
-#endif
+if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
@@ -894,25 +842,11 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
     }
     else
     {
-#ifdef __SWITCH__
-        const char *rejectReason =
-            switchPreserveProfileBlur
-                ? "because the profile blur is filtered on the 2D path"
-                : !switchHasUnlitTechnique
-                    ? "because it has no unlit technique"
-                    : "because it has a fogable technique";
-        Com_PrintWarning(
-            CON_CHANNEL_GFX,
-            "R_AddCmdDrawStretchPicFlipST: NOT DRAWING WITH MATERIAL \"%s\", %s.\n",
-            Material_GetName(defaultMaterial),
-            rejectReason);
-#else
-        v10 = Material_GetName(material);
+v10 = Material_GetName(material);
         Com_PrintWarning(
             CON_CHANNEL_GFX,
             "R_AddCmdDrawStretchPicFlipST: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
             v10);
-#endif
         actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );

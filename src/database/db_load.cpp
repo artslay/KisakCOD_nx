@@ -8116,60 +8116,12 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
 #endif
 
-    // A native MaterialTechniqueSet must always have an effective remap target.
-    // The authored fastfile field may be zero when no explicit remap is stored;
-    // on the original runtime that state is equivalent to using the TechniqueSet
-    // itself. Leaving the widened ARM64 pointer null makes Material_GetTechniqueSet()
-    // dereference +0x10 from a null remap target during 2D text/material checks.
-    if (!serialized.remappedTechniqueSet ||
-        serialized.remappedTechniqueSet == UINT32_MAX)
-    {
-        varMaterialTechniqueSet->remappedTechniqueSet =
-            varMaterialTechniqueSet;
-    }
-    else
-    {
-        // Positive remap references are 32-bit serialized aliases. Resolve them
-        // through the widened Switch alias table rather than leaving a pointer
-        // into the serialized fastfile block.
-        const uintptr_t aliasSlot =
-            DB_ConvertOffsetToPointerValue(
-                serialized.remappedTechniqueSet);
-        uintptr_t resolvedPointer = 0;
-
-        if (aliasSlot)
-        {
-            bool resolved =
-                DB_ResolveSwitchPointerAlias(
-                    aliasSlot,
-                    &resolvedPointer);
-            if (!resolved)
-            {
-                resolved = DB_TryResolveSwitchSerializedAliasChain(
-                    aliasSlot,
-                    &resolvedPointer);
-            }
-
-            if (resolved && resolvedPointer >= 0x10000u)
-            {
-                varMaterialTechniqueSet->remappedTechniqueSet =
-                    reinterpret_cast<MaterialTechniqueSet *>(
-                        resolvedPointer);
-            }
-            else
-            {
-                varMaterialTechniqueSet->remappedTechniqueSet = nullptr;
-                DB_AddSwitchPointerAliasFixup(
-                    aliasSlot,
-                    reinterpret_cast<uintptr_t *>(
-                        &varMaterialTechniqueSet->remappedTechniqueSet));
-            }
-        }
-        else
-        {
-            varMaterialTechniqueSet->remappedTechniqueSet = nullptr;
-        }
-    }
+    // remappedTechniqueSet is runtime remap state. The stock DB loader reads
+    // the 148-byte record, loads the name and technique pointers, and the
+    // renderer computes the effective target by name in Material_RemapTechniqueSet.
+    // Seed a valid native self-pointer here; never interpret the raw field at
+    // serialized offset +8 as a native ARM64 pointer or alias.
+    varMaterialTechniqueSet->remappedTechniqueSet = varMaterialTechniqueSet;
 
 #ifdef __SWITCH__
     if (traceRawType == 23u && traceAssetIndex == 4728)
