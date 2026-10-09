@@ -8150,7 +8150,7 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][TECH CURSOR] slot asset=%d index=%d token=%08x stream=%u offset4=%u\n",
+                "[SWITCH TECH CURSOR] slot asset=%d index=%d token=%08x stream=%u offset4=%u\n",
                 traceAssetIndex,
                 i,
                 value,
@@ -8189,7 +8189,7 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][TECH CURSOR] inline asset=%d index=%d token=%08x stream=%u before=%u aligned=%u header=%u\n",
+                    "[SWITCH TECH CURSOR] inline asset=%d index=%d token=%08x stream=%u before=%u aligned=%u header=%u\n",
                     traceAssetIndex,
                     i,
                     value,
@@ -8224,7 +8224,7 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][TECH CURSOR] loaded asset=%d index=%d token=%08x passes=%u stream=%u offset4=%u name=%p\n",
+                    "[SWITCH TECH CURSOR] loaded asset=%d index=%d token=%08x passes=%u stream=%u offset4=%u name=%p\n",
                     traceAssetIndex,
                     i,
                     value,
