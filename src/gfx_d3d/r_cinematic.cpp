@@ -17,6 +17,7 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
+extern void COM_NotifyIntroMovieFrameDecoded(const char *movieName);
 #endif
 
 // #define CINEMA
@@ -360,6 +361,9 @@ char __cdecl R_Cinematic_Advance()
             iassert((cinematicGlob.binkTextureSet.bink_buffers.FrameNum == 0 || cinematicGlob.binkTextureSet.bink_buffers.FrameNum == 1));
             cinematicGlob.activeImageFrame = cinematicGlob.binkTextureSet.bink_buffers.FrameNum;
             cinematicGlob.activeImageFrameTextureSet = cinematicGlob.activeTextureSet;
+#ifdef __SWITCH__
+            COM_NotifyIntroMovieFrameDecoded(cinematicGlob.currentCinematicName);
+#endif
         }
         Unlock_Bink_textures(dx.device, &cinematicGlob.binkTextureSet, cinematicGlob.bink);
         if ((cinematicGlob.playbackFlags & 2) != 0 || cinematicGlob.bink->FrameNum != cinematicGlob.bink->Frames)

@@ -38,6 +38,11 @@
 #include "mem_track.h"
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+#include <atomic>
+#include <cstring>
+#endif
+
 #include <setjmp.h>
 
 #ifdef __SWITCH__
@@ -1285,6 +1290,36 @@ cmd_function_s Com_WriteDefaults_f_VAR;
 static const char* comInitAllocName = "$init";
 #ifdef __SWITCH__
 bool com_introMoviePending = false;
+static const dvar_t *com_introPlaybackVerified;
+static std::atomic<bool> com_introPlaybackVerificationPending{false};
+static std::atomic<bool> com_introPlaybackFrameConfirmed{false};
+
+// This is called from the cinematic worker after BinkDoFrame successfully
+// decodes a frame. Dvar writes are deferred to the main thread.
+void COM_NotifyIntroMovieFrameDecoded(const char *movieName)
+{
+    if (!movieName ||
+        (std::strcmp(movieName, "IW_logo") != 0 &&
+         std::strcmp(movieName, "atvi") != 0 &&
+         std::strcmp(movieName, "cod_intro") != 0))
+    {
+        return;
+    }
+
+    if (com_introPlaybackVerificationPending.exchange(false, std::memory_order_acq_rel))
+        com_introPlaybackFrameConfirmed.store(true, std::memory_order_release);
+}
+
+static void COM_ProcessIntroMovieFrameConfirmation()
+{
+    if (!com_introPlaybackFrameConfirmed.exchange(false, std::memory_order_acq_rel))
+        return;
+
+    Dvar_SetBool((dvar_s *)com_introPlayed, 1);
+    Dvar_SetBool((dvar_s *)com_introPlaybackVerified, 1);
+    Switch_LogWrite(
+        "[KisakCOD][INTRO] decoded intro frame confirmed; playback state archived\n");
+}
 #endif
 void __cdecl Com_Init_Try_Block_Function(char* commandLine)
 {
@@ -1555,33 +1590,55 @@ void COM_PlayIntroMovies()
 #endif
     {
 #ifdef __SWITCH__
-        char trace[192];
+        bool introPlayed = com_introPlayed && com_introPlayed->current.enabled;
+        const bool introPlaybackVerified =
+            com_introPlaybackVerified && com_introPlaybackVerified->current.enabled;
+
+        // Earlier Switch builds archived com_introPlayed before opening Bink.
+        // Do not trust that legacy flag until this port has decoded an intro
+        // frame successfully; clear the stale value once to enable recovery.
+        if (introPlayed && !introPlaybackVerified)
+        {
+            Dvar_SetBool((dvar_s *)com_introPlayed, 0);
+            introPlayed = false;
+            Switch_LogWrite(
+                "[KisakCOD][INTRO] clearing legacy com_introPlayed without verified playback\n");
+        }
+
+        char trace[224];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][INTRO] com_introPlayed=%u action=%s\n",
-            com_introPlayed && com_introPlayed->current.enabled ? 1u : 0u,
-            com_introPlayed && com_introPlayed->current.enabled ? "skip" : "queue IW_logo");
+            "[KisakCOD][INTRO] com_introPlayed=%u playbackVerified=%u action=%s\n",
+            introPlayed ? 1u : 0u,
+            introPlaybackVerified ? 1u : 0u,
+            introPlayed && introPlaybackVerified ? "skip" : "queue IW_logo");
         Switch_LogWrite(trace);
-#endif
+
+        if (!(introPlayed && introPlaybackVerified))
+        {
+            com_introPlaybackFrameConfirmed.store(false, std::memory_order_release);
+            com_introPlaybackVerificationPending.store(true, std::memory_order_release);
+
+            // The existing UI/menu startup path consumes this request only
+            // after the UI is ready.
+            com_introMoviePending = true;
+            Dvar_SetString(
+                (dvar_s *)nextmap,
+                (char *)"cinematic atvi; set nextmap cinematic cod_intro");
+            // On Switch, com_introPlayed is set only after a decoded intro frame.
+            Switch_LogWrite("[KisakCOD][INTRO] queued IW_logo -> atvi -> cod_intro\n");
+        }
+#else
         if (!com_introPlayed->current.enabled)
         {
-#ifdef __SWITCH__
-            // Defer the first cinematic command until the UI has finished
-            // starting in Com_StartHunkUsers().
-            com_introMoviePending = true;
-#else
             Cbuf_AddText(0, "cinematic IW_logo\n");
-#endif
             Dvar_SetString((dvar_s *)nextmap, (char *)"cinematic atvi; set nextmap cinematic cod_intro");
             Dvar_SetBool((dvar_s *)com_introPlayed, 1);
-#ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][INTRO] queued IW_logo -> atvi -> cod_intro\n");
-#endif
         }
+#endif
     }
 }
-
 const char *s_lockThreadNames[4] = { "none", "minimal", "all" };
 
 void Com_InitDvars()
@@ -1671,6 +1728,13 @@ void Com_InitDvars()
     com_sv_running = Dvar_RegisterBool("sv_running", 0, DVAR_ROM, "Server is running");
     com_filter_output = Dvar_RegisterBool("com_filter_output", 0, DVAR_NOFLAG, "Use console filters for filtering output.");
     com_introPlayed = Dvar_RegisterBool("com_introPlayed", 0, DVAR_ARCHIVE, "Intro movie has been played");
+#ifdef __SWITCH__
+    com_introPlaybackVerified = Dvar_RegisterBool(
+        "com_introPlaybackVerified",
+        0,
+        DVAR_ARCHIVE,
+        "Intro playback was confirmed by a successfully decoded video frame");
+#endif
     com_animCheck = Dvar_RegisterBool("com_animCheck", 0, DVAR_NOFLAG, "Check anim tree");
     com_hiDef = Dvar_RegisterBool("hiDef", 1, DVAR_ROM, "True if the game video is running in high-def.");
     com_wideScreen = Dvar_RegisterBool(
@@ -1910,6 +1974,9 @@ static void Com_AttractMode(int localClientNum)
 
 void __cdecl Com_Frame_Try_Block_Function()
 {
+#ifdef __SWITCH__
+    COM_ProcessIntroMovieFrameConfirmation();
+#endif
     float deltaTime; // [esp+4h] [ebp-78h]
     int lastFrameIndex; // [esp+68h] [ebp-14h]
     int msec; // [esp+6Ch] [ebp-10h]
@@ -2415,7 +2482,7 @@ void Com_StartHunkUsers()
         // the UI/renderer are fully initialized. Consume that pending request
         // here, after the initial menu is active, so the menu background movie
         // can render underneath the profile screen.
-        Cbuf_AddText(0, "cinematic IW_logo\\n");
+        Cbuf_AddText(0, "cinematic IW_logo\n");
         com_introMoviePending = false;
         Switch_LogWrite("[KisakCOD][INTRO] starting deferred IW_logo cinematic\\n");
     }
