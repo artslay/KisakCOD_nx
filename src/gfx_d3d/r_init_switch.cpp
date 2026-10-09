@@ -361,6 +361,17 @@ void R_InitSystems()
     R_InitFonts();
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] after R_InitFonts\n");
+
+    // UI window backgrounds may store a material-name alias in the original
+    // 32-bit fastfile instead of a native Material pointer. The stream loader
+    // copies those names into the pending-fixup table, but pointer-slot fixups
+    // alone cannot resolve that second representation. Resolve only after the
+    // UI/common zones, renderer material registry, and built-in materials are
+    // all initialized; doing this earlier can bind to a default placeholder.
+    DB_ResolvePendingSwitchMaterialNameAliases();
+    DB_FixupSwitchPointerAliases();
+
+    Switch_LogWrite("[KisakCOD][RINIT] after material alias fixups\n");
     Switch_LogWrite("[KisakCOD][RINIT] before R_InitLoadWater\n");
 #endif
     R_InitLoadWater();
