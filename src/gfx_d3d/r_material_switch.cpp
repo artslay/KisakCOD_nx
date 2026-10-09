@@ -81,7 +81,7 @@ Material *__cdecl R_GetBspMaterial(uint32_t materialIndex)
             "r_bsp_load_obj.cpp",
             226,
             0,
-            "materialIndex doesn't index MAX_MAP_MATERIALS\\n\\t%i not in [0, %i)",
+            "materialIndex doesn't index MAX_MAP_MATERIALS\n\t%i not in [0, %i)",
             materialIndex,
             1224);
         return rgp.defaultMaterial;
