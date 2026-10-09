@@ -140,15 +140,10 @@ void Switch_GamepadFrame()
     // release generates one key-up, even if the UI key catcher is still set.
     if (cinematicActive)
     {
+        // Use the Switch equivalents of Escape/Back explicitly. Mapping every
+        // gameplay button to Escape here causes ordinary input to cut movies off.
         constexpr u64 cinematicSkipButtons =
-            HidNpadButton_A | HidNpadButton_B |
-            HidNpadButton_X | HidNpadButton_Y |
-            HidNpadButton_L | HidNpadButton_R |
-            HidNpadButton_ZL | HidNpadButton_ZR |
-            HidNpadButton_Up | HidNpadButton_Down |
-            HidNpadButton_Left | HidNpadButton_Right |
-            HidNpadButton_Plus | HidNpadButton_Minus |
-            HidNpadButton_StickL | HidNpadButton_StickR;
+            HidNpadButton_B | HidNpadButton_Plus;
         if (Pressed(cinematicSkipButtons))
         {
             CL_KeyEvent(0, K_ESCAPE, 1, Sys_Milliseconds());
