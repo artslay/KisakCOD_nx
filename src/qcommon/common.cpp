@@ -2064,17 +2064,30 @@ void __cdecl Com_Frame_Try_Block_Function()
 #endif
             CL_RunOncePerClientFrame(0, msec);
 #ifdef __SWITCH__
-            g_switchFrameStage = "frame/preframe_event_loop";
+            g_switchFrameStage = "frame/preframe_event_loop/before";
 #endif
             Com_EventLoop();
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/preframe_event_loop/after";
+#endif
 #ifdef KISAK_MP
             for (int localClientNum = 0; localClientNum < 1; ++localClientNum)
             {
                 Cbuf_Execute(localClientNum, CL_ControllerIndexFromClientNum(localClientNum));
             }
 #elif KISAK_SP
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/preframe_cbuf_execute";
+#endif
             Cbuf_Execute(0, CL_ControllerIndexFromClientNum(0));
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/preframe_cbuf_execute_done";
+            g_switchFrameStage = "frame/preframe_attract_mode";
+#endif
             Com_AttractMode(0);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/preframe_attract_mode_done";
+#endif
             //if (!cl_multi_gamepads_enabled) // KISAKTODO?
             //{
             //    v20 = 2;
