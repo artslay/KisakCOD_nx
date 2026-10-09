@@ -1147,10 +1147,6 @@ void __cdecl DB_ResolvePendingSwitchMaterialNameAliases()
                 if (!candidate || !candidate->info.name ||
                     I_stricmp(candidate->info.name, fixup.name))
                     continue;
-                if (candidate == rgp.defaultMaterial)
-                    continue;
-                if (rgp.defaultMaterial && Material_IsDefault(candidate))
-                    continue;
                 material = candidate;
                 break;
             }
