@@ -21,6 +21,10 @@ extern void Switch_LogWrite(const char *msg);
 struct SwitchBinkState
 {
     AVFormatContext *format;
+    AVIOContext *memoryIo;
+    const uint8_t *memoryData;
+    int64_t memorySize;
+    int64_t memoryPosition;
     AVCodecContext *codec;
     AVStream *videoStream;
     AVFrame *frame;
@@ -67,6 +71,99 @@ static void Switch_BinkSetAvError(int err, const char *where)
         avError);
 }
 
+static uint32_t Switch_BinkReadU32LE(const uint8_t *bytes)
+{
+    return static_cast<uint32_t>(bytes[0]) |
+        (static_cast<uint32_t>(bytes[1]) << 8) |
+        (static_cast<uint32_t>(bytes[2]) << 16) |
+        (static_cast<uint32_t>(bytes[3]) << 24);
+}
+
+static bool Switch_BinkGetMemorySize(
+    const uint8_t *data,
+    int64_t *sizeOut)
+{
+    if (!data || !sizeOut || std::memcmp(data, "BIK", 3) != 0)
+    {
+        Switch_BinkSetError(
+            "BINKFROMMEMORY input has no supported Bink 1 header");
+        return false;
+    }
+
+    // Bink stores the file size minus the 8-byte signature/size prefix at
+    // offset 4. BinkOpen's memory ABI supplies only the data pointer, so this
+    // header field is the authoritative bound for FFmpeg's custom input IO.
+    const uint64_t declaredSize =
+        static_cast<uint64_t>(Switch_BinkReadU32LE(data + 4)) + 8u;
+    if (declaredSize < 44u)
+    {
+        Switch_BinkSetError("BINKFROMMEMORY input has an invalid Bink size");
+        return false;
+    }
+
+    *sizeOut = static_cast<int64_t>(declaredSize);
+    return true;
+}
+
+static int Switch_BinkReadMemory(
+    void *opaque,
+    uint8_t *buffer,
+    int bufferSize)
+{
+    SwitchBinkState *state = static_cast<SwitchBinkState *>(opaque);
+    if (!state || !buffer || bufferSize < 0)
+        return AVERROR(EINVAL);
+    if (bufferSize == 0)
+        return 0;
+    if (state->memoryPosition >= state->memorySize)
+        return AVERROR_EOF;
+
+    const int64_t remaining = state->memorySize - state->memoryPosition;
+    const int bytesToCopy = static_cast<int>(
+        std::min<int64_t>(remaining, bufferSize));
+    std::memcpy(
+        buffer,
+        state->memoryData + state->memoryPosition,
+        static_cast<size_t>(bytesToCopy));
+    state->memoryPosition += bytesToCopy;
+    return bytesToCopy;
+}
+
+static int64_t Switch_BinkSeekMemory(
+    void *opaque,
+    int64_t offset,
+    int whence)
+{
+    SwitchBinkState *state = static_cast<SwitchBinkState *>(opaque);
+    if (!state)
+        return AVERROR(EINVAL);
+    if (whence & AVSEEK_SIZE)
+        return state->memorySize;
+
+    whence &= ~AVSEEK_FORCE;
+    int64_t base = 0;
+    switch (whence)
+    {
+    case SEEK_SET:
+        base = 0;
+        break;
+    case SEEK_CUR:
+        base = state->memoryPosition;
+        break;
+    case SEEK_END:
+        base = state->memorySize;
+        break;
+    default:
+        return AVERROR(EINVAL);
+    }
+
+    if (offset < -base || offset > state->memorySize - base)
+        return AVERROR(EINVAL);
+
+    state->memoryPosition = base + offset;
+    return state->memoryPosition;
+}
+
 static void Switch_BinkFreeState(SwitchBinkState *state)
 {
     if (!state)
@@ -90,6 +187,11 @@ static void Switch_BinkFreeState(SwitchBinkState *state)
         avcodec_free_context(&state->codec);
     if (state->format)
         avformat_close_input(&state->format);
+    if (state->memoryIo)
+    {
+        av_freep(&state->memoryIo->buffer);
+        avio_context_free(&state->memoryIo);
+    }
 
     delete state;
 }
@@ -265,7 +367,9 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
 {
     g_switchBinkError[0] = 0;
 
-    if (!name || !*name)
+    const bool fromMemory = (flags & BINKFROMMEMORY) != 0;
+    const char *traceName = fromMemory ? "<memory>" : name;
+    if (!name || (!fromMemory && !*name))
     {
         Switch_BinkSetError("empty filename");
         return nullptr;
@@ -289,15 +393,70 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
         return nullptr;
     }
 
-    int ret = avformat_open_input(
-        &state->format,
-        name,
-        binkFormat,
-        nullptr);
+    int ret = 0;
+    if (fromMemory)
+    {
+        state->memoryData = reinterpret_cast<const uint8_t *>(name);
+        if (!Switch_BinkGetMemorySize(state->memoryData, &state->memorySize))
+        {
+            Switch_BinkFreeState(state);
+            return nullptr;
+        }
+
+        constexpr int ioBufferSize = 32 * 1024;
+        uint8_t *ioBuffer = static_cast<uint8_t *>(av_malloc(ioBufferSize));
+        if (!ioBuffer)
+        {
+            Switch_BinkSetError("FFmpeg memory IO buffer allocation failed");
+            Switch_BinkFreeState(state);
+            return nullptr;
+        }
+
+        state->memoryIo = avio_alloc_context(
+            ioBuffer,
+            ioBufferSize,
+            0,
+            state,
+            Switch_BinkReadMemory,
+            nullptr,
+            Switch_BinkSeekMemory);
+        if (!state->memoryIo)
+        {
+            av_free(ioBuffer);
+            Switch_BinkSetError("avio_alloc_context failed for memory input");
+            Switch_BinkFreeState(state);
+            return nullptr;
+        }
+        state->memoryIo->seekable = AVIO_SEEKABLE_NORMAL;
+
+        state->format = avformat_alloc_context();
+        if (!state->format)
+        {
+            Switch_BinkSetError("avformat_alloc_context failed for memory input");
+            Switch_BinkFreeState(state);
+            return nullptr;
+        }
+        state->format->pb = state->memoryIo;
+        state->format->flags |= AVFMT_FLAG_CUSTOM_IO;
+        ret = avformat_open_input(
+            &state->format,
+            nullptr,
+            binkFormat,
+            nullptr);
+    }
+    else
+    {
+        ret = avformat_open_input(
+            &state->format,
+            name,
+            binkFormat,
+            nullptr);
+    }
+
     if (ret < 0)
     {
         Switch_BinkSetAvError(ret, "avformat_open_input");
-        delete state;
+        Switch_BinkFreeState(state);
         return nullptr;
     }
 
@@ -337,7 +496,7 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
             trace,
             sizeof(trace),
             "[KisakCOD][BINK CODEC] reject name=%s format=%s stream=%d codec=%s id=%d\n",
-            name,
+            traceName,
             formatName,
             state->videoStreamIndex,
             codecName ? codecName : "(unknown)",
@@ -490,7 +649,7 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
         trace,
         sizeof(trace),
         "[KisakCOD][BINK CODEC] open name=%s format=%s codec=%s id=%d size=%ux%u frames=%u fps=%u/%u\n",
-        name,
+        traceName,
         state->format->iformat ? state->format->iformat->name : "(unknown)",
         avcodec_get_name(params->codec_id),
         static_cast<int>(params->codec_id),
