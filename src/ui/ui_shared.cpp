@@ -39,7 +39,7 @@ void *captureData;
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 extern bool Switch_ShowSoftwareKeyboard(const char *initialText, unsigned int maxChars, char *outText, unsigned int outSize);
 
 static inline void Switch_LogWriteFiltered(const char *msg)
@@ -3459,6 +3459,9 @@ int __cdecl Menus_OpenByName(UiContext *dc, const char *p)
     menuDef_t *pMenu; // [esp+0h] [ebp-4h]
 #ifdef __SWITCH__
     static int switchMainTextOpenTraceCount;
+    // Preserve the caller's stage. Leaving this function's "return" marker active
+    // makes a later failure in the caller look like a Menus_OpenByName failure.
+    const char *const switchPreviousFrameStage = g_switchFrameStage;
     const bool traceMainText =
         p &&
         !I_stricmp(p, "main_text") &&
@@ -3535,6 +3538,9 @@ int __cdecl Menus_OpenByName(UiContext *dc, const char *p)
             ++switchMainTextOpenTraceCount;
         }
         g_switchFrameStage = "ui/menus_open_by_name/return";
+        g_switchFrameStage = switchPreviousFrameStage
+            ? switchPreviousFrameStage
+            : "frame/unknown";
 #endif
         return 1;
     }
