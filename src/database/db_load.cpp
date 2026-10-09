@@ -7833,7 +7833,6 @@ void __cdecl Load_MaterialConstantDefArray(bool atStreamStart, int32_t count)
 void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
 {
 #ifdef __SWITCH__
-    const void **inserted = nullptr;
     uint32_t value = 0;
 
     if (atStreamStart)
@@ -7854,15 +7853,14 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
     {
         if (value == UINT32_MAX || value == UINT32_MAX - 1u)
         {
-            // Mirror the serialized-header alignment previously supplied by
-            // AllocLoad_FxElemVisStateSample() before the ARM64 object is made.
+            // Align the serialized object header in stream 4. For a technique
+            // -2 token, the insertion alias is the inline technique object
+            // itself; DB_InsertPointer() would reserve another four stream
+            // bytes before that header and make the loader read from the
+            // middle of the serialized object. Load_MaterialTechnique()
+            // registers the header-to-native-object alias after decoding.
             DB_AllocStreamPos(3);
-            if (value == UINT32_MAX - 1u)
-                inserted = DB_InsertPointer();
             Load_MaterialTechnique(1);
-            if (inserted)
-                *inserted = *reinterpret_cast<void **>(
-                    varMaterialTechniquePtr);
         }
         else
         {
@@ -8179,9 +8177,11 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
             const uint32_t techniqueOffsetAfterAlign =
                 Switch_GetStreamCursorOffset(techniqueStream);
 
-            const void **inserted = nullptr;
-            if (value == UINT32_MAX - 1)
-                inserted = DB_InsertPointer();
+            // There is no separate serialized pointer slot before this
+            // inline object in stream 4. The -2 token requests insertion
+            // semantics for the object header itself, and
+            // Load_MaterialTechnique registers that header as its alias.
+            // DB_InsertPointer() would consume four bytes and skip the header.
 
             if (traceEarlyMaterialTechniques && i < 4)
             {
@@ -8291,9 +8291,6 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
             }
 #endif
 
-            if (inserted)
-                *inserted = *reinterpret_cast<void **>(
-                    &varMaterialTechniqueSet->techniques[i]);
         }
         else
         {
