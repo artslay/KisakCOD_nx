@@ -12,6 +12,8 @@
 #include <qcommon/cmd.h>
 #include <ui/keycodes.h>
 
+extern void Switch_LogWrite(const char *msg);
+
 static PadState g_pad;
 static u64 g_buttons = 0;
 static u64 g_previousButtons = 0;
@@ -19,6 +21,7 @@ static HidAnalogStickState g_leftStick = {};
 static HidAnalogStickState g_rightStick = {};
 static bool g_initialized = false;
 static bool g_connected = false;
+static bool g_cinematicSkipKeyDown = false;
 
 static float NormalizeStick(int32_t value)
 {
@@ -146,8 +149,26 @@ void Switch_GamepadFrame()
             HidNpadButton_Left | HidNpadButton_Right |
             HidNpadButton_Plus | HidNpadButton_Minus |
             HidNpadButton_StickL | HidNpadButton_StickR;
-        SendKeyEdge(cinematicSkipButtons, K_ESCAPE);
+        if (Pressed(cinematicSkipButtons))
+        {
+            CL_KeyEvent(0, K_ESCAPE, 1, Sys_Milliseconds());
+            g_cinematicSkipKeyDown = true;
+            Switch_LogWrite("[KisakCOD][CIN SKIP] controller button pressed\n");
+        }
+        else if (g_cinematicSkipKeyDown && Released(cinematicSkipButtons))
+        {
+            CL_KeyEvent(0, K_ESCAPE, 0, Sys_Milliseconds());
+            g_cinematicSkipKeyDown = false;
+        }
         return;
+    }
+
+    // A movie can end on the same key-down that requested a skip. Release the
+    // synthetic Escape even if the engine has already left CA_CINEMATIC.
+    if (g_cinematicSkipKeyDown)
+    {
+        CL_KeyEvent(0, K_ESCAPE, 0, Sys_Milliseconds());
+        g_cinematicSkipKeyDown = false;
     }
 
     // UI navigation is fed through the engine's normal key path. Do not send
@@ -199,6 +220,7 @@ void Switch_GamepadShutdown()
 {
     g_initialized = false;
     g_connected = false;
+    g_cinematicSkipKeyDown = false;
     g_buttons = 0;
     g_previousButtons = 0;
     g_leftStick = {};
