@@ -606,7 +606,7 @@ static Material *Switch_FindLoadedMaterialByName(const char *name)
 
         if (!I_stricmp(material->info.name, name) &&
             material != rgp.defaultMaterial &&
-            !Material_IsDefault(material))
+            (!rgp.defaultMaterial || !Material_IsDefault(material)))
             return material;
     }
 
