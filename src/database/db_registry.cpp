@@ -1410,6 +1410,15 @@ void __cdecl DB_LoadXAssets(XZoneInfo *zoneInfo, uint32_t zoneCount, int32_t syn
         iassert(!g_copyInfoCount);
         Sys_SyncDatabase();
         DB_UnarchiveAssets();
+
+#ifdef __SWITCH__
+        // All zones in this synchronous batch are now registered and their
+        // stream blocks may already have been replaced by the next fastfile.
+        // Resolve copied MaterialHandle name aliases against the completed DB
+        // asset table; never manufacture a default material for an unresolved
+        // name.
+        DB_ResolvePendingSwitchMaterialNameAliases();
+#endif
     }
 }
 
