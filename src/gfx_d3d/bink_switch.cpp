@@ -317,6 +317,31 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
     state->videoStream =
         state->format->streams[state->videoStreamIndex];
     const AVCodecParameters *params = state->videoStream->codecpar;
+
+    // BinkOpen is a Bink API entry point. Do not let an unrelated video
+    // stream select any decoder available in FFmpeg when the resolved media
+    // path is wrong; that would invoke a codec outside the Bink contract.
+    if (params->codec_id != AV_CODEC_ID_BINKVIDEO)
+    {
+        char trace[512];
+        const char *formatName =
+            state->format->iformat ? state->format->iformat->name : "(unknown)";
+        const char *codecName = avcodec_get_name(params->codec_id);
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][BINK CODEC] reject name=%s format=%s stream=%d codec=%s id=%d\n",
+            name,
+            formatName,
+            state->videoStreamIndex,
+            codecName ? codecName : "(unknown)",
+            static_cast<int>(params->codec_id));
+        Switch_LogWrite(trace);
+        Switch_BinkSetError("input video stream is not Bink video");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
     const AVCodec *decoder = avcodec_find_decoder(params->codec_id);
     if (!decoder)
     {
@@ -434,12 +459,15 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
     bink->soundon = 0;
     bink->ioptr = reinterpret_cast<U8 PTR4 *>(state);
 
-    char trace[384];
+    char trace[512];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][CINEMATIC] FFmpeg BinkOpen name=%s size=%ux%u frames=%u fps=%u/%u\n",
+        "[KisakCOD][BINK CODEC] open name=%s format=%s codec=%s id=%d size=%ux%u frames=%u fps=%u/%u\n",
         name,
+        state->format->iformat ? state->format->iformat->name : "(unknown)",
+        avcodec_get_name(params->codec_id),
+        static_cast<int>(params->codec_id),
         static_cast<unsigned>(bink->Width),
         static_cast<unsigned>(bink->Height),
         static_cast<unsigned>(bink->Frames),
