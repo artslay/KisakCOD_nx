@@ -4111,6 +4111,7 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
              (namePtr >> 32) == UINT64_C(0xFFFFFFFF));
 
         bool badName = gfxImage == nullptr || namePtr == 0 || badNamePtr;
+        bool nonAsciiName = false;
         bool nameTerminated = false;
         uint8_t nameBytes[16] = {};
 
@@ -4133,6 +4134,7 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
                 if (ch < 0x20 || ch > 0x7E)
                 {
                     badName = true;
+                    nonAsciiName = true;
                     break;
                 }
             }
@@ -4161,9 +4163,11 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
                         ? "null-name"
                         : badNamePtr
                             ? "invalid-name-ptr"
-                            : nameTerminated
+                            : nonAsciiName
                                 ? "non-ascii-name"
-                                : "unterminated-name",
+                                : nameTerminated
+                                    ? "invalid-name"
+                                    : "unterminated-name",
                 static_cast<unsigned>(nameBytes[0]),
                 static_cast<unsigned>(nameBytes[1]),
                 static_cast<unsigned>(nameBytes[2]),
