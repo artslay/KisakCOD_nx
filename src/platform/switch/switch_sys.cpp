@@ -246,6 +246,39 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         }
     }
 
+    // The LR is the caller's return address. Dump its nearby instructions too:
+    // the PC may be an indirect-dispatch thunk, while LR identifies the call site.
+    const uintptr_t lr = static_cast<uintptr_t>(ctx->lr.x);
+    const uintptr_t lrAligned = lr & ~static_cast<uintptr_t>(3);
+    if (lrAligned >= 12 &&
+        (lrAligned >> 32) == (pcAligned >> 32))
+    {
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][CRASH] lr_aligned=%p lr_delta=%llu\n",
+            reinterpret_cast<void *>(lrAligned),
+            static_cast<unsigned long long>(lr - lrAligned));
+        Switch_LogCrashLine(line);
+
+        for (int offset = -12; offset <= 12; offset += 4)
+        {
+            const uintptr_t address =
+                lrAligned + static_cast<intptr_t>(offset);
+            const uint32_t instruction =
+                *reinterpret_cast<const volatile uint32_t *>(address);
+
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[KisakCOD][CRASH] lr_insn[%+d] %p = 0x%08x\n",
+                offset,
+                reinterpret_cast<void *>(address),
+                instruction);
+            Switch_LogCrashLine(line);
+        }
+    }
+
     int farReg = -1;
     int low32Reg = -1;
     const uint64_t farValue = ctx->far.x;
