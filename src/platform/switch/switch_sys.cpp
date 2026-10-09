@@ -261,7 +261,8 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
             static_cast<unsigned long long>(lr - lrAligned));
         Switch_LogCrashLine(line);
 
-        for (int offset = -12; offset <= 12; offset += 4)
+        // Include enough caller instructions to see how x0-x3 were prepared.
+        for (int offset = -64; offset <= 32; offset += 4)
         {
             const uintptr_t address =
                 lrAligned + static_cast<intptr_t>(offset);
@@ -275,6 +276,48 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                 offset,
                 reinterpret_cast<void *>(address),
                 instruction);
+            Switch_LogCrashLine(line);
+        }
+
+        // Decode the common ADRP/LDR/BLR pattern and show the exact global
+        // callback slot and target which led to the faulting thunk.
+        const uint32_t adrpInsn =
+            *reinterpret_cast<const volatile uint32_t *>(lrAligned - 12);
+        const uint32_t loadInsn =
+            *reinterpret_cast<const volatile uint32_t *>(lrAligned - 8);
+        const uint32_t callInsn =
+            *reinterpret_cast<const volatile uint32_t *>(lrAligned - 4);
+        const unsigned adrpRd = adrpInsn & 31u;
+        const unsigned loadRt = loadInsn & 31u;
+        const unsigned loadRn = (loadInsn >> 5) & 31u;
+        const unsigned callRn = (callInsn >> 5) & 31u;
+        if ((adrpInsn & 0x9F000000u) == 0x90000000u &&
+            (loadInsn & 0xFFC00000u) == 0xF9400000u &&
+            (callInsn & 0xFFFFFC1Fu) == 0xD63F0000u &&
+            adrpRd == loadRn && loadRt == callRn)
+        {
+            const uint64_t rawImm =
+                (static_cast<uint64_t>((adrpInsn >> 5) & 0x7FFFFu) << 2) |
+                static_cast<uint64_t>((adrpInsn >> 29) & 3u);
+            const int64_t pageOffset =
+                (rawImm & (UINT64_C(1) << 20))
+                    ? static_cast<int64_t>(rawImm) - (INT64_C(1) << 21)
+                    : static_cast<int64_t>(rawImm);
+            const uintptr_t adrpPage =
+                (lrAligned - 12u) & ~static_cast<uintptr_t>(0xFFFu);
+            const int64_t signedSlot =
+                static_cast<int64_t>(adrpPage) +
+                pageOffset * INT64_C(4096) +
+                static_cast<int64_t>((loadInsn >> 10) & 0xFFFu) * 8;
+            const uintptr_t slotAddress = static_cast<uintptr_t>(signedSlot);
+            const uintptr_t targetAddress =
+                *reinterpret_cast<const volatile uintptr_t *>(slotAddress);
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[KisakCOD][CRASH] indirect_call slot=%p target=%p\n",
+                reinterpret_cast<void *>(slotAddress),
+                reinterpret_cast<void *>(targetAddress));
             Switch_LogCrashLine(line);
         }
     }
