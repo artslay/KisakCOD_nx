@@ -1870,6 +1870,20 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                     Con_ToggleConsole();
                 return;
             }
+
+            // A cinematic switches the UI off, but startup/menu transitions
+            // can leave KEYCATCH_UI active for a frame. Handle Escape as a
+            // cinematic action before routing it to UI_KeyEvent, otherwise
+            // a controller's skip press is swallowed by the menu.
+            if ((clcState == CA_CINEMATIC || clcState == CA_LOGO) &&
+                (clUI->keyCatchers & KEYCATCH_MESSAGE) == 0)
+            {
+                if ((clUI->keyCatchers & KEYCATCH_CONSOLE) != 0)
+                    Con_CancelAutoComplete();
+                CL_StopLogoOrCinematic(localClientNum);
+                return;
+            }
+
             if ((clUI->keyCatchers & KEYCATCH_MESSAGE) == 0)
             {
                 if ((clUI->keyCatchers & KEYCATCH_CONSOLE) != 0)
@@ -1901,7 +1915,6 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
             }
             goto LABEL_91;
         }
-
         if (!down)
         {
             kba = keys[key].binding;

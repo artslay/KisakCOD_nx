@@ -124,9 +124,31 @@ void Switch_GamepadFrame()
         std::abs(g_rightStick.x) > 256 ||
         std::abs(g_rightStick.y) > 256;
 
+    const connstate_t connectionState = CL_GetLocalClientConnectionState(0);
+    const bool cinematicActive =
+        connectionState == CA_CINEMATIC || connectionState == CA_LOGO;
     const bool uiActive = Key_IsCatcherActive(0, KEYCATCH_UI);
     const bool gameplayActive =
-        CL_GetLocalClientConnectionState(0) == CA_ACTIVE && !uiActive;
+        connectionState == CA_ACTIVE && !uiActive;
+
+    // Stock CoD4 treats keyboard/mouse buttons as cinematic-skip input.
+    // Poll a combined controller-button mask while a cinematic/logo is active
+    // so the first press generates one normal Escape key-down and the last
+    // release generates one key-up, even if the UI key catcher is still set.
+    if (cinematicActive)
+    {
+        constexpr u64 cinematicSkipButtons =
+            HidNpadButton_A | HidNpadButton_B |
+            HidNpadButton_X | HidNpadButton_Y |
+            HidNpadButton_L | HidNpadButton_R |
+            HidNpadButton_ZL | HidNpadButton_ZR |
+            HidNpadButton_Up | HidNpadButton_Down |
+            HidNpadButton_Left | HidNpadButton_Right |
+            HidNpadButton_Plus | HidNpadButton_Minus |
+            HidNpadButton_StickL | HidNpadButton_StickR;
+        SendKeyEdge(cinematicSkipButtons, K_ESCAPE);
+        return;
+    }
 
     // UI navigation is fed through the engine's normal key path. Do not send
     // these keys during gameplay, otherwise A/B/D-pad would also execute any
