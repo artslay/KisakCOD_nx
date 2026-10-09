@@ -762,6 +762,19 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
         chromaWidth,
         chromaHeight);
 
+    // Do not charge file opening, FFmpeg stream probing, or Vulkan texture
+    // creation against the movie's playback clock. Those operations happen
+    // before the first frame is displayed and can take longer than several
+    // frame periods on Switch. Starting the clock in BinkOpen makes BinkWait
+    // report that every early frame is overdue, so the engine drains frames
+    // as fast as it can and the cinematic appears to be skipped.
+    if (state->decodedFrames == 0)
+    {
+        state->startTicks = static_cast<uint32_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+    }
+
     ++state->decodedFrames;
     bink->LastFrameNum = bink->FrameNum;
     bink->FrameChangePercent = 100;
