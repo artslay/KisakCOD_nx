@@ -155,6 +155,13 @@ void __cdecl Material_Sort()
             (material->info.gameFlags & 0x40) != 0;
         material->info.drawSurf.fields.materialSortedIndex = i;
     }
+
+    // Some UI MaterialHandles are serialized as forward name aliases rather
+    // than native pointers. The loader cannot resolve those until the renderer
+    // has enumerated and sorted its actual fastfile material registry. Retry
+    // pending alias fixups here, when rgp.sortedMaterials is authoritative;
+    // this avoids leaving style-3 menu items with a null window.background.
+    DB_FixupSwitchPointerAliases();
 }
 
 #endif
