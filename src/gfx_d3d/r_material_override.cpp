@@ -579,6 +579,11 @@ void __cdecl Material_RemapTechniqueSet(MaterialTechniqueSet *techSet)
     if (remappedTechniqueSet &&
         remappedTechniqueSet != techSet)
     {
+        // Resolve both sides before testing the remap invariant. A source set
+        // can still contain serialized 32-bit technique tokens or pending
+        // forward aliases; checking it first would misclassify a resolvable
+        // source slot as null and reject an otherwise valid remap.
+        Switch_ResolveNativeTechniquePointers(techSet);
         Switch_ResolveNativeTechniquePointers(remappedTechniqueSet);
 
         uint32_t missingSourceTechnique = UINT32_MAX;
