@@ -558,11 +558,32 @@ bool __cdecl Material_IsDefault(const Material *material)
 }
 
 #ifdef __SWITCH__
-static Material *Switch_FindLoadedUiMaterial(const char *name)
+static Material *Switch_FindLoadedMaterialByName(const char *name)
 {
-    if (!name)
+    if (!name || !*name)
         return nullptr;
 
+    // The renderer's sorted-material array contains native Material objects
+    // already registered by the engine. Search it before consulting the DB
+    // alias table, which can return a default clone on the 64-bit Switch port.
+    const int registeredCount = std::min<int>(
+        static_cast<int>(rgp.materialCount),
+        static_cast<int>(ARRAY_COUNT(rgp.sortedMaterials)));
+
+    for (int i = 0; i < registeredCount; ++i)
+    {
+        Material *material = rgp.sortedMaterials[i];
+        if (!material || !material->info.name)
+            continue;
+
+        if (!I_stricmp(material->info.name, name) &&
+            material != rgp.defaultMaterial &&
+            !Material_IsDefault(material))
+            return material;
+    }
+
+    // Some native assets can be present in the loaded fastfile registry before
+    // renderer registration. Accept only an exact, real non-default asset.
     XAssetHeader assets[2048];
     const int count = DB_GetAllXAssetOfType(
         ASSET_TYPE_MATERIAL,
@@ -575,7 +596,9 @@ static Material *Switch_FindLoadedUiMaterial(const char *name)
         if (!material || !material->info.name)
             continue;
 
-        if (!I_stricmp(material->info.name, name))
+        if (!I_stricmp(material->info.name, name) &&
+            material != rgp.defaultMaterial &&
+            !Material_IsDefault(material))
             return material;
     }
 
@@ -596,38 +619,34 @@ Material *__cdecl Material_Register_FastFile(const char *name)
     std::snprintf(trace, sizeof(trace), "[SWITCH MATERIAL TRACE] after DB_FindXAssetHeader name=%s material=%p\n", name, (void *)header.material);
     Switch_LogRaw(trace);
 
-    // The stock UI zone owns these materials. If the normal name-hash lookup
-    // has already produced a material-default stub, search the loaded asset pool
-    // by canonical name before accepting it. In particular, the selected main-menu
-    // button requests button_highlight_end dynamically; a hash miss turns that
-    // alpha-shaped cap into the blue $default square and also applies the wrong
-    // material's color/blend state. Recover only named UI assets that are already
-    // present in the loaded fastfiles; do not fabricate a replacement material.
-    const bool isSwitchUiMaterialRecoveryCandidate =
-        name &&
-        (!I_stricmp(name, "animbg_blur_back") ||
-         !I_stricmp(name, "animbg_blur_fogscroll") ||
-         !I_stricmp(name, "animbg_blur_front") ||
-         !I_stricmp(name, "button_highlight_end"));
-
-    if (isSwitchUiMaterialRecoveryCandidate &&
+    // DB_FindXAssetHeader may return a default clone if a serialized material
+    // alias was not resolved. Recover only an exact-name Material that already
+    // exists in the renderer/DB registries. This handles dynamic selected-menu
+    // materials like button_highlight_end and prevents the default blue square.
+    if (name &&
         (header.material == rgp.defaultMaterial ||
          (header.material && Material_IsDefault(header.material))))
     {
-        Material *loaded =
-            Switch_FindLoadedUiMaterial(name);
-
-        if (loaded &&
-            loaded != rgp.defaultMaterial &&
-            !Material_IsDefault(loaded))
+        Material *loaded = Switch_FindLoadedMaterialByName(name);
+        if (loaded)
         {
             header.material = loaded;
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[SWITCH UI MATERIAL] recovered %s from loaded material pool=%p\n",
+                "[KisakCOD][MATERIAL RECOVER] name=%s material=%p\\n",
                 name,
                 static_cast<void *>(loaded));
+            Switch_LogRaw(trace);
+        }
+        else if (!I_stricmp(name, "button_highlight_end"))
+        {
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][MATERIAL MISS] name=%s registered=%u\\n",
+                name,
+                static_cast<unsigned>(rgp.materialCount));
             Switch_LogRaw(trace);
         }
     }
