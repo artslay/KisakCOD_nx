@@ -9,6 +9,7 @@
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern Material *__cdecl Material_Find(const char *name);
+extern Material *__cdecl Material_FindLoadedRendererMaterialByName(const char *name);
 extern void __cdecl Sys_Error(const char *error, ...);
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
@@ -926,17 +927,23 @@ static bool Switch_TryResolveMaterialNameAlias(
         length >= 127 || !hasLetter)
         return false;
 
-    // Material_Find searches the renderer's already-registered material
-    // hash table. Unlike DB_FindXAssetHeader it does not manufacture a
-    // default material on a miss, and unlike the DB asset enumerator it does
-    // not acquire the database hash lock while this loader is running.
-    Material *material = Material_Find(name);
+    // Static MaterialHandles in the UI zone can point directly to the
+    // serialized bytes of a material name. Resolve them against the renderer's
+    // real native material registry, not Material_Find's DB hash result: on
+    // Switch that hash can contain a default clone with the requested name.
+    // This helper does not enumerate DB assets and therefore does not re-enter
+    // the database hash lock while the stream loader is running.
+    Material *material = Material_FindLoadedRendererMaterialByName(name);
 
-    // Keep the prior font-name behavior for references whose material has not
-    // yet appeared in the loaded asset list. UI material aliases never use
-    // this fallback, so a missing UI asset cannot become a default placeholder.
+    // Preserve the legacy font alias path for font materials that are not
+    // registered with the renderer yet. UI/material aliases never fall back to
+    // DB_FindXAssetHeader, which may create a default placeholder.
     if (!material && !std::strncmp(name, "fonts/", 6))
-        material = DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name).material;
+    {
+        material = Material_Find(name);
+        if (!material)
+            material = DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name).material;
+    }
 
     if (!material)
         return false;
