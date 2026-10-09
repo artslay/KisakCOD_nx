@@ -726,14 +726,33 @@ void __cdecl R_AddCmdDrawStretchPic(
         defaultMaterial = rgp.defaultMaterial;
 
     actualMaterial = defaultMaterial;
-    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+#ifdef __SWITCH__
+    // A Switch fastfile MaterialTechniqueSet can remap to a feature variant
+    // that contains LIT/EMISSIVE techniques absent from the authored set. The
+    // renderer's remap assertion logs exactly this shape (sourceTech=null,
+    // remappedTech!=null). Testing Material_GetTechnique() here sees the
+    // remapped variant and incorrectly classifies 2D UI materials as fogable,
+    // replacing button_highlight_end and other UI caps with $default.
+    // Use the authored set to decide whether the material is intrinsically
+    // fogable; the backend still uses the remapped set for technique selection.
+    // A missing authored set is rejected conservatively.
+    const MaterialTechniqueSet *authoredTechniqueSet =
+        defaultMaterial ? defaultMaterial->techniqueSet : nullptr;
+    const bool hasFogableTechnique =
+        !authoredTechniqueSet ||
+        authoredTechniqueSet->techniques[TECHNIQUE_LIT_BEGIN] ||
+        authoredTechniqueSet->techniques[TECHNIQUE_EMISSIVE];
+#else
+    const bool hasFogableTechnique = Material_HasAnyFogableTechnique(defaultMaterial);
+#endif
+    if (!hasFogableTechnique || Material_IsDefault(defaultMaterial))
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
             Name = Material_GetName(material);
             Com_PrintWarning(
                 CON_CHANNEL_GFX,
-                "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it uses the depth buffer. Set materialType to 2d.\n",
+                "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \\"%s\\", because it uses the depth buffer. Set materialType to 2d.\\n",
                 Name);
             actualMaterial = rgp.defaultMaterial;
         }
@@ -743,7 +762,7 @@ void __cdecl R_AddCmdDrawStretchPic(
         v10 = Material_GetName(material);
         Com_PrintWarning(
             CON_CHANNEL_GFX,
-            "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
+            "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \\"%s\\", because it has a fogable technique.\\n",
             v10);
         actualMaterial = rgp.defaultMaterial;
     }
