@@ -1290,13 +1290,14 @@ cmd_function_s Com_WriteDefaults_f_VAR;
 static const char* comInitAllocName = "$init";
 #ifdef __SWITCH__
 bool com_introMoviePending = false;
-static const dvar_t *com_introPlaybackVerified;
-static std::atomic<bool> com_introPlaybackVerificationPending{false};
-static std::atomic<bool> com_introPlaybackFrameConfirmed{false};
+static const dvar_t *com_introPlaybackVerified; // legacy marker; retained for existing configs
+static const dvar_t *com_introPlaybackDrawSubmitted;
+static std::atomic<bool> com_introPlaybackDrawPending{false};
+static std::atomic<bool> com_introPlaybackDrawConfirmed{false};
 
-// This is called from the cinematic worker after BinkDoFrame successfully
-// decodes a frame. Dvar writes are deferred to the main thread.
-void COM_NotifyIntroMovieFrameDecoded(const char *movieName)
+// Called only when an intro movie with an available decoded frame is submitted
+// to the renderer. Decoding alone is not enough to persist "intro played".
+void COM_NotifyIntroMovieDrawSubmitted(const char *movieName)
 {
     if (!movieName ||
         (std::strcmp(movieName, "IW_logo") != 0 &&
@@ -1306,19 +1307,19 @@ void COM_NotifyIntroMovieFrameDecoded(const char *movieName)
         return;
     }
 
-    if (com_introPlaybackVerificationPending.exchange(false, std::memory_order_acq_rel))
-        com_introPlaybackFrameConfirmed.store(true, std::memory_order_release);
+    if (com_introPlaybackDrawPending.exchange(false, std::memory_order_acq_rel))
+        com_introPlaybackDrawConfirmed.store(true, std::memory_order_release);
 }
 
-static void COM_ProcessIntroMovieFrameConfirmation()
+static void COM_ProcessIntroMovieDrawConfirmation()
 {
-    if (!com_introPlaybackFrameConfirmed.exchange(false, std::memory_order_acq_rel))
+    if (!com_introPlaybackDrawConfirmed.exchange(false, std::memory_order_acq_rel))
         return;
 
     Dvar_SetBool((dvar_s *)com_introPlayed, 1);
-    Dvar_SetBool((dvar_s *)com_introPlaybackVerified, 1);
+    Dvar_SetBool((dvar_s *)com_introPlaybackDrawSubmitted, 1);
     Switch_LogWrite(
-        "[KisakCOD][INTRO] decoded intro frame confirmed; playback state archived\n");
+        "[KisakCOD][INTRO] intro frame submitted to renderer; playback state archived\n");
 }
 #endif
 void __cdecl Com_Init_Try_Block_Function(char* commandLine)
@@ -1591,13 +1592,14 @@ void COM_PlayIntroMovies()
     {
 #ifdef __SWITCH__
         bool introPlayed = com_introPlayed && com_introPlayed->current.enabled;
-        const bool introPlaybackVerified =
-            com_introPlaybackVerified && com_introPlaybackVerified->current.enabled;
+        const bool introPlaybackDrawSubmitted =
+            com_introPlaybackDrawSubmitted &&
+            com_introPlaybackDrawSubmitted->current.enabled;
 
-        // Earlier Switch builds archived com_introPlayed before opening Bink.
-        // Do not trust that legacy flag until this port has decoded an intro
-        // frame successfully; clear the stale value once to enable recovery.
-        if (introPlayed && !introPlaybackVerified)
+        // Earlier Switch builds archived com_introPlayed either before Bink
+        // opened or immediately after decoding a frame, before it was submitted
+        // for drawing. Those old markers cannot prove an intro was shown.
+        if (introPlayed && !introPlaybackDrawSubmitted)
         {
             Dvar_SetBool((dvar_s *)com_introPlayed, 0);
             introPlayed = false;
@@ -1609,16 +1611,16 @@ void COM_PlayIntroMovies()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][INTRO] com_introPlayed=%u playbackVerified=%u action=%s\n",
+            "[KisakCOD][INTRO] com_introPlayed=%u drawSubmitted=%u action=%s\n",
             introPlayed ? 1u : 0u,
-            introPlaybackVerified ? 1u : 0u,
-            introPlayed && introPlaybackVerified ? "skip" : "queue IW_logo");
+            introPlaybackDrawSubmitted ? 1u : 0u,
+            introPlayed && introPlaybackDrawSubmitted ? "skip" : "queue IW_logo");
         Switch_LogWrite(trace);
 
-        if (!(introPlayed && introPlaybackVerified))
+        if (!(introPlayed && introPlaybackDrawSubmitted))
         {
-            com_introPlaybackFrameConfirmed.store(false, std::memory_order_release);
-            com_introPlaybackVerificationPending.store(true, std::memory_order_release);
+            com_introPlaybackDrawConfirmed.store(false, std::memory_order_release);
+            com_introPlaybackDrawPending.store(true, std::memory_order_release);
 
             // The existing UI/menu startup path consumes this request only
             // after the UI is ready.
@@ -1734,6 +1736,11 @@ void Com_InitDvars()
         0,
         DVAR_ARCHIVE,
         "Intro playback was confirmed by a successfully decoded video frame");
+    com_introPlaybackDrawSubmitted = Dvar_RegisterBool(
+        "com_introPlaybackDrawSubmitted",
+        0,
+        DVAR_ARCHIVE,
+        "An intro frame was submitted to the renderer");
 #endif
     com_animCheck = Dvar_RegisterBool("com_animCheck", 0, DVAR_NOFLAG, "Check anim tree");
     com_hiDef = Dvar_RegisterBool("hiDef", 1, DVAR_ROM, "True if the game video is running in high-def.");
@@ -1975,7 +1982,7 @@ static void Com_AttractMode(int localClientNum)
 void __cdecl Com_Frame_Try_Block_Function()
 {
 #ifdef __SWITCH__
-    COM_ProcessIntroMovieFrameConfirmation();
+    COM_ProcessIntroMovieDrawConfirmation();
 #endif
     float deltaTime; // [esp+4h] [ebp-78h]
     int lastFrameIndex; // [esp+68h] [ebp-14h]
