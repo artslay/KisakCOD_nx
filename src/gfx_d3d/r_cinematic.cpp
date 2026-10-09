@@ -881,11 +881,24 @@ char __cdecl R_Cinematic_BinkOpenPath(
     }
     if (cinematicGlob.bink)
         return 1;
+
+    Error = (const char *)BinkGetError();
     if (errText)
+        _snprintf(errText, errTextSize, "BinkOpen: %s", Error ? Error : "(no error text)");
+
+#ifdef __SWITCH__
     {
-        Error = (const char *)BinkGetError();
-        _snprintf(errText, errTextSize, "BinkOpen: %s", Error);
+        char trace[768];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CINEMATIC OPEN FAIL] path=%s playbackFlags=0x%02x error=%s\n",
+            filepath ? filepath : "(null)",
+            static_cast<unsigned>(static_cast<unsigned char>(playbackFlags)),
+            Error && Error[0] ? Error : "(empty BinkGetError)");
+        Switch_LogWrite(trace);
     }
+#endif
     return 0;
 }
 
