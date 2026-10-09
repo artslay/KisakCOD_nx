@@ -278,10 +278,21 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
         return nullptr;
     }
 
+    // This wrapper implements the Bink API, so force FFmpeg's Bink
+    // demuxer instead of allowing format probing to select an unrelated
+    // container and start its decoder inside avformat_find_stream_info().
+    const AVInputFormat *binkFormat = av_find_input_format("bink");
+    if (!binkFormat)
+    {
+        Switch_BinkSetError("FFmpeg Bink demuxer is unavailable");
+        delete state;
+        return nullptr;
+    }
+
     int ret = avformat_open_input(
         &state->format,
         name,
-        nullptr,
+        binkFormat,
         nullptr);
     if (ret < 0)
     {
