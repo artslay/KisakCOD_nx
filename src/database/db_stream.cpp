@@ -48,9 +48,19 @@ struct SwitchPointerAliasFixup
     uintptr_t *destination;
 };
 
+struct SwitchMaterialNameAliasFixup
+{
+    uintptr_t *destination;
+    char name[128];
+};
+
 static std::vector<SwitchPointerAliasEntry> g_switchPointerAliasEntries;
 static std::unordered_map<uintptr_t, size_t> g_switchPointerAliasIndex;
 static std::vector<SwitchPointerAliasFixup> g_switchPointerAliasFixups;
+
+// Unlike raw serialized-pointer fixups, name fixups own a copy of the name and
+// may safely survive DB_InitStreams() switching from one fastfile to another.
+static std::vector<SwitchMaterialNameAliasFixup> g_switchMaterialNameAliasFixups;
 static bool Switch_IsInvalidNativePointer(uintptr_t pointer)
 {
     if (pointer < static_cast<uintptr_t>(0x10000u))
@@ -970,6 +980,238 @@ static bool Switch_TryResolveMaterialNameAlias(
 
     return true;
 }
+
+bool __cdecl DB_AddSwitchMaterialNameAliasFixup(
+    uintptr_t serializedName,
+    uintptr_t *destination)
+{
+    if (!serializedName || !destination)
+        return false;
+
+    const uintptr_t destinationAddress =
+        reinterpret_cast<uintptr_t>(destination);
+    if (Switch_IsInvalidNativePointer(destinationAddress))
+        return false;
+
+    uintptr_t blockOffset = 0;
+    const int32_t block = Switch_StreamOwner(
+        reinterpret_cast<const uint8_t *>(serializedName),
+        &blockOffset);
+    if (block < 0 ||
+        static_cast<uint32_t>(block) >= ARRAY_COUNT(g_streamPosArray))
+        return false;
+
+    const XBlock &streamBlock = g_streamBlocks[block];
+    if (!streamBlock.data || blockOffset >= streamBlock.size)
+        return false;
+
+    const char *name = reinterpret_cast<const char *>(serializedName);
+    const size_t remaining = streamBlock.size - blockOffset;
+    size_t length = 0;
+    bool hasLetter = false;
+    while (length < remaining && length < 127 && name[length] != '\0')
+    {
+        const unsigned char c = static_cast<unsigned char>(name[length]);
+        const bool letter =
+            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        const bool digit = c >= '0' && c <= '9';
+        if (!letter && !digit && c != '_' && c != '/' &&
+            c != '-' && c != '.' && c != '
+    auto fixup = g_switchPointerAliasFixups.begin();
+    while (fixup != g_switchPointerAliasFixups.end())
+    {
+        uintptr_t resolvedPointer = 0;
+        bool resolved = DB_ResolveSwitchPointerAlias(
+            fixup->serializedSlot,
+            &resolvedPointer);
+        if (!resolved || !resolvedPointer)
+            resolved = DB_TryResolveSwitchSerializedAliasChain(
+                fixup->serializedSlot,
+                &resolvedPointer);
+        if (!resolved || !resolvedPointer)
+        {
+            Switch_TryResolveMaterialNameAlias(
+                fixup->serializedSlot,
+                &resolvedPointer);
+        }
+
+        if (resolvedPointer)
+        {
+            const uintptr_t destination =
+                reinterpret_cast<uintptr_t>(fixup->destination);
+            if (Switch_IsInvalidNativePointer(destination))
+            {
+                char trace[384];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\n",
+                    reinterpret_cast<const void *>(fixup->serializedSlot),
+                    reinterpret_cast<const void *>(destination),
+                    reinterpret_cast<const void *>(resolvedPointer),
+                    g_switchCurrentAssetIndex,
+                    static_cast<unsigned>(g_switchCurrentAssetRawType),
+                    g_switchDbStage ? g_switchDbStage : "");
+                Switch_LogWrite(trace);
+                fixup = g_switchPointerAliasFixups.erase(fixup);
+            }
+            else
+            {
+                *fixup->destination = resolvedPointer;
+                fixup = g_switchPointerAliasFixups.erase(fixup);
+            }
+        }
+        else
+        {
+            ++fixup;
+        }
+    }
+}
+#endif
+ && c != '*')
+            return false;
+        hasLetter = hasLetter || letter;
+        ++length;
+    }
+
+    if (!length || length >= remaining || length >= 127 || !hasLetter)
+        return false;
+
+    char nameCopy[128] = {};
+    std::memcpy(nameCopy, name, length);
+
+    for (SwitchMaterialNameAliasFixup &fixup : g_switchMaterialNameAliasFixups)
+    {
+        if (fixup.destination == destination)
+        {
+            if (std::strcmp(fixup.name, nameCopy))
+                std::memcpy(fixup.name, nameCopy, length + 1);
+            return true;
+        }
+    }
+
+    SwitchMaterialNameAliasFixup fixup{};
+    fixup.destination = destination;
+    std::memcpy(fixup.name, nameCopy, length + 1);
+    g_switchMaterialNameAliasFixups.push_back(fixup);
+
+    static uint32_t traceCount = 0;
+    if (traceCount < 64)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL NAME QUEUED] name=%s destination=%p asset=%d rawType=%u\n",
+            fixup.name,
+            static_cast<void *>(destination),
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType));
+        Switch_LogWrite(trace);
+        ++traceCount;
+    }
+    return true;
+}
+
+void __cdecl DB_ResolvePendingSwitchMaterialNameAliases()
+{
+    if (g_switchMaterialNameAliasFixups.empty())
+        return;
+
+    XAssetHeader assets[2048];
+    const int count = DB_GetAllXAssetOfType(
+        ASSET_TYPE_MATERIAL,
+        assets,
+        static_cast<int>(ARRAY_COUNT(assets)));
+
+    uint32_t resolvedCount = 0;
+    uint32_t missingCount = 0;
+    for (const SwitchMaterialNameAliasFixup &fixup :
+         g_switchMaterialNameAliasFixups)
+    {
+        if (!fixup.destination ||
+            Switch_IsInvalidNativePointer(
+                reinterpret_cast<uintptr_t>(fixup.destination)))
+        {
+            ++missingCount;
+            continue;
+        }
+
+        Material *material =
+            Material_FindLoadedRendererMaterialByName(fixup.name);
+        if (!material)
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                Material *candidate = assets[i].material;
+                if (!candidate || !candidate->info.name ||
+                    I_stricmp(candidate->info.name, fixup.name))
+                    continue;
+                if (candidate == rgp.defaultMaterial)
+                    continue;
+                if (rgp.defaultMaterial && Material_IsDefault(candidate))
+                    continue;
+                material = candidate;
+                break;
+            }
+        }
+
+        if (material)
+        {
+            *fixup.destination = reinterpret_cast<uintptr_t>(material);
+            ++resolvedCount;
+
+            static uint32_t resolvedTraceCount = 0;
+            if (resolvedTraceCount < 64)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][MATERIAL NAME RESOLVED] name=%s material=%p destination=%p\n",
+                    fixup.name,
+                    static_cast<void *>(material),
+                    static_cast<void *>(fixup.destination));
+                Switch_LogWrite(trace);
+                ++resolvedTraceCount;
+            }
+        }
+        else
+        {
+            ++missingCount;
+            static uint32_t missingTraceCount = 0;
+            if (missingTraceCount < 64)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][MATERIAL NAME MISSING] name=%s destination=%p assets=%d\n",
+                    fixup.name,
+                    static_cast<void *>(fixup.destination),
+                    count);
+                Switch_LogWrite(trace);
+                ++missingTraceCount;
+            }
+        }
+    }
+
+    char summary[192];
+    std::snprintf(
+        summary,
+        sizeof(summary),
+        "[KisakCOD][MATERIAL NAME FIXUP] queued=%u resolved=%u missing=%u\n",
+        static_cast<unsigned>(g_switchMaterialNameAliasFixups.size()),
+        resolvedCount,
+        missingCount);
+    Switch_LogWrite(summary);
+
+    // The queue is deliberately batch-scoped: unresolved entries are logged
+    // and discarded instead of retaining destinations that a later zone unload
+    // might invalidate.
+    g_switchMaterialNameAliasFixups.clear();
+}
+
 void __cdecl DB_FixupSwitchPointerAliases()
 {
     auto fixup = g_switchPointerAliasFixups.begin();
