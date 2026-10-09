@@ -138,7 +138,7 @@ $(TARGET).nro: $(TARGET).elf $(TARGET).nacp progress-init
 	@elf2nro $< $@ --nacp=$(TARGET).nacp --icon=$(CURDIR)/$(ICON)
 
 $(TARGET).elf: $(OBJECTS)
-	@$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
+	@$(CXX) $(LDFLAGS) -Wl,-Map=$(BUILD)/kisakcod.map -o $@ $^ $(LIBS)
 
 # Always rebuild the tiny build-number object so __DATE__/__TIME__ changes on every plain `make`.
 $(BUILD)/src/buildnumber.o: src/buildnumber.cpp ALWAYS
