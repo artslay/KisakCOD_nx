@@ -3292,6 +3292,7 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         }
 #endif
         item.parent = menu;
+#ifdef __SWITCH__
         g_switchFrameStage = "ui/menus_open/on_open_script";
 #endif
         Item_RunScript(dc, &item, (char*)menu->onOpen);
@@ -3345,7 +3346,9 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
             Switch_LogWrite("[KisakCOD][UIMAIN] Menus_Open before UI_PlayLocalSoundAliasByName\n");
         }
 #endif
+#ifdef __SWITCH__
         g_switchFrameStage = "ui/menus_open/play_sound";
+#endif
         UI_PlayLocalSoundAliasByName(dc->localClientNum, menu->soundName);
 #ifdef __SWITCH__
         if (traceMainText)
