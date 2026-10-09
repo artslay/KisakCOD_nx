@@ -577,7 +577,7 @@ Material *__cdecl Material_FindLoadedRendererMaterialByName(const char *name)
 
         if (!I_stricmp(material->info.name, name) &&
             material != rgp.defaultMaterial &&
-            !Material_IsDefault(material))
+            (!rgp.defaultMaterial || !Material_IsDefault(material)))
             return material;
     }
 
@@ -633,7 +633,8 @@ Material *__cdecl Material_Register_FastFile(const char *name)
     // materials like button_highlight_end and prevents the default blue square.
     if (name &&
         (header.material == rgp.defaultMaterial ||
-         (header.material && Material_IsDefault(header.material))))
+         (rgp.defaultMaterial && header.material &&
+          Material_IsDefault(header.material))))
     {
         Material *loaded = Switch_FindLoadedMaterialByName(name);
         if (loaded)
