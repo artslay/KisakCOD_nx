@@ -558,14 +558,13 @@ bool __cdecl Material_IsDefault(const Material *material)
 }
 
 #ifdef __SWITCH__
-static Material *Switch_FindLoadedMaterialByName(const char *name)
+Material *__cdecl Material_FindLoadedRendererMaterialByName(const char *name)
 {
     if (!name || !*name)
         return nullptr;
 
-    // The renderer's sorted-material array contains native Material objects
-    // already registered by the engine. Search it before consulting the DB
-    // alias table, which can return a default clone on the 64-bit Switch port.
+    // Search the renderer's native registry directly. This avoids a DB hash
+    // alias that may resolve to a default clone with the same requested name.
     const int registeredCount = std::min<int>(
         static_cast<int>(rgp.materialCount),
         static_cast<int>(ARRAY_COUNT(rgp.sortedMaterials)));
@@ -581,6 +580,15 @@ static Material *Switch_FindLoadedMaterialByName(const char *name)
             !Material_IsDefault(material))
             return material;
     }
+
+    return nullptr;
+}
+
+static Material *Switch_FindLoadedMaterialByName(const char *name)
+{
+    Material *registered = Material_FindLoadedRendererMaterialByName(name);
+    if (registered)
+        return registered;
 
     // Some native assets can be present in the loaded fastfile registry before
     // renderer registration. Accept only an exact, real non-default asset.
