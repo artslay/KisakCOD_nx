@@ -726,7 +726,22 @@ void __cdecl R_AddCmdDrawStretchPic(
         defaultMaterial = rgp.defaultMaterial;
 
     actualMaterial = defaultMaterial;
-if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+#ifdef __SWITCH__
+    const char *switchMaterialName = Material_GetName(defaultMaterial);
+    const bool switchPreserveProfileBlur =
+        switchMaterialName &&
+        (!I_stricmp(switchMaterialName, "animbg_blur_back") ||
+         !I_stricmp(switchMaterialName, "animbg_blur_fogscroll") ||
+         !I_stricmp(switchMaterialName, "animbg_blur_front"));
+    const bool switchHasUnlitTechnique =
+        Material_GetTechnique(defaultMaterial, TECHNIQUE_UNLIT) != nullptr;
+    if (!switchPreserveProfileBlur &&
+        (Material_IsDefault(defaultMaterial) ||
+         (switchHasUnlitTechnique &&
+          !Material_HasAnyFogableTechnique(defaultMaterial))))
+#else
+    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+#endif
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
@@ -828,7 +843,22 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
     else
         defaultMaterial = rgp.defaultMaterial;
     actualMaterial = defaultMaterial;
-if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+#ifdef __SWITCH__
+    const char *switchMaterialName = Material_GetName(defaultMaterial);
+    const bool switchPreserveProfileBlur =
+        switchMaterialName &&
+        (!I_stricmp(switchMaterialName, "animbg_blur_back") ||
+         !I_stricmp(switchMaterialName, "animbg_blur_fogscroll") ||
+         !I_stricmp(switchMaterialName, "animbg_blur_front"));
+    const bool switchHasUnlitTechnique =
+        Material_GetTechnique(defaultMaterial, TECHNIQUE_UNLIT) != nullptr;
+    if (!switchPreserveProfileBlur &&
+        (Material_IsDefault(defaultMaterial) ||
+         (switchHasUnlitTechnique &&
+          !Material_HasAnyFogableTechnique(defaultMaterial))))
+#else
+    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+#endif
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
