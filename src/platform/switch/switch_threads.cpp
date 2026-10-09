@@ -588,8 +588,10 @@ int Sys_SpawnServerThread(void (*function)(uint32_t))
     g_switchThreadStage = "spawnServer/before_create";
     Sys_CreateThread((void (__cdecl *)(uint32_t))function, THREAD_CONTEXT_SERVER);
     g_switchThreadStage = "spawnServer/after_create";
-    g_switchThreadStage = "spawnServer/return";
-    return threadHandle[THREAD_CONTEXT_SERVER] != nullptr ? 1 : 0;
+    const bool serverThreadStarted =
+        threadHandle[THREAD_CONTEXT_SERVER] != nullptr;
+    g_switchThreadStage = "thread/ready";
+    return serverThreadStarted ? 1 : 0;
 }
 
 void Sys_WaitClientMessageReceived()
