@@ -3268,39 +3268,19 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
 #ifdef __SWITCH__
         if (traceMain)
         {
-            const int openMenuCount = dc->openMenuCount;
-            const char *topName =
-                openMenuCount > 0 && dc->menuStack[openMenuCount - 1] &&
-                dc->menuStack[openMenuCount - 1]->window.name
-                    ? dc->menuStack[openMenuCount - 1]->window.name
-                    : "<none>";
-            menuDef_t *mainText = nullptr;
-            int mainTextItems = -1;
-            int mainTextFullScreen = -1;
-            for (int traceIndex = 0; traceIndex < dc->menuCount; ++traceIndex)
-            {
-                menuDef_t *candidate = dc->Menus[traceIndex];
-                if (candidate && candidate->window.name &&
-                    !I_stricmp(candidate->window.name, "main_text"))
-                {
-                    mainText = candidate;
-                    mainTextItems = candidate->itemCount;
-                    mainTextFullScreen = candidate->fullScreen;
-                    break;
-                }
-            }
-            char trace[768];
+            // Mark the completed callback before diagnostics. Do not rescan
+            // the entire UiContext::Menus array here: the callback may open
+            // or close menus, and this Switch-only diagnostic must not add
+            // a second walk over state that the engine is already mutating.
+            g_switchFrameStage = "frame/cl_main/disconnected_set_menu/main_open/onopen_done";
+            char trace[256];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][FRAME] main onOpen returned stack=%d top=%s main_text=%p items=%d fullscreen=%d\n",
-                openMenuCount,
-                topName,
-                static_cast<void *>(mainText),
-                mainTextItems,
-                mainTextFullScreen);
+                "[KisakCOD][FRAME] main onOpen returned menu=%p stack=%d\n",
+                static_cast<void *>(menu),
+                dc ? dc->openMenuCount : -1);
             Switch_LogWrite(trace);
-            g_switchFrameStage = "frame/cl_main/disconnected_set_menu/main_open/onopen_done";
         }
         if (traceMainText)
         {
