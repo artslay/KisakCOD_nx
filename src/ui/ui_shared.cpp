@@ -3289,6 +3289,17 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
         }
 #endif
     }
+#ifdef __SWITCH__
+    // The crash handler reports this thread-local stage. Keep the boundary
+    // between the completed onOpen script and the optional menu sound explicit:
+    // a fault here must not be mistaken for a fastfile or technique-set failure.
+    if (traceMain)
+        g_switchFrameStage =
+            "frame/cl_frame/disconnected_set_menu/main_open/post_onopen/before_sound_test";
+    else if (traceMainText)
+        g_switchFrameStage =
+            "frame/cl_frame/disconnected_set_menu/main_open/main_text/post_onopen/before_sound_test";
+#endif
     if (menu->soundName)
     {
 #ifdef __SWITCH__
@@ -3318,6 +3329,12 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
 #endif
     }
 #ifdef __SWITCH__
+    if (traceMain)
+        g_switchFrameStage =
+            "frame/cl_frame/disconnected_set_menu/main_open/post_sound_branch";
+    else if (traceMainText)
+        g_switchFrameStage =
+            "frame/cl_frame/disconnected_set_menu/main_open/main_text/post_sound_branch";
     if (traceMainText)
     {
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/done";
