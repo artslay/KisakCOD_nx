@@ -276,18 +276,7 @@ static void R_LoadGraphicsAssets()
     // The renderer registers built-in images immediately afterwards, so the
     // database must no longer be mutating its XAsset tables concurrently.
     if (zoneCount > 0)
-    {
         DB_LoadXAssets(zoneInfo, zoneCount, 1);
-
-        // Resolve serialized UI material-name aliases only after the complete
-        // fastfile batch has returned and the DB asset table is stable. Sorting
-        // rebuilds rgp.sortedMaterials from the loaded asset registry; the
-        // Switch Material_Sort path then retries pending pointer aliases.
-        // Without this initial pass, UI window.background references that are
-        // forward aliases can remain null for the entire front-end menu.
-        Material_Sort();
-    }
-
 }
 
 void R_InitGraphicsApi() {
