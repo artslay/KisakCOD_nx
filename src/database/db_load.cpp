@@ -9256,18 +9256,30 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
             }
             else
             {
-                // Positive MaterialHandle values are serialized pointer aliases.
-                // Resolve them exactly like the other DB pointer assets and keep
-                // the reference pending when the target has not been registered
-                // yet. Do not call DB_FindXAssetHeader(name) here: that function
-                // creates a default material placeholder when the real asset has
-                // not reached the registry yet, permanently freezing this handle
-                // onto the wrong native Material object.
-                // DB_ConvertOffsetToAlias reads the serialized 32-bit token
-                // directly from this field and registers a fixup for the native
-                // pointer. Clearing the field first destroys that token, so keep
-                // the serialized value intact until the resolver consumes it.
-                DB_ConvertOffsetToAlias(varMaterialHandle);
+                // Some UI fastfile MaterialHandles point directly to the
+                // serialized bytes of their material name instead of to a
+                // normal 32-bit alias slot. Copy such names while this zone's
+                // stream is still active; DB_InitStreams() replaces the stream
+                // table for the next fastfile, so the fixup must not retain a
+                // raw pointer into that table.
+                const uintptr_t serializedMaterialName =
+                    materialAliasSlot
+                        ? DB_ResolveSwitchSerializedString(materialAliasSlot)
+                        : 0;
+                if (serializedMaterialName &&
+                    DB_AddSwitchMaterialNameAliasFixup(
+                        serializedMaterialName,
+                        reinterpret_cast<uintptr_t *>(varMaterialHandle)))
+                {
+                    *varMaterialHandle = nullptr;
+                }
+                else
+                {
+                    // Normal serialized pointer aliases keep the original
+                    // resolver path. Do not use DB_FindXAssetHeader(name)
+                    // because that can create a default material clone.
+                    DB_ConvertOffsetToAlias(varMaterialHandle);
+                }
             }
 
             if (traceSwitchFontMaterialAlias)
