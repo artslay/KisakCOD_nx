@@ -558,7 +558,7 @@ bool __cdecl Material_IsDefault(const Material *material)
 }
 
 #ifdef __SWITCH__
-static Material *Switch_FindLoadedUiBackgroundMaterial(const char *name)
+static Material *Switch_FindLoadedUiMaterial(const char *name)
 {
     if (!name)
         return nullptr;
@@ -596,22 +596,26 @@ Material *__cdecl Material_Register_FastFile(const char *name)
     std::snprintf(trace, sizeof(trace), "[SWITCH MATERIAL TRACE] after DB_FindXAssetHeader name=%s material=%p\n", name, (void *)header.material);
     Switch_LogRaw(trace);
 
-    // The stock UI zone owns these three materials. If the normal name hash
-    // lookup has already produced the material-default stub, search the loaded
-    // material pool by canonical name before accepting the stub. This handles
-    // ARM64 registry/hash mismatches without altering non-UI material behavior.
-    const bool isProfileBlurMaterial =
+    // The stock UI zone owns these materials. If the normal name-hash lookup
+    // has already produced a material-default stub, search the loaded asset pool
+    // by canonical name before accepting it. In particular, the selected main-menu
+    // button requests button_highlight_end dynamically; a hash miss turns that
+    // alpha-shaped cap into the blue $default square and also applies the wrong
+    // material's color/blend state. Recover only named UI assets that are already
+    // present in the loaded fastfiles; do not fabricate a replacement material.
+    const bool isSwitchUiMaterialRecoveryCandidate =
         name &&
         (!I_stricmp(name, "animbg_blur_back") ||
          !I_stricmp(name, "animbg_blur_fogscroll") ||
-         !I_stricmp(name, "animbg_blur_front"));
+         !I_stricmp(name, "animbg_blur_front") ||
+         !I_stricmp(name, "button_highlight_end"));
 
-    if (isProfileBlurMaterial &&
+    if (isSwitchUiMaterialRecoveryCandidate &&
         (header.material == rgp.defaultMaterial ||
          (header.material && Material_IsDefault(header.material))))
     {
         Material *loaded =
-            Switch_FindLoadedUiBackgroundMaterial(name);
+            Switch_FindLoadedUiMaterial(name);
 
         if (loaded &&
             loaded != rgp.defaultMaterial &&
