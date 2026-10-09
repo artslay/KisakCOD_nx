@@ -755,11 +755,25 @@ void __cdecl R_AddCmdDrawStretchPic(
     }
     else
     {
+#ifdef __SWITCH__
+        const char *rejectReason =
+            !switchHasUnlitTechnique
+                ? "because it has no unlit technique"
+                : switchPreserveProfileBlur
+                    ? "because the profile blur is filtered on the 2D path"
+                    : "because it has a fogable technique";
+        Com_PrintWarning(
+            CON_CHANNEL_GFX,
+            "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", %s.\n",
+            Material_GetName(defaultMaterial),
+            rejectReason);
+#else
         v10 = Material_GetName(material);
         Com_PrintWarning(
             CON_CHANNEL_GFX,
             "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
             v10);
+#endif
         actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
@@ -872,11 +886,25 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
     }
     else
     {
+#ifdef __SWITCH__
+        const char *rejectReason =
+            !switchHasUnlitTechnique
+                ? "because it has no unlit technique"
+                : switchPreserveProfileBlur
+                    ? "because the profile blur is filtered on the 2D path"
+                    : "because it has a fogable technique";
+        Com_PrintWarning(
+            CON_CHANNEL_GFX,
+            "R_AddCmdDrawStretchPicFlipST: NOT DRAWING WITH MATERIAL \"%s\", %s.\n",
+            Material_GetName(defaultMaterial),
+            rejectReason);
+#else
         v10 = Material_GetName(material);
         Com_PrintWarning(
             CON_CHANNEL_GFX,
             "R_AddCmdDrawStretchPicFlipST: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
             v10);
+#endif
         actualMaterial = rgp.defaultMaterial;
     }
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
