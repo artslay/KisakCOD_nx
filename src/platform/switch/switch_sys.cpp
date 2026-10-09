@@ -67,7 +67,8 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[SWITCH STREAM MISMATCH]",
         "[SWITCH STREAM ARRAY MISMATCH]",
         "[SWITCH STREAM REGRESS]",
-        "[SWITCH IMAGE ANOMALY]"
+        "[SWITCH IMAGE ANOMALY]",
+        "[SWITCH TECH CURSOR]"
     };
 
     for (const char *prefix : kPrefixes)
