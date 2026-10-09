@@ -301,14 +301,9 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
         return nullptr;
     }
 
-    ret = avformat_find_stream_info(state->format, nullptr);
-    if (ret < 0)
-    {
-        Switch_BinkSetAvError(ret, "avformat_find_stream_info");
-        Switch_BinkFreeState(state);
-        return nullptr;
-    }
-
+    // Validate the video codec before asking FFmpeg to inspect/decode packets.
+    // avformat_find_stream_info() may invoke a decoder while probing; calling it
+    // first lets a wrongly resolved/non-Bink video reach an unrelated decoder.
     state->videoStreamIndex = av_find_best_stream(
         state->format,
         AVMEDIA_TYPE_VIDEO,
@@ -349,6 +344,26 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
             static_cast<int>(params->codec_id));
         Switch_LogWrite(trace);
         Switch_BinkSetError("input video stream is not Bink video");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    // At this point the Bink demuxer's header has identified the stream and we
+    // have confirmed its codec ID. Only now may stream probing decode packets.
+    ret = avformat_find_stream_info(state->format, nullptr);
+    if (ret < 0)
+    {
+        Switch_BinkSetAvError(ret, "avformat_find_stream_info");
+        Switch_BinkFreeState(state);
+        return nullptr;
+    }
+
+    // Reacquire stream metadata after probing; FFmpeg may update it.
+    state->videoStream = state->format->streams[state->videoStreamIndex];
+    params = state->videoStream->codecpar;
+    if (params->codec_id != AV_CODEC_ID_BINKVIDEO)
+    {
+        Switch_BinkSetError("video stream changed to a non-Bink codec during stream probing");
         Switch_BinkFreeState(state);
         return nullptr;
     }
