@@ -2484,7 +2484,7 @@ void Com_StartHunkUsers()
         // can render underneath the profile screen.
         Cbuf_AddText(0, "cinematic IW_logo\n");
         com_introMoviePending = false;
-        Switch_LogWrite("[KisakCOD][INTRO] starting deferred IW_logo cinematic\\n");
+        Switch_LogWrite("[KisakCOD][INTRO] starting deferred IW_logo cinematic\n");
     }
 #endif
 
