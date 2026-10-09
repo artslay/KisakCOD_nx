@@ -7463,7 +7463,7 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][MATERIAL TECHNIQUE INVALID] asset=%d rawType=%u stream=%u offset=%u start=%p index=%d name=%08x flags=%04x passCount=%04x after=%p bytes=",
+            "[KisakCOD][TECH CURSOR INVALID] asset=%d rawType=%u stream=%u offset=%u start=%p index=%d name=%08x flags=%04x passCount=%04x after=%p bytes=",
             g_switchCurrentAssetIndex,
             static_cast<unsigned>(g_switchCurrentAssetRawType),
             static_cast<unsigned>(techniqueHeaderStream),
@@ -8135,9 +8135,29 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     }
 #endif
 
+    const bool traceEarlyMaterialTechniques =
+        traceRawType == 4u &&
+        traceAssetIndex >= 0 &&
+        traceAssetIndex <= 3;
+
     for (int i = 0; i < 34; ++i)
     {
         const uint32_t value = serialized.techniques[i];
+
+        if (traceEarlyMaterialTechniques && i < 4)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][TECH CURSOR] slot asset=%d index=%d token=%08x stream=%u offset4=%u\\n",
+                traceAssetIndex,
+                i,
+                value,
+                static_cast<unsigned>(g_streamPosIndex),
+                Switch_GetStreamCursorOffset(4));
+            Switch_LogWrite(trace);
+        }
 
         if (!value)
         {
@@ -8163,6 +8183,23 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
             if (value == UINT32_MAX - 1)
                 inserted = DB_InsertPointer();
 
+            if (traceEarlyMaterialTechniques && i < 4)
+            {
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][TECH CURSOR] inline asset=%d index=%d token=%08x stream=%u before=%u aligned=%u header=%u\\n",
+                    traceAssetIndex,
+                    i,
+                    value,
+                    static_cast<unsigned>(techniqueStream),
+                    techniqueOffsetBeforeAlign,
+                    techniqueOffsetAfterAlign,
+                    Switch_GetStreamCursorOffset(techniqueStream));
+                Switch_LogWrite(trace);
+            }
+
             if (traceRawType == 23u && traceAssetIndex == 4728)
             {
                 char trace[256];
@@ -8180,6 +8217,23 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
             }
 
             Load_MaterialTechnique(1);
+
+            if (traceEarlyMaterialTechniques && i < 4)
+            {
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][TECH CURSOR] loaded asset=%d index=%d token=%08x passes=%u stream=%u offset4=%u name=%p\\n",
+                    traceAssetIndex,
+                    i,
+                    value,
+                    static_cast<unsigned>(varMaterialTechnique->passCount),
+                    static_cast<unsigned>(g_streamPosIndex),
+                    Switch_GetStreamCursorOffset(4),
+                    static_cast<const void *>(varMaterialTechnique->name));
+                Switch_LogWrite(trace);
+            }
 
 #ifdef __SWITCH__
             if (traceRawType == 5u &&
