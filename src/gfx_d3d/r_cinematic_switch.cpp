@@ -1,11 +1,15 @@
 #ifdef __SWITCH__
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
+#include <cstdio>
 
 #include "binklib/binktextures.h"
 #include "gfx/vulkan/d3d9_compat.h"
 #include "gfx/vulkan/vulkan_backend.h"
+
+extern void Switch_LogWrite(const char *msg);
 
 static void UploadBinkPlane(
     IDirect3DTexture9 *texture,
@@ -16,9 +20,33 @@ static void UploadBinkPlane(
     if (!texture || !plane.Buffer || !width || !height)
         return;
 
+    static std::atomic<unsigned> uploadFailureLogs{0};
+    auto logUploadFailure = [&](const char *reason, VkImageLayout layout)
+    {
+        const unsigned n = uploadFailureLogs.fetch_add(1, std::memory_order_relaxed);
+        if (n >= 8)
+            return;
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CINEMATIC UPLOAD FAIL] reason=%s image=%p size=%ux%u format=%u layout=%u\n",
+            reason,
+            reinterpret_cast<void *>(texture ? texture->image : VK_NULL_HANDLE),
+            static_cast<unsigned>(width),
+            static_cast<unsigned>(height),
+            texture ? static_cast<unsigned>(texture->format) : 0u,
+            static_cast<unsigned>(layout));
+        Switch_LogWrite(trace);
+    };
+
     VulkanBackend *backend = GetVulkanBackend();
     if (!backend || !texture->image)
+    {
+        logUploadFailure(!backend ? "Vulkan backend unavailable" : "texture has no VkImage",
+            VK_IMAGE_LAYOUT_UNDEFINED);
         return;
+    }
 
     const VkImageLayout oldLayout = texture->GetSubresourceLayout(0, 0);
     const size_t bytes = static_cast<size_t>(width) * height;
@@ -35,6 +63,7 @@ static void UploadBinkPlane(
             oldLayout,
             0))
     {
+        logUploadFailure("UploadImage2D returned false", oldLayout);
         return;
     }
 
