@@ -2413,6 +2413,9 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
     const char *p; // [esp+1810h] [ebp-4h] BYREF
 
 #ifdef __SWITCH__
+    // Debug stage markers must not leak past Item_RunScript. Otherwise a later
+    // failure in the caller is misreported as an Item_RunScript return failure.
+    const char *const switchPreviousFrameStage = g_switchFrameStage;
     const bool traceMainOpen =
         item &&
         item->parent &&
@@ -2597,7 +2600,9 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/done";
             Switch_LogWrite("[KisakCOD][UIMAIN] Item_RunScript complete\n");
         }
-        g_switchFrameStage = "ui/item_run_script/return";
+        g_switchFrameStage = switchPreviousFrameStage
+            ? switchPreviousFrameStage
+            : "frame/unknown";
 #endif
     }
 }
