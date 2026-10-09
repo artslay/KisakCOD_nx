@@ -18,6 +18,7 @@
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern void COM_NotifyIntroMovieDrawSubmitted(const char *movieName);
+extern void COM_NotifyIntroMoviePlaybackFinished(const char *movieName);
 #endif
 
 // #define CINEMA
@@ -255,7 +256,13 @@ void __cdecl R_Cinematic_UpdateFrame_Core(
     {
         iassert( cinematicGlob.bink );
         if (!R_Cinematic_Advance())
+        {
             cinematicGlob.cinematicFinished = 1;
+#ifdef __SWITCH__
+            COM_NotifyIntroMoviePlaybackFinished(
+                cinematicGlob.currentCinematicName);
+#endif
+        }
     }
 }
 

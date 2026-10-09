@@ -9263,7 +9263,10 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
                 // creates a default material placeholder when the real asset has
                 // not reached the registry yet, permanently freezing this handle
                 // onto the wrong native Material object.
-                *varMaterialHandle = nullptr;
+                // DB_ConvertOffsetToAlias reads the serialized 32-bit token
+                // directly from this field and registers a fixup for the native
+                // pointer. Clearing the field first destroys that token, so keep
+                // the serialized value intact until the resolver consumes it.
                 DB_ConvertOffsetToAlias(varMaterialHandle);
             }
 

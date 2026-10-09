@@ -117,6 +117,13 @@ VulkanBackend *GetVulkanBackend()
 void VulkanBackend::SetError(const char *message)
 {
     m_lastError = message ? message : "Vulkan backend error";
+    char trace[320];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][VK ERROR] %s\n",
+        m_lastError.c_str());
+    Switch_LogWrite(trace);
 }
 
 bool VulkanBackend::Init(const GfxWindowParms *wndParms)
@@ -699,6 +706,88 @@ void VulkanBackend::DestroySwapchain()
     m_swapchain = VK_NULL_HANDLE;
 }
 
+bool VulkanBackend::RecreateSwapchain()
+{
+    if (!m_device || !m_surface)
+    {
+        SetError("Cannot recreate swapchain without a Vulkan device and surface");
+        return false;
+    }
+
+    m_swapchainNeedsRecreate = true;
+    {
+        // Match ImmediateSubmit/Shutdown lock ordering before waiting for the
+        // device; cinematic uploads share the device and graphics queue.
+        std::lock_guard<std::mutex> immediateLock(m_immediateMutex);
+        std::lock_guard<std::mutex> queueLock(m_queueMutex);
+        const VkResult idleResult = vkDeviceWaitIdle(m_device);
+        if (idleResult != VK_SUCCESS)
+        {
+            SetError("vkDeviceWaitIdle failed while recreating swapchain");
+            return false;
+        }
+    }
+
+    const uint32_t previousWidth = m_width;
+    const uint32_t previousHeight = m_height;
+
+    m_frameActive = false;
+    m_renderingActive = false;
+    m_backbufferClearedThisFrame = false;
+    m_uniformOffset = 0;
+    m_swapchainIndex = 0;
+
+    if (m_commandPool)
+    {
+        const VkResult resetResult =
+            vkResetCommandPool(m_device, m_commandPool, 0);
+        if (resetResult != VK_SUCCESS)
+        {
+            SetError("vkResetCommandPool failed while recreating swapchain");
+            return false;
+        }
+    }
+
+    DestroySwapchain();
+
+    // A failed acquire/present can leave the binary semaphore state uncertain.
+    // Recreate the per-frame synchronization objects after the device is idle
+    // instead of reusing a semaphore/fence that may no longer be signaled.
+    if (m_sync.imageAvailable)
+        vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
+    if (m_sync.renderFinished)
+        vkDestroySemaphore(m_device, m_sync.renderFinished, nullptr);
+    if (m_sync.fence)
+        vkDestroyFence(m_device, m_sync.fence, nullptr);
+    m_sync = FrameSync{};
+
+    m_lastError.clear();
+    if (!CreateSwapchain())
+        return false;
+
+    if (m_width != previousWidth || m_height != previousHeight)
+    {
+        DestroyDefaultDepth();
+        if (!CreateDefaultDepth())
+            return false;
+    }
+
+    if (!CreateSync())
+        return false;
+
+    m_swapchainNeedsRecreate = false;
+
+    char trace[192];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][VK] swapchain recreated (%ux%u)\n",
+        m_width,
+        m_height);
+    Switch_LogWrite(trace);
+    return true;
+}
+
 void VulkanBackend::DestroyDefaultDepth()
 {
     if (m_defaultDepthImage)
@@ -714,23 +803,55 @@ bool VulkanBackend::BeginFrame()
     if (!m_initialized || m_frameActive)
         return m_frameActive;
 
+    if (m_swapchainNeedsRecreate && !RecreateSwapchain())
+        return false;
+
     if (vkWaitForFences(m_device, 1, &m_sync.fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
     {
         SetError("vkWaitForFences failed");
         return false;
     }
-    vkResetFences(m_device, 1, &m_sync.fence);
-    vkResetCommandPool(m_device, m_commandPool, 0);
-    vkResetDescriptorPool(m_device, m_descriptorPool, 0);
+
+    // Keep the fence signaled until a command buffer is ready to submit.
+    // Resetting it before vkAcquireNextImageKHR can leave an unsignaled fence
+    // when acquire reports OUT_OF_DATE, making the next BeginFrame wait forever.
+    if (vkResetCommandPool(m_device, m_commandPool, 0) != VK_SUCCESS)
+    {
+        SetError("vkResetCommandPool failed at frame start");
+        (void)RecreateSwapchain();
+        return false;
+    }
+    if (vkResetDescriptorPool(m_device, m_descriptorPool, 0) != VK_SUCCESS)
+    {
+        SetError("vkResetDescriptorPool failed at frame start");
+        (void)RecreateSwapchain();
+        return false;
+    }
     m_uniformOffset = 0;
 
     VkResult result = vkAcquireNextImageKHR(
-        m_device, m_swapchain, UINT64_MAX, m_sync.imageAvailable, VK_NULL_HANDLE, &m_swapchainIndex);
+        m_device,
+        m_swapchain,
+        UINT64_MAX,
+        m_sync.imageAvailable,
+        VK_NULL_HANDLE,
+        &m_swapchainIndex);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        Switch_LogWrite(
+            "[KisakCOD][VK] acquire reported OUT_OF_DATE; recreating swapchain\n");
+        (void)RecreateSwapchain();
+        return false;
+    }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
         SetError("vkAcquireNextImageKHR failed");
+        (void)RecreateSwapchain();
         return false;
     }
+    if (result == VK_SUBOPTIMAL_KHR)
+        m_swapchainNeedsRecreate = true;
 
     VkCommandBufferBeginInfo begin{};
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -738,6 +859,7 @@ bool VulkanBackend::BeginFrame()
     if (vkBeginCommandBuffer(m_commandBuffer, &begin) != VK_SUCCESS)
     {
         SetError("vkBeginCommandBuffer failed");
+        (void)RecreateSwapchain();
         return false;
     }
 
@@ -767,8 +889,10 @@ bool VulkanBackend::EndFrame()
     if (!swapImage || m_swapchainLayouts.size() <= m_swapchainIndex)
     {
         SetError("Invalid swapchain image state");
+        (void)RecreateSwapchain();
         return false;
     }
+
     if (m_presentSourceImage)
     {
         TransitionImage(
@@ -803,10 +927,8 @@ bool VulkanBackend::EndFrame()
             swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1, &blit, VK_FILTER_LINEAR);
 
-        // The compatibility render target remains owned by the D3D surface
-        // and is tracked as COLOR_ATTACHMENT_OPTIMAL. Restore that layout
-        // after the present blit so the next frame does not render through a
-        // stale layout tracker.
+        // The compatibility render target remains in COLOR_ATTACHMENT_OPTIMAL
+        // between frames. Restore its tracked layout after the present blit.
         TransitionImage(
             m_presentSourceImage,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -833,6 +955,16 @@ bool VulkanBackend::EndFrame()
     if (vkEndCommandBuffer(m_commandBuffer) != VK_SUCCESS)
     {
         SetError("vkEndCommandBuffer failed");
+        (void)RecreateSwapchain();
+        return false;
+    }
+
+    // Reset only when the frame is ready to submit. If submit itself fails,
+    // RecreateSwapchain replaces this unsignaled fence and both semaphores.
+    if (vkResetFences(m_device, 1, &m_sync.fence) != VK_SUCCESS)
+    {
+        SetError("vkResetFences failed before frame submission");
+        (void)RecreateSwapchain();
         return false;
     }
 
@@ -855,6 +987,7 @@ bool VulkanBackend::EndFrame()
     if (submitResult != VK_SUCCESS)
     {
         SetError("vkQueueSubmit failed");
+        (void)RecreateSwapchain();
         return false;
     }
 
@@ -871,10 +1004,23 @@ bool VulkanBackend::EndFrame()
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
         result = vkQueuePresentKHR(m_graphicsQueue, &present);
     }
-    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        Switch_LogWrite(
+            "[KisakCOD][VK] present reported OUT_OF_DATE; recreating swapchain\n");
+        return RecreateSwapchain();
+    }
+    if (result == VK_SUBOPTIMAL_KHR)
+    {
+        m_frameActive = false;
+        m_swapchainNeedsRecreate = true;
+        return true;
+    }
+    if (result != VK_SUCCESS)
     {
         SetError("vkQueuePresentKHR failed");
-        return false;
+        return RecreateSwapchain();
     }
 
     m_frameActive = false;

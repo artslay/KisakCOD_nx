@@ -230,6 +230,7 @@ private:
     bool SelectPhysicalDevice();
     bool CreateDevice();
     bool CreateSwapchain();
+    bool RecreateSwapchain();
     bool CreateDefaultDepth();
     bool CreateCommandResources();
     bool CreateDescriptorResources();
@@ -291,6 +292,7 @@ private:
     bool m_initialized = false;
     bool m_frameActive = false;
     bool m_renderingActive = false;
+    bool m_swapchainNeedsRecreate = false;
     bool m_backbufferClearedThisFrame = false;
 
     VkImage m_presentSourceImage = VK_NULL_HANDLE;
