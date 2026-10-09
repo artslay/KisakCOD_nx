@@ -766,6 +766,46 @@ void __cdecl R_AddCmdDrawStretchPic(
             v10);
         actualMaterial = rgp.defaultMaterial;
     }
+#ifdef __SWITCH__
+    if (defaultMaterial && defaultMaterial->info.name &&
+        !I_stricmp(defaultMaterial->info.name, "button_highlight_end"))
+    {
+        static uint32_t switchButtonHighlightTraceCount = 0;
+        if (switchButtonHighlightTraceCount < 8)
+        {
+            const MaterialTechniqueSet *authored =
+                defaultMaterial->techniqueSet;
+            const MaterialTechniqueSet *remapped =
+                authored ? authored->remappedTechniqueSet : nullptr;
+            char trace[448];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI STRETCH MATERIAL] #%u input=%p name=%s "
+                "sourceSet=%p sourceLit=%p sourceEmissive=%p "
+                "remapSet=%p remapLit=%p remapEmissive=%p flags=0x%02x "
+                "chosen=%s\n",
+                static_cast<unsigned>(switchButtonHighlightTraceCount),
+                static_cast<void *>(defaultMaterial),
+                defaultMaterial->info.name,
+                static_cast<const void *>(authored),
+                authored ? static_cast<const void *>(
+                    authored->techniques[TECHNIQUE_LIT_BEGIN]) : nullptr,
+                authored ? static_cast<const void *>(
+                    authored->techniques[TECHNIQUE_EMISSIVE]) : nullptr,
+                static_cast<const void *>(remapped),
+                remapped ? static_cast<const void *>(
+                    remapped->techniques[TECHNIQUE_LIT_BEGIN]) : nullptr,
+                remapped ? static_cast<const void *>(
+                    remapped->techniques[TECHNIQUE_EMISSIVE]) : nullptr,
+                static_cast<unsigned>(defaultMaterial->stateFlags),
+                actualMaterial && actualMaterial->info.name
+                    ? actualMaterial->info.name : "<null>");
+            Switch_LogWrite(trace);
+            ++switchButtonHighlightTraceCount;
+        }
+    }
+#endif
     iassert( !Material_UsesDepthBuffer( actualMaterial ) );
     cmd = (GfxCmdStretchPic *)R_GetCommandBuffer(RC_FIRST_NONCRITICAL, sizeof(GfxCmdStretchPic));
     if (cmd)
