@@ -457,9 +457,30 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
     }
     else
     {
+        // FFmpeg parses "sdmc:/..." as a URL whose protocol is "sdmc".
+        // Switch paths are local filesystem paths, so force FFmpeg's file
+        // protocol while keeping the mount prefix for libnx's devoptab.
+        char fileUrl[1024];
+        const char *inputName = name;
+        if (std::strchr(name, ':') && std::strncmp(name, "file:", 5) != 0)
+        {
+            const int urlLength = std::snprintf(
+                fileUrl,
+                sizeof(fileUrl),
+                "file:%s",
+                name);
+            if (urlLength < 0 || static_cast<size_t>(urlLength) >= sizeof(fileUrl))
+            {
+                Switch_BinkSetError("FFmpeg local file URL is too long");
+                Switch_BinkFreeState(state);
+                return nullptr;
+            }
+            inputName = fileUrl;
+        }
+
         ret = avformat_open_input(
             &state->format,
-            name,
+            inputName,
             binkFormat,
             nullptr);
     }
