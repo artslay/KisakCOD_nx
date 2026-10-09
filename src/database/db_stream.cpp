@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstring>
 #include <climits>
 #include <vector>
 #include <unordered_map>
@@ -872,7 +873,7 @@ void __cdecl DB_AddSwitchPointerAliasFixup(
     g_switchPointerAliasFixups.push_back({serializedSlot, destination});
 }
 
-static bool Switch_TryResolveFontMaterialAlias(
+static bool Switch_TryResolveMaterialNameAlias(
     uintptr_t serializedSlot,
     uintptr_t *resolvedPointer)
 {
@@ -889,56 +890,97 @@ static bool Switch_TryResolveFontMaterialAlias(
         return false;
 
     const XBlock &streamBlock = g_streamBlocks[block];
-    if (!streamBlock.data ||
-        blockOffset >= streamBlock.size ||
-        streamBlock.size - blockOffset < 7)
+    if (!streamBlock.data || blockOffset >= streamBlock.size)
         return false;
-
-    const char *name =
-        reinterpret_cast<const char *>(serializedSlot);
-
-    // Some 32-bit fastfile font material pointers are linker aliases that
-    // reuse the storage of the material name string itself. On ARM64 that
-    // alias cannot be treated as a pointer-to-pointer: the target bytes are
-    // literally "fonts/...". Resolve such aliases by material name once the
-    // referenced material asset is available.
-    static const char prefix[] = "fonts/";
-    for (size_t i = 0; i < sizeof(prefix) - 1; ++i)
-    {
-        if (name[i] != prefix[i])
-            return false;
-    }
 
     const size_t remaining = streamBlock.size - blockOffset;
-    size_t length = 0;
-    while (length < remaining && length < 127 && name[length] != '\0')
-        ++length;
-
-    if (length == 0 || length >= remaining || length >= 127)
+    if (remaining < 7)
         return false;
 
-    Material *material =
-        DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name).material;
+    const char *name = reinterpret_cast<const char *>(serializedSlot);
+
+    // Some serialized asset references are linker aliases to the bytes of
+    // the asset name rather than to a 32-bit pointer slot. Fonts exposed this
+    // first, but static UI MaterialHandles use the same representation in
+    // some fastfiles. Only accept a bounded, null-terminated asset identifier;
+    // arbitrary binary payloads must never be treated as names.
+    size_t length = 0;
+    bool hasLetter = false;
+    while (length < remaining && length < 127 && name[length] != '\0')
+    {
+        const unsigned char c =
+            static_cast<unsigned char>(name[length]);
+        const bool letter =
+            (c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z');
+        const bool digit = c >= '0' && c <= '9';
+        if (!letter && !digit && c != '_' && c != '/' &&
+            c != '-' && c != '.' && c != '$' && c != '*')
+            return false;
+        hasLetter = hasLetter || letter;
+        ++length;
+    }
+
+    if (length == 0 || length >= remaining ||
+        length >= 127 || !hasLetter)
+        return false;
+
+    // Search only materials already registered by loaded fastfiles.
+    // DB_FindXAssetHeader may manufacture a default material on a miss, which
+    // would turn an unresolved UI background into a persistent placeholder.
+    XAssetHeader materials[2048]{};
+    const int32_t materialCount = DB_GetAllXAssetOfType(
+        ASSET_TYPE_MATERIAL,
+        materials,
+        static_cast<int32_t>(ARRAY_COUNT(materials)));
+    const int32_t maxCount = static_cast<int32_t>(ARRAY_COUNT(materials));
+    const int32_t count = materialCount < 0
+        ? 0
+        : (materialCount > maxCount ? maxCount : materialCount);
+
+    Material *material = nullptr;
+    for (int32_t i = 0; i < count; ++i)
+    {
+        const char *loadedName =
+            DB_GetXAssetHeaderName(ASSET_TYPE_MATERIAL, &materials[i]);
+        if (loadedName && !I_stricmp(loadedName, name))
+        {
+            material = materials[i].material;
+            break;
+        }
+    }
+
+    // Keep the prior font-name behavior for references whose material has not
+    // yet appeared in the loaded asset list. UI material aliases never use
+    // this fallback, so a missing UI asset cannot become a default placeholder.
+    if (!material && !std::strncmp(name, "fonts/", 6))
+        material = DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name).material;
+
     if (!material)
         return false;
 
     *resolvedPointer = reinterpret_cast<uintptr_t>(material);
 
-    char trace[384];
-    std::snprintf(
-        trace,
-        sizeof(trace),
-        "[KisakCOD][FONT MATERIAL ALIAS] slot=%p name=%s material=%p asset=%d rawType=%u\n",
-        reinterpret_cast<const void *>(serializedSlot),
-        name,
-        static_cast<void *>(material),
-        g_switchCurrentAssetIndex,
-        static_cast<unsigned>(g_switchCurrentAssetRawType));
-    Switch_LogWrite(trace);
+    static uint32_t switchMaterialNameAliasTraceCount = 0;
+    if (switchMaterialNameAliasTraceCount < 64)
+    {
+        char trace[448];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][MATERIAL NAME ALIAS] slot=%p name=%s material=%p asset=%d rawType=%u stage=%s\n",
+            reinterpret_cast<const void *>(serializedSlot),
+            name,
+            static_cast<void *>(material),
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            g_switchDbStage ? g_switchDbStage : "");
+        Switch_LogWrite(trace);
+        ++switchMaterialNameAliasTraceCount;
+    }
 
     return true;
 }
-
 void __cdecl DB_FixupSwitchPointerAliases()
 {
     auto fixup = g_switchPointerAliasFixups.begin();
@@ -954,7 +996,7 @@ void __cdecl DB_FixupSwitchPointerAliases()
                 &resolvedPointer);
         if (!resolved || !resolvedPointer)
         {
-            Switch_TryResolveFontMaterialAlias(
+            Switch_TryResolveMaterialNameAlias(
                 fixup->serializedSlot,
                 &resolvedPointer);
         }
