@@ -988,9 +988,7 @@ bool __cdecl DB_AddSwitchMaterialNameAliasFixup(
     if (!serializedName || !destination)
         return false;
 
-    const uintptr_t destinationAddress =
-        reinterpret_cast<uintptr_t>(destination);
-    if (Switch_IsInvalidNativePointer(destinationAddress))
+    if (Switch_IsInvalidNativePointer(reinterpret_cast<uintptr_t>(destination)))
         return false;
 
     uintptr_t blockOffset = 0;
@@ -1016,59 +1014,7 @@ bool __cdecl DB_AddSwitchMaterialNameAliasFixup(
             (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
         const bool digit = c >= '0' && c <= '9';
         if (!letter && !digit && c != '_' && c != '/' &&
-            c != '-' && c != '.' && c != '
-    auto fixup = g_switchPointerAliasFixups.begin();
-    while (fixup != g_switchPointerAliasFixups.end())
-    {
-        uintptr_t resolvedPointer = 0;
-        bool resolved = DB_ResolveSwitchPointerAlias(
-            fixup->serializedSlot,
-            &resolvedPointer);
-        if (!resolved || !resolvedPointer)
-            resolved = DB_TryResolveSwitchSerializedAliasChain(
-                fixup->serializedSlot,
-                &resolvedPointer);
-        if (!resolved || !resolvedPointer)
-        {
-            Switch_TryResolveMaterialNameAlias(
-                fixup->serializedSlot,
-                &resolvedPointer);
-        }
-
-        if (resolvedPointer)
-        {
-            const uintptr_t destination =
-                reinterpret_cast<uintptr_t>(fixup->destination);
-            if (Switch_IsInvalidNativePointer(destination))
-            {
-                char trace[384];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\n",
-                    reinterpret_cast<const void *>(fixup->serializedSlot),
-                    reinterpret_cast<const void *>(destination),
-                    reinterpret_cast<const void *>(resolvedPointer),
-                    g_switchCurrentAssetIndex,
-                    static_cast<unsigned>(g_switchCurrentAssetRawType),
-                    g_switchDbStage ? g_switchDbStage : "");
-                Switch_LogWrite(trace);
-                fixup = g_switchPointerAliasFixups.erase(fixup);
-            }
-            else
-            {
-                *fixup->destination = resolvedPointer;
-                fixup = g_switchPointerAliasFixups.erase(fixup);
-            }
-        }
-        else
-        {
-            ++fixup;
-        }
-    }
-}
-#endif
- && c != '*')
+            c != '-' && c != '.' && c != '$' && c != '*')
             return false;
         hasLetter = hasLetter || letter;
         ++length;
@@ -1084,8 +1030,7 @@ bool __cdecl DB_AddSwitchMaterialNameAliasFixup(
     {
         if (fixup.destination == destination)
         {
-            if (std::strcmp(fixup.name, nameCopy))
-                std::memcpy(fixup.name, nameCopy, length + 1);
+            std::memcpy(fixup.name, nameCopy, length + 1);
             return true;
         }
     }
@@ -1202,9 +1147,7 @@ void __cdecl DB_ResolvePendingSwitchMaterialNameAliases()
         missingCount);
     Switch_LogWrite(summary);
 
-    // The queue is deliberately batch-scoped: unresolved entries are logged
-    // and discarded instead of retaining destinations that a later zone unload
-    // might invalidate.
+    // Do not keep unresolved destinations across future zone unloads.
     g_switchMaterialNameAliasFixups.clear();
 }
 
