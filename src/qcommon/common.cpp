@@ -1604,7 +1604,7 @@ void COM_PlayIntroMovies()
             Dvar_SetBool((dvar_s *)com_introPlayed, 0);
             introPlayed = false;
             Switch_LogWrite(
-                "[KisakCOD][INTRO] clearing legacy com_introPlayed without verified playback\n");
+                "[KisakCOD][INTRO] clearing legacy com_introPlayed without draw confirmation\n");
         }
 
         char trace[224];
@@ -1628,7 +1628,7 @@ void COM_PlayIntroMovies()
             Dvar_SetString(
                 (dvar_s *)nextmap,
                 (char *)"cinematic atvi; set nextmap cinematic cod_intro");
-            // On Switch, com_introPlayed is set only after a decoded intro frame.
+            // On Switch, com_introPlayed is set only after a frame is submitted for drawing.
             Switch_LogWrite("[KisakCOD][INTRO] queued IW_logo -> atvi -> cod_intro\n");
         }
 #else
