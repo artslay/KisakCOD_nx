@@ -733,7 +733,11 @@ void __cdecl R_AddCmdDrawStretchPic(
         (!I_stricmp(switchMaterialName, "animbg_blur_back") ||
          !I_stricmp(switchMaterialName, "animbg_blur_fogscroll") ||
          !I_stricmp(switchMaterialName, "animbg_blur_front"));
+    // The profile-blur path is rejected below before any technique
+    // lookup; the engine default is already a known-safe 2D material.
     const bool switchHasUnlitTechnique =
+        switchPreserveProfileBlur ||
+        Material_IsDefault(defaultMaterial) ||
         Material_GetTechnique(defaultMaterial, TECHNIQUE_UNLIT) != nullptr;
     if (!switchPreserveProfileBlur &&
         (Material_IsDefault(defaultMaterial) ||
@@ -757,10 +761,10 @@ void __cdecl R_AddCmdDrawStretchPic(
     {
 #ifdef __SWITCH__
         const char *rejectReason =
-            !switchHasUnlitTechnique
-                ? "because it has no unlit technique"
-                : switchPreserveProfileBlur
-                    ? "because the profile blur is filtered on the 2D path"
+            switchPreserveProfileBlur
+                ? "because the profile blur is filtered on the 2D path"
+                : !switchHasUnlitTechnique
+                    ? "because it has no unlit technique"
                     : "because it has a fogable technique";
         Com_PrintWarning(
             CON_CHANNEL_GFX,
@@ -864,7 +868,11 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
         (!I_stricmp(switchMaterialName, "animbg_blur_back") ||
          !I_stricmp(switchMaterialName, "animbg_blur_fogscroll") ||
          !I_stricmp(switchMaterialName, "animbg_blur_front"));
+    // The profile-blur path is rejected below before any technique
+    // lookup; the engine default is already a known-safe 2D material.
     const bool switchHasUnlitTechnique =
+        switchPreserveProfileBlur ||
+        Material_IsDefault(defaultMaterial) ||
         Material_GetTechnique(defaultMaterial, TECHNIQUE_UNLIT) != nullptr;
     if (!switchPreserveProfileBlur &&
         (Material_IsDefault(defaultMaterial) ||
@@ -888,10 +896,10 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
     {
 #ifdef __SWITCH__
         const char *rejectReason =
-            !switchHasUnlitTechnique
-                ? "because it has no unlit technique"
-                : switchPreserveProfileBlur
-                    ? "because the profile blur is filtered on the 2D path"
+            switchPreserveProfileBlur
+                ? "because the profile blur is filtered on the 2D path"
+                : !switchHasUnlitTechnique
+                    ? "because it has no unlit technique"
                     : "because it has a fogable technique";
         Com_PrintWarning(
             CON_CHANNEL_GFX,
