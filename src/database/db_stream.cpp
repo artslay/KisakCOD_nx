@@ -8,6 +8,7 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
+extern Material *__cdecl Material_Find(const char *name);
 extern void __cdecl Sys_Error(const char *error, ...);
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
@@ -925,30 +926,11 @@ static bool Switch_TryResolveMaterialNameAlias(
         length >= 127 || !hasLetter)
         return false;
 
-    // Search only materials already registered by loaded fastfiles.
-    // DB_FindXAssetHeader may manufacture a default material on a miss, which
-    // would turn an unresolved UI background into a persistent placeholder.
-    XAssetHeader materials[2048]{};
-    const int32_t materialCount = DB_GetAllXAssetOfType(
-        ASSET_TYPE_MATERIAL,
-        materials,
-        static_cast<int32_t>(ARRAY_COUNT(materials)));
-    const int32_t maxCount = static_cast<int32_t>(ARRAY_COUNT(materials));
-    const int32_t count = materialCount < 0
-        ? 0
-        : (materialCount > maxCount ? maxCount : materialCount);
-
-    Material *material = nullptr;
-    for (int32_t i = 0; i < count; ++i)
-    {
-        const char *loadedName =
-            DB_GetXAssetHeaderName(ASSET_TYPE_MATERIAL, &materials[i]);
-        if (loadedName && !I_stricmp(loadedName, name))
-        {
-            material = materials[i].material;
-            break;
-        }
-    }
+    // Material_Find searches the renderer's already-registered material
+    // hash table. Unlike DB_FindXAssetHeader it does not manufacture a
+    // default material on a miss, and unlike the DB asset enumerator it does
+    // not acquire the database hash lock while this loader is running.
+    Material *material = Material_Find(name);
 
     // Keep the prior font-name behavior for references whose material has not
     // yet appeared in the loaded asset list. UI material aliases never use
