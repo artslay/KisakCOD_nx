@@ -726,7 +726,7 @@ void __cdecl R_AddCmdDrawStretchPic(
         defaultMaterial = rgp.defaultMaterial;
 
     actualMaterial = defaultMaterial;
-if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
@@ -740,7 +740,7 @@ if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defa
     }
     else
     {
-v10 = Material_GetName(material);
+        v10 = Material_GetName(material);
         Com_PrintWarning(
             CON_CHANNEL_GFX,
             "R_AddCmdDrawStretchPic: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",
@@ -828,7 +828,7 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
     else
         defaultMaterial = rgp.defaultMaterial;
     actualMaterial = defaultMaterial;
-if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
@@ -842,7 +842,7 @@ if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defa
     }
     else
     {
-v10 = Material_GetName(material);
+        v10 = Material_GetName(material);
         Com_PrintWarning(
             CON_CHANNEL_GFX,
             "R_AddCmdDrawStretchPicFlipST: NOT DRAWING WITH MATERIAL \"%s\", because it has a fogable technique.\n",

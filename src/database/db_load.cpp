@@ -7989,71 +7989,6 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     const uint32_t techniqueSetHeaderAfter =
         Switch_GetStreamCursorOffset(techniqueSetHeaderStream);
 
-#ifdef __SWITCH__
-    if (g_switchCurrentAssetRawType == 5u && g_switchCurrentAssetIndex == 1502)
-    {
-        const uint8_t *block4 =
-            g_streamBlocks && g_streamBlocks[4].data
-                ? g_streamBlocks[4].data
-                : nullptr;
-        const uint32_t block4Size =
-            g_streamBlocks ? g_streamBlocks[4].size : 0u;
-        uint32_t defaultOffset = UINT32_MAX;
-        uint32_t cinematicOffset = UINT32_MAX;
-
-        if (block4)
-        {
-            for (uint32_t off = 0; off + 8 <= block4Size; ++off)
-            {
-                if (defaultOffset == UINT32_MAX &&
-                    !std::memcmp(block4 + off, "default", 7) &&
-                    block4[off + 7] == 0)
-                    defaultOffset = off;
-
-                if (cinematicOffset == UINT32_MAX &&
-                    off + 10 <= block4Size &&
-                    !std::memcmp(block4 + off, "cinematic", 9) &&
-                    block4[off + 9] == 0)
-                    cinematicOffset = off;
-
-                if (defaultOffset != UINT32_MAX &&
-                    cinematicOffset != UINT32_MAX)
-                    break;
-            }
-        }
-
-        char trace[768];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH DB FIND] techset1502 raw-name=%08x remap=%08x block4=%p size=%u defaultOff=%08x cinematicOff=%08x\n",
-            serialized.name,
-            serialized.remappedTechniqueSet,
-            static_cast<const void *>(block4),
-            block4Size,
-            defaultOffset,
-            cinematicOffset);
-        Switch_LogWrite(trace);
-
-        if (defaultOffset != UINT32_MAX &&
-            serialized.name == 0x4004ddddu)
-        {
-            const uint32_t fallbackToken =
-                0x40000000u + defaultOffset + 1u;
-            char fallbackTrace[256];
-            std::snprintf(
-                fallbackTrace,
-                sizeof(fallbackTrace),
-                "[SWITCH DB FIND] techset1502 NAME FALLBACK old=%08x new=%08x offset=%08x\n",
-                serialized.name,
-                fallbackToken,
-                defaultOffset);
-            Switch_LogWrite(fallbackTrace);
-            serialized.name = fallbackToken;
-        }
-    }
-#endif
-
     Switch_LogRawDwords(
         "[SWITCH TECHSET WORDS]",
         reinterpret_cast<const uint8_t *>(&serialized),
@@ -8118,7 +8053,7 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
 
     // remappedTechniqueSet is runtime remap state. The stock DB loader reads
     // the 148-byte record, loads the name and technique pointers, and the
-    // renderer computes the effective target by name in Material_RemapTechniqueSet.
+    // renderer computes the effective target by name in Material_OriginalRemapTechniqueSet.
     // Seed a valid native self-pointer here; never interpret the raw field at
     // serialized offset +8 as a native ARM64 pointer or alias.
     varMaterialTechniqueSet->remappedTechniqueSet = varMaterialTechniqueSet;
