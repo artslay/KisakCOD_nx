@@ -6989,7 +6989,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                                 std::snprintf(
                                     trace,
                                     sizeof(trace),
-                                    "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=%s x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f material=%s action=restored_sibling_pair ptr=%p\\n",
+                                    "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=%s x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f material=%s action=restored_sibling_pair ptr=%p\n",
                                     item->parent->window.name ? item->parent->window.name : "<unnamed>",
                                     item->window.rect.x,
                                     item->window.rect.y,
