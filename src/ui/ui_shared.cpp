@@ -6858,7 +6858,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                             std::snprintf(
                                 trace,
                                 sizeof(trace),
-                                "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f borderSize=%.1f material=%s action=restored ptr=%p\\n",
+                                "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f borderSize=%.1f material=%s action=restored ptr=%p\n",
                                 item->window.rect.x,
                                 item->window.rect.y,
                                 item->window.rect.w,
@@ -6880,7 +6880,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                             std::snprintf(
                                 trace,
                                 sizeof(trace),
-                                "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f borderSize=%.1f material=gradient_fadein result=%s action=preserve_null_background\\n",
+                                "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f borderSize=%.1f material=gradient_fadein result=%s action=preserve_null_background\n",
                                 item->window.rect.x,
                                 item->window.rect.y,
                                 item->window.rect.w,
