@@ -7262,7 +7262,7 @@ void __cdecl Item_TextColor(UiContext *dc, itemDef_s *item, float (*newColor)[4]
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI FOCUSED TEXT COLOR] menu=%s item=%s type=%d style=%d focusColor=%.3f,%.3f,%.3f,%.3f authored=%.3f,%.3f,%.3f,%.3f result=%.3f,%.3f,%.3f,%.3f flags=%08x rect=%.1f,%.1f %.1fx%.1f\\n",
+                "[KisakCOD][UI FOCUSED TEXT COLOR] menu=%s item=%s type=%d style=%d focusColor=%.3f,%.3f,%.3f,%.3f authored=%.3f,%.3f,%.3f,%.3f result=%.3f,%.3f,%.3f,%.3f flags=%08x rect=%.1f,%.1f %.1fx%.1f\n",
                 parent->window.name,
                 item->window.name ? item->window.name : "<null>",
                 item->type,
