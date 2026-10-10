@@ -14,6 +14,10 @@
 #include <cstring>
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+#include <gfx_d3d/r_rendercmds.h>
+#endif
+
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #elif KISAK_SP
@@ -9280,8 +9284,12 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                     const char *materialName = backgroundMaterial->info.name;
                     const bool isAnimatedLayer =
                         std::strncmp(materialName, "animbg_", 7) == 0;
+                    // The stock logo belongs to the main menu itself, not the
+                    // profile-picker backdrop. Keep it on other overlays, but omit
+                    // it when composing the shared background for player_profile.
                     const bool isMainMenuLogo =
-                        !I_stricmp(materialName, "logo_cod2");
+                        !I_stricmp(materialName, "logo_cod2") &&
+                        I_stricmp(foregroundName, "player_profile") != 0;
                     if (!isAnimatedLayer && !isMainMenuLogo)
                         continue;
 
@@ -9326,6 +9334,35 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                             backgroundItem->window.rect.h);
                         Switch_LogWrite(trace);
                         ++switchSharedBackdropTraceCount;
+                    }
+                }
+
+                // The main menu backdrop here is made of 2D UI layers, so the
+                // normal refdef blurRadius post-effect does not blur it: that effect
+                // runs while rendering the 3D scene, before UI items are submitted.
+                // Reuse the engine's saved-screen blur material after composing only
+                // the animated background and before painting profile controls.
+                // Save and blend in the same ordered render-command stream each frame
+                // so the current background stays blurred without leaving stale frames.
+                if (!I_stricmp(foregroundName, "player_profile"))
+                {
+                    const uint32_t screenTimerId =
+                        static_cast<uint32_t>(dc->localClientNum);
+                    R_AddCmdSaveScreen(screenTimerId);
+                    R_AddCmdBlendSavedScreenShockBlurred(
+                        100,
+                        0.0f,
+                        0.0f,
+                        1.0f,
+                        1.0f,
+                        screenTimerId);
+
+                    static uint32_t switchProfileBlurTraceCount = 0;
+                    if (switchProfileBlurTraceCount < 4u)
+                    {
+                        Switch_LogWrite(
+                            "[KisakCOD][UI PROFILE BACKDROP BLUR] source=main_text action=save_and_blend_shellshock_blurred\n");
+                        ++switchProfileBlurTraceCount;
                     }
                 }
             }
