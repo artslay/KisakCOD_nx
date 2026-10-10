@@ -14,10 +14,6 @@
 #include <cstring>
 #include <universal/profile.h>
 
-#ifdef __SWITCH__
-#include <gfx_d3d/r_rendercmds.h>
-#endif
-
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #elif KISAK_SP
@@ -9281,25 +9277,71 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                         continue;
                     }
 
+                    const bool isProfileBackdrop =
+                        !I_stricmp(foregroundName, "player_profile");
                     const char *materialName = backgroundMaterial->info.name;
-                    const bool isAnimatedLayer =
-                        std::strncmp(materialName, "animbg_", 7) == 0;
-                    // The stock logo belongs to the main menu itself, not the
-                    // profile-picker backdrop. Keep it on other overlays, but omit
-                    // it when composing the shared background for player_profile.
-                    const bool isMainMenuLogo =
-                        !I_stricmp(materialName, "logo_cod2") &&
-                        I_stricmp(foregroundName, "player_profile") != 0;
-                    if (!isAnimatedLayer && !isMainMenuLogo)
-                        continue;
+                    Material *originalBackdropMaterial = backgroundMaterial;
 
-                    // These items belong to main_text, which may not be open
-                    // while player_profile is the topmost fullscreen menu. Item_Paint
-                    // rejects windows whose dynamic visibility bit is clear, even
-                    // though this call deliberately paints their authored backdrop
-                    // under the overlay. Temporarily enable only that bit for this
-                    // paint, then restore its original value without discarding other
-                    // animation/fade flags updated by the normal paint path.
+                    if (isProfileBackdrop)
+                    {
+                        // This is copied from the stock ui/player_profile.menu:
+                        // its backdrop is exactly these three blurred materials.
+                        // The remaining main_text layers (thin fog, second front,
+                        // and logo) are not part of the original profile screen.
+                        const char *profileBlurMaterialName = nullptr;
+                        if (!I_stricmp(materialName, "animbg_back"))
+                            profileBlurMaterialName = "animbg_blur_back";
+                        else if (!I_stricmp(materialName, "animbg_fogscroll"))
+                            profileBlurMaterialName = "animbg_blur_fogscroll";
+                        else if (!I_stricmp(materialName, "animbg_front"))
+                            profileBlurMaterialName = "animbg_blur_front";
+                        else
+                            continue;
+
+                        Material *profileBlurMaterial =
+                            Material_RegisterHandle(
+                                const_cast<char *>(profileBlurMaterialName),
+                                backgroundItem->imageTrack);
+                        if (!profileBlurMaterial ||
+                            Switch_UI_BadPointer(profileBlurMaterial) ||
+                            !profileBlurMaterial->info.name ||
+                            I_stricmp(
+                                profileBlurMaterial->info.name,
+                                profileBlurMaterialName) != 0)
+                        {
+                            // Do not silently replace the missing stock blurred
+                            // material with the sharp original layer.
+                            static uint32_t missingProfileBlurTraceCount = 0;
+                            if (missingProfileBlurTraceCount < 8u)
+                            {
+                                char trace[256];
+                                std::snprintf(
+                                    trace,
+                                    sizeof(trace),
+                                    "[KisakCOD][UI PROFILE BLUR MATERIAL] requested=%s action=unavailable\\n",
+                                    profileBlurMaterialName);
+                                Switch_LogWrite(trace);
+                                ++missingProfileBlurTraceCount;
+                            }
+                            continue;
+                        }
+                        backgroundItem->window.background = profileBlurMaterial;
+                        backgroundMaterial = profileBlurMaterial;
+                        materialName = backgroundMaterial->info.name;
+                    }
+                    else
+                    {
+                        const bool isAnimatedLayer =
+                            std::strncmp(materialName, "animbg_", 7) == 0;
+                        const bool isMainMenuLogo =
+                            !I_stricmp(materialName, "logo_cod2");
+                        if (!isAnimatedLayer && !isMainMenuLogo)
+                            continue;
+                    }
+
+                    // Item_Paint rejects windows whose dynamic visibility bit is
+                    // clear because main_text may not be open below this fullscreen
+                    // overlay. Temporarily enable just that bit, then restore it.
                     const uint32_t backdropLocalClient =
                         static_cast<uint32_t>(dc->localClientNum);
                     const uint32_t originalBackdropFlags =
@@ -9307,10 +9349,38 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                     backgroundItem->window.dynamicFlags[backdropLocalClient] =
                         originalBackdropFlags | 4u;
 
-                    // Item_Paint preserves the original expressions for the
-                    // scrolling layers, resolves their actual materials, and
-                    // submits them through the normal renderer path.
+                    float originalForeColor[4];
+                    std::memcpy(
+                        originalForeColor,
+                        backgroundItem->window.foreColor,
+                        sizeof(originalForeColor));
+                    if (isProfileBackdrop)
+                    {
+                        const dvar_t *fsGameDvar = Dvar_FindVar("fs_game");
+                        const char *fsGameName =
+                            fsGameDvar ? Dvar_GetString(fsGameDvar) : "";
+                        if (fsGameName && fsGameName[0])
+                        {
+                            // Match the original menu's tint for custom fs_game.
+                            backgroundItem->window.foreColor[0] = 0.8f;
+                            backgroundItem->window.foreColor[1] = 0.8f;
+                            backgroundItem->window.foreColor[2] = 1.0f;
+                            backgroundItem->window.foreColor[3] = 1.0f;
+                        }
+                    }
+
+                    // Item_Paint retains the original scrolling expression, so
+                    // the blurred fog layer animates at the same rate as stock.
                     Item_Paint(dc, backgroundItem);
+
+                    if (isProfileBackdrop)
+                    {
+                        backgroundItem->window.background = originalBackdropMaterial;
+                        std::memcpy(
+                            backgroundItem->window.foreColor,
+                            originalForeColor,
+                            sizeof(originalForeColor));
+                    }
 
                     uint32_t updatedBackdropFlags =
                         backgroundItem->window.dynamicFlags[backdropLocalClient];
@@ -9337,34 +9407,6 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                     }
                 }
 
-                // The main menu backdrop here is made of 2D UI layers, so the
-                // normal refdef blurRadius post-effect does not blur it: that effect
-                // runs while rendering the 3D scene, before UI items are submitted.
-                // Reuse the engine's saved-screen blur material after composing only
-                // the animated background and before painting profile controls.
-                // Save and blend in the same ordered render-command stream each frame
-                // so the current background stays blurred without leaving stale frames.
-                if (!I_stricmp(foregroundName, "player_profile"))
-                {
-                    const uint32_t screenTimerId =
-                        static_cast<uint32_t>(dc->localClientNum);
-                    R_AddCmdSaveScreen(screenTimerId);
-                    R_AddCmdBlendSavedScreenShockBlurred(
-                        100,
-                        0.0f,
-                        0.0f,
-                        1.0f,
-                        1.0f,
-                        screenTimerId);
-
-                    static uint32_t switchProfileBlurTraceCount = 0;
-                    if (switchProfileBlurTraceCount < 4u)
-                    {
-                        Switch_LogWrite(
-                            "[KisakCOD][UI PROFILE BACKDROP BLUR] source=main_text action=save_and_blend_shellshock_blurred\n");
-                        ++switchProfileBlurTraceCount;
-                    }
-                }
             }
         }
     }
