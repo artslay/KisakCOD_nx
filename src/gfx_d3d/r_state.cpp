@@ -1827,10 +1827,6 @@ void __cdecl R_SetSampler(
     g_switchLastSamplerMaterials[samplerIndex] = context.state->material;
     g_switchLastSamplerMaterialNames[samplerIndex] =
         context.state->material ? context.state->material->info.name : nullptr;
-    g_switchLastSamplerNameHashes[samplerIndex] = context.state->material && context.state->material->textureTable
-        ? context.state->material->textureTable[0].nameHash : 0u;
-    g_switchLastSamplerSemantics[samplerIndex] = context.state->material && context.state->material->textureTable
-        ? context.state->material->textureTable[0].semantic : 0u;
     extern thread_local const GfxImage *g_switchLastSamplerImages[16];
     g_switchLastSamplerImages[samplerIndex] = image;
 #endif
