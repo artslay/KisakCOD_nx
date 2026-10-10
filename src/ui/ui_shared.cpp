@@ -7245,6 +7245,42 @@ void __cdecl Item_TextColor(UiContext *dc, itemDef_s *item, float (*newColor)[4]
         (*newColor)[2] = disableColor[2];
         (*newColor)[3] = disableColor[3];
     }
+#ifdef __SWITCH__
+    // Record the final color after focus pulsing and disabled-state overrides.
+    // Earlier diagnostics only showed the authored foreColor, which is not
+    // the color that Item_TextColor sends to the text renderer when focused.
+    if (parent && parent->window.name &&
+        (!I_stricmp(parent->window.name, "main_text") ||
+         !I_stricmp(parent->window.name, "main") ||
+         !I_stricmp(parent->window.name, "options_graphics")) &&
+        Window_HasFocus(dc->localClientNum, &item->window))
+    {
+        static uint32_t switchFocusedTextColorTraceCount = 0;
+        if (switchFocusedTextColorTraceCount < 32u)
+        {
+            char trace[640];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI FOCUSED TEXT COLOR] menu=%s item=%s type=%d style=%d focusColor=%.3f,%.3f,%.3f,%.3f authored=%.3f,%.3f,%.3f,%.3f result=%.3f,%.3f,%.3f,%.3f flags=%08x rect=%.1f,%.1f %.1fx%.1f\\n",
+                parent->window.name,
+                item->window.name ? item->window.name : "<null>",
+                item->type,
+                item->window.style,
+                parent->focusColor[0], parent->focusColor[1],
+                parent->focusColor[2], parent->focusColor[3],
+                item->window.foreColor[0], item->window.foreColor[1],
+                item->window.foreColor[2], item->window.foreColor[3],
+                (*newColor)[0], (*newColor)[1],
+                (*newColor)[2], (*newColor)[3],
+                static_cast<unsigned>(item->window.dynamicFlags[dc->localClientNum]),
+                item->window.rect.x, item->window.rect.y,
+                item->window.rect.w, item->window.rect.h);
+            Switch_LogWrite(trace);
+            ++switchFocusedTextColorTraceCount;
+        }
+    }
+#endif
 }
 
 void __cdecl Item_Text_AutoWrapped_Paint(
