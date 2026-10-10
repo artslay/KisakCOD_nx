@@ -1525,16 +1525,6 @@ HRESULT IDirect3DDevice9::SetSwitchUnlitMode(bool enabled)
     return S_OK;
 }
 
-HRESULT IDirect3DDevice9::SetSwitchUi2DMode(bool enabled)
-{
-    if (m_switchUi2D != enabled)
-    {
-        m_switchUi2D = enabled;
-        m_pipelineDirty = true;
-    }
-    return S_OK;
-}
-
 HRESULT IDirect3DDevice9::SetSamplerState(uint32_t stage, uint32_t state, uint32_t value)
 {
     if (stage >= 16 || state >= 16)
@@ -1762,7 +1752,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_blendOp);
     key = HashCombine(key, m_blendOpAlpha);
     key = HashCombine(key, m_separateAlphaBlend);
-    key = HashCombine(key, m_switchUi2D);
     key = HashCombine(key, static_cast<uint32_t>(m_topology));
     key = HashCombine(key, m_cullMode);
     key = HashCombine(key, m_scissor);
@@ -2111,34 +2100,21 @@ bool IDirect3DDevice9::EnsurePipeline()
         depth.back = depth.front;
     }
 
+    // Use the blend factors decoded by R_HW_SetBlend from the active
+    // Material's GfxStateBits. The old Switch-only 2D override forced every UI
+    // texture through straight-alpha blending, discarding authored additive,
+    // premultiplied, and separate-alpha modes (notably menu highlight caps).
     VkPipelineColorBlendAttachmentState colorBlend{};
-    if (m_switchUi2D)
-    {
-        // CoD4's authored menu is straight-alpha 2D. On Switch the original
-        // D3D9 material state can arrive through a widened 32->64-bit asset
-        // path, so the Vulkan backend gets the semantic rule directly instead
-        // of trusting a potentially-corrupted serialized blend bitfield.
-        colorBlend.blendEnable = VK_TRUE;
-        colorBlend.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        colorBlend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        colorBlend.colorBlendOp = VK_BLEND_OP_ADD;
-        colorBlend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        colorBlend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        colorBlend.alphaBlendOp = VK_BLEND_OP_ADD;
-    }
-    else
-    {
-        colorBlend.blendEnable = m_blendEnable ? VK_TRUE : VK_FALSE;
-        colorBlend.srcColorBlendFactor = BlendFactor(m_srcBlend);
-        colorBlend.dstColorBlendFactor = BlendFactor(m_dstBlend);
-        colorBlend.colorBlendOp = BlendOp(m_blendOp);
-        colorBlend.srcAlphaBlendFactor = BlendFactor(
-            m_separateAlphaBlend ? m_srcBlendAlpha : m_srcBlend);
-        colorBlend.dstAlphaBlendFactor = BlendFactor(
-            m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend);
-        colorBlend.alphaBlendOp = BlendOp(
-            m_separateAlphaBlend ? m_blendOpAlpha : m_blendOp);
-    }
+    colorBlend.blendEnable = m_blendEnable ? VK_TRUE : VK_FALSE;
+    colorBlend.srcColorBlendFactor = BlendFactor(m_srcBlend);
+    colorBlend.dstColorBlendFactor = BlendFactor(m_dstBlend);
+    colorBlend.colorBlendOp = BlendOp(m_blendOp);
+    colorBlend.srcAlphaBlendFactor = BlendFactor(
+        m_separateAlphaBlend ? m_srcBlendAlpha : m_srcBlend);
+    colorBlend.dstAlphaBlendFactor = BlendFactor(
+        m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend);
+    colorBlend.alphaBlendOp = BlendOp(
+        m_separateAlphaBlend ? m_blendOpAlpha : m_blendOp);
     colorBlend.colorWriteMask =
         ((m_colorWriteMask & 1) ? VK_COLOR_COMPONENT_R_BIT : 0) |
         ((m_colorWriteMask & 2) ? VK_COLOR_COMPONENT_G_BIT : 0) |
@@ -2362,6 +2338,68 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     }
     m_topology = PrimitiveTopology(primitiveType);
 #ifdef __SWITCH__
+    {
+        const GfxImage *uiImage = g_switchLastSamplerImages[0];
+        const char *uiImageName =
+            uiImage && uiImage->name ? uiImage->name : nullptr;
+        const bool isGradient =
+            uiImageName && std::strcmp(uiImageName, "gradient_fadein") == 0;
+        const bool isHighlightCap =
+            uiImageName && std::strcmp(uiImageName, "button_highlight_end") == 0;
+        static uint32_t gradientDrawTraceCount = 0;
+        static uint32_t capDrawTraceCount = 0;
+        uint32_t *traceCount =
+            isGradient ? &gradientDrawTraceCount :
+            isHighlightCap ? &capDrawTraceCount : nullptr;
+
+        if (traceCount && *traceCount < 8)
+        {
+            const KisakVkTexture *uiTexture = m_textures[0];
+            uint32_t vertexColor = 0xFFFFFFFFu;
+            const auto &stream = m_streams[0];
+            if (stream.buffer && stream.stride >= 20)
+            {
+                const size_t colorOffset =
+                    static_cast<size_t>(stream.offset) + 16u;
+                if (colorOffset + sizeof(vertexColor) <=
+                    stream.buffer->shadow.size())
+                {
+                    std::memcpy(
+                        &vertexColor,
+                        stream.buffer->shadow.data() + colorOffset,
+                        sizeof(vertexColor));
+                }
+            }
+
+            char trace[640];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI BLEND] image=%s draw=%u blend=%u src=%u dst=%u op=%u separateAlpha=%u srcA=%u dstA=%u opA=%u alphaTest=%u alphaFunc=%u alphaRef=%u vertexColor=%08x tex=%p size=%ux%u srcFormat=%u vkFormat=%u\n",
+                uiImageName,
+                static_cast<unsigned>(*traceCount),
+                m_blendEnable ? 1u : 0u,
+                static_cast<unsigned>(m_srcBlend),
+                static_cast<unsigned>(m_dstBlend),
+                static_cast<unsigned>(m_blendOp),
+                m_separateAlphaBlend ? 1u : 0u,
+                static_cast<unsigned>(m_srcBlendAlpha),
+                static_cast<unsigned>(m_dstBlendAlpha),
+                static_cast<unsigned>(m_blendOpAlpha),
+                m_alphaTest ? 1u : 0u,
+                static_cast<unsigned>(m_alphaFunc),
+                static_cast<unsigned>(m_alphaRef),
+                vertexColor,
+                static_cast<const void *>(uiTexture),
+                uiTexture ? uiTexture->width : 0u,
+                uiTexture ? uiTexture->height : 0u,
+                uiTexture ? static_cast<unsigned>(uiTexture->sourceFormat) : 0u,
+                uiTexture ? static_cast<unsigned>(uiTexture->format) : 0u);
+            Switch_LogWrite(trace);
+            ++*traceCount;
+        }
+    }
+
     static uint32_t switchDrawTraceCount = 0;
     if (switchDrawTraceCount < 8)
     {
