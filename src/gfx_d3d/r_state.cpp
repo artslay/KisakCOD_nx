@@ -1820,6 +1820,21 @@ void __cdecl R_SetSampler(
 #endif
 
     iassert(image);
+#ifdef __SWITCH__
+    // The native texture binding can remain unchanged across material draws,
+    // but the per-draw diagnostic identity must still follow the current pass.
+    // Keep this metadata update outside the SetTexture condition below.
+    g_switchLastSamplerMaterials[samplerIndex] = context.state->material;
+    g_switchLastSamplerMaterialNames[samplerIndex] =
+        context.state->material ? context.state->material->info.name : nullptr;
+    g_switchLastSamplerNameHashes[samplerIndex] = context.state->material && context.state->material->textureTable
+        ? context.state->material->textureTable[0].nameHash : 0u;
+    g_switchLastSamplerSemantics[samplerIndex] = context.state->material && context.state->material->textureTable
+        ? context.state->material->textureTable[0].semantic : 0u;
+    extern thread_local const GfxImage *g_switchLastSamplerImages[16];
+    g_switchLastSamplerImages[samplerIndex] = image;
+#endif
+
     if (context.state->samplerTexture[samplerIndex] != &image->texture)
     {
         context.state->samplerTexture[samplerIndex] = &image->texture;
@@ -1828,18 +1843,6 @@ void __cdecl R_SetSampler(
             RB_LogPrint(va("---------- texture %i: %s\n", samplerIndex, image->name));
         }
         R_HW_SetSamplerTexture(context.state->prim.device, samplerIndex, &image->texture);
-#ifdef __SWITCH__
-        g_switchLastSamplerMaterials[samplerIndex] = context.state->material;
-        g_switchLastSamplerMaterialNames[samplerIndex] =
-            context.state->material ? context.state->material->info.name : nullptr;
-        g_switchLastSamplerNameHashes[samplerIndex] = context.state->material && context.state->material->textureTable
-            ? context.state->material->textureTable[0].nameHash : 0u;
-        g_switchLastSamplerSemantics[samplerIndex] = context.state->material && context.state->material->textureTable
-            ? context.state->material->textureTable[0].semantic : 0u;
-        extern thread_local const GfxImage *g_switchLastSamplerImages[16];
-        if (samplerIndex < 16)
-            g_switchLastSamplerImages[samplerIndex] = image;
-#endif
     }
     iassert((samplerState & (SAMPLER_FILTER_MASK | SAMPLER_MIPMAP_MASK)) != 0);
     if (context.state->refSamplerState[samplerIndex] != samplerState)
