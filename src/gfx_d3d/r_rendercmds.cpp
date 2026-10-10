@@ -767,42 +767,70 @@ void __cdecl R_AddCmdDrawStretchPic(
         actualMaterial = rgp.defaultMaterial;
     }
 #ifdef __SWITCH__
-    if (defaultMaterial && defaultMaterial->info.name &&
-        !I_stricmp(defaultMaterial->info.name, "button_highlight_end"))
     {
-        static uint32_t switchButtonHighlightTraceCount = 0;
-        if (switchButtonHighlightTraceCount < 8)
+        static uint32_t switchUiStretchTraceCount = 0;
+        const char *resolvedName =
+            defaultMaterial && defaultMaterial->info.name
+                ? defaultMaterial->info.name : "<null>";
+        const bool isGradient =
+            !I_stricmp(resolvedName, "gradient_fadein");
+        const bool isButtonCap =
+            !I_stricmp(resolvedName, "button_highlight_end");
+        // The authored right-hand cap is a narrow, 33-pixel menu quad. Trace
+        // that geometry even if a preceding handle/filter stage has already
+        // changed its material to $default; never repair it by guessing a
+        // material from geometry.
+        const bool isNarrowCapQuad =
+            w >= 7.5f && w <= 9.0f && h >= 32.0f && h <= 34.0f;
+        if ((isGradient || isButtonCap || isNarrowCapQuad) &&
+            switchUiStretchTraceCount < 32)
         {
             const MaterialTechniqueSet *authored =
-                defaultMaterial->techniqueSet;
+                defaultMaterial ? defaultMaterial->techniqueSet : nullptr;
             const MaterialTechniqueSet *remapped =
                 authored ? authored->remappedTechniqueSet : nullptr;
-            char trace[448];
+            const MaterialTextureDef *texture =
+                defaultMaterial && defaultMaterial->textureTable &&
+                    defaultMaterial->textureCount
+                    ? &defaultMaterial->textureTable[0] : nullptr;
+            const GfxImage *image =
+                texture && texture->semantic != TS_WATER_MAP
+                    ? texture->u.image : nullptr;
+            uint32_t packedColor = 0xFFFFFFFFu;
+            R_ConvertColorToBytes(color, &packedColor);
+            const char *requestedName =
+                material ? Material_GetName(material) : "<null>";
+            char trace[768];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI STRETCH MATERIAL] #%u input=%p name=%s "
-                "sourceSet=%p sourceLit=%p sourceEmissive=%p "
-                "remapSet=%p remapLit=%p remapEmissive=%p flags=0x%02x "
-                "chosen=%s\n",
-                static_cast<unsigned>(switchButtonHighlightTraceCount),
-                static_cast<void *>(defaultMaterial),
-                defaultMaterial->info.name,
-                static_cast<const void *>(authored),
-                authored ? static_cast<const void *>(
-                    authored->techniques[TECHNIQUE_LIT_BEGIN]) : nullptr,
-                authored ? static_cast<const void *>(
-                    authored->techniques[TECHNIQUE_EMISSIVE]) : nullptr,
-                static_cast<const void *>(remapped),
-                remapped ? static_cast<const void *>(
-                    remapped->techniques[TECHNIQUE_LIT_BEGIN]) : nullptr,
-                remapped ? static_cast<const void *>(
-                    remapped->techniques[TECHNIQUE_EMISSIVE]) : nullptr,
-                static_cast<unsigned>(defaultMaterial->stateFlags),
+                "[KisakCOD][UI STRETCH INPUT] #%u requested=%s resolved=%s chosen=%s "
+                "image=%s view=%u rect=%.2f,%.2f %.2fx%.2f "
+                "color=%s(%.3f,%.3f,%.3f,%.3f) packed=%08x flags=%02x "
+                "fogable=%u depthFlag=%u default=%u sourceSet=%p remapSet=%p\n",
+                static_cast<unsigned>(switchUiStretchTraceCount),
+                requestedName ? requestedName : "<null>",
+                resolvedName,
                 actualMaterial && actualMaterial->info.name
-                    ? actualMaterial->info.name : "<null>");
+                    ? actualMaterial->info.name : "<null>",
+                image && image->name ? image->name : "<null>",
+                static_cast<unsigned>(gfxCmdBufSourceState.viewMode),
+                x, y, w, h,
+                color ? "rgba" : "null",
+                color ? color[0] : -1.0f,
+                color ? color[1] : -1.0f,
+                color ? color[2] : -1.0f,
+                color ? color[3] : -1.0f,
+                static_cast<unsigned>(packedColor),
+                defaultMaterial
+                    ? static_cast<unsigned>(defaultMaterial->stateFlags) : 0u,
+                hasFogableTechnique ? 1u : 0u,
+                defaultMaterial && (defaultMaterial->stateFlags & 0x10) ? 1u : 0u,
+                Material_IsDefault(defaultMaterial) ? 1u : 0u,
+                static_cast<const void *>(authored),
+                static_cast<const void *>(remapped));
             Switch_LogWrite(trace);
-            ++switchButtonHighlightTraceCount;
+            ++switchUiStretchTraceCount;
         }
     }
 #endif
