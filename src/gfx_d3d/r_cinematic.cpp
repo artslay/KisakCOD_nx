@@ -1272,6 +1272,23 @@ void __cdecl R_Cinematic_DrawLetterbox_OptionalCinematic(bool drawCinematic, flo
 
 void __cdecl R_Cinematic_DrawStretchPic_Letterboxed()
 {
+#ifdef __SWITCH__
+    // The cinematic material samples the engine's code-image planes, not a
+    // regular material texture. When no decoded frame is active those planes
+    // point to black/gray fallback images; drawing that full-screen quad over
+    // the UI hides the menu background and its animated layers. Do not submit
+    // a cinematic quad until a real Bink frame is active.
+    if (cinematicGlob.activeImageFrame == CINEMATIC_INVALID_IMAGE_FRAME)
+    {
+        static bool switchLoggedMissingCinematicFrame = false;
+        if (!switchLoggedMissingCinematicFrame)
+        {
+            Switch_LogWrite("[KisakCOD][CINEMATIC] skipped letterboxed draw: no active frame\n");
+            switchLoggedMissingCinematicFrame = true;
+        }
+        return;
+    }
+#endif
     R_Cinematic_DrawLetterbox_OptionalCinematic(1, 1.0);
 #ifdef __SWITCH__
     if (cinematicGlob.activeImageFrame != CINEMATIC_INVALID_IMAGE_FRAME)
