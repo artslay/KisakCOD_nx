@@ -11,6 +11,7 @@
 #include "r_image.h"
 
 #ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
 extern thread_local uint32_t g_switchLastSamplerNameHashes[16];
 extern thread_local uint8_t g_switchLastSamplerSemantics[16];
 #endif
@@ -526,6 +527,60 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     stateBits[0] = refStateBits->loadBits[0];
     stateBits[1] = refStateBits->loadBits[1];
     iassert( context.source->viewMode != VIEW_MODE_NONE );
+#ifdef __SWITCH__
+    // Record the authored UI pass before it reaches the Vulkan state cache.
+    // This is intentionally upstream of device draw calls: some UI render paths
+    // can batch or defer geometry, so a draw-side-only trace can miss the pass.
+    static uint32_t switchUiPassTraceCount = 0;
+    const char *switchUiMaterialName =
+        material->info.name ? material->info.name : "";
+    const bool switchUiMaterial =
+        !I_stricmp(switchUiMaterialName, "gradient_fadein") ||
+        !I_stricmp(switchUiMaterialName, "button_highlight_end");
+    if (switchUiMaterial &&
+        context.source->viewMode == VIEW_MODE_2D &&
+        switchUiPassTraceCount < 32)
+    {
+        const MaterialTextureDef *switchTexture =
+            material->textureTable && material->textureCount
+                ? &material->textureTable[0] : nullptr;
+        const GfxImage *switchImage =
+            switchTexture && switchTexture->semantic != TS_WATER_MAP
+                ? switchTexture->u.image : nullptr;
+        const char *switchImageName =
+            switchImage && switchImage->name ? switchImage->name : "<null>";
+        char trace[768];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI PASS] material=%s image0=%s techType=%u pass=%u "
+            "view=%u entry=%u stateCount=%u state0=%08x state1=%08x "
+            "blend=%u src=%u dst=%u op=%u srcA=%u dstA=%u opA=%u "
+            "vertexShader=%s pixelShader=%s\\n",
+            switchUiMaterialName,
+            switchImageName,
+            static_cast<unsigned>(context.state->techType),
+            static_cast<unsigned>(passIndex),
+            static_cast<unsigned>(context.source->viewMode),
+            static_cast<unsigned>(material->stateBitsEntry[context.state->techType]),
+            static_cast<unsigned>(material->stateBitsCount),
+            static_cast<unsigned>(stateBits[0]),
+            static_cast<unsigned>(stateBits[1]),
+            (stateBits[0] & 0x700u) != 0 ? 1u : 0u,
+            static_cast<unsigned>(stateBits[0] & 0xFu),
+            static_cast<unsigned>((stateBits[0] >> 4) & 0xFu),
+            static_cast<unsigned>((stateBits[0] >> 8) & 0x7u),
+            static_cast<unsigned>((stateBits[0] >> 16) & 0xFu),
+            static_cast<unsigned>((stateBits[0] >> 20) & 0xFu),
+            static_cast<unsigned>((stateBits[0] >> 24) & 0x7u),
+            pass->vertexShader && pass->vertexShader->name
+                ? pass->vertexShader->name : "<null>",
+            pass->pixelShader && pass->pixelShader->name
+                ? pass->pixelShader->name : "<null>");
+        Switch_LogWrite(trace);
+        ++switchUiPassTraceCount;
+    }
+#endif
 #ifdef KISAK_RADIANT
     // IDB R_SetupPass @0x53c563: for 2D draws the binary forces the low 6 (depth-state) bits of
     // stateBits[1] to 2 — BEFORE the state change — so every 2D pass gets the engine's 2D depth
