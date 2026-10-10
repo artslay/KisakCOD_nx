@@ -7449,6 +7449,94 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
     // would turn the next Load_MaterialPassArray into a 65,535-entry read.
     if (serialized.passCount > 64u)
     {
+        // Preserve the surrounding serialized stream bytes on this fatal path.
+        // The bad header alone cannot distinguish a misaligned cursor from a
+        // token/inline-object interpretation error; the preceding bytes and
+        // parent cursor show where the previous nested object actually ended.
+        {
+            const uint32_t blockIndex = techniqueHeaderStream;
+            const bool blockValid =
+                g_streamBlocks &&
+                blockIndex < ARRAY_COUNT(g_streamPosArray) &&
+                g_streamBlocks[blockIndex].data &&
+                techniqueHeaderOffset <= g_streamBlocks[blockIndex].size;
+            const uint8_t *blockData =
+                blockValid ? g_streamBlocks[blockIndex].data : nullptr;
+            const uint32_t blockSize =
+                blockValid ? g_streamBlocks[blockIndex].size : 0u;
+            const uint32_t windowStart =
+                techniqueHeaderOffset > 16u
+                    ? techniqueHeaderOffset - 16u
+                    : 0u;
+            const uint32_t windowEnd =
+                blockValid
+                    ? static_cast<uint32_t>(
+                          techniqueHeaderOffset + 32u < blockSize
+                              ? techniqueHeaderOffset + 32u
+                              : blockSize)
+                    : 0u;
+            const uint32_t stackCount = g_streamPosStackIndex;
+            const uint32_t parentStream =
+                stackCount
+                    ? g_streamPosStack[stackCount - 1u].index
+                    : UINT32_MAX;
+            const uint8_t *parentPos =
+                stackCount
+                    ? g_streamPosStack[stackCount - 1u].pos
+                    : nullptr;
+            uint32_t parentOffset = UINT32_MAX;
+            if (g_streamBlocks &&
+                parentStream < ARRAY_COUNT(g_streamPosArray) &&
+                g_streamBlocks[parentStream].data &&
+                parentPos)
+            {
+                const uintptr_t parentBase = reinterpret_cast<uintptr_t>(
+                    g_streamBlocks[parentStream].data);
+                const uintptr_t parentAddress =
+                    reinterpret_cast<uintptr_t>(parentPos);
+                if (parentAddress >= parentBase &&
+                    parentAddress - parentBase <=
+                        g_streamBlocks[parentStream].size)
+                {
+                    parentOffset = static_cast<uint32_t>(
+                        parentAddress - parentBase);
+                }
+            }
+
+            char trace[320];
+            int written = std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][TECH WINDOW] stream=%u offset=%u stack=%u parentStream=%u parentOffset=%u window=%u..%u bytes=",
+                static_cast<unsigned>(techniqueHeaderStream),
+                techniqueHeaderOffset,
+                static_cast<unsigned>(stackCount),
+                static_cast<unsigned>(parentStream),
+                parentOffset,
+                windowStart,
+                windowEnd);
+            if (blockData)
+            {
+                for (uint32_t offset = windowStart;
+                     offset < windowEnd &&
+                     written > 0 &&
+                     static_cast<size_t>(written) + 4u < sizeof(trace);
+                     ++offset)
+                {
+                    written += std::snprintf(
+                        trace + written,
+                        sizeof(trace) - static_cast<size_t>(written),
+                        "%02x",
+                        static_cast<unsigned>(blockData[offset]));
+                }
+            }
+            std::snprintf(
+                trace + (written > 0 ? written : 0),
+                sizeof(trace) - static_cast<size_t>(written > 0 ? written : 0),
+                "\\n");
+            Switch_LogWrite(trace);
+        }
+
         int techniqueIndex = -1;
         if (varMaterialTechniqueSet &&
             varMaterialTechniquePtr >= varMaterialTechniqueSet->techniques &&
