@@ -6895,6 +6895,99 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                     }
                 }
 
+                // Restore the stock right cap for any UI row whose adjacent
+                // left segment still has its authored gradient_fadein material.
+                // This covers option pages as well as main_text: the fastfile
+                // can lose the small cap's material pointer while retaining the
+                // exact cap geometry. Require a matching sibling row and color
+                // so unrelated thin shader windows and separator lines are left
+                // untouched.
+                if (item->window.style == 3 &&
+                    !item->window.background &&
+                    item->parent &&
+                    item->parent->items &&
+                    item->parent->itemCount > 0 &&
+                    item->window.rect.w >= 4.5f &&
+                    item->window.rect.w <= 6.0f &&
+                    item->window.rect.h >= 19.5f &&
+                    item->window.rect.h <= 22.5f)
+                {
+                    bool hasMatchingGradientSegment = false;
+                    for (int siblingIndex = 0;
+                         siblingIndex < item->parent->itemCount;
+                         ++siblingIndex)
+                    {
+                        itemDef_s *sibling = item->parent->items[siblingIndex];
+                        if (!sibling || sibling == item ||
+                            sibling->window.style != 3 ||
+                            !sibling->window.background ||
+                            !sibling->window.background->info.name ||
+                            I_stricmp(sibling->window.background->info.name, "gradient_fadein"))
+                        {
+                            continue;
+                        }
+
+                        const rectDef_s &gradientRect = sibling->window.rect;
+                        const rectDef_s &capRect = item->window.rect;
+                        const float rightEdge = gradientRect.x + gradientRect.w;
+                        if (gradientRect.w < 100.0f ||
+                            gradientRect.w > 240.0f ||
+                            gradientRect.h < 19.5f ||
+                            gradientRect.h > 22.5f ||
+                            rightEdge < capRect.x - 0.1f ||
+                            rightEdge > capRect.x + 0.1f ||
+                            gradientRect.y < capRect.y - 0.1f ||
+                            gradientRect.y > capRect.y + 0.1f ||
+                            gradientRect.h < capRect.h - 0.1f ||
+                            gradientRect.h > capRect.h + 0.1f ||
+                            sibling->window.foreColor[0] < item->window.foreColor[0] - 0.02f ||
+                            sibling->window.foreColor[0] > item->window.foreColor[0] + 0.02f ||
+                            sibling->window.foreColor[1] < item->window.foreColor[1] - 0.02f ||
+                            sibling->window.foreColor[1] > item->window.foreColor[1] + 0.02f ||
+                            sibling->window.foreColor[2] < item->window.foreColor[2] - 0.02f ||
+                            sibling->window.foreColor[2] > item->window.foreColor[2] + 0.02f ||
+                            sibling->window.foreColor[3] < item->window.foreColor[3] - 0.02f ||
+                            sibling->window.foreColor[3] > item->window.foreColor[3] + 0.02f)
+                        {
+                            continue;
+                        }
+
+                        hasMatchingGradientSegment = true;
+                        break;
+                    }
+
+                    if (hasMatchingGradientSegment)
+                    {
+                        Material *capMaterial =
+                            Material_RegisterHandle("button_highlight_end", item->imageTrack);
+                        if (capMaterial &&
+                            !Material_IsDefault(capMaterial) &&
+                            capMaterial->info.name &&
+                            !I_stricmp(capMaterial->info.name, "button_highlight_end"))
+                        {
+                            item->window.background = capMaterial;
+                            static uint32_t switchUiSiblingHighlightCapTraceCount = 0;
+                            if (switchUiSiblingHighlightCapTraceCount < 24u)
+                            {
+                                char trace[448];
+                                std::snprintf(
+                                    trace,
+                                    sizeof(trace),
+                                    "[KisakCOD][UI HIGHLIGHT CAP] menu=%s x=%.1f y=%.1f w=%.1f h=%.1f source=gradient_fadein material=%s action=restored_sibling ptr=%p\\n",
+                                    item->parent->window.name ? item->parent->window.name : "<unnamed>",
+                                    item->window.rect.x,
+                                    item->window.rect.y,
+                                    item->window.rect.w,
+                                    item->window.rect.h,
+                                    capMaterial->info.name,
+                                    static_cast<void *>(capMaterial));
+                                Switch_LogWrite(trace);
+                                ++switchUiSiblingHighlightCapTraceCount;
+                            }
+                        }
+                    }
+                }
+
     // Log an unfiltered sample of relevant-menu items immediately before its window is painted. The
     // older UI ITEM STATE trace required focus/style/materialExp and could
     // miss the exact case where no item acquired focus or the highlight
