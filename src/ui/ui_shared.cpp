@@ -9070,10 +9070,30 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                     if (!isAnimatedLayer && !isMainMenuLogo)
                         continue;
 
+                    // These items belong to main_text, which may not be open
+                    // while player_profile is the topmost fullscreen menu. Item_Paint
+                    // rejects windows whose dynamic visibility bit is clear, even
+                    // though this call deliberately paints their authored backdrop
+                    // under the overlay. Temporarily enable only that bit for this
+                    // paint, then restore its original value without discarding other
+                    // animation/fade flags updated by the normal paint path.
+                    const uint32_t backdropLocalClient =
+                        static_cast<uint32_t>(dc->localClientNum);
+                    const uint32_t originalBackdropFlags =
+                        backgroundItem->window.dynamicFlags[backdropLocalClient];
+                    backgroundItem->window.dynamicFlags[backdropLocalClient] =
+                        originalBackdropFlags | 4u;
+
                     // Item_Paint preserves the original expressions for the
                     // scrolling layers, resolves their actual materials, and
                     // submits them through the normal renderer path.
                     Item_Paint(dc, backgroundItem);
+
+                    uint32_t updatedBackdropFlags =
+                        backgroundItem->window.dynamicFlags[backdropLocalClient];
+                    backgroundItem->window.dynamicFlags[backdropLocalClient] =
+                        (updatedBackdropFlags & ~4u) |
+                        (originalBackdropFlags & 4u);
 
                     static uint32_t switchSharedBackdropTraceCount = 0;
                     if (switchSharedBackdropTraceCount < 24u)
