@@ -5680,6 +5680,11 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
 {
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu";
+    if (!menu)
+    {
+        Switch_LogWrite("[KisakCOD][UI ABI] Menu_Paint received null menu\n");
+        return 0;
+    }
     if (Switch_UI_BadPointer(menu))
     {
         Switch_UI_LogBadPointer("Menu_Paint", "menu", nullptr, menu);
@@ -5703,6 +5708,23 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     if (Switch_UI_BadPointer(menu->items))
     {
         Switch_UI_LogBadPointer("Menu_Paint", "items", menu, menu->items);
+        return 0;
+    }
+    if (menu->itemCount < 0 || menu->itemCount > 4096)
+    {
+        char trace[192];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI ABI] Menu_Paint invalid itemCount=%d menu=%p\n",
+            menu->itemCount,
+            static_cast<void *>(menu));
+        Switch_LogWrite(trace);
+        return 0;
+    }
+    if (menu->itemCount > 0 && !menu->items)
+    {
+        Switch_LogWrite("[KisakCOD][UI ABI] Menu_Paint has items but null item array\n");
         return 0;
     }
     if (Switch_UI_BadPointer(menu->font))
@@ -5940,8 +5962,30 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     {
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/item";
-#endif
+        itemDef_s *item = menu->items ? menu->items[i] : nullptr;
+        if (!item || Switch_UI_BadPointer(item))
+        {
+            static uint32_t switchInvalidMenuItemTraceCount = 0;
+            if (switchInvalidMenuItemTraceCount < 64)
+            {
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][UI ABI] Menu_Paint skipped menu=%s item=%d/%d ptr=%p\n",
+                    menu->window.name ? menu->window.name : "<null>",
+                    i,
+                    menu->itemCount,
+                    static_cast<void *>(item));
+                Switch_LogWrite(trace);
+                ++switchInvalidMenuItemTraceCount;
+            }
+            continue;
+        }
+        Item_Paint(dc, item);
+#else
         Item_Paint(dc, menu->items[i]);
+#endif
     }
 
     if (g_debugMode)
@@ -6313,6 +6357,11 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
 {
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/item";
+    if (!item)
+    {
+        Switch_LogWrite("[KisakCOD][UI ABI] Item_Paint received null item\n");
+        return;
+    }
     if (Switch_UI_BadPointer(item))
     {
         Switch_UI_LogBadPointer("Item_Paint", "item", nullptr, item);
