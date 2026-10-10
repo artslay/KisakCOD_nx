@@ -443,10 +443,32 @@ void Switch_LogWrite(const char *msg)
         "Couldn't play stream '",
         "R_Cinematic_BinkOpen '"
     };
-    const bool keepUiMaterialDiag =
-        std::strncmp(msg, "[KisakCOD][UI MENU]", 19) == 0 ||
-        std::strncmp(msg, "[KisakCOD][UI BIND]", 19) == 0 ||
-        std::strncmp(msg, "[KisakCOD][UI ITEM]", 19) == 0;
+    // Allow the bounded UI paint-path traces used to diagnose menu item
+    // visibility, selected-button materials, and the final blend state. Keep
+    // unrelated UI diagnostics suppressed so the SD log stays readable.
+    static constexpr const char *const kVisibleUiPrefixes[] =
+    {
+        "[KisakCOD][UI MENU]",
+        "[KisakCOD][UI MENU ",
+        "[KisakCOD][UI BIND]",
+        "[KisakCOD][UI ITEM]",
+        "[KisakCOD][UI ITEM ",
+        "[KisakCOD][UI HANDLE ",
+        "[KisakCOD][UI PIC ",
+        "[KisakCOD][UI STRETCH ",
+        "[KisakCOD][UI PASS]",
+        "[KisakCOD][UI BLEND]"
+    };
+    bool keepUiMaterialDiag = false;
+    for (const char *prefix : kVisibleUiPrefixes)
+    {
+        const size_t prefixLength = std::strlen(prefix);
+        if (std::strncmp(msg, prefix, prefixLength) == 0)
+        {
+            keepUiMaterialDiag = true;
+            break;
+        }
+    }
 
     for (const char *prefix : kSuppressedPrefixes)
     {
