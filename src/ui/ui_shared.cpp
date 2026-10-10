@@ -9356,9 +9356,7 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                         sizeof(originalForeColor));
                     if (isProfileBackdrop)
                     {
-                        const dvar_t *fsGameDvar = Dvar_FindVar("fs_game");
-                        const char *fsGameName =
-                            fsGameDvar ? Dvar_GetString(fsGameDvar) : "";
+                        const char *fsGameName = Dvar_GetString("fs_game");
                         if (fsGameName && fsGameName[0])
                         {
                             // Match the original menu's tint for custom fs_game.
