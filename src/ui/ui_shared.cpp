@@ -3454,7 +3454,7 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI MENU INITIAL FOCUS] menu=%s focused=%u index=%d cursor=%d item=%s type=%d menuFlags=%08x itemFlags=%08x\\n",
+                "[KisakCOD][UI MENU INITIAL FOCUS] menu=%s focused=%u index=%d cursor=%d item=%s type=%d menuFlags=%08x itemFlags=%08x\n",
                 menu->window.name ? menu->window.name : "<null>",
                 focusedItemIndex >= 0 ? 1u : 0u,
                 focusedItemIndex,
