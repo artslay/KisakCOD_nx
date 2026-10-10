@@ -390,7 +390,7 @@ void __cdecl Menu_UpdatePosition(int localClientNum, menuDef_t *menu)
 #ifdef __SWITCH__
     if (Switch_UIUtils_BadRuntimePointer(menu))
     {
-        Switch_LogWrite("[KisakCOD][UI ABI] Menu_UpdatePosition received invalid menu pointer\\n");
+        Switch_LogWrite("[KisakCOD][UI ABI] Menu_UpdatePosition received invalid menu pointer\n");
         return;
     }
     if (menu->itemCount < 0 || menu->itemCount > 4096)
@@ -399,7 +399,7 @@ void __cdecl Menu_UpdatePosition(int localClientNum, menuDef_t *menu)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][UI ABI] Menu_UpdatePosition invalid itemCount=%d menu=%p\\n",
+            "[KisakCOD][UI ABI] Menu_UpdatePosition invalid itemCount=%d menu=%p\n",
             menu->itemCount,
             static_cast<void *>(menu));
         Switch_LogWrite(trace);
@@ -407,7 +407,7 @@ void __cdecl Menu_UpdatePosition(int localClientNum, menuDef_t *menu)
     }
     if (menu->itemCount > 0 && Switch_UIUtils_BadRuntimePointer(menu->items))
     {
-        Switch_LogWrite("[KisakCOD][UI ABI] Menu_UpdatePosition received invalid item array\\n");
+        Switch_LogWrite("[KisakCOD][UI ABI] Menu_UpdatePosition received invalid item array\n");
         return;
     }
 #endif
@@ -431,7 +431,7 @@ void __cdecl Menu_UpdatePosition(int localClientNum, menuDef_t *menu)
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][UI ABI] Menu_UpdatePosition skipped item=%d/%d ptr=%p\\n",
+                    "[KisakCOD][UI ABI] Menu_UpdatePosition skipped item=%d/%d ptr=%p\n",
                     i,
                     menu->itemCount,
                     static_cast<void *>(item));
