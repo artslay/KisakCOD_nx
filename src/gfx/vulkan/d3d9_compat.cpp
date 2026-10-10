@@ -2339,22 +2339,34 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     m_topology = PrimitiveTopology(primitiveType);
 #ifdef __SWITCH__
     {
-        const GfxImage *uiImage = g_switchLastSamplerImages[0];
-        const char *uiImageName =
-            uiImage && uiImage->name ? uiImage->name : nullptr;
-        const bool isGradient =
-            uiImageName && std::strcmp(uiImageName, "gradient_fadein") == 0;
-        const bool isHighlightCap =
-            uiImageName && std::strcmp(uiImageName, "button_highlight_end") == 0;
+        // UI draws may bind their authored texture on a sampler other than 0.
+        // Trace all stages and also match the material name so a default-image
+        // fallback does not hide the draw we're investigating.
+        extern thread_local const char *g_switchLastSamplerMaterialNames[16];
         static uint32_t gradientDrawTraceCount = 0;
         static uint32_t capDrawTraceCount = 0;
-        uint32_t *traceCount =
-            isGradient ? &gradientDrawTraceCount :
-            isHighlightCap ? &capDrawTraceCount : nullptr;
 
-        if (traceCount && *traceCount < 8)
+        for (uint32_t samplerIndex = 0; samplerIndex < 16; ++samplerIndex)
         {
-            const KisakVkTexture *uiTexture = m_textures[0];
+            const GfxImage *uiImage = g_switchLastSamplerImages[samplerIndex];
+            const char *uiImageName =
+                uiImage && uiImage->name ? uiImage->name : nullptr;
+            const char *materialName =
+                g_switchLastSamplerMaterialNames[samplerIndex];
+            const bool isGradient =
+                (uiImageName && std::strcmp(uiImageName, "gradient_fadein") == 0) ||
+                (materialName && std::strcmp(materialName, "gradient_fadein") == 0);
+            const bool isHighlightCap =
+                (uiImageName && std::strcmp(uiImageName, "button_highlight_end") == 0) ||
+                (materialName && std::strcmp(materialName, "button_highlight_end") == 0);
+
+            uint32_t *traceCount =
+                isHighlightCap ? &capDrawTraceCount :
+                isGradient ? &gradientDrawTraceCount : nullptr;
+            if (!traceCount || *traceCount >= 8)
+                continue;
+
+            const KisakVkTexture *uiTexture = m_textures[samplerIndex];
             uint32_t vertexColor = 0xFFFFFFFFu;
             const auto &stream = m_streams[0];
             if (stream.buffer && stream.stride >= 20)
@@ -2371,12 +2383,17 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 }
             }
 
-            char trace[640];
+            char trace[704];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI BLEND] image=%s draw=%u blend=%u src=%u dst=%u op=%u separateAlpha=%u srcA=%u dstA=%u opA=%u alphaTest=%u alphaFunc=%u alphaRef=%u vertexColor=%08x tex=%p size=%ux%u srcFormat=%u vkFormat=%u\n",
-                uiImageName,
+                "[KisakCOD][UI BLEND] image=%s material=%s sampler=%u draw=%u "
+                "blend=%u src=%u dst=%u op=%u separateAlpha=%u srcA=%u dstA=%u "
+                "opA=%u alphaTest=%u alphaFunc=%u alphaRef=%u vertexColor=%08x "
+                "tex=%p size=%ux%u srcFormat=%u vkFormat=%u\\n",
+                uiImageName ? uiImageName : "<null>",
+                materialName ? materialName : "<null>",
+                static_cast<unsigned>(samplerIndex),
                 static_cast<unsigned>(*traceCount),
                 m_blendEnable ? 1u : 0u,
                 static_cast<unsigned>(m_srcBlend),
