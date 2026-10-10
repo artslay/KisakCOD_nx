@@ -1274,17 +1274,30 @@ void __cdecl R_Cinematic_DrawStretchPic_Letterboxed()
 {
 #ifdef __SWITCH__
     // The cinematic material samples the engine's code-image planes, not a
-    // regular material texture. When no decoded frame is active those planes
-    // point to black/gray fallback images; drawing that full-screen quad over
-    // the UI hides the menu background and its animated layers. Do not submit
-    // a cinematic quad until a real Bink frame is active.
-    if (cinematicGlob.activeImageFrame == CINEMATIC_INVALID_IMAGE_FRAME)
+    // regular material texture. A stale activeImageFrame can survive the last
+    // displayed frame after playback has finished or failed to open; submitting
+    // that quad then covers the menu's real background with fallback planes.
+    // Only draw while playback is genuinely active and a decoded frame exists.
+    const bool hasActiveFrame =
+        cinematicGlob.activeImageFrame != CINEMATIC_INVALID_IMAGE_FRAME;
+    const bool playbackStarted = R_Cinematic_IsStarted();
+    if (!hasActiveFrame || !playbackStarted)
     {
-        static bool switchLoggedMissingCinematicFrame = false;
-        if (!switchLoggedMissingCinematicFrame)
+        static uint32_t switchSkippedCinematicDraws = 0;
+        if (switchSkippedCinematicDraws < 8u)
         {
-            Switch_LogWrite("[KisakCOD][CINEMATIC] skipped letterboxed draw: no active frame\n");
-            switchLoggedMissingCinematicFrame = true;
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][CINEMATIC] skipped letterboxed draw frame=%d started=%u finished=%u name=%s\n",
+                cinematicGlob.activeImageFrame,
+                playbackStarted ? 1u : 0u,
+                cinematicGlob.cinematicFinished ? 1u : 0u,
+                cinematicGlob.currentCinematicName[0]
+                    ? cinematicGlob.currentCinematicName : "<none>");
+            Switch_LogWrite(trace);
+            ++switchSkippedCinematicDraws;
         }
         return;
     }
