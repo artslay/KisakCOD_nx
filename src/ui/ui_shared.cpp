@@ -5889,7 +5889,7 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI MENU PAINT GATE] menu=%s visible=%u items=%d fullScreen=%u flags=%08x static=%08x showOnly=%s rect=%.1f,%.1f %.1fx%.1f\\n",
+                "[KisakCOD][UI MENU PAINT GATE] menu=%s visible=%u items=%d fullScreen=%u flags=%08x static=%08x showOnly=%s rect=%.1f,%.1f %.1fx%.1f\n",
                 switchGateMenuName,
                 switchMenuVisible ? 1u : 0u,
                 menu->itemCount,
@@ -6039,7 +6039,7 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][UI MENU ITEM CALL] menu=%s index=%d/%d item=%s ptr=%p type=%d style=%d flags=%08x focus=%u\\n",
+                    "[KisakCOD][UI MENU ITEM CALL] menu=%s index=%d/%d item=%s ptr=%p type=%d style=%d flags=%08x focus=%u\n",
                     switchLoopMenuName,
                     i,
                     menu->itemCount,
