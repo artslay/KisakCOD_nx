@@ -5834,9 +5834,9 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
     if (uiscript_debug->current.integer)
     {
         if (menu->window.name)
-            Com_Printf(CON_CHANNEL_UI, "hiding the %s menu becuase the 'visible when' expression was false\\n", menu->window.name);
+            Com_Printf(CON_CHANNEL_UI, "hiding the %s menu becuase the 'visible when' expression was false\n", menu->window.name);
         else
-            Com_Printf(CON_CHANNEL_UI, "hiding the %s menu becuase the 'visible when' expression was false\\n", "unnamed");
+            Com_Printf(CON_CHANNEL_UI, "hiding the %s menu becuase the 'visible when' expression was false\n", "unnamed");
     }
     return 0;
 }
