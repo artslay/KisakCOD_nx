@@ -6751,155 +6751,13 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                     item->window.background = Material_RegisterHandle(lowerCaseName, item->imageTrack);
                 }
 #ifdef __SWITCH__
-                // The stock main_text menu authors the right edge of each
-                // highlight as a WINDOW_STYLE_SHADER item at x=214.5, w=5.5,
-                // h=22 with background "button_highlight_end". Some Switch
-                // fastfile menu instances arrive with that serialized material
-                // pointer null. Resolve the actual named engine material here,
-                // where the owning menu and authored cap geometry are known;
-                // do not substitute a guessed material in the renderer.
-                if (item->window.style == 3 &&
-                    !item->window.background &&
-                    item->parent &&
-                    item->parent->window.name &&
-                    !I_stricmp(item->parent->window.name, "main_text") &&
-                    item->window.rect.x >= 214.4f &&
-                    item->window.rect.x <= 214.6f &&
-                    item->window.rect.w >= 5.4f &&
-                    item->window.rect.w <= 5.6f &&
-                    item->window.rect.h >= 21.9f &&
-                    item->window.rect.h <= 22.1f)
-                {
-                    Material *capMaterial =
-                        Material_RegisterHandle("button_highlight_end", item->imageTrack);
-                    if (capMaterial &&
-                        !Material_IsDefault(capMaterial) &&
-                        capMaterial->info.name &&
-                        !I_stricmp(capMaterial->info.name, "button_highlight_end"))
-                    {
-                        item->window.background = capMaterial;
-                        static uint32_t switchUiHighlightCapTraceCount = 0;
-                        if (switchUiHighlightCapTraceCount < 8u)
-                        {
-                            char trace[384];
-                            std::snprintf(
-                                trace,
-                                sizeof(trace),
-                                "[KisakCOD][UI HIGHLIGHT CAP] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f material=%s action=restored ptr=%p\n",
-                                item->window.rect.x,
-                                item->window.rect.y,
-                                item->window.rect.w,
-                                item->window.rect.h,
-                                capMaterial->info.name,
-                                static_cast<void *>(capMaterial));
-                            Switch_LogWrite(trace);
-                            ++switchUiHighlightCapTraceCount;
-                        }
-                    }
-                    else
-                    {
-                        static uint32_t switchUiHighlightCapMissTraceCount = 0;
-                        if (switchUiHighlightCapMissTraceCount < 4u)
-                        {
-                            char trace[384];
-                            std::snprintf(
-                                trace,
-                                sizeof(trace),
-                                "[KisakCOD][UI HIGHLIGHT CAP] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f material=button_highlight_end result=%s action=preserve_fill_fallback\n",
-                                item->window.rect.x,
-                                item->window.rect.y,
-                                item->window.rect.w,
-                                item->window.rect.h,
-                                capMaterial && capMaterial->info.name
-                                    ? capMaterial->info.name : "<null>");
-                            Switch_LogWrite(trace);
-                            ++switchUiHighlightCapMissTraceCount;
-                        }
-                    }
-                }
-
-                // The selected main_text row has a separate authored left
-                // highlight (gradient_fadein) with borderSize=2 and alpha=0.35.
-                // On Switch, its fastfile instance can lose the background
-                // pointer even though the row geometry and authored highlight
-                // colors are intact. Restore only that exact selected-row shape
-                // using the stock engine material so its alpha gradient is
-                // sampled normally; do not synthesize a gradient in the renderer.
-                if (item->window.style == 3 &&
-                    !item->window.background &&
-                    item->parent &&
-                    item->parent->window.name &&
-                    !I_stricmp(item->parent->window.name, "main_text") &&
-                    item->window.rect.x >= -0.1f &&
-                    item->window.rect.x <= 0.1f &&
-                    item->window.rect.w >= 214.4f &&
-                    item->window.rect.w <= 214.6f &&
-                    item->window.rect.h >= 21.9f &&
-                    item->window.rect.h <= 22.1f &&
-                    item->window.borderSize >= 1.9f &&
-                    item->window.borderSize <= 2.1f &&
-                    item->window.foreColor[3] >= 0.30f &&
-                    item->window.foreColor[3] <= 0.40f &&
-                    item->window.borderColor[3] >= 0.35f &&
-                    item->window.borderColor[3] <= 0.45f)
-                {
-                    Material *gradientMaterial =
-                        Material_RegisterHandle("gradient_fadein", item->imageTrack);
-                    if (gradientMaterial &&
-                        !Material_IsDefault(gradientMaterial) &&
-                        gradientMaterial->info.name &&
-                        !I_stricmp(gradientMaterial->info.name, "gradient_fadein"))
-                    {
-                        item->window.background = gradientMaterial;
-                        static uint32_t switchUiHighlightGradientTraceCount = 0;
-                        if (switchUiHighlightGradientTraceCount < 8u)
-                        {
-                            char trace[416];
-                            std::snprintf(
-                                trace,
-                                sizeof(trace),
-                                "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f borderSize=%.1f material=%s action=restored ptr=%p\n",
-                                item->window.rect.x,
-                                item->window.rect.y,
-                                item->window.rect.w,
-                                item->window.rect.h,
-                                item->window.foreColor[3],
-                                item->window.borderSize,
-                                gradientMaterial->info.name,
-                                static_cast<void *>(gradientMaterial));
-                            Switch_LogWrite(trace);
-                            ++switchUiHighlightGradientTraceCount;
-                        }
-                    }
-                    else
-                    {
-                        static uint32_t switchUiHighlightGradientMissTraceCount = 0;
-                        if (switchUiHighlightGradientMissTraceCount < 4u)
-                        {
-                            char trace[416];
-                            std::snprintf(
-                                trace,
-                                sizeof(trace),
-                                "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f borderSize=%.1f material=gradient_fadein result=%s action=preserve_null_background\n",
-                                item->window.rect.x,
-                                item->window.rect.y,
-                                item->window.rect.w,
-                                item->window.rect.h,
-                                item->window.foreColor[3],
-                                item->window.borderSize,
-                                gradientMaterial && gradientMaterial->info.name
-                                    ? gradientMaterial->info.name : "<null>");
-                            Switch_LogWrite(trace);
-                            ++switchUiHighlightGradientMissTraceCount;
-                        }
-                    }
-                }
-
-                // Recover a missing left highlight segment for stock UI rows in any menu.
-                // The right cap is a strong structural signature: it shares y/height/color
-                // and begins exactly where the left gradient ends. Require that this menu
-                // already uses both stock highlight materials elsewhere, so ordinary panels,
-                // separators, sliders, and unrelated shader windows are not guessed at.
+                // Restore genuine stock highlight pairs in every menu. The fastfile can
+                // retain the row geometry/colors while leaving one or both material pointers
+                // null. Match the authored left-gradient/right-cap geometry and color rather
+                // than relying on another row having already registered either material.
+                // This also handles the case where both siblings are null or are painted in
+                // the opposite order. Unpaired separators, panels, and control backgrounds
+                // are deliberately left alone.
                 if (item->window.style == 3 &&
                     !item->window.background &&
                     item->parent &&
@@ -6912,67 +6770,49 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                     item->window.foreColor[3] >= 0.03f &&
                     item->window.foreColor[3] <= 0.45f)
                 {
-                    bool menuHasStockGradient = false;
-                    bool menuHasStockCap = false;
-                    bool hasMatchingCapGeometry = false;
-
+                    bool hasPairedCap = false;
+                    const rectDef_s &gradientRect = item->window.rect;
                     for (int siblingIndex = 0;
                          siblingIndex < item->parent->itemCount;
                          ++siblingIndex)
                     {
                         itemDef_s *sibling = item->parent->items[siblingIndex];
-                        if (!sibling || sibling == item || sibling->window.style != 3 ||
-                            !sibling->window.background ||
-                            !sibling->window.background->info.name)
+                        if (!sibling || sibling == item || sibling->window.style != 3)
+                            continue;
+
+                        const rectDef_s &capRect = sibling->window.rect;
+                        if (capRect.w < 4.5f || capRect.w > 6.0f ||
+                            capRect.h < 19.5f || capRect.h > 22.5f ||
+                            capRect.x < gradientRect.x + gradientRect.w - 0.1f ||
+                            capRect.x > gradientRect.x + gradientRect.w + 0.1f ||
+                            capRect.y < gradientRect.y - 0.1f ||
+                            capRect.y > gradientRect.y + 0.1f ||
+                            capRect.h < gradientRect.h - 0.1f ||
+                            capRect.h > gradientRect.h + 0.1f)
                         {
                             continue;
                         }
 
-                        const char *siblingMaterialName = sibling->window.background->info.name;
-                        if (!I_stricmp(siblingMaterialName, "gradient_fadein"))
-                            menuHasStockGradient = true;
-                        else if (!I_stricmp(siblingMaterialName, "button_highlight_end"))
-                            menuHasStockCap = true;
-                    }
-
-                    if (menuHasStockGradient && menuHasStockCap)
-                    {
-                        const rectDef_s &gradientRect = item->window.rect;
-                        for (int siblingIndex = 0;
-                             siblingIndex < item->parent->itemCount;
-                             ++siblingIndex)
+                        bool sameColor = true;
+                        for (int channel = 0; channel < 4; ++channel)
                         {
-                            itemDef_s *sibling = item->parent->items[siblingIndex];
-                            if (!sibling || sibling == item || sibling->window.style != 3)
-                                continue;
-
-                            const rectDef_s &capRect = sibling->window.rect;
-                            if (capRect.w < 4.5f || capRect.w > 6.0f ||
-                                capRect.h < 19.5f || capRect.h > 22.5f ||
-                                capRect.x < gradientRect.x + gradientRect.w - 0.1f ||
-                                capRect.x > gradientRect.x + gradientRect.w + 0.1f ||
-                                capRect.y < gradientRect.y - 0.1f ||
-                                capRect.y > gradientRect.y + 0.1f ||
-                                capRect.h < gradientRect.h - 0.1f ||
-                                capRect.h > gradientRect.h + 0.1f ||
-                                sibling->window.foreColor[0] < item->window.foreColor[0] - 0.02f ||
-                                sibling->window.foreColor[0] > item->window.foreColor[0] + 0.02f ||
-                                sibling->window.foreColor[1] < item->window.foreColor[1] - 0.02f ||
-                                sibling->window.foreColor[1] > item->window.foreColor[1] + 0.02f ||
-                                sibling->window.foreColor[2] < item->window.foreColor[2] - 0.02f ||
-                                sibling->window.foreColor[2] > item->window.foreColor[2] + 0.02f ||
-                                sibling->window.foreColor[3] < item->window.foreColor[3] - 0.02f ||
-                                sibling->window.foreColor[3] > item->window.foreColor[3] + 0.02f)
+                            const float delta =
+                                sibling->window.foreColor[channel] -
+                                item->window.foreColor[channel];
+                            if (delta < -0.02f || delta > 0.02f)
                             {
-                                continue;
+                                sameColor = false;
+                                break;
                             }
-
-                            hasMatchingCapGeometry = true;
+                        }
+                        if (sameColor)
+                        {
+                            hasPairedCap = true;
                             break;
                         }
                     }
 
-                    if (hasMatchingCapGeometry)
+                    if (hasPairedCap)
                     {
                         Material *gradientMaterial =
                             Material_RegisterHandle("gradient_fadein", item->imageTrack);
@@ -6982,14 +6822,14 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                             !I_stricmp(gradientMaterial->info.name, "gradient_fadein"))
                         {
                             item->window.background = gradientMaterial;
-                            static uint32_t switchUiSiblingHighlightGradientTraceCount = 0;
-                            if (switchUiSiblingHighlightGradientTraceCount < 24u)
+                            static uint32_t switchUiPairedGradientTraceCount = 0;
+                            if (switchUiPairedGradientTraceCount < 32u)
                             {
                                 char trace[480];
                                 std::snprintf(
                                     trace,
                                     sizeof(trace),
-                                    "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=%s x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f material=%s action=restored_sibling_pair ptr=%p\n",
+                                    "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=%s x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f material=%s action=restored_paired_geometry ptr=%p\n",
                                     item->parent->window.name ? item->parent->window.name : "<unnamed>",
                                     item->window.rect.x,
                                     item->window.rect.y,
@@ -6999,19 +6839,12 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                                     gradientMaterial->info.name,
                                     static_cast<void *>(gradientMaterial));
                                 Switch_LogWrite(trace);
-                                ++switchUiSiblingHighlightGradientTraceCount;
+                                ++switchUiPairedGradientTraceCount;
                             }
                         }
                     }
                 }
 
-                // Restore the stock right cap for any UI row whose adjacent
-                // left segment still has its authored gradient_fadein material.
-                // This covers option pages as well as main_text: the fastfile
-                // can lose the small cap's material pointer while retaining the
-                // exact cap geometry. Require a matching sibling row and color
-                // so unrelated thin shader windows and separator lines are left
-                // untouched.
                 if (item->window.style == 3 &&
                     !item->window.background &&
                     item->parent &&
@@ -7020,53 +6853,54 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                     item->window.rect.w >= 4.5f &&
                     item->window.rect.w <= 6.0f &&
                     item->window.rect.h >= 19.5f &&
-                    item->window.rect.h <= 22.5f)
+                    item->window.rect.h <= 22.5f &&
+                    item->window.foreColor[3] >= 0.03f &&
+                    item->window.foreColor[3] <= 0.45f)
                 {
-                    bool hasMatchingGradientSegment = false;
+                    bool hasPairedGradient = false;
+                    const rectDef_s &capRect = item->window.rect;
                     for (int siblingIndex = 0;
                          siblingIndex < item->parent->itemCount;
                          ++siblingIndex)
                     {
                         itemDef_s *sibling = item->parent->items[siblingIndex];
-                        if (!sibling || sibling == item ||
-                            sibling->window.style != 3 ||
-                            !sibling->window.background ||
-                            !sibling->window.background->info.name ||
-                            I_stricmp(sibling->window.background->info.name, "gradient_fadein"))
-                        {
+                        if (!sibling || sibling == item || sibling->window.style != 3)
                             continue;
-                        }
 
                         const rectDef_s &gradientRect = sibling->window.rect;
-                        const rectDef_s &capRect = item->window.rect;
                         const float rightEdge = gradientRect.x + gradientRect.w;
-                        if (gradientRect.w < 100.0f ||
-                            gradientRect.w > 240.0f ||
-                            gradientRect.h < 19.5f ||
-                            gradientRect.h > 22.5f ||
+                        if (gradientRect.w < 100.0f || gradientRect.w > 240.0f ||
+                            gradientRect.h < 19.5f || gradientRect.h > 22.5f ||
                             rightEdge < capRect.x - 0.1f ||
                             rightEdge > capRect.x + 0.1f ||
                             gradientRect.y < capRect.y - 0.1f ||
                             gradientRect.y > capRect.y + 0.1f ||
                             gradientRect.h < capRect.h - 0.1f ||
-                            gradientRect.h > capRect.h + 0.1f ||
-                            sibling->window.foreColor[0] < item->window.foreColor[0] - 0.02f ||
-                            sibling->window.foreColor[0] > item->window.foreColor[0] + 0.02f ||
-                            sibling->window.foreColor[1] < item->window.foreColor[1] - 0.02f ||
-                            sibling->window.foreColor[1] > item->window.foreColor[1] + 0.02f ||
-                            sibling->window.foreColor[2] < item->window.foreColor[2] - 0.02f ||
-                            sibling->window.foreColor[2] > item->window.foreColor[2] + 0.02f ||
-                            sibling->window.foreColor[3] < item->window.foreColor[3] - 0.02f ||
-                            sibling->window.foreColor[3] > item->window.foreColor[3] + 0.02f)
+                            gradientRect.h > capRect.h + 0.1f)
                         {
                             continue;
                         }
 
-                        hasMatchingGradientSegment = true;
-                        break;
+                        bool sameColor = true;
+                        for (int channel = 0; channel < 4; ++channel)
+                        {
+                            const float delta =
+                                sibling->window.foreColor[channel] -
+                                item->window.foreColor[channel];
+                            if (delta < -0.02f || delta > 0.02f)
+                            {
+                                sameColor = false;
+                                break;
+                            }
+                        }
+                        if (sameColor)
+                        {
+                            hasPairedGradient = true;
+                            break;
+                        }
                     }
 
-                    if (hasMatchingGradientSegment)
+                    if (hasPairedGradient)
                     {
                         Material *capMaterial =
                             Material_RegisterHandle("button_highlight_end", item->imageTrack);
@@ -7076,14 +6910,14 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                             !I_stricmp(capMaterial->info.name, "button_highlight_end"))
                         {
                             item->window.background = capMaterial;
-                            static uint32_t switchUiSiblingHighlightCapTraceCount = 0;
-                            if (switchUiSiblingHighlightCapTraceCount < 24u)
+                            static uint32_t switchUiPairedCapTraceCount = 0;
+                            if (switchUiPairedCapTraceCount < 32u)
                             {
-                                char trace[448];
+                                char trace[480];
                                 std::snprintf(
                                     trace,
                                     sizeof(trace),
-                                    "[KisakCOD][UI HIGHLIGHT CAP] menu=%s x=%.1f y=%.1f w=%.1f h=%.1f source=gradient_fadein material=%s action=restored_sibling ptr=%p\n",
+                                    "[KisakCOD][UI HIGHLIGHT CAP] menu=%s x=%.1f y=%.1f w=%.1f h=%.1f material=%s action=restored_paired_geometry ptr=%p\n",
                                     item->parent->window.name ? item->parent->window.name : "<unnamed>",
                                     item->window.rect.x,
                                     item->window.rect.y,
@@ -7092,7 +6926,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                                     capMaterial->info.name,
                                     static_cast<void *>(capMaterial));
                                 Switch_LogWrite(trace);
-                                ++switchUiSiblingHighlightCapTraceCount;
+                                ++switchUiPairedCapTraceCount;
                             }
                         }
                     }
