@@ -5,6 +5,7 @@
 #include <universal/q_parse.h>
 #include <universal/profile.h>
 #ifdef __SWITCH__
+#include <cstdint>
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
@@ -405,9 +406,10 @@ void __cdecl Menu_UpdatePosition(int localClientNum, menuDef_t *menu)
         Switch_LogWrite(trace);
         return;
     }
-    if (menu->itemCount > 0 && Switch_UIUtils_BadRuntimePointer(menu->items))
+    if (menu->itemCount > 0 &&
+        (!menu->items || Switch_UIUtils_BadRuntimePointer(menu->items)))
     {
-        Switch_LogWrite("[KisakCOD][UI ABI] Menu_UpdatePosition received invalid item array\n");
+        Switch_LogWrite("[KisakCOD][UI ABI] Menu_UpdatePosition received null or invalid item array\n");
         return;
     }
 #endif
