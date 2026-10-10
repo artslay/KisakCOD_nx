@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <universal/profile.h>
 
 #ifdef KISAK_MP
@@ -6356,9 +6357,15 @@ void __cdecl Window_Paint(
             }
             else
             {
-                // Match WINDOW_STYLE_FILLED's flat-color path: a null background
-                // must use the engine's white UI material so foreColor alpha blends.
-                UI_FillRect(
+                // Keep WINDOW_STYLE_SHADER's signed-rectangle semantics when a
+                // serialized background handle is null. UI_DrawHandlePic normalizes
+                // negative widths/heights and flips the UVs; UI_FillRect passes the
+                // signed sizes straight to CL_DrawStretchPic and drops mirrored
+                // edge pieces in compound panels (including the corner strips).
+                // The white material is the engine's real UI fill material, tinted
+                // by the authored foreColor; this is not a generated replacement
+                // texture and does not affect windows with an assigned background.
+                UI_DrawHandlePic(
                     scrPlace,
                     fillRect,
                     fillRect_4,
@@ -6366,7 +6373,8 @@ void __cdecl Window_Paint(
                     fillRect_12,
                     origRect->horzAlign,
                     origRect->vertAlign,
-                    v8);
+                    v8,
+                    sharedUiInfo.assets.whiteMaterial);
             }
             break;
         case 5:
@@ -6981,6 +6989,117 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                 item->text ? item->text : "<null>");
             Switch_LogWrite(trace);
             ++switchItemCandidateCount[switchMenuSlot];
+        }
+    }
+
+    // Trace target UI windows beyond the main menu and graphics-options page.
+    // The original bounded trace only covered those two menus, so profile,
+    // mission-select, and confirmation popup items could never be diagnosed.
+    if (parent && parent->window.name)
+    {
+        const char *menuName = parent->window.name;
+        const char *itemName = item->window.name ? item->window.name : "";
+        const bool isBackItem =
+            !I_stricmp(itemName, "back") ||
+            (item->text && !I_stricmp(item->text, "@MENU_BACK"));
+        const bool isTargetMenu =
+            std::strstr(menuName, "mission") ||
+            std::strstr(menuName, "profile") ||
+            std::strstr(menuName, "quit") ||
+            std::strstr(menuName, "popmenu") ||
+            std::strstr(menuName, "network") ||
+            std::strstr(menuName, "connect") ||
+            std::strstr(menuName, "first_time");
+        const bool isKnownTraceMenu =
+            !I_stricmp(menuName, "main_text") ||
+            !I_stricmp(menuName, "main") ||
+            !I_stricmp(menuName, "options_graphics");
+        const bool isLargeNullShader =
+            item->window.style == 3 &&
+            !item->window.background &&
+            ((item->window.rect.w >= 100.0f ||
+              item->window.rect.w <= -100.0f) ||
+             (item->window.rect.h >= 32.0f ||
+              item->window.rect.h <= -32.0f));
+        const bool isSignedNullShader =
+            item->window.style == 3 &&
+            !item->window.background &&
+            (item->window.rect.w < 0.0f || item->window.rect.h < 0.0f);
+        const bool isCinematicItem = item->window.ownerDraw == 277;
+        const bool shouldTrace =
+            isBackItem ||
+            isTargetMenu ||
+            isCinematicItem ||
+            (!isKnownTraceMenu &&
+             (isLargeNullShader || isSignedNullShader));
+
+        if (shouldTrace)
+        {
+            static const itemDef_s *switchUiTargetTraceItems[512] = {};
+            static uint32_t switchUiTargetTraceCount = 0;
+            bool alreadyTraced = false;
+            for (uint32_t i = 0; i < switchUiTargetTraceCount; ++i)
+            {
+                if (switchUiTargetTraceItems[i] == item)
+                {
+                    alreadyTraced = true;
+                    break;
+                }
+            }
+
+            if (!alreadyTraced &&
+                switchUiTargetTraceCount < ARRAY_COUNT(switchUiTargetTraceItems))
+            {
+                const Material *itemBackground = item->window.background;
+                const char *itemBackgroundName =
+                    itemBackground &&
+                    !Switch_UI_BadPointer(itemBackground) &&
+                    itemBackground->info.name
+                        ? itemBackground->info.name
+                        : "<null>";
+                const Material *menuBackground = parent->window.background;
+                const char *menuBackgroundName =
+                    menuBackground &&
+                    !Switch_UI_BadPointer(menuBackground) &&
+                    menuBackground->info.name
+                        ? menuBackground->info.name
+                        : "<null>";
+                const uint32_t localClient =
+                    static_cast<uint32_t>(dc->localClientNum);
+                char trace[896];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][UI TARGET ITEM] menu=%s item=%s type=%d style=%d ownerDraw=%d imageTrack=%d bg=%s menuBg=%s matExp=%d flags=%08x static=%08x rect=%.1f,%.1f %.1fx%.1f fore=%.3f,%.3f,%.3f,%.3f back=%.3f,%.3f,%.3f,%.3f border=%d borderSize=%.1f text=%s\n",
+                    menuName,
+                    itemName[0] ? itemName : "<null>",
+                    item->type,
+                    item->window.style,
+                    item->window.ownerDraw,
+                    item->imageTrack,
+                    itemBackgroundName,
+                    menuBackgroundName,
+                    item->materialExp.numEntries,
+                    static_cast<unsigned>(item->window.dynamicFlags[localClient]),
+                    static_cast<unsigned>(item->window.staticFlags),
+                    item->window.rect.x,
+                    item->window.rect.y,
+                    item->window.rect.w,
+                    item->window.rect.h,
+                    item->window.foreColor[0],
+                    item->window.foreColor[1],
+                    item->window.foreColor[2],
+                    item->window.foreColor[3],
+                    item->window.backColor[0],
+                    item->window.backColor[1],
+                    item->window.backColor[2],
+                    item->window.backColor[3],
+                    item->window.border,
+                    item->window.borderSize,
+                    item->text ? item->text : "<null>");
+                Switch_LogWrite(trace);
+                switchUiTargetTraceItems[switchUiTargetTraceCount++] = item;
+            }
         }
     }
 #endif
