@@ -6341,16 +6341,33 @@ void __cdecl Window_Paint(
             else
                 v8 = 0;
             foreColor = v8;
-            UI_DrawHandlePic(
-                scrPlace,
-                fillRect,
-                fillRect_4,
-                fillRect_8,
-                fillRect_12,
-                origRect->horzAlign,
-                origRect->vertAlign,
-                v8,
-                w->background);
+            if (w->background)
+            {
+                UI_DrawHandlePic(
+                    scrPlace,
+                    fillRect,
+                    fillRect_4,
+                    fillRect_8,
+                    fillRect_12,
+                    origRect->horzAlign,
+                    origRect->vertAlign,
+                    v8,
+                    w->background);
+            }
+            else
+            {
+                // Match WINDOW_STYLE_FILLED's flat-color path: a null background
+                // must use the engine's white UI material so foreColor alpha blends.
+                UI_FillRect(
+                    scrPlace,
+                    fillRect,
+                    fillRect_4,
+                    fillRect_8,
+                    fillRect_12,
+                    origRect->horzAlign,
+                    origRect->vertAlign,
+                    v8);
+            }
             break;
         case 5:
             if (w->background)
