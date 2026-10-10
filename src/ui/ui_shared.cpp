@@ -6080,7 +6080,21 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         menu->window.rect.y = GetExpressionFloat(dc->localClientNum, &menu->rectYExp);
 
     Menu_UpdatePosition(dc->localClientNum, menu);
-    if (menu->fullScreen && menu->window.background)
+#ifdef __SWITCH__
+    // player_profile is a fullscreen overlay over the animated main-menu
+    // backdrop drawn by Menu_PaintAll. Its own fullscreen material resolves
+    // to a solid white layer on Switch, so do not draw the profile menu's
+    // window/background; its child items still paint normally below.
+    const bool preserveSharedMainMenuBackdrop =
+        menu->fullScreen &&
+        menu->window.name &&
+        !I_stricmp(menu->window.name, "player_profile");
+#else
+    const bool preserveSharedMainMenuBackdrop = false;
+#endif
+    if (menu->fullScreen &&
+        menu->window.background &&
+        !preserveSharedMainMenuBackdrop)
     {
         if (!menu)
             MyAssertHandler("c:\\trees\\cod3\\src\\ui\\ui_utils_api.h", 36, 0, "%s", "w");
@@ -6096,7 +6110,8 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
             menu->window.background);
     }
     fadeCycle = (float)menu->fadeCycle;
-    Window_Paint(dc, &menu->window, menu->fadeAmount, menu->fadeInAmount, menu->fadeClamp, fadeCycle);
+    if (!preserveSharedMainMenuBackdrop)
+        Window_Paint(dc, &menu->window, menu->fadeAmount, menu->fadeInAmount, menu->fadeClamp, fadeCycle);
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/items";
