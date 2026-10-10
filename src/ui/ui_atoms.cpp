@@ -4,6 +4,11 @@
 #include <database/database.h>
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #elif KISAK_SP
@@ -45,6 +50,70 @@ void __cdecl UI_DrawHandlePic(
     float s1; // [esp+38h] [ebp-8h]
     float s0; // [esp+3Ch] [ebp-4h]
 
+#ifdef __SWITCH__
+    {
+        static uint32_t switchUiGradientPicTraceCount = 0;
+        static uint32_t switchUiCapPicTraceCount = 0;
+        const char *materialName =
+            material && material->info.name ? material->info.name : "<null>";
+        const bool gradientMaterial =
+            !I_stricmp(materialName, "gradient_fadein") ||
+            !I_stricmp(materialName, "images/gradient_fadein") ||
+            !I_stricmp(materialName, "gradient_fadein.iwi") ||
+            !I_stricmp(materialName, "images/gradient_fadein.iwi");
+        const float absW = w < 0.0f ? -w : w;
+        const float absH = h < 0.0f ? -h : h;
+        // CoD4's right cap is authored at roughly 8.25x33 UI units. This
+        // trace runs before ScrPlace scaling, unlike renderer-side geometry.
+        const bool capGeometry =
+            absW >= 7.5f && absW <= 9.0f &&
+            absH >= 32.0f && absH <= 34.0f;
+        const bool capMaterial =
+            !I_stricmp(materialName, "button_highlight_end") ||
+            !I_stricmp(materialName, "images/button_highlight_end") ||
+            !I_stricmp(materialName, "button_highlight_end.iwi") ||
+            !I_stricmp(materialName, "images/button_highlight_end.iwi");
+        const bool traceGradient =
+            gradientMaterial && switchUiGradientPicTraceCount < 16u;
+        const bool traceCap =
+            (capMaterial || capGeometry) && switchUiCapPicTraceCount < 32u;
+        if (traceGradient || traceCap)
+        {
+            const uint32_t traceIndex =
+                traceCap ? switchUiCapPicTraceCount : switchUiGradientPicTraceCount;
+            const MaterialTextureDef *texture =
+                material && material->textureTable && material->textureCount
+                    ? &material->textureTable[0] : nullptr;
+            const GfxImage *image =
+                texture && texture->semantic != TS_WATER_MAP
+                    ? texture->u.image : nullptr;
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI PIC INPUT] #%u kind=%s material=%s image=%s "
+                "rect=%.2f,%.2f %.2fx%.2f color=%s(%.3f,%.3f,%.3f,%.3f) "
+                "align=%d,%d\\n",
+                static_cast<unsigned>(traceIndex),
+                traceCap ? "cap" : "gradient",
+                materialName,
+                image && image->name ? image->name : "<null>",
+                x, y, w, h,
+                color ? "rgba" : "null",
+                color ? color[0] : -1.0f,
+                color ? color[1] : -1.0f,
+                color ? color[2] : -1.0f,
+                color ? color[3] : -1.0f,
+                horzAlign,
+                vertAlign);
+            Switch_LogWrite(trace);
+            if (traceCap)
+                ++switchUiCapPicTraceCount;
+            else
+                ++switchUiGradientPicTraceCount;
+        }
+    }
+#endif
     if (w >= 0.0)
     {
         s0 = 0.0;
