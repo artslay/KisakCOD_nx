@@ -6082,10 +6082,10 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
 
     Menu_UpdatePosition(dc->localClientNum, menu);
 #ifdef __SWITCH__
-    // player_profile is a fullscreen overlay over the animated main-menu
-    // backdrop drawn by Menu_PaintAll. Its own fullscreen material resolves
-    // to a solid white layer on Switch, so do not draw the profile menu's
-    // window/background; its child items still paint normally below.
+    // player_profile overlays the animated main-menu backdrop. Its window
+    // can paint an opaque white layer on Switch even when fullScreen is false,
+    // so omit the profile menu's window/background regardless of that flag.
+    // Keep the actual profile-list and button items painting normally below.
     const bool preserveSharedMainMenuBackdrop =
         menu->window.name &&
         !I_stricmp(menu->window.name, "player_profile");
