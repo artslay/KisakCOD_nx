@@ -8921,6 +8921,109 @@ void __cdecl Menu_PaintAll(UiContext *dc)
         }
     }
 
+#ifdef __SWITCH__
+    // Menu_PaintAll intentionally skips everything below the topmost fullscreen
+    // menu. In the stock UI, however, the profile picker, level picker, and
+    // confirmation popups are overlays over the existing main-menu scene. That
+    // scene's animated background layers live in main_text, not in each popup.
+    // Paint only those real background layers before the popup, rather than
+    // painting the whole main_text menu (which would also expose its buttons).
+    if (anyFullscreen &&
+        drawStart >= 0 &&
+        drawStart < dc->openMenuCount)
+    {
+        menuDef_t *foregroundMenu = dc->menuStack[drawStart];
+        const char *foregroundName =
+            foregroundMenu && foregroundMenu->window.name
+                ? foregroundMenu->window.name : "";
+
+        const bool needsMainMenuBackdrop =
+            !I_stricmp(foregroundName, "player_profile") ||
+            !I_stricmp(foregroundName, "levels") ||
+            !I_stricmp(foregroundName, "multi_popmenu") ||
+            !I_stricmp(foregroundName, "quit_popmenu");
+
+        if (needsMainMenuBackdrop)
+        {
+            menuDef_t *backdropMenu = Menus_FindByName(dc, "main_text");
+            bool backdropAlreadyInPaintRange = false;
+
+            for (int stackIndex = drawStart;
+                 stackIndex < dc->openMenuCount;
+                 ++stackIndex)
+            {
+                if (dc->menuStack[stackIndex] == backdropMenu)
+                {
+                    backdropAlreadyInPaintRange = true;
+                    break;
+                }
+            }
+
+            if (backdropMenu &&
+                backdropMenu != foregroundMenu &&
+                Menus_MenuIsInStack(dc, backdropMenu) &&
+                !backdropAlreadyInPaintRange &&
+                backdropMenu->items &&
+                backdropMenu->itemCount > 0)
+            {
+                for (int backgroundIndex = 0;
+                     backgroundIndex < backdropMenu->itemCount;
+                     ++backgroundIndex)
+                {
+                    itemDef_s *backgroundItem =
+                        backdropMenu->items[backgroundIndex];
+                    if (!backgroundItem ||
+                        Switch_UI_BadPointer(backgroundItem) ||
+                        backgroundItem->window.style != 3)
+                    {
+                        continue;
+                    }
+
+                    Material *backgroundMaterial =
+                        backgroundItem->window.background;
+                    if (!backgroundMaterial ||
+                        Switch_UI_BadPointer(backgroundMaterial) ||
+                        !backgroundMaterial->info.name)
+                    {
+                        continue;
+                    }
+
+                    const char *materialName = backgroundMaterial->info.name;
+                    const bool isAnimatedLayer =
+                        std::strncmp(materialName, "animbg_", 7) == 0;
+                    const bool isMainMenuLogo =
+                        !I_stricmp(materialName, "logo_cod2");
+                    if (!isAnimatedLayer && !isMainMenuLogo)
+                        continue;
+
+                    // Item_Paint preserves the original expressions for the
+                    // scrolling layers, resolves their actual materials, and
+                    // submits them through the normal renderer path.
+                    Item_Paint(dc, backgroundItem);
+
+                    static uint32_t switchSharedBackdropTraceCount = 0;
+                    if (switchSharedBackdropTraceCount < 24u)
+                    {
+                        char trace[384];
+                        std::snprintf(
+                            trace,
+                            sizeof(trace),
+                            "[KisakCOD][UI SHARED BACKDROP] target=%s source=main_text material=%s rect=%.1f,%.1f %.1fx%.1f action=painted_under_overlay\n",
+                            foregroundName,
+                            materialName,
+                            backgroundItem->window.rect.x,
+                            backgroundItem->window.rect.y,
+                            backgroundItem->window.rect.w,
+                            backgroundItem->window.rect.h);
+                        Switch_LogWrite(trace);
+                        ++switchSharedBackdropTraceCount;
+                    }
+                }
+            }
+        }
+    }
+#endif
+
     {
         PROF_SCOPED("Menu_PaintAll_PaintMenus");
         if (!anyFullscreen)
