@@ -5743,20 +5743,70 @@ int __cdecl Menus_AnyFullScreenVisible(UiContext *dc)
 
 char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
 {
+#ifdef __SWITCH__
+    const bool traceProfileVisibility =
+        menu && menu->window.name &&
+        !I_stricmp(menu->window.name, "player_profile");
+    auto traceProfileGate = [&](const char *reason, bool visible)
+    {
+        static uint32_t traceCount = 0;
+        if (!traceProfileVisibility || traceCount >= 48u)
+            return;
+
+        const int localClient = dc->localClientNum;
+        const char *topName =
+            dc->openMenuCount > 0 &&
+            dc->menuStack[dc->openMenuCount - 1] &&
+            dc->menuStack[dc->openMenuCount - 1]->window.name
+                ? dc->menuStack[dc->openMenuCount - 1]->window.name
+                : "<none>";
+        char trace[512];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI PROFILE VISIBILITY] visible=%u reason=%s menuFlags=%08x static=%08x ownerDrawFlags=%08x visibleExp=%u stack=%d top=%s\\n",
+            visible ? 1u : 0u,
+            reason,
+            static_cast<unsigned>(menu->window.dynamicFlags[localClient]),
+            static_cast<unsigned>(menu->window.staticFlags),
+            static_cast<unsigned>(menu->window.ownerDrawFlags),
+            static_cast<unsigned>(menu->visibleExp.numEntries),
+            dc->openMenuCount,
+            topName);
+        Switch_LogWrite(trace);
+        ++traceCount;
+    };
+#endif
     if (!Window_IsVisible(dc->localClientNum, &menu->window))
+    {
+#ifdef __SWITCH__
+        traceProfileGate("window_hidden", false);
+#endif
         return 0;
+    }
     if (menu->window.ownerDrawFlags && !UI_OwnerDrawVisible(menu->window.ownerDrawFlags))
+    {
+#ifdef __SWITCH__
+        traceProfileGate("owner_draw_hidden", false);
+#endif
         return 0;
+    }
     if ((menu->window.staticFlags & 0x20000000) != 0
         && CL_IsCgameInitialized(dc->localClientNum)
         && CG_ScopeIsOverlayed(dc->localClientNum))
     {
+#ifdef __SWITCH__
+        traceProfileGate("scope_overlay", false);
+#endif
         return 0;
     }
     if ((menu->window.staticFlags & 0x10000000) != 0
         && CL_IsCgameInitialized(dc->localClientNum)
         && CG_Flashbanged(dc->localClientNum))
     {
+#ifdef __SWITCH__
+        traceProfileGate("flashbanged", false);
+#endif
         return 0;
     }
     if ((menu->window.staticFlags & 0x40000000) != 0)
@@ -5764,16 +5814,29 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
         clientUIActive_t *clUI = CL_GetLocalClientUIGlobals(dc->localClientNum);
 
         if ((clUI->keyCatchers & KEYCATCH_UI) != 0)
+        {
+#ifdef __SWITCH__
+            traceProfileGate("ui_keycatcher", false);
+#endif
             return 0;
+        }
     }
-    if (!menu->visibleExp.numEntries || IsExpressionTrue(dc->localClientNum, &menu->visibleExp))
+    const bool visibleWhen =
+        !menu->visibleExp.numEntries ||
+        IsExpressionTrue(dc->localClientNum, &menu->visibleExp);
+#ifdef __SWITCH__
+    traceProfileGate(
+        visibleWhen ? "visible_when_true" : "visible_when_false",
+        visibleWhen);
+#endif
+    if (visibleWhen)
         return 1;
     if (uiscript_debug->current.integer)
     {
         if (menu->window.name)
-            Com_Printf(CON_CHANNEL_UI, "hiding the %s menu becuase the 'visible when' expression was false\n", menu->window.name);
+            Com_Printf(CON_CHANNEL_UI, "hiding the %s menu becuase the 'visible when' expression was false\\n", menu->window.name);
         else
-            Com_Printf(CON_CHANNEL_UI, "hiding the %s menu becuase the 'visible when' expression was false\n", "unnamed");
+            Com_Printf(CON_CHANNEL_UI, "hiding the %s menu becuase the 'visible when' expression was false\\n", "unnamed");
     }
     return 0;
 }
@@ -5978,7 +6041,8 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     const bool switchRelevantGateMenu =
         !I_stricmp(switchGateMenuName, "main_text") ||
         !I_stricmp(switchGateMenuName, "main") ||
-        !I_stricmp(switchGateMenuName, "options_graphics");
+        !I_stricmp(switchGateMenuName, "options_graphics") ||
+        !I_stricmp(switchGateMenuName, "player_profile");
     const bool switchMenuVisible = Menu_IsVisible(dc, menu);
     if (switchRelevantGateMenu)
     {
@@ -8958,6 +9022,36 @@ void __cdecl Menu_PaintAll(UiContext *dc)
     }
 
 #ifdef __SWITCH__
+    {
+        static uint32_t switchFullscreenPickTraceCount = 0;
+        if (switchFullscreenPickTraceCount < 24u)
+        {
+            const menuDef_t *picked =
+                drawStart >= 0 && drawStart < dc->openMenuCount
+                    ? dc->menuStack[drawStart] : nullptr;
+            const char *pickedName =
+                picked && picked->window.name
+                    ? picked->window.name : "<none>";
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI FULLSCREEN PICK] stack=%d drawStart=%d any=%u picked=%s fullScreen=%u flags=%08x visibleExp=%u\\n",
+                dc->openMenuCount,
+                drawStart,
+                anyFullscreen ? 1u : 0u,
+                pickedName,
+                picked && picked->fullScreen ? 1u : 0u,
+                picked ? static_cast<unsigned>(
+                    picked->window.dynamicFlags[dc->localClientNum]) : 0u,
+                picked ? static_cast<unsigned>(picked->visibleExp.numEntries) : 0u);
+            Switch_LogWrite(trace);
+            ++switchFullscreenPickTraceCount;
+        }
+    }
+#endif
+
+#ifdef __SWITCH__
     // Menu_PaintAll intentionally skips everything below the topmost fullscreen
     // menu. In the stock UI, however, the profile picker, level picker, and
     // confirmation popups are overlays over the existing main-menu scene. That
@@ -9003,6 +9097,31 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                     break;
                 }
             }
+
+#ifdef __SWITCH__
+            if (!I_stricmp(foregroundName, "player_profile"))
+            {
+                static uint32_t switchProfileBackdropDecisionCount = 0;
+                if (switchProfileBackdropDecisionCount < 24u)
+                {
+                    char trace[448];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[KisakCOD][UI PROFILE BACKDROP] stack=%d drawStart=%d foreground=%p backdrop=%p backdropName=%s items=%d alreadyInRange=%u\\n",
+                        dc->openMenuCount,
+                        drawStart,
+                        static_cast<void *>(foregroundMenu),
+                        static_cast<void *>(backdropMenu),
+                        backdropMenu && backdropMenu->window.name
+                            ? backdropMenu->window.name : "<none>",
+                        backdropMenu ? backdropMenu->itemCount : -1,
+                        backdropAlreadyInPaintRange ? 1u : 0u);
+                    Switch_LogWrite(trace);
+                    ++switchProfileBackdropDecisionCount;
+                }
+            }
+#endif
 
             if (backdropMenu &&
                 backdropMenu != foregroundMenu &&
