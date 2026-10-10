@@ -9318,7 +9318,7 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                                 std::snprintf(
                                     trace,
                                     sizeof(trace),
-                                    "[KisakCOD][UI PROFILE BLUR MATERIAL] requested=%s action=unavailable\\n",
+                                    "[KisakCOD][UI PROFILE BLUR MATERIAL] requested=%s action=unavailable\n",
                                     profileBlurMaterialName);
                                 Switch_LogWrite(trace);
                                 ++missingProfileBlurTraceCount;
