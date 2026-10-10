@@ -6773,7 +6773,6 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                     Material *capMaterial =
                         Material_RegisterHandle("button_highlight_end", item->imageTrack);
                     if (capMaterial &&
-                        capMaterial != rgp.defaultMaterial &&
                         !Material_IsDefault(capMaterial) &&
                         capMaterial->info.name &&
                         !I_stricmp(capMaterial->info.name, "button_highlight_end"))
