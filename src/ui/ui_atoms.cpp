@@ -6,6 +6,7 @@
 
 #ifdef __SWITCH__
 #include <cstdio>
+#include <gfx_d3d/r_image.h>
 extern void Switch_LogWrite(const char *msg);
 #endif
 
