@@ -9023,8 +9023,38 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                         continue;
                     }
 
+                    // The profile picker can be the first menu painted after
+                    // startup. In that path main_text's material expressions have not
+                    // necessarily been evaluated yet, so its real backdrop materials
+                    // still have null window.background pointers. Resolve the authored
+                    // material expression here using the same engine path as Item_Paint
+                    // before deciding whether this item is one of the shared layers.
                     Material *backgroundMaterial =
                         backgroundItem->window.background;
+                    if ((!backgroundMaterial ||
+                         Switch_UI_BadPointer(backgroundMaterial)) &&
+                        backgroundItem->materialExp.numEntries)
+                    {
+                        const char *expressionMaterialName =
+                            GetExpressionResultString(
+                                dc->localClientNum,
+                                &backgroundItem->materialExp);
+                        if (expressionMaterialName && *expressionMaterialName)
+                        {
+                            char resolvedMaterialName[64];
+                            I_strncpyz(
+                                resolvedMaterialName,
+                                expressionMaterialName,
+                                sizeof(resolvedMaterialName));
+                            I_strlwr(resolvedMaterialName);
+                            backgroundMaterial = Material_RegisterHandle(
+                                resolvedMaterialName,
+                                backgroundItem->imageTrack);
+                            backgroundItem->window.background =
+                                backgroundMaterial;
+                        }
+                    }
+
                     if (!backgroundMaterial ||
                         Switch_UI_BadPointer(backgroundMaterial) ||
                         !backgroundMaterial->info.name)
