@@ -9049,7 +9049,7 @@ void __cdecl Menu_PaintAll(UiContext *dc)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI FULLSCREEN PICK] stack=%d drawStart=%d any=%u picked=%s fullScreen=%u flags=%08x visibleExp=%u\\n",
+                "[KisakCOD][UI FULLSCREEN PICK] stack=%d drawStart=%d any=%u picked=%s fullScreen=%u flags=%08x visibleExp=%u\n",
                 dc->openMenuCount,
                 drawStart,
                 anyFullscreen ? 1u : 0u,
