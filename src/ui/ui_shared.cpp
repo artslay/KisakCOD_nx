@@ -5869,8 +5869,49 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     }
 #endif
 
+#ifdef __SWITCH__
+    const char *switchGateMenuName =
+        menu->window.name ? menu->window.name : "<null>";
+    const bool switchRelevantGateMenu =
+        !I_stricmp(switchGateMenuName, "main_text") ||
+        !I_stricmp(switchGateMenuName, "main") ||
+        !I_stricmp(switchGateMenuName, "options_graphics");
+    const bool switchMenuVisible = Menu_IsVisible(dc, menu);
+    if (switchRelevantGateMenu)
+    {
+        static uint32_t switchMenuGateTraceCount[3] = {0, 0, 0};
+        const unsigned switchGateSlot =
+            !I_stricmp(switchGateMenuName, "main_text") ? 0u :
+            !I_stricmp(switchGateMenuName, "main") ? 1u : 2u;
+        if (switchMenuGateTraceCount[switchGateSlot] < 8u)
+        {
+            char trace[640];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI MENU PAINT GATE] menu=%s visible=%u items=%d fullScreen=%u flags=%08x static=%08x showOnly=%s rect=%.1f,%.1f %.1fx%.1f\\n",
+                switchGateMenuName,
+                switchMenuVisible ? 1u : 0u,
+                menu->itemCount,
+                menu->fullScreen ? 1u : 0u,
+                static_cast<unsigned>(menu->window.dynamicFlags[dc->localClientNum]),
+                static_cast<unsigned>(menu->window.staticFlags),
+                ui_showMenuOnly->current.string[0]
+                    ? ui_showMenuOnly->current.string : "<none>",
+                menu->window.rect.x,
+                menu->window.rect.y,
+                menu->window.rect.w,
+                menu->window.rect.h);
+            Switch_LogWrite(trace);
+            ++switchMenuGateTraceCount[switchGateSlot];
+        }
+    }
+    if (!switchMenuVisible)
+    {
+#else
     if (!Menu_IsVisible(dc, menu))
     {
+#endif
 #ifdef __SWITCH__
         if (menu->window.name && !I_stricmp(menu->window.name, "main"))
         {
@@ -5981,6 +6022,36 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
                 ++switchInvalidMenuItemTraceCount;
             }
             continue;
+        }
+        const char *switchLoopMenuName =
+            menu->window.name ? menu->window.name : "<null>";
+        if (!I_stricmp(switchLoopMenuName, "main_text") ||
+            !I_stricmp(switchLoopMenuName, "main") ||
+            !I_stricmp(switchLoopMenuName, "options_graphics"))
+        {
+            static uint32_t switchMenuItemCallCount[3] = {0, 0, 0};
+            const unsigned switchLoopSlot =
+                !I_stricmp(switchLoopMenuName, "main_text") ? 0u :
+                !I_stricmp(switchLoopMenuName, "main") ? 1u : 2u;
+            if (switchMenuItemCallCount[switchLoopSlot] < 32u)
+            {
+                char trace[512];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][UI MENU ITEM CALL] menu=%s index=%d/%d item=%s ptr=%p type=%d style=%d flags=%08x focus=%u\\n",
+                    switchLoopMenuName,
+                    i,
+                    menu->itemCount,
+                    item->window.name ? item->window.name : "<null>",
+                    static_cast<void *>(item),
+                    item->type,
+                    item->window.style,
+                    static_cast<unsigned>(item->window.dynamicFlags[dc->localClientNum]),
+                    Window_HasFocus(dc->localClientNum, &item->window) ? 1u : 0u);
+                Switch_LogWrite(trace);
+                ++switchMenuItemCallCount[switchLoopSlot];
+            }
         }
         Item_Paint(dc, item);
 #else
