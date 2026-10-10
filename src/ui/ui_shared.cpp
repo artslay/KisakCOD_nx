@@ -3369,6 +3369,109 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
 #endif
     }
 #ifdef __SWITCH__
+    // The Switch UI is navigated with the controller and normally has no
+    // mouse-hover event to assign a focused item. The stock desktop path only
+    // updates item focus here when the cursor is visible; on Switch, a menu can
+    // therefore own focus while every child remains unfocused. Preserve any
+    // focus established by the menu's onOpen script, and only select a visible,
+    // actionable item when the active menu still has no focused child.
+    if (Menus_MenuIsInStack(dc, menu) &&
+        Window_HasFocus(dc->localClientNum, &menu->window))
+    {
+        int focusedItemIndex = -1;
+        for (int focusIndex = 0; focusIndex < menu->itemCount; ++focusIndex)
+        {
+            itemDef_s *focusCandidate =
+                menu->items ? menu->items[focusIndex] : nullptr;
+            if (!focusCandidate || Switch_UI_BadPointer(focusCandidate))
+                continue;
+
+            if (Window_HasFocus(dc->localClientNum, &focusCandidate->window) &&
+                Item_IsVisible(dc->localClientNum, focusCandidate))
+            {
+                focusedItemIndex = focusIndex;
+                break;
+            }
+        }
+
+        if (focusedItemIndex < 0 && menu->items && menu->itemCount > 0)
+        {
+            int startIndex = menu->cursorItem[dc->localClientNum];
+            if (startIndex < 0 || startIndex >= menu->itemCount)
+                startIndex = 0;
+
+            for (int offset = 0; offset < menu->itemCount; ++offset)
+            {
+                const int candidateIndex = (startIndex + offset) % menu->itemCount;
+                itemDef_s *focusCandidate = menu->items[candidateIndex];
+                if (!focusCandidate || Switch_UI_BadPointer(focusCandidate))
+                    continue;
+                if (focusCandidate->type == 0 ||
+                    (focusCandidate->window.staticFlags & 0x100000) != 0)
+                {
+                    continue;
+                }
+                if (!Window_IsVisible(dc->localClientNum, &focusCandidate->window) ||
+                    !Item_IsVisible(dc->localClientNum, focusCandidate))
+                {
+                    continue;
+                }
+                if ((focusCandidate->dvarFlags & 0xCu) != 0 &&
+                    !Item_EnableShowViaDvar(focusCandidate, 4))
+                {
+                    continue;
+                }
+
+                if (Item_SetFocus(
+                        dc,
+                        focusCandidate,
+                        focusCandidate->window.rect.x,
+                        focusCandidate->window.rect.y) &&
+                    Window_HasFocus(dc->localClientNum, &focusCandidate->window))
+                {
+                    Menu_SetCursorItem(dc->localClientNum, menu, candidateIndex);
+                    focusedItemIndex = candidateIndex;
+                    break;
+                }
+
+                // An onFocus script may have opened another menu. Do not keep
+                // assigning focus to an underlying menu in that case.
+                if (!Menus_MenuIsInStack(dc, menu) ||
+                    !Window_HasFocus(dc->localClientNum, &menu->window))
+                {
+                    break;
+                }
+            }
+        }
+
+        static uint32_t switchInitialFocusTraceCount = 0;
+        if (switchInitialFocusTraceCount < 32u)
+        {
+            itemDef_s *focusedItem = focusedItemIndex >= 0
+                ? menu->items[focusedItemIndex]
+                : nullptr;
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI MENU INITIAL FOCUS] menu=%s focused=%u index=%d cursor=%d item=%s type=%d menuFlags=%08x itemFlags=%08x\\n",
+                menu->window.name ? menu->window.name : "<null>",
+                focusedItemIndex >= 0 ? 1u : 0u,
+                focusedItemIndex,
+                menu->cursorItem[dc->localClientNum],
+                focusedItem && focusedItem->window.name
+                    ? focusedItem->window.name : "<null>",
+                focusedItem ? focusedItem->type : -1,
+                static_cast<unsigned>(menu->window.dynamicFlags[dc->localClientNum]),
+                focusedItem
+                    ? static_cast<unsigned>(focusedItem->window.dynamicFlags[dc->localClientNum])
+                    : 0u);
+            Switch_LogWrite(trace);
+            ++switchInitialFocusTraceCount;
+        }
+    }
+#endif
+#ifdef __SWITCH__
     if (traceMain)
         g_switchFrameStage =
             "frame/cl_frame/disconnected_set_menu/main_open/post_sound_branch";
