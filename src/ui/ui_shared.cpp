@@ -7314,7 +7314,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                         std::snprintf(
                             trace,
                             sizeof(trace),
-                            "[KisakCOD][UI PROFILE PLAQUE] defaultMaterial=%d tint=%.3f,%.3f,%.3f,%.3f rect=%.1f,%.1f %.1fx%.1f action=native_material\\n",
+                            "[KisakCOD][UI PROFILE PLAQUE] defaultMaterial=%d tint=%.3f,%.3f,%.3f,%.3f rect=%.1f,%.1f %.1fx%.1f action=native_material\n",
                             Material_IsDefault(item->window.background) ? 1 : 0,
                             item->window.foreColor[0],
                             item->window.foreColor[1],
