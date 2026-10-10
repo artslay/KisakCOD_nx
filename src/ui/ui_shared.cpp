@@ -6521,7 +6521,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI ITEM CANDIDATE] menu=%s item=%s index=%u type=%d style=%d focus=%u visible=%u flags=%08x static=%08x itemFlags=%08x materialExp=%d background=%s rect=%.1f,%.1f %.1fx%.1f foreColor=%.3f,%.3f,%.3f,%.3f text=%s\\n",
+                "[KisakCOD][UI ITEM CANDIDATE] menu=%s item=%s index=%u type=%d style=%d focus=%u visible=%u flags=%08x static=%08x itemFlags=%08x materialExp=%d background=%s rect=%.1f,%.1f %.1fx%.1f foreColor=%.3f,%.3f,%.3f,%.3f text=%s\n",
                 switchMenuName,
                 item->window.name ? item->window.name : "<null>",
                 static_cast<unsigned>(switchItemCandidateCount[switchMenuSlot]),
