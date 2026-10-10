@@ -7215,7 +7215,6 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                 // Suppress only that screen-covering white fill; Item_Paint continues
                 // below so any text/control payload on the item is still processed.
                 bool suppressProfileWhiteBackdrop = false;
-                bool suppressProfileHeaderGradientLine = false;
                 if (parent &&
                     parent->window.name &&
                     !I_stricmp(parent->window.name, "player_profile") &&
@@ -7286,82 +7285,63 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                         }
                     }
                 }
-                // The stock player_profile title uses three line_horizontal
-                // decorations around "Select Profile". Their ends should fade out
-                // symmetrically instead of stopping abruptly. Replace only those
-                // three authored header rules with mirrored halves of the real
-                // gradient_fadein material; negative width flips the right half.
+                // Draw the title's side fades from the same gradient material used
+                // by the stock menu highlight. The title occupies the right-aligned
+                // rect (-360, 75, 240, 24); place one fade on each side of its centered
+                // text. A negative width mirrors the texture so both fades approach
+                // the title strongly and disappear toward the outer edges.
                 if (parent &&
                     parent->window.name &&
                     !I_stricmp(parent->window.name, "player_profile") &&
-                    item->window.style == 3 &&
-                    item->window.background &&
-                    !Switch_UI_BadPointer(item->window.background) &&
-                    item->window.background->info.name)
+                    item->window.style == 0 &&
+                    item->textExp.numEntries > 0)
                 {
-                    const char *profileHeaderMaterialName =
-                        item->window.background->info.name;
-                    const bool horizontalRuleMaterial =
-                        !I_stricmp(profileHeaderMaterialName, "line_horizontal") ||
-                        !I_stricmp(profileHeaderMaterialName, "images/line_horizontal");
-                    if (horizontalRuleMaterial)
+                    const rectDef_s &titleRect = item->window.rect;
+                    const bool isProfileTitle =
+                        titleRect.x > -360.1f && titleRect.x < -359.9f &&
+                        titleRect.y > 74.9f && titleRect.y < 75.1f &&
+                        titleRect.w > 239.9f && titleRect.w < 240.1f &&
+                        titleRect.h > 23.9f && titleRect.h < 24.1f;
+                    if (isProfileTitle)
                     {
-                        const rectDef_s &headerRect = item->window.rect;
-                        const float x = headerRect.x;
-                        const float y = headerRect.y;
-                        const float w = headerRect.w;
-                        const float h = headerRect.h;
-                        const bool thinHeaderRule =
-                            x > -360.1f && x < -359.9f &&
-                            w > 239.9f && w < 240.1f &&
-                            h > 0.4f && h < 0.6f &&
-                            ((y > 82.9f && y < 83.1f) ||
-                             (y > 94.9f && y < 95.1f));
-                        const bool headerGlow =
-                            x > -340.1f && x < -339.9f &&
-                            y > 83.9f && y < 84.1f &&
-                            w > 199.9f && w < 200.1f &&
-                            h > 9.9f && h < 10.1f;
-
-                        if (thinHeaderRule || headerGlow)
+                        Material *gradientMaterial =
+                            Material_RegisterHandle("gradient_fadein", item->imageTrack);
+                        if (gradientMaterial &&
+                            !Switch_UI_BadPointer(gradientMaterial) &&
+                            !Material_IsDefault(gradientMaterial) &&
+                            gradientMaterial->info.name &&
+                            (!I_stricmp(gradientMaterial->info.name, "gradient_fadein") ||
+                             !I_stricmp(gradientMaterial->info.name, "images/gradient_fadein")))
                         {
-                            Material *gradientMaterial =
-                                Material_RegisterHandle("gradient_fadein", item->imageTrack);
-                            if (gradientMaterial &&
-                                !Switch_UI_BadPointer(gradientMaterial) &&
-                                !Material_IsDefault(gradientMaterial) &&
-                                gradientMaterial->info.name &&
-                                (!I_stricmp(gradientMaterial->info.name, "gradient_fadein") ||
-                                 !I_stricmp(gradientMaterial->info.name, "images/gradient_fadein")))
-                            {
-                                const float leftWidth = w * 0.5f;
-                                UI_DrawHandlePic(
-                                    &scrPlaceFull,
-                                    x,
-                                    y,
-                                    leftWidth,
-                                    h,
-                                    headerRect.horzAlign,
-                                    headerRect.vertAlign,
-                                    item->window.foreColor,
-                                    gradientMaterial);
-                                UI_DrawHandlePic(
-                                    &scrPlaceFull,
-                                    x + leftWidth,
-                                    y,
-                                    -(w - leftWidth),
-                                    h,
-                                    headerRect.horzAlign,
-                                    headerRect.vertAlign,
-                                    item->window.foreColor,
-                                    gradientMaterial);
-                                suppressProfileHeaderGradientLine = true;
-                            }
+                            const float sideFadeWidth = 65.0f;
+                            const float sideFadeHeight = 2.5f;
+                            const float sideFadeY =
+                                titleRect.y + (titleRect.h - sideFadeHeight) * 0.5f;
+                            UI_DrawHandlePic(
+                                &scrPlaceView[dc->localClientNum],
+                                titleRect.x,
+                                sideFadeY,
+                                sideFadeWidth,
+                                sideFadeHeight,
+                                titleRect.horzAlign,
+                                titleRect.vertAlign,
+                                item->window.foreColor,
+                                gradientMaterial);
+                            UI_DrawHandlePic(
+                                &scrPlaceView[dc->localClientNum],
+                                titleRect.x + titleRect.w - sideFadeWidth,
+                                sideFadeY,
+                                -sideFadeWidth,
+                                sideFadeHeight,
+                                titleRect.horzAlign,
+                                titleRect.vertAlign,
+                                item->window.foreColor,
+                                gradientMaterial);
                         }
                     }
                 }
 
-                if (!suppressProfileWhiteBackdrop && !suppressProfileHeaderGradientLine)
+                if (!suppressProfileWhiteBackdrop)
                     Window_Paint(dc, &item->window, parent->fadeAmount, parent->fadeInAmount, parent->fadeClamp, fadeCycle);
 #else
                 Window_Paint(dc, &item->window, parent->fadeAmount, parent->fadeInAmount, parent->fadeClamp, fadeCycle);
