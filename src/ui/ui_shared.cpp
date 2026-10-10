@@ -5873,7 +5873,8 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         const bool traceMenu =
             !I_stricmp(menuName, "main_text") ||
             !I_stricmp(menuName, "main") ||
-            !I_stricmp(menuName, "options_graphics");
+            !I_stricmp(menuName, "options_graphics") ||
+            !I_stricmp(menuName, "player_profile");
 
         // Trace each relevant menu once. The old global-per-frame counter was
         // exhausted by repeated main_text paints before it reached later menus.
@@ -6086,7 +6087,6 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     // to a solid white layer on Switch, so do not draw the profile menu's
     // window/background; its child items still paint normally below.
     const bool preserveSharedMainMenuBackdrop =
-        menu->fullScreen &&
         menu->window.name &&
         !I_stricmp(menu->window.name, "player_profile");
 #else
