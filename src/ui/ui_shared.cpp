@@ -7290,7 +7290,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                 // decorations around "Select Profile". Their ends should fade out
                 // symmetrically instead of stopping abruptly. Replace only those
                 // three authored header rules with mirrored halves of the real
-                // gradient_fadein material; negative width flips the left half.
+                // gradient_fadein material; negative width flips the right half.
                 if (parent &&
                     parent->window.name &&
                     !I_stricmp(parent->window.name, "player_profile") &&
@@ -7339,7 +7339,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                                     &scrPlaceFull,
                                     x,
                                     y,
-                                    -leftWidth,
+                                    leftWidth,
                                     h,
                                     headerRect.horzAlign,
                                     headerRect.vertAlign,
@@ -7349,7 +7349,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                                     &scrPlaceFull,
                                     x + leftWidth,
                                     y,
-                                    w - leftWidth,
+                                    -(w - leftWidth),
                                     h,
                                     headerRect.horzAlign,
                                     headerRect.vertAlign,
