@@ -7206,7 +7206,90 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
 #endif
                 fadeCycle = (float)parent->fadeCycle;
 
+#ifdef __SWITCH__
+                // player_profile is an overlay over main_text's animated backdrop.
+                // Window_Paint's style-3 path substitutes the shared white material
+                // when a shader item's background pointer is null. If that item spans
+                // the whole logical screen and has an opaque white tint, drawing it
+                // here erases the backdrop before the profile controls are painted.
+                // Suppress only that screen-covering white fill; Item_Paint continues
+                // below so any text/control payload on the item is still processed.
+                bool suppressProfileWhiteBackdrop = false;
+                if (parent &&
+                    parent->window.name &&
+                    !I_stricmp(parent->window.name, "player_profile") &&
+                    item->window.style == 3 &&
+                    item->window.foreColor[0] >= 0.99f &&
+                    item->window.foreColor[1] >= 0.99f &&
+                    item->window.foreColor[2] >= 0.99f &&
+                    item->window.foreColor[3] >= 0.99f)
+                {
+                    const float rectX0 = item->window.rect.x;
+                    const float rectX1 = rectX0 + item->window.rect.w;
+                    const float rectY0 = item->window.rect.y;
+                    const float rectY1 = rectY0 + item->window.rect.h;
+                    const float left = rectX0 < rectX1 ? rectX0 : rectX1;
+                    const float right = rectX0 > rectX1 ? rectX0 : rectX1;
+                    const float top = rectY0 < rectY1 ? rectY0 : rectY1;
+                    const float bottom = rectY0 > rectY1 ? rectY0 : rectY1;
+                    const bool coversLogicalScreen =
+                        left <= 0.01f && top <= 0.01f &&
+                        right >= 639.99f && bottom >= 479.99f;
+
+                    const Material *background = item->window.background;
+                    const char *backgroundName =
+                        background && background->info.name
+                            ? background->info.name : "";
+                    const bool whiteFillMaterial =
+                        !background ||
+                        Material_IsDefault(background) ||
+                        !I_stricmp(backgroundName, "white") ||
+                        !I_stricmp(backgroundName, "$white") ||
+                        !I_stricmp(backgroundName, "images/white") ||
+                        !I_stricmp(backgroundName, "default");
+
+                    suppressProfileWhiteBackdrop =
+                        coversLogicalScreen && whiteFillMaterial;
+                    if (suppressProfileWhiteBackdrop)
+                    {
+                        static const itemDef_s *tracedProfileWhiteItems[64] = {};
+                        static uint32_t tracedProfileWhiteItemCount = 0;
+                        bool alreadyTraced = false;
+                        for (uint32_t traceIndex = 0;
+                             traceIndex < tracedProfileWhiteItemCount;
+                             ++traceIndex)
+                        {
+                            if (tracedProfileWhiteItems[traceIndex] == item)
+                            {
+                                alreadyTraced = true;
+                                break;
+                            }
+                        }
+                        if (!alreadyTraced &&
+                            tracedProfileWhiteItemCount <
+                                ARRAY_COUNT(tracedProfileWhiteItems))
+                        {
+                            char trace[384];
+                            std::snprintf(
+                                trace,
+                                sizeof(trace),
+                                "[KisakCOD][UI PROFILE WHITE OVERLAY] item=%s bg=%s rect=%.1f,%.1f %.1fx%.1f action=skipped_opaque_white_fill\\n",
+                                item->window.name ? item->window.name : "<null>",
+                                *backgroundName ? backgroundName : "<null>",
+                                item->window.rect.x,
+                                item->window.rect.y,
+                                item->window.rect.w,
+                                item->window.rect.h);
+                            Switch_LogWrite(trace);
+                            tracedProfileWhiteItems[tracedProfileWhiteItemCount++] = item;
+                        }
+                    }
+                }
+                if (!suppressProfileWhiteBackdrop)
+                    Window_Paint(dc, &item->window, parent->fadeAmount, parent->fadeInAmount, parent->fadeClamp, fadeCycle);
+#else
                 Window_Paint(dc, &item->window, parent->fadeAmount, parent->fadeInAmount, parent->fadeClamp, fadeCycle);
+#endif
                 if (g_debugMode)
                 {
                     r = Item_CorrectedTextRect(dc->localClientNum, item);
