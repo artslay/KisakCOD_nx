@@ -1,4 +1,5 @@
 #include <universal/q_shared.h>
+#include <cstdio>
 #include "r_shade.h"
 #include "r_state.h"
 #include "rb_logfile.h"
@@ -556,7 +557,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
             "[KisakCOD][UI PASS] material=%s image0=%s techType=%u pass=%u "
             "view=%u entry=%u stateCount=%u state0=%08x state1=%08x "
             "blend=%u src=%u dst=%u op=%u srcA=%u dstA=%u opA=%u "
-            "vertexShader=%s pixelShader=%s\\n",
+            "vertexShader=%s pixelShader=%s\n",
             switchUiMaterialName,
             switchImageName,
             static_cast<unsigned>(context.state->techType),
