@@ -6337,10 +6337,29 @@ void __cdecl Window_Paint(
                     "localClientNum doesn't index MAX_POSSIBLE_LOCAL_CLIENTS\n\t%i not in [0, %i)",
                     v11,
                     1);
+#ifdef __SWITCH__
+            // Some fastfile UI decoration windows carry their authored tint in
+            // foreColor but never receive the transient 0x10000 dynamic bit on
+            // this port. Passing nullptr for those windows turns the intended
+            // alpha/color into opaque white. Preserve the engine's null-color
+            // behavior for untinted image layers, but always honor a meaningful
+            // authored tint (including alpha) on style-3 shader windows.
+            const bool hasAuthoredTint =
+                w->foreColor[3] > 0.0f &&
+                (w->foreColor[3] < 0.999f ||
+                 w->foreColor[0] < 0.999f ||
+                 w->foreColor[1] < 0.999f ||
+                 w->foreColor[2] < 0.999f);
+            if ((w->dynamicFlags[v11] & 0x10000) != 0 || hasAuthoredTint)
+                v8 = w->foreColor;
+            else
+                v8 = 0;
+#else
             if ((w->dynamicFlags[v11] & 0x10000) != 0)
                 v8 = w->foreColor;
             else
                 v8 = 0;
+#endif
             foreColor = v8;
             if (w->background)
             {
@@ -6767,16 +6786,16 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                 // the opposite order. Unpaired separators, panels, and control backgrounds
                 // are deliberately left alone.
                 if (item->window.style == 3 &&
-                    !item->window.background &&
+                    (!item->window.background || Material_IsDefault(item->window.background)) &&
                     item->parent &&
                     item->parent->items &&
                     item->parent->itemCount > 0 &&
-                    item->window.rect.w >= 100.0f &&
-                    item->window.rect.w <= 240.0f &&
-                    item->window.rect.h >= 19.5f &&
-                    item->window.rect.h <= 22.5f &&
-                    item->window.foreColor[3] >= 0.03f &&
-                    item->window.foreColor[3] <= 0.45f)
+                    item->window.rect.w >= 40.0f &&
+                    item->window.rect.w <= 640.0f &&
+                    item->window.rect.h >= 8.0f &&
+                    item->window.rect.h <= 48.0f &&
+                    item->window.foreColor[3] >= 0.01f &&
+                    item->window.foreColor[3] <= 0.85f)
                 {
                     bool hasPairedCap = false;
                     const rectDef_s &gradientRect = item->window.rect;
@@ -6789,8 +6808,8 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                             continue;
 
                         const rectDef_s &capRect = sibling->window.rect;
-                        if (capRect.w < 4.5f || capRect.w > 6.0f ||
-                            capRect.h < 19.5f || capRect.h > 22.5f ||
+                        if (capRect.w < 2.0f || capRect.w > 24.0f ||
+                            capRect.h < 8.0f || capRect.h > 48.0f ||
                             capRect.x < gradientRect.x + gradientRect.w - 0.1f ||
                             capRect.x > gradientRect.x + gradientRect.w + 0.1f ||
                             capRect.y < gradientRect.y - 0.1f ||
@@ -6854,16 +6873,16 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                 }
 
                 if (item->window.style == 3 &&
-                    !item->window.background &&
+                    (!item->window.background || Material_IsDefault(item->window.background)) &&
                     item->parent &&
                     item->parent->items &&
                     item->parent->itemCount > 0 &&
-                    item->window.rect.w >= 4.5f &&
-                    item->window.rect.w <= 6.0f &&
-                    item->window.rect.h >= 19.5f &&
-                    item->window.rect.h <= 22.5f &&
-                    item->window.foreColor[3] >= 0.03f &&
-                    item->window.foreColor[3] <= 0.45f)
+                    item->window.rect.w >= 2.0f &&
+                    item->window.rect.w <= 24.0f &&
+                    item->window.rect.h >= 8.0f &&
+                    item->window.rect.h <= 48.0f &&
+                    item->window.foreColor[3] >= 0.01f &&
+                    item->window.foreColor[3] <= 0.85f)
                 {
                     bool hasPairedGradient = false;
                     const rectDef_s &capRect = item->window.rect;
@@ -6877,8 +6896,8 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
 
                         const rectDef_s &gradientRect = sibling->window.rect;
                         const float rightEdge = gradientRect.x + gradientRect.w;
-                        if (gradientRect.w < 100.0f || gradientRect.w > 240.0f ||
-                            gradientRect.h < 19.5f || gradientRect.h > 22.5f ||
+                        if (gradientRect.w < 40.0f || gradientRect.w > 640.0f ||
+                            gradientRect.h < 8.0f || gradientRect.h > 48.0f ||
                             rightEdge < capRect.x - 0.1f ||
                             rightEdge > capRect.x + 0.1f ||
                             gradientRect.y < capRect.y - 0.1f ||
@@ -8937,7 +8956,16 @@ void __cdecl Menu_PaintAll(UiContext *dc)
             foregroundMenu && foregroundMenu->window.name
                 ? foregroundMenu->window.name : "";
 
+        // The options pages use the same main-menu scene behind their
+        // translucent panels. Do not infer the set from the open-menu stack:
+        // some stock transitions replace main_text instead of keeping it below
+        // the fullscreen page, but its loaded material items are still the
+        // authoritative animated backdrop.
+        const bool isOptionsMenu =
+            std::strncmp(foregroundName, "options_", 8) == 0 ||
+            !I_stricmp(foregroundName, "options");
         const bool needsMainMenuBackdrop =
+            isOptionsMenu ||
             !I_stricmp(foregroundName, "player_profile") ||
             !I_stricmp(foregroundName, "levels") ||
             !I_stricmp(foregroundName, "multi_popmenu") ||
@@ -8961,7 +8989,6 @@ void __cdecl Menu_PaintAll(UiContext *dc)
 
             if (backdropMenu &&
                 backdropMenu != foregroundMenu &&
-                Menus_MenuIsInStack(dc, backdropMenu) &&
                 !backdropAlreadyInPaintRange &&
                 backdropMenu->items &&
                 backdropMenu->itemCount > 0)
