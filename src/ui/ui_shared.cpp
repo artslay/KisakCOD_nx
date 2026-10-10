@@ -6817,6 +6817,84 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                         }
                     }
                 }
+
+                // The selected main_text row has a separate authored left
+                // highlight (gradient_fadein) with borderSize=2 and alpha=0.35.
+                // On Switch, its fastfile instance can lose the background
+                // pointer even though the row geometry and authored highlight
+                // colors are intact. Restore only that exact selected-row shape
+                // using the stock engine material so its alpha gradient is
+                // sampled normally; do not synthesize a gradient in the renderer.
+                if (item->window.style == 3 &&
+                    !item->window.background &&
+                    item->parent &&
+                    item->parent->window.name &&
+                    !I_stricmp(item->parent->window.name, "main_text") &&
+                    item->window.rect.x >= -0.1f &&
+                    item->window.rect.x <= 0.1f &&
+                    item->window.rect.w >= 214.4f &&
+                    item->window.rect.w <= 214.6f &&
+                    item->window.rect.h >= 21.9f &&
+                    item->window.rect.h <= 22.1f &&
+                    item->window.borderSize >= 1.9f &&
+                    item->window.borderSize <= 2.1f &&
+                    item->window.foreColor[3] >= 0.30f &&
+                    item->window.foreColor[3] <= 0.40f &&
+                    item->window.borderColor[3] >= 0.35f &&
+                    item->window.borderColor[3] <= 0.45f)
+                {
+                    Material *gradientMaterial =
+                        Material_RegisterHandle("gradient_fadein", item->imageTrack);
+                    if (gradientMaterial &&
+                        !Material_IsDefault(gradientMaterial) &&
+                        gradientMaterial->info.name &&
+                        !I_stricmp(gradientMaterial->info.name, "gradient_fadein"))
+                    {
+                        item->window.background = gradientMaterial;
+                        static uint32_t switchUiHighlightGradientTraceCount = 0;
+                        if (switchUiHighlightGradientTraceCount < 8u)
+                        {
+                            char trace[416];
+                            std::snprintf(
+                                trace,
+                                sizeof(trace),
+                                "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f borderSize=%.1f material=%s action=restored ptr=%p\\n",
+                                item->window.rect.x,
+                                item->window.rect.y,
+                                item->window.rect.w,
+                                item->window.rect.h,
+                                item->window.foreColor[3],
+                                item->window.borderSize,
+                                gradientMaterial->info.name,
+                                static_cast<void *>(gradientMaterial));
+                            Switch_LogWrite(trace);
+                            ++switchUiHighlightGradientTraceCount;
+                        }
+                    }
+                    else
+                    {
+                        static uint32_t switchUiHighlightGradientMissTraceCount = 0;
+                        if (switchUiHighlightGradientMissTraceCount < 4u)
+                        {
+                            char trace[416];
+                            std::snprintf(
+                                trace,
+                                sizeof(trace),
+                                "[KisakCOD][UI HIGHLIGHT GRADIENT] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f alpha=%.3f borderSize=%.1f material=gradient_fadein result=%s action=preserve_null_background\\n",
+                                item->window.rect.x,
+                                item->window.rect.y,
+                                item->window.rect.w,
+                                item->window.rect.h,
+                                item->window.foreColor[3],
+                                item->window.borderSize,
+                                gradientMaterial && gradientMaterial->info.name
+                                    ? gradientMaterial->info.name : "<null>");
+                            Switch_LogWrite(trace);
+                            ++switchUiHighlightGradientMissTraceCount;
+                        }
+                    }
+                }
+
     // Log an unfiltered sample of relevant-menu items immediately before its window is painted. The
     // older UI ITEM STATE trace required focus/style/materialExp and could
     // miss the exact case where no item acquired focus or the highlight
