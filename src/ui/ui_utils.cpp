@@ -8,6 +8,17 @@
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
+
+static inline bool Switch_UIUtils_BadRuntimePointer(const void *ptr)
+{
+    if (!ptr)
+        return false;
+
+    const uintptr_t address = reinterpret_cast<uintptr_t>(ptr);
+    return address < UINT64_C(0x100000000) ||
+           (address >> 32) == UINT64_C(0xFFFFFFFF) ||
+           address >= (UINT64_C(1) << 39);
+}
 #endif
 
 stringDef_s *g_strHandle[2048];
@@ -374,23 +385,69 @@ void __cdecl Menu_UpdatePosition(int localClientNum, menuDef_t *menu)
     float x; // [esp+14h] [ebp-Ch]
     float y; // [esp+18h] [ebp-8h]
 
-    if (menu)
+    if (!menu)
+        return;
+#ifdef __SWITCH__
+    if (Switch_UIUtils_BadRuntimePointer(menu))
     {
-        x = menu->window.rect.x;
-        y = menu->window.rect.y;
-        if (menu->window.border)
+        Switch_LogWrite("[KisakCOD][UI ABI] Menu_UpdatePosition received invalid menu pointer\\n");
+        return;
+    }
+    if (menu->itemCount < 0 || menu->itemCount > 4096)
+    {
+        char trace[192];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI ABI] Menu_UpdatePosition invalid itemCount=%d menu=%p\\n",
+            menu->itemCount,
+            static_cast<void *>(menu));
+        Switch_LogWrite(trace);
+        return;
+    }
+    if (menu->itemCount > 0 && Switch_UIUtils_BadRuntimePointer(menu->items))
+    {
+        Switch_LogWrite("[KisakCOD][UI ABI] Menu_UpdatePosition received invalid item array\\n");
+        return;
+    }
+#endif
+    x = menu->window.rect.x;
+    y = menu->window.rect.y;
+    if (menu->window.border)
+    {
+        x = x + menu->window.borderSize;
+        y = y + menu->window.borderSize;
+    }
+    for (i = 0; i < menu->itemCount; ++i)
+    {
+        itemDef_s *item = menu->items ? menu->items[i] : nullptr;
+#ifdef __SWITCH__
+        if (!item || Switch_UIUtils_BadRuntimePointer(item))
         {
-            x = x + menu->window.borderSize;
-            y = y + menu->window.borderSize;
+            static uint32_t switchInvalidItemTraceCount = 0;
+            if (switchInvalidItemTraceCount < 64)
+            {
+                char trace[224];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][UI ABI] Menu_UpdatePosition skipped item=%d/%d ptr=%p\\n",
+                    i,
+                    menu->itemCount,
+                    static_cast<void *>(item));
+                Switch_LogWrite(trace);
+                ++switchInvalidItemTraceCount;
+            }
+            continue;
         }
-        for (i = 0; i < menu->itemCount; ++i)
-            Item_SetScreenCoords(
-                localClientNum,
-                menu->items[i],
-                x,
-                y,
-                menu->window.rect.horzAlign,
-                menu->window.rect.vertAlign);
+#endif
+        Item_SetScreenCoords(
+            localClientNum,
+            item,
+            x,
+            y,
+            menu->window.rect.horzAlign,
+            menu->window.rect.vertAlign);
     }
 }
 
