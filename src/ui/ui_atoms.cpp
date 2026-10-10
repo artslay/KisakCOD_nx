@@ -75,7 +75,7 @@ void __cdecl UI_DrawHandlePic(
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI HANDLE CANDIDATE] #%u material=%s image=%s rect=%.2f,%.2f %.2fx%.2f color=%s(%.3f,%.3f,%.3f,%.3f) align=%d,%d\\n",
+                "[KisakCOD][UI HANDLE CANDIDATE] #%u material=%s image=%s rect=%.2f,%.2f %.2fx%.2f color=%s(%.3f,%.3f,%.3f,%.3f) align=%d,%d\n",
                 static_cast<unsigned>(switchUiHandleProbeCount),
                 materialName,
                 imageName,
