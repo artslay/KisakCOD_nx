@@ -7273,7 +7273,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                             std::snprintf(
                                 trace,
                                 sizeof(trace),
-                                "[KisakCOD][UI PROFILE WHITE OVERLAY] item=%s bg=%s rect=%.1f,%.1f %.1fx%.1f action=skipped_opaque_white_fill\\n",
+                                "[KisakCOD][UI PROFILE WHITE OVERLAY] item=%s bg=%s rect=%.1f,%.1f %.1fx%.1f action=skipped_opaque_white_fill\n",
                                 item->window.name ? item->window.name : "<null>",
                                 *backgroundName ? backgroundName : "<null>",
                                 item->window.rect.x,
