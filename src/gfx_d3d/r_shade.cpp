@@ -601,55 +601,39 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
 #endif
     R_SetState(context.state, stateBits);
 #ifdef __SWITCH__
-    // Query the effective D3D9-compatibility state after application, so the
-    // log distinguishes authored material bits from the state Vulkan consumes.
+    // The Switch IDirect3DDevice9 compatibility interface exposes render-state
+    // writes but not GetRenderState. Trace R_SetState's applied engine cache
+    // instead, and decode it using the same bit layout as r_state.cpp.
     if (switchUiMaterial &&
         context.source->viewMode == VIEW_MODE_2D &&
         switchUiBlendTraceCount < 32u)
     {
-        DWORD blendEnable = 0xFFFFFFFFu;
-        DWORD srcBlend = 0xFFFFFFFFu;
-        DWORD dstBlend = 0xFFFFFFFFu;
-        DWORD blendOp = 0xFFFFFFFFu;
-        DWORD separateAlpha = 0xFFFFFFFFu;
-        DWORD srcBlendAlpha = 0xFFFFFFFFu;
-        DWORD dstBlendAlpha = 0xFFFFFFFFu;
-        DWORD blendOpAlpha = 0xFFFFFFFFu;
-        DWORD alphaTest = 0xFFFFFFFFu;
-        DWORD colorWrite = 0xFFFFFFFFu;
-        IDirect3DDevice9 *device = context.state->prim.device;
-        if (device)
-        {
-            device->GetRenderState(D3DRS_ALPHABLENDENABLE, &blendEnable);
-            device->GetRenderState(D3DRS_SRCBLEND, &srcBlend);
-            device->GetRenderState(D3DRS_DESTBLEND, &dstBlend);
-            device->GetRenderState(D3DRS_BLENDOP, &blendOp);
-            device->GetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, &separateAlpha);
-            device->GetRenderState(D3DRS_SRCBLENDALPHA, &srcBlendAlpha);
-            device->GetRenderState(D3DRS_DESTBLENDALPHA, &dstBlendAlpha);
-            device->GetRenderState(D3DRS_BLENDOPALPHA, &blendOpAlpha);
-            device->GetRenderState(D3DRS_ALPHATESTENABLE, &alphaTest);
-            device->GetRenderState(D3DRS_COLORWRITEENABLE, &colorWrite);
-        }
+        const uint32_t effectiveState0 = context.state->activeStateBits[0];
+        const uint32_t effectiveState1 = context.state->activeStateBits[1];
+        const uint32_t colorWrite =
+            ((effectiveState0 & 0x08000000u) != 0 ? 7u : 0u) |
+            ((effectiveState0 & 0x10000000u) != 0 ? 8u : 0u);
         char trace[640];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][UI BLEND] material=%s pass=%u techType=%u state0=%08x state1=%08x alphaBlend=%u src=%u dst=%u op=%u separateAlpha=%u srcA=%u dstA=%u opA=%u alphaTest=%u colorWrite=%u\n",
+            "[KisakCOD][UI BLEND] material=%s pass=%u techType=%u requested0=%08x requested1=%08x active0=%08x active1=%08x alphaBlend=%u srcIdx=%u dstIdx=%u opIdx=%u separateAlpha=%u srcAIdx=%u dstAIdx=%u opAIdx=%u alphaTest=%u colorWrite=%u\n",
             switchUiMaterialName,
             static_cast<unsigned>(passIndex),
             static_cast<unsigned>(context.state->techType),
             static_cast<unsigned>(stateBits[0]),
             static_cast<unsigned>(stateBits[1]),
-            static_cast<unsigned>(blendEnable),
-            static_cast<unsigned>(srcBlend),
-            static_cast<unsigned>(dstBlend),
-            static_cast<unsigned>(blendOp),
-            static_cast<unsigned>(separateAlpha),
-            static_cast<unsigned>(srcBlendAlpha),
-            static_cast<unsigned>(dstBlendAlpha),
-            static_cast<unsigned>(blendOpAlpha),
-            static_cast<unsigned>(alphaTest),
+            static_cast<unsigned>(effectiveState0),
+            static_cast<unsigned>(effectiveState1),
+            (effectiveState0 & 0x700u) != 0 ? 1u : 0u,
+            static_cast<unsigned>(effectiveState0 & 0xFu),
+            static_cast<unsigned>((effectiveState0 >> 4) & 0xFu),
+            static_cast<unsigned>((effectiveState0 >> 8) & 0x7u),
+            (effectiveState0 & 0x07000000u) != 0 ? 1u : 0u,
+            static_cast<unsigned>((effectiveState0 >> 16) & 0xFu),
+            static_cast<unsigned>((effectiveState0 >> 20) & 0xFu),
+            static_cast<unsigned>((effectiveState0 >> 24) & 0x7u),
+            (effectiveState0 & 0x800u) == 0 ? 1u : 0u,
             static_cast<unsigned>(colorWrite));
         Switch_LogWrite(trace);
         ++switchUiBlendTraceCount;
