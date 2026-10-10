@@ -6751,6 +6751,73 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                     item->window.background = Material_RegisterHandle(lowerCaseName, item->imageTrack);
                 }
 #ifdef __SWITCH__
+                // The stock main_text menu authors the right edge of each
+                // highlight as a WINDOW_STYLE_SHADER item at x=214.5, w=5.5,
+                // h=22 with background "button_highlight_end". Some Switch
+                // fastfile menu instances arrive with that serialized material
+                // pointer null. Resolve the actual named engine material here,
+                // where the owning menu and authored cap geometry are known;
+                // do not substitute a guessed material in the renderer.
+                if (item->window.style == 3 &&
+                    !item->window.background &&
+                    item->parent &&
+                    item->parent->window.name &&
+                    !I_stricmp(item->parent->window.name, "main_text") &&
+                    item->window.rect.x >= 214.4f &&
+                    item->window.rect.x <= 214.6f &&
+                    item->window.rect.w >= 5.4f &&
+                    item->window.rect.w <= 5.6f &&
+                    item->window.rect.h >= 21.9f &&
+                    item->window.rect.h <= 22.1f)
+                {
+                    Material *capMaterial =
+                        Material_RegisterHandle("button_highlight_end", item->imageTrack);
+                    if (capMaterial &&
+                        capMaterial != rgp.defaultMaterial &&
+                        !Material_IsDefault(capMaterial) &&
+                        capMaterial->info.name &&
+                        !I_stricmp(capMaterial->info.name, "button_highlight_end"))
+                    {
+                        item->window.background = capMaterial;
+                        static uint32_t switchUiHighlightCapTraceCount = 0;
+                        if (switchUiHighlightCapTraceCount < 8u)
+                        {
+                            char trace[384];
+                            std::snprintf(
+                                trace,
+                                sizeof(trace),
+                                "[KisakCOD][UI HIGHLIGHT CAP] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f material=%s action=restored ptr=%p\n",
+                                item->window.rect.x,
+                                item->window.rect.y,
+                                item->window.rect.w,
+                                item->window.rect.h,
+                                capMaterial->info.name,
+                                static_cast<void *>(capMaterial));
+                            Switch_LogWrite(trace);
+                            ++switchUiHighlightCapTraceCount;
+                        }
+                    }
+                    else
+                    {
+                        static uint32_t switchUiHighlightCapMissTraceCount = 0;
+                        if (switchUiHighlightCapMissTraceCount < 4u)
+                        {
+                            char trace[384];
+                            std::snprintf(
+                                trace,
+                                sizeof(trace),
+                                "[KisakCOD][UI HIGHLIGHT CAP] menu=main_text x=%.1f y=%.1f w=%.1f h=%.1f material=button_highlight_end result=%s action=preserve_fill_fallback\n",
+                                item->window.rect.x,
+                                item->window.rect.y,
+                                item->window.rect.w,
+                                item->window.rect.h,
+                                capMaterial && capMaterial->info.name
+                                    ? capMaterial->info.name : "<null>");
+                            Switch_LogWrite(trace);
+                            ++switchUiHighlightCapMissTraceCount;
+                        }
+                    }
+                }
     // Log an unfiltered sample of relevant-menu items immediately before its window is painted. The
     // older UI ITEM STATE trace required focus/style/materialExp and could
     // miss the exact case where no item acquired focus or the highlight
