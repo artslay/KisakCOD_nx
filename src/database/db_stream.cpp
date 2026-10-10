@@ -1058,7 +1058,7 @@ bool __cdecl DB_AddSwitchMaterialNameAliasFixup(
     return true;
 }
 
-void __cdecl DB_ResolvePendingSwitchMaterialNameAliases()
+void __cdecl DB_ResolvePendingSwitchMaterialNameAliases(bool finalPass)
 {
     if (g_switchMaterialNameAliasFixups.empty())
         return;
@@ -1071,6 +1071,9 @@ void __cdecl DB_ResolvePendingSwitchMaterialNameAliases()
 
     uint32_t resolvedCount = 0;
     uint32_t missingCount = 0;
+    uint32_t deferredCount = 0;
+    std::vector<SwitchMaterialNameAliasFixup> unresolved;
+
     for (const SwitchMaterialNameAliasFixup &fixup :
          g_switchMaterialNameAliasFixups)
     {
@@ -1082,20 +1085,31 @@ void __cdecl DB_ResolvePendingSwitchMaterialNameAliases()
             continue;
         }
 
-        // Prefer the completed database asset table so an old renderer-list
-        // entry cannot win over the material belonging to the active fastfile.
         Material *material = nullptr;
-        for (int i = 0; i < count; ++i)
+
+        // DB_FindXAssetHeader creates a named default clone when a material is
+        // not loaded yet. Such a clone has the requested name, so a name-only
+        // scan can incorrectly bind a UI MaterialHandle to $default and then
+        // permanently discard its pending fixup. Treat a zone-0 DB entry as a
+        // placeholder until a real zone asset replaces it.
+        const bool defaultDbEntry =
+            DB_IsXAssetDefault(ASSET_TYPE_MATERIAL, fixup.name);
+        if (!defaultDbEntry)
         {
-            Material *candidate = assets[i].material;
-            if (!candidate || !candidate->info.name ||
-                I_stricmp(candidate->info.name, fixup.name))
-                continue;
-            material = candidate;
-            break;
+            for (int i = 0; i < count; ++i)
+            {
+                Material *candidate = assets[i].material;
+                if (!candidate || !candidate->info.name ||
+                    I_stricmp(candidate->info.name, fixup.name))
+                    continue;
+
+                material = candidate;
+                break;
+            }
         }
 
-        // Built-in renderer materials may not have a DB XAsset entry.
+        // Built-in renderer materials may not have a DB XAsset entry. This
+        // search excludes default clones once the renderer default is ready.
         if (!material)
             material = Material_FindLoadedRendererMaterialByName(fixup.name);
 
@@ -1111,17 +1125,45 @@ void __cdecl DB_ResolvePendingSwitchMaterialNameAliases()
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][MATERIAL NAME RESOLVED] name=%s material=%p destination=%p\n",
+                    "[KisakCOD][MATERIAL NAME RESOLVED] name=%s material=%p destination=%p final=%u\n",
                     fixup.name,
                     static_cast<void *>(material),
-                    static_cast<void *>(fixup.destination));
+                    static_cast<void *>(fixup.destination),
+                    finalPass ? 1u : 0u);
                 Switch_LogWrite(trace);
                 ++resolvedTraceCount;
             }
         }
+        else if (!finalPass)
+        {
+            // During startup, UI/common zones can refer to materials that are
+            // only registered by a later zone. Keep the copied name and the
+            // native destination queued for the next completed load batch.
+            unresolved.push_back(fixup);
+            ++deferredCount;
+
+            static uint32_t deferredTraceCount = 0;
+            if (deferredTraceCount < 64)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][MATERIAL NAME DEFERRED] name=%s destination=%p defaultEntry=%u\n",
+                    fixup.name,
+                    static_cast<void *>(fixup.destination),
+                    defaultDbEntry ? 1u : 0u);
+                Switch_LogWrite(trace);
+                ++deferredTraceCount;
+            }
+        }
         else
         {
+            // The final pass happens after all startup zones and the renderer
+            // material registry are ready. Leave unresolved handles null;
+            // never substitute a fake/default material for a missing asset.
             ++missingCount;
+
             static uint32_t missingTraceCount = 0;
             if (missingTraceCount < 64)
             {
@@ -1129,28 +1171,36 @@ void __cdecl DB_ResolvePendingSwitchMaterialNameAliases()
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][MATERIAL NAME MISSING] name=%s destination=%p assets=%d\n",
+                    "[KisakCOD][MATERIAL NAME MISSING] name=%s destination=%p assets=%d final=1 defaultEntry=%u\n",
                     fixup.name,
                     static_cast<void *>(fixup.destination),
-                    count);
+                    count,
+                    defaultDbEntry ? 1u : 0u);
                 Switch_LogWrite(trace);
                 ++missingTraceCount;
             }
         }
     }
 
-    char summary[192];
+    const uint32_t queuedCount =
+        static_cast<uint32_t>(g_switchMaterialNameAliasFixups.size());
+    if (finalPass)
+        g_switchMaterialNameAliasFixups.clear();
+    else
+        g_switchMaterialNameAliasFixups.swap(unresolved);
+
+    char summary[224];
     std::snprintf(
         summary,
         sizeof(summary),
-        "[KisakCOD][MATERIAL NAME FIXUP] queued=%u resolved=%u missing=%u\n",
-        static_cast<unsigned>(g_switchMaterialNameAliasFixups.size()),
+        "[KisakCOD][MATERIAL NAME FIXUP] queued=%u resolved=%u deferred=%u missing=%u final=%u pending=%u\n",
+        queuedCount,
         resolvedCount,
-        missingCount);
+        deferredCount,
+        missingCount,
+        finalPass ? 1u : 0u,
+        static_cast<unsigned>(g_switchMaterialNameAliasFixups.size()));
     Switch_LogWrite(summary);
-
-    // Do not keep unresolved destinations across future zone unloads.
-    g_switchMaterialNameAliasFixups.clear();
 }
 
 void __cdecl DB_FixupSwitchPointerAliases()

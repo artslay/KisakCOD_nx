@@ -368,7 +368,7 @@ void R_InitSystems()
     // alone cannot resolve that second representation. Resolve only after the
     // UI/common zones, renderer material registry, and built-in materials are
     // all initialized; doing this earlier can bind to a default placeholder.
-    DB_ResolvePendingSwitchMaterialNameAliases();
+    DB_ResolvePendingSwitchMaterialNameAliases(true);
     DB_FixupSwitchPointerAliases();
 
     Switch_LogWrite("[KisakCOD][RINIT] after material alias fixups\n");

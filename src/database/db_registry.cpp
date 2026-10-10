@@ -1412,12 +1412,11 @@ void __cdecl DB_LoadXAssets(XZoneInfo *zoneInfo, uint32_t zoneCount, int32_t syn
         DB_UnarchiveAssets();
 
 #ifdef __SWITCH__
-        // All zones in this synchronous batch are now registered and their
-        // stream blocks may already have been replaced by the next fastfile.
-        // Resolve copied MaterialHandle name aliases against the completed DB
-        // asset table; never manufacture a default material for an unresolved
-        // name.
-        DB_ResolvePendingSwitchMaterialNameAliases();
+        // Resolve only aliases whose real assets are now available. During
+        // startup, a material may belong to a later zone, so retain unresolved
+        // names until that zone is registered. Once the renderer is live, this
+        // batch is the final attempt to avoid retaining destinations across unloads.
+        DB_ResolvePendingSwitchMaterialNameAliases(rg.registered != 0);
 #endif
     }
 }
