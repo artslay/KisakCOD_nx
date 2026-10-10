@@ -537,16 +537,10 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
         stateBits[1] = stateBits[1] & 0xFFFFFFC0 | 2;
 #endif
 #ifdef __SWITCH__
-    // The Switch bootstrap shader is deliberately a material-agnostic fallback.
-    // UNLIT remains the shader-routing mode; the separate 2D flag lets Vulkan
-    // apply the menu's alpha composition without depending on serialized
-    // material names or widened D3D9 state bits.
-    const bool switchUi2D =
-        context.source->viewMode == VIEW_MODE_2D &&
-        context.state->techType == TECHNIQUE_UNLIT;
+    // Keep the Switch bootstrap shader's routing mode. Blending is derived
+    // from the material's authored D3D9 state in the Vulkan compatibility layer.
     context.state->prim.device->SetSwitchUnlitMode(
         context.state->techType == TECHNIQUE_UNLIT);
-    context.state->prim.device->SetSwitchUi2DMode(switchUi2D);
 #endif
     R_SetState(context.state, stateBits);
     if (r_logFile->current.integer)
