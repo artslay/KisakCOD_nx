@@ -6046,10 +6046,11 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     const bool switchMenuVisible = Menu_IsVisible(dc, menu);
     if (switchRelevantGateMenu)
     {
-        static uint32_t switchMenuGateTraceCount[3] = {0, 0, 0};
+        static uint32_t switchMenuGateTraceCount[4] = {0, 0, 0, 0};
         const unsigned switchGateSlot =
             !I_stricmp(switchGateMenuName, "main_text") ? 0u :
-            !I_stricmp(switchGateMenuName, "main") ? 1u : 2u;
+            !I_stricmp(switchGateMenuName, "main") ? 1u :
+            !I_stricmp(switchGateMenuName, "options_graphics") ? 2u : 3u;
         if (switchMenuGateTraceCount[switchGateSlot] < 8u)
         {
             char trace[640];
@@ -9023,8 +9024,20 @@ void __cdecl Menu_PaintAll(UiContext *dc)
 
 #ifdef __SWITCH__
     {
+        bool profileInMenuStack = false;
+        for (int stackIndex = 0; stackIndex < dc->openMenuCount; ++stackIndex)
+        {
+            const menuDef_t *stackMenu = dc->menuStack[stackIndex];
+            if (stackMenu && stackMenu->window.name &&
+                !I_stricmp(stackMenu->window.name, "player_profile"))
+            {
+                profileInMenuStack = true;
+                break;
+            }
+        }
+
         static uint32_t switchFullscreenPickTraceCount = 0;
-        if (switchFullscreenPickTraceCount < 24u)
+        if (profileInMenuStack && switchFullscreenPickTraceCount < 24u)
         {
             const menuDef_t *picked =
                 drawStart >= 0 && drawStart < dc->openMenuCount
@@ -9036,7 +9049,7 @@ void __cdecl Menu_PaintAll(UiContext *dc)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI FULLSCREEN PICK] stack=%d drawStart=%d any=%u picked=%s fullScreen=%u flags=%08x visibleExp=%u\n",
+                "[KisakCOD][UI FULLSCREEN PICK] stack=%d drawStart=%d any=%u picked=%s fullScreen=%u flags=%08x visibleExp=%u\\n",
                 dc->openMenuCount,
                 drawStart,
                 anyFullscreen ? 1u : 0u,
