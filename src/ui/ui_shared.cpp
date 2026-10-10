@@ -5764,7 +5764,7 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][UI PROFILE VISIBILITY] visible=%u reason=%s menuFlags=%08x static=%08x ownerDrawFlags=%08x visibleExp=%u stack=%d top=%s\\n",
+            "[KisakCOD][UI PROFILE VISIBILITY] visible=%u reason=%s menuFlags=%08x static=%08x ownerDrawFlags=%08x visibleExp=%u stack=%d top=%s\n",
             visible ? 1u : 0u,
             reason,
             static_cast<unsigned>(menu->window.dynamicFlags[localClient]),
@@ -9036,7 +9036,7 @@ void __cdecl Menu_PaintAll(UiContext *dc)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI FULLSCREEN PICK] stack=%d drawStart=%d any=%u picked=%s fullScreen=%u flags=%08x visibleExp=%u\\n",
+                "[KisakCOD][UI FULLSCREEN PICK] stack=%d drawStart=%d any=%u picked=%s fullScreen=%u flags=%08x visibleExp=%u\n",
                 dc->openMenuCount,
                 drawStart,
                 anyFullscreen ? 1u : 0u,
@@ -9108,7 +9108,7 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                     std::snprintf(
                         trace,
                         sizeof(trace),
-                        "[KisakCOD][UI PROFILE BACKDROP] stack=%d drawStart=%d foreground=%p backdrop=%p backdropName=%s items=%d alreadyInRange=%u\\n",
+                        "[KisakCOD][UI PROFILE BACKDROP] stack=%d drawStart=%d foreground=%p backdrop=%p backdropName=%s items=%d alreadyInRange=%u\n",
                         dc->openMenuCount,
                         drawStart,
                         static_cast<void *>(foregroundMenu),
