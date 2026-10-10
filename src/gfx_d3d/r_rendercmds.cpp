@@ -768,6 +768,62 @@ void __cdecl R_AddCmdDrawStretchPic(
     }
 #ifdef __SWITCH__
     {
+        // Broad, bounded probe for the first 2D picture commands. The narrower
+        // cap-only trace below cannot explain a missing marker when the UI has
+        // already selected a different material or uses a scaled cap rectangle.
+        static uint32_t switchUi2DProbeCount = 0;
+        if (gfxCmdBufSourceState.viewMode == VIEW_MODE_2D &&
+            switchUi2DProbeCount < 48u)
+        {
+            const char *requestedName =
+                material ? Material_GetName(material) : "<null>";
+            const char *resolvedName =
+                defaultMaterial && defaultMaterial->info.name
+                    ? defaultMaterial->info.name : "<null>";
+            const MaterialTechniqueSet *authored =
+                defaultMaterial ? defaultMaterial->techniqueSet : nullptr;
+            const MaterialTechniqueSet *remapped =
+                authored ? authored->remappedTechniqueSet : nullptr;
+            const MaterialTextureDef *texture =
+                defaultMaterial && defaultMaterial->textureTable &&
+                    defaultMaterial->textureCount
+                    ? &defaultMaterial->textureTable[0] : nullptr;
+            const GfxImage *image =
+                texture && texture->semantic != TS_WATER_MAP
+                    ? texture->u.image : nullptr;
+            uint32_t packedColor = 0xFFFFFFFFu;
+            R_ConvertColorToBytes(color, &packedColor);
+            char trace[768];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI STRETCH CANDIDATE] #%u requested=%s resolved=%s chosen=%s image=%s rect=%.2f,%.2f %.2fx%.2f color=%s(%.3f,%.3f,%.3f,%.3f) packed=%08x view=%u flags=%02x fogable=%u depthFlag=%u default=%u sourceSet=%p remapSet=%p\n",
+                static_cast<unsigned>(switchUi2DProbeCount),
+                requestedName ? requestedName : "<null>",
+                resolvedName,
+                actualMaterial && actualMaterial->info.name
+                    ? actualMaterial->info.name : "<null>",
+                image && image->name ? image->name : "<null>",
+                x, y, w, h,
+                color ? "rgba" : "null",
+                color ? color[0] : -1.0f,
+                color ? color[1] : -1.0f,
+                color ? color[2] : -1.0f,
+                color ? color[3] : -1.0f,
+                static_cast<unsigned>(packedColor),
+                static_cast<unsigned>(gfxCmdBufSourceState.viewMode),
+                defaultMaterial
+                    ? static_cast<unsigned>(defaultMaterial->stateFlags) : 0u,
+                hasFogableTechnique ? 1u : 0u,
+                defaultMaterial && (defaultMaterial->stateFlags & 0x10) ? 1u : 0u,
+                Material_IsDefault(defaultMaterial) ? 1u : 0u,
+                static_cast<const void *>(authored),
+                static_cast<const void *>(remapped));
+            Switch_LogWrite(trace);
+            ++switchUi2DProbeCount;
+        }
+    }
+    {
         static uint32_t switchUiGradientTraceCount = 0;
         static uint32_t switchUiCapTraceCount = 0;
         const char *resolvedName =

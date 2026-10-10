@@ -533,6 +533,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     // This is intentionally upstream of device draw calls: some UI render paths
     // can batch or defer geometry, so a draw-side-only trace can miss the pass.
     static uint32_t switchUiPassTraceCount = 0;
+    static uint32_t switchUiBlendTraceCount = 0;
     const char *switchUiMaterialName =
         material->info.name ? material->info.name : "";
     const bool switchUiMaterial =
@@ -599,6 +600,61 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
         context.state->techType == TECHNIQUE_UNLIT);
 #endif
     R_SetState(context.state, stateBits);
+#ifdef __SWITCH__
+    // Query the effective D3D9-compatibility state after application, so the
+    // log distinguishes authored material bits from the state Vulkan consumes.
+    if (switchUiMaterial &&
+        context.source->viewMode == VIEW_MODE_2D &&
+        switchUiBlendTraceCount < 32u)
+    {
+        DWORD blendEnable = 0xFFFFFFFFu;
+        DWORD srcBlend = 0xFFFFFFFFu;
+        DWORD dstBlend = 0xFFFFFFFFu;
+        DWORD blendOp = 0xFFFFFFFFu;
+        DWORD separateAlpha = 0xFFFFFFFFu;
+        DWORD srcBlendAlpha = 0xFFFFFFFFu;
+        DWORD dstBlendAlpha = 0xFFFFFFFFu;
+        DWORD blendOpAlpha = 0xFFFFFFFFu;
+        DWORD alphaTest = 0xFFFFFFFFu;
+        DWORD colorWrite = 0xFFFFFFFFu;
+        IDirect3DDevice9 *device = context.state->prim.device;
+        if (device)
+        {
+            device->GetRenderState(D3DRS_ALPHABLENDENABLE, &blendEnable);
+            device->GetRenderState(D3DRS_SRCBLEND, &srcBlend);
+            device->GetRenderState(D3DRS_DESTBLEND, &dstBlend);
+            device->GetRenderState(D3DRS_BLENDOP, &blendOp);
+            device->GetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, &separateAlpha);
+            device->GetRenderState(D3DRS_SRCBLENDALPHA, &srcBlendAlpha);
+            device->GetRenderState(D3DRS_DESTBLENDALPHA, &dstBlendAlpha);
+            device->GetRenderState(D3DRS_BLENDOPALPHA, &blendOpAlpha);
+            device->GetRenderState(D3DRS_ALPHATESTENABLE, &alphaTest);
+            device->GetRenderState(D3DRS_COLORWRITEENABLE, &colorWrite);
+        }
+        char trace[640];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][UI BLEND] material=%s pass=%u techType=%u state0=%08x state1=%08x alphaBlend=%u src=%u dst=%u op=%u separateAlpha=%u srcA=%u dstA=%u opA=%u alphaTest=%u colorWrite=%u\n",
+            switchUiMaterialName,
+            static_cast<unsigned>(passIndex),
+            static_cast<unsigned>(context.state->techType),
+            static_cast<unsigned>(stateBits[0]),
+            static_cast<unsigned>(stateBits[1]),
+            static_cast<unsigned>(blendEnable),
+            static_cast<unsigned>(srcBlend),
+            static_cast<unsigned>(dstBlend),
+            static_cast<unsigned>(blendOp),
+            static_cast<unsigned>(separateAlpha),
+            static_cast<unsigned>(srcBlendAlpha),
+            static_cast<unsigned>(dstBlendAlpha),
+            static_cast<unsigned>(blendOpAlpha),
+            static_cast<unsigned>(alphaTest),
+            static_cast<unsigned>(colorWrite));
+        Switch_LogWrite(trace);
+        ++switchUiBlendTraceCount;
+    }
+#endif
     if (r_logFile->current.integer)
     {
         RB_LogPrint("---------- R_SetupPass\n");

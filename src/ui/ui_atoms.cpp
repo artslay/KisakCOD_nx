@@ -57,6 +57,14 @@ void __cdecl UI_DrawHandlePic(
         static uint32_t switchUiCapPicTraceCount = 0;
         const char *materialName =
             material && material->info.name ? material->info.name : "<null>";
+        const MaterialTextureDef *texture =
+            material && material->textureTable && material->textureCount
+                ? &material->textureTable[0] : nullptr;
+        const GfxImage *image =
+            texture && texture->semantic != TS_WATER_MAP
+                ? texture->u.image : nullptr;
+        const char *imageName =
+            image && image->name ? image->name : "<null>";
         const bool gradientMaterial =
             !I_stricmp(materialName, "gradient_fadein") ||
             !I_stricmp(materialName, "images/gradient_fadein") ||
@@ -74,20 +82,19 @@ void __cdecl UI_DrawHandlePic(
             !I_stricmp(materialName, "images/button_highlight_end") ||
             !I_stricmp(materialName, "button_highlight_end.iwi") ||
             !I_stricmp(materialName, "images/button_highlight_end.iwi");
+        const bool capImage =
+            !I_stricmp(imageName, "button_highlight_end") ||
+            !I_stricmp(imageName, "images/button_highlight_end") ||
+            !I_stricmp(imageName, "button_highlight_end.iwi") ||
+            !I_stricmp(imageName, "images/button_highlight_end.iwi");
         const bool traceGradient =
             gradientMaterial && switchUiGradientPicTraceCount < 16u;
         const bool traceCap =
-            (capMaterial || capGeometry) && switchUiCapPicTraceCount < 32u;
+            (capMaterial || capImage || capGeometry) && switchUiCapPicTraceCount < 32u;
         if (traceGradient || traceCap)
         {
             const uint32_t traceIndex =
                 traceCap ? switchUiCapPicTraceCount : switchUiGradientPicTraceCount;
-            const MaterialTextureDef *texture =
-                material && material->textureTable && material->textureCount
-                    ? &material->textureTable[0] : nullptr;
-            const GfxImage *image =
-                texture && texture->semantic != TS_WATER_MAP
-                    ? texture->u.image : nullptr;
             char trace[512];
             std::snprintf(
                 trace,
