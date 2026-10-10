@@ -539,9 +539,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     const bool switchUiMaterial =
         !I_stricmp(switchUiMaterialName, "gradient_fadein") ||
         !I_stricmp(switchUiMaterialName, "button_highlight_end");
-    if (switchUiMaterial &&
-        context.source->viewMode == VIEW_MODE_2D &&
-        switchUiPassTraceCount < 32)
+    if (switchUiMaterial && switchUiPassTraceCount < 32)
     {
         const MaterialTextureDef *switchTexture =
             material->textureTable && material->textureCount
@@ -604,9 +602,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     // The Switch IDirect3DDevice9 compatibility interface exposes render-state
     // writes but not GetRenderState. Trace R_SetState's applied engine cache
     // instead, and decode it using the same bit layout as r_state.cpp.
-    if (switchUiMaterial &&
-        context.source->viewMode == VIEW_MODE_2D &&
-        switchUiBlendTraceCount < 32u)
+    if (switchUiMaterial && switchUiBlendTraceCount < 32u)
     {
         const uint32_t effectiveState0 = context.state->activeStateBits[0];
         const uint32_t effectiveState1 = context.state->activeStateBits[1];
@@ -617,10 +613,11 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][UI BLEND] material=%s pass=%u techType=%u requested0=%08x requested1=%08x active0=%08x active1=%08x alphaBlend=%u srcIdx=%u dstIdx=%u opIdx=%u separateAlpha=%u srcAIdx=%u dstAIdx=%u opAIdx=%u alphaTest=%u colorWrite=%u\n",
+            "[KisakCOD][UI BLEND] material=%s pass=%u techType=%u view=%u requested0=%08x requested1=%08x active0=%08x active1=%08x alphaBlend=%u srcIdx=%u dstIdx=%u opIdx=%u separateAlpha=%u srcAIdx=%u dstAIdx=%u opAIdx=%u alphaTest=%u colorWrite=%u\n",
             switchUiMaterialName,
             static_cast<unsigned>(passIndex),
             static_cast<unsigned>(context.state->techType),
+            static_cast<unsigned>(context.source->viewMode),
             static_cast<unsigned>(stateBits[0]),
             static_cast<unsigned>(stateBits[1]),
             static_cast<unsigned>(effectiveState0),
