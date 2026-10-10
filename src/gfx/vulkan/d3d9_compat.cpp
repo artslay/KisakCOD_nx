@@ -2390,7 +2390,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 "[KisakCOD][UI BLEND] image=%s material=%s sampler=%u draw=%u "
                 "blend=%u src=%u dst=%u op=%u separateAlpha=%u srcA=%u dstA=%u "
                 "opA=%u alphaTest=%u alphaFunc=%u alphaRef=%u vertexColor=%08x "
-                "tex=%p size=%ux%u srcFormat=%u vkFormat=%u\\n",
+                "tex=%p size=%ux%u srcFormat=%u vkFormat=%u\n",
                 uiImageName ? uiImageName : "<null>",
                 materialName ? materialName : "<null>",
                 static_cast<unsigned>(samplerIndex),
