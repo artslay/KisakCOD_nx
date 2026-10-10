@@ -7215,6 +7215,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                 // Suppress only that screen-covering white fill; Item_Paint continues
                 // below so any text/control payload on the item is still processed.
                 bool suppressProfileWhiteBackdrop = false;
+                bool suppressProfileBluePlaque = false;
                 if (parent &&
                     parent->window.name &&
                     !I_stricmp(parent->window.name, "player_profile") &&
@@ -7285,24 +7286,38 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                         }
                     }
                 }
-                // Draw the title's side fades from the same gradient material used
-                // by the stock menu highlight. The title occupies the right-aligned
-                // rect (-360, 75, 240, 24); place one fade on each side of its centered
-                // text. A negative width mirrors the texture so both fades approach
-                // the title strongly and disappear toward the outer edges.
+                // The blue accent behind "Select Profile" is the stock
+                // line_horizontal item at (-340, 84, 200, 10). Draw its own
+                // rectangle using two mirrored halves of gradient_fadein so
+                // the existing blue plaque fades away at both ends. Keep the
+                // draw inside the authored plaque geometry; do not add lines
+                // beside or above/below the title.
                 if (parent &&
                     parent->window.name &&
                     !I_stricmp(parent->window.name, "player_profile") &&
-                    item->window.style == 0 &&
-                    item->textExp.numEntries > 0)
+                    item->window.style == 3 &&
+                    item->window.background &&
+                    !Switch_UI_BadPointer(item->window.background) &&
+                    item->window.background->info.name)
                 {
-                    const rectDef_s &titleRect = item->window.rect;
-                    const bool isProfileTitle =
-                        titleRect.x > -360.1f && titleRect.x < -359.9f &&
-                        titleRect.y > 74.9f && titleRect.y < 75.1f &&
-                        titleRect.w > 239.9f && titleRect.w < 240.1f &&
-                        titleRect.h > 23.9f && titleRect.h < 24.1f;
-                    if (isProfileTitle)
+                    const char *profilePlaqueMaterialName =
+                        item->window.background->info.name;
+                    const rectDef_s &plaqueRect = item->window.rect;
+                    const bool isBlueProfilePlaque =
+                        (!I_stricmp(profilePlaqueMaterialName, "line_horizontal") ||
+                         !I_stricmp(profilePlaqueMaterialName, "images/line_horizontal")) &&
+                        plaqueRect.x > -340.1f && plaqueRect.x < -339.9f &&
+                        plaqueRect.y > 83.9f && plaqueRect.y < 84.1f &&
+                        plaqueRect.w > 199.9f && plaqueRect.w < 200.1f &&
+                        plaqueRect.h > 9.9f && plaqueRect.h < 10.1f &&
+                        item->window.foreColor[0] > 0.35f &&
+                        item->window.foreColor[0] < 0.45f &&
+                        item->window.foreColor[1] > 0.55f &&
+                        item->window.foreColor[1] < 0.65f &&
+                        item->window.foreColor[2] > 0.95f &&
+                        item->window.foreColor[3] > 0.7f;
+
+                    if (isBlueProfilePlaque)
                     {
                         Material *gradientMaterial =
                             Material_RegisterHandle("gradient_fadein", item->imageTrack);
@@ -7313,35 +7328,39 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                             (!I_stricmp(gradientMaterial->info.name, "gradient_fadein") ||
                              !I_stricmp(gradientMaterial->info.name, "images/gradient_fadein")))
                         {
-                            const float sideFadeWidth = 65.0f;
-                            const float sideFadeHeight = 2.5f;
-                            const float sideFadeY =
-                                titleRect.y + (titleRect.h - sideFadeHeight) * 0.5f;
+                            const float halfWidth = plaqueRect.w * 0.5f;
+                            const float *plaqueColor = item->window.foreColor;
+                            const ScreenPlacement *plaquePlacement =
+                                &scrPlaceView[dc->localClientNum];
+
+                            // Positive width reveals the texture toward the
+                            // center; negative width mirrors it for the right edge.
                             UI_DrawHandlePic(
-                                &scrPlaceView[dc->localClientNum],
-                                titleRect.x,
-                                sideFadeY,
-                                sideFadeWidth,
-                                sideFadeHeight,
-                                titleRect.horzAlign,
-                                titleRect.vertAlign,
-                                item->window.foreColor,
+                                plaquePlacement,
+                                plaqueRect.x,
+                                plaqueRect.y,
+                                halfWidth,
+                                plaqueRect.h,
+                                plaqueRect.horzAlign,
+                                plaqueRect.vertAlign,
+                                plaqueColor,
                                 gradientMaterial);
                             UI_DrawHandlePic(
-                                &scrPlaceView[dc->localClientNum],
-                                titleRect.x + titleRect.w - sideFadeWidth,
-                                sideFadeY,
-                                -sideFadeWidth,
-                                sideFadeHeight,
-                                titleRect.horzAlign,
-                                titleRect.vertAlign,
-                                item->window.foreColor,
+                                plaquePlacement,
+                                plaqueRect.x + halfWidth,
+                                plaqueRect.y,
+                                -halfWidth,
+                                plaqueRect.h,
+                                plaqueRect.horzAlign,
+                                plaqueRect.vertAlign,
+                                plaqueColor,
                                 gradientMaterial);
+                            suppressProfileBluePlaque = true;
                         }
                     }
                 }
 
-                if (!suppressProfileWhiteBackdrop)
+                if (!suppressProfileWhiteBackdrop && !suppressProfileBluePlaque)
                     Window_Paint(dc, &item->window, parent->fadeAmount, parent->fadeInAmount, parent->fadeClamp, fadeCycle);
 #else
                 Window_Paint(dc, &item->window, parent->fadeAmount, parent->fadeInAmount, parent->fadeClamp, fadeCycle);
