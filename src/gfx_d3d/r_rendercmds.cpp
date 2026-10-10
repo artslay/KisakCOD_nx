@@ -768,12 +768,11 @@ void __cdecl R_AddCmdDrawStretchPic(
     }
 #ifdef __SWITCH__
     {
-        // Broad, bounded probe for the first 2D picture commands. The narrower
-        // cap-only trace below cannot explain a missing marker when the UI has
-        // already selected a different material or uses a scaled cap rectangle.
+        // Broad, bounded probe for the first picture commands. Do not filter
+        // by viewMode here: if the UI path leaves viewMode unset/incorrect, that
+        // is exactly the routing defect this trace needs to reveal.
         static uint32_t switchUi2DProbeCount = 0;
-        if (gfxCmdBufSourceState.viewMode == VIEW_MODE_2D &&
-            switchUi2DProbeCount < 48u)
+        if (switchUi2DProbeCount < 48u)
         {
             const char *requestedName =
                 material ? Material_GetName(material) : "<null>";
