@@ -6495,6 +6495,59 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/enable";
 #endif
     parent = item->parent;
+#ifdef __SWITCH__
+    // Log an unfiltered sample of relevant-menu items before painting. The
+    // older UI ITEM STATE trace required focus/style/materialExp and could
+    // miss the exact case where no item acquired focus or the highlight
+    // material was never selected.
+    if (parent && parent->window.name)
+    {
+        const char *switchMenuName = parent->window.name;
+        int switchMenuSlot = -1;
+        if (!I_stricmp(switchMenuName, "main_text")) switchMenuSlot = 0;
+        else if (!I_stricmp(switchMenuName, "main")) switchMenuSlot = 1;
+        else if (!I_stricmp(switchMenuName, "options_graphics")) switchMenuSlot = 2;
+        static uint32_t switchItemCandidateCount[3] = {0, 0, 0};
+        if (switchMenuSlot >= 0 &&
+            switchItemCandidateCount[switchMenuSlot] < 96u)
+        {
+            const uint32_t localClient = static_cast<uint32_t>(dc->localClientNum);
+            const bool hasFocus = Window_HasFocus(dc->localClientNum, &item->window);
+            const bool isVisible = Item_IsVisible(dc->localClientNum, item);
+            const Material *background = item->window.background;
+            const char *backgroundName =
+                background && background->info.name ? background->info.name : "<null>";
+            char trace[768];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI ITEM CANDIDATE] menu=%s item=%s index=%u type=%d style=%d focus=%u visible=%u flags=%08x static=%08x itemFlags=%08x materialExp=%d background=%s rect=%.1f,%.1f %.1fx%.1f foreColor=%.3f,%.3f,%.3f,%.3f text=%s\\n",
+                switchMenuName,
+                item->window.name ? item->window.name : "<null>",
+                static_cast<unsigned>(switchItemCandidateCount[switchMenuSlot]),
+                item->type,
+                item->window.style,
+                hasFocus ? 1u : 0u,
+                isVisible ? 1u : 0u,
+                item->window.dynamicFlags[localClient],
+                item->window.staticFlags,
+                item->itemFlags,
+                item->materialExp.numEntries,
+                backgroundName,
+                item->window.rect.x,
+                item->window.rect.y,
+                item->window.rect.w,
+                item->window.rect.h,
+                item->window.foreColor[0],
+                item->window.foreColor[1],
+                item->window.foreColor[2],
+                item->window.foreColor[3],
+                item->text ? item->text : "<null>");
+            Switch_LogWrite(trace);
+            ++switchItemCandidateCount[switchMenuSlot];
+        }
+    }
+#endif
     if (item)
     {
         if (item->window.ownerDrawFlags)
