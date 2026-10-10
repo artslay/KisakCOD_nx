@@ -65,6 +65,31 @@ void __cdecl UI_DrawHandlePic(
                 ? texture->u.image : nullptr;
         const char *imageName =
             image && image->name ? image->name : "<null>";
+        // Trace a bounded sample of all handle-picture submissions, not only
+        // the expected highlight material/geometry. This proves whether the
+        // menu paint path reaches UI_DrawHandlePic at all.
+        static uint32_t switchUiHandleProbeCount = 0;
+        if (switchUiHandleProbeCount < 48u)
+        {
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][UI HANDLE CANDIDATE] #%u material=%s image=%s rect=%.2f,%.2f %.2fx%.2f color=%s(%.3f,%.3f,%.3f,%.3f) align=%d,%d\\n",
+                static_cast<unsigned>(switchUiHandleProbeCount),
+                materialName,
+                imageName,
+                x, y, w, h,
+                color ? "rgba" : "null",
+                color ? color[0] : -1.0f,
+                color ? color[1] : -1.0f,
+                color ? color[2] : -1.0f,
+                color ? color[3] : -1.0f,
+                horzAlign,
+                vertAlign);
+            Switch_LogWrite(trace);
+            ++switchUiHandleProbeCount;
+        }
         const bool gradientMaterial =
             !I_stricmp(materialName, "gradient_fadein") ||
             !I_stricmp(materialName, "images/gradient_fadein") ||
