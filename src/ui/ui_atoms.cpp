@@ -93,7 +93,7 @@ void __cdecl UI_DrawHandlePic(
                 sizeof(trace),
                 "[KisakCOD][UI PIC INPUT] #%u kind=%s material=%s image=%s "
                 "rect=%.2f,%.2f %.2fx%.2f color=%s(%.3f,%.3f,%.3f,%.3f) "
-                "align=%d,%d\\n",
+                "align=%d,%d\n",
                 static_cast<unsigned>(traceIndex),
                 traceCap ? "cap" : "gradient",
                 materialName,
