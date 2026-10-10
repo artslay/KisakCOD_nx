@@ -768,7 +768,8 @@ void __cdecl R_AddCmdDrawStretchPic(
     }
 #ifdef __SWITCH__
     {
-        static uint32_t switchUiStretchTraceCount = 0;
+        static uint32_t switchUiGradientTraceCount = 0;
+        static uint32_t switchUiCapTraceCount = 0;
         const char *resolvedName =
             defaultMaterial && defaultMaterial->info.name
                 ? defaultMaterial->info.name : "<null>";
@@ -782,9 +783,15 @@ void __cdecl R_AddCmdDrawStretchPic(
         // material from geometry.
         const bool isNarrowCapQuad =
             w >= 7.5f && w <= 9.0f && h >= 32.0f && h <= 34.0f;
-        if ((isGradient || isButtonCap || isNarrowCapQuad) &&
-            switchUiStretchTraceCount < 32)
+        const bool traceGradient =
+            isGradient && switchUiGradientTraceCount < 8u;
+        const bool traceCap =
+            (isButtonCap || isNarrowCapQuad) &&
+            switchUiCapTraceCount < 16u;
+        if (traceGradient || traceCap)
         {
+            const uint32_t traceIndex =
+                traceCap ? switchUiCapTraceCount : switchUiGradientTraceCount;
             const MaterialTechniqueSet *authored =
                 defaultMaterial ? defaultMaterial->techniqueSet : nullptr;
             const MaterialTechniqueSet *remapped =
@@ -804,11 +811,12 @@ void __cdecl R_AddCmdDrawStretchPic(
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][UI STRETCH INPUT] #%u requested=%s resolved=%s chosen=%s "
+                "[KisakCOD][UI STRETCH INPUT] #%u kind=%s requested=%s resolved=%s chosen=%s "
                 "image=%s view=%u rect=%.2f,%.2f %.2fx%.2f "
                 "color=%s(%.3f,%.3f,%.3f,%.3f) packed=%08x flags=%02x "
                 "fogable=%u depthFlag=%u default=%u sourceSet=%p remapSet=%p\n",
-                static_cast<unsigned>(switchUiStretchTraceCount),
+                static_cast<unsigned>(traceIndex),
+                traceCap ? "cap" : "gradient",
                 requestedName ? requestedName : "<null>",
                 resolvedName,
                 actualMaterial && actualMaterial->info.name
@@ -830,7 +838,10 @@ void __cdecl R_AddCmdDrawStretchPic(
                 static_cast<const void *>(authored),
                 static_cast<const void *>(remapped));
             Switch_LogWrite(trace);
-            ++switchUiStretchTraceCount;
+            if (traceCap)
+                ++switchUiCapTraceCount;
+            else
+                ++switchUiGradientTraceCount;
         }
     }
 #endif
