@@ -7333,13 +7333,16 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                             const ScreenPlacement *plaquePlacement =
                                 &scrPlaceView[dc->localClientNum];
 
-                            // Positive width reveals the texture toward the
-                            // center; negative width mirrors it for the right edge.
+                            // gradient_fadein is opaque at its left edge and
+                            // fades toward its right edge. Flip the left half so it
+                            // fades from the outer-left edge into the center, then
+                            // draw the right half normally so the center stays bright
+                            // while the outer-right edge fades away.
                             UI_DrawHandlePic(
                                 plaquePlacement,
                                 plaqueRect.x,
                                 plaqueRect.y,
-                                halfWidth,
+                                -halfWidth,
                                 plaqueRect.h,
                                 plaqueRect.horzAlign,
                                 plaqueRect.vertAlign,
@@ -7349,7 +7352,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                                 plaquePlacement,
                                 plaqueRect.x + halfWidth,
                                 plaqueRect.y,
-                                -halfWidth,
+                                halfWidth,
                                 plaqueRect.h,
                                 plaqueRect.horzAlign,
                                 plaqueRect.vertAlign,
