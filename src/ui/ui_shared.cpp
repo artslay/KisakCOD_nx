@@ -7215,7 +7215,6 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                 // Suppress only that screen-covering white fill; Item_Paint continues
                 // below so any text/control payload on the item is still processed.
                 bool suppressProfileWhiteBackdrop = false;
-                bool suppressProfileBluePlaque = false;
                 if (parent &&
                     parent->window.name &&
                     !I_stricmp(parent->window.name, "player_profile") &&
@@ -7286,84 +7285,51 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                         }
                     }
                 }
-                // The blue accent behind "Select Profile" is the stock
-                // line_horizontal item at (-340, 84, 200, 10). Draw its own
-                // rectangle using two mirrored halves of gradient_fadein so
-                // the existing blue plaque fades away at both ends. Keep the
-                // draw inside the authored plaque geometry; do not add lines
-                // beside or above/below the title.
+                // Keep the stock material path intact for the profile plaque.
+                // A missing fade must be fixed in material/image loading or texture
+                // sampling, not by submitting substitute quads from Item_Paint.
+#ifdef __SWITCH__
                 if (parent &&
                     parent->window.name &&
                     !I_stricmp(parent->window.name, "player_profile") &&
                     item->window.style == 3 &&
                     item->window.background &&
                     !Switch_UI_BadPointer(item->window.background) &&
-                    item->window.background->info.name)
+                    item->window.background->info.name &&
+                    (!I_stricmp(item->window.background->info.name, "line_horizontal") ||
+                     !I_stricmp(item->window.background->info.name, "images/line_horizontal")) &&
+                    item->window.rect.x > -340.1f && item->window.rect.x < -339.9f &&
+                    item->window.rect.y > 83.9f && item->window.rect.y < 84.1f &&
+                    item->window.rect.w > 199.9f && item->window.rect.w < 200.1f &&
+                    item->window.rect.h > 9.9f && item->window.rect.h < 10.1f)
                 {
-                    const char *profilePlaqueMaterialName =
-                        item->window.background->info.name;
-                    const rectDef_s &plaqueRect = item->window.rect;
-                    const bool isBlueProfilePlaque =
-                        (!I_stricmp(profilePlaqueMaterialName, "line_horizontal") ||
-                         !I_stricmp(profilePlaqueMaterialName, "images/line_horizontal")) &&
-                        plaqueRect.x > -340.1f && plaqueRect.x < -339.9f &&
-                        plaqueRect.y > 83.9f && plaqueRect.y < 84.1f &&
-                        plaqueRect.w > 199.9f && plaqueRect.w < 200.1f &&
-                        plaqueRect.h > 9.9f && plaqueRect.h < 10.1f &&
-                        item->window.foreColor[0] > 0.35f &&
-                        item->window.foreColor[0] < 0.45f &&
-                        item->window.foreColor[1] > 0.55f &&
-                        item->window.foreColor[1] < 0.65f &&
-                        item->window.foreColor[2] > 0.95f &&
-                        item->window.foreColor[3] > 0.7f;
-
-                    if (isBlueProfilePlaque)
+                    static bool profilePlaqueLogged = false;
+                    if (!profilePlaqueLogged)
                     {
-                        Material *gradientMaterial =
-                            Material_RegisterHandle("gradient_fadein", item->imageTrack);
-                        if (gradientMaterial &&
-                            !Switch_UI_BadPointer(gradientMaterial) &&
-                            !Material_IsDefault(gradientMaterial) &&
-                            gradientMaterial->info.name &&
-                            (!I_stricmp(gradientMaterial->info.name, "gradient_fadein") ||
-                             !I_stricmp(gradientMaterial->info.name, "images/gradient_fadein")))
-                        {
-                            const float halfWidth = plaqueRect.w * 0.5f;
-                            const float *plaqueColor = item->window.foreColor;
-                            const ScreenPlacement *plaquePlacement =
-                                &scrPlaceView[dc->localClientNum];
-
-                            // gradient_fadein is opaque at its left edge and
-                            // fades toward its right edge. Flip the left half so it
-                            // fades from the outer-left edge into the center, then
-                            // draw the right half normally so the center stays bright
-                            // while the outer-right edge fades away.
-                            UI_DrawHandlePic(
-                                plaquePlacement,
-                                plaqueRect.x,
-                                plaqueRect.y,
-                                -halfWidth,
-                                plaqueRect.h,
-                                plaqueRect.horzAlign,
-                                plaqueRect.vertAlign,
-                                plaqueColor,
-                                gradientMaterial);
-                            UI_DrawHandlePic(
-                                plaquePlacement,
-                                plaqueRect.x + halfWidth,
-                                plaqueRect.y,
-                                halfWidth,
-                                plaqueRect.h,
-                                plaqueRect.horzAlign,
-                                plaqueRect.vertAlign,
-                                plaqueColor,
-                                gradientMaterial);
-                            suppressProfileBluePlaque = true;
-                        }
+                        Switch_UI_LogMaterial(
+                            "player_profile/blue_plaque",
+                            "player_profile",
+                            item->window.background);
+                        char trace[320];
+                        std::snprintf(
+                            trace,
+                            sizeof(trace),
+                            "[KisakCOD][UI PROFILE PLAQUE] defaultMaterial=%d tint=%.3f,%.3f,%.3f,%.3f rect=%.1f,%.1f %.1fx%.1f action=native_material\\n",
+                            Material_IsDefault(item->window.background) ? 1 : 0,
+                            item->window.foreColor[0],
+                            item->window.foreColor[1],
+                            item->window.foreColor[2],
+                            item->window.foreColor[3],
+                            item->window.rect.x,
+                            item->window.rect.y,
+                            item->window.rect.w,
+                            item->window.rect.h);
+                        Switch_LogWrite(trace);
+                        profilePlaqueLogged = true;
                     }
                 }
-
-                if (!suppressProfileWhiteBackdrop && !suppressProfileBluePlaque)
+#endif
+                if (!suppressProfileWhiteBackdrop)
                     Window_Paint(dc, &item->window, parent->fadeAmount, parent->fadeInAmount, parent->fadeClamp, fadeCycle);
 #else
                 Window_Paint(dc, &item->window, parent->fadeAmount, parent->fadeInAmount, parent->fadeClamp, fadeCycle);
