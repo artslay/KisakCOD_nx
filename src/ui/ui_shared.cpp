@@ -3375,8 +3375,7 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
     // therefore own focus while every child remains unfocused. Preserve any
     // focus established by the menu's onOpen script, and only select a visible,
     // actionable item when the active menu still has no focused child.
-    if (Menus_MenuIsInStack(dc, menu) &&
-        Window_HasFocus(dc->localClientNum, &menu->window))
+    if (Menus_MenuIsInStack(dc, menu) && Menu_GetFocused(dc) == menu)
     {
         int focusedItemIndex = -1;
         for (int focusIndex = 0; focusIndex < menu->itemCount; ++focusIndex)
@@ -3436,8 +3435,7 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
 
                 // An onFocus script may have opened another menu. Do not keep
                 // assigning focus to an underlying menu in that case.
-                if (!Menus_MenuIsInStack(dc, menu) ||
-                    !Window_HasFocus(dc->localClientNum, &menu->window))
+                if (!Menus_MenuIsInStack(dc, menu) || Menu_GetFocused(dc) != menu)
                 {
                     break;
                 }
