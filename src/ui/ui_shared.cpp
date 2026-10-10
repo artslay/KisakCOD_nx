@@ -6328,6 +6328,7 @@ void __cdecl Window_Paint(
             KISAK_NULLSUB();
             break;
         case 3:
+        {
             v11 = dc->localClientNum;
             if (dc->localClientNum)
                 MyAssertHandler(
@@ -6396,6 +6397,7 @@ void __cdecl Window_Paint(
                     sharedUiInfo.assets.whiteMaterial);
             }
             break;
+        }
         case 5:
             if (w->background)
             {
