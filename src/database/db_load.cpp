@@ -7533,7 +7533,7 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
             std::snprintf(
                 trace + (written > 0 ? written : 0),
                 sizeof(trace) - static_cast<size_t>(written > 0 ? written : 0),
-                "\\n");
+                "\n");
             Switch_LogWrite(trace);
         }
 
