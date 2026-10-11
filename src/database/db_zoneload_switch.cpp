@@ -449,6 +449,38 @@ void *LinkAsset(void *context, int assetType, void *asset)
     XAssetHeader header(asset);
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
 
+#ifdef __SWITCH__
+    // Keep BSP registration visible with one bounded record per clip-map asset.
+    // The map can finish loading all zone data yet fail the later engine lookup
+    // if the asset name/type differs from what CM_LoadMapData_FastFile requests.
+    if (registerType == ASSET_TYPE_CLIPMAP ||
+        registerType == ASSET_TYPE_CLIPMAP_PVS)
+    {
+        static unsigned int switchBspAssetTraceCount = 0;
+        if (switchBspAssetTraceCount < 4)
+        {
+            ++switchBspAssetTraceCount;
+            const auto *sourceClipMap = static_cast<const clipMap_t *>(asset);
+            const auto *registeredClipMap = registered.clipMap;
+            char trace[448];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][BSP ASSET] zone=%s sourceType=%d engineType=%u registerType=%u source=%p name=%s registered=%p registeredName=%s same=%u\\n",
+                state.zoneName ? state.zoneName : "(null)",
+                assetType,
+                static_cast<unsigned>(type),
+                static_cast<unsigned>(registerType),
+                static_cast<const void *>(sourceClipMap),
+                sourceClipMap && sourceClipMap->name ? sourceClipMap->name : "<null>",
+                static_cast<const void *>(registeredClipMap),
+                registeredClipMap && registeredClipMap->name ? registeredClipMap->name : "<null>",
+                registeredClipMap == sourceClipMap ? 1u : 0u);
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
+
     if (type == ASSET_TYPE_TECHNIQUE_SET)
     {
         // Load_MaterialTechniqueSetAsset
