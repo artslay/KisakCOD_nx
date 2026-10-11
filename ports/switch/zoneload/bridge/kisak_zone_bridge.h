@@ -30,6 +30,10 @@ struct KisakZoneHooks
     // registers it; returns the asset the engine will use (an existing one may win).
     void *(*linkAsset)(void *context, int assetType, void *asset);
 
+    // Resolve an asset's XString before it is used as a native name. Some fastfiles
+    // point at a serialized XString slot rather than directly at its characters.
+    const char *(*resolveAssetName)(void *context, const char *name);
+
     // GfxImage texture data is available (Load_Texture).
     void (*loadImageData)(void *context, void *loadDef, void *image);
     // LoadedSound sample data is available (SND_SetData).
