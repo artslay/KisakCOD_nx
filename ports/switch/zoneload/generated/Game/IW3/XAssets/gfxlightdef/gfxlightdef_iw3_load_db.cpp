@@ -12,13 +12,12 @@
 
 #include "kisak_zone_hooks_internal.h"
 
-#include "kisak_zone_hooks_internal.h"
-
 // Referenced Assets:
 #include "../gfximage/gfximage_iw3_load_db.h"
 
 #include <cassert>
 #include <cstring>
+#include <stdexcept>
 #include <type_traits>
 
 using namespace IW3;
@@ -163,11 +162,25 @@ void Loader_GfxLightDef::LoadAsset_GfxLightDef(GfxLightDef** pAsset)
     assert(pAsset != nullptr);
     
     // A small number of fastfiles store this XString as a pointer to a
-    // serialized XString slot. Resolve it before AssetName is implicitly
-    // converted to std::string for the OAT and engine asset registries.
+    // serialized XString slot. Resolve it against the OAT stream's own bounded
+    // blocks before AssetName is implicitly converted to std::string.
     KisakZone_SetActiveAssetPhase(25); // resolve serialized light-definition name
-    if (const auto* hooks = KisakZone_CurrentHooks(); hooks && hooks->resolveAssetName && (*pAsset)->name)
-        (*pAsset)->name = hooks->resolveAssetName(hooks->context, (*pAsset)->name);
+    if ((*pAsset)->name)
+    {
+        const char* resolvedName = m_stream.ResolveStringPointer((*pAsset)->name);
+        if (!resolvedName)
+        {
+            if (const auto* hooks = KisakZone_CurrentHooks(); hooks && hooks->resolveAssetName)
+                resolvedName = hooks->resolveAssetName(hooks->context, (*pAsset)->name);
+        }
+        if (!resolvedName)
+            throw std::runtime_error("invalid serialized GfxLightDef name");
+        (*pAsset)->name = resolvedName;
+    }
+    else
+    {
+        throw std::runtime_error("null GfxLightDef name");
+    }
 
     KisakZone_SetActiveAssetPhase(26); // collect light-definition references
     AssetInfoCollector assetInfo(m_zone);
