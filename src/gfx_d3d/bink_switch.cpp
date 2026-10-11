@@ -34,6 +34,7 @@ struct SwitchBinkState
     SwsContext *sws;
     int videoStreamIndex;
     bool inputEof;
+    bool packetPending;
     bool frameDecodeFinished;
     bool decodeFailed;
     bool paused;
@@ -252,6 +253,27 @@ static bool Switch_BinkDecodeNext(SwitchBinkState *state)
             return false;
         }
 
+        // avcodec_send_packet() returning EAGAIN means the decoder did not
+        // accept that packet. Keep it referenced and retry after draining any
+        // output; discarding it can break inter-frame decoding after frame 1.
+        if (state->packetPending)
+        {
+            ret = avcodec_send_packet(state->codec, state->packet);
+            if (ret == AVERROR(EAGAIN))
+                continue;
+
+            if (ret < 0)
+            {
+                Switch_BinkSetAvError(ret, "avcodec_send_packet");
+                state->decodeFailed = true;
+                return false;
+            }
+
+            av_packet_unref(state->packet);
+            state->packetPending = false;
+            continue;
+        }
+
         if (state->inputEof)
             return false;
 
@@ -285,15 +307,7 @@ static bool Switch_BinkDecodeNext(SwitchBinkState *state)
             continue;
         }
 
-        ret = avcodec_send_packet(state->codec, state->packet);
-        av_packet_unref(state->packet);
-
-        if (ret < 0 && ret != AVERROR(EAGAIN))
-        {
-            Switch_BinkSetAvError(ret, "avcodec_send_packet");
-            state->decodeFailed = true;
-            return false;
-        }
+        state->packetPending = true;
     }
 }
 
