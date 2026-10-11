@@ -270,3 +270,33 @@ void KisakZone_Free(void* zone)
 {
     delete static_cast<Zone*>(zone);
 }
+
+/*
+ * Extract the model pointers from an OAT WeaponDef without exposing OAT's
+ * generated asset types to the engine translation unit. That unit also
+ * includes the engine's legacy Fx/RawFile/StringTable declarations, so
+ * including IW3_Assets.h there causes duplicate type declarations.
+ */
+bool KisakZone_ExtractWeaponModelPointers(const void* asset, void** modelPointers, const size_t modelPointerCount)
+{
+    constexpr size_t kWeaponModelPointerCount = 38;
+    if (!asset || !modelPointers || modelPointerCount < kWeaponModelPointerCount)
+        return false;
+
+    const auto* const weapon = static_cast<const IW3::WeaponDef*>(asset);
+    size_t outputIndex = 0;
+
+    for (size_t index = 0; index < 16; ++index)
+        modelPointers[outputIndex++] = weapon->gunXModel[index];
+    for (size_t index = 0; index < 16; ++index)
+        modelPointers[outputIndex++] = weapon->worldModel[index];
+
+    modelPointers[outputIndex++] = weapon->handXModel;
+    modelPointers[outputIndex++] = weapon->worldClipModel;
+    modelPointers[outputIndex++] = weapon->rocketModel;
+    modelPointers[outputIndex++] = weapon->knifeModel;
+    modelPointers[outputIndex++] = weapon->worldKnifeModel;
+    modelPointers[outputIndex++] = weapon->projectileModel;
+
+    return outputIndex == kWeaponModelPointerCount;
+}
