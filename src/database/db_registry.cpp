@@ -1686,9 +1686,8 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][IWI ROOT] fastfile=%s resolved=%s/%s\n",
+            "[KisakCOD][IWI ROOT] fastfile=%s relative=%s\n",
             zoneName,
-            Sys_DefaultInstallPath(),
             filename);
         Switch_LogWrite(trace);
     }
