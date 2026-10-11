@@ -426,6 +426,7 @@ const char *g_defaultAssetName[ASSET_TYPE_COUNT] =
     "",
     "",
     "",
+    "",
     "light_dynamic",
     "",
     "fonts/consolefont",
