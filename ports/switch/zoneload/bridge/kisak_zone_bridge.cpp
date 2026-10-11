@@ -108,6 +108,9 @@ namespace
                         case 15: phaseName = "font/insert-alias"; break;
                         case 16: phaseName = "font/decode-entry"; break;
                         case 17: phaseName = "font/alias-lookup"; break;
+                        case 18: phaseName = "font/dispatch-entry"; break;
+                        case 19: phaseName = "font/loader-constructed"; break;
+                        case 20: phaseName = "font/load-return"; break;
                         default: phaseName = "font/start"; break;
                         }
                     }
