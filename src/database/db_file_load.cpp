@@ -27,6 +27,9 @@ extern XAssetHeader *varXAssetHeader;
 extern void __cdecl Load_XAssetHeader(bool atStreamStart);
 uint32_t g_switchImageAdds = 0;
 uint64_t g_switchTraceDecompOut = 0;
+// Deferred image names contain offsets into the currently active fastfile streams.
+// Increment whenever DB_InitStreams replaces that stream table.
+uint32_t g_switchStreamGeneration = 0;
 
 // XFile is a serialized fastfile header: two 32-bit sizes followed by
 // exactly nine 32-bit block sizes. Keep this layout independent of host
@@ -581,6 +584,7 @@ void __cdecl DB_LoadXFileInternal()
 #endif
     DB_InitStreams(g_load.zoneMem);
 #ifdef __SWITCH__
+    ++g_switchStreamGeneration;
     g_switchDbStage = "file/streams_init_done";
 
     if (g_load.filename && I_stricmp(g_load.filename, "ui") == 0)
