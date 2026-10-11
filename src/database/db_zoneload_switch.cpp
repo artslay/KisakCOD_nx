@@ -466,7 +466,7 @@ void *LinkAsset(void *context, int assetType, void *asset)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][BSP ASSET] zone=%s sourceType=%d engineType=%u registerType=%u source=%p name=%s registered=%p registeredName=%s same=%u\\n",
+                "[KisakCOD][BSP ASSET] zone=%s sourceType=%d engineType=%u registerType=%u source=%p name=%s registered=%p registeredName=%s same=%u\n",
                 state.zoneName ? state.zoneName : "(null)",
                 assetType,
                 static_cast<unsigned>(type),
