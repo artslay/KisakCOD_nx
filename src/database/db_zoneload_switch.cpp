@@ -137,6 +137,17 @@ uint16_t ScriptString(void *context, uint16_t zoneIndex)
     const auto &state = *static_cast<ZoneLoadState *>(context);
     return zoneIndex < state.scriptStrings.size() ? state.scriptStrings[zoneIndex] : 0;
 }
+const char *ResolveAssetName(void *context, const char *name)
+{
+    (void)context;
+    if (!name)
+        return nullptr;
+
+    const uintptr_t resolved =
+        DB_ResolveSwitchSerializedString(reinterpret_cast<uintptr_t>(name));
+    return resolved ? reinterpret_cast<const char *>(resolved) : name;
+}
+
 
 void LoadImageData(void *context, void *loadDef, void *imagePointer)
 {
@@ -474,6 +485,7 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
     hooks.scriptStringsLoaded = ScriptStringsLoaded;
     hooks.scriptString = ScriptString;
     hooks.linkAsset = LinkAsset;
+    hooks.resolveAssetName = ResolveAssetName;
     hooks.loadImageData = LoadImageData;
     hooks.setSoundData = SetSoundData;
 
