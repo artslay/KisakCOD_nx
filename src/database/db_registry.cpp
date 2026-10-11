@@ -2207,11 +2207,46 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
             bspLookupMissLogged = true;
             char trace[256];
             const uint32_t hash = DB_HashForName(name, type);
+            uint32_t matchingRecord = 0;
+            for (uint32_t i = 1; i < 0x8000u; ++i)
+            {
+                const XAssetEntryPoolEntry &candidate = g_assetEntryPool[i];
+                if (candidate.entry.asset.type == type &&
+                    candidate.entry.asset.header.clipMap == &cm &&
+                    candidate.entry.asset.header.clipMap->name &&
+                    Switch_IstricmpAssetName(
+                        candidate.entry.asset.header.clipMap->name, name) == 0)
+                {
+                    matchingRecord = i;
+                    break;
+                }
+            }
+
+            bool recordInQueryBucket = false;
+            uint32_t chainIndex = db_hashTable[hash];
+            uint32_t chainGuard = 0;
+            while (chainIndex && chainIndex < 0x8000u &&
+                   ++chainGuard <= 0x8000u)
+            {
+                if (chainIndex == matchingRecord && matchingRecord)
+                {
+                    recordInQueryBucket = true;
+                    break;
+                }
+                chainIndex = g_assetEntryPool[chainIndex].entry.nextHash;
+            }
+
+            const XAssetEntryPoolEntry &record = g_assetEntryPool[matchingRecord];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][BSP LOOKUP MISS] type=%u name=%s hash=%u bucketHead=%u cm=%p cmName=%s\n",
+                "[KisakCOD][BSP LOOKUP MISS] type=%u name=%s hash=%u bucketHead=%u record=%u zone=%u inuse=%u nextHash=%u inBucket=%u cm=%p cmName=%s\n",
                 static_cast<unsigned>(type), name, hash,
                 static_cast<unsigned>(db_hashTable[hash]),
+                matchingRecord,
+                static_cast<unsigned>(record.entry.zoneIndex),
+                static_cast<unsigned>(record.entry.inuse),
+                static_cast<unsigned>(record.entry.nextHash),
+                recordInQueryBucket ? 1u : 0u,
                 static_cast<void *>(&cm),
                 cm.name ? cm.name : "<null>");
             Switch_LogWrite(trace);
