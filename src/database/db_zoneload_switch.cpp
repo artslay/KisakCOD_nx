@@ -34,7 +34,7 @@
 #include <ui/ui_shared.h>
 
 #include "kisak_zone_bridge.h"
-#include "Game/IW3/IW3.h"
+#include "Game/IW3/IW3_AssetType.h"
 
 // src/database/db_registry.cpp (DB_AddXAsset itself is file-local there).
 extern XAssetHeader __cdecl DB_AddXAsset(XAssetType type, XAssetHeader header);
