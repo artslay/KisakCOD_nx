@@ -1,4 +1,7 @@
 #include <universal/q_shared.h>
+#ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
+#endif
 #include "bg_local.h"
 #include "bg_public.h"
 #include <qcommon/mem_track.h>
@@ -898,6 +901,9 @@ WeaponDef *__cdecl BG_LoadDefaultWeaponDef()
 
 WeaponDef *__cdecl BG_LoadDefaultWeaponDef_FastFile()
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/weapon/default_definition/find_none_asset";
+#endif
     return DB_FindXAssetHeader(ASSET_TYPE_WEAPON, "none").weapon;
 }
 
