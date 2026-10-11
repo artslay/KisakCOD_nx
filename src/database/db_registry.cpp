@@ -922,6 +922,25 @@ void __cdecl DB_ReleaseXAssets()
     }
 }
 
+bool __cdecl DB_IsZoneLoaded(const char *zoneName)
+{
+    if (!zoneName || !*zoneName)
+        return false;
+
+    for (int32_t i = 0; i < g_zoneCount; ++i)
+    {
+        const uint32_t zoneHandle = g_zoneHandles[i];
+        if (zoneHandle >= ARRAY_COUNT(g_zones))
+            continue;
+
+        const XZone &zone = g_zones[zoneHandle];
+        if (zone.name[0] && !I_stricmp(zone.name, zoneName))
+            return true;
+    }
+
+    return false;
+}
+
 void __cdecl DB_ShutdownXAssets()
 {
     int32_t i; // [esp+0h] [ebp-4h]
