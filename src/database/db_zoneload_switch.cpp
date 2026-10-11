@@ -384,17 +384,6 @@ void *LinkAsset(void *context, int assetType, void *asset)
 {
     auto &state = *static_cast<ZoneLoadState *>(context);
     ++state.linkedAssets;
-    const bool traceStallWindow =
-        state.zoneName && std::strcmp(state.zoneName, "killhouse") == 0 &&
-        state.linkedAssets >= 1675u && state.linkedAssets <= 1705u;
-    if (traceStallWindow)
-    {
-        char trace[192];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] asset-link begin count=%u type=%d asset=%p\n",
-            state.linkedAssets, assetType, asset);
-        Switch_LogWrite(trace);
-    }
     if ((state.linkedAssets % 512u) == 0)
     {
         char trace[192];
@@ -463,14 +452,6 @@ void *LinkAsset(void *context, int assetType, void *asset)
             loaded->items[itemIndex]->parent = registered.menu;
     }
 
-    if (traceStallWindow)
-    {
-        char trace[160];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] asset-link end count=%u type=%d\n",
-            state.linkedAssets, assetType);
-        Switch_LogWrite(trace);
-    }
     return registered.data;
 }
 
