@@ -154,19 +154,10 @@ void Unlock_Bink_textures(
         BINKFRAMETEXTURES &textures = set_textures->textures[i];
         BINKFRAMEPLANESET &planes = buffers.Frames[i];
 
-        UploadBinkPlane(
-            textures.Ytexture, planes.YPlane,
-            buffers.YABufferWidth, buffers.YABufferHeight);
-        UploadBinkPlane(
-            textures.cRtexture, planes.cRPlane,
-            buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
-        UploadBinkPlane(
-            textures.cBtexture, planes.cBPlane,
-            buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
-        UploadBinkPlane(
-            textures.Atexture, planes.APlane,
-            buffers.YABufferWidth, buffers.YABufferHeight);
-
+        // On Switch, Bink decodes into the CPU lockShadow buffers above.
+        // The frame textures only own those buffers; rendering samples tex_draw,
+        // already uploaded from activePlanes. Uploading these unused GPU images
+        // adds six synchronous Vulkan submissions for every decoded frame.
         planes.YPlane.Buffer = nullptr;
         planes.cRPlane.Buffer = nullptr;
         planes.cBPlane.Buffer = nullptr;
