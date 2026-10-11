@@ -605,11 +605,26 @@ static void Switch_LogDeferredImageDelayCoverage(
         writtenBytes += static_cast<size_t>(n);
     }
 
-    char trace[768];
+    char nameBytesText[16 * 3 + 1] = {};
+    size_t nameBytesWritten = 0;
+    for (size_t i = 0; i < sizeof(nameBytes); ++i)
+    {
+        const int n = std::snprintf(
+            nameBytesText + nameBytesWritten,
+            sizeof(nameBytesText) - nameBytesWritten,
+            i ? " %02x" : "%02x",
+            static_cast<unsigned>(nameBytes[i]));
+        if (n <= 0 ||
+            static_cast<size_t>(n) >= sizeof(nameBytesText) - nameBytesWritten)
+            break;
+        nameBytesWritten += static_cast<size_t>(n);
+    }
+
+    char trace[1024];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][DEFERRED IMAGE COVERAGE] asset=%d generation=%u token=%08x targetBlock=%u targetOffset=%08x nameBlock=%u nameOffset=%08x delayRanges=%u block4Ranges=%u targetOverlap=%d nameOverlap=%d targetBytes=%s\n",
+        "[KisakCOD][DEFERRED IMAGE COVERAGE] asset=%d generation=%u token=%08x targetBlock=%u targetOffset=%08x nameBlock=%u nameOffset=%08x delayRanges=%u block4Ranges=%u targetOverlap=%d nameOverlap=%d targetBytes=%s nameBytes=%s\\n",
         deferred.assetIndex,
         deferred.streamGeneration,
         deferred.nameToken,
@@ -621,7 +636,8 @@ static void Switch_LogDeferredImageDelayCoverage(
         block4DelayRanges,
         targetDelayIndex,
         nameDelayIndex,
-        bytesText);
+        bytesText,
+        nameBytesText);
     Switch_LogWrite(trace);
 }
 
