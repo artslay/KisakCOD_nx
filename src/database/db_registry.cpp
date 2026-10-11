@@ -4366,6 +4366,60 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
         const uintptr_t directName =
             reinterpret_cast<uintptr_t>(image->name);
 
+        // Diagnostic only: compare the serialized XString token's canonical
+        // target against the name pointer that survived until deferred fixup.
+        // This catches a pointer that changes during loading without changing
+        // the image name or attempting to repair it heuristically.
+        if (deferred.nameToken != 0u &&
+            deferred.nameToken != UINT32_MAX &&
+            deferred.nameToken != UINT32_MAX - 1u)
+        {
+            const uintptr_t serializedTarget =
+                DB_ConvertOffsetToPointerValue(deferred.nameToken);
+            uint32_t tokenBlock = UINT32_MAX;
+            uint32_t tokenOffset = 0;
+            uint32_t actualBlock = UINT32_MAX;
+            uint32_t actualOffset = 0;
+            const bool tokenTextReady =
+                serializedTarget &&
+                Switch_IsStreamAsciiImageName(
+                    serializedTarget, &tokenBlock, &tokenOffset);
+            const bool actualTextReady =
+                directName &&
+                Switch_IsStreamAsciiImageName(
+                    directName, &actualBlock, &actualOffset);
+            const bool closeSameBlock =
+                tokenTextReady && actualTextReady &&
+                tokenBlock == actualBlock &&
+                (tokenOffset > actualOffset
+                     ? tokenOffset - actualOffset
+                     : actualOffset - tokenOffset) <= 64u;
+
+            if (directName != serializedTarget && closeSameBlock)
+            {
+                char trace[640];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][XSTRING ADDRESS MISMATCH] asset=%d rawType=%u token=%08x target=%p targetBlock=%u targetOffset=%08x targetText=%.*s actual=%p actualBlock=%u actualOffset=%08x actualText=%.*s original=%p\\n",
+                    deferred.assetIndex,
+                    deferred.rawType,
+                    deferred.nameToken,
+                    reinterpret_cast<const void *>(serializedTarget),
+                    tokenBlock,
+                    tokenOffset,
+                    80,
+                    reinterpret_cast<const char *>(serializedTarget),
+                    reinterpret_cast<const void *>(directName),
+                    actualBlock,
+                    actualOffset,
+                    80,
+                    reinterpret_cast<const char *>(directName),
+                    reinterpret_cast<const void *>(deferred.originalName));
+                Switch_LogWrite(trace);
+            }
+        }
+
         // A direct XString result is authoritative when it already points at
         // a printable string in the serialized stream. Do not feed such a
         // string through the generic pointer-alias table: that table contains
