@@ -464,8 +464,9 @@ static void Switch_IndexIwdArchives(const char *game)
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][IWI ROOT] index ready archives=%zu entries=%zu language=%s game=%s searchDirs=%zu\n",
+        "[KisakCOD][IWI ROOT] index ready archives=%zu records=%zu uniquePaths=%zu language=%s game=%s searchDirs=%zu\n",
         g_iwdArchives.size(),
+        g_iwdEntryRecords.size(),
         g_iwdEntries.size(),
         g_switchSelectedLanguage.c_str(),
         gameName,
