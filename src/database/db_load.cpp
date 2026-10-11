@@ -8028,6 +8028,62 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     const uint32_t techniqueSetHeaderAfter =
         Switch_GetStreamCursorOffset(techniqueSetHeaderStream);
 
+    // Keep a compact, synchronous record for early UI materials. The raw
+    // stream trace may be buffered separately, but this line must remain beside
+    // the cursor diagnostics that explain an invalid inline technique header.
+    if (traceRawType == 4u &&
+        traceAssetIndex >= 0 &&
+        traceAssetIndex <= 3)
+    {
+        char trace[640];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TECHSET ABI] asset=%d stream=%u headerOffset=%u headerAfter=%u start=%p "
+            "name=%08x world=%02x uploaded=%02x unused=%02x%02x remap=%08x "
+            "tech=%08x,%08x,%08x,%08x,%08x,%08x\n",
+            traceAssetIndex,
+            static_cast<unsigned>(techniqueSetHeaderStream),
+            techniqueSetHeaderOffset,
+            techniqueSetHeaderAfter,
+            static_cast<const void *>(techniqueSetStart),
+            serialized.name,
+            static_cast<unsigned>(serialized.worldVertFormat),
+            static_cast<unsigned>(serialized.hasBeenUploaded),
+            static_cast<unsigned>(serialized.unused[0]),
+            static_cast<unsigned>(serialized.unused[1]),
+            serialized.remappedTechniqueSet,
+            serialized.techniques[0],
+            serialized.techniques[1],
+            serialized.techniques[2],
+            serialized.techniques[3],
+            serialized.techniques[4],
+            serialized.techniques[5]);
+        Switch_LogWrite(trace);
+
+        int written = std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TECHSET ABI BYTES] asset=%d:",
+            traceAssetIndex);
+        const uint8_t *raw =
+            reinterpret_cast<const uint8_t *>(&serialized);
+        for (size_t i = 0; i < 32u && written > 0 &&
+             static_cast<size_t>(written) + 4u < sizeof(trace); ++i)
+        {
+            written += std::snprintf(
+                trace + written,
+                sizeof(trace) - static_cast<size_t>(written),
+                " %02x",
+                static_cast<unsigned>(raw[i]));
+        }
+        std::snprintf(
+            trace + (written > 0 ? written : 0),
+            sizeof(trace) - static_cast<size_t>(written > 0 ? written : 0),
+            "\n");
+        Switch_LogWrite(trace);
+    }
+
     Switch_LogRawDwords(
         "[SWITCH TECHSET WORDS]",
         reinterpret_cast<const uint8_t *>(&serialized),
