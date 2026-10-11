@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <cstdint>
+#include <universal/physicalmemory.h>
 #endif
 
 #include <qcommon/threads.h>
@@ -65,6 +66,50 @@ bool g_anyFastFileLoaded;
 #endif
 
 DB_LoadData g_load;
+
+#ifdef __SWITCH__
+// Native ARM64 asset structures belong to the fastfile zone that created them.
+// Hunk memory is cleared by Com_Restart() even when code/common zones remain
+// loaded, leaving those zones with dangling pointers. PMem allocations are
+// tracked by the active PMem_BeginAlloc(zone->name, allocType) scope and are
+// released with that zone.
+uint8_t *__cdecl DB_AllocSwitchAssetMemory(
+    uint32_t size,
+    const char *name,
+    int32_t type)
+{
+    (void)name;
+    (void)type;
+
+    if (!size || !g_load.filename || !g_load.f ||
+        g_load.allocType < 0 || g_load.allocType >= 2)
+    {
+        Com_Error(
+            ERR_FATAL,
+            "Switch asset allocation outside an active fastfile zone");
+        return nullptr;
+    }
+
+    uint8_t *memory = PMem_Alloc(
+        size,
+        32u,
+        4u,
+        static_cast<uint32_t>(g_load.allocType));
+    if (!memory)
+    {
+        Com_Error(
+            ERR_DROP,
+            "Could not allocate %u bytes for Switch fastfile asset '%s'",
+            size,
+            name ? name : "<unnamed>");
+        return nullptr;
+    }
+
+    // Match Hunk_Alloc(): translated native structures start zero-initialized.
+    memset(memory, 0, size);
+    return memory;
+}
+#endif
 LONG g_loadedSize;
 LONG g_loadedExternalBytes;
 volatile int32_t g_totalSize;
@@ -571,7 +616,7 @@ void __cdecl DB_LoadXFileInternal()
     if (varXAssetList->assets)
     {
         varXAssetList->assets =
-            reinterpret_cast<XAsset *>(Hunk_Alloc(
+            reinterpret_cast<XAsset *>(DB_AllocSwitchAssetMemory(
                 static_cast<uint32_t>(
                     sizeof(XAsset) * static_cast<size_t>(varXAssetList->assetCount)),
                 "SwitchXAssetArray",
@@ -703,7 +748,7 @@ void Load_XAssetListCustom()
         }
 
         const char **dst =
-            reinterpret_cast<const char **>(Hunk_Alloc(
+            reinterpret_cast<const char **>(DB_AllocSwitchAssetMemory(
                 static_cast<uint32_t>(
                     sizeof(const char *) * static_cast<size_t>(count)),
                 "SwitchXAssetStrings",
