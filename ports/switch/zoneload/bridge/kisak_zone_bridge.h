@@ -45,3 +45,5 @@ struct KisakZoneHooks
 // when the engine frees the zone's memory), or null with a message in errorOut.
 void *KisakZone_Load(const char *zoneName, const KisakZoneBlocks &blocks, const KisakZoneHooks &hooks, char *errorOut, size_t errorSize);
 void KisakZone_Free(void *zone);
+// Read the OAT IW3 WeaponDef model pointer fields without importing its types into engine code.
+bool KisakZone_ExtractWeaponModelPointers(const void *asset, void **modelPointers, size_t modelPointerCount);
