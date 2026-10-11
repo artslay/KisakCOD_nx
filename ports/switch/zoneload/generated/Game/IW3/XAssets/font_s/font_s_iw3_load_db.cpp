@@ -10,6 +10,8 @@
 
 #include "Loading/AssetInfoCollector.h"
 
+#include "kisak_zone_hooks_internal.h"
+
 // Referenced Assets:
 #include "../material/material_iw3_load_db.h"
 
