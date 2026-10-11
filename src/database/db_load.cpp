@@ -5835,27 +5835,64 @@ void __cdecl Load_GfxImage(bool atStreamStart)
 #ifdef __SWITCH__
         {
             const char *resolvedName = varGfxImage->name;
+            const uintptr_t resolvedAddress =
+                reinterpret_cast<uintptr_t>(resolvedName);
+            uint32_t pointerBlock = UINT32_MAX;
+            uint32_t pointerOffset = UINT32_MAX;
+            if (resolvedAddress && g_streamBlocks)
+            {
+                for (uint32_t block = 0;
+                     block < ARRAY_COUNT(g_streamPosArray);
+                     ++block)
+                {
+                    if (!g_streamBlocks[block].data)
+                        continue;
+
+                    const uintptr_t base =
+                        reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+                    if (resolvedAddress >= base &&
+                        resolvedAddress - base < g_streamBlocks[block].size)
+                    {
+                        pointerBlock = block;
+                        pointerOffset =
+                            static_cast<uint32_t>(resolvedAddress - base);
+                        break;
+                    }
+                }
+            }
+
             uint32_t nameBlock = UINT32_MAX;
             uint32_t nameOffset = 0;
             const bool nameIsStreamAscii =
                 resolvedName &&
                 Switch_IsStreamAsciiImageName(
-                    reinterpret_cast<uintptr_t>(resolvedName),
+                    resolvedAddress,
                     &nameBlock,
                     &nameOffset);
-            char trace[512];
+            const bool safeToReadName =
+                resolvedName &&
+                (pointerBlock != UINT32_MAX ||
+                 serialized.name == UINT32_MAX);
+            const unsigned firstByte =
+                safeToReadName
+                    ? static_cast<unsigned>(
+                          static_cast<unsigned char>(resolvedName[0]))
+                    : 0u;
+            const bool emptyName = safeToReadName && firstByte == 0u;
+
+            char trace[560];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][GFXIMAGE TRACE] asset=%d rawType=%u image=%p token=%08x name=%p first=%02x streamAscii=%u nameBlock=%u nameOffset=%08x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\n",
-                g_switchCurrentAssetIndex,
-                g_switchCurrentAssetRawType,
-                static_cast<void *>(varGfxImage),
+                "[KisakCOD][GFXIMAGE TRACE] token=%08x image=%p name=%p first=%02x safe=%u streamAscii=%u pointerBlock=%u pointerOffset=%08x nameBlock=%u nameOffset=%08x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\\n",
                 serialized.name,
+                static_cast<void *>(varGfxImage),
                 static_cast<const void *>(resolvedName),
-                resolvedName ? static_cast<unsigned>(
-                    static_cast<unsigned char>(resolvedName[0])) : 0u,
+                firstByte,
+                safeToReadName ? 1u : 0u,
                 nameIsStreamAscii ? 1u : 0u,
+                pointerBlock,
+                pointerOffset,
                 nameBlock,
                 nameOffset,
                 static_cast<unsigned>(varGfxImage->category),
@@ -5866,8 +5903,8 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 static_cast<unsigned>(g_streamPosIndex),
                 Switch_GetStreamCursorOffset(0),
                 Switch_GetStreamCursorOffset(4),
-                (!resolvedName || resolvedName[0] == '\0') ? 1u : 0u);
-            if (traceKillhouseImage)
+                emptyName ? 1u : 0u);
+            if (traceKillhouseImage || !nameIsStreamAscii)
                 Switch_LogWrite(trace);
 
             if (resolvedName && std::strcmp(resolvedName, "3") == 0)
