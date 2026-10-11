@@ -141,6 +141,98 @@ struct SwitchInvalidOffsetTraceKey
     uint32_t rawType;
 };
 
+struct SwitchPointerStoreTraceKey
+{
+    uint32_t block;
+    uint32_t offset;
+    uintptr_t caller;
+    uint8_t operation;
+};
+
+void __cdecl DB_LogSwitchPointerStoreIfStream(
+    const char *operation,
+    const void *destination,
+    uint32_t serializedToken,
+    uintptr_t resolvedValue,
+    uintptr_t caller)
+{
+    if (!destination || !g_streamBlocks)
+        return;
+
+    const uintptr_t address = reinterpret_cast<uintptr_t>(destination);
+    uint32_t block = UINT32_MAX;
+    uint32_t offset = 0;
+    for (uint32_t i = 0; i < ARRAY_COUNT(g_streamPosArray); ++i)
+    {
+        if (!g_streamBlocks[i].data)
+            continue;
+        const uintptr_t base =
+            reinterpret_cast<uintptr_t>(g_streamBlocks[i].data);
+        if (address >= base && address - base < g_streamBlocks[i].size)
+        {
+            block = i;
+            offset = static_cast<uint32_t>(address - base);
+            break;
+        }
+    }
+
+    // Eight-byte runtime pointers must never be stored in the 32-bit
+    // serialized stream buffers. Keep this trace bounded and report only
+    // unique writer sites so a malformed asset cannot flood the log.
+    if (block == UINT32_MAX)
+        return;
+
+    uint8_t operationId = 0;
+    if (operation && std::strcmp(operation, "DB_ConvertOffsetToAlias") == 0)
+        operationId = 1;
+    else if (operation && std::strcmp(operation, "DB_ConvertOffsetToPointer") == 0)
+        operationId = 2;
+    else if (operation && std::strcmp(operation, "Load_XString") == 0)
+        operationId = 3;
+    else
+        operationId = 4;
+
+    static SwitchPointerStoreTraceKey seen[32] = {};
+    static uint32_t seenCount = 0;
+    for (uint32_t i = 0; i < seenCount; ++i)
+    {
+        if (seen[i].block == block &&
+            seen[i].offset == offset &&
+            seen[i].caller == caller &&
+            seen[i].operation == operationId)
+            return;
+    }
+    if (seenCount >= ARRAY_COUNT(seen))
+    {
+        static bool suppressionLogged = false;
+        if (!suppressionLogged)
+        {
+            Switch_LogWrite(
+                "[KisakCOD][STREAM POINTER STORE] further unique writes suppressed\n");
+            suppressionLogged = true;
+        }
+        return;
+    }
+
+    seen[seenCount++] = {block, offset, caller, operationId};
+    char trace[512];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][STREAM POINTER STORE] op=%s destBlock=%u destOffset=%08x token=%08x value=%p caller=%p asset=%d rawType=%u rawHeader=%08x stage=%s\n",
+        operation ? operation : "<unknown>",
+        block,
+        offset,
+        serializedToken,
+        reinterpret_cast<const void *>(resolvedValue),
+        reinterpret_cast<const void *>(caller),
+        g_switchCurrentAssetIndex,
+        static_cast<unsigned>(g_switchCurrentAssetRawType),
+        static_cast<unsigned>(g_switchCurrentAssetHeader),
+        g_switchDbStage ? g_switchDbStage : "");
+    Switch_LogWrite(trace);
+}
+
 static void Switch_LogInvalidOffsetOnce(
     uint32_t token,
     uint32_t block,
@@ -426,6 +518,12 @@ void __cdecl DB_ConvertOffsetToAlias(void *data)
     if (!aliasSlot)
     {
 #ifdef __SWITCH__
+        DB_LogSwitchPointerStoreIfStream(
+            "DB_ConvertOffsetToAlias",
+            data,
+            offset,
+            0,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
         *reinterpret_cast<uintptr_t *>(data) = 0;
 #endif
         return;
@@ -490,10 +588,22 @@ void __cdecl DB_ConvertOffsetToAlias(void *data)
 
     if (resolvedPointer)
     {
+        DB_LogSwitchPointerStoreIfStream(
+            "DB_ConvertOffsetToAlias",
+            data,
+            offset,
+            resolvedPointer,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
         *reinterpret_cast<uintptr_t *>(data) = resolvedPointer;
     }
     else
     {
+        DB_LogSwitchPointerStoreIfStream(
+            "DB_ConvertOffsetToAlias",
+            data,
+            offset,
+            0,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
         *reinterpret_cast<uintptr_t *>(data) = 0;
         DB_AddSwitchPointerAliasFixup(
             aliasSlot,
@@ -534,7 +644,14 @@ void __cdecl DB_ConvertOffsetToPointer(void *data)
 {
     const uint32_t offset = *reinterpret_cast<const uint32_t *>(data);
 #ifdef __SWITCH__
-    *reinterpret_cast<uintptr_t *>(data) = DB_ConvertOffsetToPointerValue(offset);
+    const uintptr_t resolvedPointer = DB_ConvertOffsetToPointerValue(offset);
+    DB_LogSwitchPointerStoreIfStream(
+        "DB_ConvertOffsetToPointer",
+        data,
+        offset,
+        resolvedPointer,
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    *reinterpret_cast<uintptr_t *>(data) = resolvedPointer;
 #else
     *reinterpret_cast<uint32_t *>(data) =
         static_cast<uint32_t>(DB_ConvertOffsetToPointerValue(offset));
