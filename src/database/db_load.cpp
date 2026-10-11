@@ -5817,14 +5817,23 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                         nameAddress >= cursorAddress;
                 }
 
-                // Follow pointer-slot chains only after the target is already
-                // behind the stream cursor. A forward name is kept as its
-                // direct serialized address; the existing validation below
-                // delays its external pixel load until its bytes are present.
+                // The original Load_XString treats a positive serialized
+                // token as a direct address to the string. Do not reinterpret
+                // arbitrary bytes at that address as another pointer: a stale
+                // DWORD can otherwise redirect an image to an unrelated name.
+                // Forward stream-4 strings are left untouched until materialized.
                 if (!namePointsForwardInStream4)
                 {
-                    resolvedName =
-                        DB_ResolveSwitchSerializedString(nameAddress);
+                    uint32_t stringBlock = UINT32_MAX;
+                    uint32_t stringOffset = 0;
+                    if (Switch_IsStreamAsciiImageName(
+                            nameAddress,
+                            &stringBlock,
+                            &stringOffset))
+                    {
+                        resolvedName = reinterpret_cast<uintptr_t>(
+                            &g_streamBlocks[stringBlock].data[stringOffset]);
+                    }
                 }
 #endif
 
