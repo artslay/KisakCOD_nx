@@ -6,6 +6,12 @@
 #include <script/scr_const.h>
 #include <server/sv_game.h>
 #include "bullet.h"
+#ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
+#define SWITCH_WEAPON_STAGE(stage) (g_switchFrameStage = "frame/weapon/" stage)
+#else
+#define SWITCH_WEAPON_STAGE(stage) ((void)0)
+#endif
 
 #ifdef KISAK_MP
 #include <game_mp/g_utils_mp.h>
@@ -702,22 +708,34 @@ int __cdecl G_GivePlayerWeapon(playerState_s *pPS, int iWeaponIndex, uint8_t alt
 
 void __cdecl G_SetupWeaponDef()
 {
+    SWITCH_WEAPON_STAGE("setup/enter");
     Com_DPrintf(CON_CHANNEL_PLAYERWEAP, "----------------------\n");
     Com_DPrintf(CON_CHANNEL_PLAYERWEAP, "Game: G_SetupWeaponDef\n");
     if (!bg_lastParsedWeaponIndex)
     {
+        SWITCH_WEAPON_STAGE("setup/set_memory");
         Com_SetWeaponInfoMemory(1);
+        SWITCH_WEAPON_STAGE("setup/clear_registered_items");
         ClearRegisteredItems();
+        SWITCH_WEAPON_STAGE("setup/clear_definitions");
         BG_ClearWeaponDef();
 #ifdef KISAK_MP
+        SWITCH_WEAPON_STAGE("setup/register_defaultweapon_mp");
         G_GetWeaponIndexForName("defaultweapon_mp");
 #elif KISAK_SP
         if (level.initializing)
+        {
+            SWITCH_WEAPON_STAGE("setup/register_defaultweapon");
             BG_GetWeaponIndexForName("defaultweapon", G_RegisterWeapon);
+        }
         else
+        {
+            SWITCH_WEAPON_STAGE("setup/find_defaultweapon");
             BG_FindWeaponIndexForName("defaultweapon");
+        }
 #endif
     }
+    SWITCH_WEAPON_STAGE("setup/complete");
     Com_DPrintf(CON_CHANNEL_PLAYERWEAP, "----------------------\n");
 }
 
