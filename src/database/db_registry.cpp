@@ -4414,6 +4414,9 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
     if (g_switchDeferredImageAssets.empty())
         return;
 
+    const bool finalDelayedImageFixup =
+        g_switchDbStage &&
+        std::strcmp(g_switchDbStage, "delayed_images/fixup") == 0;
     size_t writeIndex = 0;
     for (const SwitchDeferredImageAsset &deferred : g_switchDeferredImageAssets)
     {
@@ -4568,9 +4571,7 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
     // The final delayed-stream pass must not silently convert unresolved
     // serialized image-name bytes into some other stream object. Report one
     // representative entry so the underlying serialized offset can be traced.
-    if (writeIndex != 0 &&
-        g_switchDbStage &&
-        std::strcmp(g_switchDbStage, "delayed_images/fixup") == 0)
+    if (writeIndex != 0 && finalDelayedImageFixup)
     {
         const SwitchDeferredImageAsset &first =
             g_switchDeferredImageAssets[0];
