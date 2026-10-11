@@ -24,6 +24,7 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogRaw(const char *msg);
+extern uint64_t DB_GetSwitchInflatedOutputBytes();
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 
@@ -10455,6 +10456,7 @@ static void Switch_TranslateXModelSerialized(
     uintptr_t serializedStart =
         reinterpret_cast<uintptr_t>(DB_GetStreamPos());
     uint32_t serializedStream = g_streamPosIndex;
+    const uint64_t inflatedOffset = DB_GetSwitchInflatedOutputBytes();
     uint32_t serializedOffset = UINT32_MAX;
     if (g_streamBlocks &&
         serializedStream < ARRAY_COUNT(g_streamPosArray) &&
@@ -10477,39 +10479,53 @@ static void Switch_TranslateXModelSerialized(
         g_switchCurrentAssetIndex <= 36;
     if (traceEarlyXModelHeader)
     {
-        char trace[320];
+        char trace[384];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][XMODEL HEADER START] asset=%d rawType=%u rawHeader=%08x stream=%u offset=%08x pos=%p model=%p prev=%d/%u/%08x\n",
+            "[KisakCOD][XMODEL HEADER START] asset=%d rawType=%u rawHeader=%08x stream=%u scratchOffset=%08x inflatedOffset=%016llx pos=%p model=%p prev=%d/%u/%08x\\n",
             g_switchCurrentAssetIndex,
             static_cast<unsigned>(g_switchCurrentAssetRawType),
             static_cast<unsigned>(g_switchCurrentAssetHeader),
             static_cast<unsigned>(serializedStream),
             serializedOffset,
+            static_cast<unsigned long long>(inflatedOffset),
             reinterpret_cast<const void *>(serializedStart),
             static_cast<void *>(model),
             g_switchPreviousAssetIndex,
             static_cast<unsigned>(g_switchPreviousAssetRawType),
             static_cast<unsigned>(g_switchPreviousAssetHeader));
-        Switch_LogWrite(trace);
+        Switch_LogRaw(trace);
     }
 #endif
     DB_LoadSwitchSerialized(serialized, SERIALIZED_SIZE);
 #ifdef __SWITCH__
     if (traceEarlyXModelHeader)
     {
+        const uint64_t inflatedEnd = DB_GetSwitchInflatedOutputBytes();
+        uint32_t nameTokenForTrace = 0;
+        std::memcpy(&nameTokenForTrace, serialized, sizeof(nameTokenForTrace));
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][XMODEL HEADER END] asset=%d inflated=%016llx->%016llx bytes=%u nameToken=%08x\\n",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned long long>(inflatedOffset),
+            static_cast<unsigned long long>(inflatedEnd),
+            static_cast<unsigned>(SERIALIZED_SIZE),
+            nameTokenForTrace);
+        Switch_LogRaw(trace);
+
         char tag[96];
         std::snprintf(
             tag,
             sizeof(tag),
             "[KisakCOD][XMODEL RAW %d]",
             g_switchCurrentAssetIndex);
-        Switch_LogRawDwords(tag, serialized, 40);
-        Switch_LogRawDwords(
-            "[KisakCOD][XMODEL RAW TAIL]",
-            serialized + 152,
-            SERIALIZED_SIZE - 152);
+        // Dump the full serialized header; the former trace omitted bytes
+        // from offsets 0x28 through 0x97.
+        Switch_LogRawDwords(tag, serialized, SERIALIZED_SIZE);
     }
 #endif
     std::memset(model, 0, sizeof(*model));
