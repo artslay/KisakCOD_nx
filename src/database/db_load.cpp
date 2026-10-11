@@ -37,6 +37,55 @@ uint32_t g_switchRawFileBufferToken = 0;
 uint32_t g_switchRawFileB4BeforeName = 0;
 uint32_t g_switchRawFileB4AfterName = 0;
 uint32_t g_switchSerializedXModelNameToken = 0;
+extern uint32_t g_streamPosStackIndex;
+
+static void Switch_TraceEarlyXModelCursor(const char *phase)
+{
+    if (g_switchCurrentAssetRawType != 3u ||
+        g_switchCurrentAssetIndex < 33 ||
+        g_switchCurrentAssetIndex > 36)
+        return;
+
+    auto getOffset = [](uint32_t block) -> uint32_t
+    {
+        if (!g_streamBlocks ||
+            block >= ARRAY_COUNT(g_streamPosArray) ||
+            !g_streamBlocks[block].data)
+            return UINT32_MAX;
+
+        const uint8_t *cursor =
+            block == g_streamPosIndex
+                ? DB_GetStreamPos()
+                : g_streamPosArray[block];
+        if (!cursor)
+            return UINT32_MAX;
+
+        const uintptr_t base =
+            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+        const uintptr_t address = reinterpret_cast<uintptr_t>(cursor);
+        if (address < base ||
+            address - base > g_streamBlocks[block].size)
+            return UINT32_MAX;
+
+        return static_cast<uint32_t>(address - base);
+    };
+
+    char trace[384];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][XMODEL CURSOR] asset=%d phase=%s active=%u activeOffset=%08x b0=%08x b4=%08x b7=%08x b8=%08x stack=%u\n",
+        g_switchCurrentAssetIndex,
+        phase ? phase : "?",
+        static_cast<unsigned>(g_streamPosIndex),
+        getOffset(g_streamPosIndex),
+        getOffset(0),
+        getOffset(4),
+        getOffset(7),
+        getOffset(8),
+        static_cast<unsigned>(g_streamPosStackIndex));
+    Switch_LogRaw(trace);
+}
 
 static void Switch_LogRawDwords(
     const char *tag,
@@ -10609,6 +10658,7 @@ void __cdecl Load_XModel(bool atStreamStart)
     varXString = &varXModel->name;
     Load_XString(0);
 #ifdef __SWITCH__
+    Switch_TraceEarlyXModelCursor("name_done");
     // A missing runtime model name currently makes DB_LinkXAssetEntry
     // dereference null. Record the original 32-bit token before the registry
     // sees this model, so an invalid offset can be traced to the exact asset.
@@ -10757,6 +10807,7 @@ void __cdecl Load_XModel(bool atStreamStart)
         varXSurface = varXModel->surfs;
         Load_XSurfaceArray(1, varXModel->numsurfs);
 #ifdef __SWITCH__
+        Switch_TraceEarlyXModelCursor("surfs_done");
         if (switchTraceXModel)
             g_switchDbStage = "xmodel/surfs_done";
 #endif
@@ -10788,6 +10839,7 @@ void __cdecl Load_XModel(bool atStreamStart)
         varMaterialHandle = varXModel->materialHandles;
         Load_MaterialHandleArray(1, varXModel->numsurfs);
 #ifdef __SWITCH__
+        Switch_TraceEarlyXModelCursor("materials_done");
         if (switchTraceXModel)
             g_switchDbStage = "xmodel/materials_done";
 #endif
@@ -10819,6 +10871,7 @@ void __cdecl Load_XModel(bool atStreamStart)
         varXModelCollSurf = varXModel->collSurfs;
         Load_XModelCollSurfArray(1, varXModel->numCollSurfs);
 #ifdef __SWITCH__
+        Switch_TraceEarlyXModelCursor("coll_surfs_done");
         if (switchTraceXModel)
             g_switchDbStage = "xmodel/collSurfs_done";
 #endif
@@ -10833,6 +10886,7 @@ void __cdecl Load_XModel(bool atStreamStart)
         varXBoneInfo = varXModel->boneInfo;
         Load_XBoneInfoArray(1, varXModel->numBones);
 #ifdef __SWITCH__
+        Switch_TraceEarlyXModelCursor("bone_info_done");
         if (switchTraceXModel)
             g_switchDbStage = "xmodel/boneInfo_done";
 #endif
@@ -10844,6 +10898,7 @@ void __cdecl Load_XModel(bool atStreamStart)
     varPhysPresetPtr = &varXModel->physPreset;
     Load_PhysPresetPtr(0);
 #ifdef __SWITCH__
+    Switch_TraceEarlyXModelCursor("phys_preset_done");
     if (switchTraceXModel)
         g_switchDbStage = "xmodel/physGeoms";
 #endif
@@ -10851,7 +10906,21 @@ void __cdecl Load_XModel(bool atStreamStart)
     {
         if (varXModel->physGeoms == (PhysGeomList *)-1)
         {
+#ifdef __SWITCH__
+            // PhysGeomList is 44 bytes in the fastfile but 56 bytes natively
+            // on ARM64. Keep the 4-byte serialized alignment while allocating
+            // the expanded object in zone memory, not over the stream buffer.
+            DB_AllocStreamPos(3);
+            varXModel->physGeoms =
+                reinterpret_cast<PhysGeomList *>(
+                    DB_AllocSwitchAssetMemory(
+                        static_cast<uint32_t>(sizeof(PhysGeomList)),
+                        "SwitchPhysGeomList",
+                        22));
+            std::memset(varXModel->physGeoms, 0, sizeof(PhysGeomList));
+#else
             varXModel->physGeoms = (PhysGeomList *)AllocLoad_FxElemVisStateSample();
+#endif
             varPhysGeomList = varXModel->physGeoms;
             Load_PhysGeomList(1);
 #ifdef __SWITCH__
@@ -10865,10 +10934,13 @@ void __cdecl Load_XModel(bool atStreamStart)
         }
     }
 #ifdef __SWITCH__
+    Switch_TraceEarlyXModelCursor("before_model_pop");
     if (switchTraceXModel)
         g_switchDbStage = "xmodel/load_pop_call";
 #endif
     DB_PopStreamPos();
+#ifdef __SWITCH__
+    Switch_TraceEarlyXModelCursor("after_model_pop");
 #ifdef __SWITCH__
     if (switchTraceXModel)
         g_switchDbStage = "xmodel/load_done";
@@ -10939,6 +11011,7 @@ void __cdecl Load_XModelPtr(bool atStreamStart)
 #endif
             Load_XModel(1);
 #ifdef __SWITCH__
+            Switch_TraceEarlyXModelCursor("body_return");
             if (switchTraceXModel)
                 g_switchDbStage = "xmodel/load_return";
             if (switchTraceXModel)
@@ -10988,6 +11061,7 @@ void __cdecl Load_XModelPtr(bool atStreamStart)
 #endif
     DB_PopStreamPos();
 #ifdef __SWITCH__
+    Switch_TraceEarlyXModelCursor("after_ptr_pop");
     if (switchTraceXModel)
         g_switchDbStage = "xmodel/done";
 #endif
