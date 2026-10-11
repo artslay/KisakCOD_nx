@@ -24,6 +24,7 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern thread_local const char * volatile g_switchFrameStage;
 #endif
 
 // These are implemented by the shared renderer dvar/command modules.
@@ -132,18 +133,23 @@ void R_ShutdownDirect3D()
     // Release renderer-owned Vulkan resources while the compatibility device
     // and Vulkan backend are still alive. This mirrors the original D3D9
     // shutdown ordering and prevents dangling GPU resources after device loss.
+    g_switchFrameStage = "frame/r_shutdown/direct3d/cinematic";
     R_Cinematic_Shutdown();
+    g_switchFrameStage = "frame/r_shutdown/direct3d/resources";
     R_ReleaseForShutdownOrReset();
 
+    g_switchFrameStage = "frame/r_shutdown/direct3d/device";
     delete dx.device;
     dx.device = nullptr;
     dx.d3d9 = nullptr;
 
+    g_switchFrameStage = "frame/r_shutdown/direct3d/backend";
     if (g_gfxBackend)
     {
         g_gfxBackend->Shutdown();
         g_gfxBackend.reset();
     }
+    g_switchFrameStage = "frame/r_shutdown/direct3d/done";
 }
 
 void R_ReleaseForShutdownOrReset()
@@ -690,13 +696,18 @@ void R_ShutdownStreams()
 
 void R_Shutdown(int destroyWindow) {
     (void)destroyWindow;
+    g_switchFrameStage = "frame/r_shutdown/streams";
     R_ShutdownStreams();
+    g_switchFrameStage = "frame/r_shutdown/material_usage";
     R_ShutdownMaterialUsage();
     if (s_registered) {
+        g_switchFrameStage = "frame/r_shutdown/images";
         R_ShutdownImages();
         s_registered = false;
     }
+    g_switchFrameStage = "frame/r_shutdown/direct3d";
     R_ShutdownDirect3D();
+    g_switchFrameStage = "frame/r_shutdown/done";
 }
 
 #endif
