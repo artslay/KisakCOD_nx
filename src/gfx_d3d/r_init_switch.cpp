@@ -144,11 +144,9 @@ void R_ShutdownDirect3D()
     dx.d3d9 = nullptr;
 
     g_switchFrameStage = "frame/r_shutdown/direct3d/backend";
-    if (g_gfxBackend)
-    {
-        g_gfxBackend->Shutdown();
-        g_gfxBackend.reset();
-    }
+    // VulkanBackend's destructor owns backend shutdown. Calling Shutdown()
+    // here and then reset() would shut down the same Vulkan device twice.
+    g_gfxBackend.reset();
     g_switchFrameStage = "frame/r_shutdown/direct3d/done";
 }
 
