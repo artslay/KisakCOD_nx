@@ -20,9 +20,11 @@ namespace
     thread_local size_t s_kisakTracedAssetCount = 0;
     thread_local bool s_kisakTraceAssetActive = false;
 
-    constexpr size_t kKillhouseTraceStart = 1630;
-    constexpr size_t kKillhouseTraceEnd = 1710;
-    constexpr size_t kKillhouseTraceAssetLimit = 96;
+    // Narrow index-based window just after the previous log stopped.
+    // The link counter can increase by several assets inside one top-level XAsset.
+    constexpr size_t kKillhouseTraceStart = 655;
+    constexpr size_t kKillhouseTraceEnd = 675;
+    constexpr size_t kKillhouseTraceAssetLimit = 32;
 }
 
 void KisakZone_ResetAssetTrace()
@@ -49,8 +51,8 @@ void KisakZone_TraceAssetLoad(const char *zoneName, const size_t assetIndex, con
     if (begin)
     {
         s_kisakTraceAssetActive = false;
-        if (s_kisakLinkedAssetCount < kKillhouseTraceStart ||
-            s_kisakLinkedAssetCount > kKillhouseTraceEnd ||
+        if (assetIndex < kKillhouseTraceStart ||
+            assetIndex > kKillhouseTraceEnd ||
             s_kisakTracedAssetCount >= kKillhouseTraceAssetLimit)
             return;
 
