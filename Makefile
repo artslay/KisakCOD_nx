@@ -105,11 +105,23 @@ CPP_SOURCES += src/gfx_d3d/r_meshdata.cpp src/gfx_d3d/r_draw_method.cpp src/gfx_
 CPP_SOURCES += src/gfx_d3d/r_draw_material.cpp src/gfx_d3d/r_draw_shadowable_light.cpp src/gfx_d3d/rb_tess.cpp
 CPP_SOURCES += src/gfx_d3d/r_add_cmdbuf.cpp src/gfx_d3d/r_staticmodel.cpp src/gfx_d3d/r_xsurface.cpp src/gfx_d3d/r_reflection_probe_load_obj.cpp
 CPP_SOURCES += src/gfx_d3d/r_light.cpp src/gfx_d3d/r_light_load_obj.cpp src/gfx_d3d/r_primarylights.cpp src/gfx_d3d/r_outdoor.cpp
-CPP_SOURCES += src/physics/ode/collision_trimesh_box.cpp
+# Portable OpenAssetTools IW3 zone loader. Fastfiles use a 32-bit disk ABI,
+# while Switch pointers and native asset structures are 64-bit.
+ZONELOAD_DIR := ports/switch/zoneload
+ZONELOAD_CPP_SOURCES := $(shell find $(ZONELOAD_DIR)/oat $(ZONELOAD_DIR)/generated -type f -name '*.cpp') $(ZONELOAD_DIR)/bridge/kisak_zone_bridge.cpp
+CPP_SOURCES += $(ZONELOAD_CPP_SOURCES)
+CPPFLAGS += -I$(CURDIR)/$(ZONELOAD_DIR)/generated \
+             -I$(CURDIR)/$(ZONELOAD_DIR)/oat/Common -I$(CURDIR)/$(ZONELOAD_DIR)/oat/ZoneCommon \
+             -I$(CURDIR)/$(ZONELOAD_DIR)/oat/ZoneLoading -I$(CURDIR)/$(ZONELOAD_DIR)/oat/Utils \
+             -I$(CURDIR)/$(ZONELOAD_DIR)/bridge
 
 CPP_OBJECTS := $(CPP_SOURCES:%.cpp=$(BUILD)/%.o)
 C_OBJECTS   := $(C_SOURCES:%.c=$(BUILD)/%.o)
 OBJECTS     := $(CPP_OBJECTS) $(C_OBJECTS)
+
+# OAT ARCH_x64 means 64-bit host structures decoding 32-bit zone data.
+ZONELOAD_OBJECTS := $(ZONELOAD_CPP_SOURCES:%.cpp=$(BUILD)/%.o)
+$(ZONELOAD_OBJECTS): CXXFLAGS += -std=gnu++23 -DARCH_x64
 
 .DEFAULT_GOAL := all
 
