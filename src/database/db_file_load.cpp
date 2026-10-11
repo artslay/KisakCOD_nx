@@ -174,6 +174,9 @@ static void DB_ReadXFileStage();
 static int32_t __cdecl DB_ReadData();
 static void Load_XAssetListCustom();
 static void __cdecl Load_XAssetArrayCustom(int32_t count);
+#ifdef __SWITCH__
+void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName);
+#endif
 
 void __cdecl DB_CancelLoadXFile()
 {
@@ -607,6 +610,10 @@ void __cdecl DB_LoadXFileInternal()
 #ifdef __SWITCH__
     g_switchDbStage = "asset_list";
 #endif
+#ifdef __SWITCH__
+    // Load the 32-bit on-disk zone into native ARM64 asset structures.
+    DB_LoadXFileContent_Switch(g_load.zoneMem, g_load.filename);
+#else
     Load_XAssetListCustom();
 #ifdef __SWITCH__
     if (g_load.filename && I_stricmp(g_load.filename, "ui") == 0)
@@ -642,6 +649,7 @@ void __cdecl DB_LoadXFileInternal()
         Load_XAssetArrayCustom(varXAssetList->assetCount);
     }
     DB_PopStreamPos();
+#endif
     DB_FinishGeometryBlocks(g_load.zoneMem);
     __atomic_sub_fetch(&g_loadingAssets, 1u, __ATOMIC_SEQ_CST);
 #ifdef __SWITCH__

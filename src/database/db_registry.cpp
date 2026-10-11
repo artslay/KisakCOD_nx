@@ -1197,10 +1197,17 @@ void __cdecl DB_ShutdownXAssets()
     Sys_UnlockWrite(&db_hashCritSect);
 }
 
+#ifdef __SWITCH__
+void DB_FreeXFileContent_Switch(XZoneMemory *zoneMem);
+#endif
+
 void __cdecl DB_FreeXZoneMemory(XZoneMemory *zoneMem)
 {
     uint32_t blockIndex; // [esp+0h] [ebp-4h]
 
+#ifdef __SWITCH__
+    DB_FreeXFileContent_Switch(zoneMem);
+#endif
     DB_ReleaseGeometryBuffers(zoneMem);
     for (blockIndex = 0; blockIndex < 9; ++blockIndex)
     {
