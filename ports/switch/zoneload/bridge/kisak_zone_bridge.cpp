@@ -97,6 +97,17 @@ namespace
                         case 4: phaseName = "font/glow-material"; break;
                         case 5: phaseName = "font/glyphs"; break;
                         case 6: phaseName = "font/asset-register"; break;
+                        case 7: phaseName = "font/load-entry"; break;
+                        case 8: phaseName = "font/load-pointer-return"; break;
+                        case 9: phaseName = "font/existing-name-lookup"; break;
+                        case 10: phaseName = "font/existing-lookup-return"; break;
+                        case 11: phaseName = "font/pointer-entry"; break;
+                        case 12: phaseName = "font/pointer-check"; break;
+                        case 13: phaseName = "font/pointer-classify"; break;
+                        case 14: phaseName = "font/allocate"; break;
+                        case 15: phaseName = "font/insert-alias"; break;
+                        case 16: phaseName = "font/decode-entry"; break;
+                        case 17: phaseName = "font/alias-lookup"; break;
                         default: phaseName = "font/start"; break;
                         }
                     }
