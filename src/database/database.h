@@ -127,6 +127,7 @@ void __cdecl DB_EnumXAssets_FastFile(
     void *inData,
     bool includeOverride);
 bool __cdecl DB_IsMinimumFastFileLoaded();
+bool __cdecl DB_IsZoneLoaded(const char *zoneName);
 XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name);
 XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *name);
 #ifdef __SWITCH__
