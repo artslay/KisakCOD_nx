@@ -415,6 +415,11 @@ void Switch_LogWrite(const char *msg)
     // for targeted debugging, but are disabled by default.
     static constexpr const char *const kSuppressedPrefixes[] =
     {
+        // High-volume/obsolete diagnostics; retain zone-load progress and errors.
+        "[KisakCOD][VK DRAW]",
+        "[KisakCOD][IWI ROOT] archive=",
+        "[KisakCOD][BOOT] CL_InitUI:",
+        "[KisakCOD][BOOT] CL_CreateDevGui:",
         "[KisakCOD][INTRO]",
         "[KisakCOD][UI ",
         "[KisakCOD][UIMAIN]",
@@ -451,24 +456,6 @@ void Switch_LogWrite(const char *msg)
         "Couldn't play stream '",
         "R_Cinematic_BinkOpen '"
     };
-    // Keep normal UI paint/geometry traces out of the SD log. The only
-    // exception is this single bounded material record, used to diagnose the
-    // blue plaque on player_profile without flooding the log with draw calls.
-    static constexpr const char *const kVisibleUiPrefixes[] =
-    {
-        "[KisakCOD][UI PROFILE PLAQUE]"
-    };
-    bool keepUiMaterialDiag = false;
-    for (const char *prefix : kVisibleUiPrefixes)
-    {
-        const size_t prefixLength = std::strlen(prefix);
-        if (std::strncmp(msg, prefix, prefixLength) == 0)
-        {
-            keepUiMaterialDiag = true;
-            break;
-        }
-    }
-
     for (const char *prefix : kSuppressedPrefixes)
     {
         const size_t len = std::strlen(prefix);
