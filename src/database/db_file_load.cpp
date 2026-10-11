@@ -68,6 +68,16 @@ bool g_anyFastFileLoaded;
 DB_LoadData g_load;
 
 #ifdef __SWITCH__
+// Stream 0 is reused as a scratch buffer on Switch, so its cursor offset is
+// not a logical position in the uncompressed fastfile.
+uint64_t __cdecl DB_GetSwitchInflatedOutputBytes()
+{
+    return static_cast<uint64_t>(g_load.stream.total_out);
+}
+#endif
+
+
+#ifdef __SWITCH__
 // Native ARM64 asset structures belong to the fastfile zone that created them.
 // Hunk memory is cleared by Com_Restart() even when code/common zones remain
 // loaded, leaving those zones with dangling pointers. PMem allocations are
