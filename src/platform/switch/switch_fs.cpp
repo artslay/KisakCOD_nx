@@ -920,6 +920,16 @@ void __cdecl FS_Startup(char *gameName)
 
 void __cdecl FS_InitFilesystem()
 {
+    // Match the retail startup-variable pass before FS_Startup builds the
+    // filesystem search paths and indexes IWD archives.
+    Com_StartupVariable("fs_cdpath");
+    Com_StartupVariable("fs_basepath");
+    Com_StartupVariable("fs_homepath");
+    Com_StartupVariable("fs_game");
+    Com_StartupVariable("fs_copyfiles");
+    Com_StartupVariable("fs_restrict");
+    Com_StartupVariable("loc_language");
+
     SEH_InitLanguage();
     FS_Startup((char*)"main");
     SEH_Init_StringEd();
