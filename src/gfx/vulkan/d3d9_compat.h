@@ -173,7 +173,10 @@ struct KisakVkBuffer {
     VkBuffer buffer=VK_NULL_HANDLE;
     VkDeviceMemory memory=VK_NULL_HANDLE;
     void *mapped=nullptr;
+    // Dynamic buffers keep a staging copy; static buffers are written directly
+    // to their persistently mapped HOST_VISIBLE|HOST_COHERENT allocation.
     std::vector<uint8_t> shadow;
+    bool dynamic=false;
     uint32_t size=0;
     VkDevice device=VK_NULL_HANDLE;
     void Release();
