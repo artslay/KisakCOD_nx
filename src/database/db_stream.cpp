@@ -1266,7 +1266,7 @@ void __cdecl DB_FixupSwitchPointerAliases()
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\\n",
+                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\n",
                     reinterpret_cast<const void *>(fixup.serializedSlot),
                     reinterpret_cast<const void *>(destination),
                     reinterpret_cast<const void *>(resolvedPointer),
