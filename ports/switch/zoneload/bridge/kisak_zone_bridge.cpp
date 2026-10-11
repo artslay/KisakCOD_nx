@@ -115,9 +115,10 @@ namespace
                         case 22: phaseName = "lightdef/asset-register"; break;
                         case 23: phaseName = "lightdef/register-return"; break;
                         case 24: phaseName = "lightdef/alias-lookup"; break;
-                        case 25: phaseName = "lightdef/collect-references"; break;
-                        case 26: phaseName = "lightdef/engine-link"; break;
-                        case 27: phaseName = "lightdef/engine-link-return"; break;
+                        case 25: phaseName = "lightdef/name-resolution"; break;
+                        case 26: phaseName = "lightdef/collect-references"; break;
+                        case 27: phaseName = "lightdef/engine-link"; break;
+                        case 28: phaseName = "lightdef/engine-link-return"; break;
                         default: phaseName = "lightdef/start"; break;
                         }
                     }
