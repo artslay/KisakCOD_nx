@@ -460,11 +460,7 @@ void Switch_LogWrite(const char *msg)
     {
         const size_t len = std::strlen(prefix);
         if (std::strncmp(msg, prefix, len) == 0)
-        {
-            if (!keepUiMaterialDiag)
-                return;
-            break;
-        }
+            return;
     }
 
     const bool isSwitchDiag =
