@@ -6,9 +6,11 @@
 
 #include "kisak_zone_hooks_internal.h"
 
+#include <atomic>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 
 extern void Switch_LogWrite(const char *msg);
 
@@ -16,65 +18,42 @@ using namespace IW3;
 
 namespace
 {
-    thread_local size_t s_kisakLinkedAssetCount = 0;
-    thread_local size_t s_kisakTracedAssetCount = 0;
-    thread_local bool s_kisakTraceAssetActive = false;
-
-    // Narrow index-based window just after the previous log stopped.
-    // The link counter can increase by several assets inside one top-level XAsset.
-    constexpr size_t kKillhouseTraceStart = 655;
-    constexpr size_t kKillhouseTraceEnd = 675;
-    constexpr size_t kKillhouseTraceAssetLimit = 32;
+    constexpr size_t kNoActiveAsset = std::numeric_limits<size_t>::max();
+    std::atomic<size_t> s_kisakActiveAssetIndex{kNoActiveAsset};
+    std::atomic<int> s_kisakActiveAssetType{-1};
+    // Even values mean the snapshot is stable; odd values mean a writer is updating it.
+    std::atomic<uint64_t> s_kisakAssetProgressSerial{0};
 }
 
-void KisakZone_ResetAssetTrace()
+void KisakZone_SetActiveAsset(const size_t assetIndex, const int assetType)
 {
-    s_kisakLinkedAssetCount = 0;
-    s_kisakTracedAssetCount = 0;
-    s_kisakTraceAssetActive = false;
+    s_kisakAssetProgressSerial.fetch_add(1, std::memory_order_acq_rel);
+    s_kisakActiveAssetType.store(assetType, std::memory_order_relaxed);
+    s_kisakActiveAssetIndex.store(assetIndex, std::memory_order_relaxed);
+    s_kisakAssetProgressSerial.fetch_add(1, std::memory_order_release);
 }
 
-void KisakZone_NoteAssetLinked()
+void KisakZone_ClearActiveAsset()
 {
-    ++s_kisakLinkedAssetCount;
+    s_kisakAssetProgressSerial.fetch_add(1, std::memory_order_acq_rel);
+    s_kisakActiveAssetType.store(-1, std::memory_order_relaxed);
+    s_kisakActiveAssetIndex.store(kNoActiveAsset, std::memory_order_relaxed);
+    s_kisakAssetProgressSerial.fetch_add(1, std::memory_order_release);
 }
 
-void KisakZone_TraceAssetLoad(const char *zoneName, const size_t assetIndex, const int assetType, const bool begin)
+KisakZoneAssetProgress KisakZone_GetActiveAssetProgress()
 {
-    if (!zoneName || std::strcmp(zoneName, "killhouse") != 0)
+    for (;;)
     {
-        if (begin)
-            s_kisakTraceAssetActive = false;
-        return;
-    }
+        const uint64_t before = s_kisakAssetProgressSerial.load(std::memory_order_acquire);
+        if (before & 1u)
+            continue;
 
-    if (begin)
-    {
-        s_kisakTraceAssetActive = false;
-        if (assetIndex < kKillhouseTraceStart ||
-            assetIndex > kKillhouseTraceEnd ||
-            s_kisakTracedAssetCount >= kKillhouseTraceAssetLimit)
-            return;
-
-        ++s_kisakTracedAssetCount;
-        s_kisakTraceAssetActive = true;
-
-        char trace[192];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] asset-load begin index=%zu type=%d linked=%zu\n",
-            assetIndex, assetType, s_kisakLinkedAssetCount);
-        Switch_LogWrite(trace);
-        return;
-    }
-
-    if (s_kisakTraceAssetActive)
-    {
-        char trace[192];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] asset-load end index=%zu type=%d linked=%zu\n",
-            assetIndex, assetType, s_kisakLinkedAssetCount);
-        Switch_LogWrite(trace);
-        s_kisakTraceAssetActive = false;
+        const size_t index = s_kisakActiveAssetIndex.load(std::memory_order_relaxed);
+        const int type = s_kisakActiveAssetType.load(std::memory_order_relaxed);
+        const uint64_t after = s_kisakAssetProgressSerial.load(std::memory_order_acquire);
+        if (before == after)
+            return {index, type, after, index != kNoActiveAsset};
     }
 }
 
@@ -192,10 +171,18 @@ void ContentLoader::LoadXAssetArray(const bool atStreamStart, const size_t count
 
     for (size_t index = 0; index < count; index++)
     {
-        const int traceAssetType = static_cast<int>(varXAsset->type);
-        KisakZone_TraceAssetLoad(m_zone.m_name.c_str(), index, traceAssetType, true);
-        LoadXAsset(false);
-        KisakZone_TraceAssetLoad(m_zone.m_name.c_str(), index, traceAssetType, false);
+        const int assetType = static_cast<int>(varXAsset->type);
+        KisakZone_SetActiveAsset(index, assetType);
+        try
+        {
+            LoadXAsset(false);
+        }
+        catch (...)
+        {
+            KisakZone_ClearActiveAsset();
+            throw;
+        }
+        KisakZone_ClearActiveAsset();
         varXAsset++;
 
 #ifdef DEBUG_OFFSETS
@@ -206,7 +193,7 @@ void ContentLoader::LoadXAssetArray(const bool atStreamStart, const size_t count
 
 void ContentLoader::Load()
 {
-    KisakZone_ResetAssetTrace();
+    KisakZone_ClearActiveAsset();
     XAssetList assetList{};
     varXAssetList = &assetList;
 
