@@ -6218,7 +6218,7 @@ int __cdecl yyparse()
             if (yylen > 0)
             {
                 pos = yyvsp[1 - yylen].pos;
-                yyval.val.type = yyvsp[1 - yylen].val.type;
+                yyval.val = yyvsp[1 - yylen].val;
                 yyval.pos = pos;
             }
             //v18 = yyn - 1;
@@ -6226,31 +6226,27 @@ int __cdecl yyparse()
             switch(yyn - 1)
             {
             case 1:
-                v36.type = node1(yyvsp[-1].val.type, yyvsp->val).type;
-                yaccResult.type = v36.type;
+                yaccResult = node1(yyvsp[-1].val.type, yyvsp->val);
                 break;
             case 2:
-                v35.type = node1(ENUM_expression, yyvsp->val).type;
-                yaccResult.type = v35.type;
+                yaccResult = node1(ENUM_expression, yyvsp->val);
                 break;
             case 3:
-                v34.type = node1(ENUM_statement, yyvsp->val).type;
-                yaccResult.type = v34.type;
+                yaccResult = node1(ENUM_statement, yyvsp->val);
                 break;
             case 4:
-                v33.type = node1(ENUM_statement, yyvsp->val).type;
-                yaccResult.type = v33.type;
+                yaccResult = node1(ENUM_statement, yyvsp->val);
                 break;
             case 5:
                 val2.sourcePosValue = yyvsp->pos;
-                v32.type = node2(ENUM_primitive_expression, yyvsp->val, val2).type;
+                v32 = node2(ENUM_primitive_expression, yyvsp->val, val2);
                 yyval.val = v32;
                 break;
             case 6:
                 valstack[5].sourcePosValue = yyvsp[-1].pos;
                 valstack[4].sourcePosValue = yyvsp->pos;
                 valstack[3].sourcePosValue = yyvsp[-2].pos;
-                v30.type = node5(ENUM_bool_or, yyvsp[-2].val, yyvsp->val, valstack[3], valstack[4], valstack[5]).type;
+                v30 = node5(ENUM_bool_or, yyvsp[-2].val, yyvsp->val, valstack[3], valstack[4], valstack[5]);
                 yyval.val = v30;
                 yyval.pos = yyvsp[-1].pos;
                 break;
@@ -6265,14 +6261,14 @@ int __cdecl yyparse()
             case 8:
                 val4.sourcePosValue = yyvsp[-1].pos;
                 v25.intValue = OP_bit_or;
-                v27.type = node4(ENUM_binary, yyvsp[-2].val, yyvsp->val, v25, val4).type;
+                v27 = node4(ENUM_binary, yyvsp[-2].val, yyvsp->val, v25, val4);
                 yyval.val = v27;
                 yyval.pos = yyvsp[-1].pos;
                 break;
             case 9:
                 v23.type = RETURN_ARG1(yyvsp[-1].pos);
                 val6[279].type = RETURN_ARG1(0x67);
-                v24.type = node4(ENUM_binary, yyvsp[-2].val, yyvsp->val, val6[279], v23).type;
+                v24 = node4(ENUM_binary, yyvsp[-2].val, yyvsp->val, val6[279], v23);
                 yyval.val = v24;
                 yyval.pos = yyvsp[-1].pos;
                 break;
@@ -7987,6 +7983,6 @@ void __cdecl ScriptParse(sval_u *parseData, unsigned __int8 user)
     yy_current_buffer = &buffer_state;
     yy_start = 3;
     yyparse();
-    parseData->type = yaccResult.type;
+    *parseData = yaccResult;
 }
 
