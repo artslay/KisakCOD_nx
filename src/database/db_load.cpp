@@ -41,6 +41,7 @@ uint32_t g_switchRawFileBufferToken = 0;
 uint32_t g_switchRawFileB4BeforeName = 0;
 uint32_t g_switchRawFileB4AfterName = 0;
 uint32_t g_switchSerializedXModelNameToken = 0;
+uint32_t g_switchLastGfxImageNameToken = 0;
 extern uint32_t g_streamPosStackIndex;
 
 static void Switch_TraceEarlyXModelCursor(const char *phase)
@@ -5603,6 +5604,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
 
         SerializedGfxImage serialized{};
         DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
+        g_switchLastGfxImageNameToken = serialized.name;
 
         const bool traceKillhouseImage =
             g_switchCurrentAssetRawType == 4u &&
