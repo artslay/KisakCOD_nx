@@ -68,6 +68,7 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[SWITCH STREAM ARRAY MISMATCH]",
         "[SWITCH STREAM REGRESS]",
         "[SWITCH IMAGE ANOMALY]",
+        "[SWITCH IMAGE ANOMALY DETAIL]",
         "[SWITCH TECH CURSOR]",
         "[KisakCOD][TECHSET ABI]",
         "[KisakCOD][TECHSET ABI BYTES]",
