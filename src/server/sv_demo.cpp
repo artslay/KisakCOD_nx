@@ -401,9 +401,23 @@ void __cdecl SV_ShutdownDemo()
 
 static int SV_GetMemFileSegmentSize(MemoryFile *memFile, uint32_t segmentIndex)
 {
+    if (!memFile || !memFile->buffer || memFile->bufferSize < 4)
+        return -1;
+
     const uint8_t *segmentStart = MemFile_GetSegmentAddess(memFile, segmentIndex);
-    const uint8_t *segmentEnd = MemFile_CopySegments(memFile, segmentIndex, nullptr);
-    return static_cast<int>(segmentEnd - segmentStart);
+    const uint8_t *bufferEnd = memFile->buffer + memFile->bufferSize;
+    if (segmentStart < memFile->buffer || segmentStart > bufferEnd - sizeof(uint32_t))
+        return -1;
+
+    // Each MemFile segment begins with its 32-bit byte length. CopySegments()
+    // returns the end of the entire buffer, not the end of the requested segment.
+    uint32_t segmentSize = 0;
+    std::memcpy(&segmentSize, segmentStart, sizeof(segmentSize));
+    if (segmentSize < sizeof(uint32_t) ||
+        segmentSize > static_cast<size_t>(bufferEnd - segmentStart))
+        return -1;
+
+    return static_cast<int>(segmentSize);
 }
 
 int __cdecl SV_AddDemoSave(SaveGame *savehandle, server_demo_save_t *save, int createSave)
