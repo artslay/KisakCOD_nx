@@ -128,7 +128,9 @@ static void Switch_IndexIwdArchive(const char *archivePath)
     g_iwdArchives.push_back(std::move(archive));
 
     unz_global_info globalInfo = {};
-    if (unzGetGlobalInfo(archiveFile, &globalInfo) == UNZ_OK)
+    const bool gotGlobalInfo =
+        unzGetGlobalInfo(archiveFile, &globalInfo) == UNZ_OK;
+    if (gotGlobalInfo)
     {
         g_iwdEntryRecords.reserve(
             g_iwdEntryRecords.size() + globalInfo.number_entry);
@@ -138,6 +140,9 @@ static void Switch_IndexIwdArchive(const char *archivePath)
 
     int entryCount = 0;
     int iwiEntryCount = 0;
+    int directoryEntryCount = 0;
+    int nameReadFailures = 0;
+    int positionReadFailures = 0;
     char firstIwi[256] = {};
     if (unzGoToFirstFile(archiveFile) == UNZ_OK)
     {
@@ -156,24 +161,39 @@ static void Switch_IndexIwdArchive(const char *archivePath)
                     0,
                     nullptr,
                     0) != UNZ_OK)
+            {
+                ++nameReadFailures;
                 continue;
+            }
 
             const std::string normalizedName = SwitchNormalizePath(name);
-            if (normalizedName.empty() || normalizedName.back() == '/')
+            if (normalizedName.empty())
                 continue;
+            if (normalizedName.back() == '/')
+            {
+                ++directoryEntryCount;
+                continue;
+            }
 
             if (normalizedName.size() >= 4 &&
-                normalizedName.compare(normalizedName.size() - 4, 4, ".iwi") == 0)
+                normalizedName.compare(
+                    normalizedName.size() - 4, 4, ".iwi") == 0)
             {
                 ++iwiEntryCount;
                 if (!firstIwi[0])
-                    I_strncpyz(firstIwi, normalizedName.c_str(), sizeof(firstIwi));
+                    I_strncpyz(
+                        firstIwi,
+                        normalizedName.c_str(),
+                        sizeof(firstIwi));
             }
 
             if (unzGetCurrentFileInfoPosition(
                     archiveFile,
                     &infoPosition) != UNZ_OK)
+            {
+                ++positionReadFailures;
                 continue;
+            }
 
             SwitchIwdEntry entry;
             entry.archiveIndex = archiveIndex;
@@ -200,14 +220,18 @@ static void Switch_IndexIwdArchive(const char *archivePath)
         } while (unzGoToNextFile(archiveFile) == UNZ_OK);
     }
 
-    char trace[512];
+    char trace[640];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][IWI ROOT] archive=%s zipEntries=%lu indexed=%d iwiEntries=%d firstIwi=%s\n",
+        "[KisakCOD][IWI ROOT] archive=%s zipEntries=%lu indexed=%d dirs=%d nameFailures=%d positionFailures=%d iwiEntries=%d firstIwi=%s\n",
         archivePath,
-        static_cast<unsigned long>(globalInfo.number_entry),
+        static_cast<unsigned long>(
+            gotGlobalInfo ? globalInfo.number_entry : 0),
         entryCount,
+        directoryEntryCount,
+        nameReadFailures,
+        positionReadFailures,
         iwiEntryCount,
         firstIwi[0] ? firstIwi : "<none>");
     Switch_LogWrite(trace);
