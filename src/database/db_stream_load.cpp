@@ -314,58 +314,103 @@ uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress)
     if (!serializedAddress || !g_streamBlocks)
         return 0;
 
-    uintptr_t nativePointer = 0;
-    if (DB_ResolveSwitchPointerAlias(serializedAddress, &nativePointer) &&
-        nativePointer)
+    // XAsset names may point at a serialized XString pointer slot rather than
+    // the characters themselves. Resolve a bounded chain of those offsets,
+    // but test for a real printable name before interpreting its first four
+    // bytes as another offset. This ordering is important: a valid short name
+    // such as "3" must remain a string rather than becoming an offset token.
+    uintptr_t current = serializedAddress;
+    uintptr_t visited[8] = {};
+
+    for (size_t depth = 0; depth < ARRAY_COUNT(visited); ++depth)
     {
-        if (Switch_IsSerializedAssetName(nativePointer))
-            return nativePointer;
-    }
+        if (!current)
+            return 0;
 
-    // XString names are either direct serialized offsets into stream data or
-    // the explicit -1 inline form. Do NOT interpret arbitrary four bytes at a
-    // string address as another serialized offset: ordinary string data can
-    // happen to look like a valid offset (for example 0x00000009), which
-    // creates false names such as "3".
-    for (uint32_t block = 0;
-         block < ARRAY_COUNT(g_streamPosArray);
-         ++block)
-    {
-        if (!g_streamBlocks[block].data)
+        for (size_t i = 0; i < depth; ++i)
+        {
+            if (visited[i] == current)
+                return 0;
+        }
+        visited[depth] = current;
+
+        if (Switch_IsSerializedAssetName(current))
+            return current;
+
+        uintptr_t aliasTarget = 0;
+        if (DB_ResolveSwitchPointerAlias(current, &aliasTarget) &&
+            aliasTarget && aliasTarget != current)
+        {
+            if (Switch_IsSerializedAssetName(aliasTarget))
+                return aliasTarget;
+            current = aliasTarget;
             continue;
+        }
 
-        const uintptr_t base =
-            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
-        const uintptr_t end =
-            base + g_streamBlocks[block].size;
-        if (serializedAddress < base || serializedAddress >= end)
+        aliasTarget = 0;
+        if (DB_TryResolveSwitchSerializedAliasChain(current, &aliasTarget) &&
+            aliasTarget && aliasTarget != current)
+        {
+            if (Switch_IsSerializedAssetName(aliasTarget))
+                return aliasTarget;
+            current = aliasTarget;
             continue;
+        }
 
-        const size_t offset =
-            static_cast<size_t>(serializedAddress - base);
-        const size_t remaining =
-            g_streamBlocks[block].size - offset;
-        if (remaining < sizeof(uint32_t))
+        const uint8_t *slot = nullptr;
+        size_t remaining = 0;
+        for (uint32_t block = 0;
+             block < ARRAY_COUNT(g_streamPosArray);
+             ++block)
+        {
+            if (!g_streamBlocks[block].data)
+                continue;
+
+            const uintptr_t base =
+                reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+            const uintptr_t end = base + g_streamBlocks[block].size;
+            if (current < base || current >= end)
+                continue;
+
+            const size_t offset = static_cast<size_t>(current - base);
+            remaining = g_streamBlocks[block].size - offset;
+            slot = reinterpret_cast<const uint8_t *>(current);
+            break;
+        }
+
+        if (!slot || remaining < sizeof(uint32_t))
             return 0;
 
         uint32_t raw = 0;
-        std::memcpy(
-            &raw,
-            reinterpret_cast<const void *>(serializedAddress),
-            sizeof(raw));
+        std::memcpy(&raw, slot, sizeof(raw));
 
-        if (raw == UINT32_MAX &&
-            remaining > sizeof(uint32_t))
+        if (raw == UINT32_MAX)
         {
-            const uintptr_t inlineAddress =
-                serializedAddress + sizeof(uint32_t);
-            if (Switch_IsSerializedAssetName(inlineAddress))
-                return inlineAddress;
+            if (remaining > sizeof(uint32_t))
+            {
+                const uintptr_t inlineAddress = current + sizeof(uint32_t);
+                if (Switch_IsSerializedAssetName(inlineAddress))
+                    return inlineAddress;
+            }
+            return 0;
         }
 
-        return Switch_IsSerializedAssetName(serializedAddress)
-            ? serializedAddress
-            : 0;
+        if (!raw || raw == UINT32_MAX - 1u)
+            return 0;
+
+        // Follow a positive serialized offset only after the pointed-to bytes
+        // have failed the direct-string test above. Validate the target
+        // locally rather than treating arbitrary contents as an unchecked
+        // pointer; the next iteration must still recognize a valid string.
+        const uint32_t targetBlock = (raw - 1u) >> 28;
+        const uint32_t targetOffset = (raw - 1u) & 0x0FFFFFFFu;
+        if (targetBlock >= ARRAY_COUNT(g_streamPosArray) ||
+            !g_streamBlocks[targetBlock].data ||
+            targetOffset >= g_streamBlocks[targetBlock].size)
+            return 0;
+
+        current = reinterpret_cast<uintptr_t>(
+            g_streamBlocks[targetBlock].data + targetOffset);
     }
 
     return 0;
