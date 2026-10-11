@@ -5884,7 +5884,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][GFXIMAGE TRACE] token=%08x image=%p name=%p first=%02x safe=%u streamAscii=%u pointerBlock=%u pointerOffset=%08x nameBlock=%u nameOffset=%08x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\\n",
+                "[KisakCOD][GFXIMAGE TRACE] token=%08x image=%p name=%p first=%02x safe=%u streamAscii=%u pointerBlock=%u pointerOffset=%08x nameBlock=%u nameOffset=%08x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\n",
                 serialized.name,
                 static_cast<void *>(varGfxImage),
                 static_cast<const void *>(resolvedName),
