@@ -325,6 +325,99 @@ namespace
             return &block->m_buffer[blockOffset];
         }
 
+        const char* ResolveStringPointer(const char* candidate) const override
+        {
+            uintptr_t current = reinterpret_cast<uintptr_t>(candidate);
+            if (!current)
+                return nullptr;
+
+            const auto isString = [](const uint8_t* bytes, const size_t remaining)
+            {
+                const size_t limit = remaining < 256u ? remaining : 256u;
+                for (size_t i = 0; i < limit; ++i)
+                {
+                    const uint8_t c = bytes[i];
+                    if (c == 0)
+                        return i != 0;
+                    if (c < 0x21u || c > 0x7Eu)
+                        return false;
+                }
+                return false;
+            };
+
+            // Some XAsset names reference an XString slot instead of pointing
+            // directly to its characters. Resolve that chain against these
+            // exact blocks: the engine's g_streamBlocks table is not guaranteed
+            // to describe the buffers owned by this OAT stream.
+            for (size_t depth = 0; depth < 8; ++depth)
+            {
+                XBlock* sourceBlock = nullptr;
+                size_t sourceOffset = 0;
+                for (XBlock* block : m_blocks)
+                {
+                    if (!block || !block->m_buffer)
+                        continue;
+
+                    const uintptr_t base =
+                        reinterpret_cast<uintptr_t>(block->m_buffer.get());
+                    if (current < base)
+                        continue;
+
+                    const uintptr_t delta = current - base;
+                    if (delta >= block->m_buffer_size)
+                        continue;
+
+                    sourceBlock = block;
+                    sourceOffset = static_cast<size_t>(delta);
+                    break;
+                }
+
+                if (!sourceBlock)
+                    return nullptr;
+
+                const size_t remaining = sourceBlock->m_buffer_size - sourceOffset;
+                const auto* bytes = sourceBlock->m_buffer.get() + sourceOffset;
+                if (isString(bytes, remaining))
+                    return reinterpret_cast<const char*>(bytes);
+
+                if (remaining < sizeof(uint32_t))
+                    return nullptr;
+
+                uint32_t rawOffset = 0;
+                std::memcpy(&rawOffset, bytes, sizeof(rawOffset));
+
+                if (rawOffset == UINT32_MAX)
+                {
+                    if (remaining > sizeof(uint32_t) &&
+                        isString(bytes + sizeof(uint32_t), remaining - sizeof(uint32_t)))
+                        return reinterpret_cast<const char*>(bytes + sizeof(uint32_t));
+                    return nullptr;
+                }
+
+                if (!rawOffset || rawOffset == UINT32_MAX - 1u)
+                    return nullptr;
+
+                const uintptr_t encodedOffset = static_cast<uintptr_t>(rawOffset - 1u);
+                const size_t targetBlockIndex =
+                    static_cast<size_t>((encodedOffset & m_block_mask) >> m_block_shift);
+                const size_t targetOffset =
+                    static_cast<size_t>(encodedOffset & m_offset_mask);
+
+                if (targetBlockIndex >= m_blocks.size())
+                    return nullptr;
+
+                const XBlock* targetBlock = m_blocks[targetBlockIndex];
+                if (!targetBlock || !targetBlock->m_buffer ||
+                    targetOffset >= targetBlock->m_buffer_size)
+                    return nullptr;
+
+                current =
+                    reinterpret_cast<uintptr_t>(targetBlock->m_buffer.get() + targetOffset);
+            }
+
+            return nullptr;
+        }
+
         void* ConvertOffsetToAliasNative(const void* offset) override
         {
             // For details see ConvertOffsetToPointer
