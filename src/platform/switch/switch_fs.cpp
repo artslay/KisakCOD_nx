@@ -137,6 +137,8 @@ static void Switch_IndexIwdArchive(const char *archivePath)
     }
 
     int entryCount = 0;
+    int iwiEntryCount = 0;
+    char firstIwi[256] = {};
     if (unzGoToFirstFile(archiveFile) == UNZ_OK)
     {
         do
@@ -156,13 +158,21 @@ static void Switch_IndexIwdArchive(const char *archivePath)
                     0) != UNZ_OK)
                 continue;
 
+            const std::string normalizedName = SwitchNormalizePath(name);
+            if (normalizedName.empty() || normalizedName.back() == '/')
+                continue;
+
+            if (normalizedName.size() >= 4 &&
+                normalizedName.compare(normalizedName.size() - 4, 4, ".iwi") == 0)
+            {
+                ++iwiEntryCount;
+                if (!firstIwi[0])
+                    I_strncpyz(firstIwi, normalizedName.c_str(), sizeof(firstIwi));
+            }
+
             if (unzGetCurrentFileInfoPosition(
                     archiveFile,
                     &infoPosition) != UNZ_OK)
-                continue;
-
-            const std::string normalizedName = SwitchNormalizePath(name);
-            if (normalizedName.empty() || normalizedName.back() == '/')
                 continue;
 
             SwitchIwdEntry entry;
@@ -190,13 +200,16 @@ static void Switch_IndexIwdArchive(const char *archivePath)
         } while (unzGoToNextFile(archiveFile) == UNZ_OK);
     }
 
-    char trace[320];
+    char trace[512];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][IWI ROOT] archive=%s entries=%d\n",
+        "[KisakCOD][IWI ROOT] archive=%s zipEntries=%lu indexed=%d iwiEntries=%d firstIwi=%s\n",
         archivePath,
-        entryCount);
+        static_cast<unsigned long>(globalInfo.number_entry),
+        entryCount,
+        iwiEntryCount,
+        firstIwi[0] ? firstIwi : "<none>");
     Switch_LogWrite(trace);
 }
 
