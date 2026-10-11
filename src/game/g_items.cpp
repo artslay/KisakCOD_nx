@@ -6,6 +6,12 @@
 #include <script/scr_vm.h>
 #include <script/scr_const.h>
 #include <stringed/stringed_hooks.h>
+#ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
+#define SWITCH_WEAPON_STAGE(stage) (g_switchFrameStage = "frame/weapon/" stage)
+#else
+#define SWITCH_WEAPON_STAGE(stage) ((void)0)
+#endif
 
 #ifdef KISAK_MP
 #include <game_mp/g_utils_mp.h>
@@ -1173,6 +1179,7 @@ void __cdecl SaveRegisteredItems()
 
 void __cdecl G_RegisterWeapon(uint32_t weapIndex)
 {
+    SWITCH_WEAPON_STAGE("register/check_index");
     char *Name; // eax
     char *v2; // eax
     uint32_t modelindex; // [esp+0h] [ebp-Ch]
@@ -1187,26 +1194,33 @@ void __cdecl G_RegisterWeapon(uint32_t weapIndex)
     level.registerWeapons = 1;
 #endif
 
+    SWITCH_WEAPON_STAGE("register/get_weapon_def");
     weapDef = BG_GetWeaponDef(weapIndex);
+    SWITCH_WEAPON_STAGE("register/read_use_hint");
     if (*weapDef->szUseHintString
         && !G_GetHintStringIndex(&weapDef->iUseHintStringIndex, (char *)weapDef->szUseHintString))
     {
         Com_Error(ERR_DROP, "Too many different hintstring values on weapons. Max allowed is %i different strings", 32);
     }
+    SWITCH_WEAPON_STAGE("register/read_drop_hint");
     if (*weapDef->dropHintString && !G_GetHintStringIndex(&weapDef->dropHintStringIndex, (char *)weapDef->dropHintString))
         Com_Error(ERR_DROP, "Too many different hintstring values on weapons. Max allowed is %i different strings", 32);
     for (weapModel = 0; weapModel < 0x10u; ++weapModel)
     {
+        SWITCH_WEAPON_STAGE("register/world_model");
         if (weapDef->worldModel[weapModel])
         {
+            SWITCH_WEAPON_STAGE("register/world_model_name");
             Name = (char *)XModelGetName(weapDef->worldModel[weapModel]);
             modelindex = G_ModelIndex(Name);
             if (XModelBad(weapDef->worldModel[weapModel]))
                 G_OverrideModel(modelindex, (char*)"defaultweapon");
         }
     }
+    SWITCH_WEAPON_STAGE("register/projectile_model");
     if (weapDef->projectileModel)
     {
+        SWITCH_WEAPON_STAGE("register/projectile_model_name");
         v2 = (char *)XModelGetName(weapDef->projectileModel);
         G_ModelIndex(v2);
     }
