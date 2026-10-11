@@ -35,7 +35,6 @@
 
 #include "kisak_zone_bridge.h"
 #include "Game/IW3/IW3_AssetType.h"
-#include "Game/IW3/IW3_Assets.h"
 
 // src/database/db_registry.cpp (DB_AddXAsset itself is file-local there).
 extern XAssetHeader __cdecl DB_AddXAsset(XAssetType type, XAssetHeader header);
@@ -456,29 +455,28 @@ void *LinkAsset(void *context, int assetType, void *asset)
         // before DB_AddXAsset runs its normal duplicate/override selection.
         // Doing this on the incoming copy avoids modifying an existing weapon
         // if the registry decides not to accept this zone's duplicate.
-        const auto *const sourceWeapon = static_cast<const IW3::WeaponDef *>(asset);
-        std::memcpy(&nativeWeapon, sourceWeapon, sizeof(nativeWeapon));
-
-        for (size_t modelIndex = 0; modelIndex < 16; ++modelIndex)
+        // Keep the generated OAT asset types out of this engine translation unit:
+        // IW3_Assets.h redeclares Fx/RawFile/StringTable types owned by the engine.
+        // The bridge extracts only the pointer members needed here.
+        std::memcpy(&nativeWeapon, asset, sizeof(nativeWeapon));
+        void *modelPointers[38]{};
+        if (KisakZone_ExtractWeaponModelPointers(asset, modelPointers, 38))
         {
-            nativeWeapon.gunXModel[modelIndex] =
-                reinterpret_cast<::XModel *>(sourceWeapon->gunXModel[modelIndex]);
-            nativeWeapon.worldModel[modelIndex] =
-                reinterpret_cast<::XModel *>(sourceWeapon->worldModel[modelIndex]);
-        }
+            for (size_t modelIndex = 0; modelIndex < 16; ++modelIndex)
+            {
+                nativeWeapon.gunXModel[modelIndex] =
+                    reinterpret_cast<::XModel *>(modelPointers[modelIndex]);
+                nativeWeapon.worldModel[modelIndex] =
+                    reinterpret_cast<::XModel *>(modelPointers[16 + modelIndex]);
+            }
 
-        nativeWeapon.handXModel =
-            reinterpret_cast<::XModel *>(sourceWeapon->handXModel);
-        nativeWeapon.worldClipModel =
-            reinterpret_cast<::XModel *>(sourceWeapon->worldClipModel);
-        nativeWeapon.rocketModel =
-            reinterpret_cast<::XModel *>(sourceWeapon->rocketModel);
-        nativeWeapon.knifeModel =
-            reinterpret_cast<::XModel *>(sourceWeapon->knifeModel);
-        nativeWeapon.worldKnifeModel =
-            reinterpret_cast<::XModel *>(sourceWeapon->worldKnifeModel);
-        nativeWeapon.projectileModel =
-            reinterpret_cast<::XModel *>(sourceWeapon->projectileModel);
+            nativeWeapon.handXModel = reinterpret_cast<::XModel *>(modelPointers[32]);
+            nativeWeapon.worldClipModel = reinterpret_cast<::XModel *>(modelPointers[33]);
+            nativeWeapon.rocketModel = reinterpret_cast<::XModel *>(modelPointers[34]);
+            nativeWeapon.knifeModel = reinterpret_cast<::XModel *>(modelPointers[35]);
+            nativeWeapon.worldKnifeModel = reinterpret_cast<::XModel *>(modelPointers[36]);
+            nativeWeapon.projectileModel = reinterpret_cast<::XModel *>(modelPointers[37]);
+        }
         header.weapon = &nativeWeapon;
     }
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
