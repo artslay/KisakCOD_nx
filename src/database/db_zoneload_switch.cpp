@@ -448,38 +448,40 @@ void *LinkAsset(void *context, int assetType, void *asset)
 #endif
     }
     XAssetHeader header(asset);
-    const XAssetHeader registered = DB_AddXAsset(registerType, header);
-
-    // The fastfile loader expands the on-disk 32-bit WeaponDef into OAT's
-    // ARM64 structure. Reapply pointer-bearing model members with typed
-    // assignments after the engine registry has cloned the asset, so the
-    // engine's native WeaponDef never relies on those fields' raw-copy layout.
-    if (type == ASSET_TYPE_WEAPON && registered.weapon && asset)
+    WeaponDef nativeWeapon;
+    if (type == ASSET_TYPE_WEAPON && asset)
     {
+        // OAT's generated loader has already resolved these references to
+        // native pointers. Reapply model members on a native-layout copy
+        // before DB_AddXAsset runs its normal duplicate/override selection.
+        // Doing this on the incoming copy avoids modifying an existing weapon
+        // if the registry decides not to accept this zone's duplicate.
         const auto *const sourceWeapon = static_cast<const IW3::WeaponDef *>(asset);
-        auto *const engineWeapon = registered.weapon;
+        std::memcpy(&nativeWeapon, sourceWeapon, sizeof(nativeWeapon));
 
         for (size_t modelIndex = 0; modelIndex < 16; ++modelIndex)
         {
-            engineWeapon->gunXModel[modelIndex] =
+            nativeWeapon.gunXModel[modelIndex] =
                 reinterpret_cast<::XModel *>(sourceWeapon->gunXModel[modelIndex]);
-            engineWeapon->worldModel[modelIndex] =
+            nativeWeapon.worldModel[modelIndex] =
                 reinterpret_cast<::XModel *>(sourceWeapon->worldModel[modelIndex]);
         }
 
-        engineWeapon->handXModel =
+        nativeWeapon.handXModel =
             reinterpret_cast<::XModel *>(sourceWeapon->handXModel);
-        engineWeapon->worldClipModel =
+        nativeWeapon.worldClipModel =
             reinterpret_cast<::XModel *>(sourceWeapon->worldClipModel);
-        engineWeapon->rocketModel =
+        nativeWeapon.rocketModel =
             reinterpret_cast<::XModel *>(sourceWeapon->rocketModel);
-        engineWeapon->knifeModel =
+        nativeWeapon.knifeModel =
             reinterpret_cast<::XModel *>(sourceWeapon->knifeModel);
-        engineWeapon->worldKnifeModel =
+        nativeWeapon.worldKnifeModel =
             reinterpret_cast<::XModel *>(sourceWeapon->worldKnifeModel);
-        engineWeapon->projectileModel =
+        nativeWeapon.projectileModel =
             reinterpret_cast<::XModel *>(sourceWeapon->projectileModel);
+        header.weapon = &nativeWeapon;
     }
+    const XAssetHeader registered = DB_AddXAsset(registerType, header);
 
 #ifdef __SWITCH__
     // Keep BSP registration visible with one bounded record per clip-map asset.
