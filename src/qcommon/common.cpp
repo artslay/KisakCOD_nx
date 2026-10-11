@@ -2401,7 +2401,9 @@ void __cdecl Com_AssetLoadUI()
 #elif KISAK_SP
         zoneInfo.name = "ui";
 #endif
-        zoneInfo.allocFlags = DB_ZONE_GAME;
+        // Keep UI assets resident while SV_LoadLevelAssets replaces the DB_ZONE_GAME map zone.
+        // This same free mask still replaces UI/load/dev assets on an explicit UI reload.
+        zoneInfo.allocFlags = DB_ZONE_LOAD;
         zoneInfo.freeFlags = DB_ZONE_GAME | DB_ZONE_LOAD | DB_ZONE_DEV;
         DB_LoadXAssets(&zoneInfo, 1u, 0);
     }
