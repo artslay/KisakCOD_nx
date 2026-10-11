@@ -412,7 +412,7 @@ static int SV_GetMemFileSegmentSize(MemoryFile *memFile, uint32_t segmentIndex)
     // Each MemFile segment begins with its 32-bit byte length. CopySegments()
     // returns the end of the entire buffer, not the end of the requested segment.
     uint32_t segmentSize = 0;
-    std::memcpy(&segmentSize, segmentStart, sizeof(segmentSize));
+    memcpy(&segmentSize, segmentStart, sizeof(segmentSize));
     if (segmentSize < sizeof(uint32_t) ||
         segmentSize > static_cast<size_t>(bufferEnd - segmentStart))
         return -1;
