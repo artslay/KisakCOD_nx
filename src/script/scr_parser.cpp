@@ -692,7 +692,14 @@ char *__cdecl Scr_ReadFile(const char *filename, char *extFilename, const char *
 {
     int file; // [esp+24h] [ebp-4h] BYREF
 
+#ifdef __SWITCH__
+    // Dvar strings are native pointers on aarch64. Reading current.integer
+    // as a pointer truncates the high 32 bits and faults while loading the
+    // first script (for example, codescripts/delete).
+    if (fs_gameDirVar->current.string && fs_gameDirVar->current.string[0])
+#else
     if (*(_BYTE *)fs_gameDirVar->current.integer)
+#endif
     {
         if ((FS_FOpenFileRead(extFilename, &file) & 0x80000000) != 0)
         {
