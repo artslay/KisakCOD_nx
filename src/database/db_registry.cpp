@@ -6,65 +6,10 @@ extern const char * volatile g_switchDbStage;
 extern bool Switch_IsStreamAsciiImageName(
     uintptr_t address,
     uint32_t *blockOut,
-    uint32_t *offsetOut)
-{
-    if (!address || !g_streamBlocks)
-        return false;
-
-    for (uint32_t block = 0;
-         block < ARRAY_COUNT(g_streamPosArray);
-         ++block)
-    {
-        if (!g_streamBlocks[block].data)
-            continue;
-
-        const uintptr_t base =
-            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
-        const uintptr_t end =
-            base + g_streamBlocks[block].size;
-        if (address < base || address >= end)
-            continue;
-
-        const size_t offset =
-            static_cast<size_t>(address - base);
-        const size_t remaining =
-            g_streamBlocks[block].size - offset;
-        const size_t limit =
-            remaining < 256u ? remaining : 256u;
-        const unsigned char *name =
-            reinterpret_cast<const unsigned char *>(address);
-
-        if (!limit)
-            return false;
-
-        size_t stringLength = 0;
-        for (; stringLength < limit; ++stringLength)
-        {
-            const unsigned char ch = name[stringLength];
-            if (ch == 0)
-                break;
-
-            if (ch < 0x21 || ch > 0x7E)
-                return false;
-        }
-
-        if (stringLength == 0 || stringLength == limit)
-            return false;
-
-        // Match the original Load_XString contract: the serialized token
-        // identifies the exact string address. Do not scan backward through
-        // adjacent printable bytes; a shorter name may intentionally share
-        // storage with the suffix of another string.
-        if (blockOut)
-            *blockOut = block;
-        if (offsetOut)
-            *offsetOut = static_cast<uint32_t>(offset);
-
-        return true;
-    }
-
-    return false;
-}
+    uint32_t *offsetOut);
+extern char com_errorMessage[4096];
+extern const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(
+    const XAssetHeader *);
 #endif
 
 #include <qcommon/files.h>
@@ -4147,11 +4092,6 @@ bool Switch_IsStreamAsciiImageName(
     uint32_t *blockOut,
     uint32_t *offsetOut)
 {
-    if (blockOut)
-        *blockOut = UINT32_MAX;
-    if (offsetOut)
-        *offsetOut = 0;
-
     if (!address || !g_streamBlocks)
         return false;
 
@@ -4187,7 +4127,6 @@ bool Switch_IsStreamAsciiImageName(
             const unsigned char ch = name[stringLength];
             if (ch == 0)
                 break;
-
             if (ch < 0x21 || ch > 0x7E)
                 return false;
         }
@@ -4195,65 +4134,18 @@ bool Switch_IsStreamAsciiImageName(
         if (stringLength == 0 || stringLength == limit)
             return false;
 
-        // Some Switch fastfile pointers have been observed landing inside a
-        // NUL-terminated printable image name. Recover the start only when the
-        // printable run is preceded by NUL (or is at the block start), rather
-        // than treating an arbitrary pointer into binary data as a string.
-        size_t normalizedOffset = offset;
-        if (normalizedOffset != 0)
-        {
-            const unsigned char *baseBytes =
-                reinterpret_cast<const unsigned char *>(g_streamBlocks[block].data);
-            while (normalizedOffset > 0)
-            {
-                const unsigned char previous =
-                    baseBytes[normalizedOffset - 1u];
-
-                if (previous < 0x21 || previous > 0x7E)
-                    break;
-
-                --normalizedOffset;
-            }
-
-            if (normalizedOffset != offset &&
-                (normalizedOffset == 0 ||
-                 baseBytes[normalizedOffset - 1u] == 0))
-            {
-                address = base +
-                    static_cast<uintptr_t>(normalizedOffset);
-                name = reinterpret_cast<const unsigned char *>(address);
-
-                const size_t normalizedRemaining =
-                    g_streamBlocks[block].size - normalizedOffset;
-                const size_t normalizedLimit =
-                    normalizedRemaining < 256u ? normalizedRemaining : 256u;
-
-                size_t normalizedLength = 0;
-                for (; normalizedLength < normalizedLimit; ++normalizedLength)
-                {
-                    const unsigned char ch = name[normalizedLength];
-                    if (ch == 0)
-                        break;
-
-                    if (ch < 0x21 || ch > 0x7E)
-                        return false;
-                }
-
-                if (normalizedLength == 0 ||
-                    normalizedLength == normalizedLimit)
-                    return false;
-
-#ifdef __SWITCH__
-                char trace[256];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][XSTRING PREFIX FIX] block=%u exactOffset=%08x fixedOffset=%08x name=%s\n",
-                    block,
-                    static_cast<unsigned>(offset),
-                    static_cast<unsigned>(normalizedOffset),
-                    reinterpret_cast<const char *>(name));
-                Switch_LogWrite(trace);
+        // Match the original Load_XString contract: the serialized token
+        // identifies the exact string address. Do not scan backward through
+        // adjacent printable bytes; a shorter name may intentionally share
+        // storage with the suffix of another string.
+        if (blockOut)
+            *blockOut = block;
+        if (offsetOut)
+            *offsetOut = static_cast<uint32_t>(offset);
+        return true;
+    }
+    return false;
+}
 #endif
             }
         }
