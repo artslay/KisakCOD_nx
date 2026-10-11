@@ -190,11 +190,11 @@ static void Switch_IndexIwdArchive(const char *archivePath)
         } while (unzGoToNextFile(archiveFile) == UNZ_OK);
     }
 
-    char trace[192];
+    char trace[320];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[SWITCH IWD] indexed %s entries=%d\n",
+        "[KisakCOD][IWI ROOT] archive=%s entries=%d\n",
         archivePath,
         entryCount);
     Switch_LogWrite(trace);
@@ -497,11 +497,17 @@ static void Switch_IndexIwdArchives(const char *game)
             g_switchSelectedLanguage);
     }
 
-    char trace[320];
+    char trace[768];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][IWI ROOT] index ready archives=%zu records=%zu uniquePaths=%zu language=%s game=%s searchDirs=%zu\n",
+        "[KisakCOD][IWI ROOT] index ready install=%s base=%s home=%s cd=%s archives=%zu records=%zu uniquePaths=%zu language=%s game=%s searchDirs=%zu\n",
+        kSwitchRoot,
+        base,
+        fs_homepath && fs_homepath->current.string[0]
+            ? fs_homepath->current.string : "<unset>",
+        fs_cdpath && fs_cdpath->current.string[0]
+            ? fs_cdpath->current.string : "<unset>",
         g_iwdArchives.size(),
         g_iwdEntryRecords.size(),
         g_iwdEntries.size(),

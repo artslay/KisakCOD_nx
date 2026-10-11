@@ -1678,6 +1678,20 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
 #endif
     DB_BuildOSPath(zoneName, sizeof(filename), filename);
 #ifdef __SWITCH__
+    if (!I_stricmp(zoneName, "code_post_gfx") ||
+        !I_stricmp(zoneName, "ui") ||
+        !I_stricmp(zoneName, "common"))
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][IWI ROOT] fastfile=%s resolved=%s/%s\n",
+            zoneName,
+            kSwitchRoot,
+            filename);
+        Switch_LogWrite(trace);
+    }
     g_switchDbStage = "internal/open_call";
     zoneFile = FS_SwitchOpenRootFile(filename);
     if (!zoneFile)
