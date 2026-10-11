@@ -286,7 +286,13 @@ void __cdecl CL_ShutdownDevGui()
 
 void __cdecl CL_ShutdownHunkUsers()
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_hunk_users/sync_threads";
+#endif
     Com_SyncThreads();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_hunk_users/cgame";
+#endif
     CL_ShutdownCGame();
     if (cls.devGuiStarted)
     {
@@ -297,7 +303,13 @@ void __cdecl CL_ShutdownHunkUsers()
         Cmd_RemoveCommand("devgui_open");
         cls.devGuiStarted = 0;
     }
+ #ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_hunk_users/ui";
+#endif
     CL_ShutdownUI();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_hunk_users/ui_done";
+#endif
     if (cls.uiStarted)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\client\\cl_main.cpp", 383, 0, "%s", "!cls.uiStarted");
 }
@@ -620,6 +632,9 @@ void __cdecl CL_MapLoading_StartCinematic(const char *mapname, float volume)
 
 void __cdecl CL_MapLoading(const char *mapname)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_map_loading/enter";
+#endif
     // KISAKTODO: (SP): could use more touchups
     if (!clientUIActives[0].isRunning)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\client\\cl_main.cpp", 677, 0, "%s", "clUI->isRunning");
@@ -632,9 +647,18 @@ void __cdecl CL_MapLoading(const char *mapname)
 
     clientUIActives[0].connectionState = CA_LOADING;
 #ifndef KISAK_NO_FASTFILES
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_map_loading/start_cinematic";
+#endif
     CL_MapLoading_StartCinematic(mapname, (float)(snd_cinematicVolumeScale->current.value * snd_volume->current.value)),
 #endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_map_loading/draw_connect_screen";
+#endif
     UI_DrawConnectScreen();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_map_loading/draw_connect_screen_done";
+#endif
     //Live_SetCurrentMapname(mapname);
     if (cl_multi_gamepads_enabled)
         Cmd_ExecuteSingleCommand(0, cl_controller_in_use, (char*)"nosplitscreen\n");
@@ -1654,15 +1678,33 @@ void __cdecl CL_UpdateSound()
 
 void __cdecl CL_ShutdownRenderer(int destroyWindow)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_renderer/enter";
+#endif
     iassert(cls.rendererStarted || destroyWindow);
 
     cls.rendererStarted = 0;
     // MP ADD
+    // MP ADD
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_renderer/world";
+#endif
     Com_ShutdownWorld();
     if (IsFastFileLoad() && destroyWindow)
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_shutdown_renderer/collision";
+#endif
         CM_Shutdown();
+    }
     // MP END
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_renderer/r_shutdown";
+#endif
     R_Shutdown(destroyWindow);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_renderer/r_shutdown_done";
+#endif
     cls.whiteMaterial = 0;
     cls.consoleMaterial = 0;
     cls.consoleFont = 0;
@@ -1671,16 +1713,31 @@ void __cdecl CL_ShutdownRenderer(int destroyWindow)
 
 void __cdecl CL_ShutdownAll(bool destroyWindow)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_all/sync_render_thread";
+#endif
     R_SyncRenderThread();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_all/hunk_users";
+#endif
     CL_ShutdownHunkUsers();
 
     if (cls.rendererStarted)
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/cl_shutdown_all/renderer";
+#endif
         CL_ShutdownRenderer(destroyWindow);
         iassert(!cls.rendererStarted);
     }
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_all/track_shutdown";
+#endif
     track_shutdown(3);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cl_shutdown_all/done";
+#endif
 }
 
 void __cdecl CL_DisconnectLocalClient()
