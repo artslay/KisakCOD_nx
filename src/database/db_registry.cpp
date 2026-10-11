@@ -2367,6 +2367,35 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, char *name)
 #endif
     if (!asset.header.data)
     {
+#ifdef __SWITCH__
+        if (type == ASSET_TYPE_CLIPMAP || type == ASSET_TYPE_CLIPMAP_PVS)
+        {
+            const uint32_t bspHash = DB_HashForName(name, type);
+            const uint32_t bspBucket = db_hashTable[bspHash];
+            uint32_t headType = UINT32_MAX;
+            const void *headData = nullptr;
+            const char *headName = "<none>";
+            if (bspBucket && bspBucket < 0x8000u)
+            {
+                const XAsset &headAsset = g_assetEntryPool[bspBucket].entry.asset;
+                headType = static_cast<uint32_t>(headAsset.type);
+                headData = headAsset.header.data;
+                if ((headAsset.type == ASSET_TYPE_CLIPMAP ||
+                     headAsset.type == ASSET_TYPE_CLIPMAP_PVS) &&
+                    headAsset.header.clipMap)
+                    headName = headAsset.header.clipMap->name
+                        ? headAsset.header.clipMap->name : "<null>";
+            }
+            char trace[384];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][BSP DEFAULT FAILURE] type=%u name=%s hash=%u bucket=%u headType=%u head=%p headName=%s cm=%p cmName=%s\n",
+                static_cast<unsigned>(type), name ? name : "<null>",
+                bspHash, bspBucket, headType, headData, headName,
+                static_cast<void *>(&cm), cm.name ? cm.name : "<null>");
+            Switch_LogWrite(trace);
+        }
+#endif
         Sys_UnlockWrite(&db_hashCritSect);
         if (type == ASSET_TYPE_CLIPMAP || type == ASSET_TYPE_CLIPMAP_PVS)
             Com_Error(
