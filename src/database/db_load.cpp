@@ -1906,6 +1906,12 @@ void __cdecl Load_XString(bool atStreamStart)
             reinterpret_cast<uintptr_t>(*varXString));
     }
 
+    DB_LogSwitchPointerStoreIfStream(
+        "Load_XString slot init",
+        varXString,
+        serialized,
+        0,
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     *varXString = nullptr;
     if (serialized)
     {
@@ -1996,6 +2002,12 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
             sizeof(serialized));
     }
 
+    DB_LogSwitchPointerStoreIfStream(
+        "Load_XStringPtr slot init",
+        varXStringPtr,
+        serialized,
+        0,
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     *varXStringPtr = nullptr;
     if (!serialized)
         return;
@@ -2022,7 +2034,19 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
             return;
 
         *nativeStringSlot = nullptr;
-        *varXStringPtr = nativeStringSlot;
+        DB_LogSwitchPointerStoreIfStream(
+            "Load_XStringPtr",
+            varXStringPtr,
+            serialized,
+            reinterpret_cast<uintptr_t>(nativeStringSlot),
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+        DB_LogSwitchPointerStoreIfStream(
+        "Load_XStringPtr",
+        varXStringPtr,
+        serialized,
+        reinterpret_cast<uintptr_t>(nativeStringSlot),
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    *varXStringPtr = nativeStringSlot;
 
         if (nested == UINT32_MAX)
         {
