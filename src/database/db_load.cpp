@@ -10400,7 +10400,67 @@ static void Switch_TranslateXModelSerialized(
     uint8_t serialized[SERIALIZED_SIZE];
 
     iassert(model);
+#ifdef __SWITCH__
+    uintptr_t serializedStart =
+        reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+    uint32_t serializedStream = g_streamPosIndex;
+    uint32_t serializedOffset = UINT32_MAX;
+    if (g_streamBlocks &&
+        serializedStream < ARRAY_COUNT(g_streamPosArray) &&
+        g_streamBlocks[serializedStream].data)
+    {
+        const uintptr_t blockBase =
+            reinterpret_cast<uintptr_t>(
+                g_streamBlocks[serializedStream].data);
+        if (serializedStart >= blockBase &&
+            serializedStart - blockBase <=
+                g_streamBlocks[serializedStream].size)
+        {
+            serializedOffset =
+                static_cast<uint32_t>(serializedStart - blockBase);
+        }
+    }
+    const bool traceEarlyXModelHeader =
+        g_switchCurrentAssetRawType == 3u &&
+        g_switchCurrentAssetIndex >= 32 &&
+        g_switchCurrentAssetIndex <= 36;
+    if (traceEarlyXModelHeader)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][XMODEL HEADER START] asset=%d rawType=%u rawHeader=%08x stream=%u offset=%08x pos=%p model=%p prev=%d/%u/%08x\n",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<unsigned>(g_switchCurrentAssetHeader),
+            static_cast<unsigned>(serializedStream),
+            serializedOffset,
+            reinterpret_cast<const void *>(serializedStart),
+            static_cast<void *>(model),
+            g_switchPreviousAssetIndex,
+            static_cast<unsigned>(g_switchPreviousAssetRawType),
+            static_cast<unsigned>(g_switchPreviousAssetHeader));
+        Switch_LogWrite(trace);
+    }
+#endif
     DB_LoadSwitchSerialized(serialized, SERIALIZED_SIZE);
+#ifdef __SWITCH__
+    if (traceEarlyXModelHeader)
+    {
+        char tag[96];
+        std::snprintf(
+            tag,
+            sizeof(tag),
+            "[KisakCOD][XMODEL RAW %d]",
+            g_switchCurrentAssetIndex);
+        Switch_LogRawDwords(tag, serialized, 40);
+        Switch_LogRawDwords(
+            "[KisakCOD][XMODEL RAW TAIL]",
+            serialized + 152,
+            SERIALIZED_SIZE - 152);
+    }
+#endif
     std::memset(model, 0, sizeof(*model));
 
     if (serializedNameToken)
