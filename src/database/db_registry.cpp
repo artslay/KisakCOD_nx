@@ -3333,87 +3333,50 @@ void __cdecl DB_GetXAsset(XAssetType type, XAssetHeader header)
     asset.header = header;
     name = DB_GetXAssetName(&asset);
 #ifdef __SWITCH__
-    // OAT's 64-bit runtime objects and the engine's registered pool objects
-    // can have different addresses even when they represent the same asset.
-    // Prefer exact pointer identity, but fall back to the active same-name
-    // entry instead of walking past the end of the hash chain indefinitely.
+    // Match the retail registry semantics: an in-use reference must resolve
+    // to the exact registered pool object, not merely another asset with the
+    // same name. OAT references are normalized before they reach this point.
     const uint32_t hash = DB_HashForName(name, type);
-    XAssetEntry *nameMatch = nullptr;
-    uint32_t hashGuard = 0;
-    for (assetEntryIndex = db_hashTable[hash];
-         assetEntryIndex;
-         )
+    uint32_t switchGetGuard = 0;
+    for (assetEntryIndex = db_hashTable[hash]; ;
+         assetEntryIndex = assetEntry->nextHash)
     {
-        if (assetEntryIndex >= 0x8000u || ++hashGuard > 0x8000u)
-            break;
-
-        assetEntry = &g_assetEntryPool[assetEntryIndex].entry;
-        if (assetEntry->asset.type == type)
+        if (!assetEntryIndex)
         {
-            if (assetEntry->asset.header.data == header.data)
-            {
-                assetEntry->inuse = 1;
-                return;
-            }
-
-            const char *registeredName = DB_GetXAssetName(&assetEntry->asset);
-            if (!nameMatch && registeredName &&
-                !Switch_IstricmpAssetName(registeredName, name))
-                nameMatch = assetEntry;
-
-            uint16_t overrideIndex = assetEntry->nextOverride;
-            uint32_t overrideGuard = 0;
-            while (overrideIndex)
-            {
-                if (overrideIndex >= 0x8000u || ++overrideGuard > 0x8000u)
-                    break;
-
-                XAssetEntry *overrideEntry =
-                    &g_assetEntryPool[overrideIndex].entry;
-                if (overrideEntry->asset.type == type)
-                {
-                    if (overrideEntry->asset.header.data == header.data)
-                    {
-                        overrideEntry->inuse = 1;
-                        return;
-                    }
-
-                    const char *overrideName =
-                        DB_GetXAssetName(&overrideEntry->asset);
-                    if (!nameMatch && overrideName &&
-                        !Switch_IstricmpAssetName(overrideName, name))
-                        nameMatch = overrideEntry;
-                }
-                overrideIndex = overrideEntry->nextOverride;
-            }
+            Com_Error(
+                ERR_DROP,
+                "Switch DB_GetXAsset could not resolve registered pointer: type=%u name=%s",
+                static_cast<unsigned>(type),
+                name ? name : "<null>");
+            return;
         }
-
-        assetEntryIndex = assetEntry->nextHash;
+        if (assetEntryIndex >= 0x8000u || ++switchGetGuard > 0x8000u)
+        {
+            Com_Error(
+                ERR_DROP,
+                "Switch DB_GetXAsset encountered an invalid hash chain: type=%u name=%s",
+                static_cast<unsigned>(type),
+                name ? name : "<null>");
+            return;
+        }
+        assetEntry = &g_assetEntryPool[assetEntryIndex].entry;
+        if (assetEntry->asset.type == type &&
+            assetEntry->asset.header.xmodelPieces == header.xmodelPieces)
+            break;
     }
-
-    if (nameMatch)
-    {
-        nameMatch->inuse = 1;
-        return;
-    }
-
-    Com_Error(
-        ERR_DROP,
-        "Switch DB_GetXAsset could not resolve registered asset: type=%u name=%s",
-        static_cast<unsigned>(type),
-        name ? name : "<null>");
-    return;
 #else
-    for (assetEntryIndex = db_hashTable[DB_HashForName(name, type)]; ; assetEntryIndex = assetEntry->nextHash)
+    for (assetEntryIndex = db_hashTable[DB_HashForName(name, type)]; ;
+         assetEntryIndex = assetEntry->nextHash)
     {
         if (!assetEntryIndex)
             MyAssertHandler(".\\database\\db_registry.cpp", 3163, 0, "%s", "assetEntryIndex");
         assetEntry = &g_assetEntryPool[assetEntryIndex].entry;
-        if (assetEntry->asset.type == type && assetEntry->asset.header.xmodelPieces == header.xmodelPieces)
+        if (assetEntry->asset.type == type &&
+            assetEntry->asset.header.xmodelPieces == header.xmodelPieces)
             break;
     }
-    assetEntry->inuse = 1;
 #endif
+    assetEntry->inuse = 1;
 }
 
 static void __cdecl DB_DelayedCloneXAsset(XAssetEntry *newEntry)
@@ -4139,18 +4102,6 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     iassert(existingEntry);
     if (existingEntry->entry.zoneIndex)
     {
-#ifdef __SWITCH__
-        // OAT can present the same named LightDef more than once from a
-        // single zone. Keep the first name registration and release the
-        // redundant native LightDef pool entry rather than hitting the
-        // original engine's same-zone assertion.
-        if (type == ASSET_TYPE_LIGHT_DEF &&
-            existingEntry->entry.zoneIndex == newEntry->entry.zoneIndex)
-        {
-            DB_FreeXAssetEntry(newEntry);
-            return existingEntry;
-        }
-#endif
         iassert(existingEntry->entry.zoneIndex != newEntry->entry.zoneIndex);
 
         if (!*g_defaultAssetName[type] && type != ASSET_TYPE_RAWFILE && type != ASSET_TYPE_MAP_ENTS)

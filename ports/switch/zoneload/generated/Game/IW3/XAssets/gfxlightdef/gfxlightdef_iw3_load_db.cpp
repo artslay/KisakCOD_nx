@@ -79,7 +79,9 @@ void Loader_GfxLightDef::Load_GfxLightImage(const bool atStreamStart)
     {
         KisakZone_SetActiveAssetPhase(14); // enter nested attenuation-image loader
         Loader_GfxImage loader(m_zone, m_stream);
-        loader.Load(&varGfxLightImage->image);
+        auto* imageInfo = loader.Load(&varGfxLightImage->image);
+        if (imageInfo)
+            varGfxLightImage->image = imageInfo->Asset();
         KisakZone_SetActiveAssetPhase(15); // attenuation-image loader returned
     }
 }
