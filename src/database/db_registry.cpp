@@ -2855,43 +2855,42 @@ static void __cdecl DB_FreeMaterial(void *arg, XAssetHeader header)
 
 XAssetHeader(__cdecl *DB_AllocXAssetHeaderHandler[ASSET_TYPE_COUNT])(void *) =
 {
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocMaterial,
+  &DB_AllocXAsset_StringTable_, // XMODELPIECES
+  &DB_AllocXAsset_StringTable_, // PHYSPRESET
+  &DB_AllocXAsset_StringTable_, // XANIMPARTS
+  &DB_AllocXAsset_StringTable_, // XMODEL
+  &DB_AllocMaterial,            // MATERIAL
 #ifdef KISAK_SP
-  &DB_AllocPixelShader,
+  &DB_AllocPixelShader,         // PIXELSHADER
 #endif
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocLoadedSound,
-  &node1_,
-
-  &node1_,
-  &node1_,
-  &node1_,
-  &node1_,
-  &DB_AllocXAsset_StringTable_,
-  &node1_,
-  &DB_AllocGfxLightDef,
-  NULL,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocWeaponDef,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  &DB_AllocXAsset_StringTable_,
-  NULL,
-  NULL,
-  NULL,
-  &DB_AllocXAsset_StringTable_, // ASSET_TYPE_XMODELALIAS
-  &DB_AllocXAsset_StringTable_, // ASSET_TYPE_RAWFILE
-  &DB_AllocXAsset_StringTable_  // ASSET_TYPE_STRINGTABLE
+  &DB_AllocXAsset_StringTable_, // TECHNIQUE_SET
+  &DB_AllocXAsset_StringTable_, // IMAGE
+  &DB_AllocXAsset_StringTable_, // SOUND
+  &DB_AllocXAsset_StringTable_, // SOUND_CURVE
+  &DB_AllocLoadedSound,         // LOADED_SOUND
+  &node1_,                      // CLIPMAP
+  &node1_,                      // CLIPMAP_PVS
+  &node1_,                      // COMWORLD
+  &node1_,                      // GAMEWORLD_SP
+  &node1_,                      // GAMEWORLD_MP
+  &DB_AllocXAsset_StringTable_, // MAP_ENTS
+  &node1_,                      // GFXWORLD
+  &DB_AllocGfxLightDef,         // LIGHT_DEF (Switch uses native typed pool)
+  NULL,                         // UI_MAP
+  &DB_AllocXAsset_StringTable_, // FONT
+  &DB_AllocXAsset_StringTable_, // MENULIST
+  &DB_AllocXAsset_StringTable_, // MENU
+  &DB_AllocXAsset_StringTable_, // LOCALIZE_ENTRY
+  &DB_AllocWeaponDef,           // WEAPON
+  NULL,                         // SNDDRIVER_GLOBALS has no pool
+  &DB_AllocXAsset_StringTable_, // FX
+  &DB_AllocXAsset_StringTable_, // IMPACT_FX
+  NULL,                         // AITYPE
+  NULL,                         // MPTYPE
+  NULL,                         // CHARACTER
+  &DB_AllocXAsset_StringTable_, // XMODELALIAS
+  &DB_AllocXAsset_StringTable_, // RAWFILE
+  &DB_AllocXAsset_StringTable_  // STRINGTABLE
 };
 
 void __cdecl DB_FreeXAssetHeader_StringTable_(void *arg, XAssetHeader header)
@@ -2910,42 +2909,46 @@ void __cdecl NULLSUB(void *crap, XAssetHeader head)
 
 void(__cdecl *DB_FreeXAssetHeaderHandler[ASSET_TYPE_COUNT])(void *, XAssetHeader) =
 {
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeMaterial,
+  DB_FreeXAssetHeader_StringTable_, // XMODELPIECES
+  DB_FreeXAssetHeader_StringTable_, // PHYSPRESET
+  DB_FreeXAssetHeader_StringTable_, // XANIMPARTS
+  DB_FreeXAssetHeader_StringTable_, // XMODEL
+  DB_FreeMaterial,                  // MATERIAL
 #ifdef KISAK_SP
-  DB_FreePixelShader,
+  DB_FreePixelShader,               // PIXELSHADER
 #endif
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeLoadedSound,
-  NULLSUB,
-  NULLSUB,
-  NULLSUB,
-  NULLSUB,
-  NULLSUB,
-  NULLSUB,
-  DB_FreeXAssetHeader_StringTable_,
-  NULLSUB,
-  DB_FreeXAssetHeader_StringTable_,
-  NULL,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeWeaponDef,
-  NULL,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeXAssetHeader_StringTable_,
-  NULL,
-  NULL,
-  NULL,
-  NULL,
-  DB_FreeXAssetHeader_StringTable_,
-  DB_FreeXAssetHeader_StringTable_
+  DB_FreeXAssetHeader_StringTable_, // TECHNIQUE_SET
+  DB_FreeXAssetHeader_StringTable_, // IMAGE
+  DB_FreeXAssetHeader_StringTable_, // SOUND
+  DB_FreeXAssetHeader_StringTable_, // SOUND_CURVE
+  DB_FreeLoadedSound,               // LOADED_SOUND
+  NULLSUB,                          // CLIPMAP
+  NULLSUB,                          // CLIPMAP_PVS
+  NULLSUB,                          // COMWORLD
+  NULLSUB,                          // GAMEWORLD_SP
+  NULLSUB,                          // GAMEWORLD_MP
+  DB_FreeXAssetHeader_StringTable_, // MAP_ENTS
+  NULLSUB,                          // GFXWORLD is an engine singleton
+#ifdef __SWITCH__
+  DB_FreeGfxLightDef,               // LIGHT_DEF
+#else
+  DB_FreeXAssetHeader_StringTable_, // LIGHT_DEF
+#endif
+  NULL,                             // UI_MAP
+  DB_FreeXAssetHeader_StringTable_, // FONT
+  DB_FreeXAssetHeader_StringTable_, // MENULIST
+  DB_FreeXAssetHeader_StringTable_, // MENU
+  DB_FreeXAssetHeader_StringTable_, // LOCALIZE_ENTRY
+  DB_FreeWeaponDef,                 // WEAPON
+  NULL,                             // SNDDRIVER_GLOBALS has no pool
+  DB_FreeXAssetHeader_StringTable_, // FX
+  DB_FreeXAssetHeader_StringTable_, // IMPACT_FX
+  NULL,                             // AITYPE
+  NULL,                             // MPTYPE
+  NULL,                             // CHARACTER
+  DB_FreeXAssetHeader_StringTable_, // XMODELALIAS
+  DB_FreeXAssetHeader_StringTable_, // RAWFILE
+  DB_FreeXAssetHeader_StringTable_  // STRINGTABLE
 };
 
 static void __cdecl DB_InitSingleton(void *pool, int32_t size)
