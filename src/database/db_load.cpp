@@ -8063,12 +8063,13 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
     const uint32_t techniqueSetHeaderAfter =
         Switch_GetStreamCursorOffset(techniqueSetHeaderStream);
 
-    // Keep a compact, synchronous record for early UI materials. The raw
-    // stream trace may be buffered separately, but this line must remain beside
-    // the cursor diagnostics that explain an invalid inline technique header.
+    // Keep a compact, synchronous record for early UI materials and the
+    // killhouse technique set whose nested image name was found invalid. The
+    // raw stream trace may be buffered separately, so keep this beside the
+    // cursor diagnostics that explain malformed serialized pointers.
     if (traceRawType == 4u &&
-        traceAssetIndex >= 0 &&
-        traceAssetIndex <= 3)
+        ((traceAssetIndex >= 0 && traceAssetIndex <= 3) ||
+         traceAssetIndex == 1530))
     {
         char trace[640];
         std::snprintf(
