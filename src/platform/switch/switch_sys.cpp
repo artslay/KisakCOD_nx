@@ -70,6 +70,7 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[SWITCH IMAGE ANOMALY]",
         "[SWITCH TECH CURSOR]",
         "[KisakCOD][TECHSET ABI]",
+        "[KisakCOD][TECHSET ABI BYTES]",
         "[KisakCOD][GFXIMAGE HEADER]",
         "[KisakCOD][GFXIMAGE TRACE]"
     };
