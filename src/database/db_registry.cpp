@@ -500,7 +500,7 @@ static void __cdecl DB_CloneXAssetInternalSwitch(const XAsset *from, XAsset *to)
         return;
     }
 
-    DB_CloneXAssetInternalSwitch(from, to);
+    DB_CloneXAssetInternal(from, to);
 }
 #else
 #define DB_CloneXAssetInternalSwitch DB_CloneXAssetInternal
