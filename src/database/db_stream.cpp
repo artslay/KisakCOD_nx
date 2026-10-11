@@ -3,6 +3,7 @@
 #include <climits>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <universal/q_shared.h>
 #include "database.h"
 
@@ -48,6 +49,29 @@ struct SwitchPointerAliasFixup
     uintptr_t *destination;
 };
 
+struct SwitchPointerAliasFixupKey
+{
+    uintptr_t serializedSlot;
+    uintptr_t destination;
+
+    bool operator==(const SwitchPointerAliasFixupKey &other) const noexcept
+    {
+        return serializedSlot == other.serializedSlot &&
+            destination == other.destination;
+    }
+};
+
+struct SwitchPointerAliasFixupKeyHash
+{
+    size_t operator()(const SwitchPointerAliasFixupKey &key) const noexcept
+    {
+        const size_t first = std::hash<uintptr_t>{}(key.serializedSlot);
+        const size_t second = std::hash<uintptr_t>{}(key.destination);
+        return first ^ (second + static_cast<size_t>(0x9e3779b97f4a7c15ull) +
+            (first << 6) + (first >> 2));
+    }
+};
+
 struct SwitchMaterialNameAliasFixup
 {
     uintptr_t *destination;
@@ -57,6 +81,9 @@ struct SwitchMaterialNameAliasFixup
 static std::vector<SwitchPointerAliasEntry> g_switchPointerAliasEntries;
 static std::unordered_map<uintptr_t, size_t> g_switchPointerAliasIndex;
 static std::vector<SwitchPointerAliasFixup> g_switchPointerAliasFixups;
+static std::unordered_set<
+    SwitchPointerAliasFixupKey,
+    SwitchPointerAliasFixupKeyHash> g_switchPointerAliasFixupKeys;
 
 // Unlike raw serialized-pointer fixups, name fixups own a copy of the name and
 // may safely survive DB_InitStreams() switching from one fastfile to another.
@@ -258,9 +285,11 @@ void __cdecl DB_InitStreams(XZoneMemory *zoneMem)
     g_switchPointerAliasEntries.clear();
     g_switchPointerAliasIndex.clear();
     g_switchPointerAliasFixups.clear();
+    g_switchPointerAliasFixupKeys.clear();
     g_switchPointerAliasEntries.reserve(16384);
     g_switchPointerAliasIndex.reserve(16384);
     g_switchPointerAliasFixups.reserve(4096);
+    g_switchPointerAliasFixupKeys.reserve(4096);
 #endif
     for (i = 0; i < 9; ++i)
         g_streamPosArray[i] = zoneMem->blocks[i].data;
@@ -875,12 +904,11 @@ void __cdecl DB_AddSwitchPointerAliasFixup(
     if (!serializedSlot || !destination)
         return;
 
-    for (const SwitchPointerAliasFixup &fixup : g_switchPointerAliasFixups)
-    {
-        if (fixup.serializedSlot == serializedSlot &&
-            fixup.destination == destination)
-            return;
-    }
+    const SwitchPointerAliasFixupKey key{
+        serializedSlot,
+        reinterpret_cast<uintptr_t>(destination)};
+    if (!g_switchPointerAliasFixupKeys.insert(key).second)
+        return;
 
     g_switchPointerAliasFixups.push_back({serializedSlot, destination});
 }
@@ -1205,54 +1233,64 @@ void __cdecl DB_ResolvePendingSwitchMaterialNameAliases(bool finalPass)
 
 void __cdecl DB_FixupSwitchPointerAliases()
 {
-    auto fixup = g_switchPointerAliasFixups.begin();
-    while (fixup != g_switchPointerAliasFixups.end())
+    // Compact resolved entries in place. Erasing each resolved vector element
+    // shifts the remaining queue and makes large map loads quadratic.
+    size_t writeIndex = 0;
+    const size_t count = g_switchPointerAliasFixups.size();
+    for (size_t readIndex = 0; readIndex < count; ++readIndex)
     {
+        const SwitchPointerAliasFixup fixup =
+            g_switchPointerAliasFixups[readIndex];
         uintptr_t resolvedPointer = 0;
         bool resolved = DB_ResolveSwitchPointerAlias(
-            fixup->serializedSlot,
+            fixup.serializedSlot,
             &resolvedPointer);
         if (!resolved || !resolvedPointer)
             resolved = DB_TryResolveSwitchSerializedAliasChain(
-                fixup->serializedSlot,
+                fixup.serializedSlot,
                 &resolvedPointer);
         if (!resolved || !resolvedPointer)
         {
             Switch_TryResolveMaterialNameAlias(
-                fixup->serializedSlot,
+                fixup.serializedSlot,
                 &resolvedPointer);
         }
 
         if (resolvedPointer)
         {
             const uintptr_t destination =
-                reinterpret_cast<uintptr_t>(fixup->destination);
+                reinterpret_cast<uintptr_t>(fixup.destination);
             if (Switch_IsInvalidNativePointer(destination))
             {
                 char trace[384];
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\n",
-                    reinterpret_cast<const void *>(fixup->serializedSlot),
+                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\\n",
+                    reinterpret_cast<const void *>(fixup.serializedSlot),
                     reinterpret_cast<const void *>(destination),
                     reinterpret_cast<const void *>(resolvedPointer),
                     g_switchCurrentAssetIndex,
                     static_cast<unsigned>(g_switchCurrentAssetRawType),
                     g_switchDbStage ? g_switchDbStage : "");
                 Switch_LogWrite(trace);
-                fixup = g_switchPointerAliasFixups.erase(fixup);
             }
             else
             {
-                *fixup->destination = resolvedPointer;
-                fixup = g_switchPointerAliasFixups.erase(fixup);
+                *fixup.destination = resolvedPointer;
             }
+
+            g_switchPointerAliasFixupKeys.erase({
+                fixup.serializedSlot,
+                destination});
+            continue;
         }
-        else
-        {
-            ++fixup;
-        }
+
+        if (writeIndex != readIndex)
+            g_switchPointerAliasFixups[writeIndex] = fixup;
+        ++writeIndex;
     }
+
+    g_switchPointerAliasFixups.resize(writeIndex);
 }
 #endif
