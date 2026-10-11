@@ -1917,8 +1917,15 @@ void __cdecl Load_XString(bool atStreamStart)
         }
         else
         {
-            *varXString = reinterpret_cast<const char *>(
-                DB_ConvertOffsetToPointerValue(serialized));
+            const uintptr_t resolvedName =
+                DB_ConvertOffsetToPointerValue(serialized);
+            DB_LogSwitchPointerStoreIfStream(
+                "Load_XString",
+                varXString,
+                serialized,
+                resolvedName,
+                reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+            *varXString = reinterpret_cast<const char *>(resolvedName);
         }
     }
 #else
