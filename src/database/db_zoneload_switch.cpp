@@ -3,7 +3,7 @@
 // Zones on disk store their structures with 32-bit layouts, which
 // the legacy fastfile loader reads directly into memory. On arm64 that would
 // corrupt every structure, so DB_LoadXFileInternal calls this instead. The
-// OpenAssetTools-based loader (ports/ios/zoneload) reads the same data into the
+// OpenAssetTools-based loader (ports/switch/zoneload) reads the same data into the
 // engine's zone blocks and native 64-bit structures; this file supplies the
 // engine side of the work the 32-bit loader did inline:
 //   - script strings become engine string ids (Load_ScriptStringList/_Custom)
@@ -34,6 +34,7 @@
 #include <ui/ui_shared.h>
 
 #include "kisak_zone_bridge.h"
+#include "Game/IW3/IW3.h"
 
 // src/database/db_registry.cpp (DB_AddXAsset itself is file-local there).
 extern XAssetHeader __cdecl DB_AddXAsset(XAssetType type, XAssetHeader header);
@@ -104,7 +105,22 @@ void SetSoundData(void *context, void *soundPointer)
 }
 
 // ---------------------------------------------------------------------------
-// Per-asset load work
+// Fastfiles use the PC/IW3 asset IDs, but this Switch SP runtime's XAssetType
+// includes the extra ASSET_TYPE_PIXELSHADER slot after MATERIAL. Translate only
+// at the engine boundary; OAT must continue parsing the original 0..32 zone IDs.
+static_assert(ASSET_TYPE_MATERIAL == IW3::ASSET_TYPE_MATERIAL);
+static_assert(ASSET_TYPE_PIXELSHADER == IW3::ASSET_TYPE_TECHNIQUE_SET);
+static_assert(ASSET_TYPE_TECHNIQUE_SET == IW3::ASSET_TYPE_TECHNIQUE_SET + 1);
+static_assert(ASSET_TYPE_RAWFILE == IW3::ASSET_TYPE_RAWFILE + 1);
+static_assert(ASSET_TYPE_COUNT == IW3::ASSET_TYPE_COUNT + 1);
+
+static XAssetType SwitchEngineAssetTypeFromIW3(const int serializedType)
+{
+    const int engineType = serializedType >= IW3::ASSET_TYPE_TECHNIQUE_SET
+        ? serializedType + 1
+        : serializedType;
+    return static_cast<XAssetType>(engineType);
+}
 
 void ResolveSoundName(snd_alias_list_t *&sound)
 {
@@ -281,7 +297,7 @@ void FixupClipMap(clipMap_t *clipMap)
 void *LinkAsset(void *context, int assetType, void *asset)
 {
     auto &state = *static_cast<ZoneLoadState *>(context);
-    const auto type = static_cast<XAssetType>(assetType);
+    const auto type = SwitchEngineAssetTypeFromIW3(assetType);
 
     switch (type)
     {
