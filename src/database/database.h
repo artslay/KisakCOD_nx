@@ -213,6 +213,11 @@ void __cdecl DB_LoadXFile(
     uint8_t *buf,
     int32_t allocType);
 
+#ifdef __SWITCH__
+// Allocates widened native asset data within the currently loading fastfile zone.
+uint8_t *__cdecl DB_AllocSwitchAssetMemory(uint32_t size, const char *name, int32_t type);
+#endif
+
 // db_memory
 void __cdecl DB_RecoverGeometryBuffers(XZoneMemory *zoneMem);
 void __cdecl DB_ReleaseGeometryBuffers(XZoneMemory *zoneMem);
