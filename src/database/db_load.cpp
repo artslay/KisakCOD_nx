@@ -10941,7 +10941,6 @@ void __cdecl Load_XModel(bool atStreamStart)
     DB_PopStreamPos();
 #ifdef __SWITCH__
     Switch_TraceEarlyXModelCursor("after_model_pop");
-#ifdef __SWITCH__
     if (switchTraceXModel)
         g_switchDbStage = "xmodel/load_done";
 #endif
