@@ -180,8 +180,10 @@ void SetSoundData(void *context, void *soundPointer)
 // Fastfiles use the PC/IW3 asset IDs, but this Switch SP runtime's XAssetType
 // includes the extra ASSET_TYPE_PIXELSHADER slot after MATERIAL. Translate only
 // at the engine boundary; OAT must continue parsing the original 0..32 zone IDs.
-static_assert(ASSET_TYPE_MATERIAL == IW3::ASSET_TYPE_MATERIAL);
-static_assert(ASSET_TYPE_PIXELSHADER == IW3::ASSET_TYPE_TECHNIQUE_SET);
+static_assert(static_cast<int>(ASSET_TYPE_MATERIAL) ==
+              static_cast<int>(IW3::ASSET_TYPE_MATERIAL));
+static_assert(static_cast<int>(ASSET_TYPE_PIXELSHADER) ==
+              static_cast<int>(IW3::ASSET_TYPE_TECHNIQUE_SET));
 static_assert(ASSET_TYPE_TECHNIQUE_SET == IW3::ASSET_TYPE_TECHNIQUE_SET + 1);
 static_assert(ASSET_TYPE_RAWFILE == IW3::ASSET_TYPE_RAWFILE + 1);
 static_assert(ASSET_TYPE_COUNT == IW3::ASSET_TYPE_COUNT + 1);
