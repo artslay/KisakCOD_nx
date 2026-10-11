@@ -139,18 +139,16 @@ void ContentLoader::LoadXAsset(const bool atStreamStart) const
         LOAD_ASSET(ASSET_TYPE_GAMEWORLD_MP, GameWorldMp, gameWorldMp)
         LOAD_ASSET(ASSET_TYPE_MAP_ENTS, MapEnts, mapEnts)
         LOAD_ASSET(ASSET_TYPE_GFXWORLD, GfxWorld, gfxWorld)
-        LOAD_ASSET(ASSET_TYPE_LIGHT_DEF, GfxLightDef, lightDef)
-        case ASSET_TYPE_FONT:
+        case ASSET_TYPE_LIGHT_DEF:
         {
-            // Keep the dispatch/constructor boundary observable: the font loader's
-            // own entry phase is set only after its base and derived constructors.
-            KisakZone_SetActiveAssetPhase(18); // entering font-loader dispatch
-            Loader_Font_s loader(m_zone, m_stream);
-            KisakZone_SetActiveAssetPhase(19); // font loader constructed
-            loader.Load(&varXAsset->header.font);
-            KisakZone_SetActiveAssetPhase(20); // font loader returned
+            KisakZone_SetActiveAssetPhase(1); // enter light-definition dispatch
+            Loader_GfxLightDef loader(m_zone, m_stream);
+            KisakZone_SetActiveAssetPhase(2); // loader constructed
+            loader.Load(&varXAsset->header.lightDef);
+            KisakZone_SetActiveAssetPhase(3); // loader returned
             break;
         }
+        LOAD_ASSET(ASSET_TYPE_FONT, Font_s, font)
         LOAD_ASSET(ASSET_TYPE_MENULIST, MenuList, menuList)
         LOAD_ASSET(ASSET_TYPE_MENU, menuDef_t, menu)
         LOAD_ASSET(ASSET_TYPE_LOCALIZE_ENTRY, LocalizeEntry, localize)
