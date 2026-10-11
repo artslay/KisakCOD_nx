@@ -23,7 +23,10 @@ XAssetInfoGeneric* AssetLoader::LinkAsset(std::string name,
     // KisakCOD: the engine runs its per-asset load work and registers the asset;
     // generated loaders then continue with the asset the engine chose.
     if (const auto* hooks = KisakZone_CurrentHooks(); hooks && info)
+    {
         info->m_ptr = hooks->linkAsset(hooks->context, static_cast<int>(m_asset_type), info->m_ptr);
+        KisakZone_NoteAssetLinked();
+    }
 
     return info;
 }
