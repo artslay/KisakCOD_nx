@@ -443,21 +443,12 @@ void Switch_LogWrite(const char *msg)
         "Couldn't play stream '",
         "R_Cinematic_BinkOpen '"
     };
-    // Allow the bounded UI paint-path traces used to diagnose menu item
-    // visibility, selected-button materials, and the final blend state. Keep
-    // unrelated UI diagnostics suppressed so the SD log stays readable.
+    // Keep normal UI paint/geometry traces out of the SD log. The only
+    // exception is this single bounded material record, used to diagnose the
+    // blue plaque on player_profile without flooding the log with draw calls.
     static constexpr const char *const kVisibleUiPrefixes[] =
     {
-        "[KisakCOD][UI MENU]",
-        "[KisakCOD][UI MENU ",
-        "[KisakCOD][UI BIND]",
-        "[KisakCOD][UI ITEM]",
-        "[KisakCOD][UI ITEM ",
-        "[KisakCOD][UI HANDLE ",
-        "[KisakCOD][UI PIC ",
-        "[KisakCOD][UI STRETCH ",
-        "[KisakCOD][UI PASS]",
-        "[KisakCOD][UI BLEND]"
+        "[KisakCOD][UI PROFILE PLAQUE]"
     };
     bool keepUiMaterialDiag = false;
     for (const char *prefix : kVisibleUiPrefixes)
