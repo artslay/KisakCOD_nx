@@ -3332,6 +3332,78 @@ void __cdecl DB_GetXAsset(XAssetType type, XAssetHeader header)
     asset.type = type;
     asset.header = header;
     name = DB_GetXAssetName(&asset);
+#ifdef __SWITCH__
+    // OAT's 64-bit runtime objects and the engine's registered pool objects
+    // can have different addresses even when they represent the same asset.
+    // Prefer exact pointer identity, but fall back to the active same-name
+    // entry instead of walking past the end of the hash chain indefinitely.
+    const uint32_t hash = DB_HashForName(name, type);
+    XAssetEntry *nameMatch = nullptr;
+    uint32_t hashGuard = 0;
+    for (assetEntryIndex = db_hashTable[hash];
+         assetEntryIndex;
+         )
+    {
+        if (assetEntryIndex >= 0x8000u || ++hashGuard > 0x8000u)
+            break;
+
+        assetEntry = &g_assetEntryPool[assetEntryIndex].entry;
+        if (assetEntry->asset.type == type)
+        {
+            if (assetEntry->asset.header.data == header.data)
+            {
+                assetEntry->inuse = 1;
+                return;
+            }
+
+            const char *registeredName = DB_GetXAssetName(&assetEntry->asset);
+            if (!nameMatch && registeredName &&
+                !Switch_IstricmpAssetName(registeredName, name))
+                nameMatch = assetEntry;
+
+            uint16_t overrideIndex = assetEntry->nextOverride;
+            uint32_t overrideGuard = 0;
+            while (overrideIndex)
+            {
+                if (overrideIndex >= 0x8000u || ++overrideGuard > 0x8000u)
+                    break;
+
+                XAssetEntry *overrideEntry =
+                    &g_assetEntryPool[overrideIndex].entry;
+                if (overrideEntry->asset.type == type)
+                {
+                    if (overrideEntry->asset.header.data == header.data)
+                    {
+                        overrideEntry->inuse = 1;
+                        return;
+                    }
+
+                    const char *overrideName =
+                        DB_GetXAssetName(&overrideEntry->asset);
+                    if (!nameMatch && overrideName &&
+                        !Switch_IstricmpAssetName(overrideName, name))
+                        nameMatch = overrideEntry;
+                }
+                overrideIndex = overrideEntry->nextOverride;
+            }
+        }
+
+        assetEntryIndex = assetEntry->nextHash;
+    }
+
+    if (nameMatch)
+    {
+        nameMatch->inuse = 1;
+        return;
+    }
+
+    Com_Error(
+        ERR_DROP,
+        "Switch DB_GetXAsset could not resolve registered asset: type=%u name=%s",
+        static_cast<unsigned>(type),
+        name ? name : "<null>");
+    return;
+#else
     for (assetEntryIndex = db_hashTable[DB_HashForName(name, type)]; ; assetEntryIndex = assetEntry->nextHash)
     {
         if (!assetEntryIndex)
@@ -3341,6 +3413,7 @@ void __cdecl DB_GetXAsset(XAssetType type, XAssetHeader header)
             break;
     }
     assetEntry->inuse = 1;
+#endif
 }
 
 static void __cdecl DB_DelayedCloneXAsset(XAssetEntry *newEntry)
