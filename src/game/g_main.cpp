@@ -28,6 +28,9 @@
 #include "actor_corpse.h"
 #include <universal/profile.h>
 #include <qcommon/cmd.h>
+#ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
+#endif
 #include <client/client.h>
 #include <qcommon/qcommon.h>
 #include <server/sv_world.h>
@@ -1116,12 +1119,28 @@ void __cdecl G_InitGame(
     GScr_LoadConsts();
     ProfLoad_End();
     ProfLoad_Begin("G_SetupWeaponDef");
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/setup_weapon_def";
+#endif
     G_SetupWeaponDef();
     ProfLoad_End();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/after_setup_weapon_def";
+#endif
     if (!SV_InitDemoSavegame(save) || *save)
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/game_init/link_world";
+#endif
         CM_LinkWorld();
+    }
     else
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/game_init/init_demo";
+#endif
         level.demoplaying = SV_InitDemo((int*)&randomSeed);
+    }
     G_srand(randomSeed);
     level.openScriptIOFileHandles[0] = 0;
     level.openScriptIOFileBuffers[0] = 0;
