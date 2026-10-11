@@ -2198,8 +2198,12 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         }
     }
 #ifdef __SWITCH__
+    // The first lookup may occur before the map zone has registered its BSP.
+    // Ignore that expected miss; retain the one-shot trace for a failed lookup
+    // after the global clip map has acquired its loaded name.
     if (type == ASSET_TYPE_CLIPMAP && name &&
-        Switch_IstricmpAssetName(name, "maps/killhouse.d3dbsp") == 0)
+        Switch_IstricmpAssetName(name, "maps/killhouse.d3dbsp") == 0 &&
+        cm.name)
     {
         static bool bspLookupMissLogged = false;
         if (!bspLookupMissLogged)
