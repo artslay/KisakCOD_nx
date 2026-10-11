@@ -73,7 +73,8 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[KisakCOD][TECHSET ABI]",
         "[KisakCOD][TECHSET ABI BYTES]",
         "[KisakCOD][GFXIMAGE HEADER]",
-        "[KisakCOD][GFXIMAGE TRACE]"
+        "[KisakCOD][GFXIMAGE TRACE]",
+        "[KisakCOD][IWI ROOT]"
     };
 
     for (const char *prefix : kPrefixes)
