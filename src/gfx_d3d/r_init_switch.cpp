@@ -257,7 +257,7 @@ static void R_LoadGraphicsAssets()
 
     addZoneIfNotLoaded(gfxCfg.codeFastFileName, DB_ZONE_CODE);
     addZoneIfNotLoaded(gfxCfg.localizedCodeFastFileName, DB_ZONE_CODE_LOC);
-    addZoneIfNotLoaded(gfxCfg.uiFastFileName, DB_ZONE_GAME);
+    addZoneIfNotLoaded(gfxCfg.uiFastFileName, DB_ZONE_LOAD);
     addZoneIfNotLoaded(gfxCfg.commonFastFileName, DB_ZONE_COMMON);
     addZoneIfNotLoaded(gfxCfg.localizedCommonFastFileName, DB_ZONE_COMMON_LOC);
     addZoneIfNotLoaded(gfxCfg.modFastFileName, DB_ZONE_MOD);
