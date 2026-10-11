@@ -356,6 +356,20 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
     name = DB_XAssetGetNameHandler[type](header);
 
 #ifdef __SWITCH__
+    // Some fastfiles store an asset name as a positive offset to another
+    // serialized XString slot. Resolve that chain before the registry hashes
+    // or dereferences the name. Non-stream/native names are left unchanged.
+    if (name)
+    {
+        const uintptr_t resolvedName =
+            DB_ResolveSwitchSerializedString(
+                reinterpret_cast<uintptr_t>(name));
+        if (resolvedName)
+            name = reinterpret_cast<const char *>(resolvedName);
+    }
+#endif
+
+#ifdef __SWITCH__
     if (type == ASSET_TYPE_FONT &&
         g_switchCurrentAssetIndex >= 1215 &&
         g_switchCurrentAssetIndex <= 1221 &&
