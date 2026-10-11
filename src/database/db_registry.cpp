@@ -507,6 +507,74 @@ struct SwitchDeferredImageAsset
 
 static std::vector<SwitchDeferredImageAsset> g_switchDeferredImageAssets;
 
+// Keep address diagnostics useful without writing the same unresolved image on
+// every asset-registration pass. Log each watched image once when first seen,
+// then at most once more during the final delayed-image fixup.
+struct SwitchDeferredImageTraceState
+{
+    int32_t assetIndex;
+    uint32_t rawType;
+    uint32_t nameToken;
+    bool initialLogged;
+    bool finalLogged;
+};
+
+static bool Switch_ShouldLogDeferredImageAddressTrace(
+    int32_t assetIndex,
+    uint32_t rawType,
+    uint32_t nameToken,
+    bool finalPass)
+{
+    static SwitchDeferredImageTraceState states[256] = {};
+    static size_t stateCount = 0;
+    static bool limitNoticeLogged = false;
+
+    SwitchDeferredImageTraceState *state = nullptr;
+    for (size_t i = 0; i < stateCount; ++i)
+    {
+        if (states[i].assetIndex == assetIndex &&
+            states[i].rawType == rawType &&
+            states[i].nameToken == nameToken)
+        {
+            state = &states[i];
+            break;
+        }
+    }
+
+    if (!state)
+    {
+        if (stateCount >= ARRAY_COUNT(states))
+        {
+            if (!limitNoticeLogged)
+            {
+                Switch_LogWrite(
+                    "[KisakCOD][XSTRING ADDRESS TRACE] further unique image diagnostics suppressed\\n");
+                limitNoticeLogged = true;
+            }
+            return false;
+        }
+
+        state = &states[stateCount++];
+        state->assetIndex = assetIndex;
+        state->rawType = rawType;
+        state->nameToken = nameToken;
+    }
+
+    if (finalPass)
+    {
+        if (state->finalLogged)
+            return false;
+        state->initialLogged = true;
+        state->finalLogged = true;
+        return true;
+    }
+
+    if (state->initialLogged)
+        return false;
+    state->initialLogged = true;
+    return true;
+}
+
 static bool Switch_ShouldTraceDeferredImageName(const char *name)
 {
     static constexpr const char *const targets[] =
@@ -4380,9 +4448,14 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
             // Emit raw, non-mutating diagnostics for deferred image strings.
             // The prior mismatch-only condition could hide the reason when the
             // canonical target does not itself look like a printable string.
-            if (deferred.assetIndex == 1530 ||
-                (deferred.assetIndex >= 4000 &&
-                 deferred.assetIndex <= 4100))
+            if ((deferred.assetIndex == 1530 ||
+                 (deferred.assetIndex >= 4000 &&
+                  deferred.assetIndex <= 4100)) &&
+                Switch_ShouldLogDeferredImageAddressTrace(
+                    deferred.assetIndex,
+                    deferred.rawType,
+                    deferred.nameToken,
+                    finalDelayedImageFixup))
             {
                 const uint32_t formulaBlock =
                     (deferred.nameToken - 1u) >> 28;
