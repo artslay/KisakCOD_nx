@@ -240,47 +240,27 @@ static void R_LoadGraphicsAssets()
     XZoneInfo zoneInfo[6]{};
     uint32_t zoneCount = 0;
 
-    zoneInfo[zoneCount].name = gfxCfg.codeFastFileName;
-    zoneInfo[zoneCount].allocFlags = DB_ZONE_CODE;
-    zoneInfo[zoneCount].freeFlags = 0;
-    ++zoneCount;
-
-    if (gfxCfg.localizedCodeFastFileName)
+    // CL_StartLoading() registers the renderer again for each new map. Keep
+    // the code/UI/common fastfiles already owned by the database instead of
+    // creating another zone for the same assets on every renderer restart.
+    const auto addZoneIfNotLoaded =
+        [&zoneInfo, &zoneCount](const char *name, int32_t allocFlags)
     {
-        zoneInfo[zoneCount].name = gfxCfg.localizedCodeFastFileName;
-        zoneInfo[zoneCount].allocFlags = DB_ZONE_CODE_LOC;
+        if (!name || !*name || DB_IsZoneLoaded(name))
+            return;
+
+        zoneInfo[zoneCount].name = name;
+        zoneInfo[zoneCount].allocFlags = allocFlags;
         zoneInfo[zoneCount].freeFlags = 0;
         ++zoneCount;
-    }
+    };
 
-    if (gfxCfg.uiFastFileName)
-    {
-        zoneInfo[zoneCount].name = gfxCfg.uiFastFileName;
-        zoneInfo[zoneCount].allocFlags = DB_ZONE_GAME;
-        zoneInfo[zoneCount].freeFlags = 0;
-        ++zoneCount;
-    }
-
-    zoneInfo[zoneCount].name = gfxCfg.commonFastFileName;
-    zoneInfo[zoneCount].allocFlags = DB_ZONE_COMMON;
-    zoneInfo[zoneCount].freeFlags = 0;
-    ++zoneCount;
-
-    if (gfxCfg.localizedCommonFastFileName)
-    {
-        zoneInfo[zoneCount].name = gfxCfg.localizedCommonFastFileName;
-        zoneInfo[zoneCount].allocFlags = DB_ZONE_COMMON_LOC;
-        zoneInfo[zoneCount].freeFlags = 0;
-        ++zoneCount;
-    }
-
-    if (gfxCfg.modFastFileName)
-    {
-        zoneInfo[zoneCount].name = gfxCfg.modFastFileName;
-        zoneInfo[zoneCount].allocFlags = DB_ZONE_MOD;
-        zoneInfo[zoneCount].freeFlags = 0;
-        ++zoneCount;
-    }
+    addZoneIfNotLoaded(gfxCfg.codeFastFileName, DB_ZONE_CODE);
+    addZoneIfNotLoaded(gfxCfg.localizedCodeFastFileName, DB_ZONE_CODE_LOC);
+    addZoneIfNotLoaded(gfxCfg.uiFastFileName, DB_ZONE_GAME);
+    addZoneIfNotLoaded(gfxCfg.commonFastFileName, DB_ZONE_COMMON);
+    addZoneIfNotLoaded(gfxCfg.localizedCommonFastFileName, DB_ZONE_COMMON_LOC);
+    addZoneIfNotLoaded(gfxCfg.modFastFileName, DB_ZONE_MOD);
 
     // Complete all renderer bootstrap fastfiles before R_InitSystems().
     // The renderer registers built-in images immediately afterwards, so the
@@ -290,14 +270,24 @@ static void R_LoadGraphicsAssets()
 }
 
 void R_InitGraphicsApi() {
+    // A map change calls R_Shutdown(false): renderer registration is reset,
+    // but the Vulkan device and compatibility device remain alive. Initialize
+    // a backend only after a full shutdown has actually discarded it.
     if (!g_gfxBackend)
+    {
         g_gfxBackend = CreateVulkanBackend();
+        if (!g_gfxBackend)
+        {
+            R_FatalInitError("CreateVulkanBackend failed");
+            return;
+        }
 
-    if (!g_gfxBackend)
-        R_FatalInitError("CreateVulkanBackend failed");
-
-    if (!g_gfxBackend->Init(nullptr))
-        R_FatalInitError(g_gfxBackend->GetLastError());
+        if (!g_gfxBackend->Init(nullptr))
+        {
+            R_FatalInitError(g_gfxBackend->GetLastError());
+            return;
+        }
+    }
 
     // The fastfile loader allocates static vertex/index buffers immediately.
     // Therefore the D3D9 compatibility device must exist before any zone is
