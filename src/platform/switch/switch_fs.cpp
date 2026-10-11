@@ -1137,10 +1137,6 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         }
     }
 
-    // IWI assets are packed in main/*.iwd on Switch. Do not treat an
-    // IWI miss as a loose-file lookup: there are no loose IWI assets in the
-    // packaged layout, and the original engine resolves packed IWI files
-    // through its IWD search paths.
     const bool isIwi =
         normalizedName.size() >= 4 &&
         normalizedName.compare(
@@ -1148,26 +1144,23 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
             4,
             ".iwi") == 0;
 
-    if (isIwi)
+    if (isIwi && traceImage3)
     {
-        if (traceImage3)
-        {
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][IWI ROOT] packed lookup failed raw=%s normalized=%s entries=%zu archives=%zu\n",
-                filename,
-                normalizedName.c_str(),
-                g_iwdEntryRecords.size(),
-                g_iwdArchives.size());
-            Switch_LogWrite(trace);
-        }
-        return (uint32_t)-1;
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][IWI ROOT] indexed lookup failed raw=%s normalized=%s entries=%zu archives=%zu; trying loose search path\n",
+            filename,
+            normalizedName.c_str(),
+            g_iwdEntryRecords.size(),
+            g_iwdArchives.size());
+        Switch_LogWrite(trace);
     }
 
-    // Non-IWI loose files use game/main only. Fastfiles are loaded from
-    // game/zone/<language> by the database loader and do not belong here.
+    // Match the original filesystem behavior: after packed search paths fail,
+    // try the game-directory path even for IWI assets. An absent loose file
+    // naturally remains a miss; the file type itself must not suppress search.
     char path[256];
     FILE *fp = nullptr;
 
