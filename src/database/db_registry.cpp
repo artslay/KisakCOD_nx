@@ -3493,6 +3493,40 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         g_switchDbStage = "xmodel/name_deref";
     }
 #endif
+#ifdef __SWITCH__
+    if (!name)
+    {
+        const void *headerData = newEntry->entry.asset.header.data;
+        const char *typeName =
+            static_cast<uint32_t>(type) < ASSET_TYPE_COUNT
+                ? DB_GetXAssetTypeName(static_cast<uint32_t>(type))
+                : "invalid";
+        const XModel *model =
+            type == ASSET_TYPE_XMODEL
+                ? newEntry->entry.asset.header.model
+                : nullptr;
+        const uintptr_t modelName =
+            model ? reinterpret_cast<uintptr_t>(model->name) : 0;
+        char trace[512];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][ASSET NULL NAME] asset=%d rawType=%u runtimeType=%u typeName=%s entry=%p header=%p name=%p modelName=%p modelNameLow=%08x zone=%u rawHeader=%08x stage=%s\\n",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<unsigned>(type),
+            typeName,
+            static_cast<void *>(newEntry),
+            headerData,
+            static_cast<const void *>(name),
+            reinterpret_cast<const void *>(modelName),
+            static_cast<unsigned>(modelName),
+            static_cast<unsigned>(newEntry->entry.zoneIndex),
+            static_cast<unsigned>(g_switchCurrentAssetHeader),
+            g_switchDbStage ? g_switchDbStage : "");
+        Switch_LogWrite(trace);
+    }
+#endif
     v2 = *name;
     isStubAsset = v2 == ',';
     if (v2 == ',')
