@@ -35,6 +35,7 @@
 
 #include "kisak_zone_bridge.h"
 #include "Game/IW3/IW3_AssetType.h"
+#include "Game/IW3/IW3_Assets.h"
 
 // src/database/db_registry.cpp (DB_AddXAsset itself is file-local there).
 extern XAssetHeader __cdecl DB_AddXAsset(XAssetType type, XAssetHeader header);
@@ -448,6 +449,37 @@ void *LinkAsset(void *context, int assetType, void *asset)
     }
     XAssetHeader header(asset);
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
+
+    // The fastfile loader expands the on-disk 32-bit WeaponDef into OAT's
+    // ARM64 structure. Reapply pointer-bearing model members with typed
+    // assignments after the engine registry has cloned the asset, so the
+    // engine's native WeaponDef never relies on those fields' raw-copy layout.
+    if (type == ASSET_TYPE_WEAPON && registered.weapon && asset)
+    {
+        const auto *const sourceWeapon = static_cast<const IW3::WeaponDef *>(asset);
+        auto *const engineWeapon = registered.weapon;
+
+        for (size_t modelIndex = 0; modelIndex < 16; ++modelIndex)
+        {
+            engineWeapon->gunXModel[modelIndex] =
+                reinterpret_cast<::XModel *>(sourceWeapon->gunXModel[modelIndex]);
+            engineWeapon->worldModel[modelIndex] =
+                reinterpret_cast<::XModel *>(sourceWeapon->worldModel[modelIndex]);
+        }
+
+        engineWeapon->handXModel =
+            reinterpret_cast<::XModel *>(sourceWeapon->handXModel);
+        engineWeapon->worldClipModel =
+            reinterpret_cast<::XModel *>(sourceWeapon->worldClipModel);
+        engineWeapon->rocketModel =
+            reinterpret_cast<::XModel *>(sourceWeapon->rocketModel);
+        engineWeapon->knifeModel =
+            reinterpret_cast<::XModel *>(sourceWeapon->knifeModel);
+        engineWeapon->worldKnifeModel =
+            reinterpret_cast<::XModel *>(sourceWeapon->worldKnifeModel);
+        engineWeapon->projectileModel =
+            reinterpret_cast<::XModel *>(sourceWeapon->projectileModel);
+    }
 
 #ifdef __SWITCH__
     // Keep BSP registration visible with one bounded record per clip-map asset.
