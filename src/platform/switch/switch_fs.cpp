@@ -1220,26 +1220,42 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         Switch_LogWrite(trace);
     }
 
-    // Match the original filesystem behavior: after packed search paths fail,
-    // try the game-directory path even for IWI assets. An absent loose file
-    // naturally remains a miss; the file type itself must not suppress search.
-    char path[256];
+    // Search the same game-directory families registered by the original
+    // FS_Startup: active game/mod, basegame, main, main_shared, players, raw,
+    // and raw_shared, including the selected-language subdirectories.
+    char path[512] = {};
     FILE *fp = nullptr;
 
     const char *base = fs_basepath && fs_basepath->current.string[0]
         ? fs_basepath->current.string
         : kSwitchRoot;
-    const char *gameName = fs_gamedir[0] ? fs_gamedir : "main";
+    const char *gameName = g_switchPrimaryGame.empty()
+        ? "main"
+        : g_switchPrimaryGame.c_str();
+    const std::vector<std::string> searchDirectories =
+        Switch_GetGameSearchDirectories(
+            base,
+            gameName,
+            g_switchSelectedLanguage);
 
-    std::snprintf(
-        path,
-        sizeof(path),
-        "%s/%s/%s",
-        base,
-        gameName,
-        filename);
+    size_t pathsChecked = 0;
+    for (const std::string &directory : searchDirectories)
+    {
+        const int pathLength = std::snprintf(
+            path,
+            sizeof(path),
+            "%s/%s",
+            directory.c_str(),
+            filename);
+        if (pathLength < 0 ||
+            static_cast<size_t>(pathLength) >= sizeof(path))
+            continue;
 
-    fp = FS_FileOpenReadBinary(path);
+        ++pathsChecked;
+        fp = FS_FileOpenReadBinary(path);
+        if (fp)
+            break;
+    }
 
     if (!fp)
     {
@@ -1249,8 +1265,9 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][IWI ROOT] path=%s iwd=0 loose=0 osPath=%s\n",
+                "[KisakCOD][IWI ROOT] path=%s iwd=0 loose=0 pathsChecked=%zu lastOSPath=%s\n",
                 normalizedName.c_str(),
+                pathsChecked,
                 path);
             Switch_LogWrite(trace);
         }
