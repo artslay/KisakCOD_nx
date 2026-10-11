@@ -91,27 +91,34 @@ namespace
                     {
                         switch (progress.phase)
                         {
-                        case 1: phaseName = "font/fields"; break;
-                        case 2: phaseName = "font/name"; break;
-                        case 3: phaseName = "font/material"; break;
-                        case 4: phaseName = "font/glow-material"; break;
-                        case 5: phaseName = "font/glyphs"; break;
-                        case 6: phaseName = "font/asset-register"; break;
-                        case 7: phaseName = "font/load-entry"; break;
-                        case 8: phaseName = "font/load-pointer-return"; break;
-                        case 9: phaseName = "font/existing-name-lookup"; break;
-                        case 10: phaseName = "font/existing-lookup-return"; break;
-                        case 11: phaseName = "font/pointer-entry"; break;
-                        case 12: phaseName = "font/pointer-check"; break;
-                        case 13: phaseName = "font/pointer-classify"; break;
-                        case 14: phaseName = "font/allocate"; break;
-                        case 15: phaseName = "font/insert-alias"; break;
-                        case 16: phaseName = "font/decode-entry"; break;
-                        case 17: phaseName = "font/alias-lookup"; break;
-                        case 18: phaseName = "font/dispatch-entry"; break;
-                        case 19: phaseName = "font/loader-constructed"; break;
-                        case 20: phaseName = "font/load-return"; break;
-                        default: phaseName = "font/start"; break;
+                        case 1: phaseName = "lightdef/dispatch-entry"; break;
+                        case 2: phaseName = "lightdef/loader-constructed"; break;
+                        case 3: phaseName = "lightdef/load-return"; break;
+                        case 4: phaseName = "lightdef/pointer-resolution"; break;
+                        case 5: phaseName = "lightdef/pointer-return"; break;
+                        case 6: phaseName = "lightdef/existing-name-lookup"; break;
+                        case 7: phaseName = "lightdef/existing-lookup-return"; break;
+                        case 8: phaseName = "lightdef/fields-read"; break;
+                        case 9: phaseName = "lightdef/fields-decoded"; break;
+                        case 10: phaseName = "lightdef/name-resolution"; break;
+                        case 11: phaseName = "lightdef/name-resolved"; break;
+                        case 12: phaseName = "lightdef/attenuation-resolution"; break;
+                        case 13: phaseName = "lightdef/attenuation-return"; break;
+                        case 14: phaseName = "lightdef/image-loader"; break;
+                        case 15: phaseName = "lightdef/image-loader-return"; break;
+                        case 16: phaseName = "lightdef/pointer-entry"; break;
+                        case 17: phaseName = "lightdef/pointer-classify"; break;
+                        case 18: phaseName = "lightdef/allocate"; break;
+                        case 19: phaseName = "lightdef/insert-alias"; break;
+                        case 20: phaseName = "lightdef/decode-entry"; break;
+                        case 21: phaseName = "lightdef/decode-return"; break;
+                        case 22: phaseName = "lightdef/asset-register"; break;
+                        case 23: phaseName = "lightdef/register-return"; break;
+                        case 24: phaseName = "lightdef/alias-lookup"; break;
+                        case 25: phaseName = "lightdef/collect-references"; break;
+                        case 26: phaseName = "lightdef/engine-link"; break;
+                        case 27: phaseName = "lightdef/engine-link-return"; break;
+                        default: phaseName = "lightdef/start"; break;
                         }
                     }
 
