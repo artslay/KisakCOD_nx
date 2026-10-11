@@ -5604,6 +5604,28 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         SerializedGfxImage serialized{};
         DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
 
+        const bool traceKillhouseImage =
+            g_switchCurrentAssetRawType == 4u &&
+            g_switchCurrentAssetIndex == 1530;
+        if (traceKillhouseImage)
+        {
+            uint32_t words[9] = {};
+            std::memcpy(words, &serialized, sizeof(serialized));
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][GFXIMAGE HEADER] asset=%d image=%p stream=%u b0=%08x b4=%08x words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\\n",
+                g_switchCurrentAssetIndex,
+                static_cast<void *>(varGfxImage),
+                static_cast<unsigned>(g_streamPosIndex),
+                Switch_GetStreamCursorOffset(0),
+                Switch_GetStreamCursorOffset(4),
+                words[0], words[1], words[2], words[3], words[4],
+                words[5], words[6], words[7], words[8]);
+            Switch_LogWrite(trace);
+        }
+
         const bool traceUiImage =
             g_switchCurrentAssetRawType == 4u &&
             g_switchCurrentAssetIndex >= 0 &&
@@ -5813,17 +5835,29 @@ void __cdecl Load_GfxImage(bool atStreamStart)
 #ifdef __SWITCH__
         {
             const char *resolvedName = varGfxImage->name;
-            char trace[448];
+            uint32_t nameBlock = UINT32_MAX;
+            uint32_t nameOffset = 0;
+            const bool nameIsStreamAscii =
+                resolvedName &&
+                Switch_IsStreamAsciiImageName(
+                    reinterpret_cast<uintptr_t>(resolvedName),
+                    &nameBlock,
+                    &nameOffset);
+            char trace[512];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][GFXIMAGE NAME] asset=%d rawType=%u serializedName=%08x name=%p first=%02x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\n",
+                "[KisakCOD][GFXIMAGE TRACE] asset=%d rawType=%u image=%p token=%08x name=%p first=%02x streamAscii=%u nameBlock=%u nameOffset=%08x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\\n",
                 g_switchCurrentAssetIndex,
                 g_switchCurrentAssetRawType,
+                static_cast<void *>(varGfxImage),
                 serialized.name,
                 static_cast<const void *>(resolvedName),
                 resolvedName ? static_cast<unsigned>(
                     static_cast<unsigned char>(resolvedName[0])) : 0u,
+                nameIsStreamAscii ? 1u : 0u,
+                nameBlock,
+                nameOffset,
                 static_cast<unsigned>(varGfxImage->category),
                 static_cast<unsigned>(varGfxImage->semantic),
                 static_cast<unsigned>(varGfxImage->delayLoadPixels),
@@ -5832,8 +5866,9 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 static_cast<unsigned>(g_streamPosIndex),
                 Switch_GetStreamCursorOffset(0),
                 Switch_GetStreamCursorOffset(4),
-                (!resolvedName || resolvedName[0] == '\0') ? 1u : 0u);
-            Switch_LogWrite(trace);
+                (!resolvedName || resolvedName[0] == '\\0') ? 1u : 0u);
+            if (traceKillhouseImage)
+                Switch_LogWrite(trace);
 
             if (resolvedName && std::strcmp(resolvedName, "3") == 0)
             {
