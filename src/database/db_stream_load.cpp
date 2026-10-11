@@ -189,8 +189,14 @@ void __cdecl DB_LogSwitchPointerStoreIfStream(
         operationId = 2;
     else if (operation && std::strcmp(operation, "Load_XString") == 0)
         operationId = 3;
-    else
+    else if (operation && std::strcmp(operation, "Load_XStringPtr slot init") == 0)
         operationId = 4;
+    else if (operation && std::strcmp(operation, "Load_XStringPtr") == 0)
+        operationId = 5;
+    else if (operation && std::strcmp(operation, "Load_XString slot init") == 0)
+        operationId = 6;
+    else
+        operationId = 7;
 
     static SwitchPointerStoreTraceKey seen[32] = {};
     static uint32_t seenCount = 0;
