@@ -4092,6 +4092,11 @@ bool Switch_IsStreamAsciiImageName(
     uint32_t *blockOut,
     uint32_t *offsetOut)
 {
+    if (blockOut)
+        *blockOut = UINT32_MAX;
+    if (offsetOut)
+        *offsetOut = 0;
+
     if (!address || !g_streamBlocks)
         return false;
 
@@ -4127,6 +4132,7 @@ bool Switch_IsStreamAsciiImageName(
             const unsigned char ch = name[stringLength];
             if (ch == 0)
                 break;
+
             if (ch < 0x21 || ch > 0x7E)
                 return false;
         }
@@ -4134,26 +4140,14 @@ bool Switch_IsStreamAsciiImageName(
         if (stringLength == 0 || stringLength == limit)
             return false;
 
-        // Match the original Load_XString contract: the serialized token
-        // identifies the exact string address. Do not scan backward through
-        // adjacent printable bytes; a shorter name may intentionally share
-        // storage with the suffix of another string.
+        // Preserve the exact XString address from the serialized fastfile.
+        // A token may legitimately point into the suffix of another string;
+        // walking backward changes the string value and can make the
+        // renderer request the wrong .iwi file.
         if (blockOut)
             *blockOut = block;
         if (offsetOut)
             *offsetOut = static_cast<uint32_t>(offset);
-        return true;
-    }
-    return false;
-}
-#endif
-            }
-        }
-
-        if (blockOut)
-            *blockOut = block;
-        if (offsetOut)
-            *offsetOut = static_cast<uint32_t>(normalizedOffset);
 
         return true;
     }
