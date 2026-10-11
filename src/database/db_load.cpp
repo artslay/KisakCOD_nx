@@ -1951,7 +1951,7 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
 
         const char **nativeStringSlot =
             reinterpret_cast<const char **>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(const char *)),
                     "SwitchXStringPtr",
                     22));
@@ -1999,7 +1999,7 @@ void __cdecl Load_XStringPtr(bool atStreamStart)
 
     const char **nativeStringSlot =
         reinterpret_cast<const char **>(
-            Hunk_Alloc(
+            DB_AllocSwitchAssetMemory(
                 static_cast<uint32_t>(sizeof(const char *)),
                 "SwitchXStringPtr",
                 22));
@@ -2417,7 +2417,7 @@ static XAnimPartTrans *Switch_LoadXAnimPartTrans()
 
     XAnimPartTrans *native =
         reinterpret_cast<XAnimPartTrans *>(
-            Hunk_Alloc(
+            DB_AllocSwitchAssetMemory(
                 static_cast<uint32_t>(nativeSize),
                 "SwitchXAnimPartTrans",
                 22));
@@ -2501,7 +2501,7 @@ static XAnimDeltaPartQuat *Switch_LoadXAnimDeltaPartQuat()
 
     XAnimDeltaPartQuat *native =
         reinterpret_cast<XAnimDeltaPartQuat *>(
-            Hunk_Alloc(
+            DB_AllocSwitchAssetMemory(
                 static_cast<uint32_t>(nativeSize),
                 "SwitchXAnimDeltaPartQuat",
                 22));
@@ -2552,7 +2552,7 @@ static XAnimDeltaPart *Switch_LoadXAnimDeltaPart()
 
     XAnimDeltaPart *native =
         reinterpret_cast<XAnimDeltaPart *>(
-            Hunk_Alloc(
+            DB_AllocSwitchAssetMemory(
                 static_cast<uint32_t>(sizeof(XAnimDeltaPart)),
                 "SwitchXAnimDeltaPart",
                 22));
@@ -2930,7 +2930,7 @@ void __cdecl Load_XAnimPartsPtr(bool atStreamStart)
             // lives in persistent ARM64 Hunk memory.
             DB_AllocStreamPos(3);
             *varXAnimPartsPtr = reinterpret_cast<XAnimParts *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(XAnimParts)),
                     "SwitchXAnimParts",
                     22));
@@ -3399,7 +3399,7 @@ void __cdecl Load_LoadedSoundPtr(bool atStreamStart)
             // in the stream buffer: the subsequent raw PCM payload starts after 44 serialized
             // bytes and would overwrite the upper half of sound.data.
             *varLoadedSoundPtr = reinterpret_cast<LoadedSound *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(LoadedSound)),
                     "SwitchLoadedSound",
                     22));
@@ -3684,7 +3684,7 @@ void __cdecl Load_SndCurvePtr(bool atStreamStart)
             // lives in persistent ARM64 Hunk memory.
             DB_AllocStreamPos(3);
             *varSndCurvePtr = reinterpret_cast<SndCurve *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(SndCurve)),
                     "SwitchSndCurve",
                     22));
@@ -3891,7 +3891,7 @@ void __cdecl Load_snd_alias_t(bool atStreamStart)
                 reinterpret_cast<uintptr_t>(DB_GetStreamPos());
 
             varsnd_alias_t->soundFile =
-                reinterpret_cast<SoundFile *>(Hunk_Alloc(
+                reinterpret_cast<SoundFile *>(DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(SoundFile)),
                     "SwitchSoundFile",
                     22));
@@ -3976,7 +3976,7 @@ void __cdecl Load_snd_alias_t(bool atStreamStart)
         if (value == UINT32_MAX)
         {
             varsnd_alias_t->speakerMap =
-                reinterpret_cast<SpeakerMap *>(Hunk_Alloc(
+                reinterpret_cast<SpeakerMap *>(DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(SpeakerMap)),
                     "SwitchSpeakerMap",
                     22));
@@ -4227,7 +4227,7 @@ void __cdecl Load_snd_alias_list_t(bool atStreamStart)
         if (headValue == UINT32_MAX)
         {
             varsnd_alias_list_t->head =
-                reinterpret_cast<snd_alias_t *>(Hunk_Alloc(
+                reinterpret_cast<snd_alias_t *>(DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(snd_alias_t) * static_cast<size_t>(varsnd_alias_list_t->count)),
                     "SwitchSndAliasArray",
@@ -4321,7 +4321,7 @@ void __cdecl Load_snd_alias_list_ptr(bool atStreamStart)
         if (serialized == UINT32_MAX || serialized == UINT32_MAX - 1)
         {
             snd_alias_list_t *nativeList =
-                reinterpret_cast<snd_alias_list_t *>(Hunk_Alloc(
+                reinterpret_cast<snd_alias_list_t *>(DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(snd_alias_list_t)),
                     "SwitchSndAliasList",
                     22));
@@ -4792,7 +4792,7 @@ static void Switch_LoadXRigidVertListRecord(
             DB_AllocStreamPos(3);
             dst->collisionTree =
                 reinterpret_cast<XSurfaceCollisionTree *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(sizeof(XSurfaceCollisionTree)),
                         "SwitchXSurfaceCollisionTree",
                         22));
@@ -5230,7 +5230,7 @@ void __cdecl Load_XSurface(bool atStreamStart)
             DB_AllocStreamPos(3);
             varXSurface->vertList =
                 reinterpret_cast<XRigidVertList *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(
                             sizeof(XRigidVertList) *
                             static_cast<size_t>(varXSurface->vertListCount)),
@@ -6046,7 +6046,7 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
                 reinterpret_cast<uintptr_t>(DB_GetStreamPos());
 
             GfxImage *nativeImage =
-                reinterpret_cast<GfxImage *>(Hunk_Alloc(
+                reinterpret_cast<GfxImage *>(DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(GfxImage)),
                     "SwitchGfxImage",
                     22));
@@ -6671,7 +6671,7 @@ void __cdecl Load_MaterialVertexShaderPtr(bool atStreamStart)
                 inserted = DB_InsertPointer();
 
             *varMaterialVertexShaderPtr =
-                reinterpret_cast<MaterialVertexShader *>(Hunk_Alloc(
+                reinterpret_cast<MaterialVertexShader *>(DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(MaterialVertexShader)),
                     "SwitchMaterialVertexShader", 22));
             varMaterialVertexShader = *varMaterialVertexShaderPtr;
@@ -6825,7 +6825,7 @@ static void Load_MaterialPixelShaderHandle(bool atStreamStart)
             DB_AllocStreamPos(3);
             *varMaterialPixelShaderPtr =
                 reinterpret_cast<MaterialPixelShader *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(sizeof(MaterialPixelShader)),
                         "SwitchMaterialPixelShader",
                         22));
@@ -6892,7 +6892,7 @@ void __cdecl Load_MaterialPixelShaderPtr(bool atStreamStart)
                 inserted = DB_InsertPointer();
 
             *varMaterialPixelShaderPtr =
-                reinterpret_cast<MaterialPixelShader *>(Hunk_Alloc(
+                reinterpret_cast<MaterialPixelShader *>(DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(MaterialPixelShader)),
                     "SwitchMaterialPixelShader", 22));
             varMaterialPixelShader = *varMaterialPixelShaderPtr;
@@ -7210,7 +7210,7 @@ static void Switch_LoadMaterialPassSerialized(
                 : nullptr;
 
         varMaterialPass->vertexDecl =
-            reinterpret_cast<MaterialVertexDeclaration *>(Hunk_Alloc(
+            reinterpret_cast<MaterialVertexDeclaration *>(DB_AllocSwitchAssetMemory(
                 static_cast<uint32_t>(sizeof(MaterialVertexDeclaration)),
                 "SwitchMaterialVertexDeclaration", 22));
         varMaterialVertexDeclaration = varMaterialPass->vertexDecl;
@@ -7275,7 +7275,7 @@ static void Switch_LoadMaterialPassSerialized(
                 reinterpret_cast<uintptr_t>(DB_GetStreamPos());
 
             varMaterialPass->args =
-                reinterpret_cast<MaterialShaderArgument *>(Hunk_Alloc(
+                reinterpret_cast<MaterialShaderArgument *>(DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(MaterialShaderArgument) * count),
                     "SwitchMaterialShaderArguments", 22));
@@ -7601,7 +7601,7 @@ void __cdecl Load_MaterialTechnique(bool atStreamStart)
         sizeof(MaterialTechnique) +
         sizeof(MaterialPass) * (passStorageCount - 1u));
     varMaterialTechnique = reinterpret_cast<MaterialTechnique *>(
-        Hunk_Alloc(allocationSize, "SwitchMaterialTechnique", 22));
+        DB_AllocSwitchAssetMemory(allocationSize, "SwitchMaterialTechnique", 22));
     std::memset(varMaterialTechnique, 0, allocationSize);
     iassert(varMaterialTechniquePtr);
     *varMaterialTechniquePtr = varMaterialTechnique;
@@ -8615,7 +8615,7 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
             Switch_LogWrite("[SWITCH MATERIAL] techset inline begin\n");
             *varMaterialTechniqueSetPtr =
                 reinterpret_cast<MaterialTechniqueSet *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(sizeof(MaterialTechniqueSet)),
                         "SwitchMaterialTechniqueSet",
                         22));
@@ -8722,7 +8722,7 @@ void __cdecl Load_MaterialTechniqueSetPtr(bool atStreamStart)
 
                     *varMaterialTechniqueSetPtr =
                         reinterpret_cast<MaterialTechniqueSet *>(
-                            Hunk_Alloc(
+                            DB_AllocSwitchAssetMemory(
                                 static_cast<uint32_t>(
                                     sizeof(MaterialTechniqueSet)),
                                 "SwitchMaterialTechniqueSet",
@@ -9020,7 +9020,7 @@ void __cdecl Load_Material(bool atStreamStart)
                 reinterpret_cast<uintptr_t>(DB_GetStreamPos());
             varMaterial->textureTable =
                 reinterpret_cast<MaterialTextureDef *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(
                             sizeof(MaterialTextureDef) *
                             static_cast<size_t>(varMaterial->textureCount)),
@@ -9261,7 +9261,7 @@ void __cdecl Load_MaterialHandle(bool atStreamStart)
             const uintptr_t serializedMaterialAddress =
                 reinterpret_cast<uintptr_t>(DB_GetStreamPos());
             *varMaterialHandle = reinterpret_cast<Material *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(Material)),
                     "SwitchMaterial",
                     22));
@@ -9604,7 +9604,7 @@ Load_Stream(atStreamStart, (uint8_t *)varGfxLightDefPtr, 4);
         {
             *varGfxLightDefPtr =
                 reinterpret_cast<GfxLightDef *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(sizeof(GfxLightDef)),
                         "SwitchGfxLightDef",
                         22));
@@ -9884,7 +9884,7 @@ void __cdecl Load_PhysPresetPtr(bool atStreamStart)
             // storing the expanded ARM64 object in persistent Hunk memory.
             DB_AllocStreamPos(3);
             *varPhysPresetPtr = reinterpret_cast<PhysPreset *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(PhysPreset)),
                     "SwitchPhysPreset",
                     22));
@@ -10270,7 +10270,7 @@ void __cdecl Load_BrushWrapper(bool atStreamStart)
     {
         varBrushWrapper->sides =
             reinterpret_cast<cbrushside_t *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(cbrushside_t) *
                         static_cast<size_t>(serialized.numsides)),
@@ -10376,7 +10376,7 @@ static void Switch_Load_PhysGeomInfoData(PhysGeomInfo *geom)
     if (serializedBrush == UINT32_MAX)
     {
         geom->brush = reinterpret_cast<BrushWrapper *>(
-            Hunk_Alloc(
+            DB_AllocSwitchAssetMemory(
                 static_cast<uint32_t>(sizeof(BrushWrapper)),
                 "SwitchBrushWrapper",
                 22));
@@ -10476,7 +10476,7 @@ void __cdecl Load_PhysGeomList(bool atStreamStart)
     {
         varPhysGeomList->geoms =
             reinterpret_cast<PhysGeomInfo *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(PhysGeomInfo) *
                         static_cast<size_t>(serialized.count)),
@@ -10776,7 +10776,7 @@ void __cdecl Load_XModel(bool atStreamStart)
         DB_AllocStreamPos(3);
         varXModel->surfs =
             reinterpret_cast<XSurface *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(XSurface) *
                         static_cast<size_t>(varXModel->numsurfs)),
@@ -10807,7 +10807,7 @@ void __cdecl Load_XModel(bool atStreamStart)
         DB_AllocStreamPos(3);
         varXModel->materialHandles =
             reinterpret_cast<Material **>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(Material *) *
                         static_cast<size_t>(varXModel->numsurfs)),
@@ -10838,7 +10838,7 @@ void __cdecl Load_XModel(bool atStreamStart)
         DB_AllocStreamPos(3);
         varXModel->collSurfs =
             reinterpret_cast<XModelCollSurf_s *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(XModelCollSurf_s) *
                         static_cast<size_t>(varXModel->numCollSurfs)),
@@ -10956,7 +10956,7 @@ void __cdecl Load_XModelPtr(bool atStreamStart)
             if (switchTraceXModel)
                 g_switchDbStage = "xmodel/alloc";
             *varXModelPtr = reinterpret_cast<XModel *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(XModel)),
                     "SwitchXModel",
                     22));
@@ -11414,7 +11414,7 @@ void __cdecl Load_PathData(bool atStreamStart)
 
         pathnode_t *nativeNodes =
             reinterpret_cast<pathnode_t *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(pathnode_t) * static_cast<size_t>(nodeCount)),
                     "SwitchPathNodes",
@@ -11610,7 +11610,7 @@ void __cdecl Load_GameWorldSpPtr(bool atStreamStart)
             // out of the serialized stream block.
             *varGameWorldSpPtr =
                 reinterpret_cast<GameWorldSp *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(sizeof(GameWorldSp)),
                         "SwitchGameWorldSp",
                         22));
@@ -11739,7 +11739,7 @@ void __cdecl Load_FxEffectDefHandle(bool atStreamStart)
             // lives in persistent ARM64 Hunk memory.
             DB_AllocStreamPos(3);
             *varFxEffectDefHandle = reinterpret_cast<const FxEffectDef *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(FxEffectDef)),
                     "SwitchFxEffectDef",
                     22));
@@ -11982,7 +11982,7 @@ void __cdecl Load_FxElemDefVisuals(bool atStreamStart)
             DB_AllocStreamPos(3);
             varFxElemDefVisuals->markArray =
                 reinterpret_cast<FxElemMarkVisuals *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(
                             sizeof(FxElemMarkVisuals) *
                             static_cast<size_t>(varFxElemDef->visualCount)),
@@ -12009,7 +12009,7 @@ void __cdecl Load_FxElemDefVisuals(bool atStreamStart)
             // still a packed sequence of four-byte pointer tokens.
             DB_AllocStreamPos(3);
             varFxElemDefVisuals->array = reinterpret_cast<FxElemVisuals *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(FxElemVisuals) *
                         static_cast<size_t>(varFxElemDef->visualCount)),
@@ -12075,7 +12075,7 @@ void __cdecl Load_FxTrailDef(bool atStreamStart)
                 DB_AllocStreamPos(3);
                 varFxTrailDef->verts =
                     reinterpret_cast<FxTrailVertex *>(
-                        Hunk_Alloc(
+                        DB_AllocSwitchAssetMemory(
                             static_cast<uint32_t>(
                                 sizeof(FxTrailVertex) *
                                 static_cast<size_t>(serialized.vertCount)),
@@ -12103,7 +12103,7 @@ void __cdecl Load_FxTrailDef(bool atStreamStart)
                 DB_AllocStreamPos(1);
                 varFxTrailDef->inds =
                     reinterpret_cast<uint16_t *>(
-                        Hunk_Alloc(
+                        DB_AllocSwitchAssetMemory(
                             static_cast<uint32_t>(
                                 sizeof(uint16_t) *
                                 static_cast<size_t>(serialized.indCount)),
@@ -12318,7 +12318,7 @@ static void Load_FxElemDefFromSerializedSwitch(
         {
             DB_AllocStreamPos(3);
             varFxElemDef->trailDef = reinterpret_cast<FxTrailDef *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(FxTrailDef)),
                     "SwitchFxTrailDef",
                     22));
@@ -12502,7 +12502,7 @@ void __cdecl Load_FxEffectDef(bool atStreamStart)
             // widened native array from the hunk, so preserve that stream step.
             DB_AllocStreamPos(3);
             varFxEffectDef->elemDefs =
-                (const FxElemDef *)Hunk_Alloc(
+                (const FxElemDef *)DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(FxElemDef) *
                         (varFxEffectDef->elemDefCountEmission +
@@ -13734,7 +13734,7 @@ void __cdecl Load_expressionEntry_ptr(bool atStreamStart)
             DB_AllocStreamPos(3);
             *varexpressionEntry_ptr =
                 reinterpret_cast<expressionEntry *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(sizeof(expressionEntry)),
                         "SwitchExpressionEntry",
                         22));
@@ -13841,7 +13841,7 @@ static void Switch_LoadExpressionEntryPtrArray(
 
             expressionEntry *entry =
                 reinterpret_cast<expressionEntry *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(sizeof(expressionEntry)),
                         "SwitchExpressionEntry",
                         22));
@@ -13912,7 +13912,7 @@ void __cdecl Load_statement(bool atStreamStart)
     {
         varstatement->entries =
             reinterpret_cast<expressionEntry **>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(expressionEntry *) *
                         static_cast<size_t>(
@@ -14010,7 +14010,7 @@ void __cdecl Load_listBoxDef_ptr(bool atStreamStart)
     // aligned, but store the translated structure in native-sized memory.
     DB_AllocStreamPos(3);
     *varlistBoxDef_ptr = reinterpret_cast<listBoxDef_s *>(
-        Hunk_Alloc(
+        DB_AllocSwitchAssetMemory(
             static_cast<uint32_t>(sizeof(listBoxDef_s)),
             "SwitchListBoxDef",
             22));
@@ -14048,7 +14048,7 @@ void __cdecl Load_editFieldDef_ptr(bool atStreamStart)
         (void)serialized;
         DB_AllocStreamPos(3);
         *vareditFieldDef_ptr = reinterpret_cast<editFieldDef_s *>(
-            Hunk_Alloc(
+            DB_AllocSwitchAssetMemory(
                 static_cast<uint32_t>(sizeof(editFieldDef_s)),
                 "SwitchEditFieldDef",
                 22));
@@ -14127,7 +14127,7 @@ void __cdecl Load_multiDef_ptr(bool atStreamStart)
     // larger because both 32-entry string arrays now contain 64-bit pointers.
     DB_AllocStreamPos(3);
     *varmultiDef_ptr = reinterpret_cast<multiDef_s *>(
-        Hunk_Alloc(
+        DB_AllocSwitchAssetMemory(
             static_cast<uint32_t>(sizeof(multiDef_s)),
             "SwitchMultiDef",
             22));
@@ -14248,7 +14248,7 @@ void __cdecl Load_ItemKeyHandler(bool atStreamStart)
         DB_AllocStreamPos(3);
         varItemKeyHandler->next =
             reinterpret_cast<ItemKeyHandler *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(ItemKeyHandler)),
                     "SwitchItemKeyHandlerNext",
                     22));
@@ -14357,7 +14357,7 @@ void __cdecl Load_itemDef_t(bool atStreamStart)
         DB_AllocStreamPos(3);
         varitemDef_t->onKey =
             reinterpret_cast<ItemKeyHandler *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(ItemKeyHandler)),
                     "SwitchItemKeyHandler",
                     22));
@@ -14419,7 +14419,7 @@ void __cdecl Load_itemDef_ptr(bool atStreamStart)
             DB_AllocStreamPos(3);
             *varitemDef_ptr =
                 reinterpret_cast<itemDef_s *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(sizeof(itemDef_s)),
                         "SwitchItemDef",
                         22));
@@ -14527,7 +14527,7 @@ void __cdecl Load_itemDef_ptrArray(bool atStreamStart, int32_t count)
                 DB_AllocStreamPos(3);
                 *varitemDef_ptr =
                     reinterpret_cast<itemDef_s *>(
-                        Hunk_Alloc(
+                        DB_AllocSwitchAssetMemory(
                             static_cast<uint32_t>(sizeof(itemDef_s)),
                             "SwitchItemDef",
                             22));
@@ -14844,7 +14844,7 @@ void __cdecl Load_menuDef_t(bool atStreamStart)
         DB_AllocStreamPos(3);
         varmenuDef_t->onKey =
             reinterpret_cast<ItemKeyHandler *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(ItemKeyHandler)),
                     "SwitchItemKeyHandler",
                     22));
@@ -14907,7 +14907,7 @@ void __cdecl Load_menuDef_t(bool atStreamStart)
         DB_AllocStreamPos(3);
         varmenuDef_t->items =
             reinterpret_cast<itemDef_s **>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(itemDef_s *) *
                         static_cast<size_t>(varmenuDef_t->itemCount)),
@@ -14982,7 +14982,7 @@ void __cdecl Load_menuDef_ptr(bool atStreamStart)
 #ifdef __SWITCH__
             DB_AllocStreamPos(3);
             *varmenuDef_ptr = reinterpret_cast<menuDef_t *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(menuDef_t)),
                     "SwitchMenuDef",
                     22));
@@ -15175,7 +15175,7 @@ void __cdecl Load_MenuList(bool atStreamStart)
         const size_t count = static_cast<size_t>(varMenuList->menuCount);
         varMenuList->menus =
             reinterpret_cast<menuDef_t **>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(menuDef_t *) * count),
                     "SwitchMenuList",
                     22));
@@ -15275,7 +15275,7 @@ void __cdecl Load_MenuListPtr(bool atStreamStart)
 #ifdef __SWITCH__
             DB_AllocStreamPos(3);
             *varMenuListPtr = reinterpret_cast<MenuList *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(MenuList)),
                     "SwitchMenuList",
                     22));
@@ -15500,7 +15500,7 @@ void __cdecl Load_LocalizeEntryPtr(bool atStreamStart)
             // lives in persistent ARM64 Hunk memory.
             DB_AllocStreamPos(3);
             *varLocalizeEntryPtr = reinterpret_cast<LocalizeEntry *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(LocalizeEntry)),
                     "SwitchLocalizeEntry",
                     22));
@@ -15639,7 +15639,7 @@ void __cdecl Load_FxImpactTable(bool atStreamStart)
         if (serializedTable)
         {
             varFxImpactTable->table = reinterpret_cast<FxImpactEntry *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(FxImpactEntry) * 12u),
                     "SwitchFxImpactEntry",
@@ -15693,7 +15693,7 @@ void __cdecl Load_FxImpactTablePtr(bool atStreamStart)
             // lives in persistent ARM64 Hunk memory.
             DB_AllocStreamPos(3);
             *varFxImpactTablePtr = reinterpret_cast<FxImpactTable *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(FxImpactTable)),
                     "SwitchFxImpactTable",
                     22));
@@ -16287,7 +16287,7 @@ void __cdecl Load_WeaponDef(bool atStreamStart)
 
             snd_alias_list_t **nativeBounce =
                 reinterpret_cast<snd_alias_list_t **>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(
                             sizeof(snd_alias_list_t *) *
                             kBounceSoundCount),
@@ -16680,7 +16680,7 @@ void __cdecl Load_WeaponDefPtr(bool atStreamStart)
             // lives in persistent ARM64 Hunk memory.
             DB_AllocStreamPos(3);
             *varWeaponDefPtr = reinterpret_cast<WeaponDef *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(WeaponDef)),
                     "SwitchWeaponDef",
                     22));
@@ -17130,7 +17130,7 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
 
             RawFile *nativeRawFile =
                 reinterpret_cast<RawFile *>(
-                    Hunk_Alloc(
+                    DB_AllocSwitchAssetMemory(
                         static_cast<uint32_t>(sizeof(RawFile)),
                         "SwitchRawFile",
                         22));
@@ -17295,7 +17295,7 @@ void __cdecl Load_StringTable(bool atStreamStart)
 
     const char **values = nullptr;
     const uint32_t allocationCount = count ? count : 1;
-    values = reinterpret_cast<const char **>(Hunk_Alloc(
+    values = reinterpret_cast<const char **>(DB_AllocSwitchAssetMemory(
         static_cast<uint32_t>(sizeof(const char *) *
             static_cast<size_t>(allocationCount)),
         "SwitchStringTableValues",
@@ -17363,7 +17363,7 @@ void __cdecl Load_StringTablePtr(bool atStreamStart)
         DB_AllocStreamPos(3);
         const uintptr_t serializedTable =
             reinterpret_cast<uintptr_t>(DB_GetStreamPos());
-        StringTable *table = reinterpret_cast<StringTable *>(Hunk_Alloc(
+        StringTable *table = reinterpret_cast<StringTable *>(DB_AllocSwitchAssetMemory(
             static_cast<uint32_t>(sizeof(StringTable)),
             "SwitchStringTable",
             22));
@@ -18622,7 +18622,7 @@ void __cdecl Load_FontHandle(bool atStreamStart)
             // lives in persistent ARM64 Hunk memory.
             DB_AllocStreamPos(3);
             *varFontHandle = reinterpret_cast<Font_s *>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(Font_s)),
                     "SwitchFont",
                     22));
@@ -19072,7 +19072,7 @@ void Load_XAssetListCustom()
 
         varXAssetList->stringList.strings =
             reinterpret_cast<const char **>(
-                Hunk_Alloc(
+                DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(
                         sizeof(const char *) * static_cast<size_t>(count)),
                     "SwitchXAssetStringList",
