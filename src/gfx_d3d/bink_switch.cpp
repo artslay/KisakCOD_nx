@@ -742,7 +742,7 @@ RADDEFFUNC S32 RADEXPLINK BinkWait(HBINK bink)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][BINK FLOW] post-first-frame wait frame=%u elapsed=%u target=%llu paused=%u finished=%u\\n",
+            "[KisakCOD][BINK FLOW] post-first-frame wait frame=%u elapsed=%u target=%llu paused=%u finished=%u\n",
             static_cast<unsigned>(bink->FrameNum),
             static_cast<unsigned>(elapsed),
             static_cast<unsigned long long>(framePeriodMs),
@@ -877,7 +877,7 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][BINK FRAME] second frame decoded frame=%u\\n",
+            "[KisakCOD][BINK FRAME] second frame decoded frame=%u\n",
             static_cast<unsigned>(bink->FrameNum));
         Switch_LogWrite(trace);
     }
