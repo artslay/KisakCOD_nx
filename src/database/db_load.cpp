@@ -5936,7 +5936,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 Switch_GetStreamCursorOffset(0),
                 Switch_GetStreamCursorOffset(4),
                 emptyName ? 1u : 0u);
-            if (traceKillhouseImage || !nameIsStreamAscii || traceMissingIwiImage)
+            if (traceKillhouseImage || traceMissingIwiImage)
                 Switch_LogWrite(trace);
 
             if (resolvedName && std::strcmp(resolvedName, "3") == 0)
