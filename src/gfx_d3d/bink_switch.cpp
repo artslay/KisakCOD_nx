@@ -36,6 +36,7 @@ struct SwitchBinkState
     bool inputEof;
     bool packetPending;
     bool frameDecodeFinished;
+    bool firstPostFrameWaitLogged;
     bool decodeFailed;
     bool paused;
     bool convertedAllocated;
@@ -724,7 +725,34 @@ RADDEFFUNC void RADEXPLINK BinkClose(HBINK bink)
 RADDEFFUNC S32 RADEXPLINK BinkWait(HBINK bink)
 {
     SwitchBinkState *state = Switch_BinkState(bink);
-    if (!state || state->paused || state->frameDecodeFinished)
+    if (!state)
+        return 1;
+
+    if (state->decodedFrames == 1 && !state->firstPostFrameWaitLogged)
+    {
+        const uint64_t framePeriodMs =
+            (1000ull * state->fpsDen + state->fpsNum - 1) /
+            state->fpsNum;
+        const uint32_t elapsed =
+            static_cast<uint32_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count()) -
+            state->startTicks;
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][BINK FLOW] post-first-frame wait frame=%u elapsed=%u target=%llu paused=%u finished=%u\\n",
+            static_cast<unsigned>(bink->FrameNum),
+            static_cast<unsigned>(elapsed),
+            static_cast<unsigned long long>(framePeriodMs),
+            state->paused ? 1u : 0u,
+            state->frameDecodeFinished ? 1u : 0u);
+        Switch_LogWrite(trace);
+        state->firstPostFrameWaitLogged = true;
+    }
+
+    if (state->paused || state->frameDecodeFinished)
         return 1;
 
     if (!state->decodedFrames)
@@ -843,6 +871,16 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
     }
 
     ++state->decodedFrames;
+    if (state->decodedFrames == 2)
+    {
+        char trace[192];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][BINK FRAME] second frame decoded frame=%u\\n",
+            static_cast<unsigned>(bink->FrameNum));
+        Switch_LogWrite(trace);
+    }
     bink->LastFrameNum = bink->FrameNum;
     bink->FrameChangePercent = 100;
     return 0;
