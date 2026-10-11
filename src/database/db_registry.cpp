@@ -4224,6 +4224,58 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
 
         if (badName)
         {
+            uint32_t nameBlock = UINT32_MAX;
+            uint32_t nameOffset = UINT32_MAX;
+            if (namePtr && g_streamBlocks)
+            {
+                for (uint32_t block = 0;
+                     block < ARRAY_COUNT(g_streamPosArray);
+                     ++block)
+                {
+                    if (!g_streamBlocks[block].data)
+                        continue;
+
+                    const uintptr_t base =
+                        reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+                    const uintptr_t end = base + g_streamBlocks[block].size;
+                    if (namePtr >= base && namePtr < end)
+                    {
+                        nameBlock = block;
+                        nameOffset = static_cast<uint32_t>(namePtr - base);
+                        break;
+                    }
+                }
+            }
+
+            uint32_t imageWords[12] = {};
+            if (gfxImage)
+                std::memcpy(imageWords, gfxImage,
+                            sizeof(imageWords) < sizeof(*gfxImage)
+                                ? sizeof(imageWords)
+                                : sizeof(*gfxImage));
+
+            char detail[512];
+            std::snprintf(
+                detail,
+                sizeof(detail),
+                "[SWITCH IMAGE ANOMALY DETAIL] image=%p name=%p nameBlock=%u nameOffset=%08x mapType=%u texture=%p width=%u height=%u depth=%u category=%u semantic=%u delay=%u words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\\n",
+                reinterpret_cast<const void *>(imagePtr),
+                reinterpret_cast<const void *>(namePtr),
+                nameBlock,
+                nameOffset,
+                gfxImage ? static_cast<unsigned>(gfxImage->mapType) : 0u,
+                gfxImage ? static_cast<void *>(gfxImage->texture.basemap) : nullptr,
+                gfxImage ? static_cast<unsigned>(gfxImage->width) : 0u,
+                gfxImage ? static_cast<unsigned>(gfxImage->height) : 0u,
+                gfxImage ? static_cast<unsigned>(gfxImage->depth) : 0u,
+                gfxImage ? static_cast<unsigned>(gfxImage->category) : 0u,
+                gfxImage ? static_cast<unsigned>(gfxImage->semantic) : 0u,
+                gfxImage ? static_cast<unsigned>(gfxImage->delayLoadPixels) : 0u,
+                imageWords[0], imageWords[1], imageWords[2], imageWords[3],
+                imageWords[4], imageWords[5], imageWords[6], imageWords[7],
+                imageWords[8], imageWords[9], imageWords[10], imageWords[11]);
+            Switch_LogWrite(detail);
+
             char trace[320];
             std::snprintf(
                 trace,
