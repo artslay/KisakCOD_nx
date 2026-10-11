@@ -20,6 +20,7 @@ extern void Switch_LogWrite(const char *msg);
 extern void COM_NotifyIntroMovieDrawSubmitted(const char *movieName);
 extern thread_local const char * volatile g_switchFrameStage;
 extern void COM_NotifyIntroMoviePlaybackFinished(const char *movieName);
+extern void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures);
 #endif
 
 // #define CINEMA
@@ -1146,6 +1147,11 @@ void __cdecl R_Cinematic_UpdateFrame()
 
 void R_Cinematic_UpdateRendererImages()
 {
+#ifdef __SWITCH__
+    // Bink decodes CPU planes on its worker, but Vulkan image uploads and
+    // layout transitions must be serialized with renderer work.
+    Switch_UploadPendingBinkFrame(&cinematicGlob.binkTextureSet);
+#endif
     if (cinematicGlob.activeImageFrame == -1)
     {
         RB_UnbindAllImages();
