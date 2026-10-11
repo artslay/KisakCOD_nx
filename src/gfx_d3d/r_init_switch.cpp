@@ -18,9 +18,23 @@
 #include "rb_state.h"
 #include "r_draw_method.h"
 #include "r_dvars.h"
+#include <qcommon/threads.h>
 #include <gfx/gfx_backend.h>
 #include "../gfx/vulkan/vulkan_backend.h"
 #include <database/database.h>
+#include "r_bsp.h"
+#include "r_cmds.h"
+#include "r_debug.h"
+#include "r_font.h"
+#include "r_image.h"
+#include "r_light.h"
+#include "r_material.h"
+#include "r_model.h"
+#include "r_model_lighting.h"
+#include "r_rendercmds.h"
+#include "r_staticmodelcache.h"
+#include "r_water.h"
+#include "rb_light.h"
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
@@ -692,19 +706,57 @@ void R_ShutdownStreams()
         R_ClearAllStreamSources(&gfxCmdBufState.prim);
 }
 
-void R_Shutdown(int destroyWindow) {
-    (void)destroyWindow;
-    g_switchFrameStage = "frame/r_shutdown/streams";
-    R_ShutdownStreams();
-    g_switchFrameStage = "frame/r_shutdown/material_usage";
-    R_ShutdownMaterialUsage();
-    if (s_registered) {
-        g_switchFrameStage = "frame/r_shutdown/images";
-        R_ShutdownImages();
-        s_registered = false;
+void R_Shutdown(int destroyWindow)
+{
+    if (rg.registered)
+    {
+        g_switchFrameStage = "frame/r_shutdown/sync_render_thread";
+        R_SyncRenderThread();
+        rg.registered = 0;
+        iassert(r_glob.haveThreadOwnership);
+        r_glob.startedRenderThread = 0;
+
+        g_switchFrameStage = "frame/r_shutdown/streams";
+        R_ShutdownStreams();
+        g_switchFrameStage = "frame/r_shutdown/material_usage";
+        R_ShutdownMaterialUsage();
+        R_ShutdownDebug();
+        R_SaveLightVisHistory();
+        R_ShutdownLightDefs();
+        R_ShutdownWorld();
+
+        if (!IsFastFileLoad())
+        {
+            R_ShutdownLoadWater();
+            R_ShutdownFonts();
+            Material_Shutdown();
+            if (s_registered)
+            {
+                g_switchFrameStage = "frame/r_shutdown/images";
+                R_ShutdownImages();
+            }
+        }
+
+        R_ResetModelLighting();
+        rgp.world = nullptr;
+        R_UnlockSkinnedCache();
+        R_FlushStaticModelCache();
+
+        // Map changes call R_Shutdown(false). The original renderer keeps the
+        // device and its dynamic buffers alive for that path; releasing them
+        // here leaves frontEndDataOut->skinnedCacheVb pointing at a null buffer
+        // when the next remote-screen frame begins.
+        if (destroyWindow)
+        {
+            g_switchFrameStage = "frame/r_shutdown/direct3d";
+            R_ShutdownDirect3D();
+            R_ShutdownRenderCommands();
+        }
+
+        R_UnregisterCmds();
     }
-    g_switchFrameStage = "frame/r_shutdown/direct3d";
-    R_ShutdownDirect3D();
+
+    s_registered = false;
     g_switchFrameStage = "frame/r_shutdown/done";
 }
 
