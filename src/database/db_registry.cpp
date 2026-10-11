@@ -2763,6 +2763,22 @@ static XAssetHeader __cdecl DB_AllocGfxLightDef(void *arg)
     return header;
 }
 
+#ifdef __SWITCH__
+static void __cdecl DB_FreeGfxLightDef(void *arg, XAssetHeader header)
+{
+    auto *pool =
+        static_cast<XAssetPool<GfxLightDef, POOLSIZE_LIGHT_DEF> *>(arg);
+    if (!header.lightDef)
+        return;
+
+    // header.lightDef points at the first member (entry) of the pool entry.
+    auto *entry =
+        reinterpret_cast<XAssetPoolEntry<GfxLightDef> *>(header.lightDef);
+    entry->next = pool->freeHead;
+    pool->freeHead = entry;
+}
+#endif
+
 static XAssetHeader __cdecl DB_AllocLoadedSound(void *arg)
 {
     auto *pool =
@@ -3003,6 +3019,15 @@ static XAssetHeader __cdecl DB_AllocXAssetHeader(XAssetType type)
 
 static void __cdecl DB_FreeXAssetHeader(XAssetType type, XAssetHeader header)
 {
+#ifdef __SWITCH__
+    // LightDef headers come from the native typed pool, not the generic
+    // StringTable-style pool used by the legacy free-handler table.
+    if (type == ASSET_TYPE_LIGHT_DEF)
+    {
+        DB_FreeGfxLightDef(DB_XAssetPool[type], header);
+        return;
+    }
+#endif
     if (DB_FreeXAssetHeaderHandler[type])
         DB_FreeXAssetHeaderHandler[type](DB_XAssetPool[type], header);
 }
