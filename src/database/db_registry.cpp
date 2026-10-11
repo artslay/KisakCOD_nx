@@ -3511,7 +3511,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][ASSET NULL NAME] asset=%d rawType=%u runtimeType=%u typeName=%s entry=%p header=%p name=%p modelName=%p modelNameLow=%08x zone=%u rawHeader=%08x stage=%s\\n",
+            "[KisakCOD][ASSET NULL NAME] asset=%d rawType=%u runtimeType=%u typeName=%s entry=%p header=%p name=%p modelName=%p modelNameLow=%08x zone=%u rawHeader=%08x stage=%s\n",
             g_switchCurrentAssetIndex,
             static_cast<unsigned>(g_switchCurrentAssetRawType),
             static_cast<unsigned>(type),
