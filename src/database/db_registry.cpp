@@ -509,6 +509,122 @@ struct SwitchDeferredImageAsset
 
 static std::vector<SwitchDeferredImageAsset> g_switchDeferredImageAssets;
 
+static void Switch_LogDeferredImageDelayCoverage(
+    const SwitchDeferredImageAsset &deferred,
+    uintptr_t target,
+    uintptr_t name)
+{
+    uint32_t targetBlock = UINT32_MAX;
+    uint32_t targetOffset = 0;
+    uint32_t nameBlock = UINT32_MAX;
+    uint32_t nameOffset = 0;
+    auto locate = [](uintptr_t address, uint32_t *blockOut, uint32_t *offsetOut)
+    {
+        if (!address || !g_streamBlocks)
+            return;
+        for (uint32_t block = 0; block < ARRAY_COUNT(g_streamPosArray); ++block)
+        {
+            if (!g_streamBlocks[block].data)
+                continue;
+            const uintptr_t base =
+                reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+            if (address >= base &&
+                address - base < g_streamBlocks[block].size)
+            {
+                if (blockOut)
+                    *blockOut = block;
+                if (offsetOut)
+                    *offsetOut = static_cast<uint32_t>(address - base);
+                return;
+            }
+        }
+    };
+    locate(target, &targetBlock, &targetOffset);
+    locate(name, &nameBlock, &nameOffset);
+
+    uint8_t targetBytes[16] = {};
+    uint8_t nameBytes[16] = {};
+    if (targetBlock != UINT32_MAX)
+    {
+        const size_t remaining =
+            g_streamBlocks[targetBlock].size - targetOffset;
+        const size_t count = remaining < sizeof(targetBytes)
+            ? remaining : sizeof(targetBytes);
+        std::memcpy(targetBytes, reinterpret_cast<const void *>(target), count);
+    }
+    if (nameBlock != UINT32_MAX)
+    {
+        const size_t remaining =
+            g_streamBlocks[nameBlock].size - nameOffset;
+        const size_t count = remaining < sizeof(nameBytes)
+            ? remaining : sizeof(nameBytes);
+        std::memcpy(nameBytes, reinterpret_cast<const void *>(name), count);
+    }
+
+    uint32_t delayCount = g_streamDelayIndex;
+    if (delayCount > ARRAY_COUNT(g_streamDelayArray))
+        delayCount = ARRAY_COUNT(g_streamDelayArray);
+    int32_t targetDelayIndex = -1;
+    int32_t nameDelayIndex = -1;
+    uint32_t block4DelayRanges = 0;
+    for (uint32_t i = 0; i < delayCount; ++i)
+    {
+        const uintptr_t begin =
+            reinterpret_cast<uintptr_t>(g_streamDelayArray[i].ptr);
+        const int32_t signedSize = g_streamDelayArray[i].size;
+        if (!begin || signedSize <= 0)
+            continue;
+        const uintptr_t size = static_cast<uintptr_t>(signedSize);
+        if (begin > UINTPTR_MAX - size)
+            continue;
+        const uintptr_t end = begin + size;
+        if (targetDelayIndex < 0 &&
+            target && begin < target + sizeof(targetBytes) && end > target)
+            targetDelayIndex = static_cast<int32_t>(i);
+        if (nameDelayIndex < 0 &&
+            name && begin < name + sizeof(nameBytes) && end > name)
+            nameDelayIndex = static_cast<int32_t>(i);
+
+        uint32_t rangeBlock = UINT32_MAX;
+        locate(begin, &rangeBlock, nullptr);
+        if (rangeBlock == 4u)
+            ++block4DelayRanges;
+    }
+
+    char bytesText[16 * 3 + 1] = {};
+    size_t writtenBytes = 0;
+    for (size_t i = 0; i < sizeof(targetBytes); ++i)
+    {
+        const int n = std::snprintf(
+            bytesText + writtenBytes,
+            sizeof(bytesText) - writtenBytes,
+            i ? " %02x" : "%02x",
+            static_cast<unsigned>(targetBytes[i]));
+        if (n <= 0 || static_cast<size_t>(n) >= sizeof(bytesText) - writtenBytes)
+            break;
+        writtenBytes += static_cast<size_t>(n);
+    }
+
+    char trace[768];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][DEFERRED IMAGE COVERAGE] asset=%d generation=%u token=%08x targetBlock=%u targetOffset=%08x nameBlock=%u nameOffset=%08x delayRanges=%u block4Ranges=%u targetOverlap=%d nameOverlap=%d targetBytes=%s\n",
+        deferred.assetIndex,
+        deferred.streamGeneration,
+        deferred.nameToken,
+        targetBlock,
+        targetOffset,
+        nameBlock,
+        nameOffset,
+        delayCount,
+        block4DelayRanges,
+        targetDelayIndex,
+        nameDelayIndex,
+        bytesText);
+    Switch_LogWrite(trace);
+}
+
 // Keep address diagnostics useful without writing the same unresolved image on
 // every asset-registration pass. Log each watched image once when first seen,
 // then at most once more during the final delayed-image fixup.
@@ -4639,6 +4755,28 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
             // keep the image deferred until the stream has materialized it.
             // Following arbitrary DWORDs here can turn unrelated object data
             // into a plausible but incorrect name such as "3".
+            if (finalDelayedImageFixup)
+            {
+                static uint32_t tracedGeneration = UINT32_MAX;
+                static uint32_t tracedThisGeneration = 0;
+                if (tracedGeneration != g_switchStreamGeneration)
+                {
+                    tracedGeneration = g_switchStreamGeneration;
+                    tracedThisGeneration = 0;
+                }
+                if (deferred.assetIndex == 1530 || tracedThisGeneration < 8u)
+                {
+                    const uintptr_t target =
+                        deferred.nameToken &&
+                        deferred.nameToken != UINT32_MAX &&
+                        deferred.nameToken != UINT32_MAX - 1u
+                            ? DB_ConvertOffsetToPointerValue(deferred.nameToken)
+                            : 0;
+                    Switch_LogDeferredImageDelayCoverage(
+                        deferred, target, directName);
+                    ++tracedThisGeneration;
+                }
+            }
             g_switchDeferredImageAssets[writeIndex++] = deferred;
             continue;
         }
