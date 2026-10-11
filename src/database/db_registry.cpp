@@ -4066,6 +4066,18 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     iassert(existingEntry);
     if (existingEntry->entry.zoneIndex)
     {
+#ifdef __SWITCH__
+        // OAT can present the same named LightDef more than once from a
+        // single zone. Keep the first name registration and release the
+        // redundant native LightDef pool entry rather than hitting the
+        // original engine's same-zone assertion.
+        if (type == ASSET_TYPE_LIGHT_DEF &&
+            existingEntry->entry.zoneIndex == newEntry->entry.zoneIndex)
+        {
+            DB_FreeXAssetEntry(newEntry);
+            return existingEntry;
+        }
+#endif
         iassert(existingEntry->entry.zoneIndex != newEntry->entry.zoneIndex);
 
         if (!*g_defaultAssetName[type] && type != ASSET_TYPE_RAWFILE && type != ASSET_TYPE_MAP_ENTS)
