@@ -4376,6 +4376,90 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
         {
             const uintptr_t serializedTarget =
                 DB_ConvertOffsetToPointerValue(deferred.nameToken);
+
+            // Emit raw, non-mutating diagnostics for deferred image strings.
+            // The prior mismatch-only condition could hide the reason when the
+            // canonical target does not itself look like a printable string.
+            if (deferred.assetIndex == 1530 ||
+                (deferred.assetIndex >= 4000 &&
+                 deferred.assetIndex <= 4100))
+            {
+                const uint32_t formulaBlock =
+                    (deferred.nameToken - 1u) >> 28;
+                const uint32_t formulaOffset =
+                    (deferred.nameToken - 1u) & 0x0FFFFFFFu;
+                uint8_t targetBytes[16] = {};
+                size_t targetByteCount = 0;
+                if (formulaBlock < ARRAY_COUNT(g_streamPosArray) &&
+                    g_streamBlocks[formulaBlock].data &&
+                    formulaOffset < g_streamBlocks[formulaBlock].size)
+                {
+                    targetByteCount =
+                        g_streamBlocks[formulaBlock].size - formulaOffset;
+                    if (targetByteCount > sizeof(targetBytes))
+                        targetByteCount = sizeof(targetBytes);
+                    std::memcpy(
+                        targetBytes,
+                        g_streamBlocks[formulaBlock].data + formulaOffset,
+                        targetByteCount);
+                }
+
+                char targetBytesText[16 * 3 + 1] = {};
+                size_t targetBytesWritten = 0;
+                for (size_t byteIndex = 0;
+                     byteIndex < targetByteCount;
+                     ++byteIndex)
+                {
+                    const int written = std::snprintf(
+                        targetBytesText + targetBytesWritten,
+                        sizeof(targetBytesText) - targetBytesWritten,
+                        byteIndex ? " %02x" : "%02x",
+                        static_cast<unsigned>(targetBytes[byteIndex]));
+                    if (written <= 0 ||
+                        static_cast<size_t>(written) >=
+                            sizeof(targetBytesText) - targetBytesWritten)
+                        break;
+                    targetBytesWritten += static_cast<size_t>(written);
+                }
+
+                uint32_t actualBlock = UINT32_MAX;
+                uint32_t actualOffset = 0;
+                const bool actualInStream =
+                    Switch_IsStreamAsciiImageName(
+                        directName, &actualBlock, &actualOffset);
+                const bool targetAscii =
+                    Switch_IsStreamAsciiImageName(
+                        serializedTarget, nullptr, nullptr);
+
+                char trace[1024];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][XSTRING ADDRESS TRACE] asset=%d rawType=%u token=%08x formula=%u:%08x target=%p targetAscii=%u targetText=%.*s targetBytes=%s direct=%p directAscii=%u directText=%.*s directBlock=%u directOffset=%08x original=%p\\n",
+                    deferred.assetIndex,
+                    deferred.rawType,
+                    deferred.nameToken,
+                    formulaBlock,
+                    formulaOffset,
+                    reinterpret_cast<const void *>(serializedTarget),
+                    targetAscii ? 1u : 0u,
+                    targetAscii ? 80 : 0,
+                    targetAscii
+                        ? reinterpret_cast<const char *>(serializedTarget)
+                        : "",
+                    targetBytesText,
+                    reinterpret_cast<const void *>(directName),
+                    actualInStream ? 1u : 0u,
+                    actualInStream ? 80 : 0,
+                    actualInStream
+                        ? reinterpret_cast<const char *>(directName)
+                        : "",
+                    actualBlock,
+                    actualOffset,
+                    reinterpret_cast<const void *>(deferred.originalName));
+                Switch_LogWrite(trace);
+            }
+
             uint32_t tokenBlock = UINT32_MAX;
             uint32_t tokenOffset = 0;
             uint32_t actualBlock = UINT32_MAX;
