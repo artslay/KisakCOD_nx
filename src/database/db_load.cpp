@@ -5882,12 +5882,42 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                     : 0u;
             const bool emptyName = safeToReadName && firstByte == 0u;
 
-            char trace[560];
+            static constexpr const char *const kMissingIwiImageNames[] =
+            {
+                "3",
+                "codeMeshArg",
+                "hud_burningcaricon",
+                "hud_checkbox_active",
+                "hud_objective_tank",
+                "sm2/effect",
+                "decode_characters_glow"
+            };
+            const bool traceNameReadable =
+                nameIsStreamAscii ||
+                (serialized.name == UINT32_MAX && resolvedName);
+            bool traceMissingIwiImage = false;
+            if (traceNameReadable)
+            {
+                for (const char *candidate : kMissingIwiImageNames)
+                {
+                    if (I_stricmp(resolvedName, candidate) == 0)
+                    {
+                        traceMissingIwiImage = true;
+                        break;
+                    }
+                }
+            }
+
+            char trace[768];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][GFXIMAGE TRACE] token=%08x image=%p name=%p first=%02x safe=%u streamAscii=%u pointerBlock=%u pointerOffset=%08x nameBlock=%u nameOffset=%08x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\n",
+                "[KisakCOD][GFXIMAGE TRACE] asset=%d rawType=%u token=%08x text=%.*s image=%p name=%p first=%02x safe=%u streamAscii=%u pointerBlock=%u pointerOffset=%08x nameBlock=%u nameOffset=%08x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\n",
+                g_switchCurrentAssetIndex,
+                static_cast<unsigned>(g_switchCurrentAssetRawType),
                 serialized.name,
+                traceNameReadable ? 96 : 11,
+                traceNameReadable ? resolvedName : "<unreadable>",
                 static_cast<void *>(varGfxImage),
                 static_cast<const void *>(resolvedName),
                 firstByte,
@@ -5906,7 +5936,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 Switch_GetStreamCursorOffset(0),
                 Switch_GetStreamCursorOffset(4),
                 emptyName ? 1u : 0u);
-            if (traceKillhouseImage || !nameIsStreamAscii)
+            if (traceKillhouseImage || !nameIsStreamAscii || traceMissingIwiImage)
                 Switch_LogWrite(trace);
 
             if (resolvedName && std::strcmp(resolvedName, "3") == 0)
