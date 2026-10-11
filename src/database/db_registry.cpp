@@ -4447,7 +4447,7 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][DEFERRED IMAGE EXPIRED] asset=%d rawType=%u token=%08x sourceGeneration=%u activeGeneration=%u\\n",
+                    "[KisakCOD][DEFERRED IMAGE EXPIRED] asset=%d rawType=%u token=%08x sourceGeneration=%u activeGeneration=%u\n",
                     deferred.assetIndex,
                     deferred.rawType,
                     deferred.nameToken,
@@ -4457,7 +4457,7 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
             }
             else if (expiredImageTraceCount == 16u)
             {
-                Switch_LogWrite("[KisakCOD][DEFERRED IMAGE EXPIRED] further entries suppressed\\n");
+                Switch_LogWrite("[KisakCOD][DEFERRED IMAGE EXPIRED] further entries suppressed\n");
             }
             ++expiredImageTraceCount;
             continue;
