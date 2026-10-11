@@ -402,19 +402,6 @@ void __cdecl DB_LoadDelayedImages()
 {
     uint32_t copyIter; // [esp+0h] [ebp-4h]
 
-#ifdef __SWITCH__
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][DELAY IMAGES] begin zone=%s copies=%u\n",
-            g_load.filename ? g_load.filename : "<null>",
-            static_cast<unsigned>(g_copyInfoCount));
-        Switch_LogWrite(trace);
-    }
-#endif
-
     DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(__cdecl *)(XAssetHeader, void *))R_DelayLoadImage, 0, 0);
     for (copyIter = 0; copyIter < g_copyInfoCount; ++copyIter)
     {
@@ -422,9 +409,6 @@ void __cdecl DB_LoadDelayedImages()
             R_DelayLoadImage(g_copyInfo[copyIter]->asset.header);
     }
 
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][DELAY IMAGES] end\n");
-#endif
 }
 
 void __cdecl DB_FinishGeometryBlocks(XZoneMemory *zoneMem)
@@ -657,19 +641,7 @@ void __cdecl DB_LoadXFileInternal()
 #endif
     Load_DelayStream();
 #ifdef __SWITCH__
-    // Forward GfxImage XStrings may only become concrete after the complete
-    // delayed stream has been materialized. Retry queued image assets once
-    // before the renderer starts opening the corresponding IWI files.
-    g_switchDbStage = "delayed_images/fixup";
-    DB_FlushSwitchDeferredImageAssets();
-
-    // Deferred image registration can publish native GfxImage objects that
-    // were not available when earlier MaterialTextureDef/MaterialHandle
-    // references were fixed. Run the normal alias pass once more after that
-    // registration, before the renderer can consume the zone.
-    g_switchDbStage = "delayed_images/alias_fixup";
-    DB_FixupSwitchPointerAliases();
-
+    // OAT resolved serialized pointers and XString references while loading.
     g_switchDbStage = "delayed_images/enum";
 #endif
     DB_LoadDelayedImages();

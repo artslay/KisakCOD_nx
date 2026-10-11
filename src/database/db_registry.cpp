@@ -3359,32 +3359,17 @@ static __attribute__((noinline)) XAssetHeader __cdecl DB_AddXAsset_SwitchLocal(
 #endif
 
 #ifdef __SWITCH__
-    if (type == ASSET_TYPE_TECHNIQUE_SET)
-        Switch_LogWrite("[SWITCH TECHSET ADD] before write lock\n");
     if (type == ASSET_TYPE_IMAGE)
-    {
         ++g_switchImageAdds;
-        Switch_LogWrite("[SWITCH IMAGE] DB_AddXAsset before write lock\n");
-    }
 #endif
     Sys_LockWrite(&db_hashCritSect);
-#ifdef __SWITCH__
-    if (type == ASSET_TYPE_TECHNIQUE_SET)
-        Switch_LogWrite("[SWITCH TECHSET ADD] after write lock\n");
-    if (type == ASSET_TYPE_IMAGE)
-        Switch_LogWrite("[SWITCH IMAGE] DB_AddXAsset after write lock\n");
-#endif
+
 
 #ifdef __SWITCH__
     g_switchDbStage = "asset/link";
 #endif
     existingEntry = DB_LinkXAssetEntry(&newEntry, 0);
-#ifdef __SWITCH__
-    if (type == ASSET_TYPE_TECHNIQUE_SET)
-        Switch_LogWrite("[SWITCH TECHSET ADD] after link\n");
-    if (type == ASSET_TYPE_IMAGE)
-        Switch_LogWrite("[SWITCH IMAGE] DB_AddXAsset after DB_LinkXAssetEntry\n");
-#endif
+
 
 #ifdef __SWITCH__
     // Copy the native 64-bit header while the registry lock is still held.
@@ -3420,12 +3405,7 @@ static __attribute__((noinline)) XAssetHeader __cdecl DB_AddXAsset_SwitchLocal(
 #endif
     Sys_UnlockWrite(&db_hashCritSect);
 
-#ifdef __SWITCH__
-    if (type == ASSET_TYPE_TECHNIQUE_SET)
-        Switch_LogWrite("[SWITCH TECHSET ADD] after unlock\n");
-    if (type == ASSET_TYPE_IMAGE)
-        Switch_LogWrite("[SWITCH IMAGE] DB_AddXAsset after unlock\n");
-#endif
+
 
 #ifdef __SWITCH__
     g_switchDbStage = "asset/sync";
@@ -3490,10 +3470,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         type == ASSET_TYPE_WEAPON;
     if (switchTraceWeapon1506)
         Switch_LogWrite("[SWITCH WEAPON1506] DB_Link before DB_GetXAssetName\n");
-    if (newEntry->entry.asset.type == ASSET_TYPE_TECHNIQUE_SET)
-        Switch_LogWrite("[SWITCH TECHSET LINK] before DB_GetXAssetName\n");
-    if (newEntry->entry.asset.type == ASSET_TYPE_IMAGE)
-        Switch_LogWrite("[SWITCH IMAGE] DB_Link before DB_GetXAssetName\n");
+
 #endif
 #ifdef __SWITCH__
     g_switchDbStage = "asset/name";
@@ -3613,34 +3590,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 #endif
 
 #ifdef __SWITCH__
-    if (newEntry->entry.asset.type == ASSET_TYPE_TECHNIQUE_SET)
-    {
-        char trace[192];
-        std::snprintf(trace, sizeof(trace),
-            "[SWITCH TECHSET LINK] name=%p first=%02x\n",
-            (const void *)name,
-            name ? static_cast<unsigned>(static_cast<uint8_t>(*name)) : 0u);
-        Switch_LogWrite(trace);
 
-        if (name && !I_stricmp(name, "default"))
-        {
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[SWITCH DB FIND] default techset registration entry=%p header=%p zone=%u\n",
-                static_cast<void *>(newEntry),
-                static_cast<void *>(newEntry->entry.asset.header.data),
-                static_cast<unsigned>(newEntry->entry.zoneIndex));
-            Switch_LogWrite(trace);
-        }
-    }
-    if (newEntry->entry.asset.type == ASSET_TYPE_IMAGE)
-    {
-        char trace[160];
-        std::snprintf(trace, sizeof(trace),
-            "[SWITCH IMAGE] DB_Link image name ptr=%p\n", (const void *)name);
-        Switch_LogWrite(trace);
-    }
 #endif
 
 
@@ -4280,13 +4230,11 @@ void __cdecl Load_MaterialTechniqueSetAsset(XAssetHeader *techniqueSet)
     Material_OriginalRemapTechniqueSet(techniqueSet->techniqueSet);
 #ifdef __SWITCH__
     g_switchDbStage = "techset/remap_done";
-    Switch_LogWrite("[SWITCH TECHSET ASSET] after remap\n");
     g_switchDbStage = "techset/upload_call";
 #endif
     Material_UploadShaders(techniqueSet->techniqueSet);
 #ifdef __SWITCH__
     g_switchDbStage = "techset/upload_done";
-    Switch_LogWrite("[SWITCH TECHSET ASSET] after upload\n");
 #endif
 }
 
