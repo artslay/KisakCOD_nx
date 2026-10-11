@@ -16955,9 +16955,11 @@ void __cdecl Load_RawFile(bool atStreamStart)
     const bool switchRawFileTrace =
         g_switchCurrentAssetRawType == 31u &&
         (g_switchCurrentAssetIndex == 1126 ||
-         g_switchCurrentAssetIndex == 1531);
+         g_switchCurrentAssetIndex == 1531 ||
+         g_switchCurrentAssetIndex == 6501);
     if (switchRawFileTrace)
-        {
+    {
+        g_switchDbStage = "rawfile/load_enter";
         char trace[128];
         std::snprintf(
             trace, sizeof(trace),
@@ -16976,10 +16978,14 @@ void __cdecl Load_RawFile(bool atStreamStart)
     if (atStreamStart)
     {
         SerializedRawFile serialized{};
+        if (switchRawFileTrace)
+            g_switchDbStage = "rawfile/header_read";
         Load_Stream(
             true,
             reinterpret_cast<uint8_t *>(&serialized),
             sizeof(serialized));
+        if (switchRawFileTrace)
+            g_switchDbStage = "rawfile/header_done";
 
 #ifdef __SWITCH__
         g_switchRawFileLen = serialized.len;
@@ -17022,7 +17028,11 @@ void __cdecl Load_RawFile(bool atStreamStart)
     DB_PushStreamPos(4);
     varXString = &varRawFile->name;
 #ifdef __SWITCH__
+    if (switchRawFileTrace)
+        g_switchDbStage = "rawfile/name_load";
     Load_XString(0);
+    if (switchRawFileTrace)
+        g_switchDbStage = "rawfile/name_done";
     g_switchRawFileB4AfterName =
         (g_streamBlocks && g_streamBlocks[4].data &&
          g_streamPosIndex == 4 &&
@@ -17063,10 +17073,16 @@ void __cdecl Load_RawFile(bool atStreamStart)
             Switch_LogWrite(trace);
         }
 #endif
+        if (switchRawFileTrace)
+            g_switchDbStage = "rawfile/buffer_alloc";
         varRawFile->buffer = (const char *)AllocLoad_raw_byte();
         varConstChar = (const char *)varRawFile->buffer;
+        if (switchRawFileTrace)
+            g_switchDbStage = "rawfile/buffer_load";
         Load_ConstCharArray(1, varRawFile->len + 1);
 #ifdef __SWITCH__
+        if (switchRawFileTrace)
+            g_switchDbStage = "rawfile/buffer_done";
         if (switchRawFileTrace)
         {
             const uintptr_t bufferPtr =
@@ -17124,12 +17140,18 @@ void __cdecl Load_RawFile(bool atStreamStart)
     }
 #endif
     if (switchRawFileTrace)
+    {
+        g_switchDbStage = "rawfile/pop";
         Switch_LogWrite("[SWITCH RAWFILE] before pop\n");
+    }
 #endif
     DB_PopStreamPos();
 #ifdef __SWITCH__
     if (switchRawFileTrace)
+    {
+        g_switchDbStage = "rawfile/load_done";
         Switch_LogWrite("[SWITCH RAWFILE] after pop\n");
+    }
 #endif
 #else
     Load_Stream(atStreamStart, (uint8_t *)varRawFile, 12);
@@ -17154,6 +17176,12 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
     // XAssetHeader is native on ARM64, but the fastfile pointer token is only
     // 4 bytes. Never let Load_Stream write a serialized token through a
     // RawFile** lvalue.
+    const bool switchRawFilePtrTrace =
+        g_switchCurrentAssetRawType == 31u &&
+        (g_switchCurrentAssetIndex == 1126 ||
+         g_switchCurrentAssetIndex == 6501);
+    if (switchRawFilePtrTrace)
+        g_switchDbStage = "rawfile/ptr_enter";
     uint32_t value = 0;
     if (atStreamStart)
     {
@@ -17170,12 +17198,11 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
             sizeof(value));
     }
 
+    if (switchRawFilePtrTrace)
+        g_switchDbStage = "rawfile/ptr_token";
     DB_PushStreamPos(0);
 
 #ifdef __SWITCH__
-    const bool switchRawFilePtrTrace =
-        g_switchCurrentAssetIndex == 1126 &&
-        g_switchCurrentAssetRawType == 31u;
     if (switchRawFilePtrTrace)
     {
         char trace[256];
@@ -17196,6 +17223,8 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
     {
         if (value == UINT32_MAX || value == UINT32_MAX - 1u)
         {
+            if (switchRawFilePtrTrace)
+                g_switchDbStage = "rawfile/object_alloc";
             DB_AllocStreamPos(3);
 
             RawFile *nativeRawFile =
@@ -17204,6 +17233,8 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
                         static_cast<uint32_t>(sizeof(RawFile)),
                         "SwitchRawFile",
                         22));
+            if (switchRawFilePtrTrace)
+                g_switchDbStage = "rawfile/object_alloc_done";
             std::memset(nativeRawFile, 0, sizeof(RawFile));
 
             if (value == UINT32_MAX - 1u)
@@ -17212,7 +17243,11 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
             *varRawFilePtr = nativeRawFile;
             varRawFile = nativeRawFile;
 
+            if (switchRawFilePtrTrace)
+                g_switchDbStage = "rawfile/load_call";
             Load_RawFile(true);
+            if (switchRawFilePtrTrace)
+                g_switchDbStage = "rawfile/load_return";
 
 #ifdef __SWITCH__
             if (switchRawFilePtrTrace)
@@ -17232,7 +17267,11 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
 
             XAssetHeader rawHeader{};
             rawHeader.rawfile = nativeRawFile;
+            if (switchRawFilePtrTrace)
+                g_switchDbStage = "rawfile/register_call";
             Load_RawFileAsset(&rawHeader);
+            if (switchRawFilePtrTrace)
+                g_switchDbStage = "rawfile/register_return";
             *varRawFilePtr = rawHeader.rawfile;
 
             if (inserted)
@@ -17254,7 +17293,11 @@ void __cdecl Load_RawFilePtr(bool atStreamStart)
         *varRawFilePtr = nullptr;
     }
 
+    if (switchRawFilePtrTrace)
+        g_switchDbStage = "rawfile/ptr_pop";
     DB_PopStreamPos();
+    if (switchRawFilePtrTrace)
+        g_switchDbStage = "rawfile/ptr_done";
 #else
     uint32_t value;
 
@@ -18921,6 +18964,11 @@ void __cdecl Load_XAssetHeader(bool atStreamStart)
         Load_FxImpactTablePtr(atStreamStart);
         break;
     case ASSET_TYPE_RAWFILE:
+#ifdef __SWITCH__
+        if (g_switchCurrentAssetIndex == 6501 &&
+            g_switchCurrentAssetRawType == 31u)
+            g_switchDbStage = "xasset/6501_rawfile_dispatch";
+#endif
         varRawFilePtr = (RawFile **)varXAssetHeader;
         Load_RawFilePtr(atStreamStart);
         break;
@@ -18933,8 +18981,23 @@ void __cdecl Load_XAssetHeader(bool atStreamStart)
 
 void __cdecl Load_XAsset(bool atStreamStart)
 {
+#ifdef __SWITCH__
+    const bool traceRawFile6501 =
+        g_switchCurrentAssetIndex == 6501 &&
+        g_switchCurrentAssetRawType == 31u;
+    if (traceRawFile6501)
+        g_switchDbStage = "xasset/6501_record_read";
+#endif
     Load_Stream(atStreamStart, (uint8_t *)varXAsset, 8);
+#ifdef __SWITCH__
+    if (traceRawFile6501)
+        g_switchDbStage = "xasset/6501_record_done";
+#endif
     varXAssetHeader = &varXAsset->header;
+#ifdef __SWITCH__
+    if (traceRawFile6501)
+        g_switchDbStage = "xasset/6501_dispatch";
+#endif
     Load_XAssetHeader(0);
 }
 
