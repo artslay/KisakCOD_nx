@@ -42,18 +42,6 @@ static_assert(sizeof(scr_block_s) == 0x218);
 
 union sval_u // sizeof=0x4
 {                                       // ...
-    sval_u& operator=(const sval_u &other)
-    {
-        this->type = other.type;
-        return *this;
-    }
-    sval_u &operator=(sval_u &other)
-    {
-        this->type = other.type;
-        return *this;
-    }
-
-
 
     sval_u()
     {
