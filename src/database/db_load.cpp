@@ -10483,7 +10483,7 @@ static void Switch_TranslateXModelSerialized(
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][XMODEL HEADER START] asset=%d rawType=%u rawHeader=%08x stream=%u scratchOffset=%08x inflatedOffset=%016llx pos=%p model=%p prev=%d/%u/%08x\\n",
+            "[KisakCOD][XMODEL HEADER START] asset=%d rawType=%u rawHeader=%08x stream=%u scratchOffset=%08x inflatedOffset=%016llx pos=%p model=%p prev=%d/%u/%08x\n",
             g_switchCurrentAssetIndex,
             static_cast<unsigned>(g_switchCurrentAssetRawType),
             static_cast<unsigned>(g_switchCurrentAssetHeader),
@@ -10509,7 +10509,7 @@ static void Switch_TranslateXModelSerialized(
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][XMODEL HEADER END] asset=%d inflated=%016llx->%016llx bytes=%u nameToken=%08x\\n",
+            "[KisakCOD][XMODEL HEADER END] asset=%d inflated=%016llx->%016llx bytes=%u nameToken=%08x\n",
             g_switchCurrentAssetIndex,
             static_cast<unsigned long long>(inflatedOffset),
             static_cast<unsigned long long>(inflatedEnd),
