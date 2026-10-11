@@ -4081,11 +4081,27 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 
         if (!DB_OverrideAsset(newEntry->entry.zoneIndex, existingEntry->entry.zoneIndex))
         {
+#ifdef __SWITCH__
+            uint32_t switchOverrideGuard = 0;
+#endif
             for (pOverrideAssetEntryIndex = &existingEntry->entry.nextOverride;
                 *pOverrideAssetEntryIndex;
                 pOverrideAssetEntryIndex = &overrideAssetEntry->entry.nextOverride)
             {
+#ifdef __SWITCH__
+                const uint16_t overrideIndex = *pOverrideAssetEntryIndex;
+                // A malformed override chain must not hang zone loading.
+                // Index 0 is the terminator; valid pool indices are below 0x8000.
+                if (overrideIndex >= 0x8000u ||
+                    ++switchOverrideGuard > 0x8000u)
+                {
+                    *pOverrideAssetEntryIndex = 0;
+                    break;
+                }
+                overrideAssetEntry = &g_assetEntryPool[overrideIndex];
+#else
                 overrideAssetEntry = &g_assetEntryPool[*pOverrideAssetEntryIndex];
+#endif
                 if (DB_OverrideAsset(newEntry->entry.zoneIndex, overrideAssetEntry->entry.zoneIndex))
                     break;
             }
