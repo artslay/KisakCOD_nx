@@ -4036,7 +4036,7 @@ void __cdecl Mark_MaterialTechniqueSetAsset(MaterialTechniqueSet *techniqueSet)
 }
 
 #ifdef __SWITCH__
-static bool Switch_IsStreamAsciiImageName(
+bool Switch_IsStreamAsciiImageName(
     uintptr_t address,
     uint32_t *blockOut,
     uint32_t *offsetOut)
