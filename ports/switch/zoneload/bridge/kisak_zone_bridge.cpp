@@ -86,10 +86,25 @@ namespace
 
                 if (progress.active && now - lastProgressTime >= std::chrono::seconds(10))
                 {
-                    char trace[224];
+                    const char *phaseName = "asset/start";
+                    if (progress.assetType == 17)
+                    {
+                        switch (progress.phase)
+                        {
+                        case 1: phaseName = "font/fields"; break;
+                        case 2: phaseName = "font/name"; break;
+                        case 3: phaseName = "font/material"; break;
+                        case 4: phaseName = "font/glow-material"; break;
+                        case 5: phaseName = "font/glyphs"; break;
+                        case 6: phaseName = "font/asset-register"; break;
+                        default: phaseName = "font/start"; break;
+                        }
+                    }
+
+                    char trace[256];
                     std::snprintf(trace, sizeof(trace),
-                        "[KisakCOD][ZONELOAD] asset-load no-progress zone=%s index=%zu type=%d seconds=10\n",
-                        m_zoneName.c_str(), progress.assetIndex, progress.assetType);
+                        "[KisakCOD][ZONELOAD] asset-load no-progress zone=%s index=%zu type=%d phase=%s seconds=10\n",
+                        m_zoneName.c_str(), progress.assetIndex, progress.assetType, phaseName);
                     Switch_LogWrite(trace);
                     return;
                 }
