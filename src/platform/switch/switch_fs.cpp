@@ -1508,18 +1508,39 @@ int __cdecl FS_FileExists(char *file)
     if (g_iwdEntries.find(normalizedName) != g_iwdEntries.end())
         return 1;
 
-    char path[256];
-    SwitchPath(
-        path,
-        sizeof(path),
-        fs_basepath ? fs_basepath->current.string : kSwitchRoot,
-        fs_gamedir,
-        file);
-    FILE *fp = fopen(path, "rb");
-    if (!fp)
-        return 0;
-    fclose(fp);
-    return 1;
+    const char *base = fs_basepath && fs_basepath->current.string[0]
+        ? fs_basepath->current.string
+        : kSwitchRoot;
+    const char *gameName = g_switchPrimaryGame.empty()
+        ? "main"
+        : g_switchPrimaryGame.c_str();
+    const std::vector<std::string> searchDirectories =
+        Switch_GetGameSearchDirectories(
+            base,
+            gameName,
+            g_switchSelectedLanguage);
+
+    char path[512];
+    for (const std::string &directory : searchDirectories)
+    {
+        const int pathLength = std::snprintf(
+            path,
+            sizeof(path),
+            "%s/%s",
+            directory.c_str(),
+            file);
+        if (pathLength < 0 ||
+            static_cast<size_t>(pathLength) >= sizeof(path))
+            continue;
+
+        FILE *fp = fopen(path, "rb");
+        if (!fp)
+            continue;
+        fclose(fp);
+        return 1;
+    }
+
+    return 0;
 }
 
 int __cdecl FS_FOpenFileWrite(const char *filename)
