@@ -399,6 +399,13 @@ void __cdecl SV_ShutdownDemo()
 }
 
 
+static int SV_GetMemFileSegmentSize(MemoryFile *memFile, uint32_t segmentIndex)
+{
+    const uint8_t *segmentStart = MemFile_GetSegmentAddess(memFile, segmentIndex);
+    const uint8_t *segmentEnd = MemFile_CopySegments(memFile, segmentIndex, nullptr);
+    return static_cast<int>(segmentEnd - segmentStart);
+}
+
 int __cdecl SV_AddDemoSave(SaveGame *savehandle, server_demo_save_t *save, int createSave)
 {
     server_demo_history_t *history;
@@ -432,16 +439,24 @@ int __cdecl SV_AddDemoSave(SaveGame *savehandle, server_demo_save_t *save, int c
             SaveMemory_FinalizeSave(demohandle);
             return 0;
         }
-        unsigned char *seg0Size = MemFile_CopySegments(SaveMemory_GetMemoryFile(demohandle), 0, 0);
-        unsigned char *totalSize = &MemFile_CopySegments(SaveMemory_GetMemoryFile(savehandle), 1, 0)[(uintptr_t)seg0Size];
-        if (SV_HistoryAlloc(history, &save->buf, (int)(uintptr_t)totalSize) == 0)
+        MemoryFile *demoMemoryFile = SaveMemory_GetMemoryFile(demohandle);
+        MemoryFile *saveMemoryFile = SaveMemory_GetMemoryFile(savehandle);
+        const int seg0Size = SV_GetMemFileSegmentSize(demoMemoryFile, 0);
+        const int seg1Size = SV_GetMemFileSegmentSize(saveMemoryFile, 1);
+        if (seg0Size < 0 || seg1Size < 0 || seg0Size > 0x7FFFFFFF - seg1Size)
         {
             SaveMemory_FinalizeSave(demohandle);
             return 0;
         }
-        save->bufLen = (int)(uintptr_t)totalSize;
-        MemFile_CopySegments(SaveMemory_GetMemoryFile(demohandle), 0, save->buf);
-        MemFile_CopySegments(SaveMemory_GetMemoryFile(savehandle), 1, &save->buf[(uintptr_t)seg0Size]);
+        const int totalSize = seg0Size + seg1Size;
+        if (SV_HistoryAlloc(history, &save->buf, totalSize) == 0)
+        {
+            SaveMemory_FinalizeSave(demohandle);
+            return 0;
+        }
+        save->bufLen = totalSize;
+        MemFile_CopySegments(demoMemoryFile, 0, save->buf);
+        MemFile_CopySegments(saveMemoryFile, 1, save->buf + seg0Size);
         SaveMemory_FinalizeSave(demohandle);
         return 1;
     }
@@ -454,14 +469,15 @@ int __cdecl SV_AddDemoSave(SaveGame *savehandle, server_demo_save_t *save, int c
         SaveMemory_FinalizeSave(demohandle);
         return 0;
     }
-    unsigned char *seg0Size = MemFile_CopySegments(SaveMemory_GetMemoryFile(demohandle), 0, 0);
-    if (SV_HistoryAlloc(history, &save->buf, (int)(uintptr_t)seg0Size) == 0)
+    MemoryFile *demoMemoryFile = SaveMemory_GetMemoryFile(demohandle);
+    const int seg0Size = SV_GetMemFileSegmentSize(demoMemoryFile, 0);
+    if (seg0Size < 0 || SV_HistoryAlloc(history, &save->buf, seg0Size) == 0)
     {
         SaveMemory_FinalizeSave(demohandle);
         return 0;
     }
-    save->bufLen = (int)(uintptr_t)seg0Size;
-    MemFile_CopySegments(SaveMemory_GetMemoryFile(demohandle), 0, save->buf);
+    save->bufLen = seg0Size;
+    MemFile_CopySegments(demoMemoryFile, 0, save->buf);
     SaveMemory_FinalizeSave(demohandle);
     return 1;
 }
