@@ -2197,6 +2197,27 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 #endif
         }
     }
+#ifdef __SWITCH__
+    if (type == ASSET_TYPE_CLIPMAP && name &&
+        Switch_IstricmpAssetName(name, "maps/killhouse.d3dbsp") == 0)
+    {
+        static bool bspLookupMissLogged = false;
+        if (!bspLookupMissLogged)
+        {
+            bspLookupMissLogged = true;
+            char trace[256];
+            const uint32_t hash = DB_HashForName(name, type);
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][BSP LOOKUP MISS] type=%u name=%s hash=%u bucketHead=%u cm=%p cmName=%s\\n",
+                static_cast<unsigned>(type), name, hash,
+                static_cast<unsigned>(db_hashTable[hash]),
+                static_cast<void *>(&cm),
+                cm.name ? cm.name : "<null>");
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     return 0;
 }
 
