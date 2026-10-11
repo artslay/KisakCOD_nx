@@ -26,6 +26,7 @@ static_assert(sizeof(IW3::cbrush_t) == 96, "IW3::cbrush_t stride differs from th
 #include <vector>
 
 extern void Switch_LogWrite(const char *msg);
+extern const char * volatile g_switchDbStage;
 
 namespace
 {
@@ -119,14 +120,20 @@ namespace
                         case 26: phaseName = "lightdef/collect-references"; break;
                         case 27: phaseName = "lightdef/engine-link"; break;
                         case 28: phaseName = "lightdef/engine-link-return"; break;
+                        case 29: phaseName = "lightdef/oat-pool-insert"; break;
+                        case 30: phaseName = "lightdef/oat-pool-return"; break;
+                        case 31: phaseName = "lightdef/engine-register"; break;
+                        case 32: phaseName = "lightdef/engine-register-return"; break;
                         default: phaseName = "lightdef/start"; break;
                         }
                     }
 
                     char trace[256];
+                    const char *engineStage = g_switchDbStage;
                     std::snprintf(trace, sizeof(trace),
-                        "[KisakCOD][ZONELOAD] asset-load no-progress zone=%s index=%zu type=%d phase=%s seconds=10\n",
-                        m_zoneName.c_str(), progress.assetIndex, progress.assetType, phaseName);
+                        "[KisakCOD][ZONELOAD] asset-load no-progress zone=%s index=%zu type=%d phase=%s db=%s seconds=10\n",
+                        m_zoneName.c_str(), progress.assetIndex, progress.assetType, phaseName,
+                        engineStage ? engineStage : "(none)");
                     Switch_LogWrite(trace);
                     return;
                 }
