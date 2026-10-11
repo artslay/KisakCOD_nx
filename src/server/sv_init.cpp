@@ -435,7 +435,9 @@ void __cdecl SV_SpawnServer(const char *mapname, int savegame)
         //char zoneName[64];
         //XZoneInfo zoneInfo;
 
-        DB_ResetZoneSize(0);
+        // Track compressed fastfile bytes so the loading UI can show real progress.
+        // A zero value leaves DB_GetLoadedFraction() at 0 for the whole zone load.
+        DB_ResetZoneSize(1);
         //Com_sprintf(zoneName, 0x40u, "%s_load", mapname);
         //zoneInfo.name = zoneName;
         //zoneInfo.allocFlags = DB_ZONE_LOAD;
