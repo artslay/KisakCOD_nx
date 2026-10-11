@@ -10,6 +10,8 @@
 
 #include "Loading/AssetInfoCollector.h"
 
+#include "kisak_zone_hooks_internal.h"
+
 // Referenced Assets:
 #include "../gfximage/gfximage_iw3_load_db.h"
 
@@ -36,10 +38,16 @@ XAssetInfo<GfxLightDef>* Loader_GfxLightDef::Load(GfxLightDef** pAsset)
     m_asset_info = nullptr;
     
     varGfxLightDefPtr = pAsset;
+    KisakZone_SetActiveAssetPhase(4); // enter pointer resolution
     LoadPtr_GfxLightDef(false);
+    KisakZone_SetActiveAssetPhase(5); // pointer resolution returned
     
     if (m_asset_info == nullptr && *pAsset != nullptr)
+    {
+        KisakZone_SetActiveAssetPhase(6); // resolve existing light-definition asset name
         m_asset_info = reinterpret_cast<XAssetInfo<GfxLightDef>*>(GetAssetInfo(AssetName<AssetLightDef>(**pAsset)));
+        KisakZone_SetActiveAssetPhase(7); // existing asset lookup returned
+    }
     
     return m_asset_info;
 }
@@ -68,8 +76,10 @@ void Loader_GfxLightDef::Load_GfxLightImage(const bool atStreamStart)
     
     if (varGfxLightImage->image)
     {
+        KisakZone_SetActiveAssetPhase(14); // enter nested attenuation-image loader
         Loader_GfxImage loader(m_zone, m_stream);
         loader.Load(&varGfxLightImage->image);
+        KisakZone_SetActiveAssetPhase(15); // attenuation-image loader returned
     }
 }
 
@@ -78,15 +88,23 @@ void Loader_GfxLightDef::Load_GfxLightDef(const bool atStreamStart)
     assert(varGfxLightDef != nullptr);
     
     if (atStreamStart)
+    {
+        KisakZone_SetActiveAssetPhase(8); // read serialized light-definition fields
         FillStruct_GfxLightDef(m_stream.LoadWithFill(16));
+        KisakZone_SetActiveAssetPhase(9); // fields decoded
+    }
     
     m_stream.PushBlock(XFILE_BLOCK_VIRTUAL);
     
+    KisakZone_SetActiveAssetPhase(10); // resolve light-definition name
     varXString = &varGfxLightDef->name;
     LoadXString(false);
+    KisakZone_SetActiveAssetPhase(11); // name resolved
     
     varGfxLightImage = &varGfxLightDef->attenuation;
+    KisakZone_SetActiveAssetPhase(12); // resolve attenuation image
     Load_GfxLightImage(false);
+    KisakZone_SetActiveAssetPhase(13); // attenuation image returned
     
     m_stream.PopBlock();
 }
@@ -97,29 +115,40 @@ void Loader_GfxLightDef::LoadPtr_GfxLightDef(const bool atStreamStart)
     
     assert(!atStreamStart);
     
+    KisakZone_SetActiveAssetPhase(16); // enter light-definition pointer loader
     m_stream.PushBlock(XFILE_BLOCK_TEMP);
     
     if (*varGfxLightDefPtr != nullptr)
     {
+        KisakZone_SetActiveAssetPhase(17); // classify serialized light-definition pointer
         const auto zonePtrType = GetZonePointerType(*varGfxLightDefPtr);
         if (zonePtrType == ZonePointerType::FOLLOWING || zonePtrType == ZonePointerType::INSERT)
         {
+            KisakZone_SetActiveAssetPhase(18); // allocate native light-definition object
             *varGfxLightDefPtr = m_stream.AllocOutOfBlock<GfxLightDef>(4);
             
             uintptr_t toInsertLookupEntry = 0;
             if (zonePtrType == ZonePointerType::INSERT)
+            {
+                KisakZone_SetActiveAssetPhase(19); // reserve inserted-alias slot
                 toInsertLookupEntry = m_stream.InsertPointerAliasLookup();
+            }
             
             varGfxLightDef = *varGfxLightDefPtr;
+            KisakZone_SetActiveAssetPhase(20); // decode light-definition payload
             Load_GfxLightDef(true);
+            KisakZone_SetActiveAssetPhase(21); // payload decoded
             
+            KisakZone_SetActiveAssetPhase(22); // register light-definition asset
             LoadAsset_GfxLightDef(varGfxLightDefPtr);
+            KisakZone_SetActiveAssetPhase(23); // asset registration returned
             
             if (zonePtrType == ZonePointerType::INSERT)
                 m_stream.SetInsertedPointerAliasLookup(toInsertLookupEntry, *varGfxLightDefPtr);
         }
         else
         {
+            KisakZone_SetActiveAssetPhase(24); // resolve serialized light-definition alias
             *varGfxLightDefPtr = m_stream.ConvertOffsetToAliasLookup(*varGfxLightDefPtr);
         }
     }
@@ -131,6 +160,7 @@ void Loader_GfxLightDef::LoadAsset_GfxLightDef(GfxLightDef** pAsset)
 {
     assert(pAsset != nullptr);
     
+    KisakZone_SetActiveAssetPhase(25); // collect light-definition references
     AssetInfoCollector assetInfo(m_zone);
     AssetMarker<AssetLightDef> marker(assetInfo);
     marker.Mark(*pAsset);
@@ -138,6 +168,8 @@ void Loader_GfxLightDef::LoadAsset_GfxLightDef(GfxLightDef** pAsset)
     auto* reallocatedAsset = m_zone.Memory().Alloc<GfxLightDef>();
     std::memcpy(reallocatedAsset, *pAsset, sizeof(GfxLightDef));
     
+    KisakZone_SetActiveAssetPhase(26); // link light-definition into engine asset registry
     m_asset_info = reinterpret_cast<XAssetInfo<GfxLightDef>*>(LinkAsset(AssetName<AssetLightDef>(**pAsset), reallocatedAsset, assetInfo.GetDependencies(), assetInfo.GetUsedScriptStrings(), assetInfo.GetIndirectAssetReferences()));
+    KisakZone_SetActiveAssetPhase(27); // engine asset registry returned
     *pAsset = m_asset_info->Asset();
 }
