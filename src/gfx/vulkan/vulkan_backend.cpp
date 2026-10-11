@@ -185,22 +185,34 @@ void VulkanBackend::Shutdown()
     m_samplerCache.clear();
 
     if (m_descriptorPool) vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
+    m_descriptorPool = VK_NULL_HANDLE;
     if (m_pipelineLayout) vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
+    m_pipelineLayout = VK_NULL_HANDLE;
     if (m_vsSamplerLayout) vkDestroyDescriptorSetLayout(m_device, m_vsSamplerLayout, nullptr);
+    m_vsSamplerLayout = VK_NULL_HANDLE;
     if (m_vsUniformLayout) vkDestroyDescriptorSetLayout(m_device, m_vsUniformLayout, nullptr);
+    m_vsUniformLayout = VK_NULL_HANDLE;
     if (m_psSamplerLayout) vkDestroyDescriptorSetLayout(m_device, m_psSamplerLayout, nullptr);
+    m_psSamplerLayout = VK_NULL_HANDLE;
     if (m_psUniformLayout) vkDestroyDescriptorSetLayout(m_device, m_psUniformLayout, nullptr);
+    m_psUniformLayout = VK_NULL_HANDLE;
 
     if (m_uniformMapped && m_uniformRingMemory)
         vkUnmapMemory(m_device, m_uniformRingMemory);
+    m_uniformMapped = nullptr;
     if (m_uniformRing)
         vkDestroyBuffer(m_device, m_uniformRing, nullptr);
+    m_uniformRing = VK_NULL_HANDLE;
     if (m_uniformRingMemory)
         vkFreeMemory(m_device, m_uniformRingMemory, nullptr);
+    m_uniformRingMemory = VK_NULL_HANDLE;
 
     if (m_sync.imageAvailable) vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
+    m_sync.imageAvailable = VK_NULL_HANDLE;
     if (m_sync.renderFinished) vkDestroySemaphore(m_device, m_sync.renderFinished, nullptr);
+    m_sync.renderFinished = VK_NULL_HANDLE;
     if (m_sync.fence) vkDestroyFence(m_device, m_sync.fence, nullptr);
+    m_sync.fence = VK_NULL_HANDLE;
     if (m_immediateCommandPool)
         vkDestroyCommandPool(m_device, m_immediateCommandPool, nullptr);
     if (m_commandPool) vkDestroyCommandPool(m_device, m_commandPool, nullptr);
@@ -229,6 +241,9 @@ void VulkanBackend::Shutdown()
     m_initialized = false;
     m_frameActive = false;
     m_renderingActive = false;
+    m_swapchainNeedsRecreate = false;
+    m_backbufferClearedThisFrame = false;
+    ClearPresentSource();
 
     if (g_backend == this)
         g_backend = nullptr;
