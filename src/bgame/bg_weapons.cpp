@@ -15,6 +15,13 @@
 #include <game/g_local.h>
 #endif
 
+#ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
+#define SWITCH_WEAPON_STAGE(stage) (g_switchFrameStage = "frame/weapon/" stage)
+#else
+#define SWITCH_WEAPON_STAGE(stage) ((void)0)
+#endif
+
 //struct WeaponDef **bg_weaponDefs 82800908     bg_weapons.obj
 //float (*)[29] penetrationDepthTable 82800f10     bg_weapons.obj
 //uint32_t bg_lastParsedWeaponIndex 828010e4     bg_weapons.obj
@@ -219,9 +226,13 @@ void __cdecl BG_FillInAllWeaponItems()
 
 void __cdecl BG_SetupWeaponIndex(uint32_t weapIndex)
 {
+    SWITCH_WEAPON_STAGE("index/setup_ammo");
     BG_SetupAmmoIndexes(weapIndex);
+    SWITCH_WEAPON_STAGE("index/setup_shared_ammo");
     BG_SetupSharedAmmoIndexes(weapIndex);
+    SWITCH_WEAPON_STAGE("index/setup_clip");
     BG_SetupClipIndexes(weapIndex);
+    SWITCH_WEAPON_STAGE("index/fill_items");
     BG_FillInWeaponItems(weapIndex);
 }
 
@@ -238,9 +249,11 @@ void __cdecl BG_SetupAmmoIndexes(uint32_t weapIndex)
     uint32_t index; // [esp+14h] [ebp-8h]
     WeaponDef *weapDef; // [esp+18h] [ebp-4h]
 
+    SWITCH_WEAPON_STAGE("ammo/get_weapon_def");
     weapDef = BG_GetWeaponDef(weapIndex);
     for (index = 0; index < bg_numAmmoTypes; ++index)
     {
+        SWITCH_WEAPON_STAGE("ammo/compare_names");
         if (!strcmp(bg_weapAmmoTypes[index]->szAmmoName, weapDef->szAmmoName))
         {
             weapDef->iAmmoIndex = index;
@@ -259,8 +272,10 @@ void __cdecl BG_SetupSharedAmmoIndexes(uint32_t weapIndex)
     uint32_t index; // [esp+8h] [ebp-8h]
     WeaponDef *weapDef; // [esp+Ch] [ebp-4h]
 
+    SWITCH_WEAPON_STAGE("shared_ammo/get_weapon_def");
     weapDef = BG_GetWeaponDef(weapIndex);
     weapDef->iSharedAmmoCapIndex = -1;
+    SWITCH_WEAPON_STAGE("shared_ammo/read_name");
     if (*weapDef->szSharedAmmoCapName)
     {
         Com_DPrintf(CON_CHANNEL_PLAYERWEAP, "%s: %s\n", weapDef->szInternalName, weapDef->szSharedAmmoCapName);
@@ -273,6 +288,7 @@ void __cdecl BG_SetupSharedAmmoIndexes(uint32_t weapIndex)
                 ++bg_numSharedAmmoCaps;
                 return;
             }
+            SWITCH_WEAPON_STAGE("shared_ammo/compare_names");
             if (!I_stricmp(bg_sharedAmmoCaps[index]->szSharedAmmoCapName, weapDef->szSharedAmmoCapName))
                 break;
         }
@@ -306,9 +322,11 @@ void __cdecl BG_SetupClipIndexes(uint32_t weapIndex)
     uint32_t index; // [esp+14h] [ebp-8h]
     WeaponDef *weapDef; // [esp+18h] [ebp-4h]
 
+    SWITCH_WEAPON_STAGE("clip/get_weapon_def");
     weapDef = BG_GetWeaponDef(weapIndex);
     for (index = 0; index < bg_numWeapClips; ++index)
     {
+        SWITCH_WEAPON_STAGE("clip/compare_names");
         if (!strcmp(bg_weapClips[index]->szClipName, weapDef->szClipName))
         {
             weapDef->iClipIndex = index;
@@ -378,20 +396,25 @@ uint32_t __cdecl BG_GetWeaponIndexForName(const char *name, void(__cdecl *regWea
     uint32_t weapIndex; // [esp+8h] [ebp-8h]
     WeaponDef *weapDef; // [esp+Ch] [ebp-4h]
 
+    SWITCH_WEAPON_STAGE("get_index/check_name");
     if (!*name || !I_stricmp(name, "none"))
         return 0;
+    SWITCH_WEAPON_STAGE("get_index/find_cached");
     weapIndex = BG_FindWeaponIndexForName(name);
     if (weapIndex)
         return weapIndex;
+    SWITCH_WEAPON_STAGE("get_index/load_asset");
     weapDef = BG_LoadWeaponDef(name);
     if (weapDef)
     {
+        SWITCH_WEAPON_STAGE("get_index/check_default_asset");
         if (IsFastFileLoad() && (DB_FindXAssetHeader(ASSET_TYPE_WEAPON, name), DB_IsXAssetDefault(ASSET_TYPE_WEAPON, name)))
         {
             return 0;
         }
         else
         {
+            SWITCH_WEAPON_STAGE("get_index/setup_definition");
             return BG_SetupWeaponDef(weapDef, regWeap);
         }
     }
@@ -406,18 +429,25 @@ uint32_t __cdecl BG_SetupWeaponDef(WeaponDef *weapDef, void(__cdecl *regWeap)(ui
 {
     uint32_t weapIndex; // [esp+0h] [ebp-4h]
 
+    SWITCH_WEAPON_STAGE("setup_definition/allocate_index");
     bg_lastParsedWeaponIndex++;
 
     bcassert(bg_lastParsedWeaponIndex, ARRAY_COUNT(bg_weaponDefs));
 
     weapIndex = bg_lastParsedWeaponIndex;
     bg_weaponDefs[bg_lastParsedWeaponIndex] = weapDef;
+    SWITCH_WEAPON_STAGE("setup_definition/setup_index");
     BG_SetupWeaponIndex(weapIndex);
+    SWITCH_WEAPON_STAGE("setup_definition/setup_alts");
     BG_SetupWeaponAlts(weapIndex, regWeap);
 
     if (regWeap)
+    {
+        SWITCH_WEAPON_STAGE("setup_definition/register_weapon");
         regWeap(weapIndex);
+    }
 
+    SWITCH_WEAPON_STAGE("setup_definition/complete");
     return weapIndex;
 }
 
@@ -426,10 +456,13 @@ void __cdecl BG_SetupWeaponAlts(uint32_t weapIndex, void(__cdecl *regWeap)(uint3
     int32_t altWeaponIndex; // [esp+0h] [ebp-8h]
     WeaponDef *weapDef; // [esp+4h] [ebp-4h]
 
+    SWITCH_WEAPON_STAGE("alts/get_weapon_def");
     weapDef = BG_GetWeaponDef(weapIndex);
     weapDef->altWeaponIndex = 0;
+    SWITCH_WEAPON_STAGE("alts/read_name");
     if (*weapDef->szAltWeaponName)
     {
+        SWITCH_WEAPON_STAGE("alts/load_alt_weapon");
         altWeaponIndex = BG_GetWeaponIndexForName(weapDef->szAltWeaponName, regWeap);
         if (!altWeaponIndex)
             Com_Error(ERR_DROP, "could not find altWeapon %s for weapon %s", weapDef->szAltWeaponName, weapDef->szInternalName);
