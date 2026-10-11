@@ -426,7 +426,9 @@ const char *g_defaultAssetName[ASSET_TYPE_COUNT] =
     "",
     "",
     "",
+#ifdef KISAK_SP
     "",
+#endif
     "light_dynamic",
     "",
     "fonts/consolefont",
