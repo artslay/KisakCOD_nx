@@ -23,7 +23,6 @@
 #include "../gfx/vulkan/vulkan_backend.h"
 #include <database/database.h>
 #include "r_bsp.h"
-#include "r_cmds.h"
 #include "r_debug.h"
 #include "r_font.h"
 #include "r_model.h"
@@ -722,7 +721,6 @@ void R_Shutdown(int destroyWindow)
         {
             R_ShutdownLoadWater();
             R_ShutdownFonts();
-            Material_Shutdown();
             if (s_registered)
             {
                 g_switchFrameStage = "frame/r_shutdown/images";
@@ -746,7 +744,6 @@ void R_Shutdown(int destroyWindow)
             R_ShutdownRenderCommands();
         }
 
-        R_UnregisterCmds();
     }
 
     s_registered = false;
