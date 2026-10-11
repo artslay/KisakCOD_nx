@@ -46,8 +46,9 @@ extern uint32_t g_streamPosStackIndex;
 static void Switch_TraceEarlyXModelCursor(const char *phase)
 {
     if (g_switchCurrentAssetRawType != 3u ||
-        g_switchCurrentAssetIndex < 33 ||
-        g_switchCurrentAssetIndex > 36)
+        (g_switchCurrentAssetIndex != 21 &&
+         (g_switchCurrentAssetIndex < 33 ||
+          g_switchCurrentAssetIndex > 36)))
         return;
 
     auto getOffset = [](uint32_t block) -> uint32_t
@@ -10490,8 +10491,9 @@ static void Switch_TranslateXModelSerialized(
     }
     const bool traceEarlyXModelHeader =
         g_switchCurrentAssetRawType == 3u &&
-        g_switchCurrentAssetIndex >= 32 &&
-        g_switchCurrentAssetIndex <= 36;
+        (g_switchCurrentAssetIndex == 21 ||
+         (g_switchCurrentAssetIndex >= 32 &&
+          g_switchCurrentAssetIndex <= 36));
     if (traceEarlyXModelHeader)
     {
         char trace[384];
@@ -10618,7 +10620,8 @@ void __cdecl Load_XModel(bool atStreamStart)
 {
 #ifdef __SWITCH__
     const bool switchTraceXModel =
-        (g_switchCurrentAssetIndex == 1520 ||
+        (g_switchCurrentAssetIndex == 21 ||
+         g_switchCurrentAssetIndex == 1520 ||
          g_switchCurrentAssetIndex == 4083) &&
         g_switchCurrentAssetRawType == 3u;
     iassert(atStreamStart);
@@ -10985,7 +10988,8 @@ void __cdecl Load_XModelPtr(bool atStreamStart)
     uint32_t value; // [esp+4h] [ebp-8h]
 #ifdef __SWITCH__
     const bool switchTraceXModel =
-        (g_switchCurrentAssetIndex == 1520 ||
+        (g_switchCurrentAssetIndex == 21 ||
+         g_switchCurrentAssetIndex == 1520 ||
          g_switchCurrentAssetIndex == 4083) &&
         g_switchCurrentAssetRawType == 3u;
     if (switchTraceXModel)
