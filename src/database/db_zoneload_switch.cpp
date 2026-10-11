@@ -145,7 +145,7 @@ const char *ResolveAssetName(void *context, const char *name)
 
     const uintptr_t resolved =
         DB_ResolveSwitchSerializedString(reinterpret_cast<uintptr_t>(name));
-    return resolved ? reinterpret_cast<const char *>(resolved) : name;
+    return resolved ? reinterpret_cast<const char *>(resolved) : nullptr;
 }
 
 
