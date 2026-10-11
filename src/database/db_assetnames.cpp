@@ -314,46 +314,25 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
     if (switchTraceTechset4026)
         g_switchDbStage = "asset/name_header_data_ok";
 
-    // SP LightDef has no generic name handler at slot 18.
-    // Resolve the native ARM64 object directly before checking the table.
+    // LightDef's name handler slot is intentionally empty in SP. Read the
+    // native object directly, but keep the same serialized-XString resolution
+    // used for every other asset before the registry hashes the name.
     if (type == ASSET_TYPE_LIGHT_DEF)
+        name = DB_LightDefGetName(header);
+    else
     {
-        return DB_LightDefGetName(header);
+        if (switchTraceTechset4026)
+            g_switchDbStage = "asset/name_header_pre_handler";
+        iassert(DB_XAssetGetNameHandler[type]);
+        name = DB_XAssetGetNameHandler[type](header);
     }
-
-    if (switchTraceTechset4026)
-        g_switchDbStage = "asset/name_header_pre_handler";
 #else
     if (type == ASSET_TYPE_LIGHT_DEF)
-    {
         return DB_LightDefGetName(header);
-    }
-#endif
 
     iassert(DB_XAssetGetNameHandler[type]);
-
-#ifdef __SWITCH__
-    if (type == ASSET_TYPE_FONT &&
-        g_switchCurrentAssetIndex >= 1215 &&
-        g_switchCurrentAssetIndex <= 1221 &&
-        g_switchCurrentAssetRawType == 19u)
-    {
-        const Font_s *font = header->font;
-        const uintptr_t fontName =
-            font ? reinterpret_cast<uintptr_t>(font->fontName) : 0;
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][FONT1215] name_handler font=%p fontName=%p low=%08x\n",
-            static_cast<const void *>(font),
-            reinterpret_cast<const void *>(fontName),
-            static_cast<unsigned>(fontName));
-        Switch_LogWrite(trace);
-        g_switchDbStage = "font/name_handler";
-    }
-#endif
     name = DB_XAssetGetNameHandler[type](header);
+#endif
 
 #ifdef __SWITCH__
     // Some fastfiles store an asset name as a positive offset to another
