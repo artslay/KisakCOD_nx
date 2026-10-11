@@ -299,6 +299,19 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
     LABEL_19:
         DB_WaitXFileStage();
         DB_ReadXFileStage();
+#ifdef __SWITCH__
+        // A short/corrupt fastfile must not spin forever when a read reaches
+        // EOF before this output request has been satisfied.
+        if (g_load.switchFileEof && !g_load.stream.avail_in && g_load.stream.avail_out)
+        {
+            Com_Error(
+                ERR_DROP,
+                "Fastfile for zone '%s' ended early (missing %u decompressed bytes, file offset %llu)",
+                g_load.filename ? g_load.filename : "<unknown>",
+                static_cast<unsigned>(g_load.stream.avail_out),
+                static_cast<unsigned long long>(g_load.switchFileOffset));
+        }
+#endif
     }
 
 }
