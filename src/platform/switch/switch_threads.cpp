@@ -289,8 +289,10 @@ bool __cdecl Sys_SpawnWorkerThread(void (__cdecl *function)(uint32_t), uint32_t 
 char __cdecl Sys_SpawnCinematicsThread(void (__cdecl *function)(uint32_t))
 {
     Switch_LogWrite("[KisakCOD][CINEMATIC] spawn begin\n");
-    InitSwitchEvent(g_cinematicsThreadOutstandingRequestEvent, true, true);
-    InitSwitchEvent(g_cinematicsHostOutstandingRequestEvent, true, false);
+    // These are auto-reset events, matching the original Win32 hand-off:
+    // each host/thread signal must be consumed by exactly one wait.
+    InitSwitchEvent(g_cinematicsThreadOutstandingRequestEvent, false, true);
+    InitSwitchEvent(g_cinematicsHostOutstandingRequestEvent, false, false);
     Switch_LogWrite("[KisakCOD][CINEMATIC] events initialized\n");
 
     Sys_CreateThread(function, THREAD_CONTEXT_CINEMATIC);
