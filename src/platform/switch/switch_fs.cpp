@@ -77,6 +77,8 @@ struct SwitchZipHandle
 static std::vector<SwitchIwdArchive> g_iwdArchives;
 static std::vector<SwitchIwdEntry> g_iwdEntryRecords;
 static std::unordered_map<std::string, uint32_t> g_iwdEntries;
+static std::string g_switchSelectedLanguage = "english";
+static std::string g_switchPrimaryGame = "main";
 static SwitchZipHandle g_zipHandles[65] = {};
 
 static int AllocHandle();
@@ -282,38 +284,75 @@ static bool Switch_GetLocalizedIwdLanguage(
     return true;
 }
 
-static void Switch_IndexIwdArchives(const char *game)
+static std::vector<std::string> Switch_GetGameSearchDirectories(
+    const char *base,
+    const char *gameName,
+    const std::string &selectedLanguage)
 {
-    Switch_ClearIwdIndex();
+    std::vector<std::string> directories;
+    if (!base || !*base)
+        return directories;
 
-    const char *base = fs_basepath && fs_basepath->current.string[0]
-        ? fs_basepath->current.string
-        : kSwitchRoot;
-    const char *gameName = game && *game ? game : "main";
-    const std::string selectedLanguage = Switch_GetStartupLanguage(gameName);
-
-    // Switch package layout: all IWD archives live directly in game/main.
-    // Ordinary iw_XX archives and localized_*.iwd archives share this folder.
-    char gamePath[256];
-    std::snprintf(
-        gamePath,
-        sizeof(gamePath),
-        "%s/%s",
-        base,
-        gameName);
-
-    DIR *directory = opendir(gamePath);
-    if (!directory)
+    auto addDirectory = [&](const std::string &relativePath)
     {
-        char trace[192];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IWD] game directory missing path=%s\n",
-            gamePath);
-        Switch_LogWrite(trace);
+        if (relativePath.empty())
+            return;
+
+        const std::string fullPath =
+            std::string(base) + "/" + relativePath;
+        if (std::find(directories.begin(), directories.end(), fullPath) ==
+            directories.end())
+            directories.push_back(fullPath);
+
+        if (!selectedLanguage.empty())
+        {
+            const std::string localizedPath =
+                fullPath + "/" + selectedLanguage;
+            if (std::find(
+                    directories.begin(),
+                    directories.end(),
+                    localizedPath) == directories.end())
+                directories.push_back(localizedPath);
+        }
+    };
+
+    // Mirror the retail FS_Startup search-path families. Directories are
+    // returned from highest to lowest priority; IWD indexing reverses this
+    // list so duplicate qpaths preserve the same search-path precedence.
+    const char *modName =
+        fs_gameDirVar && fs_gameDirVar->current.string[0]
+            ? fs_gameDirVar->current.string
+            : nullptr;
+    const char *baseGameName =
+        fs_basegame && fs_basegame->current.string[0]
+            ? fs_basegame->current.string
+            : nullptr;
+
+    if (modName && I_stricmp(modName, gameName ? gameName : "main"))
+        addDirectory(modName);
+    if (baseGameName &&
+        I_stricmp(baseGameName, gameName ? gameName : "main") &&
+        (!modName || I_stricmp(baseGameName, modName)))
+        addDirectory(baseGameName);
+
+    const std::string primaryGame =
+        gameName && *gameName ? gameName : "main";
+    addDirectory(primaryGame);
+    addDirectory(primaryGame + "_shared");
+    addDirectory("players");
+    addDirectory("raw");
+    addDirectory("raw_shared");
+
+    return directories;
+}
+
+static void Switch_IndexIwdDirectory(
+    const std::string &directoryPath,
+    const std::string &selectedLanguage)
+{
+    DIR *directory = opendir(directoryPath.c_str());
+    if (!directory)
         return;
-    }
 
     std::vector<std::string> regularArchives;
     std::vector<std::string> localizedArchives;
@@ -370,44 +409,67 @@ static void Switch_IndexIwdArchives(const char *game)
         localizedArchives.end(),
         archiveSort);
 
-    int archiveCount = 0;
-
     auto indexArchives = [&](const std::vector<std::string> &archives)
     {
         for (const std::string &archiveName : archives)
         {
-            char archivePath[256];
-            std::snprintf(
-                archivePath,
-                sizeof(archivePath),
-                "%s/%s/%s",
-                base,
-                gameName,
-                archiveName.c_str());
+            const std::string archivePath =
+                directoryPath + "/" + archiveName;
 
             struct stat st = {};
-            if (stat(archivePath, &st) != 0 || !S_ISREG(st.st_mode))
+            if (stat(archivePath.c_str(), &st) != 0 ||
+                !S_ISREG(st.st_mode))
                 continue;
 
-            Switch_IndexIwdArchive(archivePath);
-            ++archiveCount;
+            Switch_IndexIwdArchive(archivePath.c_str());
         }
     };
 
-    // Normal IWDs first, selected localized IWDs second so localized assets
-    // retain higher precedence without any runtime archive rescans.
+    // Retain the existing per-directory behavior: ordinary IWDs are indexed
+    // first and selected-language IWDs afterwards.
     indexArchives(regularArchives);
     indexArchives(localizedArchives);
+}
 
-    char trace[256];
+static void Switch_IndexIwdArchives(const char *game)
+{
+    Switch_ClearIwdIndex();
+
+    const char *base = fs_basepath && fs_basepath->current.string[0]
+        ? fs_basepath->current.string
+        : kSwitchRoot;
+    const char *gameName = game && *game ? game : "main";
+    g_switchPrimaryGame = gameName;
+    g_switchSelectedLanguage = Switch_GetStartupLanguage(gameName);
+
+    const std::vector<std::string> searchDirectories =
+        Switch_GetGameSearchDirectories(
+            base,
+            gameName,
+            g_switchSelectedLanguage);
+
+    // Index from the lowest-priority directory to the highest-priority one.
+    // Switch_IndexIwdArchive() chains duplicate qpaths, so the last indexed
+    // copy becomes the first candidate exactly as in the engine search path.
+    for (auto directory = searchDirectories.rbegin();
+         directory != searchDirectories.rend();
+         ++directory)
+    {
+        Switch_IndexIwdDirectory(
+            *directory,
+            g_switchSelectedLanguage);
+    }
+
+    char trace[320];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[SWITCH IWD] ready archives=%d files=%zu language=%s game=%s\n",
-        archiveCount,
+        "[SWITCH IWD] ready archives=%zu files=%zu language=%s game=%s searchDirs=%zu\n",
+        g_iwdArchives.size(),
         g_iwdEntries.size(),
-        selectedLanguage.c_str(),
-        gameName);
+        g_switchSelectedLanguage.c_str(),
+        gameName,
+        searchDirectories.size());
     Switch_LogWrite(trace);
 }
 
