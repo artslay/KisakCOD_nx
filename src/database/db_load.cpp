@@ -5792,12 +5792,40 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 uintptr_t resolvedName = 0;
 
 #ifdef __SWITCH__
-                // If the token targets another serialized pointer slot, resolve
-                // that chain only here, for GfxImage names. The resolver first
-                // recognizes real ASCII stream strings, so ordinary direct
-                // XStrings are left untouched.
-                resolvedName =
-                    DB_ResolveSwitchSerializedString(nameAddress);
+                // Stream-4 data is materialized as the database cursor reaches
+                // it. A positive XString token may point forward into this
+                // block, where the bytes can still be stale. Do not interpret
+                // those bytes as another serialized pointer: following a
+                // stale dword can resolve an unrelated short string (for
+                // example "3") and permanently assign the wrong image name.
+                bool namePointsForwardInStream4 = false;
+                if (nameAddress && g_streamBlocks &&
+                    g_streamBlocks[4].data)
+                {
+                    const uintptr_t block4Base =
+                        reinterpret_cast<uintptr_t>(g_streamBlocks[4].data);
+                    const uintptr_t block4End =
+                        block4Base + g_streamBlocks[4].size;
+                    const uintptr_t cursorAddress =
+                        reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+
+                    namePointsForwardInStream4 =
+                        nameAddress >= block4Base &&
+                        nameAddress < block4End &&
+                        cursorAddress >= block4Base &&
+                        cursorAddress <= block4End &&
+                        nameAddress >= cursorAddress;
+                }
+
+                // Follow pointer-slot chains only after the target is already
+                // behind the stream cursor. A forward name is kept as its
+                // direct serialized address; the existing validation below
+                // delays its external pixel load until its bytes are present.
+                if (!namePointsForwardInStream4)
+                {
+                    resolvedName =
+                        DB_ResolveSwitchSerializedString(nameAddress);
+                }
 #endif
 
                 varGfxImage->name =
