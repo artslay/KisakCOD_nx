@@ -3469,7 +3469,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     // Native Switch GfxLightDef can be larger than the legacy XAssetSize
     // union because its pointers are 64-bit. Keep the old storage/alignment,
     // but guarantee room for the native LightDef copy as well.
-    union SwitchXAssetCloneScratch
+    struct SwitchXAssetCloneScratch
     {
         XAssetSize legacy;
         GfxLightDef lightDef;
