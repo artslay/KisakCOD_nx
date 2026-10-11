@@ -4609,7 +4609,7 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][DEFERRED IMAGE NAME UNRESOLVED] count=%zu firstAsset=%d rawType=%u token=%08x name=%p streamBlock=%u streamOffset=%08x first=%08x\\n",
+            "[KisakCOD][DEFERRED IMAGE NAME UNRESOLVED] count=%zu firstAsset=%d rawType=%u token=%08x name=%p streamBlock=%u streamOffset=%08x first=%08x\n",
             writeIndex,
             first.assetIndex,
             first.rawType,
