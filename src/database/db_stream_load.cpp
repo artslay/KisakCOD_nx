@@ -10,6 +10,7 @@ extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 extern uint32_t g_switchCurrentAssetHeader;
 extern const char * volatile g_switchDbStage;
+extern uint32_t g_switchStreamGeneration;
 extern int32_t g_switchCurrentAssetB4Start;
 extern int32_t g_switchPreviousAssetIndex;
 extern uint32_t g_switchPreviousAssetRawType;
@@ -143,6 +144,7 @@ struct SwitchInvalidOffsetTraceKey
 
 struct SwitchPointerStoreTraceKey
 {
+    uint32_t generation;
     uint32_t block;
     uint32_t offset;
     uintptr_t caller;
@@ -202,7 +204,8 @@ void __cdecl DB_LogSwitchPointerStoreIfStream(
     static uint32_t seenCount = 0;
     for (uint32_t i = 0; i < seenCount; ++i)
     {
-        if (seen[i].block == block &&
+        if (seen[i].generation == g_switchStreamGeneration &&
+            seen[i].block == block &&
             seen[i].offset == offset &&
             seen[i].caller == caller &&
             seen[i].operation == operationId)
@@ -220,12 +223,13 @@ void __cdecl DB_LogSwitchPointerStoreIfStream(
         return;
     }
 
-    seen[seenCount++] = {block, offset, caller, operationId};
+    seen[seenCount++] = {g_switchStreamGeneration, block, offset, caller, operationId};
     char trace[512];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][STREAM POINTER STORE] op=%s destBlock=%u destOffset=%08x token=%08x value=%p caller=%p asset=%d rawType=%u rawHeader=%08x stage=%s\n",
+        "[KisakCOD][STREAM POINTER STORE] generation=%u op=%s destBlock=%u destOffset=%08x token=%08x value=%p caller=%p asset=%d rawType=%u rawHeader=%08x stage=%s\n",
+        g_switchStreamGeneration,
         operation ? operation : "<unknown>",
         block,
         offset,
