@@ -5590,123 +5590,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
 
         DB_PushStreamPos(4);
 
-#ifdef __SWITCH__
-        static uint32_t switchDelayedImageStringProbeCount = 0;
-        const bool traceDelayedImageString =
-            serialized.delayLoadPixels != 0 &&
-            switchDelayedImageStringProbeCount < 64u;
 
-        if (traceDelayedImageString)
-        {
-            ++switchDelayedImageStringProbeCount;
-
-            uintptr_t mappedName = 0;
-            uint32_t mappedBlock = UINT32_MAX;
-            uint32_t mappedOffset = UINT32_MAX;
-
-            if (serialized.name != 0 &&
-                serialized.name != UINT32_MAX)
-            {
-                mappedName = DB_ConvertOffsetToPointerValue(serialized.name);
-
-                if (mappedName && g_streamBlocks)
-                {
-                    for (uint32_t block = 0;
-                         block < ARRAY_COUNT(g_streamPosArray);
-                         ++block)
-                    {
-                        if (!g_streamBlocks[block].data)
-                            continue;
-
-                        const uintptr_t base =
-                            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
-                        const uintptr_t end =
-                            base + g_streamBlocks[block].size;
-
-                        if (mappedName >= base && mappedName < end)
-                        {
-                            mappedBlock = block;
-                            mappedOffset =
-                                static_cast<uint32_t>(mappedName - base);
-                            break;
-                        }
-                    }
-                }
-            }
-
-            char trace[1024];
-            int written = std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][XSTRING DELAY PROBE] asset=%d rawType=%u "
-                "delay=%u token=%08x cursorB4=%08x mapped=%p block=%u "
-                "offset=%08x",
-                g_switchCurrentAssetIndex,
-                static_cast<unsigned>(g_switchCurrentAssetRawType),
-                static_cast<unsigned>(serialized.delayLoadPixels),
-                serialized.name,
-                Switch_GetStreamCursorOffset(4),
-                reinterpret_cast<const void *>(mappedName),
-                mappedBlock,
-                mappedOffset);
-
-            if (mappedBlock != UINT32_MAX)
-            {
-                const uint8_t *bytes =
-                    reinterpret_cast<const uint8_t *>(mappedName);
-                const uint32_t remaining =
-                    g_streamBlocks[mappedBlock].size - mappedOffset;
-                const uint32_t count =
-                    remaining < 16u ? remaining : 16u;
-
-                written += std::snprintf(
-                    trace + written,
-                    sizeof(trace) - static_cast<size_t>(written),
-                    " bytes:");
-
-                for (uint32_t i = 0;
-                     i < count &&
-                     static_cast<size_t>(written) + 4 < sizeof(trace);
-                     ++i)
-                {
-                    written += std::snprintf(
-                        trace + written,
-                        sizeof(trace) - static_cast<size_t>(written),
-                        " %02x",
-                        static_cast<unsigned>(bytes[i]));
-                }
-
-                if (mappedBlock == 4u && mappedOffset > 0u)
-                {
-                    const uint8_t *baseBytes =
-                        g_streamBlocks[mappedBlock].data;
-                    const uint32_t beforeCount =
-                        mappedOffset < 8u ? mappedOffset : 8u;
-
-                    written += std::snprintf(
-                        trace + written,
-                        sizeof(trace) - static_cast<size_t>(written),
-                        " before:");
-
-                    for (uint32_t i = beforeCount; i > 0u; --i)
-                    {
-                        written += std::snprintf(
-                            trace + written,
-                            sizeof(trace) - static_cast<size_t>(written),
-                            " %02x",
-                            static_cast<unsigned>(
-                                baseBytes[mappedOffset - i]));
-                    }
-                }
-            }
-
-            std::snprintf(
-                trace + written,
-                sizeof(trace) - static_cast<size_t>(written),
-                "\n");
-            Switch_LogRaw(trace);
-        }
-#endif
 
         // GfxImage names use the 32-bit XString representation from the
         // fastfile. A positive name token normally points directly at the
@@ -10665,6 +10549,26 @@ void __cdecl Load_XModel(bool atStreamStart)
     varXString = &varXModel->name;
     Load_XString(0);
 #ifdef __SWITCH__
+    // A missing runtime model name currently makes DB_LinkXAssetEntry
+    // dereference null. Record the original 32-bit token before the registry
+    // sees this model, so an invalid offset can be traced to the exact asset.
+    if (!varXModel->name)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][XMODEL NULL NAME] asset=%d rawType=%u model=%p nameToken=%08x stream=%u nameLow=%08x stage=%s\n",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<void *>(varXModel),
+            switchSerializedNameToken,
+            static_cast<unsigned>(g_streamPosIndex),
+            static_cast<unsigned>(
+                reinterpret_cast<uintptr_t>(varXModel->name)),
+            g_switchDbStage ? g_switchDbStage : "");
+        Switch_LogWrite(trace);
+    }
     if (switchTraceXModel)
         g_switchDbStage = "xmodel/bonenames";
 #endif
