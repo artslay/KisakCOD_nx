@@ -1688,7 +1688,7 @@ int32_t __cdecl DB_TryLoadXFileInternal(char *zoneName, int32_t zoneFlags)
             sizeof(trace),
             "[KisakCOD][IWI ROOT] fastfile=%s resolved=%s/%s\n",
             zoneName,
-            kSwitchRoot,
+            Sys_DefaultInstallPath(),
             filename);
         Switch_LogWrite(trace);
     }
