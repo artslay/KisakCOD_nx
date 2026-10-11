@@ -65,6 +65,10 @@ CPP_SOURCES := $(shell find src -type f -name '*.cpp' \
     ! -name 'scr_yacc.cpp' \
     ! -name 'scr_compiler2.cpp' )
 
+# Required by Phys_CollideBoxWithTriangleList; keep other optional trimesh
+# backends excluded from this Switch build.
+CPP_SOURCES += src/physics/ode/collision_trimesh_box.cpp
+
 C_SOURCES := $(shell find src -type f -name '*.c' \
     ! -path 'src/gfx_d3d/*' \
     ! -path 'src/win32/*' \
