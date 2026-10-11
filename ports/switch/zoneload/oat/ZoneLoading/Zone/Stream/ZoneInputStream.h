@@ -203,6 +203,9 @@ public:
 
     virtual void* ConvertOffsetToPointerNative(const void* offset) = 0;
 
+    // Resolve a candidate XString using the stream's own bounded block buffers.
+    virtual const char* ResolveStringPointer(const char* candidate) const = 0;
+
     template<typename T> T* ConvertOffsetToPointerNative(T* offset)
     {
         return static_cast<T*>(ConvertOffsetToPointerNative(static_cast<const void*>(offset)));
