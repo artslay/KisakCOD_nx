@@ -5558,12 +5558,60 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
     // every following stream-0 object.
     Load_Stream(1, (unsigned char *)varGfxImageLoadDef, 16);
 
-
-
-
-
-
-
+#ifdef __SWITCH__
+    // Record the serialized external-vs-inline decision for the images that
+    // currently fail their IWI lookup. This distinguishes a genuine
+    // resourceSize==0 request from a misread/misaligned fastfile header.
+    if (g_switchCurrentAssetRawType == 4u &&
+        (g_switchCurrentAssetIndex == 4007 ||
+         g_switchCurrentAssetIndex == 4022 ||
+         g_switchCurrentAssetIndex == 4034 ||
+         g_switchCurrentAssetIndex == 4049 ||
+         g_switchCurrentAssetIndex == 4064 ||
+         g_switchCurrentAssetIndex == 4069 ||
+         g_switchCurrentAssetIndex == 4072))
+    {
+        const uint8_t *bytes =
+            reinterpret_cast<const uint8_t *>(varGfxImageLoadDef);
+        char trace[512];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][GFXIMAGE TRACE] LOADDEF asset=%d image=%p name=%p category=%u delay=%u stream=%u b0=%08x b4=%08x level=%u flags=%u dims=%d,%d,%d format=%d resourceSize=%d raw=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\\n",
+            g_switchCurrentAssetIndex,
+            static_cast<void *>(varGfxImage),
+            varGfxImage ? static_cast<const void *>(varGfxImage->name) : nullptr,
+            varGfxImage ? static_cast<unsigned>(varGfxImage->category) : 255u,
+            varGfxImage ? static_cast<unsigned>(varGfxImage->delayLoadPixels) : 255u,
+            static_cast<unsigned>(g_streamPosIndex),
+            Switch_GetStreamCursorOffset(0),
+            Switch_GetStreamCursorOffset(4),
+            static_cast<unsigned>(varGfxImageLoadDef->levelCount),
+            static_cast<unsigned>(varGfxImageLoadDef->flags),
+            static_cast<int>(varGfxImageLoadDef->dimensions[0]),
+            static_cast<int>(varGfxImageLoadDef->dimensions[1]),
+            static_cast<int>(varGfxImageLoadDef->dimensions[2]),
+            static_cast<int>(varGfxImageLoadDef->format),
+            varGfxImageLoadDef->resourceSize,
+            static_cast<unsigned>(bytes[0]),
+            static_cast<unsigned>(bytes[1]),
+            static_cast<unsigned>(bytes[2]),
+            static_cast<unsigned>(bytes[3]),
+            static_cast<unsigned>(bytes[4]),
+            static_cast<unsigned>(bytes[5]),
+            static_cast<unsigned>(bytes[6]),
+            static_cast<unsigned>(bytes[7]),
+            static_cast<unsigned>(bytes[8]),
+            static_cast<unsigned>(bytes[9]),
+            static_cast<unsigned>(bytes[10]),
+            static_cast<unsigned>(bytes[11]),
+            static_cast<unsigned>(bytes[12]),
+            static_cast<unsigned>(bytes[13]),
+            static_cast<unsigned>(bytes[14]),
+            static_cast<unsigned>(bytes[15]));
+        Switch_LogWrite(trace);
+    }
+#endif
 
     if (DB_GetStreamPos() != varGfxImageLoadDef->data)
         MyAssertHandler(
