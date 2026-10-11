@@ -270,9 +270,18 @@ static void R_LoadGraphicsAssets()
 }
 
 void R_InitGraphicsApi() {
-    // A map change calls R_Shutdown(false): renderer registration is reset,
-    // but the Vulkan device and compatibility device remain alive. Initialize
-    // a backend only after a full shutdown has actually discarded it.
+    // The shared renderer's R_InitGraphicsApi() calls R_InitSystems() directly
+    // when the device already exists. R_Init() handles that final systems
+    // initialization after this function returns. Do not recreate render
+    // targets, static buffers, dynamic buffers, queries, or cinematic state on
+    // a map restart where R_Shutdown(false) preserved the devices.
+    if (g_gfxBackend && dx.device)
+    {
+        gfxCmdBufState.prim.device = dx.device;
+        return;
+    }
+
+    // Initialize a backend only after a full shutdown has discarded it.
     if (!g_gfxBackend)
     {
         g_gfxBackend = CreateVulkanBackend();
