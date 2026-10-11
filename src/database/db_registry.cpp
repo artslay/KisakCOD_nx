@@ -478,6 +478,33 @@ static XAssetEntryPoolEntry *__cdecl DB_AllocXAssetEntry(XAssetType type, uint8_
 static XAssetHeader __cdecl DB_AllocXAssetHeader(XAssetType type);
 static void __cdecl DB_PrintAssetName(XAssetHeader header, int32_t *data);
 static void __cdecl DB_CloneXAssetInternal(const XAsset *from, XAsset *to);
+#ifdef __SWITCH__
+// LightDef's runtime structure has native 64-bit pointers on Switch. Keep this
+// copy independent of the legacy asset-size dispatch used by the generic clone
+// routine: a bad/legacy size-table entry here can stall the whole DB registry.
+static void __cdecl DB_CloneXAssetInternalSwitch(const XAsset *from, XAsset *to)
+{
+    if (from && to && from->type == ASSET_TYPE_LIGHT_DEF)
+    {
+        GfxLightDef *destination = to->header.lightDef;
+        const GfxLightDef *source = from->header.lightDef;
+        if (!source || !destination)
+        {
+            Com_Error(ERR_DROP, "Switch LightDef clone received a null asset");
+            return;
+        }
+
+        g_switchDbStage = "asset/clone/lightdef-copy";
+        std::memcpy(destination, source, sizeof(GfxLightDef));
+        g_switchDbStage = "asset/clone/lightdef-copy-return";
+        return;
+    }
+
+    DB_CloneXAssetInternalSwitch(from, to);
+}
+#else
+#define DB_CloneXAssetInternalSwitch DB_CloneXAssetInternal
+#endif
 static XAssetHeader __cdecl DB_FindXAssetDefaultHeaderInternal(XAssetType type);
 static void __cdecl PrintWaitedError(XAssetType type, const char *name, int32_t waitedMsec);
 static bool __cdecl DB_GetInitializing();
@@ -1069,7 +1096,7 @@ LABEL_4:
                     ++g_defaultAssetCount;
                     assetEntry->zoneIndex = 0;
                     name = DB_GetXAssetName(&assetEntry->asset);
-                    DB_CloneXAssetInternal(&asset, &assetEntry->asset);
+                    DB_CloneXAssetInternalSwitch(&asset, &assetEntry->asset);
                     DB_SetXAssetName(&assetEntry->asset, name);
                     goto LABEL_24;
                 }
@@ -1437,7 +1464,7 @@ void __cdecl DB_CloneXAsset(const XAsset *from, XAsset *to)
     if (from->type != to->type)
         MyAssertHandler(".\\database\\db_registry.cpp", 2504, 0, "%s", "from->type == to->type");
     DB_DynamicCloneXAsset(to->header, from->header, to->type, 0);
-    DB_CloneXAssetInternal(from, to);
+    DB_CloneXAssetInternalSwitch(from, to);
 }
 
 void DB_SyncExternalAssets()
@@ -2319,7 +2346,7 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, char *name)
         Switch_LogWrite("[SWITCH DEFAULT TECHSET] before DB_CloneXAssetInternal\n");
     }
 #endif
-    DB_CloneXAssetInternal(&asset, &newEntry->asset);
+    DB_CloneXAssetInternalSwitch(&asset, &newEntry->asset);
 #ifdef __SWITCH__
     if (traceDefaultTechset)
     {
@@ -2373,7 +2400,7 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, char *name)
 
 
 
-void __cdecl DB_CloneXAssetInternal(const XAsset *from, XAsset *to)
+void __cdecl DB_CloneXAssetInternalSwitch(const XAsset *from, XAsset *to)
 {
     uint32_t size; // [esp+0h] [ebp-4h]
 
@@ -2548,7 +2575,7 @@ void __cdecl DB_CloneXAssetEntry(const XAssetEntry *from, XAssetEntry *to)
 {
     iassert(from->asset.type == to->asset.type);
     DB_DynamicCloneXAsset(to->asset.header, from->asset.header, to->asset.type, to->zoneIndex == 0);
-    DB_CloneXAssetInternal(&from->asset, &to->asset);
+    DB_CloneXAssetInternalSwitch(&from->asset, &to->asset);
     to->zoneIndex = from->zoneIndex;
 }
 
@@ -3989,7 +4016,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 #ifdef __SWITCH__
         g_switchDbStage = "asset/clone";
 #endif
-        DB_CloneXAssetInternal(&asset, &newEntry->entry.asset);
+        DB_CloneXAssetInternalSwitch(&asset, &newEntry->entry.asset);
     }
 
     if (!existingEntryIndex)
@@ -4061,11 +4088,11 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
             existingEntry->entry.nextOverride = static_cast<uint16_t>(newEntry - g_assetEntryPool);
             asset.header.xmodelPieces = reinterpret_cast<XModelPieces *>(&assetSize);
             asset.type = type;
-            DB_CloneXAssetInternal(&existingEntry->entry.asset, &asset);
+            DB_CloneXAssetInternalSwitch(&existingEntry->entry.asset, &asset);
 
             zoneIndex = existingEntry->entry.zoneIndex;
             DB_CloneXAssetEntry(&newEntry->entry, &existingEntry->entry);
-            DB_CloneXAssetInternal(&asset, &newEntry->entry.asset);
+            DB_CloneXAssetInternalSwitch(&asset, &newEntry->entry.asset);
             newEntry->entry.zoneIndex = zoneIndex;
         }
         else
