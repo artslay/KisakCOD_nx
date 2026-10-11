@@ -56,29 +56,36 @@ void Loader_Font_s::FillStruct_Font_s(const ZoneStreamFillReadAccessor& fillAcce
 void Loader_Font_s::Load_Font_s(const bool atStreamStart)
 {
     assert(varFont_s != nullptr);
-    
+
     if (atStreamStart)
+    {
+        KisakZone_SetActiveAssetPhase(1); // read serialized Font_s fields
         FillStruct_Font_s(m_stream.LoadWithFill(24));
-    
+    }
+
     m_stream.PushBlock(XFILE_BLOCK_VIRTUAL);
-    
+
+    KisakZone_SetActiveAssetPhase(2); // resolve font name
     varXString = &varFont_s->fontName;
     LoadXString(false);
-    
+
     if (varFont_s->material)
     {
+        KisakZone_SetActiveAssetPhase(3); // resolve/load primary material
         Loader_Material loader(m_zone, m_stream);
         loader.Load(&varFont_s->material);
     }
-    
+
     if (varFont_s->glowMaterial)
     {
+        KisakZone_SetActiveAssetPhase(4); // resolve/load glow material
         Loader_Material loader(m_zone, m_stream);
         loader.Load(&varFont_s->glowMaterial);
     }
-    
+
     if (varFont_s->glyphs)
     {
+        KisakZone_SetActiveAssetPhase(5); // load glyph array
         const auto zonePtrType = GetZonePointerType(varFont_s->glyphs);
         if (zonePtrType == ZonePointerType::FOLLOWING)
         {
@@ -90,7 +97,7 @@ void Loader_Font_s::Load_Font_s(const bool atStreamStart)
             varFont_s->glyphs = m_stream.ConvertOffsetToPointerNative(varFont_s->glyphs);
         }
     }
-    
+
     m_stream.PopBlock();
 }
 
@@ -115,7 +122,8 @@ void Loader_Font_s::LoadPtr_Font_s(const bool atStreamStart)
             
             varFont_s = *varFont_sPtr;
             Load_Font_s(true);
-            
+
+            KisakZone_SetActiveAssetPhase(6); // mark/register Font_s in OAT and engine pools
             LoadAsset_Font_s(varFont_sPtr);
             
             if (zonePtrType == ZonePointerType::INSERT)
