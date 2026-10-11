@@ -408,6 +408,7 @@ void Switch_LogWrite(const char *msg)
     // for targeted debugging, but are disabled by default.
     static constexpr const char *const kSuppressedPrefixes[] =
     {
+        "[KisakCOD][INTRO]",
         "[KisakCOD][UI ",
         "[KisakCOD][UIMAIN]",
         "[KisakCOD][RTHREAD]",
