@@ -21,6 +21,7 @@ namespace
     constexpr size_t kNoActiveAsset = std::numeric_limits<size_t>::max();
     std::atomic<size_t> s_kisakActiveAssetIndex{kNoActiveAsset};
     std::atomic<int> s_kisakActiveAssetType{-1};
+    std::atomic<int> s_kisakActiveAssetPhase{0};
     // Even values mean the snapshot is stable; odd values mean a writer is updating it.
     std::atomic<uint64_t> s_kisakAssetProgressSerial{0};
 }
@@ -29,7 +30,15 @@ void KisakZone_SetActiveAsset(const size_t assetIndex, const int assetType)
 {
     s_kisakAssetProgressSerial.fetch_add(1, std::memory_order_acq_rel);
     s_kisakActiveAssetType.store(assetType, std::memory_order_relaxed);
+    s_kisakActiveAssetPhase.store(0, std::memory_order_relaxed);
     s_kisakActiveAssetIndex.store(assetIndex, std::memory_order_relaxed);
+    s_kisakAssetProgressSerial.fetch_add(1, std::memory_order_release);
+}
+
+void KisakZone_SetActiveAssetPhase(const int phase)
+{
+    s_kisakAssetProgressSerial.fetch_add(1, std::memory_order_acq_rel);
+    s_kisakActiveAssetPhase.store(phase, std::memory_order_relaxed);
     s_kisakAssetProgressSerial.fetch_add(1, std::memory_order_release);
 }
 
@@ -37,6 +46,7 @@ void KisakZone_ClearActiveAsset()
 {
     s_kisakAssetProgressSerial.fetch_add(1, std::memory_order_acq_rel);
     s_kisakActiveAssetType.store(-1, std::memory_order_relaxed);
+    s_kisakActiveAssetPhase.store(0, std::memory_order_relaxed);
     s_kisakActiveAssetIndex.store(kNoActiveAsset, std::memory_order_relaxed);
     s_kisakAssetProgressSerial.fetch_add(1, std::memory_order_release);
 }
@@ -51,9 +61,10 @@ KisakZoneAssetProgress KisakZone_GetActiveAssetProgress()
 
         const size_t index = s_kisakActiveAssetIndex.load(std::memory_order_relaxed);
         const int type = s_kisakActiveAssetType.load(std::memory_order_relaxed);
+        const int phase = s_kisakActiveAssetPhase.load(std::memory_order_relaxed);
         const uint64_t after = s_kisakAssetProgressSerial.load(std::memory_order_acquire);
         if (before == after)
-            return {index, type, after, index != kNoActiveAsset};
+            return {index, type, phase, after, index != kNoActiveAsset};
     }
 }
 
