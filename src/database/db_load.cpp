@@ -5577,7 +5577,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][GFXIMAGE TRACE] LOADDEF asset=%d image=%p name=%p category=%u delay=%u stream=%u b0=%08x b4=%08x level=%u flags=%u dims=%d,%d,%d format=%d resourceSize=%d raw=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\\n",
+            "[KisakCOD][GFXIMAGE TRACE] LOADDEF asset=%d image=%p name=%p category=%u delay=%u stream=%u b0=%08x b4=%08x level=%u flags=%u dims=%d,%d,%d format=%d resourceSize=%d raw=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
             g_switchCurrentAssetIndex,
             static_cast<void *>(varGfxImage),
             varGfxImage ? static_cast<const void *>(varGfxImage->name) : nullptr,
