@@ -33,6 +33,7 @@ extern uint32_t g_switchImageAdds;
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 extern uint32_t g_switchCurrentAssetHeader;
+extern uint32_t g_switchLastGfxImageNameToken;
 #endif
 #include <qcommon/com_bsp.h>
 #include <gfx_d3d/r_init.h>
@@ -493,9 +494,38 @@ struct SwitchDeferredImageAsset
 {
     GfxImage **slot;
     GfxImage *image;
+    int32_t assetIndex;
+    uint32_t rawType;
+    uint32_t nameToken;
+    uintptr_t originalName;
 };
 
 static std::vector<SwitchDeferredImageAsset> g_switchDeferredImageAssets;
+
+static bool Switch_ShouldTraceDeferredImageName(const char *name)
+{
+    static constexpr const char *const targets[] =
+    {
+        "3",
+        "codeMeshArg",
+        "hud_burningcaricon",
+        "hud_checkbox_active",
+        "hud_objective_tank",
+        "sm2/effect",
+        "decode_characters_glow"
+    };
+
+    if (!name)
+        return false;
+
+    for (const char *target : targets)
+    {
+        if (I_stricmp(name, target) == 0)
+            return true;
+    }
+
+    return false;
+}
 #endif
 
 static void DB_ResolveSwitchFxReferenceFixups();
@@ -4340,7 +4370,14 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
         if (!alreadyQueued)
         {
             g_switchDeferredImageAssets.push_back(
-                {reinterpret_cast<GfxImage **>(image), image->image});
+                {
+                    reinterpret_cast<GfxImage **>(image),
+                    image->image,
+                    g_switchCurrentAssetIndex,
+                    g_switchCurrentAssetRawType,
+                    g_switchLastGfxImageNameToken,
+                    reinterpret_cast<uintptr_t>(image->image->name)
+                });
         }
         return;
     }
@@ -4470,6 +4507,27 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
                 static_cast<unsigned>(nameOffset),
                 finalName != reinterpret_cast<const char *>(resolvedName) ? 1u : 0u);
             Switch_LogWrite(trace);
+
+            if (Switch_ShouldTraceDeferredImageName(finalName))
+            {
+                char originTrace[512];
+                std::snprintf(
+                    originTrace,
+                    sizeof(originTrace),
+                    "[KisakCOD][GFXIMAGE NAME ORIGIN] asset=%d rawType=%u token=%08x name=%s image=%p slot=%p originalName=%p sourceBlock=%u sourceOffset=%08x directStreamString=%u stable=%u\n",
+                    deferred.assetIndex,
+                    deferred.rawType,
+                    deferred.nameToken,
+                    finalName ? finalName : "<null>",
+                    static_cast<void *>(image),
+                    static_cast<void *>(slot),
+                    reinterpret_cast<const void *>(deferred.originalName),
+                    nameBlock,
+                    static_cast<unsigned>(nameOffset),
+                    directNameIsStreamString ? 1u : 0u,
+                    finalName != reinterpret_cast<const char *>(resolvedName) ? 1u : 0u);
+                Switch_LogWrite(originTrace);
+            }
         }
 #endif
 
