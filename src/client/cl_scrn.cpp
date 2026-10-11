@@ -234,6 +234,11 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #endif
                 SCR_ClearScreen();
 #ifdef __SWITCH__
+                // The renderer keeps refreshing the load screen remotely while
+                // DB_SyncXAssets waits. Draw the active map-load cinematic into
+                // each of those frames before UI_Refresh overlays the progress UI.
+                g_switchFrameStage = "frame/scr/draw_field/loading_cinematic";
+                SCR_DrawCinematic(0);
                 g_switchFrameStage = "frame/scr/draw_field/loading_refresh";
 #endif
                 goto LABEL_14;
@@ -260,6 +265,14 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #endif
             SCR_ClearScreen();
 #ifdef __SWITCH__
+            // Preserve the cinematic behind a fullscreen loading menu as well.
+            // Earlier CA_DISCONNECTED/CA_LOGO cases fall through here, so only
+            // draw it for the actual loading state.
+            if (connectionState == CA_LOADING)
+            {
+                g_switchFrameStage = "frame/scr/draw_field/loading_cinematic";
+                SCR_DrawCinematic(0);
+            }
             g_switchFrameStage = "frame/scr/draw_field/loading_ui";
 #endif
 			UI_Refresh();
