@@ -411,30 +411,119 @@ static void Switch_IndexIwdArchives(const char *game)
     Switch_LogWrite(trace);
 }
 
+static bool Switch_ShouldTraceIwiLookup(const std::string &normalizedName)
+{
+    static constexpr const char *const targets[] =
+    {
+        "images/3.iwi",
+        "images/codemesharg.iwi",
+        "images/hud_burningcaricon.iwi",
+        "images/hud_checkbox_active.iwi",
+        "images/hud_objective_tank.iwi",
+        "images/sm2/effect.iwi",
+        "images/decode_characters_glow.iwi"
+    };
+
+    for (const char *target : targets)
+    {
+        if (normalizedName == target)
+            return true;
+    }
+
+    return false;
+}
+
 static bool Switch_OpenIwdFile(
     const char *filename,
     const SwitchIwdEntry &entry,
     int *fileHandle)
 {
+    const bool trace = Switch_ShouldTraceIwiLookup(SwitchNormalizePath(filename));
     if (entry.archiveIndex >= g_iwdArchives.size())
+    {
+        if (trace)
+            Switch_LogWrite("[KisakCOD][IWI ROOT] indexed entry has invalid archive index\n");
         return false;
+    }
 
     SwitchIwdArchive &archive = g_iwdArchives[entry.archiveIndex];
     if (!archive.file || entry.infoPosition == 0)
+    {
+        if (trace)
+        {
+            char detail[320];
+            std::snprintf(
+                detail,
+                sizeof(detail),
+                "[KisakCOD][IWI ROOT] entry rejected name=%s archive=%s pos=%u archiveOpen=%u\n",
+                filename ? filename : "<null>",
+                archive.path.c_str(),
+                static_cast<unsigned>(entry.infoPosition),
+                archive.file ? 1u : 0u);
+            Switch_LogWrite(detail);
+        }
         return false;
+    }
 
     unzFile clone = unzReOpen(archive.path.c_str(), archive.file);
     if (!clone)
+    {
+        if (trace)
+        {
+            char detail[320];
+            std::snprintf(
+                detail,
+                sizeof(detail),
+                "[KisakCOD][IWI ROOT] reopen failed name=%s archive=%s pos=%u\n",
+                filename ? filename : "<null>",
+                archive.path.c_str(),
+                static_cast<unsigned>(entry.infoPosition));
+            Switch_LogWrite(detail);
+        }
         return false;
+    }
 
     // Match the original CoD4 fast path:
     // hash/index lookup -> saved ZIP central-directory position -> open.
     // Do not scan the archive or re-read the filename at runtime.
-    if (unzSetCurrentFileInfoPosition(clone, entry.infoPosition) != UNZ_OK ||
-        unzOpenCurrentFile(clone) != UNZ_OK)
+    const int positionResult =
+        unzSetCurrentFileInfoPosition(clone, entry.infoPosition);
+    const int openResult = positionResult == UNZ_OK
+        ? unzOpenCurrentFile(clone)
+        : positionResult;
+    if (positionResult != UNZ_OK || openResult != UNZ_OK)
     {
+        if (trace)
+        {
+            char detail[384];
+            std::snprintf(
+                detail,
+                sizeof(detail),
+                "[KisakCOD][IWI ROOT] open failed name=%s archive=%s pos=%u setPosition=%d open=%d expectedSize=%u\n",
+                filename ? filename : "<null>",
+                archive.path.c_str(),
+                static_cast<unsigned>(entry.infoPosition),
+                positionResult,
+                openResult,
+                static_cast<unsigned>(entry.size));
+            Switch_LogWrite(detail);
+        }
         unzClose(clone);
         return false;
+    }
+
+    if (trace)
+    {
+        char detail[320];
+        std::snprintf(
+            detail,
+            sizeof(detail),
+            "[KisakCOD][IWI ROOT] opened name=%s archive=%s pos=%u size=%u\n",
+            filename ? filename : "<null>",
+            archive.path.c_str(),
+            static_cast<unsigned>(entry.infoPosition),
+            static_cast<unsigned>(entry.size));
+        Switch_LogWrite(detail);
     }
 
     const int h = AllocHandle();
@@ -906,8 +995,7 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
         return g_fsh[h].fileSize;
     }
 
-    const bool traceImage3 =
-        normalizedName == "images/3.iwi";
+    const bool traceImage3 = Switch_ShouldTraceIwiLookup(normalizedName);
 
     if (traceImage3)
     {
@@ -921,12 +1009,13 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=1 archive=%s size=%u\n",
+                "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=1 archive=%s infoPosition=%u size=%u\n",
                 filename,
                 normalizedName.c_str(),
                 entry.archiveIndex < g_iwdArchives.size()
                     ? g_iwdArchives[entry.archiveIndex].path.c_str()
                     : "invalid",
+                static_cast<unsigned>(entry.infoPosition),
                 static_cast<unsigned>(entry.size));
         }
         else
@@ -934,9 +1023,11 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=0 archive=none\n",
+                "[KisakCOD][IWI ROOT] raw=%s normalized=%s found=0 archive=none entries=%zu archives=%zu\n",
                 filename,
-                normalizedName.c_str());
+                normalizedName.c_str(),
+                g_iwdEntryRecords.size(),
+                g_iwdArchives.size());
         }
 
         Switch_LogWrite(trace);
