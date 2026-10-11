@@ -25,7 +25,6 @@ XAssetInfoGeneric* AssetLoader::LinkAsset(std::string name,
     if (const auto* hooks = KisakZone_CurrentHooks(); hooks && info)
     {
         info->m_ptr = hooks->linkAsset(hooks->context, static_cast<int>(m_asset_type), info->m_ptr);
-        KisakZone_NoteAssetLinked();
     }
 
     return info;
