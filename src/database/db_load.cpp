@@ -25,6 +25,7 @@
 #ifdef __SWITCH__
 extern void Switch_LogRaw(const char *msg);
 extern uint64_t DB_GetSwitchInflatedOutputBytes();
+extern bool Switch_IsStreamAsciiImageName(uintptr_t address, uint32_t *blockOut, uint32_t *offsetOut);
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 
@@ -5763,12 +5764,26 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                         reinterpret_cast<const void *>(nameAddress),
                         sizeof(firstWord));
 
+                    // A single printable first byte is not enough to
+                    // establish that a forward XString has been materialized.
+                    // The target may still contain stale bytes from an earlier
+                    // occupant of stream 4 (for example 42 29 24 FF 00 ...).
+                    // Validate the complete NUL-terminated ASCII run before
+                    // allowing the image to be registered under this name.
                     const bool nameReady =
                         varGfxImage->name &&
-                        varGfxImage->name[0] >= 0x21 &&
-                        varGfxImage->name[0] <= 0x7E;
+                        Switch_IsStreamAsciiImageName(
+                            reinterpret_cast<uintptr_t>(varGfxImage->name),
+                            nullptr,
+                            nullptr);
+                    const bool targetReady =
+                        Switch_IsStreamAsciiImageName(
+                            nameAddress,
+                            nullptr,
+                            nullptr);
 
                     if (!nameReady ||
+                        !targetReady ||
                         firstWord == UINT32_MAX)
                     {
                         varGfxImage->delayLoadPixels = true;
