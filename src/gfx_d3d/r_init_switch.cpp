@@ -26,14 +26,7 @@
 #include "r_cmds.h"
 #include "r_debug.h"
 #include "r_font.h"
-#include "r_image.h"
-#include "r_light.h"
-#include "r_material.h"
 #include "r_model.h"
-#include "r_model_lighting.h"
-#include "r_rendercmds.h"
-#include "r_staticmodelcache.h"
-#include "r_water.h"
 #include "rb_light.h"
 #ifdef __SWITCH__
 #include <cstdio>
