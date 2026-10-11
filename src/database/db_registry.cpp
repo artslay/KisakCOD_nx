@@ -4090,6 +4090,9 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         g_switchDbStage = "asset/clone";
 #endif
         DB_CloneXAssetInternalSwitch(&asset, &newEntry->entry.asset);
+#ifdef __SWITCH__
+        g_switchDbStage = "asset/link/clone_return";
+#endif
     }
 
     if (!existingEntryIndex)
@@ -4100,8 +4103,14 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     }
 
     iassert(existingEntry);
+#ifdef __SWITCH__
+    g_switchDbStage = "asset/link/existing_entry";
+#endif
     if (existingEntry->entry.zoneIndex)
     {
+#ifdef __SWITCH__
+        g_switchDbStage = "asset/link/existing_zone";
+#endif
         iassert(existingEntry->entry.zoneIndex != newEntry->entry.zoneIndex);
 
         if (!*g_defaultAssetName[type] && type != ASSET_TYPE_RAWFILE && type != ASSET_TYPE_MAP_ENTS)
@@ -4115,9 +4124,13 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
                 g_zones[newEntry->entry.zoneIndex].name);
         }
 
+#ifdef __SWITCH__
+        g_switchDbStage = "asset/link/override_compare";
+#endif
         if (!DB_OverrideAsset(newEntry->entry.zoneIndex, existingEntry->entry.zoneIndex))
         {
 #ifdef __SWITCH__
+            g_switchDbStage = "asset/link/override_chain";
             uint32_t switchOverrideGuard = 0;
 #endif
             for (pOverrideAssetEntryIndex = &existingEntry->entry.nextOverride;
@@ -4150,6 +4163,9 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         goto LABEL_46;
     }
 
+#ifdef __SWITCH__
+    g_switchDbStage = "asset/link/default_entry";
+#endif
     iassert(g_defaultAssetName[type][0]);
     iassert(!existingEntry->entry.nextOverride);
     iassert(g_defaultAssetCount);
@@ -4169,8 +4185,14 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 
             if (existingEntry->entry.inuse)
             {
+#ifdef __SWITCH__
+                g_switchDbStage = "asset/link/mark_existing";
+#endif
                 varXAsset = &existingEntry->entry.asset;
                 Mark_XAsset();
+#ifdef __SWITCH__
+                g_switchDbStage = "asset/link/mark_existing_return";
+#endif
             }
 
             newEntry->entry.nextOverride = existingEntry->entry.nextOverride;
@@ -4180,13 +4202,28 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
             DB_CloneXAssetInternalSwitch(&existingEntry->entry.asset, &asset);
 
             zoneIndex = existingEntry->entry.zoneIndex;
+#ifdef __SWITCH__
+            g_switchDbStage = "asset/link/clone_entry";
+#endif
             DB_CloneXAssetEntry(&newEntry->entry, &existingEntry->entry);
+#ifdef __SWITCH__
+            g_switchDbStage = "asset/link/clone_entry_return";
+#endif
             DB_CloneXAssetInternalSwitch(&asset, &newEntry->entry.asset);
+#ifdef __SWITCH__
+            g_switchDbStage = "asset/link/restore_old_asset_return";
+#endif
             newEntry->entry.zoneIndex = zoneIndex;
         }
         else
         {
+#ifdef __SWITCH__
+            g_switchDbStage = "asset/link/delayed_clone";
+#endif
             DB_DelayedCloneXAsset(&newEntry->entry);
+#ifdef __SWITCH__
+            g_switchDbStage = "asset/link/delayed_clone_return";
+#endif
         }
 
         return existingEntry;
@@ -4200,8 +4237,17 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
         Mark_XAsset();
     }
 
+#ifdef __SWITCH__
+    g_switchDbStage = "asset/link/replace_default";
+#endif
     DB_CloneXAssetEntry(&newEntry->entry, &existingEntry->entry);
+#ifdef __SWITCH__
+    g_switchDbStage = "asset/link/replace_default_return";
+#endif
     DB_FreeXAssetEntry(newEntry);
+#ifdef __SWITCH__
+    g_switchDbStage = "asset/link/free_replaced_entry_return";
+#endif
     return existingEntry;
 }
 
