@@ -624,7 +624,7 @@ static void Switch_LogDeferredImageDelayCoverage(
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][DEFERRED IMAGE COVERAGE] asset=%d generation=%u token=%08x targetBlock=%u targetOffset=%08x nameBlock=%u nameOffset=%08x delayRanges=%u block4Ranges=%u targetOverlap=%d nameOverlap=%d targetBytes=%s nameBytes=%s\\n",
+        "[KisakCOD][DEFERRED IMAGE COVERAGE] asset=%d generation=%u token=%08x targetBlock=%u targetOffset=%08x nameBlock=%u nameOffset=%08x delayRanges=%u block4Ranges=%u targetOverlap=%d nameOverlap=%d targetBytes=%s nameBytes=%s\n",
         deferred.assetIndex,
         deferred.streamGeneration,
         deferred.nameToken,
