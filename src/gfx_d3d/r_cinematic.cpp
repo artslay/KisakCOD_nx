@@ -18,6 +18,7 @@
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern void COM_NotifyIntroMovieDrawSubmitted(const char *movieName);
+extern thread_local const char * volatile g_switchFrameStage;
 extern void COM_NotifyIntroMoviePlaybackFinished(const char *movieName);
 #endif
 
@@ -1005,11 +1006,26 @@ void __cdecl R_Cinematic_Shutdown()
 {
     int setIter; // [esp+0h] [ebp-4h]
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cinematic_shutdown/stop_playback";
+#endif
     R_Cinematic_StopPlayback();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cinematic_shutdown/sync";
+#endif
     R_Cinematic_SyncNow();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cinematic_shutdown/release_images";
+#endif
     for (setIter = 0; setIter != 2; ++setIter)
         R_Cinematic_ReleaseImages(&cinematicGlob.textureSets[setIter]);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cinematic_shutdown/free_pool";
+#endif
     Z_Free(cinematicGlob.memPool, 18);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cinematic_shutdown/done";
+#endif
 }
 
 void __cdecl R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float volume)
