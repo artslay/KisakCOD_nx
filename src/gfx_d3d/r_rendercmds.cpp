@@ -291,10 +291,7 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
     bool v1; // [esp+1Eh] [ebp-16h]
 
     iassert( Sys_IsMainThread() || Sys_IsRenderThread() );
-#ifdef __SWITCH__
-    if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: entered\n");
-#endif
+
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/issue_commands/check_device";
 #endif
@@ -302,20 +299,12 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/issue_commands/check_device_done";
 #endif
-#ifdef __SWITCH__
-    if (Sys_IsRenderThread())
-        Switch_LogWrite(initialDeviceOk
-            ? "[KisakCOD][RTHREAD] R_IssueRenderCommands: first device check ok\n"
-            : "[KisakCOD][RTHREAD] R_IssueRenderCommands: first device check failed\n");
-#endif
+
     if (initialDeviceOk)
     {
         PROF_SCOPED("R_IssueRenderCommands");
         frontEndDataOut->drawType = type;
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before R_HandOffToBackend\n");
-#endif
+
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/issue_commands/handoff";
 #endif
@@ -324,10 +313,7 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/issue_commands/handoff_sync";
 #endif
-#ifdef __SWITCH__
-            if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: synchronous backend path\n");
-#endif
+
             if ((type & 2) != 0)
                 R_PerformanceCounters();
             if (Sys_IsMainThread())
@@ -339,103 +325,59 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/issue_commands/update_skin_cache_done";
 #endif
-#ifdef __SWITCH__
-            if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before second device check\n");
-#endif
+
             if (R_CheckLostDevice())
                 v1 = g_disableRendering == 0;
             else
                 v1 = 0;
-#ifdef __SWITCH__
-            if (Sys_IsRenderThread())
-                Switch_LogWrite(v1
-                    ? "[KisakCOD][RTHREAD] R_IssueRenderCommands: rendering enabled\n"
-                    : "[KisakCOD][RTHREAD] R_IssueRenderCommands: rendering disabled\n");
-#endif
+
             if (v1)
             {
-#ifdef __SWITCH__
-                if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_BeginFrame\n");
-#endif
+
 #ifdef __SWITCH__
                 g_switchFrameStage = "frame/scr/issue_commands/rb_begin_frame";
 #endif
                 RB_BeginFrame(frontEndDataOut);
-#ifdef __SWITCH__
-                if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_BeginFrame\n");
-                if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_Draw3D\n");
-#endif
+
 #ifdef __SWITCH__
                 g_switchFrameStage = "frame/scr/issue_commands/rb_draw3d";
 #endif
                 RB_Draw3D();
-#ifdef __SWITCH__
-                if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_Draw3D\n");
-                if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_CallExecuteRenderCommands\n");
-#endif
+
 #ifdef __SWITCH__
                 g_switchFrameStage = "frame/scr/issue_commands/rb_execute";
 #endif
                 RB_CallExecuteRenderCommands();
-#ifdef __SWITCH__
-                if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_CallExecuteRenderCommands\n");
-                if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before RB_EndFrame\n");
-#endif
+
 #ifdef __SWITCH__
                 g_switchFrameStage = "frame/scr/issue_commands/rb_end_frame";
 #endif
                 RB_EndFrame(frontEndDataOut->drawType);
-#ifdef __SWITCH__
-                if (Sys_IsRenderThread())
-                    Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after RB_EndFrame\n");
-#endif
+
             }
-#ifdef __SWITCH__
-            if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: before R_UnlockSkinnedCache\n");
-#endif
+
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/issue_commands/unlock_skin_cache";
 #endif
             R_UnlockSkinnedCache();
-#ifdef __SWITCH__
-            if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after R_UnlockSkinnedCache\n");
-#endif
+
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/issue_commands/toggle_smp_frame";
 #endif
             R_ToggleSmpFrame();
-#ifdef __SWITCH__
-            if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: after R_ToggleSmpFrame\n");
-#endif
+
         }
     }
     else
     {
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: lost-device path\n");
-#endif
+
         if (Sys_IsMainThread())
             R_WaitFrontendWorkerCmds();
         R_Cinematic_UpdateFrame();
         R_UnlockSkinnedCache();
         R_ToggleSmpFrame();
     }
-#ifdef __SWITCH__
-    if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_IssueRenderCommands: returned\n");
-#endif
+
 }
 void R_PerformanceCounters()
 {
@@ -1542,14 +1484,10 @@ void __cdecl R_BeginFrame()
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/r_begin/material_override";
 #endif
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: before Material_OverrideTechniqueSets\n");
-#endif
+
         Material_OverrideTechniqueSets();
 #ifdef __SWITCH__
-        if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: after Material_OverrideTechniqueSets\n");
+
         g_switchFrameStage = "frame/r_begin/material_override_done";
 #endif
         if (rgp.world && rgp.needSortMaterials)
@@ -1569,14 +1507,10 @@ void __cdecl R_BeginFrame()
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/r_begin/flush_debug";
 #endif
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: before CL_FlushDebugClientData\n");
-#endif
+
         CL_FlushDebugClientData();
 #ifdef __SWITCH__
-        if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: after CL_FlushDebugClientData\n");
+
         g_switchFrameStage = "frame/r_begin/flush_debug_done";
 #endif
         v1 = r_skinCache->current.enabled && IsFastFileLoad();
@@ -1587,13 +1521,11 @@ void __cdecl R_BeginFrame()
         {
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/r_begin/lock_skin_cache";
-            if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: before R_LockSkinnedCache\n");
+
 #endif
             R_LockSkinnedCache();
 #ifdef __SWITCH__
-            if (Sys_IsRenderThread() && r_glob.isRenderingRemoteUpdate)
-                Switch_LogWrite("[KisakCOD][RTHREAD] R_BeginFrame: after R_LockSkinnedCache\n");
+
             g_switchFrameStage = "frame/r_begin/lock_skin_cache_done";
 #endif
         }
@@ -2058,29 +1990,21 @@ void __cdecl R_EndRemoteScreenUpdate()
             iassert( r_glob.remoteScreenUpdateNesting > 0 );
             if (r_glob.remoteScreenUpdateNesting == 1)
             {
-#ifdef __SWITCH__
-                Switch_LogWrite("[KisakCOD][RENDER] R_EndRemoteScreenUpdate: waiting for renderer notify\n");
-#endif
+
                 while (!r_glob.screenUpdateNotify)
                     NET_Sleep(1);
-#ifdef __SWITCH__
-                Switch_LogWrite("[KisakCOD][RENDER] R_EndRemoteScreenUpdate: renderer notify received\n");
-#endif
+
                 r_glob.screenUpdateNotify = 0;
                 iassert( r_glob.remoteScreenUpdateNesting > 0 );
                 --r_glob.remoteScreenUpdateNesting;
-#ifdef __SWITCH__
-                Switch_LogWrite("[KisakCOD][RENDER] R_EndRemoteScreenUpdate: waiting for final notify\n");
-#endif
+
                 while (!r_glob.screenUpdateNotify)
                 {
                     ++g_mainThreadBlocked;
                     NET_Sleep(1);
                     --g_mainThreadBlocked;
                 }
-#ifdef __SWITCH__
-                Switch_LogWrite("[KisakCOD][RENDER] R_EndRemoteScreenUpdate: final notify received\n");
-#endif
+
                 r_glob.screenUpdateNotify = 0;
             }
             else
