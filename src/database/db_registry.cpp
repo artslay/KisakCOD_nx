@@ -2400,7 +2400,7 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, char *name)
 
 
 
-void __cdecl DB_CloneXAssetInternalSwitch(const XAsset *from, XAsset *to)
+void __cdecl DB_CloneXAssetInternal(const XAsset *from, XAsset *to)
 {
     uint32_t size; // [esp+0h] [ebp-4h]
 
