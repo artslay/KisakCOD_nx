@@ -1028,6 +1028,52 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
                 normalizedName.c_str(),
                 g_iwdEntryRecords.size(),
                 g_iwdArchives.size());
+
+            // A basename match is diagnostic only. Never silently substitute
+            // a texture from a different qpath; the exact engine asset path
+            // must remain authoritative.
+            const size_t slash = normalizedName.find_last_of('/');
+            const std::string wantedBasename =
+                slash == std::string::npos
+                    ? normalizedName
+                    : normalizedName.substr(slash + 1);
+            size_t candidates = 0;
+            for (const auto &indexed : g_iwdEntries)
+            {
+                const size_t candidateSlash =
+                    indexed.first.find_last_of('/');
+                const std::string candidateBasename =
+                    candidateSlash == std::string::npos
+                        ? indexed.first
+                        : indexed.first.substr(candidateSlash + 1);
+                if (candidateBasename != wantedBasename)
+                    continue;
+
+                const uint32_t entryIndex = indexed.second;
+                const SwitchIwdEntry *entry =
+                    entryIndex < g_iwdEntryRecords.size()
+                        ? &g_iwdEntryRecords[entryIndex]
+                        : nullptr;
+                const char *archiveName =
+                    entry && entry->archiveIndex < g_iwdArchives.size()
+                        ? g_iwdArchives[entry->archiveIndex].path.c_str()
+                        : "<invalid>";
+                char candidateTrace[448];
+                std::snprintf(
+                    candidateTrace,
+                    sizeof(candidateTrace),
+                    "[KisakCOD][IWI CANDIDATE] requested=%s candidate=%s archive=%s size=%u\n",
+                    normalizedName.c_str(),
+                    indexed.first.c_str(),
+                    archiveName,
+                    entry ? static_cast<unsigned>(entry->size) : 0u);
+                Switch_LogWrite(candidateTrace);
+                if (++candidates >= 8)
+                    break;
+            }
+
+            if (!candidates)
+                Switch_LogWrite("[KisakCOD][IWI CANDIDATE] no basename matches in indexed archives\n");
         }
 
         Switch_LogWrite(trace);
