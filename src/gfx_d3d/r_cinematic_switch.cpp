@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <mutex>
 
 #include "binklib/binktextures.h"
 #include "gfx/vulkan/d3d9_compat.h"
@@ -11,13 +12,19 @@
 
 extern void Switch_LogWrite(const char *msg);
 
+namespace {
+std::mutex g_pendingBinkUploadMutex;
+BINKTEXTURESET *g_pendingBinkUploadSet = nullptr;
+int g_pendingBinkUploadFrame = -1;
+}
+
 static void UploadBinkPlane(
     IDirect3DTexture9 *texture,
-    const BINKPLANE &plane,
+    const uint8_t *pixels,
     uint32_t width,
     uint32_t height)
 {
-    if (!texture || !plane.Buffer || !width || !height)
+    if (!texture || !pixels || !width || !height)
         return;
 
     static std::atomic<unsigned> uploadFailureLogs{0};
@@ -58,7 +65,7 @@ static void UploadBinkPlane(
             width,
             height,
             0,
-            plane.Buffer,
+            pixels,
             bytes,
             oldLayout,
             0))
@@ -132,21 +139,11 @@ void Unlock_Bink_textures(
 
     if (buffers.TotalFrames > 0)
     {
-        BINKFRAMEPLANESET &activePlanes = buffers.Frames[activeFrame];
-        BINKFRAMETEXTURES &draw = set_textures->tex_draw;
-
-        UploadBinkPlane(
-            draw.Ytexture, activePlanes.YPlane,
-            buffers.YABufferWidth, buffers.YABufferHeight);
-        UploadBinkPlane(
-            draw.cRtexture, activePlanes.cRPlane,
-            buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
-        UploadBinkPlane(
-            draw.cBtexture, activePlanes.cBPlane,
-            buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
-        UploadBinkPlane(
-            draw.Atexture, activePlanes.APlane,
-            buffers.YABufferWidth, buffers.YABufferHeight);
+        // Only publish the CPU-decoded frame here. Vulkan queue submission and
+        // image mutation belong to the render thread, not the Bink worker.
+        std::lock_guard<std::mutex> lock(g_pendingBinkUploadMutex);
+        g_pendingBinkUploadSet = set_textures;
+        g_pendingBinkUploadFrame = activeFrame;
     }
 
     for (int i = 0; i < buffers.TotalFrames; ++i)
@@ -155,9 +152,8 @@ void Unlock_Bink_textures(
         BINKFRAMEPLANESET &planes = buffers.Frames[i];
 
         // On Switch, Bink decodes into the CPU lockShadow buffers above.
-        // The frame textures only own those buffers; rendering samples tex_draw,
-        // already uploaded from activePlanes. Uploading these unused GPU images
-        // adds six synchronous Vulkan submissions for every decoded frame.
+        // The render thread uploads the selected CPU frame into tex_draw after
+        // the worker signals completion; these per-frame GPU images are unused.
         planes.YPlane.Buffer = nullptr;
         planes.cRPlane.Buffer = nullptr;
         planes.cBPlane.Buffer = nullptr;
@@ -176,6 +172,65 @@ void Unlock_Bink_textures(
         if (textures.Atexture)
             textures.Atexture->lockShadowActive = false;
     }
+}
+
+void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures)
+{
+    if (!set_textures)
+        return;
+
+    int frameIndex = -1;
+    {
+        std::lock_guard<std::mutex> lock(g_pendingBinkUploadMutex);
+        if (g_pendingBinkUploadSet != set_textures ||
+            g_pendingBinkUploadFrame < 0)
+            return;
+
+        frameIndex = g_pendingBinkUploadFrame;
+        g_pendingBinkUploadSet = nullptr;
+        g_pendingBinkUploadFrame = -1;
+    }
+
+    const BINKFRAMEBUFFERS &buffers = set_textures->bink_buffers;
+    if (frameIndex >= buffers.TotalFrames)
+        return;
+
+    const BINKFRAMETEXTURES &frameTextures = set_textures->textures[frameIndex];
+    BINKFRAMETEXTURES &draw = set_textures->tex_draw;
+
+    const auto planePixels = [](IDirect3DTexture9 *texture,
+                                uint32_t width,
+                                uint32_t height) -> const uint8_t *
+    {
+        const size_t expected = static_cast<size_t>(width) * height;
+        return texture && texture->lockShadow.size() >= expected
+            ? texture->lockShadow.data()
+            : nullptr;
+    };
+
+    // This function is called from R_Cinematic_UpdateRendererImages on the
+    // render thread. Each UploadImage2D is therefore ordered with rendering
+    // without running Vulkan queue operations from the cinematic worker.
+    UploadBinkPlane(
+        draw.Ytexture,
+        planePixels(frameTextures.Ytexture,
+                    buffers.YABufferWidth, buffers.YABufferHeight),
+        buffers.YABufferWidth, buffers.YABufferHeight);
+    UploadBinkPlane(
+        draw.cRtexture,
+        planePixels(frameTextures.cRtexture,
+                    buffers.cRcBBufferWidth, buffers.cRcBBufferHeight),
+        buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
+    UploadBinkPlane(
+        draw.cBtexture,
+        planePixels(frameTextures.cBtexture,
+                    buffers.cRcBBufferWidth, buffers.cRcBBufferHeight),
+        buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
+    UploadBinkPlane(
+        draw.Atexture,
+        planePixels(frameTextures.Atexture,
+                    buffers.YABufferWidth, buffers.YABufferHeight),
+        buffers.YABufferWidth, buffers.YABufferHeight);
 }
 
 #endif
