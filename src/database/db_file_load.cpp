@@ -49,6 +49,7 @@ struct DB_LoadData // sizeof=0x68
     int32_t outstandingReads;               // ...
 #ifdef __SWITCH__
     uint64_t switchFileOffset;
+    uint64_t switchFileSize;
     uint32_t switchLastRead;
     bool switchFileEof;
     bool switchFileError;
@@ -232,7 +233,22 @@ double __cdecl DB_GetLoadedFraction()
     double totalBytesExternal; // [esp+2Ch] [ebp-8h]
 
     if (!g_totalSize)
+    {
+#ifdef __SWITCH__
+        // The original progress counters can be unavailable for a Switch fastfile
+        // (for example, when its zone flags do not enable internal byte tracking).
+        // Keep the loading bar tied to actual compressed bytes read in that case.
+        if (g_load.f && g_load.switchFileSize)
+        {
+            const uint64_t loaded = g_load.switchFileOffset < g_load.switchFileSize
+                ? g_load.switchFileOffset
+                : g_load.switchFileSize;
+            return static_cast<double>(loaded) /
+                static_cast<double>(g_load.switchFileSize);
+        }
+#endif
         return 0.0;
+    }
     totalBytesInternal = (double)g_totalSize * 262144.0;
     loadedBytesInternal = (double)g_loadedSize * 262144.0;
     if (loadedBytesInternal < 0.0)
@@ -360,6 +376,23 @@ int32_t __cdecl DB_ReadData()
 #ifdef __SWITCH__
     g_switchDbStage = "file/read_fd";
 #endif
+    // Cache the compressed fastfile length independently of the optional
+    // engine progress counters so DB_GetLoadedFraction has a reliable fallback.
+    if (fd >= 0 && !g_load.switchFileSize)
+    {
+        struct stat switchFileStat{};
+        if (::fstat(fd, &switchFileStat) == 0 && switchFileStat.st_size > 0)
+            g_load.switchFileSize = static_cast<uint64_t>(switchFileStat.st_size);
+        else
+        {
+            // Keep a descriptor-seek fallback for filesystems that do not
+            // provide a usable fstat result. The normal read below restores the
+            // cursor to switchFileOffset before consuming data.
+            const off_t end = ::lseek(fd, 0, SEEK_END);
+            if (end > 0)
+                g_load.switchFileSize = static_cast<uint64_t>(end);
+        }
+    }
     g_load.switchFileEof = false;
     g_load.switchFileError = false;
 
