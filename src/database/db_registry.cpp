@@ -3,6 +3,10 @@
 
 #ifdef __SWITCH__
 extern const char * volatile g_switchDbStage;
+extern bool Switch_IsStreamAsciiImageName(
+    uintptr_t address,
+    uint32_t *blockOut,
+    uint32_t *offsetOut);
 extern char com_errorMessage[4096];
 extern const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(
     const XAssetHeader *);
@@ -11,6 +15,7 @@ extern const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(
 #include <qcommon/files.h>
 #ifdef __SWITCH__
 #include <cstdio>
+#include <cstring>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <cstdint>
@@ -3343,12 +3348,15 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
 #ifdef __SWITCH__
         if (name)
         {
-            const uintptr_t resolvedName =
-                DB_ResolveSwitchSerializedString(
-                    reinterpret_cast<uintptr_t>(name));
-            if (resolvedName)
+            uint32_t stringBlock = UINT32_MAX;
+            uint32_t stringOffset = 0;
+            if (Switch_IsStreamAsciiImageName(
+                    reinterpret_cast<uintptr_t>(name),
+                    &stringBlock,
+                    &stringOffset))
             {
-                name = reinterpret_cast<const char *>(resolvedName);
+                name = reinterpret_cast<const char *>(
+                    &g_streamBlocks[stringBlock].data[stringOffset]);
                 newEntry->entry.asset.header.image->name = name;
             }
         }
@@ -4444,18 +4452,13 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
         }
         else
         {
-            resolvedName =
-                DB_ResolveSwitchSerializedString(directName);
-
-            if (!resolvedName ||
-                !Switch_IsStreamAsciiImageName(
-                    resolvedName,
-                    nullptr,
-                    nullptr))
-            {
-                g_switchDeferredImageAssets[writeIndex++] = deferred;
-                continue;
-            }
+            // GfxImage::name is an XString, not a generic pointer-alias
+            // chain. If it is not a valid string at its converted address,
+            // keep the image deferred until the stream has materialized it.
+            // Following arbitrary DWORDs here can turn unrelated object data
+            // into a plausible but incorrect name such as "3".
+            g_switchDeferredImageAssets[writeIndex++] = deferred;
+            continue;
         }
 
         const char *finalName =
@@ -4559,6 +4562,61 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
             result.image ? static_cast<const void *>(result.image->name) : nullptr,
             (result.image && result.image->name) ? result.image->name : "<null>",
             g_switchDeferredImageAssets.size() - writeIndex - 1);
+        Switch_LogWrite(trace);
+    }
+
+    // The final delayed-stream pass must not silently convert unresolved
+    // serialized image-name bytes into some other stream object. Report one
+    // representative entry so the underlying serialized offset can be traced.
+    if (writeIndex != 0 &&
+        g_switchDbStage &&
+        std::strcmp(g_switchDbStage, "delayed_images/fixup") == 0)
+    {
+        const SwitchDeferredImageAsset &first =
+            g_switchDeferredImageAssets[0];
+        const uintptr_t nameAddress = first.image
+            ? reinterpret_cast<uintptr_t>(first.image->name)
+            : 0;
+        uint32_t nameBlock = UINT32_MAX;
+        uint32_t nameOffset = 0;
+        uint32_t firstWord = 0;
+        if (nameAddress && g_streamBlocks)
+        {
+            for (uint32_t block = 0;
+                 block < ARRAY_COUNT(g_streamPosArray);
+                 ++block)
+            {
+                if (!g_streamBlocks[block].data)
+                    continue;
+                const uintptr_t base =
+                    reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+                if (nameAddress < base ||
+                    nameAddress - base >= g_streamBlocks[block].size)
+                    continue;
+                nameBlock = block;
+                nameOffset =
+                    static_cast<uint32_t>(nameAddress - base);
+                if (g_streamBlocks[block].size - nameOffset >= sizeof(firstWord))
+                    std::memcpy(
+                        &firstWord,
+                        reinterpret_cast<const void *>(nameAddress),
+                        sizeof(firstWord));
+                break;
+            }
+        }
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][DEFERRED IMAGE NAME UNRESOLVED] count=%zu firstAsset=%d rawType=%u token=%08x name=%p streamBlock=%u streamOffset=%08x first=%08x\\n",
+            writeIndex,
+            first.assetIndex,
+            first.rawType,
+            first.nameToken,
+            reinterpret_cast<const void *>(nameAddress),
+            nameBlock,
+            nameOffset,
+            firstWord);
         Switch_LogWrite(trace);
     }
 
