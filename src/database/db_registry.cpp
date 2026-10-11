@@ -3295,9 +3295,26 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     }
 #endif
     if (newEntry->entry.asset.type == ASSET_TYPE_IMAGE)
+    {
         name = newEntry->entry.asset.header.image->name;
+#ifdef __SWITCH__
+        if (name)
+        {
+            const uintptr_t resolvedName =
+                DB_ResolveSwitchSerializedString(
+                    reinterpret_cast<uintptr_t>(name));
+            if (resolvedName)
+            {
+                name = reinterpret_cast<const char *>(resolvedName);
+                newEntry->entry.asset.header.image->name = name;
+            }
+        }
+#endif
+    }
     else
+    {
         name = DB_GetXAssetName(&newEntry->entry.asset);
+    }
 #ifdef __SWITCH__
     if (switchTraceTechset4026)
         g_switchDbStage = "asset/name_return";
