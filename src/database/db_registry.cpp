@@ -4193,7 +4193,7 @@ bool Switch_IsStreamAsciiImageName(
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][XSTRING PREFIX FIX] block=%u exactOffset=%08x fixedOffset=%08x name=%s\\n",
+                    "[KisakCOD][XSTRING PREFIX FIX] block=%u exactOffset=%08x fixedOffset=%08x name=%s\n",
                     block,
                     static_cast<unsigned>(offset),
                     static_cast<unsigned>(normalizedOffset),
