@@ -12,6 +12,8 @@
 
 #include "kisak_zone_hooks_internal.h"
 
+#include "kisak_zone_hooks_internal.h"
+
 // Referenced Assets:
 #include "../gfximage/gfximage_iw3_load_db.h"
 
@@ -160,7 +162,14 @@ void Loader_GfxLightDef::LoadAsset_GfxLightDef(GfxLightDef** pAsset)
 {
     assert(pAsset != nullptr);
     
-    KisakZone_SetActiveAssetPhase(25); // collect light-definition references
+    // A small number of fastfiles store this XString as a pointer to a
+    // serialized XString slot. Resolve it before AssetName is implicitly
+    // converted to std::string for the OAT and engine asset registries.
+    KisakZone_SetActiveAssetPhase(25); // resolve serialized light-definition name
+    if (const auto* hooks = KisakZone_CurrentHooks(); hooks && hooks->resolveAssetName && (*pAsset)->name)
+        (*pAsset)->name = hooks->resolveAssetName(hooks->context, (*pAsset)->name);
+
+    KisakZone_SetActiveAssetPhase(26); // collect light-definition references
     AssetInfoCollector assetInfo(m_zone);
     AssetMarker<AssetLightDef> marker(assetInfo);
     marker.Mark(*pAsset);
@@ -168,8 +177,8 @@ void Loader_GfxLightDef::LoadAsset_GfxLightDef(GfxLightDef** pAsset)
     auto* reallocatedAsset = m_zone.Memory().Alloc<GfxLightDef>();
     std::memcpy(reallocatedAsset, *pAsset, sizeof(GfxLightDef));
     
-    KisakZone_SetActiveAssetPhase(26); // link light-definition into engine asset registry
+    KisakZone_SetActiveAssetPhase(27); // link light-definition into engine asset registry
     m_asset_info = reinterpret_cast<XAssetInfo<GfxLightDef>*>(LinkAsset(AssetName<AssetLightDef>(**pAsset), reallocatedAsset, assetInfo.GetDependencies(), assetInfo.GetUsedScriptStrings(), assetInfo.GetIndirectAssetReferences()));
-    KisakZone_SetActiveAssetPhase(27); // engine asset registry returned
+    KisakZone_SetActiveAssetPhase(28); // engine asset registry returned
     *pAsset = m_asset_info->Asset();
 }
