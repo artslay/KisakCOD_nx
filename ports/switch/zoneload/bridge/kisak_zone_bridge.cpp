@@ -88,7 +88,7 @@ namespace
                 {
                     char trace[224];
                     std::snprintf(trace, sizeof(trace),
-                        "[KisakCOD][ZONELOAD] asset-load no-progress zone=%s index=%zu type=%d seconds=10\\n",
+                        "[KisakCOD][ZONELOAD] asset-load no-progress zone=%s index=%zu type=%d seconds=10\n",
                         m_zoneName.c_str(), progress.assetIndex, progress.assetType);
                     Switch_LogWrite(trace);
                     return;
