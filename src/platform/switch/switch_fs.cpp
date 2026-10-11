@@ -290,16 +290,48 @@ static std::vector<std::string> Switch_GetGameSearchDirectories(
     const std::string &selectedLanguage)
 {
     std::vector<std::string> directories;
-    if (!base || !*base)
-        return directories;
 
-    auto addDirectory = [&](const std::string &relativePath)
+    auto normalizeRoot = [](const char *root)
+    {
+        std::string normalized = root ? root : "";
+        while (normalized.size() > 1 && normalized.back() == '/')
+            normalized.pop_back();
+        return normalized;
+    };
+
+    std::vector<std::string> roots;
+    auto addRoot = [&](const char *root)
+    {
+        if (!root || !*root)
+            return;
+
+        const std::string normalizedRoot = normalizeRoot(root);
+        if (normalizedRoot.empty())
+            return;
+
+        for (const std::string &existing : roots)
+        {
+            if (!I_stricmp(existing.c_str(), normalizedRoot.c_str()))
+                return;
+        }
+        roots.push_back(normalizedRoot);
+    };
+
+    // Keep the install/base path first. fs_homepath and fs_cdpath are valid
+    // independent roots in the retail filesystem and must be searched too.
+    addRoot(base);
+    if (fs_homepath && fs_homepath->current.string[0])
+        addRoot(fs_homepath->current.string);
+    if (fs_cdpath && fs_cdpath->current.string[0])
+        addRoot(fs_cdpath->current.string);
+
+    auto addDirectoryAtRoot = [&](const std::string &root,
+                                  const std::string &relativePath)
     {
         if (relativePath.empty())
             return;
 
-        const std::string fullPath =
-            std::string(base) + "/" + relativePath;
+        const std::string fullPath = root + "/" + relativePath;
         if (std::find(directories.begin(), directories.end(), fullPath) ==
             directories.end())
             directories.push_back(fullPath);
@@ -316,9 +348,6 @@ static std::vector<std::string> Switch_GetGameSearchDirectories(
         }
     };
 
-    // Mirror the retail FS_Startup search-path families. Directories are
-    // returned from highest to lowest priority; IWD indexing reverses this
-    // list so duplicate qpaths preserve the same search-path precedence.
     const char *modName =
         fs_gameDirVar && fs_gameDirVar->current.string[0]
             ? fs_gameDirVar->current.string
@@ -327,23 +356,29 @@ static std::vector<std::string> Switch_GetGameSearchDirectories(
         fs_basegame && fs_basegame->current.string[0]
             ? fs_basegame->current.string
             : nullptr;
-
-    if (modName && I_stricmp(modName, gameName ? gameName : "main"))
-        addDirectory(modName);
-    if (baseGameName &&
-        I_stricmp(baseGameName, gameName ? gameName : "main") &&
-        (!modName || I_stricmp(baseGameName, modName)))
-        addDirectory(baseGameName);
-
     const std::string primaryGame =
         gameName && *gameName ? gameName : "main";
-    addDirectory(primaryGame);
-    addDirectory(primaryGame + "_shared");
-    addDirectory("players");
-    addDirectory("raw");
-    addDirectory("raw_shared");
-    addDirectory("devraw");
-    addDirectory("devraw_shared");
+
+    for (const std::string &root : roots)
+    {
+        // The relative search-path families are shared by every configured
+        // root. Keeping root order stable gives the base path priority while
+        // allowing assets and IWDs installed only in home/cd paths to resolve.
+        if (modName && I_stricmp(modName, primaryGame.c_str()))
+            addDirectoryAtRoot(root, modName);
+        if (baseGameName &&
+            I_stricmp(baseGameName, primaryGame.c_str()) &&
+            (!modName || I_stricmp(baseGameName, modName)))
+            addDirectoryAtRoot(root, baseGameName);
+
+        addDirectoryAtRoot(root, primaryGame);
+        addDirectoryAtRoot(root, primaryGame + "_shared");
+        addDirectoryAtRoot(root, "players");
+        addDirectoryAtRoot(root, "raw");
+        addDirectoryAtRoot(root, "raw_shared");
+        addDirectoryAtRoot(root, "devraw");
+        addDirectoryAtRoot(root, "devraw_shared");
+    }
 
     return directories;
 }
