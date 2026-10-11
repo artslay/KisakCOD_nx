@@ -37,10 +37,16 @@ XAssetInfo<Font_s>* Loader_Font_s::Load(Font_s** pAsset)
     m_asset_info = nullptr;
     
     varFont_sPtr = pAsset;
+    KisakZone_SetActiveAssetPhase(7); // enter Font_s pointer loader
     LoadPtr_Font_s(false);
-    
+    KisakZone_SetActiveAssetPhase(8); // pointer loader returned
+
     if (m_asset_info == nullptr && *pAsset != nullptr)
+    {
+        KisakZone_SetActiveAssetPhase(9); // resolve name for an existing Font_s alias
         m_asset_info = reinterpret_cast<XAssetInfo<Font_s>*>(GetAssetInfo(AssetName<AssetFont>(**pAsset)));
+        KisakZone_SetActiveAssetPhase(10); // existing asset lookup returned
+    }
     
     return m_asset_info;
 }
@@ -109,34 +115,43 @@ void Loader_Font_s::LoadPtr_Font_s(const bool atStreamStart)
     
     assert(!atStreamStart);
     
+    KisakZone_SetActiveAssetPhase(11); // enter pointer resolution
     m_stream.PushBlock(XFILE_BLOCK_TEMP);
-    
+
+    KisakZone_SetActiveAssetPhase(12); // inspect serialized pointer kind
     if (*varFont_sPtr != nullptr)
     {
+        KisakZone_SetActiveAssetPhase(13); // classify serialized pointer
         const auto zonePtrType = GetZonePointerType(*varFont_sPtr);
         if (zonePtrType == ZonePointerType::FOLLOWING || zonePtrType == ZonePointerType::INSERT)
         {
+            KisakZone_SetActiveAssetPhase(14); // allocate native Font_s object
             *varFont_sPtr = m_stream.AllocOutOfBlock<Font_s>(4);
-            
+
             uintptr_t toInsertLookupEntry = 0;
             if (zonePtrType == ZonePointerType::INSERT)
+            {
+                KisakZone_SetActiveAssetPhase(15); // reserve inserted-alias slot
                 toInsertLookupEntry = m_stream.InsertPointerAliasLookup();
-            
+            }
+
             varFont_s = *varFont_sPtr;
+            KisakZone_SetActiveAssetPhase(16); // enter the actual Font_s decoder
             Load_Font_s(true);
 
             KisakZone_SetActiveAssetPhase(6); // mark/register Font_s in OAT and engine pools
             LoadAsset_Font_s(varFont_sPtr);
-            
+
             if (zonePtrType == ZonePointerType::INSERT)
                 m_stream.SetInsertedPointerAliasLookup(toInsertLookupEntry, *varFont_sPtr);
         }
         else
         {
+            KisakZone_SetActiveAssetPhase(17); // resolve a serialized alias to an existing Font_s
             *varFont_sPtr = m_stream.ConvertOffsetToAliasLookup(*varFont_sPtr);
         }
     }
-    
+
     m_stream.PopBlock();
 }
 
