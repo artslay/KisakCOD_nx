@@ -5818,11 +5818,11 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 }
 
                 // The original Load_XString treats a positive serialized
-                // token as a direct address to the string. Do not reinterpret
-                // arbitrary bytes at that address as another pointer, or walk
-                // backward to the start of a printable run: valid XStrings may
-                // point at suffixes inside the shared string pool.
-                // Forward stream-4 strings are left untouched until materialized.
+                // token as an offset to the string and converts it with the
+                // database's block/offset rule. Do not follow arbitrary bytes
+                // at the target as another pointer: stale DWORDs can redirect
+                // an image to an unrelated name. Forward stream-4 strings are
+                // left untouched until their contents have materialized.
                 if (!namePointsForwardInStream4)
                 {
                     uint32_t stringBlock = UINT32_MAX;
