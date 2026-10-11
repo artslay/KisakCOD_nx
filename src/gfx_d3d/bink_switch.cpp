@@ -34,6 +34,7 @@ struct SwitchBinkState
     SwsContext *sws;
     int videoStreamIndex;
     bool inputEof;
+    bool frameDecodeFinished;
     bool decodeFailed;
     bool paused;
     bool convertedAllocated;
@@ -709,7 +710,7 @@ RADDEFFUNC void RADEXPLINK BinkClose(HBINK bink)
 RADDEFFUNC S32 RADEXPLINK BinkWait(HBINK bink)
 {
     SwitchBinkState *state = Switch_BinkState(bink);
-    if (!state || state->paused)
+    if (!state || state->paused || state->frameDecodeFinished)
         return 1;
 
     if (!state->decodedFrames)
@@ -735,11 +736,12 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
     if (!state || !bink || !bink->FrameBuffers)
         return 1;
 
-    if (bink->FrameNum > bink->Frames)
+    if (state->frameDecodeFinished || bink->FrameNum > bink->Frames)
         return 1;
 
     if (!Switch_BinkDecodeNext(state))
     {
+        state->frameDecodeFinished = true;
         char trace[512];
         std::snprintf(
             trace,
@@ -762,6 +764,7 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
     const AVFrame *frame = nullptr;
     if (!Switch_BinkGetFrameForCopy(state, &frame))
     {
+        state->frameDecodeFinished = true;
         char trace[256];
         std::snprintf(
             trace,
