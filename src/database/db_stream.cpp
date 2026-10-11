@@ -491,7 +491,7 @@ const void **__cdecl DB_InsertPointer()
 
     const void **pData =
         reinterpret_cast<const void **>(
-            Hunk_Alloc(
+            DB_AllocSwitchAssetMemory(
                 static_cast<uint32_t>(sizeof(void *)),
                 "SwitchDBInsertPointer",
                 22));
