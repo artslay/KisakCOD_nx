@@ -9,6 +9,12 @@
 #include "Zone/Zone.h"
 
 #include <cstdio>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <string>
 
 #if UINTPTR_MAX > 0xFFFFFFFFu
 // Must match the engine cbrush_t stride (static_assert in src/xanim/xanim.h).
@@ -19,9 +25,83 @@ static_assert(sizeof(IW3::cbrush_t) == 96, "IW3::cbrush_t stride differs from th
 #include <optional>
 #include <vector>
 
+extern void Switch_LogWrite(const char *msg);
+
 namespace
 {
     thread_local const KisakZoneHooks* t_hooks = nullptr;
+
+    class AssetLoadStallWatchdog final
+    {
+    public:
+        explicit AssetLoadStallWatchdog(const char* zoneName)
+            : m_zoneName(zoneName ? zoneName : "")
+        {
+            if (m_zoneName != "killhouse")
+                return;
+
+            try
+            {
+                m_thread = std::thread([this] { Run(); });
+            }
+            catch (...)
+            {
+                // The watchdog is best-effort; zone loading itself must still run.
+            }
+        }
+
+        ~AssetLoadStallWatchdog()
+        {
+            m_stopping.store(true, std::memory_order_release);
+            m_condition.notify_all();
+            if (m_thread.joinable())
+                m_thread.join();
+        }
+
+    private:
+        void Run()
+        {
+            using Clock = std::chrono::steady_clock;
+            auto lastProgressTime = Clock::now();
+            uint64_t lastSerial = UINT64_MAX;
+            std::unique_lock<std::mutex> lock(m_mutex);
+
+            while (!m_stopping.load(std::memory_order_acquire))
+            {
+                m_condition.wait_for(lock, std::chrono::milliseconds(500), [this]
+                {
+                    return m_stopping.load(std::memory_order_acquire);
+                });
+                if (m_stopping.load(std::memory_order_acquire))
+                    return;
+
+                const auto progress = KisakZone_GetActiveAssetProgress();
+                const auto now = Clock::now();
+                if (progress.serial != lastSerial)
+                {
+                    lastSerial = progress.serial;
+                    lastProgressTime = now;
+                    continue;
+                }
+
+                if (progress.active && now - lastProgressTime >= std::chrono::seconds(10))
+                {
+                    char trace[224];
+                    std::snprintf(trace, sizeof(trace),
+                        "[KisakCOD][ZONELOAD] asset-load no-progress zone=%s index=%zu type=%d seconds=10\\n",
+                        m_zoneName.c_str(), progress.assetIndex, progress.assetType);
+                    Switch_LogWrite(trace);
+                    return;
+                }
+            }
+        }
+
+        const std::string m_zoneName;
+        std::atomic<bool> m_stopping{false};
+        std::mutex m_mutex;
+        std::condition_variable m_condition;
+        std::thread m_thread;
+    };
 
     class ScopedHooks
     {
@@ -119,8 +199,13 @@ void* KisakZone_Load(const char* zoneName, const KisakZoneBlocks& blocks, const 
         const auto input =
             ZoneInputStream::Create(kZonePointerBits, kOffsetBlockBits, blockList, IW3::XFILE_BLOCK_VIRTUAL, stream, zone->Memory(), std::nullopt);
         IW3::ContentLoader loader(*zone, *input);
+        KisakZone_ClearActiveAsset();
         KisakZone_ResetConvertedScriptStrings();
-        loader.Load();
+        {
+            AssetLoadStallWatchdog watchdog(zoneName);
+            loader.Load();
+        }
+        KisakZone_ClearActiveAsset();
         KisakZone_ResetConvertedScriptStrings();
         return zone.release();
     }
