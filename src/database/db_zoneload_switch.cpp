@@ -41,6 +41,7 @@ extern XAssetHeader __cdecl DB_AddXAsset(XAssetType type, XAssetHeader header);
 extern void Switch_LogWrite(const char *msg);
 
 #include <cstdio>
+#include <cstring>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -143,7 +144,7 @@ void LoadImageData(void *context, void *loadDef, void *imagePointer)
     auto *image = static_cast<GfxImage *>(imagePointer);
     auto *definition = static_cast<GfxImageLoadDef *>(loadDef);
     const bool traceLargeImage =
-        definition && definition->resourceSize >= 1024u * 1024u;
+        definition && definition->resourceSize >= 4u * 1024u * 1024u;
     if (traceLargeImage)
     {
         char trace[256];
