@@ -5615,7 +5615,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][GFXIMAGE HEADER] asset=%d image=%p stream=%u b0=%08x b4=%08x words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\\n",
+                "[KisakCOD][GFXIMAGE HEADER] asset=%d image=%p stream=%u b0=%08x b4=%08x words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",
                 g_switchCurrentAssetIndex,
                 static_cast<void *>(varGfxImage),
                 static_cast<unsigned>(g_streamPosIndex),
@@ -5847,7 +5847,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][GFXIMAGE TRACE] asset=%d rawType=%u image=%p token=%08x name=%p first=%02x streamAscii=%u nameBlock=%u nameOffset=%08x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\\n",
+                "[KisakCOD][GFXIMAGE TRACE] asset=%d rawType=%u image=%p token=%08x name=%p first=%02x streamAscii=%u nameBlock=%u nameOffset=%08x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\n",
                 g_switchCurrentAssetIndex,
                 g_switchCurrentAssetRawType,
                 static_cast<void *>(varGfxImage),
@@ -5866,7 +5866,7 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                 static_cast<unsigned>(g_streamPosIndex),
                 Switch_GetStreamCursorOffset(0),
                 Switch_GetStreamCursorOffset(4),
-                (!resolvedName || resolvedName[0] == '\\0') ? 1u : 0u);
+                (!resolvedName || resolvedName[0] == '\0') ? 1u : 0u);
             if (traceKillhouseImage)
                 Switch_LogWrite(trace);
 
