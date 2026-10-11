@@ -6,10 +6,65 @@ extern const char * volatile g_switchDbStage;
 extern bool Switch_IsStreamAsciiImageName(
     uintptr_t address,
     uint32_t *blockOut,
-    uint32_t *offsetOut);
-extern char com_errorMessage[4096];
-extern const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(
-    const XAssetHeader *);
+    uint32_t *offsetOut)
+{
+    if (!address || !g_streamBlocks)
+        return false;
+
+    for (uint32_t block = 0;
+         block < ARRAY_COUNT(g_streamPosArray);
+         ++block)
+    {
+        if (!g_streamBlocks[block].data)
+            continue;
+
+        const uintptr_t base =
+            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
+        const uintptr_t end =
+            base + g_streamBlocks[block].size;
+        if (address < base || address >= end)
+            continue;
+
+        const size_t offset =
+            static_cast<size_t>(address - base);
+        const size_t remaining =
+            g_streamBlocks[block].size - offset;
+        const size_t limit =
+            remaining < 256u ? remaining : 256u;
+        const unsigned char *name =
+            reinterpret_cast<const unsigned char *>(address);
+
+        if (!limit)
+            return false;
+
+        size_t stringLength = 0;
+        for (; stringLength < limit; ++stringLength)
+        {
+            const unsigned char ch = name[stringLength];
+            if (ch == 0)
+                break;
+
+            if (ch < 0x21 || ch > 0x7E)
+                return false;
+        }
+
+        if (stringLength == 0 || stringLength == limit)
+            return false;
+
+        // Match the original Load_XString contract: the serialized token
+        // identifies the exact string address. Do not scan backward through
+        // adjacent printable bytes; a shorter name may intentionally share
+        // storage with the suffix of another string.
+        if (blockOut)
+            *blockOut = block;
+        if (offsetOut)
+            *offsetOut = static_cast<uint32_t>(offset);
+
+        return true;
+    }
+
+    return false;
+}
 #endif
 
 #include <qcommon/files.h>
