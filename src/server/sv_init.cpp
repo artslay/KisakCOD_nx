@@ -562,6 +562,13 @@ void __cdecl SV_SpawnServer(const char *mapname, int savegame)
 
     if (!IsFastFileLoad())
         Com_LoadBsp(filename);
+    else
+    {
+        // SV_LoadLevelAssets queues DB_LoadXAssets asynchronously (sync=0).
+        // Collision loading immediately looks up this map's clipMap, so wait
+        // for the database thread to finish registering the fastfile first.
+        DB_SyncXAssets();
+    }
 
     {
         PROF_SCOPED("Load collision (server)");
