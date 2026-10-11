@@ -4258,7 +4258,7 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
             std::snprintf(
                 detail,
                 sizeof(detail),
-                "[SWITCH IMAGE ANOMALY DETAIL] image=%p name=%p nameBlock=%u nameOffset=%08x mapType=%u texture=%p width=%u height=%u depth=%u category=%u semantic=%u delay=%u words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\\n",
+                "[SWITCH IMAGE ANOMALY DETAIL] image=%p name=%p nameBlock=%u nameOffset=%08x mapType=%u texture=%p width=%u height=%u depth=%u category=%u semantic=%u delay=%u words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",
                 reinterpret_cast<const void *>(imagePtr),
                 reinterpret_cast<const void *>(namePtr),
                 nameBlock,
