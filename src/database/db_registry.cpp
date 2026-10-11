@@ -35,6 +35,7 @@ extern bool FS_SwitchRootFileExists(const char *path);
 extern void __cdecl NET_Sleep(int msec);
 extern void Switch_LogWrite(const char *msg);
 extern uint32_t g_switchImageAdds;
+extern uint32_t g_switchStreamGeneration;
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 extern uint32_t g_switchCurrentAssetHeader;
@@ -502,6 +503,7 @@ struct SwitchDeferredImageAsset
     int32_t assetIndex;
     uint32_t rawType;
     uint32_t nameToken;
+    uint32_t streamGeneration;
     uintptr_t originalName;
 };
 
@@ -4402,6 +4404,7 @@ void __cdecl Load_GfxImageAsset(XAssetHeader *image)
                     g_switchCurrentAssetIndex,
                     g_switchCurrentAssetRawType,
                     g_switchLastGfxImageNameToken,
+                    g_switchStreamGeneration,
                     reinterpret_cast<uintptr_t>(image->image->name)
                 });
         }
@@ -4430,6 +4433,35 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
 
         if (!image || !slot)
             continue;
+
+        // Fastfile offsets and stream-backed name pointers are only valid for
+        // the stream table active when this image was queued. DB_InitStreams()
+        // replaces that table for the next fastfile; never re-resolve an old
+        // token against the new block addresses.
+        if (deferred.streamGeneration != g_switchStreamGeneration)
+        {
+            static uint32_t expiredImageTraceCount = 0;
+            if (expiredImageTraceCount < 16u)
+            {
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][DEFERRED IMAGE EXPIRED] asset=%d rawType=%u token=%08x sourceGeneration=%u activeGeneration=%u\\n",
+                    deferred.assetIndex,
+                    deferred.rawType,
+                    deferred.nameToken,
+                    deferred.streamGeneration,
+                    g_switchStreamGeneration);
+                Switch_LogWrite(trace);
+            }
+            else if (expiredImageTraceCount == 16u)
+            {
+                Switch_LogWrite("[KisakCOD][DEFERRED IMAGE EXPIRED] further entries suppressed\\n");
+            }
+            ++expiredImageTraceCount;
+            continue;
+        }
 
         const uintptr_t directName =
             reinterpret_cast<uintptr_t>(image->name);
