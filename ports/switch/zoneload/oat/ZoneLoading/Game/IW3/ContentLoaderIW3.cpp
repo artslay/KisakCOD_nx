@@ -10,6 +10,8 @@
 #include <cstdio>
 #include <cstring>
 
+extern void Switch_LogWrite(const char *msg);
+
 using namespace IW3;
 
 namespace
@@ -57,7 +59,7 @@ void KisakZone_TraceAssetLoad(const char *zoneName, const size_t assetIndex, con
 
         char trace[192];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] asset-load begin index=%zu type=%d linked=%zu\\n",
+            "[KisakCOD][ZONELOAD] asset-load begin index=%zu type=%d linked=%zu\n",
             assetIndex, assetType, s_kisakLinkedAssetCount);
         Switch_LogWrite(trace);
         return;
@@ -67,7 +69,7 @@ void KisakZone_TraceAssetLoad(const char *zoneName, const size_t assetIndex, con
     {
         char trace[192];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] asset-load end index=%zu type=%d linked=%zu\\n",
+            "[KisakCOD][ZONELOAD] asset-load end index=%zu type=%d linked=%zu\n",
             assetIndex, assetType, s_kisakLinkedAssetCount);
         Switch_LogWrite(trace);
         s_kisakTraceAssetActive = false;
