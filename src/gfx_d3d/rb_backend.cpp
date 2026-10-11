@@ -2808,45 +2808,16 @@ void __cdecl RB_BeginFrame(const GfxBackEndData *data)
     int hr; // [esp+0h] [ebp-4h]
 
     backEndData = (GfxBackEndData*)data;
-#ifdef __SWITCH__
-    if (Sys_IsRenderThread())
-    {
-        char trace[256];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][RTHREAD] RB_BeginFrame: enter drawType=0x%08x views=%u smc=%u lighting=%u\n",
-            (unsigned)data->drawType,
-            (unsigned)data->viewInfoCount,
-            (unsigned)data->smcPatchCount,
-            (unsigned)data->modelLightingPatchCount);
-        Switch_LogWrite(trace);
-    }
-#endif
     if ((data->drawType & 1) != 0)
     {
         ++r_glob.backEndFrameCount;
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: before RB_UpdateBackEndDvarOptions\n");
-#endif
+
         RB_UpdateBackEndDvarOptions();
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: after RB_UpdateBackEndDvarOptions\n");
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: before RB_PatchStaticModelCache\n");
-#endif
+
         RB_PatchStaticModelCache();
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: after RB_PatchStaticModelCache\n");
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: before RB_PatchModelLighting\n");
-#endif
+
         RB_PatchModelLighting(backEndData->modelLightingPatchList, backEndData->modelLightingPatchCount);
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: after RB_PatchModelLighting\n");
-#endif
+
 
         iassert(dx.device);
         iassert(!dx.inScene);
@@ -2855,10 +2826,7 @@ void __cdecl RB_BeginFrame(const GfxBackEndData *data)
 
         do
         {
-#ifdef __SWITCH__
-            if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: before BeginScene\n");
-#endif
+
             if (r_logFile && r_logFile->current.integer)
                 RB_LogPrint("dx.device->BeginScene()\n");
 #ifdef __SWITCH__
@@ -2869,10 +2837,7 @@ void __cdecl RB_BeginFrame(const GfxBackEndData *data)
 #else
             hr = dx.device->BeginScene();
 #endif
-#ifdef __SWITCH__
-            if (Sys_IsRenderThread())
-                Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: after BeginScene\n");
-#endif
+
             if (hr < 0)
             {
                 do
@@ -2883,40 +2848,18 @@ void __cdecl RB_BeginFrame(const GfxBackEndData *data)
             }
         } while (alwaysfails);
 
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: before RB_UploadShaderStep\n");
-#endif
+
         RB_UploadShaderStep();
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: after RB_UploadShaderStep\n");
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: before RB_ResetStatTracking\n");
-#endif
+
         RB_ResetStatTracking();
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: after RB_ResetStatTracking\n");
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: before R_Cinematic_UpdateFrame\n");
-#endif
+
         R_Cinematic_UpdateFrame();
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: after R_Cinematic_UpdateFrame\n");
-#endif
+
         tess.indexCount = 0;
         tess.vertexCount = 0;
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: complete\n");
-#endif
+
     }
-#ifdef __SWITCH__
-    else if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] RB_BeginFrame: drawType has no begin-frame bit\n");
-#endif
+
 }
 
 void __cdecl RB_EndFrame(char drawType)
@@ -3393,26 +3336,18 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
             {
                 PROF_SCOPED("WaitBackendEvent");
                 KISAK_NULLSUB();
-#ifdef __SWITCH__
-                Switch_LogWrite("[KisakCOD][RTHREAD] before backend event wait\n");
-#endif
+
                 R_ProcessWorkerCmdsWithTimeout(Sys_WaitBackendEvent, 1);
-#ifdef __SWITCH__
-                Switch_LogWrite("[KisakCOD][RTHREAD] backend event wait returned\n");
-#endif
+
             }
-#ifdef __SWITCH__
-            Switch_LogWrite("[KisakCOD][RTHREAD] entering renderer loop\n");
-#endif
+
             if (Sys_FinishRenderer())
             {
                 data = Sys_RendererSleep();
                 if (data)
                 {
                     RB_RenderCommandFrame((GfxBackEndData*)data);
-#ifdef __SWITCH__
-                    
-#endif
+
                 }
                 Sys_StopRenderer();
                 //KISAK_NULLSUB();
@@ -3441,12 +3376,10 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
                         Com_Error(ERR_FATAL, "Switch Vulkan render context is unavailable");
                         return;
                     }
-                    Switch_LogWrite("[KisakCOD][RTHREAD] remote update: before SCR_UpdateScreen\n");
+
 #endif
                     SCR_UpdateScreen();
-#ifdef __SWITCH__
-                    Switch_LogWrite("[KisakCOD][RTHREAD] remote update: after SCR_UpdateScreen\n");
-#endif
+
 #endif
                     wait = 33 - (Sys_Milliseconds() - start);
                     if (wait > 0)
@@ -3455,9 +3388,7 @@ void __cdecl  RB_RenderThread(uint32_t threadContext)
                 iassert(r_glob.isRenderingRemoteUpdate);
                 r_glob.isRenderingRemoteUpdate = 0;
                 iassert(!r_glob.screenUpdateNotify);
-#ifdef __SWITCH__
-                Switch_LogWrite("[KisakCOD][RTHREAD] remote update: final notify\n");
-#endif
+
                 r_glob.screenUpdateNotify = 1;
             }
             if (!data)
