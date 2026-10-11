@@ -271,6 +271,14 @@ uintptr_t __cdecl DB_ConvertOffsetToPointerValue(uint32_t offset);
 uintptr_t __cdecl DB_ResolveSwitchSerializedString(uintptr_t serializedAddress);
 #endif
 void __cdecl DB_ConvertOffsetToPointer(void *data);
+#ifdef __SWITCH__
+void __cdecl DB_LogSwitchPointerStoreIfStream(
+    const char *operation,
+    const void *destination,
+    uint32_t serializedToken,
+    uintptr_t resolvedValue,
+    uintptr_t caller);
+#endif
 void __cdecl DB_LoadSwitchSerialized(void *dst, uint32_t size);
 void __cdecl Load_XStringCustom(char **str);
 void __cdecl Load_TempStringCustom(char **str);
