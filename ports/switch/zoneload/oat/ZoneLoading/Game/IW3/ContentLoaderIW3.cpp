@@ -7,8 +7,72 @@
 #include "kisak_zone_hooks_internal.h"
 
 #include <cassert>
+#include <cstdio>
+#include <cstring>
 
 using namespace IW3;
+
+namespace
+{
+    thread_local size_t s_kisakLinkedAssetCount = 0;
+    thread_local size_t s_kisakTracedAssetCount = 0;
+    thread_local bool s_kisakTraceAssetActive = false;
+
+    constexpr size_t kKillhouseTraceStart = 1630;
+    constexpr size_t kKillhouseTraceEnd = 1710;
+    constexpr size_t kKillhouseTraceAssetLimit = 96;
+}
+
+void KisakZone_ResetAssetTrace()
+{
+    s_kisakLinkedAssetCount = 0;
+    s_kisakTracedAssetCount = 0;
+    s_kisakTraceAssetActive = false;
+}
+
+void KisakZone_NoteAssetLinked()
+{
+    ++s_kisakLinkedAssetCount;
+}
+
+void KisakZone_TraceAssetLoad(const char *zoneName, const size_t assetIndex, const int assetType, const bool begin)
+{
+    if (!zoneName || std::strcmp(zoneName, "killhouse") != 0)
+    {
+        if (begin)
+            s_kisakTraceAssetActive = false;
+        return;
+    }
+
+    if (begin)
+    {
+        s_kisakTraceAssetActive = false;
+        if (s_kisakLinkedAssetCount < kKillhouseTraceStart ||
+            s_kisakLinkedAssetCount > kKillhouseTraceEnd ||
+            s_kisakTracedAssetCount >= kKillhouseTraceAssetLimit)
+            return;
+
+        ++s_kisakTracedAssetCount;
+        s_kisakTraceAssetActive = true;
+
+        char trace[192];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][ZONELOAD] asset-load begin index=%zu type=%d linked=%zu\\n",
+            assetIndex, assetType, s_kisakLinkedAssetCount);
+        Switch_LogWrite(trace);
+        return;
+    }
+
+    if (s_kisakTraceAssetActive)
+    {
+        char trace[192];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][ZONELOAD] asset-load end index=%zu type=%d linked=%zu\\n",
+            assetIndex, assetType, s_kisakLinkedAssetCount);
+        Switch_LogWrite(trace);
+        s_kisakTraceAssetActive = false;
+    }
+}
 
 ContentLoader::ContentLoader(Zone& zone, ZoneInputStream& stream)
     : ContentLoaderBase(zone, stream),
@@ -124,7 +188,10 @@ void ContentLoader::LoadXAssetArray(const bool atStreamStart, const size_t count
 
     for (size_t index = 0; index < count; index++)
     {
+        const int traceAssetType = static_cast<int>(varXAsset->type);
+        KisakZone_TraceAssetLoad(m_zone.m_name.c_str(), index, traceAssetType, true);
         LoadXAsset(false);
+        KisakZone_TraceAssetLoad(m_zone.m_name.c_str(), index, traceAssetType, false);
         varXAsset++;
 
 #ifdef DEBUG_OFFSETS
@@ -135,6 +202,7 @@ void ContentLoader::LoadXAssetArray(const bool atStreamStart, const size_t count
 
 void ContentLoader::Load()
 {
+    KisakZone_ResetAssetTrace();
     XAssetList assetList{};
     varXAssetList = &assetList;
 
