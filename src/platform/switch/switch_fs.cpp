@@ -342,6 +342,8 @@ static std::vector<std::string> Switch_GetGameSearchDirectories(
     addDirectory("players");
     addDirectory("raw");
     addDirectory("raw_shared");
+    addDirectory("devraw");
+    addDirectory("devraw_shared");
 
     return directories;
 }
