@@ -4435,7 +4435,7 @@ void __cdecl DB_FlushSwitchDeferredImageAssets()
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][XSTRING ADDRESS TRACE] asset=%d rawType=%u token=%08x formula=%u:%08x target=%p targetAscii=%u targetText=%.*s targetBytes=%s direct=%p directAscii=%u directText=%.*s directBlock=%u directOffset=%08x original=%p\\n",
+                    "[KisakCOD][XSTRING ADDRESS TRACE] asset=%d rawType=%u token=%08x formula=%u:%08x target=%p targetAscii=%u targetText=%.*s targetBytes=%s direct=%p directAscii=%u directText=%.*s directBlock=%u directOffset=%08x original=%p\n",
                     deferred.assetIndex,
                     deferred.rawType,
                     deferred.nameToken,
