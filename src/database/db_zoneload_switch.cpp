@@ -38,7 +38,9 @@
 
 // src/database/db_registry.cpp (DB_AddXAsset itself is file-local there).
 extern XAssetHeader __cdecl DB_AddXAsset(XAssetType type, XAssetHeader header);
+extern void Switch_LogWrite(const char *msg);
 
+#include <cstdio>
 #include <map>
 #include <mutex>
 #include <unordered_map>
@@ -55,6 +57,11 @@ struct ZoneLoadState
     std::vector<uint16_t> scriptStrings;
     std::unordered_set<void *> processed;
     std::unordered_map<MaterialVertexDeclaration *, MaterialVertexDeclaration *> vertexDecls;
+
+    // Bounded progress reporting for a zone that stalls during native loading.
+    uint64_t bytesRead = 0;
+    uint64_t nextReadReport = 16ull * 1024ull * 1024ull;
+    uint32_t linkedAssets = 0;
 };
 
 std::mutex s_zoneHandlesMutex;
@@ -67,12 +74,23 @@ bool FirstVisit(ZoneLoadState &state, void *object)
 
 size_t ReadZoneData(void *context, void *buffer, size_t length)
 {
-    (void)context;
+    auto &state = *static_cast<ZoneLoadState *>(context);
     // Generated loaders request zero bytes for empty arrays; the engine's
     // inflate reader asserts on a zero-size request and zlib reports Z_BUF_ERROR.
     if (length == 0)
         return 0;
+
     DB_LoadXFileData(static_cast<uint8_t *>(buffer), static_cast<uint32_t>(length));
+    state.bytesRead += length;
+    if (state.bytesRead >= state.nextReadReport)
+    {
+        char trace[192];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][ZONELOAD] stream zone-data=%llu bytes linked-assets=%u\n",
+            static_cast<unsigned long long>(state.bytesRead), state.linkedAssets);
+        Switch_LogWrite(trace);
+        state.nextReadReport += 16ull * 1024ull * 1024ull;
+    }
     return length;
 }
 
@@ -297,6 +315,16 @@ void FixupClipMap(clipMap_t *clipMap)
 void *LinkAsset(void *context, int assetType, void *asset)
 {
     auto &state = *static_cast<ZoneLoadState *>(context);
+    ++state.linkedAssets;
+    if ((state.linkedAssets % 512u) == 0)
+    {
+        char trace[192];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][ZONELOAD] linked-assets=%u last-pc-type=%d stream-bytes=%llu\n",
+            state.linkedAssets, assetType,
+            static_cast<unsigned long long>(state.bytesRead));
+        Switch_LogWrite(trace);
+    }
     const auto type = SwitchEngineAssetTypeFromIW3(assetType);
 
     switch (type)
@@ -380,10 +408,34 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
     hooks.loadImageData = LoadImageData;
     hooks.setSoundData = SetSoundData;
 
+    char trace[256];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][ZONELOAD] begin zone=%s block4=%u block7=%u block8=%u\n",
+        zoneName ? zoneName : "(null)",
+        static_cast<unsigned>(blocks.size[4]),
+        static_cast<unsigned>(blocks.size[7]),
+        static_cast<unsigned>(blocks.size[8]));
+    Switch_LogWrite(trace);
+
     char error[512] = "";
     void *const zone = KisakZone_Load(zoneName, blocks, hooks, error, sizeof(error));
     if (!zone)
+    {
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][ZONELOAD] failed zone=%s data=%llu assets=%u error=%s\n",
+            zoneName ? zoneName : "(null)",
+            static_cast<unsigned long long>(state.bytesRead),
+            state.linkedAssets, error);
+        Switch_LogWrite(trace);
         Com_Error(ERR_DROP, "Fastfile for zone '%s' could not be loaded: %s", zoneName, error);
+    }
+
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][ZONELOAD] complete zone=%s data=%llu assets=%u\n",
+        zoneName ? zoneName : "(null)",
+        static_cast<unsigned long long>(state.bytesRead),
+        state.linkedAssets);
+    Switch_LogWrite(trace);
 
     {
         std::lock_guard<std::mutex> lock(s_zoneHandlesMutex);
