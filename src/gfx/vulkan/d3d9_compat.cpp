@@ -728,18 +728,25 @@ void KisakVkBuffer::Release()
 
 HRESULT KisakVkBuffer::Lock(uint32_t offset, uint32_t lockSize, void **out, uint32_t)
 {
-    if (!out || offset > size || lockSize > size - offset)
+    if (!out || offset > size || lockSize > size - offset || !mapped)
         return E_FAIL;
 
-    if (shadow.size() != size)
-        shadow.resize(size);
-    *out = shadow.data() + offset;
+    if (dynamic)
+    {
+        if (shadow.size() != size)
+            shadow.resize(size);
+        *out = shadow.data() + offset;
+    }
+    else
+    {
+        *out = static_cast<uint8_t *>(mapped) + offset;
+    }
     return S_OK;
 }
 
 HRESULT KisakVkBuffer::Unlock()
 {
-    if (!mapped || shadow.empty())
+    if (!mapped || !dynamic || shadow.empty())
         return S_OK;
     std::memcpy(mapped, shadow.data(), shadow.size());
     return S_OK;
@@ -1253,7 +1260,7 @@ HRESULT IDirect3DDevice9::SetDepthStencilSurface(IDirect3DSurface9 *surface)
 }
 
 HRESULT IDirect3DDevice9::CreateVertexBuffer(
-    uint32_t size, uint32_t, uint32_t, uint32_t,
+    uint32_t size, uint32_t usage, uint32_t, uint32_t,
     IDirect3DVertexBuffer9 **out, void *)
 {
     if (!out || !m_backend || !size)
@@ -1262,7 +1269,10 @@ HRESULT IDirect3DDevice9::CreateVertexBuffer(
     auto *buffer = new KisakVkBuffer;
     buffer->size = size;
     buffer->device = m_backend->Device();
-    buffer->shadow.resize(size);
+    // D3DUSAGE_DYNAMIC; static zone/world buffers don't need a CPU shadow.
+    buffer->dynamic = (usage & 0x200u) != 0;
+    if (buffer->dynamic)
+        buffer->shadow.resize(size);
 
     if (!m_backend->CreateBuffer(
             size,
@@ -1279,7 +1289,7 @@ HRESULT IDirect3DDevice9::CreateVertexBuffer(
 }
 
 HRESULT IDirect3DDevice9::CreateIndexBuffer(
-    uint32_t size, uint32_t, _D3DFORMAT,
+    uint32_t size, uint32_t usage, _D3DFORMAT,
     uint32_t, IDirect3DIndexBuffer9 **out, void *)
 {
     if (!out || !m_backend || !size)
@@ -1288,7 +1298,10 @@ HRESULT IDirect3DDevice9::CreateIndexBuffer(
     auto *buffer = new KisakVkBuffer;
     buffer->size = size;
     buffer->device = m_backend->Device();
-    buffer->shadow.resize(size);
+    // D3DUSAGE_DYNAMIC; static zone/world buffers don't need a CPU shadow.
+    buffer->dynamic = (usage & 0x200u) != 0;
+    if (buffer->dynamic)
+        buffer->shadow.resize(size);
 
     if (!m_backend->CreateBuffer(
             size,
