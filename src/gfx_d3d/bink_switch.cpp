@@ -37,6 +37,7 @@ struct SwitchBinkState
     AVCodecContext *audioCodec;
     AVFrame *audioFrame;
     ALuint audioSource;
+    float audioGain;
     bool audioSourceReady;
     bool audioDecodeFailed;
     bool audioInputFlushed;
@@ -255,6 +256,7 @@ static bool Switch_BinkEnsureAudioSource(SwitchBinkState *state)
     alSourcei(state->audioSource, AL_SOURCE_RELATIVE, AL_TRUE);
     alSource3f(state->audioSource, AL_POSITION, 0.0f, 0.0f, 0.0f);
     alSourcef(state->audioSource, AL_ROLLOFF_FACTOR, 0.0f);
+    alSourcef(state->audioSource, AL_GAIN, state->audioGain);
     state->audioSourceReady = alGetError() == AL_NO_ERROR;
     if (!state->audioSourceReady)
     {
@@ -679,6 +681,7 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
     }
 
     state->audioStreamIndex = -1;
+    state->audioGain = 1.0f;
 
     // This wrapper implements the Bink API, so force FFmpeg's Bink
     // demuxer instead of allowing format probing to select an unrelated
@@ -1328,11 +1331,18 @@ RADDEFFUNC void RADEXPLINK BinkSetMixBinVolumes(
     S32 PTR4 *volumes,
     U32 total)
 {
-    (void)bink;
-    (void)trackId;
     (void)volMixBins;
-    (void)volumes;
     (void)total;
+
+    SwitchBinkState *state = Switch_BinkState(bink);
+    if (!state || trackId != 0 || !volumes)
+        return;
+
+    const float left = std::max(0, std::min(32768, volumes[0])) / 32768.0f;
+    const float right = std::max(0, std::min(32768, volumes[1])) / 32768.0f;
+    state->audioGain = std::max(left, right);
+    if (state->audioSourceReady)
+        alSourcef(state->audioSource, AL_GAIN, state->audioGain);
 }
 
 RADDEFFUNC S32 RADEXPLINK BinkControlBackgroundIO(
