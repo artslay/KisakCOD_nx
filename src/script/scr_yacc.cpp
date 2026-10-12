@@ -35,6 +35,9 @@ struct stype_t // sizeof=0x8
     sval_u val;                         // ...
     unsigned int pos;                   // ...
 };
+#ifdef KISAK_SWITCH
+static_assert(sizeof(stype_t) == 16, "Switch YACC values must preserve native pointer width");
+#endif
 
 // KISAKTODO ICF'd function that just returns first arg. 
 sval_u __cdecl node1_(unsigned int pool)
