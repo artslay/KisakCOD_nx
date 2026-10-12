@@ -67,7 +67,18 @@ void AudioThreadMain(SwitchSdlAudioDevice *device)
             continue;
         }
 
-        audrvUpdate(&device->driver);
+        // Wait for the renderer's next frame before polling wave-buffer state. The update
+        // below both refreshes completed buffers and submits the previous iteration's queue
+        // change, avoiding a second audrvUpdate call for every newly queued buffer.
+        audrenWaitFrame();
+
+        if (!device->running.load(std::memory_order_acquire))
+            break;
+        if (device->paused.load(std::memory_order_acquire))
+            continue;
+
+        if (R_FAILED(audrvUpdate(&device->driver)))
+            continue;
 
         int freeBuffer = -1;
         for (int i = 0; i < 2; ++i)
@@ -83,10 +94,7 @@ void AudioThreadMain(SwitchSdlAudioDevice *device)
         }
 
         if (freeBuffer < 0)
-        {
-            audrenWaitFrame();
             continue;
-        }
 
         nextBuffer = (freeBuffer + 1) & 1;
 
@@ -118,7 +126,8 @@ void AudioThreadMain(SwitchSdlAudioDevice *device)
 
         AudioDriverWaveBuf &buffer = device->buffers[freeBuffer];
         audrvVoiceAddWaveBuf(&device->driver, 0, &buffer);
-        audrvUpdate(&device->driver);
+        // The queued buffer is submitted by audrvUpdate at the start of the next
+        // renderer-frame iteration. The other buffer remains queued during that interval.
     }
 }
 } // namespace
