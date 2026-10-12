@@ -43,10 +43,13 @@ static_assert(sizeof(scr_block_s) == 0x218);
 union sval_u // sizeof=0x4
 {                                       // ...
 
-    sval_u()
+    // sval_u is 8 bytes on aarch64 because it contains native pointers.
+    // Clear the entire union before setting a 32-bit integer value, or the
+    // upper half can retain garbage and later be interpreted as a pointer.
+    sval_u() : node(nullptr)
     {
     }
-    sval_u(int i)
+    sval_u(int i) : node(nullptr)
     {
         intValue = i;
     }
