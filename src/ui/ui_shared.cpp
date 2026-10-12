@@ -6187,12 +6187,25 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     const bool preserveSharedMainMenuBackdrop =
         menu->window.name &&
         !I_stricmp(menu->window.name, "player_profile");
+
+    // During a map load, the briefing menu is an overlay on the active
+    // loading cinematic. Its full-screen background otherwise covers the
+    // movie every remote refresh, making a correctly advancing video look
+    // frozen. Preserve the cinematic as the backdrop but still paint all
+    // briefing items (including loading/status UI) over it.
+    const bool preserveLoadingCinematicBackdrop =
+        clientUIActives[dc->localClientNum].connectionState == CA_LOADING &&
+        R_Cinematic_IsStarted() &&
+        menu->window.name &&
+        !I_stricmp(menu->window.name, "briefing");
+    const bool preserveMenuBackdrop =
+        preserveSharedMainMenuBackdrop || preserveLoadingCinematicBackdrop;
 #else
-    const bool preserveSharedMainMenuBackdrop = false;
+    const bool preserveMenuBackdrop = false;
 #endif
     if (menu->fullScreen &&
         menu->window.background &&
-        !preserveSharedMainMenuBackdrop)
+        !preserveMenuBackdrop)
     {
         if (!menu)
             MyAssertHandler("c:\\trees\\cod3\\src\\ui\\ui_utils_api.h", 36, 0, "%s", "w");
@@ -6208,7 +6221,7 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
             menu->window.background);
     }
     fadeCycle = (float)menu->fadeCycle;
-    if (!preserveSharedMainMenuBackdrop)
+    if (!preserveMenuBackdrop)
         Window_Paint(dc, &menu->window, menu->fadeAmount, menu->fadeInAmount, menu->fadeClamp, fadeCycle);
 
 #ifdef __SWITCH__
