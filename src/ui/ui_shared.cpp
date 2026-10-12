@@ -9514,6 +9514,28 @@ void __cdecl Menu_PaintAll(UiContext *dc)
         }
     }
 
+#ifdef __SWITCH__
+    // Keep the frame-rate counter visible over menu screens too. The normal
+    // cg_drawFPS overlay is only painted by the in-game HUD, while the UI
+    // context already maintains a rolling FPS value for every menu frame.
+    {
+        font = UI_GetFontHandle(&scrPlaceView[dc->localClientNum], 0, 0.5);
+        v1 = va("FPS: %.0f", dc->FPS);
+        UI_DrawText(
+            &scrPlaceView[dc->localClientNum],
+            v1,
+            0x7FFFFFFF,
+            font,
+            8.0,
+            25.0,
+            0,
+            0,
+            0.5,
+            colorWhite,
+            0);
+    }
+#endif
+
     {
         PROF_SCOPED("Menu_PaintAll_Debug");
 
