@@ -16,6 +16,7 @@
 #include <universal/profile.h>
 
 #ifdef __SWITCH__
+#include <cstdio>
 extern void Switch_LogWrite(const char *msg);
 extern void COM_NotifyIntroMovieDrawSubmitted(const char *movieName);
 extern thread_local const char * volatile g_switchFrameStage;
@@ -357,7 +358,36 @@ char __cdecl R_Cinematic_Advance()
         PROF_SCOPED("BinkWait");
         wait = BinkWait(cinematicGlob.bink);
     }
-    
+#ifdef __SWITCH__
+    // Observe Bink's clock and ring-buffer indices even when the picture stays
+    // on one frame; audio is advanced independently by the codec backend.
+    static unsigned int switchCinematicAdvanceTraceCalls = 0;
+    if ((++switchCinematicAdvanceTraceCalls % 30u) == 1u)
+    {
+        char trace[320];
+        const BINKFRAMEBUFFERS *buffers = cinematicGlob.binkTextureSet.bink_buffers.TotalFrames
+            ? &cinematicGlob.binkTextureSet.bink_buffers
+            : nullptr;
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CINEMATIC ADVANCE] call=%u wait=%d frame=%u/%u paused=%d targetPaused=%d underrun=%d full=%u active=%d buffer=%u/%u fileIO=%d\\n",
+            switchCinematicAdvanceTraceCalls,
+            wait,
+            static_cast<unsigned>(cinematicGlob.bink->FrameNum),
+            static_cast<unsigned>(cinematicGlob.bink->Frames),
+            static_cast<int>(cinematicGlob.currentPaused),
+            static_cast<int>(targetPaused),
+            cinematicGlob.underrun ? 1 : 0,
+            static_cast<unsigned>(percentageFull),
+            cinematicGlob.activeImageFrame,
+            buffers ? static_cast<unsigned>(buffers->FrameNum) : 0u,
+            buffers ? static_cast<unsigned>(buffers->TotalFrames) : 0u,
+            cinematicGlob.hasFileIO ? 1 : 0);
+        Switch_LogWrite(trace);
+    }
+#endif
+
     if (!wait && !cinematicGlob.underrun)
     {
         Lock_Bink_textures(&cinematicGlob.binkTextureSet);
@@ -1172,6 +1202,30 @@ void R_Cinematic_UpdateRendererImages()
         iassert( gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A] );
         iassert( gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_Y] );
     }
+#ifdef __SWITCH__
+    static unsigned int switchCinematicImageTraceCalls = 0;
+    if ((++switchCinematicImageTraceCalls % 60u) == 1u)
+    {
+        char trace[384];
+        const bool hasBink = cinematicGlob.bink != nullptr;
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CINEMATIC IMAGE] call=%u movie=%.48s active=%d textureSet=%d binkFrame=%u bufferFrame=%u codeY=%p codeCr=%p codeCb=%p codeA=%p\\n",
+            switchCinematicImageTraceCalls,
+            cinematicGlob.currentCinematicName,
+            cinematicGlob.activeImageFrame,
+            cinematicGlob.activeImageFrameTextureSet,
+            hasBink ? static_cast<unsigned>(cinematicGlob.bink->FrameNum) : 0u,
+            cinematicGlob.binkTextureSet.bink_buffers.TotalFrames
+                ? static_cast<unsigned>(cinematicGlob.binkTextureSet.bink_buffers.FrameNum) : 0u,
+            static_cast<void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_Y]),
+            static_cast<void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CR]),
+            static_cast<void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CB]),
+            static_cast<void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A]));
+        Switch_LogWrite(trace);
+    }
+#endif
 }
 
 void __cdecl R_Cinematic_SetRendererImagesToFrame(int frameToSetTo)
