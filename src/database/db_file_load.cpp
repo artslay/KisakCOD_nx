@@ -227,6 +227,11 @@ void __cdecl DB_LoadedExternalData(int32_t size)
 
 double __cdecl DB_GetLoadedFraction()
 {
+#ifdef __SWITCH__
+    // Sample the exact values used for the UI bar without flooding the log.
+    static uint32_t switchDbFractionTraceCalls = 0;
+    const bool traceProgress = (++switchDbFractionTraceCalls % 60u) == 1u;
+#endif
     double loadedBytesInternal; // [esp+14h] [ebp-20h]
     double totalBytesInternal; // [esp+1Ch] [ebp-18h]
     double loadedBytesExternal; // [esp+24h] [ebp-10h]
@@ -243,8 +248,43 @@ double __cdecl DB_GetLoadedFraction()
             const uint64_t loaded = g_load.switchFileOffset < g_load.switchFileSize
                 ? g_load.switchFileOffset
                 : g_load.switchFileSize;
-            return static_cast<double>(loaded) /
+            const double fraction = static_cast<double>(loaded) /
                 static_cast<double>(g_load.switchFileSize);
+#ifdef __SWITCH__
+            if (traceProgress)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][DB PROGRESS] source=file-offset fraction=%.5f gTotal=%d gLoaded=%d ext=%d/%d file=%llu/%llu\\n",
+                    fraction,
+                    static_cast<int>(g_totalSize),
+                    static_cast<int>(g_loadedSize),
+                    static_cast<int>(g_loadedExternalBytes),
+                    static_cast<int>(g_totalExternalBytes),
+                    static_cast<unsigned long long>(g_load.switchFileOffset),
+                    static_cast<unsigned long long>(g_load.switchFileSize));
+                Switch_LogWrite(trace);
+            }
+#endif
+            return fraction;
+        }
+#ifdef __SWITCH__
+        if (traceProgress)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][DB PROGRESS] source=zero gTotal=%d gLoaded=%d ext=%d/%d file=%llu/%llu\\n",
+                static_cast<int>(g_totalSize),
+                static_cast<int>(g_loadedSize),
+                static_cast<int>(g_loadedExternalBytes),
+                static_cast<int>(g_totalExternalBytes),
+                static_cast<unsigned long long>(g_load.switchFileOffset),
+                static_cast<unsigned long long>(g_load.switchFileSize));
+            Switch_LogWrite(trace);
         }
 #endif
         return 0.0;
@@ -259,7 +299,28 @@ double __cdecl DB_GetLoadedFraction()
     loadedBytesExternal = (double)g_loadedExternalBytes;
     if (totalBytesExternal < loadedBytesExternal)
         loadedBytesExternal = totalBytesExternal;
-    return (float)((loadedBytesInternal + loadedBytesExternal) / (totalBytesInternal + totalBytesExternal));
+    const double fraction =
+        (loadedBytesInternal + loadedBytesExternal) /
+        (totalBytesInternal + totalBytesExternal);
+#ifdef __SWITCH__
+    if (traceProgress)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][DB PROGRESS] source=engine-count fraction=%.5f gTotal=%d gLoaded=%d ext=%d/%d file=%llu/%llu\\n",
+            fraction,
+            static_cast<int>(g_totalSize),
+            static_cast<int>(g_loadedSize),
+            static_cast<int>(g_loadedExternalBytes),
+            static_cast<int>(g_totalExternalBytes),
+            static_cast<unsigned long long>(g_load.switchFileOffset),
+            static_cast<unsigned long long>(g_load.switchFileSize));
+        Switch_LogWrite(trace);
+    }
+#endif
+    return static_cast<float>(fraction);
 }
 
 void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
