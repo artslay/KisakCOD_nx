@@ -3,6 +3,10 @@
 #include <sound/snd_public.h>
 #include <gfx_d3d/r_cinematic.h>
 #include <qcommon/cmd.h>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #include <cgame_mp/cg_local_mp.h>
@@ -66,6 +70,12 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
 {
     if (cin_skippable || R_Cinematic_IsFinished())
     {
+        // Capture the queued follow-up before clearing nextmap. UIMENU_NONE
+        // leaves KEYCATCH_UI active, so the usual disconnected-state fallback
+        // may never reopen the main menu after the final cinematic.
+        const char *nextCommand = nextmap ? nextmap->current.string : nullptr;
+        const bool hasNextCommand = nextCommand && nextCommand[0] != '\0';
+
         R_Cinematic_StopPlayback();
 
         if (CL_GetLocalClientConnectionState(localClientNum) == CA_CINEMATIC)
@@ -79,11 +89,26 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
                     localClientNum,
                     1);
             clientUIActives[localClientNum].connectionState = CA_DISCONNECTED;
-            if (nextmap->current.integer)
+            if (hasNextCommand)
             {
-                Cbuf_AddText(0, va("%s\n", nextmap->current.string));
-                Dvar_SetString(nextmap, (char*)"");
+                Cbuf_AddText(0, va("%s\n", nextCommand));
+                Dvar_SetString((dvar_s *)nextmap, (char*)"");
             }
+
+            // Keep the UI closed while another queued cinematic/map command
+            // starts, but explicitly restore the front-end after the last one.
+            UI_SetActiveMenu(localClientNum, hasNextCommand ? UIMENU_NONE : UIMENU_MAIN);
+#ifdef __SWITCH__
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][CIN MENU] stop state=CA_CINEMATIC next=%u action=%s catcher=0x%x\n",
+                hasNextCommand ? 1u : 0u,
+                hasNextCommand ? "continue" : "main",
+                static_cast<unsigned>(clientUIActives[localClientNum].keyCatchers));
+            Switch_LogWrite(trace);
+#endif
         }
     }
 }
