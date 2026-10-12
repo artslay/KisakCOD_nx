@@ -592,6 +592,11 @@ uint32_t SL_GetString(const char* str, uint32_t user)
 
 int SL_GetRefStringLen(RefString* refString)
 {
+	if (!refString->byteLen)
+	{
+		Com_Error(ERR_DROP, "invalid zero-length script string");
+		return 0;
+	}
 	int len = (uint8_t)(refString->byteLen - 1);
 	const uintptr_t base = (uintptr_t)scrMemTreePub.mt_buffer;
 	const uintptr_t ptr = (uintptr_t)refString->str;
@@ -685,7 +690,7 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 		iassert(((entry->status_next & HASH_STAT_MASK) == HASH_STAT_HEAD));
 
 		uint32_t newIndex = (uint16_t)entry->status_next;
-		if (newIndex >= STRINGLIST_SIZE)
+		if (!newIndex || newIndex >= STRINGLIST_SIZE)
 		{
 			Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
 			Com_Error(ERR_DROP, "corrupt script string free chain (bucket %u)", index);
