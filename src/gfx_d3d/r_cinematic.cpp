@@ -1206,12 +1206,20 @@ void R_Cinematic_UpdateRendererImages()
     static unsigned int switchCinematicImageTraceCalls = 0;
     if ((++switchCinematicImageTraceCalls % 60u) == 1u)
     {
-        char trace[384];
+        char trace[640];
         const bool hasBink = cinematicGlob.bink != nullptr;
+        const GfxImage *codeY = gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_Y];
+        const GfxImage *codeCr = gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CR];
+        const GfxImage *codeCb = gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CB];
+        const GfxImage *codeA = gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A];
+        const auto mapOf = [](const GfxImage *image) -> const void *
+        {
+            return image ? static_cast<const void *>(image->texture.map) : nullptr;
+        };
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CINEMATIC IMAGE] call=%u movie=%.48s active=%d textureSet=%d binkFrame=%u bufferFrame=%u codeY=%p codeCr=%p codeCb=%p codeA=%p\n",
+            "[KisakCOD][CINEMATIC IMAGE] call=%u movie=%.32s active=%d textureSet=%d binkFrame=%u bufferFrame=%u code=%p/%p/%p/%p map=%p/%p/%p/%p drawTex=%p/%p/%p vk=%p/%p/%p\n",
             switchCinematicImageTraceCalls,
             cinematicGlob.currentCinematicName,
             cinematicGlob.activeImageFrame,
@@ -1219,10 +1227,23 @@ void R_Cinematic_UpdateRendererImages()
             hasBink ? static_cast<unsigned>(cinematicGlob.bink->FrameNum) : 0u,
             cinematicGlob.binkTextureSet.bink_buffers.TotalFrames
                 ? static_cast<unsigned>(cinematicGlob.binkTextureSet.bink_buffers.FrameNum) : 0u,
-            const_cast<void *>(static_cast<const void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_Y])),
-            const_cast<void *>(static_cast<const void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CR])),
-            const_cast<void *>(static_cast<const void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CB])),
-            const_cast<void *>(static_cast<const void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A])));
+            const_cast<void *>(static_cast<const void *>(codeY)),
+            const_cast<void *>(static_cast<const void *>(codeCr)),
+            const_cast<void *>(static_cast<const void *>(codeCb)),
+            const_cast<void *>(static_cast<const void *>(codeA)),
+            const_cast<void *>(mapOf(codeY)),
+            const_cast<void *>(mapOf(codeCr)),
+            const_cast<void *>(mapOf(codeCb)),
+            const_cast<void *>(mapOf(codeA)),
+            static_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.Ytexture),
+            static_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.cRtexture),
+            static_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.cBtexture),
+            reinterpret_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.Ytexture
+                ? cinematicGlob.binkTextureSet.tex_draw.Ytexture->image : VK_NULL_HANDLE),
+            reinterpret_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.cRtexture
+                ? cinematicGlob.binkTextureSet.tex_draw.cRtexture->image : VK_NULL_HANDLE),
+            reinterpret_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.cBtexture
+                ? cinematicGlob.binkTextureSet.tex_draw.cBtexture->image : VK_NULL_HANDLE));
         Switch_LogWrite(trace);
     }
 #endif
