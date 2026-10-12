@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include "scr_stringlist.h"
 
 #undef GetObject
@@ -133,6 +134,10 @@ union VariableUnion // sizeof=0x4
 #ifndef __SWITCH__
 static_assert(sizeof(VariableUnion) == 0x4);
 #endif
+
+// Runtime stack entries store the native union. Savegames keep compact 32-bit payloads.
+#define SCRIPT_STACK_ENTRY_SIZE (sizeof(uint8_t) + sizeof(VariableUnion))
+#define SCRIPT_STACK_BUFFER_SIZE(entryCount) (offsetof(VariableStackBuffer, buf) + SCRIPT_STACK_ENTRY_SIZE * (entryCount))
 
 struct VariableValue // sizeof=0x8
 {   

@@ -309,7 +309,7 @@ void __cdecl WriteStack(const VariableStackBuffer *stackBuf, MemoryFile *memFile
     const char *buf; // r31
     unsigned int v7; // r3
     __int16 v8; // r30
-    VariableUnion *v9; // r4
+    VariableUnion entryValue;
     _WORD v10[24]; // [sp+50h] [-30h] BYREF
 
     iassert(stackBuf);
@@ -329,9 +329,9 @@ void __cdecl WriteStack(const VariableStackBuffer *stackBuf, MemoryFile *memFile
         {
             v7 = (unsigned __int8)*buf;
             v8 = v5 - 1;
-            v9 = *(VariableUnion **)(buf + 1);
-            buf += 5;
-            DoSaveEntryInternal(v7, reinterpret_cast<uintptr_t>(v9), memFile);
+            memcpy(&entryValue, buf + 1, sizeof(entryValue));
+            buf += SCRIPT_STACK_ENTRY_SIZE;
+            DoSaveEntryInternal(v7, entryValue.pointerValue, memFile);
             v5 = v8;
         } while (v8);
     }
@@ -348,7 +348,7 @@ VariableStackBuffer *__cdecl Scr_ReadStack(MemoryFile *memFile)
     __int16 v8; // r11
     __int16 v9; // r28
     unsigned __int8 v11[8]; // [sp+50h] [-40h] BYREF
-    VariableValue v12; // [sp+58h] [-38h] BYREF
+    VariableValue v12{}; // [sp+58h] [-38h] BYREF
 
     MemFile_ReadData(memFile, 2, v11);
     v2 = *(_WORD *)v11;
@@ -362,11 +362,13 @@ VariableStackBuffer *__cdecl Scr_ReadStack(MemoryFile *memFile)
             0,
             "%s",
             "bufLen == (unsigned short)bufLen");
-    v6 = (VariableStackBuffer*)MT_Alloc((int)(offsetof(VariableStackBuffer, buf) + 5 * v3), MT_TYPE_THREAD);
+    const int nativeBufLen = static_cast<int>(SCRIPT_STACK_BUFFER_SIZE(v3));
+    iassert(nativeBufLen <= 0xFFFF);
+    v6 = (VariableStackBuffer*)MT_Alloc(nativeBufLen, MT_TYPE_THREAD);
     ++scrVarPub.numScriptThreads;
     v6->pos = Scr_ReadCodepos(memFile);
     v6->size = v2;
-    v6->bufLen = v5;
+    v6->bufLen = static_cast<uint16_t>(nativeBufLen);
     MemFile_ReadData(memFile, 1, v11);
     v6->localId = Scr_ReadId(memFile, v11[0]);
     MemFile_ReadData(memFile, 1, v11);
@@ -381,8 +383,8 @@ VariableStackBuffer *__cdecl Scr_ReadStack(MemoryFile *memFile)
             Scr_DoLoadEntryInternal(&v12, memFile);
             v8 = v9;
             *v7 = v12.type;
-            *(unsigned int *)(v7 + 1) = v12.u.intValue;
-            v7 += 5;
+            memcpy(v7 + 1, &v12.u, sizeof(v12.u));
+            v7 += SCRIPT_STACK_ENTRY_SIZE;
         } while (v9);
     }
     return (VariableStackBuffer *)v6;
@@ -1431,7 +1433,7 @@ void __cdecl AddSaveStackInternal(const VariableStackBuffer *stackBuf)
     const char *buf; // r31
     unsigned int v4; // r3
     unsigned __int16 v5; // r30
-    VariableUnion *v6; // r4
+    VariableUnion entryValue;
 
     localId = stackBuf->localId;
     if (stackBuf->localId && !scrVarPub.saveIdMap[localId])
@@ -1447,9 +1449,9 @@ void __cdecl AddSaveStackInternal(const VariableStackBuffer *stackBuf)
         {
             v4 = (unsigned __int8)*buf;
             v5 = size - 1;
-            v6 = *(VariableUnion **)(buf + 1);
-            buf += 5;
-            AddSaveEntryInternal(v4, (const VariableStackBuffer*)v6);
+            memcpy(&entryValue, buf + 1, sizeof(entryValue));
+            buf += SCRIPT_STACK_ENTRY_SIZE;
+            AddSaveEntryInternal(v4, reinterpret_cast<const VariableStackBuffer*>(entryValue.pointerValue));
             size = v5;
         } while (v5);
     }
@@ -1893,11 +1895,13 @@ void __cdecl AddSaveStack(const VariableStackBuffer *stackBuf)
         {
             v4 = (unsigned __int8)*buf;
             v5 = size - 1;
-            v6 = *(const VariableStackBuffer **)(buf + 1);
-            buf += 5;
+            VariableUnion entryValue;
+            memcpy(&entryValue, buf + 1, sizeof(entryValue));
+            v6 = reinterpret_cast<const VariableStackBuffer*>(entryValue.pointerValue);
+            buf += SCRIPT_STACK_ENTRY_SIZE;
             if (v4 == VAR_POINTER)
             {
-                AddSaveObject(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(v6)));
+                AddSaveObject(static_cast<uint32_t>(entryValue.pointerValue));
             }
             else if (v4 == VAR_STACK)
             {

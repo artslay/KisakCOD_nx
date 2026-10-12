@@ -2411,8 +2411,8 @@ void Scr_DumpScriptThreads(void)
 					{
 						--size;
 						type = *buf++;
-						u.intValue = *(int*)buf;
-						buf += 4;
+						memcpy(&u, buf, sizeof(u));
+						buf += sizeof(VariableUnion);
 						if (type == VAR_CODEPOS)
 							info.pos[info.posSize++] = u.codePosValue;
 					}
@@ -4428,14 +4428,14 @@ float  Scr_GetThreadUsage(const VariableStackBuffer* stackBuf, float* endonUsage
 	VariableUnion u; // [esp+10h] [ebp-8h]
 
 	size = stackBuf->size;
-	buf = &stackBuf->buf[5 * size];
+	buf = &stackBuf->buf[SCRIPT_STACK_ENTRY_SIZE * size];
 	usage = Scr_GetObjectUsage(stackBuf->localId);
 	*endonUsage = Scr_GetEndonUsage(stackBuf->localId);
 	localId = stackBuf->localId;
 	while (size)
 	{
-		bufa = buf - 4;
-		u.intValue = *(int*)bufa;
+		bufa = buf - sizeof(VariableUnion);
+		memcpy(&u, bufa, sizeof(u));
 		buf = bufa - 1;
 		--size;
 		if (*buf == 7)

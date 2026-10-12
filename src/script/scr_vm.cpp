@@ -841,12 +841,12 @@ const char* __cdecl Scr_GetStackThreadPos(uint32_t endLocalId, VariableStackBuff
         MyAssertHandler(".\\script\\scr_vm.cpp", 3012, 0, "%s", "startLocalId");
     size = stackValue->size;
     localId = stackValue->localId;
-    buf = &stackValue->buf[5 * size];
+    buf = &stackValue->buf[SCRIPT_STACK_ENTRY_SIZE * size];
     pos = stackValue->pos;
     while (size)
     {
-        bufa = buf - 4;
-        u.intValue = *(int*)bufa;
+        bufa = buf - sizeof(VariableUnion);
+        memcpy(&u, bufa, sizeof(u));
         buf = bufa - 1;
         --size;
         if (*buf == VAR_CODEPOS)
@@ -863,7 +863,7 @@ const char* __cdecl Scr_GetStackThreadPos(uint32_t endLocalId, VariableStackBuff
             localId = parentLocalId;
             if (!u.codePosValue)
                 MyAssertHandler(".\\script\\scr_vm.cpp", 3039, 0, "%s", "u.codePosValue");
-            pos = (const char*)u.intValue;
+            pos = u.codePosValue;
         }
     }
 #ifndef DEDICATED
@@ -1029,7 +1029,7 @@ void __cdecl VM_Notify(uint32_t notifyListOwnerId, uint32_t stringValue, Variabl
                         size = *stackValue->pos;
                         iassert(size >= 0);
                         iassert(size <= stackValue->size);
-                        buf = &stackValue->buf[5 * (stackValue->size - size)];
+                        buf = &stackValue->buf[SCRIPT_STACK_ENTRY_SIZE * (stackValue->size - size)];
 
                         for (currentValue = top; size; --currentValue)
                         {
@@ -1048,8 +1048,8 @@ LABEL_30:
                             if (tempValue3.type == VAR_PRECODEPOS)
                                 break;
 
-                            tempValue3.u.codePosValue = *(const char**)buf;
-                            buf += 4;
+                            memcpy(&tempValue3.u, buf, sizeof(tempValue3.u));
+                            buf += sizeof(VariableUnion);
 
                             AddRefToValue(tempValue3.type, tempValue3.u);
                             type = currentValue->type;
@@ -1116,9 +1116,8 @@ LABEL_30:
 
                         iassert(newSize >= 0 && newSize < (1 << 16));
 
-                        len = 5 * size;
-                        //bufLen = 5 * newSize + 11;
-                        bufLen = 5 * newSize + (sizeof(VariableStackBuffer)-1);
+                        len = SCRIPT_STACK_ENTRY_SIZE * size;
+                        bufLen = static_cast<int>(SCRIPT_STACK_BUFFER_SIZE(newSize));
 
                         if (!MT_Realloc(stackValue->bufLen, bufLen))
                         {
@@ -1144,8 +1143,8 @@ LABEL_30:
                             AddRefToValue(currentValue->type, currentValue->u);
                             iassert((unsigned)currentValue->type < VAR_COUNT);
                             *buf++ = currentValue->type;
-                            *(const char**)buf = currentValue->u.codePosValue;
-                            buf += 4;
+                            memcpy(buf, &currentValue->u, sizeof(currentValue->u));
+                            buf += sizeof(VariableUnion);
                             --newSize;
                         } while (newSize);
 
@@ -1270,18 +1269,18 @@ void __cdecl VM_TerminateStack(uint32_t endLocalId, uint32_t startLocalId, Varia
     int size; // [esp+Ch] [ebp-18h]
     int sizea; // [esp+Ch] [ebp-18h]
     uint32_t parentLocalId; // [esp+10h] [ebp-14h]
-    const char* u; // [esp+14h] [ebp-10h]
+    VariableUnion u; // [esp+14h] [ebp-10h]
     VariableValue tempValue; // [esp+1Ch] [ebp-8h] BYREF
 
     if (!startLocalId)
         MyAssertHandler(".\\script\\scr_vm.cpp", 2932, 0, "%s", "startLocalId");
     size = stackValue->size;
     localId = stackValue->localId;
-    buf = &stackValue->buf[5 * size];
+    buf = &stackValue->buf[SCRIPT_STACK_ENTRY_SIZE * size];
     while (size)
     {
-        bufa = buf - 4;
-        u = *(const char**)bufa;
+        bufa = buf - sizeof(VariableUnion);
+        memcpy(&u, bufa, sizeof(u));
         buf = (char*)bufa - 1;
         --size;
         if (*buf == 7)
@@ -1300,7 +1299,7 @@ void __cdecl VM_TerminateStack(uint32_t endLocalId, uint32_t startLocalId, Varia
                 Scr_SetThreadWaitTime(startLocalId, scrVarPub.time);
                 if (!u)
                     MyAssertHandler(".\\script\\scr_vm.cpp", 2971, 0, "%s", "u.codePosValue");
-                stackValue->pos = u;
+                stackValue->pos = u.codePosValue;
                 stackValue->localId = parentLocalId;
                 stackValue->size = sizea;
                 tempValue.type = VAR_STACK;
@@ -1315,7 +1314,7 @@ void __cdecl VM_TerminateStack(uint32_t endLocalId, uint32_t startLocalId, Varia
         }
         else
         {
-            RemoveRefToValue(*(uint8_t*)buf, (VariableUnion)u);
+            RemoveRefToValue(*(uint8_t*)buf, u);
         }
     }
     if (localId != endLocalId)
@@ -1457,11 +1456,11 @@ void __cdecl VM_TrimStack(uint32_t startLocalId, VariableStackBuffer* stackValue
 
     size = stackValue->size;
     localId = stackValue->localId;
-    buf = &stackValue->buf[5 * size];
+    buf = &stackValue->buf[SCRIPT_STACK_ENTRY_SIZE * size];
     while (size)
     {
-        bufa = buf - 4;
-        u.intValue = *(int*)bufa;
+        bufa = buf - sizeof(VariableUnion);
+        memcpy(&u, bufa, sizeof(u));
         buf = bufa - 1;
         --size;
         if (*buf == 7)
@@ -1554,7 +1553,7 @@ VariableStackBuffer *__cdecl VM_ArchiveStack()
     size = fs.top - fs.startTop;
     if (size != (uint16_t)size)
         MyAssertHandler(".\\script\\scr_vm.cpp", 2768, 0, "%s", "size == (unsigned short)size");
-    bufLen = 5 * size + 11;
+    bufLen = static_cast<int>(SCRIPT_STACK_BUFFER_SIZE(size));
     if (bufLen != (uint16_t)bufLen)
         MyAssertHandler(".\\script\\scr_vm.cpp", 2770, 0, "%s", "bufLen == (unsigned short)bufLen");
     stackValue = (VariableStackBuffer*) MT_Alloc(bufLen, MT_TYPE_THREAD);
@@ -1566,23 +1565,25 @@ VariableStackBuffer *__cdecl VM_ArchiveStack()
     stackValue->pos = fs.pos;
     stackValue->time = scrVarPub.time;
     scrVmPub.localVars -= fs.localVarCount;
-    buf = &stackValue->buf[5 * size];
+    buf = &stackValue->buf[SCRIPT_STACK_ENTRY_SIZE * size];
     while (size)
     {
-        buf -= 4;
+        buf -= sizeof(VariableUnion);
+        VariableUnion archivedValue;
         if (top->type == VAR_CODEPOS)
         {
             --scrVmPub.function_count;
             --scrVmPub.function_frame;
             //*bufa = scrVmPub.function_frame->fs.pos;
-            *(uintptr_t *)buf = (uintptr_t)scrVmPub.function_frame->fs.pos;
+            archivedValue.codePosValue = scrVmPub.function_frame->fs.pos;
             scrVmPub.localVars -= scrVmPub.function_frame->fs.localVarCount;
             localId = GetParentLocalId(localId);
         }
         else
         {
-            *(uintptr_t*)buf = top->u.pointerValue;
+            archivedValue = top->u;
         }
+        memcpy(buf, &archivedValue, sizeof(archivedValue));
         --buf;
         if (top->type >= 0x100u)
             MyAssertHandler(".\\script\\scr_vm.cpp", 2805, 0, "%s", "top->type >= 0 && top->type < (1 << 8)");
@@ -1712,8 +1713,8 @@ VariableStackBuffer *VM_ArchiveStack2(int size, const char *codePos, VariableVal
     VariableStackBuffer *stackBuf;
     int bufLen;
 
-    //bufLen = 5 * size + 11;
-    bufLen = 5 * size + sizeof(VariableStackBuffer);
+    // Native runtime stacks store a native-width value union per entry.
+    bufLen = static_cast<int>(SCRIPT_STACK_BUFFER_SIZE(size));
 
     iassert(size == (unsigned short)size);
     iassert(bufLen == (unsigned short)bufLen);
@@ -1727,24 +1728,26 @@ VariableStackBuffer *VM_ArchiveStack2(int size, const char *codePos, VariableVal
     stackBuf->pos = codePos;
     stackBuf->time = scrVarPub.time;
     scrVmPub.localVars -= localVarCount;
-    buf = &stackBuf->buf[5 * size];
+    buf = &stackBuf->buf[SCRIPT_STACK_ENTRY_SIZE * size];
 
     while (size)
     {
-        pos = buf - 4;
+        pos = buf - sizeof(VariableUnion);
+        VariableUnion archivedValue;
 
         if (top->type == VAR_CODEPOS)
         {
             --scrVmPub.function_count;
             --scrVmPub.function_frame;
-            *(intptr_t *)pos = (intptr_t)scrVmPub.function_frame->fs.pos;
+            archivedValue.codePosValue = scrVmPub.function_frame->fs.pos;
             scrVmPub.localVars -= scrVmPub.function_frame->fs.localVarCount;
             id = GetParentLocalId(id);
         }
         else
         {
-            *(intptr_t *)pos = (intptr_t)top->u.codePosValue;
+            archivedValue = top->u;
         }
+        memcpy((char *)pos, &archivedValue, sizeof(archivedValue));
 
         buf = pos - 1;
         iassert(top->type >= 0 && top->type < (1 << 8));
@@ -4722,21 +4725,18 @@ void __cdecl VM_UnarchiveStack(uint32_t startLocalId, VariableStackBuffer* stack
         --size;
         top->type = (Vartype_t)*(unsigned char*)buf;
         buf += 1;
+        memcpy(&top->u, buf, sizeof(top->u));
 
         if (top->type == VAR_CODEPOS)
         {
             iassert(scrVmPub.function_count < 32 /*MAX_VM_STACK_DEPTH*/);
 
-            scrVmPub.function_frame->fs.pos = *(const char**)buf;
+            scrVmPub.function_frame->fs.pos = top->u.codePosValue;
             ++scrVmPub.function_count;
             ++scrVmPub.function_frame;
         }
-        else
-        {
-            top->u.codePosValue = *(const char**)buf;
-        }
 
-        buf += 4;
+        buf += sizeof(VariableUnion);
     }
     fs.pos = stackValue->pos;
     fs.top = top;
@@ -4801,20 +4801,17 @@ void VM_UnarchiveStack2(uint32_t startLocalId, function_stack_t *stack, Variable
         --size;
         startTop->type = (Vartype_t)*(unsigned char *)buf;
         pos = buf + 1;
+        memcpy(&startTop->u, pos, sizeof(startTop->u));
 
         if (startTop->type == VAR_CODEPOS)
         {
             iassert(scrVmPub.function_count < 32/*MAX_VM_STACK_DEPTH*/);
-            scrVmPub.function_frame->fs.pos = *(const char **)pos;
+            scrVmPub.function_frame->fs.pos = startTop->u.codePosValue;
             ++scrVmPub.function_count;
             ++scrVmPub.function_frame;
         }
-        else
-        {
-            startTop->u.intValue = *(int *)pos;
-        }
 
-        buf = (pos + 4);
+        buf = pos + sizeof(VariableUnion);
     }
 
     stack->pos = stackValue->pos;
