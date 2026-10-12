@@ -1,5 +1,6 @@
 #ifdef KISAK_OPENAL
 
+#include <algorithm>
 #include <universal/q_shared.h>
 #include "snd_local.h"
 #include "snd_public.h"
