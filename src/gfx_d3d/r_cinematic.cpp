@@ -21,7 +21,8 @@ extern void Switch_LogWrite(const char *msg);
 extern void COM_NotifyIntroMovieDrawSubmitted(const char *movieName);
 extern thread_local const char * volatile g_switchFrameStage;
 extern void COM_NotifyIntroMoviePlaybackFinished(const char *movieName);
-extern void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures);
+extern void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieFrame, uint32_t movieFrames);
+extern void Switch_ResetBinkReadbackProbes();
 #endif
 
 // #define CINEMA
@@ -130,11 +131,7 @@ void __cdecl R_Cinematic_InitBinkVolumes()
 
 void __cdecl R_Cinematic_Init()
 {
-#ifdef __SWITCH__
-    Switch_LogWrite(g_cinematicThreadInitialized
-        ? "[KisakCOD][CINEMATIC] R_Cinematic_Init: entry initialized=true\n"
-        : "[KisakCOD][CINEMATIC] R_Cinematic_Init: entry initialized=false\n");
-#endif
+
     iassert(!g_cinematicThreadInitialized || g_cinematicThreadState == CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES);
 
     memset(&cinematicGlob, 0, sizeof(cinematicGlob));
@@ -147,24 +144,15 @@ void __cdecl R_Cinematic_Init()
 
     if (!g_cinematicThreadInitialized)
     {
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: spawning thread\n");
-#endif
+
         g_cinematicThreadInitialized = 1;
         g_cinematicThreadState = CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES;
         Sys_SpawnCinematicsThread(R_Cinematic_Thread);
         KISAK_NULLSUB();
         cinematicGlob.atHighPriority = 1;
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: spawn returned\n");
-#endif
+
     }
-#ifdef __SWITCH__
-    else
-    {
-        Switch_LogWrite("[KisakCOD][CINEMATIC] R_Cinematic_Init: thread already initialized\n");
-    }
-#endif
+
 }
 
 void R_Cinematic_ReserveMemory()
@@ -175,25 +163,17 @@ void R_Cinematic_ReserveMemory()
 void __cdecl  R_Cinematic_Thread(uint32_t threadContext)
 {
     iassert(threadContext == THREAD_CONTEXT_CINEMATIC);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][CINEMATIC] thread entered\n");
-#endif
+
     while (1)
     {
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][CINEMATIC] before host wait\n");
-#endif
+
         R_CinematicThread_WaitForHostEvent();
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][CINEMATIC] host event received\n");
-#endif
+
         R_Cinematic_UpdateFrame_Core2();
         g_cinematicThreadState = CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES;
         Sys_ResetCinematicsHostOutstandingRequestEvent();
         Sys_SetCinematicsThreadOutstandingRequestEvent();
-#ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][CINEMATIC] thread event signaled\n");
-#endif
+
     }
 }
 
@@ -358,35 +338,7 @@ char __cdecl R_Cinematic_Advance()
         PROF_SCOPED("BinkWait");
         wait = BinkWait(cinematicGlob.bink);
     }
-#ifdef __SWITCH__
-    // Observe Bink's clock and ring-buffer indices even when the picture stays
-    // on one frame; audio is advanced independently by the codec backend.
-    static unsigned int switchCinematicAdvanceTraceCalls = 0;
-    if ((++switchCinematicAdvanceTraceCalls % 30u) == 1u)
-    {
-        char trace[320];
-        const BINKFRAMEBUFFERS *buffers = cinematicGlob.binkTextureSet.bink_buffers.TotalFrames
-            ? &cinematicGlob.binkTextureSet.bink_buffers
-            : nullptr;
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][CINEMATIC ADVANCE] call=%u wait=%d frame=%u/%u paused=%d targetPaused=%d underrun=%d full=%u active=%d buffer=%u/%u fileIO=%d\n",
-            switchCinematicAdvanceTraceCalls,
-            wait,
-            static_cast<unsigned>(cinematicGlob.bink->FrameNum),
-            static_cast<unsigned>(cinematicGlob.bink->Frames),
-            static_cast<int>(cinematicGlob.currentPaused),
-            static_cast<int>(targetPaused),
-            cinematicGlob.underrun ? 1 : 0,
-            static_cast<unsigned>(percentageFull),
-            cinematicGlob.activeImageFrame,
-            buffers ? static_cast<unsigned>(buffers->FrameNum) : 0u,
-            buffers ? static_cast<unsigned>(buffers->TotalFrames) : 0u,
-            cinematicGlob.hasFileIO ? 1 : 0);
-        Switch_LogWrite(trace);
-    }
-#endif
+
 
     if (!wait && !cinematicGlob.underrun)
     {
@@ -1069,6 +1021,9 @@ void __cdecl R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float
 void __cdecl R_Cinematic_StartPlayback_Internal(char *name, uint32_t playbackFlags, float volume)
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
+#ifdef __SWITCH__
+    Switch_ResetBinkReadbackProbes();
+#endif
     I_strncpyz(cinematicGlob.targetCinematicName, name, 256);
     cinematicGlob.targetCinematicChanged = 1;
     cinematicGlob.cinematicFinished = 0;
@@ -1114,15 +1069,9 @@ void __cdecl R_Cinematic_UpdateFrame()
 
     PROF_SCOPED("R_Cinematic_UpdateFrame");
 
-#ifdef __SWITCH__
-    if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: before cinematic critical section\n");
-#endif
+
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
-#ifdef __SWITCH__
-    if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: cinematic critical section acquired\n");
-#endif
+
     v0 = !cinematicGlob.fullSyncNextUpdate && (cinematicGlob.playbackFlags & 1) == 0;
     cinematicGlob.fullSyncNextUpdate = 0;
     if (g_cinematicThreadState == CINEMATIC_THREAD_STATE_FROM_HOST_GO)
@@ -1132,47 +1081,22 @@ void __cdecl R_Cinematic_UpdateFrame()
             0,
             "%s",
             "g_cinematicThreadState != CINEMATIC_THREAD_STATE_FROM_HOST_GO");
-#ifdef __SWITCH__
-    if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: before R_Cinematic_ThreadFinish\n");
-#endif
+
     if (R_Cinematic_ThreadFinish(v0))
     {
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: ThreadFinish returned true\n");
-#endif
+
         g_cinematicThreadState = CINEMATIC_THREAD_STATE_FROM_HOST_GO;
         Sys_ResetCinematicsThreadOutstandingRequestEvent();
         Sys_SetCinematicsHostOutstandingRequestEvent();
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: before second ThreadFinish\n");
-#endif
+
         R_Cinematic_ThreadFinish(v0);
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread())
-            Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: second ThreadFinish returned\n");
-#endif
+
     }
-#ifdef __SWITCH__
-    else if (Sys_IsRenderThread())
-    {
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: ThreadFinish returned false\n");
-    }
-    if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: before UpdateRendererImages\n");
-#endif
+
     R_Cinematic_UpdateRendererImages();
-#ifdef __SWITCH__
-    if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: after UpdateRendererImages\n");
-#endif
+
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
-#ifdef __SWITCH__
-    if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_UpdateFrame: complete\n");
-#endif
+
 }
 
 void R_Cinematic_UpdateRendererImages()
@@ -1180,7 +1104,10 @@ void R_Cinematic_UpdateRendererImages()
 #ifdef __SWITCH__
     // Bink decodes CPU planes on its worker, but Vulkan image uploads and
     // layout transitions must be serialized with renderer work.
-    Switch_UploadPendingBinkFrame(&cinematicGlob.binkTextureSet);
+    Switch_UploadPendingBinkFrame(
+        &cinematicGlob.binkTextureSet,
+        cinematicGlob.bink ? static_cast<uint32_t>(cinematicGlob.bink->FrameNum) : 0u,
+        cinematicGlob.bink ? static_cast<uint32_t>(cinematicGlob.bink->Frames) : 0u);
 #endif
     if (cinematicGlob.activeImageFrame == -1)
     {
@@ -1202,51 +1129,7 @@ void R_Cinematic_UpdateRendererImages()
         iassert( gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A] );
         iassert( gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_Y] );
     }
-#ifdef __SWITCH__
-    static unsigned int switchCinematicImageTraceCalls = 0;
-    if ((++switchCinematicImageTraceCalls % 60u) == 1u)
-    {
-        char trace[640];
-        const bool hasBink = cinematicGlob.bink != nullptr;
-        const GfxImage *codeY = gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_Y];
-        const GfxImage *codeCr = gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CR];
-        const GfxImage *codeCb = gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CB];
-        const GfxImage *codeA = gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A];
-        const auto mapOf = [](const GfxImage *image) -> const void *
-        {
-            return image ? static_cast<const void *>(image->texture.map) : nullptr;
-        };
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][CINEMATIC IMAGE] call=%u movie=%.32s active=%d textureSet=%d binkFrame=%u bufferFrame=%u code=%p/%p/%p/%p map=%p/%p/%p/%p drawTex=%p/%p/%p vk=%p/%p/%p\n",
-            switchCinematicImageTraceCalls,
-            cinematicGlob.currentCinematicName,
-            cinematicGlob.activeImageFrame,
-            cinematicGlob.activeImageFrameTextureSet,
-            hasBink ? static_cast<unsigned>(cinematicGlob.bink->FrameNum) : 0u,
-            cinematicGlob.binkTextureSet.bink_buffers.TotalFrames
-                ? static_cast<unsigned>(cinematicGlob.binkTextureSet.bink_buffers.FrameNum) : 0u,
-            const_cast<void *>(static_cast<const void *>(codeY)),
-            const_cast<void *>(static_cast<const void *>(codeCr)),
-            const_cast<void *>(static_cast<const void *>(codeCb)),
-            const_cast<void *>(static_cast<const void *>(codeA)),
-            const_cast<void *>(mapOf(codeY)),
-            const_cast<void *>(mapOf(codeCr)),
-            const_cast<void *>(mapOf(codeCb)),
-            const_cast<void *>(mapOf(codeA)),
-            static_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.Ytexture),
-            static_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.cRtexture),
-            static_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.cBtexture),
-            reinterpret_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.Ytexture
-                ? cinematicGlob.binkTextureSet.tex_draw.Ytexture->image : VK_NULL_HANDLE),
-            reinterpret_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.cRtexture
-                ? cinematicGlob.binkTextureSet.tex_draw.cRtexture->image : VK_NULL_HANDLE),
-            reinterpret_cast<void *>(cinematicGlob.binkTextureSet.tex_draw.cBtexture
-                ? cinematicGlob.binkTextureSet.tex_draw.cBtexture->image : VK_NULL_HANDLE));
-        Switch_LogWrite(trace);
-    }
-#endif
+
 }
 
 void __cdecl R_Cinematic_SetRendererImagesToFrame(int frameToSetTo)
@@ -1267,25 +1150,14 @@ void __cdecl R_Cinematic_SetRendererImagesToFrame(int frameToSetTo)
 
 char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay)
 {
-    uint32_t switchWaitSpins = 0;
 
-#ifdef __SWITCH__
-    if (Sys_IsRenderThread())
-        Switch_LogWrite("[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: enter\n");
-#endif
 
     do
     {
         while (2)
         {
             const bool waitReady = Sys_WaitForCinematicsThreadOutstandingRequestEventTimeout(1);
-#ifdef __SWITCH__
-            if (Sys_IsRenderThread() &&
-                (switchWaitSpins == 0 || (!waitReady && (switchWaitSpins % 1000) == 0)))
-                Switch_LogWrite(waitReady
-                    ? "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: wait=true\n"
-                    : "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: wait=false\n");
-#endif
+
             if (waitReady)
             {
                 switch (g_cinematicThreadState)
@@ -1313,12 +1185,7 @@ char __cdecl R_Cinematic_ThreadFinish(bool midBinkIsOkay)
             }
             break;
         }
-        ++switchWaitSpins;
-#ifdef __SWITCH__
-        if (Sys_IsRenderThread() && (switchWaitSpins == 5 || (switchWaitSpins % 1000) == 0))
-            Switch_LogWrite(
-                "[KisakCOD][RTHREAD] R_Cinematic_ThreadFinish: still waiting\n");
-#endif
+
     } while (!midBinkIsOkay || g_cinematicThreadState != CINEMATIC_THREAD_STATE_FROM_HOST_GO_BINK);
     return 0;
 }
@@ -1369,36 +1236,7 @@ void __cdecl R_Cinematic_DrawLetterbox_OptionalCinematic(bool drawCinematic, flo
 
 void __cdecl R_Cinematic_DrawStretchPic_Letterboxed()
 {
-#ifdef __SWITCH__
-    // The cinematic material samples the engine's code-image planes, not a
-    // regular material texture. A stale activeImageFrame can survive the last
-    // displayed frame after playback has finished or failed to open; submitting
-    // that quad then covers the menu's real background with fallback planes.
-    // Only draw while playback is genuinely active and a decoded frame exists.
-    const bool hasActiveFrame =
-        cinematicGlob.activeImageFrame != CINEMATIC_INVALID_IMAGE_FRAME;
-    const bool playbackStarted = R_Cinematic_IsStarted();
-    if (!hasActiveFrame || !playbackStarted)
-    {
-        static uint32_t switchSkippedCinematicDraws = 0;
-        if (switchSkippedCinematicDraws < 8u)
-        {
-            char trace[320];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][CINEMATIC] skipped letterboxed draw frame=%d started=%u finished=%u name=%s\n",
-                cinematicGlob.activeImageFrame,
-                playbackStarted ? 1u : 0u,
-                cinematicGlob.cinematicFinished ? 1u : 0u,
-                cinematicGlob.currentCinematicName[0]
-                    ? cinematicGlob.currentCinematicName : "<none>");
-            Switch_LogWrite(trace);
-            ++switchSkippedCinematicDraws;
-        }
-        return;
-    }
-#endif
+
     R_Cinematic_DrawLetterbox_OptionalCinematic(1, 1.0);
 #ifdef __SWITCH__
     if (cinematicGlob.activeImageFrame != CINEMATIC_INVALID_IMAGE_FRAME)
