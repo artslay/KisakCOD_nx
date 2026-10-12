@@ -103,7 +103,7 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
             const int menuActivated =
                 UI_SetActiveMenu(localClientNum, hasNextCommand ? UIMENU_NONE : UIMENU_MAIN);
             if (!hasNextCommand && !menuActivated)
-                Key_RemoveCatcher(localClientNum, KEYCATCH_UI);
+                Key_RemoveCatcher(localClientNum, ~KEYCATCH_UI);
 #ifdef __SWITCH__
             char trace[256];
             std::snprintf(
