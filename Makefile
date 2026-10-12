@@ -62,7 +62,6 @@ CPP_SOURCES := $(shell find src -type f -name '*.cpp' \
     ! -name 'stack.cpp' \
     ! -name 'obstack.cpp' \
     ! -name 'testing.cpp' \
-    ! -name 'scr_yacc.cpp' \
     ! -name 'scr_compiler2.cpp' )
 
 # Required by Phys_CollideBoxWithTriangleList; keep other optional trimesh
