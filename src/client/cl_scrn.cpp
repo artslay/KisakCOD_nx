@@ -49,7 +49,7 @@ static void Switch_TraceLoadingCinematicDraw(const char *site)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CINEMATIC DRAW] call=%u site=%s stage=%s\\n",
+            "[KisakCOD][CINEMATIC DRAW] call=%u site=%s stage=%s\n",
             calls,
             site ? site : "unknown",
             g_switchFrameStage ? g_switchFrameStage : "unknown");
