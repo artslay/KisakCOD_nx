@@ -8,6 +8,9 @@
 #include "scr_parser.h"
 #include "scr_variable.h"
 #include "scr_vm.h"
+#ifdef __SWITCH__
+extern void Switch_SetProgressScriptStage(const char *stage, const char *filename);
+#endif
 
 enum
 {
@@ -198,6 +201,9 @@ void __cdecl Scr_LoadAnimTreeAtIndex(uint32_t index, void *(__cdecl *Alloc)(int)
     iassert(GetVariableName(id) < SL_MAX_STRING_INDEX);
 
     filenameId = (uint16_t)GetVariableName(id);
+#ifdef __SWITCH__
+    Switch_SetProgressScriptStage("script/load_animtree", SL_ConvertToString(filenameId));
+#endif
     fileId = FindObject(id);
     iassert(fileId);
     if (!FindVariable(fileId, 1))

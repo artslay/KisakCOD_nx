@@ -10,6 +10,9 @@
 #include <script/scr_main.h>
 #include <xanim/xanim.h>
 #include <universal/profile.h>
+#ifdef __SWITCH__
+extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
+#endif
 
 int __cdecl GScr_LoadScriptAndLabel(const char *filename, const char *label, ScriptFunctions *functions)
 {
@@ -260,27 +263,45 @@ void __cdecl GScr_LoadScripts(const char *mapname, ScriptFunctions *functions)
     unsigned int inited; // [sp+54h] [-7Ch]
     char filename[112]; // [sp+60h] [-70h] BYREF
 
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/load/begin", UINT32_MAX);
+#endif
     Scr_BeginLoadScripts();
 
     {
+#ifdef __SWITCH__
+        Switch_SetProgressStage("script/load/misc_scripts", UINT32_MAX);
+#endif
         PROF_SCOPED("load misc scripts");
         GScr_LoadScriptAndLabel("codescripts/delete", "main", functions);
         GScr_LoadScriptAndLabel("codescripts/struct", "initstructs", functions);
         GScr_LoadScriptAndLabel("codescripts/struct", "createstruct", functions);
     }
     {
+#ifdef __SWITCH__
+        Switch_SetProgressStage("script/load/anim_scripts", UINT32_MAX);
+#endif
         PROF_SCOPED("load anim scripts");
         GScr_LoadAnimScripts(functions);
     }
     {
+#ifdef __SWITCH__
+        Switch_SetProgressStage("script/load/level_script", UINT32_MAX);
+#endif
         PROF_SCOPED("load level script");
         Com_sprintf(filename, 64, "maps/%s", mapname);
         GScr_LoadScriptAndLabel(filename, "main", functions);
     }
     {
+#ifdef __SWITCH__
+        Switch_SetProgressStage("script/load/entity_scripts", UINT32_MAX);
+#endif
         PROF_SCOPED("load entity scripts");
         GScr_LoadScriptsForEntities(functions); // LWSS: function changed to register functions for `node_negotiation_begin`
     }
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/load/post_compile", UINT32_MAX);
+#endif
     // LWSS: Removing this. Don't see it in SP PC. There should be 57 functions here.
     //inited = Scr_InitStringSet();
     //Path_CallFunctionForNodes(GScr_LoadScriptsForPathNode, functions);

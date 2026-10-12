@@ -1007,14 +1007,23 @@ void GScr_LoadScriptsAndAnims()
     functions.maxSize = 128;
     functions.address = address;
     mapname = Dvar_GetString("mapname");
+#ifdef __SWITCH__
+    Switch_SetProgressStage("frame/game_init/script_load_sources", UINT32_MAX);
+#endif
     GScr_LoadScripts(mapname, &functions);
     functions.maxSize = functions.count;
     functions.count = 0;
+#ifdef __SWITCH__
+    Switch_SetProgressStage("frame/game_init/script_bind_functions", UINT32_MAX);
+#endif
     GScr_SetScripts(&functions);
 
     if (functions.maxSize != functions.count)
         Com_Error(ERR_DROP, "Script function count mismatch");
 
+#ifdef __SWITCH__
+    Switch_SetProgressStage("frame/game_init/script_load_anim_instances", UINT32_MAX);
+#endif
     G_LoadAnimTreeInstances();
 }
 

@@ -25,6 +25,9 @@
 #include "actor_grenade.h"
 #include "bullet.h"
 #include <server/sv_public.h>
+#ifdef __SWITCH__
+extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
+#endif
 #include <universal/com_sndalias.h>
 #include <universal/surfaceflags.h>
 #include <database/database.h>
@@ -11255,20 +11258,56 @@ void __cdecl GScr_SetScriptsAndAnimsForEntities(ScriptFunctions *functions)
 
 void __cdecl GScr_SetScripts(ScriptFunctions *functions)
 {
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/bind/delete", UINT32_MAX);
+#endif
     g_scr_data.delete_ = GScr_SetScriptAndLabel(functions, "codescripts/delete", "main", 1);
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/bind/initstructs", UINT32_MAX);
+#endif
     g_scr_data.initstructs = GScr_SetScriptAndLabel(functions, "codescripts/struct", "initstructs", 1);
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/bind/createstruct", UINT32_MAX);
+#endif
     g_scr_data.createstruct = GScr_SetScriptAndLabel(functions, "codescripts/struct", "createstruct", 1);
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/bind/anim_scripts", UINT32_MAX);
+#endif
     GScr_SetAnimScripts(functions);
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/bind/level_script", UINT32_MAX);
+#endif
     GScr_SetLevelScript(functions);
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/bind/entity_scripts", UINT32_MAX);
+#endif
     GScr_SetScriptsAndAnimsForEntities(functions);
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/bind/path_nodes", UINT32_MAX);
+#endif
     Path_CallFunctionForNodes(GScr_SetScriptsForPathNode, functions);
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/bind/post_load", UINT32_MAX);
+#endif
     GScr_PostLoadScripts();
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/bind/end_load", UINT32_MAX);
+#endif
     Scr_EndLoadScripts();
     if (!G_ExitAfterConnectPaths())
     {
+#ifdef __SWITCH__
+        Switch_SetProgressStage("script/bind/precache_animtrees", UINT32_MAX);
+#endif
         Scr_PrecacheAnimTrees(Hunk_AllocXAnimCreate, 1);
+#ifdef __SWITCH__
+        Switch_SetProgressStage("script/bind/find_animtrees", UINT32_MAX);
+#endif
         GScr_FindAnimTrees();
     }
+#ifdef __SWITCH__
+    Switch_SetProgressStage("script/bind/end_animtrees", UINT32_MAX);
+#endif
     Scr_EndLoadAnimTrees();
 }
 

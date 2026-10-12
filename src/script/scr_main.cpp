@@ -15,6 +15,7 @@
 #undef GetObject
 
 #ifdef __SWITCH__
+extern void Switch_SetProgressScriptStage(const char *stage, const char *filename);
 extern "C" {
 thread_local const char * volatile g_switchScriptLoadStage = "idle";
 thread_local char g_switchScriptLoadName[128] = {};
@@ -23,6 +24,7 @@ thread_local char g_switchScriptLoadName[128] = {};
 static void Switch_SetScriptLoadDiagnostic(const char *stage, const char *filename = nullptr)
 {
     g_switchScriptLoadStage = stage;
+    Switch_SetProgressScriptStage(stage, filename);
     if (!filename)
         return;
 
