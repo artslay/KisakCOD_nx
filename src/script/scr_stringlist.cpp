@@ -272,9 +272,17 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 
 		prev = hash;
 		newIndex = (uint16_t)entry->status_next;
+		uint32_t traversed = 0;
 
-		for (newEntry = &scrStringGlob.hashTable[newIndex]; newEntry != entry; newEntry = &scrStringGlob.hashTable[newIndex])
+		while (newIndex != hash)
 		{
+			if (!newIndex || newIndex >= STRINGLIST_SIZE || traversed++ >= STRINGLIST_SIZE)
+			{
+				Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+				Com_Error(ERR_DROP, "corrupt script string hash chain (bucket %u)", hash);
+				return 0;
+			}
+			newEntry = &scrStringGlob.hashTable[newIndex];
 			iassert((newEntry->status_next & HASH_STAT_MASK) == HASH_STAT_MOVABLE);
 
 			refStr = GetRefString(newEntry->u.prev);
@@ -298,7 +306,7 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 			}
 			prev = newIndex;
 			newIndex = (uint16_t)newEntry->status_next;
-		} //for()
+		}
 
 		newIndex = scrStringGlob.hashTable[0].status_next;
 
@@ -330,13 +338,25 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 			
 			next = (uint16_t)entry->status_next;
 
-			for (prev = next;
-				(uint16_t)scrStringGlob.hashTable[prev].status_next != hash;
-				prev = (uint16_t)scrStringGlob.hashTable[prev].status_next)
+			prev = next;
+			uint32_t traversed = 0;
+			while (prev < STRINGLIST_SIZE &&
+				(uint16_t)scrStringGlob.hashTable[prev].status_next != hash &&
+				traversed++ < STRINGLIST_SIZE)
 			{
-				;
+				const uint32_t link = (uint16_t)scrStringGlob.hashTable[prev].status_next;
+				if (!link || link >= STRINGLIST_SIZE)
+					break;
+				prev = link;
 			}
 
+			if (!prev || prev >= STRINGLIST_SIZE ||
+				(uint16_t)scrStringGlob.hashTable[prev].status_next != hash)
+			{
+				Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+				Com_Error(ERR_DROP, "corrupt script string collision chain (bucket %u)", hash);
+				return 0;
+			}
 			iassert(prev);
 
 			newIndex = scrStringGlob.hashTable[0].status_next;
@@ -458,11 +478,17 @@ static uint32_t FindStringOfSize(const char* str, uint32_t len)
 	{
 		uint32_t prev = hash;
 		uint32_t newIndex = (uint16_t)entry->status_next;
+		uint32_t traversed = 0;
 
-		for (HashEntry* newEntry = &scrStringGlob.hashTable[newIndex];
-			newEntry != entry;
-			newEntry = &scrStringGlob.hashTable[newIndex])
+		while (newIndex != hash)
 		{
+			if (!newIndex || newIndex >= STRINGLIST_SIZE || traversed++ >= STRINGLIST_SIZE)
+			{
+				Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+				Com_Error(ERR_DROP, "corrupt script string lookup chain (bucket %u)", hash);
+				return 0;
+			}
+			HashEntry* newEntry = &scrStringGlob.hashTable[newIndex];
 			iassert((newEntry->status_next & HASH_STAT_MASK) == HASH_STAT_MOVABLE);
 			refStr = GetRefString(newEntry->u.prev);
 
@@ -484,7 +510,7 @@ static uint32_t FindStringOfSize(const char* str, uint32_t len)
 			}
 			prev = newIndex;
 			newIndex = (uint16_t)newEntry->status_next;
-		} // for()
+		}
 		Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
 		return 0;
 	} //memcmp
@@ -567,13 +593,26 @@ uint32_t SL_GetString(const char* str, uint32_t user)
 int SL_GetRefStringLen(RefString* refString)
 {
 	int len = (uint8_t)(refString->byteLen - 1);
+	const uintptr_t base = (uintptr_t)scrMemTreePub.mt_buffer;
+	const uintptr_t ptr = (uintptr_t)refString->str;
+	const uintptr_t end = base + MT_SIZE;
 
-	while (refString->str[len])
+	if (ptr < base || ptr >= end || len < 0)
+	{
+		Com_Error(ERR_DROP, "invalid script string allocation while reading length");
+		return 0;
+	}
+
+	const uintptr_t available = end - ptr;
+	while ((uintptr_t)len < available && refString->str[len])
 		len += 256;
 
-	// lwss add some asserts for sanity
-	iassert((uintptr_t)refString->str >= (uintptr_t)&scrMemTreeGlob.nodes[0] && (uintptr_t)refString->str < (uintptr_t)&scrMemTreeGlob.nodes[MEMORY_NODE_COUNT]);
-	iassert((uintptr_t)&refString->str[len + 1] >= (uintptr_t)&scrMemTreeGlob.nodes[0] && (uintptr_t)&refString->str[len + 1] < (uintptr_t)&scrMemTreeGlob.nodes[MEMORY_NODE_COUNT]);
+	if ((uintptr_t)len >= available)
+	{
+		Com_Error(ERR_DROP, "unterminated script string at memory-tree offset %u",
+			(unsigned)((ptr - base) + len));
+		return 0;
+	}
 
 	return len;
 }
@@ -646,6 +685,12 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 		iassert(((entry->status_next & HASH_STAT_MASK) == HASH_STAT_HEAD));
 
 		uint32_t newIndex = (uint16_t)entry->status_next;
+		if (newIndex >= STRINGLIST_SIZE)
+		{
+			Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+			Com_Error(ERR_DROP, "corrupt script string free chain (bucket %u)", index);
+			return;
+		}
 		HashEntry* newEntry = &scrStringGlob.hashTable[newIndex];
 
 		if (entry->u.prev == stringValue)
@@ -665,9 +710,15 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 		else
 		{
 			uint32_t prev = index;
+			uint32_t traversed = 0;
 			while (1)
 			{
-				iassert(newEntry != entry);
+				if (newEntry == entry || newIndex >= STRINGLIST_SIZE || traversed++ >= STRINGLIST_SIZE)
+				{
+					Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+					Com_Error(ERR_DROP, "corrupt script string free lookup chain (bucket %u)", index);
+					return;
+				}
 				iassert((newEntry->status_next & HASH_STAT_MASK) == HASH_STAT_MOVABLE);
 
 				if (newEntry->u.prev == stringValue)
@@ -675,6 +726,12 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 
 				prev = newIndex;
 				newIndex = (uint16_t)newEntry->status_next;
+				if (!newIndex || newIndex >= STRINGLIST_SIZE)
+				{
+					Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+					Com_Error(ERR_DROP, "corrupt script string free link (bucket %u)", index);
+					return;
+				}
 				newEntry = &scrStringGlob.hashTable[newIndex];
 			}
 			scrStringGlob.hashTable[prev].status_next = (uint16_t)newEntry->status_next | (scrStringGlob.hashTable[prev].status_next & HASH_STAT_MASK);
