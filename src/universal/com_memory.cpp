@@ -895,12 +895,12 @@ HunkUser* __cdecl Hunk_UserCreate(int32_t maxSize, const char* name, bool fixed,
         MyAssertHandler(".\\universal\\com_memory.cpp", 2834, 0, "%s\n\t(maxSize) = %i", "(!(maxSize % (4*1024)))", maxSize);
     user = (HunkUser*)Z_VirtualReserve(maxSize);
 #ifdef __SWITCH__
-    // Windows VirtualAlloc returns zero-filled reserved/committed pages. The
-    // Switch implementation backs reservations with malloc, so reproduce that
-    // initialization contract for HunkUser headers and allocations. In
-    // particular, current->next must start null before Hunk_UserAlloc chains
-    // additional blocks and Hunk_UserDestroy walks the chain.
-    memset(user, 0, static_cast<size_t>(maxSize));
+    // VirtualAlloc supplies zeroed pages as they are committed. malloc-backed
+    // Switch reservations must preserve that behavior without touching the whole
+    // arena up front: script parsing creates many 64 KiB HunkUser blocks.
+    // The first page holds the HunkUser header and initial allocation data;
+    // Hunk_UserAlloc zeroes additional pages only as the arena grows.
+    memset(user, 0, 0x1000u);
     Z_VirtualCommit(user, (int)offsetof(HunkUser, buf));
     user->end = (uintptr_t)user + (uintptr_t)maxSize;
     user->pos = (uintptr_t)user->buf;
@@ -961,6 +961,13 @@ void* Hunk_UserAlloc(HunkUser* user, uint32_t size, int32_t alignment)
     {
         iassert(current->pos - pos > 0);
 #ifdef __SWITCH__
+        // Windows clears newly committed pages lazily. The Switch reservation
+        // is malloc-backed, so clear only the newly reached portion, bounded by
+        // this HunkUser's end because malloc does not guarantee page alignment.
+        const uintptr_t commitEnd = (current->pos + 4095u) & ~uintptr_t(0xFFF);
+        const uintptr_t zeroEnd = commitEnd < current->end ? commitEnd : current->end;
+        if (zeroEnd > pos)
+            memset(reinterpret_cast<void*>(pos), 0, static_cast<size_t>(zeroEnd - pos));
         Z_VirtualCommit((void*)pos, (int)(current->pos - pos));
 #else
         Z_VirtualCommit((void*)pos, current->pos - (uint32_t)pos);
