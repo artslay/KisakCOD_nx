@@ -1877,7 +1877,7 @@ void __cdecl UI_Refresh()
                 0);
         }
 #endif
-    #ifdef __SWITCH__
+#ifdef __SWITCH__
     g_switchFrameStage = "ui/refresh/return";
 #endif
 }
