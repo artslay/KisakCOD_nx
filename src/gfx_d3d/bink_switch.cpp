@@ -635,21 +635,6 @@ static bool Switch_BinkGetFrameForCopy(
     return true;
 }
 
-static uint32_t Switch_BinkTracePlaneHash(const void *data, size_t bytes)
-{
-    if (!data || !bytes)
-        return 0;
-
-    const uint8_t *p = static_cast<const uint8_t *>(data);
-    uint32_t hash = 2166136261u;
-    for (size_t i = 0; i < bytes; ++i)
-    {
-        hash ^= p[i];
-        hash *= 16777619u;
-    }
-    return hash;
-}
-
 static void Switch_BinkCopyPlane(
     BINKPLANE *plane,
     const uint8_t *src,
@@ -1188,42 +1173,12 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
     // creation against the movie's playback clock.
     if (state->decodedFrames == 0)
     {
-        char trace[192];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][BINK FRAME] first frame decoded size=%ux%u\n",
-            static_cast<unsigned>(bink->Width),
-            static_cast<unsigned>(bink->Height));
-        Switch_LogWrite(trace);
         state->startTicks = static_cast<uint32_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count());
     }
 
     ++state->decodedFrames;
-    if (state->decodedFrames <= 3u ||
-        (state->decodedFrames % 30u) == 0u)
-    {
-        char trace[320];
-        const uint32_t hashY = Switch_BinkTracePlaneHash(
-            dst.YPlane.Buffer, static_cast<size_t>(width) * height);
-        const uint32_t hashCr = Switch_BinkTracePlaneHash(
-            dst.cRPlane.Buffer, static_cast<size_t>(chromaWidth) * chromaHeight);
-        const uint32_t hashCb = Switch_BinkTracePlaneHash(
-            dst.cBPlane.Buffer, static_cast<size_t>(chromaWidth) * chromaHeight);
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][BINK DECODE] decoded=%u movieFrame=%u bufferFrame=%u dimensions=%ux%u hashY=%08x hashCr=%08x hashCb=%08x\n",
-            static_cast<unsigned>(state->decodedFrames),
-            static_cast<unsigned>(bink->FrameNum),
-            static_cast<unsigned>(buffers->FrameNum),
-            static_cast<unsigned>(width),
-            static_cast<unsigned>(height),
-            hashY, hashCr, hashCb);
-        Switch_LogWrite(trace);
-    }
     bink->LastFrameNum = bink->FrameNum;
     bink->FrameChangePercent = 100;
     return 0;
@@ -1255,7 +1210,6 @@ RADDEFFUNC void RADEXPLINK BinkNextFrame(HBINK bink)
     if (bink->FrameNum >= bink->Frames)
         return;
 
-    const U32 previousFrameNum = bink->FrameNum;
     ++bink->FrameNum;
     if (bink->FrameBuffers && bink->FrameBuffers->TotalFrames > 0)
     {
@@ -1263,22 +1217,7 @@ RADDEFFUNC void RADEXPLINK BinkNextFrame(HBINK bink)
             (bink->FrameBuffers->FrameNum + 1) %
             bink->FrameBuffers->TotalFrames;
     }
-    if (bink->FrameNum <= 4u || (bink->FrameNum % 30u) == 0u)
-    {
-        char trace[224];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][BINK NEXT] frame=%u->%u decoded=%u nextBuffer=%u/%u\n",
-            static_cast<unsigned>(previousFrameNum),
-            static_cast<unsigned>(bink->FrameNum),
-            static_cast<unsigned>(state->decodedFrames),
-            bink->FrameBuffers
-                ? static_cast<unsigned>(bink->FrameBuffers->FrameNum) : 0u,
-            bink->FrameBuffers
-                ? static_cast<unsigned>(bink->FrameBuffers->TotalFrames) : 0u);
-        Switch_LogWrite(trace);
-    }
+
 }
 
 RADDEFFUNC S32 RADEXPLINK BinkPause(HBINK bink, S32 pause)
