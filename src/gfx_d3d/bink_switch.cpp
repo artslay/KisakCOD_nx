@@ -6,6 +6,11 @@
 #include <cstdio>
 #include <cerrno>
 #include <cstring>
+#include <cmath>
+#include <vector>
+
+#include <AL/al.h>
+#include <AL/alc.h>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -28,6 +33,14 @@ struct SwitchBinkState
     int64_t memoryPosition;
     AVCodecContext *codec;
     AVStream *videoStream;
+    int audioStreamIndex;
+    AVCodecContext *audioCodec;
+    AVFrame *audioFrame;
+    ALuint audioSource;
+    bool audioSourceReady;
+    bool audioDecodeFailed;
+    bool audioInputFlushed;
+    std::vector<int16_t> audioPcm;
     AVFrame *frame;
     AVFrame *convertedFrame;
     AVPacket *packet;
@@ -173,6 +186,27 @@ static void Switch_BinkFreeState(SwitchBinkState *state)
     if (!state)
         return;
 
+    if (state->audioSourceReady && alcGetCurrentContext())
+    {
+        alSourceStop(state->audioSource);
+        ALint queued = 0;
+        alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queued);
+        while (queued-- > 0)
+        {
+            ALuint buffer = 0;
+            alSourceUnqueueBuffers(state->audioSource, 1, &buffer);
+            if (buffer)
+                alDeleteBuffers(1, &buffer);
+        }
+        alDeleteSources(1, &state->audioSource);
+        state->audioSourceReady = false;
+    }
+
+    if (state->audioFrame)
+        av_frame_free(&state->audioFrame);
+    if (state->audioCodec)
+        avcodec_free_context(&state->audioCodec);
+
     if (state->sws)
         sws_freeContext(state->sws);
 
@@ -198,6 +232,231 @@ static void Switch_BinkFreeState(SwitchBinkState *state)
     }
 
     delete state;
+}
+
+static bool Switch_BinkEnsureAudioSource(SwitchBinkState *state)
+{
+    if (!state || !state->audioCodec)
+        return false;
+    if (state->audioSourceReady)
+        return true;
+    if (!alcGetCurrentContext())
+        return false;
+
+    while (alGetError() != AL_NO_ERROR) {}
+    alGenSources(1, &state->audioSource);
+    if (!state->audioSource || alGetError() != AL_NO_ERROR)
+    {
+        state->audioSource = 0;
+        return false;
+    }
+
+    alSourcei(state->audioSource, AL_SOURCE_RELATIVE, AL_TRUE);
+    alSource3f(state->audioSource, AL_POSITION, 0.0f, 0.0f, 0.0f);
+    alSourcef(state->audioSource, AL_ROLLOFF_FACTOR, 0.0f);
+    state->audioSourceReady = alGetError() == AL_NO_ERROR;
+    if (!state->audioSourceReady)
+    {
+        alDeleteSources(1, &state->audioSource);
+        state->audioSource = 0;
+    }
+    return state->audioSourceReady;
+}
+
+static double Switch_BinkReadAudioSample(
+    const AVFrame *frame,
+    AVSampleFormat sampleFormat,
+    bool planar,
+    int bytesPerSample,
+    int inputChannels,
+    int channel,
+    int sample)
+{
+    const uint8_t *plane = frame->extended_data[planar ? channel : 0];
+    const size_t sampleIndex = planar
+        ? static_cast<size_t>(sample)
+        : static_cast<size_t>(sample) * static_cast<size_t>(inputChannels) + static_cast<size_t>(channel);
+    const uint8_t *p = plane + sampleIndex * static_cast<size_t>(bytesPerSample);
+
+    switch (sampleFormat)
+    {
+    case AV_SAMPLE_FMT_U8:
+        return (static_cast<int>(*p) - 128) / 128.0;
+    case AV_SAMPLE_FMT_S16:
+        return *reinterpret_cast<const int16_t *>(p) / 32768.0;
+    case AV_SAMPLE_FMT_S32:
+        return *reinterpret_cast<const int32_t *>(p) / 2147483648.0;
+    case AV_SAMPLE_FMT_S64:
+        return static_cast<double>(*reinterpret_cast<const int64_t *>(p) / 9223372036854775808.0L);
+    case AV_SAMPLE_FMT_FLT:
+        return *reinterpret_cast<const float *>(p);
+    case AV_SAMPLE_FMT_DBL:
+        return *reinterpret_cast<const double *>(p);
+    default:
+        return 0.0;
+    }
+}
+
+static void Switch_BinkQueueAudioFrame(SwitchBinkState *state, const AVFrame *frame)
+{
+    if (!state || !frame || !Switch_BinkEnsureAudioSource(state))
+        return;
+
+    int inputChannels = frame->ch_layout.nb_channels;
+    if (inputChannels <= 0)
+        inputChannels = state->audioCodec->ch_layout.nb_channels;
+    if (inputChannels <= 0 || frame->nb_samples <= 0)
+        return;
+
+    int sampleRate = frame->sample_rate > 0
+        ? frame->sample_rate
+        : state->audioCodec->sample_rate;
+    if (sampleRate <= 0)
+        return;
+
+    const AVSampleFormat format = static_cast<AVSampleFormat>(frame->format);
+    const bool planar = av_sample_fmt_is_planar(format) != 0;
+    const AVSampleFormat packedFormat = av_get_packed_sample_fmt(format);
+    const int bytesPerSample = av_get_bytes_per_sample(format);
+    if (bytesPerSample <= 0 || packedFormat == AV_SAMPLE_FMT_NONE)
+        return;
+
+    const int outputChannels = inputChannels == 1 ? 1 : 2;
+    const size_t outputSampleCount =
+        static_cast<size_t>(frame->nb_samples) * static_cast<size_t>(outputChannels);
+    state->audioPcm.resize(outputSampleCount);
+
+    for (int i = 0; i < frame->nb_samples; ++i)
+    {
+        for (int channel = 0; channel < outputChannels; ++channel)
+        {
+            const int sourceChannel = inputChannels == 1 ? 0 : channel;
+            double value = Switch_BinkReadAudioSample(
+                frame,
+                packedFormat,
+                planar,
+                bytesPerSample,
+                inputChannels,
+                sourceChannel,
+                i);
+            if (!std::isfinite(value))
+                value = 0.0;
+            value = std::max(-1.0, std::min(1.0, value));
+            state->audioPcm[
+                static_cast<size_t>(i) * static_cast<size_t>(outputChannels) +
+                static_cast<size_t>(channel)] =
+                static_cast<int16_t>(std::lrint(value * 32767.0));
+        }
+    }
+
+    ALint processed = 0;
+    alGetSourcei(state->audioSource, AL_BUFFERS_PROCESSED, &processed);
+    while (processed-- > 0)
+    {
+        ALuint oldBuffer = 0;
+        alSourceUnqueueBuffers(state->audioSource, 1, &oldBuffer);
+        if (oldBuffer)
+            alDeleteBuffers(1, &oldBuffer);
+    }
+
+    ALuint buffer = 0;
+    alGenBuffers(1, &buffer);
+    if (!buffer || alGetError() != AL_NO_ERROR)
+    {
+        if (buffer)
+            alDeleteBuffers(1, &buffer);
+        return;
+    }
+
+    const ALenum outputFormat =
+        outputChannels == 1 ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
+    const size_t pcmBytes = outputSampleCount * sizeof(int16_t);
+    if (pcmBytes > static_cast<size_t>(INT32_MAX))
+    {
+        alDeleteBuffers(1, &buffer);
+        return;
+    }
+
+    alBufferData(
+        buffer,
+        outputFormat,
+        state->audioPcm.data(),
+        static_cast<ALsizei>(pcmBytes),
+        sampleRate);
+    if (alGetError() != AL_NO_ERROR)
+    {
+        alDeleteBuffers(1, &buffer);
+        return;
+    }
+
+    alSourceQueueBuffers(state->audioSource, 1, &buffer);
+    if (alGetError() != AL_NO_ERROR)
+    {
+        alDeleteBuffers(1, &buffer);
+        return;
+    }
+
+    ALint sourceState = AL_STOPPED;
+    alGetSourcei(state->audioSource, AL_SOURCE_STATE, &sourceState);
+    if (sourceState != AL_PLAYING)
+        alSourcePlay(state->audioSource);
+}
+
+static void Switch_BinkReceiveAudioFrames(SwitchBinkState *state)
+{
+    if (!state || !state->audioCodec || !state->audioFrame)
+        return;
+
+    for (;;)
+    {
+        const int ret = avcodec_receive_frame(state->audioCodec, state->audioFrame);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+            return;
+        if (ret < 0)
+        {
+            state->audioDecodeFailed = true;
+            return;
+        }
+
+        Switch_BinkQueueAudioFrame(state, state->audioFrame);
+        av_frame_unref(state->audioFrame);
+    }
+}
+
+static void Switch_BinkDecodeAudioPacket(SwitchBinkState *state, const AVPacket *packet)
+{
+    if (!state || !state->audioCodec || state->audioDecodeFailed)
+        return;
+
+    int ret = avcodec_send_packet(state->audioCodec, packet);
+    if (ret == AVERROR(EAGAIN))
+    {
+        Switch_BinkReceiveAudioFrames(state);
+        ret = avcodec_send_packet(state->audioCodec, packet);
+    }
+    if (ret < 0 && ret != AVERROR_EOF)
+    {
+        state->audioDecodeFailed = true;
+        return;
+    }
+
+    Switch_BinkReceiveAudioFrames(state);
+}
+
+static void Switch_BinkFlushAudio(SwitchBinkState *state)
+{
+    if (!state || !state->audioCodec || state->audioInputFlushed)
+        return;
+
+    state->audioInputFlushed = true;
+    int ret = avcodec_send_packet(state->audioCodec, nullptr);
+    if (ret == AVERROR(EAGAIN))
+    {
+        Switch_BinkReceiveAudioFrames(state);
+        ret = avcodec_send_packet(state->audioCodec, nullptr);
+    }
+    if (ret >= 0 || ret == AVERROR_EOF)
+        Switch_BinkReceiveAudioFrames(state);
 }
 
 static bool Switch_BinkInitConvertedFrame(SwitchBinkState *state)
@@ -282,6 +541,7 @@ static bool Switch_BinkDecodeNext(SwitchBinkState *state)
         if (ret == AVERROR_EOF)
         {
             state->inputEof = true;
+            Switch_BinkFlushAudio(state);
             ret = avcodec_send_packet(state->codec, nullptr);
             if (ret < 0 && ret != AVERROR_EOF)
             {
@@ -300,6 +560,13 @@ static bool Switch_BinkDecodeNext(SwitchBinkState *state)
             Switch_BinkSetAvError(ret, "av_read_frame");
             state->decodeFailed = true;
             return false;
+        }
+
+        if (state->packet->stream_index == state->audioStreamIndex)
+        {
+            Switch_BinkDecodeAudioPacket(state, state->packet);
+            av_packet_unref(state->packet);
+            continue;
         }
 
         if (state->packet->stream_index != state->videoStreamIndex)
@@ -408,6 +675,8 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
         Switch_BinkSetError("out of memory");
         return nullptr;
     }
+
+    state->audioStreamIndex = -1;
 
     // This wrapper implements the Bink API, so force FFmpeg's Bink
     // demuxer instead of allowing format probing to select an unrelated
@@ -575,6 +844,18 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
         return nullptr;
     }
 
+    // Bink files may contain one or more audio streams. The first decodable audio stream
+    // is the game's selected soundtrack for this port; video-only files remain valid.
+    state->audioStreamIndex = av_find_best_stream(
+        state->format,
+        AVMEDIA_TYPE_AUDIO,
+        -1,
+        -1,
+        nullptr,
+        0);
+    if (state->audioStreamIndex < 0)
+        state->audioStreamIndex = -1;
+
     const AVCodec *decoder = avcodec_find_decoder(params->codec_id);
     if (!decoder)
     {
@@ -620,6 +901,33 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
     {
         Switch_BinkFreeState(state);
         return nullptr;
+    }
+
+    if (state->audioStreamIndex >= 0)
+    {
+        AVStream *audioStream = state->format->streams[state->audioStreamIndex];
+        const AVCodec *audioDecoder = avcodec_find_decoder(audioStream->codecpar->codec_id);
+        if (audioDecoder)
+        {
+            state->audioCodec = avcodec_alloc_context3(audioDecoder);
+            if (state->audioCodec &&
+                avcodec_parameters_to_context(state->audioCodec, audioStream->codecpar) >= 0 &&
+                avcodec_open2(state->audioCodec, audioDecoder, nullptr) >= 0)
+            {
+                state->audioFrame = av_frame_alloc();
+                if (!state->audioFrame)
+                    avcodec_free_context(&state->audioCodec);
+            }
+            else if (state->audioCodec)
+            {
+                avcodec_free_context(&state->audioCodec);
+            }
+        }
+
+        if (state->audioCodec)
+            Switch_BinkEnsureAudioSource(state);
+        else
+            state->audioStreamIndex = -1;
     }
 
     AVRational frameRate = state->videoStream->avg_frame_rate;
@@ -689,7 +997,7 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
         : 0;
     bink->Paused = 0;
     bink->videoon = 1;
-    bink->soundon = 0;
+    bink->soundon = state->audioSourceReady ? 1u : 0u;
     bink->ioptr = reinterpret_cast<U8 PTR4 *>(state);
 
     char trace[512];
@@ -905,7 +1213,23 @@ RADDEFFUNC S32 RADEXPLINK BinkPause(HBINK bink, S32 pause)
 {
     SwitchBinkState *state = Switch_BinkState(bink);
     if (state)
+    {
         state->paused = pause != 0;
+        if (state->audioSourceReady)
+        {
+            if (state->paused)
+                alSourcePause(state->audioSource);
+            else
+            {
+                ALint queued = 0;
+                ALint sourceState = AL_STOPPED;
+                alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queued);
+                alGetSourcei(state->audioSource, AL_SOURCE_STATE, &sourceState);
+                if (queued > 0 && sourceState != AL_PLAYING)
+                    alSourcePlay(state->audioSource);
+            }
+        }
+    }
     if (bink)
         bink->Paused = pause ? 1u : 0u;
     return state && state->paused ? 1 : 0;
@@ -959,10 +1283,36 @@ RADDEFFUNC void RADEXPLINK BinkSetSoundTrack(
     (void)tracks;
 }
 
+RADDEFFUNC S32 RADEXPLINK BinkSetSoundOnOff(HBINK bink, S32 onoff)
+{
+    SwitchBinkState *state = Switch_BinkState(bink);
+    if (!bink || !state)
+        return 0;
+
+    const bool enable = onoff != 0 && state->audioCodec && Switch_BinkEnsureAudioSource(state);
+    bink->soundon = enable ? 1u : 0u;
+    if (state->audioSourceReady)
+    {
+        if (!enable)
+            alSourcePause(state->audioSource);
+        else
+        {
+            ALint queued = 0;
+            alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queued);
+            if (queued > 0)
+                alSourcePlay(state->audioSource);
+        }
+    }
+    return bink->soundon ? 1 : 0;
+}
+
 RADDEFFUNC S32 RADEXPLINK BinkSetSoundSystem(
     BINKSNDSYSOPEN open,
     UINTa param)
 {
+    // The Switch Bink implementation decodes the file's first audio stream using FFmpeg
+    // and queues PCM to the already initialized OpenAL output. The legacy platform callback
+    // supplied by the Windows/Miles implementation is not usable on Switch.
     (void)open;
     (void)param;
     return 1;
