@@ -7,6 +7,9 @@
 #include <aim_assist/aim_assist.h>
 #include <xanim/xanim.h>
 #include <universal/com_files.h>
+#ifdef __SWITCH__
+extern const char * volatile g_switchServerInitStage;
+#endif
 
 #ifdef KISAK_MP
 #include <game_mp/g_main_mp.h>
@@ -199,7 +202,13 @@ void __cdecl BG_ClearWeaponDef()
 
     iassert(bg_lastParsedWeaponIndex == 0);
 
+#ifdef __SWITCH__
+    g_switchServerInitStage = "weapon/clear/load_default_definition";
+#endif
     bg_weaponDefs[0] = BG_LoadDefaultWeaponDef();
+#ifdef __SWITCH__
+    g_switchServerInitStage = "weapon/clear/init_ammo_tables";
+#endif
     bg_weapAmmoTypes[0] = bg_weaponDefs[0];
     bg_numAmmoTypes = 1;
     bg_sharedAmmoCaps[0] = bg_weaponDefs[0];
@@ -208,9 +217,15 @@ void __cdecl BG_ClearWeaponDef()
     bg_numWeapClips = 1;
     for (itemIdx = 1; itemIdx < 2048; ++itemIdx)
         bg_itemlist[itemIdx].giType = IT_BAD;
+#ifdef __SWITCH__
+    g_switchServerInitStage = "weapon/clear/load_player_anim_types";
+#endif
     BG_LoadPlayerAnimTypes();
 #ifdef KISAK_MP
     BG_InitWeaponStrings();
+#endif
+#ifdef __SWITCH__
+    g_switchServerInitStage = "weapon/clear/complete";
 #endif
 }
 

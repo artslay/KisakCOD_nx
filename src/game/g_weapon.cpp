@@ -13,6 +13,10 @@ extern thread_local const char * volatile g_switchFrameStage;
 #define SWITCH_WEAPON_STAGE(stage) ((void)0)
 #endif
 
+#ifdef __SWITCH__
+const char * volatile g_switchServerInitStage = "weapon/idle";
+#endif
+
 #ifdef KISAK_MP
 #include <game_mp/g_utils_mp.h>
 #include <server_mp/server_mp.h>
@@ -708,33 +712,57 @@ int __cdecl G_GivePlayerWeapon(playerState_s *pPS, int iWeaponIndex, uint8_t alt
 
 void __cdecl G_SetupWeaponDef()
 {
+#ifdef __SWITCH__
+    g_switchServerInitStage = "weapon/setup/enter";
+#endif
     SWITCH_WEAPON_STAGE("setup/enter");
     Com_DPrintf(CON_CHANNEL_PLAYERWEAP, "----------------------\n");
     Com_DPrintf(CON_CHANNEL_PLAYERWEAP, "Game: G_SetupWeaponDef\n");
     if (!bg_lastParsedWeaponIndex)
     {
+#ifdef __SWITCH__
+        g_switchServerInitStage = "weapon/setup/set_memory";
+#endif
         SWITCH_WEAPON_STAGE("setup/set_memory");
         Com_SetWeaponInfoMemory(1);
+#ifdef __SWITCH__
+        g_switchServerInitStage = "weapon/setup/clear_registered_items";
+#endif
         SWITCH_WEAPON_STAGE("setup/clear_registered_items");
         ClearRegisteredItems();
+#ifdef __SWITCH__
+        g_switchServerInitStage = "weapon/setup/clear_definitions";
+#endif
         SWITCH_WEAPON_STAGE("setup/clear_definitions");
         BG_ClearWeaponDef();
 #ifdef KISAK_MP
+#ifdef __SWITCH__
+        g_switchServerInitStage = "weapon/setup/register_defaultweapon_mp";
+#endif
         SWITCH_WEAPON_STAGE("setup/register_defaultweapon_mp");
         G_GetWeaponIndexForName("defaultweapon_mp");
 #elif KISAK_SP
         if (level.initializing)
         {
+#ifdef __SWITCH__
+            g_switchServerInitStage = "weapon/setup/register_defaultweapon";
+#endif
             SWITCH_WEAPON_STAGE("setup/register_defaultweapon");
             BG_GetWeaponIndexForName("defaultweapon", G_RegisterWeapon);
         }
         else
         {
+#ifdef __SWITCH__
+            g_switchServerInitStage = "weapon/setup/find_defaultweapon";
+#endif
             SWITCH_WEAPON_STAGE("setup/find_defaultweapon");
             BG_FindWeaponIndexForName("defaultweapon");
         }
 #endif
     }
+#ifdef __SWITCH__
+    g_switchServerInitStage = "weapon/setup/complete";
+#endif
     SWITCH_WEAPON_STAGE("setup/complete");
     Com_DPrintf(CON_CHANNEL_PLAYERWEAP, "----------------------\n");
 }

@@ -460,7 +460,6 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][FONT MATERIAL LOAD]",
         "[KisakCOD][FONT MATERIAL ALIAS]",
         "[KisakCOD][TECHSET4026]",
-        "[KisakCOD][WATCHDOG]",
         "[KisakCOD][DELAY IMAGE]",
         "[KisakCOD][DELAY IMAGES]",
         "[KisakCOD][IMAGE3 ADD]",

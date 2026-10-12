@@ -1320,6 +1320,9 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
     iassert(IsFastFileLoad());
 
 #ifdef __SWITCH__
+    const bool traceWeaponLookup = type == ASSET_TYPE_WEAPON;
+    if (traceWeaponLookup)
+        g_switchDbStage = "weapon/find/read_lock_wait";
     const bool traceDefaultMaterial =
         type == ASSET_TYPE_MATERIAL && name && !I_stricmp(name, "$default");
 #endif
@@ -1350,8 +1353,16 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
     InterlockedIncrement(&db_hashCritSect.readCount);
     while (db_hashCritSect.writeCount)
         std::this_thread::yield();
+#ifdef __SWITCH__
+    if (traceWeaponLookup)
+        g_switchDbStage = "weapon/find/read_lock_acquired";
+#endif
 
     XAssetEntryPoolEntry *found = DB_FindXAssetEntry(type, name);
+#ifdef __SWITCH__
+    if (traceWeaponLookup)
+        g_switchDbStage = "weapon/find/read_lookup_done";
+#endif
     assetEntry = found ? &found->entry : nullptr;
 
     if (db_hashCritSect.readCount <= 0)
@@ -1360,12 +1371,18 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
 
     if (assetEntry)
     {
+#ifdef __SWITCH__
+        if (traceWeaponLookup)
+            g_switchDbStage = "weapon/find/read_hit";
+#endif
         assetEntry->inuse = 1;
         return assetEntry->asset.header;
     }
 
 
 #ifdef __SWITCH__
+    if (traceWeaponLookup)
+        g_switchDbStage = "weapon/find/write_lock_wait";
     if (traceDefaultMaterial)
         Switch_LogWrite("[SWITCH DBLOOKUP] before write lock\n");
 #endif
@@ -1380,7 +1397,15 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
 #endif
 
     // Re-check after acquiring the writer lock, matching the upstream double-check.
+#ifdef __SWITCH__
+    if (traceWeaponLookup)
+        g_switchDbStage = "weapon/find/write_locked";
+#endif
     XAssetEntryPoolEntry *existing = DB_FindXAssetEntry(type, name);
+#ifdef __SWITCH__
+    if (traceWeaponLookup)
+        g_switchDbStage = "weapon/find/write_recheck_done";
+#endif
     if (existing)
     {
         assetEntry = &existing->entry;
@@ -1402,16 +1427,30 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
     if (traceDefaultMaterial)
         Switch_LogWrite("[SWITCH DBLOOKUP] before DB_CreateDefaultEntry\n");
 #endif
+#ifdef __SWITCH__
+    if (traceWeaponLookup)
+        g_switchDbStage = "weapon/find/create_default_entry";
+#endif
     newEntry = DB_CreateDefaultEntry(type, (char *)name);
 #ifdef __SWITCH__
+    if (traceWeaponLookup)
+        g_switchDbStage = "weapon/find/default_entry_created";
     if (traceDefaultMaterial)
         Switch_LogWrite("[SWITCH DBLOOKUP] after DB_CreateDefaultEntry\n");
+#endif
+#ifdef __SWITCH__
+    if (traceWeaponLookup)
+        g_switchDbStage = "weapon/find/unlocked";
 #endif
     Sys_UnlockWrite(&db_hashCritSect);
 
 
     v5 = g_assetNames[type];
     (void)v5;
+#ifdef __SWITCH__
+    if (traceWeaponLookup)
+        g_switchDbStage = "weapon/find/return";
+#endif
     return newEntry ? newEntry->asset.header : XAssetHeader{};
 }
 
@@ -2353,8 +2392,14 @@ XAssetEntry *__cdecl DB_CreateDefaultEntry(XAssetType type, char *name)
         Switch_LogWrite(trace);
     }
 #endif
+#ifdef __SWITCH__
+    if (type == ASSET_TYPE_WEAPON)
+        g_switchDbStage = "weapon/default_entry/find_base";
+#endif
     asset.header = DB_FindXAssetDefaultHeaderInternal(type);
 #ifdef __SWITCH__
+    if (type == ASSET_TYPE_WEAPON)
+        g_switchDbStage = "weapon/default_entry/base_found";
     if (!asset.header.data && type == ASSET_TYPE_LOADED_SOUND)
     {
         asset.header.loadSnd = &g_switchDefaultLoadedSound;
@@ -2546,6 +2591,8 @@ XAssetHeader __cdecl DB_FindXAssetDefaultHeaderInternal(XAssetType type)
 #ifdef __SWITCH__
     if (type == ASSET_TYPE_TECHNIQUE_SET)
         g_switchDbStage = "asset/default_bucket";
+    if (type == ASSET_TYPE_WEAPON)
+        g_switchDbStage = "weapon/default_header/scan";
 #endif
     const uint32_t bucket = db_hashTable[hash];
 #ifdef __SWITCH__
@@ -2597,7 +2644,13 @@ XAssetHeader __cdecl DB_FindXAssetDefaultHeaderInternal(XAssetType type)
         {
             XAssetName = DB_GetXAssetName(&assetEntry->entry.asset);
             if (!I_stricmp(XAssetName, name))
+            {
+#ifdef __SWITCH__
+                if (type == ASSET_TYPE_WEAPON)
+                    g_switchDbStage = "weapon/default_header/found_base";
+#endif
                 break;
+            }
         }
     }
 #ifdef __SWITCH__
@@ -2616,6 +2669,10 @@ XAssetHeader __cdecl DB_FindXAssetDefaultHeaderInternal(XAssetType type)
 #else
     while (assetEntry->entry.nextOverride)
         assetEntry = &g_assetEntryPool[assetEntry->entry.nextOverride];
+#endif
+#ifdef __SWITCH__
+    if (type == ASSET_TYPE_WEAPON)
+        g_switchDbStage = "weapon/default_header/return";
 #endif
     return assetEntry->entry.asset.header;
 }

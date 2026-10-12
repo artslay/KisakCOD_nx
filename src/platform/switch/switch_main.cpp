@@ -22,6 +22,7 @@ extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
 extern uint32_t g_switchCurrentAssetHeader;
 extern const char * volatile g_switchDbStage;
+extern const char * volatile g_switchServerInitStage;
 
 static std::atomic<bool> g_switchProgressWatchdogStop{false};
 static std::thread g_switchProgressWatchdog;
@@ -39,12 +40,13 @@ static void SwitchProgressWatchdogMain()
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][WATCHDOG] t=%us asset=%d rawType=%u header=%08x stage=%s\n",
+            "[KisakCOD][WATCHDOG] t=%us asset=%d rawType=%u header=%08x dbStage=%s serverStage=%s\n",
             ++tick * 5u,
             g_switchCurrentAssetIndex,
             static_cast<unsigned>(g_switchCurrentAssetRawType),
             static_cast<unsigned>(g_switchCurrentAssetHeader),
-            g_switchDbStage ? g_switchDbStage : "(null)");
+            g_switchDbStage ? g_switchDbStage : "(null)",
+            g_switchServerInitStage ? g_switchServerInitStage : "(null)");
         Switch_LogWrite(line);
     }
 }
