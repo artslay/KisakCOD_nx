@@ -202,7 +202,7 @@ void __cdecl UI_DrawLoadBar(
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][LOAD BAR] call=%u fastfile=%d fraction=%.5f percent=%.1f fill=%.1f total=%.1f material=%p\\n",
+            "[KisakCOD][LOAD BAR] call=%u fastfile=%d fraction=%.5f percent=%.1f fill=%.1f total=%.1f material=%p\n",
             switchLoadBarTraceCalls,
             IsFastFileLoad() ? 1 : 0,
             static_cast<double>(percentDone),
