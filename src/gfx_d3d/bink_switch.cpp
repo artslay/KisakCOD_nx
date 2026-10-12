@@ -1186,14 +1186,20 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
     }
 
     ++state->decodedFrames;
-    if (state->decodedFrames == 2)
+    if (state->decodedFrames == 2 ||
+        state->decodedFrames == 3 ||
+        (state->decodedFrames % 30u) == 0u)
     {
-        char trace[192];
+        char trace[224];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][BINK FRAME] second frame decoded frame=%u\n",
-            static_cast<unsigned>(bink->FrameNum));
+            "[KisakCOD][BINK DECODE] decoded=%u movieFrame=%u bufferFrame=%u dimensions=%ux%u\n",
+            static_cast<unsigned>(state->decodedFrames),
+            static_cast<unsigned>(bink->FrameNum),
+            static_cast<unsigned>(buffers->FrameNum),
+            static_cast<unsigned>(width),
+            static_cast<unsigned>(height));
         Switch_LogWrite(trace);
     }
     bink->LastFrameNum = bink->FrameNum;
@@ -1227,12 +1233,29 @@ RADDEFFUNC void RADEXPLINK BinkNextFrame(HBINK bink)
     if (bink->FrameNum >= bink->Frames)
         return;
 
+    const U32 previousFrameNum = bink->FrameNum;
     ++bink->FrameNum;
     if (bink->FrameBuffers && bink->FrameBuffers->TotalFrames > 0)
     {
         bink->FrameBuffers->FrameNum =
             (bink->FrameBuffers->FrameNum + 1) %
             bink->FrameBuffers->TotalFrames;
+    }
+    if (bink->FrameNum <= 4u || (bink->FrameNum % 30u) == 0u)
+    {
+        char trace[224];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][BINK NEXT] frame=%u->%u decoded=%u nextBuffer=%u/%u\n",
+            static_cast<unsigned>(previousFrameNum),
+            static_cast<unsigned>(bink->FrameNum),
+            static_cast<unsigned>(state->decodedFrames),
+            bink->FrameBuffers
+                ? static_cast<unsigned>(bink->FrameBuffers->FrameNum) : 0u,
+            bink->FrameBuffers
+                ? static_cast<unsigned>(bink->FrameBuffers->TotalFrames) : 0u);
+        Switch_LogWrite(trace);
     }
 }
 
