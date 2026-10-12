@@ -125,7 +125,7 @@ static inline void Switch_UI_LogBadPointer(
 
 struct SwitchUIStatementValidationCacheEntry
 {
-    const expressionEntry **entries;
+    const void *entries;
     int numEntries;
 };
 
