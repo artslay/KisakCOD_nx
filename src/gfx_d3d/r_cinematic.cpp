@@ -371,7 +371,7 @@ char __cdecl R_Cinematic_Advance()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CINEMATIC ADVANCE] call=%u wait=%d frame=%u/%u paused=%d targetPaused=%d underrun=%d full=%u active=%d buffer=%u/%u fileIO=%d\\n",
+            "[KisakCOD][CINEMATIC ADVANCE] call=%u wait=%d frame=%u/%u paused=%d targetPaused=%d underrun=%d full=%u active=%d buffer=%u/%u fileIO=%d\n",
             switchCinematicAdvanceTraceCalls,
             wait,
             static_cast<unsigned>(cinematicGlob.bink->FrameNum),
@@ -1211,7 +1211,7 @@ void R_Cinematic_UpdateRendererImages()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CINEMATIC IMAGE] call=%u movie=%.48s active=%d textureSet=%d binkFrame=%u bufferFrame=%u codeY=%p codeCr=%p codeCb=%p codeA=%p\\n",
+            "[KisakCOD][CINEMATIC IMAGE] call=%u movie=%.48s active=%d textureSet=%d binkFrame=%u bufferFrame=%u codeY=%p codeCr=%p codeCb=%p codeA=%p\n",
             switchCinematicImageTraceCalls,
             cinematicGlob.currentCinematicName,
             cinematicGlob.activeImageFrame,
