@@ -2424,7 +2424,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][CINEMATIC BIND] stage=%s frame=%u/%u slots=Y:%d Cr:%d Cb:%d A:%d\\n",
+                    "[KisakCOD][CINEMATIC BIND] stage=%s frame=%u/%u slots=Y:%d Cr:%d Cb:%d A:%d\n",
                     stages[probe],
                     frame,
                     frames,
