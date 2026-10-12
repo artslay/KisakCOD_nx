@@ -181,17 +181,26 @@ static bool MT_RebuildFreeTreesFromUsage()
         if (!scrMemTreeDebugGlob.mt_usage[node])
             continue;
 
-        const uint32_t size = scrMemTreeDebugGlob.mt_usage_size[node];
-        // Size/range must still be valid enough to conservatively reserve the
-        // whole allocation. Alignment and overlap can themselves be symptoms of
-        // the corruption that triggered recovery, so don't reject the map for
-        // those conditions: reserve the union of all claimed blocks instead.
+        uint32_t size = scrMemTreeDebugGlob.mt_usage_size[node];
+        // Alignment and overlap can be symptoms of the corruption that triggered
+        // recovery. Reserve the union of every claimed range, clipping impossible
+        // ranges to the end of the arena instead of making recovery fail again.
+        uint32_t blockSize;
         if (size >= MEMORY_NODE_BITS)
-            return false;
-
-        const uint32_t blockSize = 1u << size;
-        if (node + blockSize > MEMORY_NODE_COUNT)
-            return false;
+        {
+            // The old size is unusable. Conservatively reserve this index and
+            // everything after it; MT_FreeIndex replaces this diagnostic size
+            // with the caller's real size when the allocation is released.
+            blockSize = MEMORY_NODE_COUNT - node;
+            scrMemTreeDebugGlob.mt_usage_size[node] = 0;
+            size = 0;
+        }
+        else
+        {
+            blockSize = 1u << size;
+            if (node + blockSize > MEMORY_NODE_COUNT)
+                blockSize = MEMORY_NODE_COUNT - node;
+        }
 
         for (uint32_t slot = node; slot < node + blockSize; ++slot)
             occupied[slot] = 1;
