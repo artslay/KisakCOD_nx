@@ -292,7 +292,7 @@ LABEL_14:
         UI_Refresh();
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/ui_refresh_done";
-        if (connectionState == CA_LOADING && R_Cinematic_IsStarted())
+        if (connectionState == CA_LOADING)
         {
             // Submit the cinematic last so no later loading UI item can cover
             // the new frame with the static briefing background.
