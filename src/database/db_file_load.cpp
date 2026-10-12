@@ -287,6 +287,7 @@ double __cdecl DB_GetLoadedFraction()
             Switch_LogWrite(trace);
         }
 #endif
+#endif
         return 0.0;
     }
     totalBytesInternal = (double)g_totalSize * 262144.0;
