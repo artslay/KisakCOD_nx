@@ -482,7 +482,7 @@ void  AddRefToVector(float const* vectorValue)
 		if (scrStringDebugGlob)
 		{
 			iassert(scrStringDebugGlob->refCount[((char*)vectorValue - 4 - scrMemTreePub.mt_buffer) / MT_NODE_SIZE] >= 0);
-			InterlockedIncrement(&scrStringDebugGlob->refCount[((char*)(vectorValue - 1) - scrMemTreePub.mt_buffer) / 12]);
+			InterlockedIncrement(&scrStringDebugGlob->refCount[((char*)(vectorValue - 1) - scrMemTreePub.mt_buffer) / MT_NODE_SIZE]);
 		}
 		((unsigned short*)vectorValue)[-2]++;
 		iassert(((unsigned short*)vectorValue)[-2]);
@@ -497,7 +497,7 @@ void  RemoveRefToVector(float const* vectorValue)
 		if (scrStringDebugGlob)
 		{
 			iassert(scrStringDebugGlob->refCount[((char*)vectorValue - 4 - scrMemTreePub.mt_buffer) / MT_NODE_SIZE] >= 0);
-			InterlockedDecrement(&scrStringDebugGlob->refCount[((char*)(vectorValue - 1) - scrMemTreePub.mt_buffer) / 12]);
+			InterlockedDecrement(&scrStringDebugGlob->refCount[((char*)(vectorValue - 1) - scrMemTreePub.mt_buffer) / MT_NODE_SIZE]);
 		}
 		if (*((_WORD*)vectorValue - 2))
 			--*((_WORD*)vectorValue - 2);
@@ -3472,7 +3472,7 @@ float* Scr_AllocVector(void)
 
 	InterlockedIncrement(&scrVarPub.totalVectorRefCount);
 	if (scrStringDebugGlob)
-		InterlockedIncrement(&scrStringDebugGlob->refCount[((char*)(result - 1) - scrMemTreePub.mt_buffer) / 12]);
+		InterlockedIncrement(&scrStringDebugGlob->refCount[((char*)(result - 1) - scrMemTreePub.mt_buffer) / MT_NODE_SIZE]);
 
 	return result;
 }
