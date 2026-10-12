@@ -20,6 +20,7 @@
 #include <AL/efx-presets.h>
 #include <fstream>
 #include <cstdio>
+#include <cstdlib>
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern int32_t g_switchCurrentAssetIndex;
@@ -147,6 +148,10 @@ struct AlStreamState
     // fraction is approximated from this instead (see its comment for the small, bounded
     // error this introduces: up to one buffer queue's worth of look-ahead).
     uint64_t framesQueued;
+    // Small streamed assets inside compressed IWD archives are decoded from memory because
+    // FS_Seek emulates ZIP seeking by reopening/skipping and is unreliable for decoder chunk walks.
+    uint8_t *memoryData;
+    size_t memorySize;
 };
 
 // Per-stream-channel decoder state. Indices 40-52 are the only ones ever used (matching
@@ -238,6 +243,9 @@ static void SND_ReleaseStreamChannel(int index)
         drmp3_uninit(&stream->mp3);
     else
         drwav_uninit(&stream->wav);
+    std::free(stream->memoryData);
+    stream->memoryData = nullptr;
+    stream->memorySize = 0;
     FS_FCloseFile(stream->fsHandle);
     stream->active = false;
 }
@@ -747,14 +755,68 @@ int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int
     size_t nameLen = strlen(filename);
     stream->isMp3 = nameLen >= 4 && I_stricmp(filename + nameLen - 4, ".mp3") == 0;
 
-    bool decoderOk = stream->isMp3
-        ? drmp3_init(&stream->mp3, AL_StreamReadCallback, AL_Mp3SeekCallback, AL_Mp3TellCallback, NULL, stream, NULL)
-        : drwav_init(&stream->wav, AL_StreamReadCallback, AL_WavSeekCallback, AL_WavTellCallback, stream, NULL);
+    bool decoderOk = false;
+
+    // FS_Seek cannot perform arbitrary random access reliably inside compressed IWD entries.
+    // Decode small archived streams from memory so WAV chunk parsing and MP3 metadata/frame
+    // counting don't depend on the engine's ZIP seek emulation. Large and loose files stay streamed.
+    if (FS_IsFileInZip(stream->fsHandle) && FS_filelength(stream->fsHandle) <= 2 * 1024 * 1024)
+    {
+        size_t capacity = 0;
+        size_t used = 0;
+        bool readComplete = false;
+
+        for (;;)
+        {
+            if (capacity - used < 65536)
+            {
+                const size_t newCapacity = capacity ? capacity * 2 : 262144;
+                void *grown = std::realloc(stream->memoryData, newCapacity);
+                if (!grown)
+                    break;
+                stream->memoryData = static_cast<uint8_t *>(grown);
+                capacity = newCapacity;
+            }
+
+            const size_t available = capacity - used;
+            const uint32_t got = FS_Read(
+                stream->memoryData + used,
+                static_cast<uint32_t>(available),
+                stream->fsHandle);
+
+            if (got == 0)
+            {
+                readComplete = true;
+                break;
+            }
+            if (got == static_cast<uint32_t>(-1) || got > available)
+                break;
+
+            used += got;
+        }
+
+        if (readComplete && used > 0)
+        {
+            stream->memorySize = used;
+            decoderOk = stream->isMp3
+                ? drmp3_init_memory(&stream->mp3, stream->memoryData, stream->memorySize, NULL)
+                : drwav_init_memory(&stream->wav, stream->memoryData, stream->memorySize, NULL);
+        }
+    }
+    else
+    {
+        decoderOk = stream->isMp3
+            ? drmp3_init(&stream->mp3, AL_StreamReadCallback, AL_Mp3SeekCallback, AL_Mp3TellCallback, NULL, stream, NULL)
+            : drwav_init(&stream->wav, AL_StreamReadCallback, AL_WavSeekCallback, AL_WavTellCallback, stream, NULL);
+    }
 
     if (!decoderOk)
     {
+        std::free(stream->memoryData);
+        stream->memoryData = nullptr;
+        stream->memorySize = 0;
         FS_FCloseFile(stream->fsHandle);
-        Com_PrintError(CON_CHANNEL_SOUND, "Couldn't play stream '%s' from alias '%s' - invalid or corrupted format\n", realname, startAliasInfo->alias0->aliasName);
+        Com_PrintError(CON_CHANNEL_SOUND, "Couldn't play stream '%s' from alias '%s' - invalid or corrupted format\\n", realname, startAliasInfo->alias0->aliasName);
         return SND_SetPlaybackIdNotPlayed(index);
     }
 
