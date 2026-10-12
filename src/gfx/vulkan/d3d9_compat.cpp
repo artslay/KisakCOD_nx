@@ -2420,18 +2420,44 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     continue;
                 probeMask |= bit;
 
-                char trace[256];
+                    char psSamplerText[96] = {};
+                size_t psSamplerUsed = 0;
+                if (m_pixelShader && m_pixelShader->parseData)
+                {
+                    const MOJOSHADER_parseData *ps = m_pixelShader->parseData;
+                    for (int samplerIndex = 0;
+                         samplerIndex < ps->sampler_count && psSamplerUsed + 8 < sizeof(psSamplerText);
+                         ++samplerIndex)
+                    {
+                        const int samplerRegister = ps->samplers[samplerIndex].index;
+                        const int written = std::snprintf(
+                            psSamplerText + psSamplerUsed,
+                            sizeof(psSamplerText) - psSamplerUsed,
+                            "%s%d",
+                            samplerIndex ? "," : "",
+                            samplerRegister);
+                        if (written > 0)
+                            psSamplerUsed += std::min<size_t>(
+                                static_cast<size_t>(written),
+                                sizeof(psSamplerText) - psSamplerUsed - 1);
+                    }
+                }
+                if (!psSamplerText[0])
+                    std::snprintf(psSamplerText, sizeof(psSamplerText), "none");
+
+                char trace[320];
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][CINEMATIC BIND] stage=%s frame=%u/%u slots=Y:%d Cr:%d Cb:%d A:%d\n",
+                    "[KisakCOD][CINEMATIC BIND] stage=%s frame=%u/%u slots=Y:%d Cr:%d Cb:%d A:%d psSamplers=%s\n",
                     stages[probe],
                     frame,
                     frames,
                     ySlot,
                     crSlot,
                     cbSlot,
-                    aSlot);
+                    aSlot,
+                    psSamplerText);
                 Switch_LogWrite(trace);
                 break;
             }
