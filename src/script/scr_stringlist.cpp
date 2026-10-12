@@ -6,6 +6,10 @@
 #include <win32/win_local.h>
 #include <qcommon/qcommon.h>
 
+#ifdef KISAK_SWITCH
+extern void Switch_SetProgressPhase(const char *phase);
+#endif
+
 #include "scr_memorytree.h"
 #include <universal/profile.h>
 #include <universal/com_constantconfigstrings.h>
@@ -234,11 +238,20 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 {
 	PROF_SCOPED("SL_GetStringOfSize");
 
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("script_string/hash");
+#endif
 	iassert(str);
 
 	uint32_t hash = GetHashCode(str, len);
 
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("script_string/wait_lock");
+#endif
 	Sys_EnterCriticalSection(CRITSECT_SCRIPT_STRING);
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("script_string/chain");
+#endif
 
 	RefString* refStr = NULL;
 
@@ -318,7 +331,13 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 			Com_Error(ERR_DROP, "exceeded maximum number of script strings (increase STRINGLIST_SIZE)");
 		}
 
+#ifdef KISAK_SWITCH
+        Switch_SetProgressPhase("script_string/memtree_alloc");
+#endif
 		stringValue = MT_AllocIndex(len + 4, type);
+#ifdef KISAK_SWITCH
+        Switch_SetProgressPhase("script_string/memtree_alloc_done");
+#endif
 		newEntry = &scrStringGlob.hashTable[newIndex];
 		iassert((newEntry->status_next & HASH_STAT_MASK) == HASH_STAT_FREE);
 
@@ -369,7 +388,13 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 				Com_Error(ERR_DROP, "exceeded maximum number of script strings");
 			}
 
+#ifdef KISAK_SWITCH
+            Switch_SetProgressPhase("script_string/memtree_alloc");
+#endif
 			stringValue = MT_AllocIndex(len + 4, type);
+#ifdef KISAK_SWITCH
+            Switch_SetProgressPhase("script_string/memtree_alloc_done");
+#endif
 			newEntry = &scrStringGlob.hashTable[newIndex];
 
 			iassert((newEntry->status_next & HASH_STAT_MASK) == HASH_STAT_FREE);
@@ -384,7 +409,13 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 		}
 		else
 		{
+#ifdef KISAK_SWITCH
+            Switch_SetProgressPhase("script_string/memtree_alloc");
+#endif
 			stringValue = MT_AllocIndex(len + 4, type);
+#ifdef KISAK_SWITCH
+            Switch_SetProgressPhase("script_string/memtree_alloc_done");
+#endif
 			prev = entry->u.prev;
 			next = (uint16_t)entry->status_next;
 
@@ -397,6 +428,9 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 	iassert(stringValue);
 	entry->u.prev = stringValue;
 
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("script_string/copy");
+#endif
 	refStr = GetRefString(stringValue);
 	memcpy((uint8_t*)refStr->str, (uint8_t*)str, len);
 	refStr->data = ((uint8_t)user << 16) | refStr->data & 0xFF00FFFF;
