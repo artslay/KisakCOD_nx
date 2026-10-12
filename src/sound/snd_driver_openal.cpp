@@ -816,7 +816,7 @@ int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int
         stream->memoryData = nullptr;
         stream->memorySize = 0;
         FS_FCloseFile(stream->fsHandle);
-        Com_PrintError(CON_CHANNEL_SOUND, "Couldn't play stream '%s' from alias '%s' - invalid or corrupted format\\n", realname, startAliasInfo->alias0->aliasName);
+        Com_PrintError(CON_CHANNEL_SOUND, "Couldn't play stream '%s' from alias '%s' - invalid or corrupted format\n", realname, startAliasInfo->alias0->aliasName);
         return SND_SetPlaybackIdNotPlayed(index);
     }
 
