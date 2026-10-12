@@ -7894,7 +7894,7 @@ yy_buffer_state *__cdecl yy_create_buffer(FILE *file, unsigned int size)
 {
     yy_buffer_state *b; // [esp+0h] [ebp-4h]
 
-    b = (yy_buffer_state*)yy_flex_alloc(0x28u);
+    b = (yy_buffer_state*)yy_flex_alloc(sizeof(*b));
     if (!b)
         yy_fatal_error("out of dynamic memory in yy_create_buffer()");
     b->yy_buf_size = size;
@@ -7965,7 +7965,7 @@ int __cdecl yyerror()
 
 void __cdecl ScriptParse(sval_u *parseData, unsigned __int8 user)
 {
-    yy_buffer_state buffer_state; // [esp+0h] [ebp-28h] BYREF
+    yy_buffer_state buffer_state{};
 
     g_out_pos = -1;
     g_sourcePos = 0;
