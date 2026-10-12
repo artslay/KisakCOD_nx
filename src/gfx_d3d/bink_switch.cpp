@@ -300,7 +300,8 @@ static double Switch_BinkReadAudioSample(
 
 static void Switch_BinkQueueAudioFrame(SwitchBinkState *state, const AVFrame *frame)
 {
-    if (!state || !frame || !Switch_BinkEnsureAudioSource(state))
+    if (!state || !frame || state->paused || state->audioMuted ||
+        !Switch_BinkEnsureAudioSource(state))
         return;
 
     int inputChannels = frame->ch_layout.nb_channels;
