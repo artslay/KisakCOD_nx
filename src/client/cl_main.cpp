@@ -1414,7 +1414,12 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
         CL_StopLogo(localClientNum);
     }
     SND_StopSounds(SND_STOP_ALL);
-    UI_SetActiveMenu(localClientNum, (connectionState == CA_DISCONNECTED) ? UIMENU_MAIN : UIMENU_NONE);
+    // SCR_StopCinematic now selects MAIN when the finished/skipped cinematic
+    // has no queued next command. Do not immediately overwrite that decision
+    // with UIMENU_NONE here, which can leave an empty menu stack with UI catcher
+    // active and prevent CL_Frame's disconnected fallback from reopening MAIN.
+    if (connectionState != CA_CINEMATIC)
+        UI_SetActiveMenu(localClientNum, (connectionState == CA_DISCONNECTED) ? UIMENU_MAIN : UIMENU_NONE);
 }
 
 // attributes: thunk
