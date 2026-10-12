@@ -989,15 +989,14 @@ int __cdecl yylex()
 					continue;
 				}
 				yy_did_buffer_switch_on_eof = 0;
-				if (CL_GetLocalClientActiveCount())
+				// EOF handling must not depend on whether a local client is active.
+				// Scripts are parsed during server initialization, before the map
+				// client is necessarily active; restarting here can rescan EOF forever.
 				{
 					yy_c_buf_p = yytext;
 					yy_act = (yy_start - 1) / 2 + 96;
 					goto do_action;
 				}
-				if (!yy_did_buffer_switch_on_eof)
-					yyrestart();
-				break;
 			case 96:
 			case 97:
 			case 98:
