@@ -895,6 +895,12 @@ HunkUser* __cdecl Hunk_UserCreate(int32_t maxSize, const char* name, bool fixed,
         MyAssertHandler(".\\universal\\com_memory.cpp", 2834, 0, "%s\n\t(maxSize) = %i", "(!(maxSize % (4*1024)))", maxSize);
     user = (HunkUser*)Z_VirtualReserve(maxSize);
 #ifdef __SWITCH__
+    // Windows VirtualAlloc returns zero-filled reserved/committed pages. The
+    // Switch implementation backs reservations with malloc, so reproduce that
+    // initialization contract for HunkUser headers and allocations. In
+    // particular, current->next must start null before Hunk_UserAlloc chains
+    // additional blocks and Hunk_UserDestroy walks the chain.
+    memset(user, 0, static_cast<size_t>(maxSize));
     Z_VirtualCommit(user, (int)offsetof(HunkUser, buf));
     user->end = (uintptr_t)user + (uintptr_t)maxSize;
     user->pos = (uintptr_t)user->buf;
