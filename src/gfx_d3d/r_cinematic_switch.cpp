@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstddef>
 #include <cstdio>
 #include <mutex>
 
@@ -18,6 +19,20 @@ BINKTEXTURESET *g_pendingBinkUploadSet = nullptr;
 int g_pendingBinkUploadFrame = -1;
 unsigned int g_binkPublishTraceCount = 0;
 unsigned int g_binkUploadTraceCount = 0;
+
+uint32_t TraceBinkPlaneHash(const uint8_t *pixels, size_t bytes)
+{
+    if (!pixels || !bytes)
+        return 0;
+
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < bytes; ++i)
+    {
+        hash ^= pixels[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}
 }
 
 static bool UploadBinkPlane(
@@ -270,6 +285,16 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures)
     const uint8_t *srcA = planePixels(
         frameTextures.Atexture, buffers.YABufferWidth, buffers.YABufferHeight);
 
+    const unsigned int nextUploadCount = g_binkUploadTraceCount + 1u;
+    const bool tracePlaneContent =
+        nextUploadCount <= 4u || (nextUploadCount % 30u) == 0u;
+    const uint32_t hashY = tracePlaneContent
+        ? TraceBinkPlaneHash(srcY, static_cast<size_t>(buffers.YABufferWidth) * buffers.YABufferHeight) : 0u;
+    const uint32_t hashCr = tracePlaneContent
+        ? TraceBinkPlaneHash(srcCr, static_cast<size_t>(buffers.cRcBBufferWidth) * buffers.cRcBBufferHeight) : 0u;
+    const uint32_t hashCb = tracePlaneContent
+        ? TraceBinkPlaneHash(srcCb, static_cast<size_t>(buffers.cRcBBufferWidth) * buffers.cRcBBufferHeight) : 0u;
+
     const bool uploadY = UploadBinkPlane(
         draw.Ytexture, srcY,
         buffers.YABufferWidth, buffers.YABufferHeight);
@@ -287,21 +312,24 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures)
     if (uploadCount <= 4u || (uploadCount % 30u) == 0u ||
         (!(uploadY && uploadCr && uploadCb) && uploadCount <= 12u))
     {
-        char trace[320];
+        char trace[512];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][BINK UPLOAD] count=%u frame=%d bufferFrame=%u/%u src=%d%d%d%d dst=%d%d%d%d ok=%d%d%d%d\n",
+            "[KisakCOD][BINK UPLOAD] count=%u frame=%d bufferFrame=%u/%u src=%d%d%d%d ok=%d%d%d%d hashY=%08x hashCr=%08x hashCb=%08x tex=%p/%p/%p vk=%p/%p/%p\n",
             uploadCount,
             frameIndex,
             static_cast<unsigned>(buffers.FrameNum),
             static_cast<unsigned>(buffers.TotalFrames),
             srcY ? 1 : 0, srcCr ? 1 : 0, srcCb ? 1 : 0, srcA ? 1 : 0,
-            draw.Ytexture && draw.Ytexture->image ? 1 : 0,
-            draw.cRtexture && draw.cRtexture->image ? 1 : 0,
-            draw.cBtexture && draw.cBtexture->image ? 1 : 0,
-            draw.Atexture && draw.Atexture->image ? 1 : 0,
-            uploadY ? 1 : 0, uploadCr ? 1 : 0, uploadCb ? 1 : 0, uploadA ? 1 : 0);
+            uploadY ? 1 : 0, uploadCr ? 1 : 0, uploadCb ? 1 : 0, uploadA ? 1 : 0,
+            hashY, hashCr, hashCb,
+            static_cast<void *>(draw.Ytexture),
+            static_cast<void *>(draw.cRtexture),
+            static_cast<void *>(draw.cBtexture),
+            reinterpret_cast<void *>(draw.Ytexture ? draw.Ytexture->image : VK_NULL_HANDLE),
+            reinterpret_cast<void *>(draw.cRtexture ? draw.cRtexture->image : VK_NULL_HANDLE),
+            reinterpret_cast<void *>(draw.cBtexture ? draw.cBtexture->image : VK_NULL_HANDLE));
         Switch_LogWrite(trace);
     }
 }
