@@ -101,11 +101,11 @@ static_assert(sizeof(VariableStackBuffer) == 0xC);
 
 union VariableUnion // sizeof=0x4
 {                                       // ...
-    VariableUnion(float f)
+    VariableUnion(float f) : pointerValue(0)
     {
         floatValue = f;
     }
-    VariableUnion(int i)
+    VariableUnion(int i) : pointerValue(0)
     {
         intValue = i;
     }
@@ -117,9 +117,8 @@ union VariableUnion // sizeof=0x4
     {
         codePosValue = str;
     }
-    VariableUnion()
+    VariableUnion() : pointerValue(0)
     {
-        intValue = 0;
     }
 
     int intValue;
@@ -193,13 +192,11 @@ union VariableValueInternal_u // sizeof=0x4
     {
         return u.intValue;
     }
-    VariableValueInternal_u(int i)
+    VariableValueInternal_u(int i) : u(i)
     {
-        u.intValue = i;
     }
-    VariableValueInternal_u()
+    VariableValueInternal_u() : u()
     {
-        u.intValue = 0;
     }
 
     uint16_t next;
