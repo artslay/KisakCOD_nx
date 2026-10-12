@@ -6158,10 +6158,10 @@ int __cdecl yyparse()
             //yyss = &v18;
             //_yy_memcpy(&v18, yyss1, 2 * v37);
             yyss = (short *)alloca(sizeof(short) *yystacksize);
-            memcpy(yyss, yyss1, sizeof(short) * yystacksize);
+            memcpy(yyss, yyss1, sizeof(short) * v37);
 
             yyvs = (stype_t *)alloca(sizeof(stype_t) * yystacksize);
-            memcpy(yyvs, yyvs1, sizeof(stype_t) * yystacksize);
+            memcpy(yyvs, yyvs1, sizeof(stype_t) * v37);
             //v2 = alloca(8 * yystacksize);
             //v20 = &v18;
             //yyvs = &v18;
