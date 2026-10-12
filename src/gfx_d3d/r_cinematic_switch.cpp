@@ -293,7 +293,7 @@ void Unlock_Bink_textures(
     }
 }
 
-void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures)
+void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieFrame, uint32_t movieFrames)
 {
     if (!set_textures)
         return;
