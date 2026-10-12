@@ -62,7 +62,7 @@ struct alignas(128) scrStringGlob_t
 
 //#define MT_NODE_SIZE 12
 #define MT_NODE_SIZE (sizeof(MemoryNode))
-#define MT_SIZE 0xC0000
+#define MT_SIZE (MEMORY_NODE_COUNT * MT_NODE_SIZE)
 
 struct scrMemTreePub_t
 {                     
