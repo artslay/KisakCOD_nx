@@ -2,6 +2,7 @@
 
 #ifdef __SWITCH__
 #include "../../gfx_d3d/r_gfx.h"
+#include "../../gfx_d3d/r_cinematic.h"
 #endif
 
 #ifdef __SWITCH__
@@ -2352,6 +2353,90 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     m_topology = PrimitiveTopology(primitiveType);
 #ifdef __SWITCH__
     {
+#ifdef CINEMA
+        extern thread_local const char *g_switchLastSamplerMaterialNames[16];
+
+        // At most one record for each of three movie positions. Compare the
+        // active cinematic draw's bound texture objects against the exact Y,
+        // Cr, Cb and A images that Bink's upload path updates.
+        bool cinematicSamplerSeen = false;
+        for (uint32_t i = 0; i < 16; ++i)
+        {
+            const char *name = g_switchLastSamplerMaterialNames[i];
+            if (name && std::strcmp(name, "cinematic") == 0)
+            {
+                cinematicSamplerSeen = true;
+                break;
+            }
+        }
+
+        if (cinematicSamplerSeen && cinematicGlob.bink &&
+            cinematicGlob.bink->Frames >= 3u)
+        {
+            static char probeMovie[256] = {};
+            static uint32_t probeMask = 0;
+            const char *movieName = cinematicGlob.currentCinematicName;
+            if (std::strncmp(probeMovie, movieName, sizeof(probeMovie)) != 0)
+            {
+                std::snprintf(probeMovie, sizeof(probeMovie), "%s", movieName);
+                probeMask = 0;
+            }
+
+            const uint32_t frame = static_cast<uint32_t>(cinematicGlob.bink->FrameNum);
+            const uint32_t frames = static_cast<uint32_t>(cinematicGlob.bink->Frames);
+            const uint32_t middleFrame = std::max(2u, frames / 2u);
+            const uint32_t lateOffset = std::max(1u, frames / 50u);
+            const uint32_t lateFrame = std::max(
+                middleFrame + 1u, frames > lateOffset ? frames - lateOffset : frames);
+            const uint32_t targets[3] = {1u, middleFrame, lateFrame};
+            const char *stages[3] = {"first", "middle", "late"};
+
+            auto findTextureSlot = [&](IDirect3DBaseTexture9 *expected) -> int
+            {
+                if (!expected)
+                    return -1;
+                for (uint32_t i = 0; i < 16; ++i)
+                {
+                    if (m_textures[i] == expected)
+                        return static_cast<int>(i);
+                }
+                return -1;
+            };
+
+            IDirect3DBaseTexture9 *expectedY = cinematicGlob.binkTextureSet.tex_draw.Ytexture;
+            IDirect3DBaseTexture9 *expectedCr = cinematicGlob.binkTextureSet.tex_draw.cRtexture;
+            IDirect3DBaseTexture9 *expectedCb = cinematicGlob.binkTextureSet.tex_draw.cBtexture;
+            IDirect3DBaseTexture9 *expectedA = cinematicGlob.binkTextureSet.tex_draw.Atexture;
+
+            const int ySlot = findTextureSlot(expectedY);
+            const int crSlot = findTextureSlot(expectedCr);
+            const int cbSlot = findTextureSlot(expectedCb);
+            const int aSlot = expectedA ? findTextureSlot(expectedA) : -2;
+
+            for (uint32_t probe = 0; probe < 3u; ++probe)
+            {
+                const uint32_t bit = 1u << probe;
+                if (frame < targets[probe] || (probeMask & bit))
+                    continue;
+                probeMask |= bit;
+
+                char trace[256];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][CINEMATIC BIND] stage=%s frame=%u/%u slots=Y:%d Cr:%d Cb:%d A:%d\\n",
+                    stages[probe],
+                    frame,
+                    frames,
+                    ySlot,
+                    crSlot,
+                    cbSlot,
+                    aSlot);
+                Switch_LogWrite(trace);
+                break;
+            }
+        }
+#endif
         // UI draws may bind their authored texture on a sampler other than 0.
         // Trace all stages and also match the material name so a default-image
         // fallback does not hide the draw we're investigating.
