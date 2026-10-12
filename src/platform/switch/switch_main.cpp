@@ -75,14 +75,14 @@ static void SwitchFormatScriptContext(char *out, size_t outSize, const char *sou
     }
 
     // detail is one-based for source bytes: byte 148 points at source[147].
-    const size_t offset = detail ? static_cast<size_t>(detail - 1u) : 0u;
+    const size_t sourceLen = std::strlen(source);
+    const size_t requestedOffset = detail ? static_cast<size_t>(detail - 1u) : 0u;
+    const size_t offset = requestedOffset < sourceLen ? requestedOffset : sourceLen;
     const size_t begin = offset > 20u ? offset - 20u : 0u;
     size_t used = 0;
     for (size_t i = begin; i < offset && used + 2u < outSize; ++i)
     {
         const unsigned char c = static_cast<unsigned char>(source[i]);
-        if (!c)
-            break;
         out[used++] = (c >= 32u && c < 127u) ? static_cast<char>(c) : ' ';
     }
     if (used + 2u < outSize)
@@ -90,7 +90,7 @@ static void SwitchFormatScriptContext(char *out, size_t outSize, const char *sou
         out[used++] = '|';
         out[used] = '\0';
     }
-    for (size_t i = offset; source[i] && i < offset + 36u && used + 2u < outSize; ++i)
+    for (size_t i = offset; i < sourceLen && i < offset + 36u && used + 2u < outSize; ++i)
     {
         const unsigned char c = static_cast<unsigned char>(source[i]);
         out[used++] = (c >= 32u && c < 127u) ? static_cast<char>(c) : ' ';
