@@ -13,6 +13,7 @@
 
 #ifdef KISAK_SWITCH
 extern void Switch_SetProgressDetail(uint32_t detail);
+extern void Switch_SetProgressPhase(const char *phase);
 #endif
 
 #include "scr_yacc_structs.h"
@@ -278,6 +279,9 @@ yy_buffer_state *yy_create_buffer()
 
 void __cdecl TextValue(char *str, int len)
 {
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("lexer/text_value");
+#endif
 	yylval.val.stringValue = SL_GetStringOfSize(str, 0, len + 1, MT_TYPE_SCRIPT_PARSE);
 }
 
@@ -468,9 +472,9 @@ int __cdecl yylex()
 		do_action:
 
 #ifdef KISAK_SWITCH
-            // Keep the existing watchdog's detail field at the current source
-            // offset, so a real parser stall identifies where it stopped.
+            // Track this lexer action in the existing single-line watchdog.
             Switch_SetProgressDetail(g_out_pos == UINT32_MAX ? 0u : g_out_pos + 1u);
+            Switch_SetProgressPhase("lexer/action");
 #endif
 			// sval_u contains native 64-bit pointers on Switch. Lexer rules that
 			// write only stringValue/intValue/floatValue must not inherit the
@@ -517,11 +521,17 @@ int __cdecl yylex()
 				yy_start = 5;
 				goto LABEL_11;
 			case 7:
+#ifdef KISAK_SWITCH
+                Switch_SetProgressPhase("lexer/string_value");
+#endif
 				yylval.pos = g_out_pos;
 				g_sourcePos = g_out_pos;
 				g_out_pos += yyleng;
 				return StringValue(yytext + 1, yyleng - 2) != 0 ? 259 : 257;
 			case 8:
+#ifdef KISAK_SWITCH
+                Switch_SetProgressPhase("lexer/string_value");
+#endif
 				yylval.pos = g_out_pos;
 				g_sourcePos = g_out_pos;
 				g_out_pos += yyleng;
@@ -939,12 +949,18 @@ int __cdecl yylex()
 				g_out_pos += yyleng;
 				return 343;
 			case 91:
+#ifdef KISAK_SWITCH
+                Switch_SetProgressPhase("lexer/text_token");
+#endif
 				yylval.pos = g_out_pos;
 				g_sourcePos = g_out_pos;
 				g_out_pos += yyleng;
 				TextValue((char*)yytext, yyleng);
 				return 258;
 			case 92:
+#ifdef KISAK_SWITCH
+                Switch_SetProgressPhase("lexer/text_token");
+#endif
 				yylval.pos = g_out_pos;
 				g_sourcePos = g_out_pos;
 				g_out_pos += yyleng;
@@ -1218,8 +1234,14 @@ yynewstate:
 		/* YYCHAR is either YYEMPTY or YYEOF or a valid lookahead symbol.  */
 		if (yychar == -2)
 		{
+#ifdef KISAK_SWITCH
+            Switch_SetProgressPhase("parser/request_token");
+#endif
 			// YYDPRINTF ((stderr, "Reading a token: "));
 			yychar = yylex();
+#ifdef KISAK_SWITCH
+            Switch_SetProgressPhase("parser/token_ready");
+#endif
 		}
 
 		if (yychar > 0) // YYEOF
@@ -1294,6 +1316,9 @@ yynewstate:
 			| yyreduce -- Do a reduction.  |
 			`-----------------------------*/
 		yyreduce:
+#ifdef KISAK_SWITCH
+            Switch_SetProgressPhase("parser/reduce_action");
+#endif
 			/* yyn is the number of a rule to reduce with.  */
 			yylen = yyr2[yyn];
 
