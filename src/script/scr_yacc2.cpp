@@ -463,6 +463,11 @@ int __cdecl yylex()
 			yy_c_buf_p = yy_cp;
 		do_action:
 
+			// sval_u contains native 64-bit pointers on Switch. Lexer rules that
+			// write only stringValue/intValue/floatValue must not inherit the
+			// upper pointer bits from the previously emitted token.
+			yylval.val = sval_u{};
+
 			switch (yy_act)
 			{
 			case 0:
