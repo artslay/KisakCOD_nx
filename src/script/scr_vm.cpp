@@ -1362,7 +1362,7 @@ void __cdecl Scr_TerminateWaittillThread(uint32_t localId, uint32_t startLocalId
             MyAssertHandler(".\\script\\scr_vm.cpp", 3276, 0, "%s", "stackId");
         if (GetValueType(stackId) != VAR_STACK)
             MyAssertHandler(".\\script\\scr_vm.cpp", 3277, 0, "%s", "GetValueType( stackId ) == VAR_STACK");
-        stackValue = (VariableStackBuffer*)GetVariableValueAddress(stackId)->u.intValue;
+        stackValue = GetVariableValueAddress(stackId)->u.stackValue;
         if (scrVarPub.developer)
             Scr_GetStackThreadPos(localId, stackValue, 1);
         VM_CancelNotifyInternal(notifyListOwnerId.stringValue, startLocalId, notifyListId, notifyNameListId, stringValue);
@@ -1377,7 +1377,7 @@ void __cdecl Scr_TerminateWaittillThread(uint32_t localId, uint32_t startLocalId
             MyAssertHandler(".\\script\\scr_vm.cpp", 3293, 0, "%s", "stackId");
         if (GetValueType(stackIda) != VAR_STACK)
             MyAssertHandler(".\\script\\scr_vm.cpp", 3294, 0, "%s", "GetValueType( stackId ) == VAR_STACK");
-        stackValue = (VariableStackBuffer*)GetVariableValueAddress(stackIda)->u.intValue;
+        stackValue = GetVariableValueAddress(stackIda)->u.stackValue;
         if (scrVarPub.developer)
             Scr_GetStackThreadPos(localId, stackValue, 1);
         RemoveVariable(startLocalId, 0x18001u);
@@ -1415,7 +1415,7 @@ void __cdecl Scr_CancelNotifyList(uint32_t notifyListOwnerId)
         iassert(startLocalId);
         if (GetValueType(stackId) == VAR_STACK)
         {
-            stackValue = (VariableStackBuffer*)GetVariableValueAddress(stackId)->u.intValue;
+            stackValue = GetVariableValueAddress(stackId)->u.stackValue;
             Scr_CancelWaittill(startLocalId);
             VM_TrimStack(startLocalId, stackValue, 0);
         }
@@ -1431,7 +1431,7 @@ void __cdecl Scr_CancelNotifyList(uint32_t notifyListOwnerId)
                 iassert(!Scr_GetThreadNotifyName(selfStartLocalId));
                 iassert(GetValueType(stackId) == VAR_STACK);
                 VariableValueAddress = GetVariableValueAddress(stackId);
-                stackValue = (VariableStackBuffer*)VariableValueAddress->u.intValue;
+                stackValue = VariableValueAddress->u.stackValue;
                 iassert(!stackValue->pos);
                 VM_TrimStack(selfStartLocalId, stackValue, 1);
             }
@@ -3872,7 +3872,7 @@ void __cdecl VM_TerminateTime(uint32_t timeId)
             MyAssertHandler(".\\script\\scr_vm.cpp", 3803, 0, "%s", "startLocalId");
         if (GetValueType(stackId) != VAR_STACK)
             MyAssertHandler(".\\script\\scr_vm.cpp", 3805, 0, "%s", "GetValueType( stackId ) == VAR_STACK");
-        stackValue = (VariableStackBuffer*)GetVariableValueAddress(stackId)->u.intValue;
+        stackValue = GetVariableValueAddress(stackId)->u.stackValue;
         RemoveObjectVariable(timeId, startLocalId);
         Scr_ClearWaitTime(startLocalId);
         VM_TerminateStack(startLocalId, startLocalId, stackValue);
