@@ -28,6 +28,7 @@ extern const char * volatile g_switchServerInitStage;
 
 static std::atomic<const char *> g_switchProgressStage{"boot"};
 static std::atomic<uint32_t> g_switchProgressDetail{UINT32_MAX};
+static std::atomic<const char *> g_switchProgressPhase{"(none)"};
 static std::atomic<const char *> g_switchProgressScriptSource{nullptr};
 static std::mutex g_switchProgressScriptMutex;
 static char g_switchProgressScriptName[128] = {};
@@ -35,6 +36,7 @@ static char g_switchProgressScriptName[128] = {};
 void Switch_SetProgressStage(const char *stage, uint32_t detail)
 {
     g_switchProgressDetail.store(detail, std::memory_order_relaxed);
+    g_switchProgressPhase.store("(none)", std::memory_order_relaxed);
     g_switchProgressStage.store(stage ? stage : "(null)", std::memory_order_release);
     std::lock_guard<std::mutex> lock(g_switchProgressScriptMutex);
     g_switchProgressScriptName[0] = '\0';
@@ -43,12 +45,18 @@ void Switch_SetProgressStage(const char *stage, uint32_t detail)
 void Switch_SetProgressScriptStage(const char *stage, const char *filename)
 {
     g_switchProgressDetail.store(UINT32_MAX, std::memory_order_relaxed);
+    g_switchProgressPhase.store("(none)", std::memory_order_relaxed);
     g_switchProgressStage.store(stage ? stage : "(null)", std::memory_order_release);
     if (!filename)
         return;
 
     std::lock_guard<std::mutex> lock(g_switchProgressScriptMutex);
     std::snprintf(g_switchProgressScriptName, sizeof(g_switchProgressScriptName), "%s", filename);
+}
+
+void Switch_SetProgressPhase(const char *phase)
+{
+    g_switchProgressPhase.store(phase ? phase : "(null)", std::memory_order_release);
 }
 
 void Switch_SetProgressDetail(uint32_t detail)
@@ -113,6 +121,7 @@ static void SwitchProgressWatchdogMain()
     const char *lastDbStage = nullptr;
     const char *lastServerStage = nullptr;
     const char *lastProgressStage = nullptr;
+    const char *lastProgressPhase = nullptr;
     uint32_t lastProgressDetail = UINT32_MAX;
     char lastProgressScriptName[128] = {};
 
@@ -129,6 +138,7 @@ static void SwitchProgressWatchdogMain()
         const char *dbStage = g_switchDbStage;
         const char *serverStage = g_switchServerInitStage;
         const char *progressStage = g_switchProgressStage.load(std::memory_order_acquire);
+        const char *progressPhase = g_switchProgressPhase.load(std::memory_order_acquire);
         const uint32_t progressDetail = g_switchProgressDetail.load(std::memory_order_relaxed);
         char progressScriptName[sizeof(lastProgressScriptName)] = {};
         {
@@ -145,6 +155,9 @@ static void SwitchProgressWatchdogMain()
         const bool sameProgressStage =
             lastProgressStage == progressStage ||
             (lastProgressStage && progressStage && std::strcmp(lastProgressStage, progressStage) == 0);
+        const bool sameProgressPhase =
+            lastProgressPhase == progressPhase ||
+            (lastProgressPhase && progressPhase && std::strcmp(lastProgressPhase, progressPhase) == 0);
         const bool sameProgressScript =
             std::strcmp(lastProgressScriptName, progressScriptName) == 0;
         const bool unchanged = haveSnapshot &&
@@ -154,6 +167,7 @@ static void SwitchProgressWatchdogMain()
             sameDbStage &&
             sameServerStage &&
             sameProgressStage &&
+            sameProgressPhase &&
             progressDetail == lastProgressDetail &&
             sameProgressScript;
 
@@ -165,6 +179,7 @@ static void SwitchProgressWatchdogMain()
             lastDbStage = dbStage;
             lastServerStage = serverStage;
             lastProgressStage = progressStage;
+            lastProgressPhase = progressPhase;
             lastProgressDetail = progressDetail;
             std::memcpy(lastProgressScriptName, progressScriptName, sizeof(lastProgressScriptName));
             lastProgressScriptName[sizeof(lastProgressScriptName) - 1] = '\0';
@@ -190,7 +205,7 @@ static void SwitchProgressWatchdogMain()
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][WATCHDOG] t=%us unchanged=%us asset=%d rawType=%u header=%08x dbStage=%s serverStage=%s progressStage=%s detail=%u script=%s context=\"%s\"\n",
+            "[KisakCOD][WATCHDOG] t=%us unchanged=%us asset=%d rawType=%u header=%08x dbStage=%s serverStage=%s progressStage=%s activity=%s detail=%u script=%s context=\"%s\"\n",
             tick * 5u,
             stableTicks * 5u,
             asset,
@@ -199,6 +214,7 @@ static void SwitchProgressWatchdogMain()
             dbStage ? dbStage : "(null)",
             serverStage ? serverStage : "(null)",
             progressStage ? progressStage : "(null)",
+            progressPhase ? progressPhase : "(null)",
             progressDetail,
             progressScriptName[0] ? progressScriptName : "(none)",
             context);
