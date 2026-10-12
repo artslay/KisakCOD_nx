@@ -12,50 +12,12 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern thread_local const char * volatile g_switchFrameStage;
-extern void Switch_LogWrite(const char *msg);
 extern "C" void Switch_LogFrameTail();
 extern "C" thread_local volatile uintptr_t g_switchFrameTailReached;
 extern "C" thread_local volatile uintptr_t g_switchFrameAfterDrawReached;
 extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldAddress;
 extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldCaller;
-static thread_local bool g_switchRemoteFrameTraceActive = false;
-static thread_local bool g_switchRemoteFrameTraceUsed = false;
 
-static bool Switch_ShouldTraceRemoteFrame()
-{
-    if (!g_switchRemoteFrameTraceActive
-        && !g_switchRemoteFrameTraceUsed
-        && Sys_IsRenderThread()
-        && R_IsInRemoteScreenUpdate())
-    {
-        g_switchRemoteFrameTraceActive = true;
-        g_switchRemoteFrameTraceUsed = true;
-        return true;
-    }
-    return g_switchRemoteFrameTraceActive;
-}
-
-static void Switch_EndRemoteFrameTrace()
-{
-    g_switchRemoteFrameTraceActive = false;
-}
-
-static void Switch_TraceLoadingCinematicDraw(const char *site)
-{
-    static unsigned int calls = 0;
-    if ((++calls % 60u) == 1u)
-    {
-        char trace[192];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][CINEMATIC DRAW] call=%u site=%s stage=%s\n",
-            calls,
-            site ? site : "unknown",
-            g_switchFrameStage ? g_switchFrameStage : "unknown");
-        Switch_LogWrite(trace);
-    }
-}
 #endif
 #include <ui/ui.h>
 #include <game/g_local.h>
@@ -256,7 +218,6 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
                 // DB_SyncXAssets waits. Draw the active map-load cinematic into
                 // each of those frames before UI_Refresh overlays the progress UI.
                 g_switchFrameStage = "frame/scr/draw_field/loading_cinematic";
-                Switch_TraceLoadingCinematicDraw("loading-main");
                 SCR_DrawCinematic(0);
                 g_switchFrameStage = "frame/scr/draw_field/loading_refresh";
 #endif
@@ -290,7 +251,6 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
             if (connectionState == CA_LOADING)
             {
                 g_switchFrameStage = "frame/scr/draw_field/loading_cinematic";
-                Switch_TraceLoadingCinematicDraw("loading-fullscreen");
                 SCR_DrawCinematic(0);
             }
             g_switchFrameStage = "frame/scr/draw_field/loading_ui";
@@ -464,10 +424,7 @@ void SCR_UpdateFrame()
     g_switchFrameStage = "frame/scr/issue_commands";
 #endif
     R_IssueRenderCommands(0xFFFFFFFF);
-#ifdef __SWITCH__
-    if (g_switchRemoteFrameTraceActive)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateFrame: complete\n");
-#endif
+
     //Profile_EndInternal(0);
 #ifdef KISAK_XBOX
     if (R_SkinCacheReachedThreshold() && g_allowRemoveCorpse)
@@ -481,11 +438,7 @@ void SCR_UpdateFrame()
 
 void __cdecl SCR_UpdateScreen()
 {
-#ifdef __SWITCH__
-    const bool switchTrace = Switch_ShouldTraceRemoteFrame();
-    if (switchTrace)
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateScreen: entered\n");
-#endif
+
     if (!updateScreenCalled)
     {
         //Profile_Begin(34);
@@ -504,21 +457,12 @@ void __cdecl SCR_UpdateScreen()
                 updateScreenCalled = 1;
                 SCR_UpdateFrame();
                 updateScreenCalled = 0;
-#ifdef __SWITCH__
-                if (g_switchRemoteFrameTraceActive)
-                    Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateScreen: SCR_UpdateFrame returned\n");
-#endif
+
             }
         }
         //Profile_EndInternal(0);
     }
-#ifdef __SWITCH__
-    if (switchTrace)
-    {
-        Switch_LogWrite("[KisakCOD][RTHREAD] SCR_UpdateScreen: returned\n");
-        Switch_EndRemoteFrameTrace();
-    }
-#endif
+
 }
 
 void __cdecl SCR_UpdateLoadScreen()
