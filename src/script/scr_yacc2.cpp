@@ -26,6 +26,9 @@ struct stype_t // sizeof=0x8
 	sval_u val;                         // ...
 	uint32_t pos;                   // ...
 };
+#ifdef KISAK_SWITCH
+static_assert(sizeof(stype_t) == 16, "Switch parser semantic stack must preserve native pointer width");
+#endif
 
 #define YY_BUF_SIZE 0x4000 //16384
 
