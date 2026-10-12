@@ -4,6 +4,11 @@
 
 #include <universal/assertive.h>
 #include "scr_compiler.h"
+
+#ifdef __SWITCH__
+void Switch_SetProgressScriptSource(const char *source);
+#endif
+
 #include <win32/win_net_debug.h>
 #include "scr_vm.h"
 #include <universal/profile.h>
@@ -305,7 +310,9 @@ uint32_t __cdecl Scr_LoadScriptInternal(const char *filename, PrecacheEntry *ent
 #ifdef __SWITCH__
             Switch_SetScriptLoadDiagnostic("script_parse");
 #endif
+            Switch_SetProgressScriptSource(sourceBuffer);
             ScriptParse(&parseData, 0);
+            Switch_SetProgressScriptSource(nullptr);
 #ifdef __SWITCH__
             Switch_SetScriptLoadDiagnostic("get_script_object");
 #endif
