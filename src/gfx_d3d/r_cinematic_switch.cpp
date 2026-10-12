@@ -16,17 +16,16 @@ namespace {
 std::mutex g_pendingBinkUploadMutex;
 BINKTEXTURESET *g_pendingBinkUploadSet = nullptr;
 int g_pendingBinkUploadFrame = -1;
+unsigned int g_binkPublishTraceCount = 0;
+unsigned int g_binkUploadTraceCount = 0;
 }
 
-static void UploadBinkPlane(
+static bool UploadBinkPlane(
     IDirect3DTexture9 *texture,
     const uint8_t *pixels,
     uint32_t width,
     uint32_t height)
 {
-    if (!texture || !pixels || !width || !height)
-        return;
-
     static std::atomic<unsigned> uploadFailureLogs{0};
     auto logUploadFailure = [&](const char *reason, VkImageLayout layout)
     {
@@ -47,12 +46,22 @@ static void UploadBinkPlane(
         Switch_LogWrite(trace);
     };
 
+    // A plane without a destination/size can be legitimately unused (notably
+    // alpha). Missing source pixels for an allocated plane are worth reporting.
+    if (!texture || !width || !height)
+        return false;
+    if (!pixels)
+    {
+        logUploadFailure("source pixels unavailable", texture->GetSubresourceLayout(0, 0));
+        return false;
+    }
+
     VulkanBackend *backend = GetVulkanBackend();
     if (!backend || !texture->image)
     {
         logUploadFailure(!backend ? "Vulkan backend unavailable" : "texture has no VkImage",
             VK_IMAGE_LAYOUT_UNDEFINED);
-        return;
+        return false;
     }
 
     const VkImageLayout oldLayout = texture->GetSubresourceLayout(0, 0);
@@ -71,11 +80,12 @@ static void UploadBinkPlane(
             0))
     {
         logUploadFailure("UploadImage2D returned false", oldLayout);
-        return;
+        return false;
     }
 
     texture->SetSubresourceLayout(
         0, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    return true;
 }
 
 static void LockPlane(
@@ -145,6 +155,25 @@ void Unlock_Bink_textures(
         g_pendingBinkUploadSet = set_textures;
         g_pendingBinkUploadFrame = activeFrame;
     }
+    const unsigned int publishCount = ++g_binkPublishTraceCount;
+    if (publishCount <= 4u || (publishCount % 30u) == 0u)
+    {
+        const BINKFRAMETEXTURES &frameTextures = set_textures->textures[activeFrame];
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][BINK PUBLISH] count=%u active=%d bufferFrame=%u total=%u cpuPlanes=%d%d%d%d\\n",
+            publishCount,
+            activeFrame,
+            static_cast<unsigned>(buffers.FrameNum),
+            static_cast<unsigned>(buffers.TotalFrames),
+            frameTextures.Ytexture && !frameTextures.Ytexture->lockShadow.empty() ? 1 : 0,
+            frameTextures.cRtexture && !frameTextures.cRtexture->lockShadow.empty() ? 1 : 0,
+            frameTextures.cBtexture && !frameTextures.cBtexture->lockShadow.empty() ? 1 : 0,
+            frameTextures.Atexture && !frameTextures.Atexture->lockShadow.empty() ? 1 : 0);
+        Switch_LogWrite(trace);
+    }
 
     for (int i = 0; i < buffers.TotalFrames; ++i)
     {
@@ -180,15 +209,38 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures)
         return;
 
     int frameIndex = -1;
+    bool pendingSetMatches = false;
+    bool hasPendingFrame = false;
+    int observedPendingFrame = -1;
     {
         std::lock_guard<std::mutex> lock(g_pendingBinkUploadMutex);
-        if (g_pendingBinkUploadSet != set_textures ||
-            g_pendingBinkUploadFrame < 0)
-            return;
-
-        frameIndex = g_pendingBinkUploadFrame;
-        g_pendingBinkUploadSet = nullptr;
-        g_pendingBinkUploadFrame = -1;
+        pendingSetMatches = g_pendingBinkUploadSet == set_textures;
+        observedPendingFrame = g_pendingBinkUploadFrame;
+        hasPendingFrame = observedPendingFrame >= 0;
+        if (pendingSetMatches && hasPendingFrame)
+        {
+            frameIndex = observedPendingFrame;
+            g_pendingBinkUploadSet = nullptr;
+            g_pendingBinkUploadFrame = -1;
+        }
+    }
+    if (frameIndex < 0)
+    {
+        static unsigned int switchBinkUploadPollTraceCalls = 0;
+        if ((++switchBinkUploadPollTraceCalls % 60u) == 1u)
+        {
+            char trace[192];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][BINK UPLOAD WAIT] polls=%u setMatch=%d hasPending=%d pendingFrame=%d\\n",
+                switchBinkUploadPollTraceCalls,
+                pendingSetMatches ? 1 : 0,
+                hasPendingFrame ? 1 : 0,
+                observedPendingFrame);
+            Switch_LogWrite(trace);
+        }
+        return;
     }
 
     const BINKFRAMEBUFFERS &buffers = set_textures->bink_buffers;
@@ -211,26 +263,49 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures)
     // This function is called from R_Cinematic_UpdateRendererImages on the
     // render thread. Each UploadImage2D is therefore ordered with rendering
     // without running Vulkan queue operations from the cinematic worker.
-    UploadBinkPlane(
-        draw.Ytexture,
-        planePixels(frameTextures.Ytexture,
-                    buffers.YABufferWidth, buffers.YABufferHeight),
+    const uint8_t *srcY = planePixels(
+        frameTextures.Ytexture, buffers.YABufferWidth, buffers.YABufferHeight);
+    const uint8_t *srcCr = planePixels(
+        frameTextures.cRtexture, buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
+    const uint8_t *srcCb = planePixels(
+        frameTextures.cBtexture, buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
+    const uint8_t *srcA = planePixels(
+        frameTextures.Atexture, buffers.YABufferWidth, buffers.YABufferHeight);
+
+    const bool uploadY = UploadBinkPlane(
+        draw.Ytexture, srcY,
         buffers.YABufferWidth, buffers.YABufferHeight);
-    UploadBinkPlane(
-        draw.cRtexture,
-        planePixels(frameTextures.cRtexture,
-                    buffers.cRcBBufferWidth, buffers.cRcBBufferHeight),
+    const bool uploadCr = UploadBinkPlane(
+        draw.cRtexture, srcCr,
         buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
-    UploadBinkPlane(
-        draw.cBtexture,
-        planePixels(frameTextures.cBtexture,
-                    buffers.cRcBBufferWidth, buffers.cRcBBufferHeight),
+    const bool uploadCb = UploadBinkPlane(
+        draw.cBtexture, srcCb,
         buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
-    UploadBinkPlane(
-        draw.Atexture,
-        planePixels(frameTextures.Atexture,
-                    buffers.YABufferWidth, buffers.YABufferHeight),
+    const bool uploadA = UploadBinkPlane(
+        draw.Atexture, srcA,
         buffers.YABufferWidth, buffers.YABufferHeight);
+
+    const unsigned int uploadCount = ++g_binkUploadTraceCount;
+    if (uploadCount <= 4u || (uploadCount % 30u) == 0u ||
+        !(uploadY && uploadCr && uploadCb))
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][BINK UPLOAD] count=%u frame=%d bufferFrame=%u/%u src=%d%d%d%d dst=%d%d%d%d ok=%d%d%d%d\\n",
+            uploadCount,
+            frameIndex,
+            static_cast<unsigned>(buffers.FrameNum),
+            static_cast<unsigned>(buffers.TotalFrames),
+            srcY ? 1 : 0, srcCr ? 1 : 0, srcCb ? 1 : 0, srcA ? 1 : 0,
+            draw.Ytexture && draw.Ytexture->image ? 1 : 0,
+            draw.cRtexture && draw.cRtexture->image ? 1 : 0,
+            draw.cBtexture && draw.cBtexture->image ? 1 : 0,
+            draw.Atexture && draw.Atexture->image ? 1 : 0,
+            uploadY ? 1 : 0, uploadCr ? 1 : 0, uploadCb ? 1 : 0, uploadA ? 1 : 0);
+        Switch_LogWrite(trace);
+    }
 }
 
 #endif
