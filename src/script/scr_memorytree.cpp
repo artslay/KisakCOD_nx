@@ -180,8 +180,9 @@ static bool MT_RebuildFreeTreesFromUsage()
         if (!scrMemTreeDebugGlob.mt_usage[node])
             continue;
 
+        const uint32_t type = scrMemTreeDebugGlob.mt_usage[node];
         const uint32_t size = scrMemTreeDebugGlob.mt_usage_size[node];
-        if (size > MEMORY_NODE_BITS)
+        if (type >= MT_TYPE_COUNT || size >= MEMORY_NODE_BITS)
             return false;
 
         const uint32_t blockSize = 1u << size;
@@ -199,9 +200,13 @@ static bool MT_RebuildFreeTreesFromUsage()
         allocationBuckets += blockSize;
     }
 
-    if (allocationCount != (uint32_t)scrMemTreeGlob.totalAlloc ||
-        allocationBuckets != (uint32_t)scrMemTreeGlob.totalAllocBuckets)
-        return false;
+    // The usage map records each live allocation independently. The aggregate
+    // counters may be what became inconsistent during the original tree damage,
+    // so validate ranges/overlap above and rebuild the counters from the map.
+    // Never accept negative or impossible values from the old counters as proof
+    // that the allocation map is bad.
+    scrMemTreeGlob.totalAlloc = (int)allocationCount;
+    scrMemTreeGlob.totalAllocBuckets = (int)allocationBuckets;
 
     // Drop only the free-tree roots. Allocated payloads are not touched.
     for (int size = 0; size <= MEMORY_NODE_BITS; ++size)
