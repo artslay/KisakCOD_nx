@@ -20,7 +20,7 @@ extern const char * volatile g_switchServerInitStage;
 
 #ifdef __SWITCH__
 extern thread_local const char * volatile g_switchFrameStage;
-#define SWITCH_WEAPON_STAGE(stage) (g_switchFrameStage = "frame/weapon/" stage)
+#define SWITCH_WEAPON_STAGE(stage) ((g_switchFrameStage = "frame/weapon/" stage), (g_switchServerInitStage = "weapon/" stage))
 #else
 #define SWITCH_WEAPON_STAGE(stage) ((void)0)
 #endif
