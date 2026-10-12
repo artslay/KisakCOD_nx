@@ -10,6 +10,7 @@
 #include "client.h"
 
 #ifdef __SWITCH__
+#include <cstdio>
 extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 extern "C" void Switch_LogFrameTail();
@@ -37,6 +38,23 @@ static bool Switch_ShouldTraceRemoteFrame()
 static void Switch_EndRemoteFrameTrace()
 {
     g_switchRemoteFrameTraceActive = false;
+}
+
+static void Switch_TraceLoadingCinematicDraw(const char *site)
+{
+    static unsigned int calls = 0;
+    if ((++calls % 60u) == 1u)
+    {
+        char trace[192];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CINEMATIC DRAW] call=%u site=%s stage=%s\\n",
+            calls,
+            site ? site : "unknown",
+            g_switchFrameStage ? g_switchFrameStage : "unknown");
+        Switch_LogWrite(trace);
+    }
 }
 #endif
 #include <ui/ui.h>
@@ -238,6 +256,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
                 // DB_SyncXAssets waits. Draw the active map-load cinematic into
                 // each of those frames before UI_Refresh overlays the progress UI.
                 g_switchFrameStage = "frame/scr/draw_field/loading_cinematic";
+                Switch_TraceLoadingCinematicDraw("loading-main");
                 SCR_DrawCinematic(0);
                 g_switchFrameStage = "frame/scr/draw_field/loading_refresh";
 #endif
@@ -271,6 +290,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
             if (connectionState == CA_LOADING)
             {
                 g_switchFrameStage = "frame/scr/draw_field/loading_cinematic";
+                Switch_TraceLoadingCinematicDraw("loading-fullscreen");
                 SCR_DrawCinematic(0);
             }
             g_switchFrameStage = "frame/scr/draw_field/loading_ui";
