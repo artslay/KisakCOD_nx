@@ -47,3 +47,21 @@ void *KisakZone_Load(const char *zoneName, const KisakZoneBlocks &blocks, const 
 void KisakZone_Free(void *zone);
 // Read the OAT IW3 WeaponDef model pointer fields without importing its types into engine code.
 bool KisakZone_ExtractWeaponModelPointers(const void *asset, void **modelPointers, size_t modelPointerCount);
+struct KisakZoneStaticModelRecord
+{
+    uint16_t nextModelInWorldSector;
+    void *xmodel;
+    float origin[3];
+    float invScaledAxis[3][3];
+    float absmin[3];
+    float absmax[3];
+};
+
+// Extract records from OAT's native IW3 representation so engine code can
+// rebuild them using the engine's own cStaticModel_s ABI.
+bool KisakZone_ExtractClipMapStaticModels(
+    const void *asset,
+    const void **sourceList,
+    size_t *recordCount,
+    KisakZoneStaticModelRecord *records,
+    size_t recordCapacity);
