@@ -1131,22 +1131,38 @@ yynewstate:
 				yystacksize = 10000; // YYMAXDEPTH
 			}
 
-			//iassert(needs_free == false);
-			//needs_free = true;
+			// A GSC file can require several parser stack growths. alloca()
+			// inside this loop permanently consumes stack space on every growth,
+			// and the native Switch semantic values are wider than the x86 ones.
+			// Move grown stacks to the heap and copy only live entries.
+			short *new_yyss = (short *)malloc(sizeof(short) * (size_t)yystacksize);
+			stype_t *new_yyvs = (stype_t *)malloc(sizeof(stype_t) * (size_t)yystacksize);
+			if (!new_yyss || !new_yyvs)
+			{
+				free(new_yyss);
+				free(new_yyvs);
+				if (needs_free)
+				{
+					free(free1addr);
+					free(free2addr);
+				}
+				CompileError(g_sourcePos, "parser stack allocation failed");
+				return 2;
+			}
 
-			// YYSTACK_RELOCATE (yyss_alloc, yyss);
-			yyss = (short *)alloca(sizeof(short) * yystacksize);
-			//yyss = (short *)malloc(sizeof(short) * yystacksize);
-			free1addr = yyss;
-			//memcpy(yyss, yyss1, sizeof(short) * yystacksize);
-			memcpy(yyss, yyss1, sizeof(short) * yysize); // LWSS CHANGE
+			memcpy(new_yyss, yyss1, sizeof(short) * (size_t)yysize);
+			memcpy(new_yyvs, yyvs1, sizeof(stype_t) * (size_t)valueCount);
 
-			// YYSTACK_RELOCATE (yyvs_alloc, yyvs);
-			yyvs = (stype_t *)alloca(sizeof(stype_t) * yystacksize);
-			//yyvs = (stype_t *)malloc(sizeof(stype_t) * yystacksize);
-			free2addr = yyvs;
-			//memcpy(yyss, yyvs1, sizeof(stype_t) * yystacksize);
-			memcpy(yyvs, yyvs1, sizeof(stype_t) * valueCount);
+			if (needs_free)
+			{
+				free(free1addr);
+				free(free2addr);
+			}
+			yyss = new_yyss;
+			yyvs = new_yyvs;
+			free1addr = new_yyss;
+			free2addr = new_yyvs;
+			needs_free = true;
 
 			// The state stack is one entry ahead at yynewstate. Preserve each
 			// stack's own depth instead of inserting a phantom semantic value.
