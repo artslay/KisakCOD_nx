@@ -5,6 +5,14 @@
 #include <xanim/xmodel.h>
 #include <server/sv_game.h>
 #include <universal/profile.h>
+#ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
+extern "C" {
+thread_local volatile uintptr_t g_switchStaticModelIndex = static_cast<uintptr_t>(-1);
+thread_local volatile uintptr_t g_switchStaticModelAddress = 0;
+thread_local volatile uintptr_t g_switchStaticModelXModel = 0;
+}
+#endif
 
 #include <bgame/bg_public.h>
 #include "cmd.h"
@@ -60,8 +68,23 @@ void __cdecl TRACK_cm_world()
 void __cdecl CM_LinkWorld()
 {
     PROFLOAD_SCOPED("CM_LoadWorld");
+#ifdef __SWITCH__
+    g_switchStaticModelIndex = static_cast<uintptr_t>(-1);
+    g_switchStaticModelAddress = 0;
+    g_switchStaticModelXModel = 0;
+    g_switchFrameStage = "frame/cm_link_world/clear_world";
+#endif
     CM_ClearWorld();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cm_link_world/link_static_models";
+#endif
     CM_LinkAllStaticModels();
+#ifdef __SWITCH__
+    g_switchStaticModelIndex = static_cast<uintptr_t>(-1);
+    g_switchStaticModelAddress = 0;
+    g_switchStaticModelXModel = 0;
+    g_switchFrameStage = "frame/cm_link_world/complete";
+#endif
 }
 
 void CM_ClearWorld()
@@ -472,9 +495,20 @@ uint32_t CM_LinkAllStaticModels()
         result = i;
         if (i >= cm.numStaticModels)
             break;
+#ifdef __SWITCH__
+        g_switchStaticModelIndex = i;
+        g_switchStaticModelAddress = reinterpret_cast<uintptr_t>(staticModel);
+        g_switchStaticModelXModel = reinterpret_cast<uintptr_t>(staticModel->xmodel);
+        g_switchFrameStage = "frame/cm_link_world/xmodel_contents";
+#endif
         iassert( staticModel->xmodel );
         if (XModelGetContents(staticModel->xmodel))
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/cm_link_world/link_static_model";
+#endif
             CM_LinkStaticModel(staticModel);
+        }
         ++i;
     }
     return result;

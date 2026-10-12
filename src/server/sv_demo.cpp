@@ -20,6 +20,9 @@
 #include <script/scr_readwrite.h>
 #include <cgame/cg_main.h> // replay_time
 #include <game/savedevice.h>
+#ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
+#endif
 
 unsigned __int8 g_buf[2][3145728];
 unsigned __int8 g_msgBuf[10485760];
@@ -517,12 +520,24 @@ void __cdecl SV_InitWriteDemo(int randomSeed)
     ProfLoad_Begin("SV_InitWriteDemo");
     if (sv.demo.nextLevelplaying)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_demo.cpp", 1030, 0, "%s", "!sv.demo.nextLevelplaying");
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/sv_init_write_demo/free_demo_msg";
+#endif
     SV_FreeDemoMsg();
     if (CL_DemoPlaying())
     {
         sv.demo.recording = 0;
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/sv_init_write_demo/cm_link_world";
+#endif
         CM_LinkWorld();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/sv_init_write_demo/update_all_entities";
+#endif
         G_UpdateAllEntities();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/sv_init_write_demo/after_update_all_entities";
+#endif
         ProfLoad_End();
     }
     else
@@ -535,8 +550,17 @@ void __cdecl SV_InitWriteDemo(int randomSeed)
         SV_CheckDemoSize();
         MSG_WriteLong(&sv.demo.msg, randomSeed);
         SV_ClearHistoryCache();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/sv_init_write_demo/cm_link_world";
+#endif
         CM_LinkWorld();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/sv_init_write_demo/update_all_entities";
+#endif
         G_UpdateAllEntities();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/sv_init_write_demo/after_update_all_entities";
+#endif
         ProfLoad_End();
     }
 }
@@ -2130,10 +2154,24 @@ bool __cdecl SV_InitReadDemo(int *randomSeed)
 
 bool __cdecl SV_InitDemo(int *randomSeed)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/sv_init_demo/entry";
+#endif
     sv.demo.autoSaveTime = G_GetTime();
     if (sv.demo.nextLevelplaying)
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/sv_init_demo/read_demo";
+#endif
         return SV_InitReadDemo(randomSeed);
+    }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/sv_init_demo/write_demo";
+#endif
     SV_InitWriteDemo(*randomSeed);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/sv_init_demo/complete";
+#endif
     return 0;
 }
 

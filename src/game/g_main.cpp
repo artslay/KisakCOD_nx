@@ -1141,6 +1141,10 @@ void __cdecl G_InitGame(
 #endif
         level.demoplaying = SV_InitDemo((int*)&randomSeed);
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/after_init_demo";
+    g_switchFrameStage = "frame/game_init/seed";
+#endif
     G_srand(randomSeed);
     level.openScriptIOFileHandles[0] = 0;
     level.openScriptIOFileBuffers[0] = 0;
@@ -1155,6 +1159,9 @@ void __cdecl G_InitGame(
     level.loading = (loading_t)((((uintptr_t)*save) != 0) + 1);
     if (level.loading == LOADING_SAVEGAME)
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/game_init/load_save_weapons";
+#endif
         if (!*save)
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_main.cpp", 1488, 0, "%s", "*save");
         SaveMemory_MoveToSegment(*save, 1);
@@ -1181,9 +1188,15 @@ void __cdecl G_InitGame(
         g_scr_data.actorBackup = actorBackup;
     }
     memset(actorBackup, 0, sizeof(actorBackup_s));
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/mantle_anims";
+#endif
     if (level.time)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_main.cpp", 1517, 0, "%s", "!level.time");
     Mantle_CreateAnims(Hunk_AllocXAnimServer);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/vehicle_info";
+#endif
     if (restart)
         G_RestartScrVehicleInfo();
     else
@@ -1196,6 +1209,9 @@ void __cdecl G_InitGame(
             1,
             "%s",
             "level.actorCorpseCount >= 1 && level.actorCorpseCount <= MAX_ACTOR_CORPSES");
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/scripts_anims";
+#endif
     ProfLoad_Begin("Load scripts and anims");
     if (!useLoadedSourceFiles)
         GScr_LoadScriptsAndAnims();
@@ -1207,6 +1223,9 @@ void __cdecl G_InitGame(
             Com_Error(ERR_DROP, "Save game saved with different script files");
     }
     ProfLoad_End();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/init_entities";
+#endif
     memset(g_entities, 0, sizeof(g_entities));
     level.gentities = g_entities;
     g_entities[ENTITYNUM_NONE].flags |= FL_OBSTACLE;
@@ -1233,29 +1252,77 @@ void __cdecl G_InitGame(
     level.num_entities = 1;
     level.firstFreeEnt = 0;
     level.lastFreeEnt = 0;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/locate_game_data";
+#endif
     SV_LocateGameData(level.gentities, 1, sizeof(gentity_s), &clients->ps, sizeof(gclient_s));
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/parse_hitloc_table";
+#endif
     G_ParseHitLocDmgTable();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/penetration_table";
+#endif
     BG_LoadPenetrationDepthTable();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/init_vehicle_paths";
+#endif
     G_InitVehiclePaths();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/init_script_vehicles";
+#endif
     G_InitScrVehicles();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/init_turrets";
+#endif
     G_InitTurrets();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/pre_spawn_paths";
+#endif
     Path_PreSpawnInitPaths();
     if (!restart)
         G_DropPathnodesToFloor();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/spawn_entities";
+#endif
     ProfLoad_Begin("G_SpawnEntitiesFromString");
     G_SpawnEntitiesFromString();
     ProfLoad_End();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/update_track_nodes";
+#endif
     G_UpdateTrackExtraNodes();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/drop_actor_spawners";
+#endif
     G_DropActorSpawnersToFloor();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/setup_vehicle_paths";
+#endif
     G_SetupVehiclePaths();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/setup_script_vehicles";
+#endif
     G_SetupScrVehicles();
     level.bRegisterItems = 1;
     level.bDrawCompassFriendlies = 1;
     level.fFogOpaqueDist = FLT_MAX;
     level.fFogOpaqueDistSqrd = FLT_MAX;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/init_objectives";
+#endif
     G_InitObjectives();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/init_targets";
+#endif
     G_InitTargets();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/missile_attractors";
+#endif
     Missile_InitAttractors();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/aim_target";
+#endif
     AimTarget_Init();
     loading = level.loading;
     if (level.loading != LOADING_LEVEL)
@@ -1277,11 +1344,17 @@ void __cdecl G_InitGame(
     if (loading == LOADING_SAVEGAME)
         goto LABEL_42;
 LABEL_43:
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/free_entity_list";
+#endif
     Scr_FreeEntityList();
 #ifndef KISAK_NO_FASTFILES
     G_PrintFastFileErrors("code_post_gfx");
     G_PrintFastFileErrors("common");
     G_PrintFastFileErrors(sv_mapname->current.string);
+#endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/game_init/complete";
 #endif
     level.initializing = 0;
 }

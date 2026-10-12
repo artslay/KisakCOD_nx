@@ -115,6 +115,9 @@ extern volatile int32_t g_switchSkinCacheCreateCalled;
 extern volatile int32_t g_switchSkinCacheCreateHr;
 }
 extern thread_local const char * volatile g_switchFrameStage;
+extern "C" thread_local volatile uintptr_t g_switchStaticModelIndex;
+extern "C" thread_local volatile uintptr_t g_switchStaticModelAddress;
+extern "C" thread_local volatile uintptr_t g_switchStaticModelXModel;
 extern "C" thread_local volatile uintptr_t g_switchFrameTailReached;
 extern "C" thread_local volatile uintptr_t g_switchFrameAfterDrawReached;
 extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldAddress;
@@ -190,6 +193,14 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         static_cast<unsigned long long>(g_switchFrameAfterDrawReached),
         reinterpret_cast<void *>(g_switchFrameDrawFieldAddress),
         reinterpret_cast<void *>(g_switchFrameDrawFieldCaller));
+    Switch_LogCrashLine(line);
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] static_model_index=%llu model=%p xmodel=%p\n",
+        static_cast<unsigned long long>(g_switchStaticModelIndex),
+        reinterpret_cast<void *>(g_switchStaticModelAddress),
+        reinterpret_cast<void *>(g_switchStaticModelXModel));
     Switch_LogCrashLine(line);
 
     std::snprintf(
