@@ -1289,7 +1289,6 @@ cmd_function_s Com_WriteDefaults_f_VAR;
 
 static const char* comInitAllocName = "$init";
 #ifdef __SWITCH__
-bool com_introMoviePending = false;
 static const dvar_t *com_introPlaybackVerified; // legacy marker; retained for existing configs
 static const dvar_t *com_introPlaybackDrawSubmitted; // legacy diagnostic marker
 static const dvar_t *com_introPlaybackCompleted;
@@ -1646,9 +1645,10 @@ void COM_PlayIntroMovies()
             com_introPlaybackCompletedPending.store(false, std::memory_order_release);
             com_introPlaybackDrawPending.store(true, std::memory_order_release);
 
-            // The existing UI/menu startup path consumes this request only
-            // after the UI is ready.
-            com_introMoviePending = true;
+            // Preserve the original CoD4 startup path: enqueue the first
+            // cinematic and let the normal command buffer run it once the
+            // engine has reached its regular command-processing phase.
+            Cbuf_AddText(0, "cinematic IW_logo\n");
             Dvar_SetString(
                 (dvar_s *)nextmap,
                 (char *)"cinematic atvi; set nextmap cinematic cod_intro");
@@ -2523,19 +2523,6 @@ void Com_StartHunkUsers()
     Com_AssetLoadUI();
     MenuScreen = UI_GetMenuScreen();
     UI_SetActiveMenu(0, (uiMenuCommand_t)MenuScreen);
-
-#ifdef __SWITCH__
-    if (com_introMoviePending)
-    {
-        // COM_PlayIntroMovies() intentionally defers the first cinematic until
-        // the UI/renderer are fully initialized. Consume that pending request
-        // here, after the initial menu is active, so the menu background movie
-        // can render underneath the profile screen.
-        Cbuf_AddText(0, "cinematic IW_logo\n");
-        com_introMoviePending = false;
-        Switch_LogWrite("[KisakCOD][INTRO] starting deferred IW_logo cinematic\n");
-    }
-#endif
 
     IN_Frame();
     Com_EventLoop();
