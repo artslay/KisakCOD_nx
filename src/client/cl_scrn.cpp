@@ -247,11 +247,6 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 			UI_Refresh();
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/draw_field/loading_ui_done";
-            if (connectionState == CA_LOADING)
-            {
-                g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_top";
-                SCR_DrawCinematic(0);
-            }
 #endif
             break;
         case CA_CINEMATIC:
@@ -292,18 +287,20 @@ LABEL_14:
         UI_Refresh();
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/ui_refresh_done";
-        if (connectionState == CA_LOADING)
-        {
-            // Submit the cinematic last so no later loading UI item can cover
-            // the new frame with the static briefing background.
-            g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_top";
-            SCR_DrawCinematic(0);
-        }
 #endif
 
 LABEL_15:;
     }
 #ifdef __SWITCH__
+    // Submit the map-loading cinematic exactly once at the end of every
+    // screen-field path. The fullscreen UI branch can jump directly to
+    // LABEL_15 when the UI was already refreshed or its catcher is inactive;
+    // drawing inside UI_Refresh silently skipped the movie on those frames.
+    if (clientUIActives[0].connectionState == CA_LOADING)
+    {
+        g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_tail";
+        SCR_DrawCinematic(0);
+    }
     g_switchFrameTailReached = 1;
 #endif
 }
