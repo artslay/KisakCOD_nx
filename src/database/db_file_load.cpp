@@ -257,7 +257,7 @@ double __cdecl DB_GetLoadedFraction()
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][DB PROGRESS] source=file-offset fraction=%.5f gTotal=%d gLoaded=%d ext=%d/%d file=%llu/%llu\\n",
+                    "[KisakCOD][DB PROGRESS] source=file-offset fraction=%.5f gTotal=%d gLoaded=%d ext=%d/%d file=%llu/%llu\n",
                     fraction,
                     static_cast<int>(g_totalSize),
                     static_cast<int>(g_loadedSize),
@@ -277,7 +277,7 @@ double __cdecl DB_GetLoadedFraction()
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][DB PROGRESS] source=zero gTotal=%d gLoaded=%d ext=%d/%d file=%llu/%llu\\n",
+                "[KisakCOD][DB PROGRESS] source=zero gTotal=%d gLoaded=%d ext=%d/%d file=%llu/%llu\n",
                 static_cast<int>(g_totalSize),
                 static_cast<int>(g_loadedSize),
                 static_cast<int>(g_loadedExternalBytes),
@@ -309,7 +309,7 @@ double __cdecl DB_GetLoadedFraction()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][DB PROGRESS] source=engine-count fraction=%.5f gTotal=%d gLoaded=%d ext=%d/%d file=%llu/%llu\\n",
+            "[KisakCOD][DB PROGRESS] source=engine-count fraction=%.5f gTotal=%d gLoaded=%d ext=%d/%d file=%llu/%llu\n",
             fraction,
             static_cast<int>(g_totalSize),
             static_cast<int>(g_loadedSize),
