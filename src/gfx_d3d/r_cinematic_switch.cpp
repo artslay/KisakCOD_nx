@@ -51,10 +51,7 @@ static bool UploadBinkPlane(
     if (!texture || !width || !height)
         return false;
     if (!pixels)
-    {
-        logUploadFailure("source pixels unavailable", texture->GetSubresourceLayout(0, 0));
         return false;
-    }
 
     VulkanBackend *backend = GetVulkanBackend();
     if (!backend || !texture->image)
@@ -156,14 +153,15 @@ void Unlock_Bink_textures(
         g_pendingBinkUploadFrame = activeFrame;
     }
     const unsigned int publishCount = ++g_binkPublishTraceCount;
-    if (publishCount <= 4u || (publishCount % 30u) == 0u)
+    if (buffers.TotalFrames > 0 &&
+        (publishCount <= 4u || (publishCount % 30u) == 0u))
     {
         const BINKFRAMETEXTURES &frameTextures = set_textures->textures[activeFrame];
         char trace[320];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][BINK PUBLISH] count=%u active=%d bufferFrame=%u total=%u cpuPlanes=%d%d%d%d\\n",
+            "[KisakCOD][BINK PUBLISH] count=%u active=%d bufferFrame=%u total=%u cpuPlanes=%d%d%d%d\n",
             publishCount,
             activeFrame,
             static_cast<unsigned>(buffers.FrameNum),
@@ -233,7 +231,7 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][BINK UPLOAD WAIT] polls=%u setMatch=%d hasPending=%d pendingFrame=%d\\n",
+                "[KisakCOD][BINK UPLOAD WAIT] polls=%u setMatch=%d hasPending=%d pendingFrame=%d\n",
                 switchBinkUploadPollTraceCalls,
                 pendingSetMatches ? 1 : 0,
                 hasPendingFrame ? 1 : 0,
@@ -287,13 +285,13 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures)
 
     const unsigned int uploadCount = ++g_binkUploadTraceCount;
     if (uploadCount <= 4u || (uploadCount % 30u) == 0u ||
-        !(uploadY && uploadCr && uploadCb))
+        (!(uploadY && uploadCr && uploadCb) && uploadCount <= 12u))
     {
         char trace[320];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][BINK UPLOAD] count=%u frame=%d bufferFrame=%u/%u src=%d%d%d%d dst=%d%d%d%d ok=%d%d%d%d\\n",
+            "[KisakCOD][BINK UPLOAD] count=%u frame=%d bufferFrame=%u/%u src=%d%d%d%d dst=%d%d%d%d ok=%d%d%d%d\n",
             uploadCount,
             frameIndex,
             static_cast<unsigned>(buffers.FrameNum),
