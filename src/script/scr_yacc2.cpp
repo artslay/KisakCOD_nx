@@ -1102,6 +1102,7 @@ yynewstate:
 
 			/* Get the current used size of the three stacks, in elements.  */
 			yysize = yyssp - yyss + 1;
+			const auto valueCount = yyvsp - yyvs + 1;
 
 			/* Extend the stack our own way.  */
 			if (yystacksize >= 10000) // YYMAXDEPTH
@@ -1146,9 +1147,11 @@ yynewstate:
 			//yyvs = (stype_t *)malloc(sizeof(stype_t) * yystacksize);
 			free2addr = yyvs;
 			//memcpy(yyss, yyvs1, sizeof(stype_t) * yystacksize);
-			memcpy(yyvs, yyvs1, sizeof(stype_t) * yysize); // LWSS CHANGE
+			memcpy(yyvs, yyvs1, sizeof(stype_t) * valueCount);
 
-			yyvsp = &yyvs[yysize - 1];
+			// The state stack is one entry ahead at yynewstate. Preserve each
+			// stack's own depth instead of inserting a phantom semantic value.
+			yyvsp = &yyvs[valueCount - 1];
 			yyssp = &yyss[yysize - 1];
 
 			// YYDPRINTF ((stderr, "Stack size increased to %lu\n", (unsigned long int) yystacksize));
