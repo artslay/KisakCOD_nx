@@ -6153,19 +6153,35 @@ int __cdecl yyparse()
             if (yystacksize > 10000)
                 yystacksize = 10000;
 
-            //v1 = alloca(2 * yystacksize);
-            //v21 = &v18;
-            //yyss = &v18;
-            //_yy_memcpy(&v18, yyss1, 2 * v37);
-            yyss = (short *)alloca(sizeof(short) *yystacksize);
-            memcpy(yyss, yyss1, sizeof(short) * v37);
+            // Use heap-backed stacks after the initial 200 entries. alloca() in
+            // this growth loop permanently consumes stack space on each growth;
+            // with 64-bit stype_t values that can exhaust the Switch thread stack.
+            short *new_yyss = (short *)malloc(sizeof(short) * (size_t)yystacksize);
+            stype_t *new_yyvs = (stype_t *)malloc(sizeof(stype_t) * (size_t)yystacksize);
+            if (!new_yyss || !new_yyvs)
+            {
+                free(new_yyss);
+                free(new_yyvs);
+                if (yyfree_stacks)
+                {
+                    free(yyss);
+                    free(yyvs);
+                }
+                v17 = "parser stack allocation failed";
+                yyerror();
+                return 2;
+            }
 
-            yyvs = (stype_t *)alloca(sizeof(stype_t) * yystacksize);
-            memcpy(yyvs, yyvs1, sizeof(stype_t) * v37);
-            //v2 = alloca(8 * yystacksize);
-            //v20 = &v18;
-            //yyvs = &v18;
-            //_yy_memcpy(&v18, yyvs1, 8 * v37);
+            memcpy(new_yyss, yyss1, sizeof(short) * (size_t)v37);
+            memcpy(new_yyvs, yyvs1, sizeof(stype_t) * (size_t)v37);
+            if (yyfree_stacks)
+            {
+                free(yyss);
+                free(yyvs);
+            }
+            yyss = new_yyss;
+            yyvs = new_yyvs;
+            yyfree_stacks = 1;
 
             yyssp = &yyss[v37 - 1];
             yyvsp = &yyvs[v37 - 1];
