@@ -14,6 +14,25 @@
 
 #undef GetObject
 
+#ifdef __SWITCH__
+extern "C" {
+thread_local const char * volatile g_switchScriptLoadStage = "idle";
+thread_local char g_switchScriptLoadName[128] = {};
+}
+
+static void Switch_SetScriptLoadDiagnostic(const char *stage, const char *filename = nullptr)
+{
+    g_switchScriptLoadStage = stage;
+    if (!filename)
+        return;
+
+    unsigned int i = 0;
+    for (; i + 1 < sizeof(g_switchScriptLoadName) && filename[i]; ++i)
+        g_switchScriptLoadName[i] = filename[i];
+    g_switchScriptLoadName[i] = '\0';
+}
+#endif
+
 bool Scr_IsInOpcodeMemory(char const* pos)
 {
     iassert(scrVarPub.programBuffer);
@@ -230,15 +249,27 @@ uint32_t __cdecl Scr_LoadScriptInternal(const char *filename, PrecacheEntry *ent
     sval_u parseData; // [esp+74h] [ebp-8h] BYREF
     uint32_t fileId; // [esp+78h] [ebp-4h]
 
+#ifdef __SWITCH__
+    Switch_SetScriptLoadDiagnostic("entry", filename ? filename : "(null)");
+#endif
     iassert(scrCompilePub.script_loading);
     iassert(strlen(filename) < MAX_QPATH);
 
     Hunk_CheckTempMemoryHighClear();
 
+#ifdef __SWITCH__
+    Switch_SetScriptLoadDiagnostic("canonical_filename");
+#endif
     name = Scr_CreateCanonicalFilename(filename);
 
+#ifdef __SWITCH__
+    Switch_SetScriptLoadDiagnostic("find_loaded_script");
+#endif
     if (FindVariable(scrCompilePub.loadedscripts, name))
     {
+#ifdef __SWITCH__
+        Switch_SetScriptLoadDiagnostic("reuse_loaded_script");
+#endif
         SL_RemoveRefToString(name);
         filePtr = FindVariable(scrCompilePub.scripts, name);
 
@@ -254,6 +285,9 @@ uint32_t __cdecl Scr_LoadScriptInternal(const char *filename, PrecacheEntry *ent
         Com_sprintf(extFilename, 64, "%s.gsc", SL_ConvertToString(name));
         oldSourceBuf = scrParserPub.sourceBuf;
         ProfLoad_Begin("Scr_AddSourceBuffer");
+#ifdef __SWITCH__
+        Switch_SetScriptLoadDiagnostic("add_source_buffer");
+#endif
         sourceBuffer = Scr_AddSourceBuffer(SL_ConvertToString(name), extFilename, TempMalloc(0), 1);
         ProfLoad_End();
         if (sourceBuffer)
@@ -266,20 +300,38 @@ uint32_t __cdecl Scr_LoadScriptInternal(const char *filename, PrecacheEntry *ent
             scrParserPub.scriptfilename = extFilename;
             scrCompilePub.in_ptr = "+";
             scrCompilePub.parseBuf = sourceBuffer;
+#ifdef __SWITCH__
+            Switch_SetScriptLoadDiagnostic("script_parse");
+#endif
             ScriptParse(&parseData, 0);
+#ifdef __SWITCH__
+            Switch_SetScriptLoadDiagnostic("get_script_object");
+#endif
             Variable = GetVariable(scrCompilePub.scripts, name);
             fileId = GetObject(Variable);
             ProfLoad_Begin("ScriptCompile");
+#ifdef __SWITCH__
+            Switch_SetScriptLoadDiagnostic("script_compile");
+#endif
             ScriptCompile(parseData, fileId, scriptId, entries, entriesCount);
             ProfLoad_End();
+#ifdef __SWITCH__
+            Switch_SetScriptLoadDiagnostic("restore_parser_state");
+#endif
             scrParserPub.scriptfilename = oldFilename;
             scrParserPub.sourceBuf = oldSourceBuf;
             scrAnimPub.animTreeNames = oldAnimTreeNames;
             Hunk_CheckTempMemoryHighClear();
+#ifdef __SWITCH__
+            Switch_SetScriptLoadDiagnostic("complete");
+#endif
             return fileId;
         }
         else
         {
+#ifdef __SWITCH__
+            Switch_SetScriptLoadDiagnostic("source_buffer_missing");
+#endif
             return 0;
         }
     }

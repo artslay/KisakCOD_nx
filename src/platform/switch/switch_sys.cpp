@@ -115,6 +115,8 @@ extern volatile int32_t g_switchSkinCacheCreateCalled;
 extern volatile int32_t g_switchSkinCacheCreateHr;
 }
 extern thread_local const char * volatile g_switchFrameStage;
+extern "C" thread_local const char * volatile g_switchScriptLoadStage;
+extern "C" thread_local char g_switchScriptLoadName[128];
 extern "C" thread_local volatile uintptr_t g_switchStaticModelIndex;
 extern "C" thread_local volatile uintptr_t g_switchStaticModelAddress;
 extern "C" thread_local volatile uintptr_t g_switchStaticModelXModel;
@@ -201,6 +203,14 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         static_cast<unsigned long long>(g_switchStaticModelIndex),
         reinterpret_cast<void *>(g_switchStaticModelAddress),
         reinterpret_cast<void *>(g_switchStaticModelXModel));
+    Switch_LogCrashLine(line);
+
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] script_load_stage=%s script=%s\n",
+        g_switchScriptLoadStage ? g_switchScriptLoadStage : "(null)",
+        g_switchScriptLoadName[0] ? g_switchScriptLoadName : "(none)");
     Switch_LogCrashLine(line);
 
     std::snprintf(
