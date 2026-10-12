@@ -171,6 +171,21 @@ static bool ReadbackBinkYPlane(
             1,
             &copy);
 
+        VkBufferMemoryBarrier toHost{};
+        toHost.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        toHost.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toHost.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+        toHost.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toHost.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toHost.buffer = readbackBuffer;
+        toHost.offset = 0;
+        toHost.size = bytes;
+        vkCmdPipelineBarrier(
+            command,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_HOST_BIT,
+            0, 0, nullptr, 1, &toHost, 0, nullptr);
+
         VkImageMemoryBarrier toShader{};
         toShader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         toShader.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
