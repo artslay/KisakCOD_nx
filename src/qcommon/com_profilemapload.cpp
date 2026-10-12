@@ -167,9 +167,21 @@ void  ProfLoad_CalculateSelfTicks()
         parentEntry = entrya->parent;
         if (parentEntry)
         {
-            parentEntry->ticksSelf -= entrya->ticksTotal;
+            // On Switch, profiling can encounter an unclosed/zero-total parent
+            // while child scopes have valid ticks. Unsigned subtraction would
+            // underflow to ~2^64 and print a bogus 1.8e16 ms "self" duration.
+            if (parentEntry->ticksSelf >= entrya->ticksTotal)
+                parentEntry->ticksSelf -= entrya->ticksTotal;
+            else
+                parentEntry->ticksSelf = 0;
+
             for (elemIndexa = 0; elemIndexa < 3; ++elemIndexa)
-                parentEntry->elements[elemIndexa].ticksSelf -= entrya->elements[elemIndexa].ticksTotal;
+            {
+                if (parentEntry->elements[elemIndexa].ticksSelf >= entrya->elements[elemIndexa].ticksTotal)
+                    parentEntry->elements[elemIndexa].ticksSelf -= entrya->elements[elemIndexa].ticksTotal;
+                else
+                    parentEntry->elements[elemIndexa].ticksSelf = 0;
+            }
         }
     }
 }
