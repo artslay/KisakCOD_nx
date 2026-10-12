@@ -42,7 +42,7 @@ struct SwitchBinkState
     bool audioDecodeFailed;
     bool audioInputFlushed;
     bool audioMuted;
-    bool firstVideoFrameReady;
+    bool firstVideoFrameAccepted;
     std::vector<int16_t> audioPcm;
     AVFrame *frame;
     AVFrame *convertedFrame;
@@ -403,7 +403,7 @@ static void Switch_BinkQueueAudioFrame(SwitchBinkState *state, const AVFrame *fr
 
     ALint sourceState = AL_STOPPED;
     alGetSourcei(state->audioSource, AL_SOURCE_STATE, &sourceState);
-    if (sourceState != AL_PLAYING && state->firstVideoFrameReady &&
+    if (sourceState != AL_PLAYING && state->firstVideoFrameAccepted &&
         !state->paused && !state->audioMuted)
         alSourcePlay(state->audioSource);
 }
@@ -1185,19 +1185,6 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
                 std::chrono::steady_clock::now().time_since_epoch()).count());
     }
 
-    // Buffer audio packets while the first video frame is being decoded, but do not
-    // start the OpenAL source until that first frame is ready for the renderer.
-    state->firstVideoFrameReady = true;
-    if (state->audioSourceReady && !state->paused && !state->audioMuted)
-    {
-        ALint queuedAudio = 0;
-        ALint audioState = AL_STOPPED;
-        alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queuedAudio);
-        alGetSourcei(state->audioSource, AL_SOURCE_STATE, &audioState);
-        if (queuedAudio > 0 && audioState != AL_PLAYING)
-            alSourcePlay(state->audioSource);
-    }
-
     ++state->decodedFrames;
     if (state->decodedFrames == 2)
     {
@@ -1217,7 +1204,27 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
 RADDEFFUNC void RADEXPLINK BinkNextFrame(HBINK bink)
 {
     SwitchBinkState *state = Switch_BinkState(bink);
-    if (!bink || !state || bink->FrameNum >= bink->Frames)
+    if (!bink || !state)
+        return;
+
+    // BinkNextFrame is called after BinkDoFrame succeeds and the engine has
+    // selected the decoded buffer for display. Keep queued audio silent until
+    // that hand-off, so cinematic sound cannot run ahead of an unaccepted frame.
+    if (!state->firstVideoFrameAccepted)
+    {
+        state->firstVideoFrameAccepted = true;
+        if (state->audioSourceReady && !state->paused && !state->audioMuted)
+        {
+            ALint queuedAudio = 0;
+            ALint audioState = AL_STOPPED;
+            alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queuedAudio);
+            alGetSourcei(state->audioSource, AL_SOURCE_STATE, &audioState);
+            if (queuedAudio > 0 && audioState != AL_PLAYING)
+                alSourcePlay(state->audioSource);
+        }
+    }
+
+    if (bink->FrameNum >= bink->Frames)
         return;
 
     ++bink->FrameNum;
@@ -1245,7 +1252,8 @@ RADDEFFUNC S32 RADEXPLINK BinkPause(HBINK bink, S32 pause)
                 ALint sourceState = AL_STOPPED;
                 alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queued);
                 alGetSourcei(state->audioSource, AL_SOURCE_STATE, &sourceState);
-                if (queued > 0 && sourceState != AL_PLAYING && !state->audioMuted)
+                if (queued > 0 && sourceState != AL_PLAYING && !state->audioMuted &&
+                    state->firstVideoFrameAccepted)
                     alSourcePlay(state->audioSource);
             }
         }
@@ -1320,7 +1328,7 @@ RADDEFFUNC S32 RADEXPLINK BinkSetSoundOnOff(HBINK bink, S32 onoff)
         {
             ALint queued = 0;
             alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queued);
-            if (queued > 0)
+            if (queued > 0 && state->firstVideoFrameAccepted)
                 alSourcePlay(state->audioSource);
         }
     }
