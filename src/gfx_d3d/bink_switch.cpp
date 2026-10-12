@@ -42,6 +42,7 @@ struct SwitchBinkState
     bool audioDecodeFailed;
     bool audioInputFlushed;
     bool audioMuted;
+    bool firstVideoFrameReady;
     std::vector<int16_t> audioPcm;
     AVFrame *frame;
     AVFrame *convertedFrame;
@@ -402,7 +403,8 @@ static void Switch_BinkQueueAudioFrame(SwitchBinkState *state, const AVFrame *fr
 
     ALint sourceState = AL_STOPPED;
     alGetSourcei(state->audioSource, AL_SOURCE_STATE, &sourceState);
-    if (sourceState != AL_PLAYING && !state->paused && !state->audioMuted)
+    if (sourceState != AL_PLAYING && state->firstVideoFrameReady &&
+        !state->paused && !state->audioMuted)
         alSourcePlay(state->audioSource);
 }
 
@@ -1181,6 +1183,19 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
         state->startTicks = static_cast<uint32_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count());
+    }
+
+    // Buffer audio packets while the first video frame is being decoded, but do not
+    // start the OpenAL source until that first frame is ready for the renderer.
+    state->firstVideoFrameReady = true;
+    if (state->audioSourceReady && !state->paused && !state->audioMuted)
+    {
+        ALint queuedAudio = 0;
+        ALint audioState = AL_STOPPED;
+        alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queuedAudio);
+        alGetSourcei(state->audioSource, AL_SOURCE_STATE, &audioState);
+        if (queuedAudio > 0 && audioState != AL_PLAYING)
+            alSourcePlay(state->audioSource);
     }
 
     ++state->decodedFrames;
