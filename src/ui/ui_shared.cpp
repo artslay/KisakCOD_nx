@@ -221,6 +221,11 @@ static inline bool Switch_UI_ValidateStatement(
 
     return true;
 }
+
+void Switch_UI_ResetStatementValidationCache()
+{
+    g_switchUIValidatedStatements.clear();
+}
 #endif
 
 struct commandDef_t // sizeof=0x8
