@@ -40,6 +40,7 @@ struct SwitchBinkState
     bool audioSourceReady;
     bool audioDecodeFailed;
     bool audioInputFlushed;
+    bool audioMuted;
     std::vector<int16_t> audioPcm;
     AVFrame *frame;
     AVFrame *convertedFrame;
@@ -398,7 +399,7 @@ static void Switch_BinkQueueAudioFrame(SwitchBinkState *state, const AVFrame *fr
 
     ALint sourceState = AL_STOPPED;
     alGetSourcei(state->audioSource, AL_SOURCE_STATE, &sourceState);
-    if (sourceState != AL_PLAYING)
+    if (sourceState != AL_PLAYING && !state->paused && !state->audioMuted)
         alSourcePlay(state->audioSource);
 }
 
@@ -1225,7 +1226,7 @@ RADDEFFUNC S32 RADEXPLINK BinkPause(HBINK bink, S32 pause)
                 ALint sourceState = AL_STOPPED;
                 alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queued);
                 alGetSourcei(state->audioSource, AL_SOURCE_STATE, &sourceState);
-                if (queued > 0 && sourceState != AL_PLAYING)
+                if (queued > 0 && sourceState != AL_PLAYING && !state->audioMuted)
                     alSourcePlay(state->audioSource);
             }
         }
@@ -1290,6 +1291,7 @@ RADDEFFUNC S32 RADEXPLINK BinkSetSoundOnOff(HBINK bink, S32 onoff)
         return 0;
 
     const bool enable = onoff != 0 && state->audioCodec && Switch_BinkEnsureAudioSource(state);
+    state->audioMuted = !enable;
     bink->soundon = enable ? 1u : 0u;
     if (state->audioSourceReady)
     {
