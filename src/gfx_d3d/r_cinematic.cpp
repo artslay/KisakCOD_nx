@@ -1219,10 +1219,10 @@ void R_Cinematic_UpdateRendererImages()
             hasBink ? static_cast<unsigned>(cinematicGlob.bink->FrameNum) : 0u,
             cinematicGlob.binkTextureSet.bink_buffers.TotalFrames
                 ? static_cast<unsigned>(cinematicGlob.binkTextureSet.bink_buffers.FrameNum) : 0u,
-            static_cast<void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_Y]),
-            static_cast<void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CR]),
-            static_cast<void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CB]),
-            static_cast<void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A]));
+            const_cast<void *>(static_cast<const void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_Y])),
+            const_cast<void *>(static_cast<const void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CR])),
+            const_cast<void *>(static_cast<const void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_CB])),
+            const_cast<void *>(static_cast<const void *>(gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_CINEMATIC_A])));
         Switch_LogWrite(trace);
     }
 #endif
