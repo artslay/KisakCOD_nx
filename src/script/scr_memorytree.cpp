@@ -100,22 +100,37 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
 #ifdef KISAK_SWITCH
     Switch_SetProgressPhase("memtree/alloc_locked");
 #endif
-    for (newSize = size; ; ++newSize)
+    for (;;)
     {
-        if (newSize > MEMORY_NODE_BITS)
+        for (newSize = size; ; ++newSize)
+        {
+            if (newSize > MEMORY_NODE_BITS)
+            {
+                Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
+                MT_Error("MT_AllocIndex", numBytes);
+                return 0;
+            }
+
+            nodeNum = scrMemTreeGlob.head[newSize];
+            if (nodeNum)
+                break;
+        }
+
+#ifdef KISAK_SWITCH
+        Switch_SetProgressPhase("memtree/remove_head");
+#endif
+        if (MT_RemoveHeadMemoryNode(newSize))
+            break;
+
+        // MT_RemoveHeadMemoryNode rebuilt the free trees after detecting a cycle.
+        // Retry against the rebuilt lists rather than using the stale root index.
+        if (g_mtRebuildFailed)
         {
             Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
-            MT_Error("MT_AllocIndex", numBytes);
+            Com_Error(ERR_FATAL, "script memory tree metadata invalid; cannot rebuild free lists");
             return 0;
         }
-        nodeNum = scrMemTreeGlob.head[newSize];
-        if (scrMemTreeGlob.head[newSize])
-            break;
     }
-#ifdef KISAK_SWITCH
-    Switch_SetProgressPhase("memtree/remove_head");
-#endif
-    MT_RemoveHeadMemoryNode(newSize);
 #ifdef KISAK_SWITCH
     Switch_SetProgressPhase("memtree/split_and_add");
 #endif
@@ -142,7 +157,99 @@ bool MT_Realloc(int oldNumBytes, int newNumbytes)
     return MT_GetSize(oldNumBytes) >= MT_GetSize(newNumbytes);
 }
 
-void MT_RemoveHeadMemoryNode(int size)
+// Recover the free lists if their tree links form a cycle. The allocation usage
+// map is separate from the node backing store, so it remains authoritative unless
+// its counts or ranges contradict the allocator's own totals.
+static bool g_mtRebuildFailed = false;
+
+static bool MT_RebuildFreeTreesFromUsage()
+{
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/rebuild_validate");
+#endif
+    static uint8_t occupied[MEMORY_NODE_COUNT];
+    memset(occupied, 0, sizeof(occupied));
+    occupied[0] = 1; // Node zero is reserved by the retail allocator.
+
+    uint32_t allocationCount = 0;
+    uint32_t allocationBuckets = 0;
+
+    for (uint32_t node = 1; node < MEMORY_NODE_COUNT; ++node)
+    {
+        if (!scrMemTreeDebugGlob.mt_usage[node])
+            continue;
+
+        const uint32_t size = scrMemTreeDebugGlob.mt_usage_size[node];
+        if (size > MEMORY_NODE_BITS)
+            return false;
+
+        const uint32_t blockSize = 1u << size;
+        if ((node & (blockSize - 1u)) != 0 || node + blockSize > MEMORY_NODE_COUNT)
+            return false;
+
+        for (uint32_t slot = node; slot < node + blockSize; ++slot)
+        {
+            if (occupied[slot])
+                return false; // Overlapping allocation metadata is not recoverable.
+            occupied[slot] = 1;
+        }
+
+        ++allocationCount;
+        allocationBuckets += blockSize;
+    }
+
+    if (allocationCount != (uint32_t)scrMemTreeGlob.totalAlloc ||
+        allocationBuckets != (uint32_t)scrMemTreeGlob.totalAllocBuckets)
+        return false;
+
+    // Drop only the free-tree roots. Allocated payloads are not touched.
+    for (int size = 0; size <= MEMORY_NODE_BITS; ++size)
+        scrMemTreeGlob.head[size] = 0;
+
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/rebuild_free_lists");
+#endif
+    // Recreate a canonical buddy decomposition of every unallocated run.
+    // Every free block is inserted exactly once, with no stale tree links reused.
+    uint32_t cursor = 1;
+    while (cursor < MEMORY_NODE_COUNT)
+    {
+        if (occupied[cursor])
+        {
+            ++cursor;
+            continue;
+        }
+
+        const uint32_t runStart = cursor;
+        while (cursor < MEMORY_NODE_COUNT && !occupied[cursor])
+            ++cursor;
+        const uint32_t runEnd = cursor;
+
+        uint32_t blockStart = runStart;
+        while (blockStart < runEnd)
+        {
+            int blockLevel = 0;
+            while (blockLevel < MEMORY_NODE_BITS)
+            {
+                const uint32_t largerBlock = 1u << (blockLevel + 1);
+                if ((blockStart & (largerBlock - 1u)) != 0 ||
+                    blockStart + largerBlock > runEnd)
+                    break;
+                ++blockLevel;
+            }
+
+            MT_AddMemoryNode((int)blockStart, blockLevel);
+            blockStart += 1u << blockLevel;
+        }
+    }
+
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/rebuild_done");
+#endif
+    return true;
+}
+
+bool MT_RemoveHeadMemoryNode(int size)
 {
 #ifdef KISAK_SWITCH
     Switch_SetProgressPhase("memtree/remove_head_walk");
@@ -153,6 +260,7 @@ void MT_RemoveHeadMemoryNode(int size)
     uint16_t *parentNode;
     int prevScore;
     int nextScore;
+    uint32_t traversed = 0;
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
 
@@ -161,51 +269,60 @@ void MT_RemoveHeadMemoryNode(int size)
 
     while (1)
     {
+        // A valid free tree has at most MEMORY_NODE_COUNT nodes. If this walk
+        // exceeds that bound, links are cyclic or the tree is otherwise corrupt.
+        if (traversed++ >= MEMORY_NODE_COUNT)
+        {
+#ifdef KISAK_SWITCH
+            Switch_SetProgressPhase("memtree/rebuild_start");
+#endif
+            g_mtRebuildFailed = !MT_RebuildFreeTreesFromUsage();
+            return false;
+        }
+
         if (!oldNodeValue.prev)
         {
             oldNode = oldNodeValue.next;
             *parentNode = oldNodeValue.next;
             if (!oldNode)
-            {
                 break;
-            }
             parentNode = &scrMemTreeGlob.nodes[oldNode].next;
         }
-        else
+        else if (oldNodeValue.next)
         {
-            if (oldNodeValue.next)
-            {
-                prevScore = MT_GetScore(oldNodeValue.prev);
-                nextScore = MT_GetScore(oldNodeValue.next);
+            prevScore = MT_GetScore(oldNodeValue.prev);
+            nextScore = MT_GetScore(oldNodeValue.next);
 
-                iassert(prevScore != nextScore);
+            iassert(prevScore != nextScore);
 
-                if (prevScore >= nextScore)
-                {
-                    oldNode = oldNodeValue.prev;
-                    *parentNode = oldNode;
-                    parentNode = &scrMemTreeGlob.nodes[oldNode].prev;
-                }
-                else
-                {
-                    oldNode = oldNodeValue.next;
-                    *parentNode = oldNode;
-                    parentNode = &scrMemTreeGlob.nodes[oldNode].next;
-                }
-            }
-            else
+            if (prevScore >= nextScore)
             {
                 oldNode = oldNodeValue.prev;
                 *parentNode = oldNode;
                 parentNode = &scrMemTreeGlob.nodes[oldNode].prev;
             }
+            else
+            {
+                oldNode = oldNodeValue.next;
+                *parentNode = oldNode;
+                parentNode = &scrMemTreeGlob.nodes[oldNode].next;
+            }
         }
+        else
+        {
+            oldNode = oldNodeValue.prev;
+            *parentNode = oldNode;
+            parentNode = &scrMemTreeGlob.nodes[oldNode].prev;
+        }
+
         iassert(oldNode != 0);
 
         tempNodeValue = oldNodeValue;
         oldNodeValue = scrMemTreeGlob.nodes[oldNode];
         scrMemTreeGlob.nodes[oldNode] = tempNodeValue;
     }
+
+    return true;
 }
 
 void MT_FreeIndex(uint32_t nodeNum, int numBytes)
