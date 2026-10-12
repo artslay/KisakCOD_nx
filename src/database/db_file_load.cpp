@@ -423,7 +423,9 @@ int32_t __cdecl DB_ReadData()
 
     g_load.stream.next_in = fileBuffer;
     g_load.stream.avail_in = g_load.switchLastRead;
-    ++g_loadedSize;
+    // The renderer reads g_loadedSize concurrently while drawing the loading bar.
+    // Preserve the engine's interlocked counter semantics on Switch as well.
+    InterlockedIncrement(&g_loadedSize);
     return 1;
 #else
     fileBuffer = &g_load.compressBufferStart[g_load.overlapped.Offset % 0x80000];
