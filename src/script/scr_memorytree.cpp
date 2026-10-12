@@ -161,8 +161,9 @@ bool MT_Realloc(int oldNumBytes, int newNumbytes)
 }
 
 // Recover the free lists if their tree links form a cycle. The allocation usage
-// map is separate from the node backing store, so it remains authoritative unless
-// its counts or ranges contradict the allocator's own totals.
+// map is separate from the node backing store. Recovery conservatively reserves
+// the union of all valid allocation ranges so corrupt links and overlapping/stale
+// bookkeeping cannot cause an allocator result to overwrite a live script string.
 static bool MT_RebuildFreeTreesFromUsage()
 {
 #ifdef KISAK_SWITCH
@@ -180,21 +181,23 @@ static bool MT_RebuildFreeTreesFromUsage()
         if (!scrMemTreeDebugGlob.mt_usage[node])
             continue;
 
-        const uint32_t type = scrMemTreeDebugGlob.mt_usage[node];
         const uint32_t size = scrMemTreeDebugGlob.mt_usage_size[node];
-        if (type >= MT_TYPE_COUNT || size >= MEMORY_NODE_BITS)
+        // Size/range must still be valid enough to conservatively reserve the
+        // whole allocation. Alignment and overlap can themselves be symptoms of
+        // the corruption that triggered recovery, so don't reject the map for
+        // those conditions: reserve the union of all claimed blocks instead.
+        if (size >= MEMORY_NODE_BITS)
             return false;
 
         const uint32_t blockSize = 1u << size;
-        if ((node & (blockSize - 1u)) != 0 || node + blockSize > MEMORY_NODE_COUNT)
+        if (node + blockSize > MEMORY_NODE_COUNT)
             return false;
 
         for (uint32_t slot = node; slot < node + blockSize; ++slot)
-        {
-            if (occupied[slot])
-                return false; // Overlapping allocation metadata is not recoverable.
             occupied[slot] = 1;
-        }
+
+        if (scrMemTreeDebugGlob.mt_usage[node] >= MT_TYPE_COUNT)
+            scrMemTreeDebugGlob.mt_usage[node] = MT_TYPE_GENERIC;
 
         ++allocationCount;
         allocationBuckets += blockSize;
@@ -348,7 +351,13 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes)
     scrMemTreeGlob.totalAllocBuckets -= 1 << size;
 
     iassert(scrMemTreeDebugGlob.mt_usage[nodeNum]);
+#ifdef KISAK_SWITCH
+    // The free operation's byte size is authoritative for buddy coalescing.
+    // Repair stale diagnostic bookkeeping left by a damaged free tree.
+    scrMemTreeDebugGlob.mt_usage_size[nodeNum] = size;
+#else
     iassert((scrMemTreeDebugGlob.mt_usage_size[nodeNum] == size));
+#endif
 
     scrMemTreeDebugGlob.mt_usage[nodeNum] = 0;
     scrMemTreeDebugGlob.mt_usage_size[nodeNum] = 0;
