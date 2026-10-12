@@ -11,6 +11,10 @@
 #include "scr_main.h"
 #include "scr_compiler.h"
 
+#ifdef KISAK_SWITCH
+extern void Switch_SetProgressDetail(uint32_t detail);
+#endif
+
 #include "scr_yacc_structs.h"
 #include "scr_vm.h"
 
@@ -463,6 +467,11 @@ int __cdecl yylex()
 			yy_c_buf_p = yy_cp;
 		do_action:
 
+#ifdef KISAK_SWITCH
+            // Keep the existing watchdog's detail field at the current source
+            // offset, so a real parser stall identifies where it stopped.
+            Switch_SetProgressDetail(g_out_pos < 0 ? 0u : g_out_pos + 1u);
+#endif
 			// sval_u contains native 64-bit pointers on Switch. Lexer rules that
 			// write only stringValue/intValue/floatValue must not inherit the
 			// upper pointer bits from the previously emitted token.
