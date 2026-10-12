@@ -445,17 +445,25 @@ void __cdecl Sys_RenderCompleted()
 }
 void __cdecl Sys_FrontEndSleep()
 {
+    // Match the Win32 event order: the ownership event remains signaled while
+    // we wait for the renderer to leave its paused/idle state. RB_RenderThreadIdle
+    // uses that signal to return from its main-thread wait and call Sys_StartRenderer.
+    // Resetting ownership before rendererRunning is signaled can deadlock the two
+    // threads during a loading-screen handoff.
     {
-        std::unique_lock<std::mutex> lock(g_noThreadOwnershipEvent.mutex);
-        g_noThreadOwnershipEvent.cv.wait(
-            lock, [] { return g_noThreadOwnershipEvent.signaled; });
-        g_noThreadOwnershipEvent.signaled = false;
+        std::lock_guard<std::mutex> lock(g_noThreadOwnershipEvent.mutex);
+        iassert(g_noThreadOwnershipEvent.signaled);
     }
 
     {
         std::unique_lock<std::mutex> lock(g_rendererRunningEvent.mutex);
         g_rendererRunningEvent.cv.wait(
             lock, [] { return g_rendererRunningEvent.signaled; });
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_noThreadOwnershipEvent.mutex);
+        g_noThreadOwnershipEvent.signaled = false;
     }
 
     SetSwitchEvent(g_backendEvent[1]);
