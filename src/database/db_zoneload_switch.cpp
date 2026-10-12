@@ -423,9 +423,6 @@ void *LinkAsset(void *context, int assetType, void *asset)
     case ASSET_TYPE_FX:
         FixupEffect(static_cast<const FxEffectDef *>(asset));
         break;
-    case ASSET_TYPE_WEAPON:
-        FixupWeapon(state, static_cast<WeaponDef *>(asset));
-        break;
     case ASSET_TYPE_CLIPMAP:
     case ASSET_TYPE_CLIPMAP_PVS:
         FixupClipMap(static_cast<clipMap_t *>(asset));
@@ -477,6 +474,11 @@ void *LinkAsset(void *context, int assetType, void *asset)
             nativeWeapon.worldKnifeModel = reinterpret_cast<::XModel *>(modelPointers[36]);
             nativeWeapon.projectileModel = reinterpret_cast<::XModel *>(modelPointers[37]);
         }
+
+        // Resolve weapon sounds only after converting the OAT asset to the
+        // engine's native layout. FixupWeapon reads/writes engine WeaponDef
+        // offsets and must not be run against IW3::WeaponDef storage.
+        FixupWeapon(state, &nativeWeapon);
         header.weapon = &nativeWeapon;
     }
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
