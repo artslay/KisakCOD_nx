@@ -1097,7 +1097,7 @@ uint32_t  Scr_FindAllThreads(uint32_t selfId, uint32_t* threads, uint32_t localI
 		entryValue = &scrVarGlob.variableList[id + VARIABLELIST_CHILD_BEGIN];
 		if ((entryValue->w.status & VAR_STAT_MASK) != 0 && (entryValue->w.status & VAR_MASK) == VAR_STACK)
 		{
-			for (threadId = *(uint32_t*)(entryValue->u.u.intValue + 8);
+			for (threadId = entryValue->u.u.stackValue->localId;
 				threadId;
 				threadId = GetSafeParentLocalId(threadId))
 			{
