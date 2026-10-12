@@ -24,9 +24,6 @@ struct scrMemTreeDebugGlob_t // sizeof=0x20000
 scrMemTreeDebugGlob_t scrMemTreeDebugGlob = { 0 };
 
 static bool g_mtRebuildFailed = false;
-#ifdef KISAK_SWITCH
-static bool g_mtRebuildingFreeTrees = false;
-#endif
 static bool MT_RebuildFreeTreesFromUsage();
 
 static void MT_InitBits(void)
@@ -232,9 +229,6 @@ static bool MT_RebuildFreeTreesFromUsage()
 #endif
     // Recreate a canonical buddy decomposition of every unallocated run.
     // Every free block is inserted exactly once, with no stale tree links reused.
-#ifdef KISAK_SWITCH
-    g_mtRebuildingFreeTrees = true;
-#endif
     uint32_t cursor = 1;
     while (cursor < MEMORY_NODE_COUNT)
     {
@@ -268,7 +262,6 @@ static bool MT_RebuildFreeTreesFromUsage()
     }
 
 #ifdef KISAK_SWITCH
-    g_mtRebuildingFreeTrees = false;
     Switch_SetProgressPhase("memtree/rebuild_done");
 #endif
     return true;
@@ -571,9 +564,6 @@ void MT_AddMemoryNode(int newNode, int size)
     uint16_t *parentNode;
     int level;
     int score;
-#ifdef KISAK_SWITCH
-    uint32_t outerWalkSteps = 0;
-#endif
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
 
@@ -587,16 +577,6 @@ void MT_AddMemoryNode(int newNode, int size)
         level = MEMORY_NODE_COUNT;
         do
         {
-#ifdef KISAK_SWITCH
-            // A valid insertion path is bounded by the 16-bit node index.
-            // During recovery, never let a damaged link chain hang script loading;
-            // detach the bad branch and leak only those free blocks behind it.
-            if (g_mtRebuildingFreeTrees && ++outerWalkSteps > MEMORY_NODE_BITS * 2 + 4)
-            {
-                *parentNode = 0;
-                return;
-            }
-#endif
             iassert(newNode != node);
             score = MT_GetScore(node);
 
@@ -604,18 +584,8 @@ void MT_AddMemoryNode(int newNode, int size)
 
             if (score < newScore)
             {
-#ifdef KISAK_SWITCH
-                uint32_t innerWalkSteps = 0;
-#endif
                 while (1)
                 {
-#ifdef KISAK_SWITCH
-                    if (g_mtRebuildingFreeTrees && ++innerWalkSteps > MEMORY_NODE_BITS * 2 + 4)
-                    {
-                        *parentNode = 0;
-                        return;
-                    }
-#endif
                     iassert(node == *parentNode);
                     iassert(node != newNode);
 
