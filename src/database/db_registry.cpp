@@ -1697,6 +1697,12 @@ void __cdecl DB_LoadXAssets(XZoneInfo *zoneInfo, uint32_t zoneCount, int32_t syn
     if (sync)
         DB_ArchiveAssets();
     g_sync = sync;
+
+    // Fastfile loading blocks the main thread while the database worker
+    // streams and registers the zone. On Switch, keep the existing remote
+    // loading-screen loop alive so R_Cinematic_UpdateFrame can advance the
+    // map-loading Bink movie while Sys_SyncDatabase waits for that work.
+    R_BeginRemoteScreenUpdate();
     DB_LoadXZone(zoneInfo, zoneCount);
     if (sync)
     {
@@ -1712,6 +1718,7 @@ void __cdecl DB_LoadXAssets(XZoneInfo *zoneInfo, uint32_t zoneCount, int32_t syn
         DB_ResolvePendingSwitchMaterialNameAliases(rg.registered != 0);
 #endif
     }
+    R_EndRemoteScreenUpdate();
 }
 
 void DB_Init()
