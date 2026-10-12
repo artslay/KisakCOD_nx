@@ -7,6 +7,10 @@
 #include <cstdint>
 #include <universal/profile.h>
 
+#ifdef KISAK_SWITCH
+extern void Switch_SetProgressPhase(const char *phase);
+#endif
+
 scrMemTreePub_t scrMemTreePub;
 int marker_scr_memorytree;
 
@@ -77,6 +81,9 @@ void* MT_Alloc(int numBytes, mtType_t type)
 
 unsigned short MT_AllocIndex(int numBytes, mtType_t type)
 {
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/alloc_size");
+#endif
     uint32_t nodeNum; // [esp+4Ch] [ebp-Ch]
     uint32_t size; // [esp+50h] [ebp-8h]
     int newSize; // [esp+54h] [ebp-4h]
@@ -86,7 +93,13 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
     size = MT_GetSize(numBytes);
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
 
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/alloc_wait_lock");
+#endif
     Sys_EnterCriticalSection(CRITSECT_MEMORY_TREE);
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/alloc_locked");
+#endif
     for (newSize = size; ; ++newSize)
     {
         if (newSize > MEMORY_NODE_BITS)
@@ -99,7 +112,13 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
         if (scrMemTreeGlob.head[newSize])
             break;
     }
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/remove_head");
+#endif
     MT_RemoveHeadMemoryNode(newSize);
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/split_and_add");
+#endif
     while (newSize != size)
     {
         --newSize;
@@ -125,6 +144,9 @@ bool MT_Realloc(int oldNumBytes, int newNumbytes)
 
 void MT_RemoveHeadMemoryNode(int size)
 {
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/remove_head_walk");
+#endif
     MemoryNode tempNodeValue;
     int oldNode;
     MemoryNode oldNodeValue;
@@ -227,6 +249,9 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes)
 
 bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
 {
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/remove_node");
+#endif
     MemoryNode tempNodeValue;
     int node;
     MemoryNode oldNodeValue;
@@ -387,6 +412,9 @@ int MT_GetSubTreeSize(int nodeNum)
 
 void MT_AddMemoryNode(int newNode, int size)
 {
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("memtree/add_node");
+#endif
     int node;
     int nodeNum;
     int newScore;
