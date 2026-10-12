@@ -173,7 +173,21 @@ static const int AL_STREAM_BUFFER_FRAMES = 8192;
 static size_t AL_StreamReadCallback(void *pUserData, void *pBufferOut, size_t bytesToRead)
 {
     AlStreamState *stream = (AlStreamState *)pUserData;
-    return FS_Read((uint8_t *)pBufferOut, (uint32_t)bytesToRead, stream->fsHandle);
+    if (!stream || !pBufferOut || !bytesToRead)
+        return 0;
+
+    const uint32_t requested = static_cast<uint32_t>(
+        std::min<size_t>(bytesToRead, UINT32_MAX));
+    const uint32_t bytesRead = FS_Read(
+        static_cast<uint8_t *>(pBufferOut),
+        requested,
+        stream->fsHandle);
+
+    // FS_Read uses UINT32_MAX as its stream-handle error sentinel. Never expose that
+    // sentinel as a successful size_t byte count to dr_wav/dr_mp3.
+    if (bytesRead == UINT32_MAX || bytesRead > requested)
+        return 0;
+    return bytesRead;
 }
 
 // FS_Seek's zip-archive branch (com_files.cpp, used whenever a streamed sound is packed into an
@@ -193,11 +207,41 @@ static int AL_FixupZipSeekOrigin(int fsHandle, int trueOrigin)
     return FS_IsFileInZip(fsHandle) ? kZipOriginRotation[trueOrigin] : trueOrigin;
 }
 
+static bool AL_StreamSeek(AlStreamState *stream, int offset, int origin)
+{
+    if (!stream || origin < 0 || origin > 2)
+        return false;
+
+    if (FS_IsFileInZip(stream->fsHandle))
+    {
+        const int64_t current = FS_FTell(stream->fsHandle);
+        const int64_t length = FS_filelength(stream->fsHandle);
+        int64_t target = offset;
+
+        if (origin == 1)
+            target += current;
+        else if (origin == 2)
+            target += length;
+
+        if (target < 0 || target > length)
+            return false;
+        // FS_Seek's ZIP branch treats a no-op seek to EOF as failure; skip it.
+        if (target == current)
+            return true;
+    }
+
+    return FS_Seek(
+        stream->fsHandle,
+        offset,
+        AL_FixupZipSeekOrigin(stream->fsHandle, origin)) == 0;
+}
+
 static drwav_bool32 AL_WavSeekCallback(void *pUserData, int offset, drwav_seek_origin origin)
 {
-    AlStreamState *stream = (AlStreamState *)pUserData;
-    FS_Seek(stream->fsHandle, offset, AL_FixupZipSeekOrigin(stream->fsHandle, (int)origin));
-    return DRWAV_TRUE;
+    return AL_StreamSeek(
+        static_cast<AlStreamState *>(pUserData),
+        offset,
+        static_cast<int>(origin)) ? DRWAV_TRUE : DRWAV_FALSE;
 }
 
 static drwav_bool32 AL_WavTellCallback(void *pUserData, drwav_int64 *pCursor)
@@ -209,9 +253,10 @@ static drwav_bool32 AL_WavTellCallback(void *pUserData, drwav_int64 *pCursor)
 
 static drmp3_bool32 AL_Mp3SeekCallback(void *pUserData, int offset, drmp3_seek_origin origin)
 {
-    AlStreamState *stream = (AlStreamState *)pUserData;
-    FS_Seek(stream->fsHandle, offset, AL_FixupZipSeekOrigin(stream->fsHandle, (int)origin));
-    return DRMP3_TRUE;
+    return AL_StreamSeek(
+        static_cast<AlStreamState *>(pUserData),
+        offset,
+        static_cast<int>(origin)) ? DRMP3_TRUE : DRMP3_FALSE;
 }
 
 static drmp3_bool32 AL_Mp3TellCallback(void *pUserData, drmp3_int64 *pCursor)
