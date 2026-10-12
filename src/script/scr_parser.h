@@ -42,7 +42,9 @@ struct SourceBufferInfo // sizeof=0x2C
     float totalTime;
     float totalBuiltIn;
 };
-#ifndef KISAK_SWITCH
+#ifdef KISAK_SWITCH
+static_assert(sizeof(SourceBufferInfo) == 56, "Switch source buffer entries must use native 64-bit pointers");
+#else
 static_assert(sizeof(SourceBufferInfo) == 44);
 #endif
 
