@@ -13548,7 +13548,43 @@ void __cdecl Load_clipMap_t(bool atStreamStart)
     }
     if (varclipMap_t->staticModelList)
     {
+#ifdef __SWITCH__
+        // The stream stores 32-bit cStaticModel_s records (80 bytes each),
+        // but the ARM64 runtime structure has widened pointer/alignment fields.
+        // Preserve the original 4-byte stream alignment and consume the
+        // serialized records normally, while writing translated models to
+        // zone-owned native memory. Expanding these records in-place would
+        // overrun the 80-byte-per-model stream array and corrupt following data.
+        (void)AllocLoad_FxElemVisStateSample();
+        if (varclipMap_t->numStaticModels)
+        {
+            const size_t nativeBytes =
+                static_cast<size_t>(varclipMap_t->numStaticModels) *
+                sizeof(cStaticModel_s);
+            if (nativeBytes > UINT32_MAX)
+            {
+                Com_Error(ERR_DROP,
+                    "Switch clipMap static model array is too large (%u models)",
+                    static_cast<unsigned>(varclipMap_t->numStaticModels));
+                varclipMap_t->staticModelList = nullptr;
+            }
+            else
+            {
+                varclipMap_t->staticModelList =
+                    reinterpret_cast<cStaticModel_s *>(
+                        DB_AllocSwitchAssetMemory(
+                            static_cast<uint32_t>(nativeBytes),
+                            "SwitchCStaticModelArray",
+                            22));
+            }
+        }
+        else
+        {
+            varclipMap_t->staticModelList = nullptr;
+        }
+#else
         varclipMap_t->staticModelList = (cStaticModel_s *)AllocLoad_FxElemVisStateSample();
+#endif
         varcStaticModel_t = varclipMap_t->staticModelList;
         Load_cStaticModel_tArray(1, varclipMap_t->numStaticModels);
     }
