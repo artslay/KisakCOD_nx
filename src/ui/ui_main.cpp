@@ -1856,6 +1856,28 @@ void __cdecl UI_Refresh()
         // LWSS END
     }
 #ifdef __SWITCH__
+        // Draw the Switch menu FPS counter after all menu and cursor drawing,
+        // using the full-screen placement so it is independent of local-client
+        // viewport indexing and remains on top of fullscreen menus.
+        {
+            float fpsColor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+            Font_s *fpsFont = UI_GetFontHandle(&scrPlaceFull, 0, 0.5f);
+            char *fpsText = va("FPS: %.0f", uiInfo.uiDC.FPS);
+            UI_DrawText(
+                &scrPlaceFull,
+                fpsText,
+                0x7FFFFFFF,
+                fpsFont,
+                8.0f,
+                25.0f,
+                0,
+                0,
+                0.5f,
+                fpsColor,
+                0);
+        }
+#endif
+    #ifdef __SWITCH__
     g_switchFrameStage = "ui/refresh/return";
 #endif
 }
