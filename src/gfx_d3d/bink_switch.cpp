@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstddef>
 #include <chrono>
 #include <cstdio>
 #include <cerrno>
@@ -634,6 +635,21 @@ static bool Switch_BinkGetFrameForCopy(
     return true;
 }
 
+static uint32_t Switch_BinkTracePlaneHash(const void *data, size_t bytes)
+{
+    if (!data || !bytes)
+        return 0;
+
+    const uint8_t *p = static_cast<const uint8_t *>(data);
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < bytes; ++i)
+    {
+        hash ^= p[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
 static void Switch_BinkCopyPlane(
     BINKPLANE *plane,
     const uint8_t *src,
@@ -1186,20 +1202,26 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
     }
 
     ++state->decodedFrames;
-    if (state->decodedFrames == 2 ||
-        state->decodedFrames == 3 ||
+    if (state->decodedFrames <= 3u ||
         (state->decodedFrames % 30u) == 0u)
     {
-        char trace[224];
+        char trace[320];
+        const uint32_t hashY = Switch_BinkTracePlaneHash(
+            dst.YPlane.Buffer, static_cast<size_t>(width) * height);
+        const uint32_t hashCr = Switch_BinkTracePlaneHash(
+            dst.cRPlane.Buffer, static_cast<size_t>(chromaWidth) * chromaHeight);
+        const uint32_t hashCb = Switch_BinkTracePlaneHash(
+            dst.cBPlane.Buffer, static_cast<size_t>(chromaWidth) * chromaHeight);
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][BINK DECODE] decoded=%u movieFrame=%u bufferFrame=%u dimensions=%ux%u\n",
+            "[KisakCOD][BINK DECODE] decoded=%u movieFrame=%u bufferFrame=%u dimensions=%ux%u hashY=%08x hashCr=%08x hashCb=%08x\n",
             static_cast<unsigned>(state->decodedFrames),
             static_cast<unsigned>(bink->FrameNum),
             static_cast<unsigned>(buffers->FrameNum),
             static_cast<unsigned>(width),
-            static_cast<unsigned>(height));
+            static_cast<unsigned>(height),
+            hashY, hashCr, hashCb);
         Switch_LogWrite(trace);
     }
     bink->LastFrameNum = bink->FrameNum;
