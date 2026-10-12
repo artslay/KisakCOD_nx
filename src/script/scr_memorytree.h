@@ -112,7 +112,7 @@ char const* MT_NodeInfoString(uint32_t nodeNum);
 int MT_GetScore(int num);
 void MT_AddMemoryNode(int newNode, int size);
 bool MT_RemoveMemoryNode(int oldNode, uint32_t size);
-void MT_RemoveHeadMemoryNode(int size);
+bool MT_RemoveHeadMemoryNode(int size);
 void MT_Error(char const* funcName, int numBytes);
 int MT_GetSize(int numBytes);
 
