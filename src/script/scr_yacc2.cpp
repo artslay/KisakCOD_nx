@@ -2127,21 +2127,30 @@ yyacceptlab:
 
 void ScriptParse(sval_u *parseData, unsigned char user)
 {
+	// yy_current_buffer is a global used by the flex-style scanner. The buffer
+	// itself is local to this call, so never leave the global pointing at it
+	// after ScriptParse returns.
 	yy_buffer_state buffer_state{};
 
 	g_out_pos = -1;
 	g_sourcePos = 0;
 	g_parse_user = user;
 	g_dummyVal.node = 0;
-	yy_init = 1;
 	buffer_state.yy_buf_size = YY_BUF_SIZE;
 	buffer_state.yy_ch_buf = ch_buf;
 	buffer_state.yy_is_our_buffer = 0;
-	yy_init_buffer(&buffer_state, 0);
 	yy_current_buffer = &buffer_state;
+	yy_init_buffer(&buffer_state, 0);
 	yy_start = 3;
+	yy_init = 1;
 	yyparse();
 	*parseData = yaccResult;
+
+	yy_current_buffer = nullptr;
+	yy_c_buf_p = nullptr;
+	yytext = nullptr;
+	yy_n_chars = 0;
+	yy_hold_char = 0;
 }
 
 //#pragma GCC pop_options
