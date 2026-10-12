@@ -1100,17 +1100,20 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
     if (!Switch_BinkDecodeNext(state))
     {
         state->frameDecodeFinished = true;
-        char trace[512];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][BINK FRAME] stop frame=%u decoded=%u eof=%d decodeFailed=%d error=%s\n",
-            static_cast<unsigned>(bink->FrameNum),
-            static_cast<unsigned>(state->decodedFrames),
-            state->inputEof ? 1 : 0,
-            state->decodeFailed ? 1 : 0,
-            g_switchBinkError[0] ? g_switchBinkError : "(none)");
-        Switch_LogWrite(trace);
+        if (state->decodeFailed || g_switchBinkError[0])
+        {
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][BINK FRAME] stop frame=%u decoded=%u eof=%d decodeFailed=%d error=%s\n",
+                static_cast<unsigned>(bink->FrameNum),
+                static_cast<unsigned>(state->decodedFrames),
+                state->inputEof ? 1 : 0,
+                state->decodeFailed ? 1 : 0,
+                g_switchBinkError[0] ? g_switchBinkError : "(none)");
+            Switch_LogWrite(trace);
+        }
         // Runtime codec errors must be logged here rather than propagated via
         // BinkGetError(), because the engine asserts that API errors are empty
         // after each frame operation.
