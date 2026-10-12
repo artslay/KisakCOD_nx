@@ -3,10 +3,6 @@
 #include <sound/snd_public.h>
 #include <gfx_d3d/r_cinematic.h>
 #include <qcommon/cmd.h>
-#ifdef __SWITCH__
-#include <cstdio>
-extern void Switch_LogWrite(const char *msg);
-#endif
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #include <cgame_mp/cg_local_mp.h>
@@ -95,27 +91,6 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
                 Dvar_SetString((dvar_s *)nextmap, (char*)"");
             }
 
-            // Keep the UI closed while another queued cinematic/map command
-            // starts, but explicitly restore the front-end after the last one.
-            // UI_SetActiveMenu can reject the request before menus are available.
-            // In that case its early return leaves KEYCATCH_UI set; CL_Frame's
-            // disconnected-state fallback then never retries opening the main menu.
-            const int menuActivated =
-                UI_SetActiveMenu(localClientNum, hasNextCommand ? UIMENU_NONE : UIMENU_MAIN);
-            if (!hasNextCommand && !menuActivated)
-                Key_RemoveCatcher(localClientNum, ~KEYCATCH_UI);
-#ifdef __SWITCH__
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][CIN MENU] stop state=CA_CINEMATIC next=%u action=%s opened=%u catcher=0x%x\n",
-                hasNextCommand ? 1u : 0u,
-                hasNextCommand ? "continue" : "main",
-                menuActivated ? 1u : 0u,
-                static_cast<unsigned>(clientUIActives[localClientNum].keyCatchers));
-            Switch_LogWrite(trace);
-#endif
         }
     }
 }

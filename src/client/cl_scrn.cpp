@@ -187,17 +187,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
             switch (connectionState)
             {
             case CA_DISCONNECTED:
-#ifdef __SWITCH__
-                // After skipping the final intro movie, the main menu can be
-                // open while UI_IsFullscreen() still reports false for that
-                // transition frame. Clearing and jumping straight out leaves
-                // a black screen because UI_Refresh never paints the menu.
-                SCR_ClearScreen();
-                g_switchFrameStage = "frame/scr/draw_field/disconnected_menu_refresh";
-                goto LABEL_14;
-#else
                 goto LABEL_2;
-#endif
             case CA_CINEMATIC:
 #ifdef __SWITCH__
                 g_switchFrameStage = "frame/scr/draw_field/cinematic_clear";
