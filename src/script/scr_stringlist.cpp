@@ -285,17 +285,9 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 
 		prev = hash;
 		newIndex = (uint16_t)entry->status_next;
-		uint32_t traversed = 0;
 
-		while (newIndex != hash)
+		for (newEntry = &scrStringGlob.hashTable[newIndex]; newEntry != entry; newEntry = &scrStringGlob.hashTable[newIndex])
 		{
-			if (!newIndex || newIndex >= STRINGLIST_SIZE || traversed++ >= STRINGLIST_SIZE)
-			{
-				Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-				Com_Error(ERR_DROP, "corrupt script string hash chain (bucket %u)", hash);
-				return 0;
-			}
-			newEntry = &scrStringGlob.hashTable[newIndex];
 			iassert((newEntry->status_next & HASH_STAT_MASK) == HASH_STAT_MOVABLE);
 
 			refStr = GetRefString(newEntry->u.prev);
@@ -357,24 +349,11 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 			
 			next = (uint16_t)entry->status_next;
 
-			prev = next;
-			uint32_t traversed = 0;
-			while (prev < STRINGLIST_SIZE &&
-				(uint16_t)scrStringGlob.hashTable[prev].status_next != hash &&
-				traversed++ < STRINGLIST_SIZE)
+			for (prev = next;
+				(uint16_t)scrStringGlob.hashTable[prev].status_next != hash;
+				prev = (uint16_t)scrStringGlob.hashTable[prev].status_next)
 			{
-				const uint32_t link = (uint16_t)scrStringGlob.hashTable[prev].status_next;
-				if (!link || link >= STRINGLIST_SIZE)
-					break;
-				prev = link;
-			}
-
-			if (!prev || prev >= STRINGLIST_SIZE ||
-				(uint16_t)scrStringGlob.hashTable[prev].status_next != hash)
-			{
-				Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-				Com_Error(ERR_DROP, "corrupt script string collision chain (bucket %u)", hash);
-				return 0;
+				;
 			}
 			iassert(prev);
 
@@ -512,17 +491,11 @@ static uint32_t FindStringOfSize(const char* str, uint32_t len)
 	{
 		uint32_t prev = hash;
 		uint32_t newIndex = (uint16_t)entry->status_next;
-		uint32_t traversed = 0;
 
-		while (newIndex != hash)
+		for (HashEntry* newEntry = &scrStringGlob.hashTable[newIndex];
+			newEntry != entry;
+			newEntry = &scrStringGlob.hashTable[newIndex])
 		{
-			if (!newIndex || newIndex >= STRINGLIST_SIZE || traversed++ >= STRINGLIST_SIZE)
-			{
-				Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-				Com_Error(ERR_DROP, "corrupt script string lookup chain (bucket %u)", hash);
-				return 0;
-			}
-			HashEntry* newEntry = &scrStringGlob.hashTable[newIndex];
 			iassert((newEntry->status_next & HASH_STAT_MASK) == HASH_STAT_MOVABLE);
 			refStr = GetRefString(newEntry->u.prev);
 
@@ -724,12 +697,6 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 		iassert(((entry->status_next & HASH_STAT_MASK) == HASH_STAT_HEAD));
 
 		uint32_t newIndex = (uint16_t)entry->status_next;
-		if (!newIndex || newIndex >= STRINGLIST_SIZE)
-		{
-			Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-			Com_Error(ERR_DROP, "corrupt script string free chain (bucket %u)", index);
-			return;
-		}
 		HashEntry* newEntry = &scrStringGlob.hashTable[newIndex];
 
 		if (entry->u.prev == stringValue)
@@ -749,15 +716,9 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 		else
 		{
 			uint32_t prev = index;
-			uint32_t traversed = 0;
 			while (1)
 			{
-				if (newEntry == entry || newIndex >= STRINGLIST_SIZE || traversed++ >= STRINGLIST_SIZE)
-				{
-					Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-					Com_Error(ERR_DROP, "corrupt script string free lookup chain (bucket %u)", index);
-					return;
-				}
+				iassert(newEntry != entry);
 				iassert((newEntry->status_next & HASH_STAT_MASK) == HASH_STAT_MOVABLE);
 
 				if (newEntry->u.prev == stringValue)
@@ -765,12 +726,6 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 
 				prev = newIndex;
 				newIndex = (uint16_t)newEntry->status_next;
-				if (!newIndex || newIndex >= STRINGLIST_SIZE)
-				{
-					Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-					Com_Error(ERR_DROP, "corrupt script string free link (bucket %u)", index);
-					return;
-				}
 				newEntry = &scrStringGlob.hashTable[newIndex];
 			}
 			scrStringGlob.hashTable[prev].status_next = (uint16_t)newEntry->status_next | (scrStringGlob.hashTable[prev].status_next & HASH_STAT_MASK);
