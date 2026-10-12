@@ -247,7 +247,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 			UI_Refresh();
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/draw_field/loading_ui_done";
-            if (connectionState == CA_LOADING && R_Cinematic_IsStarted())
+            if (connectionState == CA_LOADING)
             {
                 g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_top";
                 SCR_DrawCinematic(0);
