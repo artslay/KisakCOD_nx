@@ -650,7 +650,7 @@ static void Switch_BinkCopyPlane(
     for (uint32_t y = 0; y < height; ++y)
     {
         std::memcpy(
-            plane->Buffer + static_cast<size_t>(y) * dstPitch,
+            static_cast<uint8_t *>(plane->Buffer) + static_cast<size_t>(y) * dstPitch,
             src + static_cast<size_t>(y) * srcPitch,
             width);
     }
