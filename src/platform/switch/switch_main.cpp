@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstring>
 #include <switch.h>
 #include <vulkan/vulkan.h>
 #include <atomic>
@@ -30,24 +31,73 @@ static std::thread g_switchProgressWatchdog;
 static void SwitchProgressWatchdogMain()
 {
     uint32_t tick = 0;
+    uint32_t stableTicks = 0;
+    bool haveSnapshot = false;
+    bool reportedStall = false;
+    int32_t lastAsset = 0;
+    uint32_t lastRawType = 0;
+    uint32_t lastHeader = 0;
+    const char *lastDbStage = nullptr;
+    const char *lastServerStage = nullptr;
+
     while (!g_switchProgressWatchdogStop.load(std::memory_order_acquire))
     {
         std::this_thread::sleep_for(std::chrono::seconds(5));
         if (g_switchProgressWatchdogStop.load(std::memory_order_acquire))
             break;
 
+        ++tick;
+        const int32_t asset = g_switchCurrentAssetIndex;
+        const uint32_t rawType = static_cast<unsigned>(g_switchCurrentAssetRawType);
+        const uint32_t header = static_cast<unsigned>(g_switchCurrentAssetHeader);
+        const char *dbStage = g_switchDbStage;
+        const char *serverStage = g_switchServerInitStage;
+        const bool sameDbStage =
+            lastDbStage == dbStage ||
+            (lastDbStage && dbStage && std::strcmp(lastDbStage, dbStage) == 0);
+        const bool sameServerStage =
+            lastServerStage == serverStage ||
+            (lastServerStage && serverStage && std::strcmp(lastServerStage, serverStage) == 0);
+        const bool unchanged = haveSnapshot &&
+            asset == lastAsset &&
+            rawType == lastRawType &&
+            header == lastHeader &&
+            sameDbStage &&
+            sameServerStage;
+
+        if (!unchanged)
+        {
+            lastAsset = asset;
+            lastRawType = rawType;
+            lastHeader = header;
+            lastDbStage = dbStage;
+            lastServerStage = serverStage;
+            haveSnapshot = true;
+            stableTicks = 0;
+            reportedStall = false;
+            continue;
+        }
+
+        ++stableTicks;
+        // Emit one useful breadcrumb only after the same engine/database stage
+        // has remained unchanged for 10 seconds; reset when progress resumes.
+        if (stableTicks < 2u || reportedStall)
+            continue;
+
         char line[384];
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][WATCHDOG] t=%us asset=%d rawType=%u header=%08x dbStage=%s serverStage=%s\n",
-            ++tick * 5u,
-            g_switchCurrentAssetIndex,
-            static_cast<unsigned>(g_switchCurrentAssetRawType),
-            static_cast<unsigned>(g_switchCurrentAssetHeader),
-            g_switchDbStage ? g_switchDbStage : "(null)",
-            g_switchServerInitStage ? g_switchServerInitStage : "(null)");
+            "[KisakCOD][WATCHDOG] t=%us unchanged=%us asset=%d rawType=%u header=%08x dbStage=%s serverStage=%s\n",
+            tick * 5u,
+            stableTicks * 5u,
+            asset,
+            rawType,
+            header,
+            dbStage ? dbStage : "(null)",
+            serverStage ? serverStage : "(null)");
         Switch_LogWrite(line);
+        reportedStall = true;
     }
 }
 
@@ -178,7 +228,6 @@ int main()
     SwitchBootLog("Graphics: starting engine renderer");
     SwitchStartProgressWatchdog();
     Com_Init((char*)"");
-    SwitchStopProgressWatchdog();
 
     SwitchBootLog("Stage 7/7: engine initialized");
     SwitchBootLog("Entering applet/frame loop");
