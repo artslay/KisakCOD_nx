@@ -23,6 +23,9 @@ struct scrMemTreeDebugGlob_t // sizeof=0x20000
 };
 scrMemTreeDebugGlob_t scrMemTreeDebugGlob = { 0 };
 
+static bool g_mtRebuildFailed = false;
+static bool MT_RebuildFreeTreesFromUsage();
+
 static void MT_InitBits(void)
 {
     uint8_t bits; // [esp+0h] [ebp-Ch]
@@ -160,8 +163,6 @@ bool MT_Realloc(int oldNumBytes, int newNumbytes)
 // Recover the free lists if their tree links form a cycle. The allocation usage
 // map is separate from the node backing store, so it remains authoritative unless
 // its counts or ranges contradict the allocator's own totals.
-static bool g_mtRebuildFailed = false;
-
 static bool MT_RebuildFreeTreesFromUsage()
 {
 #ifdef KISAK_SWITCH
