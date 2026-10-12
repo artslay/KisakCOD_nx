@@ -41,6 +41,13 @@ void Switch_ResetBinkReadbackProbes()
     g_binkReadbackProbeMask.store(0, std::memory_order_relaxed);
 }
 
+void Switch_ResetPendingBinkUpload()
+{
+    std::lock_guard<std::mutex> lock(g_pendingBinkUploadMutex);
+    g_pendingBinkUploadSet = nullptr;
+    g_pendingBinkUploadFrame = -1;
+}
+
 static bool UploadBinkPlane(
     IDirect3DTexture9 *texture,
     const uint8_t *pixels,

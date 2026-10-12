@@ -23,6 +23,7 @@ extern thread_local const char * volatile g_switchFrameStage;
 extern void COM_NotifyIntroMoviePlaybackFinished(const char *movieName);
 extern void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieFrame, uint32_t movieFrames);
 extern void Switch_ResetBinkReadbackProbes();
+extern void Switch_ResetPendingBinkUpload();
 #endif
 
 // #define CINEMA
@@ -474,6 +475,12 @@ void R_Cinematic_StopPlayback_Now()
         R_Cinematic_RelinquishIO();
     BinkClose(cinematicGlob.bink);
     cinematicGlob.bink = 0;
+#ifdef __SWITCH__
+    // A pending upload belongs to the movie that was just closed. The Bink
+    // texture-set address is reused by the next movie, so pointer equality
+    // alone cannot distinguish a stale frame from a frame of the new movie.
+    Switch_ResetPendingBinkUpload();
+#endif
     CinematicHunk_Reset(&cinematicGlob.binkHunk);
 }
 
@@ -512,6 +519,10 @@ char __cdecl R_Cinematic_StartPlayback_Now(const char *filename, uint32_t playba
         cinematicGlob.atHighPriority = 1;
     }
     iassert( !cinematicGlob.bink );
+#ifdef __SWITCH__
+    // Also clear stale frame state when starting after a failed/aborted clip.
+    Switch_ResetPendingBinkUpload();
+#endif
     cinematicGlob.activeImageFrame = -1;
     cinematicGlob.activeTextureSet ^= 1u;
     if (R_Cinematic_AreHunksOpen())
