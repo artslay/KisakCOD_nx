@@ -367,7 +367,9 @@ int MT_GetSize(int numBytes)
     }
     else
     {
-        numBuckets = (numBytes + 11) / 12 - 1;
+        // MemoryNode's stride is 12 bytes on 32-bit builds and 16 on Switch/aarch64.
+        // Bucket sizing must use the same stride as MT_Alloc/MT_Free pointer arithmetic.
+        numBuckets = (numBytes + (int)MT_NODE_SIZE - 1) / (int)MT_NODE_SIZE - 1;
         if (numBuckets > 255)
             return scrMemTreeGlob.logBits[numBuckets >> 8] + 8;
         else
