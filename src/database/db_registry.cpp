@@ -1422,15 +1422,33 @@ bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
     while (db_hashCritSect.writeCount)
         std::this_thread::yield();
 
+#ifdef __SWITCH__
+    // Match DB_FindXAssetEntry: malformed/cyclic hash chains must not hang
+    // server initialization when G_SetupWeaponDef checks "defaultweapon".
+    // On a corrupt chain, prefer using the already-resolved asset rather than
+    // classifying it as a default asset and silently skipping registration.
+    uint32_t guard = 0;
+#endif
     for (uint32_t assetEntryIndex = db_hashTable[hash];
          assetEntryIndex;
          assetEntryIndex = g_assetEntryPool[assetEntryIndex].entry.nextHash)
     {
+#ifdef __SWITCH__
+        if (++guard > 0x8000u || assetEntryIndex >= 0x8000u)
+        {
+            InterlockedDecrement(&db_hashCritSect.readCount);
+            return false;
+        }
+#endif
         XAssetEntryPoolEntry *assetEntry = &g_assetEntryPool[assetEntryIndex];
         if (assetEntry->entry.asset.type == type)
         {
             const char *assetName = DB_GetXAssetName(&assetEntry->entry.asset);
+#ifdef __SWITCH__
+            if (assetName && Switch_IstricmpAssetName(assetName, name) == 0)
+#else
             if (assetName && !I_stricmp(assetName, name))
+#endif
             {
                 InterlockedDecrement(&db_hashCritSect.readCount);
                 return assetEntry->entry.zoneIndex == 0;
