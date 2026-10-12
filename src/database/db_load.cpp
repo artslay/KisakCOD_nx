@@ -13548,33 +13548,7 @@ void __cdecl Load_clipMap_t(bool atStreamStart)
     }
     if (varclipMap_t->staticModelList)
     {
-#ifdef __SWITCH__
-        // cStaticModel_s contains a native XModel pointer. The serialized
-        // fastfile rows are 80 bytes, but the ARM64 rows are wider; translating
-        // them in the stream buffer overlaps the following clipMap arrays.
-        // Preserve the original 4-byte stream alignment and store translated
-        // rows in native-sized memory instead.
-        DB_AllocStreamPos(3);
-        const size_t nativeBytes =
-            static_cast<size_t>(varclipMap_t->numStaticModels) *
-            sizeof(cStaticModel_s);
-        iassert(nativeBytes <= UINT32_MAX);
-        if (varclipMap_t->numStaticModels)
-        {
-            varclipMap_t->staticModelList =
-                reinterpret_cast<cStaticModel_s *>(
-                    DB_AllocSwitchAssetMemory(
-                        static_cast<uint32_t>(nativeBytes),
-                        "SwitchClipMapStaticModels",
-                        22));
-        }
-        else
-        {
-            varclipMap_t->staticModelList = nullptr;
-        }
-#else
         varclipMap_t->staticModelList = (cStaticModel_s *)AllocLoad_FxElemVisStateSample();
-#endif
         varcStaticModel_t = varclipMap_t->staticModelList;
         Load_cStaticModel_tArray(1, varclipMap_t->numStaticModels);
     }
