@@ -28,6 +28,7 @@ extern const char * volatile g_switchServerInitStage;
 
 static std::atomic<const char *> g_switchProgressStage{"boot"};
 static std::atomic<uint32_t> g_switchProgressDetail{UINT32_MAX};
+static std::atomic<const char *> g_switchProgressScriptSource{nullptr};
 static std::mutex g_switchProgressScriptMutex;
 static char g_switchProgressScriptName[128] = {};
 
@@ -55,6 +56,46 @@ void Switch_SetProgressDetail(uint32_t detail)
     // Update a small progress value without changing the current stage/script.
     // The watchdog will only report after this value stops changing.
     g_switchProgressDetail.store(detail, std::memory_order_relaxed);
+}
+
+void Switch_SetProgressScriptSource(const char *source)
+{
+    g_switchProgressScriptSource.store(source, std::memory_order_release);
+}
+
+static void SwitchFormatScriptContext(char *out, size_t outSize, const char *source, uint32_t detail)
+{
+    if (!out || outSize == 0)
+        return;
+    out[0] = '\0';
+    if (!source || detail == UINT32_MAX)
+    {
+        std::snprintf(out, outSize, "(unavailable)");
+        return;
+    }
+
+    // detail is one-based for source bytes: byte 148 points at source[147].
+    const size_t offset = detail ? static_cast<size_t>(detail - 1u) : 0u;
+    const size_t begin = offset > 20u ? offset - 20u : 0u;
+    size_t used = 0;
+    for (size_t i = begin; i < offset && used + 2u < outSize; ++i)
+    {
+        const unsigned char c = static_cast<unsigned char>(source[i]);
+        if (!c)
+            break;
+        out[used++] = (c >= 32u && c < 127u) ? static_cast<char>(c) : ' ';
+    }
+    if (used + 2u < outSize)
+    {
+        out[used++] = '|';
+        out[used] = '\0';
+    }
+    for (size_t i = offset; source[i] && i < offset + 36u && used + 2u < outSize; ++i)
+    {
+        const unsigned char c = static_cast<unsigned char>(source[i]);
+        out[used++] = (c >= 32u && c < 127u) ? static_cast<char>(c) : ' ';
+    }
+    out[used] = '\0';
 }
 
 static std::atomic<bool> g_switchProgressWatchdogStop{false};
@@ -139,11 +180,17 @@ static void SwitchProgressWatchdogMain()
         if (stableTicks < 2u || reportedStall)
             continue;
 
-        char line[512];
+        char context[80];
+        SwitchFormatScriptContext(
+            context,
+            sizeof(context),
+            g_switchProgressScriptSource.load(std::memory_order_acquire),
+            progressDetail);
+        char line[640];
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][WATCHDOG] t=%us unchanged=%us asset=%d rawType=%u header=%08x dbStage=%s serverStage=%s progressStage=%s detail=%u script=%s\n",
+            "[KisakCOD][WATCHDOG] t=%us unchanged=%us asset=%d rawType=%u header=%08x dbStage=%s serverStage=%s progressStage=%s detail=%u script=%s context=\"%s\"\n",
             tick * 5u,
             stableTicks * 5u,
             asset,
@@ -153,7 +200,8 @@ static void SwitchProgressWatchdogMain()
             serverStage ? serverStage : "(null)",
             progressStage ? progressStage : "(null)",
             progressDetail,
-            progressScriptName[0] ? progressScriptName : "(none)");
+            progressScriptName[0] ? progressScriptName : "(none)",
+            context);
         Switch_LogWrite(line);
         reportedStall = true;
     }
