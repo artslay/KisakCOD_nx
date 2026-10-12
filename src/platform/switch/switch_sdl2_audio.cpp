@@ -349,6 +349,11 @@ SDL_AudioDeviceID SDL_OpenAudioDevice(
             &device->driver, 0, 1.0f, 1, 1);
     }
 
+    // Creating/configuring an Audren voice does not start playback. OpenAL's
+    // SDL backend starts filling wave buffers after SDL_PauseAudioDevice(0);
+    // make sure the destination voice is already in the Started state then.
+    audrvVoiceStart(&device->driver, 0);
+
     for (int i = 0; i < 2; ++i)
     {
         device->buffers[i].data_raw = device->pool;
