@@ -112,6 +112,9 @@ typedef struct
     int yy_fill_buffer;
     int yy_buffer_status;
 } yy_buffer_state;
+#ifdef KISAK_SWITCH
+static_assert(sizeof(yy_buffer_state) == 0x38, "Switch lexer buffer layout must use native 64-bit pointers");
+#endif
 
 int __cdecl yyparse();
 int __cdecl yylex();
