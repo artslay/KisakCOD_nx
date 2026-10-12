@@ -267,15 +267,14 @@ SDL_AudioDeviceID SDL_OpenAudioDevice(
         return 0;
     }
 
-    rc = audrvMemPoolAttach(&device->driver, poolId);
-    if (R_FAILED(rc))
+    if (!audrvMemPoolAttach(&device->driver, poolId))
     {
         audrvClose(&device->driver);
         audrenExit();
         std::free(device->callbackBuffer);
         std::free(device->pool);
         delete device;
-        std::snprintf(g_error, sizeof(g_error), "audrvMemPoolAttach failed (0x%x)", rc);
+        std::snprintf(g_error, sizeof(g_error), "%s", "audrvMemPoolAttach failed");
         return 0;
     }
 
