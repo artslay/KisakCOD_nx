@@ -28,6 +28,7 @@
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
+extern void Switch_UI_ResetStatementValidationCache(void);
 #endif
 
 const dvar_t *ui_showList;
@@ -648,6 +649,9 @@ void __cdecl UI_Shutdown()
 {
     Menus_CloseAll(&uiInfo.uiDC);
     UILocalVar_Shutdown(&uiInfo.uiDC.localVars);
+#ifdef __SWITCH__
+    Switch_UI_ResetStatementValidationCache();
+#endif
     Cmd_RemoveCommand("openmenu");
     Cmd_RemoveCommand("closemenu");
 }
@@ -1326,6 +1330,9 @@ void __cdecl UI_Init()
     double v2; // fp0
     MenuList *v4; // r3
 
+#ifdef __SWITCH__
+    Switch_UI_ResetStatementValidationCache();
+#endif
     memset(&uiInfo, 0, sizeof(uiInfo));
     uiInfo.uiDC.localClientNum = 0;
     g_currentMenuType = UIMENU_NONE;
