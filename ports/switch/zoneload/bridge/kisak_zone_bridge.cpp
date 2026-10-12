@@ -300,3 +300,43 @@ bool KisakZone_ExtractWeaponModelPointers(const void* asset, void** modelPointer
 
     return outputIndex == kWeaponModelPointerCount;
 }
+
+bool KisakZone_ExtractClipMapStaticModels(
+    const void *asset,
+    const void **sourceList,
+    size_t *recordCount,
+    KisakZoneStaticModelRecord *records,
+    const size_t recordCapacity)
+{
+    if (!asset || !sourceList || !recordCount)
+        return false;
+
+    const auto *clipMap = static_cast<const IW3::clipMap_t *>(asset);
+    const auto *models = clipMap->staticModelList;
+    const size_t count = clipMap->numStaticModels;
+    *sourceList = models;
+    *recordCount = count;
+
+    if (!models || count == 0 || records == nullptr)
+        return true;
+    if (recordCapacity < count)
+        return false;
+
+    for (size_t index = 0; index < count; ++index)
+    {
+        const IW3::cStaticModel_s &source = models[index];
+        KisakZoneStaticModelRecord &destination = records[index];
+        destination.nextModelInWorldSector =
+            source.writable.nextModelInWorldSector;
+        destination.xmodel = source.xmodel;
+        std::memcpy(destination.origin, source.origin, sizeof(destination.origin));
+        std::memcpy(
+            destination.invScaledAxis,
+            source.invScaledAxis,
+            sizeof(destination.invScaledAxis));
+        std::memcpy(destination.absmin, source.absmin, sizeof(destination.absmin));
+        std::memcpy(destination.absmax, source.absmax, sizeof(destination.absmax));
+    }
+
+    return true;
+}
