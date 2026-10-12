@@ -25,6 +25,15 @@ extern uint32_t g_switchCurrentAssetHeader;
 extern const char * volatile g_switchDbStage;
 extern const char * volatile g_switchServerInitStage;
 
+static std::atomic<const char *> g_switchProgressStage{"boot"};
+static std::atomic<uint32_t> g_switchProgressDetail{UINT32_MAX};
+
+void Switch_SetProgressStage(const char *stage, uint32_t detail)
+{
+    g_switchProgressDetail.store(detail, std::memory_order_relaxed);
+    g_switchProgressStage.store(stage ? stage : "(null)", std::memory_order_release);
+}
+
 static std::atomic<bool> g_switchProgressWatchdogStop{false};
 static std::thread g_switchProgressWatchdog;
 
@@ -39,6 +48,8 @@ static void SwitchProgressWatchdogMain()
     uint32_t lastHeader = 0;
     const char *lastDbStage = nullptr;
     const char *lastServerStage = nullptr;
+    const char *lastProgressStage = nullptr;
+    uint32_t lastProgressDetail = UINT32_MAX;
 
     while (!g_switchProgressWatchdogStop.load(std::memory_order_acquire))
     {
@@ -52,18 +63,25 @@ static void SwitchProgressWatchdogMain()
         const uint32_t header = static_cast<unsigned>(g_switchCurrentAssetHeader);
         const char *dbStage = g_switchDbStage;
         const char *serverStage = g_switchServerInitStage;
+        const char *progressStage = g_switchProgressStage.load(std::memory_order_acquire);
+        const uint32_t progressDetail = g_switchProgressDetail.load(std::memory_order_relaxed);
         const bool sameDbStage =
             lastDbStage == dbStage ||
             (lastDbStage && dbStage && std::strcmp(lastDbStage, dbStage) == 0);
         const bool sameServerStage =
             lastServerStage == serverStage ||
             (lastServerStage && serverStage && std::strcmp(lastServerStage, serverStage) == 0);
+        const bool sameProgressStage =
+            lastProgressStage == progressStage ||
+            (lastProgressStage && progressStage && std::strcmp(lastProgressStage, progressStage) == 0);
         const bool unchanged = haveSnapshot &&
             asset == lastAsset &&
             rawType == lastRawType &&
             header == lastHeader &&
             sameDbStage &&
-            sameServerStage;
+            sameServerStage &&
+            sameProgressStage &&
+            progressDetail == lastProgressDetail;
 
         if (!unchanged)
         {
@@ -72,6 +90,8 @@ static void SwitchProgressWatchdogMain()
             lastHeader = header;
             lastDbStage = dbStage;
             lastServerStage = serverStage;
+            lastProgressStage = progressStage;
+            lastProgressDetail = progressDetail;
             haveSnapshot = true;
             stableTicks = 0;
             reportedStall = false;
@@ -88,14 +108,16 @@ static void SwitchProgressWatchdogMain()
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][WATCHDOG] t=%us unchanged=%us asset=%d rawType=%u header=%08x dbStage=%s serverStage=%s\n",
+            "[KisakCOD][WATCHDOG] t=%us unchanged=%us asset=%d rawType=%u header=%08x dbStage=%s serverStage=%s progressStage=%s detail=%u\n",
             tick * 5u,
             stableTicks * 5u,
             asset,
             rawType,
             header,
             dbStage ? dbStage : "(null)",
-            serverStage ? serverStage : "(null)");
+            serverStage ? serverStage : "(null)",
+            progressStage ? progressStage : "(null)",
+            progressDetail);
         Switch_LogWrite(line);
         reportedStall = true;
     }

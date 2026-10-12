@@ -30,6 +30,7 @@
 #include <qcommon/cmd.h>
 #ifdef __SWITCH__
 extern thread_local const char * volatile g_switchFrameStage;
+extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
 #endif
 #include <client/client.h>
 #include <qcommon/qcommon.h>
@@ -1121,16 +1122,19 @@ void __cdecl G_InitGame(
     ProfLoad_Begin("G_SetupWeaponDef");
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/setup_weapon_def";
+    Switch_SetProgressStage("frame/game_init/setup_weapon_def", UINT32_MAX);
 #endif
     G_SetupWeaponDef();
     ProfLoad_End();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/after_setup_weapon_def";
+    Switch_SetProgressStage("frame/game_init/after_setup_weapon_def", UINT32_MAX);
 #endif
     if (!SV_InitDemoSavegame(save) || *save)
     {
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/game_init/link_world";
+        Switch_SetProgressStage("frame/game_init/link_world", UINT32_MAX);
 #endif
         CM_LinkWorld();
     }
@@ -1138,12 +1142,15 @@ void __cdecl G_InitGame(
     {
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/game_init/init_demo";
+        Switch_SetProgressStage("frame/game_init/init_demo", UINT32_MAX);
 #endif
         level.demoplaying = SV_InitDemo((int*)&randomSeed);
     }
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/after_init_demo";
+    Switch_SetProgressStage("frame/game_init/after_init_demo", UINT32_MAX);
     g_switchFrameStage = "frame/game_init/seed";
+    Switch_SetProgressStage("frame/game_init/seed", UINT32_MAX);
 #endif
     G_srand(randomSeed);
     level.openScriptIOFileHandles[0] = 0;
@@ -1161,6 +1168,7 @@ void __cdecl G_InitGame(
     {
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/game_init/load_save_weapons";
+        Switch_SetProgressStage("frame/game_init/load_save_weapons", UINT32_MAX);
 #endif
         if (!*save)
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_main.cpp", 1488, 0, "%s", "*save");
@@ -1190,12 +1198,14 @@ void __cdecl G_InitGame(
     memset(actorBackup, 0, sizeof(actorBackup_s));
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/mantle_anims";
+    Switch_SetProgressStage("frame/game_init/mantle_anims", UINT32_MAX);
 #endif
     if (level.time)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_main.cpp", 1517, 0, "%s", "!level.time");
     Mantle_CreateAnims(Hunk_AllocXAnimServer);
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/vehicle_info";
+    Switch_SetProgressStage("frame/game_init/vehicle_info", UINT32_MAX);
 #endif
     if (restart)
         G_RestartScrVehicleInfo();
@@ -1211,6 +1221,7 @@ void __cdecl G_InitGame(
             "level.actorCorpseCount >= 1 && level.actorCorpseCount <= MAX_ACTOR_CORPSES");
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/scripts_anims";
+    Switch_SetProgressStage("frame/game_init/scripts_anims", UINT32_MAX);
 #endif
     ProfLoad_Begin("Load scripts and anims");
     if (!useLoadedSourceFiles)
@@ -1225,6 +1236,7 @@ void __cdecl G_InitGame(
     ProfLoad_End();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/init_entities";
+    Switch_SetProgressStage("frame/game_init/init_entities", UINT32_MAX);
 #endif
     memset(g_entities, 0, sizeof(g_entities));
     level.gentities = g_entities;
@@ -1254,54 +1266,66 @@ void __cdecl G_InitGame(
     level.lastFreeEnt = 0;
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/locate_game_data";
+    Switch_SetProgressStage("frame/game_init/locate_game_data", UINT32_MAX);
 #endif
     SV_LocateGameData(level.gentities, 1, sizeof(gentity_s), &clients->ps, sizeof(gclient_s));
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/parse_hitloc_table";
+    Switch_SetProgressStage("frame/game_init/parse_hitloc_table", UINT32_MAX);
 #endif
     G_ParseHitLocDmgTable();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/penetration_table";
+    Switch_SetProgressStage("frame/game_init/penetration_table", UINT32_MAX);
 #endif
     BG_LoadPenetrationDepthTable();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/init_vehicle_paths";
+    Switch_SetProgressStage("frame/game_init/init_vehicle_paths", UINT32_MAX);
 #endif
     G_InitVehiclePaths();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/init_script_vehicles";
+    Switch_SetProgressStage("frame/game_init/init_script_vehicles", UINT32_MAX);
 #endif
     G_InitScrVehicles();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/init_turrets";
+    Switch_SetProgressStage("frame/game_init/init_turrets", UINT32_MAX);
 #endif
     G_InitTurrets();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/pre_spawn_paths";
+    Switch_SetProgressStage("frame/game_init/pre_spawn_paths", UINT32_MAX);
 #endif
     Path_PreSpawnInitPaths();
     if (!restart)
         G_DropPathnodesToFloor();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/spawn_entities";
+    Switch_SetProgressStage("frame/game_init/spawn_entities", UINT32_MAX);
 #endif
     ProfLoad_Begin("G_SpawnEntitiesFromString");
     G_SpawnEntitiesFromString();
     ProfLoad_End();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/update_track_nodes";
+    Switch_SetProgressStage("frame/game_init/update_track_nodes", UINT32_MAX);
 #endif
     G_UpdateTrackExtraNodes();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/drop_actor_spawners";
+    Switch_SetProgressStage("frame/game_init/drop_actor_spawners", UINT32_MAX);
 #endif
     G_DropActorSpawnersToFloor();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/setup_vehicle_paths";
+    Switch_SetProgressStage("frame/game_init/setup_vehicle_paths", UINT32_MAX);
 #endif
     G_SetupVehiclePaths();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/setup_script_vehicles";
+    Switch_SetProgressStage("frame/game_init/setup_script_vehicles", UINT32_MAX);
 #endif
     G_SetupScrVehicles();
     level.bRegisterItems = 1;
@@ -1310,18 +1334,22 @@ void __cdecl G_InitGame(
     level.fFogOpaqueDistSqrd = FLT_MAX;
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/init_objectives";
+    Switch_SetProgressStage("frame/game_init/init_objectives", UINT32_MAX);
 #endif
     G_InitObjectives();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/init_targets";
+    Switch_SetProgressStage("frame/game_init/init_targets", UINT32_MAX);
 #endif
     G_InitTargets();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/missile_attractors";
+    Switch_SetProgressStage("frame/game_init/missile_attractors", UINT32_MAX);
 #endif
     Missile_InitAttractors();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/aim_target";
+    Switch_SetProgressStage("frame/game_init/aim_target", UINT32_MAX);
 #endif
     AimTarget_Init();
     loading = level.loading;
@@ -1346,6 +1374,7 @@ void __cdecl G_InitGame(
 LABEL_43:
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/free_entity_list";
+    Switch_SetProgressStage("frame/game_init/free_entity_list", UINT32_MAX);
 #endif
     Scr_FreeEntityList();
 #ifndef KISAK_NO_FASTFILES
@@ -1355,6 +1384,7 @@ LABEL_43:
 #endif
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/game_init/complete";
+    Switch_SetProgressStage("frame/game_init/complete", UINT32_MAX);
 #endif
     level.initializing = 0;
 }

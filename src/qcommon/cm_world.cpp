@@ -7,6 +7,7 @@
 #include <universal/profile.h>
 #ifdef __SWITCH__
 extern thread_local const char * volatile g_switchFrameStage;
+extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
 extern "C" {
 thread_local volatile uintptr_t g_switchStaticModelIndex = static_cast<uintptr_t>(-1);
 thread_local volatile uintptr_t g_switchStaticModelAddress = 0;
@@ -73,10 +74,12 @@ void __cdecl CM_LinkWorld()
     g_switchStaticModelAddress = 0;
     g_switchStaticModelXModel = 0;
     g_switchFrameStage = "frame/cm_link_world/clear_world";
+    Switch_SetProgressStage("frame/cm_link_world/clear_world", UINT32_MAX);
 #endif
     CM_ClearWorld();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/cm_link_world/link_static_models";
+    Switch_SetProgressStage("frame/cm_link_world/link_static_models", UINT32_MAX);
 #endif
     CM_LinkAllStaticModels();
 #ifdef __SWITCH__
@@ -84,6 +87,7 @@ void __cdecl CM_LinkWorld()
     g_switchStaticModelAddress = 0;
     g_switchStaticModelXModel = 0;
     g_switchFrameStage = "frame/cm_link_world/complete";
+    Switch_SetProgressStage("frame/cm_link_world/complete", UINT32_MAX);
 #endif
 }
 
@@ -500,12 +504,14 @@ uint32_t CM_LinkAllStaticModels()
         g_switchStaticModelAddress = reinterpret_cast<uintptr_t>(staticModel);
         g_switchStaticModelXModel = reinterpret_cast<uintptr_t>(staticModel->xmodel);
         g_switchFrameStage = "frame/cm_link_world/xmodel_contents";
+        Switch_SetProgressStage("frame/cm_link_world/xmodel_contents", i);
 #endif
         iassert( staticModel->xmodel );
         if (XModelGetContents(staticModel->xmodel))
         {
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cm_link_world/link_static_model";
+            Switch_SetProgressStage("frame/cm_link_world/link_static_model", i);
 #endif
             CM_LinkStaticModel(staticModel);
         }
