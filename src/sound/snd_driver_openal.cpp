@@ -828,12 +828,31 @@ int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int
     int srcChannelCount = stream->channels;
     int baserate = stream->sampleRate;
 
-    // dr_mp3 doesn't know its total frame count up front the way dr_wav does from the RIFF
-    // header - drmp3_get_pcm_frame_count does a one-time scan to find it, paid once here at
-    // stream start (same spirit as the one-time cost of opening/parsing the file at all).
-    uint64_t totalFrames = stream->isMp3
-        ? drmp3_get_pcm_frame_count(&stream->mp3)
-        : stream->wav.totalPCMFrameCount;
+    // Avoid drmp3_get_pcm_frame_count() here: when an MP3 has no Xing/Info frame,
+    // dr_mp3 decodes and seeks across the entire file to discover its duration. On Switch that
+    // can stall the game thread, and ZIP-backed emulated seeks can leave the decoder at a bad
+    // position so the initial stream queue is empty. Use metadata when present; otherwise use
+    // a bitrate-based duration estimate. Playback itself remains fully streamed.
+    uint64_t totalFrames = stream->wav.totalPCMFrameCount;
+    if (stream->isMp3)
+    {
+        totalFrames = stream->mp3.totalPCMFrameCount;
+        if (totalFrames != DRMP3_UINT64_MAX)
+        {
+            if (totalFrames >= stream->mp3.delayInPCMFrames)
+                totalFrames -= stream->mp3.delayInPCMFrames;
+            if (totalFrames >= stream->mp3.paddingInPCMFrames)
+                totalFrames -= stream->mp3.paddingInPCMFrames;
+        }
+        else
+        {
+            constexpr uint64_t kFallbackBitrate = 128000; // bits per second
+            const uint64_t encodedBytes = static_cast<uint32_t>(FS_filelength(stream->fsHandle));
+            const uint64_t estimatedSeconds =
+                std::max<uint64_t>(1, (encodedBytes * 8 + kFallbackBitrate - 1) / kFallbackBitrate);
+            totalFrames = static_cast<uint64_t>(stream->sampleRate) * estimatedSeconds;
+        }
+    }
 
     ALuint source = alGlob.source[index];
     MSS_ApplyEqFilter(source, entchannel);
