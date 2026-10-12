@@ -1428,6 +1428,9 @@ void __cdecl CG_Init(int localClientNum, int savegame)
     cgameGlob->refdef.dof.farBlur = 0.0;
     
     CG_RegisterDvars();
+    // Always enable the engine's built-in FPS counter on Switch, even when
+    // an archived user config previously saved cg_drawFPS as Off.
+    Dvar_SetFromStringByName("cg_drawFPS", (char *)"1");
     Ragdoll_Init();
     Phys_Init();
     CG_DrawInformation(localClientNum);
