@@ -50,6 +50,13 @@ void Switch_SetProgressScriptStage(const char *stage, const char *filename)
     std::snprintf(g_switchProgressScriptName, sizeof(g_switchProgressScriptName), "%s", filename);
 }
 
+void Switch_SetProgressDetail(uint32_t detail)
+{
+    // Update a small progress value without changing the current stage/script.
+    // The watchdog will only report after this value stops changing.
+    g_switchProgressDetail.store(detail, std::memory_order_relaxed);
+}
+
 static std::atomic<bool> g_switchProgressWatchdogStop{false};
 static std::thread g_switchProgressWatchdog;
 
