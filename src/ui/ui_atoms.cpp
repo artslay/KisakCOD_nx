@@ -193,6 +193,26 @@ void __cdecl UI_DrawLoadBar(
         v10 = UI_LoadBarProgress_LoadObj;
     percentDone = v10();
     v9 = w * percentDone;
+#ifdef __SWITCH__
+    // Sample the value actually passed to the renderer; avoid per-frame log spam.
+    static unsigned int switchLoadBarTraceCalls = 0;
+    if ((++switchLoadBarTraceCalls % 60u) == 1u)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][LOAD BAR] call=%u fastfile=%d fraction=%.5f percent=%.1f fill=%.1f total=%.1f material=%p\\n",
+            switchLoadBarTraceCalls,
+            IsFastFileLoad() ? 1 : 0,
+            static_cast<double>(percentDone),
+            static_cast<double>(percentDone * 100.0f),
+            static_cast<double>(v9),
+            static_cast<double>(w),
+            static_cast<void *>(material));
+        Switch_LogWrite(trace);
+    }
+#endif
     CL_DrawStretchPic(scrPlace, x, y, v9, h, horzAlign, vertAlign, 0.0, 0.0, percentDone, 1.0, color, material);
 }
 
