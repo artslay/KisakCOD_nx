@@ -356,16 +356,82 @@ struct DiskDynEntityClient
 };
 static_assert(sizeof(DiskDynEntityClient) == 12);
 
-void FixupClipMap(clipMap_t *clipMap)
+void FixupClipMap(void *asset)
 {
+    auto *clipMap = static_cast<clipMap_t *>(asset);
+    static std::mutex s_convertedLock;
+    std::lock_guard<std::mutex> guard(s_convertedLock);
+
+    // The OAT zone loader builds cStaticModel_s using its own generated IW3
+    // definition. Rebuild the list with the engine's cStaticModel_s layout
+    // before the clip map is cloned into the engine singleton. This keeps the
+    // 32-bit serialized row stride out of the engine's native pointer accesses.
+    static std::unordered_map<const void *, std::vector<cStaticModel_s>>
+        s_convertedStaticModelsBySourceList;
+    static std::unordered_set<const void *> s_convertedStaticModelLists;
+
+    const void *sourceStaticModelList = nullptr;
+    size_t staticModelCount = 0;
+    if (KisakZone_ExtractClipMapStaticModels(
+            asset,
+            &sourceStaticModelList,
+            &staticModelCount,
+            nullptr,
+            0) &&
+        sourceStaticModelList &&
+        staticModelCount > 0 &&
+        !s_convertedStaticModelLists.count(clipMap->staticModelList))
+    {
+        std::vector<KisakZoneStaticModelRecord> records(staticModelCount);
+        if (KisakZone_ExtractClipMapStaticModels(
+                asset,
+                &sourceStaticModelList,
+                &staticModelCount,
+                records.data(),
+                records.size()))
+        {
+            std::vector<cStaticModel_s> &storage =
+                s_convertedStaticModelsBySourceList[sourceStaticModelList];
+            storage.resize(staticModelCount);
+
+            for (size_t index = 0; index < staticModelCount; ++index)
+            {
+                const KisakZoneStaticModelRecord &source = records[index];
+                cStaticModel_s &destination = storage[index];
+                std::memset(&destination, 0, sizeof(destination));
+                destination.writable.nextModelInWorldSector =
+                    source.nextModelInWorldSector;
+                destination.xmodel =
+                    reinterpret_cast<XModel *>(source.xmodel);
+                std::memcpy(
+                    destination.origin,
+                    source.origin,
+                    sizeof(destination.origin));
+                std::memcpy(
+                    destination.invScaledAxis,
+                    source.invScaledAxis,
+                    sizeof(destination.invScaledAxis));
+                std::memcpy(
+                    destination.absmin,
+                    source.absmin,
+                    sizeof(destination.absmin));
+                std::memcpy(
+                    destination.absmax,
+                    source.absmax,
+                    sizeof(destination.absmax));
+            }
+
+            clipMap->staticModelList = storage.data();
+            s_convertedStaticModelLists.insert(storage.data());
+        }
+    }
+
     if (sizeof(DynEntityClient) == sizeof(DiskDynEntityClient))
         return;
 
-    static std::mutex s_convertedLock;
     // Converted lists must outlive the zone load; they are keyed by the loaded list they replace.
     static std::unordered_map<const void *, std::vector<DynEntityClient>> s_convertedByDiskList;
     static std::unordered_set<const DynEntityClient *> s_convertedLists;
-    std::lock_guard<std::mutex> guard(s_convertedLock);
 
     for (int drawType = 0; drawType < 2; ++drawType)
     {
@@ -425,7 +491,7 @@ void *LinkAsset(void *context, int assetType, void *asset)
         break;
     case ASSET_TYPE_CLIPMAP:
     case ASSET_TYPE_CLIPMAP_PVS:
-        FixupClipMap(static_cast<clipMap_t *>(asset));
+        FixupClipMap(asset);
         break;
     default:
         break;
