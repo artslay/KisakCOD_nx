@@ -30,12 +30,21 @@ sval_u *__cdecl Scr_AllocNode(int size)
     return (sval_u *)Hunk_UserAlloc(g_allocNodeUser, static_cast<uint32_t>(sizeof(sval_u)) * static_cast<uint32_t>(size), alignof(sval_u));
 }
 
+sval_u node_pair(sval_u first, sval_u second)
+{
+    sval_u result;
+    result.node = Scr_AllocNode(2);
+    result.node[0] = first;
+    result.node[1] = second;
+    return result;
+}
+
 sval_u __cdecl node0(Enum_t type)
 {
     sval_u result; // eax
 
     result.node = Scr_AllocNode(1);
-    result.node[0].type = type;
+    result.node[0] = sval_u(static_cast<int>(type));
     return result;
 }
 
@@ -44,7 +53,7 @@ sval_u __cdecl node1(Enum_t type, sval_u val1)
     sval_u result; // eax
 
     result.node = Scr_AllocNode(2);
-    result.node[0].type = type;
+    result.node[0] = sval_u(static_cast<int>(type));
     result.node[1] = val1;
     return result;
 }
@@ -54,7 +63,7 @@ sval_u __cdecl node2(Enum_t type, sval_u val1, sval_u val2)
     sval_u result; // eax
 
     result.node = Scr_AllocNode(3);
-    result.node[0].type = type;
+    result.node[0] = sval_u(static_cast<int>(type));
     result.node[1] = val1;
     result.node[2] = val2;
     return result;
@@ -65,7 +74,7 @@ sval_u __cdecl node3(Enum_t type, sval_u val1, sval_u val2, sval_u val3)
     sval_u result; // eax
 
     result.node = Scr_AllocNode(4);
-    result.node[0].type = type;
+    result.node[0] = sval_u(static_cast<int>(type));
     result.node[1] = val1;
     result.node[2] = val2;
     result.node[3] = val3;
@@ -77,7 +86,7 @@ sval_u __cdecl node4(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u 
     sval_u result; // eax
 
     result.node = Scr_AllocNode(5);
-    result.node[0].type = type;
+    result.node[0] = sval_u(static_cast<int>(type));
     result.node[1] = val1;
     result.node[2] = val2;
     result.node[3] = val3;
@@ -90,7 +99,7 @@ sval_u __cdecl node5(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u 
     sval_u result; // eax
 
     result.node = Scr_AllocNode(6);
-    result.node[0].type = type;
+    result.node[0] = sval_u(static_cast<int>(type));
     result.node[1] = val1;
     result.node[2] = val2;
     result.node[3] = val3;
@@ -104,7 +113,7 @@ sval_u __cdecl node6(Enum_t type, sval_u val1, sval_u val2, sval_u val3, sval_u 
     sval_u result; // eax
 
     result.node = Scr_AllocNode(7);
-    result.node[0].type = type;
+    result.node[0] = sval_u(static_cast<int>(type));
     result.node[1] = val1;
     result.node[2] = val2;
     result.node[3] = val3;
@@ -127,7 +136,7 @@ sval_u __cdecl node7(
     sval_u result; // eax
 
     result.node = Scr_AllocNode(8);
-    result.node[0].type = type;
+    result.node[0] = sval_u(static_cast<int>(type));
     result.node[1] = val1;
     result.node[2] = val2;
     result.node[3] = val3;
@@ -152,7 +161,7 @@ sval_u __cdecl node8(
     sval_u result; // eax
 
     result.node = Scr_AllocNode(9);
-    result.node[0].type = type;
+    result.node[0] = sval_u(static_cast<int>(type));
     result.node[1] = val1;
     result.node[2] = val2;
     result.node[3] = val3;

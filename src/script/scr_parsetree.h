@@ -6,6 +6,7 @@
 void __cdecl Scr_InitAllocNode();
 void __cdecl Scr_ShutdownAllocNode();
 sval_u *__cdecl Scr_AllocNode(int size);
+sval_u node_pair(sval_u first, sval_u second);
 sval_u __cdecl node0(Enum_t type);
 sval_u __cdecl node1(Enum_t type, sval_u val2);
 sval_u __cdecl node2(Enum_t type, sval_u val1, sval_u val2);

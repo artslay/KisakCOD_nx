@@ -1282,7 +1282,7 @@ yynewstate:
 			switch (yyn)
 			{
 			case 1:
-				yaccResult = node1(yyvsp[-1].val.type, yyvsp->val);// node2_
+				yaccResult = node_pair(yyvsp[-1].val, yyvsp->val);
 				break;
 			case 2:
 				yaccResult = node1(ENUM_expression, yyvsp->val);// node1
