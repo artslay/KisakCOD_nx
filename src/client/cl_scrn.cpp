@@ -214,11 +214,8 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #endif
                 SCR_ClearScreen();
 #ifdef __SWITCH__
-                // The renderer keeps refreshing the load screen remotely while
-                // DB_SyncXAssets waits. Draw the active map-load cinematic into
-                // each of those frames before UI_Refresh overlays the progress UI.
-                g_switchFrameStage = "frame/scr/draw_field/loading_cinematic";
-                SCR_DrawCinematic(0);
+                // The load cinematic is drawn after UI_Refresh below so the
+                // loading menu cannot cover a frame that has already been updated.
                 g_switchFrameStage = "frame/scr/draw_field/loading_refresh";
 #endif
                 goto LABEL_14;
@@ -245,19 +242,16 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #endif
             SCR_ClearScreen();
 #ifdef __SWITCH__
-            // Preserve the cinematic behind a fullscreen loading menu as well.
-            // Earlier CA_DISCONNECTED/CA_LOGO cases fall through here, so only
-            // draw it for the actual loading state.
-            if (connectionState == CA_LOADING)
-            {
-                g_switchFrameStage = "frame/scr/draw_field/loading_cinematic";
-                SCR_DrawCinematic(0);
-            }
             g_switchFrameStage = "frame/scr/draw_field/loading_ui";
 #endif
 			UI_Refresh();
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/draw_field/loading_ui_done";
+            if (connectionState == CA_LOADING && R_Cinematic_IsStarted())
+            {
+                g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_top";
+                SCR_DrawCinematic(0);
+            }
 #endif
             break;
         case CA_CINEMATIC:
@@ -298,6 +292,13 @@ LABEL_14:
         UI_Refresh();
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/ui_refresh_done";
+        if (connectionState == CA_LOADING && R_Cinematic_IsStarted())
+        {
+            // Submit the cinematic last so no later loading UI item can cover
+            // the new frame with the static briefing background.
+            g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_top";
+            SCR_DrawCinematic(0);
+        }
 #endif
 
 LABEL_15:;
