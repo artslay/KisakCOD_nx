@@ -2127,7 +2127,7 @@ yyacceptlab:
 
 void ScriptParse(sval_u *parseData, unsigned char user)
 {
-	yy_buffer_state buffer_state;
+	yy_buffer_state buffer_state{};
 
 	g_out_pos = -1;
 	g_sourcePos = 0;
