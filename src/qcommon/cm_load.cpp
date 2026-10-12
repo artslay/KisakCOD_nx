@@ -85,7 +85,7 @@ void __cdecl CM_Shutdown()
     const char *savedName; // [esp+0h] [ebp-4h]
 
     savedName = cm.name;
-    Com_Memset((uint32_t *)&cm, 0, 284);
+    Com_Memset((uint32_t *)&cm, 0, sizeof(cm));
     cm.name = savedName;
     iassert( !cm.isInUse );
 }
