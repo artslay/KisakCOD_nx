@@ -470,7 +470,7 @@ int __cdecl yylex()
 #ifdef KISAK_SWITCH
             // Keep the existing watchdog's detail field at the current source
             // offset, so a real parser stall identifies where it stopped.
-            Switch_SetProgressDetail(g_out_pos < 0 ? 0u : g_out_pos + 1u);
+            Switch_SetProgressDetail(g_out_pos == UINT32_MAX ? 0u : g_out_pos + 1u);
 #endif
 			// sval_u contains native 64-bit pointers on Switch. Lexer rules that
 			// write only stringValue/intValue/floatValue must not inherit the
