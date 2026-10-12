@@ -2600,8 +2600,23 @@ XAssetHeader __cdecl DB_FindXAssetDefaultHeaderInternal(XAssetType type)
                 break;
         }
     }
+#ifdef __SWITCH__
+    // "none" may be synthesized from the default weapon when it is absent
+    // from the loaded zones. The override chain is serialized as pool indices;
+    // unlike the hash-chain walk above, the original loop had no bounds/cycle
+    // check and could hang G_SetupWeaponDef if an index is corrupt.
+    uint32_t overrideGuard = 0;
+    while (assetEntry->entry.nextOverride)
+    {
+        const uint32_t overrideIndex = assetEntry->entry.nextOverride;
+        if (overrideIndex >= 0x8000u || ++overrideGuard > 0x8000u)
+            break;
+        assetEntry = &g_assetEntryPool[overrideIndex];
+    }
+#else
     while (assetEntry->entry.nextOverride)
         assetEntry = &g_assetEntryPool[assetEntry->entry.nextOverride];
+#endif
     return assetEntry->entry.asset.header;
 }
 
