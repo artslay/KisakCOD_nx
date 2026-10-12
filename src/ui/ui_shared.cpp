@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <unordered_map>
 #include <universal/profile.h>
 
 #ifdef KISAK_MP
@@ -122,6 +123,15 @@ static inline void Switch_UI_LogBadPointer(
     Switch_LogWrite(trace);
 }
 
+struct SwitchUIStatementValidationCacheEntry
+{
+    const expressionEntry **entries;
+    int numEntries;
+};
+
+static std::unordered_map<const statement_s *, SwitchUIStatementValidationCacheEntry>
+    g_switchUIValidatedStatements;
+
 static inline bool Switch_UI_ValidateStatement(
     const char *where,
     const char *field,
@@ -153,6 +163,18 @@ static inline bool Switch_UI_ValidateStatement(
     {
         Switch_UI_LogBadPointer(where, field, owner, statement->entries);
         return false;
+    }
+
+    // UI expression trees are loaded from immutable fastfile assets. Validate
+    // each tree once, rather than walking every entry again on every painted
+    // frame. Graphics-options menus have many more expressions than the main
+    // menu, so repeating these ABI checks needlessly costs CPU time on Switch.
+    const auto cached = g_switchUIValidatedStatements.find(statement);
+    if (cached != g_switchUIValidatedStatements.end() &&
+        cached->second.entries == statement->entries &&
+        cached->second.numEntries == statement->numEntries)
+    {
+        return true;
     }
 
     for (int i = 0; i < statement->numEntries; ++i)
@@ -190,6 +212,12 @@ static inline bool Switch_UI_ValidateStatement(
             return false;
         }
     }
+
+    g_switchUIValidatedStatements.insert_or_assign(
+        statement,
+        SwitchUIStatementValidationCacheEntry{
+            statement->entries,
+            statement->numEntries});
 
     return true;
 }
