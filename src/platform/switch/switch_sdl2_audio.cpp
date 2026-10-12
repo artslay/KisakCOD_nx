@@ -296,6 +296,21 @@ SDL_AudioDeviceID SDL_OpenAudioDevice(
         return 0;
     }
 
+    // Apply the pool-attach and sink configuration before starting Audren.
+    // audrvMemPoolAttach queues a state change in AudioDriver; it is not
+    // submitted to the renderer until audrvUpdate is called.
+    rc = audrvUpdate(&device->driver);
+    if (R_FAILED(rc))
+    {
+        audrvClose(&device->driver);
+        audrenExit();
+        std::free(device->callbackBuffer);
+        std::free(device->pool);
+        delete device;
+        std::snprintf(g_error, sizeof(g_error), "initial audrvUpdate failed (0x%x)", rc);
+        return 0;
+    }
+
     rc = audrenStartAudioRenderer();
     if (R_FAILED(rc))
     {
@@ -308,20 +323,19 @@ SDL_AudioDeviceID SDL_OpenAudioDevice(
         return 0;
     }
 
-    rc = audrvVoiceInit(
-        &device->driver,
-        0,
-        device->spec.channels,
-        PcmFormat_Int16,
-        device->spec.freq);
-    if (R_FAILED(rc))
+    if (!audrvVoiceInit(
+            &device->driver,
+            0,
+            device->spec.channels,
+            PcmFormat_Int16,
+            device->spec.freq))
     {
         audrvClose(&device->driver);
         audrenExit();
         std::free(device->callbackBuffer);
         std::free(device->pool);
         delete device;
-        std::snprintf(g_error, sizeof(g_error), "audrvVoiceInit failed (0x%x)", rc);
+        std::snprintf(g_error, sizeof(g_error), "%s", "audrvVoiceInit failed");
         return 0;
     }
 
