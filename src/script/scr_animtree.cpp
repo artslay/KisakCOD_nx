@@ -53,6 +53,47 @@ void __cdecl Scr_EmitAnimation(char *pos, uint32_t animName, uint32_t sourcePos)
         CompileError(sourcePos, "#using_animtree was not specified");
 }
 
+#ifdef __SWITCH__
+// Animation operands are 32-bit scr_anim_s values in final bytecode, but while
+// compiling they temporarily form a linked list of references. Never store
+// native 64-bit pointers in these 4-byte operand slots; store program-relative
+// offsets (+1 so zero remains the end-of-list marker).
+static constexpr uintptr_t SCR_ANIM_PROGRAM_CAPACITY = 0x100000u;
+static_assert(sizeof(scr_anim_s) == sizeof(uint32_t));
+
+static uint32_t Scr_EncodeAnimCodePos(const char *codePos)
+{
+    if (!codePos)
+        return 0;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(scrVarPub.programBuffer);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(codePos);
+    if (!base || address < base || address - base >= SCR_ANIM_PROGRAM_CAPACITY)
+    {
+        Com_Error(ERR_DROP, "Animation script reference is outside the script program buffer");
+        return 0;
+    }
+
+    return static_cast<uint32_t>(address - base + 1);
+}
+
+static const char *Scr_DecodeAnimCodePos(uint32_t encoded)
+{
+    if (!encoded)
+        return nullptr;
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(scrVarPub.programBuffer);
+    const uintptr_t offset = static_cast<uintptr_t>(encoded - 1);
+    if (!base || offset >= SCR_ANIM_PROGRAM_CAPACITY)
+    {
+        Com_Error(ERR_DROP, "Animation script reference offset is outside the script program buffer");
+        return nullptr;
+    }
+
+    return reinterpret_cast<const char *>(base + offset);
+}
+#endif
+
 void __cdecl Scr_EmitAnimationInternal(char *pos, uint32_t animName, uint32_t names)
 {
     uint32_t NewVariable; // eax
@@ -66,13 +107,21 @@ void __cdecl Scr_EmitAnimationInternal(char *pos, uint32_t animName, uint32_t na
     if (animId)
     {
         value = GetVariableValueAddress(animId);
+#ifdef __SWITCH__
+        *reinterpret_cast<uint32_t *>(pos) = Scr_EncodeAnimCodePos(value->u.codePosValue);
+#else
         *(const char **)pos = value->u.codePosValue;
+#endif
         value->u.codePosValue = pos;
     }
     else
     {
         NewVariable = GetNewVariable(names, animName);
+#ifdef __SWITCH__
+        *reinterpret_cast<uint32_t *>(pos) = 0;
+#else
         *(unsigned char**)pos = NULL;
+#endif
         tempValue.type = VAR_CODEPOS;
         tempValue.u.codePosValue = pos;
         SetVariableValue(NewVariable, &tempValue);
@@ -311,7 +360,11 @@ void __cdecl ConnectScriptToAnim(
 
         for (codePos = (char *)value->u.codePosValue; codePos; codePos = nextCodePos)
         {
+#ifdef __SWITCH__
+            nextCodePos = Scr_DecodeAnimCodePos(*reinterpret_cast<const uint32_t *>(codePos));
+#else
             nextCodePos = *(const char **)codePos;
+#endif
             *(scr_anim_s *)codePos = anim;
         }
 
