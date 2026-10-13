@@ -362,6 +362,9 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes)
 {
     int size; // [esp+30h] [ebp-8h]
     int lowBit; // [esp+34h] [ebp-4h]
+#ifdef KISAK_SWITCH
+    const uint32_t freedNode = nodeNum;
+#endif
 
     PROF_SCOPED("scriptMemory");
 
@@ -395,7 +398,7 @@ iassert((scrMemTreeDebugGlob.mt_usage_size[nodeNum] == size));
     }
     MT_AddMemoryNode(nodeNum, size);
 #ifdef KISAK_SWITCH
-    MT_RecordTreeOperation(6, nodeNum, static_cast<uint32_t>(numBytes), nodeNum);
+    MT_RecordTreeOperation(6, freedNode, static_cast<uint32_t>(numBytes), nodeNum);
 #endif
     Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
 }
@@ -413,6 +416,10 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
     int prevScore;
     int nextScore;
     int level;
+#ifdef KISAK_SWITCH
+    const uint32_t targetNode = static_cast<uint32_t>(oldNode);
+    const uint32_t targetSize = size;
+#endif
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
 
@@ -464,6 +471,9 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
 
                     if (!oldNodeValue.next)
                     {
+#ifdef KISAK_SWITCH
+                        MT_RecordTreeOperation(2, targetNode, targetSize, targetNode);
+#endif
                         return true;
                     }
 
@@ -480,6 +490,9 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
 
         if (oldNode == nodeNum)
         {
+#ifdef KISAK_SWITCH
+            MT_RecordTreeOperation(3, targetNode, targetSize, targetNode);
+#endif
             return false;
         }
 
@@ -497,6 +510,9 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
         }
     }
 
+#ifdef KISAK_SWITCH
+    MT_RecordTreeOperation(3, targetNode, targetSize, targetNode);
+#endif
     return false;
 }
 
@@ -576,6 +592,10 @@ void MT_AddMemoryNode(int newNode, int size)
     uint16_t *parentNode;
     int level;
     int score;
+#ifdef KISAK_SWITCH
+    const uint32_t insertedNode = static_cast<uint32_t>(newNode);
+    const uint32_t insertedSize = static_cast<uint32_t>(size);
+#endif
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
 
@@ -624,6 +644,9 @@ void MT_AddMemoryNode(int newNode, int size)
                     newNode = node;
                     node = *parentNode;
                 }
+#ifdef KISAK_SWITCH
+                MT_RecordTreeOperation(1, insertedNode, insertedSize, insertedNode);
+#endif
                 return;
             }
             level >>= 1;
@@ -649,6 +672,9 @@ void MT_AddMemoryNode(int newNode, int size)
 
     scrMemTreeGlob.nodes[newNode].prev = 0;
     scrMemTreeGlob.nodes[newNode].next = 0;
+#ifdef KISAK_SWITCH
+    MT_RecordTreeOperation(1, insertedNode, insertedSize, insertedNode);
+#endif
 }
 
 void MT_Error(const char* funcName, int numBytes)
