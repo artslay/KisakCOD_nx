@@ -635,7 +635,7 @@ void EmitCaseStatementInfo(uint32_t name, sval_u sourcePos)
 	}
 
 	//newCaseStatement = (CaseStatementInfo *)Hunk_AllocateTempMemoryHighInternal(sizeof(*newCaseStatement));
-	newCaseStatement = (CaseStatementInfo *)Hunk_AllocateTempMemoryHigh(16, "EmitCaseStatementInfo");
+	newCaseStatement = (CaseStatementInfo *)Hunk_AllocateTempMemoryHigh(sizeof(*newCaseStatement), "EmitCaseStatementInfo");
 
 	newCaseStatement->name = name;
 	newCaseStatement->codePos = (char *)TempMalloc(0);
