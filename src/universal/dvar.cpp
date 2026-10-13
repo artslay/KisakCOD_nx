@@ -213,7 +213,7 @@ void __cdecl PBdvar_set(const char *var_name, char *value)
         Dvar_SetFromStringByName(var_name, value);
 }
 
-char *__cdecl Dvar_InfoString(int localClientNum, char bit)
+char *__cdecl Dvar_InfoString(int localClientNum, uint32_t bit)
 {
     const char *UsernameForLocalClient; // eax
 
