@@ -16,6 +16,9 @@
 
 #undef GetObject 
 
+// Preserve the original capacity of 1024 child-block pointers on every target.
+static constexpr int SCR_BLOCK_POINTER_ARRAY_BYTES = 1024 * sizeof(scr_block_s *);
+
 scrCompilePub_t scrCompilePub;
 scrCompileGlob_t scrCompileGlob;
 
@@ -2375,7 +2378,7 @@ void __cdecl EmitForStatement(
     oldContinueChildCount = scrCompileGlob.continueChildCount;
     breakChildCount = 0;
     continueChildCount = 0;
-    continueChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(4096, "EmitForStatement");
+    continueChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(SCR_BLOCK_POINTER_ARRAY_BYTES, "EmitForStatement");
     scrCompileGlob.continueChildBlocks = continueChildBlocks;
     scrCompileGlob.continueChildCount = &continueChildCount;
     scrCompileGlob.breakBlock = forStatBlock->block;
@@ -2383,7 +2386,7 @@ void __cdecl EmitForStatement(
     {
         pos2 = 0;
         nextPos2 = 0;
-        breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(4096, "EmitForStatement");
+        breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(SCR_BLOCK_POINTER_ARRAY_BYTES, "EmitForStatement");
         scrCompileGlob.breakChildCount = &breakChildCount;
     }
     else
@@ -2503,7 +2506,7 @@ void __cdecl EmitWhileStatement(
     {
         pos2 = 0;
         nextPos2 = 0;
-        breakChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(4096, "EmitWhileStatement");
+        breakChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(SCR_BLOCK_POINTER_ARRAY_BYTES, "EmitWhileStatement");
         scrCompileGlob.breakChildCount = &breakChildCount;
     }
     else
@@ -2890,7 +2893,7 @@ void __cdecl EmitSwitchStatementList(sval_u val, bool lastStatement, unsigned in
     oldBreakChildCount = scrCompileGlob.breakChildCount;
     oldBreakBlock = scrCompileGlob.breakBlock;
     breakChildCount = 0;
-    breakChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(4096, "EmitSwitchStatementList");
+    breakChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(SCR_BLOCK_POINTER_ARRAY_BYTES, "EmitSwitchStatementList");
     scrCompileGlob.breakChildBlocks = breakChildBlocks;
     scrCompileGlob.breakChildCount = &breakChildCount;
     scrCompileGlob.breakBlock = 0;
@@ -3846,13 +3849,13 @@ void __cdecl Scr_CalcLocalVarsWhileStatement(sval_u expr, sval_u stmt, scr_block
     oldContinueChildCount = scrCompileGlob.continueChildCount;
     breakChildCount = 0;
     continueChildCount = 0;
-    continueChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(4096, "Scr_CalcLocalVarsWhileStatement");
+    continueChildBlocks = (scr_block_s**)Hunk_AllocateTempMemoryHigh(SCR_BLOCK_POINTER_ARRAY_BYTES, "Scr_CalcLocalVarsWhileStatement");
     scrCompileGlob.continueChildBlocks = continueChildBlocks;
     scrCompileGlob.continueChildCount = &continueChildCount;
     abortLevel = block->abortLevel;
     if (constConditional)
     {
-        breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(4096, "Scr_CalcLocalVarsWhileStatement");
+        breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(SCR_BLOCK_POINTER_ARRAY_BYTES, "Scr_CalcLocalVarsWhileStatement");
         scrCompileGlob.breakChildCount = &breakChildCount;
     }
     else
@@ -3921,13 +3924,13 @@ void __cdecl Scr_CalcLocalVarsForStatement(
     oldContinueChildCount = scrCompileGlob.continueChildCount;
     breakChildCount = 0;
     continueChildCount = 0;
-    continueChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(4096, "Scr_CalcLocalVarsForStatement");
+    continueChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(SCR_BLOCK_POINTER_ARRAY_BYTES, "Scr_CalcLocalVarsForStatement");
     scrCompileGlob.continueChildBlocks = continueChildBlocks;
     scrCompileGlob.continueChildCount = &continueChildCount;
     abortLevel = block->abortLevel;
     if (constConditional)
     {
-        breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(4096, "Scr_CalcLocalVarsForStatement");
+        breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(SCR_BLOCK_POINTER_ARRAY_BYTES, "Scr_CalcLocalVarsForStatement");
         scrCompileGlob.breakChildCount = &breakChildCount;
     }
     else
@@ -3993,13 +3996,13 @@ void __cdecl Scr_CalcLocalVarsSwitchStatement(sval_u stmtlist, scr_block_s *bloc
     oldBreakChildBlocks = scrCompileGlob.breakChildBlocks;
     oldBreakChildCount = scrCompileGlob.breakChildCount;
     breakChildCount = 0;
-    breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(4096, "Scr_CalcLocalVarsSwitchStatement");
+    breakChildBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(SCR_BLOCK_POINTER_ARRAY_BYTES, "Scr_CalcLocalVarsSwitchStatement");
     scrCompileGlob.breakChildBlocks = breakChildBlocks;
     scrCompileGlob.breakChildCount = &breakChildCount;
     childCount = 0;
     currentBlock = 0;
     hasDefault = 0;
-    childBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(4096, "Scr_CalcLocalVarsSwitchStatement");
+    childBlocks = (scr_block_s **)Hunk_AllocateTempMemoryHigh(SCR_BLOCK_POINTER_ARRAY_BYTES, "Scr_CalcLocalVarsSwitchStatement");
     for (node = stmtlist.node[0].node[1].node; node; node = node[1].node)
     {
         if (node[0].node[0].type == ENUM_case || node[0].node[0].type == ENUM_default)

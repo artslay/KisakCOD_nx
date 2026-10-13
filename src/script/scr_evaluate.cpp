@@ -793,9 +793,10 @@ void __cdecl Scr_CompileTextInternal(const char *text, ScriptExpression_t *scrip
         else
         {
             scrCompilePub.developer_statement = 3;
-            expr = (uint32_t *)scriptExpr->parseData.type;
-            scriptExpr->parseData.type = (Enum_t)*(uint32_t *)(scriptExpr->parseData.type + 4);
-            if (*expr == 65)
+            parseNode = scriptExpr->parseData.node;
+            parseType = parseNode[0].type;
+            scriptExpr->parseData = parseNode[1];
+            if (parseType == ENUM_expression)
             {
                 varUsagePos = scrVarPub.varUsagePos;
                 if (!scrVarPub.varUsagePos)
@@ -808,7 +809,7 @@ void __cdecl Scr_CompileTextInternal(const char *text, ScriptExpression_t *scrip
             }
             else
             {
-                if (*expr != 83)
+                if (parseType != ENUM_statement)
                     MyAssertHandler(".\\script\\scr_evaluate.cpp", 2142, 0, "%s", "expr.node[0].type == ENUM_statement");
                 user = Hunk_UserCreate(0x10000, "Scr_CompileTextInternal", 0, 0, 0);
                 TempMemoryReset(user);

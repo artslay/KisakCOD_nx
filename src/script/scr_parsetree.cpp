@@ -333,7 +333,7 @@ sval_u __cdecl debugger_buffer(Enum_t type, char *buf, uint32_t size, int alignm
     sval_u *result = Scr_AllocDebugExpr(type, size + alignMask + 2 * sizeof(sval_u), "debugger_buffer");
     uint8_t *bufCopy = (uint8_t *)(((uintptr_t)&result[2] + alignMask) & ~(uintptr_t)alignMask);
     memcpy(bufCopy, buf, size);
-    result[1].intValue = static_cast<int>(reinterpret_cast<uintptr_t>(bufCopy));
+    result[1].codePosValue = reinterpret_cast<const char *>(bufCopy);
     return result[0];
 }
 
