@@ -88,7 +88,7 @@ static void MT_ReportInvariantViolation(
         ++mtInvariantReportCount;
         Com_Printf(
             CON_CHANNEL_PARSERSCRIPT,
-            "[KisakCOD][MEMTREE INVARIANT] phase=%s node=%u bucket=%u usage=%u/%u links=%u/%u extra=%u\\n",
+            "[KisakCOD][MEMTREE INVARIANT] phase=%s node=%u bucket=%u usage=%u/%u links=%u/%u extra=%u\n",
             phase,
             node,
             bucket,
