@@ -4371,12 +4371,13 @@ void __cdecl LinkThread(unsigned int threadId, VariableValue *pos, bool allowFar
                     return;
                 }
             }
-            if (!pos->type || !allowFarCall && *(DWORD*)value->u.intValue == 1)
+            char *patchPos = const_cast<char *>(value->u.codePosValue);
+            if (!pos->type || (!allowFarCall && *reinterpret_cast<const uint32_t *>(patchPos) == 1))
             {
-                CompileError2((char*)value->u.intValue, "unknown function");
+                CompileError2(patchPos, "unknown function");
                 return;
             }
-            *(DWORD*)value->u.intValue = pos->u.intValue;
+            *reinterpret_cast<const char **>(patchPos) = pos->u.codePosValue;
             RemoveVariable(threadId, i + 2);
         }
         RemoveVariable(threadId, 0);
