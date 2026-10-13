@@ -115,6 +115,30 @@ static void MT_ReportInvariantViolation(
     }
 }
 
+static bool MT_CheckSentinelAtPhase(const char *phase, uint32_t extra)
+{
+    if (mtInvariantReportCount)
+        return true;
+
+    if (scrMemTreeDebugGlob.mt_usage[0] ||
+        scrMemTreeDebugGlob.mt_usage_size[0] ||
+        scrMemTreeGlob.nodes[0].prev ||
+        scrMemTreeGlob.nodes[0].next)
+    {
+        MT_ReportInvariantViolation(
+            phase,
+            0,
+            UINT32_MAX,
+            scrMemTreeDebugGlob.mt_usage[0],
+            scrMemTreeDebugGlob.mt_usage_size[0],
+            scrMemTreeGlob.nodes[0].prev,
+            scrMemTreeGlob.nodes[0].next,
+            extra);
+        return true;
+    }
+    return false;
+}
+
 // Validate the free trees immediately after completed allocator mutations.
 // The full walk is intentionally limited to the first 4096 allocation/free
 // calls on Switch: this is a diagnostic window, not a permanent per-frame cost.
@@ -333,6 +357,7 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
     Sys_EnterCriticalSection(CRITSECT_MEMORY_TREE);
 #ifdef KISAK_SWITCH
     Switch_SetProgressPhase("memtree/alloc_locked");
+    MT_CheckSentinelAtPhase("alloc_entry_sentinel", static_cast<uint32_t>(numBytes));
 #endif
     for (newSize = size; ; ++newSize)
     {
@@ -374,12 +399,16 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
 #endif
     MT_RemoveHeadMemoryNode(newSize);
 #ifdef KISAK_SWITCH
+    MT_CheckSentinelAtPhase("alloc_after_remove_head", nodeNum);
     Switch_SetProgressPhase("memtree/split_and_add");
 #endif
     while (newSize != size)
     {
         --newSize;
         MT_AddMemoryNode(nodeNum + (1 << newSize), newSize);
+#ifdef KISAK_SWITCH
+        MT_CheckSentinelAtPhase("alloc_after_split_add", nodeNum + (1u << newSize));
+#endif
     }
     ++scrMemTreeGlob.totalAlloc;
     scrMemTreeGlob.totalAllocBuckets += 1 << size;
@@ -669,6 +698,7 @@ iassert((scrMemTreeDebugGlob.mt_usage_size[nodeNum] == size));
 #ifdef KISAK_SWITCH
     // Check after buddy removal/merge but before the freed node is inserted.
     // This separates corruption in MT_RemoveMemoryNode from corruption in MT_AddMemoryNode.
+    MT_CheckSentinelAtPhase("free_after_buddy_merge", freedNode);
     MT_ValidateFreeTrees(
         "pre_free_add_reachable",
         "pre_free_add_misaligned",
@@ -677,6 +707,7 @@ iassert((scrMemTreeDebugGlob.mt_usage_size[nodeNum] == size));
 #endif
     MT_AddMemoryNode(nodeNum, size);
 #ifdef KISAK_SWITCH
+    MT_CheckSentinelAtPhase("free_after_add_node", freedNode);
     MT_RecordTreeOperation(6, freedNode, static_cast<uint32_t>(numBytes), nodeNum);
     MT_ValidateFreeTrees(
         "post_free_add_reachable",
