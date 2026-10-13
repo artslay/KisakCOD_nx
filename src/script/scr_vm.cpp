@@ -1297,7 +1297,7 @@ void __cdecl VM_TerminateStack(uint32_t endLocalId, uint32_t startLocalId, Varia
                 if (stackValue->size < sizea)
                     MyAssertHandler(".\\script\\scr_vm.cpp", 2968, 0, "%s", "stackValue->size >= size");
                 Scr_SetThreadWaitTime(startLocalId, scrVarPub.time);
-                if (!u)
+                if (!u.codePosValue)
                     MyAssertHandler(".\\script\\scr_vm.cpp", 2971, 0, "%s", "u.codePosValue");
                 stackValue->pos = u.codePosValue;
                 stackValue->localId = parentLocalId;
