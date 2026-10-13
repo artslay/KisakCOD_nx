@@ -24,7 +24,20 @@ extern void Switch_UpdateMemoryTreeWalk(
     uint32_t parentIndex,
     uint32_t chosenNode,
     uint32_t prevScore,
-    uint32_t nextScore);
+    uint32_t nextScore,
+    uint32_t currentUsage,
+    uint32_t currentUsageSize,
+    uint32_t rawPrev,
+    uint32_t rawNext);
+extern void Switch_RecordMemoryTreeOperation(
+    uint32_t op,
+    uint32_t arg0,
+    uint32_t arg1,
+    uint32_t node,
+    uint32_t prev,
+    uint32_t next,
+    uint32_t usage,
+    uint32_t usageSize);
 #endif
 
 scrMemTreePub_t scrMemTreePub;
@@ -32,12 +45,31 @@ int marker_scr_memorytree;
 
 scrMemTreeGlob_t scrMemTreeGlob;
 
+
 struct scrMemTreeDebugGlob_t // sizeof=0x20000
 {                                       // ...
     uint8_t mt_usage[MEMORY_NODE_COUNT];    // ...
     uint8_t mt_usage_size[MEMORY_NODE_COUNT]; // ...
 };
 scrMemTreeDebugGlob_t scrMemTreeDebugGlob = { 0 };
+
+#ifdef KISAK_SWITCH
+static void MT_RecordTreeOperation(uint32_t op, uint32_t arg0, uint32_t arg1, uint32_t node)
+{
+    uint32_t prev = UINT32_MAX;
+    uint32_t next = UINT32_MAX;
+    uint32_t usage = UINT32_MAX;
+    uint32_t usageSize = UINT32_MAX;
+    if (node < MEMORY_NODE_COUNT)
+    {
+        prev = scrMemTreeGlob.nodes[node].prev;
+        next = scrMemTreeGlob.nodes[node].next;
+        usage = scrMemTreeDebugGlob.mt_usage[node];
+        usageSize = scrMemTreeDebugGlob.mt_usage_size[node];
+    }
+    Switch_RecordMemoryTreeOperation(op, arg0, arg1, node, prev, next, usage, usageSize);
+}
+#endif
 
 
 
@@ -159,6 +191,9 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
 
     scrMemTreeDebugGlob.mt_usage[nodeNum] = type;
     scrMemTreeDebugGlob.mt_usage_size[nodeNum] = size;
+#ifdef KISAK_SWITCH
+    MT_RecordTreeOperation(5, static_cast<uint32_t>(numBytes), static_cast<uint32_t>(type), nodeNum);
+#endif
     Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
     return nodeNum;
 }
@@ -215,10 +250,16 @@ void MT_RemoveHeadMemoryNode(int size)
     uint16_t *parentNode;
     int prevScore;
     int nextScore;
+#ifdef KISAK_SWITCH
+    uint32_t walkRoot;
+#endif
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
 
     parentNode = &scrMemTreeGlob.head[size];
+#ifdef KISAK_SWITCH
+    walkRoot = *parentNode;
+#endif
     oldNodeValue = scrMemTreeGlob.nodes[*parentNode];
 #ifdef KISAK_SWITCH
     uint32_t currentNode = *parentNode;
@@ -250,7 +291,11 @@ void MT_RemoveHeadMemoryNode(int size)
                     parentIndex,
                     0,
                     UINT32_MAX,
-                    UINT32_MAX);
+                    UINT32_MAX,
+                    scrMemTreeDebugGlob.mt_usage[currentNode],
+                    scrMemTreeDebugGlob.mt_usage_size[currentNode],
+                    scrMemTreeGlob.nodes[currentNode].prev,
+                    scrMemTreeGlob.nodes[currentNode].next);
 #endif
                 break;
             }
@@ -294,7 +339,11 @@ void MT_RemoveHeadMemoryNode(int size)
             parentIndex,
             static_cast<uint32_t>(oldNode),
             static_cast<uint32_t>(prevScore),
-            static_cast<uint32_t>(nextScore));
+            static_cast<uint32_t>(nextScore),
+            scrMemTreeDebugGlob.mt_usage[currentNode],
+            scrMemTreeDebugGlob.mt_usage_size[currentNode],
+            scrMemTreeGlob.nodes[currentNode].prev,
+            scrMemTreeGlob.nodes[currentNode].next);
 #endif
 
         tempNodeValue = oldNodeValue;
@@ -304,6 +353,9 @@ void MT_RemoveHeadMemoryNode(int size)
         currentNode = static_cast<uint32_t>(oldNode);
 #endif
     }
+#ifdef KISAK_SWITCH
+    MT_RecordTreeOperation(4, static_cast<uint32_t>(size), walkRoot, walkRoot);
+#endif
 }
 
 void MT_FreeIndex(uint32_t nodeNum, int numBytes)
@@ -342,6 +394,9 @@ iassert((scrMemTreeDebugGlob.mt_usage_size[nodeNum] == size));
         ++size;
     }
     MT_AddMemoryNode(nodeNum, size);
+#ifdef KISAK_SWITCH
+    MT_RecordTreeOperation(6, nodeNum, static_cast<uint32_t>(numBytes), nodeNum);
+#endif
     Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
 }
 
