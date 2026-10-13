@@ -49,7 +49,64 @@ static std::atomic<uint32_t> g_switchMemTreeTraceChosen{UINT32_MAX};
 static std::atomic<uint32_t> g_switchMemTreeTracePrevScore{UINT32_MAX};
 static std::atomic<uint32_t> g_switchMemTreeTraceNextScore{UINT32_MAX};
 static std::atomic<uint32_t> g_switchMemTreeTraceSteps{0};
+static std::atomic<uint32_t> g_switchMemTreeTraceCurrentUsage{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceCurrentUsageSize{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceRawPrev{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceRawNext{UINT32_MAX};
 static std::atomic<uint32_t> g_switchMemTreeTraceTrail[SWITCH_MEMTREE_TRACE_TRAIL_COUNT]{};
+
+static constexpr uint32_t SWITCH_MEMTREE_EVENT_COUNT = 8;
+struct SwitchMemTreeEvent
+{
+    std::atomic<uint32_t> sequence{0};
+    std::atomic<uint32_t> op{UINT32_MAX};
+    std::atomic<uint32_t> arg0{UINT32_MAX};
+    std::atomic<uint32_t> arg1{UINT32_MAX};
+    std::atomic<uint32_t> node{UINT32_MAX};
+    std::atomic<uint32_t> prev{UINT32_MAX};
+    std::atomic<uint32_t> next{UINT32_MAX};
+    std::atomic<uint32_t> usage{UINT32_MAX};
+    std::atomic<uint32_t> usageSize{UINT32_MAX};
+};
+static SwitchMemTreeEvent g_switchMemTreeEvents[SWITCH_MEMTREE_EVENT_COUNT];
+static std::atomic<uint32_t> g_switchMemTreeEventSequence{0};
+
+static const char *Switch_MemTreeOperationName(uint32_t op)
+{
+    switch (op)
+    {
+    case 1: return "add";
+    case 2: return "remove_hit";
+    case 3: return "remove_miss";
+    case 4: return "remove_head_done";
+    case 5: return "alloc_done";
+    case 6: return "free_done";
+    default: return "unknown";
+    }
+}
+
+void Switch_RecordMemoryTreeOperation(
+    uint32_t op,
+    uint32_t arg0,
+    uint32_t arg1,
+    uint32_t node,
+    uint32_t prev,
+    uint32_t next,
+    uint32_t usage,
+    uint32_t usageSize)
+{
+    const uint32_t sequence = g_switchMemTreeEventSequence.fetch_add(1, std::memory_order_relaxed) + 1u;
+    SwitchMemTreeEvent &event = g_switchMemTreeEvents[sequence % SWITCH_MEMTREE_EVENT_COUNT];
+    event.op.store(op, std::memory_order_relaxed);
+    event.arg0.store(arg0, std::memory_order_relaxed);
+    event.arg1.store(arg1, std::memory_order_relaxed);
+    event.node.store(node, std::memory_order_relaxed);
+    event.prev.store(prev, std::memory_order_relaxed);
+    event.next.store(next, std::memory_order_relaxed);
+    event.usage.store(usage, std::memory_order_relaxed);
+    event.usageSize.store(usageSize, std::memory_order_relaxed);
+    event.sequence.store(sequence, std::memory_order_release);
+}
 
 void Switch_BeginMemoryTreeWalk(
     uint32_t requestBytes,
@@ -85,7 +142,11 @@ void Switch_UpdateMemoryTreeWalk(
     uint32_t parentIndex,
     uint32_t chosenNode,
     uint32_t prevScore,
-    uint32_t nextScore)
+    uint32_t nextScore,
+    uint32_t currentUsage,
+    uint32_t currentUsageSize,
+    uint32_t rawPrev,
+    uint32_t rawNext)
 {
     g_switchMemTreeTraceCurrent.store(currentNode, std::memory_order_relaxed);
     g_switchMemTreeTracePrev.store(prev, std::memory_order_relaxed);
@@ -95,6 +156,10 @@ void Switch_UpdateMemoryTreeWalk(
     g_switchMemTreeTraceChosen.store(chosenNode, std::memory_order_relaxed);
     g_switchMemTreeTracePrevScore.store(prevScore, std::memory_order_relaxed);
     g_switchMemTreeTraceNextScore.store(nextScore, std::memory_order_relaxed);
+    g_switchMemTreeTraceCurrentUsage.store(currentUsage, std::memory_order_relaxed);
+    g_switchMemTreeTraceCurrentUsageSize.store(currentUsageSize, std::memory_order_relaxed);
+    g_switchMemTreeTraceRawPrev.store(rawPrev, std::memory_order_relaxed);
+    g_switchMemTreeTraceRawNext.store(rawNext, std::memory_order_relaxed);
     g_switchMemTreeTraceTrail[step % SWITCH_MEMTREE_TRACE_TRAIL_COUNT].store(currentNode, std::memory_order_relaxed);
     g_switchMemTreeTraceSteps.store(step, std::memory_order_release);
 }
@@ -240,6 +305,49 @@ static void SwitchProgressWatchdogMain()
             if (!trailUsed)
                 std::snprintf(trail, sizeof(trail), "(empty)");
 
+            char history[400];
+            size_t historyUsed = 0;
+            history[0] = '\0';
+            const uint32_t eventEnd = g_switchMemTreeEventSequence.load(std::memory_order_acquire);
+            const uint32_t eventStart = eventEnd >= SWITCH_MEMTREE_EVENT_COUNT
+                ? eventEnd - SWITCH_MEMTREE_EVENT_COUNT + 1u
+                : 1u;
+            for (uint32_t sequence = eventStart; sequence <= eventEnd; ++sequence)
+            {
+                SwitchMemTreeEvent &event = g_switchMemTreeEvents[sequence % SWITCH_MEMTREE_EVENT_COUNT];
+                if (event.sequence.load(std::memory_order_acquire) != sequence)
+                    continue;
+                const uint32_t op = event.op.load(std::memory_order_relaxed);
+                const uint32_t arg0 = event.arg0.load(std::memory_order_relaxed);
+                const uint32_t arg1 = event.arg1.load(std::memory_order_relaxed);
+                const uint32_t node = event.node.load(std::memory_order_relaxed);
+                const uint32_t prev = event.prev.load(std::memory_order_relaxed);
+                const uint32_t next = event.next.load(std::memory_order_relaxed);
+                const uint32_t usage = event.usage.load(std::memory_order_relaxed);
+                const uint32_t usageSize = event.usageSize.load(std::memory_order_relaxed);
+                if (event.sequence.load(std::memory_order_acquire) != sequence)
+                    continue;
+                const int written = std::snprintf(
+                    history + historyUsed,
+                    sizeof(history) - historyUsed,
+                    "%s%u:%s(%u,%u)->%u[%u/%u;u=%u/%u]",
+                    historyUsed ? " " : "",
+                    sequence,
+                    Switch_MemTreeOperationName(op),
+                    arg0,
+                    arg1,
+                    node,
+                    prev,
+                    next,
+                    usage,
+                    usageSize);
+                if (written < 0 || static_cast<size_t>(written) >= sizeof(history) - historyUsed)
+                    break;
+                historyUsed += static_cast<size_t>(written);
+            }
+            if (!historyUsed)
+                std::snprintf(history, sizeof(history), "(empty)");
+
             char context[80];
             SwitchFormatScriptContext(
                 context,
@@ -250,7 +358,7 @@ static void SwitchProgressWatchdogMain()
             std::snprintf(
                 line,
                 sizeof(line),
-                "[KisakCOD][MEMTREE WALK] t=%us requestBytes=%u type=%u requestBucket=%u treeBucket=%u root=%u steps=%u current=%u links=%u/%u parentSlot=%u:%u chosen=%u scores=%u/%u path=%s script=%s lexerDetail=%u context=\"%s\"\n",
+                "[KisakCOD][MEMTREE WALK] t=%us requestBytes=%u type=%u requestBucket=%u treeBucket=%u root=%u steps=%u current=%u links=%u/%u parentSlot=%u:%u chosen=%u scores=%u/%u nodeUsage=%u/%u rawLinks=%u/%u path=%s script=%s lexerDetail=%u context=\"%s\"\n[KisakCOD][MEMTREE HISTORY] ops=\"%s\"\n",
                 tick * 5u,
                 g_switchMemTreeTraceRequestBytes.load(std::memory_order_relaxed),
                 g_switchMemTreeTraceRequestType.load(std::memory_order_relaxed),
@@ -266,10 +374,15 @@ static void SwitchProgressWatchdogMain()
                 g_switchMemTreeTraceChosen.load(std::memory_order_relaxed),
                 g_switchMemTreeTracePrevScore.load(std::memory_order_relaxed),
                 g_switchMemTreeTraceNextScore.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceCurrentUsage.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceCurrentUsageSize.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceRawPrev.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceRawNext.load(std::memory_order_relaxed),
                 trail,
                 progressScriptName[0] ? progressScriptName : "(none)",
                 progressDetail,
-                context);
+                context,
+                history);
             Switch_LogWrite(line);
         }
 
