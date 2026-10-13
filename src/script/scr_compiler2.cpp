@@ -2623,7 +2623,7 @@ void EmitBreakStatement(sval_u sourcePos, scr_block_s *block)
 		std::snprintf(
 			line,
 			sizeof(line),
-			"[KisakCOD][SCRIPT BREAK EMIT] fileId=%u threadId=%u developer=%d sourcePos=%u statement=%p slot=0x%llx next=0x%llx previous=0x%llx tempUser=%p programUser=%p codeEnd=0x%llx\\n",
+			"[KisakCOD][SCRIPT BREAK EMIT] fileId=%u threadId=%u developer=%d sourcePos=%u statement=%p slot=0x%llx next=0x%llx previous=0x%llx tempUser=%p programUser=%p codeEnd=0x%llx\n",
 			static_cast<unsigned int>(scrCompileGlob.fileId),
 			static_cast<unsigned int>(scrCompileGlob.threadId),
 			static_cast<int>(scrCompilePub.developer_statement),
