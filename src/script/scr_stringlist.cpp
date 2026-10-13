@@ -684,11 +684,9 @@ uint32_t SL_GetString(const char* str, uint32_t user)
 
 int SL_GetRefStringLen(RefString* refString)
 {
-	if (!refString->byteLen)
-	{
-		Com_Error(ERR_DROP, "invalid zero-length script string");
-		return 0;
-	}
+	// byteLen stores only the low 8 bits of the string length (including NUL).
+	// A zero byteLen therefore represents a length divisible by 256, not an
+	// empty string; the loop below resolves the full length by scanning for NUL.
 	int len = (uint8_t)(refString->byteLen - 1);
 	const uintptr_t base = (uintptr_t)scrMemTreePub.mt_buffer;
 	const uintptr_t ptr = (uintptr_t)refString->str;
