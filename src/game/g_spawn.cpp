@@ -18,21 +18,24 @@
 
 const ent_field_t fields_1[16] =
 {
-  { "classname", 284, F_STRING, &Scr_ReadOnlyField },
-  { "origin", 224, F_VECTOR, &Scr_SetOrigin },
-  { "model", 280, F_MODEL, &Scr_ReadOnlyField },
-  { "spawnflags", 300, F_INT, &Scr_ReadOnlyField },
-  { "target", 290, F_STRING, NULL },
-  { "targetname", 292, F_STRING, NULL },
-  { "count", 340, F_INT, NULL },
-  { "health", 324, F_INT, &Scr_SetHealth },
-  { "dmg", 336, F_INT, NULL },
-  { "angles", 236, F_VECTOR, &Scr_SetAngles },
-  { "script_linkname", 286, F_STRING, NULL },
-  { "script_noteworthy", 288, F_STRING, NULL },
-  { "maxhealth", 328, F_INT, NULL },
-  { "anglelerprate", 616, F_FLOAT, NULL },
-  { "activator", 348, F_ENTITY, &Scr_ReadOnlyField },
+  // These offsets are consumed against the native AArch64 gentity_s layout.
+  // The previous numeric values were 32-bit PC offsets; in particular,
+  // classname at 284 overlapped the high half of scr_vehicle at offset 280.
+  { "classname", offsetof(gentity_s, classname), F_STRING, &Scr_ReadOnlyField },
+  { "origin", offsetof(gentity_s, r) + offsetof(entityShared_t, currentOrigin), F_VECTOR, &Scr_SetOrigin },
+  { "model", offsetof(gentity_s, model), F_MODEL, &Scr_ReadOnlyField },
+  { "spawnflags", offsetof(gentity_s, spawnflags), F_INT, &Scr_ReadOnlyField },
+  { "target", offsetof(gentity_s, target), F_STRING, NULL },
+  { "targetname", offsetof(gentity_s, targetname), F_STRING, NULL },
+  { "count", offsetof(gentity_s, count), F_INT, NULL },
+  { "health", offsetof(gentity_s, health), F_INT, &Scr_SetHealth },
+  { "dmg", offsetof(gentity_s, damage), F_INT, NULL },
+  { "angles", offsetof(gentity_s, r) + offsetof(entityShared_t, currentAngles), F_VECTOR, &Scr_SetAngles },
+  { "script_linkname", offsetof(gentity_s, script_linkName), F_STRING, NULL },
+  { "script_noteworthy", offsetof(gentity_s, script_noteworthy), F_STRING, NULL },
+  { "maxhealth", offsetof(gentity_s, maxHealth), F_INT, NULL },
+  { "anglelerprate", offsetof(gentity_s, angleLerpRate), F_FLOAT, NULL },
+  { "activator", offsetof(gentity_s, activator), F_ENTITY, &Scr_ReadOnlyField },
   { NULL, 0, F_INT, NULL }
 };
 
