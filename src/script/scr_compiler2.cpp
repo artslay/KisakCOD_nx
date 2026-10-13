@@ -971,19 +971,33 @@ void Scr_TransferBlock(scr_block_s *from, scr_block_s *to)
 			to->localVarsPublicCount++;
 		}
 
+		// Local-variable slots are indexed in reverse stack order. When a
+		// variable is inserted earlier in the list, move its initialization
+		// state with the slot as well; otherwise later parameter/local lookup
+		// can treat a different variable as already initialized.
 		while (j > i)
 		{
 			to->localVars[j] = to->localVars[j - 1];
+
+			const uint8_t fromMask = static_cast<uint8_t>(1u << ((j - 1) & 7));
+			const bool wasInitialized = (to->localVarsInitBits[(j - 1) >> 3] & fromMask) != 0;
+			const uint8_t toMask = static_cast<uint8_t>(1u << (j & 7));
+			if (wasInitialized)
+				to->localVarsInitBits[j >> 3] |= toMask;
+			else
+				to->localVarsInitBits[j >> 3] &= static_cast<uint8_t>(~toMask);
+
 			j--;
 		}
 
 		to->localVars[i].name = name;
 		to->localVars[i].sourcePos = sourcePos;
 
-		if ((1 << (i & 7)) & from->localVarsInitBits[i >> 3])
-		{
-			to->localVarsInitBits[i >> 3] |= 1 << (i & 7);
-		}
+		const uint8_t initMask = static_cast<uint8_t>(1u << (i & 7));
+		if ((from->localVarsInitBits[i >> 3] & initMask) != 0)
+			to->localVarsInitBits[i >> 3] |= initMask;
+		else
+			to->localVarsInitBits[i >> 3] &= static_cast<uint8_t>(~initMask);
 	}
 
 	iassert(from->localVarsCreateCount <= to->localVarsPublicCount);
