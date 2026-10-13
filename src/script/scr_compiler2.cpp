@@ -5035,7 +5035,7 @@ void EmitSwitchStatement(sval_u expr, sval_u stmtlist, sval_u sourcePos, bool la
 	}
 
 	*(unsigned short *)pos2 = num;
-	qsort(pos3, num, 8u, CompareCaseInfo);
+	qsort(pos3, num, sizeof(uintptr_t) * 2, CompareCaseInfo);
 
 	while (num > 1)
 	{
@@ -5051,7 +5051,7 @@ void EmitSwitchStatement(sval_u expr, sval_u stmtlist, sval_u sourcePos, bool la
 			}
 		}
 		--num;
-		pos3 += 8;
+		pos3 += sizeof(uintptr_t) * 2;
 	}
 
 	ConnectBreakStatements();
