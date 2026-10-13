@@ -33,6 +33,72 @@ static std::atomic<const char *> g_switchProgressScriptSource{nullptr};
 static std::mutex g_switchProgressScriptMutex;
 static char g_switchProgressScriptName[128] = {};
 
+// Detailed, lock-free snapshot for the script-memory-tree removal walk.
+static constexpr uint32_t SWITCH_MEMTREE_TRACE_TRAIL_COUNT = 16;
+static std::atomic<uint32_t> g_switchMemTreeTraceRequestBytes{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceRequestType{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceRequestBucket{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceTreeBucket{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceRoot{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceCurrent{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTracePrev{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceNext{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceParentKind{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceParentIndex{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceChosen{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTracePrevScore{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceNextScore{UINT32_MAX};
+static std::atomic<uint32_t> g_switchMemTreeTraceSteps{0};
+static std::atomic<uint32_t> g_switchMemTreeTraceTrail[SWITCH_MEMTREE_TRACE_TRAIL_COUNT]{};
+
+void Switch_BeginMemoryTreeWalk(
+    uint32_t requestBytes,
+    uint32_t requestType,
+    uint32_t requestBucket,
+    uint32_t treeBucket,
+    uint32_t rootNode)
+{
+    g_switchMemTreeTraceRequestBytes.store(requestBytes, std::memory_order_relaxed);
+    g_switchMemTreeTraceRequestType.store(requestType, std::memory_order_relaxed);
+    g_switchMemTreeTraceRequestBucket.store(requestBucket, std::memory_order_relaxed);
+    g_switchMemTreeTraceTreeBucket.store(treeBucket, std::memory_order_relaxed);
+    g_switchMemTreeTraceRoot.store(rootNode, std::memory_order_relaxed);
+    g_switchMemTreeTraceCurrent.store(rootNode, std::memory_order_relaxed);
+    g_switchMemTreeTracePrev.store(UINT32_MAX, std::memory_order_relaxed);
+    g_switchMemTreeTraceNext.store(UINT32_MAX, std::memory_order_relaxed);
+    g_switchMemTreeTraceParentKind.store(0, std::memory_order_relaxed);
+    g_switchMemTreeTraceParentIndex.store(treeBucket, std::memory_order_relaxed);
+    g_switchMemTreeTraceChosen.store(UINT32_MAX, std::memory_order_relaxed);
+    g_switchMemTreeTracePrevScore.store(UINT32_MAX, std::memory_order_relaxed);
+    g_switchMemTreeTraceNextScore.store(UINT32_MAX, std::memory_order_relaxed);
+    for (auto &node : g_switchMemTreeTraceTrail)
+        node.store(UINT32_MAX, std::memory_order_relaxed);
+    g_switchMemTreeTraceSteps.store(0, std::memory_order_release);
+}
+
+void Switch_UpdateMemoryTreeWalk(
+    uint32_t step,
+    uint32_t currentNode,
+    uint32_t prev,
+    uint32_t next,
+    uint32_t parentKind,
+    uint32_t parentIndex,
+    uint32_t chosenNode,
+    uint32_t prevScore,
+    uint32_t nextScore)
+{
+    g_switchMemTreeTraceCurrent.store(currentNode, std::memory_order_relaxed);
+    g_switchMemTreeTracePrev.store(prev, std::memory_order_relaxed);
+    g_switchMemTreeTraceNext.store(next, std::memory_order_relaxed);
+    g_switchMemTreeTraceParentKind.store(parentKind, std::memory_order_relaxed);
+    g_switchMemTreeTraceParentIndex.store(parentIndex, std::memory_order_relaxed);
+    g_switchMemTreeTraceChosen.store(chosenNode, std::memory_order_relaxed);
+    g_switchMemTreeTracePrevScore.store(prevScore, std::memory_order_relaxed);
+    g_switchMemTreeTraceNextScore.store(nextScore, std::memory_order_relaxed);
+    g_switchMemTreeTraceTrail[step % SWITCH_MEMTREE_TRACE_TRAIL_COUNT].store(currentNode, std::memory_order_relaxed);
+    g_switchMemTreeTraceSteps.store(step, std::memory_order_release);
+}
+
 void Switch_SetProgressStage(const char *stage, uint32_t detail)
 {
     g_switchProgressDetail.store(detail, std::memory_order_relaxed);
@@ -146,6 +212,67 @@ static void SwitchProgressWatchdogMain()
             std::memcpy(progressScriptName, g_switchProgressScriptName, sizeof(progressScriptName));
             progressScriptName[sizeof(progressScriptName) - 1] = '\0';
         }
+        if (progressPhase && std::strcmp(progressPhase, "memtree/remove_head_walk") == 0)
+        {
+            const uint32_t traceSteps = g_switchMemTreeTraceSteps.load(std::memory_order_acquire);
+            const uint32_t trailCount = traceSteps < SWITCH_MEMTREE_TRACE_TRAIL_COUNT
+                ? traceSteps
+                : SWITCH_MEMTREE_TRACE_TRAIL_COUNT;
+            const uint32_t firstTrailStep = traceSteps - trailCount + 1u;
+            char trail[112];
+            size_t trailUsed = 0;
+            trail[0] = '\0';
+            for (uint32_t i = 0; i < trailCount; ++i)
+            {
+                const uint32_t sequence = firstTrailStep + i;
+                const uint32_t node = g_switchMemTreeTraceTrail[
+                    sequence % SWITCH_MEMTREE_TRACE_TRAIL_COUNT].load(std::memory_order_relaxed);
+                const int written = std::snprintf(
+                    trail + trailUsed,
+                    sizeof(trail) - trailUsed,
+                    "%s%u",
+                    trailUsed ? "," : "",
+                    node);
+                if (written < 0 || static_cast<size_t>(written) >= sizeof(trail) - trailUsed)
+                    break;
+                trailUsed += static_cast<size_t>(written);
+            }
+            if (!trailUsed)
+                std::snprintf(trail, sizeof(trail), "(empty)");
+
+            char context[80];
+            SwitchFormatScriptContext(
+                context,
+                sizeof(context),
+                g_switchProgressScriptSource.load(std::memory_order_acquire),
+                progressDetail);
+            char line[1024];
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[KisakCOD][MEMTREE WALK] t=%us requestBytes=%u type=%u requestBucket=%u treeBucket=%u root=%u steps=%u current=%u links=%u/%u parentSlot=%u:%u chosen=%u scores=%u/%u path=%s script=%s lexerDetail=%u context=\"%s\"\n",
+                tick * 5u,
+                g_switchMemTreeTraceRequestBytes.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceRequestType.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceRequestBucket.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceTreeBucket.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceRoot.load(std::memory_order_relaxed),
+                traceSteps,
+                g_switchMemTreeTraceCurrent.load(std::memory_order_relaxed),
+                g_switchMemTreeTracePrev.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceNext.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceParentKind.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceParentIndex.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceChosen.load(std::memory_order_relaxed),
+                g_switchMemTreeTracePrevScore.load(std::memory_order_relaxed),
+                g_switchMemTreeTraceNextScore.load(std::memory_order_relaxed),
+                trail,
+                progressScriptName[0] ? progressScriptName : "(none)",
+                progressDetail,
+                context);
+            Switch_LogWrite(line);
+        }
+
         const bool sameDbStage =
             lastDbStage == dbStage ||
             (lastDbStage && dbStage && std::strcmp(lastDbStage, dbStage) == 0);
