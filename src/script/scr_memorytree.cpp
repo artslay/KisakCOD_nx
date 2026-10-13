@@ -114,6 +114,125 @@ static void MT_ReportInvariantViolation(
         }
     }
 }
+
+// Validate the free trees immediately after completed allocator mutations.
+// The full walk is intentionally limited to the first 4096 allocation/free
+// calls on Switch: this is a diagnostic window, not a permanent per-frame cost.
+static constexpr uint32_t MT_TREE_VALIDATION_MUTATION_LIMIT = 4096;
+static uint32_t mtTreeValidationMutationCount;
+static uint16_t mtTreeValidationSeen[MEMORY_NODE_COUNT] = {};
+static uint16_t mtTreeValidationStack[MEMORY_NODE_COUNT] = {};
+
+static void MT_ValidateFreeTreesAfterMutation(bool isAllocation, uint32_t changedNode)
+{
+    if (mtInvariantReportCount || mtTreeValidationMutationCount >= MT_TREE_VALIDATION_MUTATION_LIMIT)
+        return;
+
+    const uint16_t generation = static_cast<uint16_t>(++mtTreeValidationMutationCount);
+    const char *const reachablePhase = isAllocation ? "post_alloc_reachable" : "post_free_reachable";
+    const char *const alignmentPhase = isAllocation ? "post_alloc_misaligned" : "post_free_misaligned";
+    const char *const duplicatePhase = isAllocation ? "post_alloc_duplicate" : "post_free_duplicate";
+
+    for (uint32_t bucket = 0; bucket <= MEMORY_NODE_BITS; ++bucket)
+    {
+        const uint32_t alignmentMask = (1u << bucket) - 1u;
+        uint32_t stackSize = 0;
+        const uint32_t root = scrMemTreeGlob.head[bucket];
+
+        if (root)
+        {
+            if (scrMemTreeDebugGlob.mt_usage[root])
+            {
+                MT_ReportInvariantViolation(
+                    reachablePhase, root, bucket,
+                    scrMemTreeDebugGlob.mt_usage[root],
+                    scrMemTreeDebugGlob.mt_usage_size[root],
+                    scrMemTreeGlob.nodes[root].prev,
+                    scrMemTreeGlob.nodes[root].next,
+                    changedNode);
+                return;
+            }
+            if ((root & alignmentMask) != 0)
+            {
+                MT_ReportInvariantViolation(
+                    alignmentPhase, root, bucket,
+                    scrMemTreeDebugGlob.mt_usage[root],
+                    scrMemTreeDebugGlob.mt_usage_size[root],
+                    scrMemTreeGlob.nodes[root].prev,
+                    scrMemTreeGlob.nodes[root].next,
+                    changedNode);
+                return;
+            }
+            if (mtTreeValidationSeen[root] == generation)
+            {
+                MT_ReportInvariantViolation(
+                    duplicatePhase, root, bucket,
+                    scrMemTreeDebugGlob.mt_usage[root],
+                    scrMemTreeDebugGlob.mt_usage_size[root],
+                    scrMemTreeGlob.nodes[root].prev,
+                    scrMemTreeGlob.nodes[root].next,
+                    changedNode);
+                return;
+            }
+            mtTreeValidationSeen[root] = generation;
+            mtTreeValidationStack[stackSize++] = static_cast<uint16_t>(root);
+        }
+
+        while (stackSize)
+        {
+            const uint32_t node = mtTreeValidationStack[--stackSize];
+            const uint16_t children[2] = {
+                scrMemTreeGlob.nodes[node].prev,
+                scrMemTreeGlob.nodes[node].next
+            };
+
+            for (uint32_t childIndex = 0; childIndex < 2; ++childIndex)
+            {
+                const uint32_t child = children[childIndex];
+                if (!child)
+                    continue;
+
+                if (scrMemTreeDebugGlob.mt_usage[child])
+                {
+                    MT_ReportInvariantViolation(
+                        reachablePhase, child, bucket,
+                        scrMemTreeDebugGlob.mt_usage[child],
+                        scrMemTreeDebugGlob.mt_usage_size[child],
+                        scrMemTreeGlob.nodes[child].prev,
+                        scrMemTreeGlob.nodes[child].next,
+                        changedNode);
+                    return;
+                }
+                if ((child & alignmentMask) != 0)
+                {
+                    MT_ReportInvariantViolation(
+                        alignmentPhase, child, bucket,
+                        scrMemTreeDebugGlob.mt_usage[child],
+                        scrMemTreeDebugGlob.mt_usage_size[child],
+                        scrMemTreeGlob.nodes[child].prev,
+                        scrMemTreeGlob.nodes[child].next,
+                        changedNode);
+                    return;
+                }
+                if (mtTreeValidationSeen[child] == generation)
+                {
+                    MT_ReportInvariantViolation(
+                        duplicatePhase, child, bucket,
+                        scrMemTreeDebugGlob.mt_usage[child],
+                        scrMemTreeDebugGlob.mt_usage_size[child],
+                        scrMemTreeGlob.nodes[child].prev,
+                        scrMemTreeGlob.nodes[child].next,
+                        changedNode);
+                    return;
+                }
+
+                mtTreeValidationSeen[child] = generation;
+                iassert(stackSize < MEMORY_NODE_COUNT);
+                mtTreeValidationStack[stackSize++] = static_cast<uint16_t>(child);
+            }
+        }
+    }
+}
 #endif
 
 
@@ -271,6 +390,7 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
     scrMemTreeDebugGlob.mt_usage_size[nodeNum] = size;
 #ifdef KISAK_SWITCH
     MT_RecordTreeOperation(5, static_cast<uint32_t>(numBytes), static_cast<uint32_t>(type), nodeNum);
+    MT_ValidateFreeTreesAfterMutation(true, nodeNum);
 #endif
     Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
     return nodeNum;
@@ -525,6 +645,7 @@ iassert((scrMemTreeDebugGlob.mt_usage_size[nodeNum] == size));
     MT_AddMemoryNode(nodeNum, size);
 #ifdef KISAK_SWITCH
     MT_RecordTreeOperation(6, freedNode, static_cast<uint32_t>(numBytes), nodeNum);
+    MT_ValidateFreeTreesAfterMutation(false, freedNode);
 #endif
     Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
 }
