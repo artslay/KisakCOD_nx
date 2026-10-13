@@ -83,6 +83,9 @@ scrVmGlob_t scrVmGlob;
 jmp_buf g_script_error[33];
 scrVmDebugPub_t scrVmDebugPub;
 
+// OP_switch stores pointer-width case values followed by native code-position pointers.
+static constexpr size_t SCR_SWITCH_ENTRY_SIZE = sizeof(uintptr_t) + sizeof(const char *);
+
 function_stack_t fs;
 
 const dvar_s *logScriptTimes;
@@ -348,11 +351,12 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
     const char* v8; // eax
     int v9; // [esp+4h] [ebp-7Ch]
     const char* v10; // [esp+38h] [ebp-48h]
-    int v11; // [esp+40h] [ebp-40h]
+    uintptr_t v11; // native-width switch case key
     uint16_t v12; // [esp+44h] [ebp-3Ch]
     uint16_t v13; // [esp+54h] [ebp-2Ch]
     uint16_t v14; // [esp+58h] [ebp-28h]
     uint32_t caseValue; // [esp+6Ch] [ebp-14h]
+    uintptr_t jumpOffset; // Switch operand width
     int caseCount; // [esp+74h] [ebp-Ch]
     VariableValue value; // [esp+78h] [ebp-8h] BYREF
     const char* posb; // [esp+8Ch] [ebp+Ch]
@@ -594,9 +598,10 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
             case 99:
                 return (char*)&pos[-*(uint16_t*)pos + 2];
             case 124:
-                posb = &pos[*(_DWORD*)pos + 4];
-                v12 = *(_WORD*)posb;
-                posa = posb + 2;
+                jumpOffset = *reinterpret_cast<const uintptr_t *>(pos);
+                posb = pos + sizeof(uintptr_t) + jumpOffset;
+                v12 = *reinterpret_cast<const uint16_t *>(posb);
+                posa = posb + sizeof(uint16_t);
                 caseCount = v12;
                 v9 = top->type;
                 if (v9 == VAR_STRING)
@@ -606,9 +611,9 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
                 else
                 {
                     if (v9 != VAR_INTEGER)
-                        return (char*)&posa[8 * v12];
+                        return const_cast<char *>(posa + SCR_SWITCH_ENTRY_SIZE * v12);
                     if (!IsValidArrayIndex(top->u.intValue))
-                        return (char*)&posa[8 * v12];
+                        return const_cast<char *>(posa + SCR_SWITCH_ENTRY_SIZE * v12);
                     caseValue = GetInternalVariableIndex(top->u.intValue);
                 }
                 if (!v12)
@@ -617,7 +622,8 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
                     MyAssertHandler(".\\script\\scr_vm.cpp", 2516, 0, "%s", "caseValue");
                 break;
             case 125:
-                return (char*)&pos[8 * *(uint16_t*)pos + 2];
+                v12 = *reinterpret_cast<const uint16_t *>(pos);
+                return const_cast<char *>(pos + sizeof(uint16_t) + SCR_SWITCH_ENTRY_SIZE * v12);
             default:
                 if (!alwaysfails)
                 {
@@ -633,10 +639,10 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
             }
             do
             {
-                v11 = *(_DWORD*)posa;
-                posc = posa + 4;
-                v10 = *(const char**)posc;
-                posa = posc + 4;
+                v11 = *reinterpret_cast<const uintptr_t *>(posa);
+                posc = posa + sizeof(uintptr_t);
+                v10 = *reinterpret_cast<const char * const *>(posc);
+                posa = posc + sizeof(const char *);
                 if (v11 == caseValue)
                 {
                     if (!v10)
@@ -3404,7 +3410,8 @@ function_call:
 
         case OP_endswitch:
             caseCount = Scr_ReadUnsignedShort(&fs.pos);
-            Scr_ReadIntArray(&fs.pos, 2 * caseCount);
+            // Switch case records use native-width key and code-position fields.
+            fs.pos += static_cast<size_t>(caseCount) * SCR_SWITCH_ENTRY_SIZE;
             continue;
 
         case OP_vector:
