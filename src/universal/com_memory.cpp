@@ -1165,6 +1165,11 @@ void __cdecl TempMemoryReset(HunkUser *user)
     g_user = user;
 }
 
+HunkUser* __cdecl TempMemoryGetUser()
+{
+    return g_user;
+}
+
 char *__cdecl TempMallocAlignStrict(uint32_t len)
 {
     return (char *)Hunk_UserAllocAlignStrict(g_user, len);
