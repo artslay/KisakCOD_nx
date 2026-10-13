@@ -2673,9 +2673,9 @@ void  Scr_EvalEquality(VariableValue* value1, VariableValue* value2)
 		break;
 	case VAR_VECTOR:
 		value1->type = VAR_INTEGER;
-		v2 = *(float*)value2->u.intValue == *(float*)value1->u.intValue
-			&& *(float*)(value2->u.intValue + 4) == *(float*)(value1->u.intValue + 4)
-			&& *(float*)(value2->u.intValue + 8) == *(float*)(value1->u.intValue + 8);
+		v2 = value2->u.vectorValue[0] == value1->u.vectorValue[0]
+			&& value2->u.vectorValue[1] == value1->u.vectorValue[1]
+			&& value2->u.vectorValue[2] == value1->u.vectorValue[2];
 		RemoveRefToVector(value1->u.vectorValue);
 		RemoveRefToVector(value2->u.vectorValue);
 		value1->u.intValue = v2;
