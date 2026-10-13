@@ -123,15 +123,16 @@ static uint32_t mtTreeValidationMutationCount;
 static uint16_t mtTreeValidationSeen[MEMORY_NODE_COUNT] = {};
 static uint16_t mtTreeValidationStack[MEMORY_NODE_COUNT] = {};
 
-static void MT_ValidateFreeTreesAfterMutation(bool isAllocation, uint32_t changedNode)
+static void MT_ValidateFreeTrees(
+    const char *reachablePhase,
+    const char *alignmentPhase,
+    const char *duplicatePhase,
+    uint32_t changedNode)
 {
     if (mtInvariantReportCount || mtTreeValidationMutationCount >= MT_TREE_VALIDATION_MUTATION_LIMIT)
         return;
 
     const uint16_t generation = static_cast<uint16_t>(++mtTreeValidationMutationCount);
-    const char *const reachablePhase = isAllocation ? "post_alloc_reachable" : "post_free_reachable";
-    const char *const alignmentPhase = isAllocation ? "post_alloc_misaligned" : "post_free_misaligned";
-    const char *const duplicatePhase = isAllocation ? "post_alloc_duplicate" : "post_free_duplicate";
 
     for (uint32_t bucket = 0; bucket <= MEMORY_NODE_BITS; ++bucket)
     {
@@ -390,7 +391,11 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
     scrMemTreeDebugGlob.mt_usage_size[nodeNum] = size;
 #ifdef KISAK_SWITCH
     MT_RecordTreeOperation(5, static_cast<uint32_t>(numBytes), static_cast<uint32_t>(type), nodeNum);
-    MT_ValidateFreeTreesAfterMutation(true, nodeNum);
+    MT_ValidateFreeTrees(
+        "post_alloc_reachable",
+        "post_alloc_misaligned",
+        "post_alloc_duplicate",
+        nodeNum);
 #endif
     Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
     return nodeNum;
@@ -642,10 +647,23 @@ iassert((scrMemTreeDebugGlob.mt_usage_size[nodeNum] == size));
         nodeNum &= ~lowBit;
         ++size;
     }
+#ifdef KISAK_SWITCH
+    // Check after buddy removal/merge but before the freed node is inserted.
+    // This separates corruption in MT_RemoveMemoryNode from corruption in MT_AddMemoryNode.
+    MT_ValidateFreeTrees(
+        "pre_free_add_reachable",
+        "pre_free_add_misaligned",
+        "pre_free_add_duplicate",
+        freedNode);
+#endif
     MT_AddMemoryNode(nodeNum, size);
 #ifdef KISAK_SWITCH
     MT_RecordTreeOperation(6, freedNode, static_cast<uint32_t>(numBytes), nodeNum);
-    MT_ValidateFreeTreesAfterMutation(false, freedNode);
+    MT_ValidateFreeTrees(
+        "post_free_add_reachable",
+        "post_free_add_misaligned",
+        "post_free_add_duplicate",
+        freedNode);
 #endif
     Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
 }
