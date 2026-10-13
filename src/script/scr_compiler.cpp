@@ -2935,9 +2935,9 @@ void __cdecl EmitSwitchStatementList(sval_u val, bool lastStatement, unsigned in
                 return;
             }
             if (lastStatement && Scr_IsLastStatement(nextNode))
-                EmitStatement(node->type, 1, endSourcePos, scrCompileGlob.breakBlock);
+                EmitStatement(node[0], 1, endSourcePos, scrCompileGlob.breakBlock);
             else
-                EmitStatement(node->type, 0, endSourcePos, scrCompileGlob.breakBlock);
+                EmitStatement(node[0], 0, endSourcePos, scrCompileGlob.breakBlock);
             if (scrCompileGlob.breakBlock && scrCompileGlob.breakBlock->abortLevel)
             {
                 scrCompileGlob.breakBlock = 0;
@@ -4021,7 +4021,7 @@ void __cdecl Scr_CalcLocalVarsSwitchStatement(sval_u stmtlist, scr_block_s *bloc
         }
         else if (currentBlock)
         {
-            Scr_CalcLocalVarsStatement(node->type, currentBlock);
+            Scr_CalcLocalVarsStatement(node[0], currentBlock);
             if (currentBlock->abortLevel)
             {
                 if (currentBlock->abortLevel == 2)
