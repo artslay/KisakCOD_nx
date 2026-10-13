@@ -766,6 +766,7 @@ void __cdecl Scr_CompileTextInternal(const char *text, ScriptExpression_t *scrip
     char *start; // [esp+28h] [ebp-14h]
     char *end; // [esp+2Ch] [ebp-10h]
     HunkUser *user; // [esp+30h] [ebp-Ch]
+    HunkUser *previousUser;
     sval_u *parseNode;
     Enum_t parseType;
 
@@ -812,6 +813,7 @@ void __cdecl Scr_CompileTextInternal(const char *text, ScriptExpression_t *scrip
             {
                 if (parseType != ENUM_statement)
                     MyAssertHandler(".\\script\\scr_evaluate.cpp", 2142, 0, "%s", "expr.node[0].type == ENUM_statement");
+                previousUser = TempMemoryGetUser();
                 user = Hunk_UserCreate(0x10000, "Scr_CompileTextInternal", 0, 0, 0);
                 TempMemoryReset(user);
                 start = TempMalloc(0);
@@ -828,6 +830,8 @@ void __cdecl Scr_CompileTextInternal(const char *text, ScriptExpression_t *scrip
                     end = TempMalloc(0);
                     scriptExpr->parseData = debugger_buffer(ENUM_statement, start, end - start, 32);
                 }
+                // Restore the caller's temporary allocator before destroying the debugger-only arena.
+                TempMemoryReset(previousUser);
                 Hunk_UserDestroy(user);
             }
         }
