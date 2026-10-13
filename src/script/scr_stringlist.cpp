@@ -150,6 +150,16 @@ void SL_AddUserInternal(RefString* refStr, uint32_t user)
 
 void SL_AddRefToString(uint32_t stringValue)
 {
+#ifdef KISAK_SWITCH
+    if (!stringValue)
+    {
+        Switch_ReportInvalidStringRef(
+            "SL_AddRefToString",
+            stringValue,
+            scrMemTreePub.mt_buffer,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    }
+#endif
 	PROF_SCOPED("SL_AddRefToString");
 
 	if (scrStringDebugGlob)
@@ -593,6 +603,16 @@ uint32_t SL_FindString(const char* str)
 
 void __cdecl SL_TransferRefToUser(uint32_t stringValue, uint32_t user)
 {
+#ifdef KISAK_SWITCH
+    if (!stringValue)
+    {
+        Switch_ReportInvalidStringRef(
+            "SL_TransferRefToUser",
+            stringValue,
+            scrMemTreePub.mt_buffer,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    }
+#endif
 	volatile LONG Comperand; // [esp+20h] [ebp-28h]
 	RefString *refStr; // [esp+44h] [ebp-4h]
 
