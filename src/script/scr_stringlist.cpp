@@ -19,6 +19,16 @@ extern void Switch_LogWrite(const char *msg);
 #include "scr_variable.h"
 
 #ifdef KISAK_SWITCH
+#include <cstddef>
+static_assert(sizeof(HashEntry) == 8,
+              "script-string hash entries must retain their 32-bit layout");
+static_assert(sizeof(MemoryNode) == 12,
+              "script-string memory nodes must retain their 12-byte stride");
+static_assert(offsetof(RefString, str) == 4,
+              "script-string handle header must remain four bytes on Switch AArch64");
+#endif
+
+#ifdef KISAK_SWITCH
 static void Switch_ReportInvalidStringRef(
     const char *origin,
     uint32_t handle,
