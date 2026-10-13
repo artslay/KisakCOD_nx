@@ -4083,10 +4083,29 @@ void G_UpdateVehicleTags(gentity_s *ent)
 
     veh = ent->scr_vehicle;
     vehicleAtEntry = reinterpret_cast<uintptr_t>(veh);
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=enter ent=%p entNum=%u vehicle=%p poolIndex=%d vehicleSize=%u\n",
-        (void *)ent, (unsigned int)ent->s.number, (void *)veh,
-        VEH_VehiclePoolIndexForTrace(veh), (unsigned int)sizeof(*veh));
+    {
+        const scr_vehicle_s *poolCandidate = NULL;
+        int poolMatchCount = 0;
+        int poolMatchIndex = -1;
+        for (int poolIndex = 0; poolIndex < ARRAY_COUNT(s_vehicles); ++poolIndex)
+        {
+            if (s_vehicles[poolIndex].entNum == ent->s.number)
+            {
+                if (!poolCandidate)
+                {
+                    poolCandidate = &s_vehicles[poolIndex];
+                    poolMatchIndex = poolIndex;
+                }
+                ++poolMatchCount;
+            }
+        }
+        Com_Printf(CON_CHANNEL_SERVER,
+            "[KisakCOD][VEHICLE TAG TRACE] stage=enter ent=%p entNum=%u vehicle=%p poolIndex=%d poolCandidate=%p poolMatchIndex=%d poolMatchCount=%d caller=%p vehicleSize=%u\\n",
+            (void *)ent, (unsigned int)ent->s.number, (void *)veh,
+            VEH_VehiclePoolIndexForTrace(veh), (const void *)poolCandidate,
+            poolMatchIndex, poolMatchCount, __builtin_return_address(0),
+            (unsigned int)sizeof(*veh));
+    }
 
     VEH_TRACE_BONE_INDEX(veh->boneIndex.player, scr_const.tag_player, "player");
     VEH_TRACE_BONE_INDEX(veh->boneIndex.detach, scr_const.tag_detach, "detach");
