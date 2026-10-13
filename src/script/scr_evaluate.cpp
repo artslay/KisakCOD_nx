@@ -60,7 +60,7 @@ void __cdecl Scr_ArchiveCanonicalStrings()
             len += strlen(SL_ConvertToString(stringValue)) + 1;
     }
     scrEvaluateGlob.archivedCanonicalStringsBuf = (char *)Hunk_AllocDebugMem(len);
-    scrEvaluateGlob.archivedCanonicalStrings = (ArchivedCanonicalStringInfo *)Hunk_AllocDebugMem(8 * scrVarPub.canonicalStrCount);
+    scrEvaluateGlob.archivedCanonicalStrings = (ArchivedCanonicalStringInfo *)Hunk_AllocDebugMem(sizeof(*scrEvaluateGlob.archivedCanonicalStrings) * scrVarPub.canonicalStrCount);
     scrEvaluateGlob.canonicalStringLookup = (int *)Hunk_AllocDebugMem(4 * scrVarPub.canonicalStrCount + 4);
     i = 0;
     lena = 0;
@@ -91,8 +91,8 @@ void __cdecl Scr_ArchiveCanonicalStrings()
     qsort(
         scrEvaluateGlob.archivedCanonicalStrings,
         scrVarPub.canonicalStrCount,
-        8u,
-        (int(__cdecl *)(const void *, const void *))CompareCanonicalStrings);
+        sizeof(*scrEvaluateGlob.archivedCanonicalStrings),
+        CompareCanonicalStrings);
     for (ia = 0; ia < (int)scrVarPub.canonicalStrCount; ++ia)
     {
         if (!scrEvaluateGlob.archivedCanonicalStrings[ia].canonicalStr)
@@ -114,9 +114,13 @@ void __cdecl Scr_ArchiveCanonicalStrings()
     *scrEvaluateGlob.canonicalStringLookup = 0;
 }
 
-int __cdecl CompareCanonicalStrings(const char **arg1, const char **arg2)
+int __cdecl CompareCanonicalStrings(const void *arg1, const void *arg2)
 {
-    return strcmp(arg1[1], arg2[1]);
+    const ArchivedCanonicalStringInfo *left =
+        static_cast<const ArchivedCanonicalStringInfo *>(arg1);
+    const ArchivedCanonicalStringInfo *right =
+        static_cast<const ArchivedCanonicalStringInfo *>(arg2);
+    return strcmp(left->value, right->value);
 }
 
 const char *__cdecl Scr_GetCanonicalString(uint32_t fieldName)
