@@ -766,7 +766,8 @@ void __cdecl Scr_CompileTextInternal(const char *text, ScriptExpression_t *scrip
     char *start; // [esp+28h] [ebp-14h]
     char *end; // [esp+2Ch] [ebp-10h]
     HunkUser *user; // [esp+30h] [ebp-Ch]
-    uint32_t *expr; // [esp+38h] [ebp-4h]
+    sval_u *parseNode;
+    Enum_t parseType;
 
     if (!strcmp(text, "<locals>"))
     {
