@@ -3,6 +3,11 @@
 
 #include <universal/q_shared.h>
 #include <cstddef>
+#ifdef KISAK_SWITCH
+#include <cstdio>
+#include <cstdint>
+extern void Switch_LogWrite(const char *msg);
+#endif
 #include "scr_compiler.h"
 #include "scr_main.h"
 #include "scr_debugger.h"
@@ -278,6 +283,23 @@ void __cdecl EmitShort(__int16 value)
 
 void __cdecl CompileTransferRefToString(unsigned int stringValue, unsigned int user)
 {
+#ifdef KISAK_SWITCH
+    if (!stringValue)
+    {
+        char line[256];
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][SCRIPT ZERO STRING INPUT] value=%u user=%u constRef=%d developer=%d fileId=%u caller=0x%llx\\n",
+            stringValue,
+            user,
+            static_cast<int>(scrCompileGlob.bConstRefCount),
+            static_cast<int>(scrCompilePub.developer_statement),
+            static_cast<unsigned int>(scrCompileGlob.fileId),
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+        Switch_LogWrite(line);
+    }
+#endif
     iassert(stringValue);
 
     if (scrCompilePub.developer_statement == SCR_DEV_IGNORE)
