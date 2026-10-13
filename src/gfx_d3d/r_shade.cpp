@@ -13,8 +13,6 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
-extern thread_local uint32_t g_switchLastSamplerNameHashes[16];
-extern thread_local uint8_t g_switchLastSamplerSemantics[16];
 #endif
 
 
@@ -731,13 +729,6 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
     if (rg.hasAnyImageOverrides)
         R_OverrideImage(&image, texDef);
 
-#ifdef __SWITCH__
-    if (arg->dest < 16)
-    {
-        g_switchLastSamplerNameHashes[arg->dest] = texDef->nameHash;
-        g_switchLastSamplerSemantics[arg->dest] = texDef->semantic;
-    }
-#endif
     R_SetSampler(context, arg->dest, texDef->samplerState, image);
     return texDef;
 }
