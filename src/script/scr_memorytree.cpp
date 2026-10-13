@@ -38,6 +38,15 @@ extern void Switch_RecordMemoryTreeOperation(
     uint32_t next,
     uint32_t usage,
     uint32_t usageSize);
+extern void Switch_ReportFirstMemoryTreeInvariant(
+    const char *phase,
+    uint32_t node,
+    uint32_t bucket,
+    uint32_t usage,
+    uint32_t usageSize,
+    uint32_t prev,
+    uint32_t next,
+    uint32_t extra);
 #endif
 
 scrMemTreePub_t scrMemTreePub;
@@ -85,6 +94,7 @@ static void MT_ReportInvariantViolation(
     // Report invariant violations without changing allocator control flow.
     if (mtInvariantReportCount < 64)
     {
+        const bool firstViolation = mtInvariantReportCount == 0;
         ++mtInvariantReportCount;
         Com_Printf(
             CON_CHANNEL_PARSERSCRIPT,
@@ -97,6 +107,11 @@ static void MT_ReportInvariantViolation(
             prev,
             next,
             extra);
+        if (firstViolation)
+        {
+            Switch_ReportFirstMemoryTreeInvariant(
+                phase, node, bucket, usage, usageSize, prev, next, extra);
+        }
     }
 }
 #endif
