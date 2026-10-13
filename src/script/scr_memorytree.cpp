@@ -132,6 +132,25 @@ static void MT_ValidateFreeTrees(
     if (mtInvariantReportCount || mtTreeValidationMutationCount >= MT_TREE_VALIDATION_MUTATION_LIMIT)
         return;
 
+    // Index zero is the null-node sentinel, never an allocatable block. The
+    // treap insertion path must not inherit its contents as a child's links.
+    if (scrMemTreeDebugGlob.mt_usage[0] ||
+        scrMemTreeDebugGlob.mt_usage_size[0] ||
+        scrMemTreeGlob.nodes[0].prev ||
+        scrMemTreeGlob.nodes[0].next)
+    {
+        MT_ReportInvariantViolation(
+            "sentinel_corrupt",
+            0,
+            UINT32_MAX,
+            scrMemTreeDebugGlob.mt_usage[0],
+            scrMemTreeDebugGlob.mt_usage_size[0],
+            scrMemTreeGlob.nodes[0].prev,
+            scrMemTreeGlob.nodes[0].next,
+            changedNode);
+        return;
+    }
+
     const uint16_t generation = static_cast<uint16_t>(++mtTreeValidationMutationCount);
 
     for (uint32_t bucket = 0; bucket <= MEMORY_NODE_BITS; ++bucket)
@@ -960,11 +979,14 @@ void MT_AddMemoryNode(int newNode, int size)
                     iassert(node != newNode);
 
                     *parentNode = newNode;
-                    scrMemTreeGlob.nodes[newNode] = scrMemTreeGlob.nodes[node];
                     if (!node)
                     {
+                        // A null child is a leaf, not a request to copy the
+                        // reserved nodes[0] sentinel into a free-tree node.
+                        scrMemTreeGlob.nodes[newNode] = MemoryNode{};
                         break;
                     }
+                    scrMemTreeGlob.nodes[newNode] = scrMemTreeGlob.nodes[node];
                     level >>= 1;
 
                     iassert(node != nodeNum);
