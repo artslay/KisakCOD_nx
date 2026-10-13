@@ -699,7 +699,7 @@ void ConnectBreakStatements()
 		std::snprintf(
 			line,
 			sizeof(line),
-			"[KisakCOD][SCRIPT BREAK PATCH] fileId=%u threadId=%u developer=%d statement=%p slot=0x%llx next=0x%llx target=0x%llx program=0x%llx usedEnd=0x%llx slotOk=%d nextOk=%d offset=0x%llx\\n",
+			"[KisakCOD][SCRIPT BREAK PATCH] fileId=%u threadId=%u developer=%d statement=%p slot=0x%llx next=0x%llx target=0x%llx program=0x%llx usedEnd=0x%llx slotOk=%d nextOk=%d offset=0x%llx\n",
 			static_cast<unsigned int>(scrCompileGlob.fileId),
 			static_cast<unsigned int>(scrCompileGlob.threadId),
 			static_cast<int>(scrCompilePub.developer_statement),
@@ -2591,7 +2591,7 @@ void EmitBreakStatement(sval_u sourcePos, scr_block_s *block)
 			std::snprintf(
 				line,
 				sizeof(line),
-				"[KisakCOD][SCRIPT BREAK EMIT RANGE] fileId=%u threadId=%u developer=%d slot=0x%llx next=0x%llx program=0x%llx\\n",
+				"[KisakCOD][SCRIPT BREAK EMIT RANGE] fileId=%u threadId=%u developer=%d slot=0x%llx next=0x%llx program=0x%llx\n",
 				static_cast<unsigned int>(scrCompileGlob.fileId),
 				static_cast<unsigned int>(scrCompileGlob.threadId),
 				static_cast<int>(scrCompilePub.developer_statement),
