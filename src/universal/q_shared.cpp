@@ -120,6 +120,32 @@ int I_strnicmp(const char* s0, const char* s1, int n)
     int c0; // [esp+4h] [ebp-4h]
 
 #ifdef __SWITCH__
+    // Diagnostic only: report tiny non-null pointers before the normal
+    // comparison dereferences them. Do not recover or alter comparison flow.
+    {
+        const uintptr_t v0 = reinterpret_cast<uintptr_t>(s0);
+        const uintptr_t v1 = reinterpret_cast<uintptr_t>(s1);
+        if ((s0 && v0 < UINT64_C(0x10000)) ||
+            (s1 && v1 < UINT64_C(0x10000)))
+        {
+            char trace[640];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][STRNICMP LOW PTR] s0=%p low32=%08x high32=%08x s1=%p low32=%08x high32=%08x n=%d caller=%p frame=%s\\n",
+                static_cast<const void *>(s0),
+                static_cast<unsigned>(v0 & UINT64_C(0xffffffff)),
+                static_cast<unsigned>(v0 >> 32),
+                static_cast<const void *>(s1),
+                static_cast<unsigned>(v1 & UINT64_C(0xffffffff)),
+                static_cast<unsigned>(v1 >> 32),
+                n,
+                __builtin_return_address(0),
+                g_switchFrameStage ? g_switchFrameStage : "<null>");
+            Switch_LogWrite(trace);
+        }
+    }
+
     if (Switch_BadStringPointer(s0) || Switch_BadStringPointer(s1))
     {
         Switch_LogBadStringCompare(s0, s1, n);
