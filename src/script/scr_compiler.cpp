@@ -4367,7 +4367,7 @@ void __cdecl LinkThread(unsigned int threadId, VariableValue *pos, bool allowFar
                     MyAssertHandler(".\\script\\scr_compiler.cpp", 2319, 0, "%s", "scrVarPub.developer_script");
                 if (type == VAR_CODEPOS)
                 {
-                    CompileError2((char*)value->u.intValue, "normal script cannot reference a function in a /# ... #/ comment");
+                    CompileError2(const_cast<char *>(value->u.codePosValue), "normal script cannot reference a function in a /# ... #/ comment");
                     return;
                 }
             }
