@@ -69,6 +69,36 @@ static void MT_RecordTreeOperation(uint32_t op, uint32_t arg0, uint32_t arg1, ui
     }
     Switch_RecordMemoryTreeOperation(op, arg0, arg1, node, prev, next, usage, usageSize);
 }
+
+static uint32_t mtInvariantReportCount;
+
+static void MT_ReportInvariantViolation(
+    const char *phase,
+    uint32_t node,
+    uint32_t bucket,
+    uint32_t usage,
+    uint32_t usageSize,
+    uint32_t prev,
+    uint32_t next,
+    uint32_t extra)
+{
+    // Report invariant violations without changing allocator control flow.
+    if (mtInvariantReportCount < 64)
+    {
+        ++mtInvariantReportCount;
+        Com_Printf(
+            CON_CHANNEL_PARSERSCRIPT,
+            "[KisakCOD][MEMTREE INVARIANT] phase=%s node=%u bucket=%u usage=%u/%u links=%u/%u extra=%u\\n",
+            phase,
+            node,
+            bucket,
+            usage,
+            usageSize,
+            prev,
+            next,
+            extra);
+    }
+}
 #endif
 
 
@@ -165,6 +195,21 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
     }
 
 #ifdef KISAK_SWITCH
+    {
+        const uint32_t mask = (1u << newSize) - 1u;
+        if ((nodeNum & mask) != 0 || scrMemTreeDebugGlob.mt_usage[nodeNum] != 0)
+        {
+            MT_ReportInvariantViolation(
+                "alloc_root",
+                nodeNum,
+                static_cast<uint32_t>(newSize),
+                scrMemTreeDebugGlob.mt_usage[nodeNum],
+                scrMemTreeDebugGlob.mt_usage_size[nodeNum],
+                scrMemTreeGlob.nodes[nodeNum].prev,
+                scrMemTreeGlob.nodes[nodeNum].next,
+                size);
+        }
+    }
     Switch_BeginMemoryTreeWalk(
         static_cast<uint32_t>(numBytes),
         static_cast<uint32_t>(type),
@@ -185,6 +230,24 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
     ++scrMemTreeGlob.totalAlloc;
     scrMemTreeGlob.totalAllocBuckets += 1 << size;
 
+#ifdef KISAK_SWITCH
+    {
+        const uint32_t mask = (1u << size) - 1u;
+        if ((nodeNum & mask) != 0 || scrMemTreeDebugGlob.mt_usage[nodeNum] != 0 ||
+            scrMemTreeDebugGlob.mt_usage_size[nodeNum] != 0)
+        {
+            MT_ReportInvariantViolation(
+                "alloc_result",
+                nodeNum,
+                size,
+                scrMemTreeDebugGlob.mt_usage[nodeNum],
+                scrMemTreeDebugGlob.mt_usage_size[nodeNum],
+                scrMemTreeGlob.nodes[nodeNum].prev,
+                scrMemTreeGlob.nodes[nodeNum].next,
+                static_cast<uint32_t>(numBytes));
+        }
+    }
+#endif
     iassert(type);
     iassert((!scrMemTreeDebugGlob.mt_usage[nodeNum]));
     iassert((!scrMemTreeDebugGlob.mt_usage_size[nodeNum]));
@@ -252,9 +315,14 @@ void MT_RemoveHeadMemoryNode(int size)
     int nextScore;
 #ifdef KISAK_SWITCH
     uint32_t walkRoot;
+    uint32_t alignmentMask;
+    bool reportedInvalidNode = false;
 #endif
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
+#ifdef KISAK_SWITCH
+    alignmentMask = (1u << size) - 1u;
+#endif
 
     parentNode = &scrMemTreeGlob.head[size];
 #ifdef KISAK_SWITCH
@@ -330,6 +398,29 @@ void MT_RemoveHeadMemoryNode(int size)
 
         iassert(oldNode != 0);
 #ifdef KISAK_SWITCH
+        if (!reportedInvalidNode)
+        {
+            const bool currentInvalid =
+                scrMemTreeDebugGlob.mt_usage[currentNode] != 0 ||
+                (currentNode & alignmentMask) != 0;
+            const bool chosenInvalid =
+                scrMemTreeDebugGlob.mt_usage[static_cast<uint32_t>(oldNode)] != 0 ||
+                (static_cast<uint32_t>(oldNode) & alignmentMask) != 0;
+            if (currentInvalid || chosenInvalid)
+            {
+                const uint32_t badNode = currentInvalid ? currentNode : static_cast<uint32_t>(oldNode);
+                MT_ReportInvariantViolation(
+                    "remove_head_path",
+                    badNode,
+                    static_cast<uint32_t>(size),
+                    scrMemTreeDebugGlob.mt_usage[badNode],
+                    scrMemTreeDebugGlob.mt_usage_size[badNode],
+                    scrMemTreeGlob.nodes[badNode].prev,
+                    scrMemTreeGlob.nodes[badNode].next,
+                    currentNode);
+                reportedInvalidNode = true;
+            }
+        }
         Switch_UpdateMemoryTreeWalk(
             ++walkSteps,
             currentNode,
@@ -369,6 +460,27 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes)
     PROF_SCOPED("scriptMemory");
 
     size = MT_GetSize(numBytes);
+
+#ifdef KISAK_SWITCH
+    if (nodeNum < MEMORY_NODE_COUNT && size >= 0 && size <= MEMORY_NODE_BITS)
+    {
+        const uint32_t mask = (1u << size) - 1u;
+        const uint32_t usage = scrMemTreeDebugGlob.mt_usage[nodeNum];
+        const uint32_t usageSize = scrMemTreeDebugGlob.mt_usage_size[nodeNum];
+        if (!usage || usageSize != static_cast<uint32_t>(size) || (nodeNum & mask) != 0)
+        {
+            MT_ReportInvariantViolation(
+                "free_entry",
+                nodeNum,
+                static_cast<uint32_t>(size),
+                usage,
+                usageSize,
+                scrMemTreeGlob.nodes[nodeNum].prev,
+                scrMemTreeGlob.nodes[nodeNum].next,
+                static_cast<uint32_t>(numBytes));
+        }
+    }
+#endif
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
     iassert(nodeNum > 0 && nodeNum < MEMORY_NODE_COUNT);
@@ -419,6 +531,7 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
 #ifdef KISAK_SWITCH
     const uint32_t targetNode = static_cast<uint32_t>(oldNode);
     const uint32_t targetSize = size;
+    bool reportedAllocatedNode = false;
 #endif
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
@@ -429,6 +542,22 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
 
     for (node = *parentNode; node; node = *parentNode)
     {
+#ifdef KISAK_SWITCH
+        if (!reportedAllocatedNode && node < MEMORY_NODE_COUNT &&
+            scrMemTreeDebugGlob.mt_usage[node] != 0)
+        {
+            MT_ReportInvariantViolation(
+                "remove_lookup_allocated",
+                static_cast<uint32_t>(node),
+                targetSize,
+                scrMemTreeDebugGlob.mt_usage[node],
+                scrMemTreeDebugGlob.mt_usage_size[node],
+                scrMemTreeGlob.nodes[node].prev,
+                scrMemTreeGlob.nodes[node].next,
+                targetNode);
+            reportedAllocatedNode = true;
+        }
+#endif
         if (oldNode == node)
         {
             oldNodeValue = scrMemTreeGlob.nodes[oldNode];
@@ -598,6 +727,31 @@ void MT_AddMemoryNode(int newNode, int size)
 #endif
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
+#ifdef KISAK_SWITCH
+    if (size >= 0 && size <= MEMORY_NODE_BITS)
+    {
+        const uint32_t index = static_cast<uint32_t>(newNode);
+        const bool validIndex = newNode > 0 && index < MEMORY_NODE_COUNT;
+        const uint32_t mask = (1u << size) - 1u;
+        if (!validIndex || (index & mask) != 0 ||
+            (validIndex && scrMemTreeDebugGlob.mt_usage[index] != 0))
+        {
+            const uint32_t usage = validIndex ? scrMemTreeDebugGlob.mt_usage[index] : UINT32_MAX;
+            const uint32_t usageSize = validIndex ? scrMemTreeDebugGlob.mt_usage_size[index] : UINT32_MAX;
+            const uint32_t prev = validIndex ? scrMemTreeGlob.nodes[index].prev : UINT32_MAX;
+            const uint32_t next = validIndex ? scrMemTreeGlob.nodes[index].next : UINT32_MAX;
+            MT_ReportInvariantViolation(
+                "add_entry",
+                index,
+                static_cast<uint32_t>(size),
+                usage,
+                usageSize,
+                prev,
+                next,
+                static_cast<uint32_t>(newNode));
+        }
+    }
+#endif
 
     parentNode = &scrMemTreeGlob.head[size];
     node = (uint16_t)*parentNode;
@@ -609,6 +763,20 @@ void MT_AddMemoryNode(int newNode, int size)
         level = MEMORY_NODE_COUNT;
         do
         {
+#ifdef KISAK_SWITCH
+            if (newNode == node)
+            {
+                MT_ReportInvariantViolation(
+                    "add_duplicate",
+                    static_cast<uint32_t>(node),
+                    static_cast<uint32_t>(size),
+                    scrMemTreeDebugGlob.mt_usage[node],
+                    scrMemTreeDebugGlob.mt_usage_size[node],
+                    scrMemTreeGlob.nodes[node].prev,
+                    scrMemTreeGlob.nodes[node].next,
+                    insertedNode);
+            }
+#endif
             iassert(newNode != node);
             score = MT_GetScore(node);
 
