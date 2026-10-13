@@ -543,10 +543,11 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
     {
 #ifdef KISAK_SWITCH
         if (!reportedAllocatedNode && node < MEMORY_NODE_COUNT &&
-            scrMemTreeDebugGlob.mt_usage[node] != 0)
+            (scrMemTreeDebugGlob.mt_usage[node] != 0 ||
+             (static_cast<uint32_t>(node) & ((1u << targetSize) - 1u)) != 0))
         {
             MT_ReportInvariantViolation(
-                "remove_lookup_allocated",
+                "remove_lookup_invalid",
                 static_cast<uint32_t>(node),
                 targetSize,
                 scrMemTreeDebugGlob.mt_usage[node],
@@ -723,6 +724,7 @@ void MT_AddMemoryNode(int newNode, int size)
 #ifdef KISAK_SWITCH
     const uint32_t insertedNode = static_cast<uint32_t>(newNode);
     const uint32_t insertedSize = static_cast<uint32_t>(size);
+    bool reportedInvalidPath = false;
 #endif
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
@@ -763,6 +765,21 @@ void MT_AddMemoryNode(int newNode, int size)
         do
         {
 #ifdef KISAK_SWITCH
+            if (!reportedInvalidPath &&
+                (scrMemTreeDebugGlob.mt_usage[node] != 0 ||
+                 (static_cast<uint32_t>(node) & ((1u << insertedSize) - 1u)) != 0))
+            {
+                MT_ReportInvariantViolation(
+                    "add_path_invalid",
+                    static_cast<uint32_t>(node),
+                    insertedSize,
+                    scrMemTreeDebugGlob.mt_usage[node],
+                    scrMemTreeDebugGlob.mt_usage_size[node],
+                    scrMemTreeGlob.nodes[node].prev,
+                    scrMemTreeGlob.nodes[node].next,
+                    insertedNode);
+                reportedInvalidPath = true;
+            }
             if (newNode == node)
             {
                 MT_ReportInvariantViolation(
