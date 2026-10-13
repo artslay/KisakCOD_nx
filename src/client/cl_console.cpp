@@ -2703,7 +2703,7 @@ void __cdecl ConDrawInput_AutoCompleteArg(const char **stringList, int32_t strin
         }
         if (matchCount)
         {
-            qsort(matches, matchCount, 4u, (int(__cdecl *)(const void *, const void *))ConDrawInput_CompareStrings);
+            qsort(matches, matchCount, sizeof(matches[0]), (int(__cdecl *)(const void *, const void *))ConDrawInput_CompareStrings);
             consoleFont = cls.consoleFont;
             ArgChar = ConDrawInput_TextFieldFirstArgChar();
             x = (double)R_TextWidth(g_consoleField.buffer, ArgChar, consoleFont) + conDrawInputGlob.leftX - 6.0;
