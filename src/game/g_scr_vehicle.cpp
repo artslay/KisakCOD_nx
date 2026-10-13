@@ -4100,7 +4100,7 @@ void G_UpdateVehicleTags(gentity_s *ent)
             }
         }
         Com_Printf(CON_CHANNEL_SERVER,
-            "[KisakCOD][VEHICLE TAG TRACE] stage=enter ent=%p entNum=%u vehicle=%p poolIndex=%d poolCandidate=%p poolMatchIndex=%d poolMatchCount=%d caller=%p vehicleSize=%u\\n",
+            "[KisakCOD][VEHICLE TAG TRACE] stage=enter ent=%p entNum=%u vehicle=%p poolIndex=%d poolCandidate=%p poolMatchIndex=%d poolMatchCount=%d caller=%p vehicleSize=%u\n",
             (void *)ent, (unsigned int)ent->s.number, (void *)veh,
             VEH_VehiclePoolIndexForTrace(veh), (const void *)poolCandidate,
             poolMatchIndex, poolMatchCount, __builtin_return_address(0),
