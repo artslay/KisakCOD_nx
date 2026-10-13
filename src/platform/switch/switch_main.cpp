@@ -56,6 +56,7 @@ static std::atomic<uint32_t> g_switchMemTreeTraceRawNext{UINT32_MAX};
 static std::atomic<uint32_t> g_switchMemTreeTraceTrail[SWITCH_MEMTREE_TRACE_TRAIL_COUNT]{};
 
 static constexpr uint32_t SWITCH_MEMTREE_EVENT_COUNT = 64;
+static constexpr uint32_t SWITCH_MEMTREE_WATCHDOG_HISTORY_COUNT = 8;
 struct SwitchMemTreeEvent
 {
     std::atomic<uint32_t> sequence{0};
@@ -374,8 +375,8 @@ static void SwitchProgressWatchdogMain()
             size_t historyUsed = 0;
             history[0] = '\0';
             const uint32_t eventEnd = g_switchMemTreeEventSequence.load(std::memory_order_acquire);
-            const uint32_t eventStart = eventEnd >= SWITCH_MEMTREE_EVENT_COUNT
-                ? eventEnd - SWITCH_MEMTREE_EVENT_COUNT + 1u
+            const uint32_t eventStart = eventEnd >= SWITCH_MEMTREE_WATCHDOG_HISTORY_COUNT
+                ? eventEnd - SWITCH_MEMTREE_WATCHDOG_HISTORY_COUNT + 1u
                 : 1u;
             for (uint32_t sequence = eventStart; sequence <= eventEnd; ++sequence)
             {
