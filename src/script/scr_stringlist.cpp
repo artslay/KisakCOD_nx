@@ -2,18 +2,42 @@
 #include "scr_stringlist.h"
 
 #include <string.h> // strlen()
+#include <cstdio>
+#include <cstdint>
 #include <universal/assertive.h>
 #include <win32/win_local.h>
 #include <qcommon/qcommon.h>
 
 #ifdef KISAK_SWITCH
 extern void Switch_SetProgressPhase(const char *phase);
+extern void Switch_LogWrite(const char *msg);
 #endif
 
 #include "scr_memorytree.h"
 #include <universal/profile.h>
 #include <universal/com_constantconfigstrings.h>
 #include "scr_variable.h"
+
+#ifdef KISAK_SWITCH
+static void Switch_ReportInvalidStringRef(
+    const char *origin,
+    uint32_t handle,
+    const void *refString,
+    uintptr_t caller)
+{
+    char line[256];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][SCRIPT STRING INVALID REF] origin=%s handle=%u ref=%p caller=0x%llx base=%p\n",
+        origin,
+        handle,
+        refString,
+        static_cast<unsigned long long>(caller),
+        static_cast<const void *>(scrMemTreePub.mt_buffer));
+    Switch_LogWrite(line);
+}
+#endif
 
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
@@ -93,6 +117,17 @@ static uint32_t SL_ConvertFromRefString(RefString *refString)
 
 void SL_AddUserInternal(RefString* refStr, uint32_t user)
 {
+#ifdef KISAK_SWITCH
+    if (scrMemTreePub.mt_buffer &&
+        reinterpret_cast<const char *>(refStr) == scrMemTreePub.mt_buffer)
+    {
+        Switch_ReportInvalidStringRef(
+            "SL_AddUserInternal",
+            0,
+            refStr,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    }
+#endif
 	if (((uint8_t)user & refStr->user) == 0)
 	{
 		if (scrStringDebugGlob)
@@ -447,6 +482,16 @@ const char* SL_ConvertToString(uint32_t stringValue)
 
 RefString* GetRefString(uint32_t stringValue)
 {
+#ifdef KISAK_SWITCH
+    if (!stringValue)
+    {
+        Switch_ReportInvalidStringRef(
+            "GetRefString(handle)",
+            stringValue,
+            scrMemTreePub.mt_buffer,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    }
+#endif
 	iassert(stringValue);
 	iassert(stringValue * MT_NODE_SIZE < MT_SIZE);
 
@@ -455,7 +500,17 @@ RefString* GetRefString(uint32_t stringValue)
 RefString* GetRefString(const char* str)
 {
 	iassert(str >= scrMemTreePub.mt_buffer && str < scrMemTreePub.mt_buffer + MT_SIZE);
-
+#ifdef KISAK_SWITCH
+    if (reinterpret_cast<uintptr_t>(str) ==
+        reinterpret_cast<uintptr_t>(scrMemTreePub.mt_buffer) + sizeof(uint32_t))
+    {
+        Switch_ReportInvalidStringRef(
+            "GetRefString(char*)",
+            0,
+            scrMemTreePub.mt_buffer,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    }
+#endif
 	return (RefString*)(str - 4);
 }
 
