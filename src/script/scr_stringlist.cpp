@@ -160,6 +160,11 @@ void SL_AddUserInternal(RefString* refStr, uint32_t user)
 
 void SL_AddRefToString(uint32_t stringValue)
 {
+	if (!stringValue)
+	{
+		Com_Error(ERR_DROP, "invalid null script-string handle in SL_AddRefToString");
+		return;
+	}
 #ifdef KISAK_SWITCH
     if (!stringValue)
     {
@@ -746,6 +751,12 @@ uint32_t SL_GetLowercaseString(const char* str, uint32_t user)
 
 void SL_RemoveRefToString(uint32_t stringValue)
 {
+	if (!stringValue)
+	{
+		Com_Error(ERR_DROP, "invalid null script-string handle in SL_RemoveRefToString");
+		return;
+	}
+
 	RefString* refStr; // [esp+30h] [ebp-8h]
 	int len; // [esp+34h] [ebp-4h]
 
