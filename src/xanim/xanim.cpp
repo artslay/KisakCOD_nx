@@ -1,4 +1,5 @@
 #include <universal/q_shared.h>
+#include <stddef.h>
 #include "xanim.h"
 #include "xanim_calc.h"
 
@@ -280,7 +281,12 @@ XAnim_s* __cdecl XAnimCreateAnims(const char* debugName, uint32_t size, void* (_
     iassert(debugName);
     iassert(Alloc);
 
-    anims = (XAnim_s*)Alloc(8 * size + 12);
+    // The original 32-bit layout used a 12-byte XAnim_s header and 8-byte
+    // XAnimEntry records. On Switch, the native pointers widen both layouts;
+    // size the trailing entries from the actual compiled structure offsets.
+    const size_t animsAllocationSize =
+        offsetof(XAnim_s, entries) + sizeof(XAnimEntry) * static_cast<size_t>(size);
+    anims = (XAnim_s*)Alloc(static_cast<int>(animsAllocationSize));
     anims->size = size;
 
     if (g_anim_developer)
@@ -294,7 +300,7 @@ XAnim_s* __cdecl XAnimCreateAnims(const char* debugName, uint32_t size, void* (_
             *v5++ = *v6++;
         } while (v4);
         anims->debugName = newDebugName;
-        anims->debugAnimNames = (const char**)Hunk_AllocDebugMem(4 * size, "XAnimCreateAnims");
+        anims->debugAnimNames = (const char**)Hunk_AllocDebugMem(static_cast<int>(sizeof(*anims->debugAnimNames) * static_cast<size_t>(size)), "XAnimCreateAnims");
     }
 
     if (Hunk_DataOnHunk((unsigned char*)anims))
