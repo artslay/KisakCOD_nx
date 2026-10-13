@@ -55,7 +55,7 @@ static std::atomic<uint32_t> g_switchMemTreeTraceRawPrev{UINT32_MAX};
 static std::atomic<uint32_t> g_switchMemTreeTraceRawNext{UINT32_MAX};
 static std::atomic<uint32_t> g_switchMemTreeTraceTrail[SWITCH_MEMTREE_TRACE_TRAIL_COUNT]{};
 
-static constexpr uint32_t SWITCH_MEMTREE_EVENT_COUNT = 8;
+static constexpr uint32_t SWITCH_MEMTREE_EVENT_COUNT = 64;
 struct SwitchMemTreeEvent
 {
     std::atomic<uint32_t> sequence{0};
@@ -106,6 +106,71 @@ void Switch_RecordMemoryTreeOperation(
     event.usage.store(usage, std::memory_order_relaxed);
     event.usageSize.store(usageSize, std::memory_order_relaxed);
     event.sequence.store(sequence, std::memory_order_release);
+}
+
+static std::atomic<bool> g_switchMemTreeFirstInvariantCaptured{false};
+
+void Switch_ReportFirstMemoryTreeInvariant(
+    const char *phase,
+    uint32_t node,
+    uint32_t bucket,
+    uint32_t usage,
+    uint32_t usageSize,
+    uint32_t prev,
+    uint32_t next,
+    uint32_t extra)
+{
+    bool expected = false;
+    if (!g_switchMemTreeFirstInvariantCaptured.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel))
+        return;
+
+    const uint32_t eventEnd = g_switchMemTreeEventSequence.load(std::memory_order_acquire);
+    const uint32_t eventStart = eventEnd >= SWITCH_MEMTREE_EVENT_COUNT
+        ? eventEnd - SWITCH_MEMTREE_EVENT_COUNT + 1u
+        : 1u;
+
+    char line[320];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][MEMTREE FIRST FAULT] phase=%s node=%u bucket=%u usage=%u/%u links=%u/%u extra=%u eventRange=%u-%u\\n",
+        phase, node, bucket, usage, usageSize, prev, next, extra, eventStart, eventEnd);
+    Switch_LogWrite(line);
+
+    for (uint32_t sequence = eventStart; sequence <= eventEnd; ++sequence)
+    {
+        SwitchMemTreeEvent &event = g_switchMemTreeEvents[sequence % SWITCH_MEMTREE_EVENT_COUNT];
+        if (event.sequence.load(std::memory_order_acquire) != sequence)
+            continue;
+
+        const uint32_t op = event.op.load(std::memory_order_relaxed);
+        const uint32_t arg0 = event.arg0.load(std::memory_order_relaxed);
+        const uint32_t arg1 = event.arg1.load(std::memory_order_relaxed);
+        const uint32_t eventNode = event.node.load(std::memory_order_relaxed);
+        const uint32_t eventPrev = event.prev.load(std::memory_order_relaxed);
+        const uint32_t eventNext = event.next.load(std::memory_order_relaxed);
+        const uint32_t eventUsage = event.usage.load(std::memory_order_relaxed);
+        const uint32_t eventUsageSize = event.usageSize.load(std::memory_order_relaxed);
+
+        if (event.sequence.load(std::memory_order_acquire) != sequence)
+            continue;
+
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][MEMTREE OP BEFORE FIRST FAULT] seq=%u op=%s(%u,%u)->%u links=%u/%u usage=%u/%u\\n",
+            sequence,
+            Switch_MemTreeOperationName(op),
+            arg0,
+            arg1,
+            eventNode,
+            eventPrev,
+            eventNext,
+            eventUsage,
+            eventUsageSize);
+        Switch_LogWrite(line);
+    }
 }
 
 void Switch_BeginMemoryTreeWalk(
