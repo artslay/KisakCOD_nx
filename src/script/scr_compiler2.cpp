@@ -698,15 +698,17 @@ void ConnectBreakStatements()
 		const bool slotSpanOk = nextPos >= slot && nextPos - slot == sizeof(const char *);
 		if (!slotInProgram || !nextInProgram || !slotSpanOk)
 		{
-			char line[448];
+				char line[512];
 			std::snprintf(
 				line,
 				sizeof(line),
-				"[KisakCOD][SCRIPT BREAK PATCH] fileId=%u threadId=%u developer=%d statement=%p slot=0x%llx next=0x%llx target=0x%llx program=0x%llx usedEnd=0x%llx slotOk=%d nextOk=%d spanOk=%d offset=0x%llx\n",
+				"[KisakCOD][SCRIPT BREAK PATCH] fileId=%u threadId=%u developer=%d statement=%p tempUser=%p programUser=%p slot=0x%llx next=0x%llx target=0x%llx program=0x%llx usedEnd=0x%llx slotOk=%d nextOk=%d spanOk=%d offset=0x%llx\n",
 				static_cast<unsigned int>(scrCompileGlob.fileId),
 				static_cast<unsigned int>(scrCompileGlob.threadId),
 				static_cast<int>(scrCompilePub.developer_statement),
 				static_cast<const void *>(statement),
+				static_cast<const void *>(TempMemoryGetUser()),
+				static_cast<const void *>(scrVarPub.programHunkUser),
 				static_cast<unsigned long long>(slot),
 				static_cast<unsigned long long>(nextPos),
 				static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(codePos)),
@@ -2597,10 +2599,12 @@ void EmitBreakStatement(sval_u sourcePos, scr_block_s *block)
 			std::snprintf(
 				line,
 				sizeof(line),
-				"[KisakCOD][SCRIPT BREAK EMIT RANGE] fileId=%u threadId=%u developer=%d slot=0x%llx next=0x%llx program=0x%llx\n",
+				"[KisakCOD][SCRIPT BREAK EMIT RANGE] fileId=%u threadId=%u developer=%d tempUser=%p programUser=%p slot=0x%llx next=0x%llx program=0x%llx\n",
 				static_cast<unsigned int>(scrCompileGlob.fileId),
 				static_cast<unsigned int>(scrCompileGlob.threadId),
 				static_cast<int>(scrCompilePub.developer_statement),
+				static_cast<const void *>(TempMemoryGetUser()),
+				static_cast<const void *>(scrVarPub.programHunkUser),
 				static_cast<unsigned long long>(slot),
 				static_cast<unsigned long long>(nextPos),
 				static_cast<unsigned long long>(programBegin));
