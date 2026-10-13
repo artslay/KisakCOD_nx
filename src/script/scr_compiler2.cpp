@@ -3,6 +3,11 @@
 
 #include <universal/q_shared.h>
 #include <cstddef>
+#ifdef KISAK_SWITCH
+#include <cstdio>
+#include <cstdint>
+extern void Switch_LogWrite(const char *msg);
+#endif
 #include "../qcommon/qcommon.h"
 
 #include "scr_compiler.h"
@@ -580,6 +585,24 @@ CompileTransferRefToString
 */
 void CompileTransferRefToString(uint32_t stringValue, unsigned char user)
 {
+#ifdef KISAK_SWITCH
+	if (!stringValue)
+	{
+		char line[320];
+		std::snprintf(
+			line,
+			sizeof(line),
+			"[KisakCOD][SCRIPT ZERO STRING INPUT] value=%u user=%u constRef=%d developer=%d fileId=%u threadId=%u caller=0x%llx\n",
+			stringValue,
+			static_cast<unsigned int>(user),
+			static_cast<int>(scrCompileGlob.bConstRefCount),
+			static_cast<int>(scrCompilePub.developer_statement),
+			static_cast<unsigned int>(scrCompileGlob.fileId),
+			static_cast<unsigned int>(scrCompileGlob.threadId),
+			static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+		Switch_LogWrite(line);
+	}
+#endif
 	iassert(stringValue);
 
 	if (scrCompilePub.developer_statement == SCR_DEV_IGNORE)
@@ -908,9 +931,7 @@ void Scr_TransferBlock(scr_block_s *from, scr_block_s *to)
 
 		while (j > i)
 		{
-			//to->localVars[j] = *(scr_localVar_t *)&to->localVarsInitBits[sizeof(scr_localVar_t) * j + sizeof(uint32_t)];
-			to->localVars[j].name = *(uint32_t*)&to->localVarsInitBits[8 * j];
-			to->localVars[j].sourcePos = *(uint32_t*)&to->localVarsInitBits[8 * j + 4];
+			to->localVars[j] = to->localVars[j - 1];
 			j--;
 		}
 
@@ -974,9 +995,7 @@ void Scr_MergeChildBlocks(scr_block_s **childBlocks, int childCount, scr_block_s
 
 			while (j > i)
 			{
-				//childBlock->localVars[j] = *(scr_localVar_t *)&childBlock->localVarsInitBits[sizeof(scr_localVar_t) * j + sizeof(uint32_t)];
-				childBlock->localVars[j].name = *(uint32_t *)&childBlock->localVarsInitBits[8 * j];
-				childBlock->localVars[j].sourcePos = *(uint32_t *)&childBlock->localVarsInitBits[8 * j + 4];
+				childBlock->localVars[j] = childBlock->localVars[j - 1];
 				j--;
 			}
 
@@ -1089,6 +1108,24 @@ EmitCanonicalString
 */
 void EmitCanonicalString(uint32_t stringValue)
 {
+#ifdef KISAK_SWITCH
+	if (!stringValue)
+	{
+		char line[320];
+		std::snprintf(
+			line,
+			sizeof(line),
+			"[KisakCOD][SCRIPT ZERO CANONICAL INPUT] value=%u constRef=%d developer=%d fileId=%u threadId=%u codePos=%p caller=0x%llx\n",
+			stringValue,
+			static_cast<int>(scrCompileGlob.bConstRefCount),
+			static_cast<int>(scrCompilePub.developer_statement),
+			static_cast<unsigned int>(scrCompileGlob.fileId),
+			static_cast<unsigned int>(scrCompileGlob.threadId),
+			static_cast<const void *>(scrCompileGlob.codePos),
+			static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+		Switch_LogWrite(line);
+	}
+#endif
 	iassert(stringValue);
 	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(unsigned short));
 
@@ -2999,12 +3036,55 @@ int Scr_FindLocalVarIndex(uint32_t name, sval_u sourcePos, bool create, scr_bloc
 				return 0;
 			}
 
-			CompileError(sourcePos.sourcePosValue, "unreachable code");
-			return 0;
+			{
+#ifdef KISAK_SWITCH
+				char line[384];
+				std::snprintf(
+					line,
+					sizeof(line),
+					"[KisakCOD][SCRIPT LOCALVAR UNREACHABLE] block=%p name=%u create=%d forceNotCreate=%d sourcePos=%u developer=%d fileId=%u threadId=%u count=%d createCount=%d publicCount=%d caller=0x%llx\n",
+					static_cast<const void *>(block),
+					name,
+					static_cast<int>(create),
+					static_cast<int>(scrCompileGlob.forceNotCreate),
+					static_cast<unsigned int>(sourcePos.sourcePosValue),
+					static_cast<int>(scrCompilePub.developer_statement),
+					static_cast<unsigned int>(scrCompileGlob.fileId),
+					static_cast<unsigned int>(scrCompileGlob.threadId),
+					block->localVarsCount,
+					block->localVarsCreateCount,
+					block->localVarsPublicCount,
+					static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+				Switch_LogWrite(line);
+#endif
+				CompileError(sourcePos.sourcePosValue, "unreachable code");
+				return 0;
+			}
 		}
 
 		if (i == block->localVarsCreateCount)
 		{
+#ifdef KISAK_SWITCH
+			if (!block->localVars[i].name)
+			{
+				char line[384];
+				std::snprintf(
+					line,
+					sizeof(line),
+					"[KisakCOD][SCRIPT ZERO LOCALVAR NAME] block=%p index=%d count=%d createCount=%d publicCount=%d sourcePos=%u developer=%d fileId=%u threadId=%u caller=0x%llx\n",
+					static_cast<const void *>(block),
+					i,
+					block->localVarsCount,
+					block->localVarsCreateCount,
+					block->localVarsPublicCount,
+					static_cast<unsigned int>(block->localVars[i].sourcePos),
+					static_cast<int>(scrCompilePub.developer_statement),
+					static_cast<unsigned int>(scrCompileGlob.fileId),
+					static_cast<unsigned int>(scrCompileGlob.threadId),
+					static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+				Switch_LogWrite(line);
+			}
+#endif
 			block->localVarsCreateCount++;
 
 			EmitOpcode(OP_CreateLocalVariable, 0, CALL_NONE);
