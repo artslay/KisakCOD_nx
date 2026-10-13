@@ -149,6 +149,24 @@ void __cdecl Scr_CompileRemoveRefToString(unsigned int stringValue)
 
 void __cdecl EmitCanonicalString(unsigned int stringValue)
 {
+#ifdef KISAK_SWITCH
+    if (!stringValue)
+    {
+        char line[320];
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][SCRIPT ZERO CANONICAL INPUT] value=%u constRef=%d developer=%d fileId=%u threadId=%u codePos=%p caller=0x%llx\\n",
+            stringValue,
+            static_cast<int>(scrCompileGlob.bConstRefCount),
+            scrCompilePub.developer_statement,
+            static_cast<unsigned int>(scrCompileGlob.fileId),
+            static_cast<unsigned int>(scrCompileGlob.threadId),
+            static_cast<const void *>(scrCompileGlob.codePos),
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+        Switch_LogWrite(line);
+    }
+#endif
     if (!stringValue)
         MyAssertHandler(".\\script\\scr_compiler.cpp", 192, 0, "%s", "stringValue");
     scrCompileGlob.codePos = (unsigned char*)TempMallocAlignStrict(2u);
@@ -231,6 +249,25 @@ int __cdecl Scr_FindLocalVarIndex(unsigned int name, sval_u sourcePos, bool crea
         return block->localVarsCreateCount - 1 - i;
     }
 unreachable:
+#ifdef KISAK_SWITCH
+    {
+        char line[320];
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][SCRIPT LOCALVAR UNREACHABLE] block=%p name=%u create=%d forceNotCreate=%d sourcePos=%u developer=%d fileId=%u threadId=%u caller=0x%llx\\n",
+            static_cast<const void *>(block),
+            name,
+            static_cast<int>(create),
+            static_cast<int>(scrCompileGlob.forceNotCreate),
+            static_cast<unsigned int>(sourcePos.stringValue),
+            scrCompilePub.developer_statement,
+            static_cast<unsigned int>(scrCompileGlob.fileId),
+            static_cast<unsigned int>(scrCompileGlob.threadId),
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+        Switch_LogWrite(line);
+    }
+#endif
     CompileError(sourcePos.stringValue, "unreachable code");
     return 0;
 }
