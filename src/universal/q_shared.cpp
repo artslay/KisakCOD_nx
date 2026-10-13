@@ -132,7 +132,7 @@ int I_strnicmp(const char* s0, const char* s1, int n)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][STRNICMP LOW PTR] s0=%p low32=%08x high32=%08x s1=%p low32=%08x high32=%08x n=%d caller=%p frame=%s\\n",
+                "[KisakCOD][STRNICMP LOW PTR] s0=%p low32=%08x high32=%08x s1=%p low32=%08x high32=%08x n=%d caller=%p frame=%s\n",
                 static_cast<const void *>(s0),
                 static_cast<unsigned>(v0 & UINT64_C(0xffffffff)),
                 static_cast<unsigned>(v0 >> 32),
