@@ -1607,13 +1607,13 @@ void __cdecl G_DrawVehiclePaths()
     __int16 v0; // r29
     int v1; // r31
     const char *v2; // r11
-    unsigned __int8 *integer; // r10
+    const unsigned __int8 *integer; // r10
     int v4; // r8
     vehicle_pathpos_t v5; // [sp+50h] [-100h] BYREF
 
-    if (*(_BYTE *)g_vehicleDrawPath->current.integer)
+    if (*g_vehicleDrawPath->current.string)
     {
-        if (*(_BYTE *)g_vehicleDrawPath->current.integer != 48)
+        if (*g_vehicleDrawPath->current.string != '0')
         {
             v0 = 0;
             if (s_numNodes > 0)
@@ -1622,7 +1622,7 @@ void __cdecl G_DrawVehiclePaths()
                 while (1)
                 {
                     v2 = SL_ConvertToString(s_nodes[v1].name);
-                    integer = (unsigned __int8 *)g_vehicleDrawPath->current.integer;
+                    integer = (const unsigned __int8 *)g_vehicleDrawPath->current.string;
                     do
                     {
                         v4 = *(unsigned __int8 *)v2 - *integer;
