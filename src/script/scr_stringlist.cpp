@@ -160,11 +160,6 @@ void SL_AddUserInternal(RefString* refStr, uint32_t user)
 
 void SL_AddRefToString(uint32_t stringValue)
 {
-	if (!stringValue)
-	{
-		Com_Error(ERR_DROP, "invalid null script-string handle in SL_AddRefToString");
-		return;
-	}
 #ifdef KISAK_SWITCH
     if (!stringValue)
     {
@@ -175,6 +170,11 @@ void SL_AddRefToString(uint32_t stringValue)
             reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     }
 #endif
+	if (!stringValue)
+	{
+		Com_Error(ERR_DROP, "invalid null script-string handle in SL_AddRefToString");
+		return;
+	}
 	PROF_SCOPED("SL_AddRefToString");
 
 	if (scrStringDebugGlob)
@@ -751,6 +751,16 @@ uint32_t SL_GetLowercaseString(const char* str, uint32_t user)
 
 void SL_RemoveRefToString(uint32_t stringValue)
 {
+#ifdef KISAK_SWITCH
+    if (!stringValue)
+    {
+        Switch_ReportInvalidStringRef(
+            "SL_RemoveRefToString",
+            stringValue,
+            scrMemTreePub.mt_buffer,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    }
+#endif
 	if (!stringValue)
 	{
 		Com_Error(ERR_DROP, "invalid null script-string handle in SL_RemoveRefToString");
