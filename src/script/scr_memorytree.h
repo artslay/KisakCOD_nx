@@ -32,16 +32,17 @@ enum mtType_t : int
     MT_TYPE_COUNT = 22
 };
 
-// Native allocations from the script memory tree must preserve pointer alignment.
-// Keep the 12-byte retail node fields, but use a 16-byte stride on 64-bit hosts.
-struct alignas(void *) MemoryNode
+// The script-memory tree uses the retail 12-byte unit for node indices and
+// string-handle address conversion on every target. Allocations that store native
+// pointers must request at least a two-node block when pointer alignment requires it.
+struct MemoryNode
 {                                       // XREF: scrMemTreeGlob_t/r
     uint16_t prev;              // XREF: MT_Init(void)+46/w
     uint16_t next;              // XREF: MT_Init(void)+4E/w
     uint32_t padding[2];            // XREF: MT_RemoveHeadMemoryNode+61/w
 };
 
-static_assert(sizeof(MemoryNode) == (sizeof(void *) == 8 ? 16 : 12));
+static_assert(sizeof(MemoryNode) == 12);
 
 #define MEMORY_NODE_BITS 16
 #define MEMORY_NODE_COUNT 0x10000
@@ -66,7 +67,7 @@ struct alignas(128) scrMemTreeGlob_t // sizeof=0xC0380
     int totalAllocBuckets;              // XREF: MT_DumpTree(void):loc-59E7AE/r
 };
 
-static_assert(sizeof(scrMemTreeGlob_t) == sizeof(MemoryNode) * MEMORY_NODE_COUNT + 0x380);
+static_assert(sizeof(scrMemTreeGlob_t) == 0xC0380);
 
 static const char* mt_type_names[22] =
 {

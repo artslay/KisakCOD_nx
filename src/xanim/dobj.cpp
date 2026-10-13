@@ -25,11 +25,26 @@ struct SavedDObj // sizeof=0x60
 
 uint32_t g_empty;
 
-// The native model pointer array is followed by one parent-index byte per model.
-// Keep the allocation size in sync with the 64-bit XModel* elements on Switch.
-static int DObjModelListAllocationSize(uint32_t numModels)
+// The model pointer array is followed by one parent-index byte per model.
+static int DObjModelListDataSize(uint32_t numModels)
 {
     return (int)(sizeof(XModel *) * numModels + numModels);
+}
+
+static int DObjModelListAllocationSize(uint32_t numModels)
+{
+    const int dataSize = DObjModelListDataSize(numModels);
+
+    // With the retail 12-byte node stride, a one-node block is only 4-byte
+    // aligned. Keep native XModel* storage 8-byte aligned by allocating a
+    // two-node buddy block when the payload would otherwise fit in one node.
+    if (alignof(XModel *) > alignof(MemoryNode) &&
+        dataSize <= static_cast<int>(sizeof(MemoryNode)))
+    {
+        return static_cast<int>(sizeof(MemoryNode)) + 1;
+    }
+
+    return dataSize;
 }
 
 void __cdecl DObjInit()
@@ -1299,5 +1314,5 @@ void DObjClone(const DObj_s *from, DObj_s *obj)
     obj->tree = 0;
     v5 = (XModel **)MT_Alloc(DObjModelListAllocationSize(from->numModels), MT_TYPE_MODEL_LIST);
     obj->models = v5;
-    memcpy(v5, from->models, DObjModelListAllocationSize(from->numModels));
+    memcpy(v5, from->models, DObjModelListDataSize(from->numModels));
 }
