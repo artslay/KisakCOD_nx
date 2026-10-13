@@ -2309,7 +2309,7 @@ void Scr_ScriptWatch::EvaluateWatchChildren(Scr_WatchElement_s *parentElement)
         }
         if (count)
         {
-            names = Scr_AllocDebugMem(4 * count, "Scr_ScriptWatch::EvaluateWatchChildren");
+            names = Scr_AllocDebugMem(sizeof(newElementOldRef[0]) * count, "Scr_ScriptWatch::EvaluateWatchChildren");
             memcpy(names, hardcodedNames, 4 * hardcodedCount);
             if (parentElement->objectType == VAR_THREAD_LIST)
             {
@@ -2333,8 +2333,8 @@ void Scr_ScriptWatch::EvaluateWatchChildren(Scr_WatchElement_s *parentElement)
             qsort(&names[hardcodedCount], count - hardcodedCount, 4u, (int(__cdecl *)(void const *, void const *))compare);
             oldElements = parentElement->childArrayHead;
             oldChildCount = parentElement->childCount;
-            newElements = (Scr_WatchElement_s*)Scr_AllocDebugMem(100 * count, "Scr_ScriptWatch::EvaluateWatchChildren3");
-            memset(newElements, 0, 100 * count);
+            newElements = (Scr_WatchElement_s*)Scr_AllocDebugMem(sizeof(*newElements) * count, "Scr_ScriptWatch::EvaluateWatchChildren3");
+            memset(newElements, 0, sizeof(*newElements) * count);
             newElementOldRef = (Scr_WatchElement_s**)Scr_AllocDebugMem(4 * count, "Scr_ScriptWatch::EvaluateWatchChildren");
             v9 = oldElements && parentElement->objectType == oldObjectType;
             sameType = v9;
@@ -2700,7 +2700,7 @@ void Scr_ScriptList::Init()
         this->numLines - 1,
         sizeof(scriptWindowsNames[0]),
         (int(__cdecl *)(const void *, const void *))ConDrawInput_CompareStrings);
-    this->scriptWindows = (Scr_ScriptWindow **)Scr_AllocDebugMem(4 * this->numLines, "Scr_ScriptList::Init2");
+    this->scriptWindows = (Scr_ScriptWindow **)Scr_AllocDebugMem(sizeof(this->scriptWindows[0]) * this->numLines, "Scr_ScriptList::Init2");
     memset(&info, 0, sizeof(info));
     Hunk_CheckTempMemoryHighClear();
     Scr_AddSourceBuffer(0, (char *)"scriptdebugger/help.txt", 0, 0);
