@@ -4305,7 +4305,12 @@ void __cdecl Scr_AddAnim(scr_anim_s value)
 {
     IncInParam();
     scrVmPub.top->type = VAR_ANIMATION;
+#ifdef __SWITCH__
+    // VAR_ANIMATION stores the packed 32-bit index/tree payload, not a native pointer.
+    scrVmPub.top->u.intValue = static_cast<int32_t>(value.linkPointer);
+#else
     scrVmPub.top->u.codePosValue = value.linkPointer;
+#endif
 }
 
 void __cdecl Scr_AddUndefined()
