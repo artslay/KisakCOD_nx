@@ -494,7 +494,7 @@ int __cdecl EmitExpressionList(sval_u exprlist, scr_block_s *block)
     expr_count = 0;
     for (node = exprlist.node[0].node; node; node = node[1].node)
     {
-        EmitExpression(node[0].node[0], block);
+        EmitExpression(node[0], block);
         ++expr_count;
     }
     return expr_count;
@@ -1338,7 +1338,7 @@ bool __cdecl EmitOrEvalPrimitiveExpressionList(
         MyAssertHandler(".\\script\\scr_compiler.cpp", 2536, 0, "%s", "constValue");
     expr_count = GetExpressionCount(exprlist);
     if (expr_count == 1)
-        return EmitOrEvalExpression(exprlist.node[0].node[0].node[0], constValue, block); 
+        return EmitOrEvalExpression(exprlist.node[0].node[0], constValue, block); 
     if (expr_count == 3)
     {
         success = true;
@@ -1346,13 +1346,13 @@ bool __cdecl EmitOrEvalPrimitiveExpressionList(
         {
             if (success)
             {
-                success = EmitOrEvalExpression(node[0].node[0], &constValue2, block);
+                success = EmitOrEvalExpression(node[0], &constValue2, block);
                 if (success)
                     Scr_PushValue(&constValue2);
             }
             else
             {
-                EmitExpression(node[0].node[0], block);
+                EmitExpression(node[0], block);
             }
         }
         if (success)
@@ -1518,7 +1518,7 @@ bool __cdecl EvalPrimitiveExpressionList(sval_u exprlist, sval_u sourcePos, Vari
     expr_count = GetExpressionCount(exprlist);
 
     if (expr_count == 1)
-        return EvalExpression(exprlist.node[0].node[0].node[0], constValue);
+        return EvalExpression(exprlist.node[0].node[0], constValue);
 
     if (expr_count != 3)
         return false;
@@ -1526,9 +1526,8 @@ bool __cdecl EvalPrimitiveExpressionList(sval_u exprlist, sval_u sourcePos, Vari
     i = 0;
     for (node = exprlist.node[0].node; node; node = node[1].node, i++)
     {
-        if (!EvalExpression(node[0].node[0], &constValue2[i]))
+        if (!EvalExpression(node[0], &constValue2[i]))
             return false;
-        ++i;
     }
     Scr_CreateVector(constValue2, &constValue->value);
     constValue->sourcePos = sourcePos;
@@ -2700,7 +2699,7 @@ void __cdecl EmitWaittillStatement(
 
     iassert(node);
 
-    EmitExpression(node[0].node[0], block);
+    EmitExpression(node[0], block);
     EmitPrimitiveExpression(obj, block);
 
     EmitOpcode(OP_waittill, -2, 0);
@@ -2733,13 +2732,13 @@ void __cdecl EmitWaittillmatchStatement(
         node = node[1].node;
         if (!node)
             break;
-        EmitExpression(node[0].node[0], block);
+        EmitExpression(node[0], block);
     }
 
     node = exprlist.node[0].node[1].node;
 
     iassert(node);
-    EmitExpression(node[0].node[0], block);
+    EmitExpression(node[0], block);
     EmitPrimitiveExpression(obj, block);
     EmitOpcode(OP_waittillmatch, -2 - exprCount, 0);
     AddOpcodePos(waitSourcePos.stringValue, 0);
@@ -2790,7 +2789,7 @@ void __cdecl EmitNotifyStatement(
     for (node = exprlist.node[0].node; node; node = node[1].node)
     {
         start_node = node;
-        EmitExpression(node[0].node[0], block);
+        EmitExpression(node[0], block);
         expr_count++;
     }
 
