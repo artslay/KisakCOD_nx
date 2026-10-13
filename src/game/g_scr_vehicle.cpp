@@ -176,7 +176,14 @@ void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
         ent->s.lerp.eFlags |= 0x10000u;
     ent->s.lerp.u.turret.gunAngles[0] = 0.0;
     ent->s.lerp.u.turret.gunAngles[1] = 0.0;
+    Com_Printf(CON_CHANNEL_SERVER,
+        "[KisakCOD][VEHICLE TAG TRACE] stage=init_entity_enter ent=%p entNum=%u argVehicle=%p priorField=%p\n",
+        (void *)ent, (unsigned int)ent->s.number, (void *)veh, (void *)ent->scr_vehicle);
     ent->scr_vehicle = veh;
+    Com_Printf(CON_CHANNEL_SERVER,
+        "[KisakCOD][VEHICLE TAG TRACE] stage=init_entity_assigned ent=%p entNum=%u argVehicle=%p field=%p matches=%d\n",
+        (void *)ent, (unsigned int)ent->s.number, (void *)veh, (void *)ent->scr_vehicle,
+        ent->scr_vehicle == veh);
     ent->s.lerp.u.primaryLight.cosHalfFovInner = 0.0;
     ent->s.lerp.u.vehicle.gunYaw = 0.0;
     ent->takedamage = 1;
@@ -185,16 +192,34 @@ void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
     ent->clipmask = 0x810211;
     ent->nextthink = level.time + 50;
     SV_DObjGetBounds(ent, ent->r.mins, ent->r.maxs);
+    Com_Printf(CON_CHANNEL_SERVER,
+        "[KisakCOD][VEHICLE TAG TRACE] stage=init_entity_after_bounds ent=%p argVehicle=%p field=%p matches=%d\n",
+        (void *)ent, (void *)veh, (void *)ent->scr_vehicle, ent->scr_vehicle == veh);
     SV_LinkEntity(ent);
+    Com_Printf(CON_CHANNEL_SERVER,
+        "[KisakCOD][VEHICLE TAG TRACE] stage=init_entity_after_link ent=%p argVehicle=%p field=%p matches=%d\n",
+        (void *)ent, (void *)veh, (void *)ent->scr_vehicle, ent->scr_vehicle == veh);
 #endif
 }
 
 void __cdecl VEH_InitVehicle(gentity_s *ent, scr_vehicle_s *veh, short infoIdx)
 {
 #ifdef KISAK_SP
+    Com_Printf(CON_CHANNEL_SERVER,
+        "[KisakCOD][VEHICLE TAG TRACE] stage=init_vehicle_enter ent=%p entNum=%u argVehicle=%p field=%p matches=%d\n",
+        (void *)ent, (unsigned int)ent->s.number, (void *)veh, (void *)ent->scr_vehicle,
+        ent->scr_vehicle == veh);
     G_VehInitPathPos(&veh->pathPos);
+    Com_Printf(CON_CHANNEL_SERVER,
+        "[KisakCOD][VEHICLE TAG TRACE] stage=init_vehicle_after_path ent=%p argVehicle=%p field=%p matches=%d\n",
+        (void *)ent, (void *)veh, (void *)ent->scr_vehicle, ent->scr_vehicle == veh);
 #endif
     VEH_InitPhysics(ent);
+#ifdef KISAK_SP
+    Com_Printf(CON_CHANNEL_SERVER,
+        "[KisakCOD][VEHICLE TAG TRACE] stage=init_vehicle_after_physics ent=%p argVehicle=%p field=%p matches=%d\n",
+        (void *)ent, (void *)veh, (void *)ent->scr_vehicle, ent->scr_vehicle == veh);
+#endif
     veh->entNum = ent->s.number;
     veh->infoIdx = infoIdx;
     veh->moveState = VEH_MOVESTATE_STOP;
@@ -4114,12 +4139,24 @@ void G_SpawnVehicle(gentity_s *ent, const char *typeName, int load)
     if (i >= 64)
         Com_Error(ERR_DROP, "Hit max vehicle count [%d]", 64);
 
+#ifdef KISAK_SP
+    Com_Printf(CON_CHANNEL_SERVER,
+        "[KisakCOD][VEHICLE TAG TRACE] stage=spawn_slot ent=%p entNum=%u slot=%d candidate=%p candidateEntNum=%u priorField=%p type=%s\n",
+        (void *)ent, (unsigned int)ent->s.number, i, (void *)veh,
+        (unsigned int)veh->entNum, (void *)ent->scr_vehicle, typeName ? typeName : "<null>");
+#endif
     VehicleInfoFromName = VEH_GetVehicleInfoFromName(typeName);
 
     if (VehicleInfoFromName < 0)
         Com_Error(ERR_DROP, "Can't find info for script vehicle [%s]", typeName);
 
     VEH_InitModelAndValidateTags(ent, &VehicleInfoFromName);
+#ifdef KISAK_SP
+    Com_Printf(CON_CHANNEL_SERVER,
+        "[KisakCOD][VEHICLE TAG TRACE] stage=after_model_validate ent=%p entNum=%u slot=%d candidate=%p candidateEntNum=%u field=%p\n",
+        (void *)ent, (unsigned int)ent->s.number, i, (void *)veh,
+        (unsigned int)veh->entNum, (void *)ent->scr_vehicle);
+#endif
     v9 = VehicleInfoFromName;
     if (!level.initializing)
     {
@@ -4130,6 +4167,12 @@ void G_SpawnVehicle(gentity_s *ent, const char *typeName, int load)
         }
     }
     memset(veh, 0, sizeof(scr_vehicle_s));
+#ifdef KISAK_SP
+    Com_Printf(CON_CHANNEL_SERVER,
+        "[KisakCOD][VEHICLE TAG TRACE] stage=after_slot_clear ent=%p entNum=%u slot=%d candidate=%p candidateEntNum=%u field=%p size=%u\n",
+        (void *)ent, (unsigned int)ent->s.number, i, (void *)veh,
+        (unsigned int)veh->entNum, (void *)ent->scr_vehicle, (unsigned int)sizeof(*veh));
+#endif
     veh->targetEnt = ENTITYNUM_NONE;
     number = veh->lookAtEnt.number;
     iassert(!number || g_entities[number - 1].r.inuse);
