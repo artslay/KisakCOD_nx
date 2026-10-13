@@ -61,6 +61,12 @@ struct ContinueStatementInfo // sizeof=0xC
 static_assert(sizeof(ContinueStatementInfo) == 0xC);
 #endif
 
+#ifdef KISAK_SWITCH
+static_assert(sizeof(CaseStatementInfo) == 0x20);
+static_assert(sizeof(BreakStatementInfo) == 0x18);
+static_assert(sizeof(ContinueStatementInfo) == 0x18);
+#endif
+
 struct VariableCompileValue // sizeof=0xC
 {                                       // ...
     VariableValue value;                // ...
