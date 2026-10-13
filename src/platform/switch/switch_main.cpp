@@ -134,7 +134,7 @@ void Switch_ReportFirstMemoryTreeInvariant(
     std::snprintf(
         line,
         sizeof(line),
-        "[KisakCOD][MEMTREE FIRST FAULT] phase=%s node=%u bucket=%u usage=%u/%u links=%u/%u extra=%u eventRange=%u-%u\\n",
+        "[KisakCOD][MEMTREE FIRST FAULT] phase=%s node=%u bucket=%u usage=%u/%u links=%u/%u extra=%u eventRange=%u-%u\n",
         phase, node, bucket, usage, usageSize, prev, next, extra, eventStart, eventEnd);
     Switch_LogWrite(line);
 
@@ -159,7 +159,7 @@ void Switch_ReportFirstMemoryTreeInvariant(
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][MEMTREE OP BEFORE FIRST FAULT] seq=%u op=%s(%u,%u)->%u links=%u/%u usage=%u/%u\\n",
+            "[KisakCOD][MEMTREE OP BEFORE FIRST FAULT] seq=%u op=%s(%u,%u)->%u links=%u/%u usage=%u/%u\n",
             sequence,
             Switch_MemTreeOperationName(op),
             arg0,
