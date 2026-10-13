@@ -2131,7 +2131,7 @@ void __cdecl Scr_TransferBlock(scr_block_s *from, scr_block_s *to)
 
         while (j > i)
         {
-            to->localVars[j] = *(scr_localVar_t *)&to->localVarsInitBits[sizeof(scr_localVar_t) * j + sizeof(unsigned int)];
+            to->localVars[j] = to->localVars[j - 1];
             j--;
         }
 
