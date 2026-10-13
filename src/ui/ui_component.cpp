@@ -2309,7 +2309,7 @@ void Scr_ScriptWatch::EvaluateWatchChildren(Scr_WatchElement_s *parentElement)
         }
         if (count)
         {
-            names = Scr_AllocDebugMem(sizeof(newElementOldRef[0]) * count, "Scr_ScriptWatch::EvaluateWatchChildren");
+            names = Scr_AllocDebugMem(sizeof(names[0]) * count, "Scr_ScriptWatch::EvaluateWatchChildren");
             memcpy(names, hardcodedNames, 4 * hardcodedCount);
             if (parentElement->objectType == VAR_THREAD_LIST)
             {
@@ -2335,7 +2335,7 @@ void Scr_ScriptWatch::EvaluateWatchChildren(Scr_WatchElement_s *parentElement)
             oldChildCount = parentElement->childCount;
             newElements = (Scr_WatchElement_s*)Scr_AllocDebugMem(sizeof(*newElements) * count, "Scr_ScriptWatch::EvaluateWatchChildren3");
             memset(newElements, 0, sizeof(*newElements) * count);
-            newElementOldRef = (Scr_WatchElement_s**)Scr_AllocDebugMem(4 * count, "Scr_ScriptWatch::EvaluateWatchChildren");
+            newElementOldRef = (Scr_WatchElement_s**)Scr_AllocDebugMem(sizeof(newElementOldRef[0]) * count, "Scr_ScriptWatch::EvaluateWatchChildren");
             v9 = oldElements && parentElement->objectType == oldObjectType;
             sameType = v9;
             elementChanged = 0;
