@@ -2199,8 +2199,8 @@ void __cdecl EmitIfElseStatement(
     Scr_TransferBlock(block, ifStatBlock->block);
     EmitStatement(stmt1, lastStatement, endSourcePos, ifStatBlock->block);
     EmitRemoveLocalVars(ifStatBlock->block, ifStatBlock->block);
-    if (!*(int*)ifStatBlock->type)
-        childBlocks[childCount++] = (scr_block_s*)ifStatBlock->type;
+    if (ifStatBlock->block->abortLevel == SCR_ABORT_NONE)
+        childBlocks[childCount++] = ifStatBlock->block;
     checksum = scrVarPub.checksum;
     if (lastStatement)
     {
@@ -2226,8 +2226,8 @@ void __cdecl EmitIfElseStatement(
     Scr_TransferBlock(block, elseStatBlock->block);
     EmitStatement(stmt2, lastStatement, endSourcePos, elseStatBlock->block);
     EmitNOP2(lastStatement, endSourcePos, elseStatBlock->block);
-    if (!*(int*)elseStatBlock->type)
-        childBlocks[childCount++] = (scr_block_s*)elseStatBlock->type;
+    if (elseStatBlock->block->abortLevel == SCR_ABORT_NONE)
+        childBlocks[childCount++] = elseStatBlock->block;
     if (!lastStatement)
         *pos2 = TempMalloc(0) - nextPos2;
     Scr_InitFromChildBlocks(childBlocks, childCount, block);
@@ -2524,8 +2524,8 @@ void __cdecl EmitWhileStatement(
     scrCompileGlob.bCanContinue = 1;
     scrCompileGlob.currentContinueStatement = 0;
     EmitStatement(stmt, 0, 0, whileStatBlock->block);
-    if (*(int*)whileStatBlock->type != 3)
-        *(int*)whileStatBlock->type = 0;
+    if (whileStatBlock->block->abortLevel != SCR_ABORT_RETURN)
+        whileStatBlock->block->abortLevel = SCR_ABORT_NONE;
     scrCompileGlob.bCanBreak = 0;
     scrCompileGlob.bCanContinue = 0;
     ConnectContinueStatements();
@@ -3783,9 +3783,9 @@ void __cdecl Scr_CalcLocalVarsIfElseStatement(
     Scr_CopyBlock(block, &ifStatBlock->block);
     Scr_CalcLocalVarsStatement(stmt1, ifStatBlock->block);
 
-    if (ifStatBlock->node[0].intValue <= SCR_ABORT_MAX)
+    if (ifStatBlock->block->abortLevel <= SCR_ABORT_MAX)
     {
-        abortLevel = ifStatBlock->node[0].intValue;
+        abortLevel = ifStatBlock->block->abortLevel;
 
         if (abortLevel == SCR_ABORT_NONE)
         {
@@ -3797,9 +3797,9 @@ void __cdecl Scr_CalcLocalVarsIfElseStatement(
     Scr_CopyBlock(block, &elseStatBlock->block);
     Scr_CalcLocalVarsStatement(stmt2, elseStatBlock->block);
 
-    if (elseStatBlock->node[0].intValue <= abortLevel)
+    if (elseStatBlock->block->abortLevel <= abortLevel)
     {
-        abortLevel = elseStatBlock->node[0].intValue;
+        abortLevel = elseStatBlock->block->abortLevel;
 
         if (abortLevel == SCR_ABORT_NONE)
         {
@@ -3863,14 +3863,14 @@ void __cdecl Scr_CalcLocalVarsWhileStatement(sval_u expr, sval_u stmt, scr_block
         breakChildBlocks = 0;
     }
     scrCompileGlob.breakChildBlocks = breakChildBlocks;
-    Scr_CopyBlock(block, (scr_block_s **)whileStatBlock);
+    Scr_CopyBlock(block, &whileStatBlock->block);
     Scr_CalcLocalVarsStatement(stmt, whileStatBlock->block);
     Scr_AddContinueBlock(whileStatBlock->block);
     for (i = 0; i < continueChildCount; ++i)
         Scr_AppendChildBlocks(&continueChildBlocks[i], 1, block);
     if (constConditional)
         Scr_AppendChildBlocks(breakChildBlocks, breakChildCount, block);
-    Scr_MergeChildBlocks((scr_block_s **)whileStatBlock, 1, block);
+    Scr_MergeChildBlocks(&whileStatBlock->block, 1, block);
     scrCompileGlob.breakChildBlocks = oldBreakChildBlocks;
     scrCompileGlob.breakChildCount = oldBreakChildCount;
     scrCompileGlob.continueChildBlocks = oldContinueChildBlocks;
@@ -3938,18 +3938,18 @@ void __cdecl Scr_CalcLocalVarsForStatement(
         breakChildBlocks = 0;
     }
     scrCompileGlob.breakChildBlocks = breakChildBlocks;
-    Scr_CopyBlock(block, (scr_block_s **)forStatBlock);
-    Scr_CopyBlock(block, (scr_block_s **)forStatPostBlock);
+    Scr_CopyBlock(block, &forStatBlock->block);
+    Scr_CopyBlock(block, &forStatPostBlock->block);
     Scr_CalcLocalVarsStatement(stmt, forStatBlock->block);
     Scr_AddContinueBlock(forStatBlock->block);
     for (i = 0; i < continueChildCount; ++i)
         Scr_AppendChildBlocks(&continueChildBlocks[i], 1, block);
     Scr_CalcLocalVarsStatement(stmt2, forStatPostBlock->block);
-    Scr_AppendChildBlocks((scr_block_s **)forStatPostBlock, 1, block);
-    Scr_MergeChildBlocks((scr_block_s **)forStatPostBlock, 1, block);
+    Scr_AppendChildBlocks(&forStatPostBlock->block, 1, block);
+    Scr_MergeChildBlocks(&forStatPostBlock->block, 1, block);
     if (constConditional)
         Scr_AppendChildBlocks(breakChildBlocks, breakChildCount, block);
-    Scr_MergeChildBlocks((scr_block_s **)forStatBlock, 1, block);
+    Scr_MergeChildBlocks(&forStatBlock->block, 1, block);
     scrCompileGlob.breakChildBlocks = oldBreakChildBlocks;
     scrCompileGlob.breakChildCount = oldBreakChildCount;
     scrCompileGlob.continueChildBlocks = oldContinueChildBlocks;
