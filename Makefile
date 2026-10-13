@@ -61,8 +61,7 @@ CPP_SOURCES := $(shell find src -type f -name '*.cpp' \
     ! -path 'src/physics/ode/collision_trimesh*.cpp' \
     ! -name 'stack.cpp' \
     ! -name 'obstack.cpp' \
-    ! -name 'testing.cpp' \
-    ! -name 'scr_compiler2.cpp' )
+    ! -name 'testing.cpp' )
 
 # Required by Phys_CollideBoxWithTriangleList; keep other optional trimesh
 # backends excluded from this Switch build.
