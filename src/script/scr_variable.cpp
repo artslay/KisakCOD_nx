@@ -1125,7 +1125,7 @@ uint32_t  Scr_FindAllThreads(uint32_t selfId, uint32_t* threads, uint32_t localI
 			{
 				if (GetValueType(stackId) == VAR_STACK)
 				{
-					for (threadId = *(uint32_t*)(GetVariableValueAddress(stackId)->u.intValue + 8);
+					for (threadId = GetVariableValueAddress(stackId)->u.stackValue->localId;
 						threadId;
 						threadId = GetSafeParentLocalId(threadId))
 					{
