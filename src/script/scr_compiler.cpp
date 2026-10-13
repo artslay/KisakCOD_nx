@@ -1338,7 +1338,7 @@ bool __cdecl EmitOrEvalPrimitiveExpressionList(
         MyAssertHandler(".\\script\\scr_compiler.cpp", 2536, 0, "%s", "constValue");
     expr_count = GetExpressionCount(exprlist);
     if (expr_count == 1)
-        return EmitOrEvalExpression(exprlist.node[0].node[0].type, constValue, block); // KISAKTODO: might be wrong 
+        return EmitOrEvalExpression(exprlist.node[0].node[0].node[0], constValue, block); 
     if (expr_count == 3)
     {
         success = true;
@@ -1346,13 +1346,13 @@ bool __cdecl EmitOrEvalPrimitiveExpressionList(
         {
             if (success)
             {
-                success = EmitOrEvalExpression(node->node->type, &constValue2, block);
+                success = EmitOrEvalExpression(node[0].node[0], &constValue2, block);
                 if (success)
                     Scr_PushValue(&constValue2);
             }
             else
             {
-                EmitExpression(node->node->type, block);
+                EmitExpression(node[0].node[0], block);
             }
         }
         if (success)
@@ -2733,7 +2733,7 @@ void __cdecl EmitWaittillmatchStatement(
         node = node[1].node;
         if (!node)
             break;
-        EmitExpression(node->node->type, block);
+        EmitExpression(node[0].node[0], block);
     }
 
     node = exprlist.node[0].node[1].node;
