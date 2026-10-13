@@ -461,6 +461,10 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes)
 
     size = MT_GetSize(numBytes);
 
+    iassert(size >= 0 && size <= MEMORY_NODE_BITS);
+    iassert(nodeNum > 0 && nodeNum < MEMORY_NODE_COUNT);
+
+    Sys_EnterCriticalSection(CRITSECT_MEMORY_TREE);
 #ifdef KISAK_SWITCH
     if (nodeNum < MEMORY_NODE_COUNT && size >= 0 && size <= MEMORY_NODE_BITS)
     {
@@ -481,11 +485,6 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes)
         }
     }
 #endif
-
-    iassert(size >= 0 && size <= MEMORY_NODE_BITS);
-    iassert(nodeNum > 0 && nodeNum < MEMORY_NODE_COUNT);
-
-    Sys_EnterCriticalSection(CRITSECT_MEMORY_TREE);
     --scrMemTreeGlob.totalAlloc;
     scrMemTreeGlob.totalAllocBuckets -= 1 << size;
 
