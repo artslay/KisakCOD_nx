@@ -117,6 +117,7 @@ char* __cdecl Z_MallocGarbage(int32_t size, const char* name, int32_t type);
 char* __cdecl TempMalloc(uint32_t len);
 void __cdecl TempMemorySetPos(char* pos);
 void __cdecl TempMemoryReset(HunkUser* user);
+HunkUser* __cdecl TempMemoryGetUser();
 char* __cdecl TempMallocAlignStrict(uint32_t len);
 char* __cdecl Z_MallocGarbage(int32_t size, const char* name, int32_t type);
 
