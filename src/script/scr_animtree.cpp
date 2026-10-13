@@ -54,11 +54,9 @@ void __cdecl Scr_EmitAnimation(char *pos, uint32_t animName, uint32_t sourcePos)
 }
 
 #ifdef __SWITCH__
-// Animation operands are 32-bit scr_anim_s values in final bytecode, but while
-// compiling they temporarily form a linked list of references. Never store
-// native 64-bit pointers in these 4-byte operand slots; store program-relative
-// offsets (+1 so zero remains the end-of-list marker).
-static constexpr uintptr_t SCR_ANIM_PROGRAM_CAPACITY = 0x100000u;
+// Animation references temporarily share the 32-bit scr_anim_s operand slot.
+// Encode code positions as program-buffer-relative offsets (+1 preserves zero
+// as the end-of-list marker) until ConnectScriptToAnim writes the final record.
 static_assert(sizeof(scr_anim_s) == sizeof(uint32_t));
 
 static uint32_t Scr_EncodeAnimCodePos(const char *codePos)
@@ -68,9 +66,9 @@ static uint32_t Scr_EncodeAnimCodePos(const char *codePos)
 
     const uintptr_t base = reinterpret_cast<uintptr_t>(scrVarPub.programBuffer);
     const uintptr_t address = reinterpret_cast<uintptr_t>(codePos);
-    if (!base || address < base || address - base >= SCR_ANIM_PROGRAM_CAPACITY)
+    if (!base || address < base || address - base >= UINT32_MAX)
     {
-        Com_Error(ERR_DROP, "Animation script reference is outside the script program buffer");
+        Com_Error(ERR_DROP, "Animation script reference does not fit the 32-bit program offset");
         return 0;
     }
 
@@ -84,9 +82,10 @@ static const char *Scr_DecodeAnimCodePos(uint32_t encoded)
 
     const uintptr_t base = reinterpret_cast<uintptr_t>(scrVarPub.programBuffer);
     const uintptr_t offset = static_cast<uintptr_t>(encoded - 1);
-    if (!base || offset >= SCR_ANIM_PROGRAM_CAPACITY)
+    const uintptr_t end = reinterpret_cast<uintptr_t>(scrVarPub.endScriptBuffer);
+    if (!base || (end && (end < base || offset >= end - base)))
     {
-        Com_Error(ERR_DROP, "Animation script reference offset is outside the script program buffer");
+        Com_Error(ERR_DROP, "Animation script reference offset is outside the compiled program buffer");
         return nullptr;
     }
 

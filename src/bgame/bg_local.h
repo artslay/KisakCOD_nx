@@ -219,14 +219,18 @@ enum ViewLockTypes : __int32
 //    const char *linkPointer;
 //};
 struct scr_anim_s // sizeof=0x4
-{   
+{
     scr_anim_s()
     {
-        linkPointer = NULL;
+        linkPointer = 0;
     }
     scr_anim_s(int i)
     {
+#ifdef __SWITCH__
+        linkPointer = static_cast<uint32_t>(i);
+#else
         linkPointer = reinterpret_cast<const char *>(static_cast<uintptr_t>(static_cast<uint32_t>(i))); // KISAKHACK
+#endif
     }
     // ...
     //$76411D3CC105A18E6E4A61D5A929E310 ___u0; // ...
@@ -237,10 +241,17 @@ struct scr_anim_s // sizeof=0x4
             uint16_t index;
             uint16_t tree;
         };
+#ifdef __SWITCH__
+        // The original anim operand and anim index/tree record are 32-bit.
+        // On 64-bit Switch a native pointer here would expand the union to 8 bytes
+        // and overwrite the following bytecode operand.
+        uint32_t linkPointer;
+#else
         const char* linkPointer;
+#endif
     };
 };
-#ifndef __SWITCH__
+#if defined(__SWITCH__) || UINTPTR_MAX == UINT32_MAX
 static_assert(sizeof(struct scr_anim_s) == 0x4);
 #endif
 
