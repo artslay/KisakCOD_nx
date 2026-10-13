@@ -9,6 +9,22 @@
 
 #ifdef KISAK_SWITCH
 extern void Switch_SetProgressPhase(const char *phase);
+extern void Switch_BeginMemoryTreeWalk(
+    uint32_t requestBytes,
+    uint32_t requestType,
+    uint32_t requestBucket,
+    uint32_t treeBucket,
+    uint32_t rootNode);
+extern void Switch_UpdateMemoryTreeWalk(
+    uint32_t step,
+    uint32_t currentNode,
+    uint32_t prev,
+    uint32_t next,
+    uint32_t parentKind,
+    uint32_t parentIndex,
+    uint32_t chosenNode,
+    uint32_t prevScore,
+    uint32_t nextScore);
 #endif
 
 scrMemTreePub_t scrMemTreePub;
@@ -117,6 +133,12 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
     }
 
 #ifdef KISAK_SWITCH
+    Switch_BeginMemoryTreeWalk(
+        static_cast<uint32_t>(numBytes),
+        static_cast<uint32_t>(type),
+        size,
+        static_cast<uint32_t>(newSize),
+        nodeNum);
     Switch_SetProgressPhase("memtree/remove_head");
 #endif
     MT_RemoveHeadMemoryNode(newSize);
@@ -146,6 +168,42 @@ bool MT_Realloc(int oldNumBytes, int newNumbytes)
     return MT_GetSize(oldNumBytes) >= MT_GetSize(newNumbytes);
 }
 
+#ifdef KISAK_SWITCH
+// parentKind: 0 = head[] root, 1 = MemoryNode.prev, 2 = MemoryNode.next,
+// 3 = unexpected member offset, 4 = pointer outside the memory-tree storage.
+static void MT_GetWalkParentSlot(const uint16_t *slot, uint32_t *parentKind, uint32_t *parentIndex)
+{
+    const uintptr_t address = reinterpret_cast<uintptr_t>(slot);
+    const uintptr_t headBegin = reinterpret_cast<uintptr_t>(&scrMemTreeGlob.head[0]);
+    const uintptr_t headEnd = headBegin + sizeof(scrMemTreeGlob.head);
+    if (address >= headBegin && address <= headEnd - sizeof(*slot))
+    {
+        *parentKind = 0;
+        *parentIndex = static_cast<uint32_t>((address - headBegin) / sizeof(*slot));
+        return;
+    }
+
+    const uintptr_t nodesBegin = reinterpret_cast<uintptr_t>(&scrMemTreeGlob.nodes[0]);
+    const uintptr_t nodesEnd = nodesBegin + sizeof(scrMemTreeGlob.nodes);
+    if (address >= nodesBegin && address <= nodesEnd - sizeof(*slot))
+    {
+        const uintptr_t offset = address - nodesBegin;
+        const uintptr_t memberOffset = offset % sizeof(MemoryNode);
+        *parentIndex = static_cast<uint32_t>(offset / sizeof(MemoryNode));
+        if (memberOffset == 0)
+            *parentKind = 1;
+        else if (memberOffset == sizeof(uint16_t))
+            *parentKind = 2;
+        else
+            *parentKind = 3;
+        return;
+    }
+
+    *parentKind = 4;
+    *parentIndex = UINT32_MAX;
+}
+#endif
+
 void MT_RemoveHeadMemoryNode(int size)
 {
 #ifdef KISAK_SWITCH
@@ -162,15 +220,40 @@ void MT_RemoveHeadMemoryNode(int size)
 
     parentNode = &scrMemTreeGlob.head[size];
     oldNodeValue = scrMemTreeGlob.nodes[*parentNode];
+#ifdef KISAK_SWITCH
+    uint32_t currentNode = *parentNode;
+    uint32_t walkSteps = 0;
+#endif
 
     while (1)
     {
+#ifdef KISAK_SWITCH
+        uint32_t parentKind;
+        uint32_t parentIndex;
+        MT_GetWalkParentSlot(parentNode, &parentKind, &parentIndex);
+        prevScore = -1;
+        nextScore = -1;
+#endif
         if (!oldNodeValue.prev)
         {
             oldNode = oldNodeValue.next;
             *parentNode = oldNodeValue.next;
             if (!oldNode)
+            {
+#ifdef KISAK_SWITCH
+                Switch_UpdateMemoryTreeWalk(
+                    ++walkSteps,
+                    currentNode,
+                    oldNodeValue.prev,
+                    oldNodeValue.next,
+                    parentKind,
+                    parentIndex,
+                    0,
+                    UINT32_MAX,
+                    UINT32_MAX);
+#endif
                 break;
+            }
             parentNode = &scrMemTreeGlob.nodes[oldNode].next;
         }
         else if (oldNodeValue.next)
@@ -201,10 +284,25 @@ void MT_RemoveHeadMemoryNode(int size)
         }
 
         iassert(oldNode != 0);
+#ifdef KISAK_SWITCH
+        Switch_UpdateMemoryTreeWalk(
+            ++walkSteps,
+            currentNode,
+            oldNodeValue.prev,
+            oldNodeValue.next,
+            parentKind,
+            parentIndex,
+            static_cast<uint32_t>(oldNode),
+            static_cast<uint32_t>(prevScore),
+            static_cast<uint32_t>(nextScore));
+#endif
 
         tempNodeValue = oldNodeValue;
         oldNodeValue = scrMemTreeGlob.nodes[oldNode];
         scrMemTreeGlob.nodes[oldNode] = tempNodeValue;
+#ifdef KISAK_SWITCH
+        currentNode = static_cast<uint32_t>(oldNode);
+#endif
     }
 }
 
