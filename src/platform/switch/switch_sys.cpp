@@ -94,6 +94,10 @@ static bool Switch_LogPrefixAllowed(const char *msg)
  * 0x400-byte default because the diagnostic formatter uses a little stack.
  */
 extern "C" {
+char __code_start[];
+}
+
+extern "C" {
 alignas(16) uint8_t __nx_exception_stack[0x4000];
 uint64_t __nx_exception_stack_size = sizeof(__nx_exception_stack);
 }
@@ -154,11 +158,15 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         "[KisakCOD][CRASH] libnx user exception\n"
         "[KisakCOD][CRASH] error_desc=0x%08x\n"
         "[KisakCOD][CRASH] pc=0x%016llx lr=0x%016llx\n"
+        "[KisakCOD][CRASH] module_base=0x%016llx pc_offset=0x%016llx lr_offset=0x%016llx\n"
         "[KisakCOD][CRASH] sp=0x%016llx fp=0x%016llx far=0x%016llx\n"
         "[KisakCOD][CRASH] pstate=0x%08x esr=0x%08x ec=0x%02x\n",
         ctx->error_desc,
         static_cast<unsigned long long>(ctx->pc.x),
         static_cast<unsigned long long>(ctx->lr.x),
+        static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__code_start)),
+        static_cast<unsigned long long>(ctx->pc.x - reinterpret_cast<uintptr_t>(__code_start)),
+        static_cast<unsigned long long>(ctx->lr.x - reinterpret_cast<uintptr_t>(__code_start)),
         static_cast<unsigned long long>(ctx->sp.x),
         static_cast<unsigned long long>(ctx->fp.x),
         static_cast<unsigned long long>(ctx->far.x),
