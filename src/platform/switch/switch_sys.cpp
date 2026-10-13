@@ -94,7 +94,7 @@ static bool Switch_LogPrefixAllowed(const char *msg)
  * 0x400-byte default because the diagnostic formatter uses a little stack.
  */
 extern "C" {
-char __code_start[];
+extern char __code_start[];
 }
 
 extern "C" {
