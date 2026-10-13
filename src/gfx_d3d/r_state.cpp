@@ -17,12 +17,6 @@ extern void Switch_LogWrite(const char *msg);
 #include "r_cinematic.h"
 #endif
 #endif
-#ifdef __SWITCH__
-thread_local const Material *g_switchLastSamplerMaterials[16]{};
-thread_local const char *g_switchLastSamplerMaterialNames[16]{};
-thread_local uint32_t g_switchLastSamplerNameHashes[16]{};
-thread_local uint8_t g_switchLastSamplerSemantics[16]{};
-#endif
 
 //float const *const shadowmapClearColor 820ebb50     gfx_d3d : r_state.obj
 //BOOL g_renderTargetIsOverridden 85b5dd38     gfx_d3d : r_state.obj
@@ -1744,19 +1738,6 @@ void __cdecl R_SetSampler(
 
 
     iassert(image);
-#ifdef __SWITCH__
-    // The native texture binding can remain unchanged across material draws,
-    // but the per-draw diagnostic identity must still follow the current pass.
-    // Keep this metadata update outside the SetTexture condition below.
-    g_switchLastSamplerMaterials[samplerIndex] = context.state->material;
-    g_switchLastSamplerMaterialNames[samplerIndex] =
-        context.state->material ? context.state->material->info.name : nullptr;
-    extern thread_local const GfxImage *g_switchLastSamplerImages[16];
-    g_switchLastSamplerImages[samplerIndex] = image;
-
-
-#endif
-
     if (context.state->samplerTexture[samplerIndex] != &image->texture)
     {
         context.state->samplerTexture[samplerIndex] = &image->texture;
