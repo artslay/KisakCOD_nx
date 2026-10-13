@@ -696,17 +696,19 @@ void ConnectBreakStatements()
 			slot <= codeEnd && sizeof(intptr_t) <= codeEnd - slot;
 		const bool nextInProgram = nextPos >= programBegin && nextPos <= codeEnd;
 		const bool slotSpanOk = nextPos >= slot && nextPos - slot == sizeof(const char *);
-		if (!slotInProgram || !nextInProgram || !slotSpanOk)
+		const uintptr_t link = reinterpret_cast<uintptr_t>(statement->next);
+		if (!slotInProgram || !nextInProgram || !slotSpanOk || nextPos == link)
 		{
-				char line[512];
+			char line[512];
 			std::snprintf(
 				line,
 				sizeof(line),
-				"[KisakCOD][SCRIPT BREAK PATCH] fileId=%u threadId=%u developer=%d statement=%p tempUser=%p programUser=%p slot=0x%llx next=0x%llx target=0x%llx program=0x%llx usedEnd=0x%llx slotOk=%d nextOk=%d spanOk=%d offset=0x%llx\n",
+				"[KisakCOD][SCRIPT BREAK PATCH] fileId=%u threadId=%u developer=%d statement=%p link=0x%llx tempUser=%p programUser=%p slot=0x%llx next=0x%llx target=0x%llx program=0x%llx usedEnd=0x%llx slotOk=%d nextOk=%d spanOk=%d nextEqLink=%d offset=0x%llx\n",
 				static_cast<unsigned int>(scrCompileGlob.fileId),
 				static_cast<unsigned int>(scrCompileGlob.threadId),
 				static_cast<int>(scrCompilePub.developer_statement),
 				static_cast<const void *>(statement),
+				static_cast<unsigned long long>(link),
 				static_cast<const void *>(TempMemoryGetUser()),
 				static_cast<const void *>(scrVarPub.programHunkUser),
 				static_cast<unsigned long long>(slot),
@@ -717,6 +719,7 @@ void ConnectBreakStatements()
 				static_cast<int>(slotInProgram),
 				static_cast<int>(nextInProgram),
 				static_cast<int>(slotSpanOk),
+				static_cast<int>(nextPos == link),
 				static_cast<unsigned long long>(codeEnd >= nextPos ? codeEnd - nextPos : UINTPTR_MAX));
 			Switch_LogWrite(line);
 		}
@@ -2614,6 +2617,27 @@ void EmitBreakStatement(sval_u sourcePos, scr_block_s *block)
 #endif
 	newBreakStatement->next = scrCompileGlob.currentBreakStatement;
 
+#ifdef KISAK_SWITCH
+	{
+		char line[448];
+		std::snprintf(
+			line,
+			sizeof(line),
+			"[KisakCOD][SCRIPT BREAK EMIT] fileId=%u threadId=%u developer=%d sourcePos=%u statement=%p slot=0x%llx next=0x%llx previous=0x%llx tempUser=%p programUser=%p codeEnd=0x%llx\\n",
+			static_cast<unsigned int>(scrCompileGlob.fileId),
+			static_cast<unsigned int>(scrCompileGlob.threadId),
+			static_cast<int>(scrCompilePub.developer_statement),
+			static_cast<unsigned int>(sourcePos.sourcePosValue),
+			static_cast<const void *>(newBreakStatement),
+			static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(newBreakStatement->codePos)),
+			static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(newBreakStatement->nextCodePos)),
+			static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(newBreakStatement->next)),
+			static_cast<const void *>(TempMemoryGetUser()),
+			static_cast<const void *>(scrVarPub.programHunkUser),
+			static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(scrCompileGlob.codePos)));
+		Switch_LogWrite(line);
+	}
+#endif
 	scrCompileGlob.currentBreakStatement = newBreakStatement;
 }
 
