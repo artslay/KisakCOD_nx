@@ -156,7 +156,7 @@ void __cdecl EmitCanonicalString(unsigned int stringValue)
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][SCRIPT ZERO CANONICAL INPUT] value=%u constRef=%d developer=%d fileId=%u threadId=%u codePos=%p caller=0x%llx\\n",
+            "[KisakCOD][SCRIPT ZERO CANONICAL INPUT] value=%u constRef=%d developer=%d fileId=%u threadId=%u codePos=%p caller=0x%llx\n",
             stringValue,
             static_cast<int>(scrCompileGlob.bConstRefCount),
             scrCompilePub.developer_statement,
@@ -255,7 +255,7 @@ unreachable:
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][SCRIPT LOCALVAR UNREACHABLE] block=%p name=%u create=%d forceNotCreate=%d sourcePos=%u developer=%d fileId=%u threadId=%u caller=0x%llx\\n",
+            "[KisakCOD][SCRIPT LOCALVAR UNREACHABLE] block=%p name=%u create=%d forceNotCreate=%d sourcePos=%u developer=%d fileId=%u threadId=%u caller=0x%llx\n",
             static_cast<const void *>(block),
             name,
             static_cast<int>(create),
