@@ -900,7 +900,7 @@ void __cdecl EmitCall(sval_u func_name, sval_u params, bool bStatement, scr_bloc
     script_function:
         if (scrCompilePub.developer_statement == 3)
         {
-            CompileError(*(unsigned int*)(func_name.type + 8), "unknown builtin function");
+            CompileError(func_name.node[2].stringValue, "unknown builtin function");
         }
         else
         {
@@ -1032,7 +1032,7 @@ void __cdecl EmitMethod(
     script_method:
         if (scrCompilePub.developer_statement == 3)
         {
-            CompileError(*(unsigned int*)(func_name.type + 8), "unknown builtin method");
+            CompileError(func_name.node[2].stringValue, "unknown builtin method");
         }
         else
         {
