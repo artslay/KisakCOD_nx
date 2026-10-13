@@ -290,7 +290,7 @@ void __cdecl CompileTransferRefToString(unsigned int stringValue, unsigned int u
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][SCRIPT ZERO STRING INPUT] value=%u user=%u constRef=%d developer=%d fileId=%u caller=0x%llx\\n",
+            "[KisakCOD][SCRIPT ZERO STRING INPUT] value=%u user=%u constRef=%d developer=%d fileId=%u caller=0x%llx\n",
             stringValue,
             user,
             static_cast<int>(scrCompileGlob.bConstRefCount),
