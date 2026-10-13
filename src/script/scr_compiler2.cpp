@@ -666,7 +666,7 @@ void ConnectContinueStatements()
 
 	for (ContinueStatementInfo *statement = scrCompileGlob.currentContinueStatement; statement; statement = statement->next)
 	{
-		*(intptr_t *)statement->codePos = codePos - statement->nextCodePos;
+		*(int32_t *)statement->codePos = static_cast<int32_t>(codePos - statement->nextCodePos);
 	}
 }
 
@@ -692,10 +692,10 @@ void ConnectBreakStatements()
 		const uintptr_t slot = reinterpret_cast<uintptr_t>(statement->codePos);
 		const uintptr_t nextPos = reinterpret_cast<uintptr_t>(statement->nextCodePos);
 		const bool slotInProgram = slot >= programBegin &&
-			slot <= programLimit - sizeof(intptr_t) &&
-			slot <= codeEnd && sizeof(intptr_t) <= codeEnd - slot;
+			slot <= programLimit - sizeof(int32_t) &&
+			slot <= codeEnd && sizeof(int32_t) <= codeEnd - slot;
 		const bool nextInProgram = nextPos >= programBegin && nextPos <= codeEnd;
-		const bool slotSpanOk = nextPos >= slot && nextPos - slot == sizeof(const char *);
+		const bool slotSpanOk = nextPos >= slot && nextPos - slot == sizeof(int32_t);
 		const uintptr_t link = reinterpret_cast<uintptr_t>(statement->next);
 		if (!slotInProgram || !nextInProgram || !slotSpanOk || nextPos == link)
 		{
@@ -724,7 +724,7 @@ void ConnectBreakStatements()
 			Switch_LogWrite(line);
 		}
 #endif
-		*(intptr_t *)statement->codePos = codePos - statement->nextCodePos;
+		*(int32_t *)statement->codePos = static_cast<int32_t>(codePos - statement->nextCodePos);
 	}
 }
 
@@ -1494,7 +1494,7 @@ void EmitGetInteger(int value, sval_u sourcePos)
 	}
 	EmitOpcode(OP_GetInteger, 1, 0);
 	AddOpcodePos(sourcePos.stringValue, 1);
-	EmitCodepos((const char*)value);
+	EmitInteger(value);
 }
 
 /*
@@ -2547,7 +2547,7 @@ void EmitContinueStatement(sval_u sourcePos, scr_block_s *block)
 	EmitOpcode(OP_jump, 0, CALL_NONE);
 	AddOpcodePos(sourcePos.stringValue, SOURCE_TYPE_BREAKPOINT);
 
-	EmitCodepos(0);
+	EmitInteger(0);
 
 	//newContinueStatement = (ContinueStatementInfo *)Hunk_AllocateTempMemoryHighInternal(sizeof(*newContinueStatement));
 	newContinueStatement = (ContinueStatementInfo*)Hunk_AllocateTempMemoryHigh(sizeof(ContinueStatementInfo), "EmitContinueStatement");
@@ -2582,7 +2582,7 @@ void EmitBreakStatement(sval_u sourcePos, scr_block_s *block)
 	EmitOpcode(OP_jump, 0, CALL_NONE);
 	AddOpcodePos(sourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
 
-	EmitCodepos(0);
+	EmitInteger(0);
 
 	//newBreakStatement = (BreakStatementInfo *)Hunk_AllocateTempMemoryHighInternal(sizeof(*newBreakStatement));
 	newBreakStatement = (BreakStatementInfo *)Hunk_AllocateTempMemoryHigh(sizeof(BreakStatementInfo), "EmitBreakStatement");
@@ -2594,9 +2594,9 @@ void EmitBreakStatement(sval_u sourcePos, scr_block_s *block)
 		const uintptr_t programLimit = programBegin + 0x100000u;
 		const uintptr_t slot = reinterpret_cast<uintptr_t>(newBreakStatement->codePos);
 		const uintptr_t nextPos = reinterpret_cast<uintptr_t>(newBreakStatement->nextCodePos);
-		if (slot < programBegin || slot > programLimit - sizeof(intptr_t) ||
+		if (slot < programBegin || slot > programLimit - sizeof(int32_t) ||
 			nextPos < programBegin || nextPos > programLimit ||
-			nextPos < slot || nextPos - slot != sizeof(const char *))
+			nextPos < slot || nextPos - slot != sizeof(int32_t))
 		{
 			char line[384];
 			std::snprintf(
@@ -5236,7 +5236,7 @@ void EmitIfElseStatement(sval_u expr, sval_u stmt1, sval_u stmt2, sval_u sourceP
 	{
 		EmitOpcode(OP_jump, 0, CALL_NONE);
 		AddOpcodePos(elseSourcePos.sourcePosValue, SOURCE_TYPE_BREAKPOINT);
-		EmitCodepos(0);
+		EmitInteger(0);
 
 		pos2 = (const char *)scrCompileGlob.codePos;
 		nextPos2 = TempMalloc(0);
@@ -5263,7 +5263,7 @@ void EmitIfElseStatement(sval_u expr, sval_u stmt1, sval_u stmt2, sval_u sourceP
 	{
 		offset = TempMallocAlignStrict(0) - nextPos2;
 		iassert(offset >= 0);
-		*(intptr_t *)pos2 = offset;
+		*(int32_t *)pos2 = static_cast<int32_t>(offset);
 	}
 
 	Scr_InitFromChildBlocks(childBlocks, childCount, block);
