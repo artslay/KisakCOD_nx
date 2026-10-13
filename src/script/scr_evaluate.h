@@ -2,6 +2,7 @@
 #include "scr_variable.h"
 #include "scr_debugger.h"
 #include <setjmp.h>
+#include <cstddef>
 
 struct ArchivedCanonicalStringInfo // sizeof=0x8
 {
@@ -12,6 +13,11 @@ struct ArchivedCanonicalStringInfo // sizeof=0x8
 };
 #ifndef KISAK_SWITCH
 static_assert(sizeof(ArchivedCanonicalStringInfo) == 0x8);
+#else
+static_assert(sizeof(ArchivedCanonicalStringInfo) == 0x10,
+              "archived canonical string records must include the native 64-bit pointer");
+static_assert(offsetof(ArchivedCanonicalStringInfo, value) == 0x8,
+              "archived canonical string value pointer must use native pointer alignment");
 #endif
 
 struct scrEvaluateGlob_t // sizeof=0x10
@@ -32,7 +38,7 @@ void __cdecl TRACK_scr_evaluate();
 uint32_t __cdecl Scr_GetBuiltin(sval_u func_name);
 int __cdecl Scr_CompareCanonicalStrings(uint32_t *arg1, uint32_t *arg2);
 void __cdecl Scr_ArchiveCanonicalStrings();
-int __cdecl CompareCanonicalStrings(const char **arg1, const char **arg2);
+int __cdecl CompareCanonicalStrings(const void *arg1, const void *arg2);
 const char *__cdecl Scr_GetCanonicalString(uint32_t fieldName);
 void __cdecl Scr_InitEvaluate();
 void __cdecl Scr_EndLoadEvaluate();
