@@ -2337,7 +2337,7 @@ void EmitBoolAndExpression(sval_u expr1, sval_u expr2, sval_u expr1sourcePos, sv
 	//offset = TempMallocAlignStrict(0) - nextPos;
 	offset = (TempMalloc(0) - nextPos);
 
-	iassert(offset < 65536);
+	iassert(offset >= 0 && offset < 65536);
 
 	*(unsigned short *)pos = offset;
 }
@@ -2369,7 +2369,7 @@ void EmitBoolOrExpression(sval_u expr1, sval_u expr2, sval_u expr1sourcePos, sva
 	//offset = TempMallocAlignStrict(0) - nextPos;
 	offset = (TempMalloc(0) - nextPos);
 
-	iassert(offset < 65536);
+	iassert(offset >= 0 && offset < 65536);
 
 	*(unsigned short *)pos = offset;
 }
@@ -4628,14 +4628,14 @@ void EmitForStatement(sval_u stmt1, sval_u expr, sval_u stmt2, sval_u stmt, sval
 
 	EmitShort(0);
 	offset = TempMalloc(0) - pos1;
-	if (offset >= 0x10000)
-		MyAssertHandler(".\\script\\scr_compiler.cpp", 3658, 0, "%s", "offset < 65536");
+	if (offset < 0 || offset >= 0x10000)
+		MyAssertHandler(".\\script\\scr_compiler.cpp", 3658, 0, "%s", "offset >= 0 && offset < 65536");
 	*(unsigned short*)scrCompileGlob.codePos = offset;
 	if (pos2)
 	{
 		offset = TempMalloc(0) - nextPos2;
-		if (offset >= 0x10000)
-			MyAssertHandler(".\\script\\scr_compiler.cpp", 3663, 0, "%s", "offset < 65536");
+		if (offset < 0 || offset >= 0x10000)
+			MyAssertHandler(".\\script\\scr_compiler.cpp", 3663, 0, "%s", "offset >= 0 && offset < 65536");
 		*(unsigned short *)pos2 = offset;
 	}
 	ConnectBreakStatements();
@@ -4752,14 +4752,14 @@ void EmitWhileStatement(sval_u expr, sval_u stmt, sval_u sourcePos, sval_u while
 
 	EmitShort(0);
 	offset = TempMalloc(0) - pos1;
-	if (offset >= 0x10000)
-		MyAssertHandler(".\\script\\scr_compiler.cpp", 3429, 0, "%s", "offset < 65536");
+	if (offset < 0 || offset >= 0x10000)
+		MyAssertHandler(".\\script\\scr_compiler.cpp", 3429, 0, "%s", "offset >= 0 && offset < 65536");
 	*(unsigned short*)scrCompileGlob.codePos = offset;
 	if (pos2)
 	{
 		offset = TempMalloc(0) - nextPos2;
-		if (offset >= 0x10000)
-			MyAssertHandler(".\\script\\scr_compiler.cpp", 3434, 0, "%s", "offset < 65536");
+		if (offset < 0 || offset >= 0x10000)
+			MyAssertHandler(".\\script\\scr_compiler.cpp", 3434, 0, "%s", "offset >= 0 && offset < 65536");
 		*(unsigned short *)pos2 = offset;
 	}
 	ConnectBreakStatements();
@@ -5075,7 +5075,7 @@ void EmitIfElseStatement(sval_u expr, sval_u stmt1, sval_u stmt2, sval_u sourceP
 	scrVarPub.checksum = checksum + 1;
 
 	offset = TempMallocAlignStrict(0) - nextPos1;
-	iassert(offset < 65536);
+	iassert(offset >= 0 && offset < 65536);
 	*(unsigned short *)pos1 = offset;
 
 	Scr_TransferBlock(block, elseStatBlock->block);
@@ -5092,6 +5092,7 @@ void EmitIfElseStatement(sval_u expr, sval_u stmt1, sval_u stmt2, sval_u sourceP
 	if (!lastStatement)
 	{
 		offset = TempMallocAlignStrict(0) - nextPos2;
+		iassert(offset >= 0);
 		*(intptr_t *)pos2 = offset;
 	}
 
@@ -5126,7 +5127,7 @@ void EmitIfStatement(sval_u expr, sval_u stmt, sval_u sourcePos, bool lastStatem
 
 	//offset = TempMallocAlignStrict(0) - nextPos;
 	offset = (TempMalloc(0) - nextPos);
-	iassert(offset < 65536);
+	iassert(offset >= 0 && offset < 65536);
 	*(unsigned short *)pos = offset;
 }
 
