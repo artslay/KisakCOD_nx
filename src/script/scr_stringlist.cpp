@@ -90,6 +90,26 @@ static void Switch_ReportStaleStringHandle(
     Switch_LogWrite(line);
 }
 
+static void Switch_ReportNonStringHandle(
+    const char *origin,
+    uint32_t handle,
+    uint32_t allocationType,
+    uint32_t allocationSize,
+    uintptr_t caller)
+{
+    char line[320];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][SCRIPT STRING NONSTRING HANDLE] origin=%s handle=%u allocation=%u/%u caller=0x%llx\n",
+        origin,
+        handle,
+        allocationType,
+        allocationSize,
+        static_cast<unsigned long long>(caller));
+    Switch_LogWrite(line);
+}
+
 static void Switch_ReportStringLengthMismatch(
     uint32_t handle,
     uint32_t passedLength,
@@ -125,9 +145,27 @@ static bool Switch_GetStringAllocation(
     uint32_t size = 0;
     if (!MT_GetIndexAllocationInfo(handle, &type, &size) ||
         size > MEMORY_NODE_BITS ||
-        static_cast<uint64_t>(handle) + (uint64_t{1} << size) > MEMORY_NODE_COUNT)
+        static_cast<uint64_t>(handle) + (uint64_t{1} << size) > MEMORY_NODE_COUNT ||
+        (handle & ((uint32_t{1} << size) - 1u)) != 0)
     {
         Switch_ReportStaleStringHandle(origin, handle, type, size, caller);
+        return false;
+    }
+
+    // These memory-tree types are used by SL_GetStringOfSize/SL_GetString_.
+    // A live block of another type is an object pointer/index accidentally
+    // being routed through script-string cleanup; never read it as RefString.
+    switch (type)
+    {
+    case MT_TYPE_EXTERNAL:
+    case MT_TYPE_TEMP:
+    case MT_TYPE_SCRIPT_STRING:
+    case MT_TYPE_CLASS:
+    case MT_TYPE_CONFIG_STRING:
+    case MT_TYPE_DEBUGGER_STRING:
+        break;
+    default:
+        Switch_ReportNonStringHandle(origin, handle, type, size, caller);
         return false;
     }
 
@@ -1055,7 +1093,6 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
                     stringValue);
 #endif
                 Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-                Com_Error(ERR_DROP, "corrupt script-string free chain");
                 return;
             }
 
@@ -1068,7 +1105,6 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
                     candidate->status_next, candidate->u.prev);
 #endif
                 Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-                Com_Error(ERR_DROP, "corrupt script-string free entry");
                 return;
             }
 
@@ -1094,7 +1130,6 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
             // Do not return this address to the allocator if the hash table
             // no longer owns the handle: it may already have been recycled.
             Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-            Com_Error(ERR_DROP, "script-string handle missing from hash chain");
             return;
         }
     }
@@ -1113,7 +1148,6 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
             stringValue);
 #endif
         Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-        Com_Error(ERR_DROP, "corrupt script-string head successor");
         return;
     }
 
