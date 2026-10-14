@@ -880,7 +880,41 @@ void __cdecl CM_TraceThroughBrush(const traceWork_t *tw, cbrush_t *brush, trace_
                 {
                     enterFrac = (d1 - 0.125) * tw->extents.invDelta[j] * sign;
                 }
-                axialSide.materialNum = brush->axialMaterialNum[index][j];
+                const int axialMaterialNum = brush->axialMaterialNum[index][j];
+                if (axialMaterialNum < 0 ||
+                    static_cast<uint32_t>(axialMaterialNum) >= cm.numMaterials)
+                {
+                    int brushIndex = -1;
+                    const uintptr_t brushAddress = reinterpret_cast<uintptr_t>(brush);
+                    const uintptr_t brushBase = reinterpret_cast<uintptr_t>(cm.brushes);
+                    const uintptr_t brushBytes = sizeof(cbrush_t) * static_cast<uintptr_t>(cm.numBrushes);
+                    if (cm.brushes && brushAddress >= brushBase &&
+                        brushAddress - brushBase < brushBytes &&
+                        (brushAddress - brushBase) % sizeof(cbrush_t) == 0)
+                    {
+                        brushIndex = static_cast<int>((brushAddress - brushBase) / sizeof(cbrush_t));
+                    }
+
+                    Com_Error(
+                        ERR_DROP,
+                        "CM_TraceThroughBrush: invalid axial material map=%s brush=%p brushIndex=%d numsides=%u axialIndex=%d axis=%d material=%d raw=0x%04x numMaterials=%u axial=[%d,%d,%d;%d,%d,%d]",
+                        cm.name ? cm.name : "<null>",
+                        static_cast<void*>(brush),
+                        brushIndex,
+                        brush->numsides,
+                        index,
+                        j,
+                        axialMaterialNum,
+                        static_cast<unsigned int>(static_cast<uint16_t>(axialMaterialNum)),
+                        cm.numMaterials,
+                        static_cast<int>(brush->axialMaterialNum[0][0]),
+                        static_cast<int>(brush->axialMaterialNum[0][1]),
+                        static_cast<int>(brush->axialMaterialNum[0][2]),
+                        static_cast<int>(brush->axialMaterialNum[1][0]),
+                        static_cast<int>(brush->axialMaterialNum[1][1]),
+                        static_cast<int>(brush->axialMaterialNum[1][2]));
+                }
+                axialSide.materialNum = axialMaterialNum;
                 axialPlane.normal[0] = 0.0;
                 axialPlane.normal[1] = 0.0;
                 axialPlane.normal[2] = 0.0;
