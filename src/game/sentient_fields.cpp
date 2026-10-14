@@ -7,21 +7,24 @@
 #include <script/scr_vm.h>
 #include "g_local.h"
 
+// These offsets are read from the native AArch64 sentient_s layout.
+// The numeric offsets in the original 32-bit engine point at unrelated fields
+// on Switch (for example, offset 88 is attackerAccuracy, not pClaimedNode).
 static const sentient_fields_s fields_2[14] =
 {
-  { "team", 4, F_INT, SentientScr_SetTeam, SentientScr_GetTeam },
-  { "threatbias", 8, F_INT, NULL, NULL },
-  { "threatbiasgroup", 12, F_INT, SentientScr_ReadOnly, NULL },
-  { "node", 88, F_PATHNODE, SentientScr_ReadOnly, NULL },
-  { "prevnode", 92, F_PATHNODE, SentientScr_ReadOnly, NULL },
-  { "enemy", 52, F_ENTHANDLE, SentientScr_ReadOnly, NULL },
-  { "syncedmeleetarget", 48, F_ENTHANDLE, NULL, NULL },
-  { "ignoreme", 16, F_BYTE, NULL, NULL },
-  { "ignoreall", 17, F_BYTE, NULL, NULL },
-  { "maxvisibledist", 32, F_FLOAT, NULL, NULL },
-  { "attackeraccuracy", 80, F_FLOAT, NULL, NULL },
-  { "ignorerandombulletdamage", 84, F_BYTE, NULL, NULL },
-  { "turretinvulnerability", 85, F_BYTE, NULL, NULL },
+  { "team", static_cast<int>(offsetof(sentient_s, eTeam)), F_INT, SentientScr_SetTeam, SentientScr_GetTeam },
+  { "threatbias", static_cast<int>(offsetof(sentient_s, iThreatBias)), F_INT, NULL, NULL },
+  { "threatbiasgroup", static_cast<int>(offsetof(sentient_s, iThreatBiasGroupIndex)), F_INT, SentientScr_ReadOnly, NULL },
+  { "node", static_cast<int>(offsetof(sentient_s, pClaimedNode)), F_PATHNODE, SentientScr_ReadOnly, NULL },
+  { "prevnode", static_cast<int>(offsetof(sentient_s, pPrevClaimedNode)), F_PATHNODE, SentientScr_ReadOnly, NULL },
+  { "enemy", static_cast<int>(offsetof(sentient_s, targetEnt)), F_ENTHANDLE, SentientScr_ReadOnly, NULL },
+  { "syncedmeleetarget", static_cast<int>(offsetof(sentient_s, syncedMeleeEnt)), F_ENTHANDLE, NULL, NULL },
+  { "ignoreme", static_cast<int>(offsetof(sentient_s, bIgnoreMe)), F_BYTE, NULL, NULL },
+  { "ignoreall", static_cast<int>(offsetof(sentient_s, bIgnoreAll)), F_BYTE, NULL, NULL },
+  { "maxvisibledist", static_cast<int>(offsetof(sentient_s, maxVisibleDist)), F_FLOAT, NULL, NULL },
+  { "attackeraccuracy", static_cast<int>(offsetof(sentient_s, attackerAccuracy)), F_FLOAT, NULL, NULL },
+  { "ignorerandombulletdamage", static_cast<int>(offsetof(sentient_s, ignoreRandomBulletDamage)), F_BYTE, NULL, NULL },
+  { "turretinvulnerability", static_cast<int>(offsetof(sentient_s, turretInvulnerability)), F_BYTE, NULL, NULL },
   { NULL, 0, F_INT, NULL, NULL }
 };
 
