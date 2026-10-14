@@ -5,6 +5,7 @@
 #include <universal/q_shared.h>
 #include "actor_fields.h"
 #include "actor.h"
+#include "sentient.h"
 #include <script/scr_vm.h>
 #include "g_local.h"
 #include <universal/surfaceflags.h>
@@ -119,14 +120,14 @@ const actor_fields_s aifields[82] =
 
 const actor_fields_s sentientfields[9] =
 {
-  { "threatbias", 8, F_INT, NULL, NULL },
-  { "node", 88, F_PATHNODE, &ActorScr_ReadOnly, NULL },
-  { "prevnode", 92, F_PATHNODE, &ActorScr_ReadOnly, NULL },
-  { "enemy", 52, F_ENTHANDLE, &ActorScr_ReadOnly, NULL },
-  { "syncedmeleetarget", 48, F_ENTHANDLE, NULL, NULL },
-  { "ignoreme", 16, F_BYTE, NULL, NULL },
-  { "ignoreall", 17, F_BYTE, NULL, NULL },
-  { "maxvisibledist", 32, F_FLOAT, NULL, NULL },
+  { "threatbias", static_cast<int>(offsetof(sentient_s, iThreatBias)), F_INT, NULL, NULL },
+  { "node", static_cast<int>(offsetof(sentient_s, pClaimedNode)), F_PATHNODE, &ActorScr_ReadOnly, NULL },
+  { "prevnode", static_cast<int>(offsetof(sentient_s, pPrevClaimedNode)), F_PATHNODE, &ActorScr_ReadOnly, NULL },
+  { "enemy", static_cast<int>(offsetof(sentient_s, targetEnt)), F_ENTHANDLE, &ActorScr_ReadOnly, NULL },
+  { "syncedmeleetarget", static_cast<int>(offsetof(sentient_s, syncedMeleeEnt)), F_ENTHANDLE, NULL, NULL },
+  { "ignoreme", static_cast<int>(offsetof(sentient_s, bIgnoreMe)), F_BYTE, NULL, NULL },
+  { "ignoreall", static_cast<int>(offsetof(sentient_s, bIgnoreAll)), F_BYTE, NULL, NULL },
+  { "maxvisibledist", static_cast<int>(offsetof(sentient_s, maxVisibleDist)), F_FLOAT, NULL, NULL },
   { NULL, 0, F_INT, NULL, NULL }
 };
 
