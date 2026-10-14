@@ -15,6 +15,10 @@
 #include "savememory.h"
 #include "actor_senses.h"
 
+#ifdef KISAK_SWITCH
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 #include <algorithm>
 
 //Line 37928:  0006 : 00006700       char const **nodeStringTable  82696700     pathnode.obj
