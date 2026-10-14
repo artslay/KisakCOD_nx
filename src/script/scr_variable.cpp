@@ -4462,7 +4462,7 @@ void  Scr_CastWeakerStringPair(VariableValue* value1, VariableValue* value2)
 				{
 				case VAR_VECTOR:
 					value2->type = VAR_STRING;
-					constTempVector = (const float*)value2->u.intValue;
+					constTempVector = value2->u.vectorValue;
 					value2->u.stringValue = SL_GetStringForVector(value2->u.vectorValue);
 					RemoveRefToVector(constTempVector);
 					return;
@@ -4496,7 +4496,7 @@ void  Scr_CastWeakerStringPair(VariableValue* value1, VariableValue* value2)
 			{
 			case VAR_VECTOR:
 				value1->type = VAR_STRING;
-				constTempVectora = (const float*)value1->u.intValue;
+				constTempVectora = value1->u.vectorValue;
 				value1->u.stringValue = SL_GetStringForVector(value1->u.vectorValue);
 				RemoveRefToVector(constTempVectora);
 				return;
