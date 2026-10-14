@@ -10,52 +10,23 @@
 #include "sv_public.h"
 #include <EffectsCore/fx_system.h>
 
-#include <cstdio>
 
-extern void Switch_LogWrite(const char *msg);
 extern client_t g_sv_clients[1];
 
 void __cdecl SV_DirectConnect()
 {
     client_t *clients; // r31
-    char diag[512];
 
     Com_DPrintf(CON_CHANNEL_SERVER, "SVC_DirectConnect ()\n");
-    std::snprintf(
-        diag, sizeof(diag),
-        "[KisakCOD][SV DIRECTCONNECT] step=entry svs=%p initialized=%d clients=%p expected=%p clientSize=%zu\n",
-        static_cast<void*>(&svs), svs.initialized,
-        static_cast<void*>(svs.clients), static_cast<void*>(g_sv_clients),
-        sizeof(client_t));
-    Switch_LogWrite(diag);
     clients = svs.clients;
-    std::snprintf(diag, sizeof(diag),
-        "[KisakCOD][SV DIRECTCONNECT] step=before_memset clients=%p size=%zu\n",
-        static_cast<void*>(clients), sizeof(client_t));
-    Switch_LogWrite(diag);
     memset(clients, 0, sizeof(client_t));
-    Switch_LogWrite("[KisakCOD][SV DIRECTCONNECT] step=after_memset\n");
 
-    std::snprintf(diag, sizeof(diag),
-        "[KisakCOD][SV DIRECTCONNECT] step=before_gentity sv.gentities=%p gentitySize=%d\n",
-        static_cast<void*>(sv.gentities), sv.gentitySize);
-    Switch_LogWrite(diag);
     clients->gentity = SV_GentityNum(0);
-    std::snprintf(diag, sizeof(diag),
-        "[KisakCOD][SV DIRECTCONNECT] step=after_gentity gentity=%p\n",
-        static_cast<void*>(clients->gentity));
-    Switch_LogWrite(diag);
-
     clients->netchan.outgoingSequence = 1;
-    Switch_LogWrite("[KisakCOD][SV DIRECTCONNECT] step=after_sequence\n");
     SV_InitReliableCommandsForClient(clients);
-    Switch_LogWrite("[KisakCOD][SV DIRECTCONNECT] step=after_reliable_init\n");
     clients->state = 1;
-    Switch_LogWrite("[KisakCOD][SV DIRECTCONNECT] step=after_state\n");
     clients->lastUsercmd.serverTime = G_GetTime();
-    Switch_LogWrite("[KisakCOD][SV DIRECTCONNECT] step=complete\n");
 }
-
 void __cdecl SV_SendClientGameState(client_t *client)
 {
     if (client != svs.clients)

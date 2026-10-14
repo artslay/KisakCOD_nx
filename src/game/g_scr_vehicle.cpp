@@ -176,14 +176,7 @@ void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
         ent->s.lerp.eFlags |= 0x10000u;
     ent->s.lerp.u.turret.gunAngles[0] = 0.0;
     ent->s.lerp.u.turret.gunAngles[1] = 0.0;
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=init_entity_enter ent=%p entNum=%u argVehicle=%p priorField=%p\n",
-        (void *)ent, (unsigned int)ent->s.number, (void *)veh, (void *)ent->scr_vehicle);
     ent->scr_vehicle = veh;
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=init_entity_assigned ent=%p entNum=%u argVehicle=%p field=%p matches=%d\n",
-        (void *)ent, (unsigned int)ent->s.number, (void *)veh, (void *)ent->scr_vehicle,
-        ent->scr_vehicle == veh);
     ent->s.lerp.u.primaryLight.cosHalfFovInner = 0.0;
     ent->s.lerp.u.vehicle.gunYaw = 0.0;
     ent->takedamage = 1;
@@ -192,34 +185,16 @@ void __cdecl VEH_InitEntity(gentity_s *ent, scr_vehicle_s *veh, int32_t infoIdx)
     ent->clipmask = 0x810211;
     ent->nextthink = level.time + 50;
     SV_DObjGetBounds(ent, ent->r.mins, ent->r.maxs);
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=init_entity_after_bounds ent=%p argVehicle=%p field=%p matches=%d\n",
-        (void *)ent, (void *)veh, (void *)ent->scr_vehicle, ent->scr_vehicle == veh);
     SV_LinkEntity(ent);
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=init_entity_after_link ent=%p argVehicle=%p field=%p matches=%d\n",
-        (void *)ent, (void *)veh, (void *)ent->scr_vehicle, ent->scr_vehicle == veh);
 #endif
 }
 
 void __cdecl VEH_InitVehicle(gentity_s *ent, scr_vehicle_s *veh, short infoIdx)
 {
 #ifdef KISAK_SP
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=init_vehicle_enter ent=%p entNum=%u argVehicle=%p field=%p matches=%d\n",
-        (void *)ent, (unsigned int)ent->s.number, (void *)veh, (void *)ent->scr_vehicle,
-        ent->scr_vehicle == veh);
     G_VehInitPathPos(&veh->pathPos);
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=init_vehicle_after_path ent=%p argVehicle=%p field=%p matches=%d\n",
-        (void *)ent, (void *)veh, (void *)ent->scr_vehicle, ent->scr_vehicle == veh);
 #endif
     VEH_InitPhysics(ent);
-#ifdef KISAK_SP
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=init_vehicle_after_physics ent=%p argVehicle=%p field=%p matches=%d\n",
-        (void *)ent, (void *)veh, (void *)ent->scr_vehicle, ent->scr_vehicle == veh);
-#endif
     veh->entNum = ent->s.number;
     veh->infoIdx = infoIdx;
     veh->moveState = VEH_MOVESTATE_STOP;
@@ -4044,93 +4019,39 @@ void VEH_SetupCollmap(gentity_s *ent)
 }
 
 #ifdef KISAK_SP
-static int VEH_VehiclePoolIndexForTrace(const scr_vehicle_s *vehicle)
-{
-    for (int i = 0; i < ARRAY_COUNT(s_vehicles); ++i)
-    {
-        if (vehicle == &s_vehicles[i])
-            return i;
-    }
-    return -1;
-}
-
-#define VEH_TRACE_BONE_INDEX(destination, tag, label) \
-    do { \
-        const uint32_t vehicleTagName = (tag); \
-        const int vehicleTagBone = SV_DObjGetBoneIndex(ent, vehicleTagName); \
-        const uintptr_t vehicleLiveBits = reinterpret_cast<uintptr_t>(veh); \
-        const uintptr_t vehicleFieldBits = reinterpret_cast<uintptr_t>(ent->scr_vehicle); \
-        const uintptr_t vehicleEntryBits = vehicleAtEntry; \
-        Com_Printf(CON_CHANNEL_SERVER, \
-            "[KisakCOD][VEHICLE TAG TRACE] stage=bone tag=%s tagId=%u ent=%p entNum=%u vehicleLive=%p vehicleField=%p vehicleEntry=%p poolIndex=%d boneIndex=%d\n", \
-            label, (unsigned int)vehicleTagName, (void *)ent, (unsigned int)ent->s.number, \
-            (void *)vehicleLiveBits, (void *)vehicleFieldBits, (void *)vehicleEntryBits, \
-            VEH_VehiclePoolIndexForTrace((const scr_vehicle_s *)vehicleLiveBits), vehicleTagBone); \
-        (destination) = vehicleTagBone; \
-    } while (0)
-
 void G_UpdateVehicleTags(gentity_s *ent)
 {
-    scr_vehicle_s *veh; // r30
-    int *flash; // r28
-    uint16_t **v4; // r29
-    int *wheel; // r29
-    uint16_t **v7; // r30
-    volatile uintptr_t vehicleAtEntry;
+    int *flash;
+    uint16_t **flashTag;
+    int *wheel;
+    uint16_t **wheelTag;
 
     iassert(ent);
     iassert(ent->scr_vehicle);
 
-    veh = ent->scr_vehicle;
-    vehicleAtEntry = reinterpret_cast<uintptr_t>(veh);
-    {
-        const scr_vehicle_s *poolCandidate = NULL;
-        int poolMatchCount = 0;
-        int poolMatchIndex = -1;
-        for (int poolIndex = 0; poolIndex < ARRAY_COUNT(s_vehicles); ++poolIndex)
-        {
-            if (s_vehicles[poolIndex].entNum == ent->s.number)
-            {
-                if (!poolCandidate)
-                {
-                    poolCandidate = &s_vehicles[poolIndex];
-                    poolMatchIndex = poolIndex;
-                }
-                ++poolMatchCount;
-            }
-        }
-        Com_Printf(CON_CHANNEL_SERVER,
-            "[KisakCOD][VEHICLE TAG TRACE] stage=enter ent=%p entNum=%u vehicle=%p poolIndex=%d poolCandidate=%p poolMatchIndex=%d poolMatchCount=%d caller=%p vehicleSize=%u\n",
-            (void *)ent, (unsigned int)ent->s.number, (void *)veh,
-            VEH_VehiclePoolIndexForTrace(veh), (const void *)poolCandidate,
-            poolMatchIndex, poolMatchCount, __builtin_return_address(0),
-            (unsigned int)sizeof(*veh));
-    }
+    scr_vehicle_s *veh = ent->scr_vehicle;
+    veh->boneIndex.player = SV_DObjGetBoneIndex(ent, scr_const.tag_player);
+    veh->boneIndex.detach = SV_DObjGetBoneIndex(ent, scr_const.tag_detach);
+    veh->boneIndex.popout = SV_DObjGetBoneIndex(ent, scr_const.tag_popout);
+    veh->boneIndex.body = SV_DObjGetBoneIndex(ent, scr_const.tag_body);
+    veh->boneIndex.turret = SV_DObjGetBoneIndex(ent, scr_const.tag_turret);
+    veh->boneIndex.barrel = SV_DObjGetBoneIndex(ent, scr_const.tag_barrel);
+    veh->boneIndex.turret_base = SV_DObjGetBoneIndex(ent, scr_const.tag_turret_base);
 
-    VEH_TRACE_BONE_INDEX(veh->boneIndex.player, scr_const.tag_player, "player");
-    VEH_TRACE_BONE_INDEX(veh->boneIndex.detach, scr_const.tag_detach, "detach");
-    VEH_TRACE_BONE_INDEX(veh->boneIndex.popout, scr_const.tag_popout, "popout");
-    VEH_TRACE_BONE_INDEX(veh->boneIndex.body, scr_const.tag_body, "body");
-    VEH_TRACE_BONE_INDEX(veh->boneIndex.turret, scr_const.tag_turret, "turret");
-    VEH_TRACE_BONE_INDEX(veh->boneIndex.barrel, scr_const.tag_barrel, "barrel");
-    VEH_TRACE_BONE_INDEX(veh->boneIndex.turret_base, scr_const.tag_turret_base, "turret_base");
     flash = veh->boneIndex.flash;
-
-    v4 = s_flashTags;
+    flashTag = s_flashTags;
     do
     {
-        VEH_TRACE_BONE_INDEX(*flash++, **v4++, "flash");
-    } while (v4 < &s_flashTags[5]);
+        *flash++ = SV_DObjGetBoneIndex(ent, **flashTag++);
+    } while (flashTag < &s_flashTags[5]);
 
     wheel = veh->boneIndex.wheel;
-    v7 = s_wheelTags;
+    wheelTag = s_wheelTags;
     do
     {
-        VEH_TRACE_BONE_INDEX(*wheel++, **v7++, "wheel");
-    } while (v7 < &s_wheelTags[6]);
+        *wheel++ = SV_DObjGetBoneIndex(ent, **wheelTag++);
+    } while (wheelTag < &s_wheelTags[6]);
 }
-
-#undef VEH_TRACE_BONE_INDEX
 #endif
 
 void G_SpawnVehicle(gentity_s *ent, const char *typeName, int load)
@@ -4158,24 +4079,12 @@ void G_SpawnVehicle(gentity_s *ent, const char *typeName, int load)
     if (i >= 64)
         Com_Error(ERR_DROP, "Hit max vehicle count [%d]", 64);
 
-#ifdef KISAK_SP
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=spawn_slot ent=%p entNum=%u slot=%d candidate=%p candidateEntNum=%u priorField=%p type=%s\n",
-        (void *)ent, (unsigned int)ent->s.number, i, (void *)veh,
-        (unsigned int)veh->entNum, (void *)ent->scr_vehicle, typeName ? typeName : "<null>");
-#endif
     VehicleInfoFromName = VEH_GetVehicleInfoFromName(typeName);
 
     if (VehicleInfoFromName < 0)
         Com_Error(ERR_DROP, "Can't find info for script vehicle [%s]", typeName);
 
     VEH_InitModelAndValidateTags(ent, &VehicleInfoFromName);
-#ifdef KISAK_SP
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=after_model_validate ent=%p entNum=%u slot=%d candidate=%p candidateEntNum=%u field=%p\n",
-        (void *)ent, (unsigned int)ent->s.number, i, (void *)veh,
-        (unsigned int)veh->entNum, (void *)ent->scr_vehicle);
-#endif
     v9 = VehicleInfoFromName;
     if (!level.initializing)
     {
@@ -4186,12 +4095,6 @@ void G_SpawnVehicle(gentity_s *ent, const char *typeName, int load)
         }
     }
     memset(veh, 0, sizeof(scr_vehicle_s));
-#ifdef KISAK_SP
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=after_slot_clear ent=%p entNum=%u slot=%d candidate=%p candidateEntNum=%u field=%p size=%u\n",
-        (void *)ent, (unsigned int)ent->s.number, i, (void *)veh,
-        (unsigned int)veh->entNum, (void *)ent->scr_vehicle, (unsigned int)sizeof(*veh));
-#endif
     veh->targetEnt = ENTITYNUM_NONE;
     number = veh->lookAtEnt.number;
     iassert(!number || g_entities[number - 1].r.inuse);
@@ -4207,36 +4110,12 @@ void G_SpawnVehicle(gentity_s *ent, const char *typeName, int load)
     iassert(!number || g_entities[number - 1].r.inuse);
     iassert(!veh->engineSndEnt.isDefined());
 
-#ifdef KISAK_SP
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=pre_init ent=%p entNum=%u poolCandidate=%p poolIndex=%d priorField=%p\n",
-        (void *)ent, (unsigned int)ent->s.number, (void *)veh,
-        VEH_VehiclePoolIndexForTrace(veh), (void *)ent->scr_vehicle);
-#endif
     VEH_InitEntity(ent, veh, v9);
-#ifdef KISAK_SP
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=after_init_entity ent=%p entNum=%u poolCandidate=%p entField=%p matches=%d poolIndex=%d\n",
-        (void *)ent, (unsigned int)ent->s.number, (void *)veh, (void *)ent->scr_vehicle,
-        ent->scr_vehicle == veh, VEH_VehiclePoolIndexForTrace(ent->scr_vehicle));
-#endif
     VEH_InitVehicle(ent, veh, v9);
-#ifdef KISAK_SP
-    Com_Printf(CON_CHANNEL_SERVER,
-        "[KisakCOD][VEHICLE TAG TRACE] stage=after_init_vehicle ent=%p entNum=%u poolCandidate=%p entField=%p matches=%d poolIndex=%d\n",
-        (void *)ent, (unsigned int)ent->s.number, (void *)veh, (void *)ent->scr_vehicle,
-        ent->scr_vehicle == veh, VEH_VehiclePoolIndexForTrace(ent->scr_vehicle));
-#endif
 
     if (!load)
     {
         VEH_SetupCollmap(ent);
-#ifdef KISAK_SP
-        Com_Printf(CON_CHANNEL_SERVER,
-            "[KisakCOD][VEHICLE TAG TRACE] stage=after_collmap ent=%p entNum=%u poolCandidate=%p entField=%p matches=%d poolIndex=%d\n",
-            (void *)ent, (unsigned int)ent->s.number, (void *)veh, (void *)ent->scr_vehicle,
-            ent->scr_vehicle == veh, VEH_VehiclePoolIndexForTrace(ent->scr_vehicle));
-#endif
     }
 
     G_UpdateVehicleTags(ent);

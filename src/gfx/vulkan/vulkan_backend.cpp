@@ -903,14 +903,6 @@ bool VulkanBackend::EndFrame()
     if (!m_frameActive)
         return true;
 
-    const uint64_t frameSerial = m_frameSerial.load(std::memory_order_relaxed);
-    const bool hadPresentSource = m_presentSourceImage != VK_NULL_HANDLE;
-    const bool wasRenderingActive = m_renderingActive;
-    const VkFormat tracedSourceFormat = m_presentSourceFormat;
-    const uint32_t tracedSourceWidth = m_presentSourceWidth;
-    const uint32_t tracedSourceHeight = m_presentSourceHeight;
-    const bool tracedBackbufferCleared = m_backbufferClearedThisFrame;
-
     EndRendering();
 
     VkImage swapImage = CurrentSwapchainImage();
@@ -1053,27 +1045,6 @@ bool VulkanBackend::EndFrame()
 
     m_frameActive = false;
 
-    // Sparse frame trace: distinguishes a submitted frame with a scene
-    // render-target blit from a frame that only presents the swapchain image.
-    static uint64_t frameTraceCount = 0;
-    ++frameTraceCount;
-    if (frameTraceCount <= 12u || (frameSerial != 0 && frameSerial % 120u == 0))
-    {
-        char msg[256];
-        std::snprintf(
-            msg, sizeof(msg),
-            "[KisakCOD][VK FRAME] present serial=%llu source=%u sourceFormat=%u sourceSize=%ux%u rendering=%u cleared=%u swap=%u result=%d\n",
-            static_cast<unsigned long long>(frameSerial),
-            hadPresentSource ? 1u : 0u,
-            static_cast<unsigned>(tracedSourceFormat),
-            tracedSourceWidth,
-            tracedSourceHeight,
-            wasRenderingActive ? 1u : 0u,
-            tracedBackbufferCleared ? 1u : 0u,
-            m_swapchainIndex,
-            static_cast<int>(result));
-        Switch_LogWrite(msg);
-    }
     return true;
 }
 
