@@ -28,6 +28,9 @@ extern void Switch_LogWrite(const char *msg);
 server_t sv;
 serverStatic_t svs;
 
+int com_time;
+int com_inServerFrame;
+
 #ifdef __SWITCH__
 static std::atomic<unsigned int> g_switchCreditsServerFrameTraceCount{0};
 static std::atomic<unsigned int> g_switchCreditsSnapshotWaitTraceCount{0};
@@ -36,14 +39,12 @@ static void Switch_CreditsServerTrace(const char *stage, unsigned int frame, int
 {
     char trace[384];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][CREDITS SERVER] frame=%u stage=%s value=%d levelTime=%d pending=%d smp=%d inServerFrame=%d inFrame=%d restart=%d\\n",
+        "[KisakCOD][CREDITS SERVER] frame=%u stage=%s value=%d levelTime=%d pending=%d smp=%d inServerFrame=%d inFrame=%d restart=%d\n",
         frame, stage, value, sv.levelTime, sv.pendingSnapshot, sv.smp, com_inServerFrame, sv.inFrame, sv.restartServerThread);
     Switch_LogWrite(trace);
 }
 #endif
 
-int com_time;
-int com_inServerFrame;
 
 const dvar_t *sv_lastSaveGame;
 const dvar_t *sv_smp;
