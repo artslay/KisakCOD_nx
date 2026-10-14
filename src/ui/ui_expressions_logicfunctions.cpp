@@ -9,8 +9,14 @@ int __cdecl compare_impact_files(const char **pe0, const char **pe1)
 int __cdecl compare_hudelems(const void *pe0, const void *pe1)
 {
     float delta; // [esp+0h] [ebp-Ch]
+    const void *elem0;
+    const void *elem1;
 
-    delta = *(float *)(*(uint32_t *)pe0 + 128) - *(float *)(*(uint32_t *)pe1 + 128);
+    // qsort receives pointers to hudelem_s* elements, not 32-bit addresses.
+    elem0 = *(const void * const *)pe0;
+    elem1 = *(const void * const *)pe1;
+    delta = *(const float *)((const char *)elem0 + 128)
+          - *(const float *)((const char *)elem1 + 128);
     if (delta >= 0.0)
         return delta > 0.0;
     else
