@@ -1543,7 +1543,7 @@ void __cdecl RuntimeErrorInternal(int channel, char *codePos, uint32_t index, co
             Com_PrintError(channel, "called from:\n");
             Scr_PrintPrevCodePos(
                 CON_CHANNEL_DONT_FILTER,
-                (char *)scrVmPub.stack[3 * i - 96].u.intValue,
+                (char *)scrVmPub.function_frame_start[i].fs.pos,
                 scrVmPub.function_frame_start[i].fs.localId == 0);
         }
         Com_PrintError(channel, "started from:\n");
