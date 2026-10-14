@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
@@ -91,6 +92,7 @@ public:
     VkPipelineLayout PipelineLayout() const { return m_pipelineLayout; }
     VkDescriptorPool DescriptorPool() const { return m_descriptorPool; }
     std::mutex &DescriptorPoolMutex() { return m_descriptorPoolMutex; }
+    uint64_t FrameSerial() const { return m_frameSerial.load(std::memory_order_relaxed); }
     VkDescriptorSetLayout VSSamplerLayout() const { return m_vsSamplerLayout; }
     VkDescriptorSetLayout VSUniformLayout() const { return m_vsUniformLayout; }
     VkDescriptorSetLayout PSSamplerLayout() const { return m_psSamplerLayout; }
@@ -277,6 +279,7 @@ private:
     FrameSync m_sync{};
 
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
+    std::atomic<uint64_t> m_frameSerial{0};
     VkDescriptorSetLayout m_vsSamplerLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_vsUniformLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_psSamplerLayout = VK_NULL_HANDLE;
