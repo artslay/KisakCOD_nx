@@ -963,9 +963,24 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
         }
     }
 
-    // Locate the hash entry before releasing the backing memory. The previous
-    // ordering could free a stale handle first and then spin forever while
-    // searching for that handle in a damaged/cyclic hash chain.
+    // Locate and validate the hash entry before releasing the backing memory.
+    // A stale handle must not free a recycled block, and a corrupt chain must not
+    // leave the freed handle in the table or spin forever while searching.
+    if (removeHead && next != index &&
+        (next == 0 || next >= STRINGLIST_SIZE ||
+         (scrStringGlob.hashTable[next].status_next & HASH_STAT_MASK) != HASH_STAT_MOVABLE))
+    {
+#ifdef KISAK_SWITCH
+        Switch_ReportStringHashChainFault(
+            "free_head_successor", index, next, 0,
+            next < STRINGLIST_SIZE ? scrStringGlob.hashTable[next].status_next : UINT32_MAX,
+            stringValue);
+#endif
+        Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+        Com_Error(ERR_DROP, "corrupt script-string head successor");
+        return;
+    }
+
     iassert(!refStr->user);
     MT_FreeIndex(stringValue, len + 4);
 
@@ -978,19 +993,6 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
         }
         else
         {
-            if (next == 0 || next >= STRINGLIST_SIZE ||
-                (scrStringGlob.hashTable[next].status_next & HASH_STAT_MASK) != HASH_STAT_MOVABLE)
-            {
-#ifdef KISAK_SWITCH
-                Switch_ReportStringHashChainFault(
-                    "free_head_successor", index, next, 0,
-                    next < STRINGLIST_SIZE ? scrStringGlob.hashTable[next].status_next : UINT32_MAX,
-                    stringValue);
-#endif
-                Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-                Com_Error(ERR_DROP, "corrupt script-string head successor");
-                return;
-            }
             newEntry = &scrStringGlob.hashTable[next];
             freeIndex = next;
             entry->status_next = (uint16_t)newEntry->status_next | HASH_STAT_HEAD;
