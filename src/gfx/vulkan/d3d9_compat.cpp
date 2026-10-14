@@ -26,6 +26,10 @@ extern void Switch_LogWrite(const char *msg);
 
 namespace
 {
+uint32_t g_switchSceneDrawPrimitiveCalls = 0;
+uint32_t g_switchSceneDrawIndexedCalls = 0;
+uint32_t g_switchSceneClearCalls = 0;
+
 struct TextureFormatInfo
 {
     VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -1153,6 +1157,9 @@ HRESULT IDirect3DDevice9::BeginScene()
         return E_FAIL;
     m_sceneOpen = true;
     m_targetRendered = false;
+    g_switchSceneDrawPrimitiveCalls = 0;
+    g_switchSceneDrawIndexedCalls = 0;
+    g_switchSceneClearCalls = 0;
     m_backend->ClearPresentSource();
     return S_OK;
 }
@@ -1189,14 +1196,19 @@ HRESULT IDirect3DDevice9::EndScene()
         char msg[256];
         std::snprintf(
             msg, sizeof(msg),
-            "[KisakCOD][VK SCENE] serial=%llu rendered=%u color=%p texture=%p queued=%u size=%ux%u\n",
+            "[KisakCOD][VK SCENE] serial=%llu offscreenRendered=%u directTarget=%u defaultFramebuffer=%u color=%p texture=%p queued=%u size=%ux%u drawsUP=%u drawsIndexed=%u clears=%u\n",
             static_cast<unsigned long long>(frameSerial),
             m_targetRendered ? 1u : 0u,
+            (!m_color || !m_color->texture) ? 1u : 0u,
+            m_color && m_color->defaultFramebuffer ? 1u : 0u,
             static_cast<void *>(m_color),
             static_cast<void *>(m_color ? m_color->texture : nullptr),
             queuePresentSource ? 1u : 0u,
             m_color && m_color->texture ? m_color->texture->width : 0u,
-            m_color && m_color->texture ? m_color->texture->height : 0u);
+            m_color && m_color->texture ? m_color->texture->height : 0u,
+            g_switchSceneDrawPrimitiveCalls,
+            g_switchSceneDrawIndexedCalls,
+            g_switchSceneClearCalls);
         Switch_LogWrite(msg);
     }
 
@@ -2626,6 +2638,7 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     vkCmdBindVertexBuffers(
         m_backend->CommandBuffer(), 0, 1, &vertexInfo.buffer, &offset);
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
+    ++g_switchSceneDrawPrimitiveCalls;
     return S_OK;
 }
 
@@ -2684,6 +2697,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
+    ++g_switchSceneDrawIndexedCalls;
     (void)minVertexIndex;
     (void)numVertices;
     return S_OK;
@@ -2795,6 +2809,7 @@ HRESULT IDirect3DDevice9::Clear(
         vkCmdClearAttachments(
             m_backend->CommandBuffer(), count, attachments.data(), 1, &rect);
     }
+    ++g_switchSceneClearCalls;
     return S_OK;
 }
 #endif
