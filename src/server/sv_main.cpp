@@ -567,17 +567,6 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
 #ifdef __SWITCH__
 #endif
         }
-        v3 = Sys_Milliseconds();
-        {
-            PROF_SCOPED("run frame");
-            SV_PreFrame();
-        }
-        CL_FlushDebugServerData();
-        if (!CL_DemoPlaying())
-        {
-            PROF_SCOPED("G_RunFrame");
-            G_RunFrame(SV_FRAME_DO_ALL, 0);
-        }
         Scr_ProfileUpdate();
         Scr_ProfileBuiltinUpdate();
         CL_UpdateDebugServerData();
