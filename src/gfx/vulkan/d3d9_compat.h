@@ -364,6 +364,13 @@ private:
     uint32_t m_ccwStencilFunc=8, m_ccwStencilFail=1, m_ccwStencilZFail=1, m_ccwStencilPass=1;
     bool m_sceneOpen=false;
     bool m_targetRendered=false;
+    // Keep descriptor sets alive across frames: NVK's pool reset walks and
+    // frees every set, which currently exposes allocator-list corruption.
+    std::vector<VkDescriptorSet> m_samplerDescriptorSets[2];
+    std::vector<VkDescriptorSet> m_uniformDescriptorSets[2];
+    size_t m_samplerSetCursor[2]{};
+    size_t m_uniformSetCursor[2]{};
+    uint64_t m_descriptorCacheFrameSerial=0;
     bool m_pipelineDirty=true;
     std::unordered_map<uint64_t, VkPipeline> m_pipelines;
     bool BindDescriptorSets();
