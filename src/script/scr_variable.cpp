@@ -27,41 +27,6 @@ scrVarDebugPub_t* scrVarDebugPub;
 scrVarDebugPub_t scrVarDebugPubBuf;
 scrVarGlob_t scrVarGlob;
 
-#ifdef KISAK_SWITCH
-static void Switch_LogZeroScriptVariableKey(
-    const char *phase,
-    uint32_t parentId,
-    uint32_t bucketIndex,
-    const VariableValueInternal *parentValue,
-    const VariableValueInternal *bucket,
-    const VariableValueInternal *entryValue,
-    uintptr_t caller)
-{
-    char line[512];
-    const uint32_t parentStatus = parentValue ? parentValue->w.status : 0;
-    const uint32_t bucketStatus = bucket ? bucket->w.status : 0;
-    const uint32_t valueStatus = entryValue ? entryValue->w.status : 0;
-    std::snprintf(
-        line,
-        sizeof(line),
-        "[KisakCOD][SCRIPT ZERO VARIABLE KEY] phase=%s parentId=%u parentStatus=0x%08x parentType=%u parentSize=%u bucket=%u bucketId=%u bucketStatus=0x%08x valueId=%u valueStatus=0x%08x valueKey=%u valueType=%u usagePos=%p caller=0x%llx\n",
-        phase,
-        parentId,
-        parentStatus,
-        parentStatus & VAR_MASK,
-        parentValue ? static_cast<unsigned>(parentValue->u.o.u.size) : 0u,
-        bucketIndex,
-        bucket ? static_cast<unsigned>(bucket->hash.id) : 0u,
-        bucketStatus,
-        entryValue ? static_cast<unsigned>(entryValue->hash.id) : 0u,
-        valueStatus,
-        valueStatus >> VAR_NAME_BITS,
-        valueStatus & VAR_MASK,
-        static_cast<const void *>(scrVarPub.varUsagePos),
-        static_cast<unsigned long long>(caller));
-    Switch_LogWrite(line);
-}
-#endif
 
 scr_classStruct_t g_classMap[CLASS_NUM_COUNT] =
 {
@@ -1620,7 +1585,33 @@ void  RemoveVariable(uint32_t parentId, uint32_t unsignedValue)
 	uint32_t id; // [esp+4h] [ebp-4h]
 
 	index = FindVariableIndexInternal(parentId, unsignedValue);
-	iassert(index);
+	if (!index)
+	{
+#ifdef KISAK_SWITCH
+		const VariableValueInternal *parentValue =
+			parentId < VARIABLELIST_PARENT_SIZE
+				? &scrVarGlob.variableList[parentId + VARIABLELIST_PARENT_BEGIN]
+				: nullptr;
+		const uint32_t parentStatus = parentValue ? parentValue->w.status : 0;
+		char line[320];
+		std::snprintf(
+			line,
+			sizeof(line),
+			"[KisakCOD][SCRIPT REMOVE MISSING] parentId=%u key=%u parentStatus=0x%08x parentType=%u parentSize=%u nextSibling=%u usagePos=%p caller=0x%llx\n",
+			parentId,
+			unsignedValue,
+			parentStatus,
+			parentStatus & VAR_MASK,
+			(parentValue && (parentStatus & VAR_MASK) == VAR_ARRAY)
+				? static_cast<unsigned>(parentValue->u.o.u.size) : 0u,
+			parentValue ? static_cast<unsigned>(parentValue->nextSibling) : 0u,
+			static_cast<const void *>(scrVarPub.varUsagePos),
+			static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+		Switch_LogWrite(line);
+#endif
+		Com_Error(ERR_DROP, "RemoveVariable: missing variable (parent=%u key=%u)", parentId, unsignedValue);
+		return;
+	}
 	id = scrVarGlob.variableList[index + VARIABLELIST_CHILD_BEGIN].hash.id;
 	MakeVariableExternal(index, &scrVarGlob.variableList[parentId + 1]);
 	FreeChildValue(parentId, id);
@@ -3768,29 +3759,6 @@ uint32_t  GetNewVariableIndexInternal3(uint32_t parentId, uint32_t name, uint32_
 	uint32_t prevSiblingIndex;
 	uint32_t nextSiblingIndex;
 
-#ifdef KISAK_SWITCH
-	if (!name)
-	{
-		VariableValueInternal *zeroNameParent = &scrVarGlob.variableList[parentId + VARIABLELIST_PARENT_BEGIN];
-		VariableValueInternal *zeroNameBucket = nullptr;
-		VariableValueInternal *zeroNameValue = nullptr;
-		if (index > 0 && index < VARIABLELIST_CHILD_SIZE)
-		{
-			zeroNameBucket = &scrVarGlob.variableList[index + VARIABLELIST_CHILD_BEGIN];
-			const uint32_t candidateId = zeroNameBucket->hash.id;
-			if (candidateId > 0 && candidateId < VARIABLELIST_CHILD_SIZE)
-				zeroNameValue = &scrVarGlob.variableList[candidateId + VARIABLELIST_CHILD_BEGIN];
-		}
-		Switch_LogZeroScriptVariableKey(
-			"insert",
-			parentId,
-			index,
-			zeroNameParent,
-			zeroNameBucket,
-			zeroNameValue,
-			reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
-	}
-#endif
 	iassert(!(name & ~VAR_NAME_LOW_MASK));
 	entry = &scrVarGlob.variableList[index + VARIABLELIST_CHILD_BEGIN];
 	entryValue = &scrVarGlob.variableList[entry->hash.id + VARIABLELIST_CHILD_BEGIN];
@@ -4070,21 +4038,6 @@ void  MakeVariableExternal(uint32_t index, VariableValueInternal* parentValue)
 	if ((parentValue->w.status & VAR_MASK) == VAR_ARRAY)
 	{
 		const uint32_t arrayKey = entryValue->w.status >> VAR_NAME_BITS;
-#ifdef KISAK_SWITCH
-		if (!arrayKey)
-		{
-			const uint32_t parentId = static_cast<uint32_t>(
-				parentValue - scrVarGlob.variableList - VARIABLELIST_PARENT_BEGIN);
-			Switch_LogZeroScriptVariableKey(
-				"remove",
-				parentId,
-				index,
-				parentValue,
-				entry,
-				entryValue,
-				reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
-		}
-#endif
 		--parentValue->u.o.u.size;
 		iassert(!IsObject(entryValue));
 		value = Scr_GetArrayIndexValue(arrayKey);
