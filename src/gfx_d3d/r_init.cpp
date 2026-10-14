@@ -3019,6 +3019,9 @@ void R_InitGraphicsApi()
     iassert( (dx.device != NULL) == (dx.d3d9 != NULL) );
     if (dx.device)
     {
+        // A platform may create the graphics device before renderer registration.
+        // That skips R_InitHardware(), where the scene draw-surface lists are normally initialized.
+        R_InitScene();
         R_InitSystems();
     }
     else
