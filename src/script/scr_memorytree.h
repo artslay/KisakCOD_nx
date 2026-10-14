@@ -98,6 +98,7 @@ static const char* mt_type_names[22] =
 int MT_GetSubTreeSize(int nodeNum);
 void MT_DumpTree(void);
 void MT_FreeIndex(uint32_t nodeNum, int numBytes, const void *caller = nullptr);
+bool MT_GetIndexAllocationInfo(uint32_t nodeNum, uint32_t *type, uint32_t *size);
 
 void MT_Free(unsigned char* p, int numBytes);
 bool MT_Realloc(int oldNumBytes, int newNumbytes);
