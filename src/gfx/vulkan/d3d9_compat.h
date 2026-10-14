@@ -277,6 +277,7 @@ constexpr uint32_t D3DQUERYTYPE_OCCLUSION = 9;
 struct IDirect3DQuery9 {
     VulkanBackend *backend = nullptr;
     void *query = nullptr;
+    uint32_t queryType = 0;
     bool begun = false;
     bool issued = false;
 
