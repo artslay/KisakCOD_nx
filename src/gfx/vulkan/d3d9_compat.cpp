@@ -1193,7 +1193,7 @@ HRESULT IDirect3DDevice9::EndScene()
     ++sceneTraceCount;
     if (sceneTraceCount <= 12u || (frameSerial != 0 && frameSerial % 120u == 0))
     {
-        char msg[256];
+        char msg[384];
         std::snprintf(
             msg, sizeof(msg),
             "[KisakCOD][VK SCENE] serial=%llu offscreenRendered=%u directTarget=%u defaultFramebuffer=%u color=%p texture=%p queued=%u size=%ux%u drawsUP=%u drawsIndexed=%u clears=%u\n",
