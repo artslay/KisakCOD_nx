@@ -19,6 +19,11 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <mutex>
+#ifdef __SWITCH__
+#include <switch.h>
+#include <switch/kernel/virtmem.h>
+#endif
 #ifdef __SWITCH__
 #include <cerrno>
 #include <cstdio>
@@ -39,6 +44,295 @@ struct HunkUser
     uint8_t _pad[8];
     uint8_t buf[1];
 };
+
+#ifdef __SWITCH__
+// Windows VirtualAlloc(MEM_RESERVE) reserves address space without consuming
+// backing memory. malloc(size) is not equivalent on Horizon: it grows the
+// process heap and can consume hundreds of MiB for the engine's main hunk.
+// Reserve virtual ranges with libnx and map physical pages only on commit.
+namespace
+{
+constexpr size_t SWITCH_VIRTUAL_PAGE_SIZE = 0x1000u;
+constexpr size_t SWITCH_VIRTUAL_RESERVATION_COUNT = 1024;
+
+struct SwitchVirtualReservation
+{
+    void *base = nullptr;
+    size_t size = 0;
+    VirtmemReservation *reservation = nullptr;
+    uint8_t *committedPages = nullptr;
+    size_t pageCount = 0;
+};
+
+SwitchVirtualReservation g_switchVirtualReservations[SWITCH_VIRTUAL_RESERVATION_COUNT];
+std::mutex g_switchVirtualReservationMutex;
+
+static void SwitchVirtualMemoryLog(const char *operation, void *address, size_t size, Result result)
+{
+    char line[256];
+    std::snprintf(
+        line, sizeof(line),
+        "[KisakCOD][VMEM] operation=%s address=%p size=%llu result=0x%x\n",
+        operation,
+        address,
+        static_cast<unsigned long long>(size),
+        static_cast<unsigned>(result));
+    Switch_LogWrite(line);
+}
+
+static bool SwitchVirtualPageIsCommitted(const SwitchVirtualReservation &reservation, size_t page)
+{
+    return (reservation.committedPages[page >> 3] & static_cast<uint8_t>(1u << (page & 7u))) != 0;
+}
+
+static void SwitchVirtualSetPageCommitted(SwitchVirtualReservation &reservation, size_t page, bool committed)
+{
+    const uint8_t bit = static_cast<uint8_t>(1u << (page & 7u));
+    uint8_t &value = reservation.committedPages[page >> 3];
+    if (committed)
+        value = static_cast<uint8_t>(value | bit);
+    else
+        value = static_cast<uint8_t>(value & static_cast<uint8_t>(~bit));
+}
+
+static SwitchVirtualReservation *SwitchVirtualFindRangeLocked(uintptr_t start, uintptr_t end)
+{
+    for (SwitchVirtualReservation &reservation : g_switchVirtualReservations)
+    {
+        if (!reservation.base)
+            continue;
+        const uintptr_t base = reinterpret_cast<uintptr_t>(reservation.base);
+        const uintptr_t limit = base + reservation.size;
+        if (start >= base && end <= limit && start <= end)
+            return &reservation;
+    }
+    return nullptr;
+}
+
+static bool SwitchVirtualUnmapPagesLocked(
+    SwitchVirtualReservation &reservation,
+    size_t firstPage,
+    size_t endPage,
+    Result *failureResult)
+{
+    size_t page = firstPage;
+    auto *const base = static_cast<uint8_t *>(reservation.base);
+
+    while (page < endPage)
+    {
+        while (page < endPage && !SwitchVirtualPageIsCommitted(reservation, page))
+            ++page;
+        const size_t runStart = page;
+        while (page < endPage && SwitchVirtualPageIsCommitted(reservation, page))
+            ++page;
+        if (runStart == page)
+            continue;
+
+        const size_t runSize = (page - runStart) * SWITCH_VIRTUAL_PAGE_SIZE;
+        void *const runAddress = base + runStart * SWITCH_VIRTUAL_PAGE_SIZE;
+        const Result result = svcUnmapPhysicalMemory(runAddress, runSize);
+        if (R_FAILED(result))
+        {
+            if (failureResult)
+                *failureResult = result;
+            SwitchVirtualMemoryLog("unmap", runAddress, runSize, result);
+            return false;
+        }
+
+        for (size_t mappedPage = runStart; mappedPage < page; ++mappedPage)
+            SwitchVirtualSetPageCommitted(reservation, mappedPage, false);
+    }
+
+    return true;
+}
+
+static bool SwitchVirtualCommitRange(void *pointer, size_t size)
+{
+    if (size == 0)
+        return true;
+    if (!pointer)
+        return false;
+
+    const uintptr_t rawStart = reinterpret_cast<uintptr_t>(pointer);
+    if (rawStart > UINTPTR_MAX - size)
+        return false;
+    const uintptr_t rawEnd = rawStart + size;
+    if (rawEnd > UINTPTR_MAX - (SWITCH_VIRTUAL_PAGE_SIZE - 1u))
+        return false;
+
+    const uintptr_t mapStart = rawStart & ~(static_cast<uintptr_t>(SWITCH_VIRTUAL_PAGE_SIZE) - 1u);
+    const uintptr_t mapEnd =
+        (rawEnd + SWITCH_VIRTUAL_PAGE_SIZE - 1u) &
+        ~(static_cast<uintptr_t>(SWITCH_VIRTUAL_PAGE_SIZE) - 1u);
+
+    std::lock_guard<std::mutex> lock(g_switchVirtualReservationMutex);
+    SwitchVirtualReservation *const reservation = SwitchVirtualFindRangeLocked(mapStart, mapEnd);
+    if (!reservation)
+    {
+        SwitchVirtualMemoryLog("commit_unreserved", pointer, size, MAKERESULT(Module_Libnx, LibnxError_BadInput));
+        return false;
+    }
+
+    const uintptr_t baseAddress = reinterpret_cast<uintptr_t>(reservation->base);
+    const size_t firstPage = static_cast<size_t>((mapStart - baseAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
+    const size_t endPage = static_cast<size_t>((mapEnd - baseAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
+    auto *const base = static_cast<uint8_t *>(reservation->base);
+
+    size_t page = firstPage;
+    while (page < endPage)
+    {
+        while (page < endPage && SwitchVirtualPageIsCommitted(*reservation, page))
+            ++page;
+        const size_t runStart = page;
+        while (page < endPage && !SwitchVirtualPageIsCommitted(*reservation, page))
+            ++page;
+        if (runStart == page)
+            continue;
+
+        const size_t runSize = (page - runStart) * SWITCH_VIRTUAL_PAGE_SIZE;
+        void *const runAddress = base + runStart * SWITCH_VIRTUAL_PAGE_SIZE;
+        const Result result = svcMapPhysicalMemory(runAddress, runSize);
+        if (R_FAILED(result))
+        {
+            SwitchVirtualMemoryLog("map", runAddress, runSize, result);
+            return false;
+        }
+
+        for (size_t mappedPage = runStart; mappedPage < page; ++mappedPage)
+            SwitchVirtualSetPageCommitted(*reservation, mappedPage, true);
+
+        // Preserve VirtualAlloc's zero-filled newly committed pages.
+        std::memset(runAddress, 0, runSize);
+    }
+
+    return true;
+}
+
+static bool SwitchVirtualDecommitRange(void *pointer, size_t size)
+{
+    if (size == 0)
+        return true;
+    if (!pointer)
+        return false;
+
+    const uintptr_t rawStart = reinterpret_cast<uintptr_t>(pointer);
+    if (rawStart > UINTPTR_MAX - size)
+        return false;
+    const uintptr_t rawEnd = rawStart + size;
+    if (rawEnd > UINTPTR_MAX - (SWITCH_VIRTUAL_PAGE_SIZE - 1u))
+        return false;
+
+    const uintptr_t mapStart = rawStart & ~(static_cast<uintptr_t>(SWITCH_VIRTUAL_PAGE_SIZE) - 1u);
+    const uintptr_t mapEnd =
+        (rawEnd + SWITCH_VIRTUAL_PAGE_SIZE - 1u) &
+        ~(static_cast<uintptr_t>(SWITCH_VIRTUAL_PAGE_SIZE) - 1u);
+
+    std::lock_guard<std::mutex> lock(g_switchVirtualReservationMutex);
+    SwitchVirtualReservation *const reservation = SwitchVirtualFindRangeLocked(mapStart, mapEnd);
+    if (!reservation)
+    {
+        SwitchVirtualMemoryLog("decommit_unreserved", pointer, size, MAKERESULT(Module_Libnx, LibnxError_BadInput));
+        return false;
+    }
+
+    const uintptr_t baseAddress = reinterpret_cast<uintptr_t>(reservation->base);
+    const size_t firstPage = static_cast<size_t>((mapStart - baseAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
+    const size_t endPage = static_cast<size_t>((mapEnd - baseAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
+    Result result = 0;
+    return SwitchVirtualUnmapPagesLocked(*reservation, firstPage, endPage, &result);
+}
+
+static void *SwitchVirtualReserve(int32_t requestedSize)
+{
+    if (requestedSize <= 0)
+        return nullptr;
+
+    const size_t request = static_cast<size_t>(requestedSize);
+    if (request > SIZE_MAX - (SWITCH_VIRTUAL_PAGE_SIZE - 1u))
+        return nullptr;
+    const size_t reserveSize =
+        (request + SWITCH_VIRTUAL_PAGE_SIZE - 1u) &
+        ~(SWITCH_VIRTUAL_PAGE_SIZE - 1u);
+    const size_t pageCount = reserveSize / SWITCH_VIRTUAL_PAGE_SIZE;
+    const size_t bitmapSize = (pageCount + 7u) / 8u;
+
+    std::lock_guard<std::mutex> lock(g_switchVirtualReservationMutex);
+    SwitchVirtualReservation *slot = nullptr;
+    for (SwitchVirtualReservation &candidate : g_switchVirtualReservations)
+    {
+        if (!candidate.base)
+        {
+            slot = &candidate;
+            break;
+        }
+    }
+    if (!slot)
+    {
+        errno = ENOMEM;
+        return nullptr;
+    }
+
+    auto *const committedPages = static_cast<uint8_t *>(std::calloc(bitmapSize, 1u));
+    if (!committedPages)
+        return nullptr;
+
+    virtmemLock();
+    void *const base = virtmemFindAslr(reserveSize, 0);
+    VirtmemReservation *const reservation = base
+        ? virtmemAddReservation(base, reserveSize)
+        : nullptr;
+    virtmemUnlock();
+
+    if (!base || !reservation)
+    {
+        std::free(committedPages);
+        errno = ENOMEM;
+        return nullptr;
+    }
+
+    slot->base = base;
+    slot->size = reserveSize;
+    slot->reservation = reservation;
+    slot->committedPages = committedPages;
+    slot->pageCount = pageCount;
+    return base;
+}
+
+static bool SwitchVirtualReleaseReservation(void *pointer)
+{
+    if (!pointer)
+        return true;
+
+    std::lock_guard<std::mutex> lock(g_switchVirtualReservationMutex);
+    SwitchVirtualReservation *reservation = nullptr;
+    for (SwitchVirtualReservation &candidate : g_switchVirtualReservations)
+    {
+        if (candidate.base == pointer)
+        {
+            reservation = &candidate;
+            break;
+        }
+    }
+    if (!reservation)
+    {
+        SwitchVirtualMemoryLog("release_unknown", pointer, 0, MAKERESULT(Module_Libnx, LibnxError_BadInput));
+        return false;
+    }
+
+    Result result = 0;
+    if (!SwitchVirtualUnmapPagesLocked(*reservation, 0, reservation->pageCount, &result))
+        return false;
+
+    virtmemLock();
+    virtmemRemoveReservation(reservation->reservation);
+    virtmemUnlock();
+
+    std::free(reservation->committedPages);
+    *reservation = SwitchVirtualReservation{};
+    return true;
+}
+} // namespace
+#endif
 
 
 HunkUser *g_user;
@@ -162,15 +456,15 @@ void* __cdecl Z_VirtualReserve(int32_t size)
     if (size <= 0)
         MyAssertHandler(".\\universal\\com_memory.cpp", 150, 0, "%s\n\t(size) = %i", "(size > 0)", size);
 #ifdef __SWITCH__
-    buf = std::malloc(static_cast<size_t>(size));
+    buf = SwitchVirtualReserve(size);
 #else
     buf = VirtualAlloc(0, size, 0x2000u, 4u);
 #endif
     if (!buf)
     {
 #ifdef __SWITCH__
-        // MyAssertHandler is intentionally non-fatal in the retail Switch build.
-        // A failed malloc must be treated as OOM before callers touch the buffer.
+        // A failed address reservation or small metadata allocation must be
+        // reported before a caller can dereference the unavailable range.
         const int allocErrno = errno;
         u64 totalMemory = 0;
         u64 usedMemory = 0;
@@ -181,7 +475,7 @@ void* __cdecl Z_VirtualReserve(int32_t size)
         char line[256];
         std::snprintf(
             line, sizeof(line),
-            "[KisakCOD][OOM] Z_VirtualReserve malloc failed size=%d errno=%d "
+            "[KisakCOD][OOM] Z_VirtualReserve failed size=%d errno=%d "
             "total=%llu totalRc=0x%x used=%llu usedRc=0x%x\n",
             size, allocErrno,
             static_cast<unsigned long long>(totalMemory),
@@ -191,6 +485,7 @@ void* __cdecl Z_VirtualReserve(int32_t size)
         Switch_LogWrite(line);
 #endif
         Sys_OutOfMemErrorInternal(".\\universal\\com_memory.cpp", 208);
+        return nullptr;
     }
     return buf;
 }
@@ -200,8 +495,8 @@ void __cdecl Z_VirtualDecommitInternal(void* ptr, int32_t size)
     if (size < 0)
         MyAssertHandler(".\\universal\\com_memory.cpp", 325, 0, "%s\n\t(size) = %i", "(size >= 0)", size);
 #ifdef __SWITCH__
-    (void)ptr;
-    (void)size;
+    if (size < 0 || !SwitchVirtualDecommitRange(ptr, static_cast<size_t>(size)))
+        Sys_OutOfMemErrorInternal(".\\universal\\com_memory.cpp", 325);
 #else
     VirtualFree(ptr, size, 0x4000u);
 #endif
@@ -210,7 +505,8 @@ void __cdecl Z_VirtualDecommitInternal(void* ptr, int32_t size)
 void __cdecl Z_VirtualFreeInternal(void* ptr)
 {
 #ifdef __SWITCH__
-    std::free(ptr);
+    if (!SwitchVirtualReleaseReservation(ptr))
+        Sys_OutOfMemErrorInternal(".\\universal\\com_memory.cpp", 343);
 #else
     VirtualFree(ptr, 0, 0x8000u);
 #endif
@@ -231,7 +527,9 @@ bool __cdecl Z_TryVirtualCommitInternal(void* ptr, int32_t size)
 {
     iassert(size >= 0);
 #ifdef __SWITCH__
-    return ptr != nullptr;
+    if (size < 0)
+        return false;
+    return SwitchVirtualCommitRange(ptr, static_cast<size_t>(size));
 #else
     return VirtualAlloc(ptr, size, 0x1000u, 4u) != 0;
 #endif
@@ -948,8 +1246,8 @@ HunkUser* __cdecl Hunk_UserCreate(int32_t maxSize, const char* name, bool fixed,
     // arena up front: script parsing creates many 64 KiB HunkUser blocks.
     // The first page holds the HunkUser header and initial allocation data;
     // Hunk_UserAlloc zeroes additional pages only as the arena grows.
+    Z_VirtualCommit(user, 0x1000);
     memset(user, 0, 0x1000u);
-    Z_VirtualCommit(user, (int)offsetof(HunkUser, buf));
     user->end = (uintptr_t)user + (uintptr_t)maxSize;
     user->pos = (uintptr_t)user->buf;
 #else
@@ -1014,9 +1312,9 @@ void* Hunk_UserAlloc(HunkUser* user, uint32_t size, int32_t alignment)
         // this HunkUser's end because malloc does not guarantee page alignment.
         const uintptr_t commitEnd = (current->pos + 4095u) & ~uintptr_t(0xFFF);
         const uintptr_t zeroEnd = commitEnd < current->end ? commitEnd : current->end;
+        Z_VirtualCommit((void*)pos, (int)(current->pos - pos));
         if (zeroEnd > pos)
             memset(reinterpret_cast<void*>(pos), 0, static_cast<size_t>(zeroEnd - pos));
-        Z_VirtualCommit((void*)pos, (int)(current->pos - pos));
 #else
         Z_VirtualCommit((void*)pos, current->pos - (uint32_t)pos);
 #endif
