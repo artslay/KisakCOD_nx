@@ -175,6 +175,58 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         (ctx->esr >> 26) & 0x3f);
     Switch_LogCrashLine(line);
 
+    // On the observed crash, PC is inside newlib's _free_r. Its AArch64
+    // frame saves {previous FP, return address} at SP and the freed pointer
+    // at SP+40. Log both this frame and the outer frame to reach the engine
+    // call site without altering allocator behavior.
+    const uintptr_t crashSp = static_cast<uintptr_t>(ctx->sp.x);
+    const uintptr_t codeBase = reinterpret_cast<uintptr_t>(__code_start);
+    if (crashSp != 0 &&
+        (crashSp & (alignof(uintptr_t) - 1u)) == 0)
+    {
+        const volatile uintptr_t* freeFrame =
+            reinterpret_cast<const volatile uintptr_t*>(crashSp);
+        const uintptr_t wrapperFp = freeFrame[0];
+        const uintptr_t wrapperLr = freeFrame[1];
+        const uintptr_t freeArg = freeFrame[5];
+        uintptr_t outerFp = 0;
+        uintptr_t outerLr = 0;
+
+        // Walk one frame only when the saved frame pointer is aligned,
+        // above the current SP, and within a plausible stack-frame distance.
+        if (wrapperFp > crashSp &&
+            wrapperFp - crashSp <= 0x100000u &&
+            (wrapperFp & (alignof(uintptr_t) - 1u)) == 0)
+        {
+            const volatile uintptr_t* wrapperFrame =
+                reinterpret_cast<const volatile uintptr_t*>(wrapperFp);
+            outerFp = wrapperFrame[0];
+            outerLr = wrapperFrame[1];
+        }
+
+        const uintptr_t wrapperOffset =
+            wrapperLr >= codeBase ? wrapperLr - codeBase : 0;
+        const uintptr_t outerOffset =
+            outerLr >= codeBase ? outerLr - codeBase : 0;
+
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][CRASH] FREE_FRAME "
+            "wrapper_fp=0x%016llx wrapper_lr=0x%016llx "
+            "wrapper_lr_offset=0x%016llx free_arg=0x%016llx "
+            "outer_fp=0x%016llx outer_lr=0x%016llx "
+            "outer_lr_offset=0x%016llx\n",
+            static_cast<unsigned long long>(wrapperFp),
+            static_cast<unsigned long long>(wrapperLr),
+            static_cast<unsigned long long>(wrapperOffset),
+            static_cast<unsigned long long>(freeArg),
+            static_cast<unsigned long long>(outerFp),
+            static_cast<unsigned long long>(outerLr),
+            static_cast<unsigned long long>(outerOffset));
+        Switch_LogCrashLine(line);
+    }
+
     const uint32_t threadContext = Sys_GetSwitchThreadContext();
     const char *threadName = "unknown";
     switch (threadContext)
