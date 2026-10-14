@@ -1392,7 +1392,7 @@ void __cdecl MSG_WriteDeltaHudElems(msg_t *msg, hudelem_s *to, int count)
     int v9; // r24
     int v10; // r31
     int v11; // r9
-    int *p_offset; // r11
+    const netField_t *p_field;
     int v13; // r8
     const netField_t *v14; // r30
     int v15; // r31
@@ -1425,15 +1425,15 @@ void __cdecl MSG_WriteDeltaHudElems(msg_t *msg, hudelem_s *to, int count)
         {
             v10 = 0;
             v11 = 0;
-            p_offset = &hudElemFields[0].offset;
+            p_field = &hudElemFields[0];
             v13 = 43;
             do
             {
-                if (*(he_type_t *)((char *)&to->type + *p_offset + v8 * 172))
+                if (*(he_type_t *)((char *)&to->type + p_field->offset + v8 * 172))
                     v10 = v11;
                 --v13;
                 ++v11;
-                p_offset += 3;
+                ++p_field;
             } while (v13);
             MSG_WriteBits(msg, v10, 6u);
             v14 = hudElemFields;
@@ -1457,7 +1457,7 @@ void __cdecl MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count
     int v8; // r26
     int i; // r21
     unsigned int v10; // r27
-    int *p_bits; // r29
+    const netField_t *p_field;
     unsigned int v12; // r25
     int v13; // r31
     msg_t *v14; // r3
@@ -1465,7 +1465,7 @@ void __cdecl MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count
     __int64 v16; // r11
     unsigned int v17; // r4
     unsigned int v18; // r11
-    int *p_offset; // r10
+
     int v20; // r9
     hudelem_s *v21; // r31
 
@@ -1484,24 +1484,24 @@ void __cdecl MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count
         for (i = Bits; i; --i)
         {
             v10 = MSG_ReadBits(msg, 6u) + 1;
-            p_bits = &hudElemFields[0].bits;
+            p_field = &hudElemFields[0];
             v12 = v10;
             do
             {
-                v13 = *(p_bits - 1) + v8;
+                v13 = p_field->offset + v8;
                 if (!MSG_ReadBits(msg, 1u))
                 {
                     *(he_type_t *)((char *)&to->type + v13) = HE_TYPE_FREE;
                     goto LABEL_18;
                 }
-                if (*p_bits)
+                if (p_field->bits)
                 {
                     if (!MSG_ReadBits(msg, 1u))
                     {
                         *(he_type_t *)((char *)&to->type + v13) = HE_TYPE_FREE;
                         goto LABEL_18;
                     }
-                    v17 = *p_bits;
+                    v17 = p_field->bits;
                     v14 = msg;
                 }
                 else
@@ -1524,17 +1524,17 @@ void __cdecl MSG_ReadDeltaHudElems(msg_t *msg, hudelem_s *to, unsigned int count
                 *(he_type_t *)((char *)&to->type + v13) = (he_type_t)MSG_ReadBits(v14, v17);
             LABEL_18:
                 --v12;
-                p_bits += 3;
+                ++p_field;
             } while (v12);
             if (v10 < 0x2B)
             {
                 v18 = 43 - v10;
-                p_offset = &hudElemFields[v10].offset;
+                p_field = &hudElemFields[v10];
                 do
                 {
                     --v18;
-                    v20 = *p_offset + v8;
-                    p_offset += 3;
+                    v20 = p_field->offset + v8;
+                    ++p_field;
                     *(he_type_t *)((char *)&to->type + v20) = HE_TYPE_FREE;
                 } while (v18);
             }
