@@ -59,11 +59,8 @@ struct ZoneLoadState
     std::unordered_set<void *> processed;
     std::unordered_map<MaterialVertexDeclaration *, MaterialVertexDeclaration *> vertexDecls;
 
-    // Bounded progress reporting for a zone that stalls during native loading.
+    // Retained for bounded BSP registration diagnostics.
     const char *zoneName = nullptr;
-    uint64_t bytesRead = 0;
-    uint64_t nextReadReport = 16ull * 1024ull * 1024ull;
-    uint32_t linkedAssets = 0;
 };
 
 std::mutex s_zoneHandlesMutex;
@@ -82,45 +79,7 @@ size_t ReadZoneData(void *context, void *buffer, size_t length)
     if (length == 0)
         return 0;
 
-    // Only trace unusually large reads. A missing "end" line identifies a stall
-    // inside decompression, without producing per-field logging.
-    const bool traceLargeRead = length >= 4ull * 1024ull * 1024ull;
-    if (traceLargeRead)
-    {
-        char trace[224];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] large-read begin zone=%s size=%zu total=%llu assets=%u\n",
-            state.zoneName ? state.zoneName : "(null)",
-            length,
-            static_cast<unsigned long long>(state.bytesRead),
-            state.linkedAssets);
-        Switch_LogWrite(trace);
-    }
-
     DB_LoadXFileData(static_cast<uint8_t *>(buffer), static_cast<uint32_t>(length));
-    state.bytesRead += length;
-
-    if (traceLargeRead)
-    {
-        char trace[224];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] large-read end zone=%s size=%zu total=%llu assets=%u\n",
-            state.zoneName ? state.zoneName : "(null)",
-            length,
-            static_cast<unsigned long long>(state.bytesRead),
-            state.linkedAssets);
-        Switch_LogWrite(trace);
-    }
-
-    if (state.bytesRead >= state.nextReadReport)
-    {
-        char trace[192];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] stream zone-data=%llu bytes linked-assets=%u\n",
-            static_cast<unsigned long long>(state.bytesRead), state.linkedAssets);
-        Switch_LogWrite(trace);
-        state.nextReadReport += 16ull * 1024ull * 1024ull;
-    }
     return length;
 }
 
@@ -154,30 +113,8 @@ void LoadImageData(void *context, void *loadDef, void *imagePointer)
     (void)context;
     auto *image = static_cast<GfxImage *>(imagePointer);
     auto *definition = static_cast<GfxImageLoadDef *>(loadDef);
-    const bool traceLargeImage =
-        definition && definition->resourceSize >= 4u * 1024u * 1024u;
-    if (traceLargeImage)
-    {
-        char trace[256];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] image-upload begin name=%s size=%u dimensions=%ux%u\n",
-            image && image->name ? image->name : "(null)",
-            static_cast<unsigned>(definition->resourceSize),
-            image ? static_cast<unsigned>(image->width) : 0u,
-            image ? static_cast<unsigned>(image->height) : 0u);
-        Switch_LogWrite(trace);
-    }
-
+    (void)definition;
     Load_Texture(&image->texture, image);
-
-    if (traceLargeImage)
-    {
-        char trace[192];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] image-upload end name=%s\n",
-            image && image->name ? image->name : "(null)");
-        Switch_LogWrite(trace);
-    }
 }
 
 void SetSoundData(void *context, void *soundPointer)
@@ -275,20 +212,8 @@ void FixupTechniqueSet(ZoneLoadState &state, MaterialTechniqueSet *techniqueSet)
 
 void FixupGfxWorld(GfxWorld *world)
 {
-    char trace[256];
-    std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][ZONELOAD] world-buffer begin vertices=%u bytes=%llu layers=%u data=%p\n",
-        static_cast<unsigned>(world->vertexCount),
-        static_cast<unsigned long long>(44ull * world->vertexCount),
-        static_cast<unsigned>(world->vertexLayerDataSize),
-        static_cast<const void *>(world->vd.vertices));
-    Switch_LogWrite(trace);
-
     Load_VertexBuffer(&world->vd.worldVb, reinterpret_cast<uint8_t *>(world->vd.vertices), 44 * world->vertexCount);
-    Switch_LogWrite("[KisakCOD][ZONELOAD] world-buffer vertices done\n");
-
     Load_VertexBuffer(&world->vld.layerVb, world->vld.data, world->vertexLayerDataSize);
-    Switch_LogWrite("[KisakCOD][ZONELOAD] world-buffer layers done\n");
 }
 
 void FixupEffect(const FxEffectDef *effect)
@@ -460,16 +385,6 @@ void FixupClipMap(void *asset)
 void *LinkAsset(void *context, int assetType, void *asset)
 {
     auto &state = *static_cast<ZoneLoadState *>(context);
-    ++state.linkedAssets;
-    if ((state.linkedAssets % 512u) == 0)
-    {
-        char trace[192];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] linked-assets=%u last-pc-type=%d stream-bytes=%llu\n",
-            state.linkedAssets, assetType,
-            static_cast<unsigned long long>(state.bytesRead));
-        Switch_LogWrite(trace);
-    }
     const auto type = SwitchEngineAssetTypeFromIW3(assetType);
 
     switch (type)
@@ -621,34 +536,10 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
     hooks.loadImageData = LoadImageData;
     hooks.setSoundData = SetSoundData;
 
-    char trace[256];
-    std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][ZONELOAD] begin zone=%s block4=%u block7=%u block8=%u\n",
-        zoneName ? zoneName : "(null)",
-        static_cast<unsigned>(blocks.size[4]),
-        static_cast<unsigned>(blocks.size[7]),
-        static_cast<unsigned>(blocks.size[8]));
-    Switch_LogWrite(trace);
-
     char error[512] = "";
     void *const zone = KisakZone_Load(zoneName, blocks, hooks, error, sizeof(error));
     if (!zone)
-    {
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD] failed zone=%s data=%llu assets=%u error=%s\n",
-            zoneName ? zoneName : "(null)",
-            static_cast<unsigned long long>(state.bytesRead),
-            state.linkedAssets, error);
-        Switch_LogWrite(trace);
         Com_Error(ERR_DROP, "Fastfile for zone '%s' could not be loaded: %s", zoneName, error);
-    }
-
-    std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][ZONELOAD] complete zone=%s data=%llu assets=%u\n",
-        zoneName ? zoneName : "(null)",
-        static_cast<unsigned long long>(state.bytesRead),
-        state.linkedAssets);
-    Switch_LogWrite(trace);
 
     {
         std::lock_guard<std::mutex> lock(s_zoneHandlesMutex);
