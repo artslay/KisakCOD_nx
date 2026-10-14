@@ -3114,7 +3114,7 @@ void __cdecl Scr_AddPathnode(pathnode_t *node)
             std::snprintf(
                 line,
                 sizeof(line),
-                "[KisakCOD][PATHNODE POINTER INVALID] node=%p nodes=%p count=%u stride=%zu delta=0x%llx caller=0x%llx\\n",
+                "[KisakCOD][PATHNODE POINTER INVALID] node=%p nodes=%p count=%u stride=%zu delta=0x%llx caller=0x%llx\n",
                 static_cast<const void *>(node),
                 static_cast<const void *>(gameWorldSp.path.nodes),
                 nodeCount,
