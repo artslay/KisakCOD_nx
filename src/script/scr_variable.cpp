@@ -44,7 +44,7 @@ static void Switch_LogZeroScriptVariableKey(
     std::snprintf(
         line,
         sizeof(line),
-        "[KisakCOD][SCRIPT ZERO VARIABLE KEY] phase=%s parentId=%u parentStatus=0x%08x parentType=%u parentSize=%u bucket=%u bucketId=%u bucketStatus=0x%08x valueId=%u valueStatus=0x%08x valueKey=%u valueType=%u usagePos=%p caller=0x%llx\\n",
+        "[KisakCOD][SCRIPT ZERO VARIABLE KEY] phase=%s parentId=%u parentStatus=0x%08x parentType=%u parentSize=%u bucket=%u bucketId=%u bucketStatus=0x%08x valueId=%u valueStatus=0x%08x valueKey=%u valueType=%u usagePos=%p caller=0x%llx\n",
         phase,
         parentId,
         parentStatus,
