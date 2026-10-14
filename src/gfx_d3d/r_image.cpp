@@ -611,17 +611,17 @@ void __cdecl R_ShutdownImages()
 }
 
 #ifdef __SWITCH__
-// Fastfile renderer shutdown normally leaves this table alone because zone
-// images are DB-owned. The procedural images registered in imageHashTable,
-// however, are allocated from the main hunk. Hunk_Clear must release and drop
-// those entries before the hunk pages are unmapped, or the next R_InitImages
-// will dereference stale pointers while looking up $white and other builtins.
+// Fastfile renderer shutdown normally leaves this table alone. Procedural
+// images in the table can point into the main hunk, so clear the table before
+// Hunk_Clear unmaps it. If the renderer is still registered, release GPU image
+// resources through the normal path; after renderer shutdown, do not dereference
+// table entries because some may already point into unmapped hunk pages.
 void __cdecl R_ShutdownImagesForHunkClear()
 {
-    if (!rg.registered)
-        return;
-
-    R_ShutdownImages();
+    if (rg.registered)
+        R_ShutdownImages();
+    else
+        memset(imageGlobals.imageHashTable, 0, sizeof(imageGlobals.imageHashTable));
 
     rgp.whiteImage = nullptr;
     rgp.blackImage = nullptr;
