@@ -840,15 +840,17 @@ bool VulkanBackend::BeginFrame()
         (void)RecreateSwapchain();
         return false;
     }
+    VkResult descriptorResetResult;
     {
         // vkResetDescriptorPool is externally synchronized against allocations/binds below.
         std::lock_guard<std::mutex> descriptorPoolLock(m_descriptorPoolMutex);
-        if (vkResetDescriptorPool(m_device, m_descriptorPool, 0) != VK_SUCCESS)
-        {
-            SetError("vkResetDescriptorPool failed at frame start");
-            (void)RecreateSwapchain();
-            return false;
-        }
+        descriptorResetResult = vkResetDescriptorPool(m_device, m_descriptorPool, 0);
+    }
+    if (descriptorResetResult != VK_SUCCESS)
+    {
+        SetError("vkResetDescriptorPool failed at frame start");
+        (void)RecreateSwapchain();
+        return false;
     }
     m_uniformOffset = 0;
 
