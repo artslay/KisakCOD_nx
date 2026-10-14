@@ -184,8 +184,12 @@ void VulkanBackend::Shutdown()
     m_samplers.clear();
     m_samplerCache.clear();
 
-    if (m_descriptorPool) vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
-    m_descriptorPool = VK_NULL_HANDLE;
+    {
+        // Descriptor pool operations share host access with render-thread descriptor binding.
+        std::lock_guard<std::mutex> descriptorPoolLock(m_descriptorPoolMutex);
+        if (m_descriptorPool) vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
+        m_descriptorPool = VK_NULL_HANDLE;
+    }
     if (m_pipelineLayout) vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
     m_pipelineLayout = VK_NULL_HANDLE;
     if (m_vsSamplerLayout) vkDestroyDescriptorSetLayout(m_device, m_vsSamplerLayout, nullptr);
@@ -836,11 +840,15 @@ bool VulkanBackend::BeginFrame()
         (void)RecreateSwapchain();
         return false;
     }
-    if (vkResetDescriptorPool(m_device, m_descriptorPool, 0) != VK_SUCCESS)
     {
-        SetError("vkResetDescriptorPool failed at frame start");
-        (void)RecreateSwapchain();
-        return false;
+        // vkResetDescriptorPool is externally synchronized against allocations/binds below.
+        std::lock_guard<std::mutex> descriptorPoolLock(m_descriptorPoolMutex);
+        if (vkResetDescriptorPool(m_device, m_descriptorPool, 0) != VK_SUCCESS)
+        {
+            SetError("vkResetDescriptorPool failed at frame start");
+            (void)RecreateSwapchain();
+            return false;
+        }
     }
     m_uniformOffset = 0;
 
