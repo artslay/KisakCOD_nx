@@ -242,7 +242,7 @@ void Loader_clipMap_t::FillStruct_cbrush_t(const ZoneStreamFillReadAccessor& fil
             "numMaterials=%u numsides=%u/%u sidesRaw=0x%08x "
             "rawAxial=[%d,%d,%d;%d,%d,%d] nativeAxial=[%d,%d,%d;%d,%d,%d]\n",
             varclipMap_t && varclipMap_t->name ? varclipMap_t->name : "<null>",
-            brushIndex, static_cast<void*>(varcbrush_t), static_cast<const void*>(rawBrush),
+            brushIndex, static_cast<void*>(varcbrush_t), static_cast<void*>(const_cast<uint8_t*>(rawBrush)),
             varclipMap_t ? varclipMap_t->numMaterials : 0u,
             rawNumSides, varcbrush_t->numsides, rawSidesPointer,
             static_cast<int>(rawAxialMaterialNum[0][0]),
@@ -935,9 +935,9 @@ void Loader_clipMap_t::Load_clipMap_t(const bool atStreamStart)
             "[KisakCOD][CLIPMAP BOX BRUSH] map=%s numMaterials=%u numBrushes=%u "
             "brushes=%p box=%p boxIndex=%d numsides=%u axial=[%d,%d,%d;%d,%d,%d]\n",
             varclipMap_t->name ? varclipMap_t->name : "<null>",
-            varclipMap_t->numMaterials, varclipMap_t->numBrushes,
+            varclipMap_t->numMaterials, static_cast<unsigned>(varclipMap_t->numBrushes),
             static_cast<void*>(varclipMap_t->brushes),
-            static_cast<const void*>(box), boxBrushIndex, box->numsides,
+            static_cast<void*>(const_cast<cbrush_t*>(box)), boxBrushIndex, box->numsides,
             static_cast<int>(box->axialMaterialNum[0][0]),
             static_cast<int>(box->axialMaterialNum[0][1]),
             static_cast<int>(box->axialMaterialNum[0][2]),
