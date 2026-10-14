@@ -27,8 +27,24 @@ void __cdecl R_HW_InsertFence(IDirect3DQuery9 **fence)
     const char *v1; // eax
     int hr; // [esp+0h] [ebp-4h]
 
-    *fence = dx.fencePool[dx.nextFence];
-    dx.nextFence = (dx.nextFence + 1) % 8;
+    if (!fence)
+    {
+        Com_Error(ERR_FATAL, "R_HW_InsertFence received a null output pointer\n");
+        return;
+    }
+
+    const uint32_t fenceIndex = dx.nextFence % ARRAY_COUNT(dx.fencePool);
+    *fence = dx.fencePool[fenceIndex];
+    dx.nextFence = (fenceIndex + 1) % ARRAY_COUNT(dx.fencePool);
+    if (!*fence)
+    {
+        Com_Error(
+            ERR_FATAL,
+            "R_HW_InsertFence: dx.fencePool[%u] is null; renderer query pool was not initialized\n",
+            fenceIndex);
+        return;
+    }
+
     do
     {
         if (r_logFile && r_logFile->current.integer)
