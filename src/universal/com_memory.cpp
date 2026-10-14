@@ -27,6 +27,7 @@
 #include <switch.h>
 #include <switch/kernel/virtmem.h>
 extern void Switch_LogWrite(const char *msg);
+extern void __cdecl R_ShutdownImagesForHunkClear();
 #endif
 struct HunkUser
 {
@@ -903,6 +904,11 @@ void Hunk_Clear()
 {
     if (!Sys_IsMainThread())
         MyAssertHandler(".\\universal\\com_memory.cpp", 1882, 0, "%s", "Sys_IsMainThread()");
+#ifdef __SWITCH__
+    // The image registry may contain procedural GfxImage objects allocated
+    // from this hunk. Release and remove them before committed pages disappear.
+    R_ShutdownImagesForHunkClear();
+#endif
     hunk_low.permanent = 0;
     hunk_low.temp = 0;
     hunk_high.permanent = 0;
