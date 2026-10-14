@@ -1132,7 +1132,7 @@ void __cdecl CG_ProcessSnapshots(int localClientNum)
             return;
         char trace[320];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][CREDITS SNAP] call=%u stage=%s value=%d demoType=%d cgTime=%d snap=%p next=%p\\n",
+            "[KisakCOD][CREDITS SNAP] call=%u stage=%s value=%d demoType=%d cgTime=%d snap=%p next=%p\n",
             switchCgSnapshotTraceCall, stage, value, cgArray[0].demoType, cgArray[0].time,
             static_cast<void *>(cgArray[0].snap), static_cast<void *>(cgArray[0].nextSnap));
         Switch_LogWrite(trace);
