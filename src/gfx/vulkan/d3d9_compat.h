@@ -238,8 +238,13 @@ struct KisakVkShader {
     VkShaderStageFlagBits stage=VK_SHADER_STAGE_VERTEX_BIT;
     const MOJOSHADER_parseData *parseData=nullptr;
     std::vector<uint32_t> spirv;
+    // The interface-linked fragment module before the optional alpha-test rewrite.
+    // Alpha testing is dynamic D3D9 state, so retain this baseline to rebuild the
+    // fragment module when the state changes without re-linking both shader stages.
+    std::vector<uint32_t> linkedSpirv;
     const void *linkedDeclaration=nullptr;
     const void *linkedPixelShader=nullptr;
+    bool linkedAlphaTestPatch=false;
     uint32_t alphaFuncSpecId=0;
     uint32_t alphaRefSpecId=0;
     void Release();
