@@ -18,6 +18,7 @@
 #include "physicalmemory.h"
 
 #include <cstdint>
+#include <algorithm>
 #include <cstdlib>
 #include <mutex>
 #ifdef __SWITCH__
@@ -58,10 +59,22 @@ struct SwitchVirtualReservation
     size_t size = 0;
     VirtmemReservation *reservation = nullptr;
     uint8_t *committedPages = nullptr;
+    uint32_t *backingBlockIndices = nullptr;
     size_t pageCount = 0;
 };
 
+struct SwitchVirtualBackingBlock
+{
+    void *base = nullptr;
+    size_t size = 0;
+    size_t virtualStartPage = 0;
+    size_t activePages = 0;
+};
+
+constexpr size_t SWITCH_VIRTUAL_BACKING_BLOCK_COUNT = 65536;
+constexpr uint32_t SWITCH_VIRTUAL_NO_BACKING_BLOCK = UINT32_MAX;
 SwitchVirtualReservation g_switchVirtualReservations[SWITCH_VIRTUAL_RESERVATION_COUNT];
+SwitchVirtualBackingBlock g_switchVirtualBackingBlocks[SWITCH_VIRTUAL_BACKING_BLOCK_COUNT];
 std::mutex g_switchVirtualReservationMutex;
 
 static void SwitchVirtualMemoryLog(const char *operation, void *address, size_t size, Result result)
@@ -113,31 +126,66 @@ static bool SwitchVirtualUnmapPagesLocked(
     Result *failureResult)
 {
     size_t page = firstPage;
-    auto *const base = static_cast<uint8_t *>(reservation.base);
+    auto *const virtualBase = static_cast<uint8_t *>(reservation.base);
 
     while (page < endPage)
     {
         while (page < endPage && !SwitchVirtualPageIsCommitted(reservation, page))
             ++page;
-        const size_t runStart = page;
-        while (page < endPage && SwitchVirtualPageIsCommitted(reservation, page))
-            ++page;
-        if (runStart == page)
-            continue;
+        if (page >= endPage)
+            break;
 
-        const size_t runSize = (page - runStart) * SWITCH_VIRTUAL_PAGE_SIZE;
-        void *const runAddress = base + runStart * SWITCH_VIRTUAL_PAGE_SIZE;
-        const Result result = svcUnmapPhysicalMemory(runAddress, runSize);
+        const size_t runStart = page;
+        const uint32_t blockIndex = reservation.backingBlockIndices[runStart];
+        if (blockIndex >= SWITCH_VIRTUAL_BACKING_BLOCK_COUNT ||
+            !g_switchVirtualBackingBlocks[blockIndex].base)
+        {
+            const Result invalidState = MAKERESULT(Module_Libnx, LibnxError_BadInput);
+            if (failureResult)
+                *failureResult = invalidState;
+            SwitchVirtualMemoryLog("unmap_bad_backing", virtualBase + runStart * SWITCH_VIRTUAL_PAGE_SIZE,
+                                   SWITCH_VIRTUAL_PAGE_SIZE, invalidState);
+            return false;
+        }
+
+        SwitchVirtualBackingBlock &block = g_switchVirtualBackingBlocks[blockIndex];
+        while (page < endPage &&
+               SwitchVirtualPageIsCommitted(reservation, page) &&
+               reservation.backingBlockIndices[page] == blockIndex)
+            ++page;
+
+        const size_t runPages = page - runStart;
+        const size_t runSize = runPages * SWITCH_VIRTUAL_PAGE_SIZE;
+        void *const destination = virtualBase + runStart * SWITCH_VIRTUAL_PAGE_SIZE;
+        const size_t backingOffsetPages = runStart - block.virtualStartPage;
+        void *const source = static_cast<uint8_t *>(block.base) +
+                             backingOffsetPages * SWITCH_VIRTUAL_PAGE_SIZE;
+
+        // svcUnmapMemory supports partial unmapping. The destination/source pair
+        // must refer to the same corresponding slice that was mapped originally.
+        const Result result = svcUnmapMemory(destination, source, runSize);
         if (R_FAILED(result))
         {
             if (failureResult)
                 *failureResult = result;
-            SwitchVirtualMemoryLog("unmap", runAddress, runSize, result);
+            SwitchVirtualMemoryLog("unmap", destination, runSize, result);
             return false;
         }
 
-        for (size_t mappedPage = runStart; mappedPage < page; ++mappedPage)
-            SwitchVirtualSetPageCommitted(reservation, mappedPage, false);
+        for (size_t unmapPage = runStart; unmapPage < page; ++unmapPage)
+        {
+            SwitchVirtualSetPageCommitted(reservation, unmapPage, false);
+            reservation.backingBlockIndices[unmapPage] = SWITCH_VIRTUAL_NO_BACKING_BLOCK;
+        }
+
+        block.activePages -= runPages;
+        if (block.activePages == 0)
+        {
+            // All pages from this aligned allocation have been restored to the
+            // heap by svcUnmapMemory, so normal free is valid again.
+            std::free(block.base);
+            block = SwitchVirtualBackingBlock{};
+        }
     }
 
     return true;
@@ -157,23 +205,24 @@ static bool SwitchVirtualCommitRange(void *pointer, size_t size)
     if (rawEnd > UINTPTR_MAX - (SWITCH_VIRTUAL_PAGE_SIZE - 1u))
         return false;
 
-    const uintptr_t mapStart = rawStart & ~(static_cast<uintptr_t>(SWITCH_VIRTUAL_PAGE_SIZE) - 1u);
-    const uintptr_t mapEnd =
-        (rawEnd + SWITCH_VIRTUAL_PAGE_SIZE - 1u) &
-        ~(static_cast<uintptr_t>(SWITCH_VIRTUAL_PAGE_SIZE) - 1u);
+    const uintptr_t pageMask = static_cast<uintptr_t>(SWITCH_VIRTUAL_PAGE_SIZE) - 1u;
+    const uintptr_t mapStart = rawStart & ~pageMask;
+    const uintptr_t mapEnd = (rawEnd + pageMask) & ~pageMask;
 
     std::lock_guard<std::mutex> lock(g_switchVirtualReservationMutex);
     SwitchVirtualReservation *const reservation = SwitchVirtualFindRangeLocked(mapStart, mapEnd);
     if (!reservation)
     {
-        SwitchVirtualMemoryLog("commit_unreserved", pointer, size, MAKERESULT(Module_Libnx, LibnxError_BadInput));
+        SwitchVirtualMemoryLog(
+            "commit_unreserved", pointer, size,
+            MAKERESULT(Module_Libnx, LibnxError_BadInput));
         return false;
     }
 
     const uintptr_t baseAddress = reinterpret_cast<uintptr_t>(reservation->base);
     const size_t firstPage = static_cast<size_t>((mapStart - baseAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
     const size_t endPage = static_cast<size_t>((mapEnd - baseAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
-    auto *const base = static_cast<uint8_t *>(reservation->base);
+    auto *const virtualBase = static_cast<uint8_t *>(reservation->base);
 
     size_t page = firstPage;
     while (page < endPage)
@@ -186,20 +235,52 @@ static bool SwitchVirtualCommitRange(void *pointer, size_t size)
         if (runStart == page)
             continue;
 
-        const size_t runSize = (page - runStart) * SWITCH_VIRTUAL_PAGE_SIZE;
-        void *const runAddress = base + runStart * SWITCH_VIRTUAL_PAGE_SIZE;
-        const Result result = svcMapPhysicalMemory(runAddress, runSize);
-        if (R_FAILED(result))
+        size_t blockIndex = 0;
+        while (blockIndex < SWITCH_VIRTUAL_BACKING_BLOCK_COUNT &&
+               g_switchVirtualBackingBlocks[blockIndex].base)
+            ++blockIndex;
+        if (blockIndex == SWITCH_VIRTUAL_BACKING_BLOCK_COUNT)
         {
-            SwitchVirtualMemoryLog("map", runAddress, runSize, result);
+            errno = ENOMEM;
+            SwitchVirtualMemoryLog(
+                "commit_backing_table_full",
+                virtualBase + runStart * SWITCH_VIRTUAL_PAGE_SIZE,
+                (page - runStart) * SWITCH_VIRTUAL_PAGE_SIZE,
+                MAKERESULT(Module_Libnx, LibnxError_OutOfMemory));
             return false;
         }
 
-        for (size_t mappedPage = runStart; mappedPage < page; ++mappedPage)
-            SwitchVirtualSetPageCommitted(*reservation, mappedPage, true);
+        const size_t runPages = page - runStart;
+        const size_t runSize = runPages * SWITCH_VIRTUAL_PAGE_SIZE;
+        void *const source = std::aligned_alloc(SWITCH_VIRTUAL_PAGE_SIZE, runSize);
+        if (!source)
+        {
+            errno = ENOMEM;
+            return false;
+        }
 
-        // Preserve VirtualAlloc's zero-filled newly committed pages.
-        memset(runAddress, 0, runSize);
+        // Heap backing is allocated only for pages requested by the engine.
+        // Clear it before mapping: svcMapMemory protects the source while mapped.
+        memset(source, 0, runSize);
+        void *const destination = virtualBase + runStart * SWITCH_VIRTUAL_PAGE_SIZE;
+        const Result result = svcMapMemory(destination, source, runSize);
+        if (R_FAILED(result))
+        {
+            SwitchVirtualMemoryLog("map", destination, runSize, result);
+            std::free(source);
+            return false;
+        }
+
+        SwitchVirtualBackingBlock &block = g_switchVirtualBackingBlocks[blockIndex];
+        block.base = source;
+        block.size = runSize;
+        block.virtualStartPage = runStart;
+        block.activePages = runPages;
+        for (size_t mappedPage = runStart; mappedPage < page; ++mappedPage)
+        {
+            SwitchVirtualSetPageCommitted(*reservation, mappedPage, true);
+            reservation->backingBlockIndices[mappedPage] = static_cast<uint32_t>(blockIndex);
+        }
     }
 
     return true;
@@ -270,11 +351,22 @@ static void *SwitchVirtualReserve(int32_t requestedSize)
     }
 
     auto *const committedPages = static_cast<uint8_t *>(std::calloc(bitmapSize, 1u));
-    if (!committedPages)
+    auto *const backingBlockIndices = static_cast<uint32_t *>(
+        std::malloc(pageCount * sizeof(uint32_t)));
+    if (!committedPages || !backingBlockIndices)
+    {
+        std::free(committedPages);
+        std::free(backingBlockIndices);
+        errno = ENOMEM;
         return nullptr;
+    }
+    std::fill(backingBlockIndices, backingBlockIndices + pageCount,
+              SWITCH_VIRTUAL_NO_BACKING_BLOCK);
 
+    // MapMemory (unlike MapPhysicalMemory) can map existing heap-backed pages
+    // into the stack region without requiring an NPDM SystemResource allowance.
     virtmemLock();
-    void *const base = virtmemFindAslr(reserveSize, 0);
+    void *const base = virtmemFindStack(reserveSize, 0);
     VirtmemReservation *const reservation = base
         ? virtmemAddReservation(base, reserveSize)
         : nullptr;
@@ -283,6 +375,7 @@ static void *SwitchVirtualReserve(int32_t requestedSize)
     if (!base || !reservation)
     {
         std::free(committedPages);
+        std::free(backingBlockIndices);
         errno = ENOMEM;
         return nullptr;
     }
@@ -291,6 +384,7 @@ static void *SwitchVirtualReserve(int32_t requestedSize)
     slot->size = reserveSize;
     slot->reservation = reservation;
     slot->committedPages = committedPages;
+    slot->backingBlockIndices = backingBlockIndices;
     slot->pageCount = pageCount;
     if (reserveSize >= 0x01000000u)
         SwitchVirtualMemoryLog("reserve", base, reserveSize, 0);
@@ -314,7 +408,9 @@ static bool SwitchVirtualReleaseReservation(void *pointer)
     }
     if (!reservation)
     {
-        SwitchVirtualMemoryLog("release_unknown", pointer, 0, MAKERESULT(Module_Libnx, LibnxError_BadInput));
+        SwitchVirtualMemoryLog(
+            "release_unknown", pointer, 0,
+            MAKERESULT(Module_Libnx, LibnxError_BadInput));
         return false;
     }
 
@@ -327,9 +423,11 @@ static bool SwitchVirtualReleaseReservation(void *pointer)
     virtmemUnlock();
 
     std::free(reservation->committedPages);
+    std::free(reservation->backingBlockIndices);
     *reservation = SwitchVirtualReservation{};
     return true;
 }
+
 } // namespace
 #endif
 
