@@ -490,7 +490,6 @@ void Switch_LogWrite(const char *msg)
     static constexpr const char *const kSuppressedPrefixes[] =
     {
         // High-volume/obsolete diagnostics; retain zone-load progress and errors.
-        "[KisakCOD][VK DRAW]",
         "[KisakCOD][IWI ROOT] archive=",
         "[KisakCOD][BOOT] CL_InitUI:",
         "[KisakCOD][BOOT] CL_CreateDevGui:",
