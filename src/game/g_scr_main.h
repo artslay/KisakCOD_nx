@@ -33,6 +33,12 @@ struct corpseInfo_t
     actor_prone_info_s proneInfo;
 };
 
+#ifdef __SWITCH__
+static_assert(offsetof(corpseInfo_t, entnum) == 8, "Switch corpseInfo_t::entnum offset must match the native 64-bit pointer layout");
+static_assert(offsetof(corpseInfo_t, proneInfo) == 12, "Switch corpseInfo_t::proneInfo offset must match the native 64-bit pointer layout");
+static_assert(sizeof(corpseInfo_t) == 40, "Switch corpseInfo_t stride must match the native 64-bit pointer layout");
+#endif
+
 struct actorBackup_s
 {
     ai_animmode_t eAnimMode;
