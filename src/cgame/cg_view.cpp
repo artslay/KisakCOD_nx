@@ -1570,7 +1570,7 @@ int __cdecl CG_DrawActiveFrame(
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CREDITS CG] frame=%u stage=%s serverTime=%d cgTime=%d skip=%d snap=%p next=%p\\n",
+            "[KisakCOD][CREDITS CG] frame=%u stage=%s serverTime=%d cgTime=%d skip=%d snap=%p next=%p\n",
             switchCreditsCgTraceFrameCount,
             stage,
             serverTime,
