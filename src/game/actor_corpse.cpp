@@ -33,30 +33,20 @@ XAnimTree_s *__cdecl G_GetActorCorpseIndexAnimTree(unsigned int index)
 
 int __cdecl G_GetActorCorpseIndex(gentity_s *ent)
 {
-    int number; // r9
-    int result; // r3
-    int *p_entnum; // r11
-
-    number = ent->s.number;
-    result = 0;
-    p_entnum = &g_scr_data.actorCorpseInfo[0].entnum;
-    while (*p_entnum != number)
+    const int number = ent->s.number;
+    for (int index = 0; index < ARRAY_COUNT(g_scr_data.actorCorpseInfo); ++index)
     {
-        p_entnum += 8;
-        ++result;
-        if (reinterpret_cast<std::uintptr_t>(p_entnum) >=
-            reinterpret_cast<std::uintptr_t>(&g_scr_data.actorBackup))
-        {
-            if (!alwaysfails)
-                MyAssertHandler(
-                    "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
-                    51,
-                    0,
-                    "G_GetActorCorpseIndex called for non actor corpse");
-            return 0;
-        }
+        if (g_scr_data.actorCorpseInfo[index].entnum == number)
+            return index;
     }
-    return result;
+
+    if (!alwaysfails)
+        MyAssertHandler(
+            "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
+            51,
+            0,
+            "G_GetActorCorpseIndex called for non actor corpse");
+    return 0;
 }
 
 int G_GetFreeActorCorpseIndex(int reuse)
@@ -192,10 +182,6 @@ int G_GetFreeActorCorpseIndex(int reuse)
 
 void __cdecl G_RemoveActorCorpses(unsigned int allowedCorpseCount)
 {
-    signed int v2; // r28
-    int actorCorpseCount; // r10
-    int *p_entnum; // r30
-
     if (allowedCorpseCount > 0x10)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
@@ -204,21 +190,15 @@ void __cdecl G_RemoveActorCorpses(unsigned int allowedCorpseCount)
             "%s\n\t(allowedCorpseCount) = %i",
             "(allowedCorpseCount >= 0 && allowedCorpseCount <= 16)",
             allowedCorpseCount);
-    v2 = allowedCorpseCount;
-    actorCorpseCount = level.actorCorpseCount;
-    if ((int)allowedCorpseCount < level.actorCorpseCount)
+
+    // Use array indexing rather than assuming a 32-bit corpseInfo_t stride.
+    for (int corpseIndex = static_cast<int>(allowedCorpseCount);
+         corpseIndex < level.actorCorpseCount;
+         ++corpseIndex)
     {
-        p_entnum = &g_scr_data.actorCorpseInfo[allowedCorpseCount].entnum;
-        do
-        {
-            if (*p_entnum >= 0)
-            {
-                G_FreeEntity(&level.gentities[*p_entnum]);
-                actorCorpseCount = level.actorCorpseCount;
-            }
-            ++v2;
-            p_entnum += 8;
-        } while (v2 < actorCorpseCount);
+        const int entnum = g_scr_data.actorCorpseInfo[corpseIndex].entnum;
+        if (entnum >= 0)
+            G_FreeEntity(&level.gentities[entnum]);
     }
     level.actorCorpseCount = allowedCorpseCount;
 }
@@ -299,73 +279,46 @@ int __cdecl G_PruneCorpsesSortCmp(int *a, int *b)
 
 void __cdecl G_PruneLoadedCorpses()
 {
-    _QWORD *v0; // r11
-    int v1; // ctr
-    signed int v2; // r28
-    int v3; // r11
-    unsigned int *v4; // r9
-    int *p_entnum; // r10
-    gentity_s *ent; // r30
-    int v7; // r27
-    int *v8; // r29
-    int v9; // r31
-    unsigned int entnum; // r7
-    // KISAKFIX: IDA pseudocode rendered the 64-byte int[16] buffer as `_BYTE v11[24]; char v12`
-    // (stack-slot collapse — v11 ended at sp+0x68, v12 at sp+0x68 was really `&v11[6]`). Kisak
-    // port copied this literally: the QWORD-fill loop writes 64 bytes into v11[24] (UB), and
-    // the "v8 = &v12" read is undefined unless v11/v12 happen to be contiguous. With >6 corpses
-    // on a savegame load, this corrupts stack (return addr, qsort comparator ptr, locals).
-    int corpseIndices[16]; // [sp+50h] BYREF — was: _BYTE v11[24] + char v12
+    int corpseIndices[ARRAY_COUNT(g_scr_data.actorCorpseInfo)];
+    int corpseCount = 0;
 
-    v0 = (_QWORD*)corpseIndices;
-    v1 = 8;
-    do
+    // Do not walk between entnum fields with a 32-bit stride: corpseInfo_t
+    // contains a native pointer and is larger on AArch64.
+    for (int corpseIndex = 0; corpseIndex < ARRAY_COUNT(g_scr_data.actorCorpseInfo); ++corpseIndex)
     {
-        *v0++ = 0x800000000LL;
-        --v1;
-    } while (v1);
-    v2 = 0;
-    v3 = 0;
-    v4 = (unsigned int*)corpseIndices;
-    p_entnum = &g_scr_data.actorCorpseInfo[0].entnum;
-    do
+        if (g_scr_data.actorCorpseInfo[corpseIndex].entnum >= 0)
+            corpseIndices[corpseCount++] = corpseIndex;
+    }
+
+    if (corpseCount <= 6)
+        return;
+
+    gentity_s *ent = G_Find(0, offsetof(gentity_s, classname), scr_const.player);
+    iassert(ent);
+    iassert(ent->sentient);
+    Sentient_GetEyePosition(ent->sentient, playerEyePos);
+
+    qsort(
+        corpseIndices,
+        corpseCount,
+        sizeof(corpseIndices[0]),
+        (int(__cdecl *)(const void *, const void *))G_PruneCorpsesSortCmp);
+
+    for (int i = 6; i < corpseCount; ++i)
     {
-        if (*p_entnum >= 0)
-        {
-            *v4 = v3;
-            ++v2;
-            ++v4;
-        }
-        p_entnum += 8;
-        ++v3;
-    } while (reinterpret_cast<std::uintptr_t>(p_entnum) <
-             reinterpret_cast<std::uintptr_t>(&g_scr_data.actorBackup));
-    if (v2 > 6)
-    {
-        ent = G_Find(0, offsetof(gentity_s, classname), scr_const.player);
-        iassert(ent);
-        iassert(ent->sentient);
-        Sentient_GetEyePosition(ent->sentient, playerEyePos);
-        qsort(corpseIndices, v2, 4u, (int(__cdecl *)(const void *, const void *))G_PruneCorpsesSortCmp);
-        v7 = v2 - 6;
-        v8 = &corpseIndices[6]; // was: (int*)&v12 — really &v11[6] after stack-slot fix
-        do
-        {
-            v9 = *v8;
-            entnum = g_scr_data.actorCorpseInfo[v9].entnum;
-            if (entnum >= level.num_entities)
-                MyAssertHandler(
-                    "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
-                    275,
-                    0,
-                    "g_scr_data.actorCorpseInfo[corpseIdx].entnum doesn't index level.num_entities\n\t%i not in [0, %i)",
-                    entnum,
-                    level.num_entities);
-            G_FreeEntity(&level.gentities[g_scr_data.actorCorpseInfo[v9].entnum]);
-            --v7;
-            ++v8;
-            g_scr_data.actorCorpseInfo[v9].entnum = -1;
-        } while (v7);
+        const int corpseIndex = corpseIndices[i];
+        const unsigned int entnum = static_cast<unsigned int>(g_scr_data.actorCorpseInfo[corpseIndex].entnum);
+        if (entnum >= static_cast<unsigned int>(level.num_entities))
+            MyAssertHandler(
+                "c:\\trees\\cod3\\cod3src\\src\\game\\actor_corpse.cpp",
+                275,
+                0,
+                "g_scr_data.actorCorpseInfo[corpseIdx].entnum doesn't index level.num_entities\n\t%i not in [0, %i)",
+                entnum,
+                level.num_entities);
+
+        G_FreeEntity(&level.gentities[entnum]);
+        g_scr_data.actorCorpseInfo[corpseIndex].entnum = -1;
     }
 }
 
