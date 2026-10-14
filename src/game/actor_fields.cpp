@@ -95,7 +95,7 @@ const actor_fields_s aifields[82] =
   { "pathenemylookahead", 1940, F_FLOAT, NULL, NULL },
   { "pathenemyfightdist", 1944, F_FLOAT, NULL, NULL },
   { "meleeattackdist", 1948, F_FLOAT, NULL, NULL },
-  { "chainnode", 1972, F_PATHNODE, &ActorScr_ReadOnly, NULL },
+  { "chainnode", static_cast<int>(offsetof(actor_s, pDesiredChainPos)), F_PATHNODE, &ActorScr_ReadOnly, NULL },
   { "movemode", 516, F_STRING, &ActorScr_ReadOnly, &ActorScr_GetMoveMode },
   { "safetochangescript", 517, F_BYTE, NULL, NULL },
   { "keepclaimednode", 1848, F_BYTE, NULL, NULL },
