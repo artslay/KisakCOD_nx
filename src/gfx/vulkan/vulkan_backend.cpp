@@ -1198,6 +1198,13 @@ void VulkanBackend::EndQuery(void *queryPtr)
 
     if (query->kind == Query::Kind::Event)
     {
+        // dx.fencePool reuses eight event queries cyclically. Record reset and
+        // set in queue order so a prior signaled event cannot satisfy a newer
+        // D3D9 Issue(END) request.
+        vkCmdResetEvent(
+            m_commandBuffer,
+            query->event,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
         vkCmdSetEvent(
             m_commandBuffer,
             query->event,
