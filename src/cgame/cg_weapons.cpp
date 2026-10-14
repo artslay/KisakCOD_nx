@@ -162,10 +162,13 @@ void __cdecl CG_RegisterWeapon(int32_t localClientNum, uint32_t weaponNum)
                 DObjSetHidePartBits(obj, weapInfo->partBits);
                 DObjUpdateClientInfo(weapInfo->viewModelDObj, 0.05f, 0);
             }
-            if (weapDef->hudIcon)
-                cgMedia.stanceMaterials[weaponNum - 129] = weapDef->hudIcon;
-            else
-                cgMedia.stanceMaterials[weaponNum - 129] = 0;
+            // Weapon HUD icons occupy the weapon portion of hintMaterials.
+            // The old stanceMaterials[weaponNum - 129] expression indexed
+            // backwards into that preceding array, but uint32_t subtraction
+            // underflowed on AArch64 (e.g. weaponNum == 1).
+            const uint32_t weaponHintIndex = weaponNum + HINT_NUM_HINTS - 129;
+            iassert(weaponHintIndex < HINT_NUM_HINTS);
+            cgMedia.hintMaterials[weaponHintIndex] = weapDef->hudIcon;
             weapInfo->translatedDisplayName = SEH_StringEd_GetString(weapDef->szDisplayName);
             if (!weapInfo->translatedDisplayName)
             {
