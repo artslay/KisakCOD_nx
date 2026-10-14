@@ -21,13 +21,10 @@
 #include <cstdlib>
 #include <mutex>
 #ifdef __SWITCH__
-#include <switch.h>
-#include <switch/kernel/virtmem.h>
-#endif
-#ifdef __SWITCH__
 #include <cerrno>
 #include <cstdio>
 #include <switch.h>
+#include <switch/kernel/virtmem.h>
 extern void Switch_LogWrite(const char *msg);
 #endif
 struct HunkUser
@@ -202,7 +199,7 @@ static bool SwitchVirtualCommitRange(void *pointer, size_t size)
             SwitchVirtualSetPageCommitted(*reservation, mappedPage, true);
 
         // Preserve VirtualAlloc's zero-filled newly committed pages.
-        std::memset(runAddress, 0, runSize);
+        memset(runAddress, 0, runSize);
     }
 
     return true;
@@ -1242,7 +1239,7 @@ HunkUser* __cdecl Hunk_UserCreate(int32_t maxSize, const char* name, bool fixed,
     }
 #ifdef __SWITCH__
     // VirtualAlloc supplies zeroed pages as they are committed. malloc-backed
-    // Switch reservations must preserve that behavior without touching the whole
+    // Switch virtual reservations must preserve that behavior without touching the whole
     // arena up front: script parsing creates many 64 KiB HunkUser blocks.
     // The first page holds the HunkUser header and initial allocation data;
     // Hunk_UserAlloc zeroes additional pages only as the arena grows.
