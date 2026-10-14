@@ -663,7 +663,7 @@ void MT_RemoveHeadMemoryNode(int size)
 #endif
 }
 
-void MT_FreeIndex(uint32_t nodeNum, int numBytes)
+void MT_FreeIndex(uint32_t nodeNum, int numBytes, const void *caller)
 {
     int size; // [esp+30h] [ebp-8h]
     int lowBit; // [esp+34h] [ebp-4h]
@@ -680,7 +680,6 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes)
 
     Sys_EnterCriticalSection(CRITSECT_MEMORY_TREE);
 #ifdef KISAK_SWITCH
-    const void *caller = __builtin_extract_return_addr(__builtin_return_address(0));
     if (nodeNum == 0 || nodeNum >= MEMORY_NODE_COUNT ||
         size < 0 || size > MEMORY_NODE_BITS)
     {
@@ -903,7 +902,12 @@ void MT_Free(byte* p, int numBytes)
 {
 	iassert(((MemoryNode*)p - scrMemTreeGlob.nodes >= 0 && (MemoryNode*)p - scrMemTreeGlob.nodes < MEMORY_NODE_COUNT));
 
+#ifdef KISAK_SWITCH
+    const void *caller = __builtin_extract_return_addr(__builtin_return_address(0));
+    MT_FreeIndex((MemoryNode *)p - scrMemTreeGlob.nodes, numBytes, caller);
+#else
     MT_FreeIndex((MemoryNode *)p - scrMemTreeGlob.nodes, numBytes);
+#endif
 }
 
 int MT_GetSize(int numBytes)

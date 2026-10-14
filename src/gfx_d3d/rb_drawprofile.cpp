@@ -7,6 +7,10 @@
 #include <qcommon/threads.h>
 #include <script/scr_parser.h>
 
+#ifdef __SWITCH__
+extern thread_local const char *g_switchFrameStage;
+#endif
+
 DrawProfileGlobals drawProfGlob;
 float g_tally;
 
@@ -618,6 +622,9 @@ int __cdecl CompareMaxSelfTimes(uint32_t *e0, uint32_t *e1)
 
 void __cdecl RB_DrawProfileScript()
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands/cmd20_profile/script_check";
+#endif
     const char *v0; // eax
     const char *v1; // eax
     const char *v2; // eax
@@ -666,6 +673,9 @@ void __cdecl RB_DrawProfileScript()
 
     if (profile_script->current.enabled)
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/issue_commands/cmd20_profile/script_names";
+#endif
         profile = Profile_GetScript();
             RB_DrawProfileBackground(30.0);
         RB_DrawProfileString(5, 30.0, "Probe Name", drawProfGlob.labelColor);
@@ -704,6 +714,9 @@ void __cdecl RB_DrawProfileScript()
     }
     else if (profile_script_by_file->current.enabled)
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/scr/issue_commands/cmd20_profile/script_files";
+#endif
         profilea = Profile_GetScript();
             RB_DrawProfileBackground(30.0);
         RB_DrawProfileString(1, 30.0, " File", drawProfGlob.labelColor);
@@ -761,6 +774,9 @@ void __cdecl RB_DrawProfileScript()
         v13 = va("%6.2f", (double)profilea->srcMaxTime * Value[20782]);
         RB_DrawProfileString(57, yb, v13, v27);
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands/cmd20_profile/script_done";
+#endif
 }
 
 void __cdecl RB_ProfileInit()

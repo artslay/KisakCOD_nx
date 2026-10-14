@@ -1608,8 +1608,17 @@ void __cdecl RB_DrawProfileCmd(GfxRenderCommandExecState *execState)
     PROF_SCOPED("RB_DrawProfileCmd");
 
     GfxCmdDrawProfile *cmd = (GfxCmdDrawProfile *)execState->cmd;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands/cmd20_profile/rb_draw_profile";
+#endif
     RB_DrawProfile();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands/cmd20_profile/rb_draw_profile_script";
+#endif
     RB_DrawProfileScript();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands/cmd20_profile/profile_done";
+#endif
 
     execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
 }
