@@ -804,7 +804,7 @@ void __cdecl R_DrawIndexedPrimitive(GfxCmdBufPrimState *state, const GfxDrawPrim
                 char drawFailure[256];
                 std::snprintf(
                     drawFailure, sizeof(drawFailure),
-                    "[KisakCOD][DRAW ERROR] hr=0x%08x device=%p vertices=%u baseIndex=%u triCount=%d\\n",
+                    "[KisakCOD][DRAW ERROR] hr=0x%08x device=%p vertices=%u baseIndex=%u triCount=%d\n",
                     static_cast<unsigned int>(hr),
                     static_cast<void *>(device),
                     args->vertexCount, args->baseIndex, triCount);
