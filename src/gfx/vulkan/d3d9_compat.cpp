@@ -277,6 +277,20 @@ uint64_t PointerKey(const void *ptr)
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ptr));
 }
 
+bool DumpSpirvFile(const char *path, const std::vector<uint32_t> &words)
+{
+    if (!path || words.empty())
+        return false;
+
+    std::FILE *file = std::fopen(path, "wb");
+    if (!file)
+        return false;
+
+    const size_t written = std::fwrite(words.data(), sizeof(uint32_t), words.size(), file);
+    const int closeResult = std::fclose(file);
+    return written == words.size() && closeResult == 0;
+}
+
 void SpirvAppend(std::vector<uint32_t> &out, SpvOp opcode, std::initializer_list<uint32_t> operands)
 {
     out.push_back((static_cast<uint32_t>(operands.size()) + 1u) << 16 | static_cast<uint32_t>(opcode));
@@ -1934,11 +1948,15 @@ bool IDirect3DDevice9::EnsurePipeline()
             return false;
         }
         m_pixelShader->spirv = pixelSpirv;
+        m_vertexShader->spirv.assign(
+            reinterpret_cast<const uint32_t *>(m_vertexShader->parseData->output),
+            reinterpret_cast<const uint32_t *>(m_vertexShader->parseData->output) +
+                vsBytes / sizeof(uint32_t));
 
         VkShaderModuleCreateInfo vsInfo{};
         vsInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        vsInfo.codeSize = vsBytes;
-        vsInfo.pCode = reinterpret_cast<const uint32_t *>(m_vertexShader->parseData->output);
+        vsInfo.codeSize = m_vertexShader->spirv.size() * sizeof(uint32_t);
+        vsInfo.pCode = m_vertexShader->spirv.data();
 
         VkShaderModuleCreateInfo psInfo{};
         psInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -2250,6 +2268,20 @@ bool IDirect3DDevice9::EnsurePipeline()
             m_cullMode,
             m_blendEnable ? 1u : 0u);
         Switch_LogWrite(msg);
+
+        const bool vertexSpirvDumped = DumpSpirvFile(
+            "sdmc:/switch/KisakCOD/vk_failed_vs.spv", m_vertexShader->spirv);
+        const bool pixelSpirvDumped = DumpSpirvFile(
+            "sdmc:/switch/KisakCOD/vk_failed_ps.spv", m_pixelShader->spirv);
+        char dumpMsg[192];
+        std::snprintf(
+            dumpMsg, sizeof(dumpMsg),
+            "[KisakCOD][VK DRAW] pipeline_spirv_dump vs=%u(%u bytes) ps=%u(%u bytes)\n",
+            vertexSpirvDumped ? 1u : 0u,
+            static_cast<unsigned int>(m_vertexShader->spirv.size() * sizeof(uint32_t)),
+            pixelSpirvDumped ? 1u : 0u,
+            static_cast<unsigned int>(m_pixelShader->spirv.size() * sizeof(uint32_t)));
+        Switch_LogWrite(dumpMsg);
 
         for (uint32_t i = 0; i < vertexAttrs.size(); ++i)
         {
