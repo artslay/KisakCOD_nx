@@ -19,6 +19,12 @@
 
 #include <cstdint>
 #include <cstdlib>
+#ifdef __SWITCH__
+#include <cerrno>
+#include <cstdio>
+#include <switch.h>
+extern void Switch_LogWrite(const char *msg);
+#endif
 struct HunkUser
 {
     HunkUser *current;
@@ -161,7 +167,31 @@ void* __cdecl Z_VirtualReserve(int32_t size)
     buf = VirtualAlloc(0, size, 0x2000u, 4u);
 #endif
     if (!buf)
-        MyAssertHandler(".\\universal\\com_memory.cpp", 208, 0, "%s", "buf");
+    {
+#ifdef __SWITCH__
+        // MyAssertHandler is intentionally non-fatal in the retail Switch build.
+        // A failed malloc must be treated as OOM before callers touch the buffer.
+        const int allocErrno = errno;
+        u64 totalMemory = 0;
+        u64 usedMemory = 0;
+        const Result totalResult = svcGetInfo(
+            &totalMemory, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
+        const Result usedResult = svcGetInfo(
+            &usedMemory, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
+        char line[256];
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][OOM] Z_VirtualReserve malloc failed size=%d errno=%d "
+            "total=%llu totalRc=0x%x used=%llu usedRc=0x%x\\n",
+            size, allocErrno,
+            static_cast<unsigned long long>(totalMemory),
+            static_cast<unsigned>(totalResult),
+            static_cast<unsigned long long>(usedMemory),
+            static_cast<unsigned>(usedResult));
+        Switch_LogWrite(line);
+#endif
+        Sys_OutOfMemErrorInternal(".\\universal\\com_memory.cpp", 208);
+    }
     return buf;
 }
 
@@ -899,6 +929,19 @@ HunkUser* __cdecl Hunk_UserCreate(int32_t maxSize, const char* name, bool fixed,
     if (maxSize % 4096)
         MyAssertHandler(".\\universal\\com_memory.cpp", 2834, 0, "%s\n\t(maxSize) = %i", "(!(maxSize % (4*1024)))", maxSize);
     user = (HunkUser*)Z_VirtualReserve(maxSize);
+    if (!user)
+    {
+#ifdef __SWITCH__
+        char line[192];
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][OOM] Hunk_UserCreate failed name=%s size=%d\\n",
+            name ? name : "(null)", maxSize);
+        Switch_LogWrite(line);
+#endif
+        Sys_OutOfMemErrorInternal(".\\universal\\com_memory.cpp", 2835);
+        return nullptr;
+    }
 #ifdef __SWITCH__
     // VirtualAlloc supplies zeroed pages as they are committed. malloc-backed
     // Switch reservations must preserve that behavior without touching the whole
