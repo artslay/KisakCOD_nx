@@ -6,10 +6,6 @@
 #include <xanim/xanim.h>
 #include <game/game_public.h>
 #include <universal/profile.h>
-#ifdef __SWITCH__
-#include <cstdio>
-extern void Switch_LogWrite(const char *msg);
-#endif
 
 uint16_t __cdecl Trace_GetEntityHitId(const trace_t *trace)
 {
@@ -793,7 +789,6 @@ void __cdecl CM_TraceThroughBrush(const traceWork_t *tw, cbrush_t *brush, trace_
     float fraca; // [esp+B8h] [ebp-50h]
     float dist; // [esp+BCh] [ebp-4Ch]
     cbrushside_t *leadside; // [esp+C0h] [ebp-48h]
-    bool leadsideIsAxial;
     cbrushside_t axialSide; // [esp+C4h] [ebp-44h] BYREF
     cplane_s axialPlane; // [esp+D0h] [ebp-38h] BYREF
     float sign; // [esp+E8h] [ebp-20h]
@@ -813,7 +808,6 @@ void __cdecl CM_TraceThroughBrush(const traceWork_t *tw, cbrush_t *brush, trace_
     leaveFrac = trace->fraction;
     allsolid = 1;
     leadside = 0;
-    leadsideIsAxial = false;
     sign = -1.0;
     bounds = (const float *)brush;
     index = 0;
@@ -893,7 +887,6 @@ void __cdecl CM_TraceThroughBrush(const traceWork_t *tw, cbrush_t *brush, trace_
                 axialPlane.normal[j] = sign;
                 axialSide.plane = &axialPlane;
                 leadside = &axialSide;
-                leadsideIsAxial = true;
             }
         }
         if (!index)
@@ -978,7 +971,6 @@ void __cdecl CM_TraceThroughBrush(const traceWork_t *tw, cbrush_t *brush, trace_
                         return;
                 LABEL_86:
                     leadside = side;
-                    leadsideIsAxial = false;
                 }
             }
             --i;
@@ -1003,79 +995,8 @@ void __cdecl CM_TraceThroughBrush(const traceWork_t *tw, cbrush_t *brush, trace_
         trace->normal[0] = leadside->plane->normal[0];
         trace->normal[1] = normal[1];
         trace->normal[2] = normal[2];
-        const uint32_t materialNum = leadside->materialNum;
-        if (!cm.materials || materialNum >= cm.numMaterials)
-        {
-#ifdef __SWITCH__
-            // An invalid material index must not turn into an out-of-bounds
-            // read in the collision trace. Capture enough provenance to find
-            // whether it came from a brush side or the brush's axial side table.
-            static uint32_t invalidMaterialLogCount = 0;
-            const uint32_t logIndex =
-                __atomic_fetch_add(&invalidMaterialLogCount, 1u, __ATOMIC_RELAXED);
-            if (logIndex < 16u)
-            {
-                const uintptr_t brushAddress = reinterpret_cast<uintptr_t>(brush);
-                const uintptr_t brushBase = reinterpret_cast<uintptr_t>(cm.brushes);
-                unsigned long long brushIndex = ~0ull;
-                if (cm.brushes && brushAddress >= brushBase)
-                {
-                    const uintptr_t offset = brushAddress - brushBase;
-                    if (offset % sizeof(cbrush_t) == 0)
-                        brushIndex = static_cast<unsigned long long>(offset / sizeof(cbrush_t));
-                }
-
-                unsigned long long sideIndex = ~0ull;
-                if (!leadsideIsAxial && brush->sides)
-                {
-                    const uintptr_t sideAddress = reinterpret_cast<uintptr_t>(leadside);
-                    const uintptr_t sidesBase = reinterpret_cast<uintptr_t>(brush->sides);
-                    if (sideAddress >= sidesBase)
-                    {
-                        const uintptr_t offset = sideAddress - sidesBase;
-                        if (offset % sizeof(cbrushside_t) == 0)
-                            sideIndex = static_cast<unsigned long long>(offset / sizeof(cbrushside_t));
-                    }
-                }
-
-                char diagnostic[640];
-                std::snprintf(
-                    diagnostic,
-                    sizeof(diagnostic),
-                    "[KisakCOD][TRACE MATERIAL OOB] map=%s index=0x%08x count=%u "
-                    "source=%s brush=%p brushIndex=%llu sides=%p side=%p sideIndex=%llu "
-                    "numSides=%u axial=%d,%d,%d,%d,%d,%d materials=%p\n",
-                    cm.name ? cm.name : "(null)",
-                    static_cast<unsigned>(materialNum),
-                    static_cast<unsigned>(cm.numMaterials),
-                    leadsideIsAxial ? "axial" : "brushside",
-                    static_cast<void *>(brush),
-                    brushIndex,
-                    static_cast<void *>(brush->sides),
-                    static_cast<void *>(leadside),
-                    sideIndex,
-                    static_cast<unsigned>(brush->numsides),
-                    static_cast<int>(brush->axialMaterialNum[0][0]),
-                    static_cast<int>(brush->axialMaterialNum[0][1]),
-                    static_cast<int>(brush->axialMaterialNum[0][2]),
-                    static_cast<int>(brush->axialMaterialNum[1][0]),
-                    static_cast<int>(brush->axialMaterialNum[1][1]),
-                    static_cast<int>(brush->axialMaterialNum[1][2]),
-                    static_cast<void *>(cm.materials));
-                Switch_LogWrite(diagnostic);
-            }
-#endif
-            trace->surfaceFlags = SURF_NONE;
-            static const char invalidMaterialName[] = "<invalid collision material>";
-            trace->material = cm.materials && cm.numMaterials
-                ? cm.materials[0].material
-                : invalidMaterialName;
-        }
-        else
-        {
-            trace->surfaceFlags = cm.materials[materialNum].surfaceFlags;
-            trace->material = cm.materials[materialNum].material;
-        }
+        trace->surfaceFlags = cm.materials[leadside->materialNum].surfaceFlags;
+        trace->material = cm.materials[leadside->materialNum].material;
         trace->walkable = 0;
     }
     else
