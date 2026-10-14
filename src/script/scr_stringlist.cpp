@@ -388,7 +388,29 @@ void SL_ShutdownSystem(uint32_t user)
 			if ((scrStringGlob.hashTable[hash].status_next & HASH_STAT_MASK) == 0)
 				break;
 
+#ifdef KISAK_SWITCH
+			uint32_t stringHandle = scrStringGlob.hashTable[hash].u.prev;
+			uint32_t allocationType = 0;
+			uint32_t allocationSize = 0;
+			uint32_t storedLength = 0;
+			RefString* refStr = nullptr;
+			if (!Switch_GetStringAllocation(
+					stringHandle, &refStr, &allocationType, &allocationSize,
+					&storedLength, "SL_ShutdownSystem",
+					reinterpret_cast<uintptr_t>(__builtin_return_address(0))))
+			{
+				char line[256];
+				std::snprintf(
+					line, sizeof(line),
+					"[KisakCOD][SCRIPT STRING SHUTDOWN REJECT] user=%u bucket=%u status=0x%08x handle=%u allocation=%u/%u\\n",
+					user, hash, scrStringGlob.hashTable[hash].status_next,
+					stringHandle, allocationType, allocationSize);
+				Switch_LogWrite(line);
+				break;
+			}
+#else
 			RefString* refStr = GetRefString(scrStringGlob.hashTable[hash].u.prev);
+#endif
 
 			if (((uint8_t)user & refStr->user) == 0)
 				break;
