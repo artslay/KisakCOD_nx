@@ -2377,7 +2377,7 @@ uint32_t  Scr_GetEntityId(uint32_t entnum, uint32_t classnum)
 		std::snprintf(
 			line,
 			sizeof(line),
-			"[KisakCOD][SCRIPT ENTITY NUM INVALID] entnum=%u entnumHex=0x%08x classnum=%u usagePos=%p caller=0x%llx\\n",
+			"[KisakCOD][SCRIPT ENTITY NUM INVALID] entnum=%u entnumHex=0x%08x classnum=%u usagePos=%p caller=0x%llx\n",
 			entnum,
 			entnum,
 			classnum,
