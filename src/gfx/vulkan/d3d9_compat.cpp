@@ -692,16 +692,76 @@ bool PatchFragmentShaderForAlphaTest(
     return true;
 }
 
-VulkanUniformLayout GetUniformLayout(const MOJOSHADER_parseData *parse)
+static void LogInvalidUniformLayout(
+    const char *reason,
+    const MOJOSHADER_parseData *parse,
+    int uniformIndex,
+    int uniformType,
+    int registerIndex,
+    int arrayCount)
 {
-    VulkanUniformLayout layout{};
-    if (!parse)
-        return layout;
+    static uint32_t traceCount = 0;
+    if (traceCount >= 16)
+        return;
 
+    ++traceCount;
+    char trace[320];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][VK UNIFORM LAYOUT] reason=%s parse=%p uniformCount=%d uniform=%d type=%d index=%d arrayCount=%d registerLimit=256\n",
+        reason,
+        static_cast<const void *>(parse),
+        parse ? parse->uniform_count : -1,
+        uniformIndex,
+        uniformType,
+        registerIndex,
+        arrayCount);
+    Switch_LogWrite(trace);
+}
+
+bool GetUniformLayout(const MOJOSHADER_parseData *parse, VulkanUniformLayout *outLayout)
+{
+    if (!parse || !outLayout || parse->uniform_count < 0 ||
+        (parse->uniform_count > 0 && !parse->uniforms))
+    {
+        LogInvalidUniformLayout("invalid_parse", parse, -1, -1, -1, -1);
+        return false;
+    }
+
+    VulkanUniformLayout layout{};
     for (int i = 0; i < parse->uniform_count; ++i)
     {
         const MOJOSHADER_uniform &u = parse->uniforms[i];
-        const uint32_t end = static_cast<uint32_t>(u.index) + static_cast<uint32_t>(std::max(1, u.array_count));
+        switch (u.type)
+        {
+        case MOJOSHADER_UNIFORM_FLOAT:
+        case MOJOSHADER_UNIFORM_INT:
+        case MOJOSHADER_UNIFORM_BOOL:
+            break;
+        default:
+            continue;
+        }
+
+        if (u.index < 0 || u.array_count < 0)
+        {
+            LogInvalidUniformLayout(
+                "negative_register_range", parse, i, static_cast<int>(u.type),
+                u.index, u.array_count);
+            return false;
+        }
+
+        const uint32_t first = static_cast<uint32_t>(u.index);
+        const uint32_t count = std::max(1u, static_cast<uint32_t>(u.array_count));
+        if (first >= 256u || count > 256u - first)
+        {
+            LogInvalidUniformLayout(
+                "register_range_overflow", parse, i, static_cast<int>(u.type),
+                u.index, u.array_count);
+            return false;
+        }
+
+        const uint32_t end = first + count;
         switch (u.type)
         {
         case MOJOSHADER_UNIFORM_FLOAT:
@@ -722,7 +782,8 @@ VulkanUniformLayout GetUniformLayout(const MOJOSHADER_parseData *parse)
     layout.intOffset = layout.floatOffset + static_cast<size_t>(layout.floatCount) * 16u;
     layout.boolOffset = layout.intOffset + static_cast<size_t>(layout.intCount) * 16u;
     layout.size = layout.boolOffset + static_cast<size_t>(layout.boolCount) * 16u;
-    return layout;
+    *outLayout = layout;
+    return true;
 }
 }
 
@@ -1684,7 +1745,14 @@ bool IDirect3DDevice9::BindUniformSet(
         m_descriptorCacheFrameSerial = frameSerial;
     }
 
-    const VulkanUniformLayout layout = GetUniformLayout(parse);
+    VulkanUniformLayout layout{};
+    if (!GetUniformLayout(parse, &layout))
+        return false;
+    if ((layout.floatCount && !floatData) ||
+        (layout.intCount && !intData) ||
+        (layout.boolCount && !boolData))
+        return false;
+
     const size_t size = std::max<size_t>(16, layout.size);
     std::vector<uint8_t> bytes(size);
     if (layout.floatCount)

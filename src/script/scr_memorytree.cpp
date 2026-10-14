@@ -80,6 +80,7 @@ static void MT_RecordTreeOperation(uint32_t op, uint32_t arg0, uint32_t arg1, ui
 }
 
 static uint32_t mtInvariantReportCount;
+static uint32_t mtFreeRejectTraceCount;
 
 static void MT_ReportInvariantViolation(
     const char *phase,
@@ -113,6 +114,31 @@ static void MT_ReportInvariantViolation(
                 phase, node, bucket, usage, usageSize, prev, next, extra);
         }
     }
+}
+
+static void MT_ReportRejectedFree(
+    const char *reason,
+    uint32_t node,
+    int numBytes,
+    int size,
+    uint32_t usage,
+    uint32_t usageSize,
+    const void *caller)
+{
+    if (mtFreeRejectTraceCount >= 32)
+        return;
+
+    ++mtFreeRejectTraceCount;
+    Com_Printf(
+        CON_CHANNEL_PARSERSCRIPT,
+        "[KisakCOD][MEMTREE FREE REJECT] reason=%s node=%u numBytes=%d size=%d usage=%u/%u caller=%p\n",
+        reason,
+        node,
+        numBytes,
+        size,
+        usage,
+        usageSize,
+        caller);
 }
 
 static bool MT_CheckSentinelAtPhase(const char *phase, uint32_t extra)
@@ -654,23 +680,47 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes)
 
     Sys_EnterCriticalSection(CRITSECT_MEMORY_TREE);
 #ifdef KISAK_SWITCH
-    if (nodeNum < MEMORY_NODE_COUNT && size >= 0 && size <= MEMORY_NODE_BITS)
+    const void *caller = __builtin_extract_return_addr(__builtin_return_address(0));
+    if (nodeNum == 0 || nodeNum >= MEMORY_NODE_COUNT ||
+        size < 0 || size > MEMORY_NODE_BITS)
     {
-        const uint32_t mask = (1u << size) - 1u;
-        const uint32_t usage = scrMemTreeDebugGlob.mt_usage[nodeNum];
-        const uint32_t usageSize = scrMemTreeDebugGlob.mt_usage_size[nodeNum];
-        if (!usage || usageSize != static_cast<uint32_t>(size) || (nodeNum & mask) != 0)
-        {
-            MT_ReportInvariantViolation(
-                "free_entry",
-                nodeNum,
-                static_cast<uint32_t>(size),
-                usage,
-                usageSize,
-                scrMemTreeGlob.nodes[nodeNum].prev,
-                scrMemTreeGlob.nodes[nodeNum].next,
-                static_cast<uint32_t>(numBytes));
-        }
+        MT_ReportRejectedFree(
+            "invalid_arguments",
+            nodeNum,
+            numBytes,
+            size,
+            UINT32_MAX,
+            UINT32_MAX,
+            caller);
+        Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
+        return;
+    }
+
+    const uint32_t mask = (1u << size) - 1u;
+    const uint32_t usage = scrMemTreeDebugGlob.mt_usage[nodeNum];
+    const uint32_t usageSize = scrMemTreeDebugGlob.mt_usage_size[nodeNum];
+    if (!usage || usageSize != static_cast<uint32_t>(size) || (nodeNum & mask) != 0)
+    {
+        MT_ReportInvariantViolation(
+            "free_entry",
+            nodeNum,
+            static_cast<uint32_t>(size),
+            usage,
+            usageSize,
+            scrMemTreeGlob.nodes[nodeNum].prev,
+            scrMemTreeGlob.nodes[nodeNum].next,
+            static_cast<uint32_t>(numBytes));
+        MT_ReportRejectedFree(
+            "allocation_mismatch",
+            nodeNum,
+            numBytes,
+            size,
+            usage,
+            usageSize,
+            caller);
+        // Do not let a duplicate or malformed free mutate the tree again.
+        Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
+        return;
     }
 #endif
     --scrMemTreeGlob.totalAlloc;
