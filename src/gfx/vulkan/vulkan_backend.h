@@ -90,6 +90,7 @@ public:
     }
     VkPipelineLayout PipelineLayout() const { return m_pipelineLayout; }
     VkDescriptorPool DescriptorPool() const { return m_descriptorPool; }
+    std::mutex &DescriptorPoolMutex() { return m_descriptorPoolMutex; }
     VkDescriptorSetLayout VSSamplerLayout() const { return m_vsSamplerLayout; }
     VkDescriptorSetLayout VSUniformLayout() const { return m_vsUniformLayout; }
     VkDescriptorSetLayout PSSamplerLayout() const { return m_psSamplerLayout; }
@@ -272,6 +273,7 @@ private:
     VkCommandBuffer m_commandBuffer = VK_NULL_HANDLE;
     std::mutex m_immediateMutex;
     std::mutex m_queueMutex;
+    std::mutex m_descriptorPoolMutex;
     FrameSync m_sync{};
 
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
