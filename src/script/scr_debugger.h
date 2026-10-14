@@ -151,7 +151,9 @@ struct Scr_OpcodeList_s // sizeof=0x8
     char *codePos;
     Scr_OpcodeList_s *next;
 };
-#ifndef KISAK_SWITCH
+#ifdef KISAK_SWITCH
+static_assert(sizeof(Scr_OpcodeList_s) == 0x10, "Scr_OpcodeList_s must hold two native 64-bit pointers");
+#else
 static_assert(sizeof(Scr_OpcodeList_s) == 0x8);
 #endif
 
