@@ -292,6 +292,8 @@ static void *SwitchVirtualReserve(int32_t requestedSize)
     slot->reservation = reservation;
     slot->committedPages = committedPages;
     slot->pageCount = pageCount;
+    if (reserveSize >= 0x01000000u)
+        SwitchVirtualMemoryLog("reserve", base, reserveSize, 0);
     return base;
 }
 
@@ -1304,9 +1306,8 @@ void* Hunk_UserAlloc(HunkUser* user, uint32_t size, int32_t alignment)
     {
         iassert(current->pos - pos > 0);
 #ifdef __SWITCH__
-        // Windows clears newly committed pages lazily. The Switch reservation
-        // is malloc-backed, so clear only the newly reached portion, bounded by
-        // this HunkUser's end because malloc does not guarantee page alignment.
+        // Commit newly reached pages before touching them, then clear the
+        // newly reached portion bounded by this HunkUser's reservation end.
         const uintptr_t commitEnd = (current->pos + 4095u) & ~uintptr_t(0xFFF);
         const uintptr_t zeroEnd = commitEnd < current->end ? commitEnd : current->end;
         Z_VirtualCommit((void*)pos, (int)(current->pos - pos));
