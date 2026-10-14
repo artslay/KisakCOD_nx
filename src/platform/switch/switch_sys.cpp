@@ -69,13 +69,7 @@ static bool Switch_LogPrefixAllowed(const char *msg)
         "[SWITCH STREAM REGRESS]",
         "[SWITCH IMAGE ANOMALY]",
         "[SWITCH IMAGE ANOMALY DETAIL]",
-        "[SWITCH TECH CURSOR]",
-        "[KisakCOD][TECHSET ABI]",
-        "[KisakCOD][TECHSET ABI BYTES]",
-        "[KisakCOD][GFXIMAGE HEADER]",
-        "[KisakCOD][GFXIMAGE TRACE]",
-        "[KisakCOD][IWI ROOT]",
-        "[KisakCOD][IWI CANDIDATE]"
+        "[SWITCH TECH CURSOR]"
     };
 
     for (const char *prefix : kPrefixes)
@@ -509,6 +503,14 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][RINIT]",
         "[KisakCOD][VERTEXSHADER ",
         "[KisakCOD][SOUND]",
+        // High-volume per-asset traces. Keep failures, zone progress, crash context,
+        // script anomalies, and memory-tree invariants visible.
+        "[KisakCOD][GFXIMAGE HEADER]",
+        "[KisakCOD][GFXIMAGE TRACE]",
+        "[KisakCOD][TECHSET ABI]",
+        "[KisakCOD][TECHSET ABI BYTES]",
+        "[KisakCOD][IWI CANDIDATE]",
+        "[KisakCOD][IWI ROOT]",
         "[KisakCOD][GFXIMAGE NAME]",
         "[KisakCOD][GFXIMAGE FORWARD NAME]",
         "[KisakCOD][GFXIMAGE NAME TARGET]",
@@ -557,14 +559,79 @@ void Switch_LogWrite(const char *msg)
     // at safe points and from the exception handler.
     if (isSwitchDiag)
     {
-        if (len <= sizeof(g_switchDeferredDiag) - g_switchDeferredDiagUsed)
+        // Keep the newest diagnostics when the bounded crash-context buffer fills.
+        // The previous append-only code silently discarded every later message
+        // after 1 MiB, often losing the trace immediately before the crash.
+        const size_t capacity = sizeof(g_switchDeferredDiag);
+        const char *deferredMsg = msg;
+        size_t deferredLen = len;
+
+        if (deferredLen >= capacity)
         {
-            std::memcpy(
-                g_switchDeferredDiag + g_switchDeferredDiagUsed,
-                msg,
-                len);
-            g_switchDeferredDiagUsed += len;
+            deferredMsg += deferredLen - capacity;
+            deferredLen = capacity;
+
+            // Avoid starting the crash dump in the middle of a diagnostic line.
+            const char *newline = static_cast<const char *>(
+                std::memchr(deferredMsg, '\n', deferredLen));
+            if (newline)
+            {
+                const size_t skip =
+                    static_cast<size_t>(newline - deferredMsg) + 1u;
+                deferredMsg += skip;
+                deferredLen -= skip;
+            }
+
+            if (deferredLen)
+            {
+                std::memcpy(g_switchDeferredDiag, deferredMsg, deferredLen);
+                g_switchDeferredDiagUsed = deferredLen;
+            }
+            else
+            {
+                g_switchDeferredDiagUsed = 0;
+            }
+            return;
         }
+
+        if (g_switchDeferredDiagUsed + deferredLen > capacity)
+        {
+            size_t drop =
+                g_switchDeferredDiagUsed + deferredLen - capacity;
+
+            // Drop whole old lines where possible so the retained trace stays readable.
+            if (drop < g_switchDeferredDiagUsed)
+            {
+                const char *newline = static_cast<const char *>(
+                    std::memchr(
+                        g_switchDeferredDiag + drop,
+                        '\n',
+                        g_switchDeferredDiagUsed - drop));
+                if (newline)
+                    drop = static_cast<size_t>(
+                        newline - g_switchDeferredDiag) + 1u;
+            }
+
+            if (drop >= g_switchDeferredDiagUsed)
+            {
+                g_switchDeferredDiagUsed = 0;
+            }
+            else
+            {
+                const size_t remaining = g_switchDeferredDiagUsed - drop;
+                std::memmove(
+                    g_switchDeferredDiag,
+                    g_switchDeferredDiag + drop,
+                    remaining);
+                g_switchDeferredDiagUsed = remaining;
+            }
+        }
+
+        std::memcpy(
+            g_switchDeferredDiag + g_switchDeferredDiagUsed,
+            msg,
+            deferredLen);
+        g_switchDeferredDiagUsed += deferredLen;
         return;
     }
 
