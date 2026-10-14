@@ -1289,7 +1289,7 @@ int __cdecl Scr_SetEntityField(unsigned int entnum, unsigned int offset)
         if (callback)
             callback(v11, offset);
         else
-            Scr_SetGenericField((unsigned char*)&v11->s.eType, v12->type, v12->ofs);
+            Scr_SetGenericField((unsigned char*)v11, v12->type, v12->ofs);
         return 1;
     }
 }
@@ -1390,7 +1390,7 @@ void __cdecl Scr_GetEntityField(unsigned int entnum, unsigned int offset)
                 0,
                 "%s",
                 "(unsigned)offset < ARRAY_COUNT( fields ) - 1");
-        Scr_GetGenericField((unsigned char*)&g_entities[entnum].s.eType, fields_1[offset].type, fields_1[offset].ofs);
+        Scr_GetGenericField((unsigned char*)&g_entities[entnum], fields_1[offset].type, fields_1[offset].ofs);
         break;
     }
 }
