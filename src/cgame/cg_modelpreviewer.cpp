@@ -65,7 +65,7 @@ void __cdecl CG_ModPrvUpdateMru(const dvar_s **mruDvars, const char **stringTabl
 {
     const dvar_s **v3; // r31
     int v6; // r30
-    char *v7; // r27
+ // r27
 
     v3 = mruDvars;
     if (!mruDvars)
@@ -73,7 +73,7 @@ void __cdecl CG_ModPrvUpdateMru(const dvar_s **mruDvars, const char **stringTabl
     if (!stringTable)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_modelpreviewer.cpp", 346, 0, "%s", "stringTable");
     v6 = 0;
-    v7 = (char *)((char *)stringTable - (char *)v3);
+
     do
     {
         if (!*v3)
@@ -83,10 +83,10 @@ void __cdecl CG_ModPrvUpdateMru(const dvar_s **mruDvars, const char **stringTabl
                 0,
                 "%s",
                 "mruDvars[dvarIndex]");
-        if (v6 && !*(_BYTE *)(*v3)->current.integer)
+        if (v6 && (!(*v3)->current.string || !(*v3)->current.string[0]))
             break;
         ++v6;
-        *(const dvar_s **)((char *)v3 + (uintptr_t)v7) = (const dvar_s *)(uintptr_t)(*v3)->current.integer;
+        stringTable[v6] = (*v3)->current.string;
         ++v3;
     } while (v6 < 4);
     stringTable[v6] = 0;
