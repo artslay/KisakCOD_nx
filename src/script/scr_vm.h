@@ -164,12 +164,15 @@ inline Opcode_t &operator++(Opcode_t &e, int i)
     return e;
 }
 
-struct Scr_StringNode_s // sizeof=0x8
+struct Scr_StringNode_s // 32-bit size=0x8; native Switch size=0x10
 {
     const char *text;
     Scr_StringNode_s *next;
 };
-#ifndef KISAK_SWITCH
+#ifdef KISAK_SWITCH
+static_assert(sizeof(Scr_StringNode_s) == 2 * sizeof(void*),
+              "script string-list nodes must use native pointer-sized fields");
+#else
 static_assert(sizeof(Scr_StringNode_s) == 0x8);
 #endif
 
