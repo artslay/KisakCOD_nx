@@ -132,7 +132,7 @@ static void MT_ReportRejectedFree(
     ++mtFreeRejectTraceCount;
     Com_Printf(
         CON_CHANNEL_PARSERSCRIPT,
-        "[KisakCOD][MEMTREE FREE CHECK] reason=%s node=%u numBytes=%d size=%d usage=%u/%u caller=%p indexCaller=%p\n",
+        "[KisakCOD][MEMTREE FREE REJECT] reason=%s node=%u numBytes=%d size=%d usage=%u/%u caller=%p indexCaller=%p\n",
         reason,
         node,
         numBytes,
@@ -722,9 +722,12 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes, const void *caller)
             usageSize,
             caller,
             indexCaller);
-        // This diagnostic counter is not authoritative enough to alter the
-        // retail allocator path. Preserve MT_FreeIndex behavior while tracing
-        // the caller so the original fault can be reproduced and fixed.
+        // Do not mutate the buddy allocator when the shadow allocation metadata
+        // says this block is not live. Continuing would decrement allocation
+        // counters and insert an already-free node a second time, corrupting
+        // the free tree and potentially hanging MT_AddMemoryNode.
+        Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
+        return;
     }
 #endif
     --scrMemTreeGlob.totalAlloc;
