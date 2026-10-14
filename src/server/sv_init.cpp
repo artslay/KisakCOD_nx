@@ -674,6 +674,10 @@ void __cdecl SV_SpawnServer(const char *mapname, int savegame)
     if (saveError)
         SV_DisplaySaveErrorUI();
 
+    // SV_SpawnServer sets this while client game state and the first snapshot
+    // are initialized. No other path clears it, so CGame would otherwise skip
+    // CG_DrawActiveFrame forever after the loading screen ends.
+    CL_SetSkipRendering(0);
     CL_SetActive();
     Com_Printf(CON_CHANNEL_SERVER, "Load time: %d msec\n", Sys_Milliseconds() - startTime);
     Com_ResetFrametime();
