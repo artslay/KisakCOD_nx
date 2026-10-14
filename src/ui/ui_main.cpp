@@ -1833,6 +1833,26 @@ void __cdecl UI_Refresh()
         {
             if (Menu_IsMenuOpenAndVisible(0, "pregame"))
             {
+#ifdef __SWITCH__
+                // Finish the simplecredits pregame transition from the normal
+                // UI frame, after SV_SpawnServer has returned and CL_SetActive
+                // has run. Calling UI_PlayerStart inside server map setup can
+                // stop the loading cinematic before the first active frame.
+                if (!I_stricmp(g_mapname, "simplecredits"))
+                {
+                    char trace[256];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[KisakCOD][CREDITS] UI_Refresh transition finished=%d started=%d nextReady=%d\n",
+                        R_Cinematic_IsFinished(),
+                        R_Cinematic_IsStarted(),
+                        R_Cinematic_IsNextReady());
+                    Switch_LogWrite(trace);
+                    UI_PlayerStart();
+                }
+                else
+#endif
                 if (R_Cinematic_IsFinished())
                     UI_PlayerStart();
             }
