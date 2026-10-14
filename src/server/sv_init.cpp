@@ -23,6 +23,10 @@ extern void Sys_Print(const char *text);
 #include <universal/com_files.h>
 #include <universal/com_sndalias.h>
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 const dvar_t *sv_clientFrameRateFix;
 const dvar_t *sv_loadMyChanges;
 
@@ -674,10 +678,17 @@ void __cdecl SV_SpawnServer(const char *mapname, int savegame)
     if (saveError)
         SV_DisplaySaveErrorUI();
 
-    // SV_SpawnServer sets this while client game state and the first snapshot
-    // are initialized. No other path clears it, so CGame would otherwise skip
-    // CG_DrawActiveFrame forever after the loading screen ends.
-    CL_SetSkipRendering(0);
+#ifdef __SWITCH__
+    // The simplecredits level is an unattended credits sequence, not a
+    // pregame menu that waits for a loading cinematic or user input to finish.
+    // Use the engine's normal PlayerStart transition so it closes "pregame",
+    // clears cl_paused/skip-rendering, and starts any queued next cinematic.
+    if (!saveError && !I_stricmp(mapname, "simplecredits"))
+    {
+        Switch_LogWrite("[KisakCOD][CREDITS] starting simplecredits without waiting on pregame cinematic\n");
+        UI_PlayerStart();
+    }
+#endif
     CL_SetActive();
     Com_Printf(CON_CHANNEL_SERVER, "Load time: %d msec\n", Sys_Milliseconds() - startTime);
     Com_ResetFrametime();
