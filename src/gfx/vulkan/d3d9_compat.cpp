@@ -2381,21 +2381,36 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
     if (!m_indices || !m_indices->buffer || !indexCount)
     {
-        char msg[256];
+        char msg[320];
         std::snprintf(
             msg, sizeof(msg),
-            "[KisakCOD][VK DRAW] fail=indices prim=%u count=%u indices=%p buffer=%p start=%u base=%d\n",
-            primitiveType, primitiveCount,
+            "[KisakCOD][VK DRAW] fail=indices self=%p prim=%u count=%u indexCount=%u indices=%p hasBuffer=%u vertices=%u start=%u base=%d backend=%u frame=%u\\n",
+            static_cast<void *>(this),
+            primitiveType, primitiveCount, indexCount,
             static_cast<void *>(m_indices),
-            m_indices ? m_indices->buffer : nullptr,
-            startIndex, baseVertexIndex);
+            m_indices && m_indices->buffer ? 1u : 0u,
+            numVertices, startIndex, baseVertexIndex,
+            m_backend ? 1u : 0u,
+            m_backend && m_backend->IsFrameActive() ? 1u : 0u);
         Switch_LogWrite(msg);
         return E_FAIL;
     }
     m_topology = PrimitiveTopology(primitiveType);
 
     if (!PrepareDraw())
+    {
+        char msg[320];
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK DRAW] fail=prepare_draw self=%p prim=%u count=%u indexCount=%u vertices=%u start=%u base=%d backend=%u frame=%u\\n",
+            static_cast<void *>(this),
+            primitiveType, primitiveCount, indexCount, numVertices,
+            startIndex, baseVertexIndex,
+            m_backend ? 1u : 0u,
+            m_backend && m_backend->IsFrameActive() ? 1u : 0u);
+        Switch_LogWrite(msg);
         return E_FAIL;
+    }
 
     for (uint32_t stream = 0; stream < 16; ++stream)
     {
