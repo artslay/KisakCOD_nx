@@ -69,6 +69,99 @@ static void Switch_ReportStringHashChainFault(
         stringValue);
     Switch_LogWrite(line);
 }
+
+static void Switch_ReportStaleStringHandle(
+    const char *origin,
+    uint32_t handle,
+    uint32_t allocationType,
+    uint32_t allocationSize,
+    uintptr_t caller)
+{
+    char line[320];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][SCRIPT STRING STALE HANDLE] origin=%s handle=%u allocation=%u/%u caller=0x%llx\n",
+        origin,
+        handle,
+        allocationType,
+        allocationSize,
+        static_cast<unsigned long long>(caller));
+    Switch_LogWrite(line);
+}
+
+static void Switch_ReportStringLengthMismatch(
+    uint32_t handle,
+    uint32_t passedLength,
+    uint32_t storedLength,
+    uint32_t allocationType,
+    uint32_t allocationSize,
+    uintptr_t caller)
+{
+    char line[320];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][SCRIPT STRING LENGTH MISMATCH] handle=%u passed=%u stored=%u allocation=%u/%u caller=0x%llx\n",
+        handle,
+        passedLength,
+        storedLength,
+        allocationType,
+        allocationSize,
+        static_cast<unsigned long long>(caller));
+    Switch_LogWrite(line);
+}
+
+static bool Switch_GetStringAllocation(
+    uint32_t handle,
+    RefString **refString,
+    uint32_t *allocationType,
+    uint32_t *allocationSize,
+    uint32_t *storedLength,
+    const char *origin,
+    uintptr_t caller)
+{
+    uint32_t type = 0;
+    uint32_t size = 0;
+    if (!MT_GetIndexAllocationInfo(handle, &type, &size) ||
+        size > MEMORY_NODE_BITS ||
+        static_cast<uint64_t>(handle) + (uint64_t{1} << size) > MEMORY_NODE_COUNT)
+    {
+        Switch_ReportStaleStringHandle(origin, handle, type, size, caller);
+        return false;
+    }
+
+    RefString *ref = GetRefString(handle);
+    const size_t allocationBytes =
+        (static_cast<size_t>(1u) << size) * sizeof(MemoryNode);
+    constexpr size_t stringOffset = offsetof(RefString, str);
+    if (allocationBytes <= stringOffset)
+    {
+        Switch_ReportStaleStringHandle(origin, handle, type, size, caller);
+        return false;
+    }
+
+    const size_t available = allocationBytes - stringOffset;
+    const void *terminator = memchr(ref->str, '\\0', available);
+    if (!terminator)
+    {
+        Switch_ReportStringHashChainFault(
+            "unterminated_string_allocation", 0, handle, 0, ref->data, handle);
+        return false;
+    }
+
+    const auto *end = static_cast<const char *>(terminator);
+    const uint32_t length = static_cast<uint32_t>(end - ref->str) + 1u;
+    if (refString)
+        *refString = ref;
+    if (allocationType)
+        *allocationType = type;
+    if (allocationSize)
+        *allocationSize = size;
+    if (storedLength)
+        *storedLength = length;
+    return true;
+}
 #endif
 
 #ifdef KISAK_MP
@@ -862,16 +955,47 @@ void SL_RemoveRefToString(uint32_t stringValue)
 
 	PROF_SCOPED("SL_RemoveRefToString");
 
+#ifdef KISAK_SWITCH
+    uint32_t allocationType = 0;
+    uint32_t allocationSize = 0;
+    uint32_t storedLength = 0;
+    if (!Switch_GetStringAllocation(
+            stringValue, &refStr, &allocationType, &allocationSize,
+            &storedLength, "SL_RemoveRefToString",
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0))))
+        return;
+    len = static_cast<int>(storedLength);
+#else
 	refStr = GetRefString(stringValue);
 	len = SL_GetRefStringLen(refStr) + 1;
-	SL_RemoveRefToStringOfSize(stringValue, len);
+#endif
+	SL_RemoveRefToStringOfSize(stringValue, static_cast<uint32_t>(len));
 }
 
 static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 {
 	PROF_SCOPED("SL_FreeString");
 
-	uint32_t index = GetHashCode(refStr->str, len);
+#ifdef KISAK_SWITCH
+    uint32_t allocationType = 0;
+    uint32_t allocationSize = 0;
+    uint32_t storedLength = 0;
+    RefString *validatedRef = nullptr;
+    if (!Switch_GetStringAllocation(
+            stringValue, &validatedRef, &allocationType, &allocationSize,
+            &storedLength, "SL_FreeString",
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0))))
+        return;
+    refStr = validatedRef;
+    if (len != storedLength)
+    {
+        Switch_ReportStringLengthMismatch(
+            stringValue, len, storedLength, allocationType, allocationSize,
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+        len = storedLength;
+    }
+#endif
+    uint32_t index = GetHashCode(refStr->str, len);
 
 	Sys_EnterCriticalSection(CRITSECT_SCRIPT_STRING);
 
@@ -891,9 +1015,18 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 #ifdef KISAK_SWITCH
         Switch_ReportStringHashChainFault(
             "free_bucket_not_head", index, index, 0, headStatus, stringValue);
+        char line[256];
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][SCRIPT STRING FREE REJECT] handle=%u hash=%u status=0x%08x data=0x%08x length=%u allocation=%u/%u caller=0x%llx\n",
+            stringValue, index, headStatus, refStr->data, len,
+            allocationType, allocationSize,
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+        Switch_LogWrite(line);
 #endif
+        // Keep the allocation quarantined. The handle/table mismatch means it
+        // is unsafe to return this node to the memory tree or mutate the hash list.
         Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-        Com_Error(ERR_DROP, "script-string free found a non-head bucket");
         return;
     }
 
@@ -1071,7 +1204,20 @@ void SL_RemoveRefToStringOfSize(uint32_t stringValue, uint32_t len)
 {
 	PROF_SCOPED("SL_RemoveRefToStringOfSize");
 
+#ifdef KISAK_SWITCH
+    uint32_t allocationType = 0;
+    uint32_t allocationSize = 0;
+    uint32_t storedLength = 0;
+    RefString *validatedRef = nullptr;
+    if (!Switch_GetStringAllocation(
+            stringValue, &validatedRef, &allocationType, &allocationSize,
+            &storedLength, "SL_RemoveRefToStringOfSize",
+            reinterpret_cast<uintptr_t>(__builtin_return_address(0))))
+        return;
+    RefString* refStr = validatedRef;
+#else
 	RefString* refStr = GetRefString(stringValue);
+#endif
 
 	if (InterlockedDecrement(&refStr->data) << 16) // refcount
 	{
