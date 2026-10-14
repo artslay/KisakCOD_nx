@@ -364,6 +364,13 @@ void __cdecl Con_Init()
     Cmd_AddCommandInternal("chatmodepublic", Con_ChatModePublic_f, &Con_ChatModePublic_f_VAR);
     Cmd_AddCommandInternal("chatmodeteam", Con_ChatModeTeam_f, &Con_ChatModeTeam_f_VAR);
     Cmd_AddCommandInternal("clear", Con_Clear_f, &Con_Clear_f_VAR);
+#ifdef __SWITCH__
+    // Switch console output is routed differently from the desktop console,
+    // so CL_ConsolePrint may not run before map scripts call SetSavedDvar on
+    // console-owned dvars. Initialize those dvars during normal console init.
+    if (!con.initialized)
+        Con_OneTimeInit();
+#endif
 }
 
 void __cdecl SetupChatField(int32_t localClientNum, int32_t teamChat, int32_t widthInPixels)
