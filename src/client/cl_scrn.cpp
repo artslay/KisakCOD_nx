@@ -111,7 +111,7 @@ int __cdecl CL_CGameRendering()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CREDITS RENDER] gate=%u connection=%d fullscreen=%d skip=%d activeMenu=%d catcher=0x%08x serverTime=%d\\n",
+            "[KisakCOD][CREDITS RENDER] gate=%u connection=%d fullscreen=%d skip=%d activeMenu=%d catcher=0x%08x serverTime=%d\n",
             switchCGameGateTraceCount,
             static_cast<int>(clientUIActives[0].connectionState),
             switchCGameFullscreen,
@@ -141,7 +141,7 @@ int __cdecl CL_CGameRendering()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CREDITS RENDER] draw=%u result=%d skipAfter=%d\\n",
+            "[KisakCOD][CREDITS RENDER] draw=%u result=%d skipAfter=%d\n",
             switchCGameDrawTraceCount,
             switchCGameDrawResult,
             CL_SkipRendering());

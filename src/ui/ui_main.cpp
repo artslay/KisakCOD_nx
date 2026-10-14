@@ -1801,7 +1801,7 @@ void __cdecl UI_Refresh()
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][CREDITS UI] refresh=%u activeMenu=%d connection=%d visible=%d fullscreen=%d finished=%d started=%d pending=%d catcher=0x%08x skip=%d\\n",
+                "[KisakCOD][CREDITS UI] refresh=%u activeMenu=%d connection=%d visible=%d fullscreen=%d finished=%d started=%d pending=%d catcher=0x%08x skip=%d\n",
                 switchCreditsUiTraceCount,
                 static_cast<int>(g_currentMenuType),
                 static_cast<int>(clientUIActives[0].connectionState),

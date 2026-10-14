@@ -17,6 +17,7 @@
 
 #ifdef __SWITCH__
 #include <cstdio>
+#include <cstring>
 extern void Switch_LogWrite(const char *msg);
 extern void COM_NotifyIntroMovieDrawSubmitted(const char *movieName);
 extern thread_local const char * volatile g_switchFrameStage;
@@ -252,7 +253,7 @@ void __cdecl R_Cinematic_UpdateFrame_Core(
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][CREDITS BINK] update=%u name=%s frame=%u frames=%u canAdvance=%d activeFrame=%d finishedBefore=%d\\n",
+                    "[KisakCOD][CREDITS BINK] update=%u name=%s frame=%u frames=%u canAdvance=%d activeFrame=%d finishedBefore=%d\n",
                     switchCreditsBinkTraceCount,
                     cinematicGlob.currentCinematicName,
                     cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->FrameNum) : 0u,
