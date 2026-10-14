@@ -878,7 +878,12 @@ void* Hunk_AllocDebugMem(uint32_t size, const char* name)
     iassert(Sys_IsMainThread());
     iassert(g_debugUser);
 
+#ifdef __SWITCH__
+    // Native Switch pointers are 64-bit; debug allocations must meet pointer alignment.
+    return Hunk_UserAlloc(g_debugUser, size, alignof(void*));
+#else
     return Hunk_UserAlloc(g_debugUser, size, 4);
+#endif
 }
 
 void __cdecl Hunk_FreeDebugMem(void* ptr)
