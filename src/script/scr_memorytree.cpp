@@ -665,6 +665,25 @@ void MT_RemoveHeadMemoryNode(int size)
 #endif
 }
 
+bool MT_GetIndexAllocationInfo(uint32_t nodeNum, uint32_t *type, uint32_t *size)
+{
+    uint32_t allocationType = 0;
+    uint32_t allocationSize = 0;
+    if (nodeNum > 0 && nodeNum < MEMORY_NODE_COUNT)
+    {
+        Sys_EnterCriticalSection(CRITSECT_MEMORY_TREE);
+        allocationType = scrMemTreeDebugGlob.mt_usage[nodeNum];
+        allocationSize = scrMemTreeDebugGlob.mt_usage_size[nodeNum];
+        Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
+    }
+
+    if (type)
+        *type = allocationType;
+    if (size)
+        *size = allocationSize;
+    return allocationType != 0;
+}
+
 void MT_FreeIndex(uint32_t nodeNum, int numBytes, const void *caller)
 {
     int size; // [esp+30h] [ebp-8h]
