@@ -52,6 +52,13 @@ thread_local SwitchUniformFreeTraceEntry
     g_switchUniformFreeTrace[SWITCH_UNIFORM_FREE_TRACE_CAPACITY]{};
 thread_local uint64_t g_switchUniformFreeTraceSequence = 0;
 
+constexpr size_t SWITCH_UNIFORM_MAX_REGISTERS = 256u;
+constexpr size_t SWITCH_UNIFORM_BYTES_PER_REGISTER = 16u;
+constexpr size_t SWITCH_UNIFORM_UPLOAD_SCRATCH_SIZE =
+    3u * SWITCH_UNIFORM_MAX_REGISTERS * SWITCH_UNIFORM_BYTES_PER_REGISTER;
+thread_local std::array<uint8_t, SWITCH_UNIFORM_UPLOAD_SCRATCH_SIZE>
+    g_switchUniformUploadScratch{};
+
 void RecordSwitchUniformFreeTrace(
     const char *stage,
     uint64_t frameSerial,
@@ -1866,29 +1873,35 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 
     const size_t size = std::max<size_t>(16, layout.size);
-    std::vector<uint8_t> bytes(size);
-    traceUniformBindStage("bytes_allocated", bytes.data(), bytes.size(), 1);
+    if (size > g_switchUniformUploadScratch.size())
+    {
+        traceUniformBindStage("scratch_too_small", nullptr, size, 0);
+        return false;
+    }
+    uint8_t *bytes = g_switchUniformUploadScratch.data();
+    std::memset(bytes, 0, size);
+    traceUniformBindStage("scratch_ready", bytes, size, 1);
     if (layout.floatCount)
-        std::memcpy(bytes.data() + layout.floatOffset, floatData,
+        std::memcpy(bytes + layout.floatOffset, floatData,
                     static_cast<size_t>(layout.floatCount) * 16u);
     if (layout.intCount)
-        std::memcpy(bytes.data() + layout.intOffset, intData,
+        std::memcpy(bytes + layout.intOffset, intData,
                     static_cast<size_t>(layout.intCount) * 16u);
     if (layout.boolCount)
     {
-        uint8_t *dst = bytes.data() + layout.boolOffset;
+        uint8_t *dst = bytes + layout.boolOffset;
         const int32_t *src = static_cast<const int32_t *>(boolData);
         for (uint32_t i = 0; i < layout.boolCount; ++i)
             std::memcpy(dst + static_cast<size_t>(i) * 16u, &src[i], sizeof(int32_t));
     }
 
     VkDescriptorBufferInfo bufferInfo{};
-    if (!m_backend->AllocateUniform(bytes.data(), bytes.size(), &bufferInfo))
+    if (!m_backend->AllocateUniform(bytes, size, &bufferInfo))
     {
-        traceUniformBindStage("uniform_ring_failed", bytes.data(), bytes.size(), 0);
+        traceUniformBindStage("uniform_ring_failed", bytes, size, 0);
         return false;
     }
-    traceUniformBindStage("uniform_ring_written", bytes.data(), bytes.size(), 1);
+    traceUniformBindStage("uniform_ring_written", bytes, size, 1);
 
     const size_t cacheIndex = setIndex == 1 ? 0 : 1;
     auto &cachedSets = m_uniformDescriptorSets[cacheIndex];
@@ -1909,12 +1922,12 @@ bool IDirect3DDevice9::BindUniformSet(
         alloc.pSetLayouts = &descriptorLayout;
         if (vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set) != VK_SUCCESS)
         {
-            traceUniformBindStage("descriptor_alloc_failed", bytes.data(), bytes.size(), 0);
+            traceUniformBindStage("descriptor_alloc_failed", bytes, size, 0);
             return false;
         }
-        traceUniformBindStage("descriptor_allocated", bytes.data(), bytes.size(), 1);
+        traceUniformBindStage("descriptor_allocated", bytes, size, 1);
         cachedSets.push_back(set);
-        traceUniformBindStage("descriptor_cached", bytes.data(), bytes.size(), 1);
+        traceUniformBindStage("descriptor_cached", bytes, size, 1);
     }
     ++m_uniformSetCursor[cacheIndex];
 
@@ -1926,12 +1939,12 @@ bool IDirect3DDevice9::BindUniformSet(
     write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     write.pBufferInfo = &bufferInfo;
     vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
-    traceUniformBindStage("descriptor_updated", bytes.data(), bytes.size(), 1);
+    traceUniformBindStage("descriptor_updated", bytes, size, 1);
 
     vkCmdBindDescriptorSets(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
         setIndex, 1, &set, 0, nullptr);
-    traceUniformBindStage("descriptor_bound_before_vector_free", bytes.data(), bytes.size(), 1);
+    traceUniformBindStage("descriptor_bound", bytes, size, 1);
     return true;
 }
 
