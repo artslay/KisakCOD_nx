@@ -11,6 +11,7 @@
 
 #ifdef __SWITCH__
 #include <cstdio>
+extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 extern "C" void Switch_LogFrameTail();
 extern "C" thread_local volatile uintptr_t g_switchFrameTailReached;
