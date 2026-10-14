@@ -1720,15 +1720,52 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 
     VulkanUniformLayout layout{};
+    static uint32_t uniformBindTraceCount = 0;
+    const uint32_t traceId = uniformBindTraceCount++;
+    const bool traceUniformBind = traceId < 4u;
+    auto traceUniformBindStage =
+        [&](const char *stage, const void *buffer, size_t byteCount, int result)
+        {
+            if (!traceUniformBind)
+                return;
+            char msg[448];
+            std::snprintf(
+                msg,
+                sizeof(msg),
+                "[KisakCOD][VK UNIFORM FREE TRACE] id=%u stage=%s frame=%llu set=%u parse=%p uniforms=%d layout=%zu counts=%u/%u/%u buffer=%p bytes=%zu result=%d\\n",
+                traceId,
+                stage,
+                static_cast<unsigned long long>(m_backend->FrameSerial()),
+                setIndex,
+                static_cast<const void *>(parse),
+                parse ? parse->uniform_count : -1,
+                layout.size,
+                layout.floatCount,
+                layout.intCount,
+                layout.boolCount,
+                buffer,
+                byteCount,
+                result);
+            Switch_LogWrite(msg);
+        };
+    traceUniformBindStage("entry", nullptr, 0, 1);
     if (!GetUniformLayout(parse, &layout))
+    {
+        traceUniformBindStage("layout_failed", nullptr, 0, 0);
         return false;
+    }
+    traceUniformBindStage("layout_ready", parse, layout.size, 1);
     if ((layout.floatCount && !floatData) ||
         (layout.intCount && !intData) ||
         (layout.boolCount && !boolData))
+    {
+        traceUniformBindStage("missing_uniform_data", nullptr, layout.size, 0);
         return false;
+    }
 
     const size_t size = std::max<size_t>(16, layout.size);
     std::vector<uint8_t> bytes(size);
+    traceUniformBindStage("bytes_allocated", bytes.data(), bytes.size(), 1);
     if (layout.floatCount)
         std::memcpy(bytes.data() + layout.floatOffset, floatData,
                     static_cast<size_t>(layout.floatCount) * 16u);
@@ -1745,7 +1782,11 @@ bool IDirect3DDevice9::BindUniformSet(
 
     VkDescriptorBufferInfo bufferInfo{};
     if (!m_backend->AllocateUniform(bytes.data(), bytes.size(), &bufferInfo))
+    {
+        traceUniformBindStage("uniform_ring_failed", bytes.data(), bytes.size(), 0);
         return false;
+    }
+    traceUniformBindStage("uniform_ring_written", bytes.data(), bytes.size(), 1);
 
     const size_t cacheIndex = setIndex == 1 ? 0 : 1;
     auto &cachedSets = m_uniformDescriptorSets[cacheIndex];
@@ -1765,8 +1806,13 @@ bool IDirect3DDevice9::BindUniformSet(
         alloc.descriptorSetCount = 1;
         alloc.pSetLayouts = &descriptorLayout;
         if (vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set) != VK_SUCCESS)
+        {
+            traceUniformBindStage("descriptor_alloc_failed", bytes.data(), bytes.size(), 0);
             return false;
+        }
+        traceUniformBindStage("descriptor_allocated", bytes.data(), bytes.size(), 1);
         cachedSets.push_back(set);
+        traceUniformBindStage("descriptor_cached", bytes.data(), bytes.size(), 1);
     }
     ++m_uniformSetCursor[cacheIndex];
 
@@ -1778,10 +1824,12 @@ bool IDirect3DDevice9::BindUniformSet(
     write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     write.pBufferInfo = &bufferInfo;
     vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
+    traceUniformBindStage("descriptor_updated", bytes.data(), bytes.size(), 1);
 
     vkCmdBindDescriptorSets(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
         setIndex, 1, &set, 0, nullptr);
+    traceUniformBindStage("descriptor_bound_before_vector_free", bytes.data(), bytes.size(), 1);
     return true;
 }
 
