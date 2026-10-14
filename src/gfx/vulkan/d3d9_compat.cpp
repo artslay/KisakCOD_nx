@@ -2639,6 +2639,22 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
         m_backend->CommandBuffer(), 0, 1, &vertexInfo.buffer, &offset);
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
     ++g_switchSceneDrawPrimitiveCalls;
+    const uint64_t frameSerial = m_backend->FrameSerial();
+    if (frameSerial != 0 && frameSerial % 120u == 0)
+    {
+        char msg[384];
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK DRAW SUBMIT] serial=%llu kind=UP draw=%u prim=%u primitives=%u vertices=%u stride=%u vs=%p ps=%p decl=%p viewport=%ux%u\\n",
+            static_cast<unsigned long long>(frameSerial),
+            g_switchSceneDrawPrimitiveCalls,
+            primitiveType, primitiveCount, vertexCount, stride,
+            static_cast<void *>(m_vertexShader),
+            static_cast<void *>(m_pixelShader),
+            static_cast<void *>(m_decl),
+            m_viewport.Width, m_viewport.Height);
+        Switch_LogWrite(msg);
+    }
     return S_OK;
 }
 
@@ -2698,6 +2714,27 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
     ++g_switchSceneDrawIndexedCalls;
+    const uint64_t frameSerial = m_backend->FrameSerial();
+    if (frameSerial != 0 && frameSerial % 120u == 0)
+    {
+        char msg[512];
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK DRAW SUBMIT] serial=%llu kind=INDEXED draw=%u prim=%u primitives=%u indices=%u vertices=%u start=%u base=%d vs=%p ps=%p decl=%p indexBuffer=%p stream0=%p stride0=%u depth=%u/%u blend=%u cull=%u colorMask=0x%x\\n",
+            static_cast<unsigned long long>(frameSerial),
+            g_switchSceneDrawIndexedCalls,
+            primitiveType, primitiveCount, indexCount, numVertices,
+            startIndex, baseVertexIndex,
+            static_cast<void *>(m_vertexShader),
+            static_cast<void *>(m_pixelShader),
+            static_cast<void *>(m_decl),
+            static_cast<void *>(m_indices),
+            static_cast<void *>(m_streams[0].buffer),
+            m_streams[0].stride,
+            m_depthEnable ? 1u : 0u, m_depthWrite ? 1u : 0u,
+            m_blendEnable ? 1u : 0u, m_cullMode, m_colorWriteMask);
+        Switch_LogWrite(msg);
+    }
     (void)minVertexIndex;
     (void)numVertices;
     return S_OK;
