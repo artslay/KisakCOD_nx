@@ -1890,7 +1890,9 @@ void __cdecl UI_Refresh()
         {
             if (Menu_IsMenuOpenAndVisible(0, "pregame"))
             {
-                if (R_Cinematic_IsFinished())
+                const bool cinematicFinished = R_Cinematic_IsFinished();
+                const bool completedLoadingCinematic = SCR_ConsumeMapLoadingCinematicFinished();
+                if (cinematicFinished || completedLoadingCinematic)
                     UI_PlayerStart();
             }
         }

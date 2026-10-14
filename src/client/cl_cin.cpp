@@ -10,6 +10,34 @@
 
 bool cin_skippable;
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+static bool switchMapLoadingCinematicFinished;
+
+void SCR_ResetMapLoadingCinematicFinished()
+{
+    switchMapLoadingCinematicFinished = false;
+}
+
+bool SCR_ConsumeMapLoadingCinematicFinished()
+{
+    const bool finished = switchMapLoadingCinematicFinished;
+    switchMapLoadingCinematicFinished = false;
+    if (finished)
+        Switch_LogWrite("[KisakCOD][CIN LOAD] consumed completed loading-cinematic latch\n");
+    return finished;
+}
+#else
+void SCR_ResetMapLoadingCinematicFinished()
+{
+}
+
+bool SCR_ConsumeMapLoadingCinematicFinished()
+{
+    return false;
+}
+#endif
+
 int32_t __cdecl CIN_PlayCinematic(int32_t localClientNum, char *arg)
 {
     float volume; // [esp+4h] [ebp-4h]
@@ -72,6 +100,14 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
         const char *nextCommand = nextmap ? nextmap->current.string : nullptr;
         const bool hasNextCommand = nextCommand && nextCommand[0] != '\0';
 
+#ifdef __SWITCH__
+        if (R_Cinematic_IsFinished() &&
+            CL_GetLocalClientConnectionState(localClientNum) == CA_LOADING)
+        {
+            switchMapLoadingCinematicFinished = true;
+            Switch_LogWrite("[KisakCOD][CIN LOAD] completed loading cinematic latched\n");
+        }
+#endif
         R_Cinematic_StopPlayback();
 
         if (CL_GetLocalClientConnectionState(localClientNum) == CA_CINEMATIC)

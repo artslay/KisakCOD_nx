@@ -656,6 +656,8 @@ void __cdecl CL_PlayCinematic_f();
 void __cdecl CL_PlayUnskippableCinematic_f();
 void __cdecl SCR_DrawCinematic(int32_t localClientNum);
 void __cdecl SCR_StopCinematic(int32_t localClientNum);
+void SCR_ResetMapLoadingCinematicFinished();
+bool SCR_ConsumeMapLoadingCinematicFinished();
 
 
 extern int32_t g_console_field_width;

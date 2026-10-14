@@ -633,6 +633,7 @@ void __cdecl CL_MapLoading_StartCinematic(const char *mapname, float volume)
 void __cdecl CL_MapLoading(const char *mapname)
 {
 #ifdef __SWITCH__
+    SCR_ResetMapLoadingCinematicFinished();
     g_switchFrameStage = "frame/cl_map_loading/enter";
 #endif
     // KISAKTODO: (SP): could use more touchups
