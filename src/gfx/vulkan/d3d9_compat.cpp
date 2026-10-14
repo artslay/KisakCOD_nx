@@ -2384,7 +2384,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         char msg[320];
         std::snprintf(
             msg, sizeof(msg),
-            "[KisakCOD][VK DRAW] fail=indices self=%p prim=%u count=%u indexCount=%u indices=%p hasBuffer=%u vertices=%u start=%u base=%d backend=%u frame=%u\\n",
+            "[KisakCOD][VK DRAW] fail=indices self=%p prim=%u count=%u indexCount=%u indices=%p hasBuffer=%u vertices=%u start=%u base=%d backend=%u frame=%u\n",
             static_cast<void *>(this),
             primitiveType, primitiveCount, indexCount,
             static_cast<void *>(m_indices),
@@ -2402,7 +2402,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         char msg[320];
         std::snprintf(
             msg, sizeof(msg),
-            "[KisakCOD][VK DRAW] fail=prepare_draw self=%p prim=%u count=%u indexCount=%u vertices=%u start=%u base=%d backend=%u frame=%u\\n",
+            "[KisakCOD][VK DRAW] fail=prepare_draw self=%p prim=%u count=%u indexCount=%u vertices=%u start=%u base=%d backend=%u frame=%u\n",
             static_cast<void *>(this),
             primitiveType, primitiveCount, indexCount, numVertices,
             startIndex, baseVertexIndex,
