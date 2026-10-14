@@ -332,7 +332,7 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 #endif
 	Sys_EnterCriticalSection(CRITSECT_SCRIPT_STRING);
 #ifdef KISAK_SWITCH
-    Switch_SetProgressPhase("script_string/chain");
+    Switch_SetProgressPhase("script_string/lookup_chain");
 #endif
 
 	RefString* refStr = NULL;
@@ -460,6 +460,9 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 		{
 			iassert((entry->status_next & HASH_STAT_MASK) == HASH_STAT_MOVABLE);
 			
+#ifdef KISAK_SWITCH
+            Switch_SetProgressPhase("script_string/lookup_predecessor");
+#endif
 			next = (uint16_t)entry->status_next;
             prev = next;
             uint32_t chainSteps = 0;
