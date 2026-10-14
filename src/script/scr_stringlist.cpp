@@ -402,7 +402,7 @@ void SL_ShutdownSystem(uint32_t user)
 				char line[256];
 				std::snprintf(
 					line, sizeof(line),
-					"[KisakCOD][SCRIPT STRING SHUTDOWN REJECT] user=%u bucket=%u status=0x%08x handle=%u allocation=%u/%u\\n",
+					"[KisakCOD][SCRIPT STRING SHUTDOWN REJECT] user=%u bucket=%u status=0x%08x handle=%u allocation=%u/%u\n",
 					user, hash, scrStringGlob.hashTable[hash].status_next,
 					stringHandle, allocationType, allocationSize);
 				Switch_LogWrite(line);
