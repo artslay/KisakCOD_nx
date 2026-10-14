@@ -911,6 +911,7 @@ IDirect3DQuery9 *IDirect3DQuery9::Create(VulkanBackend *backend, uint32_t queryT
     auto *result = new IDirect3DQuery9;
     result->backend = backend;
     result->query = query;
+    result->queryType = queryType;
     return result;
 }
 
@@ -921,7 +922,9 @@ HRESULT IDirect3DQuery9::Issue(uint32_t flags)
 
     if (flags == D3DISSUE_BEGIN)
     {
-        if (begun)
+        // D3D9 event queries are issued with END only. BEGIN/END is reserved
+        // for occlusion queries.
+        if (queryType == D3DQUERYTYPE_EVENT || begun)
             return E_FAIL;
         backend->BeginQuery(query);
         begun = true;
@@ -931,7 +934,18 @@ HRESULT IDirect3DQuery9::Issue(uint32_t flags)
 
     if (flags == D3DISSUE_END)
     {
-        if (begun || !issued)
+        if (queryType == D3DQUERYTYPE_EVENT)
+        {
+            // Event queries are a reusable ring in dx.fencePool. Unlike an
+            // occlusion query, an event query does not require BEGIN and must
+            // be issuable again after its previous result was consumed.
+            backend->EndQuery(query);
+            begun = false;
+            issued = true;
+            return S_OK;
+        }
+
+        if (begun)
         {
             backend->EndQuery(query);
             begun = false;
