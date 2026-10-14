@@ -73,7 +73,7 @@ bool FirstVisit(ZoneLoadState &state, void *object)
 
 size_t ReadZoneData(void *context, void *buffer, size_t length)
 {
-    auto &state = *static_cast<ZoneLoadState *>(context);
+    (void)context;
     // Generated loaders request zero bytes for empty arrays; the engine's
     // inflate reader asserts on a zero-size request and zlib reports Z_BUF_ERROR.
     if (length == 0)
@@ -111,9 +111,8 @@ const char *ResolveAssetName(void *context, const char *name)
 void LoadImageData(void *context, void *loadDef, void *imagePointer)
 {
     (void)context;
+    (void)loadDef;
     auto *image = static_cast<GfxImage *>(imagePointer);
-    auto *definition = static_cast<GfxImageLoadDef *>(loadDef);
-    (void)definition;
     Load_Texture(&image->texture, image);
 }
 
