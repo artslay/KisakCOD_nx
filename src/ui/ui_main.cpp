@@ -1790,6 +1790,32 @@ void __cdecl UI_Refresh()
 {
 #ifdef __SWITCH__
     g_switchFrameStage = "ui/refresh/entry";
+    // Diagnostic only: report the original pregame/cinematic gate specifically
+    // for simplecredits; do not alter the gate or menu transition.
+    if (!I_stricmp(g_mapname, "simplecredits"))
+    {
+        static uint32_t switchCreditsUiTraceCount = 0;
+        if (switchCreditsUiTraceCount < 12)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][CREDITS UI] refresh=%u activeMenu=%d connection=%d visible=%d fullscreen=%d finished=%d started=%d pending=%d catcher=0x%08x skip=%d\\n",
+                switchCreditsUiTraceCount,
+                static_cast<int>(g_currentMenuType),
+                static_cast<int>(clientUIActives[0].connectionState),
+                Menu_IsMenuOpenAndVisible(0, "pregame"),
+                Menus_AnyFullScreenVisible(&uiInfo.uiDC),
+                R_Cinematic_IsFinished(),
+                R_Cinematic_IsStarted(),
+                R_Cinematic_IsPending(),
+                clientUIActives[0].keyCatchers,
+                CL_SkipRendering());
+            Switch_LogWrite(trace);
+            ++switchCreditsUiTraceCount;
+        }
+    }
     static uint32_t switchUiRefreshTraceCount = 0;
     if (switchUiRefreshTraceCount < 6)
     {

@@ -101,13 +101,59 @@ int __cdecl CL_CGameRendering()
 
     if (clientUIActives[0].connectionState != CA_ACTIVE)
         return 0;
+#ifdef __SWITCH__
+    const bool switchCGameFullscreen = UI_IsFullscreen();
+    const bool switchCGameSkipRendering = CL_SkipRendering();
+    static uint32_t switchCGameGateTraceCount = 0;
+    if (switchCGameGateTraceCount < 12)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CREDITS RENDER] gate=%u connection=%d fullscreen=%d skip=%d activeMenu=%d catcher=0x%08x serverTime=%d\\n",
+            switchCGameGateTraceCount,
+            static_cast<int>(clientUIActives[0].connectionState),
+            switchCGameFullscreen,
+            switchCGameSkipRendering,
+            static_cast<int>(UI_GetActiveMenu(0)),
+            clientUIActives[0].keyCatchers,
+            clients[0].serverTime);
+        Switch_LogWrite(trace);
+        ++switchCGameGateTraceCount;
+    }
+    if (switchCGameFullscreen)
+        return 0;
+#else
     if (UI_IsFullscreen())
         return 0;
+#endif
     R_BeginClientCmdList2D();
     animFrametime = cls.animFrametime;
     DemoType = CL_GetDemoType();
+#ifdef __SWITCH__
+    static uint32_t switchCGameDrawTraceCount = 0;
+    const int switchCGameDrawResult =
+        CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime);
+    if (switchCGameDrawTraceCount < 12)
+    {
+        char trace[192];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CREDITS RENDER] draw=%u result=%d skipAfter=%d\\n",
+            switchCGameDrawTraceCount,
+            switchCGameDrawResult,
+            CL_SkipRendering());
+        Switch_LogWrite(trace);
+        ++switchCGameDrawTraceCount;
+    }
+    if (!switchCGameDrawResult)
+        return 0;
+#else
     if (!CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime))
         return 0;
+#endif
     if ((clientUIActives[0].keyCatchers & KEYCATCH_UI) != 0)
         UI_Refresh();
     R_AddCmdEndOfList();

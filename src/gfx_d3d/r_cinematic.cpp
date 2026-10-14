@@ -239,7 +239,33 @@ void __cdecl R_Cinematic_UpdateFrame_Core(
     if (isCinematicBeingPlayed)
     {
         iassert( cinematicGlob.bink );
-        if (!R_Cinematic_Advance())
+        const bool switchCinematicCanAdvance = R_Cinematic_Advance();
+#ifdef __SWITCH__
+        if (std::strstr(cinematicGlob.currentCinematicName, "simplecredits"))
+        {
+            static uint32_t switchCreditsBinkTraceCount = 0;
+            if (switchCreditsBinkTraceCount < 8 ||
+                (switchCreditsBinkTraceCount % 60) == 0 ||
+                !switchCinematicCanAdvance)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][CREDITS BINK] update=%u name=%s frame=%u frames=%u canAdvance=%d activeFrame=%d finishedBefore=%d\\n",
+                    switchCreditsBinkTraceCount,
+                    cinematicGlob.currentCinematicName,
+                    cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->FrameNum) : 0u,
+                    cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->Frames) : 0u,
+                    switchCinematicCanAdvance,
+                    cinematicGlob.activeImageFrame,
+                    cinematicGlob.cinematicFinished);
+                Switch_LogWrite(trace);
+            }
+            ++switchCreditsBinkTraceCount;
+        }
+#endif
+        if (!switchCinematicCanAdvance)
         {
             cinematicGlob.cinematicFinished = 1;
 #ifdef __SWITCH__
