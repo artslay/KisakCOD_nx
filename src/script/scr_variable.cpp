@@ -2370,7 +2370,24 @@ uint32_t  Scr_GetEntityId(uint32_t entnum, uint32_t classnum)
 	uint32_t entId; // [esp+8h] [ebp-8h]
 	uint32_t id; // [esp+Ch] [ebp-4h]
 
-	iassert((unsigned)entnum < (1 << 16));
+	if (entnum >= (1u << 16) || classnum >= CLASS_NUM_COUNT)
+	{
+#ifdef KISAK_SWITCH
+		char line[320];
+		std::snprintf(
+			line,
+			sizeof(line),
+			"[KisakCOD][SCRIPT ENTITY NUM INVALID] entnum=%u entnumHex=0x%08x classnum=%u usagePos=%p caller=0x%llx\\n",
+			entnum,
+			entnum,
+			classnum,
+			static_cast<const void *>(scrVarPub.varUsagePos),
+			static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+		Switch_LogWrite(line);
+#endif
+		Com_Error(ERR_DROP, "Scr_GetEntityId: invalid entity reference (entnum=%u classnum=%u)", entnum, classnum);
+		return 0;
+	}
 	entArrayId = g_classMap[classnum].entArrayId;
 	iassert(entArrayId);
 	id = GetArrayVariable(entArrayId, entnum);
