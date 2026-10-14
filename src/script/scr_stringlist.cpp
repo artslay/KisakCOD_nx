@@ -142,7 +142,7 @@ static bool Switch_GetStringAllocation(
     }
 
     const size_t available = allocationBytes - stringOffset;
-    const void *terminator = memchr(ref->str, '\\0', available);
+    const void *terminator = memchr(ref->str, '\0', available);
     if (!terminator)
     {
         Switch_ReportStringHashChainFault(
