@@ -1562,7 +1562,7 @@ int __cdecl CG_DrawActiveFrame(
 #ifdef __SWITCH__
     static uint32_t switchCreditsCgTraceFrameCount = 0;
     const bool switchCreditsCgTraceThisFrame =
-        !I_stricmp(clients[0].mapname, "simplecredits") && switchCreditsCgTraceFrameCount < 3;
+        clientUIActives[0].connectionState == CA_ACTIVE && switchCreditsCgTraceFrameCount < 3;
     const auto switchCreditsCgTrace = [&](const char *stage) {
         if (!switchCreditsCgTraceThisFrame)
             return;
@@ -1583,9 +1583,17 @@ int __cdecl CG_DrawActiveFrame(
     switchCreditsCgTrace("entry");
 #endif
     //Profile_Begin(13);
+#ifdef __SWITCH__
+    switchCreditsCgTrace("before_clear_scene");
+#endif
     R_ClearScene(localClientNum);
+#ifdef __SWITCH__
+    switchCreditsCgTrace("after_clear_scene");
+    switchCreditsCgTrace("before_fx_begin_update");
+#endif
     FX_BeginUpdate(localClientNum);
 #ifdef __SWITCH__
+    switchCreditsCgTrace("after_fx_begin_update");
     switchCreditsCgTrace("scene_cleared");
 #endif
     CG_SetCollWorldLocalClientNum(localClientNum);

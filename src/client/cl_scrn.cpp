@@ -129,10 +129,35 @@ int __cdecl CL_CGameRendering()
     if (UI_IsFullscreen())
         return 0;
 #endif
+#ifdef __SWITCH__
+    static uint32_t switchCGameEntryTraceCount = 0;
+    const bool switchCGameTraceThisCall = switchCGameEntryTraceCount < 4;
+    if (switchCGameTraceThisCall)
+    {
+        char trace[192];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][CREDITS RENDER ENTRY] call=%u stage=before_begin_2d serverTime=%d skip=%d\n",
+            switchCGameEntryTraceCount, clients[0].serverTime, CL_SkipRendering());
+        Switch_LogWrite(trace);
+    }
+#endif
     R_BeginClientCmdList2D();
+#ifdef __SWITCH__
+    if (switchCGameTraceThisCall)
+        Switch_LogWrite("[KisakCOD][CREDITS RENDER ENTRY] stage=after_begin_2d\n");
+#endif
     animFrametime = cls.animFrametime;
+#ifdef __SWITCH__
+    if (switchCGameTraceThisCall)
+        Switch_LogWrite("[KisakCOD][CREDITS RENDER ENTRY] stage=before_demo_type\n");
+#endif
     DemoType = CL_GetDemoType();
 #ifdef __SWITCH__
+    if (switchCGameTraceThisCall)
+        Switch_LogWrite("[KisakCOD][CREDITS RENDER ENTRY] stage=after_demo_type\n");
+    if (switchCGameTraceThisCall)
+        Switch_LogWrite("[KisakCOD][CREDITS RENDER ENTRY] stage=before_cg_draw_active_frame\n");
+    ++switchCGameEntryTraceCount;
     static uint32_t switchCGameDrawTraceCount = 0;
     const int switchCGameDrawResult =
         CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime);
