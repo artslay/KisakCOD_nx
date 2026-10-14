@@ -219,6 +219,10 @@ void R_Init() {
 
     R_InitGraphicsApi();
 
+    // Unlike the Windows bootstrap, Switch enters renderer initialization
+    // directly through R_Init(); initialize the scene draw-surface lists here
+    // before any BSP camera pass can use scene.drawSurfs[stage].
+    R_InitScene();
     R_InitSystems();
 }
 char R_InitRendererForWindow(HWND) { R_Init(); return 1; }
