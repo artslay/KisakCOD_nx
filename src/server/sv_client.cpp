@@ -10,11 +10,24 @@
 #include "sv_public.h"
 #include <EffectsCore/fx_system.h>
 
+#include <cstdio>
+
+extern void Switch_LogWrite(const char *msg);
+extern client_t g_sv_clients[1];
+
 void __cdecl SV_DirectConnect()
 {
     client_t *clients; // r31
+    char diag[512];
 
     Com_DPrintf(CON_CHANNEL_SERVER, "SVC_DirectConnect ()\n");
+    std::snprintf(
+        diag, sizeof(diag),
+        "[KisakCOD][SV DIRECTCONNECT] svs=%p initialized=%d clients=%p expected=%p clientSize=%zu\\n",
+        static_cast<void*>(&svs), svs.initialized,
+        static_cast<void*>(svs.clients), static_cast<void*>(g_sv_clients),
+        sizeof(client_t));
+    Switch_LogWrite(diag);
     clients = svs.clients;
     memset(svs.clients, 0, sizeof(client_t));
     clients->gentity = SV_GentityNum(0);
