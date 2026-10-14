@@ -624,13 +624,16 @@ bool VulkanBackend::CreateDescriptorResources()
         return false;
     }
 
+    // Descriptor sets are cached and reused across frames instead of resetting the
+    // pool every frame. Keep enough capacity for a high-water mark of 8192 draws
+    // (two 16-sampler sets and two uniform sets per draw).
     VkDescriptorPoolSize poolSizes[] = {
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 65536},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4096}
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 262144},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 16384}
     };
     VkDescriptorPoolCreateInfo pool{};
     pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    pool.maxSets = 4096 * 4;
+    pool.maxSets = 8192 * 4;
     pool.poolSizeCount = 2;
     pool.pPoolSizes = poolSizes;
     if (vkCreateDescriptorPool(m_device, &pool, nullptr, &m_descriptorPool) != VK_SUCCESS)
@@ -840,18 +843,9 @@ bool VulkanBackend::BeginFrame()
         (void)RecreateSwapchain();
         return false;
     }
-    VkResult descriptorResetResult;
-    {
-        // vkResetDescriptorPool is externally synchronized against allocations/binds below.
-        std::lock_guard<std::mutex> descriptorPoolLock(m_descriptorPoolMutex);
-        descriptorResetResult = vkResetDescriptorPool(m_device, m_descriptorPool, 0);
-    }
-    if (descriptorResetResult != VK_SUCCESS)
-    {
-        SetError("vkResetDescriptorPool failed at frame start");
-        (void)RecreateSwapchain();
-        return false;
-    }
+    // Descriptor sets remain allocated and are reused by the D3D9 compatibility
+    // device after the previous frame fence above has signaled. Resetting the pool
+    // here forces NVK to free every set on every frame and currently crashes in _free_r.
     m_uniformOffset = 0;
 
     VkResult result = vkAcquireNextImageKHR(
@@ -889,6 +883,7 @@ bool VulkanBackend::BeginFrame()
     }
 
     m_frameActive = true;
+    m_frameSerial.fetch_add(1, std::memory_order_relaxed);
     m_renderingActive = false;
     m_backbufferClearedThisFrame = false;
 
