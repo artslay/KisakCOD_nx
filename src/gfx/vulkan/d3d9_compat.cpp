@@ -1162,8 +1162,10 @@ HRESULT IDirect3DDevice9::EndScene()
     if (!m_backend || !m_sceneOpen)
         return S_OK;
 
+    const uint64_t frameSerial = m_backend->FrameSerial();
+    const bool queuePresentSource = m_color && m_color->texture && m_targetRendered;
     m_backend->EndRendering();
-    if (m_color && m_color->texture && m_targetRendered)
+    if (queuePresentSource)
     {
         KisakVkTexture *texture = m_color->texture;
         m_backend->QueuePresentSource(
@@ -1177,6 +1179,27 @@ HRESULT IDirect3DDevice9::EndScene()
     {
         m_backend->ClearPresentSource();
     }
+
+    // Sparse runtime trace: tells whether the game produced a scene render
+    // target for presentation, without logging every draw call.
+    static uint64_t sceneTraceCount = 0;
+    ++sceneTraceCount;
+    if (sceneTraceCount <= 12u || (frameSerial != 0 && frameSerial % 120u == 0))
+    {
+        char msg[256];
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK SCENE] serial=%llu rendered=%u color=%p texture=%p queued=%u size=%ux%u\n",
+            static_cast<unsigned long long>(frameSerial),
+            m_targetRendered ? 1u : 0u,
+            static_cast<void *>(m_color),
+            static_cast<void *>(m_color ? m_color->texture : nullptr),
+            queuePresentSource ? 1u : 0u,
+            m_color && m_color->texture ? m_color->texture->width : 0u,
+            m_color && m_color->texture ? m_color->texture->height : 0u);
+        Switch_LogWrite(msg);
+    }
+
     m_sceneOpen = false;
     return S_OK;
 }
