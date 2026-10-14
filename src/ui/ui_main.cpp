@@ -1747,7 +1747,7 @@ void UI_PlayerStart()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CREDITS UI] UI_PlayerStart entered activeMenu=%d finished=%d started=%d pending=%d skip=%d fullscreen=%d catcher=0x%08x\\n",
+            "[KisakCOD][CREDITS UI] UI_PlayerStart entered activeMenu=%d finished=%d started=%d pending=%d skip=%d fullscreen=%d catcher=0x%08x\n",
             static_cast<int>(g_currentMenuType),
             R_Cinematic_IsFinished(),
             R_Cinematic_IsStarted(),
@@ -1828,7 +1828,7 @@ void __cdecl UI_Refresh()
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][CREDITS UI] refresh=%u activeMenu=%d connection=%d visible=%d fullscreen=%d finished=%d started=%d pending=%d catcher=0x%08x skip=%d menus=%d top=%s\\n",
+                "[KisakCOD][CREDITS UI] refresh=%u activeMenu=%d connection=%d visible=%d fullscreen=%d finished=%d started=%d pending=%d catcher=0x%08x skip=%d menus=%d top=%s\n",
                 switchCreditsUiTraceCount,
                 static_cast<int>(g_currentMenuType),
                 static_cast<int>(clientUIActives[0].connectionState),
@@ -2854,7 +2854,7 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][CREDITS UI] set_pregame autoContinue=%d finished=%d started=%d pending=%d skip=%d\\n",
+                "[KisakCOD][CREDITS UI] set_pregame autoContinue=%d finished=%d started=%d pending=%d skip=%d\n",
                 UI_AutoContinue(),
                 R_Cinematic_IsFinished(),
                 R_Cinematic_IsStarted(),
