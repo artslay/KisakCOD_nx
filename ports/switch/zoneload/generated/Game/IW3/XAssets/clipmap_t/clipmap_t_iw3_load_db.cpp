@@ -20,6 +20,11 @@
 #include <cstring>
 #include <type_traits>
 
+#include <cstdio>
+#include <cstdint>
+
+extern void Switch_LogWrite(const char *msg);
+
 using namespace IW3;
 
 Loader_clipMap_t::Loader_clipMap_t(Zone& zone, ZoneInputStream& stream)
@@ -195,6 +200,66 @@ void Loader_clipMap_t::FillStruct_cbrush_t(const ZoneStreamFillReadAccessor& fil
     m_stream.AddPointerLookup(&varcbrush_t->sides, fillAccessor.BlockBuffer(32));
     fillAccessor.FillArray(varcbrush_t->axialMaterialNum[0], 36);
     fillAccessor.FillArray(varcbrush_t->axialMaterialNum[1], 42);
+
+    // Compare serialized collision-brush fields against the native object immediately
+    // after decoding. The serialized cbrush_t is 80 bytes; native Switch cbrush_t has
+    // a wider stride, so this also catches an incorrect source offset or field mapping.
+    uint32_t rawNumSides = 0;
+    uint32_t rawSidesPointer = 0;
+    int16_t rawAxialMaterialNum[2][3] = {};
+    const auto* rawBrush = static_cast<const uint8_t*>(fillAccessor.BlockBuffer(0));
+    std::memcpy(&rawNumSides, rawBrush + 28, sizeof(rawNumSides));
+    std::memcpy(&rawSidesPointer, rawBrush + 32, sizeof(rawSidesPointer));
+    std::memcpy(rawAxialMaterialNum, rawBrush + 36, sizeof(rawAxialMaterialNum));
+
+    bool badAxialMaterial = false;
+    for (int sideIndex = 0; sideIndex < 2; ++sideIndex)
+    {
+        for (int axisIndex = 0; axisIndex < 3; ++axisIndex)
+        {
+            const int value = varcbrush_t->axialMaterialNum[sideIndex][axisIndex];
+            if (value < 0 || static_cast<uint32_t>(value) >= varclipMap_t->numMaterials)
+                badAxialMaterial = true;
+        }
+    }
+    if (badAxialMaterial || rawNumSides != varcbrush_t->numsides)
+    {
+        int brushIndex = -1;
+        if (varclipMap_t && varclipMap_t->brushes)
+        {
+            const uintptr_t brushAddress = reinterpret_cast<uintptr_t>(varcbrush_t);
+            const uintptr_t brushBase = reinterpret_cast<uintptr_t>(varclipMap_t->brushes);
+            const uintptr_t brushBytes = sizeof(cbrush_t) * static_cast<uintptr_t>(varclipMap_t->numBrushes);
+            if (brushAddress >= brushBase && brushAddress - brushBase < brushBytes &&
+                (brushAddress - brushBase) % sizeof(cbrush_t) == 0)
+                brushIndex = static_cast<int>((brushAddress - brushBase) / sizeof(cbrush_t));
+        }
+
+        char diagnostic[1024];
+        std::snprintf(
+            diagnostic, sizeof(diagnostic),
+            "[KisakCOD][CLIPMAP BRUSH DECODE] map=%s brushIndex=%d native=%p raw=%p "
+            "numMaterials=%u numsides=%u/%u sidesRaw=0x%08x "
+            "rawAxial=[%d,%d,%d;%d,%d,%d] nativeAxial=[%d,%d,%d;%d,%d,%d]\n",
+            varclipMap_t && varclipMap_t->name ? varclipMap_t->name : "<null>",
+            brushIndex, static_cast<void*>(varcbrush_t), static_cast<const void*>(rawBrush),
+            varclipMap_t ? varclipMap_t->numMaterials : 0u,
+            rawNumSides, varcbrush_t->numsides, rawSidesPointer,
+            static_cast<int>(rawAxialMaterialNum[0][0]),
+            static_cast<int>(rawAxialMaterialNum[0][1]),
+            static_cast<int>(rawAxialMaterialNum[0][2]),
+            static_cast<int>(rawAxialMaterialNum[1][0]),
+            static_cast<int>(rawAxialMaterialNum[1][1]),
+            static_cast<int>(rawAxialMaterialNum[1][2]),
+            static_cast<int>(varcbrush_t->axialMaterialNum[0][0]),
+            static_cast<int>(varcbrush_t->axialMaterialNum[0][1]),
+            static_cast<int>(varcbrush_t->axialMaterialNum[0][2]),
+            static_cast<int>(varcbrush_t->axialMaterialNum[1][0]),
+            static_cast<int>(varcbrush_t->axialMaterialNum[1][1]),
+            static_cast<int>(varcbrush_t->axialMaterialNum[1][2]));
+        Switch_LogWrite(diagnostic);
+    }
+
     fillAccessor.FillPtr(varcbrush_t->baseAdjacentSide, 48);
     m_stream.AddPointerLookup(&varcbrush_t->baseAdjacentSide, fillAccessor.BlockBuffer(48));
     fillAccessor.FillArray(varcbrush_t->firstAdjacentSideOffsets[0], 52);
@@ -850,6 +915,36 @@ void Loader_clipMap_t::Load_clipMap_t(const bool atStreamStart)
         {
             varclipMap_t->box_brush = m_stream.ConvertOffsetToPointerLookup(varclipMap_t->box_brush).Expect();
         }
+    }
+
+    if (varclipMap_t->box_brush)
+    {
+        int boxBrushIndex = -1;
+        const uintptr_t boxAddress = reinterpret_cast<uintptr_t>(varclipMap_t->box_brush);
+        const uintptr_t brushBase = reinterpret_cast<uintptr_t>(varclipMap_t->brushes);
+        const uintptr_t brushBytes = sizeof(cbrush_t) * static_cast<uintptr_t>(varclipMap_t->numBrushes);
+        if (varclipMap_t->brushes && boxAddress >= brushBase &&
+            boxAddress - brushBase < brushBytes &&
+            (boxAddress - brushBase) % sizeof(cbrush_t) == 0)
+            boxBrushIndex = static_cast<int>((boxAddress - brushBase) / sizeof(cbrush_t));
+
+        const auto* box = varclipMap_t->box_brush;
+        char diagnostic[768];
+        std::snprintf(
+            diagnostic, sizeof(diagnostic),
+            "[KisakCOD][CLIPMAP BOX BRUSH] map=%s numMaterials=%u numBrushes=%u "
+            "brushes=%p box=%p boxIndex=%d numsides=%u axial=[%d,%d,%d;%d,%d,%d]\n",
+            varclipMap_t->name ? varclipMap_t->name : "<null>",
+            varclipMap_t->numMaterials, varclipMap_t->numBrushes,
+            static_cast<void*>(varclipMap_t->brushes),
+            static_cast<const void*>(box), boxBrushIndex, box->numsides,
+            static_cast<int>(box->axialMaterialNum[0][0]),
+            static_cast<int>(box->axialMaterialNum[0][1]),
+            static_cast<int>(box->axialMaterialNum[0][2]),
+            static_cast<int>(box->axialMaterialNum[1][0]),
+            static_cast<int>(box->axialMaterialNum[1][1]),
+            static_cast<int>(box->axialMaterialNum[1][2]));
+        Switch_LogWrite(diagnostic);
     }
     
     if (varclipMap_t->dynEntDefList[0])
