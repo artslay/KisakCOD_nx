@@ -1946,8 +1946,15 @@ bool IDirect3DDevice9::EnsurePipeline()
             reinterpret_cast<const uint32_t *>(m_pixelShader->parseData->output),
             reinterpret_cast<const uint32_t *>(m_pixelShader->parseData->output) + psBytes / sizeof(uint32_t));
         unpatchedPixelSpirvForProbe = pixelSpirv;
+        m_pixelShader->linkedSpirv = pixelSpirv;
 
-        if (!PatchFragmentShaderForAlphaTest(
+        // Do not rewrite every fragment shader with discard logic when D3D9
+        // alpha testing is disabled. Keep that variant byte-for-byte identical
+        // to the interface-linked MojoShader module.
+        m_pixelShader->alphaFuncSpecId = 0;
+        m_pixelShader->alphaRefSpecId = 0;
+        if (m_alphaTest &&
+            !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
                 &m_pixelShader->alphaFuncSpecId,
                 &m_pixelShader->alphaRefSpecId))
@@ -1997,6 +2004,55 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_vertexShader->linkedPixelShader = m_pixelShader;
         m_pixelShader->linkedDeclaration = m_decl;
         m_pixelShader->linkedPixelShader = m_pixelShader;
+        m_pixelShader->linkedAlphaTestPatch = m_alphaTest;
+    }
+    else if (m_pixelShader->linkedAlphaTestPatch != m_alphaTest)
+    {
+        // Alpha testing is dynamic state. Rebuild only the fragment module when
+        // that state toggles; the stored linked baseline avoids running the
+        // MojoShader interface linker more than once for the same shader pair.
+        if (m_pixelShader->module)
+            vkDestroyShaderModule(m_backend->Device(), m_pixelShader->module, nullptr);
+        m_pixelShader->module = VK_NULL_HANDLE;
+
+        std::vector<uint32_t> pixelSpirv = m_pixelShader->linkedSpirv;
+        if (pixelSpirv.empty())
+        {
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=missing_linked_pixel_spirv\n");
+            return false;
+        }
+        unpatchedPixelSpirvForProbe = pixelSpirv;
+        m_pixelShader->alphaFuncSpecId = 0;
+        m_pixelShader->alphaRefSpecId = 0;
+
+        if (m_alphaTest &&
+            !PatchFragmentShaderForAlphaTest(
+                pixelSpirv,
+                &m_pixelShader->alphaFuncSpecId,
+                &m_pixelShader->alphaRefSpecId))
+        {
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
+            return false;
+        }
+
+        m_pixelShader->spirv = std::move(pixelSpirv);
+        VkShaderModuleCreateInfo psInfo{};
+        psInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        psInfo.codeSize = m_pixelShader->spirv.size() * sizeof(uint32_t);
+        psInfo.pCode = m_pixelShader->spirv.data();
+
+        const VkResult psResult =
+            vkCreateShaderModule(m_backend->Device(), &psInfo, nullptr, &m_pixelShader->module);
+        if (psResult != VK_SUCCESS)
+        {
+            char msg[128];
+            std::snprintf(msg, sizeof(msg),
+                "[KisakCOD][VK DRAW] pipeline_fail=shader_module_variant ps=%d\n",
+                static_cast<int>(psResult));
+            Switch_LogWrite(msg);
+            return false;
+        }
+        m_pixelShader->linkedAlphaTestPatch = m_alphaTest;
     }
 
     VkPipelineShaderStageCreateInfo stages[2]{};
@@ -2026,7 +2082,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     alphaSpecializationInfo.pMapEntries = alphaSpecializationEntries;
     alphaSpecializationInfo.dataSize = sizeof(alphaSpecializationData);
     alphaSpecializationInfo.pData = &alphaSpecializationData;
-    stages[1].pSpecializationInfo = &alphaSpecializationInfo;
+    stages[1].pSpecializationInfo = m_alphaTest ? &alphaSpecializationInfo : nullptr;
 
     std::vector<VkVertexInputBindingDescription> bindings;
     for (uint32_t stream = 0; stream < 16; ++stream)
