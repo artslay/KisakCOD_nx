@@ -255,7 +255,7 @@ uint16_t __cdecl SMC_Allocate(uint32_t smcIndex, uint32_t bitCount)
         tree->usedlist.next->prev = &tree->usedlist;
     }
     leafs = s_cache.leafs[treeIndex];
-    index = ((char *)block - (char *)leafs) / 8;
+    index = static_cast<uint32_t>((static_cast<char *>(reinterpret_cast<void *>(block)) - reinterpret_cast<char *>(leafs)) / sizeof(static_model_leaf_t));
     bcassert(index, ARRAY_COUNT(s_cache.leafs[treeIndex]));
     iassert(block == &leafs[index].freenode);
     nodeIndex = ((index + 32) >> (5 - listIndex)) - 1;
@@ -305,7 +305,7 @@ uint16_t __cdecl R_CacheStaticModelSurface(
     if (cacheIndex)
     {
         cachedSurf = &SMC_GetLeaf(cacheIndex)->cachedSurf;
-        tree = &s_cache.trees[((char*)cachedSurf - (char*)s_cache.leafs) / 256];
+        tree = &s_cache.trees[(reinterpret_cast<char *>(cachedSurf) - reinterpret_cast<char *>(s_cache.leafs)) / sizeof(s_cache.leafs[0])];
         if (tree->frameCount != rg.frontEndFrameCount)
         {
             tree->frameCount = rg.frontEndFrameCount;
@@ -353,7 +353,7 @@ uint16_t __cdecl R_CacheStaticModelSurface(
                 frontEndDataOut->smcPatchVertsUsed += cachedVertsNeeded;
                 R_AddWorkerCmd(WRKCMD_SKIN_CACHED_STATICMODEL, (unsigned char*)&skinSmodelCmd);
                 R_CacheStaticModelIndices(cachedSurfa->smodelIndex, cachedSurfa->lodIndex, cachedSurfa->baseVertIndex);
-                treea = &s_cache.trees[((char*)cachedSurfa - (char*)s_cache.leafs) / 256];
+                treea = &s_cache.trees[(reinterpret_cast<char *>(cachedSurfa) - reinterpret_cast<char *>(s_cache.leafs)) / sizeof(s_cache.leafs[0])];
                 treea->frameCount = rg.frontEndFrameCount;
                 
                 iassert(treea->usedlist.prev->prev->next == treea->usedlist.prev);
