@@ -610,6 +610,29 @@ void __cdecl R_ShutdownImages()
     }
 }
 
+#ifdef __SWITCH__
+// Fastfile renderer shutdown normally leaves this table alone because zone
+// images are DB-owned. The procedural images registered in imageHashTable,
+// however, are allocated from the main hunk. Hunk_Clear must release and drop
+// those entries before the hunk pages are unmapped, or the next R_InitImages
+// will dereference stale pointers while looking up $white and other builtins.
+void __cdecl R_ShutdownImagesForHunkClear()
+{
+    if (!rg.registered)
+        return;
+
+    R_ShutdownImages();
+
+    rgp.whiteImage = nullptr;
+    rgp.blackImage = nullptr;
+    rgp.blackImage3D = nullptr;
+    rgp.blackImageCube = nullptr;
+    rgp.grayImage = nullptr;
+    rgp.identityNormalMapImage = nullptr;
+    rgp.pixelCostColorCodeImage = nullptr;
+}
+#endif
+
 void __cdecl Image_SetupRenderTarget(
     GfxImage *image,
     uint16_t width,
