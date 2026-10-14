@@ -47,6 +47,28 @@ static void Switch_ReportInvalidStringRef(
         static_cast<const void *>(scrMemTreePub.mt_buffer));
     Switch_LogWrite(line);
 }
+
+static void Switch_ReportStringHashChainFault(
+    const char *origin,
+    uint32_t hash,
+    uint32_t index,
+    uint32_t steps,
+    uint32_t status,
+    uint32_t stringValue)
+{
+    char line[320];
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][SCRIPT STRING HASH FAULT] origin=%s hash=%u index=%u steps=%u status=0x%08x string=%u\n",
+        origin,
+        hash,
+        index,
+        steps,
+        status,
+        stringValue);
+    Switch_LogWrite(line);
+}
 #endif
 
 #ifdef KISAK_MP
@@ -346,9 +368,40 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 		prev = hash;
 		newIndex = (uint16_t)entry->status_next;
 
-		for (newEntry = &scrStringGlob.hashTable[newIndex]; newEntry != entry; newEntry = &scrStringGlob.hashTable[newIndex])
+		uint32_t chainSteps = 0;
+		while (newIndex != hash)
 		{
-			iassert((newEntry->status_next & HASH_STAT_MASK) == HASH_STAT_MOVABLE);
+#ifdef KISAK_SWITCH
+            if (newIndex == 0 || newIndex >= STRINGLIST_SIZE || chainSteps++ >= STRINGLIST_SIZE)
+            {
+                Switch_ReportStringHashChainFault(
+                    "lookup_chain_index", hash, newIndex, chainSteps,
+                    newIndex < STRINGLIST_SIZE ? scrStringGlob.hashTable[newIndex].status_next : UINT32_MAX,
+                    0);
+                Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+                Com_Error(ERR_DROP, "corrupt script-string hash chain");
+                return 0;
+            }
+#else
+            if (newIndex == 0 || newIndex >= STRINGLIST_SIZE || chainSteps++ >= STRINGLIST_SIZE)
+            {
+                Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+                Com_Error(ERR_DROP, "corrupt script-string hash chain");
+                return 0;
+            }
+#endif
+            newEntry = &scrStringGlob.hashTable[newIndex];
+            if ((newEntry->status_next & HASH_STAT_MASK) != HASH_STAT_MOVABLE)
+            {
+#ifdef KISAK_SWITCH
+                Switch_ReportStringHashChainFault(
+                    "lookup_chain_status", hash, newIndex, chainSteps,
+                    newEntry->status_next, newEntry->u.prev);
+#endif
+                Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+                Com_Error(ERR_DROP, "corrupt script-string hash entry");
+                return 0;
+            }
 
 			refStr = GetRefString(newEntry->u.prev);
 
@@ -408,14 +461,48 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 			iassert((entry->status_next & HASH_STAT_MASK) == HASH_STAT_MOVABLE);
 			
 			next = (uint16_t)entry->status_next;
-
-			for (prev = next;
-				(uint16_t)scrStringGlob.hashTable[prev].status_next != hash;
-				prev = (uint16_t)scrStringGlob.hashTable[prev].status_next)
-			{
-				;
-			}
-			iassert(prev);
+            prev = next;
+            uint32_t chainSteps = 0;
+            for (;;)
+            {
+#ifdef KISAK_SWITCH
+                if (prev == 0 || prev >= STRINGLIST_SIZE || chainSteps++ >= STRINGLIST_SIZE)
+                {
+                    Switch_ReportStringHashChainFault(
+                        "lookup_predecessor_index", hash, prev, chainSteps,
+                        prev < STRINGLIST_SIZE ? scrStringGlob.hashTable[prev].status_next : UINT32_MAX,
+                        entry->u.prev);
+                    Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+                    Com_Error(ERR_DROP, "corrupt script-string predecessor chain");
+                    return 0;
+                }
+#else
+                if (prev == 0 || prev >= STRINGLIST_SIZE || chainSteps++ >= STRINGLIST_SIZE)
+                {
+                    Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+                    Com_Error(ERR_DROP, "corrupt script-string predecessor chain");
+                    return 0;
+                }
+#endif
+                const uint32_t predecessorStatus = scrStringGlob.hashTable[prev].status_next;
+                const uint32_t predecessorKind = predecessorStatus & HASH_STAT_MASK;
+                if (predecessorKind != HASH_STAT_MOVABLE && predecessorKind != HASH_STAT_HEAD)
+                {
+#ifdef KISAK_SWITCH
+                    Switch_ReportStringHashChainFault(
+                        "lookup_predecessor_status", hash, prev, chainSteps,
+                        predecessorStatus, entry->u.prev);
+#endif
+                    Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+                    Com_Error(ERR_DROP, "corrupt script-string predecessor entry");
+                    return 0;
+                }
+                const uint32_t predecessorNext = (uint16_t)predecessorStatus;
+                if (predecessorNext == hash)
+                    break;
+                prev = predecessorNext;
+            }
+            iassert(prev);
 
 			newIndex = scrStringGlob.hashTable[0].status_next;
 
@@ -790,61 +877,142 @@ static void SL_FreeString(uint32_t stringValue, RefString* refStr, uint32_t len)
 		Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
 		return;
 	}
-	else
-	{
-		HashEntry *entry = &scrStringGlob.hashTable[index];
 
-		iassert(!refStr->user);
+#ifdef KISAK_SWITCH
+    Switch_SetProgressPhase("script_string/free_chain");
+#endif
+    HashEntry *entry = &scrStringGlob.hashTable[index];
+    const uint32_t headStatus = entry->status_next;
+    if ((headStatus & HASH_STAT_MASK) != HASH_STAT_HEAD)
+    {
+#ifdef KISAK_SWITCH
+        Switch_ReportStringHashChainFault(
+            "free_bucket_not_head", index, index, 0, headStatus, stringValue);
+#endif
+        Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+        Com_Error(ERR_DROP, "script-string free found a non-head bucket");
+        return;
+    }
 
-		MT_FreeIndex(stringValue, len + 4);
+    uint32_t next = (uint16_t)headStatus;
+    uint32_t freeIndex = index;
+    uint32_t previousIndex = index;
+    HashEntry *newEntry = entry;
+    const bool removeHead = entry->u.prev == stringValue;
 
-		iassert(((entry->status_next & HASH_STAT_MASK) == HASH_STAT_HEAD));
+    if (!removeHead)
+    {
+        uint32_t currentIndex = next;
+        uint32_t chainSteps = 0;
+        bool found = false;
+        while (currentIndex != index)
+        {
+            if (currentIndex == 0 || currentIndex >= STRINGLIST_SIZE ||
+                chainSteps++ >= STRINGLIST_SIZE)
+            {
+#ifdef KISAK_SWITCH
+                Switch_ReportStringHashChainFault(
+                    "free_chain_index", index, currentIndex, chainSteps,
+                    currentIndex < STRINGLIST_SIZE
+                        ? scrStringGlob.hashTable[currentIndex].status_next
+                        : UINT32_MAX,
+                    stringValue);
+#endif
+                Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+                Com_Error(ERR_DROP, "corrupt script-string free chain");
+                return;
+            }
 
-		uint32_t newIndex = (uint16_t)entry->status_next;
-		HashEntry* newEntry = &scrStringGlob.hashTable[newIndex];
+            HashEntry *candidate = &scrStringGlob.hashTable[currentIndex];
+            if ((candidate->status_next & HASH_STAT_MASK) != HASH_STAT_MOVABLE)
+            {
+#ifdef KISAK_SWITCH
+                Switch_ReportStringHashChainFault(
+                    "free_chain_status", index, currentIndex, chainSteps,
+                    candidate->status_next, candidate->u.prev);
+#endif
+                Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+                Com_Error(ERR_DROP, "corrupt script-string free entry");
+                return;
+            }
 
-		if (entry->u.prev == stringValue)
-		{
-			if (newEntry == entry)
-			{
-				newEntry = entry;
-				newIndex = index;
-			}
-			else
-			{
-				entry->status_next = (uint16_t)newEntry->status_next | HASH_STAT_HEAD;
-				entry->u.prev = newEntry->u.prev;
-				scrStringGlob.nextFreeEntry = entry;
-			}
-		}
-		else
-		{
-			uint32_t prev = index;
-			while (1)
-			{
-				iassert(newEntry != entry);
-				iassert((newEntry->status_next & HASH_STAT_MASK) == HASH_STAT_MOVABLE);
+            if (candidate->u.prev == stringValue)
+            {
+                freeIndex = currentIndex;
+                newEntry = candidate;
+                found = true;
+                break;
+            }
 
-				if (newEntry->u.prev == stringValue)
-					break;
+            previousIndex = currentIndex;
+            currentIndex = (uint16_t)candidate->status_next;
+        }
 
-				prev = newIndex;
-				newIndex = (uint16_t)newEntry->status_next;
-				newEntry = &scrStringGlob.hashTable[newIndex];
-			}
-			scrStringGlob.hashTable[prev].status_next = (uint16_t)newEntry->status_next | (scrStringGlob.hashTable[prev].status_next & HASH_STAT_MASK);
-		}
+        if (!found)
+        {
+#ifdef KISAK_SWITCH
+            Switch_ReportStringHashChainFault(
+                "free_handle_missing", index, currentIndex, chainSteps,
+                scrStringGlob.hashTable[index].status_next, stringValue);
+#endif
+            // Do not return this address to the allocator if the hash table
+            // no longer owns the handle: it may already have been recycled.
+            Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+            Com_Error(ERR_DROP, "script-string handle missing from hash chain");
+            return;
+        }
+    }
 
-		iassert((newEntry->status_next & HASH_STAT_MASK) != HASH_STAT_FREE);
-		uint32_t newNext = scrStringGlob.hashTable[0].status_next;
-		iassert((newNext & HASH_STAT_MASK) == HASH_STAT_FREE);
+    // Locate the hash entry before releasing the backing memory. The previous
+    // ordering could free a stale handle first and then spin forever while
+    // searching for that handle in a damaged/cyclic hash chain.
+    iassert(!refStr->user);
+    MT_FreeIndex(stringValue, len + 4);
 
-		newEntry->status_next = newNext;
-		newEntry->u.prev = 0;
-		scrStringGlob.hashTable[newNext].u.prev = newIndex;
-		scrStringGlob.hashTable[0].status_next = newIndex;
-		Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
-	}
+    if (removeHead)
+    {
+        if (next == index)
+        {
+            newEntry = entry;
+            freeIndex = index;
+        }
+        else
+        {
+            if (next == 0 || next >= STRINGLIST_SIZE ||
+                (scrStringGlob.hashTable[next].status_next & HASH_STAT_MASK) != HASH_STAT_MOVABLE)
+            {
+#ifdef KISAK_SWITCH
+                Switch_ReportStringHashChainFault(
+                    "free_head_successor", index, next, 0,
+                    next < STRINGLIST_SIZE ? scrStringGlob.hashTable[next].status_next : UINT32_MAX,
+                    stringValue);
+#endif
+                Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+                Com_Error(ERR_DROP, "corrupt script-string head successor");
+                return;
+            }
+            newEntry = &scrStringGlob.hashTable[next];
+            freeIndex = next;
+            entry->status_next = (uint16_t)newEntry->status_next | HASH_STAT_HEAD;
+            entry->u.prev = newEntry->u.prev;
+        }
+    }
+    else
+    {
+        scrStringGlob.hashTable[previousIndex].status_next =
+            (uint16_t)newEntry->status_next |
+            (scrStringGlob.hashTable[previousIndex].status_next & HASH_STAT_MASK);
+    }
+
+    iassert((newEntry->status_next & HASH_STAT_MASK) != HASH_STAT_FREE);
+    uint32_t newNext = scrStringGlob.hashTable[0].status_next;
+    iassert((newNext & HASH_STAT_MASK) == HASH_STAT_FREE);
+
+    newEntry->status_next = newNext;
+    newEntry->u.prev = 0;
+    scrStringGlob.hashTable[newNext].u.prev = freeIndex;
+    scrStringGlob.hashTable[0].status_next = freeIndex;
+    Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
 }
 
 const char* __cdecl SL_DebugConvertToString(uint32_t stringValue)
