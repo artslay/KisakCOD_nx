@@ -222,7 +222,8 @@ void Loader_clipMap_t::FillStruct_cbrush_t(const ZoneStreamFillReadAccessor& fil
                 badAxialMaterial = true;
         }
     }
-    if (badAxialMaterial || rawNumSides != varcbrush_t->numsides)
+    if (varcbrush_t != varclipMap_t->box_brush &&
+        (badAxialMaterial || rawNumSides != varcbrush_t->numsides))
     {
         int brushIndex = -1;
         if (varclipMap_t && varclipMap_t->brushes)
