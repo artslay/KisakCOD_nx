@@ -1848,6 +1848,12 @@ bool IDirect3DDevice9::EnsurePipeline()
         return true;
     }
 
+    // Keep the linked fragment module before our custom alpha-test rewrite.
+    // If NVK rejects the final pipeline, diagnostic probes below can determine
+    // whether the rewrite or specialization map is responsible without needing
+    // to copy shader binaries off the Switch.
+    std::vector<uint32_t> unpatchedPixelSpirvForProbe;
+
     if (m_vertexShader->linkedDeclaration != m_decl ||
         m_vertexShader->linkedPixelShader != m_pixelShader)
     {
@@ -1939,6 +1945,8 @@ bool IDirect3DDevice9::EnsurePipeline()
         std::vector<uint32_t> pixelSpirv(
             reinterpret_cast<const uint32_t *>(m_pixelShader->parseData->output),
             reinterpret_cast<const uint32_t *>(m_pixelShader->parseData->output) + psBytes / sizeof(uint32_t));
+        unpatchedPixelSpirvForProbe = pixelSpirv;
+
         if (!PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
                 &m_pixelShader->alphaFuncSpecId,
@@ -2268,6 +2276,77 @@ bool IDirect3DDevice9::EnsurePipeline()
             m_cullMode,
             m_blendEnable ? 1u : 0u);
         Switch_LogWrite(msg);
+
+        // Probe 1: keep the exact shader modules and pipeline state, but
+        // remove fragment specialization data. This isolates specialization
+        // constant handling from pipeline state and shader-module validity.
+        {
+            VkPipelineShaderStageCreateInfo probeStages[2] = {stages[0], stages[1]};
+            probeStages[1].pSpecializationInfo = nullptr;
+
+            VkGraphicsPipelineCreateInfo probeInfo = info;
+            probeInfo.pStages = probeStages;
+
+            VkPipeline probePipeline = VK_NULL_HANDLE;
+            const VkResult probeResult = vkCreateGraphicsPipelines(
+                m_backend->Device(), VK_NULL_HANDLE, 1, &probeInfo, nullptr, &probePipeline);
+            if (probePipeline)
+                vkDestroyPipeline(m_backend->Device(), probePipeline, nullptr);
+
+            char probeMsg[128];
+            std::snprintf(
+                probeMsg, sizeof(probeMsg),
+                "[KisakCOD][VK DRAW] pipeline_probe no_specialization vk=%d\n",
+                static_cast<int>(probeResult));
+            Switch_LogWrite(probeMsg);
+        }
+
+        // Probe 2: use the linked fragment SPIR-V before the custom alpha-test
+        // instructions were inserted, with specialization disabled. This is
+        // intentionally diagnostic only; the result is not used for rendering.
+        if (!unpatchedPixelSpirvForProbe.empty())
+        {
+            VkShaderModule probePixelModule = VK_NULL_HANDLE;
+            VkShaderModuleCreateInfo probeModuleInfo{};
+            probeModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            probeModuleInfo.codeSize =
+                unpatchedPixelSpirvForProbe.size() * sizeof(uint32_t);
+            probeModuleInfo.pCode = unpatchedPixelSpirvForProbe.data();
+
+            const VkResult moduleResult = vkCreateShaderModule(
+                m_backend->Device(), &probeModuleInfo, nullptr, &probePixelModule);
+            VkResult pipelineProbeResult = moduleResult;
+            VkPipeline probePipeline = VK_NULL_HANDLE;
+
+            if (moduleResult == VK_SUCCESS)
+            {
+                VkPipelineShaderStageCreateInfo probeStages[2] = {stages[0], stages[1]};
+                probeStages[1].module = probePixelModule;
+                probeStages[1].pSpecializationInfo = nullptr;
+
+                VkGraphicsPipelineCreateInfo probeInfo = info;
+                probeInfo.pStages = probeStages;
+
+                pipelineProbeResult = vkCreateGraphicsPipelines(
+                    m_backend->Device(), VK_NULL_HANDLE, 1, &probeInfo, nullptr, &probePipeline);
+                if (probePipeline)
+                    vkDestroyPipeline(m_backend->Device(), probePipeline, nullptr);
+                vkDestroyShaderModule(m_backend->Device(), probePixelModule, nullptr);
+            }
+
+            char probeMsg[160];
+            std::snprintf(
+                probeMsg, sizeof(probeMsg),
+                "[KisakCOD][VK DRAW] pipeline_probe unpatched_pixel module=%d pipeline=%d\n",
+                static_cast<int>(moduleResult),
+                static_cast<int>(pipelineProbeResult));
+            Switch_LogWrite(probeMsg);
+        }
+        else
+        {
+            Switch_LogWrite(
+                "[KisakCOD][VK DRAW] pipeline_probe unpatched_pixel skipped=no_cached_linked_spirv\n");
+        }
 
         const bool vertexSpirvDumped = DumpSpirvFile(
             "sdmc:/switch/KisakCOD/vk_failed_vs.spv", m_vertexShader->spirv);
