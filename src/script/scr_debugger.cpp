@@ -1777,7 +1777,7 @@ void __cdecl Scr_AddAssignmentPos(char *codePos)
     if (scrCompilePub.developer_statement != 2 && scrDebuggerGlob.assignHeadCodePos != codePos)
     {
         scrDebuggerGlob.assignHeadCodePos = codePos;
-        v1 = (Scr_OpcodeList_s *)Hunk_AllocDebugMem(8);
+        v1 = (Scr_OpcodeList_s *)Hunk_AllocDebugMem(sizeof(*v1));
         v1->codePos = codePos;
         v1->next = scrDebuggerGlob.assignHead;
         scrDebuggerGlob.assignHead = v1;
