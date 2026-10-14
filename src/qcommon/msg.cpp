@@ -220,7 +220,7 @@ const netField_t playerStateFields[143] =
 
 void __cdecl TRACK_msg()
 {
-    track_static_alloc_internal((void *)playerStateFields, 1716, "playerStateFields", 9);
+    track_static_alloc_internal((void *)playerStateFields, sizeof(playerStateFields), "playerStateFields", 9);
 }
 
 void __cdecl MSG_Init(msg_t *buf, unsigned __int8 *data, int length)
@@ -1570,7 +1570,7 @@ void __cdecl MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
     int integer; // r11
     int v8; // r19
     int v9; // r23
-    const int *p_bits; // r26
+    const netField_t *p_field;
     int v11; // r27
     __int64 v12; // r11
     double v13; // fp0
@@ -1643,21 +1643,21 @@ void __cdecl MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
         v8 = 0;
     }
     v9 = 143;
-    p_bits = &playerStateFields[0].bits;
+    p_field = &playerStateFields[0];
     do
     {
-        v11 = *(p_bits - 1);
+        v11 = p_field->offset;
         if (!*(int *)((char *)&to->commandTime + v11))
         {
             MSG_WriteBits(msg, 0, 1u);
             goto LABEL_31;
         }
         MSG_WriteBits(msg, 1, 1u);
-        LODWORD(v12) = *p_bits;
-        if (*p_bits)
+        LODWORD(v12) = p_field->bits;
+        if (p_field->bits)
         {
             v16 = *(int *)((char *)&to->commandTime + v11);
-            v17 = *p_bits;
+            v17 = p_field->bits;
             if ((int)v12 <= 0)
                 v17 = -(int)v12;
             v18 = v17 & 7;
@@ -1685,7 +1685,7 @@ void __cdecl MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
             {
                 v15 = *(int *)((char *)&to->commandTime + v11);
             LABEL_30:
-                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%i ", (const char *)*(p_bits - 2), v15);
+                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%i ", p_field->name, v15);
             }
         }
         else
@@ -1704,11 +1704,11 @@ void __cdecl MSG_WriteDeltaPlayerstate(msg_t *msg, playerState_s *to)
             MSG_WriteBits(msg, 1, 1u);
             MSG_WriteBits(msg, *(int *)((char *)&to->commandTime + v11), 0x20u);
             if (v8)
-                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%f ", (const char *)*(p_bits - 2), *(float *)((char *)&to->commandTime + v11));
+                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%f ", p_field->name, *(float *)((char *)&to->commandTime + v11));
         }
     LABEL_31:
         --v9;
-        p_bits += 3;
+        ++p_field;
     } while (v9);
     v20 = 0;
     v21 = 2;
@@ -2082,7 +2082,7 @@ void __cdecl MSG_ReadDeltaPlayerstate(msg_t *msg, playerState_s *to)
     int integer; // r11
     int print; // r18
     int v9; // r23
-    const int *p_bits; // r26
+    const netField_t *p_field;
     int v11; // r28
     unsigned int v12; // r11
     int Bits; // r6
@@ -2186,19 +2186,19 @@ void __cdecl MSG_ReadDeltaPlayerstate(msg_t *msg, playerState_s *to)
     }
 
     v9 = 143;
-    p_bits = &playerStateFields[0].bits;
+    p_field = &playerStateFields[0];
     do
     {
-        v11 = *(p_bits - 1);
+        v11 = p_field->offset;
         if (!MSG_ReadBits(msg, 1u))
         {
             *(int *)((char *)&to->commandTime + v11) = 0;
             goto LABEL_34;
         }
-        v12 = *p_bits;
-        if (*p_bits)
+        v12 = p_field->bits;
+        if (p_field->bits)
         {
-            v15 = *p_bits;
+            v15 = p_field->bits;
             //v16 = _cntlzw(v12) == 0;
             v16 = (v12 & 0x80000000u) != 0;
             if (v16)
@@ -2241,15 +2241,15 @@ void __cdecl MSG_ReadDeltaPlayerstate(msg_t *msg, playerState_s *to)
             *(float *)((char *)&to->commandTime + v11) = (float)Bits;
         LABEL_32:
             if (print)
-                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%i ", (const char *)*(p_bits - 2), Bits);
+                Com_Printf(CON_CHANNEL_SYSTEM, "%s:%i ", p_field->name, Bits);
             goto LABEL_34;
         }
         *(int *)((char *)&to->commandTime + v11) = MSG_ReadBits(msg, 0x20u);
         if (print)
-            Com_Printf(CON_CHANNEL_SYSTEM, "%s:%f ", (const char *)*(p_bits - 2), *(float *)((char *)&to->commandTime + v11));
+            Com_Printf(CON_CHANNEL_SYSTEM, "%s:%f ", p_field->name, *(float *)((char *)&to->commandTime + v11));
     LABEL_34:
         --v9;
-        p_bits += 3;
+        ++p_field;
     } while (v9);
     if (MSG_ReadBits(msg, 1u))
     {
