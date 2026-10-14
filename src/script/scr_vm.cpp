@@ -136,7 +136,7 @@ Scr_StringNode_s* __cdecl Scr_GetStringList(const char* filename, char** pBuf)
         LABEL_10:
             if (*end == 10)
                 ++end;
-            v3 = (Scr_StringNode_s*)Hunk_AllocDebugMem(8);
+            v3 = (Scr_StringNode_s*)Hunk_AllocDebugMem(sizeof(*v3));
             *pTail = v3;
             v3->text = text;
             v3->next = 0;
