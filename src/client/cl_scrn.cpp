@@ -11,7 +11,6 @@
 
 #ifdef __SWITCH__
 #include <cstdio>
-extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 extern "C" void Switch_LogFrameTail();
 extern "C" thread_local volatile uintptr_t g_switchFrameTailReached;
@@ -102,47 +101,13 @@ int __cdecl CL_CGameRendering()
 
     if (clientUIActives[0].connectionState != CA_ACTIVE)
         return 0;
-#ifdef __SWITCH__
-    const bool switchCGameFullscreen = UI_IsFullscreen();
-    static uint32_t switchCGameTraceCount = 0;
-    const bool switchCGameTrace = switchCGameTraceCount < 8;
-    if (switchCGameTrace)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][CG RENDER] active fullscreen=%d serverTime=%d\n",
-            switchCGameFullscreen,
-            clients[0].serverTime);
-        Switch_LogWrite(trace);
-        ++switchCGameTraceCount;
-    }
-    if (switchCGameFullscreen)
-        return 0;
-#else
     if (UI_IsFullscreen())
         return 0;
-#endif
     R_BeginClientCmdList2D();
     animFrametime = cls.animFrametime;
     DemoType = CL_GetDemoType();
-#ifdef __SWITCH__
-    if (switchCGameTrace)
-        Switch_LogWrite("[KisakCOD][CG RENDER] before CG_DrawActiveFrame\n");
-    const int switchCGDrawResult = CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime);
-    if (switchCGameTrace)
-    {
-        char trace[128];
-        std::snprintf(trace, sizeof(trace), "[KisakCOD][CG RENDER] after CG_DrawActiveFrame result=%d\n", switchCGDrawResult);
-        Switch_LogWrite(trace);
-    }
-    if (!switchCGDrawResult)
-        return 0;
-#else
     if (!CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime))
         return 0;
-#endif
     if ((clientUIActives[0].keyCatchers & KEYCATCH_UI) != 0)
         UI_Refresh();
     R_AddCmdEndOfList();

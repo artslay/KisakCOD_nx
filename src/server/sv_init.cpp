@@ -674,8 +674,6 @@ void __cdecl SV_SpawnServer(const char *mapname, int savegame)
     if (saveError)
         SV_DisplaySaveErrorUI();
 
-// Keep CGame's skip-rendering gate clear after map initialization.
-    CL_SetSkipRendering(0);
     CL_SetActive();
     Com_Printf(CON_CHANNEL_SERVER, "Load time: %d msec\n", Sys_Milliseconds() - startTime);
     Com_ResetFrametime();
