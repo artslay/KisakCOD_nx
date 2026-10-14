@@ -2645,7 +2645,7 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
         char msg[384];
         std::snprintf(
             msg, sizeof(msg),
-            "[KisakCOD][VK DRAW SUBMIT] serial=%llu kind=UP draw=%u prim=%u primitives=%u vertices=%u stride=%u vs=%p ps=%p decl=%p viewport=%ux%u\\n",
+            "[KisakCOD][VK DRAW SUBMIT] serial=%llu kind=UP draw=%u prim=%u primitives=%u vertices=%u stride=%u vs=%p ps=%p decl=%p viewport=%ux%u\n",
             static_cast<unsigned long long>(frameSerial),
             g_switchSceneDrawPrimitiveCalls,
             primitiveType, primitiveCount, vertexCount, stride,
@@ -2720,7 +2720,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         char msg[512];
         std::snprintf(
             msg, sizeof(msg),
-            "[KisakCOD][VK DRAW SUBMIT] serial=%llu kind=INDEXED draw=%u prim=%u primitives=%u indices=%u vertices=%u start=%u base=%d vs=%p ps=%p decl=%p indexBuffer=%p stream0=%p stride0=%u depth=%u/%u blend=%u cull=%u colorMask=0x%x\\n",
+            "[KisakCOD][VK DRAW SUBMIT] serial=%llu kind=INDEXED draw=%u prim=%u primitives=%u indices=%u vertices=%u start=%u base=%d vs=%p ps=%p decl=%p indexBuffer=%p stream0=%p stride0=%u depth=%u/%u blend=%u cull=%u colorMask=0x%x\n",
             static_cast<unsigned long long>(frameSerial),
             g_switchSceneDrawIndexedCalls,
             primitiveType, primitiveCount, indexCount, numVertices,
