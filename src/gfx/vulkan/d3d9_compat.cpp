@@ -2222,11 +2222,62 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
     if (pipelineResult != VK_SUCCESS)
     {
-        char msg[160];
-        std::snprintf(msg, sizeof(msg),
-            "[KisakCOD][VK DRAW] pipeline_fail=graphics_pipeline vk=%d\n",
-            static_cast<int>(pipelineResult));
+        char msg[640];
+        const MOJOSHADER_parseData *vs = m_vertexShader->parseData;
+        const MOJOSHADER_parseData *ps = m_pixelShader->parseData;
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK DRAW] pipeline_fail=graphics_pipeline vk=%d colorFormat=%u depthFormat=%u topology=%u bindings=%u attributes=%u vs={profile:%s,type:%d,bytes:%d,inputs:%d} ps={profile:%s,type:%d,bytes:%d,inputs:%d} depth={test:%u,write:%u,func:%u} stencil=%u alphaTest=%u cull=%u blend=%u\n",
+            static_cast<int>(pipelineResult),
+            static_cast<unsigned int>(colorFormat),
+            static_cast<unsigned int>(depthFormat),
+            static_cast<unsigned int>(m_topology),
+            static_cast<unsigned int>(bindings.size()),
+            static_cast<unsigned int>(vertexAttrs.size()),
+            vs && vs->profile ? vs->profile : "(null)",
+            vs ? static_cast<int>(vs->shader_type) : -1,
+            vs ? vs->output_len : 0,
+            vs ? vs->attribute_count : 0,
+            ps && ps->profile ? ps->profile : "(null)",
+            ps ? static_cast<int>(ps->shader_type) : -1,
+            ps ? ps->output_len : 0,
+            ps ? ps->attribute_count : 0,
+            m_depthEnable ? 1u : 0u,
+            m_depthWrite ? 1u : 0u,
+            m_depthFunc,
+            m_stencilEnable ? 1u : 0u,
+            m_alphaTest ? 1u : 0u,
+            m_cullMode,
+            m_blendEnable ? 1u : 0u);
         Switch_LogWrite(msg);
+
+        for (uint32_t i = 0; i < vertexAttrs.size(); ++i)
+        {
+            const VkVertexInputAttributeDescription &attr = vertexAttrs[i];
+            bool bindingFound = false;
+            for (const VkVertexInputBindingDescription &binding : bindings)
+            {
+                if (binding.binding == attr.binding)
+                {
+                    bindingFound = true;
+                    break;
+                }
+            }
+
+            VkFormatProperties formatProperties{};
+            vkGetPhysicalDeviceFormatProperties(
+                m_backend->PhysicalDevice(), attr.format, &formatProperties);
+
+            char attributeMsg[256];
+            std::snprintf(
+                attributeMsg, sizeof(attributeMsg),
+                "[KisakCOD][VK DRAW] pipeline_fail=vertex_input i=%u location=%u binding=%u bindingFound=%u format=%u bufferFeatures=0x%x offset=%u\n",
+                i, attr.location, attr.binding, bindingFound ? 1u : 0u,
+                static_cast<unsigned int>(attr.format),
+                static_cast<unsigned int>(formatProperties.bufferFeatures),
+                attr.offset);
+            Switch_LogWrite(attributeMsg);
+        }
         return false;
     }
 
