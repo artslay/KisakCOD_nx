@@ -1593,18 +1593,41 @@ void  RemoveVariable(uint32_t parentId, uint32_t unsignedValue)
 				? &scrVarGlob.variableList[parentId + VARIABLELIST_PARENT_BEGIN]
 				: nullptr;
 		const uint32_t parentStatus = parentValue ? parentValue->w.status : 0;
-		char line[320];
+		const uint32_t hashBucket = (parentId + FACTOR101 * unsignedValue) % 0xFFFD + 1;
+		const VariableValueInternal *bucketEntry =
+			&scrVarGlob.variableList[hashBucket + VARIABLELIST_CHILD_BEGIN];
+		const uint32_t bucketId = bucketEntry->hash.id;
+		const VariableValueInternal *bucketValue =
+			bucketId < VARIABLELIST_CHILD_SIZE
+				? &scrVarGlob.variableList[bucketId + VARIABLELIST_CHILD_BEGIN]
+				: nullptr;
+		const uint32_t firstChildId = parentValue ? parentValue->nextSibling : 0;
+		const VariableValueInternal *firstChild =
+			firstChildId > 0 && firstChildId < VARIABLELIST_CHILD_SIZE
+				? &scrVarGlob.variableList[firstChildId + VARIABLELIST_CHILD_BEGIN]
+				: nullptr;
+		char line[512];
 		std::snprintf(
 			line,
 			sizeof(line),
-			"[KisakCOD][SCRIPT REMOVE MISSING] parentId=%u key=%u parentStatus=0x%08x parentType=%u parentSize=%u nextSibling=%u usagePos=%p caller=0x%llx\n",
+			"[KisakCOD][SCRIPT REMOVE MISSING] parentId=%u key=%u parentStatus=0x%08x parentType=%u parentSize=%u nextSibling=%u hashBucket=%u bucketId=%u bucketStatus=0x%08x bucketKey=%u bucketNext=%u firstChildId=%u firstChildStatus=0x%08x firstChildKey=%u firstChildNext=%u firstChildVNext=%u usagePos=%p caller=0x%llx\n",
 			parentId,
 			unsignedValue,
 			parentStatus,
 			parentStatus & VAR_MASK,
 			(parentValue && (parentStatus & VAR_MASK) == VAR_ARRAY)
 				? static_cast<unsigned>(parentValue->u.o.u.size) : 0u,
-			parentValue ? static_cast<unsigned>(parentValue->nextSibling) : 0u,
+			firstChildId,
+			hashBucket,
+			bucketId,
+			bucketValue ? bucketValue->w.status : 0u,
+			bucketValue ? static_cast<unsigned>(bucketValue->w.status >> VAR_NAME_BITS) : 0u,
+			bucketValue ? static_cast<unsigned>(bucketValue->v.next) : 0u,
+			firstChildId,
+			firstChild ? firstChild->w.status : 0u,
+			firstChild ? static_cast<unsigned>(firstChild->w.name >> VAR_NAME_BITS) : 0u,
+			firstChild ? static_cast<unsigned>(firstChild->nextSibling) : 0u,
+			firstChild ? static_cast<unsigned>(firstChild->v.next) : 0u,
 			static_cast<const void *>(scrVarPub.varUsagePos),
 			static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
 		Switch_LogWrite(line);
