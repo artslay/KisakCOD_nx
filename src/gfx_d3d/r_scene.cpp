@@ -1838,13 +1838,12 @@ void __cdecl R_GenerateSortedDrawSurfs(
             static_cast<unsigned>(decalInfo->drawSurfCount),
             static_cast<unsigned>(emissiveInfo->drawSurfCount),
             static_cast<unsigned>(frontEndDataOut->drawSurfCount),
-            scene.sceneDObjCount,
-            scene.sceneModelCount,
-            scene.sceneBrushCount,
-            scene.sceneDObjCount,
-            scene.drawSurfCount[0],
-            scene.drawSurfCount[1],
-            scene.drawSurfCount[2]);
+            static_cast<unsigned>(scene.sceneDObjCount),
+            static_cast<unsigned>(scene.sceneModelCount),
+            static_cast<unsigned>(scene.sceneBrushCount),
+            static_cast<int>(scene.drawSurfCount[0]),
+            static_cast<int>(scene.drawSurfCount[1]),
+            static_cast<int>(scene.drawSurfCount[2]));
         Switch_LogWrite(trace);
     }
 #endif
