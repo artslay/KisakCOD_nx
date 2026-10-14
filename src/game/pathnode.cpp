@@ -3094,6 +3094,38 @@ void __cdecl Scr_AddPathnode(pathnode_t *node)
 {
     unsigned int v1; // r3
 
+#ifdef KISAK_SWITCH
+    {
+        const uintptr_t nodeAddress = reinterpret_cast<uintptr_t>(node);
+        const uintptr_t nodesAddress = reinterpret_cast<uintptr_t>(gameWorldSp.path.nodes);
+        const uint32_t nodeCount = Path_NodeCount();
+        const uintptr_t nodeBytes = static_cast<uintptr_t>(nodeCount) * sizeof(pathnode_t);
+        const bool addressInRange =
+            node != nullptr &&
+            nodesAddress != 0 &&
+            nodeAddress >= nodesAddress &&
+            nodeAddress - nodesAddress < nodeBytes &&
+            (nodeAddress - nodesAddress) % sizeof(pathnode_t) == 0;
+
+        if (!addressInRange)
+        {
+            char line[384];
+            const uintptr_t delta = nodeAddress >= nodesAddress ? nodeAddress - nodesAddress : 0;
+            std::snprintf(
+                line,
+                sizeof(line),
+                "[KisakCOD][PATHNODE POINTER INVALID] node=%p nodes=%p count=%u stride=%zu delta=0x%llx caller=0x%llx\\n",
+                static_cast<const void *>(node),
+                static_cast<const void *>(gameWorldSp.path.nodes),
+                nodeCount,
+                sizeof(pathnode_t),
+                static_cast<unsigned long long>(delta),
+                static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+            Switch_LogWrite(line);
+        }
+    }
+#endif
+
     v1 = Path_ConvertNodeToIndex(node);
     Scr_AddEntityNum(v1, CLASS_NUM_PATHNODE);
 }
