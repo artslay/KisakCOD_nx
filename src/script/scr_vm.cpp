@@ -38,6 +38,7 @@
 
 #ifdef KISAK_SWITCH
 #include <chrono>
+extern void Switch_LogWrite(const char *msg);
 static inline uint64_t Kisak_ProfileClock()
 {
     return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -4344,6 +4345,22 @@ void __cdecl Scr_AddEntityNum(uint32_t entnum, uint32_t classnum)
     uint32_t EntityId; // eax
     const char* varUsagePos; // [esp+0h] [ebp-4h]
 
+#ifdef KISAK_SWITCH
+    if (entnum >= (1u << 16) || classnum >= CLASS_NUM_COUNT)
+    {
+        char line[320];
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][SCRIPT ADD ENTITY NUM INVALID] entnum=%u entnumHex=0x%08x classnum=%u usagePos=%p caller=0x%llx\\n",
+            entnum,
+            entnum,
+            classnum,
+            static_cast<const void *>(scrVarPub.varUsagePos),
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+        Switch_LogWrite(line);
+    }
+#endif
     varUsagePos = scrVarPub.varUsagePos;
     if (!scrVarPub.varUsagePos)
         scrVarPub.varUsagePos = "<script entity variable>";
