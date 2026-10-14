@@ -182,7 +182,7 @@ void* __cdecl Z_VirtualReserve(int32_t size)
         std::snprintf(
             line, sizeof(line),
             "[KisakCOD][OOM] Z_VirtualReserve malloc failed size=%d errno=%d "
-            "total=%llu totalRc=0x%x used=%llu usedRc=0x%x\\n",
+            "total=%llu totalRc=0x%x used=%llu usedRc=0x%x\n",
             size, allocErrno,
             static_cast<unsigned long long>(totalMemory),
             static_cast<unsigned>(totalResult),
@@ -935,7 +935,7 @@ HunkUser* __cdecl Hunk_UserCreate(int32_t maxSize, const char* name, bool fixed,
         char line[192];
         std::snprintf(
             line, sizeof(line),
-            "[KisakCOD][OOM] Hunk_UserCreate failed name=%s size=%d\\n",
+            "[KisakCOD][OOM] Hunk_UserCreate failed name=%s size=%d\n",
             name ? name : "(null)", maxSize);
         Switch_LogWrite(line);
 #endif
