@@ -169,10 +169,9 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         (ctx->esr >> 26) & 0x3f);
     Switch_LogCrashLine(line);
 
-    // On the observed crash, PC is inside newlib's _free_r. Its AArch64
-    // frame saves {previous FP, return address} at SP and the freed pointer
-    // at SP+40. Log both this frame and the outer frame to reach the engine
-    // call site without altering allocator behavior.
+    // Record the current and caller frame chain for any exception. Do not
+    // interpret a fixed stack slot as an allocator argument: this handler runs
+    // for all faults, not only crashes inside newlib's _free_r.
     const uintptr_t crashSp = static_cast<uintptr_t>(ctx->sp.x);
     const uintptr_t codeBase = reinterpret_cast<uintptr_t>(__code_start);
     if (crashSp != 0 &&
@@ -206,11 +205,11 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         std::snprintf(
             line,
             sizeof(line),
-            "[KisakCOD][CRASH] FREE_FRAME "
-            "wrapper_fp=0x%016llx wrapper_lr=0x%016llx "
-            "wrapper_lr_offset=0x%016llx free_arg=0x%016llx "
-            "outer_fp=0x%016llx outer_lr=0x%016llx "
-            "outer_lr_offset=0x%016llx\n",
+            "[KisakCOD][CRASH] FRAME_CHAIN "
+            "frame_fp=0x%016llx frame_lr=0x%016llx "
+            "frame_lr_offset=0x%016llx stack_slot5=0x%016llx "
+            "caller_fp=0x%016llx caller_lr=0x%016llx "
+            "caller_lr_offset=0x%016llx\n",
             static_cast<unsigned long long>(wrapperFp),
             static_cast<unsigned long long>(wrapperLr),
             static_cast<unsigned long long>(wrapperOffset),
