@@ -123,7 +123,8 @@ static void MT_ReportRejectedFree(
     int size,
     uint32_t usage,
     uint32_t usageSize,
-    const void *caller)
+    const void *caller,
+    const void *indexCaller)
 {
     if (mtFreeRejectTraceCount >= 32)
         return;
@@ -131,14 +132,15 @@ static void MT_ReportRejectedFree(
     ++mtFreeRejectTraceCount;
     Com_Printf(
         CON_CHANNEL_PARSERSCRIPT,
-        "[KisakCOD][MEMTREE FREE REJECT] reason=%s node=%u numBytes=%d size=%d usage=%u/%u caller=%p\n",
+        "[KisakCOD][MEMTREE FREE REJECT] reason=%s node=%u numBytes=%d size=%d usage=%u/%u caller=%p indexCaller=%p\n",
         reason,
         node,
         numBytes,
         size,
         usage,
         usageSize,
-        caller);
+        caller,
+        indexCaller);
 }
 
 static bool MT_CheckSentinelAtPhase(const char *phase, uint32_t extra)
@@ -680,6 +682,7 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes, const void *caller)
 
     Sys_EnterCriticalSection(CRITSECT_MEMORY_TREE);
 #ifdef KISAK_SWITCH
+    const void *indexCaller = __builtin_extract_return_addr(__builtin_return_address(0));
     if (nodeNum == 0 || nodeNum >= MEMORY_NODE_COUNT ||
         size < 0 || size > MEMORY_NODE_BITS)
     {
@@ -690,7 +693,8 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes, const void *caller)
             size,
             UINT32_MAX,
             UINT32_MAX,
-            caller);
+            caller,
+            indexCaller);
         Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
         return;
     }
@@ -716,10 +720,11 @@ void MT_FreeIndex(uint32_t nodeNum, int numBytes, const void *caller)
             size,
             usage,
             usageSize,
-            caller);
-        // Do not let a duplicate or malformed free mutate the tree again.
-        Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
-        return;
+            caller,
+            indexCaller);
+        // This diagnostic counter is not authoritative enough to alter the
+        // retail allocator path. Preserve MT_FreeIndex behavior while tracing
+        // the caller so the original fault can be reproduced and fixed.
     }
 #endif
     --scrMemTreeGlob.totalAlloc;
