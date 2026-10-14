@@ -90,26 +90,6 @@ static void Switch_ReportStaleStringHandle(
     Switch_LogWrite(line);
 }
 
-static void Switch_ReportNonStringHandle(
-    const char *origin,
-    uint32_t handle,
-    uint32_t allocationType,
-    uint32_t allocationSize,
-    uintptr_t caller)
-{
-    char line[320];
-    std::snprintf(
-        line,
-        sizeof(line),
-        "[KisakCOD][SCRIPT STRING NONSTRING HANDLE] origin=%s handle=%u allocation=%u/%u caller=0x%llx\n",
-        origin,
-        handle,
-        allocationType,
-        allocationSize,
-        static_cast<unsigned long long>(caller));
-    Switch_LogWrite(line);
-}
-
 static void Switch_ReportStringLengthMismatch(
     uint32_t handle,
     uint32_t passedLength,
@@ -152,23 +132,9 @@ static bool Switch_GetStringAllocation(
         return false;
     }
 
-    // These memory-tree types are used by SL_GetStringOfSize/SL_GetString_.
-    // A live block of another type is an object pointer/index accidentally
-    // being routed through script-string cleanup; never read it as RefString.
-    switch (type)
-    {
-    case MT_TYPE_EXTERNAL:
-    case MT_TYPE_TEMP:
-    case MT_TYPE_SCRIPT_STRING:
-    case MT_TYPE_CLASS:
-    case MT_TYPE_CONFIG_STRING:
-    case MT_TYPE_DEBUGGER_STRING:
-        break;
-    default:
-        Switch_ReportNonStringHandle(origin, handle, type, size, caller);
-        return false;
-    }
-
+    // Do not whitelist allocator tags here: SL_GetStringOfSize accepts its
+    // caller's mtType_t and stores script strings under that type. The tag
+    // identifies allocation provenance, not the semantic contents of the block.
     RefString *ref = GetRefString(handle);
     const size_t allocationBytes =
         (static_cast<size_t>(1u) << size) * sizeof(MemoryNode);
