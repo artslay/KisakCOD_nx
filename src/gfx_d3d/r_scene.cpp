@@ -1443,7 +1443,7 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
             char trace[512];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][CREDITS SCENE] call=%u stage=before_sorted world=%p time=%d viewOrg=%.2f,%.2f,%.2f size=%dx%d viewInfos=%u drawSurfs=%u worldSurfs=%u worldSurfsNoDecal=%u smodels=%u litRange=%u-%u decalRange=%u-%u emissiveRange=%u-%u\\n",
+                "[KisakCOD][CREDITS SCENE] call=%u stage=before_sorted world=%p time=%d viewOrg=%.2f,%.2f,%.2f size=%dx%d viewInfos=%u drawSurfs=%u worldSurfs=%u worldSurfsNoDecal=%u smodels=%u litRange=%u-%u decalRange=%u-%u emissiveRange=%u-%u\n",
                 switchCreditsSceneTraceCall,
                 static_cast<void *>(rgp.world),
                 refdef->time,
@@ -1470,7 +1470,7 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
             char trace[256];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][CREDITS SCENE] call=%u stage=after_sorted viewInfos=%u drawSurfs=%u added=%u\\n",
+                "[KisakCOD][CREDITS SCENE] call=%u stage=after_sorted viewInfos=%u drawSurfs=%u added=%u\n",
                 switchCreditsSceneTraceCall,
                 static_cast<unsigned>(frontEndDataOut->viewInfoCount),
                 static_cast<unsigned>(frontEndDataOut->drawSurfCount),
@@ -1830,7 +1830,7 @@ void __cdecl R_GenerateSortedDrawSurfs(
         char trace[512];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][CREDITS SURFS] call=%u cell=%d view=%d lit=%u decal=%u emissive=%u totalDrawSurfs=%u sceneEnts=%u sceneModels=%u sceneBrushes=%u sceneDObjs=%u bspLight=%d bspDecal=%d bspEmissive=%d\\n",
+            "[KisakCOD][CREDITS SURFS] call=%u cell=%d view=%d lit=%u decal=%u emissive=%u totalDrawSurfs=%u sceneDObjs=%u sceneModels=%u sceneBrushes=%u bspLight=%d bspDecal=%d bspEmissive=%d\n",
             switchCreditsSortedTraceCall,
             cameraCellIndex,
             viewInfoIndex,
