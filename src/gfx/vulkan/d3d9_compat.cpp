@@ -1607,8 +1607,12 @@ bool IDirect3DDevice9::BindUniformSet(
     const void *intData,
     const void *boolData)
 {
-    if (!parse)
+    if (!parse || !m_backend)
         return false;
+
+    // The descriptor pool is also reset at frame start; serialize the full
+    // allocate/update/bind sequence against that reset.
+    std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
 
     const VulkanUniformLayout layout = GetUniformLayout(parse);
     const size_t size = std::max<size_t>(16, layout.size);
@@ -1663,6 +1667,12 @@ bool IDirect3DDevice9::BindSamplerSet(
     uint32_t setIndex,
     IDirect3DBaseTexture9 *const (&textures)[16])
 {
+    if (!m_backend)
+        return false;
+
+    // A reset must not invalidate a set between allocation and command recording.
+    std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
+
     VkDescriptorSetLayout layout = setIndex == 0
         ? m_backend->VSSamplerLayout() : m_backend->PSSamplerLayout();
 
