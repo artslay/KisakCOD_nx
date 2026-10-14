@@ -384,7 +384,7 @@ struct cbrushside_t // sizeof=0xC
     // padding byte
 };
 
-struct __declspec(align(16)) cbrush_t // sizeof=0x50
+struct alignas(16) cbrush_t // x86 size=0x50; Switch AArch64 size=0x60
 {                                       // ...
     float mins[3];
     int contents;
@@ -395,17 +395,14 @@ struct __declspec(align(16)) cbrush_t // sizeof=0x50
     unsigned __int8* baseAdjacentSide;
     __int16 firstAdjacentSideOffsets[2][3];
     unsigned __int8 edgeCount[2][3];
-    // padding byte
-    // padding byte
-    // padding byte
-    // padding byte
-    // padding byte
-    // padding byte
-    // padding byte
-    // padding byte
-    // padding byte
-    // padding byte
+    // padding bytes needed to preserve 16-byte alignment
 };
+#ifdef KISAK_SWITCH
+static_assert(alignof(cbrush_t) == 16,
+              "collision brush arrays must retain 16-byte type alignment on Switch");
+static_assert(sizeof(cbrush_t) == 96,
+              "Switch cbrush_t stride must match the FastFile native brush layout");
+#endif
 
 struct MapEnts // sizeof=0xC
 {                                       // ...
