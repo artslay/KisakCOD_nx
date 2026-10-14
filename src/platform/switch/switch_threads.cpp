@@ -637,7 +637,42 @@ void Sys_ServerCompleted()
     Sys_SetEvent(&serverCompletedEvent);
 }
 
-int Sys_ServerTimeout() { return 0; }
+int Sys_ServerTimeout()
+{
+    int time = g_timeout;
+
+    // Match the SP server-thread contract: a cleared timeout is already
+    // satisfied, allowing the server to leave its worker-command wait.
+    if (!time)
+        return 1;
+
+    const int timeMS = static_cast<int>(Sys_Milliseconds());
+    if (timeMS - g_timeout >= 0)
+    {
+        const int nextTimeout =
+            timeMS - static_cast<int>(-50.0f / com_timescaleValue);
+
+        // Preserve a concurrently updated timeout, as the native
+        // InterlockedCompareExchange loop does.
+        while (true)
+        {
+            const int current = g_timeout;
+            if (current != time)
+                break;
+
+            const int oldVal = static_cast<int>(InterlockedCompareExchange(
+                reinterpret_cast<volatile uint32_t *>(&g_timeout),
+                static_cast<uint32_t>(nextTimeout),
+                static_cast<uint32_t>(current)));
+            if (oldVal == current)
+                return 1;
+        }
+
+        return 1;
+    }
+
+    return 0;
+}
 
 void Sys_WakeServer()
 {
@@ -655,7 +690,31 @@ bool Sys_WaitServer()
     return Sys_WaitForSingleObjectTimeout(&serverCompletedEvent, 1);
 }
 void Sys_Sleep(uint32_t msec) { std::this_thread::sleep_for(std::chrono::milliseconds(msec)); }
-void Sys_SetServerTimeout(int) {}
+void Sys_SetServerTimeout(int timeout)
+{
+    iassert(timeout >= 0);
+    iassert(com_timescaleValue);
+
+    if (timeout)
+    {
+        const int val = static_cast<int>(
+            static_cast<float>(timeout) / com_timescaleValue);
+        const int timeMS = static_cast<int>(Sys_Milliseconds());
+        if (g_timeout && timeMS - g_timeout < 0 &&
+            g_timeout - (timeMS + val) <= 0)
+        {
+            // Keep an earlier active deadline.
+        }
+        else
+        {
+            g_timeout = timeMS + val;
+        }
+    }
+    else
+    {
+        g_timeout = 0;
+    }
+}
 bool Sys_WaitForSaveHistoryDone()
 {
     return Sys_WaitForSingleObjectTimeout(&g_saveHistoryDoneEvent, 2000);
