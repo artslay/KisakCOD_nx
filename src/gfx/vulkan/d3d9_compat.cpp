@@ -1610,9 +1610,16 @@ bool IDirect3DDevice9::BindUniformSet(
     if (!parse || !m_backend)
         return false;
 
-    // The descriptor pool is also reset at frame start; serialize the full
-    // allocate/update/bind sequence against that reset.
+    // Cached descriptor sets are only reused after BeginFrame has waited for the
+    // previous frame fence. Serialize cursors and descriptor updates.
     std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
+    const uint64_t frameSerial = m_backend->FrameSerial();
+    if (m_descriptorCacheFrameSerial != frameSerial)
+    {
+        m_samplerSetCursor[0] = m_samplerSetCursor[1] = 0;
+        m_uniformSetCursor[0] = m_uniformSetCursor[1] = 0;
+        m_descriptorCacheFrameSerial = frameSerial;
+    }
 
     const VulkanUniformLayout layout = GetUniformLayout(parse);
     const size_t size = std::max<size_t>(16, layout.size);
@@ -1635,17 +1642,28 @@ bool IDirect3DDevice9::BindUniformSet(
     if (!m_backend->AllocateUniform(bytes.data(), bytes.size(), &bufferInfo))
         return false;
 
-    VkDescriptorSetAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    alloc.descriptorPool = m_backend->DescriptorPool();
-    VkDescriptorSetLayout descriptorLayout = setIndex == 1
-        ? m_backend->VSUniformLayout() : m_backend->PSUniformLayout();
-    alloc.descriptorSetCount = 1;
-    alloc.pSetLayouts = &descriptorLayout;
-
+    const size_t cacheIndex = setIndex == 1 ? 0 : 1;
+    auto &cachedSets = m_uniformDescriptorSets[cacheIndex];
+    const size_t cursor = m_uniformSetCursor[cacheIndex];
     VkDescriptorSet set = VK_NULL_HANDLE;
-    if (vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set) != VK_SUCCESS)
-        return false;
+    if (cursor < cachedSets.size())
+    {
+        set = cachedSets[cursor];
+    }
+    else
+    {
+        VkDescriptorSetAllocateInfo alloc{};
+        alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        alloc.descriptorPool = m_backend->DescriptorPool();
+        VkDescriptorSetLayout descriptorLayout = setIndex == 1
+            ? m_backend->VSUniformLayout() : m_backend->PSUniformLayout();
+        alloc.descriptorSetCount = 1;
+        alloc.pSetLayouts = &descriptorLayout;
+        if (vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set) != VK_SUCCESS)
+            return false;
+        cachedSets.push_back(set);
+    }
+    ++m_uniformSetCursor[cacheIndex];
 
     VkWriteDescriptorSet write{};
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1670,21 +1688,39 @@ bool IDirect3DDevice9::BindSamplerSet(
     if (!m_backend)
         return false;
 
-    // A reset must not invalidate a set between allocation and command recording.
+    // Reuse this layout's set at the current command-buffer slot, once the
+    // preceding frame fence has signaled.
     std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
+    const uint64_t frameSerial = m_backend->FrameSerial();
+    if (m_descriptorCacheFrameSerial != frameSerial)
+    {
+        m_samplerSetCursor[0] = m_samplerSetCursor[1] = 0;
+        m_uniformSetCursor[0] = m_uniformSetCursor[1] = 0;
+        m_descriptorCacheFrameSerial = frameSerial;
+    }
 
-    VkDescriptorSetLayout layout = setIndex == 0
-        ? m_backend->VSSamplerLayout() : m_backend->PSSamplerLayout();
-
-    VkDescriptorSetAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    alloc.descriptorPool = m_backend->DescriptorPool();
-    alloc.descriptorSetCount = 1;
-    alloc.pSetLayouts = &layout;
-
+    const size_t cacheIndex = setIndex == 0 ? 0 : 1;
+    auto &cachedSets = m_samplerDescriptorSets[cacheIndex];
+    const size_t cursor = m_samplerSetCursor[cacheIndex];
     VkDescriptorSet set = VK_NULL_HANDLE;
-    if (vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set) != VK_SUCCESS)
-        return false;
+    if (cursor < cachedSets.size())
+    {
+        set = cachedSets[cursor];
+    }
+    else
+    {
+        VkDescriptorSetLayout layout = setIndex == 0
+            ? m_backend->VSSamplerLayout() : m_backend->PSSamplerLayout();
+        VkDescriptorSetAllocateInfo alloc{};
+        alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        alloc.descriptorPool = m_backend->DescriptorPool();
+        alloc.descriptorSetCount = 1;
+        alloc.pSetLayouts = &layout;
+        if (vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set) != VK_SUCCESS)
+            return false;
+        cachedSets.push_back(set);
+    }
+    ++m_samplerSetCursor[cacheIndex];
 
     std::array<VkDescriptorImageInfo,16> images{};
     std::array<VkWriteDescriptorSet,16> writes{};
