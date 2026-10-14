@@ -63,35 +63,35 @@ static const char *mpDefaultDrawBoneOptions[4] = { "Draw None", "Draw All Tags",
 
 void __cdecl CG_ModPrvUpdateMru(const dvar_s **mruDvars, const char **stringTable, const dvar_s *dvar)
 {
-    const dvar_s **v3; // r31
-    int v6; // r30
- // r27
-
-    v3 = mruDvars;
     if (!mruDvars)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_modelpreviewer.cpp", 345, 0, "%s", "mruDvars");
     if (!stringTable)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_modelpreviewer.cpp", 346, 0, "%s", "stringTable");
-    v6 = 0;
 
-    do
+    int dvarIndex = 0;
+    for (; dvarIndex < 4; ++dvarIndex)
     {
-        if (!*v3)
+        if (!mruDvars[dvarIndex])
+        {
             MyAssertHandler(
                 "c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_modelpreviewer.cpp",
                 350,
                 0,
                 "%s",
                 "mruDvars[dvarIndex]");
-        if (v6 && (!(*v3)->current.string || !(*v3)->current.string[0]))
             break;
-        ++v6;
-        stringTable[v6] = (*v3)->current.string;
-        ++v3;
-    } while (v6 < 4);
-    stringTable[v6] = 0;
+        }
+
+        const char *mruName = mruDvars[dvarIndex]->current.string;
+        if (dvarIndex && (!mruName || !mruName[0]))
+            break;
+
+        stringTable[dvarIndex] = mruName;
+    }
+
+    stringTable[dvarIndex] = nullptr;
     if (dvar)
-        Dvar_UpdateEnumDomain((dvar_s*)(dvar_s*)dvar, stringTable);
+        Dvar_UpdateEnumDomain((dvar_s*)dvar, stringTable);
 }
 
 void __cdecl CG_ModPrvPushMruEntry(
