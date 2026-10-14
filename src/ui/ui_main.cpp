@@ -1740,6 +1740,24 @@ bool __cdecl UI_AllowScriptMenuResponse(int localClientNum)
 
 void UI_PlayerStart()
 {
+#ifdef __SWITCH__
+    if (!I_stricmp(g_mapname, "simplecredits"))
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CREDITS UI] UI_PlayerStart entered activeMenu=%d finished=%d started=%d pending=%d skip=%d fullscreen=%d catcher=0x%08x\\n",
+            static_cast<int>(g_currentMenuType),
+            R_Cinematic_IsFinished(),
+            R_Cinematic_IsStarted(),
+            R_Cinematic_IsPending(),
+            CL_SkipRendering(),
+            Menus_AnyFullScreenVisible(&uiInfo.uiDC),
+            clientUIActives[0].keyCatchers);
+        Switch_LogWrite(trace);
+    }
+#endif
     if (g_currentMenuType != UIMENU_PREGAME && g_currentMenuType != UIMENU_MAIN)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\ui\\ui_main.cpp",
@@ -1795,13 +1813,22 @@ void __cdecl UI_Refresh()
     if (!I_stricmp(g_mapname, "simplecredits"))
     {
         static uint32_t switchCreditsUiTraceCount = 0;
-        if (switchCreditsUiTraceCount < 12)
+        static uint32_t switchCreditsUiActiveTraceCount = 0;
+        const bool switchCreditsUiActive = clientUIActives[0].connectionState == CA_ACTIVE;
+        if (switchCreditsUiTraceCount < 12 ||
+            (switchCreditsUiActive && switchCreditsUiActiveTraceCount < 24))
         {
-            char trace[384];
+            const int openMenuCount = uiInfo.uiDC.openMenuCount;
+            const char *topMenu =
+                openMenuCount > 0 && uiInfo.uiDC.menuStack[openMenuCount - 1] &&
+                uiInfo.uiDC.menuStack[openMenuCount - 1]->window.name
+                    ? uiInfo.uiDC.menuStack[openMenuCount - 1]->window.name
+                    : "<none>";
+            char trace[448];
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][CREDITS UI] refresh=%u activeMenu=%d connection=%d visible=%d fullscreen=%d finished=%d started=%d pending=%d catcher=0x%08x skip=%d\n",
+                "[KisakCOD][CREDITS UI] refresh=%u activeMenu=%d connection=%d visible=%d fullscreen=%d finished=%d started=%d pending=%d catcher=0x%08x skip=%d menus=%d top=%s\\n",
                 switchCreditsUiTraceCount,
                 static_cast<int>(g_currentMenuType),
                 static_cast<int>(clientUIActives[0].connectionState),
@@ -1811,9 +1838,13 @@ void __cdecl UI_Refresh()
                 R_Cinematic_IsStarted(),
                 R_Cinematic_IsPending(),
                 clientUIActives[0].keyCatchers,
-                CL_SkipRendering());
+                CL_SkipRendering(),
+                openMenuCount,
+                topMenu);
             Switch_LogWrite(trace);
             ++switchCreditsUiTraceCount;
+            if (switchCreditsUiActive)
+                ++switchCreditsUiActiveTraceCount;
         }
     }
     static uint32_t switchUiRefreshTraceCount = 0;
@@ -2816,6 +2847,22 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
         }
         break;
     case UIMENU_PREGAME:
+#ifdef __SWITCH__
+        if (!I_stricmp(g_mapname, "simplecredits"))
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][CREDITS UI] set_pregame autoContinue=%d finished=%d started=%d pending=%d skip=%d\\n",
+                UI_AutoContinue(),
+                R_Cinematic_IsFinished(),
+                R_Cinematic_IsStarted(),
+                R_Cinematic_IsPending(),
+                CL_SkipRendering());
+            Switch_LogWrite(trace);
+        }
+#endif
         if (UI_AutoContinue())
         {
             UI_PlayerStart();
