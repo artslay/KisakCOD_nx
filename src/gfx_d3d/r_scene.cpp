@@ -49,6 +49,11 @@ void __cdecl CL_UpdateSound();
 #include "r_state.h"
 #include "r_draw_sunshadow.h"
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 //struct GfxScene scene      859c8280     gfx_d3d : r_scene.obj
 GfxViewParms lockPvsViewParms;
 GfxScene scene;
@@ -1428,7 +1433,51 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
             dpvs = &lockPvsViewParms;
         else
             dpvs = viewParmsDraw;
+#ifdef __SWITCH__
+        static unsigned int switchCreditsSceneTraceCount = 0;
+        const unsigned int switchCreditsSceneTraceCall = switchCreditsSceneTraceCount++;
+        const bool switchCreditsSceneTraceThisCall = switchCreditsSceneTraceCall < 4;
+        const unsigned int switchCreditsSceneDrawSurfsBefore = frontEndDataOut->drawSurfCount;
+        if (switchCreditsSceneTraceThisCall)
+        {
+            char trace[512];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][CREDITS SCENE] call=%u stage=before_sorted world=%p time=%d viewOrg=%.2f,%.2f,%.2f size=%dx%d viewInfos=%u drawSurfs=%u worldSurfs=%u worldSurfsNoDecal=%u smodels=%u litRange=%u-%u decalRange=%u-%u emissiveRange=%u-%u\\n",
+                switchCreditsSceneTraceCall,
+                static_cast<void *>(rgp.world),
+                refdef->time,
+                refdef->vieworg[0], refdef->vieworg[1], refdef->vieworg[2],
+                refdef->width, refdef->height,
+                static_cast<unsigned>(frontEndDataOut->viewInfoCount),
+                static_cast<unsigned>(frontEndDataOut->drawSurfCount),
+                rgp.world ? rgp.world->dpvs.staticSurfaceCount : 0u,
+                rgp.world ? rgp.world->dpvs.staticSurfaceCountNoDecal : 0u,
+                rgp.world ? rgp.world->dpvs.smodelCount : 0u,
+                rgp.world ? rgp.world->dpvs.litSurfsBegin : 0u,
+                rgp.world ? rgp.world->dpvs.litSurfsEnd : 0u,
+                rgp.world ? rgp.world->dpvs.decalSurfsBegin : 0u,
+                rgp.world ? rgp.world->dpvs.decalSurfsEnd : 0u,
+                rgp.world ? rgp.world->dpvs.emissiveSurfsBegin : 0u,
+                rgp.world ? rgp.world->dpvs.emissiveSurfsEnd : 0u);
+            Switch_LogWrite(trace);
+        }
+#endif
         R_GenerateSortedDrawSurfs(&sceneParms, dpvs, viewParmsDraw);
+#ifdef __SWITCH__
+        if (switchCreditsSceneTraceThisCall)
+        {
+            char trace[256];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][CREDITS SCENE] call=%u stage=after_sorted viewInfos=%u drawSurfs=%u added=%u\\n",
+                switchCreditsSceneTraceCall,
+                static_cast<unsigned>(frontEndDataOut->viewInfoCount),
+                static_cast<unsigned>(frontEndDataOut->drawSurfCount),
+                static_cast<unsigned>(frontEndDataOut->drawSurfCount - switchCreditsSceneDrawSurfsBefore));
+            Switch_LogWrite(trace);
+        }
+#endif
     }
 }
 
@@ -1773,6 +1822,32 @@ void __cdecl R_GenerateSortedDrawSurfs(
         viewInfo->needsFloatZ = DoesDrawSurfListInfoNeedFloatz;
     }
     R_ShowCull();
+#ifdef __SWITCH__
+    static unsigned int switchCreditsSortedTraceCount = 0;
+    const unsigned int switchCreditsSortedTraceCall = switchCreditsSortedTraceCount++;
+    if (switchCreditsSortedTraceCall < 4)
+    {
+        char trace[512];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][CREDITS SURFS] call=%u cell=%d view=%d lit=%u decal=%u emissive=%u totalDrawSurfs=%u sceneEnts=%u sceneModels=%u sceneBrushes=%u sceneDObjs=%u bspLight=%d bspDecal=%d bspEmissive=%d\\n",
+            switchCreditsSortedTraceCall,
+            cameraCellIndex,
+            viewInfoIndex,
+            static_cast<unsigned>(litInfo->drawSurfCount),
+            static_cast<unsigned>(decalInfo->drawSurfCount),
+            static_cast<unsigned>(emissiveInfo->drawSurfCount),
+            static_cast<unsigned>(frontEndDataOut->drawSurfCount),
+            scene.sceneDObjCount,
+            scene.sceneModelCount,
+            scene.sceneBrushCount,
+            scene.sceneDObjCount,
+            scene.drawSurfCount[0],
+            scene.drawSurfCount[1],
+            scene.drawSurfCount[2]);
+        Switch_LogWrite(trace);
+    }
+#endif
 }
 
 // LWSS: not sure why this variable was here, guess from initial development. (no xref's)
