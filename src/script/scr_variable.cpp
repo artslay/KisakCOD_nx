@@ -2588,6 +2588,38 @@ void RemoveRefToObject(uint32_t id)
 			iassert(classnum < CLASS_NUM_COUNT);
 			entArrayId = g_classMap[classnum].entArrayId;
 			iassert(entArrayId);
+#ifdef KISAK_SWITCH
+			const uint32_t entityNum = entryValue->u.o.u.entnum;
+			const uint32_t entityArrayKey = (entityNum + MAX_ARRAYINDEX) & VAR_NAME_LOW_MASK;
+			if (!FindVariableIndexInternal(entArrayId, entityArrayKey))
+			{
+				const VariableValueInternal *arrayValue =
+					&scrVarGlob.variableList[entArrayId + VARIABLELIST_PARENT_BEGIN];
+				const uint32_t firstChildId = arrayValue->nextSibling;
+				const VariableValueInternal *firstChild =
+					firstChildId > 0 && firstChildId < VARIABLELIST_CHILD_SIZE
+						? &scrVarGlob.variableList[firstChildId + VARIABLELIST_CHILD_BEGIN]
+						: nullptr;
+				char line[512];
+				std::snprintf(
+					line,
+					sizeof(line),
+					"[KisakCOD][SCRIPT ENTITY ARRAY REMOVE MISSING] objectId=%u objectStatus=0x%08x objectRefCount=%u classnum=%u entnum=%u entArrayId=%u arrayStatus=0x%08x arraySize=%u firstChildId=%u firstChildKey=%u usagePos=%p caller=0x%llx\n",
+					id,
+					entryValue->w.status,
+					static_cast<unsigned>(entryValue->u.o.refCount),
+					classnum,
+					entityNum,
+					static_cast<unsigned>(entArrayId),
+					arrayValue->w.status,
+					static_cast<unsigned>(arrayValue->u.o.u.size),
+					firstChildId,
+					firstChild ? static_cast<unsigned>(firstChild->w.name >> VAR_NAME_BITS) : 0u,
+					static_cast<const void *>(scrVarPub.varUsagePos),
+					static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+				Switch_LogWrite(line);
+			}
+#endif
 			RemoveArrayVariable(entArrayId, entryValue->u.o.u.size);
 		}
 	}
@@ -3513,6 +3545,23 @@ uint32_t  AllocEntity(uint32_t classnum, unsigned short entnum)
 	entryValue->w.classnum|= classnum << VAR_NAME_BITS;
 	entryValue->u.next = 0;
 	entryValue->u.o.u.entnum = entnum;
+#ifdef KISAK_SWITCH
+	if (classnum >= CLASS_NUM_COUNT || entnum >= 4096)
+	{
+		char line[256];
+		std::snprintf(
+			line,
+			sizeof(line),
+			"[KisakCOD][SCRIPT ENTITY ALLOC INVALID] objectId=%u classnum=%u entnum=%u status=0x%08x usagePos=%p caller=0x%llx\n",
+			id,
+			classnum,
+			static_cast<unsigned>(entnum),
+			entryValue->w.status,
+			static_cast<const void *>(scrVarPub.varUsagePos),
+			static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+		Switch_LogWrite(line);
+	}
+#endif
 	return id;
 }
 
