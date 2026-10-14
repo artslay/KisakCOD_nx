@@ -1718,7 +1718,7 @@ void  SetVariableEntityFieldValue(uint32_t entId, uint32_t fieldName, VariableVa
 		iassert(!(entryValue->w.type & VAR_MASK));
 
 		entryValue->w.status |= value->type;
-		entryValue->u.u.intValue = value->u.intValue;
+		entryValue->u.u = value->u;
 	}
 }
 
