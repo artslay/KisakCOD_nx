@@ -1469,7 +1469,10 @@ void __cdecl Hunk_UserReset(HunkUser* user)
     }
     user->pos = (int)user->buf;
 #endif
-    memset(user->buf, 0, 0xFE0u);
+    // Clear only the remainder of the first committed page. The native
+    // HunkUser header is 0x40 bytes on AArch64 (0x20 on 32-bit), so the
+    // old fixed 0xFE0 length crossed into an uncommitted page on Switch.
+    memset(user->buf, 0, 0x1000u - offsetof(HunkUser, buf));
 }
 
 void __cdecl Hunk_UserDestroy(HunkUser* user)
