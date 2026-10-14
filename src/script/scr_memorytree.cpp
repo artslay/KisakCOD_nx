@@ -132,7 +132,7 @@ static void MT_ReportRejectedFree(
     ++mtFreeRejectTraceCount;
     Com_Printf(
         CON_CHANNEL_PARSERSCRIPT,
-        "[KisakCOD][MEMTREE FREE REJECT] reason=%s node=%u numBytes=%d size=%d usage=%u/%u caller=%p indexCaller=%p\n",
+        "[KisakCOD][MEMTREE FREE CHECK] reason=%s node=%u numBytes=%d size=%d usage=%u/%u caller=%p indexCaller=%p\n",
         reason,
         node,
         numBytes,
