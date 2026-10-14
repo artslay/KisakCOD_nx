@@ -1732,7 +1732,7 @@ bool IDirect3DDevice9::BindUniformSet(
             std::snprintf(
                 msg,
                 sizeof(msg),
-                "[KisakCOD][VK UNIFORM FREE TRACE] id=%u stage=%s frame=%llu set=%u parse=%p uniforms=%d layout=%zu counts=%u/%u/%u buffer=%p bytes=%zu result=%d\\n",
+                "[KisakCOD][VK UNIFORM FREE TRACE] id=%u stage=%s frame=%llu set=%u parse=%p uniforms=%d layout=%zu counts=%u/%u/%u buffer=%p bytes=%zu result=%d\n",
                 traceId,
                 stage,
                 static_cast<unsigned long long>(m_backend->FrameSerial()),
