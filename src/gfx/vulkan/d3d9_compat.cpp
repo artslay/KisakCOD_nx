@@ -23,12 +23,69 @@
 #include <vector>
 
 extern void Switch_LogWrite(const char *msg);
+extern thread_local const char * volatile g_switchFrameStage;
 
 namespace
 {
 uint32_t g_switchSceneDrawPrimitiveCalls = 0;
 uint32_t g_switchSceneDrawIndexedCalls = 0;
 uint32_t g_switchSceneClearCalls = 0;
+
+constexpr size_t SWITCH_UNIFORM_FREE_TRACE_CAPACITY = 48;
+struct SwitchUniformFreeTraceEntry
+{
+    uint64_t sequence = 0;
+    uint64_t frameSerial = 0;
+    uint32_t setIndex = 0;
+    int uniformCount = 0;
+    uint32_t floatCount = 0;
+    uint32_t intCount = 0;
+    uint32_t boolCount = 0;
+    size_t layoutSize = 0;
+    uintptr_t parseAddress = 0;
+    uintptr_t bufferAddress = 0;
+    size_t byteCount = 0;
+    const char *stage = nullptr;
+    int result = 0;
+};
+thread_local SwitchUniformFreeTraceEntry
+    g_switchUniformFreeTrace[SWITCH_UNIFORM_FREE_TRACE_CAPACITY]{};
+thread_local uint64_t g_switchUniformFreeTraceSequence = 0;
+
+void RecordSwitchUniformFreeTrace(
+    const char *stage,
+    uint64_t frameSerial,
+    uint32_t setIndex,
+    const MOJOSHADER_parseData *parse,
+    const VulkanUniformLayout &layout,
+    const void *buffer,
+    size_t byteCount,
+    int result)
+{
+    static constexpr char commandStage[] =
+        "frame/scr/issue_commands/cmd6_stretch_pic";
+    const char *frameStage = g_switchFrameStage;
+    if (!frameStage ||
+        std::strncmp(frameStage, commandStage, sizeof(commandStage) - 1) != 0)
+        return;
+
+    const uint64_t sequence = ++g_switchUniformFreeTraceSequence;
+    SwitchUniformFreeTraceEntry &entry =
+        g_switchUniformFreeTrace[(sequence - 1u) % SWITCH_UNIFORM_FREE_TRACE_CAPACITY];
+    entry.sequence = sequence;
+    entry.frameSerial = frameSerial;
+    entry.setIndex = setIndex;
+    entry.uniformCount = parse ? parse->uniform_count : -1;
+    entry.floatCount = layout.floatCount;
+    entry.intCount = layout.intCount;
+    entry.boolCount = layout.boolCount;
+    entry.layoutSize = layout.size;
+    entry.parseAddress = reinterpret_cast<uintptr_t>(parse);
+    entry.bufferAddress = reinterpret_cast<uintptr_t>(buffer);
+    entry.byteCount = byteCount;
+    entry.stage = stage;
+    entry.result = result;
+}
 
 struct TextureFormatInfo
 {
@@ -785,6 +842,48 @@ bool GetUniformLayout(const MOJOSHADER_parseData *parse, VulkanUniformLayout *ou
     *outLayout = layout;
     return true;
 }
+}
+
+extern "C" void Switch_DumpVulkanUniformTraceOnCrash(void (*writeLine)(const char *))
+{
+    if (!writeLine)
+        return;
+    const uint64_t end = g_switchUniformFreeTraceSequence;
+    if (!end)
+    {
+        writeLine("[KisakCOD][VK UNIFORM CRASH TRACE] no cmd6 uniform events captured\n");
+        return;
+    }
+
+    const uint64_t first = end > SWITCH_UNIFORM_FREE_TRACE_CAPACITY
+        ? end - SWITCH_UNIFORM_FREE_TRACE_CAPACITY + 1u
+        : 1u;
+    char line[512];
+    for (uint64_t sequence = first; sequence <= end; ++sequence)
+    {
+        const SwitchUniformFreeTraceEntry &entry =
+            g_switchUniformFreeTrace[(sequence - 1u) % SWITCH_UNIFORM_FREE_TRACE_CAPACITY];
+        if (entry.sequence != sequence)
+            continue;
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][VK UNIFORM CRASH TRACE] seq=%llu frame=%llu stage=%s set=%u parse=%p uniforms=%d layout=%zu counts=%u/%u/%u buffer=%p bytes=%zu result=%d\n",
+            static_cast<unsigned long long>(entry.sequence),
+            static_cast<unsigned long long>(entry.frameSerial),
+            entry.stage ? entry.stage : "(null)",
+            entry.setIndex,
+            reinterpret_cast<const void *>(entry.parseAddress),
+            entry.uniformCount,
+            entry.layoutSize,
+            entry.floatCount,
+            entry.intCount,
+            entry.boolCount,
+            reinterpret_cast<const void *>(entry.bufferAddress),
+            entry.byteCount,
+            entry.result);
+        writeLine(line);
+    }
 }
 
 void KisakVkBuffer::Release()
@@ -1726,6 +1825,9 @@ bool IDirect3DDevice9::BindUniformSet(
     auto traceUniformBindStage =
         [&](const char *stage, const void *buffer, size_t byteCount, int result)
         {
+            const uint64_t currentFrame = m_backend->FrameSerial();
+            RecordSwitchUniformFreeTrace(
+                stage, currentFrame, setIndex, parse, layout, buffer, byteCount, result);
             if (!traceUniformBind)
                 return;
             char msg[448];
@@ -1735,7 +1837,7 @@ bool IDirect3DDevice9::BindUniformSet(
                 "[KisakCOD][VK UNIFORM FREE TRACE] id=%u stage=%s frame=%llu set=%u parse=%p uniforms=%d layout=%zu counts=%u/%u/%u buffer=%p bytes=%zu result=%d\n",
                 traceId,
                 stage,
-                static_cast<unsigned long long>(m_backend->FrameSerial()),
+                static_cast<unsigned long long>(currentFrame),
                 setIndex,
                 static_cast<const void *>(parse),
                 parse ? parse->uniform_count : -1,

@@ -124,6 +124,7 @@ extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldAddress;
 extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldCaller;
 extern "C" uint32_t Sys_GetSwitchThreadContext();
 extern "C" const char *Sys_GetSwitchThreadStage();
+extern "C" void Switch_DumpVulkanUniformTraceOnCrash(void (*writeLine)(const char *));
 
 
 static void Switch_LogCrashLine(const char *line)
@@ -454,6 +455,8 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         }
         Switch_LogCrashLine(line);
     }
+
+    Switch_DumpVulkanUniformTraceOnCrash(Switch_LogCrashLine);
 
     Switch_LogCrashLine("[KisakCOD][CRASH] ========================================\n");
 
