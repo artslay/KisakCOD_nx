@@ -562,6 +562,62 @@ char R_CreateForInitOrReset()
     if (!g_allocateMinimalResources)
         R_CreateParticleCloudBuffer();
 
+    // The original D3D9 bootstrap creates one flush event query and an eight
+    // entry event-query ring used by R_HW_InsertFence(). The Switch bootstrap
+    // had the matching shutdown code but never populated dx.fencePool, so the
+    // first RB_EndSceneRendering dereferenced a null query.
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!backend || !dx.device)
+    {
+        Switch_LogWrite("[KisakCOD][QUERY INIT] fail=missing_backend_or_device\n");
+        return 0;
+    }
+
+    dx.nextFence = 0;
+    dx.flushGpuQueryIssued = false;
+    dx.flushGpuQueryCount = 0;
+
+    if (!dx.flushGpuQuery)
+        dx.flushGpuQuery = IDirect3DQuery9::Create(backend, D3DQUERYTYPE_EVENT);
+    if (!dx.flushGpuQuery)
+    {
+        Switch_LogWrite("[KisakCOD][QUERY INIT] fail=flush_event\n");
+        return 0;
+    }
+
+    for (uint32_t i = 0; i < ARRAY_COUNT(dx.fencePool); ++i)
+    {
+        if (!dx.fencePool[i])
+            dx.fencePool[i] = IDirect3DQuery9::Create(backend, D3DQUERYTYPE_EVENT);
+
+        if (!dx.fencePool[i])
+        {
+            char msg[128];
+            std::snprintf(
+                msg, sizeof(msg),
+                "[KisakCOD][QUERY INIT] fail=fence_event index=%u\n", i);
+            Switch_LogWrite(msg);
+
+            for (uint32_t j = 0; j < ARRAY_COUNT(dx.fencePool); ++j)
+            {
+                if (dx.fencePool[j])
+                {
+                    dx.fencePool[j]->Release();
+                    dx.fencePool[j] = nullptr;
+                }
+            }
+            dx.flushGpuQuery->Release();
+            dx.flushGpuQuery = nullptr;
+            return 0;
+        }
+    }
+
+    // Pixel-cost queries are optional for minimal-resource initialization.
+    if (!g_allocateMinimalResources && !gfxAssets.pixelCountQuery)
+        gfxAssets.pixelCountQuery =
+            IDirect3DQuery9::Create(backend, D3DQUERYTYPE_OCCLUSION);
+
+    Switch_LogWrite("[KisakCOD][QUERY INIT] flush_event=1 fence_events=8\n");
     return 1;
 }
 
