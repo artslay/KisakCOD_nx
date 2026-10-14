@@ -47,7 +47,9 @@ struct HunkUser
 // Windows VirtualAlloc(MEM_RESERVE) reserves address space without consuming
 // backing memory. malloc(size) is not equivalent on Horizon: it grows the
 // process heap and can consume hundreds of MiB for the engine's main hunk.
-// Reserve virtual ranges with libnx and map physical pages only on commit.
+// Reserve stack-region virtual ranges with libnx, and map aligned heap-backed
+// pages only on commit. svcMapPhysicalMemory is unsuitable for this NRO because
+// it requires SystemResource allowance that the process does not have.
 namespace
 {
 constexpr size_t SWITCH_VIRTUAL_PAGE_SIZE = 0x1000u;
