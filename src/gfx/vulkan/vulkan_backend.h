@@ -178,7 +178,8 @@ public:
         VkImageLayout oldLayout,
         VkImageLayout newLayout,
         VkImageAspectFlags aspect,
-        VkImageSubresourceRange range = {});
+        VkImageSubresourceRange range = {},
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE);
 
     bool ImmediateSubmit(const std::function<void(VkCommandBuffer)> &fn);
 

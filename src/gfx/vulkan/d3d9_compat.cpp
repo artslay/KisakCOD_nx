@@ -2939,35 +2939,103 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 HRESULT IDirect3DDevice9::UpdateTexture(
     IDirect3DVolumeTexture9 *source, IDirect3DVolumeTexture9 *destination)
 {
-    if (!m_backend || !source || !destination)
+    if (!m_backend || !source || !destination || source == destination ||
+        source->image == VK_NULL_HANDLE || destination->image == VK_NULL_HANDLE)
         return E_FAIL;
-    if (source->depth <= 1 || destination->depth <= 1)
+    if (source->depth <= 1 || destination->depth <= 1 ||
+        source->arrayLayers != 1 || destination->arrayLayers != 1 ||
+        source->format != destination->format)
         return E_FAIL;
 
+    const uint32_t mipCount = std::min(source->mipLevels, destination->mipLevels);
+    if (mipCount == 0)
+        return E_FAIL;
+
+    std::vector<VkImageLayout> sourceLayouts(mipCount);
+    std::vector<VkImageLayout> destinationLayouts(mipCount);
+    for (uint32_t level = 0; level < mipCount; ++level)
+    {
+        sourceLayouts[level] = source->GetSubresourceLayout(level);
+        destinationLayouts[level] = destination->GetSubresourceLayout(level);
+        // Copying from UNDEFINED content is invalid and would silently mask an
+        // earlier upload failure as a successful texture update.
+        if (sourceLayouts[level] == VK_IMAGE_LAYOUT_UNDEFINED)
+            return E_FAIL;
+    }
+
+    const VkImageLayout sourceOverallLayout = source->layout;
+    const bool recordInCurrentFrame = m_backend->IsFrameActive();
     m_backend->EndRendering();
-    m_backend->TransitionImage(
-        source->image, source->layout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        VK_IMAGE_ASPECT_COLOR_BIT);
-    m_backend->TransitionImage(
-        destination->image, destination->layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_ASPECT_COLOR_BIT);
 
-    VkImageCopy copy{};
-    copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy.srcSubresource.layerCount = 1;
-    copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copy.dstSubresource.layerCount = 1;
-    copy.extent = {
-        std::min(source->width, destination->width),
-        std::min(source->height, destination->height),
-        std::min(source->depth, destination->depth)
+    const auto recordCopy = [&](VkCommandBuffer commandBuffer)
+    {
+        for (uint32_t level = 0; level < mipCount; ++level)
+        {
+            VkImageSubresourceRange range{};
+            range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            range.baseMipLevel = level;
+            range.levelCount = 1;
+            range.baseArrayLayer = 0;
+            range.layerCount = 1;
+
+            m_backend->TransitionImage(
+                source->image, sourceLayouts[level],
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT, range, commandBuffer);
+            m_backend->TransitionImage(
+                destination->image, destinationLayouts[level],
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT, range, commandBuffer);
+
+            VkImageCopy copy{};
+            copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copy.srcSubresource.mipLevel = level;
+            copy.srcSubresource.layerCount = 1;
+            copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copy.dstSubresource.mipLevel = level;
+            copy.dstSubresource.layerCount = 1;
+            copy.extent = {
+                std::min(std::max(1u, source->width >> level),
+                         std::max(1u, destination->width >> level)),
+                std::min(std::max(1u, source->height >> level),
+                         std::max(1u, destination->height >> level)),
+                std::min(std::max(1u, source->depth >> level),
+                         std::max(1u, destination->depth >> level))
+            };
+            vkCmdCopyImage(
+                commandBuffer,
+                source->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                destination->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &copy);
+
+            // The source stays usable in its original layout, while the
+            // destination is made shader-readable only after the copy finishes.
+            m_backend->TransitionImage(
+                source->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                sourceLayouts[level], VK_IMAGE_ASPECT_COLOR_BIT, range, commandBuffer);
+            m_backend->TransitionImage(
+                destination->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT, range, commandBuffer);
+        }
     };
-    vkCmdCopyImage(
-        m_backend->CommandBuffer(),
-        source->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        destination->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        1, &copy);
-    source->layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+    if (recordInCurrentFrame)
+    {
+        recordCopy(m_backend->CommandBuffer());
+    }
+    else if (!m_backend->ImmediateSubmit(recordCopy))
+    {
+        return E_FAIL;
+    }
+
+    for (uint32_t level = 0; level < mipCount; ++level)
+    {
+        source->SetSubresourceLayout(level, 0, sourceLayouts[level]);
+        destination->SetSubresourceLayout(
+            level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+    source->layout = sourceOverallLayout;
     destination->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     return S_OK;
 }

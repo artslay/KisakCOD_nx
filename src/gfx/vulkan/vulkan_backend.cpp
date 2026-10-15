@@ -1638,7 +1638,8 @@ void VulkanBackend::TransitionImage(
     VkImageLayout oldLayout,
     VkImageLayout newLayout,
     VkImageAspectFlags aspect,
-    VkImageSubresourceRange range)
+    VkImageSubresourceRange range,
+    VkCommandBuffer commandBuffer)
 {
     if (!image || oldLayout == newLayout)
         return;
@@ -1649,8 +1650,15 @@ void VulkanBackend::TransitionImage(
         range.baseMipLevel = 0;
         range.levelCount = VK_REMAINING_MIP_LEVELS;
         range.baseArrayLayer = 0;
-        range.layerCount = 1;
+        // A default whole-image transition must include every cubemap face.
+        // For 2D and 3D images, VK_REMAINING_ARRAY_LAYERS resolves to one layer.
+        range.layerCount = VK_REMAINING_ARRAY_LAYERS;
     }
+
+    if (commandBuffer == VK_NULL_HANDLE)
+        commandBuffer = m_commandBuffer;
+    if (commandBuffer == VK_NULL_HANDLE)
+        return;
 
     VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     VkPipelineStageFlags dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -1729,7 +1737,7 @@ void VulkanBackend::TransitionImage(
     barrier.subresourceRange = range;
 
     vkCmdPipelineBarrier(
-        m_commandBuffer,
+        commandBuffer,
         srcStage, dstStage, 0,
         0, nullptr, 0, nullptr, 1, &barrier);
 }
