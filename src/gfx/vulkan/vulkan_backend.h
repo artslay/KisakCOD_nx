@@ -140,7 +140,8 @@ public:
         size_t bytes,
         VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         uint32_t baseArrayLayer = 0,
-        VkOffset3D imageOffset = {});
+        VkOffset3D imageOffset = {},
+        VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     bool DownloadImage2D(
         VkImage image,

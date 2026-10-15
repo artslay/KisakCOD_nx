@@ -1192,8 +1192,12 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
         const uint32_t h = std::max(1u, height >> level);
         if (lockWasUndefined || (lockFlags & D3DLOCK_DISCARD))
         {
+            const VkImageLayout finalLayout = info.depth
+                ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             if (!backend->UploadImage2D(image, format, info.aspect, w, h, level,
-                    lockShadow.data(), lockShadow.size(), lockOriginalLayout))
+                    lockShadow.data(), lockShadow.size(), lockOriginalLayout,
+                    0, VkOffset3D{}, finalLayout))
                 return E_FAIL;
         }
         else
@@ -1210,13 +1214,20 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
             for (uint32_t row=0; row<rows; ++row)
                 std::memcpy(packed.data()+static_cast<size_t>(row)*pitch,
                     lockShadow.data()+static_cast<size_t>(y+row)*fullPitch+x, pitch);
+            const VkImageLayout finalLayout = info.depth
+                ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             if (!backend->UploadImage2D(image, format, info.aspect, rw, rh, level,
                     packed.data(), packed.size(), lockOriginalLayout, 0,
-                    VkOffset3D{static_cast<int32_t>(lockLeft),static_cast<int32_t>(lockTop),0}))
+                    VkOffset3D{static_cast<int32_t>(lockLeft),static_cast<int32_t>(lockTop),0},
+                    finalLayout))
                 return E_FAIL;
         }
-        SetSubresourceLayout(level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        const VkImageLayout finalLayout = info.depth
+            ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+            : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        SetSubresourceLayout(level, 0, finalLayout);
+        layout = finalLayout;
     }
     lockShadowActive=false; lockLevel=0xffffffffu; lockFlags=0;
     lockWasUndefined=false; lockOriginalLayout=VK_IMAGE_LAYOUT_UNDEFINED;

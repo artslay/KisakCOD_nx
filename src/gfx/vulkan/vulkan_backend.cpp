@@ -2149,7 +2149,8 @@ bool VulkanBackend::UploadImage2D(
     VkImage image, VkFormat format, VkImageAspectFlags aspect,
     uint32_t width, uint32_t height, uint32_t mipLevel,
     const void *data, size_t bytes,
-    VkImageLayout oldLayout, uint32_t baseArrayLayer, VkOffset3D imageOffset)
+    VkImageLayout oldLayout, uint32_t baseArrayLayer, VkOffset3D imageOffset,
+    VkImageLayout finalLayout)
 {
     if (!image || !data || !bytes)
         return false;
@@ -2243,9 +2244,22 @@ bool VulkanBackend::UploadImage2D(
         VkImageMemoryBarrier toShader{};
         toShader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         toShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        toShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        toShader.newLayout = finalLayout;
         toShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        toShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        VkPipelineStageFlags finalStage =
+            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        if (finalLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        {
+            finalStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            toShader.dstAccessMask =
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        }
+        else
+        {
+            toShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        }
         toShader.image = image;
         toShader.subresourceRange.aspectMask = aspect;
         toShader.subresourceRange.baseMipLevel = mipLevel;
@@ -2255,7 +2269,7 @@ bool VulkanBackend::UploadImage2D(
         vkCmdPipelineBarrier(
             command,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            finalStage,
             0,0,nullptr,0,nullptr,1,&toShader);
     });
 
