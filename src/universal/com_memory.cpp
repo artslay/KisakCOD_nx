@@ -269,7 +269,33 @@ static bool SwitchVirtualCommitRange(void *pointer, size_t size)
         const Result result = svcMapMemory(destination, source, runSize);
         if (R_FAILED(result))
         {
-            SwitchVirtualMemoryLog("map", destination, runSize, result);
+            MemoryInfo destinationInfo{};
+            MemoryInfo sourceInfo{};
+            u32 destinationPageInfo = 0;
+            u32 sourcePageInfo = 0;
+            const Result destinationQuery = svcQueryMemory(
+                &destinationInfo, &destinationPageInfo,
+                reinterpret_cast<uintptr_t>(destination));
+            const Result sourceQuery = svcQueryMemory(
+                &sourceInfo, &sourcePageInfo,
+                reinterpret_cast<uintptr_t>(source));
+            char line[512];
+            std::snprintf(
+                line, sizeof(line),
+                "[KisakCOD][VMEM MAP FAIL] dst=%p src=%p size=%llu rc=0x%x "
+                "dstQuery=0x%x dstBase=%p dstRegionSize=%llu dstType=0x%x dstAttr=0x%x dstPerm=0x%x "
+                "srcQuery=0x%x srcBase=%p srcRegionSize=%llu srcType=0x%x srcAttr=0x%x srcPerm=0x%x\\n",
+                destination, source, static_cast<unsigned long long>(runSize),
+                static_cast<unsigned>(result),
+                static_cast<unsigned>(destinationQuery),
+                reinterpret_cast<void *>(static_cast<uintptr_t>(destinationInfo.addr)),
+                static_cast<unsigned long long>(destinationInfo.size),
+                destinationInfo.type, destinationInfo.attr, destinationInfo.perm,
+                static_cast<unsigned>(sourceQuery),
+                reinterpret_cast<void *>(static_cast<uintptr_t>(sourceInfo.addr)),
+                static_cast<unsigned long long>(sourceInfo.size),
+                sourceInfo.type, sourceInfo.attr, sourceInfo.perm);
+            Switch_LogWrite(line);
             std::free(source);
             return false;
         }
