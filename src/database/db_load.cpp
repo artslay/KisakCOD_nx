@@ -8177,7 +8177,6 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
                         Switch_LogWrite(trace);
                         ++switchTechniquePendingTraceCount;
                     }
-                {
                     DB_AddSwitchPointerAliasFixup(
                         serializedSlot,
                         reinterpret_cast<uintptr_t *>(
@@ -8680,7 +8679,6 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
                         Switch_LogWrite(trace);
                         ++switchTechniqueSetPendingTraceCount;
                     }
-                {
                     DB_AddSwitchPointerAliasFixup(
                         serializedSlot,
                         reinterpret_cast<uintptr_t *>(
