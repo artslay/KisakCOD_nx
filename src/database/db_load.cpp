@@ -195,7 +195,7 @@ static void Switch_TranslateGameWorldSpSerialized(GameWorldSp *out)
 
 static uintptr_t Switch_TranslatePathNodePointer(
     uint32_t token,
-    const uint8_t *serializedBase,
+    uintptr_t serializedStreamBase,
     uint32_t serializedStride,
     uint32_t serializedCount,
     pathnode_t *nativeBase)
@@ -208,8 +208,7 @@ static uintptr_t Switch_TranslatePathNodePointer(
     if (!serializedAddress)
         return 0;
 
-    const uintptr_t base =
-        reinterpret_cast<uintptr_t>(serializedBase);
+    const uintptr_t base = serializedStreamBase;
     const uintptr_t end =
         base + static_cast<uintptr_t>(serializedStride) *
             static_cast<uintptr_t>(serializedCount);
@@ -232,6 +231,7 @@ static uintptr_t Switch_TranslatePathNodePointer(
 static void Switch_TranslatePathNodeArray(
     pathnode_t *nativeBase,
     const uint8_t *serialized,
+    uintptr_t serializedStreamBase,
     uint32_t count)
 {
     constexpr uint32_t SerializedPathNodeSize = 128u;
@@ -279,7 +279,7 @@ static void Switch_TranslatePathNodeArray(
             reinterpret_cast<pathnode_t *>(
                 Switch_TranslatePathNodePointer(
                     pNextToken,
-                    serialized,
+                    serializedStreamBase,
                     SerializedPathNodeSize,
                     count,
                     nativeBase));
@@ -287,7 +287,7 @@ static void Switch_TranslatePathNodeArray(
             reinterpret_cast<pathnode_t *>(
                 Switch_TranslatePathNodePointer(
                     pPrevToken,
-                    serialized,
+                    serializedStreamBase,
                     SerializedPathNodeSize,
                     count,
                     nativeBase));
@@ -295,7 +295,7 @@ static void Switch_TranslatePathNodeArray(
             reinterpret_cast<pathnode_t *>(
                 Switch_TranslatePathNodePointer(
                     pParentToken,
-                    serialized,
+                    serializedStreamBase,
                     SerializedPathNodeSize,
                     count,
                     nativeBase));
@@ -305,6 +305,289 @@ static void Switch_TranslatePathNodeArray(
         std::memcpy(&dst->transient.costFactor, src + 124u, sizeof(float));
     }
 }
+
+
+#ifdef __SWITCH__
+struct SwitchPathTreeAddressEntry
+{
+    uintptr_t serializedAddress;
+    pathnode_tree_t *nativeNode;
+};
+
+struct SwitchPathTreeLoadContext
+{
+    uintptr_t serializedRootBase;
+    uint32_t rootCount;
+    uint32_t pathNodeCount;
+    pathnode_tree_t *nativeRoots;
+    std::vector<SwitchPathTreeAddressEntry> addressMap;
+    uint32_t inlineNodeCount;
+    bool trace;
+};
+
+static pathnode_tree_t *Switch_FindTranslatedPathTree(
+    const SwitchPathTreeLoadContext &context,
+    uintptr_t serializedAddress)
+{
+    for (const SwitchPathTreeAddressEntry &entry : context.addressMap)
+    {
+        if (entry.serializedAddress == serializedAddress)
+            return entry.nativeNode;
+    }
+
+    const uintptr_t rootBytes =
+        static_cast<uintptr_t>(context.rootCount) * 16u;
+    if (serializedAddress >= context.serializedRootBase &&
+        serializedAddress - context.serializedRootBase < rootBytes)
+    {
+        const uintptr_t delta =
+            serializedAddress - context.serializedRootBase;
+        if ((delta % 16u) == 0u)
+        {
+            const uint32_t index = static_cast<uint32_t>(delta / 16u);
+            if (index < context.rootCount)
+                return &context.nativeRoots[index];
+        }
+    }
+
+    return nullptr;
+}
+
+static pathnode_tree_t *Switch_AllocPathTreeNode(const char *label)
+{
+    pathnode_tree_t *node = reinterpret_cast<pathnode_tree_t *>(
+        DB_AllocSwitchAssetMemory(
+            static_cast<uint32_t>(sizeof(pathnode_tree_t)),
+            label,
+            22));
+    if (!node)
+        Com_Error(ERR_FATAL, "Switch path tree node allocation failed");
+    std::memset(node, 0, sizeof(*node));
+    return node;
+}
+
+static pathnode_tree_t *Switch_LoadPathTreeInline(
+    SwitchPathTreeLoadContext *context,
+    uint32_t depth);
+
+static pathnode_tree_t *Switch_ResolvePathTreePointer(
+    SwitchPathTreeLoadContext *context,
+    uint32_t token)
+{
+    if (!token)
+        return nullptr;
+
+    const uintptr_t serializedAddress =
+        DB_ConvertOffsetToPointerValue(token);
+    if (!serializedAddress)
+        Com_Error(ERR_DROP, "Switch path tree pointer token could not be resolved");
+
+    pathnode_tree_t *nativeNode =
+        Switch_FindTranslatedPathTree(*context, serializedAddress);
+    if (!nativeNode)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PATH TREE ABI] unresolved child token=%08x address=%p root=%p roots=%u mapped=%u\n",
+            token,
+            reinterpret_cast<const void *>(serializedAddress),
+            reinterpret_cast<const void *>(context->serializedRootBase),
+            context->rootCount,
+            static_cast<unsigned>(context->addressMap.size()));
+        Switch_LogRaw(trace);
+        Com_Error(ERR_DROP, "Switch path tree child points outside translated tree data");
+    }
+
+    return nativeNode;
+}
+
+static void Switch_TranslatePathTreeRecord(
+    SwitchPathTreeLoadContext *context,
+    const uint8_t *serialized,
+    pathnode_tree_t *nativeNode,
+    uint32_t depth)
+{
+    if (depth > 64u)
+        Com_Error(ERR_DROP, "Switch path tree inline nesting is too deep");
+
+    nativeNode->axis = Switch_ReadSerializedValue<int32_t>(serialized, 0);
+    nativeNode->dist = Switch_ReadSerializedValue<float>(serialized, 4);
+
+    if (nativeNode->axis < 0)
+    {
+        const int32_t leafCount =
+            Switch_ReadSerializedValue<int32_t>(serialized, 8);
+        const uint32_t leafToken =
+            Switch_ReadSerializedValue<uint32_t>(serialized, 12);
+
+        if (leafCount < 0 ||
+            static_cast<uint32_t>(leafCount) > context->pathNodeCount)
+            Com_Error(ERR_DROP, "Switch path tree leaf node count is invalid");
+
+        nativeNode->u.s.nodeCount = leafCount;
+        nativeNode->u.s.nodes = nullptr;
+        if (leafToken && leafCount > 0)
+        {
+            const uint64_t bytes64 =
+                static_cast<uint64_t>(static_cast<uint32_t>(leafCount)) *
+                sizeof(uint16_t);
+            if (bytes64 > UINT32_MAX)
+                Com_Error(ERR_DROP, "Switch path tree leaf node array is too large");
+
+            uint16_t *leafNodes = reinterpret_cast<uint16_t *>(
+                DB_AllocSwitchAssetMemory(
+                    static_cast<uint32_t>(bytes64),
+                    "SwitchPathTreeLeafNodes",
+                    22));
+            if (!leafNodes)
+                Com_Error(ERR_FATAL, "Switch path tree leaf allocation failed");
+
+            DB_LoadSwitchSerialized(
+                leafNodes,
+                static_cast<uint32_t>(bytes64));
+
+            for (int32_t i = 0; i < leafCount; ++i)
+            {
+                if (leafNodes[i] >= context->pathNodeCount)
+                {
+                    char trace[256];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[KisakCOD][PATH TREE ABI] invalid leaf index=%u position=%d nodeCount=%u\n",
+                        static_cast<unsigned>(leafNodes[i]),
+                        i,
+                        context->pathNodeCount);
+                    Switch_LogRaw(trace);
+                    Com_Error(ERR_DROP, "Switch path tree leaf contains an invalid path node index");
+                }
+            }
+            nativeNode->u.s.nodes = leafNodes;
+        }
+
+        return;
+    }
+
+    for (uint32_t childIndex = 0; childIndex < 2u; ++childIndex)
+    {
+        const uint32_t childToken =
+            Switch_ReadSerializedValue<uint32_t>(serialized, 8u + childIndex * 4u);
+        pathnode_tree_t *child = nullptr;
+
+        if (childToken == UINT32_MAX)
+        {
+            child = Switch_LoadPathTreeInline(context, depth + 1u);
+        }
+        else if (childToken)
+        {
+            child = Switch_ResolvePathTreePointer(context, childToken);
+        }
+
+        nativeNode->u.child[childIndex] = child;
+    }
+}
+
+static pathnode_tree_t *Switch_LoadPathTreeInline(
+    SwitchPathTreeLoadContext *context,
+    uint32_t depth)
+{
+    if (++context->inlineNodeCount > PATH_MAX_NODES * 2u)
+        Com_Error(ERR_DROP, "Switch path tree has too many inline nodes");
+
+    const uintptr_t serializedAddress =
+        reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+    uint8_t serialized[16]{};
+    DB_LoadSwitchSerialized(serialized, sizeof(serialized));
+
+    pathnode_tree_t *nativeNode =
+        Switch_AllocPathTreeNode("SwitchPathTreeInline");
+    context->addressMap.push_back({serializedAddress, nativeNode});
+    Switch_TranslatePathTreeRecord(context, serialized, nativeNode, depth);
+    return nativeNode;
+}
+
+static pathnode_tree_t *Switch_LoadPathTreeArray(
+    int32_t treeCount,
+    uint32_t pathNodeCount,
+    bool trace)
+{
+    if (treeCount <= 0)
+        return nullptr;
+    if (static_cast<uint32_t>(treeCount) > PATH_MAX_NODES * 2u)
+        Com_Error(ERR_DROP, "Switch path tree array is too large");
+
+    const uint64_t serializedBytes64 =
+        static_cast<uint64_t>(static_cast<uint32_t>(treeCount)) * 16u;
+    const uint64_t nativeBytes64 =
+        static_cast<uint64_t>(static_cast<uint32_t>(treeCount)) *
+        sizeof(pathnode_tree_t);
+    if (serializedBytes64 > UINT32_MAX || nativeBytes64 > UINT32_MAX)
+        Com_Error(ERR_DROP, "Switch path tree array size overflow");
+
+    SwitchPathTreeLoadContext context{};
+    context.serializedRootBase =
+        reinterpret_cast<uintptr_t>(DB_GetStreamPos());
+    context.rootCount = static_cast<uint32_t>(treeCount);
+    context.pathNodeCount = pathNodeCount;
+    context.trace = trace;
+    context.inlineNodeCount = 0;
+
+    std::vector<uint8_t> serializedRoots(
+        static_cast<size_t>(serializedBytes64));
+    DB_LoadSwitchSerialized(
+        serializedRoots.data(),
+        static_cast<uint32_t>(serializedBytes64));
+
+    context.nativeRoots = reinterpret_cast<pathnode_tree_t *>(
+        DB_AllocSwitchAssetMemory(
+            static_cast<uint32_t>(nativeBytes64),
+            "SwitchPathTreeRoots",
+            22));
+    if (!context.nativeRoots)
+        Com_Error(ERR_FATAL, "Switch path tree root allocation failed");
+    std::memset(
+        context.nativeRoots,
+        0,
+        static_cast<size_t>(nativeBytes64));
+
+    context.addressMap.reserve(
+        static_cast<size_t>(context.rootCount) + 64u);
+    for (uint32_t i = 0; i < context.rootCount; ++i)
+    {
+        context.addressMap.push_back({
+            context.serializedRootBase + static_cast<uintptr_t>(i) * 16u,
+            &context.nativeRoots[i]});
+    }
+
+    for (uint32_t i = 0; i < context.rootCount; ++i)
+    {
+        Switch_TranslatePathTreeRecord(
+            &context,
+            serializedRoots.data() + static_cast<size_t>(i) * 16u,
+            &context.nativeRoots[i],
+            0);
+    }
+
+    if (trace)
+    {
+        char traceLine[320];
+        std::snprintf(
+            traceLine,
+            sizeof(traceLine),
+            "[KisakCOD][PATH TREE ABI] translated roots=%u nodeCount=%u serializedStride=16 nativeStride=%zu inline=%u mapped=%u\n",
+            context.rootCount,
+            context.pathNodeCount,
+            sizeof(pathnode_tree_t),
+            context.inlineNodeCount,
+            static_cast<unsigned>(context.addressMap.size()));
+        Switch_LogRaw(traceLine);
+    }
+
+    return context.nativeRoots;
+}
+#endif
 
 static void Switch_TranslateGameWorldMpSerialized(GameWorldMp *out)
 {
@@ -11798,6 +12081,8 @@ void __cdecl Load_PathData(bool atStreamStart)
 
         const uint32_t serializedSize =
             static_cast<uint32_t>(serializedSize64);
+        const uintptr_t serializedNodesStreamBase =
+            reinterpret_cast<uintptr_t>(DB_GetStreamPos());
         std::vector<uint8_t> serializedNodes(serializedSize);
         if (serializedSize)
             DB_LoadSwitchSerialized(
@@ -11817,6 +12102,7 @@ void __cdecl Load_PathData(bool atStreamStart)
         Switch_TranslatePathNodeArray(
             nativeNodes,
             serializedNodes.data(),
+            serializedNodesStreamBase,
             nodeCount);
         varPathData->nodes = nativeNodes;
         varpathnode_t = nativeNodes;
@@ -11908,9 +12194,17 @@ void __cdecl Load_PathData(bool atStreamStart)
     }
     if (varPathData->nodeTree)
     {
+#ifdef __SWITCH__
+        varPathData->nodeTree = Switch_LoadPathTreeArray(
+            varPathData->nodeTreeCount,
+            varPathData->nodeCount,
+            traceGw1529);
+        varpathnode_tree_t = varPathData->nodeTree;
+#else
         varPathData->nodeTree = (pathnode_tree_t *)AllocLoad_FxElemVisStateSample();
         varpathnode_tree_t = varPathData->nodeTree;
         Load_pathnode_tree_tArray(1, varPathData->nodeTreeCount);
+#endif
 #ifdef __SWITCH__
         if (traceGw1529)
         {
