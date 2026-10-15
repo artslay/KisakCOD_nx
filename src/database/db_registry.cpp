@@ -1325,20 +1325,9 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
     {
         g_switchDbStage = "rawfile/lookup/entry";
         const uintptr_t nameAddress = reinterpret_cast<uintptr_t>(name);
-        if (!name || nameAddress < 0x100000000ull)
-        {
-            char trace[320];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][RAWFILE LOOKUP] suspicious name=%p caller=%p asset=%d raw=%u header=%08x\n",
-                static_cast<const void *>(name),
-                __builtin_return_address(0),
-                g_switchCurrentAssetIndex,
-                static_cast<unsigned>(g_switchCurrentAssetRawType),
-                g_switchCurrentAssetHeader);
-            Switch_LogWrite(trace);
-        }
+        // Switch stack pointers can legitimately be below 4 GiB. The old
+        // address threshold mislabeled stack-backed lookup names as invalid
+        // and produced hundreds of false-positive log lines per frame.
     }
     const bool traceWeaponLookup = type == ASSET_TYPE_WEAPON;
     if (traceWeaponLookup)
