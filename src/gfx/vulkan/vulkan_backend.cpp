@@ -1180,6 +1180,9 @@ void VulkanBackend::Clear(float r, float g, float b, float a)
             VK_NULL_HANDLE,
             VK_FORMAT_UNDEFINED,
             0,
+            VK_NULL_HANDLE,
+            VK_NULL_HANDLE,
+            VK_IMAGE_LAYOUT_UNDEFINED,
             colorLayout,
             VK_IMAGE_LAYOUT_UNDEFINED,
             width,
@@ -1412,6 +1415,19 @@ bool VulkanBackend::GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_
     return m_swapchain != VK_NULL_HANDLE && !m_swapchainImages.empty();
 }
 
+bool VulkanBackend::SupportsSampleCount(VkSampleCountFlagBits samples, bool depth) const
+{
+    if (!m_physicalDevice || samples == 0)
+        return false;
+
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+    const VkSampleCountFlags supported = depth
+        ? properties.limits.framebufferDepthSampleCounts
+        : properties.limits.framebufferColorSampleCounts;
+    return (supported & static_cast<VkSampleCountFlags>(samples)) != 0;
+}
+
 VkImage VulkanBackend::CurrentSwapchainImage() const
 {
     return (m_swapchainIndex < m_swapchainImages.size())
@@ -1535,7 +1551,7 @@ bool VulkanBackend::CreateImage2D(
     VkImage *image,
     VkDeviceMemory *memory,
     VkImageView *view,
-    VkComponentMapping components)
+    VkComponentMapping components, VkSampleCountFlagBits samples)
 {
     VkImageCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1544,7 +1560,7 @@ bool VulkanBackend::CreateImage2D(
     info.extent = {width, height, 1};
     info.mipLevels = mipLevels;
     info.arrayLayers = 1;
-    info.samples = VK_SAMPLE_COUNT_1_BIT;
+    info.samples = samples;
     info.tiling = VK_IMAGE_TILING_OPTIMAL;
     info.usage = usage;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -2320,6 +2336,7 @@ bool VulkanBackend::EnsureRendering(
     VkImage colorImage, VkImageView colorView, VkFormat colorFormat,
     VkImage depthImage, VkImageView depthView, VkFormat depthFormat,
     VkImageAspectFlags depthAspect,
+    VkImage resolveImage, VkImageView resolveView, VkImageLayout resolveOldLayout,
     VkImageLayout colorOldLayout, VkImageLayout depthOldLayout,
     uint32_t width, uint32_t height)
 {
@@ -2345,6 +2362,15 @@ bool VulkanBackend::EnsureRendering(
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             DepthAspect(depthFormat));
     }
+    if (resolveImage && resolveView &&
+        resolveOldLayout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+    {
+        TransitionImage(
+            resolveImage,
+            resolveOldLayout,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+    }
 
     const bool clearUninitializedColor = colorOldLayout == VK_IMAGE_LAYOUT_UNDEFINED;
     const bool clearBackbuffer = colorImage == CurrentSwapchainImage() && !m_backbufferClearedThisFrame;
@@ -2357,6 +2383,12 @@ bool VulkanBackend::EnsureRendering(
         ? VK_ATTACHMENT_LOAD_OP_CLEAR
         : VK_ATTACHMENT_LOAD_OP_LOAD;
     color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    if (resolveImage && resolveView)
+    {
+        color.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+        color.resolveImageView = resolveView;
+        color.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
     if (color.loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
     {
         // D3D9 render targets do not guarantee meaningful contents before the

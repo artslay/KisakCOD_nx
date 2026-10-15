@@ -123,6 +123,23 @@ struct TextureFormatInfo
     bool depth = false;
 };
 
+bool DecodeMultisampleType(
+    _D3DMULTISAMPLE_TYPE type, VkSampleCountFlagBits *samples)
+{
+    if (!samples)
+        return false;
+
+    switch (type)
+    {
+    case D3DMULTISAMPLE_NONE: *samples = VK_SAMPLE_COUNT_1_BIT; return true;
+    case D3DMULTISAMPLE_2_SAMPLES: *samples = VK_SAMPLE_COUNT_2_BIT; return true;
+    case D3DMULTISAMPLE_4_SAMPLES: *samples = VK_SAMPLE_COUNT_4_BIT; return true;
+    case D3DMULTISAMPLE_8_SAMPLES: *samples = VK_SAMPLE_COUNT_8_BIT; return true;
+    case D3DMULTISAMPLE_16_SAMPLES: *samples = VK_SAMPLE_COUNT_16_BIT; return true;
+    default: return false;
+    }
+}
+
 VkComponentMapping GetTextureComponentMapping(_D3DFORMAT sourceFormat)
 {
     VkComponentMapping mapping{
@@ -1000,7 +1017,15 @@ uint32_t KisakVkTexture::Release()
 
     VulkanBackend *backend = GetVulkanBackend();
     if (backend)
-        backend->DestroyImage(image, memory, view);
+    {
+        if (resolveImage || resolveMemory || resolveView)
+            backend->DestroyImage(resolveImage, resolveMemory, resolveView);
+        if (image || memory || view)
+            backend->DestroyImage(image, memory, view);
+    }
+    resolveImage = VK_NULL_HANDLE;
+    resolveView = VK_NULL_HANDLE;
+    resolveMemory = VK_NULL_HANDLE;
     image = VK_NULL_HANDLE;
     view = VK_NULL_HANDLE;
     memory = VK_NULL_HANDLE;
@@ -1011,7 +1036,8 @@ uint32_t KisakVkTexture::Release()
 HRESULT KisakVkTexture::LockRect(
     uint32_t level, _D3DLOCKED_RECT *lockedRect, const tagRECT *, uint32_t)
 {
-    if (!lockedRect || level >= mipLevels || depth != 1 || !width || !height ||
+    if (!lockedRect || samples != VK_SAMPLE_COUNT_1_BIT ||
+        level >= mipLevels || depth != 1 || !width || !height ||
         GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
@@ -1027,8 +1053,8 @@ HRESULT KisakVkTexture::LockRect(
 
 HRESULT KisakVkTexture::UnlockRect(uint32_t level)
 {
-    if (!lockShadowActive || level >= mipLevels ||
-        GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
+    if (!lockShadowActive || samples != VK_SAMPLE_COUNT_1_BIT ||
+        level >= mipLevels || GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
     VulkanBackend *backend = GetVulkanBackend();
@@ -1054,7 +1080,8 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
 HRESULT KisakVkTexture::LockBox(
     uint32_t level, _D3DLOCKED_BOX *lockedBox, const _D3DBOX *, uint32_t)
 {
-    if (!lockedBox || level >= mipLevels || depth == 1 || !width || !height ||
+    if (!lockedBox || samples != VK_SAMPLE_COUNT_1_BIT ||
+        level >= mipLevels || depth == 1 || !width || !height ||
         GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
@@ -1076,8 +1103,8 @@ HRESULT KisakVkTexture::LockBox(
 
 HRESULT KisakVkTexture::UnlockBox(uint32_t level)
 {
-    if (!lockShadowActive || level >= mipLevels ||
-        GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
+    if (!lockShadowActive || samples != VK_SAMPLE_COUNT_1_BIT ||
+        level >= mipLevels || GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
     VulkanBackend *backend = GetVulkanBackend();
@@ -1296,15 +1323,28 @@ HRESULT IDirect3DDevice9::StretchRect(
     uint32_t srcW = 0;
     uint32_t srcH = 0;
     uint32_t srcLevel = 0;
+    bool srcResolvedMultisample = false;
     if (src)
     {
         if (source->level >= src->mipLevels)
             return E_FAIL;
-        srcImage = src->image;
-        srcLevel = source->level;
-        srcOldLayout = src->GetSubresourceLayout(srcLevel);
-        srcW = std::max(1u, src->width >> srcLevel);
-        srcH = std::max(1u, src->height >> srcLevel);
+        if (src->samples != VK_SAMPLE_COUNT_1_BIT)
+        {
+            if (source->level != 0 || !src->resolveImage || !src->resolveView)
+                return E_FAIL;
+            srcImage = src->resolveImage;
+            srcOldLayout = src->resolveLayout;
+            srcLevel = 0;
+            srcResolvedMultisample = true;
+        }
+        else
+        {
+            srcImage = src->image;
+            srcLevel = source->level;
+            srcOldLayout = src->GetSubresourceLayout(srcLevel);
+        }
+        srcW = std::max(1u, src->width >> source->level);
+        srcH = std::max(1u, src->height >> source->level);
     }
     else if (source->defaultFramebuffer)
     {
@@ -1319,7 +1359,8 @@ HRESULT IDirect3DDevice9::StretchRect(
         return E_FAIL;
     }
 
-    if (destination->level >= dst->mipLevels ||
+    if (dst->samples != VK_SAMPLE_COUNT_1_BIT ||
+        destination->level >= dst->mipLevels ||
         srcImage == VK_NULL_HANDLE || dst->image == VK_NULL_HANDLE ||
         srcOldLayout == VK_IMAGE_LAYOUT_UNDEFINED ||
         (src && src->image == dst->image))
@@ -1417,7 +1458,10 @@ HRESULT IDirect3DDevice9::StretchRect(
 
     if (src)
     {
-        src->SetSubresourceLayout(srcLevel, 0, srcOldLayout);
+        if (srcResolvedMultisample)
+            src->resolveLayout = srcOldLayout;
+        else
+            src->SetSubresourceLayout(srcLevel, 0, srcOldLayout);
         src->layout = srcOverallLayout;
     }
     else if (source->defaultFramebuffer)
@@ -1492,12 +1536,11 @@ HRESULT IDirect3DDevice9::EndScene()
     if (queuePresentSource)
     {
         KisakVkTexture *texture = m_color->texture;
+        const bool multisampled = texture->samples != VK_SAMPLE_COUNT_1_BIT;
         m_backend->QueuePresentSource(
-            texture->image, texture->view, texture->format,
-            texture->width, texture->height);
-        // EndFrame() owns the present-source transition. Keep the texture
-        // tracker at COLOR_ATTACHMENT_OPTIMAL until that transition is
-        // recorded, then restore the same layout after the blit.
+            multisampled ? texture->resolveImage : texture->image,
+            multisampled ? texture->resolveView : texture->view,
+            texture->format, texture->width, texture->height);
     }
     else
     {
@@ -1510,15 +1553,21 @@ HRESULT IDirect3DDevice9::EndScene()
 
 HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
     uint32_t width, uint32_t height, _D3DFORMAT format,
-    _D3DMULTISAMPLE_TYPE, uint32_t, uint32_t,
+    _D3DMULTISAMPLE_TYPE multisample, uint32_t quality, uint32_t,
     IDirect3DSurface9 **out, void *)
 {
     if (!out || !m_backend || !width || !height)
         return E_FAIL;
 
-    TextureFormatInfo info = GetTextureFormat(format);
-    if (!info.depth)
+    VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
+    if (!DecodeMultisampleType(multisample, &samples) || quality != 0 ||
+        !m_backend->SupportsSampleCount(samples, true))
         return E_FAIL;
+
+    TextureFormatInfo info = GetTextureFormat(format);
+    if (!info.depth || info.format == VK_FORMAT_UNDEFINED)
+        return E_FAIL;
+
     auto *texture = new KisakVkTexture;
     texture->width = width;
     texture->height = height;
@@ -1526,11 +1575,14 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
     texture->mipLevels = 1;
     texture->sourceFormat = format;
     texture->format = info.format;
+    texture->samples = samples;
 
+    const VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+        (samples == VK_SAMPLE_COUNT_1_BIT ? VK_IMAGE_USAGE_SAMPLED_BIT : 0);
     if (!m_backend->CreateImage2D(
-            width, height, 1, info.format,
-            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            info.aspect, &texture->image, &texture->memory, &texture->view))
+            width, height, 1, info.format, usage,
+            info.aspect, &texture->image, &texture->memory, &texture->view,
+            {}, samples))
     {
         delete texture;
         return E_FAIL;
@@ -1545,10 +1597,15 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
 
 HRESULT IDirect3DDevice9::CreateRenderTarget(
     uint32_t width, uint32_t height, _D3DFORMAT format,
-    _D3DMULTISAMPLE_TYPE, uint32_t, uint32_t,
+    _D3DMULTISAMPLE_TYPE multisample, uint32_t quality, uint32_t,
     IDirect3DSurface9 **out, void *)
 {
     if (!out || !m_backend || !width || !height)
+        return E_FAIL;
+
+    VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
+    if (!DecodeMultisampleType(multisample, &samples) || quality != 0 ||
+        !m_backend->SupportsSampleCount(samples, false))
         return E_FAIL;
 
     TextureFormatInfo info = GetTextureFormat(format);
@@ -1562,14 +1619,34 @@ HRESULT IDirect3DDevice9::CreateRenderTarget(
     texture->mipLevels = 1;
     texture->sourceFormat = format;
     texture->format = info.format;
+    texture->samples = samples;
 
+    const VkImageUsageFlags renderUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+        (samples == VK_SAMPLE_COUNT_1_BIT
+            ? (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+               VK_IMAGE_USAGE_SAMPLED_BIT)
+            : 0);
     if (!m_backend->CreateImage2D(
+            width, height, 1, info.format, renderUsage,
+            info.aspect, &texture->image, &texture->memory, &texture->view,
+            GetTextureComponentMapping(format), samples))
+    {
+        delete texture;
+        return E_FAIL;
+    }
+
+    if (samples != VK_SAMPLE_COUNT_1_BIT &&
+        !m_backend->CreateImage2D(
             width, height, 1, info.format,
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            info.aspect, &texture->image, &texture->memory, &texture->view,
-            GetTextureComponentMapping(format)))
+            info.aspect, &texture->resolveImage, &texture->resolveMemory,
+            &texture->resolveView, GetTextureComponentMapping(format)))
     {
+        m_backend->DestroyImage(texture->image, texture->memory, texture->view);
+        texture->image = VK_NULL_HANDLE;
+        texture->memory = VK_NULL_HANDLE;
+        texture->view = VK_NULL_HANDLE;
         delete texture;
         return E_FAIL;
     }
@@ -2289,6 +2366,12 @@ bool IDirect3DDevice9::EnsurePipeline()
         ? m_color->texture->format : m_backend->SwapchainFormat();
     const VkFormat depthFormat = m_depth && m_depth->texture
         ? m_depth->texture->format : m_backend->DepthFormat();
+    const VkSampleCountFlagBits colorSamples = m_color && m_color->texture
+        ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    const VkSampleCountFlagBits depthSamples = m_depth && m_depth->texture
+        ? m_depth->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    if (colorSamples != depthSamples)
+        return false;
 
     uint64_t key = 0x12345678abcdef00ull;
     key = HashCombine(key, m_vertexShader->serial);
@@ -2296,6 +2379,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_decl->serial);
     key = HashCombine(key, static_cast<uint64_t>(colorFormat));
     key = HashCombine(key, static_cast<uint64_t>(depthFormat));
+    key = HashCombine(key, static_cast<uint64_t>(colorSamples));
     key = HashCombine(key, m_viewport.Width);
     key = HashCombine(key, m_viewport.Height);
     key = HashCombine(key, m_depthEnable);
@@ -2705,7 +2789,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     VkPipelineMultisampleStateCreateInfo multisample{};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisample.rasterizationSamples = colorSamples;
 
     VkPipelineDepthStencilStateCreateInfo depth{};
     depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -2998,6 +3082,21 @@ bool IDirect3DDevice9::PrepareDraw()
             depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
             ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
             : VK_IMAGE_ASPECT_DEPTH_BIT);
+    const VkSampleCountFlagBits colorSamples = m_color && m_color->texture
+        ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    const VkSampleCountFlagBits depthSamples = m_depth && m_depth->texture
+        ? m_depth->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    if (colorSamples != depthSamples)
+    {
+        Switch_LogWrite("[KisakCOD][VK DRAW] fail=attachment_sample_count_mismatch\n");
+        return false;
+    }
+    const VkImage resolveImage = colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
+        ? m_color->texture->resolveImage : VK_NULL_HANDLE;
+    const VkImageView resolveView = colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
+        ? m_color->texture->resolveView : VK_NULL_HANDLE;
+    const VkImageLayout resolveOldLayout = colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
+        ? m_color->texture->resolveLayout : VK_IMAGE_LAYOUT_UNDEFINED;
 
     const VkImageLayout colorOldLayout =
         m_color && m_color->texture            ? m_color->texture->layout
@@ -3019,6 +3118,7 @@ bool IDirect3DDevice9::PrepareDraw()
     if (!m_backend->EnsureRendering(
             colorImage, colorView, colorFormat,
             depthImage, depthView, depthFormat, depthAspect,
+            resolveImage, resolveView, resolveOldLayout,
             colorOldLayout, depthOldLayout,
             targetWidth, targetHeight))
     {
@@ -3030,6 +3130,8 @@ bool IDirect3DDevice9::PrepareDraw()
     {
         m_color->texture->SetSubresourceLayout(
             m_color->level, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        if (resolveImage)
+            m_color->texture->resolveLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         m_targetRendered = true;
     }
     if (m_depth && m_depth->texture)
@@ -3310,6 +3412,18 @@ HRESULT IDirect3DDevice9::Clear(
             depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
             ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
             : VK_IMAGE_ASPECT_DEPTH_BIT);
+    const VkSampleCountFlagBits colorSamples = m_color && m_color->texture
+        ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    const VkSampleCountFlagBits depthSamples = m_depth && m_depth->texture
+        ? m_depth->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    if (colorSamples != depthSamples)
+        return E_FAIL;
+    const VkImage resolveImage = colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
+        ? m_color->texture->resolveImage : VK_NULL_HANDLE;
+    const VkImageView resolveView = colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
+        ? m_color->texture->resolveView : VK_NULL_HANDLE;
+    const VkImageLayout resolveOldLayout = colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
+        ? m_color->texture->resolveLayout : VK_IMAGE_LAYOUT_UNDEFINED;
 
     if (m_backend->EnsureRendering(
             m_color && m_color->texture ? m_color->texture->image : m_backend->CurrentSwapchainImage(),
@@ -3318,13 +3432,20 @@ HRESULT IDirect3DDevice9::Clear(
             m_depth && m_depth->texture ? m_depth->texture->image : m_backend->DefaultDepthImage(),
             m_depth && m_depth->texture ? m_depth->texture->view : m_backend->DefaultDepthView(),
             depthFormat, depthAspect,
+            resolveImage, resolveView, resolveOldLayout,
             m_color && m_color->texture ? m_color->texture->layout : m_backend->CurrentSwapchainLayout(),
             m_depth && m_depth->texture ? m_depth->texture->layout : m_backend->DefaultDepthLayout(),
             targetWidth, targetHeight))
     {
         if (m_color && m_color->texture)
+        {
             m_color->texture->SetSubresourceLayout(
                 m_color->level, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            if (resolveImage)
+                m_color->texture->resolveLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            if (flags & D3DCLEAR_TARGET)
+                m_targetRendered = true;
+        }
         if (m_depth && m_depth->texture)
             m_depth->texture->SetSubresourceLayout(
                 m_depth->level, 0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);

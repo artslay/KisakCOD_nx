@@ -73,6 +73,7 @@ public:
     VkSampler DummySampler() const { return m_dummySampler; }
 
     uint32_t FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties) const;
+    bool SupportsSampleCount(VkSampleCountFlagBits samples, bool depth) const;
 
     bool CreateBuffer(
         VkDeviceSize size,
@@ -96,7 +97,8 @@ public:
         VkImage *image,
         VkDeviceMemory *memory,
         VkImageView *view,
-        VkComponentMapping components = {});
+        VkComponentMapping components = {},
+        VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
 
     bool CreateImageCube(
         uint32_t width,
@@ -186,6 +188,7 @@ public:
         VkImageView depthView,
         VkFormat depthFormat,
         VkImageAspectFlags depthAspect,
+        VkImage resolveImage, VkImageView resolveView, VkImageLayout resolveOldLayout,
         VkImageLayout colorOldLayout,
         VkImageLayout depthOldLayout,
         uint32_t width,
