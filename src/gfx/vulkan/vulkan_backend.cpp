@@ -1510,10 +1510,18 @@ bool VulkanBackend::CreateBuffer(
     return true;
 }
 
-void VulkanBackend::DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory)
+void VulkanBackend::DestroyBuffer(
+    VkBuffer buffer, VkDeviceMemory memory, bool memoryMapped)
 {
-    if (buffer) vkDestroyBuffer(m_device, buffer, nullptr);
-    if (memory) vkFreeMemory(m_device, memory, nullptr);
+    // Vulkan requires mapped device memory to be unmapped before it is freed.
+    // UploadImage2D/3D use short-lived, mapped staging allocations; persistent
+    // vertex/index/uniform buffers are unmapped by their owning resource first.
+    if (memoryMapped && memory && m_device)
+        vkUnmapMemory(m_device, memory);
+    if (buffer && m_device)
+        vkDestroyBuffer(m_device, buffer, nullptr);
+    if (memory && m_device)
+        vkFreeMemory(m_device, memory, nullptr);
 }
 
 bool VulkanBackend::CreateImage2D(
@@ -2108,7 +2116,7 @@ bool VulkanBackend::UploadImage2D(
             0,0,nullptr,0,nullptr,1,&toShader);
     });
 
-    DestroyBuffer(staging, stagingMemory);
+    DestroyBuffer(staging, stagingMemory, true);
     (void)format;
     return submitted;
 }
@@ -2204,7 +2212,7 @@ bool VulkanBackend::UploadImage3D(
             0,0,nullptr,0,nullptr,1,&barrier);
     });
 
-    DestroyBuffer(staging, stagingMemory);
+    DestroyBuffer(staging, stagingMemory, true);
     (void)format;
     return submitted;
 }

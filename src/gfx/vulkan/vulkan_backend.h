@@ -82,7 +82,9 @@ public:
         VkDeviceMemory *memory,
         void **mapped = nullptr);
 
-    void DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory);
+    // Pass memoryMapped=true only when CreateBuffer was asked to map this allocation.
+    // Persistent users unmap themselves before calling DestroyBuffer.
+    void DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory, bool memoryMapped = false);
 
     bool CreateImage2D(
         uint32_t width,
