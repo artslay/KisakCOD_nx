@@ -1388,20 +1388,8 @@ void __cdecl UI_Init()
     uiscript_debug = Dvar_RegisterInt("uiscript_debug", 0, 0, 2, 0, "spam debug info for the ui script");
 
 #ifdef __SWITCH__
-    {
-        MenuList *codeMenus = UI_LoadMenus((char *)"ui/code.txt", 3);
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][FRAME] UI_Init menus=%d codeMenuList=%p open=%d active=%d\n",
-            uiInfo.uiDC.menuCount,
-            static_cast<void *>(codeMenus),
-            uiInfo.uiDC.openMenuCount,
-            static_cast<int>(g_currentMenuType));
-        Switch_LogWrite(trace);
-    }
-#endif
+    UI_LoadMenus((char *)"ui/code.txt", 3);
+
 }
 
 void __cdecl UI_KeyEvent(int localClientNum, int key, int down)
@@ -1740,26 +1728,6 @@ bool __cdecl UI_AllowScriptMenuResponse(int localClientNum)
 
 void UI_PlayerStart()
 {
-#ifdef __SWITCH__
-    if (!I_stricmp(g_mapname, "simplecredits") ||
-        (clientUIActives[0].connectionState == CA_ACTIVE &&
-         g_currentMenuType == UIMENU_PREGAME))
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][PREGAME UI] UI_PlayerStart entered activeMenu=%d finished=%d started=%d pending=%d skip=%d fullscreen=%d catcher=0x%08x\n",
-            static_cast<int>(g_currentMenuType),
-            R_Cinematic_IsFinished(),
-            R_Cinematic_IsStarted(),
-            R_Cinematic_IsPending(),
-            CL_SkipRendering(),
-            Menus_AnyFullScreenVisible(&uiInfo.uiDC),
-            clientUIActives[0].keyCatchers);
-        Switch_LogWrite(trace);
-    }
-#endif
     if (g_currentMenuType != UIMENU_PREGAME && g_currentMenuType != UIMENU_MAIN)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\ui\\ui_main.cpp",
@@ -1810,69 +1778,6 @@ void __cdecl UI_Refresh()
 {
 #ifdef __SWITCH__
     g_switchFrameStage = "ui/refresh/entry";
-    // Diagnostic only: report the pregame/cinematic transition for simplecredits
-    // and for an active map still stuck behind the pregame menu.
-    if (!I_stricmp(g_mapname, "simplecredits") ||
-        (clientUIActives[0].connectionState == CA_ACTIVE &&
-         g_currentMenuType == UIMENU_PREGAME))
-    {
-        static uint32_t switchCreditsUiTraceCount = 0;
-        static uint32_t switchCreditsUiActiveTraceCount = 0;
-        const bool switchCreditsUiActive = clientUIActives[0].connectionState == CA_ACTIVE;
-        if (switchCreditsUiTraceCount < 12 ||
-            (switchCreditsUiActive && switchCreditsUiActiveTraceCount < 24))
-        {
-            const int openMenuCount = uiInfo.uiDC.openMenuCount;
-            const char *topMenu =
-                openMenuCount > 0 && uiInfo.uiDC.menuStack[openMenuCount - 1] &&
-                uiInfo.uiDC.menuStack[openMenuCount - 1]->window.name
-                    ? uiInfo.uiDC.menuStack[openMenuCount - 1]->window.name
-                    : "<none>";
-            char trace[448];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][PREGAME UI] refresh=%u activeMenu=%d connection=%d visible=%d fullscreen=%d finished=%d started=%d pending=%d catcher=0x%08x skip=%d menus=%d top=%s\n",
-                switchCreditsUiTraceCount,
-                static_cast<int>(g_currentMenuType),
-                static_cast<int>(clientUIActives[0].connectionState),
-                Menu_IsMenuOpenAndVisible(0, "pregame"),
-                Menus_AnyFullScreenVisible(&uiInfo.uiDC),
-                R_Cinematic_IsFinished(),
-                R_Cinematic_IsStarted(),
-                R_Cinematic_IsPending(),
-                clientUIActives[0].keyCatchers,
-                CL_SkipRendering(),
-                openMenuCount,
-                topMenu);
-            Switch_LogWrite(trace);
-            ++switchCreditsUiTraceCount;
-            if (switchCreditsUiActive)
-                ++switchCreditsUiActiveTraceCount;
-        }
-    }
-    static uint32_t switchUiRefreshTraceCount = 0;
-    if (switchUiRefreshTraceCount < 6)
-    {
-        const int openMenuCount = uiInfo.uiDC.openMenuCount;
-        const char *topMenu =
-            openMenuCount > 0 && uiInfo.uiDC.menuStack[openMenuCount - 1] &&
-            uiInfo.uiDC.menuStack[openMenuCount - 1]->window.name
-                ? uiInfo.uiDC.menuStack[openMenuCount - 1]->window.name
-                : "<none>";
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][FRAME] UI_Refresh open=%d fullscreen=%d top=%s active=%d catcher=0x%08x\n",
-            openMenuCount,
-            Menus_AnyFullScreenVisible(&uiInfo.uiDC),
-            topMenu,
-            (int)g_currentMenuType,
-            uiInfo.uiDC.localClientNum == 0 ? clientUIActives[0].keyCatchers : 0);
-        Switch_LogWrite(trace);
-        ++switchUiRefreshTraceCount;
-    }
 #endif
 #ifdef __SWITCH__
     g_switchFrameStage = "ui/refresh/update_save_ui";
@@ -2454,21 +2359,12 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/entry";
-    Switch_LogWrite("[KisakCOD][UIMAIN] UI_RunMenuScript entry\n");
+
 #endif
     if (!String_Parse(args, out, sizeof(out)))
         return;
 #ifdef __SWITCH__
     {
-        char trace[512];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][UIMAIN] UI_RunMenuScript command='%s' args=%p actual=%p\n",
-            out,
-            static_cast<const void *>(args ? *args : nullptr),
-            static_cast<const void *>(actualScript));
-        Switch_LogWrite(trace);
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/command";
     }
 #endif
@@ -2717,37 +2613,28 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
     if (!I_stricmp(out, "openMenuOnDvar") || !I_stricmp(out, "openMenuOnDvarNot"))
     {
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][UIMAIN] before UI_GetOpenOrCloseMenuOnDvarArgs\n");
+
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/open_dvar/parse";
 #endif
         if ((unsigned __int8)UI_GetOpenOrCloseMenuOnDvarArgs(args, out, dvarName, testValue, menuName))
         {
 #ifdef __SWITCH__
-            char trace[1024];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][UIMAIN] openMenuOnDvar parsed dvar='%s' test='%s' menu='%s'\n",
-                dvarName,
-                testValue,
-                menuName);
-            Switch_LogWrite(trace);
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/open_dvar/test";
 #endif
             UI_OpenMenuOnDvar(out, menuName, dvarName, testValue);
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/open_dvar/test_done";
-            Switch_LogWrite("[KisakCOD][UIMAIN] UI_OpenMenuOnDvar returned\n");
+
 #endif
         }
 #ifdef __SWITCH__
         else
         {
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/open_dvar/parse_failed";
-            Switch_LogWrite("[KisakCOD][UIMAIN] UI_GetOpenOrCloseMenuOnDvarArgs returned false\n");
+
         }
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/onopen/ui_script/open_dvar/done";
-        Switch_LogWrite("[KisakCOD][UIMAIN] UI_RunMenuScript openMenuOnDvar branch done\n");
+
 #endif
         return;
     }
@@ -2800,42 +2687,42 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
     case UIMENU_MAIN:
         Key_SetCatcher(0, KEYCATCH_UI);
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][UIMAIN] before Menus_OpenByName(main)\n");
+
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open";
 #endif
         Menus_OpenByName(&uiInfo.uiDC, "main");
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open_done";
-        Switch_LogWrite("[KisakCOD][UIMAIN] after Menus_OpenByName(main)\n");
+
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/get_error_dvar";
-        Switch_LogWrite("[KisakCOD][UIMAIN] before Dvar_GetString(com_errorMessage)\n");
+
 #endif
         String = Dvar_GetString("com_errorMessage");
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/get_error_dvar_done";
-        Switch_LogWrite("[KisakCOD][UIMAIN] after Dvar_GetString(com_errorMessage)\n");
+
 #endif
         if (*String)
         {
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/error_menu";
-            Switch_LogWrite("[KisakCOD][UIMAIN] com_errorMessage nonempty; before error_popmenu\n");
+
 #endif
             Menus_OpenByName(&uiInfo.uiDC, "error_popmenu");
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/error_menu_done";
-            Switch_LogWrite("[KisakCOD][UIMAIN] after error_popmenu\n");
+
 #endif
             CL_StopControllerRumbles();
         }
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/fade_sounds";
-        Switch_LogWrite("[KisakCOD][UIMAIN] before SND_FadeAllSounds\n");
+
 #endif
         SND_FadeAllSounds(1.0, 1000);
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/fade_sounds_done";
-        Switch_LogWrite("[KisakCOD][UIMAIN] after SND_FadeAllSounds\n");
+
 #endif
         return 1;
     case UIMENU_INGAME:
@@ -2853,22 +2740,6 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
         }
         break;
     case UIMENU_PREGAME:
-#ifdef __SWITCH__
-        if (!I_stricmp(g_mapname, "simplecredits"))
-        {
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][PREGAME UI] set_pregame autoContinue=%d finished=%d started=%d pending=%d skip=%d\n",
-                UI_AutoContinue(),
-                R_Cinematic_IsFinished(),
-                R_Cinematic_IsStarted(),
-                R_Cinematic_IsPending(),
-                CL_SkipRendering());
-            Switch_LogWrite(trace);
-        }
-#endif
         if (UI_AutoContinue())
         {
             UI_PlayerStart();
