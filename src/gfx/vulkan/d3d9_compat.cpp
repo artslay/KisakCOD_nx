@@ -1190,21 +1190,22 @@ HRESULT IDirect3DDevice9::StretchRect(
     if (!m_backend || !source || !destination || !destination->texture)
         return E_FAIL;
 
-    m_backend->EndRendering();
-
     KisakVkTexture *src = source->texture;
     KisakVkTexture *dst = destination->texture;
-
     VkImage srcImage = VK_NULL_HANDLE;
     VkImageLayout srcOldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     uint32_t srcW = 0;
     uint32_t srcH = 0;
+    uint32_t srcLevel = 0;
     if (src)
     {
+        if (source->level >= src->mipLevels)
+            return E_FAIL;
         srcImage = src->image;
-        srcOldLayout = src->layout;
-        srcW = src->width;
-        srcH = src->height;
+        srcLevel = source->level;
+        srcOldLayout = src->GetSubresourceLayout(srcLevel);
+        srcW = std::max(1u, src->width >> srcLevel);
+        srcH = std::max(1u, src->height >> srcLevel);
     }
     else if (source->defaultFramebuffer)
     {
@@ -1219,63 +1220,117 @@ HRESULT IDirect3DDevice9::StretchRect(
         return E_FAIL;
     }
 
-    const uint32_t dstW = dst->width;
-    const uint32_t dstH = dst->height;
+    if (destination->level >= dst->mipLevels ||
+        srcImage == VK_NULL_HANDLE || dst->image == VK_NULL_HANDLE ||
+        srcOldLayout == VK_IMAGE_LAYOUT_UNDEFINED ||
+        src->image == dst->image)
+        return E_FAIL;
+
+    const uint32_t dstLevel = destination->level;
+    const uint32_t dstW = std::max(1u, dst->width >> dstLevel);
+    const uint32_t dstH = std::max(1u, dst->height >> dstLevel);
+    const VkImageLayout dstOldLayout = dst->GetSubresourceLayout(dstLevel);
+    const VkImageLayout srcOverallLayout = src ? src->layout : srcOldLayout;
+    const VkImageLayout dstOverallLayout = dst->layout;
+
     const tagRECT sr = sourceRect
         ? *sourceRect
         : tagRECT{0, 0, static_cast<int32_t>(srcW), static_cast<int32_t>(srcH)};
     const tagRECT dr = destinationRect
         ? *destinationRect
         : tagRECT{0, 0, static_cast<int32_t>(dstW), static_cast<int32_t>(dstH)};
+    if (sr.left < 0 || sr.top < 0 || sr.right > static_cast<int32_t>(srcW) ||
+        sr.bottom > static_cast<int32_t>(srcH) || sr.right <= sr.left || sr.bottom <= sr.top ||
+        dr.left < 0 || dr.top < 0 || dr.right > static_cast<int32_t>(dstW) ||
+        dr.bottom > static_cast<int32_t>(dstH) || dr.right <= dr.left || dr.bottom <= dr.top)
+        return E_FAIL;
 
-    if (srcOldLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+    VkImageSubresourceRange srcRange{};
+    srcRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    srcRange.baseMipLevel = srcLevel;
+    srcRange.levelCount = 1;
+    srcRange.baseArrayLayer = 0;
+    srcRange.layerCount = 1;
+    VkImageSubresourceRange dstRange{};
+    dstRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    dstRange.baseMipLevel = dstLevel;
+    dstRange.levelCount = 1;
+    dstRange.baseArrayLayer = 0;
+    dstRange.layerCount = 1;
+
+    const auto recordBlit = [&](VkCommandBuffer commandBuffer)
     {
+        if (srcOldLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+        {
+            m_backend->TransitionImage(
+                srcImage, srcOldLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT, srcRange, commandBuffer);
+        }
+        if (dstOldLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+        {
+            m_backend->TransitionImage(
+                dst->image, dstOldLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT, dstRange, commandBuffer);
+        }
+
+        VkImageBlit blit{};
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.mipLevel = srcLevel;
+        blit.srcSubresource.layerCount = 1;
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.mipLevel = dstLevel;
+        blit.dstSubresource.layerCount = 1;
+        blit.srcOffsets[0] = {sr.left, sr.top, 0};
+        blit.srcOffsets[1] = {sr.right, sr.bottom, 1};
+        blit.dstOffsets[0] = {dr.left, dr.top, 0};
+        blit.dstOffsets[1] = {dr.right, dr.bottom, 1};
+        vkCmdBlitImage(
+            commandBuffer,
+            srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &blit,
+            filter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR);
+
+        // The destination must be transitioned after the blit before it is
+        // sampled. Updating only the CPU-side layout tracker is not enough.
         m_backend->TransitionImage(
-            srcImage, srcOldLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+            dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT, dstRange, commandBuffer);
+
+        if (srcOldLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+        {
+            m_backend->TransitionImage(
+                srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcOldLayout,
+                VK_IMAGE_ASPECT_COLOR_BIT, srcRange, commandBuffer);
+        }
+    };
+
+    const bool recordInCurrentFrame = m_backend->IsFrameActive();
+    m_backend->EndRendering();
+    if (recordInCurrentFrame)
+    {
+        recordBlit(m_backend->CommandBuffer());
     }
-    if (dst->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+    else if (!m_backend->ImmediateSubmit(recordBlit))
     {
-        m_backend->TransitionImage(
-            dst->image, dst->layout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
-    }
-
-    VkImageBlit blit{};
-    blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    blit.srcSubresource.layerCount = 1;
-    blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    blit.dstSubresource.layerCount = 1;
-    blit.srcOffsets[0] = {sr.left, sr.top, 0};
-    blit.srcOffsets[1] = {sr.right, sr.bottom, 1};
-    blit.dstOffsets[0] = {dr.left, dr.top, 0};
-    blit.dstOffsets[1] = {dr.right, dr.bottom, 1};
-
-    vkCmdBlitImage(
-        m_backend->CommandBuffer(),
-        srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        dst->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        1, &blit,
-        filter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR);
-
-    // StretchRect produces a valid texture for subsequent shader sampling.
-    dst->SetSubresourceLayout(
-        destination->level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-    // The source remains the render target it was before the copy. In
-    // particular, restore the swapchain to COLOR_ATTACHMENT_OPTIMAL when a
-    // save-screen operation copied the active framebuffer.
-    if (srcOldLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
-    {
-        m_backend->TransitionImage(
-            srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcOldLayout,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+        return E_FAIL;
     }
 
     if (src)
-        src->SetSubresourceLayout(source->level, 0, srcOldLayout);
+    {
+        src->SetSubresourceLayout(srcLevel, 0, srcOldLayout);
+        src->layout = srcOverallLayout;
+    }
     else if (source->defaultFramebuffer)
+    {
         m_backend->SetCurrentSwapchainLayout(srcOldLayout);
+    }
+    dst->SetSubresourceLayout(dstLevel, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    dst->layout = dstOverallLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ||
+                  dstOverallLayout == VK_IMAGE_LAYOUT_UNDEFINED
+        ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     return S_OK;
 }
