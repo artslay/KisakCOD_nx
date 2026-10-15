@@ -63,6 +63,10 @@ constexpr _D3DFORMAT D3DFMT_R32F = 114;
 constexpr _D3DFORMAT D3DFMT_DXT1 = 0x31545844u;
 constexpr _D3DFORMAT D3DFMT_DXT3 = 0x33545844u;
 constexpr _D3DFORMAT D3DFMT_DXT5 = 0x35545844u;
+// Legacy CoD4/NVIDIA transparency-AA render-format FOURCC values passed
+// through D3DRS_ADAPTIVETESS_Y by the original D3D9 renderer.
+constexpr _D3DFORMAT D3DFMT_SSAA = 0x41415353u;
+constexpr _D3DFORMAT D3DFMT_ATOC = 0x434F5441u;
 constexpr uint32_t D3DFMT_INDEX16 = 101;
 constexpr uint32_t D3DLOCK_READONLY = 0x10;
 constexpr uint32_t D3DLOCK_NOSYSLOCK = 0x800;
@@ -424,6 +428,7 @@ private:
     uint32_t m_samplerState[16][16]{};
     D3DVIEWPORT9 m_viewport{0,0,1280,720,0.0f,1.0f};
     bool m_switchUnlit=false;
+    bool m_alphaToCoverage=false;
     bool m_depthEnable=true, m_depthWrite=true, m_blendEnable=false;
     uint32_t m_multisampleMask=0xffffffffu;
     uint32_t m_blendFactor=0xffffffffu;

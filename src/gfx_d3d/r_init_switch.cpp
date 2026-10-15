@@ -698,15 +698,14 @@ void R_SetupAntiAliasing(const GfxWindowParms *)
         requested, selected);
     Switch_LogWrite(message);
 
-    // r_aaAlpha selects legacy NVIDIA-specific transparency AA modes. It is
-    // not equivalent to Vulkan alpha-to-coverage, so report it rather than
-    // silently applying a visually different approximation.
-    static bool warnedAlphaAA = false;
-    if (!warnedAlphaAA && r_aaAlpha && r_aaAlpha->current.integer != 0)
+    // r_aaAlpha=1 is ATOC and is implemented in the Vulkan MSAA pipeline.
+    // Mode 2 requests NVIDIA SSAA, which has no equivalent single-pass state.
+    static bool warnedSuperSampleAA = false;
+    if (!warnedSuperSampleAA && r_aaAlpha && r_aaAlpha->current.integer == 2)
     {
-        warnedAlphaAA = true;
+        warnedSuperSampleAA = true;
         Switch_LogWrite(
-            "[KisakCOD][VK AA] r_aaAlpha transparency modes are unsupported; geometric MSAA only\n");
+            "[KisakCOD][VK AA] r_aaAlpha=2 SSAA mode is unsupported; geometric MSAA and ATOC are available\\n");
     }
 }
 HRESULT R_CreateDeviceInternal(HWND__ *, uint32_t, _D3DPRESENT_PARAMETERS_ *) {

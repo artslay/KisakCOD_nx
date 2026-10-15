@@ -2269,10 +2269,33 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
         m_fillMode = value;
         break;
     case D3DRS_ADAPTIVETESS_Y:
-        // The shared D3D9 renderer uses this legacy vendor state to select an
-        // NVIDIA alpha-AA render format. Conventional MSAA is supported below,
-        // but this proprietary format/state has no portable Vulkan equivalent.
-        changed = false;
+        // CoD4's fast transparency-AA mode passes the ATOC FOURCC here.
+        // Vulkan exposes the same alpha-to-coverage operation directly.
+        if (value == D3DFMT_UNKNOWN)
+        {
+            m_alphaToCoverage = false;
+        }
+        else if (value == D3DFMT_ATOC)
+        {
+            m_alphaToCoverage = true;
+        }
+        else if (value == D3DFMT_SSAA)
+        {
+            // NVIDIA's supersampled alpha mode isn't equivalent to normal ATOC.
+            // Keep that precise mode unsupported rather than quietly changing it.
+            changed = false;
+            static bool warnedSuperSampleAA = false;
+            if (!warnedSuperSampleAA)
+            {
+                warnedSuperSampleAA = true;
+                Switch_LogWrite("[KisakCOD][VK AA] r_aaAlpha=2 SSAA mode is unsupported; ATOC and geometric MSAA remain available\n");
+            }
+        }
+        else
+        {
+            changed = false;
+            LogUnsupportedRenderState(state, value);
+        }
         break;
     case D3DRS_ZWRITEENABLE: m_depthWrite = value != 0; break;
     case D3DRS_ZFUNC: m_depthFunc = value; break;
@@ -2610,6 +2633,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, static_cast<uint64_t>(depthFormat));
     key = HashCombine(key, static_cast<uint64_t>(colorSamples));
     key = HashCombine(key, m_multisampleMask);
+    key = HashCombine(key, m_alphaToCoverage);
     key = HashCombine(key, m_viewport.Width);
     key = HashCombine(key, m_viewport.Height);
     key = HashCombine(key, m_switchUnlit);
@@ -3021,6 +3045,12 @@ bool IDirect3DDevice9::EnsurePipeline()
     VkPipelineMultisampleStateCreateInfo multisample{};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisample.rasterizationSamples = colorSamples;
+    // CoD4's ATOC transparency-AA mode maps to Vulkan alpha-to-coverage.
+    // It is meaningful only when the framebuffer actually has multiple samples.
+    multisample.alphaToCoverageEnable =
+        (m_alphaToCoverage && colorSamples != VK_SAMPLE_COUNT_1_BIT)
+            ? VK_TRUE : VK_FALSE;
+    multisample.alphaToOneEnable = VK_FALSE;
     // D3D9's sample mask is a bit mask over sample indices. Supported Vulkan
     // counts in this path are at most 16, so one 32-bit word is sufficient.
     multisample.pSampleMask = &m_multisampleMask;
