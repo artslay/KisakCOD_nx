@@ -117,24 +117,35 @@ VulkanBackend *GetVulkanBackend()
 void VulkanBackend::SetError(const char *message, VkResult result)
 {
     if (result == VK_ERROR_DEVICE_LOST)
-        m_deviceLost = true;
+        m_deviceLost.store(true, std::memory_order_release);
 
-    m_lastError = message ? message : "Vulkan backend error";
     char trace[384];
-    if (result == VK_SUCCESS)
     {
-        std::snprintf(
-            trace, sizeof(trace), "[KisakCOD][VK ERROR] %s\n", m_lastError.c_str());
-    }
-    else
-    {
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][VK ERROR] %s result=%d device_lost=%u\n",
-            m_lastError.c_str(), static_cast<int>(result),
-            m_deviceLost ? 1u : 0u);
+        std::lock_guard<std::mutex> errorLock(m_errorMutex);
+        m_lastError = message ? message : "Vulkan backend error";
+        if (result == VK_SUCCESS)
+        {
+            std::snprintf(
+                trace, sizeof(trace), "[KisakCOD][VK ERROR] %s\n", m_lastError.c_str());
+        }
+        else
+        {
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK ERROR] %s result=%d device_lost=%u\n",
+                m_lastError.c_str(), static_cast<int>(result),
+                m_deviceLost.load(std::memory_order_acquire) ? 1u : 0u);
+        }
     }
     Switch_LogWrite(trace);
+}
+
+const char *VulkanBackend::GetLastError() const
+{
+    thread_local std::string errorCopy;
+    std::lock_guard<std::mutex> errorLock(m_errorMutex);
+    errorCopy = m_lastError.empty() ? "Vulkan backend error" : m_lastError;
+    return errorCopy.c_str();
 }
 
 bool VulkanBackend::IsDeviceLost() const
@@ -163,7 +174,10 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
             m_height = static_cast<uint32_t>(wndParms->displayHeight);
     }
 
-    m_lastError.clear();
+    {
+        std::lock_guard<std::mutex> errorLock(m_errorMutex);
+        m_lastError.clear();
+    }
     g_backend = this;
 
     if (!CreateInstance() ||
@@ -267,7 +281,7 @@ void VulkanBackend::Shutdown()
     m_uniformMapped = nullptr;
     m_uniformOffset = 0;
     m_initialized = false;
-    m_deviceLost = false;
+    m_deviceLost.store(false, std::memory_order_release);
     m_fillModeNonSolid = false;
     m_samplerAnisotropy = false;
     m_maxSamplerAnisotropy = 1.0f;

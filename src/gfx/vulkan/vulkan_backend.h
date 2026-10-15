@@ -222,7 +222,7 @@ public:
 
     void EndRendering();
 
-    const char *GetLastError() const override { return m_lastError.c_str(); }
+    const char *GetLastError() const override;
     bool IsInitialized() const { return m_initialized; }
     bool IsFrameActive() const { return m_frameActive; }
     bool GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_t *format) const override;
@@ -302,7 +302,7 @@ private:
 
     uint32_t m_swapchainIndex = 0;
     bool m_initialized = false;
-    bool m_deviceLost = false;
+    std::atomic<bool> m_deviceLost{false};
     bool m_fillModeNonSolid = false;
     bool m_samplerAnisotropy = false;
     float m_maxSamplerAnisotropy = 1.0f;
@@ -340,6 +340,7 @@ private:
         bool issued = false;
     };
 
+    mutable std::mutex m_errorMutex;
     std::string m_lastError;
 };
 
