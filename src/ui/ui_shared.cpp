@@ -9602,9 +9602,9 @@ void __cdecl Menu_PaintAll(UiContext *dc)
 }
 
 // The Switch loading movie is submitted after UI_Refresh, so repaint the
-// active loading menu's real load-bar windows after Bink. During SP map loads
-// CL_MapLoading commonly leaves "briefing" open; an inactive registered
-// "pregame" definition must never take precedence over the active menu.
+// authored load-bar track and fill after Bink. In stock briefing.menu, the grey
+// track is a WINDOW_STYLE_FILLED item and the progress fill is a separate
+// WINDOW_STYLE_LOADBAR item with the same rectangle. Preserve the authored order.
 void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc)
 {
     if (!dc)
@@ -9621,8 +9621,28 @@ void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc)
         }
     }
 
-    // First repaint load bars that belong to menus actually painted this frame.
-    // Repainting these after the cinematic restores their normal draw order.
+    const auto sameLoadBarRect = [](const rectDef_s &a, const rectDef_s &b)
+    {
+        return a.x > b.x - 0.1f && a.x < b.x + 0.1f &&
+            a.y > b.y - 0.1f && a.y < b.y + 0.1f &&
+            a.w > b.w - 0.1f && a.w < b.w + 0.1f &&
+            a.h > b.h - 0.1f && a.h < b.h + 0.1f;
+    };
+
+    const auto paintLoadingItem = [dc](itemDef_s *item)
+    {
+        if (!item)
+            return;
+
+        const unsigned int oldFlags =
+            item->window.dynamicFlags[dc->localClientNum];
+        if ((oldFlags & 4u) == 0)
+            Window_AddDynamicFlags(dc->localClientNum, &item->window, 4);
+        Item_Paint(dc, item);
+        if ((oldFlags & 4u) == 0)
+            Window_RemoveDynamicFlags(dc->localClientNum, &item->window, 4);
+    };
+
     bool activeMenuHasLoadBar = false;
     for (int stackIndex = drawStart; stackIndex < dc->openMenuCount; ++stackIndex)
     {
@@ -9630,7 +9650,6 @@ void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc)
         if (!menu)
             continue;
 
-        const float fadeCycle = static_cast<float>(menu->fadeCycle);
         if (menu->window.style == 6)
         {
             Window_Paint(
@@ -9639,29 +9658,71 @@ void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc)
                 menu->fadeAmount,
                 menu->fadeInAmount,
                 menu->fadeClamp,
-                fadeCycle);
+                static_cast<float>(menu->fadeCycle));
             activeMenuHasLoadBar = true;
         }
 
         if (!menu->items || menu->itemCount <= 0)
             continue;
 
+        // Treat each distinct load-bar rectangle as a group. Draw the authored
+        // non-loadbar background items matching that rectangle once, then draw
+        // every alternative loadbar item in file order. Item_Paint evaluates the
+        // stock visible-when expressions, so only the correct fill is submitted.
         for (int itemIndex = 0; itemIndex < menu->itemCount; ++itemIndex)
         {
-            itemDef_s *item = menu->items[itemIndex];
-            if (!item || item->window.style != 6)
+            itemDef_s *bar = menu->items[itemIndex];
+            if (!bar || bar->window.style != 6)
                 continue;
 
-            Item_Paint(dc, item);
             activeMenuHasLoadBar = true;
+            const rectDef_s barRect = bar->window.rect;
+
+            bool groupAlreadyPainted = false;
+            for (int priorIndex = 0; priorIndex < itemIndex; ++priorIndex)
+            {
+                itemDef_s *prior = menu->items[priorIndex];
+                if (prior && prior->window.style == 6 &&
+                    sameLoadBarRect(prior->window.rect, barRect))
+                {
+                    groupAlreadyPainted = true;
+                    break;
+                }
+            }
+            if (groupAlreadyPainted)
+                continue;
+
+            // The original briefing.menu places its grey WINDOW_STYLE_FILLED
+            // track before the two mutually exclusive load-bar fill items.
+            for (int backgroundIndex = 0; backgroundIndex < itemIndex; ++backgroundIndex)
+            {
+                itemDef_s *background = menu->items[backgroundIndex];
+                if (!background || background->window.style == 6 ||
+                    !sameLoadBarRect(background->window.rect, barRect))
+                {
+                    continue;
+                }
+                paintLoadingItem(background);
+            }
+
+            for (int fillIndex = itemIndex; fillIndex < menu->itemCount; ++fillIndex)
+            {
+                itemDef_s *fill = menu->items[fillIndex];
+                if (!fill || fill->window.style != 6 ||
+                    !sameLoadBarRect(fill->window.rect, barRect))
+                {
+                    continue;
+                }
+                paintLoadingItem(fill);
+            }
         }
     }
 
     if (activeMenuHasLoadBar)
         return;
 
-    // A few stock UI configurations keep the loading bar only in the loaded
-    // "pregame" menu definition. Use that only when no active menu provides one.
+    // Some UI sets put the stock load bar in the loaded "pregame" definition
+    // even when that menu is not open. Apply the same track-then-fill order.
     menuDef_t *loadingMenu = nullptr;
     for (int menuIndex = 0; menuIndex < dc->menuCount; ++menuIndex)
     {
@@ -9673,37 +9734,51 @@ void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc)
             break;
         }
     }
-
-    if (!loadingMenu)
-        return;
-
-    if (loadingMenu->window.style == 6)
-    {
-        Window_Paint(
-            dc,
-            &loadingMenu->window,
-            loadingMenu->fadeAmount,
-            loadingMenu->fadeInAmount,
-            loadingMenu->fadeClamp,
-            static_cast<float>(loadingMenu->fadeCycle));
-    }
-
-    if (!loadingMenu->items || loadingMenu->itemCount <= 0)
+    if (!loadingMenu || !loadingMenu->items || loadingMenu->itemCount <= 0)
         return;
 
     for (int itemIndex = 0; itemIndex < loadingMenu->itemCount; ++itemIndex)
     {
-        itemDef_s *item = loadingMenu->items[itemIndex];
-        if (!item || item->window.style != 6)
+        itemDef_s *bar = loadingMenu->items[itemIndex];
+        if (!bar || bar->window.style != 6)
             continue;
 
-        const unsigned int oldFlags =
-            item->window.dynamicFlags[dc->localClientNum];
-        if ((oldFlags & 4u) == 0)
-            Window_AddDynamicFlags(dc->localClientNum, &item->window, 4);
-        Item_Paint(dc, item);
-        if ((oldFlags & 4u) == 0)
-            Window_RemoveDynamicFlags(dc->localClientNum, &item->window, 4);
+        const rectDef_s barRect = bar->window.rect;
+        bool groupAlreadyPainted = false;
+        for (int priorIndex = 0; priorIndex < itemIndex; ++priorIndex)
+        {
+            itemDef_s *prior = loadingMenu->items[priorIndex];
+            if (prior && prior->window.style == 6 &&
+                sameLoadBarRect(prior->window.rect, barRect))
+            {
+                groupAlreadyPainted = true;
+                break;
+            }
+        }
+        if (groupAlreadyPainted)
+            continue;
+
+        for (int backgroundIndex = 0; backgroundIndex < itemIndex; ++backgroundIndex)
+        {
+            itemDef_s *background = loadingMenu->items[backgroundIndex];
+            if (!background || background->window.style == 6 ||
+                !sameLoadBarRect(background->window.rect, barRect))
+            {
+                continue;
+            }
+            paintLoadingItem(background);
+        }
+
+        for (int fillIndex = itemIndex; fillIndex < loadingMenu->itemCount; ++fillIndex)
+        {
+            itemDef_s *fill = loadingMenu->items[fillIndex];
+            if (!fill || fill->window.style != 6 ||
+                !sameLoadBarRect(fill->window.rect, barRect))
+            {
+                continue;
+            }
+            paintLoadingItem(fill);
+        }
     }
 }
 
