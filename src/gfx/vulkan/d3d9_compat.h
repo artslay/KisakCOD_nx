@@ -411,7 +411,6 @@ private:
     D3DVIEWPORT9 m_viewport{0,0,1280,720,0.0f,1.0f};
     bool m_switchUnlit=false;
     bool m_depthEnable=true, m_depthWrite=true, m_blendEnable=false;
-    bool m_multisampleAntialias=true;
     uint32_t m_multisampleMask=0xffffffffu;
     bool m_separateAlphaBlend=false;
     VkPrimitiveTopology m_topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;

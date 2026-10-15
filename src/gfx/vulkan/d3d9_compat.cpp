@@ -2067,7 +2067,14 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
     case D3DRS_SRCBLENDALPHA: m_srcBlendAlpha = value; break;
     case D3DRS_DESTBLENDALPHA: m_dstBlendAlpha = value; break;
     case D3DRS_BLENDOP: m_blendOp = value; break;
-    case D3DRS_MULTISAMPLEANTIALIAS: m_multisampleAntialias = value != 0; break;
+    case D3DRS_MULTISAMPLEANTIALIAS:
+        // D3D9 FALSE means replicate the pixel-center result to every sample,
+        // not Vulkan alpha-to-coverage. The latter changes blending semantics,
+        // so do not approximate this state with alphaToCoverageEnable.
+        changed = false;
+        if (value == 0)
+            LogUnsupportedRenderState(state, value);
+        break;
     case D3DRS_MULTISAMPLEMASK: m_multisampleMask = value; break;
     case D3DRS_BLENDOPALPHA: m_blendOpAlpha = value; break;
     case D3DRS_CULLMODE: m_cullMode = value; break;
@@ -2382,7 +2389,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, static_cast<uint64_t>(colorFormat));
     key = HashCombine(key, static_cast<uint64_t>(depthFormat));
     key = HashCombine(key, static_cast<uint64_t>(colorSamples));
-    key = HashCombine(key, m_multisampleAntialias);
     key = HashCombine(key, m_multisampleMask);
     key = HashCombine(key, m_viewport.Width);
     key = HashCombine(key, m_viewport.Height);
@@ -2794,12 +2800,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     VkPipelineMultisampleStateCreateInfo multisample{};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisample.rasterizationSamples = colorSamples;
-    multisample.alphaToCoverageEnable =
-        (colorSamples != VK_SAMPLE_COUNT_1_BIT && m_multisampleAntialias)
-            ? VK_TRUE : VK_FALSE;
-    // The D3D9 sample mask is a bit mask over sample indices. Switch sample
-    // counts supported by this compatibility path are at most 16, so one
-    // 32-bit word is sufficient for Vulkan's pSampleMask array.
+    // D3D9's sample mask is a bit mask over sample indices. Supported Vulkan
+    // counts in this path are at most 16, so one 32-bit word is sufficient.
     multisample.pSampleMask = &m_multisampleMask;
 
     VkPipelineDepthStencilStateCreateInfo depth{};
