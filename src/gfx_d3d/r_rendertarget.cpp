@@ -483,7 +483,10 @@ const char *__cdecl R_DescribeFormat(_D3DFORMAT format)
         result = "32-bit depth without stencil";
         break;
     case D3DFMT_D15S1:
-        result = "15-bit depth with 1-bit stencil";
+        result = "15-bit depth with 1-bit stencil (Vulkan D16S8 fallback)";
+        break;
+    case D3DFMT_D24FS8:
+        result = "floating-point depth with 8-bit stencil (Vulkan D32S8 fallback)";
         break;
     case D3DFMT_D24S8:
         result = "24-bit depth with 8-bit stencil";

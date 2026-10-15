@@ -101,12 +101,25 @@ VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
         return {VK_FORMAT_D16_UNORM, VK_IMAGE_ASPECT_DEPTH_BIT, 2, 0, false, true};
     case D3DFMT_D32:
         return {VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
+    case D3DFMT_D15S1:
+        // D3D9's 15/1 layout has no native Vulkan equivalent. Keep stencil
+        // attachment behavior with the closest supported packed depth/stencil.
+        return {VK_FORMAT_D16_UNORM_S8_UINT,
+                VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                4, 0, false, true};
+    case D3DFMT_D24FS8:
+        // Vendor floating-depth format fallback; depth readback is not exposed
+        // as a byte-identical D3D9 serialization layout.
+        return {VK_FORMAT_D32_SFLOAT_S8_UINT,
+                VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                8, 0, false, true};
     case D3DFMT_D24S8:
         return {VK_FORMAT_D24_UNORM_S8_UINT,
                 VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
                 4, 0, false, true};
     case D3DFMT_D24X8:
-        return {VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
+        return {VK_FORMAT_X8_D24_UNORM_PACK32,
+                VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
     case D3DFMT_DXT1:
         return {VK_FORMAT_BC1_RGBA_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 8, true, false};
     case D3DFMT_DXT3:
