@@ -107,8 +107,9 @@ constexpr uint32_t D3DCLEAR_TARGET = 0x1;
 constexpr uint32_t D3DCLEAR_ZBUFFER = 0x2;
 constexpr uint32_t D3DCLEAR_STENCIL = 0x4;
 constexpr uint32_t D3DPT_TRIANGLELIST = 4;
-constexpr uint32_t D3DFILL_SOLID = 3;
+constexpr uint32_t D3DFILL_POINT = 1;
 constexpr uint32_t D3DFILL_WIREFRAME = 2;
+constexpr uint32_t D3DFILL_SOLID = 3;
 
 enum _D3DTEXTUREFILTERTYPE : uint32_t {
     D3DTEXF_NONE = 0,

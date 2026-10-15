@@ -2394,19 +2394,19 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
     {
     case D3DRS_ZENABLE: m_depthEnable = value != 0; break;
     case D3DRS_FILLMODE:
-        if (value != D3DFILL_SOLID && value != D3DFILL_WIREFRAME)
+        if (value != D3DFILL_POINT && value != D3DFILL_WIREFRAME &&
+            value != D3DFILL_SOLID)
             return E_FAIL;
-        if (value == D3DFILL_WIREFRAME &&
+        if (value != D3DFILL_SOLID &&
             (!m_backend || !m_backend->SupportsNonSolidFill()))
         {
-            // Solid fill remains the safe fallback on Vulkan devices without
-            // fillModeNonSolid; report this unsupported optional state once.
-            static bool warnedUnsupportedWireframe = false;
-            if (!warnedUnsupportedWireframe)
+            // Vulkan requires fillModeNonSolid for line and point polygon modes.
+            static bool warnedUnsupportedNonSolidFill = false;
+            if (!warnedUnsupportedNonSolidFill)
             {
-                warnedUnsupportedWireframe = true;
+                warnedUnsupportedNonSolidFill = true;
                 Switch_LogWrite(
-                    "[KisakCOD][VK STATE] wireframe requested but fillModeNonSolid is unavailable; retaining solid fill\n");
+                    "[KisakCOD][VK STATE] point/wireframe fill requested but fillModeNonSolid is unavailable; retaining solid fill\n");
             }
             changed = false;
             break;
@@ -3174,7 +3174,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     VkPipelineRasterizationStateCreateInfo raster{};
     raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     raster.polygonMode = m_fillMode == D3DFILL_WIREFRAME
-        ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+        ? VK_POLYGON_MODE_LINE
+        : (m_fillMode == D3DFILL_POINT
+            ? VK_POLYGON_MODE_POINT : VK_POLYGON_MODE_FILL);
     raster.lineWidth = 1.0f;
     // D3D9 cull values are: NONE=1, CW=2, CCW=3.
     // The negative Vulkan viewport preserves the D3D9 top-left origin,
