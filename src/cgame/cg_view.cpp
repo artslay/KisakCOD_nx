@@ -1559,42 +1559,19 @@ int __cdecl CG_DrawActiveFrame(
     double FarPlaneDist; // fp1
     FxCmd v32[9]; // [sp+50h] [-70h] BYREF
 
+//Profile_Begin(13);
 #ifdef __SWITCH__
-    static uint32_t switchCreditsCgTraceFrameCount = 0;
-    const bool switchCreditsCgTraceThisFrame =
-        clientUIActives[0].connectionState == CA_ACTIVE && switchCreditsCgTraceFrameCount < 3;
-    const auto switchCreditsCgTrace = [&](const char *stage) {
-        if (!switchCreditsCgTraceThisFrame)
-            return;
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][CREDITS CG] frame=%u stage=%s serverTime=%d cgTime=%d skip=%d snap=%p next=%p\n",
-            switchCreditsCgTraceFrameCount,
-            stage,
-            serverTime,
-            cgArray[0].time,
-            CL_SkipRendering(),
-            static_cast<void *>(cgArray[0].snap),
-            static_cast<void *>(cgArray[0].nextSnap));
-        Switch_LogWrite(trace);
-    };
-    switchCreditsCgTrace("entry");
-#endif
-    //Profile_Begin(13);
-#ifdef __SWITCH__
-    switchCreditsCgTrace("before_clear_scene");
+
 #endif
     R_ClearScene(localClientNum);
 #ifdef __SWITCH__
-    switchCreditsCgTrace("after_clear_scene");
-    switchCreditsCgTrace("before_fx_begin_update");
+
+
 #endif
     FX_BeginUpdate(localClientNum);
 #ifdef __SWITCH__
-    switchCreditsCgTrace("after_fx_begin_update");
-    switchCreditsCgTrace("scene_cleared");
+
+
 #endif
     CG_SetCollWorldLocalClientNum(localClientNum);
     if (localClientNum)
@@ -1649,11 +1626,11 @@ int __cdecl CG_DrawActiveFrame(
             v18);
     }
 #ifdef __SWITCH__
-    switchCreditsCgTrace("before_snapshots");
+
 #endif
     CG_ProcessSnapshots(localClientNum);
 #ifdef __SWITCH__
-    switchCreditsCgTrace("after_snapshots");
+
 #endif
     if (!cgArray[0].snap)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_view.cpp", 1425, 0, "%s", "cgameGlob->snap");
@@ -1669,19 +1646,17 @@ int __cdecl CG_DrawActiveFrame(
     if (CL_SkipRendering())
     {
 #ifdef __SWITCH__
-        switchCreditsCgTrace("skip_rendering_predict");
+
 #endif
         CG_PredictPlayerState(localClientNum);
 #ifdef __SWITCH__
-        switchCreditsCgTrace("skip_rendering_return");
-        if (switchCreditsCgTraceThisFrame)
-            ++switchCreditsCgTraceFrameCount;
+
 #endif
         //Profile_EndInternal(0);
         return 0;
     }
 #ifdef __SWITCH__
-    switchCreditsCgTrace("before_vision");
+
 #endif
     CG_VisionSetsUpdate(localClientNum);
     CG_UpdateViewOffset(localClientNum);
@@ -1698,7 +1673,7 @@ int __cdecl CG_DrawActiveFrame(
     //Profile_Begin(22);
     R_UpdateNonDependentEffects(v32);
 #ifdef __SWITCH__
-    switchCreditsCgTrace("after_non_dependent_effects");
+
 #endif
     //Profile_EndInternal(0);
     if (localClientNum)
@@ -1731,14 +1706,14 @@ int __cdecl CG_DrawActiveFrame(
     CG_ClearHudGrenades();
     CG_UpdateEntInfo(localClientNum);
 #ifdef __SWITCH__
-    switchCreditsCgTrace("before_packet_entities");
+
 #endif
     if (CG_AddPacketEntities(localClientNum))
         viewlocked_entNum = cgArray[0].predictedPlayerState.viewlocked_entNum;
     else
         viewlocked_entNum = ENTITYNUM_NONE;
 #ifdef __SWITCH__
-    switchCreditsCgTrace("after_packet_entities");
+
 #endif
     //CG_UpdateRumble(localClientNum); // KISAKTODO 
     if (!cgArray[0].predictedPlayerState.locationSelectionInfo)
@@ -1763,7 +1738,7 @@ int __cdecl CG_DrawActiveFrame(
         CG_PredictPlayerState(localClientNum);
     }
 #ifdef __SWITCH__
-    switchCreditsCgTrace("after_player_state");
+
 #endif
     {
         PROF_SCOPED("view anim");
@@ -1774,7 +1749,7 @@ int __cdecl CG_DrawActiveFrame(
         CG_CalcViewValues(localClientNum);
     }
 #ifdef __SWITCH__
-    switchCreditsCgTrace("after_view_values");
+
 #endif
 
     //PIXBeginNamedEvent_Copy_NoVarArgs(0xFFFFFFFF, "player entity");
@@ -1825,12 +1800,12 @@ int __cdecl CG_DrawActiveFrame(
     R_AddCmdProjectionSet2D();
     DrawShellshockBlend(localClientNum);
 #ifdef __SWITCH__
-    switchCreditsCgTrace("before_draw_2d");
+
 #endif
     //Profile_Begin(350);
     CG_Draw2D(localClientNum);
 #ifdef __SWITCH__
-    switchCreditsCgTrace("after_draw_2d");
+
 #endif
     //Profile_EndInternal(0);
     //PIXEndNamedEvent();
@@ -1844,14 +1819,12 @@ int __cdecl CG_DrawActiveFrame(
     Sys_AllowSendClientMessages();
     R_Cinematic_SetPaused((CinematicEnum)(cg_paused->current.integer != 0));
 #ifdef __SWITCH__
-    switchCreditsCgTrace("before_draw_active");
+
 #endif
     //Profile_Begin(25);
     CG_DrawActive(localClientNum);
 #ifdef __SWITCH__
-    switchCreditsCgTrace("after_draw_active");
-    if (switchCreditsCgTraceThisFrame)
-        ++switchCreditsCgTraceFrameCount;
+
 #endif
     //Profile_EndInternal(0);
     //Profile_EndInternal(0);
