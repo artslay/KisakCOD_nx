@@ -1454,9 +1454,24 @@ void R_InitCodeImages()
             Image_LoadWhite(rgp.whiteImage);
         if (rgp.blackImage && !rgp.blackImage->texture.basemap)
             Image_LoadBlack(rgp.blackImage);
+        if (rgp.blackImage3D && !rgp.blackImage3D->texture.basemap)
+            Image_LoadBlack3D(rgp.blackImage3D);
+        if (rgp.blackImageCube && !rgp.blackImageCube->texture.basemap)
+            Image_LoadBlackCube(rgp.blackImageCube);
+        if (rgp.grayImage && !rgp.grayImage->texture.basemap)
+            Image_LoadGray(rgp.grayImage);
         if (rgp.identityNormalMapImage &&
             !rgp.identityNormalMapImage->texture.basemap)
             Image_LoadIdentityNormalMap(rgp.identityNormalMapImage);
+        if (rgp.pixelCostColorCodeImage &&
+            !rgp.pixelCostColorCodeImage->texture.basemap)
+            Image_LoadPixelCostColorCode(rgp.pixelCostColorCodeImage);
+
+        // $outdoor is registered through the builtin constructor table rather
+        // than a dedicated GfxGlobals member, so recover it by its hash entry.
+        GfxImage *outdoorImage = Image_FindExisting("$outdoor");
+        if (outdoorImage && !outdoorImage->texture.basemap)
+            R_GenerateOutdoorImage(outdoorImage);
     }
 
     {
