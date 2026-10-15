@@ -44,6 +44,8 @@ extern void Switch_LogWrite(const char *msg);
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <memory>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -59,12 +61,22 @@ struct ZoneLoadState
     std::unordered_set<void *> processed;
     std::unordered_map<MaterialVertexDeclaration *, MaterialVertexDeclaration *> vertexDecls;
 
+    // Weapon assets are copied into native 64-bit layout before registration. Their
+    // storage must outlive LinkAsset and remain valid for as long as this zone is loaded.
+    std::vector<std::unique_ptr<WeaponDef>> nativeWeaponCopies;
+
     // Retained for bounded BSP registration diagnostics.
     const char *zoneName = nullptr;
 };
 
+struct ZoneHandle
+{
+    void *zone = nullptr;
+    std::vector<std::unique_ptr<WeaponDef>> nativeWeaponCopies;
+};
+
 std::mutex s_zoneHandlesMutex;
-std::map<XZoneMemory *, void *> s_zoneHandles;
+std::map<XZoneMemory *, ZoneHandle> s_zoneHandles;
 
 bool FirstVisit(ZoneLoadState &state, void *object)
 {
@@ -424,9 +436,10 @@ void *LinkAsset(void *context, int assetType, void *asset)
 #endif
     }
     XAssetHeader header(asset);
-    WeaponDef nativeWeapon;
     if (type == ASSET_TYPE_WEAPON && asset)
     {
+        state.nativeWeaponCopies.push_back(std::make_unique<WeaponDef>());
+        WeaponDef *nativeWeapon = state.nativeWeaponCopies.back().get();
         // OAT's generated loader has already resolved these references to
         // native pointers. Reapply model members on a native-layout copy
         // before DB_AddXAsset runs its normal duplicate/override selection.
@@ -435,31 +448,31 @@ void *LinkAsset(void *context, int assetType, void *asset)
         // Keep the generated OAT asset types out of this engine translation unit:
         // IW3_Assets.h redeclares Fx/RawFile/StringTable types owned by the engine.
         // The bridge extracts only the pointer members needed here.
-        std::memcpy(&nativeWeapon, asset, sizeof(nativeWeapon));
+        std::memcpy(nativeWeapon, asset, sizeof(*nativeWeapon));
         void *modelPointers[38]{};
         if (KisakZone_ExtractWeaponModelPointers(asset, modelPointers, 38))
         {
             for (size_t modelIndex = 0; modelIndex < 16; ++modelIndex)
             {
-                nativeWeapon.gunXModel[modelIndex] =
+                nativeWeapon->gunXModel[modelIndex] =
                     reinterpret_cast<::XModel *>(modelPointers[modelIndex]);
-                nativeWeapon.worldModel[modelIndex] =
+                nativeWeapon->worldModel[modelIndex] =
                     reinterpret_cast<::XModel *>(modelPointers[16 + modelIndex]);
             }
 
-            nativeWeapon.handXModel = reinterpret_cast<::XModel *>(modelPointers[32]);
-            nativeWeapon.worldClipModel = reinterpret_cast<::XModel *>(modelPointers[33]);
-            nativeWeapon.rocketModel = reinterpret_cast<::XModel *>(modelPointers[34]);
-            nativeWeapon.knifeModel = reinterpret_cast<::XModel *>(modelPointers[35]);
-            nativeWeapon.worldKnifeModel = reinterpret_cast<::XModel *>(modelPointers[36]);
-            nativeWeapon.projectileModel = reinterpret_cast<::XModel *>(modelPointers[37]);
+            nativeWeapon->handXModel = reinterpret_cast<::XModel *>(modelPointers[32]);
+            nativeWeapon->worldClipModel = reinterpret_cast<::XModel *>(modelPointers[33]);
+            nativeWeapon->rocketModel = reinterpret_cast<::XModel *>(modelPointers[34]);
+            nativeWeapon->knifeModel = reinterpret_cast<::XModel *>(modelPointers[35]);
+            nativeWeapon->worldKnifeModel = reinterpret_cast<::XModel *>(modelPointers[36]);
+            nativeWeapon->projectileModel = reinterpret_cast<::XModel *>(modelPointers[37]);
         }
 
         // Resolve weapon sounds only after converting the OAT asset to the
         // engine's native layout. FixupWeapon reads/writes engine WeaponDef
         // offsets and must not be run against IW3::WeaponDef storage.
-        FixupWeapon(state, &nativeWeapon);
-        header.weapon = &nativeWeapon;
+        FixupWeapon(state, nativeWeapon);
+        header.weapon = nativeWeapon;
     }
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
 
@@ -542,7 +555,10 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
 
     {
         std::lock_guard<std::mutex> lock(s_zoneHandlesMutex);
-        s_zoneHandles[zoneMem] = zone;
+        ZoneHandle handle;
+        handle.zone = zone;
+        handle.nativeWeaponCopies = std::move(state.nativeWeaponCopies);
+        s_zoneHandles[zoneMem] = std::move(handle);
     }
 
     // The 32-bit loader copied the vertex and index blocks into the locked static
@@ -555,14 +571,16 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
 
 void DB_FreeXFileContent_Switch(XZoneMemory *zoneMem)
 {
-    void *zone = nullptr;
+    ZoneHandle handle;
     {
         std::lock_guard<std::mutex> lock(s_zoneHandlesMutex);
         const auto found = s_zoneHandles.find(zoneMem);
         if (found == s_zoneHandles.end())
             return;
-        zone = found->second;
+        handle = std::move(found->second);
         s_zoneHandles.erase(found);
     }
-    KisakZone_Free(zone);
+    KisakZone_Free(handle.zone);
+    // Keep native weapon copies alive through zone teardown, then release them with
+    // the zone handle instead of leaving DB asset headers pointing at stack memory.
 }
