@@ -374,7 +374,7 @@ VkFormat VertexFormat(uint8_t type)
     case D3DDECLTYPE_SHORT4N: return VK_FORMAT_R16G16B16A16_SNORM;
     case D3DDECLTYPE_USHORT2N: return VK_FORMAT_R16G16_UNORM;
     case D3DDECLTYPE_USHORT4N: return VK_FORMAT_R16G16B16A16_UNORM;
-    case D3DDECLTYPE_UDEC3: return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+    case D3DDECLTYPE_UDEC3: return VK_FORMAT_A2B10G10R10_USCALED_PACK32;
     case D3DDECLTYPE_DEC3N: return VK_FORMAT_A2B10G10R10_SNORM_PACK32;
     case D3DDECLTYPE_FLOAT16_2: return VK_FORMAT_R16G16_SFLOAT;
     case D3DDECLTYPE_FLOAT16_4: return VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -2054,8 +2054,8 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
         break;
     case D3DRS_ADAPTIVETESS_Y:
         // The shared D3D9 renderer uses this legacy vendor state to select an
-        // alpha-AA format. Switch render targets are single-sample, so it has
-        // no Vulkan equivalent until multisampling is implemented.
+        // NVIDIA alpha-AA render format. Conventional MSAA is supported below,
+        // but this proprietary format/state has no portable Vulkan equivalent.
         changed = false;
         break;
     case D3DRS_ZWRITEENABLE: m_depthWrite = value != 0; break;
@@ -2067,6 +2067,8 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
     case D3DRS_SRCBLENDALPHA: m_srcBlendAlpha = value; break;
     case D3DRS_DESTBLENDALPHA: m_dstBlendAlpha = value; break;
     case D3DRS_BLENDOP: m_blendOp = value; break;
+    case D3DRS_MULTISAMPLEANTIALIAS: m_multisampleAntialias = value != 0; break;
+    case D3DRS_MULTISAMPLEMASK: m_multisampleMask = value; break;
     case D3DRS_BLENDOPALPHA: m_blendOpAlpha = value; break;
     case D3DRS_CULLMODE: m_cullMode = value; break;
     case D3DRS_SCISSORTESTENABLE: m_scissor = value != 0; break;
@@ -2380,6 +2382,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, static_cast<uint64_t>(colorFormat));
     key = HashCombine(key, static_cast<uint64_t>(depthFormat));
     key = HashCombine(key, static_cast<uint64_t>(colorSamples));
+    key = HashCombine(key, m_multisampleAntialias);
+    key = HashCombine(key, m_multisampleMask);
     key = HashCombine(key, m_viewport.Width);
     key = HashCombine(key, m_viewport.Height);
     key = HashCombine(key, m_depthEnable);
@@ -2790,6 +2794,13 @@ bool IDirect3DDevice9::EnsurePipeline()
     VkPipelineMultisampleStateCreateInfo multisample{};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisample.rasterizationSamples = colorSamples;
+    multisample.alphaToCoverageEnable =
+        (colorSamples != VK_SAMPLE_COUNT_1_BIT && m_multisampleAntialias)
+            ? VK_TRUE : VK_FALSE;
+    // The D3D9 sample mask is a bit mask over sample indices. Switch sample
+    // counts supported by this compatibility path are at most 16, so one
+    // 32-bit word is sufficient for Vulkan's pSampleMask array.
+    multisample.pSampleMask = &m_multisampleMask;
 
     VkPipelineDepthStencilStateCreateInfo depth{};
     depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
