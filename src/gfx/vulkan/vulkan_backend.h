@@ -74,6 +74,8 @@ public:
 
     uint32_t FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties) const;
     bool SupportsSampleCount(VkSampleCountFlagBits samples, bool depth) const;
+    bool SupportsImageSampleCount(
+        VkFormat format, VkImageUsageFlags usage, VkSampleCountFlagBits samples) const;
 
     bool CreateBuffer(
         VkDeviceSize size,

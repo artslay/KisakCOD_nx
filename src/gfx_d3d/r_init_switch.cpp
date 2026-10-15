@@ -345,8 +345,7 @@ void R_InitGraphicsApi() {
     vidConfig.maxTextureMaps = 16;
     vidConfig.deviceSupportsGamma = false;
     dx.depthStencilFormat = D3DFMT_D24S8;
-    dx.multiSampleType = D3DMULTISAMPLE_NONE;
-    dx.multiSampleQuality = 0;
+    R_SetupAntiAliasing(nullptr);
 
     // The shared render-target bootstrap expects these metrics to be populated by
     // the original D3D capability path before R_CreateForInitOrReset(). On Switch
@@ -644,7 +643,72 @@ char R_CreateDevice(const GfxWindowParms *) {
     return dx.device != nullptr;
 }
 void R_SetD3DPresentParameters(_D3DPRESENT_PARAMETERS_ *, const GfxWindowParms *) {}
-void R_SetupAntiAliasing(const GfxWindowParms *) {}
+void R_SetupAntiAliasing(const GfxWindowParms *)
+{
+    dx.multiSampleType = D3DMULTISAMPLE_NONE;
+    dx.multiSampleQuality = 0;
+
+    const int requested = r_aaSamples ? r_aaSamples->current.integer : 1;
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!backend || requested <= 1 || g_allocateMinimalResources)
+    {
+        if (requested > 1 && g_allocateMinimalResources)
+            Switch_LogWrite("[KisakCOD][VK AA] disabled during minimal-resource initialization\n");
+        return;
+    }
+
+    struct SampleOption
+    {
+        int count;
+        _D3DMULTISAMPLE_TYPE d3d;
+        VkSampleCountFlagBits vk;
+    };
+    const SampleOption options[] = {
+        {16, D3DMULTISAMPLE_16_SAMPLES, VK_SAMPLE_COUNT_16_BIT},
+        {8, D3DMULTISAMPLE_8_SAMPLES, VK_SAMPLE_COUNT_8_BIT},
+        {4, D3DMULTISAMPLE_4_SAMPLES, VK_SAMPLE_COUNT_4_BIT},
+        {2, D3DMULTISAMPLE_2_SAMPLES, VK_SAMPLE_COUNT_2_BIT}
+    };
+
+    int selected = 1;
+    for (const SampleOption &option : options)
+    {
+        if (option.count > requested)
+            continue;
+        if (!backend->SupportsImageSampleCount(
+                VK_FORMAT_B8G8R8A8_UNORM,
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                option.vk))
+            continue;
+        if (!backend->SupportsImageSampleCount(
+                VK_FORMAT_D24_UNORM_S8_UINT,
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                option.vk))
+            continue;
+
+        dx.multiSampleType = option.d3d;
+        selected = option.count;
+        break;
+    }
+
+    char message[224];
+    std::snprintf(
+        message, sizeof(message),
+        "[KisakCOD][VK AA] requested=%d selected=%d\n",
+        requested, selected);
+    Switch_LogWrite(message);
+
+    // r_aaAlpha selects legacy NVIDIA-specific transparency AA modes. It is
+    // not equivalent to Vulkan alpha-to-coverage, so report it rather than
+    // silently applying a visually different approximation.
+    static bool warnedAlphaAA = false;
+    if (!warnedAlphaAA && r_aaAlpha && r_aaAlpha->current.integer != 0)
+    {
+        warnedAlphaAA = true;
+        Switch_LogWrite(
+            "[KisakCOD][VK AA] r_aaAlpha transparency modes are unsupported; geometric MSAA only\n");
+    }
+}
 HRESULT R_CreateDeviceInternal(HWND__ *, uint32_t, _D3DPRESENT_PARAMETERS_ *) {
     if (!dx.device)
         dx.device = new IDirect3DDevice9;

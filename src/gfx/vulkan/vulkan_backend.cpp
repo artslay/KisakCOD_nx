@@ -1428,6 +1428,25 @@ bool VulkanBackend::SupportsSampleCount(VkSampleCountFlagBits samples, bool dept
     return (supported & static_cast<VkSampleCountFlags>(samples)) != 0;
 }
 
+bool VulkanBackend::SupportsImageSampleCount(
+    VkFormat format, VkImageUsageFlags usage, VkSampleCountFlagBits samples) const
+{
+    if (!m_physicalDevice || format == VK_FORMAT_UNDEFINED || samples == 0)
+        return false;
+
+    VkImageFormatProperties properties{};
+    const VkResult result = vkGetPhysicalDeviceImageFormatProperties(
+        m_physicalDevice,
+        format,
+        VK_IMAGE_TYPE_2D,
+        VK_IMAGE_TILING_OPTIMAL,
+        usage,
+        0,
+        &properties);
+    return result == VK_SUCCESS &&
+        (properties.sampleCounts & static_cast<VkSampleCountFlags>(samples)) != 0;
+}
+
 VkImage VulkanBackend::CurrentSwapchainImage() const
 {
     return (m_swapchainIndex < m_swapchainImages.size())

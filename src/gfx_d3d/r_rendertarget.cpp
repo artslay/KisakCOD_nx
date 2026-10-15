@@ -487,20 +487,89 @@ void __cdecl R_InitFrameBufferRenderTarget_Win32(GfxRenderTarget *renderTarget)
     iassert(renderTarget);
     renderTarget->width = vidConfig.displayWidth;
     renderTarget->height = vidConfig.displayHeight;
+    renderTarget->surface.color = nullptr;
+    renderTarget->surface.depthStencil = nullptr;
 
-    renderTarget->surface.color = new IDirect3DSurface9;
-    renderTarget->surface.color->texture = nullptr;
-    renderTarget->surface.color->level = 0;
-    renderTarget->surface.color->defaultFramebuffer = true;
+    const auto makeSwapchainSurface = []()
+    {
+        auto *surface = new IDirect3DSurface9;
+        surface->texture = nullptr;
+        surface->level = 0;
+        surface->defaultFramebuffer = true;
+        return surface;
+    };
+
+    if (!g_allocateMinimalResources && dx.multiSampleType != D3DMULTISAMPLE_NONE)
+    {
+        const HRESULT colorResult = dx.device
+            ? dx.device->CreateRenderTarget(
+                  static_cast<uint32_t>(renderTarget->width),
+                  static_cast<uint32_t>(renderTarget->height),
+                  D3DFMT_A8R8G8B8,
+                  dx.multiSampleType,
+                  dx.multiSampleQuality,
+                  0,
+                  &renderTarget->surface.color,
+                  nullptr)
+            : E_FAIL;
+        if (colorResult < 0)
+        {
+            char message[192];
+            std::snprintf(
+                message, sizeof(message),
+                "[KisakCOD][VK AA] multisample color target failed hr=%d; falling back to swapchain\n",
+                static_cast<int>(colorResult));
+            Switch_LogWrite(message);
+            dx.multiSampleType = D3DMULTISAMPLE_NONE;
+            dx.multiSampleQuality = 0;
+        }
+    }
+
+    if (!renderTarget->surface.color)
+        renderTarget->surface.color = makeSwapchainSurface();
 
     if (!g_allocateMinimalResources)
     {
         int depthWidth, depthHeight;
         R_GetFrameBufferDepthStencilRes(&depthWidth, &depthHeight);
-        if (dx.device->CreateDepthStencilSurface(
-                depthWidth, depthHeight, dx.depthStencilFormat,
-                D3DMULTISAMPLE_NONE, 0, 0,
-                &renderTarget->surface.depthStencil, nullptr) < 0)
+        HRESULT depthResult = dx.device->CreateDepthStencilSurface(
+            static_cast<uint32_t>(depthWidth),
+            static_cast<uint32_t>(depthHeight),
+            dx.depthStencilFormat,
+            dx.multiSampleType,
+            dx.multiSampleQuality,
+            0,
+            &renderTarget->surface.depthStencil,
+            nullptr);
+
+        if (depthResult < 0 && dx.multiSampleType != D3DMULTISAMPLE_NONE)
+        {
+            char message[192];
+            std::snprintf(
+                message, sizeof(message),
+                "[KisakCOD][VK AA] multisample depth target failed hr=%d; falling back to single-sample\n",
+                static_cast<int>(depthResult));
+            Switch_LogWrite(message);
+
+            dx.multiSampleType = D3DMULTISAMPLE_NONE;
+            dx.multiSampleQuality = 0;
+            if (renderTarget->surface.color)
+                renderTarget->surface.color->Release();
+            renderTarget->surface.color = makeSwapchainSurface();
+            renderTarget->surface.depthStencil = nullptr;
+
+            depthResult = dx.device->CreateDepthStencilSurface(
+                static_cast<uint32_t>(depthWidth),
+                static_cast<uint32_t>(depthHeight),
+                dx.depthStencilFormat,
+                D3DMULTISAMPLE_NONE,
+                0,
+                0,
+                &renderTarget->surface.depthStencil,
+                nullptr);
+        }
+
+        if (depthResult < 0)
         {
             Com_Error(ERR_FATAL, "Couldn't create a %i x %i depth-stencil surface",
                       depthWidth, depthHeight);
