@@ -1071,6 +1071,9 @@ bool Switch_RestoreVulkanBuffers(VulkanBackend *backend)
     };
     std::vector<PendingBuffer> pending;
     std::lock_guard<std::mutex> lock(g_vulkanResourceRegistryMutex);
+
+    // Validate all surviving resources before creating any replacements. This
+    // avoids leaking earlier allocations if a later wrapper is inconsistent.
     for (KisakVkBuffer *owner : g_liveVulkanBuffers)
     {
         if (!owner || !owner->recoveryPending)
@@ -1078,6 +1081,12 @@ bool Switch_RestoreVulkanBuffers(VulkanBackend *backend)
         if (owner->buffer || owner->memory || owner->mapped ||
             owner->recoveryShadow.size() != owner->size)
             return false;
+    }
+
+    for (KisakVkBuffer *owner : g_liveVulkanBuffers)
+    {
+        if (!owner || !owner->recoveryPending)
+            continue;
         PendingBuffer item{};
         item.owner = owner;
         if (!backend->CreateBuffer(owner->size, owner->usageFlags, owner->memoryProperties,

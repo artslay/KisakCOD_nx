@@ -61,6 +61,7 @@ const dvar_t *r_fullscreen = nullptr;
 static bool s_registered = false;
 static bool s_switchVulkanRecoveryInProgress = false;
 static bool s_switchVulkanRecoveryFailed = false;
+static bool s_switchVulkanRecoveryFatal = false;
 
 void TRACK_r_init()
 {
@@ -819,7 +820,8 @@ void R_ComErrorCleanup()
 }
 static bool R_RecoverLostVulkanDevice()
 {
-    if (s_switchVulkanRecoveryInProgress || !Sys_IsMainThread() || !rg.registered)
+    if (s_switchVulkanRecoveryInProgress || s_switchVulkanRecoveryFatal ||
+        !Sys_IsMainThread() || !rg.registered)
         return false;
 
     VulkanBackend *oldBackend = GetVulkanBackend();
@@ -831,6 +833,17 @@ static bool R_RecoverLostVulkanDevice()
     dx.deviceLost = 1;
     Switch_LogWrite("[KisakCOD][VK RECOVERY] begin full renderer/device rebuild\n");
 
+    const auto abortRecovery = [&](const char *reason)
+    {
+        s_switchVulkanRecoveryFailed = true;
+        s_switchVulkanRecoveryFatal = true;
+        s_switchVulkanRecoveryInProgress = false;
+        dx.deviceLost = 1;
+        Switch_LogWrite(reason);
+        R_FatalInitError(reason);
+        return false;
+    };
+
     // Return ownership from the render thread before releasing resources that
     // recorded commands may still reference.
     R_SyncRenderThread();
@@ -838,17 +851,9 @@ static bool R_RecoverLostVulkanDevice()
     R_ReleaseForShutdownOrReset();
 
     if (!R_ReleaseAllVulkanImagesForDeviceLoss())
-    {
-        Switch_LogWrite("[KisakCOD][VK RECOVERY] abort=image resource accounting is not clean\n");
-        s_switchVulkanRecoveryInProgress = false;
-        return false;
-    }
+        return abortRecovery("[KisakCOD][VK RECOVERY] abort=image resource accounting is not clean\n");
     if (!Switch_PrepareVulkanDeviceLossResources(oldBackend))
-    {
-        Switch_LogWrite("[KisakCOD][VK RECOVERY] abort=live buffer is locked or cannot be snapshotted\n");
-        s_switchVulkanRecoveryInProgress = false;
-        return false;
-    }
+        return abortRecovery("[KisakCOD][VK RECOVERY] abort=live buffer is locked or cannot be snapshotted\n");
 
     delete dx.device;
     dx.device = nullptr;
@@ -859,12 +864,7 @@ static bool R_RecoverLostVulkanDevice()
     VulkanBackend *newBackend = GetVulkanBackend();
     if (s_switchVulkanRecoveryFailed || !g_gfxBackend || !dx.device ||
         !newBackend || newBackend->IsDeviceLost())
-    {
-        Switch_LogWrite("[KisakCOD][VK RECOVERY] failed=backend/device recreation\n");
-        s_switchVulkanRecoveryInProgress = false;
-        dx.deviceLost = 1;
-        return false;
-    }
+        return abortRecovery("[KisakCOD][VK RECOVERY] failed=backend/device recreation\n");
 
     // CPU asset objects stay loaded in their fastfiles. Recreate builtin images
     // and then reload/rebuild every database image against the new VkDevice.
