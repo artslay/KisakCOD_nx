@@ -330,6 +330,16 @@ void R_VulkanUploadTexture(
     const VkImageLayout oldLayout = texture->GetSubresourceLayout(mipLevel, layer);
     const size_t bytes = R_VulkanImageLevelSize(format, width, height, depth);
 
+    // Preserve ordering when an initialized image is uploaded again mid-frame:
+    // previously recorded draws must consume the old texels before the upload.
+    // First uploads to undefined levels do not need this synchronization.
+    if (oldLayout != VK_IMAGE_LAYOUT_UNDEFINED && backend->IsFrameActive() &&
+        !backend->SynchronizeActiveFrame())
+    {
+        Switch_LogWrite("[KisakCOD][VK] reupload sync failed\n");
+        return;
+    }
+
     bool uploaded = false;
     if (image->mapType == MAPTYPE_3D)
     {
