@@ -9550,6 +9550,66 @@ void __cdecl Menu_PaintAll(UiContext *dc)
     
 }
 
+// The Switch loading movie is submitted after UI_Refresh so its final Bink
+// frame survives menu transitions. Repaint only the normal pregame load-bar
+// items after that movie; painting the whole menu here would cover the video.
+void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc)
+{
+    if (!dc || dc->openMenuCount <= 0)
+        return;
+
+    int drawStart = 0;
+    for (int stackIndex = dc->openMenuCount - 1; stackIndex >= 0; --stackIndex)
+    {
+        menuDef_t *menu = dc->menuStack[stackIndex];
+        if (menu && menu->fullScreen)
+        {
+            drawStart = stackIndex;
+            break;
+        }
+    }
+
+    for (int stackIndex = drawStart; stackIndex < dc->openMenuCount; ++stackIndex)
+    {
+        menuDef_t *menu = dc->menuStack[stackIndex];
+        if (!menu || !menu->window.name ||
+            I_stricmp(menu->window.name, "pregame") != 0)
+        {
+            continue;
+        }
+
+        unsigned int paintedLoadBars = 0;
+        if (menu->items && menu->itemCount > 0)
+        {
+            for (int itemIndex = 0; itemIndex < menu->itemCount; ++itemIndex)
+            {
+                itemDef_s *item = menu->items[itemIndex];
+                if (!item || item->window.style != 6)
+                    continue;
+
+                Item_Paint(dc, item);
+                ++paintedLoadBars;
+            }
+        }
+
+#ifdef __SWITCH__
+        static unsigned int traceCount = 0;
+        if (traceCount < 8)
+        {
+            char trace[192];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][PREGAME LOADBAR OVERLAY] menu=pregame items=%u\n",
+                paintedLoadBars);
+            Switch_LogWrite(trace);
+            ++traceCount;
+        }
+#endif
+        return;
+    }
+}
+
 void __cdecl TRACK_ui_shared()
 {
     track_static_alloc_internal(&scrollInfo, 32, "scrollInfo", 34);
