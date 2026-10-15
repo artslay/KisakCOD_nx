@@ -8154,10 +8154,29 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
                 // Keep the serialized address only as a temporary placeholder.
                 // A later inline technique load registers the widened native
                 // object and DB_FixupSwitchPointerAliases() replaces this slot.
-                *varMaterialTechniquePtr =
-                    reinterpret_cast<MaterialTechnique *>(
-                        serializedSlot);
+                // Keep unresolved references null until the alias is registered.
+                // The fixup queue stores the serialized key separately; exposing the
+                // stream address here lets renderer code dereference serialized bytes.
+                *varMaterialTechniquePtr = nullptr;
                 if (serializedSlot)
+                {
+                    static uint32_t switchTechniquePendingTraceCount = 0;
+                    if (switchTechniquePendingTraceCount < 32u)
+                    {
+                        char trace[320];
+                        std::snprintf(
+                            trace,
+                            sizeof(trace),
+                            "[KisakCOD][TECHNIQUE ALIAS PENDING] asset=%d rawType=%u token=%08x serialized=%p slot=%p stream=%u\\n",
+                            g_switchCurrentAssetIndex,
+                            static_cast<unsigned>(g_switchCurrentAssetRawType),
+                            value,
+                            reinterpret_cast<const void *>(serializedSlot),
+                            static_cast<void *>(varMaterialTechniquePtr),
+                            static_cast<unsigned>(g_streamPosIndex));
+                        Switch_LogWrite(trace);
+                        ++switchTechniquePendingTraceCount;
+                    }
                 {
                     DB_AddSwitchPointerAliasFixup(
                         serializedSlot,
@@ -8638,10 +8657,29 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
             }
             else
             {
-                varMaterialTechniqueSet->techniques[i] =
-                    reinterpret_cast<MaterialTechnique *>(
-                        serializedSlot);
+                // Forward technique aliases are patched into this destination later.
+                // Never leave the serialized fastfile address visible as a native pointer.
+                varMaterialTechniqueSet->techniques[i] = nullptr;
                 if (serializedSlot)
+                {
+                    static uint32_t switchTechniqueSetPendingTraceCount = 0;
+                    if (switchTechniqueSetPendingTraceCount < 32u)
+                    {
+                        char trace[320];
+                        std::snprintf(
+                            trace,
+                            sizeof(trace),
+                            "[KisakCOD][TECHSET TECHNIQUE ALIAS PENDING] asset=%d rawType=%u index=%d token=%08x serialized=%p slot=%p stream=%u\\n",
+                            g_switchCurrentAssetIndex,
+                            static_cast<unsigned>(g_switchCurrentAssetRawType),
+                            i,
+                            value,
+                            reinterpret_cast<const void *>(serializedSlot),
+                            static_cast<void *>(&varMaterialTechniqueSet->techniques[i]),
+                            static_cast<unsigned>(g_streamPosIndex));
+                        Switch_LogWrite(trace);
+                        ++switchTechniqueSetPendingTraceCount;
+                    }
                 {
                     DB_AddSwitchPointerAliasFixup(
                         serializedSlot,
