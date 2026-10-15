@@ -27,8 +27,6 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
-extern void Switch_ArmPostLoadVulkanTrace();
-#include <cstdio>
 extern thread_local const char *g_switchFrameStage;
 extern void Switch_UI_ResetStatementValidationCache(void);
 #endif
@@ -1731,21 +1729,6 @@ bool __cdecl UI_AllowScriptMenuResponse(int localClientNum)
 
 void UI_PlayerStart()
 {
-#ifdef __SWITCH__
-    static bool switchPlayerStartTraceReported = false;
-    const bool switchLogPlayerStart = !switchPlayerStartTraceReported;
-    if (switchLogPlayerStart)
-    {
-        char trace[224];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][LOAD TRANSITION] UI_PlayerStart enter menu=%d connection=%d skipRendering=%d fullscreen=%d\n",
-            static_cast<int>(g_currentMenuType),
-            static_cast<int>(clientUIActives[0].connectionState),
-            CL_SkipRendering(), UI_IsFullscreen());
-        Switch_LogWrite(trace);
-    }
-#endif
     if (g_currentMenuType != UIMENU_PREGAME && g_currentMenuType != UIMENU_MAIN)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\ui\\ui_main.cpp",
@@ -1760,21 +1743,6 @@ void UI_PlayerStart()
         R_Cinematic_StartNextPlayback();
     else
         R_Cinematic_StopPlayback();
-#ifdef __SWITCH__
-    Switch_ArmPostLoadVulkanTrace();
-    if (switchLogPlayerStart)
-    {
-        char trace[224];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][LOAD TRANSITION] UI_PlayerStart exit menu=%d connection=%d skipRendering=%d fullscreen=%d\n",
-            static_cast<int>(g_currentMenuType),
-            static_cast<int>(clientUIActives[0].connectionState),
-            CL_SkipRendering(), UI_IsFullscreen());
-        Switch_LogWrite(trace);
-        switchPlayerStartTraceReported = true;
-    }
-#endif
 }
 
 void UI_LoadModsList()
@@ -1830,39 +1798,12 @@ void __cdecl UI_Refresh()
 #endif
         if (g_currentMenuType == UIMENU_PREGAME)
         {
-            const bool pregameVisible = Menu_IsMenuOpenAndVisible(0, "pregame");
-            bool cinematicFinished = false;
-            bool completedLoadingCinematic = false;
-            if (pregameVisible)
+            if (Menu_IsMenuOpenAndVisible(0, "pregame"))
             {
-                cinematicFinished = R_Cinematic_IsFinished();
-                completedLoadingCinematic = SCR_ConsumeMapLoadingCinematicFinished();
-            }
-#ifdef __SWITCH__
-            static int switchLastPregameGateState = -1;
-            const int switchPregameGateState =
-                (pregameVisible ? 1 : 0) |
-                (cinematicFinished ? 2 : 0) |
-                (completedLoadingCinematic ? 4 : 0) |
-                (static_cast<int>(clientUIActives[0].connectionState) << 3);
-            if (switchPregameGateState != switchLastPregameGateState)
-            {
-                char trace[256];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][LOAD TRANSITION] pregame gate visible=%d cinematicFinished=%d loadingFinished=%d connection=%d\n",
-                    pregameVisible, cinematicFinished, completedLoadingCinematic,
-                    static_cast<int>(clientUIActives[0].connectionState));
-                Switch_LogWrite(trace);
-                switchLastPregameGateState = switchPregameGateState;
-            }
-#endif
-            if (pregameVisible && (cinematicFinished || completedLoadingCinematic))
-            {
-#ifdef __SWITCH__
-                Switch_LogWrite("[KisakCOD][LOAD TRANSITION] pregame gate opened\n");
-#endif
-                UI_PlayerStart();
+                const bool cinematicFinished = R_Cinematic_IsFinished();
+                const bool completedLoadingCinematic = SCR_ConsumeMapLoadingCinematicFinished();
+                if (cinematicFinished || completedLoadingCinematic)
+                    UI_PlayerStart();
             }
         }
 

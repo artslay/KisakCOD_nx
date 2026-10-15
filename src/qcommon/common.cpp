@@ -40,7 +40,6 @@
 
 #ifdef __SWITCH__
 #include <atomic>
-#include <cstdio>
 #include <cstring>
 #endif
 
@@ -2023,21 +2022,6 @@ static void Com_AttractMode(int localClientNum)
 void __cdecl Com_Frame_Try_Block_Function()
 {
 #ifdef __SWITCH__
-    static bool switchFirstActiveFrameTraceDone = false;
-    const bool switchTraceFirstActiveFrame =
-        !switchFirstActiveFrameTraceDone &&
-        clientUIActives[0].connectionState == CA_ACTIVE;
-    if (switchTraceFirstActiveFrame)
-    {
-        char trace[256];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][ACTIVE FRAME] enter frame=%d connection=%d fullscreen=%d\n",
-            com_frameNumber,
-            static_cast<int>(clientUIActives[0].connectionState),
-            UI_IsFullscreen());
-        Switch_LogWrite(trace);
-    }
     COM_ProcessIntroMovieDrawConfirmation();
 #endif
     float deltaTime; // [esp+4h] [ebp-78h]
@@ -2176,14 +2160,8 @@ void __cdecl Com_Frame_Try_Block_Function()
     iassert(msec > 0);
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/sv_frame";
-    if (switchTraceFirstActiveFrame)
-        Switch_LogWrite("[KisakCOD][ACTIVE FRAME] before SV_Frame\n");
 #endif
     msec = SV_Frame(msec);
-#ifdef __SWITCH__
-    if (switchTraceFirstActiveFrame)
-        Switch_LogWrite("[KisakCOD][ACTIVE FRAME] after SV_Frame\n");
-#endif
 
 #ifdef KISAK_MP
     Com_DedicatedModified();
@@ -2249,10 +2227,6 @@ void __cdecl Com_Frame_Try_Block_Function()
 #elif KISAK_SP
             CL_Frame(0, msec);
 #endif
-#ifdef __SWITCH__
-            if (switchTraceFirstActiveFrame)
-                Switch_LogWrite("[KisakCOD][ACTIVE FRAME] after CL_Frame\n");
-#endif
         }
 
 #ifdef KISAK_MP
@@ -2261,16 +2235,9 @@ void __cdecl Com_Frame_Try_Block_Function()
 #endif
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr_update_screen";
-        if (switchTraceFirstActiveFrame)
-            Switch_LogWrite("[KisakCOD][ACTIVE FRAME] before SCR_UpdateScreen\n");
 #endif
         SCR_UpdateScreen();
 #ifdef __SWITCH__
-        if (switchTraceFirstActiveFrame)
-        {
-            Switch_LogWrite("[KisakCOD][ACTIVE FRAME] after SCR_UpdateScreen\n");
-            switchFirstActiveFrameTraceDone = true;
-        }
         g_switchFrameStage = "frame/ragdoll";
 #endif
         Ragdoll_Update(msec);

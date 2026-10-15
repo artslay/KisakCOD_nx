@@ -8,8 +8,6 @@ extern bool R_RecoverLostVulkanDevice();
 
 #include <algorithm>
 #include <array>
-#include <atomic>
-#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <limits>
@@ -25,13 +23,6 @@ extern bool R_RecoverLostVulkanDevice();
 #include <vulkan/vulkan_vi.h>
 
 extern void Switch_LogWrite(const char *msg);
-
-static std::atomic<uint32_t> g_switchPostLoadTraceFrames{0};
-
-void Switch_ArmPostLoadVulkanTrace()
-{
-    g_switchPostLoadTraceFrames.store(4, std::memory_order_release);
-}
 
 namespace
 {
@@ -1175,34 +1166,6 @@ bool VulkanBackend::SynchronizeActiveFrame()
 
 bool VulkanBackend::EndFrame()
 {
-#ifdef __SWITCH__
-    bool switchPostLoadTrace = false;
-    uint32_t switchTraceFrames = g_switchPostLoadTraceFrames.load(std::memory_order_acquire);
-    while (switchTraceFrames != 0)
-    {
-        if (g_switchPostLoadTraceFrames.compare_exchange_weak(
-                switchTraceFrames, switchTraceFrames - 1,
-                std::memory_order_acq_rel, std::memory_order_acquire))
-        {
-            switchPostLoadTrace = true;
-            break;
-        }
-    }
-    if (switchPostLoadTrace)
-    {
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][VK POSTLOAD] EndFrame enter serial=%llu active=%d deviceLost=%d source=%p sourceView=%p sourceSize=%ux%u rendering=%d cleared=%d\n",
-            static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
-            m_frameActive, m_deviceLost.load(std::memory_order_relaxed),
-            reinterpret_cast<void *>(m_presentSourceImage),
-            reinterpret_cast<void *>(m_presentSourceView),
-            m_presentSourceWidth, m_presentSourceHeight,
-            m_renderingActive, m_backbufferClearedThisFrame);
-        Switch_LogWrite(trace);
-    }
-#endif
     if (m_deviceLost)
     {
         m_frameActive = false;
@@ -1342,20 +1305,6 @@ bool VulkanBackend::EndFrame()
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
         result = vkQueuePresentKHR(m_graphicsQueue, &present);
     }
-#ifdef __SWITCH__
-    if (switchPostLoadTrace)
-    {
-        char trace[256];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][VK POSTLOAD] present serial=%llu result=%d source=%p sourceSize=%ux%u\n",
-            static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
-            static_cast<int>(result),
-            reinterpret_cast<void *>(m_presentSourceImage),
-            m_presentSourceWidth, m_presentSourceHeight);
-        Switch_LogWrite(trace);
-    }
-#endif
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
