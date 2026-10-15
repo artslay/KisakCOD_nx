@@ -130,6 +130,26 @@ void __cdecl SV_BuildClientSnapshot(client_t *client)
         frames = client->frames;
         sv.entityNumbers.numSnapshotEntities = 0;
         v2 = SV_GameClientNum(client - svs.clients);
+#ifdef __SWITCH__
+        static unsigned switchSnapshotTraceCount = 0;
+        if (switchSnapshotTraceCount < 4)
+        {
+            const playerState_s *entityPs =
+                client->gentity && client->gentity->client
+                    ? &client->gentity->client->ps : nullptr;
+            Com_Printf(CON_CHANNEL_SERVER,
+                "[KisakCOD][SNAPSHOT SERVER] n=%u gameClients=%p entityPs=%p game=(%.2f,%.2f,%.2f) entity=(%.2f,%.2f,%.2f) pm=%d cmd=%d\\n",
+                switchSnapshotTraceCount,
+                static_cast<void *>(v2),
+                static_cast<const void *>(entityPs),
+                v2->origin[0], v2->origin[1], v2->origin[2],
+                entityPs ? entityPs->origin[0] : 0.0f,
+                entityPs ? entityPs->origin[1] : 0.0f,
+                entityPs ? entityPs->origin[2] : 0.0f,
+                v2->pm_type, v2->commandTime);
+            ++switchSnapshotTraceCount;
+        }
+#endif
         memcpy(frames, v2, sizeof(playerState_s));
         clientNum = frames->clientNum;
         if (clientNum >= 0x880)
