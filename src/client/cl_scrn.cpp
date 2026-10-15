@@ -212,6 +212,11 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
     const float *v5; // r3
 #ifdef __SWITCH__
     bool uiCatcherActive = false;
+    // A fullscreen UI path skips the normal CA_CINEMATIC draw case below.
+    // Preserve the decision from entry so UI_Refresh cannot hide the movie
+    // before the end-of-frame cinematic submission.
+    const bool switchFullscreenCinematicNeedsTailDraw =
+        clientUIActives[0].connectionState == CA_CINEMATIC && UI_IsFullscreen();
 #endif
 
 #ifdef __SWITCH__
@@ -378,12 +383,21 @@ LABEL_14:
 LABEL_15:;
     }
 #ifdef __SWITCH__
-    // Submit the map-loading cinematic exactly once at the end of every
-    // screen-field path. The fullscreen UI branch can jump directly to
-    // LABEL_15 when the UI was already refreshed or its catcher is inactive;
-    // drawing inside UI_Refresh silently skipped the movie on those frames.
-    if (clientUIActives[0].connectionState == CA_LOADING)
+    // Submit loading cinematics at the end of every screen-field path. A
+    // fullscreen UI also bypasses the normal CA_CINEMATIC switch case above,
+    // which otherwise lets Bink audio play while no video draw command is queued.
+    // Capture that case at function entry to avoid duplicate draws if UI_Refresh
+    // changes menu state during this frame.
+    if (clientUIActives[0].connectionState == CA_LOADING ||
+        switchFullscreenCinematicNeedsTailDraw)
     {
+        static bool loggedFullscreenCinematicTail = false;
+        if (switchFullscreenCinematicNeedsTailDraw && !loggedFullscreenCinematicTail)
+        {
+            Switch_LogWrite(
+                "[KisakCOD][CINEMATIC DRAW] fullscreen CA_CINEMATIC submitted at screen-field tail\n");
+            loggedFullscreenCinematicTail = true;
+        }
         g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_tail";
         SCR_DrawCinematic(0);
     }
