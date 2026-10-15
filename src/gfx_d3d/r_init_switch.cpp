@@ -886,8 +886,9 @@ bool R_CheckLostDevice()
     if (backend && backend->IsDeviceLost())
     {
         dx.deviceLost = 1;
-        if (R_RecoverLostVulkanDevice())
-            return true;
+        // The backend entrypoint delegates the complete recovery to this
+        // renderer, including resource release and reload.
+        return backend->RecoverLostDevice();
     }
     return false;
 }
