@@ -10,6 +10,7 @@
 
 #ifdef KISAK_SWITCH
 extern void Switch_SetProgressPhase(const char *phase);
+extern void Switch_SetProgressDetail(uint32_t detail);
 extern void Switch_LogWrite(const char *msg);
 #endif
 
