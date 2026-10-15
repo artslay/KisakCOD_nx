@@ -403,7 +403,7 @@ bool VulkanBackend::CreateDevice()
     features.fillModeNonSolid = m_fillModeNonSolid ? VK_TRUE : VK_FALSE;
     char featureMsg[128];
     std::snprintf(featureMsg, sizeof(featureMsg),
-        "[KisakCOD][VK] fill_mode_non_solid=%u\\n",
+        "[KisakCOD][VK] fill_mode_non_solid=%u\n",
         m_fillModeNonSolid ? 1u : 0u);
     Switch_LogWrite(featureMsg);
 

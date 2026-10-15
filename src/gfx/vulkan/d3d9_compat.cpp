@@ -1774,7 +1774,7 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
             {
                 warnedUnsupportedWireframe = true;
                 Switch_LogWrite(
-                    "[KisakCOD][VK STATE] wireframe requested but fillModeNonSolid is unavailable; retaining solid fill\\n");
+                    "[KisakCOD][VK STATE] wireframe requested but fillModeNonSolid is unavailable; retaining solid fill\n");
             }
             changed = false;
             break;
