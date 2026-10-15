@@ -329,7 +329,7 @@ void __cdecl CL_ParseSnapshot(msg_t *msg)
     if (switchSnapshotDecodeTraceCount < 4)
     {
         Com_Printf(CON_CHANNEL_CLIENT,
-            "[KisakCOD][SNAPSHOT CLIENT] n=%u time=%d origin=(%.2f,%.2f,%.2f) pm=%d cmd=%d read=%d bit=%d\\n",
+            "[KisakCOD][SNAPSHOT CLIENT] n=%u time=%d origin=(%.2f,%.2f,%.2f) pm=%d cmd=%d read=%d bit=%d\n"
             switchSnapshotDecodeTraceCount,
             cl->snap.serverTime,
             cl->snap.ps.origin[0], cl->snap.ps.origin[1], cl->snap.ps.origin[2],
