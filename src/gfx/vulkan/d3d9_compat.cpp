@@ -249,7 +249,7 @@ TextureFormatInfo GetTextureFormat(_D3DFORMAT sourceFormat)
         return {VK_FORMAT_D32_SFLOAT_S8_UINT,
                 VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 8, 0, false, true};
     case D3DFMT_D24X8:
-        return {VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
+        return {VK_FORMAT_X8_D24_UNORM_PACK32, VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
     case D3DFMT_D24S8:
         return {VK_FORMAT_D24_UNORM_S8_UINT,
                 VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 4, 0, false, true};
@@ -2061,11 +2061,12 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
 
     VkFormat selectedFormat = info.format;
     VkImageAspectFlags selectedAspect = info.aspect;
-    if (format == D3DFMT_D15S1 || format == D3DFMT_D24FS8)
+    if (format == D3DFMT_D15S1 || format == D3DFMT_D24FS8 ||
+        format == D3DFMT_D24X8)
     {
         // These legacy formats are not byte-compatible with Vulkan formats.
-        // Choose the closest depth/stencil attachment the active GPU supports
-        // for this exact usage and sample count instead of failing immediately.
+        // Choose the closest attachment the active GPU supports for this exact
+        // usage and sample count instead of creating an incompatible image view.
         const VkFormat d15s1Candidates[] = {
             VK_FORMAT_D16_UNORM_S8_UINT,
             VK_FORMAT_D24_UNORM_S8_UINT,
@@ -2076,15 +2077,23 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
             VK_FORMAT_D24_UNORM_S8_UINT,
             VK_FORMAT_D16_UNORM_S8_UINT
         };
+        const VkFormat d24x8Candidates[] = {
+            VK_FORMAT_X8_D24_UNORM_PACK32,
+            VK_FORMAT_D32_SFLOAT,
+            VK_FORMAT_D16_UNORM
+        };
         const VkFormat *candidates = format == D3DFMT_D15S1
-            ? d15s1Candidates : d24fs8Candidates;
+            ? d15s1Candidates
+            : format == D3DFMT_D24FS8 ? d24fs8Candidates : d24x8Candidates;
         bool foundSupportedFormat = false;
         for (size_t i = 0; i < 3; ++i)
         {
             if (!m_backend->SupportsImageSampleCount(candidates[i], usage, samples))
                 continue;
             selectedFormat = candidates[i];
-            selectedAspect = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            selectedAspect = format == D3DFMT_D24X8
+                ? VK_IMAGE_ASPECT_DEPTH_BIT
+                : VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             foundSupportedFormat = true;
             break;
         }
@@ -2092,7 +2101,7 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
         {
             char message[160];
             std::snprintf(message, sizeof(message),
-                "[KisakCOD][VK FORMAT] no depth-stencil fallback for D3D format=%u samples=%u\n",
+                "[KisakCOD][VK FORMAT] no depth attachment fallback for D3D format=%u samples=%u\n",
                 format, static_cast<unsigned>(samples));
             Switch_LogWrite(message);
             return E_FAIL;
@@ -2101,7 +2110,7 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
         {
             char message[160];
             std::snprintf(message, sizeof(message),
-                "[KisakCOD][VK FORMAT] depth-stencil fallback d3d=%u vk=%u samples=%u\n",
+                "[KisakCOD][VK FORMAT] depth attachment fallback d3d=%u vk=%u samples=%u\n",
                 format, static_cast<unsigned>(selectedFormat),
                 static_cast<unsigned>(samples));
             Switch_LogWrite(message);
