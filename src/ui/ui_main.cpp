@@ -1389,6 +1389,7 @@ void __cdecl UI_Init()
 
 #ifdef __SWITCH__
     UI_LoadMenus((char *)"ui/code.txt", 3);
+#endif
 
 }
 
