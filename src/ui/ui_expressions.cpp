@@ -2612,7 +2612,7 @@ Operand *__cdecl EvaluateExpression(int localClientNum, const statement_s *state
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/ui/expression/entry";
     if (!statement || statement->numEntries < 0 || statement->numEntries > 4096 ||
-        (statement->numEntries > 0 && Switch_UIExpressionBadPointer(statement->entries)))
+        (statement->numEntries > 0 && (!statement->entries || Switch_UIExpressionBadPointer(statement->entries))))
     {
         static bool switchInvalidStatementLogged = false;
         if (!switchInvalidStatementLogged)
