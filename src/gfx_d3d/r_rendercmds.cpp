@@ -885,7 +885,7 @@ const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material,
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][MATERIAL TECHNIQUE POINTER] seq=%u material=%p address=0x%016llx techType=%u caller=%p frameStage=%s\\n",
+                "[KisakCOD][MATERIAL TECHNIQUE POINTER] seq=%u material=%p address=0x%016llx techType=%u caller=%p frameStage=%s\n",
                 traceId,
                 static_cast<const void *>(material),
                 static_cast<unsigned long long>(materialAddress),
