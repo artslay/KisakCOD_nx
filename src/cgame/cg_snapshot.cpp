@@ -1123,22 +1123,7 @@ void __cdecl CG_ProcessSnapshots(int localClientNum)
     int v8; // r4
     const char *v9; // r3
 
-#ifdef __SWITCH__
-    static unsigned int switchCgSnapshotTraceCount = 0;
-    const unsigned int switchCgSnapshotTraceCall = switchCgSnapshotTraceCount++;
-    const bool switchCgSnapshotTraceThisCall = switchCgSnapshotTraceCall < 3;
-    const auto switchCgSnapshotTrace = [&](const char *stage, int value) {
-        if (!switchCgSnapshotTraceThisCall)
-            return;
-        char trace[320];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][CREDITS SNAP] call=%u stage=%s value=%d demoType=%d cgTime=%d snap=%p next=%p\n",
-            switchCgSnapshotTraceCall, stage, value, cgArray[0].demoType, cgArray[0].time,
-            static_cast<void *>(cgArray[0].snap), static_cast<void *>(cgArray[0].nextSnap));
-        Switch_LogWrite(trace);
-    };
-    switchCgSnapshotTrace("entry", localClientNum);
-#endif
+
 
     //PIXBeginNamedEvent_Copy_NoVarArgs(0xFFFFFFFF, "process snapshots");
     //Profile_Begin(11);
@@ -1153,45 +1138,45 @@ void __cdecl CG_ProcessSnapshots(int localClientNum)
     if (cgArray[0].demoType == DEMO_TYPE_CLIENT)
     {
 #ifdef __SWITCH__
-        switchCgSnapshotTrace("before_demo_snapshots", 0);
+
 #endif
         CG_ProcessDemoSnapshots(localClientNum);
 #ifdef __SWITCH__
-        switchCgSnapshotTrace("after_demo_snapshots", 0);
+
 #endif
     }
     else
     {
 #ifdef __SWITCH__
-        switchCgSnapshotTrace("before_wait_server_snapshot", 0);
+
 #endif
         const int waitServerSnapshot = SV_WaitServerSnapshot();
 #ifdef __SWITCH__
-        switchCgSnapshotTrace("after_wait_server_snapshot", waitServerSnapshot);
+
 #endif
         if (waitServerSnapshot)
         {
 #ifdef __SWITCH__
-            switchCgSnapshotTrace("before_set_next_snap", 0);
+
 #endif
             CG_SetNextSnap(localClientNum);
 #ifdef __SWITCH__
-            switchCgSnapshotTrace("after_set_next_snap", 0);
-            switchCgSnapshotTrace("before_process_next_snap", 0);
+
+
 #endif
             CG_ProcessNextSnap(localClientNum);
 #ifdef __SWITCH__
-            switchCgSnapshotTrace("after_process_next_snap", 0);
+
 #endif
         }
     }
 #ifdef __SWITCH__
-    switchCgSnapshotTrace("before_set_frame_interpolation", 0);
+
 #endif
     CG_SetFrameInterpolation(localClientNum);
 #ifdef __SWITCH__
-    switchCgSnapshotTrace("after_set_frame_interpolation", 0);
-    switchCgSnapshotTrace("before_snapshot_checks", 0);
+
+
 #endif
     snap = cgArray[0].snap;
     if (!cgArray[0].snap)
@@ -1214,11 +1199,11 @@ void __cdecl CG_ProcessSnapshots(int localClientNum)
     if (!cgArray[0].nextSnap)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_snapshot.cpp", 943, 0, "%s", "cgameGlob->nextSnap");
 #ifdef __SWITCH__
-    switchCgSnapshotTrace("before_get_server_snap_time", 0);
+
 #endif
     ServerSnapTime = G_GetServerSnapTime();
 #ifdef __SWITCH__
-    switchCgSnapshotTrace("after_get_server_snap_time", ServerSnapTime);
+
 #endif
     nextSnap = cgArray[0].nextSnap;
     if (cgArray[0].nextSnap->serverTime != ServerSnapTime)
@@ -1247,7 +1232,7 @@ void __cdecl CG_ProcessSnapshots(int localClientNum)
         }
     }
 #ifdef __SWITCH__
-    switchCgSnapshotTrace("after_snapshot_checks", ServerSnapTime);
+
 #endif
     //Profile_EndInternal(0);
     //PIXEndNamedEvent();
