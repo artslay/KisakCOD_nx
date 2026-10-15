@@ -29,6 +29,7 @@
 #include <universal/profile.h>
 #include <qcommon/cmd.h>
 #ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
 #endif
@@ -1006,7 +1007,28 @@ void GScr_LoadScriptsAndAnims()
     functions.count = 0;
     functions.maxSize = 128;
     functions.address = address;
-    mapname = Dvar_GetString("mapname");
+    // Read the map from the server's canonical dvar. Avoid relying solely
+    // on another hash-table lookup here: an empty lookup passed "maps/" to
+    // GScr_LoadScripts and left the level-script binding unset on Switch.
+    const char *lookupMapname = Dvar_GetString("mapname");
+    mapname = (sv_mapname && sv_mapname->current.string && sv_mapname->current.string[0])
+        ? sv_mapname->current.string
+        : lookupMapname;
+#ifdef __SWITCH__
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][SCRIPT MAPNAME] server=%s lookup=%s selected=%s\\n",
+            sv_mapname && sv_mapname->current.string ? sv_mapname->current.string : "<null>",
+            lookupMapname ? lookupMapname : "<null>",
+            mapname ? mapname : "<null>");
+        Switch_LogWrite(trace);
+    }
+#endif
+    if (!mapname || !mapname[0])
+        Com_Error(ERR_DROP, "GScr_LoadScriptsAndAnims: mapname is empty");
 #ifdef __SWITCH__
     Switch_SetProgressStage("frame/game_init/script_load_sources", UINT32_MAX);
 #endif
