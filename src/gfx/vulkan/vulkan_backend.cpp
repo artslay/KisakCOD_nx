@@ -1195,7 +1195,7 @@ bool VulkanBackend::EndFrame()
             trace, sizeof(trace),
             "[KisakCOD][VK POSTLOAD] EndFrame enter serial=%llu active=%d deviceLost=%d source=%p sourceView=%p sourceSize=%ux%u rendering=%d cleared=%d\n",
             static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
-            m_frameActive, m_deviceLost,
+            m_frameActive, m_deviceLost.load(std::memory_order_relaxed),
             reinterpret_cast<void *>(m_presentSourceImage),
             reinterpret_cast<void *>(m_presentSourceView),
             m_presentSourceWidth, m_presentSourceHeight,
