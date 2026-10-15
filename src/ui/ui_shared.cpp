@@ -9601,11 +9601,10 @@ void __cdecl Menu_PaintAll(UiContext *dc)
     
 }
 
-// The Switch loading movie is submitted after UI_Refresh so its final Bink
-// frame survives menu transitions. Repaint only the real stock load-bar items
-// after the movie; painting the whole menu here would cover the video.
-// CL_MapLoading can leave "briefing" on the open-menu stack, so find "pregame"
-// in the loaded menu registry when it is not currently open.
+// The Switch loading movie is submitted after UI_Refresh, so repaint the
+// active loading menu's real load-bar windows after Bink. During SP map loads
+// CL_MapLoading commonly leaves "briefing" open; an inactive registered
+// "pregame" definition must never take precedence over the active menu.
 void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc)
 {
     if (!dc)
@@ -9622,64 +9621,29 @@ void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc)
         }
     }
 
-    menuDef_t *loadingMenu = nullptr;
+    // First repaint load bars that belong to menus actually painted this frame.
+    // Repainting these after the cinematic restores their normal draw order.
+    bool activeMenuHasLoadBar = false;
     for (int stackIndex = drawStart; stackIndex < dc->openMenuCount; ++stackIndex)
     {
         menuDef_t *menu = dc->menuStack[stackIndex];
-        if (menu && menu->window.name &&
-            I_stricmp(menu->window.name, "pregame") == 0)
+        if (!menu)
+            continue;
+
+        const float fadeCycle = static_cast<float>(menu->fadeCycle);
+        if (menu->window.style == 6)
         {
-            loadingMenu = menu;
-            break;
+            Window_Paint(
+                dc,
+                &menu->window,
+                menu->fadeAmount,
+                menu->fadeInAmount,
+                menu->fadeClamp,
+                fadeCycle);
+            activeMenuHasLoadBar = true;
         }
-    }
 
-    // During map loading, UI_DrawConnectScreen may keep "briefing" open rather
-    // than "pregame". The menu definition is still registered in UiContext::Menus.
-    if (!loadingMenu)
-    {
-        for (int menuIndex = 0; menuIndex < dc->menuCount; ++menuIndex)
-        {
-            menuDef_t *menu = dc->Menus[menuIndex];
-            if (menu && menu->window.name &&
-                I_stricmp(menu->window.name, "pregame") == 0)
-            {
-                loadingMenu = menu;
-                break;
-            }
-        }
-    }
-
-    if (loadingMenu)
-    {
-        if (!loadingMenu->items || loadingMenu->itemCount <= 0)
-            return;
-
-        for (int itemIndex = 0; itemIndex < loadingMenu->itemCount; ++itemIndex)
-        {
-            itemDef_s *item = loadingMenu->items[itemIndex];
-            if (!item || item->window.style != 6)
-                continue;
-
-            const unsigned int oldFlags =
-                item->window.dynamicFlags[dc->localClientNum];
-            // Item_Paint normally runs only for open menus. Temporarily expose
-            // just this stock load-bar item, while preserving its other UI flags.
-            if ((oldFlags & 4u) == 0)
-                Window_AddDynamicFlags(dc->localClientNum, &item->window, 4);
-            Item_Paint(dc, item);
-            if ((oldFlags & 4u) == 0)
-                Window_RemoveDynamicFlags(dc->localClientNum, &item->window, 4);
-        }
-        return;
-    }
-
-    // Defensive fallback: if this UI build has no stock "pregame" definition,
-    // repaint only load-bar styled items belonging to the active loading stack.
-    for (int stackIndex = drawStart; stackIndex < dc->openMenuCount; ++stackIndex)
-    {
-        menuDef_t *menu = dc->menuStack[stackIndex];
-        if (!menu || !menu->items || menu->itemCount <= 0)
+        if (!menu->items || menu->itemCount <= 0)
             continue;
 
         for (int itemIndex = 0; itemIndex < menu->itemCount; ++itemIndex)
@@ -9689,7 +9653,57 @@ void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc)
                 continue;
 
             Item_Paint(dc, item);
+            activeMenuHasLoadBar = true;
         }
+    }
+
+    if (activeMenuHasLoadBar)
+        return;
+
+    // A few stock UI configurations keep the loading bar only in the loaded
+    // "pregame" menu definition. Use that only when no active menu provides one.
+    menuDef_t *loadingMenu = nullptr;
+    for (int menuIndex = 0; menuIndex < dc->menuCount; ++menuIndex)
+    {
+        menuDef_t *menu = dc->Menus[menuIndex];
+        if (menu && menu->window.name &&
+            I_stricmp(menu->window.name, "pregame") == 0)
+        {
+            loadingMenu = menu;
+            break;
+        }
+    }
+
+    if (!loadingMenu)
+        return;
+
+    if (loadingMenu->window.style == 6)
+    {
+        Window_Paint(
+            dc,
+            &loadingMenu->window,
+            loadingMenu->fadeAmount,
+            loadingMenu->fadeInAmount,
+            loadingMenu->fadeClamp,
+            static_cast<float>(loadingMenu->fadeCycle));
+    }
+
+    if (!loadingMenu->items || loadingMenu->itemCount <= 0)
+        return;
+
+    for (int itemIndex = 0; itemIndex < loadingMenu->itemCount; ++itemIndex)
+    {
+        itemDef_s *item = loadingMenu->items[itemIndex];
+        if (!item || item->window.style != 6)
+            continue;
+
+        const unsigned int oldFlags =
+            item->window.dynamicFlags[dc->localClientNum];
+        if ((oldFlags & 4u) == 0)
+            Window_AddDynamicFlags(dc->localClientNum, &item->window, 4);
+        Item_Paint(dc, item);
+        if ((oldFlags & 4u) == 0)
+            Window_RemoveDynamicFlags(dc->localClientNum, &item->window, 4);
     }
 }
 
