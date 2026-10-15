@@ -547,7 +547,7 @@ void  RemoveRefToValue(int type, VariableUnion u)
 	switch (type)
 	{
 	case VAR_POINTER:
-		RemoveRefToObject(u.pointerValue);
+		RemoveRefToObject(u.intValue);
 		break;
 
 	case VAR_STRING:
@@ -704,7 +704,7 @@ uint32_t Scr_EvalVariableObject(uint32_t id)
 		if (type < VAR_ARRAY)
 		{
 			iassert(type >= FIRST_OBJECT);
-			return entryValue->u.u.pointerValue;
+			return entryValue->u.u.intValue;
 		}
 	}
 
@@ -804,7 +804,7 @@ uint32_t GetObject(uint32_t id)
 
 	iassert((entryValue->w.type & VAR_MASK) == VAR_POINTER);
 
-	return entryValue->u.u.pointerValue;
+	return entryValue->u.u.intValue;
 }
 
 uint32_t GetArray(uint32_t id)
@@ -825,7 +825,7 @@ uint32_t GetArray(uint32_t id)
 
 	iassert((entryValue->w.type & VAR_MASK) == VAR_POINTER);
 
-	return entryValue->u.u.pointerValue;
+	return entryValue->u.u.intValue;
 }
 
 uint32_t FindObject(uint32_t id)
@@ -839,7 +839,7 @@ uint32_t FindObject(uint32_t id)
 	iassert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
 	iassert((entryValue->w.type & VAR_MASK) == VAR_POINTER);
 
-	return entryValue->u.u.pointerValue;
+	return entryValue->u.u.intValue;
 }
 
 bool  IsFieldObject(uint32_t id)
@@ -932,9 +932,9 @@ uint32_t FindEntityId(uint32_t entnum, uint32_t classnum)
 		entryValue = &scrVarGlob.variableList[id + VARIABLELIST_CHILD_BEGIN];
 		iassert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
 		iassert((entryValue->w.type & VAR_MASK) == VAR_POINTER);
-		iassert(entryValue->u.u.pointerValue);
+		iassert(entryValue->u.u.intValue);
 
-		return entryValue->u.u.pointerValue;
+		return entryValue->u.u.intValue;
 	}
 	else
 	{
@@ -1925,7 +1925,7 @@ uint32_t  Scr_EvalFieldObject(uint32_t tempVariable, VariableValue* value)
 			tempValue.u.intValue = value->u.intValue;
 
 			SetVariableValue(tempVariable, &tempValue);
-			return tempValue.u.pointerValue;
+			return tempValue.u.intValue;
 		}
 	}
 
@@ -2925,7 +2925,7 @@ void  Scr_EvalArray(VariableValue* value, VariableValue* index)
 	switch (value->type)
 	{
 	case VAR_POINTER:
-		entryValue = &scrVarGlob.variableList[value->u.pointerValue + VARIABLELIST_PARENT_BEGIN];
+		entryValue = &scrVarGlob.variableList[value->u.intValue + VARIABLELIST_PARENT_BEGIN];
 
 		iassert((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE);
 		iassert(IsObject(entryValue));
@@ -2933,7 +2933,7 @@ void  Scr_EvalArray(VariableValue* value, VariableValue* index)
 		if ((entryValue->w.type & VAR_MASK) == VAR_ARRAY)
 		{
 			*index = Scr_EvalVariable(Scr_FindArrayIndex(value->u.intValue, index));
-			RemoveRefToObject(value->u.pointerValue);
+			RemoveRefToObject(value->u.intValue);
 		}
 		else
 		{
@@ -3028,11 +3028,11 @@ uint32_t Scr_EvalArrayRef(uint32_t parentId)
 						id = varValue.u.intValue;
 						RemoveRefToObject(varValue.u.stringValue);
 						varValue.u.pointerValue = Scr_AllocArray();
-						CopyArray(id, varValue.u.pointerValue);
+						CopyArray(id, varValue.u.intValue);
 						iassert(parentValue);
 						parentValue->u.u.intValue = varValue.u.intValue;
 					}
-					return varValue.u.pointerValue;
+					return varValue.u.intValue;
 				}
 				else
 				{
@@ -3085,7 +3085,7 @@ uint32_t Scr_EvalArrayRef(uint32_t parentId)
 					return 0;
 				}
 				RemoveRefToValue(varValue.type, varValue.u);
-				iassert((varValue.type != VAR_POINTER) || !scrVarGlob.variableList[VARIABLELIST_PARENT_BEGIN + varValue.u.pointerValue].u.o.refCount);
+				iassert((varValue.type != VAR_POINTER) || !scrVarGlob.variableList[VARIABLELIST_PARENT_BEGIN + varValue.u.intValue].u.o.refCount);
 				parentValue = 0;
 				goto add_array;
 			}
@@ -3097,7 +3097,7 @@ uint32_t Scr_EvalArrayRef(uint32_t parentId)
 
 	parentValue->w.type |= VAR_POINTER;
 	parentValue->u.u.pointerValue = Scr_AllocArray();
-	return parentValue->u.u.pointerValue;
+	return parentValue->u.u.intValue;
 }
 
 void  ClearArray(uint32_t parentId, VariableValue* value)
@@ -3143,7 +3143,7 @@ void  ClearArray(uint32_t parentId, VariableValue* value)
 			return;
 		}
 		RemoveRefToValue(varValue.type, varValue.u);
-		iassert((varValue.type != VAR_POINTER) || !scrVarGlob.variableList[VARIABLELIST_PARENT_BEGIN + varValue.u.pointerValue].u.o.refCount);
+		iassert((varValue.type != VAR_POINTER) || !scrVarGlob.variableList[VARIABLELIST_PARENT_BEGIN + varValue.u.intValue].u.o.refCount);
 		parentValue = 0;
 	}
 	if (varValue.type != VAR_POINTER)
@@ -4336,10 +4336,10 @@ void  CopyArray(uint32_t parentId, uint32_t newParentId)
 
 			if (type == VAR_POINTER)
 			{
-				if ((scrVarGlob.variableList[entryValue->u.u.pointerValue + 1].w.type & VAR_MASK) == VAR_ARRAY)
+				if ((scrVarGlob.variableList[entryValue->u.u.intValue + 1].w.type & VAR_MASK) == VAR_ARRAY)
 				{
 					newEntryValue->u.u.pointerValue = Scr_AllocArray();
-					CopyArray(entryValue->u.u.pointerValue, newEntryValue->u.u.pointerValue);
+					CopyArray(entryValue->u.u.intValue, newEntryValue->u.u.intValue);
 				}
 				else
 				{
@@ -4664,14 +4664,14 @@ VariableValue  Scr_EvalVariableEntityField(uint32_t entId, uint32_t fieldName)
 		valuea = GetEntityFieldValue(classnum, entValue->u.o.u.entnum, scrVarGlob.variableList[fieldId + VARIABLELIST_CHILD_BEGIN].u.u.entityOffset);
 		if (valuea.type == VAR_POINTER)
 		{
-			if ((scrVarGlob.variableList[valuea.u.pointerValue + 1].w.type & VAR_MASK) == VAR_ARRAY)
+			if ((scrVarGlob.variableList[valuea.u.intValue + 1].w.type & VAR_MASK) == VAR_ARRAY)
 			{
-				if (scrVarGlob.variableList[valuea.u.pointerValue + 1].u.next)
+				if (scrVarGlob.variableList[valuea.u.intValue + 1].u.next)
 				{
-					id.pointerValue = valuea.u.pointerValue;
-					RemoveRefToObject(valuea.u.pointerValue);
+					id.intValue = valuea.u.intValue;
+					RemoveRefToObject(valuea.u.intValue);
 					valuea.u.pointerValue = Scr_AllocArray();
-					CopyArray(id.pointerValue, valuea.u.pointerValue);
+					CopyArray(id.intValue, valuea.u.intValue);
 				}
 				return valuea;
 			}

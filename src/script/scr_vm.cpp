@@ -1779,9 +1779,9 @@ uint32_t Scr_EvalArrayIndex(uint32_t parentId, VariableValue *index)
     switch (index->type)
     {
     case VAR_INTEGER:
-        if (IsValidArrayIndex(index->u.pointerValue))
-            return GetArrayVariable(parentId, index->u.pointerValue);
-        Scr_Error(va("array index %d out of range", index->u.pointerValue));
+        if (IsValidArrayIndex(index->u.intValue))
+            return GetArrayVariable(parentId, index->u.intValue);
+        Scr_Error(va("array index %d out of range", index->u.intValue));
         return 0;
 
     case VAR_STRING:
@@ -2299,7 +2299,7 @@ thread_return:
             INC_TOP();
             fs.top->type = VAR_POINTER;
             fs.top->u.pointerValue = Scr_GetSelf(fs.localId);
-            AddRefToObject(fs.top->u.pointerValue);
+            AddRefToObject(fs.top->u.intValue);
             continue;
 
         case OP_GetLevel:
@@ -2683,7 +2683,7 @@ CallBuiltinMethod:
                 scrVarPub.error_index = -1;
                 Scr_Error(va("%s is not an entity", var_typename[fs.top->type]));
             }
-            objectId = fs.top->u.pointerValue;
+            objectId = fs.top->u.intValue;
             if (GetObjectType(objectId) == VAR_ENTITY)
             {
                 entref = Scr_GetEntityIdRef(objectId);
@@ -3249,10 +3249,10 @@ function_call:
                 scrVarPub.error_index = 2;
                 Scr_Error(va("%s is not an object", var_typename[fs.top->type]));
             }
-            if (!IsFieldObject(fs.top->u.pointerValue))
+            if (!IsFieldObject(fs.top->u.intValue))
             {
                 scrVarPub.error_index = 2;
-                Scr_Error(va("%s is not an object", var_typename[GetObjectType(fs.top->u.pointerValue)]));
+                Scr_Error(va("%s is not an object", var_typename[GetObjectType(fs.top->u.intValue)]));
             }
             tempValue.u = fs.top->u;
             --fs.top;
@@ -3261,11 +3261,11 @@ function_call:
                 stringValue = fs.top->u.stringValue;
                 --fs.top;
 
-                iassert(GetObjectType(tempValue.u.pointerValue) != VAR_THREAD);
-                iassert(GetObjectType(tempValue.u.pointerValue) != VAR_NOTIFY_THREAD);
-                iassert(GetObjectType(tempValue.u.pointerValue) != VAR_TIME_THREAD);
-                iassert(GetObjectType(tempValue.u.pointerValue) != VAR_CHILD_THREAD);
-                iassert(GetObjectType(tempValue.u.pointerValue) != VAR_DEAD_THREAD);
+                iassert(GetObjectType(tempValue.u.intValue) != VAR_THREAD);
+                iassert(GetObjectType(tempValue.u.intValue) != VAR_NOTIFY_THREAD);
+                iassert(GetObjectType(tempValue.u.intValue) != VAR_TIME_THREAD);
+                iassert(GetObjectType(tempValue.u.intValue) != VAR_CHILD_THREAD);
+                iassert(GetObjectType(tempValue.u.intValue) != VAR_DEAD_THREAD);
 
                 scrVmDebugPub.profileEnable[fs.localId] = *profileEnablePos;
 
@@ -3290,11 +3290,11 @@ function_call:
                 scrVarPub.error_index = 2;
                 Scr_Error(va("%s is not an object", var_typename[fs.top->type]));
             }
-            id = fs.top->u.pointerValue;
+            id = fs.top->u.intValue;
             if (!IsFieldObject(id))
             {
                 scrVarPub.error_index = 2;
-                Scr_Error(va("%s is not an object", var_typename[GetObjectType(fs.top->u.pointerValue)]));
+                Scr_Error(va("%s is not an object", var_typename[GetObjectType(fs.top->u.intValue)]));
             }
             --fs.top;
             if (fs.top->type != VAR_STRING)
@@ -3328,21 +3328,21 @@ function_call:
                 scrVarPub.error_index = 1;
                 Scr_Error(va("%s is not an object", var_typename[fs.top->type]));
             }
-            if (!IsFieldObject(fs.top->u.pointerValue))
+            if (!IsFieldObject(fs.top->u.intValue))
             {
                 scrVarPub.error_index = 1;
-                Scr_Error(va("%s is not an object", var_typename[GetObjectType(fs.top->u.pointerValue)]));
+                Scr_Error(va("%s is not an object", var_typename[GetObjectType(fs.top->u.intValue)]));
             }
             if (fs.top[-1].type == VAR_STRING)
             {
                 stringValue = fs.top[-1].u.stringValue;
                 AddRefToObject(fs.localId);
                 threadId = AllocThread(fs.localId);
-                iassert(GetObjectType(fs.top->u.pointerValue) != VAR_THREAD);
-                iassert(GetObjectType(fs.top->u.pointerValue) != VAR_NOTIFY_THREAD);
-                iassert(GetObjectType(fs.top->u.pointerValue) != VAR_TIME_THREAD);
-                iassert(GetObjectType(fs.top->u.pointerValue) != VAR_CHILD_THREAD);
-                iassert(GetObjectType(fs.top->u.pointerValue) != VAR_DEAD_THREAD);
+                iassert(GetObjectType(fs.top->u.intValue) != VAR_THREAD);
+                iassert(GetObjectType(fs.top->u.intValue) != VAR_NOTIFY_THREAD);
+                iassert(GetObjectType(fs.top->u.intValue) != VAR_TIME_THREAD);
+                iassert(GetObjectType(fs.top->u.intValue) != VAR_CHILD_THREAD);
+                iassert(GetObjectType(fs.top->u.intValue) != VAR_DEAD_THREAD);
                 GetObjectVariable(GetArray(GetVariable(GetArray(GetVariable(fs.top->u.stringValue, 0x18000)), stringValue)), threadId);
                 RemoveRefToObject(threadId);
                 tempValue.type = VAR_POINTER;
@@ -3370,9 +3370,9 @@ function_call:
             }
             else if (fs.top->type == VAR_INTEGER)
             {
-                if (IsValidArrayIndex(fs.top->u.pointerValue))
+                if (IsValidArrayIndex(fs.top->u.intValue))
                 {
-                    caseValue = GetInternalVariableIndex(fs.top->u.pointerValue);
+                    caseValue = GetInternalVariableIndex(fs.top->u.intValue);
                 }
                 else
                 {
@@ -3434,20 +3434,20 @@ function_call:
             classnum = Scr_ReadUnsigned(&fs.pos);
             entnum = Scr_ReadUnsigned(&fs.pos);
             fs.top->u.pointerValue = FindEntityId(entnum, classnum);
-            if (!fs.top->u.pointerValue)
+            if (!fs.top->u.intValue)
             {
                 fs.top->type = VAR_UNDEFINED;
                 Scr_Error("unknown object");
             }
             fs.top->type = VAR_POINTER;
-            AddRefToObject(fs.top->u.pointerValue);
+            AddRefToObject(fs.top->u.intValue);
             continue;
 
         case OP_thread_object:
             INC_TOP();
             fs.top->u.pointerValue = Scr_ReadUnsignedShort(&fs.pos);
             fs.top->type = VAR_POINTER;
-            AddRefToObject(fs.top->u.pointerValue);
+            AddRefToObject(fs.top->u.intValue);
             continue;
 
         case OP_EvalLocalVariable:
@@ -4205,7 +4205,7 @@ uint32_t __cdecl Scr_GetObject(uint32_t paramnum)
 
 	if (var->type == VAR_POINTER)
 	{
-		return var->u.pointerValue;
+		return var->u.intValue;
 	}
 
 	scrVarPub.error_index = paramnum + 1;
