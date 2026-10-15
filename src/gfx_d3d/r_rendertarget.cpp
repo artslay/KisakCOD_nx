@@ -710,6 +710,14 @@ void __cdecl R_ShutdownRenderTargets()
 {
     int renderTargetId; // [esp+0h] [ebp-4h]
 
+    // In single-sample mode the cached pointer owns an additional reference
+    // to the framebuffer depth surface. Release that reference separately.
+    // With MSAA, the first created surface reference is instead shared with the
+    // first render-target slot, so releasing it here would double-release it.
+    if (dx.singleSampleDepthStencilSurface &&
+        dx.multiSampleType == D3DMULTISAMPLE_NONE)
+        dx.singleSampleDepthStencilSurface->Release();
+
     for (renderTargetId = 0; renderTargetId < 15; ++renderTargetId)
     {
         if (gfxRenderTargets[renderTargetId].surface.color)
