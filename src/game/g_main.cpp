@@ -3,6 +3,9 @@
 #endif
 
 #include <universal/q_shared.h>
+#ifdef __SWITCH__
+#include <cstdio>
+#endif
 #include "g_main.h"
 #include "g_local.h"
 #include <universal/q_shared.h>
