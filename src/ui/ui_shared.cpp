@@ -6188,16 +6188,19 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         menu->window.name &&
         !I_stricmp(menu->window.name, "player_profile");
 
-    // During a map load, the briefing menu is an overlay on the active
-    // loading cinematic. Its full-screen background otherwise covers the
-    // movie every remote refresh, making a correctly advancing video look
-    // frozen. Preserve the cinematic as the backdrop but still paint all
-    // briefing items (including loading/status UI) over it.
+    // Loading menus are overlays on the active cinematic. Their full-screen
+    // backgrounds otherwise cover a correctly advancing Bink movie. Preserve
+    // the movie as the backdrop, but continue painting menu items (including
+    // briefing/status/error text) over it.
     const bool preserveLoadingCinematicBackdrop =
-        clientUIActives[dc->localClientNum].connectionState == CA_LOADING &&
         R_Cinematic_IsStarted() &&
         menu->window.name &&
-        !I_stricmp(menu->window.name, "briefing");
+        ((clientUIActives[dc->localClientNum].connectionState == CA_LOADING &&
+          !I_stricmp(menu->window.name, "briefing")) ||
+         ((clientUIActives[dc->localClientNum].connectionState == CA_LOADING ||
+           clientUIActives[dc->localClientNum].connectionState == CA_ACTIVE) &&
+          (!I_stricmp(menu->window.name, "pregame") ||
+           !I_stricmp(menu->window.name, "pregame_loaderror"))));
     const bool preserveMenuBackdrop =
         preserveSharedMainMenuBackdrop || preserveLoadingCinematicBackdrop;
 #else
