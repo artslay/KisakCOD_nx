@@ -2352,6 +2352,175 @@ bool VulkanBackend::UploadImage2D(
     return submitted;
 }
 
+bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t count)
+{
+    if (!uploads || count == 0 || !m_device || !m_graphicsQueue || m_deviceLost)
+        return false;
+
+    std::vector<VkDeviceSize> offsets(count);
+    std::vector<VkImageMemoryBarrier> toTransfer(count);
+    std::vector<VkImageMemoryBarrier> toFinal(count);
+    VkDeviceSize stagingSize = 0;
+    VkPipelineStageFlags sourceStages = 0;
+    VkPipelineStageFlags finalStages = 0;
+
+    // Pack every plane into one staging allocation. VkBufferImageCopy offsets
+    // must be four-byte aligned, including when a luma/chroma plane has odd size.
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const VulkanImageUpload2D &upload = uploads[i];
+        if (!upload.image || !upload.data || !upload.bytes ||
+            !upload.width || !upload.height ||
+            stagingSize > std::numeric_limits<VkDeviceSize>::max() - 3u)
+            return false;
+
+        const VkDeviceSize offset = (stagingSize + 3u) & ~VkDeviceSize(3u);
+        if (upload.bytes > std::numeric_limits<VkDeviceSize>::max() - offset)
+            return false;
+        offsets[i] = offset;
+        stagingSize = offset + static_cast<VkDeviceSize>(upload.bytes);
+
+        VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        VkAccessFlags sourceAccess =
+            VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+        switch (upload.oldLayout)
+        {
+        case VK_IMAGE_LAYOUT_UNDEFINED:
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            sourceAccess = 0;
+            break;
+        case VK_IMAGE_LAYOUT_PREINITIALIZED:
+            sourceStage = VK_PIPELINE_STAGE_HOST_BIT;
+            sourceAccess = VK_ACCESS_HOST_WRITE_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+            sourceStage =
+                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            sourceAccess = VK_ACCESS_SHADER_READ_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            sourceAccess = VK_ACCESS_TRANSFER_READ_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            sourceAccess = VK_ACCESS_TRANSFER_WRITE_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+            sourceStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            sourceAccess =
+                VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            break;
+        default:
+            break;
+        }
+        sourceStages |= sourceStage;
+
+        VkImageMemoryBarrier &before = toTransfer[i];
+        before.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        before.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        before.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        before.oldLayout = upload.oldLayout;
+        before.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        before.srcAccessMask = sourceAccess;
+        before.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        before.image = upload.image;
+        before.subresourceRange.aspectMask = upload.aspect;
+        before.subresourceRange.baseMipLevel = upload.mipLevel;
+        before.subresourceRange.levelCount = 1;
+        before.subresourceRange.baseArrayLayer = upload.baseArrayLayer;
+        before.subresourceRange.layerCount = 1;
+
+        VkImageMemoryBarrier &after = toFinal[i];
+        after.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        after.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        after.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        after.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        after.newLayout = upload.finalLayout;
+        after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        after.image = upload.image;
+        after.subresourceRange = before.subresourceRange;
+        if (upload.finalLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        {
+            after.dstAccessMask =
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            finalStages |=
+                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        }
+        else
+        {
+            after.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            finalStages |=
+                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+    }
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+    void *mapped = nullptr;
+    if (!CreateBuffer(
+            stagingSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &staging,
+            &stagingMemory,
+            &mapped))
+        return false;
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        std::memcpy(
+            static_cast<uint8_t *>(mapped) + static_cast<size_t>(offsets[i]),
+            uploads[i].data,
+            uploads[i].bytes);
+    }
+
+    const bool submitted = ImmediateSubmit([&](VkCommandBuffer command)
+    {
+        vkCmdPipelineBarrier(
+            command,
+            sourceStages,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 0, nullptr,
+            count, toTransfer.data());
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const VulkanImageUpload2D &upload = uploads[i];
+            VkBufferImageCopy copy{};
+            copy.bufferOffset = offsets[i];
+            copy.imageSubresource.aspectMask = upload.aspect;
+            copy.imageSubresource.mipLevel = upload.mipLevel;
+            copy.imageSubresource.baseArrayLayer = upload.baseArrayLayer;
+            copy.imageSubresource.layerCount = 1;
+            copy.imageOffset = upload.imageOffset;
+            copy.imageExtent = {upload.width, upload.height, 1};
+            vkCmdCopyBufferToImage(
+                command,
+                staging,
+                upload.image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1,
+                &copy);
+        }
+
+        vkCmdPipelineBarrier(
+            command,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            finalStages,
+            0, 0, nullptr, 0, nullptr,
+            count, toFinal.data());
+    });
+
+    DestroyBuffer(staging, stagingMemory, true);
+    return submitted;
+}
+
 bool VulkanBackend::DownloadImage2D(
     VkImage image, VkImageAspectFlags aspect,
     uint32_t width, uint32_t height, uint32_t mipLevel,
