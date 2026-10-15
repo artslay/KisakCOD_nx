@@ -23,6 +23,28 @@
 
 #include <bgame/bg_local.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern thread_local const char * volatile g_switchFrameStage;
+static thread_local char g_switchCgEntityStage[192];
+static void Switch_SetCgEntityStage(const char *phase, uint32_t index, uint32_t entnum, uint32_t eType)
+{
+    std::snprintf(
+        g_switchCgEntityStage,
+        sizeof(g_switchCgEntityStage),
+        "frame/cgame/%s/index=%u/ent=%u/type=%u",
+        phase,
+        index,
+        entnum,
+        eType);
+    g_switchFrameStage = g_switchCgEntityStage;
+}
+static void Switch_SetCgFrameStage(const char *phase)
+{
+    g_switchFrameStage = phase;
+}
+#endif
+
 void __cdecl LocalConvertQuatToMat(const DObjAnimMat *mat, float (*axis)[3])
 {
     double v4; // fp5
@@ -1861,57 +1883,118 @@ void __cdecl CG_UpdatePoseUnion(int localClientNum, centity_s *cent)
 
 void __cdecl CG_ProcessEntity(int localClientNum, centity_s *cent)
 {
+#ifdef __SWITCH__
+    Switch_SetCgFrameStage("frame/cgame/process_entity/entry");
+#endif
     if (cent->nextState.loopSound)
+    {
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/loop_sound", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_AddEntityLoopSound(localClientNum, cent);
+    }
     if (cent->nextState.eType != cent->pose.eTypeUnion)
+    {
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/update_pose_union", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_UpdatePoseUnion(localClientNum, cent);
+    }
 
+#ifdef __SWITCH__
+    Switch_SetCgEntityStage("process_entity/debug", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
     CG_DrawEntEqDebug(cent);
 
+#ifdef __SWITCH__
+    Switch_SetCgEntityStage("process_entity/dispatch", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
     switch (cent->nextState.eType)
     {
     case ET_GENERAL:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/general", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_General(localClientNum, cent);
         break;
     case ET_PLAYER:
     case ET_INVISIBLE:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/player_return", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         return;
     case ET_ITEM:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/item", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_Item(cent);
         break;
     case ET_MISSILE:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/missile", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_Missile(localClientNum, cent);
         break;
     case ET_SCRIPTMOVER:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/scriptmover", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_ScriptMover(localClientNum, cent);
         break;
     case ET_SOUND_BLEND:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/sound_blend", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_SoundBlend(localClientNum, cent);
         break;
     case ET_FX:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/fx", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_Fx(localClientNum, cent);
         break;
     case ET_LOOP_FX:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/loop_fx", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_LoopFx(localClientNum, cent);
         break;
     case ET_PRIMARY_LIGHT:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/primary_light", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_PrimaryLight(localClientNum, cent);
         break;
     case ET_MG42:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/mg42", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_mg42(localClientNum, cent);
         break;
     case ET_VEHICLE:
     case ET_VEHICLE_CORPSE:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/vehicle", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_Vehicle(localClientNum, cent);
         break;
     case ET_ACTOR:
     case ET_ACTOR_CORPSE:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/actor", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_Actor(localClientNum, cent);
         break;
     case ET_ACTOR_SPAWNER:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/actor_spawner", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         CG_ActorSpawner(cent);
         break;
     default:
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("process_entity/bad_type", UINT32_MAX, cent->nextState.number, cent->nextState.eType);
+#endif
         Com_Error(ERR_DROP, "Bad entity type %i", cent->nextState.eType);
         break;
     }
@@ -2146,8 +2229,14 @@ void __cdecl CG_AddPacketEntity(unsigned int localClientNum, unsigned int entnum
     double Radius; // fp1
     int v21; // r11
 
+#ifdef __SWITCH__
+    Switch_SetCgEntityStage("packet_entity/get_entity", UINT32_MAX, entnum, UINT32_MAX);
+#endif
     Entity = CG_GetEntity(localClientNum, entnum);
     v5 = Entity;
+#ifdef __SWITCH__
+    Switch_SetCgEntityStage("packet_entity/read_pose", UINT32_MAX, entnum, Entity->nextState.eType);
+#endif
     origin = Entity->pose.origin;
     v7 = Entity->pose.angles[0];
     v8 = Entity->pose.angles[1];
@@ -2157,6 +2246,9 @@ void __cdecl CG_AddPacketEntity(unsigned int localClientNum, unsigned int entnum
     v12 = Entity->pose.angles[2];
     if (Entity->nextState.eType == ET_SCRIPTMOVER && Entity->nextState.solid == 0xFFFFFF)
     {
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("packet_entity/lerp_scriptmover", UINT32_MAX, entnum, Entity->nextState.eType);
+#endif
         CG_CalcEntityLerpPositions(localClientNum, Entity);
         if (*origin != v9
             || origin[1] != v10
@@ -2173,6 +2265,9 @@ void __cdecl CG_AddPacketEntity(unsigned int localClientNum, unsigned int entnum
     }
     else
     {
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("packet_entity/lerp_positions", UINT32_MAX, entnum, Entity->nextState.eType);
+#endif
         CG_CalcEntityLerpPositions(localClientNum, Entity);
         if (*origin != v9
             || origin[1] != v10
@@ -2193,27 +2288,63 @@ void __cdecl CG_AddPacketEntity(unsigned int localClientNum, unsigned int entnum
             *v16 = *origin;
             v16[1] = origin[1];
             v16[2] = origin[2];
+#ifdef __SWITCH__
+            Switch_SetCgEntityStage("packet_entity/get_dobj", UINT32_MAX, entnum, Entity->nextState.eType);
+#endif
             ClientDObj = Com_GetClientDObj(entnum, localClientNum);
             if (ClientDObj)
             {
+#ifdef __SWITCH__
+                Switch_SetCgEntityStage("packet_entity/dobj_radius", UINT32_MAX, entnum, Entity->nextState.eType);
+#endif
                 Radius = DObjGetRadius(ClientDObj);
+#ifdef __SWITCH__
+                Switch_SetCgEntityStage("packet_entity/link_dobj", UINT32_MAX, entnum, Entity->nextState.eType);
+#endif
                 R_LinkDObjEntity(localClientNum, entnum, origin, (float)((float)Radius + (float)16.0));
             }
         }
     }
+#ifdef __SWITCH__
+    Switch_SetCgEntityStage("packet_entity/link_state", UINT32_MAX, entnum, v5->nextState.eType);
+#endif
     if (v5->pose.physObjId == -1)
     {
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("packet_entity/check_unlink", UINT32_MAX, entnum, v5->nextState.eType);
+#endif
         if (CG_IsEntityLinked(localClientNum, entnum))
+        {
+#ifdef __SWITCH__
+            Switch_SetCgEntityStage("packet_entity/unlink", UINT32_MAX, entnum, v5->nextState.eType);
+#endif
             CG_UnlinkEntity(localClientNum, entnum);
+        }
     }
     else
     {
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("packet_entity/check_link", UINT32_MAX, entnum, v5->nextState.eType);
+#endif
         if (CG_IsEntityLinked(localClientNum, entnum))
             v21 = v14;
         else
+        {
+#ifdef __SWITCH__
+            Switch_SetCgEntityStage("packet_entity/needs_link", UINT32_MAX, entnum, v5->nextState.eType);
+#endif
             v21 = CG_EntityNeedsLinked(localClientNum, entnum);
+        }
         if (v21)
+        {
+#ifdef __SWITCH__
+            Switch_SetCgEntityStage("packet_entity/link", UINT32_MAX, entnum, v5->nextState.eType);
+#endif
             CG_LinkEntity(localClientNum, entnum);
+        }
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage("packet_entity/process", UINT32_MAX, entnum, v5->nextState.eType);
+#endif
         CG_ProcessEntity(localClientNum, v5);
     }
 }
@@ -2228,6 +2359,9 @@ int __cdecl CG_AddPacketEntities(int localClientNum)
     unsigned int v7; // r31
     centity_s *Entity; // r4
 
+#ifdef __SWITCH__
+    Switch_SetCgFrameStage("frame/cgame/packet_entities/entry");
+#endif
     //PIXBeginNamedEvent_Copy_NoVarArgs(0xFFFFFFFF, "add packet ents");
     //Profile_Begin(325);
     if (localClientNum)
@@ -2244,19 +2378,37 @@ int __cdecl CG_AddPacketEntities(int localClientNum)
     else
         viewlocked_entNum = ENTITYNUM_NONE;
     v3 = 0;
+#ifdef __SWITCH__
+    Switch_SetCgFrameStage("frame/cgame/packet_entities/read_snapshot");
+#endif
     nextSnap = cgArray[0].nextSnap;
     v5 = 0;
+#ifdef __SWITCH__
+    Switch_SetCgFrameStage("frame/cgame/packet_entities/read_entity_count");
+#endif
     if (cgArray[0].nextSnap->numEntities > 0)
     {
         v6 = 45796;
         do
         {
+#ifdef __SWITCH__
+            Switch_SetCgEntityStage("packet_entities/read_entity_id", static_cast<uint32_t>(v5), UINT32_MAX, UINT32_MAX);
+#endif
             v7 = *(int *)((char *)&nextSnap->snapFlags + v6);
+#ifdef __SWITCH__
+            Switch_SetCgEntityStage("packet_entities/get_entity", static_cast<uint32_t>(v5), v7, UINT32_MAX);
+#endif
             Entity = CG_GetEntity(localClientNum, v7);
+#ifdef __SWITCH__
+            Switch_SetCgEntityStage("packet_entities/test_entity_type", static_cast<uint32_t>(v5), v7, UINT32_MAX);
+#endif
             if (Entity->nextState.eType < ET_EVENTS)
             {
                 if (v7 == viewlocked_entNum)
                 {
+#ifdef __SWITCH__
+                    Switch_SetCgEntityStage("packet_entities/viewlocked_lerp", static_cast<uint32_t>(v5), v7, Entity->nextState.eType);
+#endif
                     v3 = 1;
                     CG_CalcEntityLerpPositions(localClientNum, Entity);
                 }
@@ -2265,11 +2417,17 @@ int __cdecl CG_AddPacketEntities(int localClientNum)
                     CG_AddPacketEntity(localClientNum, v7);
                 }
             }
+#ifdef __SWITCH__
+            Switch_SetCgEntityStage("packet_entities/advance", static_cast<uint32_t>(v5), v7, Entity->nextState.eType);
+#endif
             nextSnap = cgArray[0].nextSnap;
             ++v5;
             v6 += 4;
         } while (v5 < cgArray[0].nextSnap->numEntities);
     }
+#ifdef __SWITCH__
+    Switch_SetCgFrameStage("frame/cgame/packet_entities/complete");
+#endif
     //Profile_EndInternal(0);
     //PIXEndNamedEvent();
     return v3;
