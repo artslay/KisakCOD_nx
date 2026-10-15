@@ -136,6 +136,18 @@ public:
         const void *data,
         size_t bytes,
         VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        uint32_t baseArrayLayer = 0,
+        VkOffset3D imageOffset = {});
+
+    bool DownloadImage2D(
+        VkImage image,
+        VkImageAspectFlags aspect,
+        uint32_t width,
+        uint32_t height,
+        uint32_t mipLevel,
+        void *data,
+        size_t bytes,
+        VkImageLayout oldLayout,
         uint32_t baseArrayLayer = 0);
 
     bool UploadImage3D(
@@ -147,7 +159,18 @@ public:
         uint32_t mipLevel,
         const void *data,
         size_t bytes,
-        VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED);
+        VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        VkOffset3D imageOffset = {});
+
+    bool DownloadImage3D(
+        VkImage image,
+        uint32_t width,
+        uint32_t height,
+        uint32_t depth,
+        uint32_t mipLevel,
+        void *data,
+        size_t bytes,
+        VkImageLayout oldLayout);
 
     void TransitionImage(
         VkImage image,

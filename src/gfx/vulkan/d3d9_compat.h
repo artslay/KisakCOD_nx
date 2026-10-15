@@ -64,8 +64,12 @@ constexpr _D3DFORMAT D3DFMT_DXT1 = 0x31545844u;
 constexpr _D3DFORMAT D3DFMT_DXT3 = 0x33545844u;
 constexpr _D3DFORMAT D3DFMT_DXT5 = 0x35545844u;
 constexpr uint32_t D3DFMT_INDEX16 = 101;
+constexpr uint32_t D3DLOCK_READONLY = 0x10;
+constexpr uint32_t D3DLOCK_NOSYSLOCK = 0x800;
 constexpr uint32_t D3DLOCK_NOOVERWRITE = 0x1000;
 constexpr uint32_t D3DLOCK_DISCARD = 0x2000;
+constexpr uint32_t D3DLOCK_DONOTWAIT = 0x4000;
+constexpr uint32_t D3DLOCK_NO_DIRTY_UPDATE = 0x8000;
 constexpr uint32_t D3DISSUE_END = 0x1;
 constexpr uint32_t D3DISSUE_BEGIN = 0x2;
 constexpr uint32_t D3DMULTISAMPLE_NONE = 0;
@@ -224,6 +228,13 @@ struct KisakVkTexture : IDirect3DResource9 {
     std::atomic<uint32_t> refs{1};
     std::vector<uint8_t> lockShadow;
     bool lockShadowActive=false;
+    bool lockIsVolume=false;
+    bool lockWasUndefined=false;
+    uint32_t lockLevel=0xffffffffu;
+    uint32_t lockFlags=0;
+    uint32_t lockLeft=0, lockTop=0, lockFront=0;
+    uint32_t lockRight=0, lockBottom=0, lockBack=0;
+    VkImageLayout lockOriginalLayout=VK_IMAGE_LAYOUT_UNDEFINED;
     uint32_t AddRef() override
     {
         return refs.fetch_add(1, std::memory_order_relaxed) + 1;

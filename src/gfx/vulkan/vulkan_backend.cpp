@@ -2043,7 +2043,7 @@ bool VulkanBackend::UploadImage2D(
     VkImage image, VkFormat format, VkImageAspectFlags aspect,
     uint32_t width, uint32_t height, uint32_t mipLevel,
     const void *data, size_t bytes,
-    VkImageLayout oldLayout, uint32_t baseArrayLayer)
+    VkImageLayout oldLayout, uint32_t baseArrayLayer, VkOffset3D imageOffset)
 {
     if (!image || !data || !bytes)
         return false;
@@ -2128,6 +2128,7 @@ bool VulkanBackend::UploadImage2D(
         copy.imageSubresource.mipLevel = mipLevel;
         copy.imageSubresource.baseArrayLayer = baseArrayLayer;
         copy.imageSubresource.layerCount = 1;
+        copy.imageOffset = imageOffset;
         copy.imageExtent = {width, height, 1};
 
         vkCmdCopyBufferToImage(
@@ -2157,10 +2158,52 @@ bool VulkanBackend::UploadImage2D(
     return submitted;
 }
 
+bool VulkanBackend::DownloadImage2D(
+    VkImage image, VkImageAspectFlags aspect,
+    uint32_t width, uint32_t height, uint32_t mipLevel,
+    void *data, size_t bytes, VkImageLayout oldLayout, uint32_t baseArrayLayer)
+{
+    if (!image || !data || !bytes || !width || !height ||
+        oldLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+        return false;
+    VkBuffer staging = VK_NULL_HANDLE;
+    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+    void *mapped = nullptr;
+    if (!CreateBuffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &staging, &stagingMemory, &mapped))
+        return false;
+    VkImageSubresourceRange range{};
+    range.aspectMask = aspect;
+    range.baseMipLevel = mipLevel;
+    range.levelCount = 1;
+    range.baseArrayLayer = baseArrayLayer;
+    range.layerCount = 1;
+    const bool submitted = ImmediateSubmit([&](VkCommandBuffer command)
+    {
+        TransitionImage(image, oldLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        aspect, range, command);
+        VkBufferImageCopy copy{};
+        copy.imageSubresource.aspectMask = aspect;
+        copy.imageSubresource.mipLevel = mipLevel;
+        copy.imageSubresource.baseArrayLayer = baseArrayLayer;
+        copy.imageSubresource.layerCount = 1;
+        copy.imageExtent = {width, height, 1};
+        vkCmdCopyImageToBuffer(command, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               staging, 1, &copy);
+        TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, oldLayout,
+                        aspect, range, command);
+    });
+    if (submitted)
+        std::memcpy(data, mapped, bytes);
+    DestroyBuffer(staging, stagingMemory, true);
+    return submitted;
+}
+
 bool VulkanBackend::UploadImage3D(
     VkImage image, VkFormat format,
     uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevel,
-    const void *data, size_t bytes, VkImageLayout oldLayout)
+    const void *data, size_t bytes, VkImageLayout oldLayout, VkOffset3D imageOffset)
 {
     if (!image || !data || !bytes)
         return false;
@@ -2235,6 +2278,7 @@ bool VulkanBackend::UploadImage3D(
         copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         copy.imageSubresource.mipLevel = mipLevel;
         copy.imageSubresource.layerCount = 1;
+        copy.imageOffset = imageOffset;
         copy.imageExtent = {width, height, depth};
         vkCmdCopyBufferToImage(command, staging, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
@@ -2250,6 +2294,46 @@ bool VulkanBackend::UploadImage3D(
 
     DestroyBuffer(staging, stagingMemory, true);
     (void)format;
+    return submitted;
+}
+
+bool VulkanBackend::DownloadImage3D(
+    VkImage image, uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevel,
+    void *data, size_t bytes, VkImageLayout oldLayout)
+{
+    if (!image || !data || !bytes || !width || !height || !depth ||
+        oldLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+        return false;
+    VkBuffer staging = VK_NULL_HANDLE;
+    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+    void *mapped = nullptr;
+    if (!CreateBuffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &staging, &stagingMemory, &mapped))
+        return false;
+    VkImageSubresourceRange range{};
+    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    range.baseMipLevel = mipLevel;
+    range.levelCount = 1;
+    range.baseArrayLayer = 0;
+    range.layerCount = 1;
+    const bool submitted = ImmediateSubmit([&](VkCommandBuffer command)
+    {
+        TransitionImage(image, oldLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        VK_IMAGE_ASPECT_COLOR_BIT, range, command);
+        VkBufferImageCopy copy{};
+        copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copy.imageSubresource.mipLevel = mipLevel;
+        copy.imageSubresource.layerCount = 1;
+        copy.imageExtent = {width, height, depth};
+        vkCmdCopyImageToBuffer(command, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               staging, 1, &copy);
+        TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, oldLayout,
+                        VK_IMAGE_ASPECT_COLOR_BIT, range, command);
+    });
+    if (submitted)
+        std::memcpy(data, mapped, bytes);
+    DestroyBuffer(staging, stagingMemory, true);
     return submitted;
 }
 

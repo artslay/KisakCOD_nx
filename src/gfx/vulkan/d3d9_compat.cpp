@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstring>
 #include <limits>
+#include <climits>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -1042,96 +1043,242 @@ uint32_t KisakVkTexture::Release()
     return 0;
 }
 
+
 HRESULT KisakVkTexture::LockRect(
-    uint32_t level, _D3DLOCKED_RECT *lockedRect, const tagRECT *, uint32_t)
+    uint32_t level, _D3DLOCKED_RECT *lockedRect, const tagRECT *rect, uint32_t flags)
 {
-    if (!lockedRect || samples != VK_SAMPLE_COUNT_1_BIT ||
+    const TextureFormatInfo info = GetTextureFormat(sourceFormat);
+    constexpr uint32_t supportedFlags =
+        D3DLOCK_READONLY | D3DLOCK_NOSYSLOCK | D3DLOCK_DISCARD |
+        D3DLOCK_NO_DIRTY_UPDATE;
+    if (!lockedRect || lockShadowActive || samples != VK_SAMPLE_COUNT_1_BIT ||
         level >= mipLevels || depth != 1 || !width || !height ||
-        GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
+        info.format == VK_FORMAT_UNDEFINED ||
+        (info.depth && sourceFormat != D3DFMT_D16_LOCKABLE) ||
+        (flags & ~supportedFlags) ||
+        ((flags & D3DLOCK_READONLY) && (flags & D3DLOCK_DISCARD)))
+        return E_FAIL;
+    const uint32_t w = std::max(1u, width >> level);
+    const uint32_t h = std::max(1u, height >> level);
+    if (w > static_cast<uint32_t>(INT32_MAX) || h > static_cast<uint32_t>(INT32_MAX))
+        return E_FAIL;
+    const tagRECT rc = rect ? *rect :
+        tagRECT{0, 0, static_cast<int32_t>(w), static_cast<int32_t>(h)};
+    if (rc.left < 0 || rc.top < 0 || rc.right <= rc.left || rc.bottom <= rc.top ||
+        rc.right > static_cast<int32_t>(w) || rc.bottom > static_cast<int32_t>(h))
+        return E_FAIL;
+    if (info.compressed &&
+        ((rc.left & 3) || (rc.top & 3) ||
+         ((rc.right & 3) && rc.right != static_cast<int32_t>(w)) ||
+         ((rc.bottom & 3) && rc.bottom != static_cast<int32_t>(h))))
+        return E_FAIL;
+    const bool full = rc.left == 0 && rc.top == 0 &&
+        rc.right == static_cast<int32_t>(w) && rc.bottom == static_cast<int32_t>(h);
+    if ((flags & D3DLOCK_DISCARD) && !full)
         return E_FAIL;
 
-    const uint32_t levelWidth = std::max(1u, width >> level);
-    const uint32_t levelHeight = std::max(1u, height >> level);
-    const uint32_t pitch = TexturePitch(sourceFormat, levelWidth);
-    lockShadow.resize(TextureLevelSize(sourceFormat, levelWidth, levelHeight));
-    lockedRect->pBits = lockShadow.data();
+    const VkImageLayout old = GetSubresourceLayout(level);
+    lockShadow.resize(TextureLevelSize(sourceFormat, w, h));
+    if (lockShadow.empty())
+        return E_FAIL;
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!(flags & D3DLOCK_DISCARD) && old != VK_IMAGE_LAYOUT_UNDEFINED)
+    {
+        if (!backend)
+            return E_FAIL;
+        backend->EndRendering();
+        if (!backend->DownloadImage2D(image, info.aspect, w, h, level,
+                                      lockShadow.data(), lockShadow.size(), old))
+            return E_FAIL;
+    }
+    else
+        std::fill(lockShadow.begin(), lockShadow.end(), 0);
+
+    const uint32_t pitch = TexturePitch(sourceFormat, w);
+    const size_t x = info.compressed
+        ? static_cast<size_t>(rc.left / 4) * info.blockBytes
+        : static_cast<size_t>(rc.left) * info.bytesPerPixel;
+    const size_t y = info.compressed
+        ? static_cast<size_t>(rc.top / 4) * pitch
+        : static_cast<size_t>(rc.top) * pitch;
+    if (y + x >= lockShadow.size())
+        return E_FAIL;
+
+    lockLevel = level; lockFlags = flags;
+    lockLeft = static_cast<uint32_t>(rc.left); lockTop = static_cast<uint32_t>(rc.top);
+    lockFront = 0; lockRight = static_cast<uint32_t>(rc.right);
+    lockBottom = static_cast<uint32_t>(rc.bottom); lockBack = 1;
+    lockIsVolume = false; lockWasUndefined = old == VK_IMAGE_LAYOUT_UNDEFINED;
+    lockOriginalLayout = old; lockShadowActive = true;
+    lockedRect->pBits = lockShadow.data() + y + x;
     lockedRect->Pitch = static_cast<int>(pitch);
-    lockShadowActive = true;
     return S_OK;
 }
 
 HRESULT KisakVkTexture::UnlockRect(uint32_t level)
 {
-    if (!lockShadowActive || samples != VK_SAMPLE_COUNT_1_BIT ||
-        level >= mipLevels || GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
+    if (!lockShadowActive || lockIsVolume || lockLevel != level ||
+        samples != VK_SAMPLE_COUNT_1_BIT || level >= mipLevels)
         return E_FAIL;
-
-    VulkanBackend *backend = GetVulkanBackend();
-    if (!backend)
-        return E_FAIL;
-
-    const uint32_t levelWidth = std::max(1u, width >> level);
-    const uint32_t levelHeight = std::max(1u, height >> level);
-    const TextureFormatInfo info = GetTextureFormat(sourceFormat);
-
-    const VkImageLayout oldLayout = GetSubresourceLayout(level);
-    if (!backend->UploadImage2D(
-            image, format, info.aspect, levelWidth, levelHeight, level,
-            lockShadow.data(), lockShadow.size(), oldLayout))
-        return E_FAIL;
-
-    SetSubresourceLayout(level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    lockShadowActive = false;
+    if (!(lockFlags & D3DLOCK_READONLY))
+    {
+        VulkanBackend *backend = GetVulkanBackend();
+        const TextureFormatInfo info = GetTextureFormat(sourceFormat);
+        if (!backend || info.format == VK_FORMAT_UNDEFINED)
+            return E_FAIL;
+        backend->EndRendering();
+        const uint32_t w = std::max(1u, width >> level);
+        const uint32_t h = std::max(1u, height >> level);
+        if (lockWasUndefined || (lockFlags & D3DLOCK_DISCARD))
+        {
+            if (!backend->UploadImage2D(image, format, info.aspect, w, h, level,
+                    lockShadow.data(), lockShadow.size(), lockOriginalLayout))
+                return E_FAIL;
+        }
+        else
+        {
+            const uint32_t rw = lockRight - lockLeft, rh = lockBottom - lockTop;
+            const uint32_t fullPitch = TexturePitch(sourceFormat, w);
+            const uint32_t pitch = TexturePitch(sourceFormat, rw);
+            const uint32_t rows = info.compressed ? std::max(1u, (rh + 3u) / 4u) : rh;
+            std::vector<uint8_t> packed(static_cast<size_t>(pitch) * rows);
+            const size_t x = info.compressed
+                ? static_cast<size_t>(lockLeft / 4u) * info.blockBytes
+                : static_cast<size_t>(lockLeft) * info.bytesPerPixel;
+            const uint32_t y = info.compressed ? lockTop / 4u : lockTop;
+            for (uint32_t row=0; row<rows; ++row)
+                std::memcpy(packed.data()+static_cast<size_t>(row)*pitch,
+                    lockShadow.data()+static_cast<size_t>(y+row)*fullPitch+x, pitch);
+            if (!backend->UploadImage2D(image, format, info.aspect, rw, rh, level,
+                    packed.data(), packed.size(), lockOriginalLayout, 0,
+                    VkOffset3D{static_cast<int32_t>(lockLeft),static_cast<int32_t>(lockTop),0}))
+                return E_FAIL;
+        }
+        SetSubresourceLayout(level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+    lockShadowActive=false; lockLevel=0xffffffffu; lockFlags=0;
+    lockWasUndefined=false; lockOriginalLayout=VK_IMAGE_LAYOUT_UNDEFINED;
     return S_OK;
 }
 
 HRESULT KisakVkTexture::LockBox(
-    uint32_t level, _D3DLOCKED_BOX *lockedBox, const _D3DBOX *, uint32_t)
+    uint32_t level, _D3DLOCKED_BOX *lockedBox, const _D3DBOX *box, uint32_t flags)
 {
-    if (!lockedBox || samples != VK_SAMPLE_COUNT_1_BIT ||
-        level >= mipLevels || depth == 1 || !width || !height ||
-        GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
+    const TextureFormatInfo info = GetTextureFormat(sourceFormat);
+    constexpr uint32_t supportedFlags =
+        D3DLOCK_READONLY | D3DLOCK_NOSYSLOCK | D3DLOCK_DISCARD |
+        D3DLOCK_NO_DIRTY_UPDATE;
+    if (!lockedBox || lockShadowActive || samples != VK_SAMPLE_COUNT_1_BIT ||
+        level >= mipLevels || depth <= 1 || !width || !height ||
+        info.format == VK_FORMAT_UNDEFINED || info.depth ||
+        (flags & ~supportedFlags) ||
+        ((flags & D3DLOCK_READONLY) && (flags & D3DLOCK_DISCARD)))
+        return E_FAIL;
+    const uint32_t w = std::max(1u,width>>level), h = std::max(1u,height>>level);
+    const uint32_t d = std::max(1u,depth>>level);
+    const _D3DBOX b = box ? *box : _D3DBOX{0,0,0,w,h,d};
+    if (b.Left>=b.Right || b.Top>=b.Bottom || b.Front>=b.Back ||
+        b.Right>w || b.Bottom>h || b.Back>d)
+        return E_FAIL;
+    if (info.compressed &&
+        ((b.Left&3u) || (b.Top&3u) ||
+         ((b.Right&3u)&&b.Right!=w) || ((b.Bottom&3u)&&b.Bottom!=h)))
+        return E_FAIL;
+    const bool full = b.Left==0 && b.Top==0 && b.Front==0 &&
+        b.Right==w && b.Bottom==h && b.Back==d;
+    if ((flags&D3DLOCK_DISCARD) && !full)
         return E_FAIL;
 
-    const uint32_t levelWidth = std::max(1u, width >> level);
-    const uint32_t levelHeight = std::max(1u, height >> level);
-    const uint32_t levelDepth = std::max(1u, depth >> level);
-    const uint32_t rowPitch = TexturePitch(sourceFormat, levelWidth);
-    const size_t slicePitch = TextureLevelSize(sourceFormat, levelWidth, levelHeight);
-    if (!rowPitch || !slicePitch)
+    const VkImageLayout old = GetSubresourceLayout(level);
+    const size_t slice = TextureLevelSize(sourceFormat,w,h);
+    lockShadow.resize(slice*d);
+    if (lockShadow.empty())
         return E_FAIL;
-    lockShadow.resize(slicePitch * levelDepth);
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!(flags&D3DLOCK_DISCARD) && old!=VK_IMAGE_LAYOUT_UNDEFINED)
+    {
+        if (!backend)
+            return E_FAIL;
+        backend->EndRendering();
+        if (!backend->DownloadImage3D(image,w,h,d,level,lockShadow.data(),lockShadow.size(),old))
+            return E_FAIL;
+    }
+    else
+        std::fill(lockShadow.begin(),lockShadow.end(),0);
 
-    lockedBox->RowPitch = static_cast<int>(rowPitch);
-    lockedBox->SlicePitch = static_cast<int>(slicePitch);
-    lockedBox->pBits = lockShadow.data();
-    lockShadowActive = true;
+    const uint32_t pitch=TexturePitch(sourceFormat,w);
+    const size_t x=info.compressed ? static_cast<size_t>(b.Left/4u)*info.blockBytes
+                                   : static_cast<size_t>(b.Left)*info.bytesPerPixel;
+    const size_t y=info.compressed ? static_cast<size_t>(b.Top/4u)*pitch
+                                   : static_cast<size_t>(b.Top)*pitch;
+    const size_t z=static_cast<size_t>(b.Front)*slice;
+    if (z+y+x>=lockShadow.size())
+        return E_FAIL;
+    lockLevel=level; lockFlags=flags;
+    lockLeft=b.Left; lockTop=b.Top; lockFront=b.Front;
+    lockRight=b.Right; lockBottom=b.Bottom; lockBack=b.Back;
+    lockIsVolume=true; lockWasUndefined=old==VK_IMAGE_LAYOUT_UNDEFINED;
+    lockOriginalLayout=old; lockShadowActive=true;
+    lockedBox->pBits=lockShadow.data()+z+y+x;
+    lockedBox->RowPitch=static_cast<int>(pitch);
+    lockedBox->SlicePitch=static_cast<int>(slice);
     return S_OK;
 }
 
 HRESULT KisakVkTexture::UnlockBox(uint32_t level)
 {
-    if (!lockShadowActive || samples != VK_SAMPLE_COUNT_1_BIT ||
-        level >= mipLevels || GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
+    if (!lockShadowActive || !lockIsVolume || lockLevel!=level ||
+        samples!=VK_SAMPLE_COUNT_1_BIT || level>=mipLevels)
         return E_FAIL;
-
-    VulkanBackend *backend = GetVulkanBackend();
-    if (!backend)
-        return E_FAIL;
-
-    const uint32_t levelWidth = std::max(1u, width >> level);
-    const uint32_t levelHeight = std::max(1u, height >> level);
-    const uint32_t levelDepth = std::max(1u, depth >> level);
-    const VkImageLayout oldLayout = GetSubresourceLayout(level);
-    if (!backend->UploadImage3D(
-            image, format, levelWidth, levelHeight, levelDepth, level,
-            lockShadow.data(), lockShadow.size(), oldLayout))
-        return E_FAIL;
-
-    SetSubresourceLayout(level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    lockShadowActive = false;
+    if (!(lockFlags&D3DLOCK_READONLY))
+    {
+        VulkanBackend *backend=GetVulkanBackend();
+        const TextureFormatInfo info=GetTextureFormat(sourceFormat);
+        if (!backend || info.format==VK_FORMAT_UNDEFINED || info.depth)
+            return E_FAIL;
+        backend->EndRendering();
+        const uint32_t w=std::max(1u,width>>level), h=std::max(1u,height>>level);
+        const uint32_t d=std::max(1u,depth>>level);
+        if (lockWasUndefined || (lockFlags&D3DLOCK_DISCARD))
+        {
+            if (!backend->UploadImage3D(image,format,w,h,d,level,
+                    lockShadow.data(),lockShadow.size(),lockOriginalLayout))
+                return E_FAIL;
+        }
+        else
+        {
+            const uint32_t rw=lockRight-lockLeft, rh=lockBottom-lockTop, rd=lockBack-lockFront;
+            const uint32_t fullPitch=TexturePitch(sourceFormat,w);
+            const uint32_t fullRows=info.compressed ? std::max(1u,(h+3u)/4u) : h;
+            const size_t fullSlice=static_cast<size_t>(fullPitch)*fullRows;
+            const uint32_t pitch=TexturePitch(sourceFormat,rw);
+            const uint32_t rows=info.compressed ? std::max(1u,(rh+3u)/4u) : rh;
+            const size_t regionSlice=static_cast<size_t>(pitch)*rows;
+            std::vector<uint8_t> packed(regionSlice*rd);
+            const size_t x=info.compressed ? static_cast<size_t>(lockLeft/4u)*info.blockBytes
+                                           : static_cast<size_t>(lockLeft)*info.bytesPerPixel;
+            const uint32_t y=info.compressed ? lockTop/4u : lockTop;
+            for (uint32_t z=0; z<rd; ++z)
+                for (uint32_t row=0; row<rows; ++row)
+                {
+                    const size_t src=static_cast<size_t>(lockFront+z)*fullSlice+
+                                     static_cast<size_t>(y+row)*fullPitch+x;
+                    const size_t dst=static_cast<size_t>(z)*regionSlice+
+                                     static_cast<size_t>(row)*pitch;
+                    std::memcpy(packed.data()+dst,lockShadow.data()+src,pitch);
+                }
+            if (!backend->UploadImage3D(image,format,rw,rh,rd,level,
+                    packed.data(),packed.size(),lockOriginalLayout,
+                    VkOffset3D{static_cast<int32_t>(lockLeft),static_cast<int32_t>(lockTop),
+                               static_cast<int32_t>(lockFront)}))
+                return E_FAIL;
+        }
+        SetSubresourceLayout(level,0,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        layout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+    lockShadowActive=false; lockLevel=0xffffffffu; lockFlags=0; lockIsVolume=false;
+    lockWasUndefined=false; lockOriginalLayout=VK_IMAGE_LAYOUT_UNDEFINED;
     return S_OK;
 }
 
@@ -1179,11 +1326,11 @@ uint32_t IDirect3DSurface9::Release()
 }
 
 HRESULT IDirect3DSurface9::LockRect(
-    _D3DLOCKED_RECT *lockedRect, const tagRECT *, uint32_t)
+    _D3DLOCKED_RECT *lockedRect, const tagRECT *rect, uint32_t flags)
 {
     if (!lockedRect || !texture)
         return E_FAIL;
-    return texture->LockRect(level, lockedRect, nullptr, 0);
+    return texture->LockRect(level, lockedRect, rect, flags);
 }
 
 HRESULT IDirect3DSurface9::UnlockRect()
@@ -2034,7 +2181,11 @@ HRESULT IDirect3DDevice9::SetViewport(const D3DVIEWPORT9 *vp)
 
 HRESULT IDirect3DDevice9::SetSwitchUnlitMode(bool enabled)
 {
-    m_switchUnlit = enabled;
+    if (m_switchUnlit != enabled)
+    {
+        m_switchUnlit = enabled;
+        m_pipelineDirty = true;
+    }
     return S_OK;
 }
 
@@ -2424,8 +2575,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_multisampleMask);
     key = HashCombine(key, m_viewport.Width);
     key = HashCombine(key, m_viewport.Height);
-    key = HashCombine(key, m_depthEnable);
-    key = HashCombine(key, m_depthWrite);
+    key = HashCombine(key, m_switchUnlit);
+    key = HashCombine(key, m_depthEnable && !m_switchUnlit);
+    key = HashCombine(key, m_depthWrite && !m_switchUnlit);
     key = HashCombine(key, m_depthFunc);
     key = HashCombine(key, m_alphaTest);
     key = HashCombine(key, m_alphaFunc);
@@ -2838,8 +2990,12 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     VkPipelineDepthStencilStateCreateInfo depth{};
     depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depth.depthTestEnable = m_depthEnable ? VK_TRUE : VK_FALSE;
-    depth.depthWriteEnable = m_depthWrite ? VK_TRUE : VK_FALSE;
+    // R_Set2D/R_Set3D toggle this Switch-specific mode around overlay passes.
+    // Keep overlays independent from world depth when a previous material left it enabled.
+    const bool effectiveDepthTest = m_depthEnable && !m_switchUnlit;
+    const bool effectiveDepthWrite = m_depthWrite && !m_switchUnlit;
+    depth.depthTestEnable = effectiveDepthTest ? VK_TRUE : VK_FALSE;
+    depth.depthWriteEnable = effectiveDepthWrite ? VK_TRUE : VK_FALSE;
     depth.depthCompareOp = CompareOp(m_depthFunc);
     depth.depthBoundsTestEnable = VK_FALSE;
     depth.stencilTestEnable = m_stencilEnable ? VK_TRUE : VK_FALSE;
