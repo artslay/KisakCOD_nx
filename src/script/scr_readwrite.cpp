@@ -983,7 +983,7 @@ static void Scr_AddDebugExprRefCount(unsigned __int16 *refCount, sval_u *debugEx
 {
     sval_u *i; // r31
 
-    for (i = debugExprHead; i; i = (sval_u *)i->type)
+    for (i = debugExprHead; i; i = i->node)
         Scr_AddDebugExprValueRefCount(refCount, i + 1);
 }
 
@@ -1297,19 +1297,13 @@ void __cdecl Scr_SaveSourceImmediate(SaveImmediate *save)
     if (!scrVarPub.developer)
         return;
 
-    int archivedCount = 0;
+    // SourceBufferInfo contains pointers, so its native stride is not the 32-bit 44-byte stride.
+    // Count the same records that the loop below serializes.
     int countOut = 0;
-    unsigned int sourceBufferLookupLen = scrParserPub.sourceBufferLookupLen;
-    if (sourceBufferLookupLen)
+    for (unsigned int index = 0; index < scrParserPub.sourceBufferLookupLen; ++index)
     {
-        bool *p_archive = &scrParserPub.sourceBufferLookup->archive;
-        do
-        {
-            if (*p_archive)
-                countOut = ++archivedCount;
-            --sourceBufferLookupLen;
-            p_archive += 44;  // sizeof(SourceBufferInfo) per IDA stride
-        } while (sourceBufferLookupLen);
+        if (scrParserPub.sourceBufferLookup[index].archive)
+            ++countOut;
     }
     SaveMemory_SaveWriteImmediate(&countOut, 4u, save);
 
@@ -1365,7 +1359,7 @@ void __cdecl Scr_LoadSource(MemoryFile *memFile, void *fileHandle)
             return;
         }
         saveSourceBufferLookup = (SaveSourceBufferInfo *)Hunk_AllocDebugMem(
-            8 * scrParserGlob.saveSourceBufferLookupLen,
+            sizeof(SaveSourceBufferInfo) * scrParserGlob.saveSourceBufferLookupLen,
             "Scr_LoadSource");
         scrParserGlob.saveSourceBufferLookup = saveSourceBufferLookup;
         v5 = scrParserGlob.saveSourceBufferLookupLen - 1;
@@ -1790,7 +1784,7 @@ void __cdecl DoSaveObjectInfo(unsigned int parentId, MemoryFile *memFile)
                     "%s",
                     "!IsObject( entryValue )");
             w = v14->w;
-            v18[0].u.intValue = v14->u.u.intValue;
+            v18[0].u = v14->u.u;
             v18[0].type = (Vartype_t)(w.type & 0x1F);
             DoSaveEntry(v18, static_cast<uintptr_t>((w.status >> 8)), v9, memFile);
         }

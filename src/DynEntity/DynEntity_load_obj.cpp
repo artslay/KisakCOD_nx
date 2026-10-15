@@ -599,9 +599,9 @@ void __cdecl DynEnt_LoadEntities()
             {
                 if (cm.dynEntCount[drawTypea])
                 {
-                    cm.dynEntPoseList[drawTypea] = (DynEntityPose *)DynEnt_Alloc(cm.dynEntCount[drawTypea], 32);
-                    cm.dynEntClientList[drawTypea] = (DynEntityClient *)DynEnt_Alloc(cm.dynEntCount[drawTypea], 12);
-                    cm.dynEntCollList[drawTypea] = (DynEntityColl *)DynEnt_Alloc(cm.dynEntCount[drawTypea], 20);
+                    cm.dynEntPoseList[drawTypea] = (DynEntityPose *)DynEnt_Alloc(cm.dynEntCount[drawTypea], sizeof(DynEntityPose));
+                    cm.dynEntClientList[drawTypea] = (DynEntityClient *)DynEnt_Alloc(cm.dynEntCount[drawTypea], sizeof(DynEntityClient));
+                    cm.dynEntCollList[drawTypea] = (DynEntityColl *)DynEnt_Alloc(cm.dynEntCount[drawTypea], sizeof(DynEntityColl));
                 }
             }
         }
