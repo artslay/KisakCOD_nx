@@ -1020,7 +1020,7 @@ void GScr_LoadScriptsAndAnims()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][SCRIPT MAPNAME] server=%s lookup=%s selected=%s\\n",
+            "[KisakCOD][SCRIPT MAPNAME] server=%s lookup=%s selected=%s\n",
             sv_mapname && sv_mapname->current.string ? sv_mapname->current.string : "<null>",
             lookupMapname ? lookupMapname : "<null>",
             mapname ? mapname : "<null>");
