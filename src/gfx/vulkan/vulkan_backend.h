@@ -26,6 +26,9 @@ public:
     bool IsDeviceLost() const override;
     bool BeginFrame();
     bool EndFrame();
+    // End and submit commands recorded so far, wait for completion, then resume
+    // recording in the same acquired swapchain frame. Used by synchronous resource locks.
+    bool SynchronizeActiveFrame();
     void Present() override;
     void BeginScene() override;
     void EndScene() override;
@@ -307,6 +310,7 @@ private:
     float m_maxSamplerAnisotropy = 1.0f;
     float m_maxSamplerLodBias = 0.0f;
     bool m_frameActive = false;
+    bool m_imageAvailablePending = false;
     bool m_renderingActive = false;
     bool m_swapchainNeedsRecreate = false;
     bool m_backbufferClearedThisFrame = false;

@@ -287,6 +287,7 @@ void VulkanBackend::Shutdown()
     m_maxSamplerAnisotropy = 1.0f;
     m_maxSamplerLodBias = 0.0f;
     m_frameActive = false;
+    m_imageAvailablePending = false;
     m_renderingActive = false;
     m_swapchainNeedsRecreate = false;
     m_backbufferClearedThisFrame = false;
@@ -837,6 +838,7 @@ bool VulkanBackend::RecreateSwapchain()
     const uint32_t previousHeight = m_height;
 
     m_frameActive = false;
+    m_imageAvailablePending = false;
     m_renderingActive = false;
     m_backbufferClearedThisFrame = false;
     m_uniformOffset = 0;
@@ -964,6 +966,7 @@ bool VulkanBackend::BeginFrame()
     }
     if (result == VK_SUBOPTIMAL_KHR)
         m_swapchainNeedsRecreate = true;
+    m_imageAvailablePending = true;
 
     VkCommandBufferBeginInfo begin{};
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -990,6 +993,105 @@ bool VulkanBackend::BeginFrame()
             DepthAspect(m_depthFormat));
     m_defaultDepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+    return true;
+}
+
+
+bool VulkanBackend::SynchronizeActiveFrame()
+{
+    if (!m_initialized || m_deviceLost)
+        return false;
+    if (!m_frameActive)
+        return true;
+    if (!m_commandBuffer || !m_commandPool || !m_graphicsQueue)
+        return false;
+
+    EndRendering();
+
+    const VkResult endResult = vkEndCommandBuffer(m_commandBuffer);
+    if (endResult != VK_SUCCESS)
+    {
+        SetError("vkEndCommandBuffer failed while synchronizing a resource lock", endResult);
+        m_frameActive = false;
+        m_swapchainNeedsRecreate = !m_deviceLost;
+        return false;
+    }
+
+    VkFence fence = VK_NULL_HANDLE;
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    const VkResult createFenceResult = vkCreateFence(m_device, &fenceInfo, nullptr, &fence);
+    if (createFenceResult != VK_SUCCESS)
+    {
+        SetError("vkCreateFence failed while synchronizing a resource lock", createFenceResult);
+        m_frameActive = false;
+        m_swapchainNeedsRecreate = !m_deviceLost;
+        return false;
+    }
+
+    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submit{};
+    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    if (m_imageAvailablePending)
+    {
+        submit.waitSemaphoreCount = 1;
+        submit.pWaitSemaphores = &m_sync.imageAvailable;
+        submit.pWaitDstStageMask = &waitStage;
+    }
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &m_commandBuffer;
+
+    VkResult submitResult;
+    {
+        std::lock_guard<std::mutex> queueLock(m_queueMutex);
+        submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, fence);
+    }
+    if (submitResult != VK_SUCCESS)
+    {
+        SetError("vkQueueSubmit failed while synchronizing a resource lock", submitResult);
+        vkDestroyFence(m_device, fence, nullptr);
+        m_frameActive = false;
+        m_swapchainNeedsRecreate = !m_deviceLost;
+        return false;
+    }
+    // A successful queue submission consumes the acquire semaphore. The final
+    // frame submission must not wait on the same binary semaphore a second time.
+    m_imageAvailablePending = false;
+
+    const VkResult waitResult = vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(m_device, fence, nullptr);
+    if (waitResult != VK_SUCCESS)
+    {
+        SetError("vkWaitForFences failed while synchronizing a resource lock", waitResult);
+        m_frameActive = false;
+        m_swapchainNeedsRecreate = !m_deviceLost;
+        return false;
+    }
+
+    const VkResult resetResult = vkResetCommandPool(m_device, m_commandPool, 0);
+    if (resetResult != VK_SUCCESS)
+    {
+        SetError("vkResetCommandPool failed while resuming after a resource lock", resetResult);
+        m_frameActive = false;
+        m_swapchainNeedsRecreate = !m_deviceLost;
+        return false;
+    }
+
+    VkCommandBufferBeginInfo begin{};
+    begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    const VkResult beginResult = vkBeginCommandBuffer(m_commandBuffer, &begin);
+    if (beginResult != VK_SUCCESS)
+    {
+        SetError("vkBeginCommandBuffer failed while resuming after a resource lock", beginResult);
+        m_frameActive = false;
+        m_swapchainNeedsRecreate = !m_deviceLost;
+        return false;
+    }
+
+    // Do not advance the frame serial, reset uniform allocation, or reacquire the
+    // swapchain image: commands after the synchronous lock belong to the same frame.
+    m_renderingActive = false;
     return true;
 }
 
@@ -1096,9 +1198,12 @@ bool VulkanBackend::EndFrame()
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit{};
     submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit.waitSemaphoreCount = 1;
-    submit.pWaitSemaphores = &m_sync.imageAvailable;
-    submit.pWaitDstStageMask = &waitStage;
+    if (m_imageAvailablePending)
+    {
+        submit.waitSemaphoreCount = 1;
+        submit.pWaitSemaphores = &m_sync.imageAvailable;
+        submit.pWaitDstStageMask = &waitStage;
+    }
     submit.commandBufferCount = 1;
     submit.pCommandBuffers = &m_commandBuffer;
     submit.signalSemaphoreCount = 1;
@@ -1116,6 +1221,7 @@ bool VulkanBackend::EndFrame()
             (void)RecreateSwapchain();
         return false;
     }
+    m_imageAvailablePending = false;
 
     VkPresentInfoKHR present{};
     present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;

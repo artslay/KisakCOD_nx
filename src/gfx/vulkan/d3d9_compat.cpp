@@ -1114,16 +1114,15 @@ HRESULT KisakVkTexture::LockRect(
     if ((flags & D3DLOCK_DISCARD) && !full)
         return E_FAIL;
 
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!backend || !backend->SynchronizeActiveFrame())
+        return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
     lockShadow.resize(TextureLevelSize(sourceFormat, w, h));
     if (lockShadow.empty())
         return E_FAIL;
-    VulkanBackend *backend = GetVulkanBackend();
     if (!(flags & D3DLOCK_DISCARD) && old != VK_IMAGE_LAYOUT_UNDEFINED)
     {
-        if (!backend)
-            return E_FAIL;
-        backend->EndRendering();
         if (!backend->DownloadImage2D(image, info.aspect, w, h, level,
                                       lockShadow.data(), lockShadow.size(), old))
             return E_FAIL;
@@ -1161,9 +1160,9 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
     {
         VulkanBackend *backend = GetVulkanBackend();
         const TextureFormatInfo info = GetTextureFormat(sourceFormat);
-        if (!backend || info.format == VK_FORMAT_UNDEFINED)
+        if (!backend || info.format == VK_FORMAT_UNDEFINED ||
+            !backend->SynchronizeActiveFrame())
             return E_FAIL;
-        backend->EndRendering();
         const uint32_t w = std::max(1u, width >> level);
         const uint32_t h = std::max(1u, height >> level);
         if (lockWasUndefined || (lockFlags & D3DLOCK_DISCARD))
@@ -1227,17 +1226,16 @@ HRESULT KisakVkTexture::LockBox(
     if ((flags&D3DLOCK_DISCARD) && !full)
         return E_FAIL;
 
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!backend || !backend->SynchronizeActiveFrame())
+        return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
     const size_t slice = TextureLevelSize(sourceFormat,w,h);
     lockShadow.resize(slice*d);
     if (lockShadow.empty())
         return E_FAIL;
-    VulkanBackend *backend = GetVulkanBackend();
     if (!(flags&D3DLOCK_DISCARD) && old!=VK_IMAGE_LAYOUT_UNDEFINED)
     {
-        if (!backend)
-            return E_FAIL;
-        backend->EndRendering();
         if (!backend->DownloadImage3D(image,w,h,d,level,lockShadow.data(),lockShadow.size(),old))
             return E_FAIL;
     }
@@ -1272,9 +1270,9 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
     {
         VulkanBackend *backend=GetVulkanBackend();
         const TextureFormatInfo info=GetTextureFormat(sourceFormat);
-        if (!backend || info.format==VK_FORMAT_UNDEFINED || info.depth)
+        if (!backend || info.format==VK_FORMAT_UNDEFINED || info.depth ||
+            !backend->SynchronizeActiveFrame())
             return E_FAIL;
-        backend->EndRendering();
         const uint32_t w=std::max(1u,width>>level), h=std::max(1u,height>>level);
         const uint32_t d=std::max(1u,depth>>level);
         if (lockWasUndefined || (lockFlags&D3DLOCK_DISCARD))
