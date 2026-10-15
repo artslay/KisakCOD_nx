@@ -1729,7 +1729,15 @@ void VulkanBackend::TransitionImage(
     VkImageSubresourceRange range,
     VkCommandBuffer commandBuffer)
 {
-    if (!image || oldLayout == newLayout)
+    if (!image)
+        return;
+    // Re-entering the same attachment layout still needs an execution/memory
+    // dependency between dynamic-rendering instances. Read-only layouts can
+    // stay barrier-free when the layout does not change.
+    if (oldLayout == newLayout &&
+        oldLayout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+        oldLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL &&
+        oldLayout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
         return;
 
     if (range.levelCount == 0)
@@ -1760,8 +1768,10 @@ void VulkanBackend::TransitionImage(
     }
     else if (oldLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
     {
-        srcStage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-        srcAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+        srcStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        srcAccess = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
     }
     else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
     {
