@@ -35,6 +35,7 @@
 #include "scr_compiler.h"
 
 #include <setjmp.h>
+#include <cstddef>
 #include <cstdio>
 
 #ifdef KISAK_SWITCH
@@ -3517,7 +3518,7 @@ uint32_t __cdecl VM_Execute(uint32_t localId, const char *pos, uint32_t paramcou
 
     iassert(paramcount <= scrVmPub.inparamcount);
     Scr_ClearOutParams();
-    startTop = &scrVmPub.top[-paramcount];
+    startTop = scrVmPub.top - static_cast<std::ptrdiff_t>(paramcount);
     paramcounta = scrVmPub.inparamcount - paramcount;
     if (scrVmPub.function_count >= 30)
     {
