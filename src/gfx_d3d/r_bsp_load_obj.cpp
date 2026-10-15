@@ -31,9 +31,52 @@
 #endif
 
 #ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
 static_assert(sizeof(GfxAabbTree) == 56, "Switch GfxAabbTree must use native 64-bit pointer layout");
+static_assert(offsetof(GfxAabbTree, smodelIndexes) == 40, "Switch GfxAabbTree smodelIndexes offset mismatch");
+static_assert(offsetof(GfxAabbTree, childrenOffset) == 48, "Switch GfxAabbTree childrenOffset mismatch");
 static_assert(sizeof(GfxCell) == 88, "Switch GfxCell must use native 64-bit pointer layout");
 static_assert(sizeof(GfxPortal) == 96, "Switch GfxPortal must use native 64-bit pointer layout");
+
+static bool R_SwitchAabbAddressLooksValid(const void *address)
+{
+    const uintptr_t value = reinterpret_cast<uintptr_t>(address);
+    return value >= UINT64_C(0x100000000) && value <= UINT64_C(0x0000100000000000);
+}
+
+static void R_SwitchLogBadAabbIndexPointer(const char *stage, const GfxAabbTree *tree)
+{
+    if (!tree)
+        return;
+    if (!R_SwitchAabbAddressLooksValid(tree))
+    {
+        char message[256];
+        std::snprintf(message, sizeof(message),
+            "[KisakCOD][AABB INDEX FAULT] stage=%s invalidTree=%p\\n",
+            stage, static_cast<const void *>(tree));
+        Switch_LogWrite(message);
+        return;
+    }
+
+    if (tree->smodelIndexCount &&
+        (!tree->smodelIndexes || !R_SwitchAabbAddressLooksValid(tree->smodelIndexes)))
+    {
+        char message[384];
+        std::snprintf(message, sizeof(message),
+            "[KisakCOD][AABB INDEX FAULT] stage=%s tree=%p indices=%p count=%u childCount=%u childOffset=%d surfaces=%u start=%u models=%u\\n",
+            stage,
+            static_cast<const void *>(tree),
+            static_cast<const void *>(tree->smodelIndexes),
+            static_cast<unsigned>(tree->smodelIndexCount),
+            static_cast<unsigned>(tree->childCount),
+            tree->childrenOffset,
+            static_cast<unsigned>(tree->surfaceCount),
+            static_cast<unsigned>(tree->startSurfIndex),
+            static_cast<unsigned>(s_world.dpvs.smodelCount));
+        Switch_LogWrite(message);
+    }
+}
 #endif
 
 r_globals_load_t rgl;
@@ -3084,6 +3127,9 @@ void __cdecl R_AllocStaticModels(GfxAabbTree *tree)
         memcpy(smodelIndexes, tree->smodelIndexes, 2 * tree->smodelIndexCount);
         tree->smodelIndexes = (unsigned short*)smodelIndexes;
     }
+#ifdef __SWITCH__
+    R_SwitchLogBadAabbIndexPointer("alloc_static_models", tree);
+#endif
     children = reinterpret_cast<GfxAabbTree *>(reinterpret_cast<uint8_t *>(tree) + tree->childrenOffset);
     for (childIndex = 0; childIndex < tree->childCount; ++childIndex)
         R_AllocStaticModels(&children[childIndex]);
@@ -3158,6 +3204,9 @@ void __cdecl R_SortGfxAabbTree(GfxWorld *world, GfxAabbTree *tree)
     int count; // [esp+84h] [ebp-8h]
     int smodelIndex; // [esp+88h] [ebp-4h]
 
+#ifdef __SWITCH__
+    R_SwitchLogBadAabbIndexPointer("sort_entry", tree);
+#endif
     qsort(tree->smodelIndexes, tree->smodelIndexCount, 2u, (int(*)(const void *, const void *))CompareStaticModels);
     if (tree->childCount)
     {
@@ -3324,7 +3373,13 @@ GfxAabbTree *__cdecl R_AabbTreeMove_r(GfxAabbTree *tree, GfxAabbTree *newTree, G
     uint32_t childIndex; // [esp+Ch] [ebp-8h]
     GfxAabbTree *allocChildren; // [esp+10h] [ebp-4h]
 
+#ifdef __SWITCH__
+    R_SwitchLogBadAabbIndexPointer("fixup_source", tree);
+#endif
     qmemcpy(newTree, tree, sizeof(GfxAabbTree));
+#ifdef __SWITCH__
+    R_SwitchLogBadAabbIndexPointer("fixup_dest", newTree);
+#endif
     children = reinterpret_cast<GfxAabbTree *>(reinterpret_cast<uint8_t *>(tree) + tree->childrenOffset);
     newTree->childrenOffset = static_cast<int>(reinterpret_cast<uint8_t *>(newChildren) - reinterpret_cast<uint8_t *>(newTree));
     allocChildren = &newChildren[tree->childCount];
