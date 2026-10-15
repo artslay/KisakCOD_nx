@@ -1,6 +1,9 @@
 #pragma once
 #include <xanim/xanim.h>
 #include "rb_backend.h"
+#ifdef __SWITCH__
+#include <gfx/vulkan/d3d9_compat.h>
+#endif
 
 static _DWORD s_codeConstUpdateFreq[90] =
 {
@@ -155,7 +158,11 @@ double __cdecl R_GetAdjustedLodDist(float dist, XModelLodRampType lodRampType);
 
 template <typename T>
 inline void __cdecl R_ReleaseAndSetNULL(
+#ifdef __SWITCH__
+    IDirect3DResource9 *var,
+#else
     IDirect3DSurface9 *var,
+#endif
     const char *fn,
     const char *filename,
     int line)

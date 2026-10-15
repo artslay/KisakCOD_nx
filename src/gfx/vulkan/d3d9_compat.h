@@ -3,6 +3,7 @@
 #ifdef __SWITCH__
 
 #include <atomic>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -170,24 +171,34 @@ struct VulkanUniformLayout
     size_t size = 0;
 };
 
-struct KisakVkBuffer {
+struct IDirect3DResource9
+{
+    virtual uint32_t AddRef() = 0;
+    virtual uint32_t Release() = 0;
+    virtual ~IDirect3DResource9() = default;
+};
+
+struct KisakVkBuffer : IDirect3DResource9 {
     std::atomic<uint32_t> refs{1};
     VkBuffer buffer=VK_NULL_HANDLE;
     VkDeviceMemory memory=VK_NULL_HANDLE;
     void *mapped=nullptr;
-    void AddRef() { refs.fetch_add(1, std::memory_order_relaxed); }
+    uint32_t AddRef() override
+    {
+        return refs.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
     // Dynamic buffers keep a staging copy; static buffers are written directly
     // to their persistently mapped HOST_VISIBLE|HOST_COHERENT allocation.
     std::vector<uint8_t> shadow;
     bool dynamic=false;
     uint32_t size=0;
     VkDevice device=VK_NULL_HANDLE;
-    void Release();
+    uint32_t Release() override;
     HRESULT Lock(uint32_t offset, uint32_t sizeBytes, void **out, uint32_t flags);
     HRESULT Unlock();
 };
 
-struct KisakVkTexture {
+struct KisakVkTexture : IDirect3DResource9 {
     VkImage image=VK_NULL_HANDLE;
     VkImageView view=VK_NULL_HANDLE;
     VkSampler sampler=VK_NULL_HANDLE;
@@ -200,7 +211,10 @@ struct KisakVkTexture {
     std::atomic<uint32_t> refs{1};
     std::vector<uint8_t> lockShadow;
     bool lockShadowActive=false;
-    void AddRef() { refs.fetch_add(1, std::memory_order_relaxed); }
+    uint32_t AddRef() override
+    {
+        return refs.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
     VkImageLayout GetSubresourceLayout(uint32_t level, uint32_t layer=0) const
     {
         if (level >= mipLevels || layer >= arrayLayers)
@@ -225,20 +239,29 @@ struct KisakVkTexture {
     HRESULT LockBox(uint32_t level, _D3DLOCKED_BOX *lockedBox, const _D3DBOX*, uint32_t);
     HRESULT UnlockBox(uint32_t level);
     HRESULT AddDirtyBox(const _D3DBOX*) { return S_OK; }
-    void Release();
+    uint32_t Release() override;
 };
 
 using IDirect3DVertexBuffer9 = KisakVkBuffer;
 using IDirect3DIndexBuffer9 = KisakVkBuffer;
 
-struct KisakVkVertexDeclaration {
+struct KisakVkVertexDeclaration : IDirect3DResource9 {
     std::atomic<uint32_t> refs{1};
     uint64_t serial=0;
     std::vector<_D3DVERTEXELEMENT9> elements;
-    void AddRef() { refs.fetch_add(1, std::memory_order_relaxed); }
-    void Release() {
-        if (refs.fetch_sub(1, std::memory_order_acq_rel) == 1)
+    uint32_t AddRef() override
+    {
+        return refs.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
+    uint32_t Release() override
+    {
+        const uint32_t oldRefs = refs.fetch_sub(1, std::memory_order_acq_rel);
+        if (oldRefs == 1)
+        {
             delete this;
+            return 0;
+        }
+        return oldRefs - 1;
     }
     // Material_BuildVertexDecl records the engine vertex declaration type so
     // Vulkan can distinguish the generic GfxVertex 2D layout from packed
@@ -247,7 +270,7 @@ struct KisakVkVertexDeclaration {
 };
 using IDirect3DVertexDeclaration9 = KisakVkVertexDeclaration;
 
-struct KisakVkShader {
+struct KisakVkShader : IDirect3DResource9 {
     std::atomic<uint32_t> refs{1};
     uint64_t serial=0;
     VkShaderModule module=VK_NULL_HANDLE;
@@ -260,11 +283,14 @@ struct KisakVkShader {
     std::vector<uint32_t> linkedSpirv;
     uint64_t linkedDeclarationSerial=0;
     uint64_t linkedPixelShaderSerial=0;
-    void AddRef() { refs.fetch_add(1, std::memory_order_relaxed); }
+    uint32_t AddRef() override
+    {
+        return refs.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
     bool linkedAlphaTestPatch=false;
     uint32_t alphaFuncSpecId=0;
     uint32_t alphaRefSpecId=0;
-    void Release();
+    uint32_t Release() override;
 };
 using IDirect3DVertexShader9 = KisakVkShader;
 using IDirect3DPixelShader9 = KisakVkShader;
@@ -277,13 +303,13 @@ using LPDIRECT3DTEXTURE9 = IDirect3DTexture9*;
 
 class VulkanBackend;
 
-struct IDirect3DSurface9 {
+struct IDirect3DSurface9 : IDirect3DResource9 {
     KisakVkTexture *texture=nullptr;
     uint32_t level=0;
     bool defaultFramebuffer=false;
-    uint32_t refs=1;
-    void AddRef();
-    HRESULT Release();
+    std::atomic<uint32_t> refs{1};
+    uint32_t AddRef() override;
+    uint32_t Release() override;
     HRESULT LockRect(_D3DLOCKED_RECT*, const tagRECT*, uint32_t);
     HRESULT UnlockRect();
 };
@@ -291,7 +317,12 @@ struct IDirect3DSurface9 {
 constexpr uint32_t D3DQUERYTYPE_EVENT = 8;
 constexpr uint32_t D3DQUERYTYPE_OCCLUSION = 9;
 
-struct IDirect3DQuery9 {
+struct IDirect3DQuery9 : IDirect3DResource9 {
+    std::atomic<uint32_t> refs{1};
+    uint32_t AddRef() override
+    {
+        return refs.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
     VulkanBackend *backend = nullptr;
     void *query = nullptr;
     uint32_t queryType = 0;
@@ -301,7 +332,7 @@ struct IDirect3DQuery9 {
     static IDirect3DQuery9 *Create(VulkanBackend *backend, uint32_t queryType);
     HRESULT Issue(uint32_t flags);
     HRESULT GetData(void *data, uint32_t size, uint32_t flags);
-    void Release();
+    uint32_t Release() override;
 };
 
 struct IDirect3D9 {};

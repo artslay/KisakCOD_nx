@@ -421,7 +421,11 @@ void __cdecl R_FreeStaticVertexBuffer(IDirect3DVertexBuffer9 *vb)
         }
         varCopy = vb;
         vb = 0;
+#ifdef __SWITCH__
+        R_ReleaseAndSetNULL<IDirect3DVertexBuffer9>(varCopy, "vb", ".\\r_buffers.cpp", 213);
+#else
         R_ReleaseAndSetNULL<IDirect3DSurface9>((IDirect3DSurface9 *)varCopy, "vb", ".\\r_buffers.cpp", 213);
+#endif
     } while (alwaysfails);
 }
 
@@ -438,7 +442,11 @@ void __cdecl R_FreeStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
         }
         varCopy = ib;
         ib = 0;
+#ifdef __SWITCH__
+        R_ReleaseAndSetNULL<IDirect3DIndexBuffer9>(varCopy, "ib", ".\\r_buffers.cpp", 272);
+#else
         R_ReleaseAndSetNULL<IDirect3DDevice9>((IDirect3DSurface9 *)varCopy, "ib", ".\\r_buffers.cpp", 272);
+#endif
     } while (alwaysfails);
 }
 
@@ -458,10 +466,16 @@ void __cdecl R_DestroyParticleCloudBuffer()
 
 void __cdecl R_DestroyDynamicBuffers()
 {
-    IDirect3DSurface9 *v0; // [esp+0h] [ebp-14h]
-    IDirect3DSurface9 *buffer; // [esp+4h] [ebp-10h]
-    IDirect3DSurface9 *var; // [esp+8h] [ebp-Ch]
-    IDirect3DIndexBuffer9 *varCopy; // [esp+Ch] [ebp-8h]
+#ifdef __SWITCH__
+    IDirect3DVertexBuffer9 *v0;
+    IDirect3DVertexBuffer9 *buffer;
+    IDirect3DIndexBuffer9 *var;
+#else
+    IDirect3DSurface9 *v0;
+    IDirect3DSurface9 *buffer;
+    IDirect3DSurface9 *var;
+#endif
+    IDirect3DIndexBuffer9 *varCopy;
     int bufferIter; // [esp+10h] [ebp-4h]
     int bufferItera; // [esp+10h] [ebp-4h]
     int bufferIterb; // [esp+10h] [ebp-4h]
@@ -480,11 +494,19 @@ void __cdecl R_DestroyDynamicBuffers()
                 }
                 varCopy = gfxBuf.preTessIndexBufferPool[bufferIter].buffer;
                 gfxBuf.preTessIndexBufferPool[bufferIter].buffer = 0;
+#ifdef __SWITCH__
+                R_ReleaseAndSetNULL<IDirect3DIndexBuffer9>(
+                    varCopy,
+                    "gfxBuf.preTessIndexBufferPool[bufferIter].buffer",
+                    ".\\r_buffers.cpp",
+                    522);
+#else
                 R_ReleaseAndSetNULL<IDirect3DDevice9>(
                     (IDirect3DSurface9 *)varCopy,
                     "gfxBuf.preTessIndexBufferPool[bufferIter].buffer",
                     ".\\r_buffers.cpp",
                     522);
+#endif
             } while (alwaysfails);
         }
     }
@@ -496,7 +518,11 @@ void __cdecl R_DestroyDynamicBuffers()
             {
                 if (r_logFile && r_logFile->current.integer)
                     RB_LogPrint("gfxBuf.dynamicIndexBufferPool[bufferIter].buffer->Release()\n");
+#ifdef __SWITCH__
+                var = gfxBuf.dynamicIndexBufferPool[bufferItera].buffer;
+#else
                 var = (IDirect3DSurface9 *)gfxBuf.dynamicIndexBufferPool[bufferItera].buffer;
+#endif
                 gfxBuf.dynamicIndexBufferPool[bufferItera].buffer = 0;
                 R_ReleaseAndSetNULL<IDirect3DDevice9>(
                     var,
@@ -514,7 +540,11 @@ void __cdecl R_DestroyDynamicBuffers()
             {
                 if (r_logFile && r_logFile->current.integer)
                     RB_LogPrint("gfxBuf.skinnedCacheVbPool[bufferIter].buffer->Release()\n");
+#ifdef __SWITCH__
+                buffer = gfxBuf.skinnedCacheVbPool[bufferIterb].buffer;
+#else
                 buffer = (IDirect3DSurface9 *)gfxBuf.skinnedCacheVbPool[bufferIterb].buffer;
+#endif
                 gfxBuf.skinnedCacheVbPool[bufferIterb].buffer = 0;
                 R_ReleaseAndSetNULL<IDirect3DDevice9>(
                     buffer,
@@ -532,7 +562,11 @@ void __cdecl R_DestroyDynamicBuffers()
             {
                 if (r_logFile && r_logFile->current.integer)
                     RB_LogPrint("gfxBuf.dynamicVertexBufferPool[bufferIter].buffer->Release()\n");
+#ifdef __SWITCH__
+                v0 = gfxBuf.dynamicVertexBufferPool[bufferIterc].buffer;
+#else
                 v0 = (IDirect3DSurface9 *)gfxBuf.dynamicVertexBufferPool[bufferIterc].buffer;
+#endif
                 gfxBuf.dynamicVertexBufferPool[bufferIterc].buffer = 0;
                 R_ReleaseAndSetNULL<IDirect3DDevice9>(
                     v0,

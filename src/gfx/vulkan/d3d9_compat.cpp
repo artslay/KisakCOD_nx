@@ -926,14 +926,15 @@ extern "C" void Switch_DumpVulkanUniformTraceOnCrash(void (*writeLine)(const cha
     }
 }
 
-void KisakVkBuffer::Release()
+uint32_t KisakVkBuffer::Release()
 {
-    if (refs.fetch_sub(1, std::memory_order_acq_rel) != 1)
-        return;
+    const uint32_t oldRefs = refs.fetch_sub(1, std::memory_order_acq_rel);
+    if (oldRefs > 1)
+        return oldRefs - 1;
     if (!device)
     {
         delete this;
-        return;
+        return 0;
     }
     if (mapped)
         vkUnmapMemory(device, memory);
@@ -944,6 +945,7 @@ void KisakVkBuffer::Release()
     memory = VK_NULL_HANDLE;
     mapped = nullptr;
     delete this;
+    return 0;
 }
 
 HRESULT KisakVkBuffer::Lock(uint32_t offset, uint32_t lockSize, void **out, uint32_t)
@@ -972,10 +974,11 @@ HRESULT KisakVkBuffer::Unlock()
     return S_OK;
 }
 
-void KisakVkTexture::Release()
+uint32_t KisakVkTexture::Release()
 {
-    if (refs.fetch_sub(1, std::memory_order_acq_rel) != 1)
-        return;
+    const uint32_t oldRefs = refs.fetch_sub(1, std::memory_order_acq_rel);
+    if (oldRefs > 1)
+        return oldRefs - 1;
 
     VulkanBackend *backend = GetVulkanBackend();
     if (backend)
@@ -984,6 +987,7 @@ void KisakVkTexture::Release()
     view = VK_NULL_HANDLE;
     memory = VK_NULL_HANDLE;
     delete this;
+    return 0;
 }
 
 HRESULT KisakVkTexture::LockRect(
@@ -1073,27 +1077,28 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
     return S_OK;
 }
 
-void IDirect3DSurface9::AddRef()
+uint32_t IDirect3DSurface9::AddRef()
 {
-    ++refs;
+    const uint32_t newRefs = refs.fetch_add(1, std::memory_order_relaxed) + 1;
     if (texture)
         texture->AddRef();
+    return newRefs;
 }
 
-HRESULT IDirect3DSurface9::Release()
+uint32_t IDirect3DSurface9::Release()
 {
-    if (refs > 1)
+    const uint32_t oldRefs = refs.fetch_sub(1, std::memory_order_acq_rel);
+    if (oldRefs > 1)
     {
-        --refs;
         if (texture)
             texture->Release();
-        return S_OK;
+        return oldRefs - 1;
     }
     if (texture)
         texture->Release();
     texture = nullptr;
     delete this;
-    return S_OK;
+    return 0;
 }
 
 HRESULT IDirect3DSurface9::LockRect(
@@ -1182,13 +1187,17 @@ HRESULT IDirect3DQuery9::GetData(void *data, uint32_t size, uint32_t)
     return S_OK;
 }
 
-void IDirect3DQuery9::Release()
+uint32_t IDirect3DQuery9::Release()
 {
+    const uint32_t oldRefs = refs.fetch_sub(1, std::memory_order_acq_rel);
+    if (oldRefs > 1)
+        return oldRefs - 1;
     if (backend && query)
         backend->ReleaseQuery(query);
     backend = nullptr;
     query = nullptr;
     delete this;
+    return 0;
 }
 
 IDirect3DDevice9::IDirect3DDevice9()
@@ -1792,10 +1801,11 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
     return CreatePixelShader(bytecode, 0, out);
 }
 
-void KisakVkShader::Release()
+uint32_t KisakVkShader::Release()
 {
-    if (refs.fetch_sub(1, std::memory_order_acq_rel) != 1)
-        return;
+    const uint32_t oldRefs = refs.fetch_sub(1, std::memory_order_acq_rel);
+    if (oldRefs > 1)
+        return oldRefs - 1;
 
     VulkanBackend *backend = GetVulkanBackend();
     if (backend && module)
@@ -1805,6 +1815,7 @@ void KisakVkShader::Release()
         MOJOSHADER_freeParseData(parseData);
     parseData = nullptr;
     delete this;
+    return 0;
 }
 
 HRESULT IDirect3DDevice9::SetVertexShader(IDirect3DVertexShader9 *shader)
