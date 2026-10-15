@@ -1672,6 +1672,7 @@ void __cdecl R_LoadAabbTrees(TrisType trisType)
     lumpType = trisType != TRIS_TYPE_LAYERED ? LUMP_UNLAYERED_AABBTREES : LUMP_AABBTREES;
     in = (const DiskGfxAabbTree *)Com_GetBspLump(lumpType, 0xCu, &aabbTreeCount);
     out = (GfxAabbTree *)Hunk_Alloc(sizeof(GfxAabbTree) * aabbTreeCount, "R_LoadAabbTrees", 22);
+    memset(out, 0, sizeof(GfxAabbTree) * aabbTreeCount);
     rgl.aabbTrees = out;
     rgl.aabbTreeCount = aabbTreeCount;
     for (aabbTreeIndex = 0; aabbTreeIndex < aabbTreeCount; ++aabbTreeIndex)
@@ -2936,7 +2937,9 @@ void __cdecl R_AddStaticModelToAabbTree_r(GfxWorld *world, GfxAabbTree *tree, in
                     newChildTrees[childIndexb].childrenOffset = static_cast<int>(
                         oldChildBase + oldChildTrees[childIndexb].childrenOffset - newChildBase);
                 }
-                childTreea = reinterpret_cast<GfxAabbTree *>(reinterpret_cast<uint8_t *>(tree) + tree->childrenOffset) + tree->childCount++;
+                childTreea = reinterpret_cast<GfxAabbTree *>(reinterpret_cast<uint8_t *>(tree) + tree->childrenOffset) + tree->childCount;
+                memset(childTreea, 0, sizeof(*childTreea));
+                ++tree->childCount;
                 childTreea->mins[0] = smodelInst->mins[0];
                 childTreea->mins[1] = smodelInst->mins[1];
                 childTreea->mins[2] = smodelInst->mins[2];
@@ -3242,7 +3245,13 @@ void __cdecl R_SortGfxAabbTree(GfxWorld *world, GfxAabbTree *tree)
                     ++count;
                 if (smodelIndexCount)
                     ++count;
-                tree->childrenOffset = Hunk_AllocAlign(sizeof(GfxAabbTree) * count, alignof(GfxAabbTree), "R_SortGfxAabbTree", 21) - (unsigned char*)tree;
+                children = reinterpret_cast<GfxAabbTree *>(Hunk_AllocAlign(
+                    sizeof(GfxAabbTree) * count,
+                    alignof(GfxAabbTree),
+                    "R_SortGfxAabbTree",
+                    21));
+                tree->childrenOffset = reinterpret_cast<uint8_t *>(children) - reinterpret_cast<uint8_t *>(tree);
+                memset(children, 0, sizeof(GfxAabbTree) * count);
                 if (tree->surfaceCount)
                 {
                     children = reinterpret_cast<GfxAabbTree *>(reinterpret_cast<uint8_t *>(tree) + tree->childrenOffset);
