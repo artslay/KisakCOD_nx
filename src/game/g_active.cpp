@@ -673,9 +673,37 @@ void __cdecl ClientThink_real(gentity_s *ent)
         clipmask = 8454161;
     v39.tracemask = clipmask;
     v39.handler = 1;
+#ifdef __SWITCH__
+    static unsigned switchServerPmoveTraceCount = 0;
+    const unsigned switchPmoveTraceId = switchServerPmoveTraceCount++;
+    const bool switchTracePmove = switchPmoveTraceId < 4;
+    if (switchTracePmove)
+    {
+        Com_Printf(CON_CHANNEL_SERVER,
+            "[KisakCOD][PMOVE SERVER] n=%u phase=before ps=%p origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) psTime=%d cmdTime=%d cmd=(%d,%d,%d,0x%08x) old=(%d,%d,%d,0x%08x) handler=%u mask=0x%08x\\n",
+            switchPmoveTraceId, static_cast<void *>(&client->ps),
+            client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
+            client->ps.velocity[0], client->ps.velocity[1], client->ps.velocity[2],
+            client->ps.commandTime, v39.cmd.serverTime, v39.cmd.forwardmove,
+            v39.cmd.rightmove, v39.cmd.upmove, v39.cmd.buttons,
+            v39.oldcmd.serverTime, v39.oldcmd.forwardmove, v39.oldcmd.rightmove,
+            v39.oldcmd.buttons, v39.handler, v39.tracemask);
+    }
+#endif
     //Profile_Begin(27);
     Pmove(&v39);
     //Profile_EndInternal(0);
+#ifdef __SWITCH__
+    if (switchTracePmove)
+    {
+        Com_Printf(CON_CHANNEL_SERVER,
+            "[KisakCOD][PMOVE SERVER] n=%u phase=after ps=%p origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) psTime=%d cmdTime=%d\\n",
+            switchPmoveTraceId, static_cast<void *>(&client->ps),
+            client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
+            client->ps.velocity[0], client->ps.velocity[1], client->ps.velocity[2],
+            client->ps.commandTime, v39.cmd.serverTime);
+    }
+#endif
     v12 = ent->client;
     if (v12->ps.eventSequence != eventSequence)
         ent->r.eventTime = level.time;
