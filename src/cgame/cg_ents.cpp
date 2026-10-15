@@ -2444,7 +2444,6 @@ int __cdecl CG_AddPacketEntities(int localClientNum)
     int v3; // r25
     snapshot_s *nextSnap; // r11
     int v5; // r29
-    int v6; // r30
     unsigned int v7; // r31
     centity_s *Entity; // r4
 
@@ -2477,13 +2476,12 @@ int __cdecl CG_AddPacketEntities(int localClientNum)
 #endif
     if (cgArray[0].nextSnap->numEntities > 0)
     {
-        v6 = 45796;
         do
         {
 #ifdef __SWITCH__
             Switch_SetCgEntityStage("packet_entities/read_entity_id", static_cast<uint32_t>(v5), UINT32_MAX, UINT32_MAX);
 #endif
-            v7 = *(int *)((char *)&nextSnap->snapFlags + v6);
+            v7 = static_cast<unsigned int>(nextSnap->entityNums[v5]);
 #ifdef __SWITCH__
             Switch_SetCgEntityStage("packet_entities/get_entity", static_cast<uint32_t>(v5), v7, UINT32_MAX);
 #endif
@@ -2511,7 +2509,6 @@ int __cdecl CG_AddPacketEntities(int localClientNum)
 #endif
             nextSnap = cgArray[0].nextSnap;
             ++v5;
-            v6 += 4;
         } while (v5 < cgArray[0].nextSnap->numEntities);
     }
 #ifdef __SWITCH__
