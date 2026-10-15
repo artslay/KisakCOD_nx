@@ -463,7 +463,7 @@ void __cdecl ActorScr_GetLastEnemySightPos(actor_s *pSelf, const actor_fields_s 
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_fields.cpp", 547, 0, "%s", "pField");
     if (pField->type != F_VECTOR)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_fields.cpp", 548, 0, "%s", "pField->type == F_VECTOR");
-    if (pField->ofs != 3428)
+    if (pField->ofs != AI_FIELD_OFFSET(lastEnemySightPos))
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\actor_fields.cpp",
             549,
