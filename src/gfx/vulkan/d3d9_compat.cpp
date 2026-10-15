@@ -104,6 +104,41 @@ struct TextureFormatInfo
     bool depth = false;
 };
 
+VkComponentMapping GetTextureComponentMapping(_D3DFORMAT sourceFormat)
+{
+    VkComponentMapping mapping{
+        VK_COMPONENT_SWIZZLE_IDENTITY,
+        VK_COMPONENT_SWIZZLE_IDENTITY,
+        VK_COMPONENT_SWIZZLE_IDENTITY,
+        VK_COMPONENT_SWIZZLE_IDENTITY
+    };
+    switch (sourceFormat)
+    {
+    case D3DFMT_X8R8G8B8:
+        mapping.a = VK_COMPONENT_SWIZZLE_ONE;
+        break;
+    case D3DFMT_L8:
+        mapping.g = VK_COMPONENT_SWIZZLE_R;
+        mapping.b = VK_COMPONENT_SWIZZLE_R;
+        mapping.a = VK_COMPONENT_SWIZZLE_ONE;
+        break;
+    case D3DFMT_A8:
+        mapping.r = VK_COMPONENT_SWIZZLE_ONE;
+        mapping.g = VK_COMPONENT_SWIZZLE_ONE;
+        mapping.b = VK_COMPONENT_SWIZZLE_ONE;
+        mapping.a = VK_COMPONENT_SWIZZLE_R;
+        break;
+    case D3DFMT_A8L8:
+        mapping.g = VK_COMPONENT_SWIZZLE_R;
+        mapping.b = VK_COMPONENT_SWIZZLE_R;
+        mapping.a = VK_COMPONENT_SWIZZLE_G;
+        break;
+    default:
+        break;
+    }
+    return mapping;
+}
+
 TextureFormatInfo GetTextureFormat(_D3DFORMAT sourceFormat)
 {
     switch (sourceFormat)
@@ -116,6 +151,8 @@ TextureFormatInfo GetTextureFormat(_D3DFORMAT sourceFormat)
         return {VK_FORMAT_R8G8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_R5G6B5:
         return {VK_FORMAT_R5G6B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
+    case D3DFMT_A1R5G5B5:
+        return {VK_FORMAT_A1R5G5B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_A8R8G8B8:
     case D3DFMT_X8R8G8B8:
         return {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
@@ -1354,7 +1391,8 @@ HRESULT IDirect3DDevice9::CreateOffscreenPlainSurface(
             width, height, 1, info.format,
             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                 VK_IMAGE_USAGE_SAMPLED_BIT,
-            info.aspect, &texture->image, &texture->memory, &texture->view))
+            info.aspect, &texture->image, &texture->memory, &texture->view,
+            GetTextureComponentMapping(format)))
     {
         delete texture;
         return E_FAIL;
@@ -1467,7 +1505,8 @@ HRESULT IDirect3DDevice9::CreateRenderTarget(
             width, height, 1, info.format,
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            info.aspect, &texture->image, &texture->memory, &texture->view))
+            info.aspect, &texture->image, &texture->memory, &texture->view,
+            GetTextureComponentMapping(format)))
     {
         delete texture;
         return E_FAIL;

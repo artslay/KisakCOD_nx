@@ -69,6 +69,8 @@ VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
         return {VK_FORMAT_R8G8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_R5G6B5:
         return {VK_FORMAT_R5G6B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
+    case D3DFMT_A1R5G5B5:
+        return {VK_FORMAT_A1R5G5B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_R32F:
         return {VK_FORMAT_R32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_G16R16F:
