@@ -251,6 +251,19 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/scr/draw_field/update_time_done";
 #endif
+#ifdef __SWITCH__
+        // Map-load cinematics can still be active for a short interval after
+        // the client advances to CA_ACTIVE. A fullscreen pregame menu prevents
+        // the normal CA_CINEMATIC path from drawing them, so draw the movie
+        // before UI_Refresh paints the pregame overlay.
+        if (connectionState == CA_ACTIVE &&
+            UI_GetActiveMenu(0) == UIMENU_PREGAME &&
+            R_Cinematic_IsStarted())
+        {
+            g_switchFrameStage = "frame/scr/draw_field/pregame_cinematic";
+            SCR_DrawCinematic(0);
+        }
+#endif
         if (!UI_IsFullscreen())
         {
 #ifdef __SWITCH__
