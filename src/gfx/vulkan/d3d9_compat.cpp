@@ -3309,8 +3309,11 @@ HRESULT IDirect3DDevice9::Clear(
 
     const VkFormat depthFormat = m_depth && m_depth->texture
         ? m_depth->texture->format : m_backend->DepthFormat();
-    const bool hasStencil = depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
-        depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT;
+    const bool hasStencil = m_depth && m_depth->texture
+        ? (GetTextureFormat(m_depth->texture->sourceFormat).aspect &
+           VK_IMAGE_ASPECT_STENCIL_BIT) != 0
+        : (depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+           depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT);
 
     std::array<VkClearAttachment,3> attachments{};
     uint32_t count = 0;
