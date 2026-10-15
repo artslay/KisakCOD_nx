@@ -77,6 +77,133 @@ static void R_SwitchLogBadAabbIndexPointer(const char *stage, const GfxAabbTree 
         Switch_LogWrite(message);
     }
 }
+
+static unsigned R_SwitchAabbTreeFaultLogCount;
+
+static void R_SwitchLogAabbTreeLayoutFault(
+    const char *stage,
+    const char *reason,
+    const GfxAabbTree *root,
+    uint32_t nodeCount,
+    const GfxAabbTree *tree,
+    const GfxAabbTree *parent,
+    uint32_t childIndex,
+    bool fieldsReadable)
+{
+    if (R_SwitchAabbTreeFaultLogCount >= 32)
+        return;
+    ++R_SwitchAabbTreeFaultLogCount;
+
+    char message[512];
+    if (fieldsReadable && tree)
+    {
+        std::snprintf(message, sizeof(message),
+            "[KisakCOD][AABB TREE STRUCT FAULT] stage=%s reason=%s root=%p node=%p parent=%p child=%u nodes=%u childCount=%u childOffset=%d indexCount=%u indices=%p models=%u\n",
+            stage, reason,
+            static_cast<const void *>(root),
+            static_cast<const void *>(tree),
+            static_cast<const void *>(parent),
+            static_cast<unsigned>(childIndex),
+            static_cast<unsigned>(nodeCount),
+            static_cast<unsigned>(tree->childCount),
+            tree->childrenOffset,
+            static_cast<unsigned>(tree->smodelIndexCount),
+            static_cast<const void *>(tree->smodelIndexes),
+            static_cast<unsigned>(s_world.dpvs.smodelCount));
+    }
+    else
+    {
+        std::snprintf(message, sizeof(message),
+            "[KisakCOD][AABB TREE STRUCT FAULT] stage=%s reason=%s root=%p node=%p parent=%p child=%u nodes=%u\n",
+            stage, reason,
+            static_cast<const void *>(root),
+            static_cast<const void *>(tree),
+            static_cast<const void *>(parent),
+            static_cast<unsigned>(childIndex),
+            static_cast<unsigned>(nodeCount));
+    }
+    Switch_LogWrite(message);
+}
+
+static bool R_SwitchValidateFixedAabbTreeNode(
+    const GfxAabbTree *root,
+    uint32_t nodeCount,
+    const GfxAabbTree *tree,
+    const GfxAabbTree *parent,
+    uint32_t childIndex)
+{
+    const uintptr_t rootAddress = reinterpret_cast<uintptr_t>(root);
+    const uintptr_t treeAddress = reinterpret_cast<uintptr_t>(tree);
+    const uintptr_t treeBytes = static_cast<uintptr_t>(nodeCount) * sizeof(GfxAabbTree);
+    if (!root || !tree || !nodeCount ||
+        treeAddress < rootAddress ||
+        treeAddress - rootAddress >= treeBytes ||
+        (treeAddress - rootAddress) % sizeof(GfxAabbTree) != 0)
+    {
+        R_SwitchLogAabbTreeLayoutFault("fixup_validate", "node_outside_array_or_misaligned",
+            root, nodeCount, tree, parent, childIndex, false);
+        return false;
+    }
+
+    if (tree->childCount > nodeCount ||
+        tree->smodelIndexCount > s_world.dpvs.smodelCount)
+    {
+        R_SwitchLogAabbTreeLayoutFault("fixup_validate", "count_exceeds_world",
+            root, nodeCount, tree, parent, childIndex, true);
+        return false;
+    }
+
+    if (tree->smodelIndexCount &&
+        (!tree->smodelIndexes || !R_SwitchAabbAddressLooksValid(tree->smodelIndexes)))
+    {
+        R_SwitchLogAabbTreeLayoutFault("fixup_validate", "invalid_model_index_pointer",
+            root, nodeCount, tree, parent, childIndex, true);
+        return false;
+    }
+
+    if (!tree->childCount)
+        return true;
+
+    const int offset = tree->childrenOffset;
+    if (offset <= 0 || offset % static_cast<int>(sizeof(GfxAabbTree)) != 0)
+    {
+        R_SwitchLogAabbTreeLayoutFault("fixup_validate", "invalid_child_offset",
+            root, nodeCount, tree, parent, childIndex, true);
+        return false;
+    }
+
+    const uintptr_t childrenAddress = treeAddress + static_cast<uintptr_t>(offset);
+    const uintptr_t arrayEnd = rootAddress + treeBytes;
+    if (childrenAddress < rootAddress || childrenAddress > arrayEnd ||
+        static_cast<uintptr_t>(tree->childCount) > (arrayEnd - childrenAddress) / sizeof(GfxAabbTree))
+    {
+        R_SwitchLogAabbTreeLayoutFault("fixup_validate", "children_outside_array",
+            root, nodeCount, tree, parent, childIndex, true);
+        return false;
+    }
+
+    const GfxAabbTree *children = reinterpret_cast<const GfxAabbTree *>(childrenAddress);
+    for (uint32_t i = 0; i < tree->childCount; ++i)
+    {
+        if (!R_SwitchValidateFixedAabbTreeNode(root, nodeCount, &children[i], tree, i))
+            return false;
+    }
+    return true;
+}
+
+static void R_SwitchValidateFixedAabbTree(const GfxCell *cell)
+{
+    if (!cell || !cell->aabbTree || cell->aabbTreeCount <= 0)
+    {
+        R_SwitchLogAabbTreeLayoutFault("fixup_validate", "invalid_cell_tree",
+            cell ? cell->aabbTree : nullptr,
+            cell && cell->aabbTreeCount > 0 ? static_cast<uint32_t>(cell->aabbTreeCount) : 0u,
+            cell ? cell->aabbTree : nullptr, nullptr, 0, false);
+        return;
+    }
+    R_SwitchValidateFixedAabbTreeNode(cell->aabbTree,
+        static_cast<uint32_t>(cell->aabbTreeCount), cell->aabbTree, nullptr, 0);
+}
 #endif
 
 r_globals_load_t rgl;
@@ -3400,6 +3527,9 @@ void __cdecl R_FixupGfxAabbTrees(GfxCell *cell)
     if (R_AabbTreeMove_r(tree, newTree, newTree + 1) - newTree != cell->aabbTreeCount)
         MyAssertHandler(".\\r_bsp_load_obj.cpp", 3383, 0, "%s", "allocChildren - newTree == cell->aabbTreeCount");
     cell->aabbTree = newTree;
+#ifdef __SWITCH__
+    R_SwitchValidateFixedAabbTree(cell);
+#endif
 }
 
 int R_PostLoadEntities()
