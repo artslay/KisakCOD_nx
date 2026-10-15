@@ -1910,7 +1910,8 @@ void __cdecl R_ReloadLostImages()
     for (uint32_t i = 0; i < IMAGE_HASH_TABLE_SIZE; ++i)
     {
         GfxImage *image = imageGlobals.imageHashTable[i];
-        if (!image || image->texture.basemap)
+        if (!image || image->texture.basemap ||
+            image->category == IMG_CATEGORY_RENDERTARGET)
             continue;
         XAssetHeader header{};
         header.image = image;

@@ -372,7 +372,12 @@ void R_InitGraphicsApi() {
     // device-dependent render resources before R_InitSystems() registers the
     // runtime renderer state.
     if (!R_CreateForInitOrReset())
+    {
+        if (s_switchVulkanRecoveryInProgress)
+            s_switchVulkanRecoveryFailed = true;
         R_FatalInitError("Couldn't initialize renderer resources");
+        return;
+    }
 
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] before R_Cinematic_Init\n");
