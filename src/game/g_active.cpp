@@ -680,7 +680,7 @@ void __cdecl ClientThink_real(gentity_s *ent)
     if (switchTracePmove)
     {
         Com_Printf(CON_CHANNEL_SERVER,
-            "[KisakCOD][PMOVE SERVER] n=%u phase=before ps=%p origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) psTime=%d cmdTime=%d cmd=(%d,%d,%d,0x%08x) old=(%d,%d,%d,0x%08x) handler=%u mask=0x%08x\\n",
+            "[KisakCOD][PMOVE SERVER] n=%u phase=before ps=%p origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) psTime=%d cmdTime=%d cmd=(%d,%d,%d,0x%08x) old=(%d,%d,%d,0x%08x) handler=%u mask=0x%08x\n",
             switchPmoveTraceId, static_cast<void *>(&client->ps),
             client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
             client->ps.velocity[0], client->ps.velocity[1], client->ps.velocity[2],
@@ -697,7 +697,7 @@ void __cdecl ClientThink_real(gentity_s *ent)
     if (switchTracePmove)
     {
         Com_Printf(CON_CHANNEL_SERVER,
-            "[KisakCOD][PMOVE SERVER] n=%u phase=after ps=%p origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) psTime=%d cmdTime=%d\\n",
+            "[KisakCOD][PMOVE SERVER] n=%u phase=after ps=%p origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) psTime=%d cmdTime=%d\n",
             switchPmoveTraceId, static_cast<void *>(&client->ps),
             client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
             client->ps.velocity[0], client->ps.velocity[1], client->ps.velocity[2],
