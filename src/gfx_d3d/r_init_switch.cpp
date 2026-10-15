@@ -818,7 +818,7 @@ void R_ComErrorCleanup()
         dx.inScene = 0;
     }
 }
-static bool R_RecoverLostVulkanDevice()
+bool R_RecoverLostVulkanDevice()
 {
     if (s_switchVulkanRecoveryInProgress || s_switchVulkanRecoveryFatal ||
         !Sys_IsMainThread() || !rg.registered)
