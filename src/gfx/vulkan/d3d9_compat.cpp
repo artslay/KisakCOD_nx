@@ -1135,6 +1135,25 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
     return S_OK;
 }
 
+HRESULT KisakVkTexture::AddDirtyBox(const _D3DBOX *box)
+{
+    // This method belongs to the volume-texture interface. 2D/cube textures
+    // cannot accept volume dirty regions.
+    if (depth <= 1 || !width || !height || !mipLevels)
+        return E_FAIL;
+
+    if (box &&
+        (box->Left > box->Right || box->Top > box->Bottom ||
+         box->Front > box->Back || box->Right > width ||
+         box->Bottom > height || box->Back > depth))
+        return E_FAIL;
+
+    // UpdateTexture currently copies every mip level and the full volume extent,
+    // not a tracked dirty subregion. Treat any valid box (or nullptr, which
+    // means the whole volume) as a conservative full-volume dirty notification.
+    return S_OK;
+}
+
 uint32_t IDirect3DSurface9::AddRef()
 {
     const uint32_t newRefs = refs.fetch_add(1, std::memory_order_relaxed) + 1;
@@ -2888,6 +2907,13 @@ bool IDirect3DDevice9::EnsurePipeline()
     rendering.colorAttachmentCount = 1;
     rendering.pColorAttachmentFormats = &colorFormat;
     rendering.depthAttachmentFormat = depthFormat;
+    // Vulkan dynamic-rendering pipelines must declare the stencil format
+    // whenever the render pass supplies a stencil attachment. Packed D3D9
+    // depth-stencil surfaces use the same VkFormat for both aspects.
+    rendering.stencilAttachmentFormat =
+        (depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+         depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
+            ? depthFormat : VK_FORMAT_UNDEFINED;
 
     VkGraphicsPipelineCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
