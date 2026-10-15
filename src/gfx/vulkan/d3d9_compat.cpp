@@ -136,6 +136,10 @@ bool DecodeMultisampleType(
     case D3DMULTISAMPLE_4_SAMPLES: *samples = VK_SAMPLE_COUNT_4_BIT; return true;
     case D3DMULTISAMPLE_8_SAMPLES: *samples = VK_SAMPLE_COUNT_8_BIT; return true;
     case D3DMULTISAMPLE_16_SAMPLES: *samples = VK_SAMPLE_COUNT_16_BIT; return true;
+    case D3DMULTISAMPLE_NONMASKABLE:
+        // D3D9's device-specific nonmaskable quality mode has no direct Vulkan
+        // sample-count equivalent; callers get an explicit failure.
+        return false;
     default: return false;
     }
 }
