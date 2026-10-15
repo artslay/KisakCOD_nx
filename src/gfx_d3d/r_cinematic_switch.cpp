@@ -194,6 +194,39 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
     const uint8_t *srcA = planePixels(
         frameTextures.Atexture, buffers.YABufferWidth, buffers.YABufferHeight);
 
+    if (!srcY || !srcCr || !srcCb)
+    {
+        static std::atomic<unsigned> missingPlaneTraceCount{0};
+        const unsigned traceId =
+            missingPlaneTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (traceId < 8u || (traceId % 120u) == 0u)
+        {
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][CINEMATIC SOURCE MISSING] n=%u selected=%d/%d planes=%p/%p/%p/%p bytes=%zu/%zu/%zu/%zu expectedY=%zu expectedC=%zu alloc=%d/%d/%d/%d\n",
+                traceId,
+                frameIndex,
+                buffers.TotalFrames,
+                static_cast<const void *>(srcY),
+                static_cast<const void *>(srcCr),
+                static_cast<const void *>(srcCb),
+                static_cast<const void *>(srcA),
+                frameTextures.Ytexture ? frameTextures.Ytexture->lockShadow.size() : 0u,
+                frameTextures.cRtexture ? frameTextures.cRtexture->lockShadow.size() : 0u,
+                frameTextures.cBtexture ? frameTextures.cBtexture->lockShadow.size() : 0u,
+                frameTextures.Atexture ? frameTextures.Atexture->lockShadow.size() : 0u,
+                static_cast<size_t>(buffers.YABufferWidth) * buffers.YABufferHeight,
+                static_cast<size_t>(buffers.cRcBBufferWidth) * buffers.cRcBBufferHeight,
+                buffers.Frames[frameIndex].YPlane.Allocate ? 1 : 0,
+                buffers.Frames[frameIndex].cRPlane.Allocate ? 1 : 0,
+                buffers.Frames[frameIndex].cBPlane.Allocate ? 1 : 0,
+                buffers.Frames[frameIndex].APlane.Allocate ? 1 : 0);
+            Switch_LogWrite(trace);
+        }
+    }
+
     VulkanBackend *backend = GetVulkanBackend();
     if (!backend)
     {
