@@ -363,8 +363,6 @@ public:
     HRESULT SetTexture(uint32_t,IDirect3DBaseTexture9*);
     HRESULT CreateVertexShader(const void*,uint32_t,IDirect3DVertexShader9**);
     HRESULT CreatePixelShader(const void*,uint32_t,IDirect3DPixelShader9**);
-    HRESULT CreateVertexShader(const void*,IDirect3DVertexShader9**);
-    HRESULT CreatePixelShader(const void*,IDirect3DPixelShader9**);
     HRESULT SetVertexShader(IDirect3DVertexShader9*);
     HRESULT SetPixelShader(IDirect3DPixelShader9*);
     HRESULT SetVertexShaderConstantF(uint32_t,const float*,uint32_t);
