@@ -75,6 +75,8 @@ public:
     VkDevice Device() const { return m_device; }
     VkPhysicalDevice PhysicalDevice() const { return m_physicalDevice; }
     bool SupportsNonSolidFill() const { return m_fillModeNonSolid; }
+    bool SupportsSamplerAnisotropy() const { return m_samplerAnisotropy; }
+    float MaxSamplerAnisotropy() const { return m_maxSamplerAnisotropy; }
     VkCommandBuffer CommandBuffer() const { return m_commandBuffer; }
     VkQueue GraphicsQueue() const { return m_graphicsQueue; }
     VkFormat SwapchainFormat() const { return m_swapchainFormat; }
@@ -190,7 +192,10 @@ public:
         bool mipmapped,
         VkSamplerAddressMode addressU,
         VkSamplerAddressMode addressV,
-        VkSamplerAddressMode addressW);
+        VkSamplerAddressMode addressW,
+        float mipLodBias = 0.0f,
+        bool anisotropyEnable = false,
+        float maxAnisotropy = 1.0f);
 
     bool AllocateUniform(const void *data, size_t size, VkDescriptorBufferInfo *info);
 
@@ -298,6 +303,9 @@ private:
     uint32_t m_swapchainIndex = 0;
     bool m_initialized = false;
     bool m_fillModeNonSolid = false;
+    bool m_samplerAnisotropy = false;
+    float m_maxSamplerAnisotropy = 1.0f;
+    float m_maxSamplerLodBias = 0.0f;
     bool m_frameActive = false;
     bool m_renderingActive = false;
     bool m_swapchainNeedsRecreate = false;

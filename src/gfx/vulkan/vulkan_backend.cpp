@@ -244,6 +244,9 @@ void VulkanBackend::Shutdown()
     m_uniformOffset = 0;
     m_initialized = false;
     m_fillModeNonSolid = false;
+    m_samplerAnisotropy = false;
+    m_maxSamplerAnisotropy = 1.0f;
+    m_maxSamplerLodBias = 0.0f;
     m_frameActive = false;
     m_renderingActive = false;
     m_swapchainNeedsRecreate = false;
@@ -401,6 +404,12 @@ bool VulkanBackend::CreateDevice()
     // non-solid polygon mode without this feature makes pipeline creation fail.
     m_fillModeNonSolid = features2.features.fillModeNonSolid == VK_TRUE;
     features.fillModeNonSolid = m_fillModeNonSolid ? VK_TRUE : VK_FALSE;
+    m_samplerAnisotropy = features2.features.samplerAnisotropy == VK_TRUE;
+    features.samplerAnisotropy = m_samplerAnisotropy ? VK_TRUE : VK_FALSE;
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+    m_maxSamplerAnisotropy = m_samplerAnisotropy ? std::max(1.0f, properties.limits.maxSamplerAnisotropy) : 1.0f;
+    m_maxSamplerLodBias = std::max(0.0f, properties.limits.maxSamplerLodBias);
     char featureMsg[128];
     std::snprintf(featureMsg, sizeof(featureMsg),
         "[KisakCOD][VK] fill_mode_non_solid=%u\n",
@@ -1980,8 +1989,15 @@ bool VulkanBackend::UploadImage3D(
 VkSampler VulkanBackend::GetSampler(
     VkFilter minFilter, VkFilter magFilter, VkSamplerMipmapMode mipMode,
     bool mipmapped,
-    VkSamplerAddressMode addressU, VkSamplerAddressMode addressV, VkSamplerAddressMode addressW)
+    VkSamplerAddressMode addressU, VkSamplerAddressMode addressV, VkSamplerAddressMode addressW,
+    float mipLodBias, bool anisotropyEnable, float maxAnisotropy)
 {
+    const bool useAnisotropy = anisotropyEnable && m_samplerAnisotropy;
+    const float clampedAnisotropy = useAnisotropy
+        ? std::clamp(maxAnisotropy, 1.0f, m_maxSamplerAnisotropy) : 1.0f;
+    const float clampedLodBias =
+        std::clamp(mipLodBias, -m_maxSamplerLodBias, m_maxSamplerLodBias);
+
     VkSamplerCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     info.magFilter = magFilter;
@@ -1990,10 +2006,17 @@ VkSampler VulkanBackend::GetSampler(
     info.addressModeU = addressU;
     info.addressModeV = addressV;
     info.addressModeW = addressW;
+    info.mipLodBias = clampedLodBias;
+    info.anisotropyEnable = useAnisotropy ? VK_TRUE : VK_FALSE;
+    info.maxAnisotropy = clampedAnisotropy;
     info.minLod = 0.0f;
     info.maxLod = mipmapped ? VK_LOD_CLAMP_NONE : 0.0f;
 
-    const uint64_t key =
+    uint32_t biasBits = 0;
+    uint32_t anisotropyBits = 0;
+    std::memcpy(&biasBits, &clampedLodBias, sizeof(biasBits));
+    std::memcpy(&anisotropyBits, &clampedAnisotropy, sizeof(anisotropyBits));
+    uint64_t key =
         (static_cast<uint64_t>(minFilter)      << 0)  |
         (static_cast<uint64_t>(magFilter)      << 4)  |
         (static_cast<uint64_t>(mipMode)        << 8)  |
@@ -2001,6 +2024,10 @@ VkSampler VulkanBackend::GetSampler(
         (static_cast<uint64_t>(addressU)       << 13) |
         (static_cast<uint64_t>(addressV)       << 17) |
         (static_cast<uint64_t>(addressW)       << 21);
+    key ^= static_cast<uint64_t>(biasBits) + 0x9e3779b97f4a7c15ull + (key << 6) + (key >> 2);
+    key ^= static_cast<uint64_t>(useAnisotropy ? 1u : 0u) + 0x9e3779b97f4a7c15ull + (key << 6) + (key >> 2);
+    key ^= static_cast<uint64_t>(anisotropyBits) + 0x9e3779b97f4a7c15ull + (key << 6) + (key >> 2);
+
     const auto found = m_samplerCache.find(key);
     if (found != m_samplerCache.end())
         return found->second;

@@ -2041,6 +2041,13 @@ bool IDirect3DDevice9::BindSamplerSet(
             const uint32_t minFilter = m_samplerState[i][D3DSAMP_MINFILTER];
             const uint32_t magFilter = m_samplerState[i][D3DSAMP_MAGFILTER];
             const uint32_t mipFilter = m_samplerState[i][D3DSAMP_MIPFILTER];
+            float mipLodBias = 0.0f;
+            const uint32_t mipLodBiasBits = m_samplerState[i][D3DSAMP_MIPMAPLODBIAS];
+            std::memcpy(&mipLodBias, &mipLodBiasBits, sizeof(mipLodBias));
+            const bool anisotropicFilter =
+                minFilter == D3DTEXF_ANISOTROPIC || magFilter == D3DTEXF_ANISOTROPIC;
+            const float maxAnisotropy = static_cast<float>(
+                std::max(1u, m_samplerState[i][D3DSAMP_MAXANISOTROPY]));
             const VkSampler sampler = m_backend->GetSampler(
                 minFilter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR,
                 magFilter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR,
@@ -2048,7 +2055,10 @@ bool IDirect3DDevice9::BindSamplerSet(
                 mipFilter != D3DTEXF_NONE,
                 AddressMode(m_samplerState[i][D3DSAMP_ADDRESSU]),
                 AddressMode(m_samplerState[i][D3DSAMP_ADDRESSV]),
-                AddressMode(m_samplerState[i][D3DSAMP_ADDRESSW]));
+                AddressMode(m_samplerState[i][D3DSAMP_ADDRESSW]),
+                mipLodBias,
+                anisotropicFilter && m_backend->SupportsSamplerAnisotropy(),
+                std::min(maxAnisotropy, m_backend->MaxSamplerAnisotropy()));
             images[i].imageView = texture->view;
             images[i].sampler = sampler ? sampler : m_backend->DummySampler();
             images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
