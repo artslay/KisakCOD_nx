@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -31,6 +32,23 @@ uint32_t g_switchSceneDrawPrimitiveCalls = 0;
 uint32_t g_switchSceneDrawIndexedCalls = 0;
 uint32_t g_switchSceneClearCalls = 0;
 std::atomic<uint64_t> g_nextSwitchResourceSerial{1};
+
+void LogUnsupportedRenderState(uint32_t state, uint32_t value)
+{
+    static std::mutex lock;
+    static std::unordered_set<uint32_t> seenStates;
+    {
+        std::lock_guard<std::mutex> guard(lock);
+        if (!seenStates.insert(state).second)
+            return;
+    }
+
+    char message[160];
+    std::snprintf(message, sizeof(message),
+        "[KisakCOD][VK STATE] unsupported D3D render state=%u value=%u\\n",
+        state, value);
+    Switch_LogWrite(message);
+}
 
 constexpr size_t SWITCH_UNIFORM_FREE_TRACE_CAPACITY = 48;
 struct SwitchUniformFreeTraceEntry
@@ -1793,18 +1811,6 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
     return S_OK;
 }
 
-HRESULT IDirect3DDevice9::CreateVertexShader(
-    const void *bytecode, IDirect3DVertexShader9 **out)
-{
-    return CreateVertexShader(bytecode, 0, out);
-}
-
-HRESULT IDirect3DDevice9::CreatePixelShader(
-    const void *bytecode, IDirect3DPixelShader9 **out)
-{
-    return CreatePixelShader(bytecode, 0, out);
-}
-
 uint32_t KisakVkShader::Release()
 {
     const uint32_t oldRefs = refs.fetch_sub(1, std::memory_order_acq_rel);
@@ -2010,7 +2016,10 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
     case D3DRS_CCW_STENCILFAIL: m_ccwStencilFail = value; break;
     case D3DRS_CCW_STENCILZFAIL: m_ccwStencilZFail = value; break;
     case D3DRS_CCW_STENCILPASS: m_ccwStencilPass = value; break;
-    default: changed = false; break;
+    default:
+        changed = false;
+        LogUnsupportedRenderState(state, value);
+        break;
     }
     if (changed)
         m_pipelineDirty = true;
