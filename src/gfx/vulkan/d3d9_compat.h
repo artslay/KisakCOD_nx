@@ -200,12 +200,16 @@ struct KisakVkTexture {
     void AddRef() { ++refs; }
     VkImageLayout GetSubresourceLayout(uint32_t level, uint32_t layer=0) const
     {
+        if (level >= mipLevels || layer >= arrayLayers)
+            return VK_IMAGE_LAYOUT_UNDEFINED;
         const size_t index = static_cast<size_t>(layer) * mipLevels + level;
         return index < subresourceLayouts.size()
             ? subresourceLayouts[index] : layout;
     }
     void SetSubresourceLayout(uint32_t level, uint32_t layer, VkImageLayout newLayout)
     {
+        if (level >= mipLevels || layer >= arrayLayers)
+            return;
         const size_t index = static_cast<size_t>(layer) * mipLevels + level;
         if (index >= subresourceLayouts.size())
             subresourceLayouts.resize(static_cast<size_t>(arrayLayers) * mipLevels,

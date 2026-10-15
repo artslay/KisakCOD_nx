@@ -2918,11 +2918,15 @@ bool IDirect3DDevice9::PrepareDraw()
 
     if (m_color && m_color->texture)
     {
-        m_color->texture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        m_color->texture->SetSubresourceLayout(
+            m_color->level, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         m_targetRendered = true;
     }
     if (m_depth && m_depth->texture)
-        m_depth->texture->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    {
+        m_depth->texture->SetSubresourceLayout(
+            m_depth->level, 0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    }
 
     if (!EnsurePipeline())
     {
@@ -3201,9 +3205,11 @@ HRESULT IDirect3DDevice9::Clear(
             targetWidth, targetHeight))
     {
         if (m_color && m_color->texture)
-            m_color->texture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            m_color->texture->SetSubresourceLayout(
+                m_color->level, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         if (m_depth && m_depth->texture)
-            m_depth->texture->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            m_depth->texture->SetSubresourceLayout(
+                m_depth->level, 0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     }
     else
     {
