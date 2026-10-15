@@ -1904,6 +1904,19 @@ void __cdecl R_RebuildLostImage(XAssetHeader header)
 void __cdecl R_ReloadLostImages()
 {
     DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(__cdecl *)(XAssetHeader, void *))R_RebuildLostImage, 0, 1);
+#ifdef __SWITCH__
+    // DB enumeration covers fastfile assets but not every loose image registered
+    // by name at runtime. Rebuild those remaining hash entries as well.
+    for (uint32_t i = 0; i < IMAGE_HASH_TABLE_SIZE; ++i)
+    {
+        GfxImage *image = imageGlobals.imageHashTable[i];
+        if (!image || image->texture.basemap)
+            continue;
+        XAssetHeader header{};
+        header.image = image;
+        R_RebuildLostImage(header);
+    }
+#endif
 }
 
 void __cdecl R_ReleaseLostImages()
