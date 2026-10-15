@@ -643,17 +643,12 @@ const char *__cdecl CL_GetConfigString(int localClientNum, unsigned int configSt
 snd_alias_t *__cdecl CL_PickSoundAlias(const char *aliasname)
 {
 #ifdef __SWITCH__
-    char trace[192];
     Switch_SetClientSoundAliasStage("cl_pick/entry");
-    std::snprintf(trace, sizeof(trace), "[KisakCOD][CL SOUND ALIAS] stage=entry aliasname=%p\n", static_cast<const void *>(aliasname));
-    Switch_LogWrite(trace);
     Switch_SetClientSoundAliasStage("cl_pick/before_com_pick");
 #endif
     snd_alias_t *alias = Com_PickSoundAlias(aliasname);
 #ifdef __SWITCH__
     Switch_SetClientSoundAliasStage("cl_pick/after_com_pick");
-    std::snprintf(trace, sizeof(trace), "[KisakCOD][CL SOUND ALIAS] stage=after_com_pick alias=%p\n", static_cast<const void *>(alias));
-    Switch_LogWrite(trace);
 #endif
     return alias;
 }
