@@ -801,9 +801,9 @@ void R_ComErrorCleanup()
 }
 bool R_CheckLostDevice()
 {
-    // Vulkan on Switch has no D3D-style lost-device/reset cycle.
-    // Keep the original return contract: true means rendering may proceed.
-    return dx.device != nullptr;
+    // Vulkan has no D3D9 reset cycle, but the VkDevice can still become lost.
+    // A non-null compatibility object does not mean its device is usable.
+    return dx.device && dx.device->TestCooperativeLevel() == S_OK;
 }
 void R_MakeDedicated(const GfxConfiguration *config) { SetGfxConfig(config); }
 void R_UpdateGpuSyncType()
