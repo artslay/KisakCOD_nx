@@ -284,7 +284,7 @@ static bool SwitchVirtualCommitRange(void *pointer, size_t size)
                 line, sizeof(line),
                 "[KisakCOD][VMEM MAP FAIL] dst=%p src=%p size=%llu rc=0x%x "
                 "dstQuery=0x%x dstBase=%p dstRegionSize=%llu dstType=0x%x dstAttr=0x%x dstPerm=0x%x "
-                "srcQuery=0x%x srcBase=%p srcRegionSize=%llu srcType=0x%x srcAttr=0x%x srcPerm=0x%x\\n",
+                "srcQuery=0x%x srcBase=%p srcRegionSize=%llu srcType=0x%x srcAttr=0x%x srcPerm=0x%x\n",
                 destination, source, static_cast<unsigned long long>(runSize),
                 static_cast<unsigned>(result),
                 static_cast<unsigned>(destinationQuery),
