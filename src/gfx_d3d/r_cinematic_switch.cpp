@@ -289,8 +289,13 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
 
     for (uint32_t i = 0; i < uploadCount; ++i)
     {
+        // Keep both layout trackers in sync. The D3D9 compatibility layer's
+        // descriptor binder checks texture->layout before sampling; updating
+        // only the per-subresource table makes it transition from UNDEFINED
+        // on the first draw, which discards the freshly uploaded Bink pixels.
         uploadedTextures[i]->SetSubresourceLayout(
             0, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        uploadedTextures[i]->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 
     const unsigned traceId =
