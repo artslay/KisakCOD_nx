@@ -266,7 +266,7 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
     std::snprintf(
         switchLogLine,
         sizeof(switchLogLine),
-        "[KisakCOD][CG LOOP SOUND] stage=entry ent=%u type=%u loopSound=%u solid=0x%08x entityIndex=%u configStringIndex=%u\\n",
+        "[KisakCOD][CG LOOP SOUND] stage=entry ent=%u type=%u loopSound=%u solid=0x%08x entityIndex=%u configStringIndex=%u\n",
         static_cast<unsigned>(cent->nextState.number),
         static_cast<unsigned>(cent->nextState.eType),
         loopSound,
@@ -290,7 +290,7 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
         std::snprintf(
             switchLogLine,
             sizeof(switchLogLine),
-            "[KisakCOD][CG LOOP SOUND] stage=invalid_alias_index ent=%u type=%u loopSound=%u max=%u\\n",
+            "[KisakCOD][CG LOOP SOUND] stage=invalid_alias_index ent=%u type=%u loopSound=%u max=%u\n",
             static_cast<unsigned>(cent->nextState.number),
             static_cast<unsigned>(cent->nextState.eType),
             loopSound,
@@ -342,7 +342,7 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
     std::snprintf(
         switchLogLine,
         sizeof(switchLogLine),
-        "[KisakCOD][CG LOOP SOUND] stage=before_configstring ent=%u type=%u loopSound=%u configStringIndex=%u handle=0x%04x\\n",
+        "[KisakCOD][CG LOOP SOUND] stage=before_configstring ent=%u type=%u loopSound=%u configStringIndex=%u handle=0x%04x\n",
         static_cast<unsigned>(cent->nextState.number),
         static_cast<unsigned>(cent->nextState.eType),
         loopSound,
@@ -362,7 +362,7 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
     std::snprintf(
         switchLogLine,
         sizeof(switchLogLine),
-        "[KisakCOD][CG LOOP SOUND] stage=after_configstring ent=%u type=%u loopSound=%u configStringIndex=%u ptr=%p\\n",
+        "[KisakCOD][CG LOOP SOUND] stage=after_configstring ent=%u type=%u loopSound=%u configStringIndex=%u ptr=%p\n",
         static_cast<unsigned>(cent->nextState.number),
         static_cast<unsigned>(cent->nextState.eType),
         loopSound,
