@@ -105,82 +105,14 @@ int __cdecl CL_CGameRendering()
         return 0;
 #ifdef __SWITCH__
     const bool switchCGameFullscreen = UI_IsFullscreen();
-    const bool switchCGameSkipRendering = CL_SkipRendering();
-    static uint32_t switchCGameGateTraceCount = 0;
-    if (switchCGameGateTraceCount < 12)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][CREDITS RENDER] gate=%u connection=%d fullscreen=%d skip=%d activeMenu=%d catcher=0x%08x serverTime=%d\n",
-            switchCGameGateTraceCount,
-            static_cast<int>(clientUIActives[0].connectionState),
-            switchCGameFullscreen,
-            switchCGameSkipRendering,
-            static_cast<int>(UI_GetActiveMenu(0)),
-            clientUIActives[0].keyCatchers,
-            clients[0].serverTime);
-        Switch_LogWrite(trace);
-        ++switchCGameGateTraceCount;
-    }
     if (switchCGameFullscreen)
         return 0;
 #else
     if (UI_IsFullscreen())
         return 0;
 #endif
-#ifdef __SWITCH__
-    static uint32_t switchCGameEntryTraceCount = 0;
-    const bool switchCGameTraceThisCall = switchCGameEntryTraceCount < 4;
-    if (switchCGameTraceThisCall)
-    {
-        char trace[192];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][CREDITS RENDER ENTRY] call=%u stage=before_begin_2d serverTime=%d skip=%d\n",
-            switchCGameEntryTraceCount, clients[0].serverTime, CL_SkipRendering());
-        Switch_LogWrite(trace);
-    }
-#endif
-    R_BeginClientCmdList2D();
-#ifdef __SWITCH__
-    if (switchCGameTraceThisCall)
-        Switch_LogWrite("[KisakCOD][CREDITS RENDER ENTRY] stage=after_begin_2d\n");
-#endif
-    animFrametime = cls.animFrametime;
-#ifdef __SWITCH__
-    if (switchCGameTraceThisCall)
-        Switch_LogWrite("[KisakCOD][CREDITS RENDER ENTRY] stage=before_demo_type\n");
-#endif
-    DemoType = CL_GetDemoType();
-#ifdef __SWITCH__
-    if (switchCGameTraceThisCall)
-        Switch_LogWrite("[KisakCOD][CREDITS RENDER ENTRY] stage=after_demo_type\n");
-    if (switchCGameTraceThisCall)
-        Switch_LogWrite("[KisakCOD][CREDITS RENDER ENTRY] stage=before_cg_draw_active_frame\n");
-    ++switchCGameEntryTraceCount;
-    static uint32_t switchCGameDrawTraceCount = 0;
-    const int switchCGameDrawResult =
-        CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime);
-    if (switchCGameDrawTraceCount < 12)
-    {
-        char trace[192];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][CREDITS RENDER] draw=%u result=%d skipAfter=%d\n",
-            switchCGameDrawTraceCount,
-            switchCGameDrawResult,
-            CL_SkipRendering());
-        Switch_LogWrite(trace);
-        ++switchCGameDrawTraceCount;
-    }
-    if (!switchCGameDrawResult)
+if (!CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime))
         return 0;
-#else
-    if (!CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime))
-        return 0;
-#endif
     if ((clientUIActives[0].keyCatchers & KEYCATCH_UI) != 0)
         UI_Refresh();
     R_AddCmdEndOfList();
@@ -391,38 +323,6 @@ LABEL_15:;
     if (clientUIActives[0].connectionState == CA_LOADING ||
         switchFullscreenCinematicNeedsTailDraw)
     {
-        static bool loggedFullscreenCinematicTail = false;
-        static uint32_t switchCinematicTailTraceCount = 0;
-        const uint32_t traceId = switchCinematicTailTraceCount++;
-        if ((clientUIActives[0].connectionState == CA_LOADING &&
-             (traceId < 12u || (traceId % 120u) == 0u)) ||
-            (switchFullscreenCinematicNeedsTailDraw && !loggedFullscreenCinematicTail))
-        {
-            char trace[512];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][CINEMATIC SCREEN TAIL] n=%u state=%d fullscreen=%d refreshedUI=%d started=%d finished=%d name=%s activeFrame=%d textureSet=%d bink=%p binkFrame=%u/%u\n",
-                traceId,
-                static_cast<int>(clientUIActives[0].connectionState),
-                UI_IsFullscreen() ? 1 : 0,
-                refreshedUI,
-                R_Cinematic_IsStarted() ? 1 : 0,
-                R_Cinematic_IsFinished() ? 1 : 0,
-                cinematicGlob.currentCinematicName[0] ? cinematicGlob.currentCinematicName : "<none>",
-                cinematicGlob.activeImageFrame,
-                cinematicGlob.activeImageFrameTextureSet,
-                static_cast<void *>(cinematicGlob.bink),
-                cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->FrameNum) : 0u,
-                cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->Frames) : 0u);
-            Switch_LogWrite(trace);
-            if (switchFullscreenCinematicNeedsTailDraw)
-            {
-                Switch_LogWrite(
-                    "[KisakCOD][CINEMATIC DRAW] fullscreen CA_CINEMATIC submitted at screen-field tail\n");
-                loggedFullscreenCinematicTail = true;
-            }
-        }
         g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_tail";
         SCR_DrawCinematic(0);
         if (clientUIActives[0].connectionState == CA_LOADING)
