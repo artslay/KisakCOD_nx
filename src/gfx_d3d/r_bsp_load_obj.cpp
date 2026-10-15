@@ -2908,7 +2908,7 @@ void __cdecl R_AddStaticModelToAabbTree_r(GfxWorld *world, GfxAabbTree *tree, in
         smodelInst = &world->dpvs.smodelInsts[smodelIndex];
         for (childIndex = 0; childIndex < tree->childCount; ++childIndex)
         {
-            childTree = (GfxAabbTree *)((char *)&tree[childIndex] + tree->childrenOffset);
+            childTree = reinterpret_cast<GfxAabbTree *>(reinterpret_cast<uint8_t *>(tree) + tree->childrenOffset) + childIndex;
             if (smodelInst->mins[0] >= (double)childTree->mins[0]
                 && smodelInst->mins[1] >= (double)childTree->mins[1]
                 && smodelInst->mins[2] >= (double)childTree->mins[2]
@@ -2936,7 +2936,7 @@ void __cdecl R_AddStaticModelToAabbTree_r(GfxWorld *world, GfxAabbTree *tree, in
                     newChildTrees[childIndexb].childrenOffset = static_cast<int>(
                         oldChildBase + oldChildTrees[childIndexb].childrenOffset - newChildBase);
                 }
-                childTreea = (GfxAabbTree *)((char *)&tree[tree->childCount++] + tree->childrenOffset);
+                childTreea = reinterpret_cast<GfxAabbTree *>(reinterpret_cast<uint8_t *>(tree) + tree->childrenOffset) + tree->childCount++;
                 childTreea->mins[0] = smodelInst->mins[0];
                 childTreea->mins[1] = smodelInst->mins[1];
                 childTreea->mins[2] = smodelInst->mins[2];
@@ -2946,7 +2946,7 @@ void __cdecl R_AddStaticModelToAabbTree_r(GfxWorld *world, GfxAabbTree *tree, in
                 R_AddStaticModelToAabbTree_r(world, childTreea, smodelIndex);
                 return;
             }
-            childTree = (GfxAabbTree *)((char *)&tree[childIndexa] + tree->childrenOffset);
+            childTree = reinterpret_cast<GfxAabbTree *>(reinterpret_cast<uint8_t *>(tree) + tree->childrenOffset) + childIndexa;
             if (!childTree->surfaceCount)
                 break;
         }
