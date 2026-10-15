@@ -504,32 +504,77 @@ bool VulkanBackend::CreateSwapchain()
     }
 
     uint32_t formatCount = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, &formatCount, nullptr);
-    std::vector<VkSurfaceFormatKHR> formats(formatCount);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(m_physicalDevice, m_surface, &formatCount, formats.data());
-    if (formats.empty())
+    VkResult formatQueryResult = vkGetPhysicalDeviceSurfaceFormatsKHR(
+        m_physicalDevice, m_surface, &formatCount, nullptr);
+    if (formatQueryResult != VK_SUCCESS || formatCount == 0)
     {
-        SetError("No swapchain formats");
+        if (formatQueryResult != VK_SUCCESS)
+            SetError("Surface format count query failed", formatQueryResult);
+        else
+            SetError("No swapchain formats");
         return false;
     }
 
-    for (const auto &format : formats)
+    std::vector<VkSurfaceFormatKHR> formats(formatCount);
+    formatQueryResult = vkGetPhysicalDeviceSurfaceFormatsKHR(
+        m_physicalDevice, m_surface, &formatCount, formats.data());
+    if (formatQueryResult != VK_SUCCESS || formatCount == 0)
     {
-        if (format.format == VK_FORMAT_B8G8R8A8_UNORM &&
-            format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-        {
-            m_swapchainFormat = format.format;
-            m_swapchainColorSpace = format.colorSpace;
-            break;
-        }
-        m_swapchainFormat = formats[0].format;
+        if (formatQueryResult != VK_SUCCESS)
+            SetError("Surface format query failed", formatQueryResult);
+        else
+            SetError("Surface format query returned an empty list");
+        return false;
+    }
+    formats.resize(formatCount);
+
+    // VK_FORMAT_UNDEFINED means the surface lets the application select any
+    // format. Do not propagate UNDEFINED into vkCreateSwapchainKHR.
+    if (formats.size() == 1 && formats[0].format == VK_FORMAT_UNDEFINED)
+    {
+        m_swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
         m_swapchainColorSpace = formats[0].colorSpace;
+    }
+    else
+    {
+        const auto preferred = std::find_if(
+            formats.begin(), formats.end(),
+            [](const VkSurfaceFormatKHR &format)
+            {
+                return format.format == VK_FORMAT_B8G8R8A8_UNORM &&
+                       format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+            });
+        const VkSurfaceFormatKHR &selected =
+            preferred != formats.end() ? *preferred : formats.front();
+        m_swapchainFormat = selected.format;
+        m_swapchainColorSpace = selected.colorSpace;
     }
 
     uint32_t presentCount = 0;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface, &presentCount, nullptr);
+    VkResult presentQueryResult = vkGetPhysicalDeviceSurfacePresentModesKHR(
+        m_physicalDevice, m_surface, &presentCount, nullptr);
+    if (presentQueryResult != VK_SUCCESS || presentCount == 0)
+    {
+        if (presentQueryResult != VK_SUCCESS)
+            SetError("Surface present-mode count query failed", presentQueryResult);
+        else
+            SetError("Surface has no present modes");
+        return false;
+    }
+
     std::vector<VkPresentModeKHR> modes(presentCount);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface, &presentCount, modes.data());
+    presentQueryResult = vkGetPhysicalDeviceSurfacePresentModesKHR(
+        m_physicalDevice, m_surface, &presentCount, modes.data());
+    if (presentQueryResult != VK_SUCCESS || presentCount == 0)
+    {
+        if (presentQueryResult != VK_SUCCESS)
+            SetError("Surface present-mode query failed", presentQueryResult);
+        else
+            SetError("Surface present-mode query returned an empty list");
+        return false;
+    }
+    modes.resize(presentCount);
+
     m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
     for (VkPresentModeKHR mode : modes)
         if (mode == VK_PRESENT_MODE_FIFO_KHR) { m_presentMode = mode; break; }
