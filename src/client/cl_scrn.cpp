@@ -377,7 +377,21 @@ void SCR_UpdateFrame()
 
     iassert(Sys_IsMainThread() || Sys_IsRenderThread());
 #ifdef __SWITCH__
+    static bool switchActiveScreenTraceDone = false;
+    const bool switchTraceActiveScreen =
+        !switchActiveScreenTraceDone &&
+        clientUIActives[0].connectionState == CA_ACTIVE;
     g_switchFrameStage = "frame/scr/begin";
+    if (switchTraceActiveScreen)
+    {
+        char trace[224];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][ACTIVE SCREEN] enter connection=%d fullscreen=%d initialized=%d\n",
+            static_cast<int>(clientUIActives[0].connectionState),
+            UI_IsFullscreen(), scr_initialized);
+        Switch_LogWrite(trace);
+    }
 #endif
     //Profile_Begin(18);
     //Profile_Begin(19);
@@ -386,6 +400,8 @@ void SCR_UpdateFrame()
 #endif
     R_BeginFrame();
 #ifdef __SWITCH__
+    if (switchTraceActiveScreen)
+        Switch_LogWrite("[KisakCOD][ACTIVE SCREEN] after R_BeginFrame\n");
     g_switchFrameStage = "frame/scr/r_begin_done";
     g_switchFrameStage = "frame/scr/snd_fx";
 #endif
@@ -398,6 +414,15 @@ void SCR_UpdateFrame()
     //Profile_Begin(20);
     refreshedUI = CL_CGameRendering();
 #ifdef __SWITCH__
+    if (switchTraceActiveScreen)
+    {
+        char trace[192];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][ACTIVE SCREEN] after CL_CGameRendering refreshedUI=%d fullscreen=%d\n",
+            refreshedUI, UI_IsFullscreen());
+        Switch_LogWrite(trace);
+    }
     g_switchFrameStage = "frame/scr/cgame_render_done";
 #endif
     if (Sys_IsMainThread() && !refreshedUI)
@@ -418,6 +443,8 @@ void SCR_UpdateFrame()
 #endif
     SCR_DrawScreenField(refreshedUI);
 #ifdef __SWITCH__
+    if (switchTraceActiveScreen)
+        Switch_LogWrite("[KisakCOD][ACTIVE SCREEN] after SCR_DrawScreenField\n");
     g_switchFrameAfterDrawReached = 1;
     g_switchFrameStage = "frame/scr/draw_field_done";
 #endif
@@ -452,9 +479,20 @@ void SCR_UpdateFrame()
     //Profile_Begin(21);
     R_EndFrame();
 #ifdef __SWITCH__
+    if (switchTraceActiveScreen)
+        Switch_LogWrite("[KisakCOD][ACTIVE SCREEN] after R_EndFrame before issue\n");
     g_switchFrameStage = "frame/scr/issue_commands";
+    if (switchTraceActiveScreen)
+        Switch_LogWrite("[KisakCOD][ACTIVE SCREEN] before R_IssueRenderCommands\n");
 #endif
     R_IssueRenderCommands(0xFFFFFFFF);
+#ifdef __SWITCH__
+    if (switchTraceActiveScreen)
+    {
+        Switch_LogWrite("[KisakCOD][ACTIVE SCREEN] after R_IssueRenderCommands\n");
+        switchActiveScreenTraceDone = true;
+    }
+#endif
 
     //Profile_EndInternal(0);
 #ifdef KISAK_XBOX
