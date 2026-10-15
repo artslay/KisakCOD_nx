@@ -13,6 +13,22 @@
 
 struct GfxWindowParms;
 
+// A single image upload within a batched transfer submission.
+struct VulkanImageUpload2D
+{
+    VkImage image = VK_NULL_HANDLE;
+    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t mipLevel = 0;
+    const void *data = nullptr;
+    size_t bytes = 0;
+    VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    uint32_t baseArrayLayer = 0;
+    VkOffset3D imageOffset{};
+    VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+};
+
 class VulkanBackend final : public IGfxBackend
 {
 public:
@@ -128,6 +144,9 @@ public:
         VkDeviceMemory *memory,
         VkImageView *view,
         VkComponentMapping components = {});
+
+    // Upload multiple images with one staging allocation and one queue submission.
+    bool UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t count);
 
     bool UploadImage2D(
         VkImage image,
