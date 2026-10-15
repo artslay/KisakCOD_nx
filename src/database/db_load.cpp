@@ -308,6 +308,15 @@ static void Switch_TranslatePathNodeArray(
 
 
 #ifdef __SWITCH__
+static_assert(offsetof(pathnode_tree_nodes_t, nodes) == 8,
+    "Switch pathnode tree leaf layout must use a native 64-bit pointer");
+static_assert(sizeof(pathnode_tree_nodes_t) == 16,
+    "Switch pathnode tree leaf layout drift");
+static_assert(offsetof(pathnode_tree_t, u) == 8,
+    "Switch pathnode tree union offset drift");
+static_assert(sizeof(pathnode_tree_t) == 24,
+    "Switch pathnode tree native size drift");
+
 struct SwitchPathTreeAddressEntry
 {
     uintptr_t serializedAddress;
