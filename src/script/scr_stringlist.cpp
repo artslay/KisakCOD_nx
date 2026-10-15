@@ -442,6 +442,45 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 	PROF_SCOPED("SL_GetStringOfSize");
 
 #ifdef KISAK_SWITCH
+	const uint32_t maxStringLength =
+		static_cast<uint32_t>(MT_SIZE - offsetof(RefString, str));
+	const uintptr_t caller =
+		reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+	if (!str || len == 0 || len > maxStringLength)
+	{
+		char line[320];
+		std::snprintf(
+			line, sizeof(line),
+			"[KisakCOD][SCRIPT STRING INPUT LENGTH FAULT] len=%u max=%u type=%u str=%p caller=0x%llx\n",
+			len, maxStringLength, static_cast<unsigned>(type),
+			static_cast<const void *>(str),
+			static_cast<unsigned long long>(caller));
+		Switch_LogWrite(line);
+		Switch_SetProgressPhase("script_string/invalid_input");
+		Switch_SetProgressDetail(len);
+		Com_Error(ERR_DROP, "invalid script string length %u", len);
+		return 0;
+	}
+	const char *terminator = static_cast<const char *>(memchr(str, '\0', len));
+	if (!terminator || terminator != str + len - 1)
+	{
+		const uint32_t terminatorOffset = terminator
+			? static_cast<uint32_t>(terminator - str)
+			: UINT32_MAX;
+		char line[320];
+		std::snprintf(
+			line, sizeof(line),
+			"[KisakCOD][SCRIPT STRING INPUT TERMINATOR FAULT] len=%u firstNul=%u type=%u str=%p caller=0x%llx\n",
+			len, terminatorOffset, static_cast<unsigned>(type),
+			static_cast<const void *>(str),
+			static_cast<unsigned long long>(caller));
+		Switch_LogWrite(line);
+		Switch_SetProgressPhase("script_string/invalid_input");
+		Switch_SetProgressDetail(len);
+		Com_Error(ERR_DROP, "script string length %u does not end at its NUL", len);
+		return 0;
+	}
+	Switch_SetProgressDetail(len);
     Switch_SetProgressPhase("script_string/hash");
 #endif
 	iassert(str);
@@ -454,6 +493,7 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 	Sys_EnterCriticalSection(CRITSECT_SCRIPT_STRING);
 #ifdef KISAK_SWITCH
     Switch_SetProgressPhase("script_string/lookup_chain");
+    Switch_SetProgressDetail(len);
 #endif
 
 	RefString* refStr = NULL;
@@ -472,6 +512,10 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 		refStr = GetRefString(entry->u.prev);
 
 		// Check if this string is already stored, if it matches the string at this particular hash lookup, and return existing entry if so.
+#ifdef KISAK_SWITCH
+		Switch_SetProgressPhase("script_string/lookup_compare");
+		Switch_SetProgressDetail(len);
+#endif
 		if (refStr->byteLen == (uint8_t)len && !memcmp(refStr->str, str, len))
 		{
 			SL_AddUserInternal(refStr, user);
@@ -485,6 +529,10 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 			Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
 			return stringValue;
 		}
+#ifdef KISAK_SWITCH
+		Switch_SetProgressPhase("script_string/lookup_chain");
+		Switch_SetProgressDetail(0);
+#endif
 
 		prev = hash;
 		newIndex = (uint16_t)entry->status_next;
@@ -492,6 +540,9 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 		uint32_t chainSteps = 0;
 		while (newIndex != hash)
 		{
+#ifdef KISAK_SWITCH
+			Switch_SetProgressDetail(chainSteps);
+#endif
 #ifdef KISAK_SWITCH
             if (newIndex == 0 || newIndex >= STRINGLIST_SIZE || chainSteps++ >= STRINGLIST_SIZE)
             {
@@ -526,6 +577,10 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 
 			refStr = GetRefString(newEntry->u.prev);
 
+#ifdef KISAK_SWITCH
+			Switch_SetProgressPhase("script_string/lookup_compare");
+			Switch_SetProgressDetail(len);
+#endif
 			if (refStr->byteLen == (uint8_t)len && !memcmp(refStr->str, str, len))
 			{
 				scrStringGlob.hashTable[prev].status_next = (uint16_t)newEntry->status_next | scrStringGlob.hashTable[prev].status_next & HASH_STAT_MASK;
@@ -543,6 +598,9 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 				Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
 				return stringValue;
 			}
+#ifdef KISAK_SWITCH
+			Switch_SetProgressPhase("script_string/lookup_chain");
+#endif
 			prev = newIndex;
 			newIndex = (uint16_t)newEntry->status_next;
 		}
@@ -900,6 +958,42 @@ uint32_t SL_GetString(const char* str, uint32_t user)
 
 int SL_GetRefStringLen(RefString* refString)
 {
+#ifdef KISAK_SWITCH
+	const uintptr_t base = reinterpret_cast<uintptr_t>(scrMemTreePub.mt_buffer);
+	const uintptr_t ptr = reinterpret_cast<uintptr_t>(refString);
+	const uintptr_t end = base + MT_SIZE;
+	if (!scrMemTreePub.mt_buffer || ptr < base || ptr >= end ||
+		((ptr - base) % MT_NODE_SIZE) != 0)
+	{
+		Com_Error(ERR_DROP, "invalid script string allocation while reading length");
+		return 0;
+	}
+
+	const uint32_t handle = static_cast<uint32_t>((ptr - base) / MT_NODE_SIZE);
+	uint32_t allocationType = 0;
+	uint32_t allocationSize = 0;
+	uint32_t storedLength = 0;
+	if (!Switch_GetStringAllocation(
+		handle, nullptr, &allocationType, &allocationSize, &storedLength,
+		"SL_GetRefStringLen",
+		reinterpret_cast<uintptr_t>(__builtin_return_address(0))))
+	{
+		Com_Error(ERR_DROP, "invalid script string allocation while reading length");
+		return 0;
+	}
+
+	// byteLen stores only the low 8 bits of the size including NUL. On Switch,
+	// use the terminator found inside the allocator's actual block rather than
+	// trusting a stale/corrupt byteLen to choose the first scan offset.
+	if (refString->byteLen != static_cast<uint8_t>(storedLength))
+	{
+		Switch_ReportStringLengthMismatch(
+			handle, refString->byteLen, storedLength, allocationType,
+			allocationSize,
+			reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+	}
+	return static_cast<int>(storedLength) - 1;
+#else
 	// byteLen stores only the low 8 bits of the string length (including NUL).
 	// A zero byteLen therefore represents a length divisible by 256, not an
 	// empty string; the loop below resolves the full length by scanning for NUL.
@@ -926,6 +1020,7 @@ int SL_GetRefStringLen(RefString* refString)
 	}
 
 	return len;
+#endif
 }
 
 static uint32_t GetLowercaseStringOfSize(
