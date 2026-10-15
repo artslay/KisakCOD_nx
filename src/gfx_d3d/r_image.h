@@ -213,6 +213,9 @@ void __cdecl Outdoor_SetRendererOutdoorLookupMatrix(GfxWorld *world);
 
 void __cdecl R_ReleaseLostImages();
 void __cdecl R_ReloadLostImages();
+#ifdef __SWITCH__
+bool R_ReleaseAllVulkanImagesForDeviceLoss();
+#endif
 
 void __cdecl Image_UploadData(
     const GfxImage *image,

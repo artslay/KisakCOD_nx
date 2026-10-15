@@ -59,6 +59,8 @@ const dvar_t *vid_ypos = nullptr;
 const dvar_t *r_fullscreen = nullptr;
 
 static bool s_registered = false;
+static bool s_switchVulkanRecoveryInProgress = false;
+static bool s_switchVulkanRecoveryFailed = false;
 
 void TRACK_r_init()
 {
@@ -321,6 +323,18 @@ void R_InitGraphicsApi() {
     // a null dx.device in R_AllocStaticVertexBuffer().
     if (!dx.device)
         dx.device = new IDirect3DDevice9;
+
+    if (s_switchVulkanRecoveryInProgress)
+    {
+        if (!Switch_RestoreVulkanBuffers(GetVulkanBackend()))
+        {
+            s_switchVulkanRecoveryFailed = true;
+            Switch_LogWrite("[KisakCOD][VK RECOVERY] failed to restore engine vertex/index buffers\n");
+            R_FatalInitError("Vulkan device recovery could not restore engine buffers");
+            return;
+        }
+        dx.deviceLost = 0;
+    }
 
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] compatibility device created before fastfiles\n");
@@ -798,11 +812,79 @@ void R_ComErrorCleanup()
         dx.inScene = 0;
     }
 }
+static bool R_RecoverLostVulkanDevice()
+{
+    if (s_switchVulkanRecoveryInProgress || !Sys_IsMainThread() || !rg.registered)
+        return false;
+
+    VulkanBackend *oldBackend = GetVulkanBackend();
+    if (!oldBackend || !oldBackend->IsDeviceLost() || !dx.device)
+        return false;
+
+    s_switchVulkanRecoveryInProgress = true;
+    s_switchVulkanRecoveryFailed = false;
+    dx.deviceLost = 1;
+    Switch_LogWrite("[KisakCOD][VK RECOVERY] begin full renderer/device rebuild\n");
+
+    // Return ownership from the render thread before releasing resources that
+    // recorded commands may still reference.
+    R_SyncRenderThread();
+    R_Cinematic_Shutdown();
+    R_ReleaseForShutdownOrReset();
+
+    if (!R_ReleaseAllVulkanImagesForDeviceLoss())
+    {
+        Switch_LogWrite("[KisakCOD][VK RECOVERY] abort=image resource accounting is not clean\n");
+        s_switchVulkanRecoveryInProgress = false;
+        return false;
+    }
+    if (!Switch_PrepareVulkanDeviceLossResources(oldBackend))
+    {
+        Switch_LogWrite("[KisakCOD][VK RECOVERY] abort=live buffer is locked or cannot be snapshotted\n");
+        s_switchVulkanRecoveryInProgress = false;
+        return false;
+    }
+
+    delete dx.device;
+    dx.device = nullptr;
+    dx.d3d9 = nullptr;
+    g_gfxBackend.reset();
+
+    R_InitGraphicsApi();
+    VulkanBackend *newBackend = GetVulkanBackend();
+    if (s_switchVulkanRecoveryFailed || !g_gfxBackend || !dx.device ||
+        !newBackend || newBackend->IsDeviceLost())
+    {
+        Switch_LogWrite("[KisakCOD][VK RECOVERY] failed=backend/device recreation\n");
+        s_switchVulkanRecoveryInProgress = false;
+        dx.deviceLost = 1;
+        return false;
+    }
+
+    // CPU asset objects stay loaded in their fastfiles. Recreate builtin images
+    // and then reload/rebuild every database image against the new VkDevice.
+    R_InitImages();
+    R_ReloadLostImages();
+    gfxCmdBufState.prim.device = dx.device;
+    dx.deviceLost = 0;
+    s_switchVulkanRecoveryInProgress = false;
+    Switch_LogWrite("[KisakCOD][VK RECOVERY] complete renderer/device rebuild\n");
+    return true;
+}
+
 bool R_CheckLostDevice()
 {
-    // Vulkan has no D3D9 reset cycle, but the VkDevice can still become lost.
-    // A non-null compatibility object does not mean its device is usable.
-    return dx.device && dx.device->TestCooperativeLevel() == S_OK;
+    if (dx.device && dx.device->TestCooperativeLevel() == S_OK)
+        return true;
+
+    VulkanBackend *backend = GetVulkanBackend();
+    if (backend && backend->IsDeviceLost())
+    {
+        dx.deviceLost = 1;
+        if (R_RecoverLostVulkanDevice())
+            return true;
+    }
+    return false;
 }
 void R_MakeDedicated(const GfxConfiguration *config) { SetGfxConfig(config); }
 void R_UpdateGpuSyncType()

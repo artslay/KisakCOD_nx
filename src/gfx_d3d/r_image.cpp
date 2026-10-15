@@ -1912,6 +1912,67 @@ void __cdecl R_ReleaseLostImages()
     DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(__cdecl *)(XAssetHeader, void *))R_FreeLostImage, 0, 1);
 }
 
+#ifdef __SWITCH__
+namespace
+{
+void R_ReleaseVulkanImageForDeviceLoss(GfxImage *image)
+{
+    if (!image)
+        return;
+
+    if (image->texture.basemap)
+    {
+        Image_Release(image);
+        return;
+    }
+
+    // A failed allocation can leave accounting populated without a resource.
+    if (image->cardMemory.platform[0] || image->cardMemory.platform[1])
+    {
+        if (!Image_IsCodeImage(image->track))
+        {
+            for (uint32_t platform = 0; platform < 2; ++platform)
+            {
+                const uint32_t bytes = image->cardMemory.platform[platform];
+                uint32_t &total = imageGlobals.totalMemory.platform[platform];
+                total = total >= bytes ? total - bytes : 0;
+            }
+        }
+        image->cardMemory.platform[0] = 0;
+        image->cardMemory.platform[1] = 0;
+    }
+}
+
+void __cdecl R_ReleaseVulkanAssetImageForDeviceLoss(XAssetHeader header, void *)
+{
+    R_ReleaseVulkanImageForDeviceLoss(header.image);
+}
+}
+
+bool R_ReleaseAllVulkanImagesForDeviceLoss()
+{
+    // Every VkImage dies with its VkDevice, unlike managed textures during a
+    // classic D3D9 reset. Keep the hash table intact so loaded names stay indexed.
+    DB_EnumXAssets(
+        ASSET_TYPE_IMAGE,
+        R_ReleaseVulkanAssetImageForDeviceLoss,
+        nullptr,
+        1);
+
+    for (uint32_t i = 0; i < IMAGE_HASH_TABLE_SIZE; ++i)
+        R_ReleaseVulkanImageForDeviceLoss(imageGlobals.imageHashTable[i]);
+    for (uint32_t i = 0; i < ARRAY_COUNT(g_imageProgs); ++i)
+        R_ReleaseVulkanImageForDeviceLoss(&g_imageProgs[i]);
+
+    const bool memoryCleared =
+        imageGlobals.totalMemory.platform[0] == 0 &&
+        imageGlobals.totalMemory.platform[1] == 0;
+    if (!memoryCleared)
+        Switch_LogWrite("[KisakCOD][VK RECOVERY] image accounting was nonzero after release\n");
+    return memoryCleared;
+}
+#endif
+
 _D3DFORMAT __cdecl R_ImagePixelFormat(const GfxImage *image)
 {
     iassert(image&&image->texture.basemap);

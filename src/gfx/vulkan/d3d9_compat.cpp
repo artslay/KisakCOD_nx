@@ -1054,7 +1054,7 @@ bool Switch_PrepareVulkanDeviceLossResources(VulkanBackend *backend)
         shader->alphaFuncSpecId = 0;
         shader->alphaRefSpecId = 0;
     }
-    Switch_LogWrite("[KisakCOD][VK RECOVERY] preserved mapped buffers and invalidated shader modules\\n");
+    Switch_LogWrite("[KisakCOD][VK RECOVERY] preserved mapped buffers and invalidated shader modules\n");
     return true;
 }
 
@@ -1093,7 +1093,7 @@ bool Switch_RestoreVulkanBuffers(VulkanBackend *backend)
                     vkUnmapMemory(backend->Device(), created.memory);
                 backend->DestroyBuffer(created.buffer, created.memory);
             }
-            Switch_LogWrite("[KisakCOD][VK RECOVERY] failed to recreate a mapped buffer\\n");
+            Switch_LogWrite("[KisakCOD][VK RECOVERY] failed to recreate a mapped buffer\n");
             return false;
         }
         std::memcpy(item.mapped, owner->recoveryShadow.data(), owner->size);
@@ -1113,7 +1113,7 @@ bool Switch_RestoreVulkanBuffers(VulkanBackend *backend)
         item.owner->recoveryShadow.clear();
         item.owner->recoveryPending = false;
     }
-    Switch_LogWrite("[KisakCOD][VK RECOVERY] restored surviving mapped vertex/index buffers\\n");
+    Switch_LogWrite("[KisakCOD][VK RECOVERY] restored surviving mapped vertex/index buffers\n");
     return true;
 }
 
