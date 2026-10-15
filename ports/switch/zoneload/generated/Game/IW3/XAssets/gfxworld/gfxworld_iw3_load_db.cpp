@@ -17,6 +17,7 @@
 #include "../xmodel/xmodel_iw3_load_db.h"
 
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <type_traits>
 
