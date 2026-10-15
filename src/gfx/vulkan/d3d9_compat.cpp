@@ -1761,6 +1761,32 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
     switch (state)
     {
     case D3DRS_ZENABLE: m_depthEnable = value != 0; break;
+    case D3DRS_FILLMODE:
+        if (value != D3DFILL_SOLID && value != D3DFILL_WIREFRAME)
+            return E_FAIL;
+        if (value == D3DFILL_WIREFRAME &&
+            (!m_backend || !m_backend->SupportsNonSolidFill()))
+        {
+            // Solid fill remains the safe fallback on Vulkan devices without
+            // fillModeNonSolid; report this unsupported optional state once.
+            static bool warnedUnsupportedWireframe = false;
+            if (!warnedUnsupportedWireframe)
+            {
+                warnedUnsupportedWireframe = true;
+                Switch_LogWrite(
+                    "[KisakCOD][VK STATE] wireframe requested but fillModeNonSolid is unavailable; retaining solid fill\\n");
+            }
+            changed = false;
+            break;
+        }
+        m_fillMode = value;
+        break;
+    case D3DRS_ADAPTIVETESS_Y:
+        // The shared D3D9 renderer uses this legacy vendor state to select an
+        // alpha-AA format. Switch render targets are single-sample, so it has
+        // no Vulkan equivalent until multisampling is implemented.
+        changed = false;
+        break;
     case D3DRS_ZWRITEENABLE: m_depthWrite = value != 0; break;
     case D3DRS_ZFUNC: m_depthFunc = value; break;
     case D3DRS_ALPHABLENDENABLE: m_blendEnable = value != 0; break;
@@ -2077,6 +2103,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_blendOpAlpha);
     key = HashCombine(key, m_separateAlphaBlend);
     key = HashCombine(key, static_cast<uint32_t>(m_topology));
+    key = HashCombine(key, m_fillMode);
     key = HashCombine(key, m_cullMode);
     key = HashCombine(key, m_scissor);
     key = HashCombine(key, m_colorWriteMask);
@@ -2442,7 +2469,8 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     VkPipelineRasterizationStateCreateInfo raster{};
     raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.polygonMode = m_fillMode == D3DFILL_WIREFRAME
+        ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
     raster.lineWidth = 1.0f;
     // D3D9 cull values are: NONE=1, CW=2, CCW=3.
     // The negative Vulkan viewport preserves the D3D9 top-left origin,

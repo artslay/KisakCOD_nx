@@ -243,6 +243,7 @@ void VulkanBackend::Shutdown()
     m_uniformMapped = nullptr;
     m_uniformOffset = 0;
     m_initialized = false;
+    m_fillModeNonSolid = false;
     m_frameActive = false;
     m_renderingActive = false;
     m_swapchainNeedsRecreate = false;
@@ -394,6 +395,17 @@ bool VulkanBackend::CreateDevice()
         SetError("Vulkan dynamic rendering is unavailable");
         return false;
     }
+
+    // Wireframe is optional in Vulkan. Query it with the core features and
+    // enable it only when the physical device supports it; requesting a
+    // non-solid polygon mode without this feature makes pipeline creation fail.
+    m_fillModeNonSolid = features2.features.fillModeNonSolid == VK_TRUE;
+    features.fillModeNonSolid = m_fillModeNonSolid ? VK_TRUE : VK_FALSE;
+    char featureMsg[128];
+    std::snprintf(featureMsg, sizeof(featureMsg),
+        "[KisakCOD][VK] fill_mode_non_solid=%u\\n",
+        m_fillModeNonSolid ? 1u : 0u);
+    Switch_LogWrite(featureMsg);
 
     VkDeviceCreateInfo info{};
     info.pNext = &dynamicRendering;

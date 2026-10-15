@@ -74,6 +74,7 @@ public:
 
     VkDevice Device() const { return m_device; }
     VkPhysicalDevice PhysicalDevice() const { return m_physicalDevice; }
+    bool SupportsNonSolidFill() const { return m_fillModeNonSolid; }
     VkCommandBuffer CommandBuffer() const { return m_commandBuffer; }
     VkQueue GraphicsQueue() const { return m_graphicsQueue; }
     VkFormat SwapchainFormat() const { return m_swapchainFormat; }
@@ -295,6 +296,7 @@ private:
 
     uint32_t m_swapchainIndex = 0;
     bool m_initialized = false;
+    bool m_fillModeNonSolid = false;
     bool m_frameActive = false;
     bool m_renderingActive = false;
     bool m_swapchainNeedsRecreate = false;
