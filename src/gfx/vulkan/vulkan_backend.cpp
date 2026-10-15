@@ -1,5 +1,11 @@
 #include "vulkan_backend.h"
 
+#ifdef __SWITCH__
+// Renderer-owned recovery also releases/reloads engine objects whose handles
+// are invalidated by VkDevice loss; the low-level backend cannot do this alone.
+extern bool R_RecoverLostVulkanDevice();
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -155,10 +161,20 @@ bool VulkanBackend::IsDeviceLost() const
 
 bool VulkanBackend::RecoverLostDevice()
 {
-    // All Vulkan resources and pipelines belong to the lost VkDevice. Until the
-    // renderer can rebuild every engine-owned resource, an in-place recovery
-    // would falsely report success while those handles remain invalid.
-    return m_initialized && !m_deviceLost;
+    if (!m_initialized)
+        return false;
+    if (!m_deviceLost)
+        return true;
+
+#ifdef __SWITCH__
+    // Recovery is orchestrated by the renderer because all engine-owned Vulkan
+    // resources must be invalidated/recreated together with the VkDevice. The
+    // recovery path may destroy this backend, so do not access members afterward.
+    return R_RecoverLostVulkanDevice();
+#else
+    // Other targets do not have the Switch renderer's resource-rebuild owner.
+    return false;
+#endif
 }
 
 bool VulkanBackend::Init(const GfxWindowParms *wndParms)
