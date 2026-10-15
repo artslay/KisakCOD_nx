@@ -1413,7 +1413,7 @@ void __cdecl Com_AddLoadedSoundFile(SoundFile *soundFile, char *fileName)
     else
     {
         soundFile->exists = 0;
-        soundFile->u.loadSnd = (LoadedSound*)CM_Hunk_Alloc(0x2Cu, "_loaded", 15);
+        soundFile->u.loadSnd = (LoadedSound*)CM_Hunk_Alloc(sizeof(LoadedSound), "_loaded", 15);
         soundFile->u.loadSnd->name = fileName;
     }
 }
