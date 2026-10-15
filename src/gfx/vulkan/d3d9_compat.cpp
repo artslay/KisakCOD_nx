@@ -1021,11 +1021,13 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
     const uint32_t levelHeight = std::max(1u, height >> level);
     const TextureFormatInfo info = GetTextureFormat(sourceFormat);
 
+    const VkImageLayout oldLayout = GetSubresourceLayout(level);
     if (!backend->UploadImage2D(
             image, format, info.aspect, levelWidth, levelHeight, level,
-            lockShadow.data(), lockShadow.size(), layout))
+            lockShadow.data(), lockShadow.size(), oldLayout))
         return E_FAIL;
 
+    SetSubresourceLayout(level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     lockShadowActive = false;
     return S_OK;
@@ -1067,11 +1069,13 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
     const uint32_t levelWidth = std::max(1u, width >> level);
     const uint32_t levelHeight = std::max(1u, height >> level);
     const uint32_t levelDepth = std::max(1u, depth >> level);
+    const VkImageLayout oldLayout = GetSubresourceLayout(level);
     if (!backend->UploadImage3D(
             image, format, levelWidth, levelHeight, levelDepth, level,
-            lockShadow.data(), lockShadow.size(), layout))
+            lockShadow.data(), lockShadow.size(), oldLayout))
         return E_FAIL;
 
+    SetSubresourceLayout(level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     lockShadowActive = false;
     return S_OK;
