@@ -5,6 +5,7 @@
 #include <universal/q_shared.h>
 #include "cl_scrn.h"
 #include <gfx_d3d/r_font.h>
+#include <gfx_d3d/r_cinematic.h>
 #include <gfx_d3d/r_rendercmds.h>
 #include <qcommon/threads.h>
 #include "client.h"
