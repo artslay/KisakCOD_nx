@@ -17,7 +17,6 @@
 #include "../xmodel/xmodel_iw3_load_db.h"
 
 #include <cassert>
-#include <cstdint>
 #include <cstring>
 #include <type_traits>
 
@@ -205,23 +204,6 @@ void Loader_GfxWorld::FillStruct_GfxAabbTree(const ZoneStreamFillReadAccessor& f
     fillAccessor.FillPtr(varGfxAabbTree->smodelIndexes, 36);
     m_stream.AddPointerLookup(&varGfxAabbTree->smodelIndexes, fillAccessor.BlockBuffer(36));
     fillAccessor.Fill(varGfxAabbTree->childrenOffset, 40);
-
-#ifdef __SWITCH__
-    // Fastfiles serialize GfxAabbTree using the original 44-byte x86 layout.
-    // The runtime Switch struct is 56 bytes, so the relative child byte offset
-    // must be converted from an x86-node delta to a native-node delta.
-    static_assert(sizeof(GfxAabbTree) == 56, "Switch GfxAabbTree layout changed");
-    constexpr int32_t serializedNodeSize = 44;
-    const int32_t serializedOffset = varGfxAabbTree->childrenOffset;
-    if (serializedOffset != 0 && serializedOffset % serializedNodeSize == 0)
-    {
-        const int64_t nativeOffset =
-            static_cast<int64_t>(serializedOffset / serializedNodeSize) *
-            static_cast<int64_t>(sizeof(GfxAabbTree));
-        if (nativeOffset >= INT32_MIN && nativeOffset <= INT32_MAX)
-            varGfxAabbTree->childrenOffset = static_cast<int32_t>(nativeOffset);
-    }
-#endif
 }
 
 void Loader_GfxWorld::FillStruct_GfxPortal(const ZoneStreamFillReadAccessor& fillAccessor)
@@ -767,7 +749,7 @@ void Loader_GfxWorld::Load_GfxCell(const bool atStreamStart)
     
     if (varGfxCell->aabbTree)
     {
-        varGfxCell->aabbTree = m_stream.AllocOutOfBlock<GfxAabbTree>(alignof(GfxAabbTree), varGfxCell->aabbTreeCount);
+        varGfxCell->aabbTree = m_stream.AllocOutOfBlock<GfxAabbTree>(4, varGfxCell->aabbTreeCount);
         varGfxAabbTree = varGfxCell->aabbTree;
         LoadArray_GfxAabbTree(true, varGfxCell->aabbTreeCount);
     }
