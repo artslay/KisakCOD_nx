@@ -331,7 +331,6 @@ struct SwitchPathTreeLoadContext
     pathnode_tree_t *nativeRoots;
     std::vector<SwitchPathTreeAddressEntry> addressMap;
     uint32_t inlineNodeCount;
-    bool trace;
 };
 
 static pathnode_tree_t *Switch_FindTranslatedPathTree(
@@ -522,7 +521,9 @@ static pathnode_tree_t *Switch_LoadPathTreeArray(
     uint32_t pathNodeCount,
     bool trace)
 {
-    if (treeCount <= 0)
+    if (treeCount < 0)
+        Com_Error(ERR_DROP, "Switch path tree count is negative");
+    if (treeCount == 0)
         return nullptr;
     if (static_cast<uint32_t>(treeCount) > PATH_MAX_NODES * 2u)
         Com_Error(ERR_DROP, "Switch path tree array is too large");
@@ -540,7 +541,6 @@ static pathnode_tree_t *Switch_LoadPathTreeArray(
         reinterpret_cast<uintptr_t>(DB_GetStreamPos());
     context.rootCount = static_cast<uint32_t>(treeCount);
     context.pathNodeCount = pathNodeCount;
-    context.trace = trace;
     context.inlineNodeCount = 0;
 
     std::vector<uint8_t> serializedRoots(
