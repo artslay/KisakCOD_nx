@@ -1563,6 +1563,7 @@ bool VulkanBackend::CreateImage2D(
         SetError("vkAllocateMemory failed for 2D image", allocateResult);
         vkDestroyImage(m_device, *image, nullptr);
         *image = VK_NULL_HANDLE;
+        *memory = VK_NULL_HANDLE;
         return false;
     }
 
@@ -1650,6 +1651,7 @@ bool VulkanBackend::CreateImageCube(
         SetError("vkAllocateMemory failed for cube image", allocateResult);
         vkDestroyImage(m_device, *image, nullptr);
         *image = VK_NULL_HANDLE;
+        *memory = VK_NULL_HANDLE;
         return false;
     }
 
@@ -1657,8 +1659,8 @@ bool VulkanBackend::CreateImageCube(
     if (bindResult != VK_SUCCESS)
     {
         SetError("vkBindImageMemory failed for cube image", bindResult);
-        vkFreeMemory(m_device, *memory, nullptr);
         vkDestroyImage(m_device, *image, nullptr);
+        vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
         return false;
@@ -1678,8 +1680,8 @@ bool VulkanBackend::CreateImageCube(
     if (viewResult != VK_SUCCESS)
     {
         SetError("vkCreateImageView cube failed", viewResult);
-        vkFreeMemory(m_device, *memory, nullptr);
         vkDestroyImage(m_device, *image, nullptr);
+        vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
         return false;
@@ -1737,14 +1739,15 @@ bool VulkanBackend::CreateImage3D(
         SetError("vkAllocateMemory failed for 3D image", allocateResult);
         vkDestroyImage(m_device, *image, nullptr);
         *image = VK_NULL_HANDLE;
+        *memory = VK_NULL_HANDLE;
         return false;
     }
     const VkResult bindResult = vkBindImageMemory(m_device, *image, *memory, 0);
     if (bindResult != VK_SUCCESS)
     {
         SetError("vkBindImageMemory failed for 3D image", bindResult);
-        vkFreeMemory(m_device, *memory, nullptr);
         vkDestroyImage(m_device, *image, nullptr);
+        vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
         *image = VK_NULL_HANDLE;
         return false;
