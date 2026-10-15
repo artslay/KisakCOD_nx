@@ -1582,8 +1582,42 @@ void __cdecl R_ImageList_f()
                 case D3DFMT_DXT3:
                     Com_Printf(CON_CHANNEL_GFX, "DXT3  ");
                     goto LABEL_36;
+                case D3DFMT_R16F:
+                    Com_Printf(CON_CHANNEL_GFX, "R16F  ");
+                    goto LABEL_36;
+                case D3DFMT_G16R16F:
+                    Com_Printf(CON_CHANNEL_GFX, "RG16F ");
+                    goto LABEL_36;
+                case D3DFMT_A16B16G16R16F:
+                    Com_Printf(CON_CHANNEL_GFX, "RGBA16F");
+                    goto LABEL_36;
                 case D3DFMT_R32F:
                     Com_Printf(CON_CHANNEL_GFX, "R32F  ");
+                    goto LABEL_36;
+                case D3DFMT_G32R32F:
+                    Com_Printf(CON_CHANNEL_GFX, "RG32F ");
+                    goto LABEL_36;
+                case D3DFMT_A32B32G32R32F:
+                    Com_Printf(CON_CHANNEL_GFX, "RGBA32F");
+                    goto LABEL_36;
+                case D3DFMT_D16:
+                case D3DFMT_D16_LOCKABLE:
+                    Com_Printf(CON_CHANNEL_GFX, "D16   ");
+                    goto LABEL_36;
+                case D3DFMT_D32:
+                    Com_Printf(CON_CHANNEL_GFX, "D32   ");
+                    goto LABEL_36;
+                case D3DFMT_D24S8:
+                    Com_Printf(CON_CHANNEL_GFX, "D24S8 ");
+                    goto LABEL_36;
+                case D3DFMT_D24X8:
+                    Com_Printf(CON_CHANNEL_GFX, "D24X8 ");
+                    goto LABEL_36;
+                case D3DFMT_D15S1:
+                    Com_Printf(CON_CHANNEL_GFX, "D15S1 ");
+                    goto LABEL_36;
+                case D3DFMT_D24FS8:
+                    Com_Printf(CON_CHANNEL_GFX, "D24FS8");
                     goto LABEL_36;
                 case D3DFMT_DXT1:
                     Com_Printf(CON_CHANNEL_GFX, "DXT1  ");
@@ -1609,6 +1643,7 @@ void __cdecl R_ImageList_f()
                 Com_Printf(CON_CHANNEL_GFX, "RGBA32");
                 break;
             case D3DFMT_X8R8G8B8:
+            case D3DFMT_X8B8G8R8:
                 Com_Printf(CON_CHANNEL_GFX, "RGB32 ");
                 break;
             case D3DFMT_A8:
@@ -1616,6 +1651,28 @@ void __cdecl R_ImageList_f()
                 break;
             case D3DFMT_L8:
                 Com_Printf(CON_CHANNEL_GFX, "L8    ");
+                break;
+            case D3DFMT_R5G6B5:
+                Com_Printf(CON_CHANNEL_GFX, "RGB565");
+                break;
+            case D3DFMT_X1R5G5B5:
+                Com_Printf(CON_CHANNEL_GFX, "RGB555");
+                break;
+            case D3DFMT_A1R5G5B5:
+                Com_Printf(CON_CHANNEL_GFX, "RGBA1555");
+                break;
+            case D3DFMT_A2B10G10R10:
+            case D3DFMT_A2R10G10B10:
+                Com_Printf(CON_CHANNEL_GFX, "RGBA10");
+                break;
+            case D3DFMT_G16R16:
+                Com_Printf(CON_CHANNEL_GFX, "RG16  ");
+                break;
+            case D3DFMT_A16B16G16R16:
+                Com_Printf(CON_CHANNEL_GFX, "RGBA16");
+                break;
+            case D3DFMT_L16:
+                Com_Printf(CON_CHANNEL_GFX, "L16   ");
                 break;
             default:
                 goto LABEL_34;

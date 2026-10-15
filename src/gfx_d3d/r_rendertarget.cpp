@@ -455,6 +455,20 @@ const char *__cdecl R_DescribeFormat(_D3DFORMAT format)
     case D3DFMT_A8B8G8R8:
         result = "24-bit color with 8-bit alpha";
         break;
+    case D3DFMT_X8R8G8B8:
+    case D3DFMT_X8B8G8R8:
+        result = "32-bit color with unused alpha";
+        break;
+    case D3DFMT_A2B10G10R10:
+    case D3DFMT_A2R10G10B10:
+        result = "30-bit color with 2-bit alpha";
+        break;
+    case D3DFMT_A16B16G16R16:
+        result = "64-bit color";
+        break;
+    case D3DFMT_G16R16:
+        result = "32-bit two-channel color";
+        break;
     case D3DFMT_R5G6B5:
         result = "16-bit color";
         break;
@@ -464,6 +478,9 @@ const char *__cdecl R_DescribeFormat(_D3DFORMAT format)
     case D3DFMT_D16_LOCKABLE:
     case D3DFMT_D16:
         result = "16-bit depth without stencil";
+        break;
+    case D3DFMT_D32:
+        result = "32-bit depth without stencil";
         break;
     case D3DFMT_D15S1:
         result = "15-bit depth with 1-bit stencil";
