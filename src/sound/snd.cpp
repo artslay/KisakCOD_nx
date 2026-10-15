@@ -14,6 +14,8 @@
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
+static bool g_switchCgSoundAliasTraceStarted = false;
+static thread_local bool g_switchTraceSoundAliasPlayActive = false;
 
 static inline void Switch_LogWriteFiltered(const char *msg)
 {
@@ -1352,12 +1354,67 @@ int __cdecl SND_PlaySoundAlias(
     int timeshift,
     snd_alias_system_t system)
 {
+#ifdef __SWITCH__
+    bool startSwitchAliasTrace = false;
+    if (!g_switchCgSoundAliasTraceStarted && g_switchFrameStage &&
+        std::strcmp(g_switchFrameStage,
+            "frame/cgame/sound_alias/cg_play_by_name/before_play") == 0)
+    {
+        g_switchCgSoundAliasTraceStarted = true;
+        g_switchTraceSoundAliasPlayActive = true;
+        startSwitchAliasTrace = true;
+
+        char trace[256];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][SOUND ALIAS TRACE] input alias=%p org=%p ent=%d system=%d timeshift=%d\n",
+            static_cast<const void *>(alias), static_cast<const void *>(org),
+            sndEnt.handle, static_cast<int>(system), timeshift);
+        Switch_LogWrite(trace);
+
+        if (alias)
+        {
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][SOUND ALIAS TRACE] fields name=%p subtitle=%p secondary=%p chain=%p soundFile=%p sequence=%d flags=0x%x\n",
+                static_cast<const void *>(alias->aliasName),
+                static_cast<const void *>(alias->subtitle),
+                static_cast<const void *>(alias->secondaryAliasName),
+                static_cast<const void *>(alias->chainAliasName),
+                static_cast<const void *>(alias->soundFile),
+                alias->sequence, static_cast<unsigned>(alias->flags));
+            Switch_LogWrite(trace);
+        }
+    }
+    if (g_switchTraceSoundAliasPlayActive)
+        g_switchFrameStage = "frame/sound_alias/play_alias/entry";
+#endif
     iassert(org);
 
     if (alias)
-        return SND_PlaySoundAlias_Internal(alias, alias, 0.0, 1.0, sndEnt, org, 0, timeshift, 0, 1, system);
-    else
-        return SND_PLAYBACKID_NOTPLAYED;
+    {
+#ifdef __SWITCH__
+        if (g_switchTraceSoundAliasPlayActive)
+            g_switchFrameStage = "frame/sound_alias/play_alias/before_internal";
+#endif
+        const int result = SND_PlaySoundAlias_Internal(alias, alias, 0.0, 1.0, sndEnt, org, 0, timeshift, 0, 1, system);
+#ifdef __SWITCH__
+        if (startSwitchAliasTrace)
+        {
+            g_switchFrameStage = "frame/sound_alias/play_alias/after_internal";
+            g_switchTraceSoundAliasPlayActive = false;
+        }
+#endif
+        return result;
+    }
+#ifdef __SWITCH__
+    if (startSwitchAliasTrace)
+    {
+        g_switchFrameStage = "frame/sound_alias/play_alias/null_alias";
+        g_switchTraceSoundAliasPlayActive = false;
+    }
+#endif
+    return SND_PLAYBACKID_NOTPLAYED;
 }
 
 int __cdecl SND_PlaySoundAlias_Internal(
@@ -1387,20 +1444,39 @@ int __cdecl SND_PlaySoundAlias_Internal(
     int secondaryAliasRecursionCounter; // [esp+98h] [ebp-8h]
     float distMax; // [esp+9Ch] [ebp-4h]
 
+#ifdef __SWITCH__
+    const bool switchTraceSoundAlias = g_switchTraceSoundAliasPlayActive;
+    if (switchTraceSoundAlias)
+        g_switchFrameStage = "frame/sound_alias/internal/entry";
+#endif
     iassert(alias0);
     iassert(alias1);
     iassert(org);
 
+#ifdef __SWITCH__
+    if (switchTraceSoundAlias)
+        g_switchFrameStage = "frame/sound_alias/internal/asserts_done";
+#endif
     playbackId = SND_PLAYBACKID_NOTPLAYED;
     outOfRange = 0;
 
     if (!g_snd.Initialized2d)
+    {
+#ifdef __SWITCH__
+        if (switchTraceSoundAlias)
+            g_switchFrameStage = "frame/sound_alias/internal/audio_not_initialized";
+#endif
         return playbackId;
+    }
 
     if (pChannel)
         *pChannel = SND_PLAYBACKID_NOTPLAYED;
 
     alias0Channel = (alias0->flags & 0x3F00) >> 8;
+#ifdef __SWITCH__
+    if (switchTraceSoundAlias)
+        g_switchFrameStage = "frame/sound_alias/internal/flags_read";
+#endif
     if (SND_IsAliasChannel3D(alias0Channel))
     {
         distMax = (1.0 - lerp) * alias0->distMax + alias1->distMax * lerp;
@@ -1415,10 +1491,28 @@ int __cdecl SND_PlaySoundAlias_Internal(
     }
     if (!outOfRange)
     {
-        if (SND_ContinueLoopingSound(alias0, alias1, lerp, volumeScale, sndEnt, org, pChannel))
+#ifdef __SWITCH__
+        if (switchTraceSoundAlias)
+            g_switchFrameStage = "frame/sound_alias/internal/before_continue_looping";
+#endif
+        const bool continueLoopingSound =
+            SND_ContinueLoopingSound(alias0, alias1, lerp, volumeScale, sndEnt, org, pChannel);
+#ifdef __SWITCH__
+        if (switchTraceSoundAlias)
+            g_switchFrameStage = "frame/sound_alias/internal/after_continue_looping";
+#endif
+        if (continueLoopingSound)
         {
+#ifdef __SWITCH__
+            if (switchTraceSoundAlias)
+                g_switchFrameStage = "frame/sound_alias/internal/looping_secondary_test";
+#endif
             if (alias0->secondaryAliasName)
             {
+#ifdef __SWITCH__
+                if (switchTraceSoundAlias)
+                    g_switchFrameStage = "frame/sound_alias/internal/looping_secondary_pick";
+#endif
                 secondaryAlias = Com_PickSoundAlias(alias0->secondaryAliasName);
                 if (secondaryAlias)
                 {
@@ -1442,7 +1536,15 @@ int __cdecl SND_PlaySoundAlias_Internal(
         if (SND_IsRestricted(alias0Channel))
             SND_StopEntityChannel(sndEnt, alias0Channel);
 
+#ifdef __SWITCH__
+        if (switchTraceSoundAlias)
+            g_switchFrameStage = "frame/sound_alias/internal/before_null_sound_test";
+#endif
         const bool isNullSound = SND_IsNullSoundFile(alias0->soundFile);
+#ifdef __SWITCH__
+        if (switchTraceSoundAlias)
+            g_switchFrameStage = "frame/sound_alias/internal/after_null_sound_test";
+#endif
         if (isNullSound)
             return SND_PLAYBACKID_NOTPLAYED;
 
@@ -1451,7 +1553,15 @@ int __cdecl SND_PlaySoundAlias_Internal(
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/choose_pitch";
 #endif
 
+#ifdef __SWITCH__
+        if (switchTraceSoundAlias)
+            g_switchFrameStage = "frame/sound_alias/internal/before_choose_pitch";
+#endif
         SND_ChoosePitchAndVolume(alias0, alias1, lerp, volumeScale, &startAliasInfo.volume, &startAliasInfo.pitch);
+#ifdef __SWITCH__
+        if (switchTraceSoundAlias)
+            g_switchFrameStage = "frame/sound_alias/internal/after_choose_pitch";
+#endif
         startAliasInfo.alias0 = alias0;
         startAliasInfo.alias1 = alias1;
         startAliasInfo.lerp = lerp;
@@ -1480,11 +1590,27 @@ int __cdecl SND_PlaySoundAlias_Internal(
 #endif
         if (v14 == 1)
         {
+#ifdef __SWITCH__
+            if (switchTraceSoundAlias)
+                g_switchFrameStage = "frame/sound_alias/internal/before_start_sample";
+#endif
             playbackId = SND_StartAliasSample(&startAliasInfo, pChannel);
+#ifdef __SWITCH__
+            if (switchTraceSoundAlias)
+                g_switchFrameStage = "frame/sound_alias/internal/after_start_sample";
+#endif
         }
         else if (v14 == 2)
         {
+#ifdef __SWITCH__
+            if (switchTraceSoundAlias)
+                g_switchFrameStage = "frame/sound_alias/internal/before_start_stream";
+#endif
             playbackId = SND_StartAliasStream(&startAliasInfo, pChannel);
+#ifdef __SWITCH__
+            if (switchTraceSoundAlias)
+                g_switchFrameStage = "frame/sound_alias/internal/after_start_stream";
+#endif
         }
         else
         {
@@ -1495,8 +1621,16 @@ int __cdecl SND_PlaySoundAlias_Internal(
             playbackId = SND_PLAYBACKID_NOTPLAYED;
         }
     }
+#ifdef __SWITCH__
+    if (switchTraceSoundAlias)
+        g_switchFrameStage = "frame/sound_alias/internal/final_secondary_test";
+#endif
     if (alias0->secondaryAliasName)
     {
+#ifdef __SWITCH__
+        if (switchTraceSoundAlias)
+            g_switchFrameStage = "frame/sound_alias/internal/final_secondary_pick";
+#endif
         secondaryAlias = Com_PickSoundAlias(alias0->secondaryAliasName);
         if (secondaryAlias)
         {
