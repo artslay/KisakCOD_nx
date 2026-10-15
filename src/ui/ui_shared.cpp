@@ -9592,20 +9592,6 @@ void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc)
             }
         }
 
-#ifdef __SWITCH__
-        static unsigned int traceCount = 0;
-        if (traceCount < 8)
-        {
-            char trace[192];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][PREGAME LOADBAR OVERLAY] menu=pregame items=%u\n",
-                paintedLoadBars);
-            Switch_LogWrite(trace);
-            ++traceCount;
-        }
-#endif
         return;
     }
 }
