@@ -1123,6 +1123,7 @@ void __cdecl Menu_PaintAll_BeginVisibleList(char *stringBegin, uint32_t stringSi
 void __cdecl Menu_PaintAll_AppendToVisibleList(char *stringBegin, uint32_t stringSize, char *stringToAppend);
 void __cdecl Menu_PaintAll_DrawVisibleList(char *stringBegin, UiContext *dc);
 void __cdecl Menu_PaintAll(UiContext *dc);
+void __cdecl Menu_PaintLoadingBarOverlay(UiContext *dc);
 void __cdecl TRACK_ui_shared();
 void __cdecl UI_AddMenuList(UiContext *dc, MenuList *menuList);
 void __cdecl UI_AddMenu(UiContext *dc, menuDef_t *menu);
