@@ -20,7 +20,6 @@
 #include <game/savedevice.h>
 #include <qcommon/cmd.h>
 #ifdef __SWITCH__
-#include <atomic>
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
 #endif
@@ -31,19 +30,7 @@ serverStatic_t svs;
 int com_time;
 int com_inServerFrame;
 
-#ifdef __SWITCH__
-static std::atomic<unsigned int> g_switchCreditsServerFrameTraceCount{0};
-static std::atomic<unsigned int> g_switchCreditsSnapshotWaitTraceCount{0};
 
-static void Switch_CreditsServerTrace(const char *stage, unsigned int frame, int value)
-{
-    char trace[384];
-    std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][CREDITS SERVER] frame=%u stage=%s value=%d levelTime=%d pending=%d smp=%d inServerFrame=%d inFrame=%d restart=%d\n",
-        frame, stage, value, sv.levelTime, sv.pendingSnapshot, sv.smp, com_inServerFrame, sv.inFrame, sv.restartServerThread);
-    Switch_LogWrite(trace);
-}
-#endif
 
 
 const dvar_t *sv_lastSaveGame;
@@ -537,13 +524,7 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
         } while (setjmp(*reinterpret_cast<jmp_buf *>(v2)));
     }
     Profile_Guard(1);
-#ifdef __SWITCH__
-    Switch_CreditsServerTrace("server_thread_entry", 0xFFFFFFFFu, static_cast<int>(threadContext));
-#endif
     Sys_InitServerEvents();
-#ifdef __SWITCH__
-    Switch_CreditsServerTrace("after_init_server_events", 0xFFFFFFFFu, 0);
-#endif
     while (1)
     {
         while (1)
@@ -570,34 +551,15 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
 #ifdef __SWITCH__
 #endif
         v3 = Sys_Milliseconds();
-#ifdef __SWITCH__
-        const unsigned int switchCreditsServerFrame =
-            g_switchCreditsServerFrameTraceCount.fetch_add(1, std::memory_order_relaxed);
-        const bool switchCreditsServerTraceThisFrame = switchCreditsServerFrame < 4;
-        if (switchCreditsServerTraceThisFrame)
-            Switch_CreditsServerTrace("before_pre_frame", switchCreditsServerFrame, v3);
-#endif
         {
             PROF_SCOPED("run frame");
             SV_PreFrame();
         }
-#ifdef __SWITCH__
-        if (switchCreditsServerTraceThisFrame)
-            Switch_CreditsServerTrace("after_pre_frame", switchCreditsServerFrame, 0);
-#endif
         CL_FlushDebugServerData();
         if (!CL_DemoPlaying())
         {
-#ifdef __SWITCH__
-            if (switchCreditsServerTraceThisFrame)
-                Switch_CreditsServerTrace("before_g_run_frame", switchCreditsServerFrame, 0);
-#endif
             PROF_SCOPED("G_RunFrame");
             G_RunFrame(SV_FRAME_DO_ALL, 0);
-#ifdef __SWITCH__
-            if (switchCreditsServerTraceThisFrame)
-                Switch_CreditsServerTrace("after_g_run_frame", switchCreditsServerFrame, 0);
-#endif
         }
         Scr_ProfileUpdate();
         Scr_ProfileBuiltinUpdate();
@@ -605,15 +567,7 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
         Sys_ServerCompleted();
         v4 = SV_CheckAutoSaveHistory(0) != 0;
         v5 = Sys_Milliseconds() - v3;
-#ifdef __SWITCH__
-        if (switchCreditsServerTraceThisFrame)
-            Switch_CreditsServerTrace("before_wait_client_message", switchCreditsServerFrame, v5);
-#endif
         Sys_WaitClientMessageReceived();
-#ifdef __SWITCH__
-        if (switchCreditsServerTraceThisFrame)
-            Switch_CreditsServerTrace("after_wait_client_message", switchCreditsServerFrame, 0);
-#endif
         Sys_EnterCriticalSection(CRITSECT_CLIENT_MESSAGE);
         if (!v4 && !Sys_ServerTimeout())
         {
@@ -648,27 +602,9 @@ void __cdecl  SV_ServerThread(unsigned int threadContext)
             {
                 PROF_SCOPED("post frame");
                 Sys_ClearClientMessage();
-#ifdef __SWITCH__
-                if (switchCreditsServerTraceThisFrame)
-                    Switch_CreditsServerTrace("before_send_client_messages", switchCreditsServerFrame, 0);
-#endif
                 SV_SendClientMessages();
-#ifdef __SWITCH__
-                if (switchCreditsServerTraceThisFrame)
-                    Switch_CreditsServerTrace("after_send_client_messages", switchCreditsServerFrame, 0);
-                if (switchCreditsServerTraceThisFrame)
-                    Switch_CreditsServerTrace("before_create_next_snapshot", switchCreditsServerFrame, 0);
-#endif
                 CL_CreateNextSnap();
-#ifdef __SWITCH__
-                if (switchCreditsServerTraceThisFrame)
-                    Switch_CreditsServerTrace("before_snapshot_signal", switchCreditsServerFrame, 0);
-#endif
                 Sys_ServerSnapshotCompleted();
-#ifdef __SWITCH__
-                if (switchCreditsServerTraceThisFrame)
-                    Switch_CreditsServerTrace("after_snapshot_signal", switchCreditsServerFrame, 0);
-#endif
                 if (SV_ProcessPendingSaves())
                     SV_DisplaySaveErrorUI(); // savedevice_xenon
                 Scr_UpdateDebugger();
@@ -785,11 +721,6 @@ void __cdecl SV_WaitServer()
 
 void __cdecl SV_InitSnapshot()
 {
-#ifdef __SWITCH__
-    g_switchCreditsServerFrameTraceCount.store(0, std::memory_order_relaxed);
-    g_switchCreditsSnapshotWaitTraceCount.store(0, std::memory_order_relaxed);
-    Switch_CreditsServerTrace("sv_init_snapshot_entry", 0xFFFFFFFFu, 0);
-#endif
     if (com_inServerFrame)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_main.cpp", 942, 0, "%s", "!com_inServerFrame");
     sv.restartServerThread = 1;
@@ -841,23 +772,11 @@ int __cdecl SV_WaitServerSnapshot()
     int v1; // r29
     int timeResidual; // r11
 
-#ifdef __SWITCH__
-    const unsigned int switchCreditsWaitCall =
-        g_switchCreditsSnapshotWaitTraceCount.fetch_add(1, std::memory_order_relaxed);
-    const bool switchCreditsWaitTraceThisCall = switchCreditsWaitCall < 3;
-    unsigned int switchCreditsWaitPolls = 0;
-    if (switchCreditsWaitTraceThisCall)
-        Switch_CreditsServerTrace("wait_snapshot_entry", switchCreditsWaitCall, 0);
-#endif
 
     iassert(Sys_IsMainThread());
 
     if (!sv.pendingSnapshot)
     {
-#ifdef __SWITCH__
-        if (switchCreditsWaitTraceThisCall)
-            Switch_CreditsServerTrace("wait_snapshot_no_pending", switchCreditsWaitCall, 0);
-#endif
         return 0;
     }
 
@@ -868,26 +787,12 @@ int __cdecl SV_WaitServerSnapshot()
         v1 = Sys_Milliseconds();
         while (!Sys_WaitServerSnapshot())
         {
-#ifdef __SWITCH__
-            if (switchCreditsWaitTraceThisCall &&
-                (switchCreditsWaitPolls == 0 || switchCreditsWaitPolls == 1000))
-            {
-                Switch_CreditsServerTrace("snapshot_event_timeout", switchCreditsWaitCall,
-                    static_cast<int>(switchCreditsWaitPolls));
-            }
-            ++switchCreditsWaitPolls;
-#endif
             Com_CheckError();
             if (!com_inServerFrame)
             {
                 com_inServerFrame = 1;
                 if (sv.smp)
                 {
-#ifdef __SWITCH__
-                    if (switchCreditsWaitTraceThisCall)
-                        Switch_CreditsServerTrace("waking_server_thread", switchCreditsWaitCall,
-                            static_cast<int>(switchCreditsWaitPolls));
-#endif
                     Sys_WakeServer();
                 }
                 else if (!sv.inFrame)
@@ -911,11 +816,6 @@ int __cdecl SV_WaitServerSnapshot()
             g_kisakScriptDebuggerHack = false;
         }
         sv.waitSnapshotTime = Sys_Milliseconds() - v1;
-#ifdef __SWITCH__
-        if (switchCreditsWaitTraceThisCall)
-            Switch_CreditsServerTrace("snapshot_event_received", switchCreditsWaitCall,
-                static_cast<int>(switchCreditsWaitPolls));
-#endif
         Sys_DisallowSendClientMessages();
         Sys_EnterCriticalSection(CRITSECT_CLIENT_MESSAGE);
         sv.clientMessageTimeout = 0;
