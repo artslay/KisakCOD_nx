@@ -1181,6 +1181,9 @@ void VulkanBackend::EndScene()
 
 void *VulkanBackend::CreateQuery(uint32_t queryType)
 {
+    if (!m_device || m_deviceLost)
+        return nullptr;
+
     auto *query = new Query;
 
     VkResult result = VK_SUCCESS;
@@ -1212,6 +1215,7 @@ void *VulkanBackend::CreateQuery(uint32_t queryType)
 
     if (result != VK_SUCCESS)
     {
+        SetError("Vulkan query creation failed", result);
         delete query;
         return nullptr;
     }
@@ -1241,7 +1245,7 @@ void VulkanBackend::ReleaseQuery(void *queryPtr)
 void VulkanBackend::BeginQuery(void *queryPtr)
 {
     auto *query = static_cast<Query *>(queryPtr);
-    if (!query || !m_commandBuffer || !m_frameActive)
+    if (!query || !m_commandBuffer || !m_frameActive || m_deviceLost)
         return;
 
     query->active = false;
@@ -1249,7 +1253,9 @@ void VulkanBackend::BeginQuery(void *queryPtr)
 
     if (query->kind == Query::Kind::Event)
     {
-        vkResetEvent(m_device, query->event);
+        const VkResult result = vkResetEvent(m_device, query->event);
+        if (result != VK_SUCCESS)
+            SetError("vkResetEvent failed for event query", result);
         return;
     }
 
@@ -1292,13 +1298,18 @@ void VulkanBackend::EndQuery(void *queryPtr)
 bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
 {
     auto *query = static_cast<Query *>(queryPtr);
-    if (!query || !query->issued)
+    if (!query || !query->issued || m_deviceLost)
         return false;
 
     if (query->kind == Query::Kind::Event)
     {
-        if (vkGetEventStatus(m_device, query->event) != VK_EVENT_SET)
+        const VkResult status = vkGetEventStatus(m_device, query->event);
+        if (status != VK_EVENT_SET)
+        {
+            if (status == VK_ERROR_DEVICE_LOST)
+                SetError("vkGetEventStatus failed", status);
             return false;
+        }
 
         if (result)
             *result = 1;
@@ -1317,7 +1328,11 @@ bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
         VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
 
     if (status != VK_SUCCESS || values[1] == 0)
+    {
+        if (status == VK_ERROR_DEVICE_LOST)
+            SetError("vkGetQueryPoolResults failed", status);
         return false;
+    }
 
     if (result)
         *result = values[0];
@@ -1326,7 +1341,7 @@ bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
 
 void VulkanBackend::WaitForGpu()
 {
-    if (m_device && m_graphicsQueue)
+    if (m_device && m_graphicsQueue && !m_deviceLost)
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
         const VkResult result = vkQueueWaitIdle(m_graphicsQueue);
@@ -1337,7 +1352,7 @@ void VulkanBackend::WaitForGpu()
 
 void VulkanBackend::Flush()
 {
-    if (m_device && m_graphicsQueue)
+    if (m_device && m_graphicsQueue && !m_deviceLost)
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
         const VkResult result = vkQueueWaitIdle(m_graphicsQueue);
@@ -2110,8 +2125,12 @@ VkSampler VulkanBackend::GetSampler(
         return found->second;
 
     VkSampler sampler = VK_NULL_HANDLE;
-    if (vkCreateSampler(m_device, &info, nullptr, &sampler) != VK_SUCCESS)
+    const VkResult result = vkCreateSampler(m_device, &info, nullptr, &sampler);
+    if (result != VK_SUCCESS)
+    {
+        SetError("vkCreateSampler failed", result);
         return VK_NULL_HANDLE;
+    }
     m_samplers.push_back(sampler);
     m_samplerCache.emplace(key, sampler);
     return sampler;
