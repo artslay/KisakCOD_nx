@@ -21,9 +21,9 @@ public:
 
     bool Init(const GfxWindowParms *wndParms) override;
     void Shutdown() override;
-    bool TestCooperativeLevel() override { return IsInitialized(); }
-    bool RecoverLostDevice() override { return true; }
-    bool IsDeviceLost() const override { return false; }
+    bool TestCooperativeLevel() override { return IsInitialized() && !IsDeviceLost(); }
+    bool RecoverLostDevice() override;
+    bool IsDeviceLost() const override;
     bool CreateWindow(GfxWindowParms *) override { return true; }
     void DestroyWindow() override {}
 
@@ -249,7 +249,7 @@ private:
     bool CreateDummyTexture();
     void DestroySwapchain();
     void DestroyDefaultDepth();
-    void SetError(const char *message);
+    void SetError(const char *message, VkResult result = VK_SUCCESS);
 
     uint32_t m_width = 1280;
     uint32_t m_height = 720;
@@ -302,6 +302,7 @@ private:
 
     uint32_t m_swapchainIndex = 0;
     bool m_initialized = false;
+    bool m_deviceLost = false;
     bool m_fillModeNonSolid = false;
     bool m_samplerAnisotropy = false;
     float m_maxSamplerAnisotropy = 1.0f;

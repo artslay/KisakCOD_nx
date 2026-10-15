@@ -114,16 +114,40 @@ VulkanBackend *GetVulkanBackend()
     return g_backend;
 }
 
-void VulkanBackend::SetError(const char *message)
+void VulkanBackend::SetError(const char *message, VkResult result)
 {
+    if (result == VK_ERROR_DEVICE_LOST)
+        m_deviceLost = true;
+
     m_lastError = message ? message : "Vulkan backend error";
-    char trace[320];
-    std::snprintf(
-        trace,
-        sizeof(trace),
-        "[KisakCOD][VK ERROR] %s\n",
-        m_lastError.c_str());
+    char trace[384];
+    if (result == VK_SUCCESS)
+    {
+        std::snprintf(
+            trace, sizeof(trace), "[KisakCOD][VK ERROR] %s\n", m_lastError.c_str());
+    }
+    else
+    {
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK ERROR] %s result=%d device_lost=%u\n",
+            m_lastError.c_str(), static_cast<int>(result),
+            m_deviceLost ? 1u : 0u);
+    }
     Switch_LogWrite(trace);
+}
+
+bool VulkanBackend::IsDeviceLost() const
+{
+    return m_deviceLost;
+}
+
+bool VulkanBackend::RecoverLostDevice()
+{
+    // All Vulkan resources and pipelines belong to the lost VkDevice. Until the
+    // renderer can rebuild every engine-owned resource, an in-place recovery
+    // would falsely report success while those handles remain invalid.
+    return m_initialized && !m_deviceLost;
 }
 
 bool VulkanBackend::Init(const GfxWindowParms *wndParms)
@@ -243,6 +267,7 @@ void VulkanBackend::Shutdown()
     m_uniformMapped = nullptr;
     m_uniformOffset = 0;
     m_initialized = false;
+    m_deviceLost = false;
     m_fillModeNonSolid = false;
     m_samplerAnisotropy = false;
     m_maxSamplerAnisotropy = 1.0f;
@@ -751,9 +776,10 @@ void VulkanBackend::DestroySwapchain()
 
 bool VulkanBackend::RecreateSwapchain()
 {
-    if (!m_device || !m_surface)
+    if (!m_device || !m_surface || m_deviceLost)
     {
-        SetError("Cannot recreate swapchain without a Vulkan device and surface");
+        if (!m_deviceLost)
+            SetError("Cannot recreate swapchain without a Vulkan device and surface");
         return false;
     }
 
@@ -766,7 +792,7 @@ bool VulkanBackend::RecreateSwapchain()
         const VkResult idleResult = vkDeviceWaitIdle(m_device);
         if (idleResult != VK_SUCCESS)
         {
-            SetError("vkDeviceWaitIdle failed while recreating swapchain");
+            SetError("vkDeviceWaitIdle failed while recreating swapchain", idleResult);
             return false;
         }
     }
@@ -843,25 +869,31 @@ void VulkanBackend::DestroyDefaultDepth()
 
 bool VulkanBackend::BeginFrame()
 {
-    if (!m_initialized || m_frameActive)
-        return m_frameActive;
+    if (m_deviceLost || !m_initialized)
+        return false;
+    if (m_frameActive)
+        return true;
 
     if (m_swapchainNeedsRecreate && !RecreateSwapchain())
         return false;
 
-    if (vkWaitForFences(m_device, 1, &m_sync.fence, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
+    const VkResult waitResult =
+        vkWaitForFences(m_device, 1, &m_sync.fence, VK_TRUE, UINT64_MAX);
+    if (waitResult != VK_SUCCESS)
     {
-        SetError("vkWaitForFences failed");
+        SetError("vkWaitForFences failed", waitResult);
         return false;
     }
 
     // Keep the fence signaled until a command buffer is ready to submit.
     // Resetting it before vkAcquireNextImageKHR can leave an unsignaled fence
     // when acquire reports OUT_OF_DATE, making the next BeginFrame wait forever.
-    if (vkResetCommandPool(m_device, m_commandPool, 0) != VK_SUCCESS)
+    const VkResult resetPoolResult = vkResetCommandPool(m_device, m_commandPool, 0);
+    if (resetPoolResult != VK_SUCCESS)
     {
-        SetError("vkResetCommandPool failed at frame start");
-        (void)RecreateSwapchain();
+        SetError("vkResetCommandPool failed at frame start", resetPoolResult);
+        if (!m_deviceLost)
+            (void)RecreateSwapchain();
         return false;
     }
     // Descriptor sets remain allocated and are reused by the D3D9 compatibility
@@ -886,8 +918,9 @@ bool VulkanBackend::BeginFrame()
     }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
-        SetError("vkAcquireNextImageKHR failed");
-        (void)RecreateSwapchain();
+        SetError("vkAcquireNextImageKHR failed", result);
+        if (!m_deviceLost)
+            (void)RecreateSwapchain();
         return false;
     }
     if (result == VK_SUBOPTIMAL_KHR)
@@ -896,10 +929,12 @@ bool VulkanBackend::BeginFrame()
     VkCommandBufferBeginInfo begin{};
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    if (vkBeginCommandBuffer(m_commandBuffer, &begin) != VK_SUCCESS)
+    const VkResult beginResult = vkBeginCommandBuffer(m_commandBuffer, &begin);
+    if (beginResult != VK_SUCCESS)
     {
-        SetError("vkBeginCommandBuffer failed");
-        (void)RecreateSwapchain();
+        SetError("vkBeginCommandBuffer failed", beginResult);
+        if (!m_deviceLost)
+            (void)RecreateSwapchain();
         return false;
     }
 
@@ -921,6 +956,12 @@ bool VulkanBackend::BeginFrame()
 
 bool VulkanBackend::EndFrame()
 {
+    if (m_deviceLost)
+    {
+        m_frameActive = false;
+        m_renderingActive = false;
+        return false;
+    }
     if (!m_frameActive)
         return true;
 
@@ -993,19 +1034,23 @@ bool VulkanBackend::EndFrame()
         m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     }
 
-    if (vkEndCommandBuffer(m_commandBuffer) != VK_SUCCESS)
+    const VkResult endResult = vkEndCommandBuffer(m_commandBuffer);
+    if (endResult != VK_SUCCESS)
     {
-        SetError("vkEndCommandBuffer failed");
-        (void)RecreateSwapchain();
+        SetError("vkEndCommandBuffer failed", endResult);
+        if (!m_deviceLost)
+            (void)RecreateSwapchain();
         return false;
     }
 
     // Reset only when the frame is ready to submit. If submit itself fails,
     // RecreateSwapchain replaces this unsignaled fence and both semaphores.
-    if (vkResetFences(m_device, 1, &m_sync.fence) != VK_SUCCESS)
+    const VkResult resetFenceResult = vkResetFences(m_device, 1, &m_sync.fence);
+    if (resetFenceResult != VK_SUCCESS)
     {
-        SetError("vkResetFences failed before frame submission");
-        (void)RecreateSwapchain();
+        SetError("vkResetFences failed before frame submission", resetFenceResult);
+        if (!m_deviceLost)
+            (void)RecreateSwapchain();
         return false;
     }
 
@@ -1027,8 +1072,9 @@ bool VulkanBackend::EndFrame()
     }
     if (submitResult != VK_SUCCESS)
     {
-        SetError("vkQueueSubmit failed");
-        (void)RecreateSwapchain();
+        SetError("vkQueueSubmit failed", submitResult);
+        if (!m_deviceLost)
+            (void)RecreateSwapchain();
         return false;
     }
 
@@ -1060,8 +1106,8 @@ bool VulkanBackend::EndFrame()
     }
     if (result != VK_SUCCESS)
     {
-        SetError("vkQueuePresentKHR failed");
-        return RecreateSwapchain();
+        SetError("vkQueuePresentKHR failed", result);
+        return m_deviceLost ? false : RecreateSwapchain();
     }
 
     m_frameActive = false;
@@ -1283,7 +1329,9 @@ void VulkanBackend::WaitForGpu()
     if (m_device && m_graphicsQueue)
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
-        vkQueueWaitIdle(m_graphicsQueue);
+        const VkResult result = vkQueueWaitIdle(m_graphicsQueue);
+        if (result != VK_SUCCESS)
+            SetError("vkQueueWaitIdle failed while waiting for GPU", result);
     }
 }
 
@@ -1292,7 +1340,9 @@ void VulkanBackend::Flush()
     if (m_device && m_graphicsQueue)
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
-        vkQueueWaitIdle(m_graphicsQueue);
+        const VkResult result = vkQueueWaitIdle(m_graphicsQueue);
+        if (result != VK_SUCCESS)
+            SetError("vkQueueWaitIdle failed while flushing GPU", result);
     }
 }
 
@@ -1753,7 +1803,7 @@ void VulkanBackend::TransitionImage(
 
 bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &fn)
 {
-    if (!m_device || !m_graphicsQueue || !m_immediateCommandPool || !fn)
+    if (!m_device || !m_graphicsQueue || !m_immediateCommandPool || !fn || m_deviceLost)
         return false;
 
     // Cinematic texture uploads run on the cinematic worker, while normal
@@ -1769,8 +1819,12 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
     alloc.commandBufferCount = 1;
 
     VkCommandBuffer command = VK_NULL_HANDLE;
-    if (vkAllocateCommandBuffers(m_device, &alloc, &command) != VK_SUCCESS)
+    const VkResult allocResult = vkAllocateCommandBuffers(m_device, &alloc, &command);
+    if (allocResult != VK_SUCCESS)
+    {
+        SetError("vkAllocateCommandBuffers for immediate submit failed", allocResult);
         return false;
+    }
 
     VkFence fence = VK_NULL_HANDLE;
     bool submitted = false;
@@ -1778,14 +1832,17 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-    if (vkBeginCommandBuffer(command, &begin) == VK_SUCCESS)
+    const VkResult beginResult = vkBeginCommandBuffer(command, &begin);
+    if (beginResult == VK_SUCCESS)
     {
         fn(command);
-        if (vkEndCommandBuffer(command) == VK_SUCCESS)
+        const VkResult endResult = vkEndCommandBuffer(command);
+        if (endResult == VK_SUCCESS)
         {
             VkFenceCreateInfo fenceInfo{};
             fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            if (vkCreateFence(m_device, &fenceInfo, nullptr, &fence) == VK_SUCCESS)
+            const VkResult fenceResult = vkCreateFence(m_device, &fenceInfo, nullptr, &fence);
+            if (fenceResult == VK_SUCCESS)
             {
                 VkSubmitInfo submit{};
                 submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1797,14 +1854,34 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
                     std::lock_guard<std::mutex> queueLock(m_queueMutex);
                     submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, fence);
                 }
-                if (submitResult == VK_SUCCESS &&
-                    vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX) == VK_SUCCESS)
+                if (submitResult == VK_SUCCESS)
                 {
-                    submitted = true;
+                    const VkResult waitResult =
+                        vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
+                    if (waitResult == VK_SUCCESS)
+                        submitted = true;
+                    else
+                        SetError("vkWaitForFences failed for immediate submit", waitResult);
+                }
+                else
+                {
+                    SetError("vkQueueSubmit failed for immediate submit", submitResult);
                 }
                 vkDestroyFence(m_device, fence, nullptr);
             }
+            else
+            {
+                SetError("vkCreateFence failed for immediate submit", fenceResult);
+            }
         }
+        else
+        {
+            SetError("vkEndCommandBuffer failed for immediate submit", endResult);
+        }
+    }
+    else
+    {
+        SetError("vkBeginCommandBuffer failed for immediate submit", beginResult);
     }
 
     vkFreeCommandBuffers(m_device, m_immediateCommandPool, 1, &command);
