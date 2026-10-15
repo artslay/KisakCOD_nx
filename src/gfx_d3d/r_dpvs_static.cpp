@@ -17,6 +17,31 @@ static bool R_SwitchAabbAddressLooksValid(const void *address)
     return value >= UINT64_C(0x100000000) && value <= UINT64_C(0x0000100000000000);
 }
 
+static int R_SwitchNativeAabbChildOffset(const GfxAabbTree *root, const GfxAabbTree *tree)
+{
+    if (!root || !tree || root->childCount == 0)
+        return tree ? tree->childrenOffset : 0;
+
+    // Legacy GfxAabbTree records in fastfiles use a 44-byte x86 stride.
+    // The loader expands each record to the 56-byte Switch runtime layout,
+    // but these relative offsets can still be in serialized-byte units.
+    constexpr int32_t serializedStride = 44;
+    const int rootOffset = root->childrenOffset;
+    const bool serializedTree =
+        rootOffset > 0 &&
+        rootOffset % static_cast<int>(sizeof(GfxAabbTree)) != 0 &&
+        rootOffset % serializedStride == 0;
+
+    const int offset = tree->childrenOffset;
+    if (!serializedTree || offset <= 0 || offset % serializedStride != 0)
+        return offset;
+
+    const int64_t nativeOffset =
+        static_cast<int64_t>(offset / serializedStride) *
+        static_cast<int64_t>(sizeof(GfxAabbTree));
+    return nativeOffset <= INT32_MAX ? static_cast<int>(nativeOffset) : offset;
+}
+
 static void R_SwitchLogAabbTreeWalkFault(
     const char *stage,
     const char *reason,
@@ -123,7 +148,7 @@ static bool R_SwitchValidateDpvsAabbTreeNode(
 
     if (tree->childCount)
     {
-        const int offset = tree->childrenOffset;
+        const int offset = R_SwitchNativeAabbChildOffset(root, tree);
         if (offset <= 0 ||
             (nodeCount && offset % static_cast<int>(sizeof(GfxAabbTree)) != 0))
         {
@@ -221,7 +246,12 @@ static void R_AddAabbTreeSurfacesInFrustum_r_impl(
     {
         if (tree->childCount)
         {
-            children = (const GfxAabbTree *)((char *)tree + tree->childrenOffset);
+#ifdef __SWITCH__
+            const int childrenOffset = R_SwitchNativeAabbChildOffset(root, tree);
+#else
+            const int childrenOffset = tree->childrenOffset;
+#endif
+            children = (const GfxAabbTree *)((char *)tree + childrenOffset);
             childCount = tree->childCount;
             for (childIndex = 0; childIndex < childCount; ++childIndex)
                 R_AddAabbTreeSurfacesInFrustum_r_impl(&children[childIndex], &clipSetChild, root, nodeCount, tree, childIndex);
