@@ -1014,6 +1014,15 @@ HRESULT KisakVkBuffer::Lock(
     if (!dynamic && (flags & (D3DLOCK_DISCARD | D3DLOCK_NOOVERWRITE)))
         return E_FAIL;
 
+    // Static buffers expose mapped storage directly, so earlier recorded draws
+    // must finish before the caller can modify bytes they may already reference.
+    if (!dynamic && !(flags & D3DLOCK_READONLY))
+    {
+        VulkanBackend *backend = GetVulkanBackend();
+        if (backend && !backend->SynchronizeActiveFrame())
+            return E_FAIL;
+    }
+
     if (dynamic)
     {
         if (shadow.size() != size)
@@ -1043,6 +1052,14 @@ HRESULT KisakVkBuffer::Unlock()
 
     if (dynamic && !(lockFlags & D3DLOCK_READONLY) && lockSize != 0)
     {
+        // Unless NOOVERWRITE is asserted, earlier commands could still reference
+        // this byte range. Synchronize before copying the CPU shadow to the GPU buffer.
+        if (!(lockFlags & D3DLOCK_NOOVERWRITE))
+        {
+            VulkanBackend *backend = GetVulkanBackend();
+            if (backend && !backend->SynchronizeActiveFrame())
+                return E_FAIL;
+        }
         std::memcpy(
             static_cast<uint8_t *>(mapped) + lockOffset,
             shadow.data() + lockOffset,
@@ -1363,14 +1380,14 @@ uint32_t IDirect3DSurface9::Release()
 HRESULT IDirect3DSurface9::LockRect(
     _D3DLOCKED_RECT *lockedRect, const tagRECT *rect, uint32_t flags)
 {
-    if (!lockedRect || !texture)
+    if (!lockedRect || !texture || !lockable)
         return E_FAIL;
     return texture->LockRect(level, lockedRect, rect, flags);
 }
 
 HRESULT IDirect3DSurface9::UnlockRect()
 {
-    if (!texture)
+    if (!texture || !lockable)
         return E_FAIL;
     return texture->UnlockRect(level);
 }
@@ -1686,12 +1703,14 @@ HRESULT IDirect3DDevice9::StretchRect(
 
 HRESULT IDirect3DDevice9::CreateOffscreenPlainSurface(
     uint32_t width, uint32_t height, _D3DFORMAT format,
-    uint32_t, IDirect3DSurface9 **out, void *)
+    uint32_t pool, IDirect3DSurface9 **out, void *)
 {
-    if (!out || !m_backend || !width || !height)
+    if (!out || !m_backend || !width || !height ||
+        (pool != D3DPOOL_SYSTEMMEM && pool != D3DPOOL_SCRATCH))
         return E_FAIL;
+    *out = nullptr;
 
-    TextureFormatInfo info = GetTextureFormat(format);
+    const TextureFormatInfo info = GetTextureFormat(format);
     if (info.depth || info.compressed || info.format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
@@ -1717,6 +1736,7 @@ HRESULT IDirect3DDevice9::CreateOffscreenPlainSurface(
     auto *surface = new IDirect3DSurface9;
     surface->texture = texture;
     surface->level = 0;
+    surface->lockable = true;
     *out = surface;
     return S_OK;
 }
@@ -1768,13 +1788,14 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
 {
     if (!out || !m_backend || !width || !height)
         return E_FAIL;
+    *out = nullptr;
 
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     if (!DecodeMultisampleType(multisample, &samples) || quality != 0 ||
         !m_backend->SupportsSampleCount(samples, true))
         return E_FAIL;
 
-    TextureFormatInfo info = GetTextureFormat(format);
+    const TextureFormatInfo info = GetTextureFormat(format);
     if (!info.depth || info.format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
@@ -1787,8 +1808,13 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
     texture->format = info.format;
     texture->samples = samples;
 
-    const VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+    const bool lockable = format == D3DFMT_D16_LOCKABLE &&
+        samples == VK_SAMPLE_COUNT_1_BIT;
+    VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
         (samples == VK_SAMPLE_COUNT_1_BIT ? VK_IMAGE_USAGE_SAMPLED_BIT : 0);
+    if (lockable)
+        usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
     if (!m_backend->CreateImage2D(
             width, height, 1, info.format, usage,
             info.aspect, &texture->image, &texture->memory, &texture->view,
@@ -1801,24 +1827,27 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
     auto *surface = new IDirect3DSurface9;
     surface->texture = texture;
     surface->level = 0;
+    surface->lockable = lockable;
     *out = surface;
     return S_OK;
 }
 
 HRESULT IDirect3DDevice9::CreateRenderTarget(
     uint32_t width, uint32_t height, _D3DFORMAT format,
-    _D3DMULTISAMPLE_TYPE multisample, uint32_t quality, uint32_t,
+    _D3DMULTISAMPLE_TYPE multisample, uint32_t quality, uint32_t lockable,
     IDirect3DSurface9 **out, void *)
 {
     if (!out || !m_backend || !width || !height)
         return E_FAIL;
+    *out = nullptr;
 
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     if (!DecodeMultisampleType(multisample, &samples) || quality != 0 ||
+        (lockable && samples != VK_SAMPLE_COUNT_1_BIT) ||
         !m_backend->SupportsSampleCount(samples, false))
         return E_FAIL;
 
-    TextureFormatInfo info = GetTextureFormat(format);
+    const TextureFormatInfo info = GetTextureFormat(format);
     if (info.depth || info.compressed || info.format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
@@ -1864,6 +1893,7 @@ HRESULT IDirect3DDevice9::CreateRenderTarget(
     auto *surface = new IDirect3DSurface9;
     surface->texture = texture;
     surface->level = 0;
+    surface->lockable = lockable != 0;
     *out = surface;
     return S_OK;
 }

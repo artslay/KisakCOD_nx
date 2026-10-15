@@ -86,6 +86,9 @@ constexpr uint32_t D3DDEVTYPE_HAL = 1;
 constexpr uint32_t D3DRTYPE_SURFACE = 8;
 constexpr uint32_t D3DBACKBUFFER_TYPE_MONO = 1;
 constexpr uint32_t D3DPOOL_DEFAULT = 0;
+constexpr uint32_t D3DPOOL_MANAGED = 1;
+constexpr uint32_t D3DPOOL_SYSTEMMEM = 2;
+constexpr uint32_t D3DPOOL_SCRATCH = 3;
 constexpr uint32_t D3DZB_FALSE = 0;
 constexpr uint32_t D3DZB_TRUE = 1;
 constexpr uint32_t D3DCLEAR_TARGET = 0x1;
@@ -337,6 +340,7 @@ struct IDirect3DSurface9 : IDirect3DResource9 {
     KisakVkTexture *texture=nullptr;
     uint32_t level=0;
     bool defaultFramebuffer=false;
+    bool lockable=false;
     std::atomic<uint32_t> refs{1};
     uint32_t AddRef() override;
     uint32_t Release() override;
