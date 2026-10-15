@@ -478,9 +478,11 @@ bool VulkanBackend::CreateDevice()
 bool VulkanBackend::CreateSwapchain()
 {
     VkSurfaceCapabilitiesKHR caps{};
-    if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physicalDevice, m_surface, &caps) != VK_SUCCESS)
+    const VkResult capabilitiesResult =
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physicalDevice, m_surface, &caps);
+    if (capabilitiesResult != VK_SUCCESS)
     {
-        SetError("Surface capability query failed");
+        SetError("Surface capability query failed", capabilitiesResult);
         return false;
     }
 
@@ -566,9 +568,10 @@ bool VulkanBackend::CreateSwapchain()
     info.presentMode = m_presentMode;
     info.clipped = VK_TRUE;
 
-    if (vkCreateSwapchainKHR(m_device, &info, nullptr, &m_swapchain) != VK_SUCCESS)
+    const VkResult swapchainResult = vkCreateSwapchainKHR(m_device, &info, nullptr, &m_swapchain);
+    if (swapchainResult != VK_SUCCESS)
     {
-        SetError("vkCreateSwapchainKHR failed");
+        SetError("vkCreateSwapchainKHR failed", swapchainResult);
         return false;
     }
 
@@ -589,9 +592,11 @@ bool VulkanBackend::CreateSwapchain()
         view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         view.subresourceRange.levelCount = 1;
         view.subresourceRange.layerCount = 1;
-        if (vkCreateImageView(m_device, &view, nullptr, &m_swapchainViews[i]) != VK_SUCCESS)
+        const VkResult viewResult =
+            vkCreateImageView(m_device, &view, nullptr, &m_swapchainViews[i]);
+        if (viewResult != VK_SUCCESS)
         {
-            SetError("vkCreateImageView failed");
+            SetError("vkCreateImageView for swapchain failed", viewResult);
             return false;
         }
     }
@@ -626,9 +631,11 @@ bool VulkanBackend::CreateCommandResources()
     pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     pool.queueFamilyIndex = m_graphicsQueueFamily;
 
-    if (vkCreateCommandPool(m_device, &pool, nullptr, &m_commandPool) != VK_SUCCESS)
+    const VkResult commandPoolResult =
+        vkCreateCommandPool(m_device, &pool, nullptr, &m_commandPool);
+    if (commandPoolResult != VK_SUCCESS)
     {
-        SetError("vkCreateCommandPool failed");
+        SetError("vkCreateCommandPool failed", commandPoolResult);
         return false;
     }
 
@@ -638,20 +645,20 @@ bool VulkanBackend::CreateCommandResources()
     alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     alloc.commandBufferCount = 1;
 
-    if (vkAllocateCommandBuffers(m_device, &alloc, &m_commandBuffer) != VK_SUCCESS)
+    const VkResult commandBufferResult =
+        vkAllocateCommandBuffers(m_device, &alloc, &m_commandBuffer);
+    if (commandBufferResult != VK_SUCCESS)
     {
-        SetError("vkAllocateCommandBuffers failed");
+        SetError("vkAllocateCommandBuffers failed", commandBufferResult);
         return false;
     }
 
     VkCommandPoolCreateInfo immediatePool = pool;
-    if (vkCreateCommandPool(
-            m_device,
-            &immediatePool,
-            nullptr,
-            &m_immediateCommandPool) != VK_SUCCESS)
+    const VkResult immediatePoolResult = vkCreateCommandPool(
+        m_device, &immediatePool, nullptr, &m_immediateCommandPool);
+    if (immediatePoolResult != VK_SUCCESS)
     {
-        SetError("vkCreateCommandPool for immediate uploads failed");
+        SetError("vkCreateCommandPool for immediate uploads failed", immediatePoolResult);
         return false;
     }
 
