@@ -262,17 +262,6 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
         loopSound,
         cent->nextState.number,
         cent->nextState.eType);
-    std::snprintf(
-        switchLogLine,
-        sizeof(switchLogLine),
-        "[KisakCOD][CG LOOP SOUND] stage=entry ent=%u type=%u loopSound=%u solid=0x%08x entityIndex=%u configStringIndex=%u\n",
-        static_cast<unsigned>(cent->nextState.number),
-        static_cast<unsigned>(cent->nextState.eType),
-        loopSound,
-        static_cast<unsigned>(cent->nextState.solid),
-        static_cast<unsigned>(cent->nextState.index.item),
-        configStringIndex);
-    Switch_LogWrite(switchLogLine);
 #endif
 
     // loopSound is an index into the sound-alias configstring bucket, not an
@@ -338,16 +327,6 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
         cent->nextState.eType);
     const unsigned int configStringHandle =
         CL_GetLocalClientGlobals(localClientNum)->configstrings[configStringIndex];
-    std::snprintf(
-        switchLogLine,
-        sizeof(switchLogLine),
-        "[KisakCOD][CG LOOP SOUND] stage=before_configstring ent=%u type=%u loopSound=%u configStringIndex=%u handle=0x%04x\n",
-        static_cast<unsigned>(cent->nextState.number),
-        static_cast<unsigned>(cent->nextState.eType),
-        loopSound,
-        configStringIndex,
-        configStringHandle);
-    Switch_LogWrite(switchLogLine);
 #endif
 
     ConfigString = CL_GetConfigString(localClientNum, configStringIndex);
@@ -358,16 +337,6 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
         loopSound,
         cent->nextState.number,
         cent->nextState.eType);
-    std::snprintf(
-        switchLogLine,
-        sizeof(switchLogLine),
-        "[KisakCOD][CG LOOP SOUND] stage=after_configstring ent=%u type=%u loopSound=%u configStringIndex=%u ptr=%p\n",
-        static_cast<unsigned>(cent->nextState.number),
-        static_cast<unsigned>(cent->nextState.eType),
-        loopSound,
-        configStringIndex,
-        static_cast<const void *>(ConfigString));
-    Switch_LogWrite(switchLogLine);
     Switch_SetCgEntityStage(
         "process_entity/loop_sound/before_alias_lookup",
         loopSound,
