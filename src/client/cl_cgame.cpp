@@ -26,6 +26,20 @@
 #include <server/sv_game.h>
 #include <qcommon/com_bsp.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+extern thread_local const char * volatile g_switchFrameStage;
+extern "C" {
+extern thread_local char g_switchCgFrameStage[192];
+}
+static void Switch_SetClientSoundAliasStage(const char *phase)
+{
+    std::snprintf(g_switchCgFrameStage, sizeof(g_switchCgFrameStage), "frame/cgame/sound_alias/%s", phase ? phase : "(null)");
+    g_switchFrameStage = g_switchCgFrameStage;
+}
+#endif
+
 char bigConfigString[8192];
 const float g_color_table[8][4]
 {
@@ -628,7 +642,20 @@ const char *__cdecl CL_GetConfigString(int localClientNum, unsigned int configSt
 // attributes: thunk
 snd_alias_t *__cdecl CL_PickSoundAlias(const char *aliasname)
 {
-    return Com_PickSoundAlias(aliasname);
+#ifdef __SWITCH__
+    char trace[192];
+    Switch_SetClientSoundAliasStage("cl_pick/entry");
+    std::snprintf(trace, sizeof(trace), "[KisakCOD][CL SOUND ALIAS] stage=entry aliasname=%p\n", static_cast<const void *>(aliasname));
+    Switch_LogWrite(trace);
+    Switch_SetClientSoundAliasStage("cl_pick/before_com_pick");
+#endif
+    snd_alias_t *alias = Com_PickSoundAlias(aliasname);
+#ifdef __SWITCH__
+    Switch_SetClientSoundAliasStage("cl_pick/after_com_pick");
+    std::snprintf(trace, sizeof(trace), "[KisakCOD][CL SOUND ALIAS] stage=after_com_pick alias=%p\n", static_cast<const void *>(alias));
+    Switch_LogWrite(trace);
+#endif
+    return alias;
 }
 
 void __cdecl CL_FinishLoadingModels()
