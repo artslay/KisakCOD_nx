@@ -330,41 +330,38 @@ void __cdecl G_ReduceOriginError(float *origin, float *originError, double maxCh
 
 void __cdecl G_ReduceAnglesError(float *angles, float *anglesError, double maxChange)
 {
-    float *v4; // r31
-    int v5; // r30
-    int v6; // r29
-    double v7; // fp0
-
-    v4 = anglesError;
-    v5 = (char *)angles - (char *)anglesError;
-    v6 = 3;
-    do
+    // The original 32-bit implementation derives an angles pointer by storing
+    // the difference between two pointers in an int. On 64-bit Switch that
+    // truncates the difference and produces an invalid destination address.
+    // Index both three-component arrays directly to preserve the original
+    // update order without relying on pointer-width assumptions.
+    for (int i = 0; i < 3; ++i)
     {
-        v7 = *v4;
-        if (v7 != 0.0)
+        const double error = anglesError[i];
+        if (error == 0.0)
+            continue;
+
+        if (error <= maxChange)
         {
-            if (v7 <= maxChange)
+            if (error >= -maxChange)
             {
-                if (v7 >= -maxChange)
-                {
-                    *(float *)((char *)v4 + v5) = *v4 + *(float *)((char *)v4 + v5);
-                    *v4 = 0.0;
-                }
-                else
-                {
-                    *v4 = *v4 + (float)maxChange;
-                    *(float *)((char *)v4 + v5) = AngleNormalize360((float)(*(float *)((char *)v4 + v5) - (float)maxChange));
-                }
+                angles[i] = anglesError[i] + angles[i];
+                anglesError[i] = 0.0f;
             }
             else
             {
-                *v4 = *v4 - (float)maxChange;
-                *(float *)((char *)v4 + v5) = AngleNormalize360((float)((float)maxChange + *(float *)((char *)v4 + v5)));
+                anglesError[i] = anglesError[i] + static_cast<float>(maxChange);
+                angles[i] = AngleNormalize360(
+                    static_cast<float>(angles[i] - static_cast<float>(maxChange)));
             }
         }
-        --v6;
-        ++v4;
-    } while (v6);
+        else
+        {
+            anglesError[i] = anglesError[i] - static_cast<float>(maxChange);
+            angles[i] = AngleNormalize360(
+                static_cast<float>(static_cast<float>(maxChange) + angles[i]));
+        }
+    }
 }
 
 void __cdecl G_AnimScripted_Think_DeathPlant(gentity_s *ent, XAnimTree_s *tree, float *origin, float *angles)
