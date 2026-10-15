@@ -383,28 +383,34 @@ VkPrimitiveTopology PrimitiveTopology(uint32_t value)
 
 uint32_t PrimitiveVertexCount(uint32_t primitiveType, uint32_t primitiveCount)
 {
+    // Reject counts whose derived vertex count would overflow before they reach
+    // Vk draw commands or the transient upload ring.
+    constexpr uint32_t maxCount = std::numeric_limits<uint32_t>::max();
     switch (primitiveType)
     {
     case 1: return primitiveCount;
-    case 2: return primitiveCount * 2u;
-    case 3: return primitiveCount + 1u;
-    case 4: return primitiveCount * 3u;
-    case 5: return primitiveCount + 2u;
-    case 6: return primitiveCount + 2u;
+    case 2: return primitiveCount <= maxCount / 2u ? primitiveCount * 2u : 0;
+    case 3: return primitiveCount < maxCount ? primitiveCount + 1u : 0;
+    case 4: return primitiveCount <= maxCount / 3u ? primitiveCount * 3u : 0;
+    case 5:
+    case 6: return primitiveCount <= maxCount - 2u ? primitiveCount + 2u : 0;
     default: return 0;
     }
 }
 
 uint32_t PrimitiveIndexCount(uint32_t primitiveType, uint32_t primitiveCount)
 {
+    // D3D/Vulkan triangle strips and fans use N+2 indices for N primitives.
+    // Triangle fans especially must not be treated as 3*N independent indices.
+    constexpr uint32_t maxCount = std::numeric_limits<uint32_t>::max();
     switch (primitiveType)
     {
     case 1: return primitiveCount;
-    case 2: return primitiveCount * 2u;
-    case 3: return primitiveCount + 1u;
-    case 4: return primitiveCount * 3u;
-    case 5: return primitiveCount + 2u;
-    case 6: return primitiveCount * 3u;
+    case 2: return primitiveCount <= maxCount / 2u ? primitiveCount * 2u : 0;
+    case 3: return primitiveCount < maxCount ? primitiveCount + 1u : 0;
+    case 4: return primitiveCount <= maxCount / 3u ? primitiveCount * 3u : 0;
+    case 5:
+    case 6: return primitiveCount <= maxCount - 2u ? primitiveCount + 2u : 0;
     default: return 0;
     }
 }
@@ -2496,7 +2502,7 @@ HRESULT SetFloatConstants(
     std::array<std::array<float,4>,N> &dst,
     uint32_t dest, const float *data, uint32_t count)
 {
-    if (!data || dest + count > N)
+    if (!data || dest > N || count > N - dest)
         return E_FAIL;
     std::memcpy(&dst[dest], data, static_cast<size_t>(count) * sizeof(dst[0]));
     return S_OK;
@@ -2507,7 +2513,7 @@ HRESULT SetIntConstants(
     std::array<std::array<int32_t,4>,N> &dst,
     uint32_t dest, const int32_t *data, uint32_t count)
 {
-    if (!data || dest + count > N)
+    if (!data || dest > N || count > N - dest)
         return E_FAIL;
     std::memcpy(&dst[dest], data, static_cast<size_t>(count) * sizeof(dst[0]));
     return S_OK;
@@ -2518,7 +2524,7 @@ HRESULT SetBoolConstants(
     std::array<int32_t,N> &dst,
     uint32_t dest, const int32_t *data, uint32_t count)
 {
-    if (!data || dest + count > N)
+    if (!data || dest > N || count > N - dest)
         return E_FAIL;
     std::memcpy(&dst[dest], data, static_cast<size_t>(count) * sizeof(dst[0]));
     return S_OK;
@@ -3864,16 +3870,24 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     uint32_t numVertices, uint32_t startIndex, uint32_t primitiveCount)
 {
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
-    if (!m_indices || !m_indices->buffer || !indexCount)
+    const uint64_t indexCapacity = m_indices
+        ? m_indices->size / sizeof(uint16_t) : 0;
+    const bool validIndexRange =
+        m_indices && m_indices->buffer && startIndex <= indexCapacity &&
+        indexCount <= indexCapacity - startIndex;
+    if (!m_indices || !m_indices->buffer || !indexCount || !validIndexRange)
     {
-        char msg[320];
+        char msg[384];
         std::snprintf(
             msg, sizeof(msg),
-            "[KisakCOD][VK DRAW] fail=indices self=%p prim=%u count=%u indexCount=%u indices=%p hasBuffer=%u vertices=%u start=%u base=%d backend=%u frame=%u\n",
+            "[KisakCOD][VK DRAW] fail=indices self=%p prim=%u count=%u indexCount=%u indices=%p hasBuffer=%u indexBytes=%u indexCapacity=%llu validRange=%u vertices=%u start=%u base=%d backend=%u frame=%u\n",
             static_cast<void *>(this),
             primitiveType, primitiveCount, indexCount,
             static_cast<void *>(m_indices),
             m_indices && m_indices->buffer ? 1u : 0u,
+            m_indices ? m_indices->size : 0u,
+            static_cast<unsigned long long>(indexCapacity),
+            validIndexRange ? 1u : 0u,
             numVertices, startIndex, baseVertexIndex,
             m_backend ? 1u : 0u,
             m_backend && m_backend->IsFrameActive() ? 1u : 0u);
