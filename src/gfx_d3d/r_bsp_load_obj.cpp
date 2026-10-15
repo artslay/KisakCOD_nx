@@ -53,7 +53,7 @@ static void R_SwitchLogBadAabbIndexPointer(const char *stage, const GfxAabbTree 
     {
         char message[256];
         std::snprintf(message, sizeof(message),
-            "[KisakCOD][AABB INDEX FAULT] stage=%s invalidTree=%p\\n",
+            "[KisakCOD][AABB INDEX FAULT] stage=%s invalidTree=%p\n",
             stage, static_cast<const void *>(tree));
         Switch_LogWrite(message);
         return;
@@ -64,7 +64,7 @@ static void R_SwitchLogBadAabbIndexPointer(const char *stage, const GfxAabbTree 
     {
         char message[384];
         std::snprintf(message, sizeof(message),
-            "[KisakCOD][AABB INDEX FAULT] stage=%s tree=%p indices=%p count=%u childCount=%u childOffset=%d surfaces=%u start=%u models=%u\\n",
+            "[KisakCOD][AABB INDEX FAULT] stage=%s tree=%p indices=%p count=%u childCount=%u childOffset=%d surfaces=%u start=%u models=%u\n",
             stage,
             static_cast<const void *>(tree),
             static_cast<const void *>(tree->smodelIndexes),
