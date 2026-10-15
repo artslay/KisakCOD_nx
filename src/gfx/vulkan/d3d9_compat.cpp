@@ -2992,6 +2992,12 @@ bool IDirect3DDevice9::PrepareDraw()
         ? m_depth->texture->view : m_backend->DefaultDepthView();
     VkFormat depthFormat = m_depth && m_depth->texture
         ? m_depth->texture->format : m_backend->DepthFormat();
+    const VkImageAspectFlags depthAspect = m_depth && m_depth->texture
+        ? GetTextureFormat(m_depth->texture->sourceFormat).aspect
+        : ((depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+            depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
+            ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
+            : VK_IMAGE_ASPECT_DEPTH_BIT);
 
     const VkImageLayout colorOldLayout =
         m_color && m_color->texture            ? m_color->texture->layout
@@ -3012,7 +3018,7 @@ bool IDirect3DDevice9::PrepareDraw()
 
     if (!m_backend->EnsureRendering(
             colorImage, colorView, colorFormat,
-            depthImage, depthView, depthFormat,
+            depthImage, depthView, depthFormat, depthAspect,
             colorOldLayout, depthOldLayout,
             targetWidth, targetHeight))
     {
@@ -3296,6 +3302,14 @@ HRESULT IDirect3DDevice9::Clear(
         ? m_color->texture->width : backBufferWidth;
     const uint32_t targetHeight = m_color && m_color->texture
         ? m_color->texture->height : backBufferHeight;
+    const VkFormat depthFormat = m_depth && m_depth->texture
+        ? m_depth->texture->format : m_backend->DepthFormat();
+    const VkImageAspectFlags depthAspect = m_depth && m_depth->texture
+        ? GetTextureFormat(m_depth->texture->sourceFormat).aspect
+        : ((depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+            depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
+            ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
+            : VK_IMAGE_ASPECT_DEPTH_BIT);
 
     if (m_backend->EnsureRendering(
             m_color && m_color->texture ? m_color->texture->image : m_backend->CurrentSwapchainImage(),
@@ -3303,7 +3317,7 @@ HRESULT IDirect3DDevice9::Clear(
             m_color && m_color->texture ? m_color->texture->format : m_backend->SwapchainFormat(),
             m_depth && m_depth->texture ? m_depth->texture->image : m_backend->DefaultDepthImage(),
             m_depth && m_depth->texture ? m_depth->texture->view : m_backend->DefaultDepthView(),
-            m_depth && m_depth->texture ? m_depth->texture->format : m_backend->DepthFormat(),
+            depthFormat, depthAspect,
             m_color && m_color->texture ? m_color->texture->layout : m_backend->CurrentSwapchainLayout(),
             m_depth && m_depth->texture ? m_depth->texture->layout : m_backend->DefaultDepthLayout(),
             targetWidth, targetHeight))
@@ -3320,13 +3334,7 @@ HRESULT IDirect3DDevice9::Clear(
         return E_FAIL;
     }
 
-    const VkFormat depthFormat = m_depth && m_depth->texture
-        ? m_depth->texture->format : m_backend->DepthFormat();
-    const bool hasStencil = m_depth && m_depth->texture
-        ? (GetTextureFormat(m_depth->texture->sourceFormat).aspect &
-           VK_IMAGE_ASPECT_STENCIL_BIT) != 0
-        : (depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
-           depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT);
+    const bool hasStencil = (depthAspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
 
     std::array<VkClearAttachment,3> attachments{};
     uint32_t count = 0;

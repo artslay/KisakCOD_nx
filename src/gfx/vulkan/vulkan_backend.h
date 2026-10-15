@@ -185,6 +185,7 @@ public:
         VkImage depthImage,
         VkImageView depthView,
         VkFormat depthFormat,
+        VkImageAspectFlags depthAspect,
         VkImageLayout colorOldLayout,
         VkImageLayout depthOldLayout,
         uint32_t width,

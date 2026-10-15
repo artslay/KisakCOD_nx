@@ -1179,6 +1179,7 @@ void VulkanBackend::Clear(float r, float g, float b, float a)
             VK_NULL_HANDLE,
             VK_NULL_HANDLE,
             VK_FORMAT_UNDEFINED,
+            0,
             colorLayout,
             VK_IMAGE_LAYOUT_UNDEFINED,
             width,
@@ -2318,6 +2319,7 @@ void VulkanBackend::ClearPresentSource()
 bool VulkanBackend::EnsureRendering(
     VkImage colorImage, VkImageView colorView, VkFormat colorFormat,
     VkImage depthImage, VkImageView depthView, VkFormat depthFormat,
+    VkImageAspectFlags depthAspect,
     VkImageLayout colorOldLayout, VkImageLayout depthOldLayout,
     uint32_t width, uint32_t height)
 {
@@ -2390,7 +2392,15 @@ bool VulkanBackend::EnsureRendering(
     rendering.colorAttachmentCount = 1;
     rendering.pColorAttachments = &color;
     if (depthView)
+    {
         rendering.pDepthAttachment = &depth;
+        // Dynamic rendering requires a separate stencil attachment declaration
+        // when the depth image view exposes a stencil aspect. Reuse the same
+        // attachment state so depth/stencil load, store, and clear operations
+        // stay synchronized for packed depth-stencil formats.
+        if (depthAspect & VK_IMAGE_ASPECT_STENCIL_BIT)
+            rendering.pStencilAttachment = &depth;
+    }
 
     vkCmdBeginRendering(m_commandBuffer, &rendering);
     m_renderingActive = true;
