@@ -245,11 +245,15 @@ bool R_VulkanAllocTexture(
     bool created = false;
     if (kind == VulkanTextureKind::Cube)
     {
-        created = !info.depth && !info.compressed
-            ? backend->CreateImageCube(width, height, levels, info.format, usage,
-                                       &texture->image, &texture->memory, &texture->view)
-            : backend->CreateImageCube(width, height, levels, info.format, usage,
-                                       &texture->image, &texture->memory, &texture->view);
+        // Cubemap sampling needs the same D3D9 channel swizzles as 2D and 3D
+        // images (notably A8/L8/A8L8 and X8R8G8B8). Depth cubemaps are not a
+        // valid color-view use in this renderer; compressed BC cubemaps are.
+        if (info.depth)
+            return false;
+        const VkComponentMapping components = R_VulkanComponentMapping(sourceFormat);
+        created = backend->CreateImageCube(
+            width, height, levels, info.format, usage,
+            &texture->image, &texture->memory, &texture->view, components);
     }
     else if (kind == VulkanTextureKind::Texture3D)
     {
