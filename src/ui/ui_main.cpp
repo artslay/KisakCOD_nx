@@ -1741,13 +1741,15 @@ bool __cdecl UI_AllowScriptMenuResponse(int localClientNum)
 void UI_PlayerStart()
 {
 #ifdef __SWITCH__
-    if (!I_stricmp(g_mapname, "simplecredits"))
+    if (!I_stricmp(g_mapname, "simplecredits") ||
+        (clientUIActives[0].connectionState == CA_ACTIVE &&
+         g_currentMenuType == UIMENU_PREGAME))
     {
         char trace[256];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CREDITS UI] UI_PlayerStart entered activeMenu=%d finished=%d started=%d pending=%d skip=%d fullscreen=%d catcher=0x%08x\n",
+            "[KisakCOD][PREGAME UI] UI_PlayerStart entered activeMenu=%d finished=%d started=%d pending=%d skip=%d fullscreen=%d catcher=0x%08x\n",
             static_cast<int>(g_currentMenuType),
             R_Cinematic_IsFinished(),
             R_Cinematic_IsStarted(),
@@ -1808,9 +1810,11 @@ void __cdecl UI_Refresh()
 {
 #ifdef __SWITCH__
     g_switchFrameStage = "ui/refresh/entry";
-    // Diagnostic only: report the original pregame/cinematic gate specifically
-    // for simplecredits; do not alter the gate or menu transition.
-    if (!I_stricmp(g_mapname, "simplecredits"))
+    // Diagnostic only: report the pregame/cinematic transition for simplecredits
+    // and for an active map still stuck behind the pregame menu.
+    if (!I_stricmp(g_mapname, "simplecredits") ||
+        (clientUIActives[0].connectionState == CA_ACTIVE &&
+         g_currentMenuType == UIMENU_PREGAME))
     {
         static uint32_t switchCreditsUiTraceCount = 0;
         static uint32_t switchCreditsUiActiveTraceCount = 0;
@@ -1828,7 +1832,7 @@ void __cdecl UI_Refresh()
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][CREDITS UI] refresh=%u activeMenu=%d connection=%d visible=%d fullscreen=%d finished=%d started=%d pending=%d catcher=0x%08x skip=%d menus=%d top=%s\n",
+                "[KisakCOD][PREGAME UI] refresh=%u activeMenu=%d connection=%d visible=%d fullscreen=%d finished=%d started=%d pending=%d catcher=0x%08x skip=%d menus=%d top=%s\n",
                 switchCreditsUiTraceCount,
                 static_cast<int>(g_currentMenuType),
                 static_cast<int>(clientUIActives[0].connectionState),
@@ -2856,7 +2860,7 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][CREDITS UI] set_pregame autoContinue=%d finished=%d started=%d pending=%d skip=%d\n",
+                "[KisakCOD][PREGAME UI] set_pregame autoContinue=%d finished=%d started=%d pending=%d skip=%d\n",
                 UI_AutoContinue(),
                 R_Cinematic_IsFinished(),
                 R_Cinematic_IsStarted(),
