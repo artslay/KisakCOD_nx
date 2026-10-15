@@ -643,7 +643,6 @@ const char *__cdecl CL_GetConfigString(int localClientNum, unsigned int configSt
 snd_alias_t *__cdecl CL_PickSoundAlias(const char *aliasname)
 {
 #ifdef __SWITCH__
-    Switch_SetClientSoundAliasStage("cl_pick/entry");
     Switch_SetClientSoundAliasStage("cl_pick/before_com_pick");
 #endif
     snd_alias_t *alias = Com_PickSoundAlias(aliasname);
