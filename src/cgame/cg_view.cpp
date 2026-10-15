@@ -1522,7 +1522,7 @@ void __cdecl CG_CalcViewValues(int localClientNum)
         char trace[512];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VIEW ORIGIN] call=%u predicted=%.2f,%.2f,%.2f view=%.2f,%.2f,%.2f height=%.2f pm=%d snapshot=%p snapOrigin=%.2f,%.2f,%.2f snapPm=%d teleported=%d time=%d\\n",
+            "[KisakCOD][VIEW ORIGIN] call=%u predicted=%.2f,%.2f,%.2f view=%.2f,%.2f,%.2f height=%.2f pm=%d snapshot=%p snapOrigin=%.2f,%.2f,%.2f snapPm=%d teleported=%d time=%d\n",
             switchViewOriginTraceCount,
             cgameGlob->predictedPlayerState.origin[0],
             cgameGlob->predictedPlayerState.origin[1],
