@@ -2846,6 +2846,11 @@ bool VulkanBackend::QueueBufferUpdate(
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
         0, 0, nullptr, 1, &afterCopy, 0, nullptr);
+
+    static std::atomic<bool> loggedQueuedBufferUpdate{false};
+    if (!loggedQueuedBufferUpdate.exchange(true, std::memory_order_relaxed))
+        Switch_LogWrite(
+            "[KisakCOD][VK BUFFER UPDATE] dynamic buffer copies queued without per-unlock GPU waits\n");
     return true;
 }
 
