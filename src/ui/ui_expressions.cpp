@@ -2663,7 +2663,8 @@ Operand *__cdecl EvaluateExpression(int localClientNum, const statement_s *state
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/ui/expression/operand";
             if (v4->data.operand.dataType == VAL_STRING &&
-                Switch_UIExpressionBadPointer(v4->data.operand.internals.string))
+                (!v4->data.operand.internals.string ||
+                 Switch_UIExpressionBadPointer(v4->data.operand.internals.string)))
             {
                 static bool switchInvalidStringLogged = false;
                 if (!switchInvalidStringLogged)
