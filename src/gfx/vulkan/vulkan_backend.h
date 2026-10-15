@@ -24,10 +24,6 @@ public:
     bool TestCooperativeLevel() override { return IsInitialized() && !IsDeviceLost(); }
     bool RecoverLostDevice() override;
     bool IsDeviceLost() const override;
-    bool CreateWindow(GfxWindowParms *) override { return true; }
-    void DestroyWindow() override {}
-
-
     bool BeginFrame();
     bool EndFrame();
     void Present() override;
@@ -35,34 +31,6 @@ public:
     void EndScene() override;
     void Clear(float r, float g, float b, float a) override;
 
-    void DrawPrimitive(uint32_t, uint32_t, uint32_t) override {}
-    void DrawIndexedPrimitive(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t) override {}
-    void *CreateVertexBuffer(uint32_t, uint32_t) override { return nullptr; }
-    void *CreateIndexBuffer(uint32_t, uint32_t) override { return nullptr; }
-    void ReleaseVertexBuffer(void *) override {}
-    void ReleaseIndexBuffer(void *) override {}
-    void *LockVertexBuffer(void *, uint32_t) override { return nullptr; }
-    void UnlockVertexBuffer(void *) override {}
-    void *LockIndexBuffer(void *, uint32_t) override { return nullptr; }
-    void UnlockIndexBuffer(void *) override {}
-    void *CreateTexture(uint32_t, uint32_t, uint32_t) override { return nullptr; }
-    void ReleaseTexture(void *) override {}
-    void SetTexture(uint32_t, void *) override {}
-    void *CreateRenderTarget(uint32_t, uint32_t, uint32_t) override { return nullptr; }
-    void ReleaseRenderTarget(void *) override {}
-    void SetRenderTarget(uint32_t, void *) override {}
-    void *GetRenderTarget(uint32_t) override { return nullptr; }
-    void *CreateVertexShader(const void *, uint32_t) override { return nullptr; }
-    void *CreatePixelShader(const void *, uint32_t) override { return nullptr; }
-    void ReleaseShader(void *) override {}
-    void SetVertexShader(void *) override {}
-    void SetPixelShader(void *) override {}
-    void SetViewport(uint32_t x, uint32_t y, uint32_t width, uint32_t height) override
-    { (void)x; (void)y; (void)width; (void)height; }
-    void SetScissorRect(uint32_t, uint32_t, uint32_t, uint32_t) override {}
-    void SetBlendState(uint32_t, uint32_t) override {}
-    void SetDepthState(bool, bool) override {}
-    void SetCullMode(uint32_t) override {}
     void *CreateQuery(uint32_t queryType) override;
     void ReleaseQuery(void *query) override;
     void BeginQuery(void *query) override;

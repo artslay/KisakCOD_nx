@@ -235,8 +235,21 @@ char R_SetupRendertarget_CheckDevice(HWND__ *) { return 1; }
 bool R_IsRegisteredRenderWindow(HWND__ *) { return s_registered; }
 void R_CheckTargetWindow(HWND__ *) {}
 void R_SortMaterials() { Material_Sort(); }
-void R_Hwnd_Resize(HWND__ *, int width, int height) {
-    if (g_gfxBackend) g_gfxBackend->SetViewport(0, 0, width, height);
+void R_Hwnd_Resize(HWND__ *, int width, int height)
+{
+    // The renderer submits draws through the D3D9 compatibility device, not
+    // through IGfxBackend. Update the device viewport used by Vulkan draw setup.
+    if (!dx.device || width <= 0 || height <= 0)
+        return;
+
+    D3DVIEWPORT9 viewport{};
+    viewport.X = 0;
+    viewport.Y = 0;
+    viewport.Width = static_cast<uint32_t>(width);
+    viewport.Height = static_cast<uint32_t>(height);
+    viewport.MinZ = 0.0f;
+    viewport.MaxZ = 1.0f;
+    (void)dx.device->SetViewport(&viewport);
 }
 
 static void R_LoadGraphicsAssets()
