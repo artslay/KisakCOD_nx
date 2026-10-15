@@ -20,7 +20,6 @@ std::mutex g_pendingBinkUploadMutex;
 BINKTEXTURESET *g_pendingBinkUploadSet = nullptr;
 int g_pendingBinkUploadFrame = -1;
 std::atomic<unsigned> g_binkUploadFailureLogs{0};
-std::atomic<unsigned> g_binkUploadSuccessLogs{0};
 
 void LogBinkUploadFailure(
     const char *reason,
@@ -298,30 +297,6 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
         uploadedTextures[i]->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 
-    const unsigned traceId =
-        g_binkUploadSuccessLogs.fetch_add(1, std::memory_order_relaxed);
-    if (traceId < 12u || (traceId % 60u) == 0u)
-    {
-        char trace[512];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][CINEMATIC UPLOAD OK] n=%u movieFrame=%u/%u selected=%d uploaded=%u sizeY=%ux%u sizeC=%ux%u images=%p/%p/%p/%p\n",
-            traceId,
-            movieFrame,
-            movieFrames,
-            frameIndex,
-            uploadCount,
-            buffers.YABufferWidth,
-            buffers.YABufferHeight,
-            buffers.cRcBBufferWidth,
-            buffers.cRcBBufferHeight,
-            reinterpret_cast<void *>(draw.Ytexture ? draw.Ytexture->image : VK_NULL_HANDLE),
-            reinterpret_cast<void *>(draw.cRtexture ? draw.cRtexture->image : VK_NULL_HANDLE),
-            reinterpret_cast<void *>(draw.cBtexture ? draw.cBtexture->image : VK_NULL_HANDLE),
-            reinterpret_cast<void *>(draw.Atexture ? draw.Atexture->image : VK_NULL_HANDLE));
-        Switch_LogWrite(trace);
-    }
 }
 
 #endif
