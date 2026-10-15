@@ -113,6 +113,7 @@ extern volatile int32_t g_switchSkinCacheCreateCalled;
 extern volatile int32_t g_switchSkinCacheCreateHr;
 }
 extern thread_local const char * volatile g_switchFrameStage;
+extern "C" thread_local char g_switchCgFrameStage[192];
 extern "C" thread_local const char * volatile g_switchScriptLoadStage;
 extern "C" thread_local char g_switchScriptLoadName[128];
 extern "C" thread_local volatile uintptr_t g_switchStaticModelIndex;
@@ -240,6 +241,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         sizeof(line),
         "[KisakCOD][CRASH] thread_context=%u (%s) stage=%s\n"
         "[KisakCOD][CRASH] frame_stage=%s tail_reached=%llu after_draw=%llu\n"
+        "[KisakCOD][CRASH] cgame_stage=%s\n"
         "[KisakCOD][CRASH] draw_field=%p caller=%p\n",
         threadContext,
         threadName,
@@ -247,6 +249,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         g_switchFrameStage ? g_switchFrameStage : "(null)",
         static_cast<unsigned long long>(g_switchFrameTailReached),
         static_cast<unsigned long long>(g_switchFrameAfterDrawReached),
+        g_switchCgFrameStage[0] ? g_switchCgFrameStage : "(unset)",
         reinterpret_cast<void *>(g_switchFrameDrawFieldAddress),
         reinterpret_cast<void *>(g_switchFrameDrawFieldCaller));
     Switch_LogCrashLine(line);

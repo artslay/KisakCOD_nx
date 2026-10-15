@@ -26,22 +26,29 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern thread_local const char * volatile g_switchFrameStage;
-static thread_local char g_switchCgEntityStage[192];
+extern "C" {
+thread_local char g_switchCgFrameStage[192] = {};
+}
 static void Switch_SetCgEntityStage(const char *phase, uint32_t index, uint32_t entnum, uint32_t eType)
 {
     std::snprintf(
-        g_switchCgEntityStage,
-        sizeof(g_switchCgEntityStage),
+        g_switchCgFrameStage,
+        sizeof(g_switchCgFrameStage),
         "frame/cgame/%s/index=%u/ent=%u/type=%u",
         phase,
         index,
         entnum,
         eType);
-    g_switchFrameStage = g_switchCgEntityStage;
+    g_switchFrameStage = g_switchCgFrameStage;
 }
 static void Switch_SetCgFrameStage(const char *phase)
 {
-    g_switchFrameStage = phase;
+    std::snprintf(
+        g_switchCgFrameStage,
+        sizeof(g_switchCgFrameStage),
+        "%s",
+        phase ? phase : "(null)");
+    g_switchFrameStage = g_switchCgFrameStage;
 }
 #endif
 
