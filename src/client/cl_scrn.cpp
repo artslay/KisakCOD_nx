@@ -425,6 +425,11 @@ LABEL_15:;
         }
         g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_tail";
         SCR_DrawCinematic(0);
+        if (clientUIActives[0].connectionState == CA_LOADING)
+        {
+            g_switchFrameStage = "frame/scr/draw_field/loading_progress_overlay";
+            Menu_PaintLoadingBarOverlay(&uiInfo.uiDC);
+        }
     }
     g_switchFrameTailReached = 1;
 #endif
