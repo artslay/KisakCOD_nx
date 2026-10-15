@@ -3264,7 +3264,7 @@ HRESULT IDirect3DDevice9::UpdateTexture(
 
 HRESULT IDirect3DDevice9::TestCooperativeLevel()
 {
-    return (m_backend && m_backend->IsInitialized()) ? S_OK : E_FAIL;
+    return (m_backend && m_backend->TestCooperativeLevel()) ? S_OK : E_FAIL;
 }
 
 HRESULT IDirect3DDevice9::Clear(
