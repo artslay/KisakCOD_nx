@@ -138,7 +138,7 @@ void __cdecl SV_BuildClientSnapshot(client_t *client)
                 client->gentity && client->gentity->client
                     ? &client->gentity->client->ps : nullptr;
             Com_Printf(CON_CHANNEL_SERVER,
-                "[KisakCOD][SNAPSHOT SERVER] n=%u gameClients=%p entityPs=%p game=(%.2f,%.2f,%.2f) entity=(%.2f,%.2f,%.2f) pm=%d cmd=%d\n"
+                "[KisakCOD][SNAPSHOT SERVER] n=%u gameClients=%p entityPs=%p game=(%.2f,%.2f,%.2f) entity=(%.2f,%.2f,%.2f) pm=%d cmd=%d\n",
                 switchSnapshotTraceCount,
                 static_cast<void *>(v2),
                 static_cast<const void *>(entityPs),
