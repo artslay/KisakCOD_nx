@@ -286,6 +286,8 @@ struct KisakVkTexture : IDirect3DResource9 {
     HRESULT UnlockRect(uint32_t level);
     HRESULT LockBox(uint32_t level, _D3DLOCKED_BOX *lockedBox, const _D3DBOX*, uint32_t);
     HRESULT UnlockBox(uint32_t level);
+    HRESULT AddDirtyRect(const tagRECT *rect);
+    HRESULT AddDirtyRect(uint32_t face, const tagRECT *rect);
     HRESULT AddDirtyBox(const _D3DBOX *box);
     uint32_t Release() override;
 };

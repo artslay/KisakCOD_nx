@@ -1250,6 +1250,14 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
         SetSubresourceLayout(level, 0, finalLayout);
         layout = finalLayout;
     }
+    if (!(lockFlags & (D3DLOCK_READONLY | D3DLOCK_NO_DIRTY_UPDATE)))
+    {
+        // For 2D textures and cube maps, conservatively mark the whole image
+        // dirty. UpdateTexture copies the corresponding complete subresource
+        // set, avoiding a separate per-face/mip dirty-rect representation here.
+        dirtyAll = true;
+        dirtyBoxes.clear();
+    }
     lockShadowActive=false; lockLevel=0xffffffffu; lockFlags=0;
     lockWasUndefined=false; lockOriginalLayout=VK_IMAGE_LAYOUT_UNDEFINED;
     return S_OK;
@@ -1371,35 +1379,6 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
     }
     if (!(lockFlags & (D3DLOCK_READONLY | D3DLOCK_NO_DIRTY_UPDATE)))
     {
-        // UnlockBox automatically marks the written volume region dirty unless
-        // the caller explicitly opts out. D3D9 dirty coordinates are expressed
-        // in base-level texels, even when this lock addressed a lower mip.
-        const uint32_t levelWidth = std::max(1u, width >> lockLevel);
-        const uint32_t levelHeight = std::max(1u, height >> lockLevel);
-        const uint32_t levelDepth = std::max(1u, depth >> lockLevel);
-        const uint64_t scale = uint64_t{1} << std::min(lockLevel, 31u);
-        _D3DBOX dirty{};
-        dirty.Left = static_cast<uint32_t>(std::min<uint64_t>(
-            width, static_cast<uint64_t>(lockLeft) * scale));
-        dirty.Top = static_cast<uint32_t>(std::min<uint64_t>(
-            height, static_cast<uint64_t>(lockTop) * scale));
-        dirty.Front = static_cast<uint32_t>(std::min<uint64_t>(
-            depth, static_cast<uint64_t>(lockFront) * scale));
-        dirty.Right = lockRight == levelWidth ? width :
-            static_cast<uint32_t>(std::min<uint64_t>(
-                width, static_cast<uint64_t>(lockRight) * scale));
-        dirty.Bottom = lockBottom == levelHeight ? height :
-            static_cast<uint32_t>(std::min<uint64_t>(
-                height, static_cast<uint64_t>(lockBottom) * scale));
-        dirty.Back = lockBack == levelDepth ? depth :
-            static_cast<uint32_t>(std::min<uint64_t>(
-                depth, static_cast<uint64_t>(lockBack) * scale));
-        if (AddDirtyBox(&dirty) != S_OK)
-            return E_FAIL;
-    }
-
-    if (!(lockFlags & (D3DLOCK_READONLY | D3DLOCK_NO_DIRTY_UPDATE)))
-    {
         // Writable UnlockBox automatically dirties the locked region unless
         // D3DLOCK_NO_DIRTY_UPDATE was requested. Store coordinates in the
         // base-level volume space, as required by D3D9.
@@ -1429,6 +1408,40 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
 
     lockShadowActive=false; lockLevel=0xffffffffu; lockFlags=0; lockIsVolume=false;
     lockWasUndefined=false; lockOriginalLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+    return S_OK;
+}
+
+HRESULT KisakVkTexture::AddDirtyRect(const tagRECT *rect)
+{
+    if (depth != 1 || arrayLayers != 1 || !width || !height || !mipLevels)
+        return E_FAIL;
+    if (rect &&
+        (rect->left < 0 || rect->top < 0 ||
+         rect->right <= rect->left || rect->bottom <= rect->top ||
+         rect->right > static_cast<int32_t>(width) ||
+         rect->bottom > static_cast<int32_t>(height)))
+        return E_FAIL;
+    // Valid partial rectangles are promoted to whole-texture dirty state so
+    // UpdateTexture never misses changed texels in a different mip.
+    dirtyAll = true;
+    dirtyBoxes.clear();
+    return S_OK;
+}
+
+HRESULT KisakVkTexture::AddDirtyRect(uint32_t face, const tagRECT *rect)
+{
+    if (arrayLayers != 6 || depth != 1 || face >= 6 ||
+        !width || !height || !mipLevels)
+        return E_FAIL;
+    if (rect &&
+        (rect->left < 0 || rect->top < 0 ||
+         rect->right <= rect->left || rect->bottom <= rect->top ||
+         rect->right > static_cast<int32_t>(width) ||
+         rect->bottom > static_cast<int32_t>(height)))
+        return E_FAIL;
+    // Dirtying any face conservatively dirties the whole cube.
+    dirtyAll = true;
+    dirtyBoxes.clear();
     return S_OK;
 }
 
@@ -3708,16 +3721,119 @@ HRESULT IDirect3DDevice9::UpdateTexture(
     if (!m_backend || !source || !destination || source == destination ||
         source->image == VK_NULL_HANDLE || destination->image == VK_NULL_HANDLE)
         return E_FAIL;
-    if (source->depth <= 1 || destination->depth <= 1 ||
-        source->arrayLayers != 1 || destination->arrayLayers != 1 ||
-        source->format != destination->format ||
-        source->width != destination->width ||
+    if (source->width != destination->width ||
         source->height != destination->height ||
         source->depth != destination->depth ||
         source->mipLevels != destination->mipLevels ||
+        source->arrayLayers != destination->arrayLayers ||
+        source->sourceFormat != destination->sourceFormat ||
+        source->format != destination->format ||
+        source->samples != VK_SAMPLE_COUNT_1_BIT ||
+        destination->samples != VK_SAMPLE_COUNT_1_BIT ||
         source->lockShadowActive || destination->lockShadowActive)
         return E_FAIL;
 
+    const TextureFormatInfo formatInfo = GetTextureFormat(source->sourceFormat);
+    if (formatInfo.format == VK_FORMAT_UNDEFINED || formatInfo.depth)
+        return E_FAIL;
+
+    // The wrapper represents 2D, cube, and volume D3D9 textures. The previous
+    // implementation rejected depth-one resources and therefore excluded every
+    // ordinary 2D image and cube map from UpdateTexture.
+    if (source->depth == 1)
+    {
+        if (source->arrayLayers != 1 && source->arrayLayers != 6)
+            return E_FAIL;
+        if (!source->dirtyAll)
+            return S_OK;
+
+        const uint32_t mipCount = source->mipLevels;
+        if (mipCount == 0)
+            return E_FAIL;
+        const uint32_t layers = source->arrayLayers;
+        const size_t subresourceCount = static_cast<size_t>(layers) * mipCount;
+        std::vector<VkImageLayout> sourceLayouts(subresourceCount);
+        std::vector<VkImageLayout> destinationLayouts(subresourceCount);
+        for (uint32_t layer = 0; layer < layers; ++layer)
+            for (uint32_t level = 0; level < mipCount; ++level)
+            {
+                const size_t index = static_cast<size_t>(layer) * mipCount + level;
+                sourceLayouts[index] = source->GetSubresourceLayout(level, layer);
+                destinationLayouts[index] = destination->GetSubresourceLayout(level, layer);
+                if (sourceLayouts[index] == VK_IMAGE_LAYOUT_UNDEFINED)
+                    return E_FAIL;
+            }
+
+        const VkImageLayout sourceOverallLayout = source->layout;
+        const bool recordInCurrentFrame = m_backend->IsFrameActive();
+        m_backend->EndRendering();
+        const auto recordCopy = [&](VkCommandBuffer commandBuffer)
+        {
+            for (uint32_t layer = 0; layer < layers; ++layer)
+                for (uint32_t level = 0; level < mipCount; ++level)
+                {
+                    const size_t index = static_cast<size_t>(layer) * mipCount + level;
+                    VkImageSubresourceRange range{};
+                    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    range.baseMipLevel = level;
+                    range.levelCount = 1;
+                    range.baseArrayLayer = layer;
+                    range.layerCount = 1;
+                    m_backend->TransitionImage(
+                        source->image, sourceLayouts[index],
+                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        VK_IMAGE_ASPECT_COLOR_BIT, range, commandBuffer);
+                    m_backend->TransitionImage(
+                        destination->image, destinationLayouts[index],
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_IMAGE_ASPECT_COLOR_BIT, range, commandBuffer);
+
+                    VkImageCopy copy{};
+                    copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    copy.srcSubresource.mipLevel = level;
+                    copy.srcSubresource.baseArrayLayer = layer;
+                    copy.srcSubresource.layerCount = 1;
+                    copy.dstSubresource = copy.srcSubresource;
+                    copy.extent = {
+                        std::max(1u, source->width >> level),
+                        std::max(1u, source->height >> level), 1
+                    };
+                    vkCmdCopyImage(
+                        commandBuffer,
+                        source->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        destination->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        1, &copy);
+
+                    m_backend->TransitionImage(
+                        source->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        sourceLayouts[index], VK_IMAGE_ASPECT_COLOR_BIT, range, commandBuffer);
+                    m_backend->TransitionImage(
+                        destination->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        VK_IMAGE_ASPECT_COLOR_BIT, range, commandBuffer);
+                }
+        };
+        if (recordInCurrentFrame)
+            recordCopy(m_backend->CommandBuffer());
+        else if (!m_backend->ImmediateSubmit(recordCopy))
+            return E_FAIL;
+
+        for (uint32_t layer = 0; layer < layers; ++layer)
+            for (uint32_t level = 0; level < mipCount; ++level)
+            {
+                const size_t index = static_cast<size_t>(layer) * mipCount + level;
+                source->SetSubresourceLayout(level, layer, sourceLayouts[index]);
+                destination->SetSubresourceLayout(
+                    level, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            }
+        source->layout = sourceOverallLayout;
+        source->dirtyAll = false;
+        source->dirtyBoxes.clear();
+        return S_OK;
+    }
+
+    if (source->arrayLayers != 1)
+        return E_FAIL;
     const uint32_t mipCount = source->mipLevels;
     if (mipCount == 0)
         return E_FAIL;
@@ -3729,11 +3845,6 @@ HRESULT IDirect3DDevice9::UpdateTexture(
         dirty = source->dirtyBoxes;
     if (dirty.empty())
         return S_OK;
-
-    const TextureFormatInfo formatInfo = GetTextureFormat(source->sourceFormat);
-    if (formatInfo.format == VK_FORMAT_UNDEFINED || formatInfo.depth ||
-        destination->sourceFormat != source->sourceFormat)
-        return E_FAIL;
 
     std::vector<_D3DBOX> mipRegions(mipCount);
     std::vector<bool> levelUsed(mipCount, false);
