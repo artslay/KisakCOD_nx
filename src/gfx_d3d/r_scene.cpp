@@ -1494,7 +1494,7 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
                     std::snprintf(
                         cellTrace,
                         sizeof(cellTrace),
-                        "[KisakCOD][DPVS CELL] cell=%u bounds=%.1f,%.1f,%.1f:%.1f,%.1f,%.1f\\n",
+                        "[KisakCOD][DPVS CELL] cell=%u bounds=%.1f,%.1f,%.1f:%.1f,%.1f,%.1f\n",
                         cellIndex,
                         cell.mins[0], cell.mins[1], cell.mins[2],
                         cell.maxs[0], cell.maxs[1], cell.maxs[2]);
