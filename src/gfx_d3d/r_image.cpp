@@ -1975,9 +1975,10 @@ void R_ReleaseVulkanImageForDeviceLoss(GfxImage *image)
         {
             for (uint32_t platform = 0; platform < 2; ++platform)
             {
-                const uint32_t bytes = image->cardMemory.platform[platform];
-                uint32_t &total = imageGlobals.totalMemory.platform[platform];
-                total = total >= bytes ? total - bytes : 0;
+                const int bytes = image->cardMemory.platform[platform];
+                int &total = imageGlobals.totalMemory.platform[platform];
+                if (bytes > 0)
+                    total = total >= bytes ? total - bytes : 0;
             }
         }
         image->cardMemory.platform[0] = 0;
