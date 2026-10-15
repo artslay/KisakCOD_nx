@@ -204,6 +204,8 @@ struct KisakVkBuffer : IDirect3DResource9 {
     std::vector<uint8_t> shadow;
     bool dynamic=false;
     uint32_t size=0;
+    bool lockActive=false;
+    uint32_t lockOffset=0, lockSize=0, lockFlags=0;
     VkDevice device=VK_NULL_HANDLE;
     uint32_t Release() override;
     HRESULT Lock(uint32_t offset, uint32_t sizeBytes, void **out, uint32_t flags);

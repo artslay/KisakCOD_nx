@@ -993,29 +993,66 @@ uint32_t KisakVkBuffer::Release()
     return 0;
 }
 
-HRESULT KisakVkBuffer::Lock(uint32_t offset, uint32_t lockSize, void **out, uint32_t)
+HRESULT KisakVkBuffer::Lock(
+    uint32_t offset, uint32_t lockSize, void **out, uint32_t flags)
 {
-    if (!out || offset > size || lockSize > size - offset || !mapped)
+    constexpr uint32_t supportedFlags =
+        D3DLOCK_READONLY | D3DLOCK_NOSYSLOCK |
+        D3DLOCK_NOOVERWRITE | D3DLOCK_DISCARD;
+    if (!out || !mapped || lockActive || offset > size ||
+        (flags & ~supportedFlags) ||
+        ((flags & D3DLOCK_DISCARD) && (flags & D3DLOCK_NOOVERWRITE)) ||
+        ((flags & D3DLOCK_READONLY) &&
+         (flags & (D3DLOCK_DISCARD | D3DLOCK_NOOVERWRITE))))
+        return E_FAIL;
+
+    // D3D9 treats a zero SizeToLock as the remaining bytes through the end.
+    if (lockSize == 0)
+        lockSize = size - offset;
+    if (lockSize > size - offset)
+        return E_FAIL;
+    if (!dynamic && (flags & (D3DLOCK_DISCARD | D3DLOCK_NOOVERWRITE)))
         return E_FAIL;
 
     if (dynamic)
     {
         if (shadow.size() != size)
             shadow.resize(size);
+        if (flags & D3DLOCK_DISCARD)
+            std::fill(shadow.begin(), shadow.end(), 0);
+        else
+            std::memcpy(shadow.data(), mapped, size);
         *out = shadow.data() + offset;
     }
     else
     {
         *out = static_cast<uint8_t *>(mapped) + offset;
     }
+
+    lockOffset = offset;
+    this->lockSize = lockSize;
+    lockFlags = flags;
+    lockActive = true;
     return S_OK;
 }
 
 HRESULT KisakVkBuffer::Unlock()
 {
-    if (!mapped || !dynamic || shadow.empty())
-        return S_OK;
-    std::memcpy(mapped, shadow.data(), shadow.size());
+    if (!mapped || !lockActive)
+        return E_FAIL;
+
+    if (dynamic && !(lockFlags & D3DLOCK_READONLY) && lockSize != 0)
+    {
+        std::memcpy(
+            static_cast<uint8_t *>(mapped) + lockOffset,
+            shadow.data() + lockOffset,
+            lockSize);
+    }
+
+    lockActive = false;
+    lockOffset = 0;
+    lockSize = 0;
+    lockFlags = 0;
     return S_OK;
 }
 
