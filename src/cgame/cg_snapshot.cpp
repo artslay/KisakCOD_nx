@@ -1137,47 +1137,18 @@ void __cdecl CG_ProcessSnapshots(int localClientNum)
             localClientNum);
     if (cgArray[0].demoType == DEMO_TYPE_CLIENT)
     {
-#ifdef __SWITCH__
-
-#endif
         CG_ProcessDemoSnapshots(localClientNum);
-#ifdef __SWITCH__
-
-#endif
     }
     else
     {
-#ifdef __SWITCH__
-
-#endif
         const int waitServerSnapshot = SV_WaitServerSnapshot();
-#ifdef __SWITCH__
-
-#endif
         if (waitServerSnapshot)
         {
-#ifdef __SWITCH__
-
-#endif
             CG_SetNextSnap(localClientNum);
-#ifdef __SWITCH__
-
-
-#endif
             CG_ProcessNextSnap(localClientNum);
-#ifdef __SWITCH__
-
-#endif
         }
     }
-#ifdef __SWITCH__
-
-#endif
     CG_SetFrameInterpolation(localClientNum);
-#ifdef __SWITCH__
-
-
-#endif
     snap = cgArray[0].snap;
     if (!cgArray[0].snap)
     {
@@ -1198,13 +1169,7 @@ void __cdecl CG_ProcessSnapshots(int localClientNum)
     }
     if (!cgArray[0].nextSnap)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_snapshot.cpp", 943, 0, "%s", "cgameGlob->nextSnap");
-#ifdef __SWITCH__
-
-#endif
     ServerSnapTime = G_GetServerSnapTime();
-#ifdef __SWITCH__
-
-#endif
     nextSnap = cgArray[0].nextSnap;
     if (cgArray[0].nextSnap->serverTime != ServerSnapTime)
     {
@@ -1231,9 +1196,6 @@ void __cdecl CG_ProcessSnapshots(int localClientNum)
                 v9);
         }
     }
-#ifdef __SWITCH__
-
-#endif
     //Profile_EndInternal(0);
     //PIXEndNamedEvent();
 }
