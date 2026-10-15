@@ -8,7 +8,11 @@
 #include <xanim/xanim.h>
 #include <universal/com_files.h>
 #ifdef __SWITCH__
+#include <cstdio>
 extern const char * volatile g_switchServerInitStage;
+extern void Switch_SetProgressPhase(const char *phase);
+extern void Switch_SetProgressDetail(uint32_t detail);
+extern void Switch_LogWrite(const char *msg);
 #endif
 
 #ifdef KISAK_MP
@@ -398,11 +402,94 @@ uint32_t __cdecl BG_FindWeaponIndexForName(const char *name)
 
     if (!name)
         return 0;
+
+#ifdef __SWITCH__
+    Switch_SetProgressPhase("weapon/find_cached/validate");
+    Switch_SetProgressDetail(bg_lastParsedWeaponIndex);
+    if (bg_lastParsedWeaponIndex >= ARRAY_COUNT(bg_weaponDefs))
+    {
+        char line[256];
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][WEAPON LOOKUP INVALID COUNT] last=%u capacity=%u name=%p\n",
+            bg_lastParsedWeaponIndex,
+            static_cast<unsigned>(ARRAY_COUNT(bg_weaponDefs)),
+            static_cast<const void *>(name));
+        Switch_LogWrite(line);
+        Com_Error(ERR_DROP, "invalid parsed weapon count %u", bg_lastParsedWeaponIndex);
+        Switch_SetProgressPhase("weapon/find_cached/error");
+        return 0;
+    }
+
+    const char *nameTerminator = static_cast<const char *>(memchr(name, '\0', MAX_QPATH));
+    if (!nameTerminator)
+    {
+        char line[256];
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][WEAPON LOOKUP UNTERMINATED NAME] name=%p last=%u caller=0x%llx\n",
+            static_cast<const void *>(name), bg_lastParsedWeaponIndex,
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+        Switch_LogWrite(line);
+        Com_Error(ERR_DROP, "unterminated weapon lookup name");
+        Switch_SetProgressPhase("weapon/find_cached/error");
+        return 0;
+    }
+#endif
+
     for (weapIndex = 1; weapIndex <= bg_lastParsedWeaponIndex; ++weapIndex)
     {
+#ifdef __SWITCH__
+        Switch_SetProgressPhase("weapon/find_cached/name_scan");
+        Switch_SetProgressDetail(weapIndex);
+        WeaponDef *candidate = bg_weaponDefs[weapIndex];
+        if (!candidate || !candidate->szInternalName)
+        {
+            char line[256];
+            std::snprintf(
+                line, sizeof(line),
+                "[KisakCOD][WEAPON LOOKUP INVALID ENTRY] index=%u last=%u def=%p internalName=%p\n",
+                weapIndex, bg_lastParsedWeaponIndex,
+                static_cast<void *>(candidate),
+                candidate ? static_cast<const void *>(candidate->szInternalName) : nullptr);
+            Switch_LogWrite(line);
+            Com_Error(ERR_DROP, "invalid weapon definition at index %u", weapIndex);
+            Switch_SetProgressPhase("weapon/find_cached/error");
+            return 0;
+        }
+
+        const char *internalNameTerminator =
+            static_cast<const char *>(memchr(candidate->szInternalName, '\0', MAX_QPATH));
+        if (!internalNameTerminator)
+        {
+            char line[256];
+            std::snprintf(
+                line, sizeof(line),
+                "[KisakCOD][WEAPON LOOKUP UNTERMINATED INTERNAL NAME] index=%u last=%u def=%p name=%p\n",
+                weapIndex, bg_lastParsedWeaponIndex,
+                static_cast<void *>(candidate),
+                static_cast<const void *>(candidate->szInternalName));
+            Switch_LogWrite(line);
+            Com_Error(ERR_DROP, "unterminated internal name for weapon index %u", weapIndex);
+            Switch_SetProgressPhase("weapon/find_cached/error");
+            return 0;
+        }
+
+        Switch_SetProgressPhase("weapon/find_cached/compare");
+#endif
         if (!I_stricmp(name, bg_weaponDefs[weapIndex]->szInternalName))
+        {
+#ifdef __SWITCH__
+            Switch_SetProgressPhase("weapon/find_cached/done");
+            Switch_SetProgressDetail(weapIndex);
+#endif
             return weapIndex;
+        }
     }
+#ifdef __SWITCH__
+    Switch_SetProgressPhase("weapon/find_cached/done");
+    Switch_SetProgressDetail(bg_lastParsedWeaponIndex);
+#endif
     return 0;
 }
 
