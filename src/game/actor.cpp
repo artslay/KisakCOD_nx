@@ -13,6 +13,7 @@
 #include "g_main.h"
 #include "actor_state.h"
 #include "g_local.h"
+#include <game/g_bsp.h>
 #include <script/scr_vm.h>
 #include "sentient.h"
 #include "actor_events.h"
@@ -4104,7 +4105,7 @@ bool __cdecl Actor_FindPath(
                 static_cast<void *>(self->scriptGoal.node),
                 self->sentient ? static_cast<void *>(self->sentient->pClaimedNode) : nullptr,
                 static_cast<void *>(gameWorldSp.path.nodes),
-                gameWorldSp.path.nodeCount,
+                static_cast<unsigned>(gameWorldSp.path.nodeCount),
                 sizeof(pathnode_t));
             Switch_LogWrite(trace);
         }
