@@ -758,19 +758,34 @@ bool VulkanBackend::CreateSync()
 {
     VkSemaphoreCreateInfo semaphore{};
     semaphore.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    if (vkCreateSemaphore(m_device, &semaphore, nullptr, &m_sync.imageAvailable) != VK_SUCCESS ||
-        vkCreateSemaphore(m_device, &semaphore, nullptr, &m_sync.renderFinished) != VK_SUCCESS)
+    const VkResult imageAvailableResult =
+        vkCreateSemaphore(m_device, &semaphore, nullptr, &m_sync.imageAvailable);
+    if (imageAvailableResult != VK_SUCCESS)
     {
-        SetError("vkCreateSemaphore failed");
+        SetError("vkCreateSemaphore imageAvailable failed", imageAvailableResult);
+        return false;
+    }
+    const VkResult renderFinishedResult =
+        vkCreateSemaphore(m_device, &semaphore, nullptr, &m_sync.renderFinished);
+    if (renderFinishedResult != VK_SUCCESS)
+    {
+        SetError("vkCreateSemaphore renderFinished failed", renderFinishedResult);
+        vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
+        m_sync.imageAvailable = VK_NULL_HANDLE;
         return false;
     }
 
     VkFenceCreateInfo fence{};
     fence.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-    if (vkCreateFence(m_device, &fence, nullptr, &m_sync.fence) != VK_SUCCESS)
+    const VkResult fenceResult = vkCreateFence(m_device, &fence, nullptr, &m_sync.fence);
+    if (fenceResult != VK_SUCCESS)
     {
-        SetError("vkCreateFence failed");
+        SetError("vkCreateFence failed", fenceResult);
+        vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
+        vkDestroySemaphore(m_device, m_sync.renderFinished, nullptr);
+        m_sync.imageAvailable = VK_NULL_HANDLE;
+        m_sync.renderFinished = VK_NULL_HANDLE;
         return false;
     }
     return true;
@@ -826,7 +841,7 @@ bool VulkanBackend::RecreateSwapchain()
             vkResetCommandPool(m_device, m_commandPool, 0);
         if (resetResult != VK_SUCCESS)
         {
-            SetError("vkResetCommandPool failed while recreating swapchain");
+            SetError("vkResetCommandPool failed while recreating swapchain", resetResult);
             return false;
         }
     }
@@ -844,7 +859,10 @@ bool VulkanBackend::RecreateSwapchain()
         vkDestroyFence(m_device, m_sync.fence, nullptr);
     m_sync = FrameSync{};
 
-    m_lastError.clear();
+    {
+        std::lock_guard<std::mutex> errorLock(m_errorMutex);
+        m_lastError.clear();
+    }
     if (!CreateSwapchain())
         return false;
 
@@ -1427,8 +1445,12 @@ bool VulkanBackend::CreateBuffer(
     info.size = size;
     info.usage = usage;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    if (vkCreateBuffer(m_device, &info, nullptr, buffer) != VK_SUCCESS)
+    const VkResult createResult = vkCreateBuffer(m_device, &info, nullptr, buffer);
+    if (createResult != VK_SUCCESS)
+    {
+        SetError("vkCreateBuffer failed", createResult);
         return false;
+    }
 
     VkMemoryRequirements requirements{};
     vkGetBufferMemoryRequirements(m_device, *buffer, &requirements);
@@ -1444,15 +1466,19 @@ bool VulkanBackend::CreateBuffer(
     alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     alloc.allocationSize = requirements.size;
     alloc.memoryTypeIndex = type;
-    if (vkAllocateMemory(m_device, &alloc, nullptr, memory) != VK_SUCCESS)
+    const VkResult allocateResult = vkAllocateMemory(m_device, &alloc, nullptr, memory);
+    if (allocateResult != VK_SUCCESS)
     {
+        SetError("vkAllocateMemory failed for buffer", allocateResult);
         vkDestroyBuffer(m_device, *buffer, nullptr);
         *buffer = VK_NULL_HANDLE;
         return false;
     }
 
-    if (vkBindBufferMemory(m_device, *buffer, *memory, 0) != VK_SUCCESS)
+    const VkResult bindResult = vkBindBufferMemory(m_device, *buffer, *memory, 0);
+    if (bindResult != VK_SUCCESS)
     {
+        SetError("vkBindBufferMemory failed", bindResult);
         vkDestroyBuffer(m_device, *buffer, nullptr);
         vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
@@ -1462,8 +1488,10 @@ bool VulkanBackend::CreateBuffer(
 
     if (mapped)
     {
-        if (vkMapMemory(m_device, *memory, 0, size, 0, mapped) != VK_SUCCESS)
+        const VkResult mapResult = vkMapMemory(m_device, *memory, 0, size, 0, mapped);
+        if (mapResult != VK_SUCCESS)
         {
+            SetError("vkMapMemory failed for buffer", mapResult);
             vkDestroyBuffer(m_device, *buffer, nullptr);
             vkFreeMemory(m_device, *memory, nullptr);
             *memory = VK_NULL_HANDLE;
@@ -1506,8 +1534,12 @@ bool VulkanBackend::CreateImage2D(
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    if (vkCreateImage(m_device, &info, nullptr, image) != VK_SUCCESS)
+    const VkResult createResult = vkCreateImage(m_device, &info, nullptr, image);
+    if (createResult != VK_SUCCESS)
+    {
+        SetError("vkCreateImage 2D failed", createResult);
         return false;
+    }
 
     VkMemoryRequirements requirements{};
     vkGetImageMemoryRequirements(m_device, *image, &requirements);
@@ -1525,15 +1557,19 @@ bool VulkanBackend::CreateImage2D(
     alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     alloc.allocationSize = requirements.size;
     alloc.memoryTypeIndex = type;
-    if (vkAllocateMemory(m_device, &alloc, nullptr, memory) != VK_SUCCESS)
+    const VkResult allocateResult = vkAllocateMemory(m_device, &alloc, nullptr, memory);
+    if (allocateResult != VK_SUCCESS)
     {
+        SetError("vkAllocateMemory failed for 2D image", allocateResult);
         vkDestroyImage(m_device, *image, nullptr);
         *image = VK_NULL_HANDLE;
         return false;
     }
 
-    if (vkBindImageMemory(m_device, *image, *memory, 0) != VK_SUCCESS)
+    const VkResult bindResult = vkBindImageMemory(m_device, *image, *memory, 0);
+    if (bindResult != VK_SUCCESS)
     {
+        SetError("vkBindImageMemory failed for 2D image", bindResult);
         vkDestroyImage(m_device, *image, nullptr);
         vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
@@ -1550,8 +1586,10 @@ bool VulkanBackend::CreateImage2D(
     viewInfo.components = components;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 1;
-    if (vkCreateImageView(m_device, &viewInfo, nullptr, view) != VK_SUCCESS)
+    const VkResult viewResult = vkCreateImageView(m_device, &viewInfo, nullptr, view);
+    if (viewResult != VK_SUCCESS)
     {
+        SetError("vkCreateImageView 2D failed", viewResult);
         vkDestroyImage(m_device, *image, nullptr);
         vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
@@ -1584,8 +1622,12 @@ bool VulkanBackend::CreateImageCube(
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    if (vkCreateImage(m_device, &info, nullptr, image) != VK_SUCCESS)
+    const VkResult createResult = vkCreateImage(m_device, &info, nullptr, image);
+    if (createResult != VK_SUCCESS)
+    {
+        SetError("vkCreateImage cube failed", createResult);
         return false;
+    }
 
     VkMemoryRequirements requirements{};
     vkGetImageMemoryRequirements(m_device, *image, &requirements);
@@ -1602,15 +1644,19 @@ bool VulkanBackend::CreateImageCube(
     alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     alloc.allocationSize = requirements.size;
     alloc.memoryTypeIndex = type;
-    if (vkAllocateMemory(m_device, &alloc, nullptr, memory) != VK_SUCCESS)
+    const VkResult allocateResult = vkAllocateMemory(m_device, &alloc, nullptr, memory);
+    if (allocateResult != VK_SUCCESS)
     {
+        SetError("vkAllocateMemory failed for cube image", allocateResult);
         vkDestroyImage(m_device, *image, nullptr);
         *image = VK_NULL_HANDLE;
         return false;
     }
 
-    if (vkBindImageMemory(m_device, *image, *memory, 0) != VK_SUCCESS)
+    const VkResult bindResult = vkBindImageMemory(m_device, *image, *memory, 0);
+    if (bindResult != VK_SUCCESS)
     {
+        SetError("vkBindImageMemory failed for cube image", bindResult);
         vkFreeMemory(m_device, *memory, nullptr);
         vkDestroyImage(m_device, *image, nullptr);
         *memory = VK_NULL_HANDLE;
@@ -1628,8 +1674,10 @@ bool VulkanBackend::CreateImageCube(
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 6;
 
-    if (vkCreateImageView(m_device, &viewInfo, nullptr, view) != VK_SUCCESS)
+    const VkResult viewResult = vkCreateImageView(m_device, &viewInfo, nullptr, view);
+    if (viewResult != VK_SUCCESS)
     {
+        SetError("vkCreateImageView cube failed", viewResult);
         vkFreeMemory(m_device, *memory, nullptr);
         vkDestroyImage(m_device, *image, nullptr);
         *memory = VK_NULL_HANDLE;
@@ -1661,8 +1709,12 @@ bool VulkanBackend::CreateImage3D(
     info.usage = usage;
     info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    if (vkCreateImage(m_device, &info, nullptr, image) != VK_SUCCESS)
+    const VkResult createResult = vkCreateImage(m_device, &info, nullptr, image);
+    if (createResult != VK_SUCCESS)
+    {
+        SetError("vkCreateImage 3D failed", createResult);
         return false;
+    }
 
     VkMemoryRequirements requirements{};
     vkGetImageMemoryRequirements(m_device, *image, &requirements);
@@ -1679,14 +1731,18 @@ bool VulkanBackend::CreateImage3D(
     alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     alloc.allocationSize = requirements.size;
     alloc.memoryTypeIndex = type;
-    if (vkAllocateMemory(m_device, &alloc, nullptr, memory) != VK_SUCCESS)
+    const VkResult allocateResult = vkAllocateMemory(m_device, &alloc, nullptr, memory);
+    if (allocateResult != VK_SUCCESS)
     {
+        SetError("vkAllocateMemory failed for 3D image", allocateResult);
         vkDestroyImage(m_device, *image, nullptr);
         *image = VK_NULL_HANDLE;
         return false;
     }
-    if (vkBindImageMemory(m_device, *image, *memory, 0) != VK_SUCCESS)
+    const VkResult bindResult = vkBindImageMemory(m_device, *image, *memory, 0);
+    if (bindResult != VK_SUCCESS)
     {
+        SetError("vkBindImageMemory failed for 3D image", bindResult);
         vkFreeMemory(m_device, *memory, nullptr);
         vkDestroyImage(m_device, *image, nullptr);
         *memory = VK_NULL_HANDLE;
@@ -1703,8 +1759,10 @@ bool VulkanBackend::CreateImage3D(
     viewInfo.components = components;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 1;
-    if (vkCreateImageView(m_device, &viewInfo, nullptr, view) != VK_SUCCESS)
+    const VkResult viewResult = vkCreateImageView(m_device, &viewInfo, nullptr, view);
+    if (viewResult != VK_SUCCESS)
     {
+        SetError("vkCreateImageView 3D failed", viewResult);
         vkDestroyImage(m_device, *image, nullptr);
         vkFreeMemory(m_device, *memory, nullptr);
         *memory = VK_NULL_HANDLE;
