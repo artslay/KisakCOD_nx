@@ -25,6 +25,7 @@
 #include "actor_grenade.h"
 #include "bullet.h"
 #include <server/sv_public.h>
+#include <server/server.h>
 #ifdef __SWITCH__
 extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
 #endif
@@ -644,7 +645,13 @@ void __cdecl GScr_SetLevelScript(ScriptFunctions *functions)
     const char *String; // r31
     char v3[72]; // [sp+50h] [-60h] BYREF
 
-    String = Dvar_GetString("mapname");
+    // Keep level-script binding on the same canonical map name as source
+    // loading; a blank second lookup previously generated "maps/" here.
+    String = (sv_mapname && sv_mapname->current.string && sv_mapname->current.string[0])
+        ? sv_mapname->current.string
+        : Dvar_GetString("mapname");
+    if (!String || !String[0])
+        Com_Error(ERR_DROP, "GScr_SetLevelScript: mapname is empty");
     if (I_strnicmp(String, "mp/", 3) && I_strnicmp(String, "mp\\", 3))
     {
         Com_sprintf(v3, 64, "maps/%s", String);
