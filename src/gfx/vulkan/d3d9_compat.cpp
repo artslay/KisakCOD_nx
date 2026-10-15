@@ -2875,7 +2875,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     };
     VkPipelineDynamicStateCreateInfo dynamic{};
     dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamic.dynamicStateCount = 2;
+    dynamic.dynamicStateCount = static_cast<uint32_t>(
+        sizeof(dynamicStates) / sizeof(dynamicStates[0]));
     dynamic.pDynamicStates = dynamicStates;
 
     VkPipelineRenderingCreateInfo rendering{};
