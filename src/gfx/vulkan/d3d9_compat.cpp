@@ -2769,36 +2769,12 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 
     VulkanUniformLayout layout{};
-    static uint32_t uniformBindTraceCount = 0;
-    const uint32_t traceId = uniformBindTraceCount++;
-    const bool traceUniformBind = traceId < 4u;
     auto traceUniformBindStage =
         [&](const char *stage, const void *buffer, size_t byteCount, int result)
         {
-            const uint64_t currentFrame = m_backend->FrameSerial();
             RecordSwitchUniformFreeTrace(
-                stage, currentFrame, setIndex, parse, layout, buffer, byteCount, result);
-            if (!traceUniformBind)
-                return;
-            char msg[448];
-            std::snprintf(
-                msg,
-                sizeof(msg),
-                "[KisakCOD][VK UNIFORM FREE TRACE] id=%u stage=%s frame=%llu set=%u parse=%p uniforms=%d layout=%zu counts=%u/%u/%u buffer=%p bytes=%zu result=%d\n",
-                traceId,
-                stage,
-                static_cast<unsigned long long>(currentFrame),
-                setIndex,
-                static_cast<const void *>(parse),
-                parse ? parse->uniform_count : -1,
-                layout.size,
-                layout.floatCount,
-                layout.intCount,
-                layout.boolCount,
-                buffer,
-                byteCount,
-                result);
-            Switch_LogWrite(msg);
+                stage, m_backend->FrameSerial(), setIndex, parse, layout,
+                buffer, byteCount, result);
         };
     traceUniformBindStage("entry", nullptr, 0, 1);
     if (!GetUniformLayout(parse, &layout))
