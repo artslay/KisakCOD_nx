@@ -1513,6 +1513,36 @@ void __cdecl CG_CalcViewValues(int localClientNum)
             cgameGlob->refdef.viewaxis,
             cgameGlob->refdefViewAngles,
             &cgameGlob->refdef.zNear);
+#ifdef __SWITCH__
+    static uint32_t switchViewOriginTraceCount = 0;
+    if (switchViewOriginTraceCount < 4)
+    {
+        const playerState_s *serverPs =
+            cgameGlob->nextSnap ? &cgameGlob->nextSnap->ps : nullptr;
+        char trace[512];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VIEW ORIGIN] call=%u predicted=%.2f,%.2f,%.2f view=%.2f,%.2f,%.2f height=%.2f pm=%d snapshot=%p snapOrigin=%.2f,%.2f,%.2f snapPm=%d teleported=%d time=%d\\n",
+            switchViewOriginTraceCount,
+            cgameGlob->predictedPlayerState.origin[0],
+            cgameGlob->predictedPlayerState.origin[1],
+            cgameGlob->predictedPlayerState.origin[2],
+            cgameGlob->refdef.vieworg[0],
+            cgameGlob->refdef.vieworg[1],
+            cgameGlob->refdef.vieworg[2],
+            cgameGlob->predictedPlayerState.viewHeightCurrent,
+            cgameGlob->predictedPlayerState.pm_type,
+            static_cast<const void *>(cgameGlob->nextSnap),
+            serverPs ? serverPs->origin[0] : 0.0f,
+            serverPs ? serverPs->origin[1] : 0.0f,
+            serverPs ? serverPs->origin[2] : 0.0f,
+            serverPs ? serverPs->pm_type : -1,
+            cgameGlob->playerTeleported ? 1 : 0,
+            cgameGlob->time);
+        Switch_LogWrite(trace);
+        ++switchViewOriginTraceCount;
+    }
+#endif
 }
 
 void __cdecl CG_InitView(int localClientNum)
