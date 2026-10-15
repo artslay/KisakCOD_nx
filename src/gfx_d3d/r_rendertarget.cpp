@@ -6,6 +6,10 @@
 #include "rb_backend.h"
 #include "rb_logfile.h"
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 
 //GfxRenderTarget *gfxRenderTargets 85b5db38     gfx_d3d : r_rendertarget.obj
 
