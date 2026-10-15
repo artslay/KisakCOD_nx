@@ -2839,17 +2839,32 @@ bool IDirect3DDevice9::PrepareDraw()
     vkCmdSetViewport(m_backend->CommandBuffer(), 0, 1, &viewport);
 
     VkRect2D scissor{};
-    scissor.offset = {
-        m_scissor ? std::max(0, m_scissorRect.left) : 0,
-        m_scissor ? std::max(0, m_scissorRect.top) : 0
-    };
+    const uint32_t targetWidth =
+        m_color && m_color->texture ? m_color->texture->width : m_viewport.Width;
+    const uint32_t targetHeight =
+        m_color && m_color->texture ? m_color->texture->height : m_viewport.Height;
+    const int32_t scissorLeft = m_scissor ? m_scissorRect.left : static_cast<int32_t>(m_viewport.X);
+    const int32_t scissorTop = m_scissor ? m_scissorRect.top : static_cast<int32_t>(m_viewport.Y);
+    const int32_t scissorRight = m_scissor
+        ? m_scissorRect.right
+        : static_cast<int32_t>(std::min<uint64_t>(
+              static_cast<uint64_t>(m_viewport.X) + m_viewport.Width, INT32_MAX));
+    const int32_t scissorBottom = m_scissor
+        ? m_scissorRect.bottom
+        : static_cast<int32_t>(std::min<uint64_t>(
+              static_cast<uint64_t>(m_viewport.Y) + m_viewport.Height, INT32_MAX));
+    const int32_t targetRight = static_cast<int32_t>(
+        std::min<uint32_t>(targetWidth, static_cast<uint32_t>(INT32_MAX)));
+    const int32_t targetBottom = static_cast<int32_t>(
+        std::min<uint32_t>(targetHeight, static_cast<uint32_t>(INT32_MAX)));
+    const int32_t left = std::clamp(scissorLeft, 0, targetRight);
+    const int32_t top = std::clamp(scissorTop, 0, targetBottom);
+    const int32_t right = std::clamp(scissorRight, left, targetRight);
+    const int32_t bottom = std::clamp(scissorBottom, top, targetBottom);
+    scissor.offset = {left, top};
     scissor.extent = {
-        m_scissor
-            ? static_cast<uint32_t>(std::max(0, m_scissorRect.right - m_scissorRect.left))
-            : m_viewport.Width,
-        m_scissor
-            ? static_cast<uint32_t>(std::max(0, m_scissorRect.bottom - m_scissorRect.top))
-            : m_viewport.Height
+        static_cast<uint32_t>(right - left),
+        static_cast<uint32_t>(bottom - top)
     };
     vkCmdSetScissor(m_backend->CommandBuffer(), 0, 1, &scissor);
 
