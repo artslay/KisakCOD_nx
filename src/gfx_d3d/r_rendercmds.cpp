@@ -2,6 +2,9 @@
 #include <universal/q_shared.h>
 
 #ifdef __SWITCH__
+#include <atomic>
+#include <cstdio>
+#include <cstdint>
 extern thread_local const char *g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 #endif
@@ -868,6 +871,36 @@ const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material,
 {
     const MaterialTechnique *technique; // [esp+0h] [ebp-8h]
     const MaterialTechniqueSet *techSet; // [esp+4h] [ebp-4h]
+
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/material_get_technique";
+    const uintptr_t materialAddress = reinterpret_cast<uintptr_t>(material);
+    if (!material || materialAddress < 0x100000000ULL)
+    {
+        static std::atomic<uint32_t> switchLowMaterialTraceCount{0};
+        const uint32_t traceId = switchLowMaterialTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (traceId < 256)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][MATERIAL TECHNIQUE POINTER] seq=%u material=%p address=0x%016llx techType=%u caller=%p frameStage=%s\\n",
+                traceId,
+                static_cast<const void *>(material),
+                static_cast<unsigned long long>(materialAddress),
+                static_cast<unsigned>(techType),
+                __builtin_return_address(0),
+                g_switchFrameStage ? g_switchFrameStage : "<null>");
+            Switch_LogWrite(trace);
+        }
+    }
+    if (!material)
+    {
+        Com_Error(ERR_FATAL, "Material_GetTechnique received a null material (techType=%u)", static_cast<unsigned>(techType));
+        return nullptr;
+    }
+#endif
 
     techSet = Material_GetTechniqueSet(material);
     iassert( techSet );
