@@ -147,16 +147,24 @@ static bool Switch_GetStringAllocation(
     }
 
     const size_t available = allocationBytes - stringOffset;
-    const void *terminator = memchr(ref->str, '\0', available);
-    if (!terminator)
+    // byteLen stores the low 8 bits of the total byte count, including
+    // the terminating NUL. Script strings can contain embedded NUL bytes, so
+    // the terminator must be found at the matching 8-bit length offset, not
+    // by stopping at the first NUL in the payload.
+    int terminatorOffset = static_cast<uint8_t>(ref->byteLen - 1u);
+    while (static_cast<size_t>(terminatorOffset) < available &&
+           ref->str[terminatorOffset] != '\0')
+    {
+        terminatorOffset += 256;
+    }
+    if (static_cast<size_t>(terminatorOffset) >= available)
     {
         Switch_ReportStringHashChainFault(
             "unterminated_string_allocation", 0, handle, 0, ref->data, handle);
         return false;
     }
 
-    const auto *end = static_cast<const char *>(terminator);
-    const uint32_t length = static_cast<uint32_t>(end - ref->str) + 1u;
+    const uint32_t length = static_cast<uint32_t>(terminatorOffset) + 1u;
     if (refString)
         *refString = ref;
     if (allocationType)
