@@ -10,7 +10,7 @@
 #include <cstdio>
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
-extern thread_local const char *g_switchFrameStage;
+extern thread_local const char * volatile g_switchFrameStage;
 extern "C" {
 extern thread_local char g_switchCgFrameStage[192];
 }
@@ -324,7 +324,9 @@ snd_alias_list_t *__cdecl Com_FindSoundAlias_FastFile(const char *name)
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/db_find";
     }
 #endif
+#ifdef __SWITCH__
     Switch_SetSoundAliasStage("find_fastfile/before_db_find");
+#endif
     aliasList = DB_FindXAssetHeader(ASSET_TYPE_SOUND, name).sound;
 #ifdef __SWITCH__
     {
@@ -338,9 +340,13 @@ snd_alias_list_t *__cdecl Com_FindSoundAlias_FastFile(const char *name)
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/db_default";
     }
 #endif
+#ifdef __SWITCH__
     Switch_SetSoundAliasStage("find_fastfile/before_default_check");
+#endif
     const bool isDefaultAliasAsset = DB_IsXAssetDefault(ASSET_TYPE_SOUND, name);
+#ifdef __SWITCH__
     Switch_SetSoundAliasStage("find_fastfile/after_default_check");
+#endif
     if (!isDefaultAliasAsset)
     {
 #ifdef __SWITCH__
@@ -542,7 +548,9 @@ snd_alias_t *__cdecl Com_PickSoundAlias(const char *aliasname)
     }
 #endif
 
+#ifdef __SWITCH__
     Switch_SetSoundAliasStage("pick/entry");
+#endif
     aliasList = Com_FindSoundAlias(aliasname);
 #ifdef __SWITCH__
     {
@@ -556,9 +564,13 @@ snd_alias_t *__cdecl Com_PickSoundAlias(const char *aliasname)
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/pick_list";
     }
 #endif
+#ifdef __SWITCH__
     Switch_SetSoundAliasStage("pick/before_pick_list");
+#endif
     snd_alias_t *pickedAlias = Com_PickSoundAliasFromList(aliasList);
+#ifdef __SWITCH__
     Switch_SetSoundAliasStage("pick/after_pick_list");
+#endif
     return pickedAlias;
 }
 
