@@ -111,7 +111,10 @@ int __cdecl CL_CGameRendering()
     if (UI_IsFullscreen())
         return 0;
 #endif
-if (!CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime))
+    R_BeginClientCmdList2D();
+    animFrametime = cls.animFrametime;
+    DemoType = CL_GetDemoType();
+    if (!CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime))
         return 0;
     if ((clientUIActives[0].keyCatchers & KEYCATCH_UI) != 0)
         UI_Refresh();
