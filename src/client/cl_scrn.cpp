@@ -392,11 +392,36 @@ LABEL_15:;
         switchFullscreenCinematicNeedsTailDraw)
     {
         static bool loggedFullscreenCinematicTail = false;
-        if (switchFullscreenCinematicNeedsTailDraw && !loggedFullscreenCinematicTail)
+        static uint32_t switchCinematicTailTraceCount = 0;
+        const uint32_t traceId = switchCinematicTailTraceCount++;
+        if ((clientUIActives[0].connectionState == CA_LOADING &&
+             (traceId < 12u || (traceId % 120u) == 0u)) ||
+            (switchFullscreenCinematicNeedsTailDraw && !loggedFullscreenCinematicTail))
         {
-            Switch_LogWrite(
-                "[KisakCOD][CINEMATIC DRAW] fullscreen CA_CINEMATIC submitted at screen-field tail\n");
-            loggedFullscreenCinematicTail = true;
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][CINEMATIC SCREEN TAIL] n=%u state=%d fullscreen=%d refreshedUI=%d started=%d finished=%d name=%s activeFrame=%d textureSet=%d bink=%p binkFrame=%u/%u\n",
+                traceId,
+                static_cast<int>(clientUIActives[0].connectionState),
+                UI_IsFullscreen() ? 1 : 0,
+                refreshedUI,
+                R_Cinematic_IsStarted() ? 1 : 0,
+                R_Cinematic_IsFinished() ? 1 : 0,
+                cinematicGlob.currentCinematicName[0] ? cinematicGlob.currentCinematicName : "<none>",
+                cinematicGlob.activeImageFrame,
+                cinematicGlob.activeImageFrameTextureSet,
+                static_cast<void *>(cinematicGlob.bink),
+                cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->FrameNum) : 0u,
+                cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->Frames) : 0u);
+            Switch_LogWrite(trace);
+            if (switchFullscreenCinematicNeedsTailDraw)
+            {
+                Switch_LogWrite(
+                    "[KisakCOD][CINEMATIC DRAW] fullscreen CA_CINEMATIC submitted at screen-field tail\n");
+                loggedFullscreenCinematicTail = true;
+            }
         }
         g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_tail";
         SCR_DrawCinematic(0);
