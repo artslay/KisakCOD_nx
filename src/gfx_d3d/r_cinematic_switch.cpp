@@ -36,7 +36,7 @@ void LogBinkUploadFailure(
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][CINEMATIC UPLOAD FAIL] reason=%s image=%p size=%ux%u format=%u layout=%u\\n",
+        "[KisakCOD][CINEMATIC UPLOAD FAIL] reason=%s image=%p size=%ux%u format=%u layout=%u\n",
         reason,
         reinterpret_cast<void *>(texture ? texture->image : VK_NULL_HANDLE),
         static_cast<unsigned>(width),
