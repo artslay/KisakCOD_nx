@@ -325,8 +325,6 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
         loopSound,
         cent->nextState.number,
         cent->nextState.eType);
-    const unsigned int configStringHandle =
-        CL_GetLocalClientGlobals(localClientNum)->configstrings[configStringIndex];
 #endif
 
     ConfigString = CL_GetConfigString(localClientNum, configStringIndex);
