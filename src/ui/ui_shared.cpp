@@ -5805,6 +5805,9 @@ int __cdecl Menus_AnyFullScreenVisible(UiContext *dc)
 char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
 {
 #ifdef __SWITCH__
+    g_switchFrameStage = "frame/ui/menu_visible/entry";
+#endif
+#ifdef __SWITCH__
     const bool traceProfileVisibility =
         menu && menu->window.name &&
         !I_stricmp(menu->window.name, "player_profile");
@@ -5838,13 +5841,20 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
         ++traceCount;
     };
 #endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/ui/menu_visible/window_flags";
+#endif
     if (!Window_IsVisible(dc->localClientNum, &menu->window))
     {
 #ifdef __SWITCH__
         traceProfileGate("window_hidden", false);
+        g_switchFrameStage = "frame/ui/menu_visible/window_hidden";
 #endif
         return 0;
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/ui/menu_visible/owner_draw";
+#endif
     if (menu->window.ownerDrawFlags && !UI_OwnerDrawVisible(menu->window.ownerDrawFlags))
     {
 #ifdef __SWITCH__
@@ -5852,6 +5862,9 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
 #endif
         return 0;
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/ui/menu_visible/scope_overlay";
+#endif
     if ((menu->window.staticFlags & 0x20000000) != 0
         && CL_IsCgameInitialized(dc->localClientNum)
         && CG_ScopeIsOverlayed(dc->localClientNum))
@@ -5861,6 +5874,9 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
 #endif
         return 0;
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/ui/menu_visible/flashbang";
+#endif
     if ((menu->window.staticFlags & 0x10000000) != 0
         && CL_IsCgameInitialized(dc->localClientNum)
         && CG_Flashbanged(dc->localClientNum))
@@ -5870,6 +5886,9 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
 #endif
         return 0;
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/ui/menu_visible/keycatcher";
+#endif
     if ((menu->window.staticFlags & 0x40000000) != 0)
     {
         clientUIActive_t *clUI = CL_GetLocalClientUIGlobals(dc->localClientNum);
@@ -5882,10 +5901,14 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
             return 0;
         }
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/ui/menu_visible/visible_expression";
+#endif
     const bool visibleWhen =
         !menu->visibleExp.numEntries ||
         IsExpressionTrue(dc->localClientNum, &menu->visibleExp);
 #ifdef __SWITCH__
+    g_switchFrameStage = "frame/ui/menu_visible/visible_expression_done";
     traceProfileGate(
         visibleWhen ? "visible_when_true" : "visible_when_false",
         visibleWhen);
