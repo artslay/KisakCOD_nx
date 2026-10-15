@@ -26,6 +26,7 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern thread_local const char * volatile g_switchFrameStage;
+extern void Switch_LogWrite(const char *msg);
 extern "C" {
 thread_local char g_switchCgFrameStage[192] = {};
 }
@@ -252,27 +253,138 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
     const char *ConfigString; // r3
     const float *origin; // r5
     float v12[6]; // [sp+50h] [-30h] BYREF
+    const unsigned int loopSound = static_cast<unsigned int>(cent->nextState.loopSound);
+    const unsigned int configStringIndex = loopSound + CS_SOUNDALIASES;
+
+#ifdef __SWITCH__
+    char switchLogLine[320];
+    Switch_SetCgEntityStage(
+        "process_entity/loop_sound/entry",
+        loopSound,
+        cent->nextState.number,
+        cent->nextState.eType);
+    std::snprintf(
+        switchLogLine,
+        sizeof(switchLogLine),
+        "[KisakCOD][CG LOOP SOUND] stage=entry ent=%u type=%u loopSound=%u solid=0x%08x entityIndex=%u configStringIndex=%u\\n",
+        static_cast<unsigned>(cent->nextState.number),
+        static_cast<unsigned>(cent->nextState.eType),
+        loopSound,
+        static_cast<unsigned>(cent->nextState.solid),
+        static_cast<unsigned>(cent->nextState.index.item),
+        configStringIndex);
+    Switch_LogWrite(switchLogLine);
+#endif
+
+    // loopSound is an index into the sound-alias configstring bucket, not an
+    // arbitrary configstring index. Reject corrupted entity-state values before
+    // they can index outside that bucket or the client configstrings array.
+    if (loopSound > static_cast<unsigned int>(CS_SOUNDALIASES_LAST - CS_SOUNDALIASES))
+    {
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage(
+            "process_entity/loop_sound/invalid_alias_index",
+            loopSound,
+            cent->nextState.number,
+            cent->nextState.eType);
+        std::snprintf(
+            switchLogLine,
+            sizeof(switchLogLine),
+            "[KisakCOD][CG LOOP SOUND] stage=invalid_alias_index ent=%u type=%u loopSound=%u max=%u\\n",
+            static_cast<unsigned>(cent->nextState.number),
+            static_cast<unsigned>(cent->nextState.eType),
+            loopSound,
+            static_cast<unsigned>(CS_SOUNDALIASES_LAST - CS_SOUNDALIASES));
+        Switch_LogWrite(switchLogLine);
+#endif
+        return;
+    }
 
     if (cent->nextState.solid == 0xFFFFFF)
     {
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage(
+            "process_entity/loop_sound/before_brush_model",
+            loopSound,
+            cent->nextState.number,
+            cent->nextState.eType);
+#endif
         BrushModel = (float *)R_GetBrushModel(cent->nextState.index.item);
+#ifdef __SWITCH__
+        Switch_SetCgEntityStage(
+            "process_entity/loop_sound/after_brush_model",
+            loopSound,
+            cent->nextState.number,
+            cent->nextState.eType);
+#endif
         v5 = cent->pose.origin[1];
-        v6 = cent->nextState.loopSound + CS_SOUNDALIASES;
         v7 = cent->pose.origin[2];
         v8 = (float)((float)(BrushModel[7] + BrushModel[10]) * (float)0.5);
         v9 = (float)((float)(BrushModel[8] + BrushModel[11]) * (float)0.5);
         v12[0] = cent->pose.origin[0] + (float)((float)(BrushModel[9] + BrushModel[6]) * (float)0.5);
         v12[1] = (float)v5 + (float)v8;
         v12[2] = (float)v7 + (float)v9;
-        ConfigString = CL_GetConfigString(localClientNum, v6);
         origin = v12;
     }
     else
     {
-        ConfigString = CL_GetConfigString(localClientNum, cent->nextState.loopSound + CS_SOUNDALIASES);
         origin = cent->pose.origin;
     }
+
+#ifdef __SWITCH__
+    Switch_SetCgEntityStage(
+        "process_entity/loop_sound/before_configstring",
+        loopSound,
+        cent->nextState.number,
+        cent->nextState.eType);
+    const unsigned int configStringHandle =
+        CL_GetLocalClientGlobals(localClientNum)->configstrings[configStringIndex];
+    std::snprintf(
+        switchLogLine,
+        sizeof(switchLogLine),
+        "[KisakCOD][CG LOOP SOUND] stage=before_configstring ent=%u type=%u loopSound=%u configStringIndex=%u handle=0x%04x\\n",
+        static_cast<unsigned>(cent->nextState.number),
+        static_cast<unsigned>(cent->nextState.eType),
+        loopSound,
+        configStringIndex,
+        configStringHandle);
+    Switch_LogWrite(switchLogLine);
+#endif
+
+    ConfigString = CL_GetConfigString(localClientNum, configStringIndex);
+
+#ifdef __SWITCH__
+    Switch_SetCgEntityStage(
+        "process_entity/loop_sound/after_configstring",
+        loopSound,
+        cent->nextState.number,
+        cent->nextState.eType);
+    std::snprintf(
+        switchLogLine,
+        sizeof(switchLogLine),
+        "[KisakCOD][CG LOOP SOUND] stage=after_configstring ent=%u type=%u loopSound=%u configStringIndex=%u ptr=%p\\n",
+        static_cast<unsigned>(cent->nextState.number),
+        static_cast<unsigned>(cent->nextState.eType),
+        loopSound,
+        configStringIndex,
+        static_cast<const void *>(ConfigString));
+    Switch_LogWrite(switchLogLine);
+    Switch_SetCgEntityStage(
+        "process_entity/loop_sound/before_alias_lookup",
+        loopSound,
+        cent->nextState.number,
+        cent->nextState.eType);
+#endif
+
     CG_PlaySoundAliasByName(localClientNum, cent->nextState.number, origin, ConfigString);
+
+#ifdef __SWITCH__
+    Switch_SetCgEntityStage(
+        "process_entity/loop_sound/after_alias_lookup",
+        loopSound,
+        cent->nextState.number,
+        cent->nextState.eType);
+#endif
 }
 
 void __cdecl CG_EntityEffects(int localClientNum, centity_s *cent)
