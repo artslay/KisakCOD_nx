@@ -238,6 +238,16 @@ TextureFormatInfo GetTextureFormat(_D3DFORMAT sourceFormat)
         return {VK_FORMAT_D16_UNORM, VK_IMAGE_ASPECT_DEPTH_BIT, 2, 0, false, true};
     case D3DFMT_D32:
         return {VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
+    // The original D3D9 formats below have no exact Vulkan equivalent.
+    // They are accepted as depth-stencil attachments using the closest supported
+    // Vulkan attachment representation; raw depth-buffer lock/readback remains
+    // unsupported, so these byte-size fields are not serialized data layouts.
+    case D3DFMT_D15S1:
+        return {VK_FORMAT_D16_UNORM_S8_UINT,
+                VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 4, 0, false, true};
+    case D3DFMT_D24FS8:
+        return {VK_FORMAT_D32_SFLOAT_S8_UINT,
+                VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 8, 0, false, true};
     case D3DFMT_D24X8:
         return {VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
     case D3DFMT_D24S8:
@@ -2042,15 +2052,6 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
     if (!info.depth || info.format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
-    auto *texture = new KisakVkTexture;
-    texture->width = width;
-    texture->height = height;
-    texture->depth = 1;
-    texture->mipLevels = 1;
-    texture->sourceFormat = format;
-    texture->format = info.format;
-    texture->samples = samples;
-
     const bool lockable = format == D3DFMT_D16_LOCKABLE &&
         samples == VK_SAMPLE_COUNT_1_BIT;
     VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
@@ -2058,9 +2059,67 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
     if (lockable)
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
+    VkFormat selectedFormat = info.format;
+    VkImageAspectFlags selectedAspect = info.aspect;
+    if (format == D3DFMT_D15S1 || format == D3DFMT_D24FS8)
+    {
+        // These legacy formats are not byte-compatible with Vulkan formats.
+        // Choose the closest depth/stencil attachment the active GPU supports
+        // for this exact usage and sample count instead of failing immediately.
+        const VkFormat d15s1Candidates[] = {
+            VK_FORMAT_D16_UNORM_S8_UINT,
+            VK_FORMAT_D24_UNORM_S8_UINT,
+            VK_FORMAT_D32_SFLOAT_S8_UINT
+        };
+        const VkFormat d24fs8Candidates[] = {
+            VK_FORMAT_D32_SFLOAT_S8_UINT,
+            VK_FORMAT_D24_UNORM_S8_UINT,
+            VK_FORMAT_D16_UNORM_S8_UINT
+        };
+        const VkFormat *candidates = format == D3DFMT_D15S1
+            ? d15s1Candidates : d24fs8Candidates;
+        bool foundSupportedFormat = false;
+        for (size_t i = 0; i < 3; ++i)
+        {
+            if (!m_backend->SupportsImageSampleCount(candidates[i], usage, samples))
+                continue;
+            selectedFormat = candidates[i];
+            selectedAspect = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+            foundSupportedFormat = true;
+            break;
+        }
+        if (!foundSupportedFormat)
+        {
+            char message[160];
+            std::snprintf(message, sizeof(message),
+                "[KisakCOD][VK FORMAT] no depth-stencil fallback for D3D format=%u samples=%u\n",
+                format, static_cast<unsigned>(samples));
+            Switch_LogWrite(message);
+            return E_FAIL;
+        }
+        if (selectedFormat != info.format)
+        {
+            char message[160];
+            std::snprintf(message, sizeof(message),
+                "[KisakCOD][VK FORMAT] depth-stencil fallback d3d=%u vk=%u samples=%u\n",
+                format, static_cast<unsigned>(selectedFormat),
+                static_cast<unsigned>(samples));
+            Switch_LogWrite(message);
+        }
+    }
+
+    auto *texture = new KisakVkTexture;
+    texture->width = width;
+    texture->height = height;
+    texture->depth = 1;
+    texture->mipLevels = 1;
+    texture->sourceFormat = format;
+    texture->format = selectedFormat;
+    texture->samples = samples;
+
     if (!m_backend->CreateImage2D(
-            width, height, 1, info.format, usage,
-            info.aspect, &texture->image, &texture->memory, &texture->view,
+            width, height, 1, selectedFormat, usage,
+            selectedAspect, &texture->image, &texture->memory, &texture->view,
             {}, samples))
     {
         delete texture;
@@ -3418,8 +3477,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     // whenever the render pass supplies a stencil attachment. Packed D3D9
     // depth-stencil surfaces use the same VkFormat for both aspects.
     rendering.stencilAttachmentFormat =
-        (depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
-         depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
+        (depthFormat == VK_FORMAT_D16_UNORM_S8_UINT ||
+            depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+            depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
             ? depthFormat : VK_FORMAT_UNDEFINED;
 
     VkGraphicsPipelineCreateInfo info{};
@@ -3639,7 +3699,8 @@ bool IDirect3DDevice9::PrepareDraw()
         ? m_depth->texture->format : m_backend->DepthFormat();
     const VkImageAspectFlags depthAspect = m_depth && m_depth->texture
         ? GetTextureFormat(m_depth->texture->sourceFormat).aspect
-        : ((depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+        : ((depthFormat == VK_FORMAT_D16_UNORM_S8_UINT ||
+            depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
             depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
             ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
             : VK_IMAGE_ASPECT_DEPTH_BIT);
@@ -4177,7 +4238,8 @@ HRESULT IDirect3DDevice9::Clear(
         ? m_depth->texture->format : m_backend->DepthFormat();
     const VkImageAspectFlags depthAspect = m_depth && m_depth->texture
         ? GetTextureFormat(m_depth->texture->sourceFormat).aspect
-        : ((depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+        : ((depthFormat == VK_FORMAT_D16_UNORM_S8_UINT ||
+            depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
             depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
             ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
             : VK_IMAGE_ASPECT_DEPTH_BIT);
