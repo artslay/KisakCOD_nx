@@ -447,16 +447,7 @@ void __cdecl Com_GetSoundFileName(const snd_alias_t *alias, char *filename, int 
 snd_alias_t *__cdecl Com_PickSoundAliasFromList(snd_alias_list_t *aliasList)
 {
 #ifdef __SWITCH__
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][SOUND] Com_PickSoundAliasFromList list=%p\n",
-            static_cast<const void *>(aliasList));
-        Switch_LogWrite(trace);
-        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/list";
-    }
+    g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/list";
 #endif
 
     int maxSequence; // [esp+8h] [ebp-18h]
@@ -484,11 +475,6 @@ snd_alias_t *__cdecl Com_PickSoundAliasFromList(snd_alias_list_t *aliasList)
 #endif
         firstAlias = aliasList->head;
 #ifdef __SWITCH__
-        {
-            char trace[224];
-            std::snprintf(trace, sizeof(trace), "[KisakCOD][SOUND ALIAS LIST] list=%p head=%p count=%d\n", static_cast<void *>(aliasList), static_cast<void *>(firstAlias), aliasList->count);
-            Switch_LogWrite(trace);
-        }
         Switch_SetSoundAliasStage("pick_list/after_head");
 #endif
         bestAlias = firstAlias;
