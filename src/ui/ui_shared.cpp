@@ -187,7 +187,7 @@ static inline bool Switch_UI_ValidateStatement(
     if (!statement->numEntries)
         return true;
 
-    if (Switch_UI_BadPointer(statement->entries))
+    if (!statement->entries || Switch_UI_BadPointer(statement->entries))
     {
         Switch_UI_LogBadPointer(where, field, owner, statement->entries);
         return false;
