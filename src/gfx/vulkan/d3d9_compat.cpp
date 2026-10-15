@@ -1398,6 +1398,35 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
             return E_FAIL;
     }
 
+    if (!(lockFlags & (D3DLOCK_READONLY | D3DLOCK_NO_DIRTY_UPDATE)))
+    {
+        // Writable UnlockBox automatically dirties the locked region unless
+        // D3DLOCK_NO_DIRTY_UPDATE was requested. Store coordinates in the
+        // base-level volume space, as required by D3D9.
+        const uint32_t levelWidth = std::max(1u, width >> lockLevel);
+        const uint32_t levelHeight = std::max(1u, height >> lockLevel);
+        const uint32_t levelDepth = std::max(1u, depth >> lockLevel);
+        const uint64_t scale = uint64_t{1} << std::min(lockLevel, 31u);
+        _D3DBOX dirty{};
+        dirty.Left = static_cast<uint32_t>(std::min<uint64_t>(
+            width, static_cast<uint64_t>(lockLeft) * scale));
+        dirty.Top = static_cast<uint32_t>(std::min<uint64_t>(
+            height, static_cast<uint64_t>(lockTop) * scale));
+        dirty.Front = static_cast<uint32_t>(std::min<uint64_t>(
+            depth, static_cast<uint64_t>(lockFront) * scale));
+        dirty.Right = lockRight == levelWidth ? width :
+            static_cast<uint32_t>(std::min<uint64_t>(
+                width, static_cast<uint64_t>(lockRight) * scale));
+        dirty.Bottom = lockBottom == levelHeight ? height :
+            static_cast<uint32_t>(std::min<uint64_t>(
+                height, static_cast<uint64_t>(lockBottom) * scale));
+        dirty.Back = lockBack == levelDepth ? depth :
+            static_cast<uint32_t>(std::min<uint64_t>(
+                depth, static_cast<uint64_t>(lockBack) * scale));
+        if (AddDirtyBox(&dirty) != S_OK)
+            return E_FAIL;
+    }
+
     lockShadowActive=false; lockLevel=0xffffffffu; lockFlags=0; lockIsVolume=false;
     lockWasUndefined=false; lockOriginalLayout=VK_IMAGE_LAYOUT_UNDEFINED;
     return S_OK;
