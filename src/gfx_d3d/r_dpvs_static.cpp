@@ -16,12 +16,11 @@ static void R_SwitchLogBadAabbIndexPointer(const char *stage, const GfxAabbTree 
 {
     if (!tree)
         return;
-    const uintptr_t treeAddress = reinterpret_cast<uintptr_t>(tree);
     if (!R_SwitchAabbAddressLooksValid(tree))
     {
         char message[256];
         std::snprintf(message, sizeof(message),
-            "[KisakCOD][AABB INDEX FAULT] stage=%s invalidTree=%p\\n",
+            "[KisakCOD][AABB INDEX FAULT] stage=%s invalidTree=%p\n",
             stage, static_cast<const void *>(tree));
         Switch_LogWrite(message);
         return;
@@ -33,7 +32,7 @@ static void R_SwitchLogBadAabbIndexPointer(const char *stage, const GfxAabbTree 
     {
         char message[384];
         std::snprintf(message, sizeof(message),
-            "[KisakCOD][AABB INDEX FAULT] stage=%s tree=%p indices=%p count=%u childCount=%u childOffset=%d surfaces=%u start=%u models=%u\\n",
+            "[KisakCOD][AABB INDEX FAULT] stage=%s tree=%p indices=%p count=%u childCount=%u childOffset=%d surfaces=%u start=%u models=%u\n",
             stage,
             static_cast<const void *>(tree),
             static_cast<const void *>(tree->smodelIndexes),
@@ -55,7 +54,7 @@ void __cdecl R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const Dpv
     {
         char message[256];
         std::snprintf(message, sizeof(message),
-            "[KisakCOD][AABB INDEX FAULT] stage=dpvs_tree invalidTree=%p\\n",
+            "[KisakCOD][AABB INDEX FAULT] stage=dpvs_tree invalidTree=%p\n",
             static_cast<const void *>(tree));
         Switch_LogWrite(message);
         return;
