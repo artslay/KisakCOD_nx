@@ -4,7 +4,12 @@
 #include <cgame/cg_local.h>
 #ifdef __SWITCH__
 #include <cstdio>
+#include <cstddef>
 extern void Switch_LogWrite(const char *msg);
+static_assert(sizeof(GfxAabbTree) == 56, "Switch DPVS requires native GfxAabbTree layout");
+static_assert(offsetof(GfxAabbTree, smodelIndexes) == 40, "Switch DPVS smodelIndexes offset mismatch");
+static_assert(offsetof(GfxAabbTree, childrenOffset) == 48, "Switch DPVS childrenOffset mismatch");
+static_assert(sizeof(GfxCell) == 88, "Switch DPVS requires native GfxCell layout");
 
 static bool R_SwitchAabbAddressLooksValid(const void *address)
 {
@@ -12,54 +17,156 @@ static bool R_SwitchAabbAddressLooksValid(const void *address)
     return value >= UINT64_C(0x100000000) && value <= UINT64_C(0x0000100000000000);
 }
 
-static void R_SwitchLogBadAabbIndexPointer(const char *stage, const GfxAabbTree *tree)
+static void R_SwitchLogAabbTreeWalkFault(
+    const char *stage,
+    const char *reason,
+    const GfxAabbTree *root,
+    uint32_t nodeCount,
+    const GfxAabbTree *tree,
+    const GfxAabbTree *parent,
+    uint32_t childIndex,
+    bool fieldsReadable)
 {
-    if (!tree)
+    static unsigned faultCount;
+    if (faultCount >= 64)
         return;
-    if (!R_SwitchAabbAddressLooksValid(tree))
+    ++faultCount;
+
+    char message[512];
+    if (fieldsReadable && tree)
     {
-        char message[256];
         std::snprintf(message, sizeof(message),
-            "[KisakCOD][AABB INDEX FAULT] stage=%s invalidTree=%p\n",
-            stage, static_cast<const void *>(tree));
-        Switch_LogWrite(message);
-        return;
+            "[KisakCOD][AABB TREE WALK FAULT] stage=%s reason=%s root=%p node=%p parent=%p child=%u nodes=%u childCount=%u childOffset=%d indexCount=%u indices=%p models=%u\n",
+            stage, reason,
+            static_cast<const void *>(root),
+            static_cast<const void *>(tree),
+            static_cast<const void *>(parent),
+            static_cast<unsigned>(childIndex),
+            static_cast<unsigned>(nodeCount),
+            static_cast<unsigned>(tree->childCount),
+            tree->childrenOffset,
+            static_cast<unsigned>(tree->smodelIndexCount),
+            static_cast<const void *>(tree->smodelIndexes),
+            rgp.world ? static_cast<unsigned>(rgp.world->dpvs.smodelCount) : 0u);
+    }
+    else
+    {
+        std::snprintf(message, sizeof(message),
+            "[KisakCOD][AABB TREE WALK FAULT] stage=%s reason=%s root=%p node=%p parent=%p child=%u nodes=%u\n",
+            stage, reason,
+            static_cast<const void *>(root),
+            static_cast<const void *>(tree),
+            static_cast<const void *>(parent),
+            static_cast<unsigned>(childIndex),
+            static_cast<unsigned>(nodeCount));
+    }
+    Switch_LogWrite(message);
+}
+
+static bool R_SwitchValidateDpvsAabbTreeNode(
+    const char *stage,
+    const GfxAabbTree *root,
+    uint32_t nodeCount,
+    const GfxAabbTree *tree,
+    const GfxAabbTree *parent,
+    uint32_t childIndex)
+{
+    if (!tree || !R_SwitchAabbAddressLooksValid(tree))
+    {
+        R_SwitchLogAabbTreeWalkFault(stage, "invalid_node_pointer",
+            root, nodeCount, tree, parent, childIndex, false);
+        return false;
     }
 
-    const uintptr_t indexAddress = reinterpret_cast<uintptr_t>(tree->smodelIndexes);
+    if (root && !nodeCount)
+    {
+        R_SwitchLogAabbTreeWalkFault(stage, "invalid_cell_node_count",
+            root, nodeCount, tree, parent, childIndex, false);
+        return false;
+    }
+
+    const uintptr_t treeAddress = reinterpret_cast<uintptr_t>(tree);
+    uintptr_t rootAddress = 0;
+    uintptr_t arrayEnd = 0;
+    if (root && nodeCount)
+    {
+        rootAddress = reinterpret_cast<uintptr_t>(root);
+        const uintptr_t treeBytes = static_cast<uintptr_t>(nodeCount) * sizeof(GfxAabbTree);
+        arrayEnd = rootAddress + treeBytes;
+        if (!R_SwitchAabbAddressLooksValid(root) ||
+            treeAddress < rootAddress ||
+            treeAddress >= arrayEnd ||
+            (treeAddress - rootAddress) % sizeof(GfxAabbTree) != 0)
+        {
+            R_SwitchLogAabbTreeWalkFault(stage, "node_outside_cell_array_or_misaligned",
+                root, nodeCount, tree, parent, childIndex, false);
+            return false;
+        }
+    }
+
+    const uint32_t modelCount = rgp.world ? rgp.world->dpvs.smodelCount : 0u;
+    if ((nodeCount && tree->childCount > nodeCount) ||
+        tree->smodelIndexCount > modelCount)
+    {
+        R_SwitchLogAabbTreeWalkFault(stage, "count_exceeds_world",
+            root, nodeCount, tree, parent, childIndex, true);
+        return false;
+    }
+
     if (tree->smodelIndexCount &&
         (!tree->smodelIndexes || !R_SwitchAabbAddressLooksValid(tree->smodelIndexes)))
     {
-        char message[384];
-        std::snprintf(message, sizeof(message),
-            "[KisakCOD][AABB INDEX FAULT] stage=%s tree=%p indices=%p count=%u childCount=%u childOffset=%d surfaces=%u start=%u models=%u\n",
-            stage,
-            static_cast<const void *>(tree),
-            static_cast<const void *>(tree->smodelIndexes),
-            static_cast<unsigned>(tree->smodelIndexCount),
-            static_cast<unsigned>(tree->childCount),
-            tree->childrenOffset,
-            static_cast<unsigned>(tree->surfaceCount),
-            static_cast<unsigned>(tree->startSurfIndex),
-            rgp.world ? static_cast<unsigned>(rgp.world->dpvs.smodelCount) : 0u);
-        Switch_LogWrite(message);
+        R_SwitchLogAabbTreeWalkFault(stage, "invalid_model_index_pointer",
+            root, nodeCount, tree, parent, childIndex, true);
+        return false;
     }
+
+    if (tree->childCount)
+    {
+        const int offset = tree->childrenOffset;
+        if (offset <= 0 ||
+            (nodeCount && offset % static_cast<int>(sizeof(GfxAabbTree)) != 0))
+        {
+            R_SwitchLogAabbTreeWalkFault(stage, "invalid_child_offset",
+                root, nodeCount, tree, parent, childIndex, true);
+            return false;
+        }
+
+        const uintptr_t childrenAddress = treeAddress + static_cast<uintptr_t>(offset);
+        if (root && nodeCount)
+        {
+            if (childrenAddress < rootAddress || childrenAddress >= arrayEnd ||
+                static_cast<uintptr_t>(tree->childCount) >
+                    (arrayEnd - childrenAddress) / sizeof(GfxAabbTree))
+            {
+                R_SwitchLogAabbTreeWalkFault(stage, "children_outside_cell_array",
+                    root, nodeCount, tree, parent, childIndex, true);
+                return false;
+            }
+        }
+        else if (!R_SwitchAabbAddressLooksValid(reinterpret_cast<const void *>(childrenAddress)))
+        {
+            R_SwitchLogAabbTreeWalkFault(stage, "invalid_children_address",
+                root, nodeCount, tree, parent, childIndex, true);
+            return false;
+        }
+    }
+
+    return true;
 }
 #endif
 
-void __cdecl R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPlaneSet *clipSet)
+static void R_AddAabbTreeSurfacesInFrustum_r_impl(
+    const GfxAabbTree *tree,
+    const DpvsClipPlaneSet *clipSet,
+    const GfxAabbTree *root,
+    uint32_t nodeCount,
+    const GfxAabbTree *parent,
+    uint32_t parentChildIndex)
 {
 #ifdef __SWITCH__
-    if (!R_SwitchAabbAddressLooksValid(tree))
-    {
-        char message[256];
-        std::snprintf(message, sizeof(message),
-            "[KisakCOD][AABB INDEX FAULT] stage=dpvs_tree invalidTree=%p\n",
-            static_cast<const void *>(tree));
-        Switch_LogWrite(message);
+    if (!R_SwitchValidateDpvsAabbTreeNode("dpvs", root, nodeCount, tree, parent, parentChildIndex))
         return;
-    }
-    R_SwitchLogBadAabbIndexPointer("dpvs", tree);
 #endif
     int v2; // [esp+10h] [ebp-D0h]
     int v3; // [esp+14h] [ebp-CCh]
@@ -117,7 +224,7 @@ void __cdecl R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const Dpv
             children = (const GfxAabbTree *)((char *)tree + tree->childrenOffset);
             childCount = tree->childCount;
             for (childIndex = 0; childIndex < childCount; ++childIndex)
-                R_AddAabbTreeSurfacesInFrustum_r(&children[childIndex], &clipSetChild);
+                R_AddAabbTreeSurfacesInFrustum_r_impl(&children[childIndex], &clipSetChild, root, nodeCount, tree, childIndex);
         }
         else
         {
@@ -132,6 +239,14 @@ void __cdecl R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const Dpv
                     for (i = 0; i < v16; ++i)
                     {
                         v7 = smodelIndexes[i];
+#ifdef __SWITCH__
+                        if (static_cast<uint32_t>(v7) >= rgp.world->dpvs.smodelCount)
+                        {
+                            R_SwitchLogAabbTreeWalkFault("dpvs", "model_index_out_of_range",
+                                root, nodeCount, tree, parent, parentChildIndex, true);
+                            return;
+                        }
+#endif
                         //if (!*(_BYTE *)(*(_DWORD *)(*((_DWORD *)NtCurrentTeb()->ThreadLocalStoragePointer + _tls_index) + 24) + v7))
                         if (!g_smodelVisData[v7])
                         {
@@ -221,6 +336,14 @@ void __cdecl R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const Dpv
                 for (smodelIndexIter = 0; smodelIndexIter < smodelIndexCount; ++smodelIndexIter)
                 {
                     smodelIndex = indices[smodelIndexIter];
+#ifdef __SWITCH__
+                    if (smodelIndex >= rgp.world->dpvs.smodelCount)
+                    {
+                        R_SwitchLogAabbTreeWalkFault("dpvs", "model_index_out_of_range",
+                            root, nodeCount, tree, parent, parentChildIndex, true);
+                        return;
+                    }
+#endif
                     //*(_BYTE *)(*(_DWORD *)(*((_DWORD *)NtCurrentTeb()->ThreadLocalStoragePointer + _tls_index) + 24) + smodelIndex) = 1;
                     g_smodelVisData[smodelIndex] = 1;
                 }
@@ -250,6 +373,12 @@ void __cdecl R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const Dpv
     }
 }
 
+
+void __cdecl R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPlaneSet *clipSet)
+{
+    R_AddAabbTreeSurfacesInFrustum_r_impl(tree, clipSet, nullptr, 0, nullptr, 0);
+}
+
 void __cdecl R_CopyClipPlane(const DpvsPlane *in, DpvsPlane *out);
 
 void __cdecl R_AddCellStaticSurfacesInFrustum(DpvsStaticCellCmd *dpvsCell)
@@ -273,7 +402,19 @@ void __cdecl R_AddCellStaticSurfacesInFrustum(DpvsStaticCellCmd *dpvsCell)
             clipSet.planes[planeIndex] = &clipPlanePool[planeIndex];
         }
         clipSet.count = planes.count;
-        R_AddAabbTreeSurfacesInFrustum_r(tree, &clipSet);
+#ifdef __SWITCH__
+        if (dpvsCell->cell->aabbTreeCount <= 0)
+        {
+            R_SwitchLogAabbTreeWalkFault("dpvs", "invalid_cell_tree_count",
+                tree, 0, tree, nullptr, 0, false);
+            return;
+        }
+#endif
+        R_AddAabbTreeSurfacesInFrustum_r_impl(
+            tree, &clipSet, tree,
+            dpvsCell->cell->aabbTreeCount > 0 ?
+                static_cast<uint32_t>(dpvsCell->cell->aabbTreeCount) : 0u,
+            nullptr, 0);
     }
 }
 
