@@ -923,7 +923,8 @@ void __cdecl Material_ReleasePassResources(MaterialPass *pass)
         pass->vertexDecl->isLoaded = false;
         for (int declIndex = 0; declIndex < 16; ++declIndex)
         {
-            delete pass->vertexDecl->routing.decl[declIndex];
+            if (pass->vertexDecl->routing.decl[declIndex])
+                pass->vertexDecl->routing.decl[declIndex]->Release();
             pass->vertexDecl->routing.decl[declIndex] = nullptr;
         }
     }

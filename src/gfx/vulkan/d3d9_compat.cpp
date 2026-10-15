@@ -30,6 +30,7 @@ namespace
 uint32_t g_switchSceneDrawPrimitiveCalls = 0;
 uint32_t g_switchSceneDrawIndexedCalls = 0;
 uint32_t g_switchSceneClearCalls = 0;
+std::atomic<uint64_t> g_nextSwitchResourceSerial{1};
 
 constexpr size_t SWITCH_UNIFORM_FREE_TRACE_CAPACITY = 48;
 struct SwitchUniformFreeTraceEntry
@@ -932,8 +933,13 @@ extern "C" void Switch_DumpVulkanUniformTraceOnCrash(void (*writeLine)(const cha
 
 void KisakVkBuffer::Release()
 {
-    if (!device)
+    if (refs.fetch_sub(1, std::memory_order_acq_rel) != 1)
         return;
+    if (!device)
+    {
+        delete this;
+        return;
+    }
     if (mapped)
         vkUnmapMemory(device, memory);
     VulkanBackend *backend = GetVulkanBackend();
@@ -973,11 +979,8 @@ HRESULT KisakVkBuffer::Unlock()
 
 void KisakVkTexture::Release()
 {
-    if (refs > 1)
-    {
-        --refs;
+    if (refs.fetch_sub(1, std::memory_order_acq_rel) != 1)
         return;
-    }
 
     VulkanBackend *backend = GetVulkanBackend();
     if (backend)
@@ -1220,10 +1223,36 @@ IDirect3DDevice9::~IDirect3DDevice9()
             vkDestroyPipeline(m_backend->Device(), pipeline.second, nullptr);
     m_pipelines.clear();
 
+    for (auto &stream : m_streams)
+    {
+        if (stream.buffer)
+            stream.buffer->Release();
+        stream = {};
+    }
+    if (m_indices)
+        m_indices->Release();
+    m_indices = nullptr;
+    for (auto *&texture : m_textures)
+    {
+        if (texture)
+            texture->Release();
+        texture = nullptr;
+    }
+    if (m_vertexShader)
+        m_vertexShader->Release();
+    m_vertexShader = nullptr;
+    if (m_pixelShader)
+        m_pixelShader->Release();
+    m_pixelShader = nullptr;
+    if (m_decl)
+        m_decl->Release();
+    m_decl = nullptr;
     if (m_color)
         m_color->Release();
+    m_color = nullptr;
     if (m_depth)
         m_depth->Release();
+    m_depth = nullptr;
 }
 
 HRESULT IDirect3DDevice9::StretchRect(
@@ -1622,6 +1651,7 @@ HRESULT IDirect3DDevice9::CreateVertexDeclaration(
         return E_FAIL;
 
     auto *decl = new IDirect3DVertexDeclaration9;
+    decl->serial = g_nextSwitchResourceSerial.fetch_add(1, std::memory_order_relaxed);
     for (const _D3DVERTEXELEMENT9 *e = elements; e->Stream != 0xFF; ++e)
         decl->elements.push_back(*e);
 
@@ -1630,14 +1660,29 @@ HRESULT IDirect3DDevice9::CreateVertexDeclaration(
 
 HRESULT IDirect3DDevice9::SetVertexDeclaration(IDirect3DVertexDeclaration9 *decl)
 {
+    if (m_decl == decl)
+        return S_OK;
+
+    if (decl)
+        decl->AddRef();
+    IDirect3DVertexDeclaration9 *oldDecl = m_decl;
     m_decl = decl;
     m_pipelineDirty = true;
+    if (oldDecl)
+        oldDecl->Release();
     return S_OK;
 }
 
 HRESULT IDirect3DDevice9::SetIndices(IDirect3DIndexBuffer9 *ib)
 {
+    if (m_indices == ib)
+        return S_OK;
+    if (ib)
+        ib->AddRef();
+    IDirect3DIndexBuffer9 *old = m_indices;
     m_indices = ib;
+    if (old)
+        old->Release();
     return S_OK;
 }
 
@@ -1646,8 +1691,18 @@ HRESULT IDirect3DDevice9::SetStreamSource(
 {
     if (stream >= 16)
         return E_FAIL;
+    if (m_streams[stream].buffer == vb &&
+        m_streams[stream].offset == offset &&
+        m_streams[stream].stride == stride)
+        return S_OK;
+
+    if (vb)
+        vb->AddRef();
+    IDirect3DVertexBuffer9 *old = m_streams[stream].buffer;
     m_streams[stream] = {vb, offset, stride};
     m_pipelineDirty = true;
+    if (old)
+        old->Release();
     return S_OK;
 }
 
@@ -1655,7 +1710,14 @@ HRESULT IDirect3DDevice9::SetTexture(uint32_t stage, IDirect3DBaseTexture9 *tex)
 {
     if (stage >= 16)
         return E_FAIL;
+    if (m_textures[stage] == tex)
+        return S_OK;
+    if (tex)
+        tex->AddRef();
+    IDirect3DBaseTexture9 *old = m_textures[stage];
     m_textures[stage] = tex;
+    if (old)
+        old->Release();
     return S_OK;
 }
 
@@ -1682,6 +1744,7 @@ HRESULT IDirect3DDevice9::CreateVertexShader(
     }
 
     auto *shader = new IDirect3DVertexShader9;
+    shader->serial = g_nextSwitchResourceSerial.fetch_add(1, std::memory_order_relaxed);
     shader->stage = VK_SHADER_STAGE_VERTEX_BIT;
     shader->parseData = parse;
     shader->spirv.resize(static_cast<size_t>(parse->output_len) / sizeof(uint32_t));
@@ -1713,6 +1776,7 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
     }
 
     auto *shader = new IDirect3DPixelShader9;
+    shader->serial = g_nextSwitchResourceSerial.fetch_add(1, std::memory_order_relaxed);
     shader->stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     shader->parseData = parse;
     shader->spirv.resize(static_cast<size_t>(parse->output_len) / sizeof(uint32_t));
@@ -1735,6 +1799,9 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
 
 void KisakVkShader::Release()
 {
+    if (refs.fetch_sub(1, std::memory_order_acq_rel) != 1)
+        return;
+
     VulkanBackend *backend = GetVulkanBackend();
     if (backend && module)
         vkDestroyShaderModule(backend->Device(), module, nullptr);
@@ -1747,16 +1814,30 @@ void KisakVkShader::Release()
 
 HRESULT IDirect3DDevice9::SetVertexShader(IDirect3DVertexShader9 *shader)
 {
+    if (m_vertexShader == shader)
+        return S_OK;
+    if (shader)
+        shader->AddRef();
+    IDirect3DVertexShader9 *old = m_vertexShader;
     m_vertexShader = shader;
     m_pipelineDirty = true;
-    return shader ? S_OK : E_FAIL;
+    if (old)
+        old->Release();
+    return S_OK;
 }
 
 HRESULT IDirect3DDevice9::SetPixelShader(IDirect3DPixelShader9 *shader)
 {
+    if (m_pixelShader == shader)
+        return S_OK;
+    if (shader)
+        shader->AddRef();
+    IDirect3DPixelShader9 *old = m_pixelShader;
     m_pixelShader = shader;
     m_pipelineDirty = true;
-    return shader ? S_OK : E_FAIL;
+    if (old)
+        old->Release();
+    return S_OK;
 }
 
 template <size_t N>
@@ -2184,9 +2265,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 
     uint64_t key = 0x12345678abcdef00ull;
-    key = HashCombine(key, PointerKey(m_vertexShader));
-    key = HashCombine(key, PointerKey(m_pixelShader));
-    key = HashCombine(key, PointerKey(m_decl));
+    key = HashCombine(key, m_vertexShader->serial);
+    key = HashCombine(key, m_pixelShader->serial);
+    key = HashCombine(key, m_decl->serial);
     key = HashCombine(key, m_viewport.Width);
     key = HashCombine(key, m_viewport.Height);
     key = HashCombine(key, m_depthEnable);
@@ -2242,8 +2323,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     // to copy shader binaries off the Switch.
     std::vector<uint32_t> unpatchedPixelSpirvForProbe;
 
-    if (m_vertexShader->linkedDeclaration != m_decl ||
-        m_vertexShader->linkedPixelShader != m_pixelShader)
+    if (m_vertexShader->linkedDeclarationSerial != m_decl->serial ||
+        m_vertexShader->linkedPixelShaderSerial != m_pixelShader->serial)
     {
         if (m_vertexShader->module)
             vkDestroyShaderModule(m_backend->Device(), m_vertexShader->module, nullptr);
@@ -2388,10 +2469,10 @@ bool IDirect3DDevice9::EnsurePipeline()
             return false;
         }
 
-        m_vertexShader->linkedDeclaration = m_decl;
-        m_vertexShader->linkedPixelShader = m_pixelShader;
-        m_pixelShader->linkedDeclaration = m_decl;
-        m_pixelShader->linkedPixelShader = m_pixelShader;
+        m_vertexShader->linkedDeclarationSerial = m_decl->serial;
+        m_vertexShader->linkedPixelShaderSerial = m_pixelShader->serial;
+        m_pixelShader->linkedDeclarationSerial = m_decl->serial;
+        m_pixelShader->linkedPixelShaderSerial = m_pixelShader->serial;
         m_pixelShader->linkedAlphaTestPatch = m_alphaTest;
     }
     else if (m_pixelShader->linkedAlphaTestPatch != m_alphaTest)

@@ -2,6 +2,7 @@
 
 #ifdef __SWITCH__
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -170,9 +171,11 @@ struct VulkanUniformLayout
 };
 
 struct KisakVkBuffer {
+    std::atomic<uint32_t> refs{1};
     VkBuffer buffer=VK_NULL_HANDLE;
     VkDeviceMemory memory=VK_NULL_HANDLE;
     void *mapped=nullptr;
+    void AddRef() { refs.fetch_add(1, std::memory_order_relaxed); }
     // Dynamic buffers keep a staging copy; static buffers are written directly
     // to their persistently mapped HOST_VISIBLE|HOST_COHERENT allocation.
     std::vector<uint8_t> shadow;
@@ -194,10 +197,10 @@ struct KisakVkTexture {
     uint32_t width=0, height=0, depth=1, mipLevels=1, arrayLayers=1;
     _D3DFORMAT sourceFormat=D3DFMT_UNKNOWN;
     std::vector<VkImageLayout> subresourceLayouts;
-    uint32_t refs=1;
+    std::atomic<uint32_t> refs{1};
     std::vector<uint8_t> lockShadow;
     bool lockShadowActive=false;
-    void AddRef() { ++refs; }
+    void AddRef() { refs.fetch_add(1, std::memory_order_relaxed); }
     VkImageLayout GetSubresourceLayout(uint32_t level, uint32_t layer=0) const
     {
         if (level >= mipLevels || layer >= arrayLayers)
@@ -229,7 +232,14 @@ using IDirect3DVertexBuffer9 = KisakVkBuffer;
 using IDirect3DIndexBuffer9 = KisakVkBuffer;
 
 struct KisakVkVertexDeclaration {
+    std::atomic<uint32_t> refs{1};
+    uint64_t serial=0;
     std::vector<_D3DVERTEXELEMENT9> elements;
+    void AddRef() { refs.fetch_add(1, std::memory_order_relaxed); }
+    void Release() {
+        if (refs.fetch_sub(1, std::memory_order_acq_rel) == 1)
+            delete this;
+    }
     // Material_BuildVertexDecl records the engine vertex declaration type so
     // Vulkan can distinguish the generic GfxVertex 2D layout from packed
     // world-vertex layouts that intentionally share the D3D source table.
@@ -238,6 +248,8 @@ struct KisakVkVertexDeclaration {
 using IDirect3DVertexDeclaration9 = KisakVkVertexDeclaration;
 
 struct KisakVkShader {
+    std::atomic<uint32_t> refs{1};
+    uint64_t serial=0;
     VkShaderModule module=VK_NULL_HANDLE;
     VkShaderStageFlagBits stage=VK_SHADER_STAGE_VERTEX_BIT;
     const MOJOSHADER_parseData *parseData=nullptr;
@@ -246,8 +258,9 @@ struct KisakVkShader {
     // Alpha testing is dynamic D3D9 state, so retain this baseline to rebuild the
     // fragment module when the state changes without re-linking both shader stages.
     std::vector<uint32_t> linkedSpirv;
-    const void *linkedDeclaration=nullptr;
-    const void *linkedPixelShader=nullptr;
+    uint64_t linkedDeclarationSerial=0;
+    uint64_t linkedPixelShaderSerial=0;
+    void AddRef() { refs.fetch_add(1, std::memory_order_relaxed); }
     bool linkedAlphaTestPatch=false;
     uint32_t alphaFuncSpecId=0;
     uint32_t alphaRefSpecId=0;
