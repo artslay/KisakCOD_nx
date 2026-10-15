@@ -211,6 +211,8 @@ struct IDirect3DResource9
 };
 
 struct KisakVkBuffer : IDirect3DResource9 {
+    KisakVkBuffer();
+    ~KisakVkBuffer() override;
     std::atomic<uint32_t> refs{1};
     VkBuffer buffer=VK_NULL_HANDLE;
     VkDeviceMemory memory=VK_NULL_HANDLE;
@@ -222,6 +224,10 @@ struct KisakVkBuffer : IDirect3DResource9 {
     // Dynamic buffers keep a staging copy; static buffers are written directly
     // to their persistently mapped HOST_VISIBLE|HOST_COHERENT allocation.
     std::vector<uint8_t> shadow;
+    std::vector<uint8_t> recoveryShadow;
+    VkBufferUsageFlags usageFlags=0;
+    VkMemoryPropertyFlags memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    bool recoveryPending=false;
     bool dynamic=false;
     uint32_t size=0;
     bool lockActive=false;
@@ -322,6 +328,8 @@ struct KisakVkVertexDeclaration : IDirect3DResource9 {
 using IDirect3DVertexDeclaration9 = KisakVkVertexDeclaration;
 
 struct KisakVkShader : IDirect3DResource9 {
+    KisakVkShader();
+    ~KisakVkShader() override;
     std::atomic<uint32_t> refs{1};
     uint64_t serial=0;
     VkShaderModule module=VK_NULL_HANDLE;
@@ -492,5 +500,8 @@ private:
         VkPipelineBindPoint bindPoint, uint32_t setIndex,
         IDirect3DBaseTexture9 *const (&textures)[16]);
 };
+
+bool Switch_PrepareVulkanDeviceLossResources(VulkanBackend *backend);
+bool Switch_RestoreVulkanBuffers(VulkanBackend *backend);
 
 #endif

@@ -33,6 +33,9 @@ uint32_t g_switchSceneDrawPrimitiveCalls = 0;
 uint32_t g_switchSceneDrawIndexedCalls = 0;
 uint32_t g_switchSceneClearCalls = 0;
 std::atomic<uint64_t> g_nextSwitchResourceSerial{1};
+std::mutex g_vulkanResourceRegistryMutex;
+std::unordered_set<KisakVkBuffer *> g_liveVulkanBuffers;
+std::unordered_set<KisakVkShader *> g_liveVulkanShaders;
 
 void LogUnsupportedRenderState(uint32_t state, uint32_t value)
 {
@@ -998,6 +1001,120 @@ extern "C" void Switch_DumpVulkanUniformTraceOnCrash(void (*writeLine)(const cha
             entry.result);
         writeLine(line);
     }
+}
+
+KisakVkBuffer::KisakVkBuffer()
+{
+    std::lock_guard<std::mutex> lock(g_vulkanResourceRegistryMutex);
+    g_liveVulkanBuffers.insert(this);
+}
+KisakVkBuffer::~KisakVkBuffer()
+{
+    std::lock_guard<std::mutex> lock(g_vulkanResourceRegistryMutex);
+    g_liveVulkanBuffers.erase(this);
+}
+
+bool Switch_PrepareVulkanDeviceLossResources(VulkanBackend *backend)
+{
+    if (!backend || backend->Device() == VK_NULL_HANDLE)
+        return false;
+    std::lock_guard<std::mutex> lock(g_vulkanResourceRegistryMutex);
+    for (KisakVkBuffer *buffer : g_liveVulkanBuffers)
+        if (!buffer || buffer->lockActive || !buffer->size ||
+            !buffer->buffer || !buffer->memory || !buffer->mapped ||
+            buffer->device != backend->Device())
+            return false;
+
+    // Mapped storage is the authoritative backing for static and dynamic buffers.
+    for (KisakVkBuffer *buffer : g_liveVulkanBuffers)
+    {
+        buffer->recoveryShadow.resize(buffer->size);
+        std::memcpy(buffer->recoveryShadow.data(), buffer->mapped, buffer->size);
+    }
+    for (KisakVkBuffer *buffer : g_liveVulkanBuffers)
+    {
+        vkUnmapMemory(buffer->device, buffer->memory);
+        buffer->mapped = nullptr;
+        backend->DestroyBuffer(buffer->buffer, buffer->memory);
+        buffer->buffer = VK_NULL_HANDLE;
+        buffer->memory = VK_NULL_HANDLE;
+        buffer->device = VK_NULL_HANDLE;
+        buffer->recoveryPending = true;
+    }
+    // VkDevice destruction frees all old shader modules. Clear handles and force
+    // the surviving wrappers to relink/recreate modules on their next draw.
+    for (KisakVkShader *shader : g_liveVulkanShaders)
+    {
+        if (!shader)
+            continue;
+        shader->module = VK_NULL_HANDLE;
+        shader->linkedDeclarationSerial = 0;
+        shader->linkedPixelShaderSerial = 0;
+        shader->linkedAlphaTestPatch = false;
+        shader->alphaFuncSpecId = 0;
+        shader->alphaRefSpecId = 0;
+    }
+    Switch_LogWrite("[KisakCOD][VK RECOVERY] preserved mapped buffers and invalidated shader modules\\n");
+    return true;
+}
+
+bool Switch_RestoreVulkanBuffers(VulkanBackend *backend)
+{
+    if (!backend || backend->Device() == VK_NULL_HANDLE)
+        return false;
+    struct PendingBuffer
+    {
+        KisakVkBuffer *owner = nullptr;
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        void *mapped = nullptr;
+    };
+    std::vector<PendingBuffer> pending;
+    std::lock_guard<std::mutex> lock(g_vulkanResourceRegistryMutex);
+    for (KisakVkBuffer *owner : g_liveVulkanBuffers)
+    {
+        if (!owner || !owner->recoveryPending)
+            continue;
+        if (owner->buffer || owner->memory || owner->mapped ||
+            owner->recoveryShadow.size() != owner->size)
+            return false;
+        PendingBuffer item{};
+        item.owner = owner;
+        if (!backend->CreateBuffer(owner->size, owner->usageFlags, owner->memoryProperties,
+                                   &item.buffer, &item.memory, &item.mapped))
+        {
+            if (item.mapped)
+                vkUnmapMemory(backend->Device(), item.memory);
+            if (item.buffer || item.memory)
+                backend->DestroyBuffer(item.buffer, item.memory);
+            for (PendingBuffer &created : pending)
+            {
+                if (created.mapped)
+                    vkUnmapMemory(backend->Device(), created.memory);
+                backend->DestroyBuffer(created.buffer, created.memory);
+            }
+            Switch_LogWrite("[KisakCOD][VK RECOVERY] failed to recreate a mapped buffer\\n");
+            return false;
+        }
+        std::memcpy(item.mapped, owner->recoveryShadow.data(), owner->size);
+        pending.push_back(item);
+    }
+    for (PendingBuffer &item : pending)
+    {
+        item.owner->buffer = item.buffer;
+        item.owner->memory = item.memory;
+        item.owner->mapped = item.mapped;
+        item.owner->device = backend->Device();
+        if (item.owner->dynamic)
+        {
+            item.owner->shadow.resize(item.owner->size);
+            std::memcpy(item.owner->shadow.data(), item.owner->recoveryShadow.data(), item.owner->size);
+        }
+        item.owner->recoveryShadow.clear();
+        item.owner->recoveryPending = false;
+    }
+    Switch_LogWrite("[KisakCOD][VK RECOVERY] restored surviving mapped vertex/index buffers\\n");
+    return true;
 }
 
 uint32_t KisakVkBuffer::Release()
@@ -2056,15 +2173,13 @@ HRESULT IDirect3DDevice9::CreateVertexBuffer(
     auto *buffer = new KisakVkBuffer;
     buffer->size = size;
     buffer->device = m_backend->Device();
-    // D3DUSAGE_DYNAMIC; static zone/world buffers don't need a CPU shadow.
+    buffer->usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     buffer->dynamic = (usage & 0x200u) != 0;
     if (buffer->dynamic)
         buffer->shadow.resize(size);
 
     if (!m_backend->CreateBuffer(
-            size,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            size, buffer->usageFlags, buffer->memoryProperties,
             &buffer->buffer, &buffer->memory, &buffer->mapped))
     {
         delete buffer;
@@ -2085,15 +2200,13 @@ HRESULT IDirect3DDevice9::CreateIndexBuffer(
     auto *buffer = new KisakVkBuffer;
     buffer->size = size;
     buffer->device = m_backend->Device();
-    // D3DUSAGE_DYNAMIC; static zone/world buffers don't need a CPU shadow.
+    buffer->usageFlags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     buffer->dynamic = (usage & 0x200u) != 0;
     if (buffer->dynamic)
         buffer->shadow.resize(size);
 
     if (!m_backend->CreateBuffer(
-            size,
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            size, buffer->usageFlags, buffer->memoryProperties,
             &buffer->buffer, &buffer->memory, &buffer->mapped))
     {
         delete buffer;
@@ -2243,6 +2356,17 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
     std::memcpy(shader->spirv.data(), parse->output, parse->output_len);
     *out = shader;
     return S_OK;
+}
+
+KisakVkShader::KisakVkShader()
+{
+    std::lock_guard<std::mutex> lock(g_vulkanResourceRegistryMutex);
+    g_liveVulkanShaders.insert(this);
+}
+KisakVkShader::~KisakVkShader()
+{
+    std::lock_guard<std::mutex> lock(g_vulkanResourceRegistryMutex);
+    g_liveVulkanShaders.erase(this);
 }
 
 uint32_t KisakVkShader::Release()
