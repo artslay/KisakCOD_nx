@@ -220,6 +220,12 @@ public:
 
     bool AllocateUniform(const void *data, size_t size, VkDescriptorBufferInfo *info);
 
+    // Record an ordered update to a dynamic vertex/index buffer without waiting
+    // for the GPU. Requires a 4-byte aligned range and an active frame.
+    bool QueueBufferUpdate(
+        VkBuffer destination, VkDeviceSize destinationOffset,
+        const void *data, size_t size);
+
     void QueuePresentSource(
         VkImage image,
         VkImageView view,
