@@ -45,7 +45,7 @@ void LogUnsupportedRenderState(uint32_t state, uint32_t value)
 
     char message[160];
     std::snprintf(message, sizeof(message),
-        "[KisakCOD][VK STATE] unsupported D3D render state=%u value=%u\\n",
+        "[KisakCOD][VK STATE] unsupported D3D render state=%u value=%u\n",
         state, value);
     Switch_LogWrite(message);
 }
