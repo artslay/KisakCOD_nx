@@ -96,9 +96,9 @@ void RecordSwitchUniformFreeTrace(
 
 struct TextureFormatInfo
 {
-    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+    VkFormat format = VK_FORMAT_UNDEFINED;
     VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
-    uint32_t bytesPerPixel = 4;
+    uint32_t bytesPerPixel = 0;
     uint32_t blockBytes = 0;
     bool compressed = false;
     bool depth = false;
@@ -991,7 +991,8 @@ void KisakVkTexture::Release()
 HRESULT KisakVkTexture::LockRect(
     uint32_t level, _D3DLOCKED_RECT *lockedRect, const tagRECT *, uint32_t)
 {
-    if (!lockedRect || level >= mipLevels || depth != 1 || !width || !height)
+    if (!lockedRect || level >= mipLevels || depth != 1 || !width || !height ||
+        GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
     const uint32_t levelWidth = std::max(1u, width >> level);
@@ -1006,7 +1007,8 @@ HRESULT KisakVkTexture::LockRect(
 
 HRESULT KisakVkTexture::UnlockRect(uint32_t level)
 {
-    if (!lockShadowActive || level >= mipLevels)
+    if (!lockShadowActive || level >= mipLevels ||
+        GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
     VulkanBackend *backend = GetVulkanBackend();
@@ -1030,14 +1032,18 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
 HRESULT KisakVkTexture::LockBox(
     uint32_t level, _D3DLOCKED_BOX *lockedBox, const _D3DBOX *, uint32_t)
 {
-    if (!lockedBox || level >= mipLevels || depth == 1 || !width || !height)        return E_FAIL;
+    if (!lockedBox || level >= mipLevels || depth == 1 || !width || !height ||
+        GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
+        return E_FAIL;
 
     const uint32_t levelWidth = std::max(1u, width >> level);
     const uint32_t levelHeight = std::max(1u, height >> level);
     const uint32_t levelDepth = std::max(1u, depth >> level);
-    const uint32_t rowPitch = levelWidth * std::max(1u, GetTextureFormat(sourceFormat).bytesPerPixel);
-    const uint32_t slicePitch = rowPitch * levelHeight;
-    lockShadow.resize(static_cast<size_t>(slicePitch) * levelDepth);
+    const uint32_t rowPitch = TexturePitch(sourceFormat, levelWidth);
+    const size_t slicePitch = TextureLevelSize(sourceFormat, levelWidth, levelHeight);
+    if (!rowPitch || !slicePitch)
+        return E_FAIL;
+    lockShadow.resize(slicePitch * levelDepth);
 
     lockedBox->RowPitch = static_cast<int>(rowPitch);
     lockedBox->SlicePitch = static_cast<int>(slicePitch);
@@ -1048,7 +1054,8 @@ HRESULT KisakVkTexture::LockBox(
 
 HRESULT KisakVkTexture::UnlockBox(uint32_t level)
 {
-    if (!lockShadowActive || level >= mipLevels)
+    if (!lockShadowActive || level >= mipLevels ||
+        GetTextureFormat(sourceFormat).format == VK_FORMAT_UNDEFINED)
         return E_FAIL;
 
     VulkanBackend *backend = GetVulkanBackend();
