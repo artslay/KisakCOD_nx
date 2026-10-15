@@ -334,7 +334,7 @@ public:
     HRESULT DrawIndexedPrimitive(uint32_t,int32_t,uint32_t,uint32_t,uint32_t,uint32_t);
     HRESULT UpdateTexture(IDirect3DVolumeTexture9*,IDirect3DVolumeTexture9*);
     HRESULT TestCooperativeLevel();
-    HRESULT Clear(uint32_t,uint32_t,uint32_t,uint32_t,float,uint32_t);
+    HRESULT Clear(uint32_t,const tagRECT*,uint32_t,uint32_t,float,uint32_t);
 
 private:
     struct StreamBinding { IDirect3DVertexBuffer9 *buffer=nullptr; uint32_t offset=0, stride=0; };

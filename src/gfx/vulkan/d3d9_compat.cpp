@@ -2799,13 +2799,21 @@ bool IDirect3DDevice9::PrepareDraw()
         m_depth && m_depth->texture
             ? m_depth->texture->layout
             : m_backend->DefaultDepthLayout();
+    uint32_t backBufferWidth = m_viewport.Width;
+    uint32_t backBufferHeight = m_viewport.Height;
+    uint32_t backBufferFormat = 0;
+    (void)m_backend->GetBackBufferDesc(
+        &backBufferWidth, &backBufferHeight, &backBufferFormat);
+    const uint32_t targetWidth = m_color && m_color->texture
+        ? m_color->texture->width : backBufferWidth;
+    const uint32_t targetHeight = m_color && m_color->texture
+        ? m_color->texture->height : backBufferHeight;
 
     if (!m_backend->EnsureRendering(
             colorImage, colorView, colorFormat,
             depthImage, depthView, depthFormat,
             colorOldLayout, depthOldLayout,
-            m_color && m_color->texture ? m_color->texture->width : m_viewport.Width,
-            m_color && m_color->texture ? m_color->texture->height : m_viewport.Height))
+            targetWidth, targetHeight))
     {
         Switch_LogWrite("[KisakCOD][VK DRAW] fail=ensure_rendering\n");
         return false;
@@ -2839,10 +2847,7 @@ bool IDirect3DDevice9::PrepareDraw()
     vkCmdSetViewport(m_backend->CommandBuffer(), 0, 1, &viewport);
 
     VkRect2D scissor{};
-    const uint32_t targetWidth =
-        m_color && m_color->texture ? m_color->texture->width : m_viewport.Width;
-    const uint32_t targetHeight =
-        m_color && m_color->texture ? m_color->texture->height : m_viewport.Height;
+    // targetWidth/targetHeight describe the full target; viewport state is separate.
     const int32_t scissorLeft = m_scissor ? m_scissorRect.left : static_cast<int32_t>(m_viewport.X);
     const int32_t scissorTop = m_scissor ? m_scissorRect.top : static_cast<int32_t>(m_viewport.Y);
     const int32_t scissorRight = m_scissor
@@ -3071,10 +3076,21 @@ HRESULT IDirect3DDevice9::TestCooperativeLevel()
 }
 
 HRESULT IDirect3DDevice9::Clear(
-    uint32_t, uint32_t, uint32_t flags, uint32_t color, float depth, uint32_t stencil)
+    uint32_t rectCount, const tagRECT *rects,
+    uint32_t flags, uint32_t color, float depth, uint32_t stencil)
 {
-    if (!m_backend || !m_backend->IsFrameActive())
+    if (!m_backend || !m_backend->IsFrameActive() || (rectCount && !rects))
         return E_FAIL;
+
+    uint32_t backBufferWidth = m_viewport.Width;
+    uint32_t backBufferHeight = m_viewport.Height;
+    uint32_t backBufferFormat = 0;
+    (void)m_backend->GetBackBufferDesc(
+        &backBufferWidth, &backBufferHeight, &backBufferFormat);
+    const uint32_t targetWidth = m_color && m_color->texture
+        ? m_color->texture->width : backBufferWidth;
+    const uint32_t targetHeight = m_color && m_color->texture
+        ? m_color->texture->height : backBufferHeight;
 
     if (m_backend->EnsureRendering(
             m_color && m_color->texture ? m_color->texture->image : m_backend->CurrentSwapchainImage(),
@@ -3085,8 +3101,7 @@ HRESULT IDirect3DDevice9::Clear(
             m_depth && m_depth->texture ? m_depth->texture->format : m_backend->DepthFormat(),
             m_color && m_color->texture ? m_color->texture->layout : m_backend->CurrentSwapchainLayout(),
             m_depth && m_depth->texture ? m_depth->texture->layout : m_backend->DefaultDepthLayout(),
-            m_color && m_color->texture ? m_color->texture->width : m_viewport.Width,
-            m_color && m_color->texture ? m_color->texture->height : m_viewport.Height))
+            targetWidth, targetHeight))
     {
         if (m_color && m_color->texture)
             m_color->texture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -3125,15 +3140,48 @@ HRESULT IDirect3DDevice9::Clear(
 
     if (count)
     {
-        VkClearRect rect{};
-        rect.rect.offset = {0, 0};
-        rect.rect.extent = {
-            m_color && m_color->texture ? m_color->texture->width : m_viewport.Width,
-            m_color && m_color->texture ? m_color->texture->height : m_viewport.Height
-        };
-        rect.layerCount = 1;
-        vkCmdClearAttachments(
-            m_backend->CommandBuffer(), count, attachments.data(), 1, &rect);
+        std::vector<VkClearRect> vulkanRects;
+        if (rectCount == 0)
+        {
+            VkClearRect rect{};
+            rect.rect.offset = {0, 0};
+            rect.rect.extent = {targetWidth, targetHeight};
+            rect.layerCount = 1;
+            vulkanRects.push_back(rect);
+        }
+        else
+        {
+            const int32_t targetRight = static_cast<int32_t>(
+                std::min<uint32_t>(targetWidth,
+                    static_cast<uint32_t>(std::numeric_limits<int32_t>::max())));
+            const int32_t targetBottom = static_cast<int32_t>(
+                std::min<uint32_t>(targetHeight,
+                    static_cast<uint32_t>(std::numeric_limits<int32_t>::max())));
+            vulkanRects.reserve(rectCount);
+            for (uint32_t i = 0; i < rectCount; ++i)
+            {
+                const int32_t left = std::clamp(rects[i].left, 0, targetRight);
+                const int32_t top = std::clamp(rects[i].top, 0, targetBottom);
+                const int32_t right = std::clamp(rects[i].right, left, targetRight);
+                const int32_t bottom = std::clamp(rects[i].bottom, top, targetBottom);
+                if (right <= left || bottom <= top)
+                    continue;
+                VkClearRect rect{};
+                rect.rect.offset = {left, top};
+                rect.rect.extent = {
+                    static_cast<uint32_t>(right - left),
+                    static_cast<uint32_t>(bottom - top)
+                };
+                rect.layerCount = 1;
+                vulkanRects.push_back(rect);
+            }
+        }
+        if (!vulkanRects.empty())
+        {
+            vkCmdClearAttachments(
+                m_backend->CommandBuffer(), count, attachments.data(),
+                static_cast<uint32_t>(vulkanRects.size()), vulkanRects.data());
+        }
     }
     ++g_switchSceneClearCalls;
     return S_OK;
