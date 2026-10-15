@@ -271,6 +271,11 @@ VkBlendFactor BlendFactor(uint32_t value)
     case 8: return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
     case 9: return VK_BLEND_FACTOR_DST_COLOR;
     case 10: return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+    case 11: return VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
+    case 12: return VK_BLEND_FACTOR_SRC_ALPHA;
+    case 13: return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    case 14: return VK_BLEND_FACTOR_CONSTANT_COLOR;
+    case 15: return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
     default: return VK_BLEND_FACTOR_ONE;
     }
 }
@@ -2076,6 +2081,10 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
             LogUnsupportedRenderState(state, value);
         break;
     case D3DRS_MULTISAMPLEMASK: m_multisampleMask = value; break;
+    case D3DRS_BLENDFACTOR:
+        m_blendFactor = value;
+        changed = false; // Vulkan blend constants are dynamic state.
+        break;
     case D3DRS_BLENDOPALPHA: m_blendOpAlpha = value; break;
     case D3DRS_CULLMODE: m_cullMode = value; break;
     case D3DRS_SCISSORTESTENABLE: m_scissor = value != 0; break;
@@ -2861,7 +2870,8 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     const VkDynamicState dynamicStates[] = {
         VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR
+        VK_DYNAMIC_STATE_SCISSOR,
+        VK_DYNAMIC_STATE_BLEND_CONSTANTS
     };
     VkPipelineDynamicStateCreateInfo dynamic{};
     dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -3198,6 +3208,16 @@ bool IDirect3DDevice9::PrepareDraw()
         static_cast<uint32_t>(bottom - top)
     };
     vkCmdSetScissor(m_backend->CommandBuffer(), 0, 1, &scissor);
+
+    // D3DRS_BLENDFACTOR is an ARGB D3DCOLOR. Vulkan expects normalized RGBA
+    // constants and consumes them when a blend factor uses CONSTANT_COLOR.
+    const float blendConstants[4] = {
+        static_cast<float>((m_blendFactor >> 16) & 0xffu) / 255.0f,
+        static_cast<float>((m_blendFactor >> 8) & 0xffu) / 255.0f,
+        static_cast<float>(m_blendFactor & 0xffu) / 255.0f,
+        static_cast<float>((m_blendFactor >> 24) & 0xffu) / 255.0f
+    };
+    vkCmdSetBlendConstants(m_backend->CommandBuffer(), blendConstants);
 
     if (!BindDescriptorSets())
     {

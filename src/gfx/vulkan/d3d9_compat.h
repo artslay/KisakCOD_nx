@@ -132,6 +132,7 @@ constexpr uint32_t D3DRS_COLORWRITEENABLE = 168;
 constexpr uint32_t D3DRS_BLENDOP = 171;
 constexpr uint32_t D3DRS_MULTISAMPLEANTIALIAS = 161;
 constexpr uint32_t D3DRS_MULTISAMPLEMASK = 162;
+constexpr uint32_t D3DRS_BLENDFACTOR = 193;
 constexpr uint32_t D3DRS_SCISSORTESTENABLE = 174;
 constexpr uint32_t D3DRS_SLOPESCALEDEPTHBIAS = 175;
 constexpr uint32_t D3DRS_TWOSIDEDSTENCILMODE = 185;
@@ -412,6 +413,7 @@ private:
     bool m_switchUnlit=false;
     bool m_depthEnable=true, m_depthWrite=true, m_blendEnable=false;
     uint32_t m_multisampleMask=0xffffffffu;
+    uint32_t m_blendFactor=0xffffffffu;
     bool m_separateAlphaBlend=false;
     VkPrimitiveTopology m_topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     uint32_t m_fillMode=D3DFILL_SOLID;
