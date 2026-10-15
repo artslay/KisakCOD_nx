@@ -1223,7 +1223,7 @@ HRESULT IDirect3DDevice9::StretchRect(
     if (destination->level >= dst->mipLevels ||
         srcImage == VK_NULL_HANDLE || dst->image == VK_NULL_HANDLE ||
         srcOldLayout == VK_IMAGE_LAYOUT_UNDEFINED ||
-        src->image == dst->image)
+        (src && src->image == dst->image))
         return E_FAIL;
 
     const uint32_t dstLevel = destination->level;
@@ -1231,7 +1231,6 @@ HRESULT IDirect3DDevice9::StretchRect(
     const uint32_t dstH = std::max(1u, dst->height >> dstLevel);
     const VkImageLayout dstOldLayout = dst->GetSubresourceLayout(dstLevel);
     const VkImageLayout srcOverallLayout = src ? src->layout : srcOldLayout;
-    const VkImageLayout dstOverallLayout = dst->layout;
 
     const tagRECT sr = sourceRect
         ? *sourceRect
@@ -1327,10 +1326,7 @@ HRESULT IDirect3DDevice9::StretchRect(
         m_backend->SetCurrentSwapchainLayout(srcOldLayout);
     }
     dst->SetSubresourceLayout(dstLevel, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    dst->layout = dstOverallLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ||
-                  dstOverallLayout == VK_IMAGE_LAYOUT_UNDEFINED
-        ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    dst->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     return S_OK;
 }
