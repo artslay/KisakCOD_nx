@@ -289,7 +289,42 @@ static void R_LoadGraphicsAssets()
         DB_LoadXAssets(zoneInfo, zoneCount, 1);
 }
 
+// R_InitGlobalStructs() clears vidConfig on renderer registration, but the
+// Vulkan backend and compatibility device can survive a renderer restart. In
+// that case R_InitGraphicsApi() takes its existing-device early return, so
+// restore the fixed Switch display defaults before returning them to cls.vidConfig.
+static void R_EnsureSwitchVideoConfig()
+{
+    if (vidConfig.sceneWidth == 0)
+        vidConfig.sceneWidth = 1280;
+    if (vidConfig.sceneHeight == 0)
+        vidConfig.sceneHeight = 720;
+    if (vidConfig.displayWidth == 0)
+        vidConfig.displayWidth = vidConfig.sceneWidth;
+    if (vidConfig.displayHeight == 0)
+        vidConfig.displayHeight = vidConfig.sceneHeight;
+    if (vidConfig.displayFrequency == 0)
+        vidConfig.displayFrequency = 60;
+
+    if (vidConfig.aspectRatioWindow <= 0.0f)
+        vidConfig.aspectRatioWindow =
+            static_cast<float>(vidConfig.displayWidth) /
+            static_cast<float>(vidConfig.displayHeight);
+    if (vidConfig.aspectRatioScenePixel <= 0.0f)
+        vidConfig.aspectRatioScenePixel =
+            static_cast<float>(vidConfig.sceneHeight) *
+            vidConfig.aspectRatioWindow /
+            static_cast<float>(vidConfig.sceneWidth);
+    if (vidConfig.aspectRatioDisplayPixel <= 0.0f)
+        vidConfig.aspectRatioDisplayPixel = 1.0f;
+    if (vidConfig.maxTextureSize == 0)
+        vidConfig.maxTextureSize = 4096;
+    if (vidConfig.maxTextureMaps == 0)
+        vidConfig.maxTextureMaps = 16;
+}
+
 void R_InitGraphicsApi() {
+    R_EnsureSwitchVideoConfig();
     // The shared renderer's R_InitGraphicsApi() calls R_InitSystems() directly
     // when the device already exists. R_Init() handles that final systems
     // initialization after this function returns. Do not recreate render
