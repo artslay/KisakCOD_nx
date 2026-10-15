@@ -549,9 +549,16 @@ bool VulkanBackend::CreateSwapchain()
     if (caps.maxImageCount && imageCount > caps.maxImageCount)
         imageCount = caps.maxImageCount;
 
-    VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    if (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-        usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    // EndFrame may blit the completed offscreen render target into the
+    // swapchain image. The target must advertise transfer-destination usage;
+    // do not create a swapchain that later receives an invalid vkCmdBlitImage.
+    if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT))
+    {
+        SetError("Surface does not support TRANSFER_DST required by the offscreen present path");
+        return false;
+    }
+    const VkImageUsageFlags usage =
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
     // Do not inherit a display rotation into the game framebuffer when the
     // surface supports identity. D3D9/CoD4 renders in the logical 1280x720
@@ -2061,6 +2068,8 @@ void VulkanBackend::TransitionImage(
 
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.oldLayout = oldLayout;
     barrier.newLayout = newLayout;
     barrier.srcAccessMask = srcAccess;
@@ -2229,6 +2238,8 @@ bool VulkanBackend::UploadImage2D(
 
         VkImageMemoryBarrier toTransfer{};
         toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         toTransfer.oldLayout = oldLayout;
         toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         toTransfer.srcAccessMask = sourceAccess;
@@ -2259,6 +2270,8 @@ bool VulkanBackend::UploadImage2D(
 
         VkImageMemoryBarrier toShader{};
         toShader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         toShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         toShader.newLayout = finalLayout;
         toShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -2396,6 +2409,8 @@ bool VulkanBackend::UploadImage3D(
 
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.oldLayout = oldLayout;
         barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.srcAccessMask = sourceAccess;
