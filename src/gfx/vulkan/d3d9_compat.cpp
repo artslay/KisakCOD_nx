@@ -378,11 +378,6 @@ uint64_t HashCombine(uint64_t value, uint64_t part)
     return value;
 }
 
-uint64_t PointerKey(const void *ptr)
-{
-    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(ptr));
-}
-
 bool DumpSpirvFile(const char *path, const std::vector<uint32_t> &words)
 {
     if (!path || words.empty())
