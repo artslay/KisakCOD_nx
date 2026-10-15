@@ -324,6 +324,20 @@ void __cdecl CL_ParseSnapshot(msg_t *msg)
     if (cl_shownet->current.integer >= 2)
         Com_Printf(CON_CHANNEL_CLIENT, "%3i %3i:%s\n", msg->readcount - 1, msg->cursize, "playerstate");
     MSG_ReadDeltaPlayerstate(msg, &cl->snap.ps);
+#ifdef __SWITCH__
+    static unsigned switchSnapshotDecodeTraceCount = 0;
+    if (switchSnapshotDecodeTraceCount < 4)
+    {
+        Com_Printf(CON_CHANNEL_CLIENT,
+            "[KisakCOD][SNAPSHOT CLIENT] n=%u time=%d origin=(%.2f,%.2f,%.2f) pm=%d cmd=%d read=%d bit=%d\\n",
+            switchSnapshotDecodeTraceCount,
+            cl->snap.serverTime,
+            cl->snap.ps.origin[0], cl->snap.ps.origin[1], cl->snap.ps.origin[2],
+            cl->snap.ps.pm_type, cl->snap.ps.commandTime,
+            msg->readcount, msg->bit);
+        ++switchSnapshotDecodeTraceCount;
+    }
+#endif
     if (cl_shownet->current.integer >= 2)
         Com_Printf(CON_CHANNEL_CLIENT, "%3i %3i:%s\n", msg->readcount - 1, msg->cursize, "packet entities");
     CL_ParsePacketEntities(clients, msg, &clients[0].snap);
