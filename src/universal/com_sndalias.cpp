@@ -7,18 +7,8 @@
 #include <qcommon/cmd.h>
 #include <database/database.h>
 #include "q_parse.h"
-#include <cstdio>
 #ifdef __SWITCH__
-extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
-extern "C" {
-extern thread_local char g_switchCgFrameStage[192];
-}
-static void Switch_SetSoundAliasStage(const char *phase)
-{
-    std::snprintf(g_switchCgFrameStage, sizeof(g_switchCgFrameStage), "frame/cgame/sound_alias/%s", phase ? phase : "(null)");
-    g_switchFrameStage = g_switchCgFrameStage;
-}
 #endif
 
 SoundAliasGlobals g_sa;
@@ -211,15 +201,9 @@ uint32_t __cdecl Com_HashAliasName(const char *name)
 {
     uint32_t hash; // [esp+4h] [ebp-4h]
 
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("hash_name/entry");
-#endif
     hash = 0;
     while (*name)
         hash = tolower(*name++) ^ (33 * hash);
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("hash_name/exit");
-#endif
     return hash % g_sa.hashSize;
 }
 
@@ -276,19 +260,10 @@ snd_alias_list_t *__cdecl Com_TryFindSoundAlias_FastFile(const char *name)
 
 snd_alias_list_t *__cdecl Com_FindSoundAlias(const char *name)
 {
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("find/entry");
-#endif
     if (IsFastFileLoad())
     {
-#ifdef __SWITCH__
-        Switch_SetSoundAliasStage("find/fastfile");
-#endif
         return Com_FindSoundAlias_FastFile(name);
     }
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("find/loadobj");
-#endif
     return Com_FindSoundAlias_LoadObj(name);
 }
 
@@ -313,52 +288,21 @@ snd_alias_list_t *__cdecl Com_FindSoundAlias_FastFile(const char *name)
     if (!name)
         MyAssertHandler(".\\universal\\com_sndalias.cpp", 623, 0, "%s", "name");
 #ifdef __SWITCH__
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][SOUND] before DB_FindXAssetHeader name=%p\n",
-            static_cast<const void *>(name));
-        Switch_LogWrite(trace);
-        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/db_find";
-    }
-#endif
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("find_fastfile/before_db_find");
+    g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/db_find";
 #endif
     aliasList = DB_FindXAssetHeader(ASSET_TYPE_SOUND, name).sound;
 #ifdef __SWITCH__
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][SOUND] DB_FindXAssetHeader returned sound=%p\n",
-            static_cast<const void *>(aliasList));
-        Switch_LogWrite(trace);
-        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/db_default";
-    }
-#endif
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("find_fastfile/before_default_check");
+    g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/db_default";
 #endif
     const bool isDefaultAliasAsset = DB_IsXAssetDefault(ASSET_TYPE_SOUND, name);
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("find_fastfile/after_default_check");
-#endif
     if (!isDefaultAliasAsset)
     {
 #ifdef __SWITCH__
-        Switch_LogWrite("[KisakCOD][SOUND] sound asset non-default\n");
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/db_done";
 #endif
         return aliasList;
     }
     Com_PrintError(CON_CHANNEL_FILES, "Missing soundalias \"%s\".\n", name);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][SOUND] sound asset default/missing\n");
-#endif
     return 0;
 }
 
@@ -460,23 +404,11 @@ snd_alias_t *__cdecl Com_PickSoundAliasFromList(snd_alias_list_t *aliasList)
     snd_alias_t *aliasa; // [esp+18h] [ebp-8h]
     snd_alias_t *firstAlias; // [esp+1Ch] [ebp-4h]
 
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("pick_list/after_entry_log");
-#endif
     if (!aliasList)
         return 0;
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("pick_list/before_count");
-#endif
     if (aliasList->count)
     {
-#ifdef __SWITCH__
-        Switch_SetSoundAliasStage("pick_list/before_head");
-#endif
         firstAlias = aliasList->head;
-#ifdef __SWITCH__
-        Switch_SetSoundAliasStage("pick_list/after_head");
-#endif
         bestAlias = firstAlias;
         cumulativeProbability = firstAlias->probability;
         maxSequence = firstAlias->sequence;
@@ -522,41 +454,13 @@ snd_alias_t *__cdecl Com_PickSoundAlias(const char *aliasname)
 {
     snd_alias_list_t *aliasList; // [esp+0h] [ebp-4h]
 #ifdef __SWITCH__
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][SOUND] Com_PickSoundAlias enter name=%p\n",
-            static_cast<const void *>(aliasname));
-        Switch_LogWrite(trace);
-        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/find";
-    }
-#endif
-
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("pick/entry");
+    g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/find";
 #endif
     aliasList = Com_FindSoundAlias(aliasname);
 #ifdef __SWITCH__
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][SOUND] Com_FindSoundAlias returned list=%p\n",
-            static_cast<const void *>(aliasList));
-        Switch_LogWrite(trace);
-        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/pick_list";
-    }
-#endif
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("pick/before_pick_list");
+    g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/pick_list";
 #endif
     snd_alias_t *pickedAlias = Com_PickSoundAliasFromList(aliasList);
-#ifdef __SWITCH__
-    Switch_SetSoundAliasStage("pick/after_pick_list");
-#endif
     return pickedAlias;
 }
 
