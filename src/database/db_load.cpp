@@ -14734,6 +14734,9 @@ void __cdecl Load_itemDefData_t(bool atStreamStart)
 void __cdecl Load_itemDef_t(bool atStreamStart)
 {
 #ifdef __SWITCH__
+    const uintptr_t serializedItemAddress =
+        atStreamStart ? reinterpret_cast<uintptr_t>(DB_GetStreamPos()) : 0;
+    itemDef_s *const loadedItem = varitemDef_t;
     iassert(atStreamStart);
     if (g_switchCurrentAssetIndex == 11 &&
         g_switchCurrentAssetRawType == 20u)
@@ -14828,6 +14831,16 @@ void __cdecl Load_itemDef_t(bool atStreamStart)
     if (g_switchCurrentAssetIndex == 11 && g_switchCurrentAssetRawType == 20u) g_switchDbStage = "menu/item/forecolorAExp";
     varstatement = &varitemDef_t->forecolorAExp;
     Load_statement(0);
+#ifdef __SWITCH__
+    // Register the widened item under its serialized header address. Other
+    // menus can share this item; references must resolve to the native object.
+    if (serializedItemAddress && loadedItem)
+    {
+        DB_RegisterSwitchPointerAlias(
+            serializedItemAddress,
+            reinterpret_cast<uintptr_t>(loadedItem));
+    }
+#endif
 }
 
 void __cdecl Load_itemDef_ptr(bool atStreamStart)
@@ -15008,16 +15021,18 @@ void __cdecl Load_itemDef_ptrArray(bool atStreamStart, int32_t count)
                 if (traceMenu11)
                     g_switchDbStage = "menu/item_alias";
 
-                itemDef_s *alias =
-                    reinterpret_cast<itemDef_s *>(
-                        DB_ConvertOffsetToPointerValue(token));
-                *varitemDef_ptr = alias;
+                // Positive item tokens refer to serialized itemDef_s headers,
+                // not native ARM64 itemDef_s objects. Resolve through the database
+                // alias table; unresolved forward references stay null until the
+                // referenced inline item has been translated and registered.
+                *varitemDef_ptr = reinterpret_cast<itemDef_s *>(
+                    static_cast<uintptr_t>(token));
+                DB_ConvertOffsetToAlias(varitemDef_ptr);
+                itemDef_s *alias = *varitemDef_ptr;
 
-                // An aliased item can also carry a stale serialized parent.
-                // Every item stored in this menu must use the native menu
-                // object as its runtime parent.
-                if (*varitemDef_ptr)
-                    (*varitemDef_ptr)->parent = varmenuDef_t;
+                // Parent is repaired after the menu's pending aliases are fixed up.
+                if (alias)
+                    alias->parent = varmenuDef_t;
 
                 if (traceMenu11)
                 {
@@ -15031,7 +15046,7 @@ void __cdecl Load_itemDef_ptrArray(bool atStreamStart, int32_t count)
                             "[SWITCH MENU11] item alias i=%d token=%08x ptr=%p\n",
                             i,
                             token,
-                            static_cast<void *>(alias));
+                            static_cast<void *>(*varitemDef_ptr));
                         Switch_LogWrite(trace);
                     }
                 }
@@ -15200,6 +15215,9 @@ static void Switch_TranslateMenuDefSerialized(menuDef_t *menu)
 void __cdecl Load_menuDef_t(bool atStreamStart)
 {
 #ifdef __SWITCH__
+    const uintptr_t serializedMenuAddress =
+        atStreamStart ? reinterpret_cast<uintptr_t>(DB_GetStreamPos()) : 0;
+    menuDef_t *const loadedMenu = varmenuDef_t;
     const bool traceMenu11 =
         g_switchCurrentAssetIndex == 11 &&
         g_switchCurrentAssetRawType == 20u;
@@ -15372,6 +15390,27 @@ void __cdecl Load_menuDef_t(bool atStreamStart)
 #endif
     DB_PopStreamPos();
 #ifdef __SWITCH__
+    // Register the native menu by its original serialized header address so
+    // positive references cannot expose the 32-bit on-disk struct to UI code.
+    if (serializedMenuAddress && loadedMenu)
+    {
+        DB_RegisterSwitchPointerAlias(
+            serializedMenuAddress,
+            reinterpret_cast<uintptr_t>(loadedMenu));
+        DB_FixupSwitchPointerAliases();
+
+        // Some item references may have been forward aliases. Restore the
+        // runtime parent only after unresolved references have been patched.
+        if (loadedMenu->items && loadedMenu->itemCount > 0 &&
+            loadedMenu->itemCount <= 4096)
+        {
+            for (int32_t i = 0; i < loadedMenu->itemCount; ++i)
+            {
+                if (loadedMenu->items[i])
+                    loadedMenu->items[i]->parent = loadedMenu;
+            }
+        }
+    }
     if (traceMenu11)
         g_switchDbStage = "menu/load_done";
 #endif
