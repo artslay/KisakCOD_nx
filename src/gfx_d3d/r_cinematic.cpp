@@ -23,7 +23,6 @@ extern void COM_NotifyIntroMovieDrawSubmitted(const char *movieName);
 extern thread_local const char * volatile g_switchFrameStage;
 extern void COM_NotifyIntroMoviePlaybackFinished(const char *movieName);
 extern void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieFrame, uint32_t movieFrames);
-extern void Switch_ResetBinkReadbackProbes();
 extern void Switch_ResetPendingBinkUpload();
 #endif
 
@@ -1060,7 +1059,6 @@ void __cdecl R_Cinematic_StartPlayback_Internal(char *name, uint32_t playbackFla
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
 #ifdef __SWITCH__
-    Switch_ResetBinkReadbackProbes();
 #endif
     I_strncpyz(cinematicGlob.targetCinematicName, name, 256);
     cinematicGlob.targetCinematicChanged = 1;
