@@ -403,7 +403,7 @@ private:
     VkPrimitiveTopology m_topology=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     uint32_t m_fillMode=D3DFILL_SOLID;
     uint32_t m_srcBlend=2, m_dstBlend=1, m_srcBlendAlpha=2, m_dstBlendAlpha=1;
-    uint32_t m_blendOp=1, m_blendOpAlpha=1, m_cullMode=2, m_depthFunc=3;
+    uint32_t m_blendOp=1, m_blendOpAlpha=1, m_cullMode=3, m_depthFunc=4;
     bool m_alphaTest=false;
     uint32_t m_alphaFunc=8, m_alphaRef=0;
     bool m_scissor=false;
