@@ -22,6 +22,20 @@
 #include <game/g_local.h>
 #include <client/cl_scrn.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+extern thread_local const char * volatile g_switchFrameStage;
+extern "C" {
+extern thread_local char g_switchCgFrameStage[192];
+}
+static void Switch_SetCgSoundAliasStage(const char *phase)
+{
+    std::snprintf(g_switchCgFrameStage, sizeof(g_switchCgFrameStage), "frame/cgame/sound_alias/%s", phase ? phase : "(null)");
+    g_switchFrameStage = g_switchCgFrameStage;
+}
+#endif
+
 UiContext cgDC;
 
 cgs_t cgsArray[1];
@@ -1225,11 +1239,34 @@ int __cdecl CG_PlaySoundAliasByName(int localClientNum, SndEntHandle entitynum, 
     const snd_alias_t *alias; // r3
     int playbackId; // r30
 
+#ifdef __SWITCH__
+    char trace[256];
+    Switch_SetCgSoundAliasStage("cg_play_by_name/entry");
+    std::snprintf(trace, sizeof(trace), "[KisakCOD][CG SOUND ALIAS] stage=entry client=%d ent=%u origin=%p aliasname=%p\n", localClientNum, static_cast<unsigned>(entitynum.field.entIndex), static_cast<const void *>(origin), static_cast<const void *>(aliasname));
+    Switch_LogWrite(trace);
+    Switch_SetCgSoundAliasStage("cg_play_by_name/before_pick");
+#endif
+
     alias = CL_PickSoundAlias(aliasname);
+
+#ifdef __SWITCH__
+    Switch_SetCgSoundAliasStage("cg_play_by_name/after_pick");
+    std::snprintf(trace, sizeof(trace), "[KisakCOD][CG SOUND ALIAS] stage=after_pick ent=%u alias=%p\n", static_cast<unsigned>(entitynum.field.entIndex), static_cast<const void *>(alias));
+    Switch_LogWrite(trace);
+#endif
     if (!alias)
         return -1;
+#ifdef __SWITCH__
+    Switch_SetCgSoundAliasStage("cg_play_by_name/before_play");
+#endif
     playbackId = SND_PlaySoundAlias(alias, entitynum, origin, 0, SASYS_CGAME);
+#ifdef __SWITCH__
+    Switch_SetCgSoundAliasStage("cg_play_by_name/after_play");
+#endif
     SND_AddLengthNotify(playbackId, alias, SndLengthNotify_Subtitle);
+#ifdef __SWITCH__
+    Switch_SetCgSoundAliasStage("cg_play_by_name/after_length_notify");
+#endif
     return playbackId;
 }
 
