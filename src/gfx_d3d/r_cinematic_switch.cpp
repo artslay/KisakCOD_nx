@@ -216,7 +216,7 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
         if (!texture->image)
         {
             LogBinkUploadFailure("texture has no VkImage", texture,
-                width, height, texture->GetSubresourceLayout(0, 0));
+                width, height, VK_IMAGE_LAYOUT_UNDEFINED);
             return;
         }
 
