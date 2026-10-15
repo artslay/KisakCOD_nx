@@ -46,7 +46,9 @@ static void Switch_ReportInvalidStringRef(
         refString,
         static_cast<unsigned long long>(caller),
         static_cast<const void *>(scrMemTreePub.mt_buffer));
-    Switch_LogWrite(line);
+    static uint32_t reportCount = 0;
+    if (reportCount++ < 4u)
+        Switch_LogWrite(line);
 }
 
 static void Switch_ReportStringHashChainFault(
@@ -68,7 +70,9 @@ static void Switch_ReportStringHashChainFault(
         steps,
         status,
         stringValue);
-    Switch_LogWrite(line);
+    static uint32_t reportCount = 0;
+    if (reportCount++ < 4u)
+        Switch_LogWrite(line);
 }
 
 static void Switch_ReportStaleStringHandle(
@@ -88,7 +92,9 @@ static void Switch_ReportStaleStringHandle(
         allocationType,
         allocationSize,
         static_cast<unsigned long long>(caller));
-    Switch_LogWrite(line);
+    static uint32_t reportCount = 0;
+    if (reportCount++ < 4u)
+        Switch_LogWrite(line);
 }
 
 static void Switch_ReportStringLengthMismatch(
@@ -110,7 +116,9 @@ static void Switch_ReportStringLengthMismatch(
         allocationType,
         allocationSize,
         static_cast<unsigned long long>(caller));
-    Switch_LogWrite(line);
+    static uint32_t reportCount = 0;
+    if (reportCount++ < 4u)
+        Switch_LogWrite(line);
 }
 
 static bool Switch_GetStringAllocation(
