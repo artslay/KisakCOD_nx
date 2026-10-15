@@ -229,6 +229,8 @@ struct KisakVkBuffer : IDirect3DResource9 {
     VkMemoryPropertyFlags memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     bool recoveryPending=false;
     bool dynamic=false;
+    // Dynamic shadow storage remains authoritative while in-frame uploads are queued.
+    bool shadowInitialized=false;
     uint32_t size=0;
     bool lockActive=false;
     uint32_t lockOffset=0, lockSize=0, lockFlags=0;
