@@ -8,6 +8,23 @@
 #include <win32/win_storage.h>
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+#include <cstdint>
+extern void Switch_LogWrite(const char *msg);
+extern thread_local const char * volatile g_switchFrameStage;
+
+static inline bool Switch_UIExpressionBadPointer(const void *ptr)
+{
+    if (!ptr)
+        return false;
+    const uintptr_t value = reinterpret_cast<uintptr_t>(ptr);
+    return value < UINT64_C(0x100000000) ||
+           (value >> 32) == UINT64_C(0xFFFFFFFF) ||
+           value >= (UINT64_C(1) << 39);
+}
+#endif
+
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
 #include <game_mp/g_main_mp.h>
@@ -2592,24 +2609,102 @@ Operand *__cdecl EvaluateExpression(int localClientNum, const statement_s *state
     int i; // [esp+14B8h] [ebp-4h]
 
     g_releaseBuildStatement = statement;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/ui/expression/entry";
+    if (!statement || statement->numEntries < 0 || statement->numEntries > 4096 ||
+        (statement->numEntries > 0 && Switch_UIExpressionBadPointer(statement->entries)))
+    {
+        static bool switchInvalidStatementLogged = false;
+        if (!switchInvalidStatementLogged)
+        {
+            char trace[256];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][UI EXPR ABI] invalid statement=%p entries=%p count=%d\n",
+                static_cast<const void *>(statement),
+                statement ? static_cast<const void *>(statement->entries) : nullptr,
+                statement ? statement->numEntries : -1);
+            Switch_LogWrite(trace);
+            switchInvalidStatementLogged = true;
+        }
+        g_switchFrameStage = "frame/ui/expression/invalid_statement";
+        return 0;
+    }
+#endif
     memset((uint8_t *)&dst, 0, sizeof(dst));
     opStack.numOperators = 0;
     for (i = 0; i < statement->numEntries; ++i)
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/ui/expression/read_entry";
+#endif
         v4 = statement->entries[i];
+#ifdef __SWITCH__
+        if (!v4 || Switch_UIExpressionBadPointer(v4))
+        {
+            static bool switchInvalidEntryLogged = false;
+            if (!switchInvalidEntryLogged)
+            {
+                char trace[256];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][UI EXPR ABI] invalid entry statement=%p index=%d/%d entry=%p\n",
+                    static_cast<const void *>(statement), i, statement->numEntries,
+                    static_cast<const void *>(v4));
+                Switch_LogWrite(trace);
+                switchInvalidEntryLogged = true;
+            }
+            g_switchFrameStage = "frame/ui/expression/invalid_entry";
+            return 0;
+        }
+#endif
         if (v4->type == 1)
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/ui/expression/operand";
+            if (v4->data.operand.dataType == VAL_STRING &&
+                Switch_UIExpressionBadPointer(v4->data.operand.internals.string))
+            {
+                static bool switchInvalidStringLogged = false;
+                if (!switchInvalidStringLogged)
+                {
+                    char trace[320];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][UI EXPR ABI] invalid string statement=%p index=%d/%d entry=%p dataType=%d string=%p\n",
+                        static_cast<const void *>(statement), i, statement->numEntries,
+                        static_cast<const void *>(v4),
+                        static_cast<int>(v4->data.operand.dataType),
+                        static_cast<const void *>(v4->data.operand.internals.string));
+                    Switch_LogWrite(trace);
+                    switchInvalidStringLogged = true;
+                }
+                g_switchFrameStage = "frame/ui/expression/invalid_string";
+                return 0;
+            }
+#endif
             if (dst.numOperandLists == 60)
             {
                 Com_PrintError(CON_CHANNEL_UI, "Invalid expression - too many operands\n");
                 return 0;
             }
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/ui/expression/add_operand";
+#endif
             AddOperandToStack(&dst, (Operand *)&v4->data);
         }
         else if (!v4->type)
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/ui/expression/operator";
+#endif
             if (v4->data.op != OP_LEFTPAREN)
+            {
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/ui/expression/run_higher_priority";
+#endif
                 RunHigherPriorityOperators(localClientNum, v4->data.op, &opStack, &dst);
+            }
             if (opStack.numOperators == 60)
             {
                 Com_PrintError(CON_CHANNEL_UI, "Invalid expression - operators are nested too deeply\n");
@@ -2618,8 +2713,16 @@ Operand *__cdecl EvaluateExpression(int localClientNum, const statement_s *state
             opStack.stack[opStack.numOperators++] = v4->data.op;
         }
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/ui/expression/finalize";
+#endif
     while (opStack.numOperators)
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/ui/expression/run_op";
+#endif
         RunOp(localClientNum, &opStack, &dst);
+    }
     if (dst.numOperandLists <= 1)
     {
         if (dst.numOperandLists)
