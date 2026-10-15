@@ -246,7 +246,6 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
 {
     float *BrushModel; // r3
     double v5; // fp10
-    unsigned int v6; // r4
     double v7; // fp9
     double v8; // fp12
     double v9; // fp0
