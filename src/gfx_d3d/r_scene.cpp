@@ -1465,7 +1465,9 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
         if (switchCreditsSceneTraceThisCall)
         {
             const mnode_t *switchDpvsRoot =
-                rgp.world ? rgp.world->dpvsPlanes.nodes : nullptr;
+                rgp.world
+                    ? reinterpret_cast<const mnode_t *>(rgp.world->dpvsPlanes.nodes)
+                    : nullptr;
             const int switchCameraCell =
                 rgp.world ? R_CellForPoint(rgp.world, refdef->vieworg) : -2;
             char trace[320];
