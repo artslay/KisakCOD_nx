@@ -26,9 +26,7 @@ static bool SwitchValidateDrawSurfMaterial(
     const bool indexValid =
         materialIndex < materialCount &&
         materialIndex < ARRAY_COUNT(rgp.sortedMaterials);
-    const uintptr_t materialAddress = reinterpret_cast<uintptr_t>(material);
-    const bool pointerValid =
-        !checkPointer || (material && materialAddress >= 0x100000000ULL);
+    const bool pointerValid = !checkPointer || material != nullptr;
 
     if (indexValid && pointerValid)
         return true;
