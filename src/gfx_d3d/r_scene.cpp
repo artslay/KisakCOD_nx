@@ -1462,6 +1462,24 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
                 rgp.world ? rgp.world->dpvs.emissiveSurfsEnd : 0u);
             Switch_LogWrite(trace);
         }
+        if (switchCreditsSceneTraceThisCall)
+        {
+            const mnode_t *switchDpvsRoot =
+                rgp.world ? rgp.world->dpvsPlanes.nodes : nullptr;
+            const int switchCameraCell =
+                rgp.world ? R_CellForPoint(rgp.world, refdef->vieworg) : -2;
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][DPVS ROOT] call=%u cellCount=%u nodes=%p rootCell=%u rootOffset=%u cameraCell=%d\n",
+                switchCreditsSceneTraceCall,
+                rgp.world ? rgp.world->dpvsPlanes.cellCount : 0u,
+                static_cast<const void *>(switchDpvsRoot),
+                switchDpvsRoot ? static_cast<unsigned>(switchDpvsRoot->cellIndex) : 0u,
+                switchDpvsRoot ? static_cast<unsigned>(switchDpvsRoot->rightChildOffset) : 0u,
+                switchCameraCell);
+            Switch_LogWrite(trace);
+        }
 #endif
         R_GenerateSortedDrawSurfs(&sceneParms, dpvs, viewParmsDraw);
 #ifdef __SWITCH__
