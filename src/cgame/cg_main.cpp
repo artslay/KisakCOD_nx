@@ -1240,10 +1240,7 @@ int __cdecl CG_PlaySoundAliasByName(int localClientNum, SndEntHandle entitynum, 
     int playbackId; // r30
 
 #ifdef __SWITCH__
-    char trace[256];
     Switch_SetCgSoundAliasStage("cg_play_by_name/entry");
-    std::snprintf(trace, sizeof(trace), "[KisakCOD][CG SOUND ALIAS] stage=entry client=%d ent=%u origin=%p aliasname=%p\n", localClientNum, static_cast<unsigned>(entitynum.field.entIndex), static_cast<const void *>(origin), static_cast<const void *>(aliasname));
-    Switch_LogWrite(trace);
     Switch_SetCgSoundAliasStage("cg_play_by_name/before_pick");
 #endif
 
@@ -1251,8 +1248,6 @@ int __cdecl CG_PlaySoundAliasByName(int localClientNum, SndEntHandle entitynum, 
 
 #ifdef __SWITCH__
     Switch_SetCgSoundAliasStage("cg_play_by_name/after_pick");
-    std::snprintf(trace, sizeof(trace), "[KisakCOD][CG SOUND ALIAS] stage=after_pick ent=%u alias=%p\n", static_cast<unsigned>(entitynum.field.entIndex), static_cast<const void *>(alias));
-    Switch_LogWrite(trace);
 #endif
     if (!alias)
         return -1;
