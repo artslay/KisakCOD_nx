@@ -35,6 +35,12 @@
 #include "g_actor_prone.h"
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+#include <cstdint>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 const char *animModeNames[10] =
 {
   "none",
@@ -4077,6 +4083,35 @@ bool __cdecl Actor_FindPath(
     float v15[12][2]; // [sp+70h] [-60h] BYREF
 
     iassert(self);
+#ifdef __SWITCH__
+    const uintptr_t goalAddress = reinterpret_cast<uintptr_t>(vGoalPos);
+    if (!vGoalPos || (goalAddress & (alignof(float) - 1u)) != 0u)
+    {
+        static uint32_t invalidGoalTraceCount = 0;
+        if (invalidGoalTraceCount < 8u)
+        {
+            ++invalidGoalTraceCount;
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][AI PATH GOAL INVALID] self=%p ent=%d goal=%p caller=%p codeNode=%p scriptNode=%p claimedNode=%p pathNodes=%p pathNodeCount=%u stride=%zu\n",
+                static_cast<void *>(self),
+                self->ent ? self->ent->s.number : -1,
+                static_cast<const void *>(vGoalPos),
+                __builtin_return_address(0),
+                static_cast<void *>(self->codeGoal.node),
+                static_cast<void *>(self->scriptGoal.node),
+                self->sentient ? static_cast<void *>(self->sentient->pClaimedNode) : nullptr,
+                static_cast<void *>(gameWorldSp.path.nodes),
+                gameWorldSp.path.nodeCount,
+                sizeof(pathnode_t));
+            Switch_LogWrite(trace);
+        }
+        Actor_ClearPath(self);
+        return false;
+    }
+#endif
     iassert(vGoalPos);
 
     if (self->ent->tagInfo)
