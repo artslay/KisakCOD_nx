@@ -705,7 +705,7 @@ void R_SetupAntiAliasing(const GfxWindowParms *)
     {
         warnedSuperSampleAA = true;
         Switch_LogWrite(
-            "[KisakCOD][VK AA] r_aaAlpha=2 SSAA mode is unsupported; geometric MSAA and ATOC are available\\n");
+            "[KisakCOD][VK AA] r_aaAlpha=2 SSAA mode is unsupported; geometric MSAA and ATOC are available\n");
     }
 }
 HRESULT R_CreateDeviceInternal(HWND__ *, uint32_t, _D3DPRESENT_PARAMETERS_ *) {

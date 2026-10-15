@@ -208,7 +208,7 @@ bool R_VulkanAllocTexture(
         char message[256];
         std::snprintf(
             message, sizeof(message),
-            "[KisakCOD][VK IMAGE] unsupported format usage d3dFormat=%u vkFormat=%u required=0x%x available=0x%x\\n",
+            "[KisakCOD][VK IMAGE] unsupported format usage d3dFormat=%u vkFormat=%u required=0x%x available=0x%x\n",
             static_cast<unsigned>(sourceFormat),
             static_cast<unsigned>(info.format),
             static_cast<unsigned>(requiredFeatures),
