@@ -156,6 +156,13 @@ VkComponentMapping GetTextureComponentMapping(_D3DFORMAT sourceFormat)
     switch (sourceFormat)
     {
     case D3DFMT_X8R8G8B8:
+    case D3DFMT_X8B8G8R8:
+    case D3DFMT_X1R5G5B5:
+        mapping.a = VK_COMPONENT_SWIZZLE_ONE;
+        break;
+    case D3DFMT_L16:
+        mapping.g = VK_COMPONENT_SWIZZLE_R;
+        mapping.b = VK_COMPONENT_SWIZZLE_R;
         mapping.a = VK_COMPONENT_SWIZZLE_ONE;
         break;
     case D3DFMT_L8:
@@ -192,13 +199,25 @@ TextureFormatInfo GetTextureFormat(_D3DFORMAT sourceFormat)
         return {VK_FORMAT_R8G8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_R5G6B5:
         return {VK_FORMAT_R5G6B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
+    case D3DFMT_X1R5G5B5:
     case D3DFMT_A1R5G5B5:
         return {VK_FORMAT_A1R5G5B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_A8R8G8B8:
     case D3DFMT_X8R8G8B8:
         return {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_A8B8G8R8:
+    case D3DFMT_X8B8G8R8:
         return {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_A2B10G10R10:
+        return {VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_G16R16:
+        return {VK_FORMAT_R16G16_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_A2R10G10B10:
+        return {VK_FORMAT_A2R10G10B10_UNORM_PACK32, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_A16B16G16R16:
+        return {VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 8, 0, false, false};
+    case D3DFMT_L16:
+        return {VK_FORMAT_R16_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_R16F:
         return {VK_FORMAT_R16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_G16R16F:
@@ -214,6 +233,8 @@ TextureFormatInfo GetTextureFormat(_D3DFORMAT sourceFormat)
     case D3DFMT_D16:
     case D3DFMT_D16_LOCKABLE:
         return {VK_FORMAT_D16_UNORM, VK_IMAGE_ASPECT_DEPTH_BIT, 2, 0, false, true};
+    case D3DFMT_D32:
+        return {VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
     case D3DFMT_D24X8:
         return {VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
     case D3DFMT_D24S8:
@@ -1355,20 +1376,26 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
 
 HRESULT KisakVkTexture::AddDirtyBox(const _D3DBOX *box)
 {
-    // This method belongs to the volume-texture interface. 2D/cube textures
-    // cannot accept volume dirty regions.
     if (depth <= 1 || !width || !height || !mipLevels)
         return E_FAIL;
 
-    if (box &&
-        (box->Left > box->Right || box->Top > box->Bottom ||
-         box->Front > box->Back || box->Right > width ||
-         box->Bottom > height || box->Back > depth))
+    // Null marks the entire volume dirty, as specified by the D3D9 volume
+    // texture interface. Once the whole resource is dirty, narrower regions
+    // cannot improve the subsequent update.
+    if (!box)
+    {
+        dirtyBoxes.clear();
+        dirtyAll = true;
+        return S_OK;
+    }
+
+    if (box->Left >= box->Right || box->Top >= box->Bottom ||
+        box->Front >= box->Back || box->Right > width ||
+        box->Bottom > height || box->Back > depth)
         return E_FAIL;
 
-    // UpdateTexture currently copies every mip level and the full volume extent,
-    // not a tracked dirty subregion. Treat any valid box (or nullptr, which
-    // means the whole volume) as a conservative full-volume dirty notification.
+    if (!dirtyAll)
+        dirtyBoxes.push_back(*box);
     return S_OK;
 }
 
@@ -3625,24 +3652,116 @@ HRESULT IDirect3DDevice9::UpdateTexture(
         return E_FAIL;
     if (source->depth <= 1 || destination->depth <= 1 ||
         source->arrayLayers != 1 || destination->arrayLayers != 1 ||
-        source->format != destination->format)
+        source->format != destination->format ||
+        source->width != destination->width ||
+        source->height != destination->height ||
+        source->depth != destination->depth ||
+        source->mipLevels != destination->mipLevels ||
+        source->lockShadowActive || destination->lockShadowActive)
         return E_FAIL;
 
-    const uint32_t mipCount = std::min(source->mipLevels, destination->mipLevels);
+    const uint32_t mipCount = source->mipLevels;
     if (mipCount == 0)
         return E_FAIL;
 
-    std::vector<VkImageLayout> sourceLayouts(mipCount);
-    std::vector<VkImageLayout> destinationLayouts(mipCount);
+    std::vector<_D3DBOX> dirty;
+    if (source->dirtyAll)
+        dirty.push_back(_D3DBOX{0, 0, 0, source->width, source->height, source->depth});
+    else
+        dirty = source->dirtyBoxes;
+    if (dirty.empty())
+        return S_OK;
+
+    const TextureFormatInfo formatInfo = GetTextureFormat(source->sourceFormat);
+    if (formatInfo.format == VK_FORMAT_UNDEFINED || formatInfo.depth ||
+        destination->sourceFormat != source->sourceFormat)
+        return E_FAIL;
+
+    std::vector<_D3DBOX> mipRegions(mipCount);
+    std::vector<bool> levelUsed(mipCount, false);
+    std::vector<VkImageLayout> sourceLayouts(mipCount, VK_IMAGE_LAYOUT_UNDEFINED);
+    std::vector<VkImageLayout> destinationLayouts(mipCount, VK_IMAGE_LAYOUT_UNDEFINED);
+
+    const auto ceilDiv = [](uint32_t value, uint32_t divisor) -> uint32_t
+    {
+        return value / divisor + (value % divisor != 0 ? 1u : 0u);
+    };
+
     for (uint32_t level = 0; level < mipCount; ++level)
     {
+        const uint32_t width = std::max(1u, source->width >> level);
+        const uint32_t height = std::max(1u, source->height >> level);
+        const uint32_t depth = std::max(1u, source->depth >> level);
+        const uint32_t scale = uint32_t{1} << std::min(level, 31u);
+        _D3DBOX merged{};
+        bool hasRegion = false;
+
+        for (const _D3DBOX &base : dirty)
+        {
+            _D3DBOX region{};
+            region.Left = base.Left / scale;
+            region.Top = base.Top / scale;
+            region.Front = base.Front / scale;
+            region.Right = ceilDiv(base.Right, scale);
+            region.Bottom = ceilDiv(base.Bottom, scale);
+            region.Back = ceilDiv(base.Back, scale);
+
+            region.Left = std::min(region.Left, width);
+            region.Top = std::min(region.Top, height);
+            region.Front = std::min(region.Front, depth);
+            region.Right = std::min(region.Right, width);
+            region.Bottom = std::min(region.Bottom, height);
+            region.Back = std::min(region.Back, depth);
+
+            if (formatInfo.compressed)
+            {
+                region.Left &= ~3u;
+                region.Top &= ~3u;
+                region.Right = static_cast<uint32_t>(std::min<uint64_t>(
+                    width, (static_cast<uint64_t>(region.Right) + 3u) & ~uint64_t{3}));
+                region.Bottom = static_cast<uint32_t>(std::min<uint64_t>(
+                    height, (static_cast<uint64_t>(region.Bottom) + 3u) & ~uint64_t{3}));
+            }
+
+            if (region.Left >= region.Right || region.Top >= region.Bottom ||
+                region.Front >= region.Back)
+                continue;
+
+            if (!hasRegion)
+            {
+                merged = region;
+                hasRegion = true;
+            }
+            else
+            {
+                merged.Left = std::min(merged.Left, region.Left);
+                merged.Top = std::min(merged.Top, region.Top);
+                merged.Front = std::min(merged.Front, region.Front);
+                merged.Right = std::max(merged.Right, region.Right);
+                merged.Bottom = std::max(merged.Bottom, region.Bottom);
+                merged.Back = std::max(merged.Back, region.Back);
+            }
+        }
+
+        if (!hasRegion)
+            continue;
+
+        // The destination may be used later as an update source. Never copy
+        // from undefined source contents, and only transition mip levels that
+        // actually intersect the dirty volume region.
         sourceLayouts[level] = source->GetSubresourceLayout(level);
         destinationLayouts[level] = destination->GetSubresourceLayout(level);
-        // Copying from UNDEFINED content is invalid and would silently mask an
-        // earlier upload failure as a successful texture update.
         if (sourceLayouts[level] == VK_IMAGE_LAYOUT_UNDEFINED)
             return E_FAIL;
+        mipRegions[level] = merged;
+        levelUsed[level] = true;
     }
+
+    bool anyLevelUsed = false;
+    for (bool used : levelUsed)
+        anyLevelUsed = anyLevelUsed || used;
+    if (!anyLevelUsed)
+        return S_OK;
 
     const VkImageLayout sourceOverallLayout = source->layout;
     const bool recordInCurrentFrame = m_backend->IsFrameActive();
@@ -3652,6 +3771,10 @@ HRESULT IDirect3DDevice9::UpdateTexture(
     {
         for (uint32_t level = 0; level < mipCount; ++level)
         {
+            if (!levelUsed[level])
+                continue;
+
+            const _D3DBOX &region = mipRegions[level];
             VkImageSubresourceRange range{};
             range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             range.baseMipLevel = level;
@@ -3671,17 +3794,19 @@ HRESULT IDirect3DDevice9::UpdateTexture(
             VkImageCopy copy{};
             copy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copy.srcSubresource.mipLevel = level;
+            copy.srcSubresource.baseArrayLayer = 0;
             copy.srcSubresource.layerCount = 1;
-            copy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copy.dstSubresource.mipLevel = level;
-            copy.dstSubresource.layerCount = 1;
+            copy.dstSubresource = copy.srcSubresource;
+            copy.srcOffset = {
+                static_cast<int32_t>(region.Left),
+                static_cast<int32_t>(region.Top),
+                static_cast<int32_t>(region.Front)
+            };
+            copy.dstOffset = copy.srcOffset;
             copy.extent = {
-                std::min(std::max(1u, source->width >> level),
-                         std::max(1u, destination->width >> level)),
-                std::min(std::max(1u, source->height >> level),
-                         std::max(1u, destination->height >> level)),
-                std::min(std::max(1u, source->depth >> level),
-                         std::max(1u, destination->depth >> level))
+                region.Right - region.Left,
+                region.Bottom - region.Top,
+                region.Back - region.Front
             };
             vkCmdCopyImage(
                 commandBuffer,
@@ -3689,8 +3814,6 @@ HRESULT IDirect3DDevice9::UpdateTexture(
                 destination->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 1, &copy);
 
-            // The source stays usable in its original layout, while the
-            // destination is made shader-readable only after the copy finishes.
             m_backend->TransitionImage(
                 source->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 sourceLayouts[level], VK_IMAGE_ASPECT_COLOR_BIT, range, commandBuffer);
@@ -3712,12 +3835,16 @@ HRESULT IDirect3DDevice9::UpdateTexture(
 
     for (uint32_t level = 0; level < mipCount; ++level)
     {
+        if (!levelUsed[level])
+            continue;
         source->SetSubresourceLayout(level, 0, sourceLayouts[level]);
         destination->SetSubresourceLayout(
             level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
     source->layout = sourceOverallLayout;
-    destination->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    source->dirtyAll = false;
+    source->dirtyBoxes.clear();
     return S_OK;
 }
 

@@ -69,8 +69,21 @@ VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
         return {VK_FORMAT_R8G8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_R5G6B5:
         return {VK_FORMAT_R5G6B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
+    case D3DFMT_X1R5G5B5:
     case D3DFMT_A1R5G5B5:
         return {VK_FORMAT_A1R5G5B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
+    case D3DFMT_X8B8G8R8:
+        return {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_A2B10G10R10:
+        return {VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_G16R16:
+        return {VK_FORMAT_R16G16_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_A2R10G10B10:
+        return {VK_FORMAT_A2R10G10B10_UNORM_PACK32, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_A16B16G16R16:
+        return {VK_FORMAT_R16G16B16A16_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 8, 0, false, false};
+    case D3DFMT_L16:
+        return {VK_FORMAT_R16_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_R16F:
         return {VK_FORMAT_R16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_R32F:
@@ -86,6 +99,8 @@ VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
     case D3DFMT_D16:
     case D3DFMT_D16_LOCKABLE:
         return {VK_FORMAT_D16_UNORM, VK_IMAGE_ASPECT_DEPTH_BIT, 2, 0, false, true};
+    case D3DFMT_D32:
+        return {VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
     case D3DFMT_D24S8:
         return {VK_FORMAT_D24_UNORM_S8_UINT,
                 VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
@@ -127,9 +142,14 @@ VkComponentMapping R_VulkanComponentMapping(_D3DFORMAT format)
     switch (format)
     {
     case D3DFMT_X8R8G8B8:
-        // D3D9 X8R8G8B8 has an unused X byte; sampling it still produces
-        // alpha = 1.0. Vulkan's BGRA view would otherwise expose that padding
-        // byte as alpha and can make otherwise opaque images translucent.
+    case D3DFMT_X8B8G8R8:
+    case D3DFMT_X1R5G5B5:
+        // X formats have padding where D3D9 sampling defines alpha as one.
+        mapping.a = VK_COMPONENT_SWIZZLE_ONE;
+        break;
+    case D3DFMT_L16:
+        mapping.g = VK_COMPONENT_SWIZZLE_R;
+        mapping.b = VK_COMPONENT_SWIZZLE_R;
         mapping.a = VK_COMPONENT_SWIZZLE_ONE;
         break;
     case D3DFMT_L8:
