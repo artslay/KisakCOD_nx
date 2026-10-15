@@ -46,8 +46,36 @@ extern bool Switch_ShowSoftwareKeyboard(const char *initialText, unsigned int ma
 
 static inline void Switch_LogWriteFiltered(const char *msg)
 {
-    if (msg && std::strncmp(msg, "[KisakCOD][UIMAIN]", 18) == 0)
+    if (!msg)
         return;
+
+    // Keep actionable UI ABI/material failures and missing-dvar warnings, but
+    // suppress temporary per-menu/per-item tracing that bloats the SD log.
+    static const char *const verbosePrefixes[] = {
+        "[KisakCOD][UIMAIN]",
+        "[KisakCOD][FRAME]",
+        "[KisakCOD][UI BIND]",
+        "[KisakCOD][UI ITEM CANDIDATE]",
+        "[KisakCOD][UI TARGET ITEM]",
+        "[KisakCOD][UI ITEM STATE]",
+        "[KisakCOD][UI FOCUSED TEXT COLOR]",
+        "[KisakCOD][UI HIGHLIGHT GRADIENT]",
+        "[KisakCOD][UI HIGHLIGHT CAP]",
+        "[KisakCOD][UI MENU ITEM CALL]",
+        "[KisakCOD][UI MENU PAINT GATE]",
+        "[KisakCOD][UI MENU]",
+        "[KisakCOD][UI FULLSCREEN PICK]",
+        "[KisakCOD][UI PROFILE VISIBILITY]",
+        "[KisakCOD][UI PROFILE BACKDROP]",
+        "[KisakCOD][UI SHARED BACKDROP]",
+        "[KisakCOD][UI PROFILE WHITE OVERLAY]",
+        "[KisakCOD][UI PROFILE PLAQUE]"
+    };
+    for (const char *prefix : verbosePrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return;
+    }
     Switch_LogWrite(msg);
 }
 
