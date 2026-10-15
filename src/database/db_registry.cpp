@@ -1400,6 +1400,8 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
 #ifdef __SWITCH__
         if (traceWeaponLookup)
             g_switchDbStage = "weapon/find/read_hit";
+        if (traceRawFileLookup)
+            g_switchDbStage = "rawfile/lookup/read_hit_return";
 #endif
         assetEntry->inuse = 1;
         return assetEntry->asset.header;
