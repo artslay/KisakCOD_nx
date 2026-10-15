@@ -1240,7 +1240,6 @@ int __cdecl CG_PlaySoundAliasByName(int localClientNum, SndEntHandle entitynum, 
     int playbackId; // r30
 
 #ifdef __SWITCH__
-    Switch_SetCgSoundAliasStage("cg_play_by_name/entry");
     Switch_SetCgSoundAliasStage("cg_play_by_name/before_pick");
 #endif
 
