@@ -199,10 +199,18 @@ TextureFormatInfo GetTextureFormat(_D3DFORMAT sourceFormat)
         return {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_A8B8G8R8:
         return {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_R16F:
+        return {VK_FORMAT_R16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_G16R16F:
         return {VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_A16B16G16R16F:
+        return {VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 8, 0, false, false};
     case D3DFMT_R32F:
         return {VK_FORMAT_R32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+    case D3DFMT_G32R32F:
+        return {VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 8, 0, false, false};
+    case D3DFMT_A32B32G32R32F:
+        return {VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, 16, 0, false, false};
     case D3DFMT_D16:
     case D3DFMT_D16_LOCKABLE:
         return {VK_FORMAT_D16_UNORM, VK_IMAGE_ASPECT_DEPTH_BIT, 2, 0, false, true};
@@ -2301,17 +2309,21 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
         // Vulkan exposes the same alpha-to-coverage operation directly.
         if (value == D3DFMT_UNKNOWN)
         {
+            changed = m_alphaToCoverage;
             m_alphaToCoverage = false;
         }
         else if (value == D3DFMT_ATOC)
         {
+            changed = !m_alphaToCoverage;
             m_alphaToCoverage = true;
         }
         else if (value == D3DFMT_SSAA)
         {
             // NVIDIA's supersampled alpha mode isn't equivalent to normal ATOC.
-            // Keep that precise mode unsupported rather than quietly changing it.
-            changed = false;
+            // Disable a previous ATOC state while reporting that SSAA itself
+            // cannot be represented by a single Vulkan multisample-state bit.
+            changed = m_alphaToCoverage;
+            m_alphaToCoverage = false;
             static bool warnedSuperSampleAA = false;
             if (!warnedSuperSampleAA)
             {
