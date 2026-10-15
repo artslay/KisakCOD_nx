@@ -462,25 +462,6 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 		Com_Error(ERR_DROP, "invalid script string length %u", len);
 		return 0;
 	}
-	const char *terminator = static_cast<const char *>(memchr(str, '\0', len));
-	if (!terminator || terminator != str + len - 1)
-	{
-		const uint32_t terminatorOffset = terminator
-			? static_cast<uint32_t>(terminator - str)
-			: UINT32_MAX;
-		char line[320];
-		std::snprintf(
-			line, sizeof(line),
-			"[KisakCOD][SCRIPT STRING INPUT TERMINATOR FAULT] len=%u firstNul=%u type=%u str=%p caller=0x%llx\n",
-			len, terminatorOffset, static_cast<unsigned>(type),
-			static_cast<const void *>(str),
-			static_cast<unsigned long long>(caller));
-		Switch_LogWrite(line);
-		Switch_SetProgressPhase("script_string/invalid_input");
-		Switch_SetProgressDetail(len);
-		Com_Error(ERR_DROP, "script string length %u does not end at its NUL", len);
-		return 0;
-	}
 	Switch_SetProgressDetail(len);
     Switch_SetProgressPhase("script_string/hash");
 #endif
