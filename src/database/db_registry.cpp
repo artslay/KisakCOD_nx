@@ -1417,7 +1417,9 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
 #ifdef __SWITCH__
     g_switchDbStage = traceWeaponLookup
         ? "weapon/find/write_lock_wait"
-        : "asset/lock_enter";
+        : (traceRawFileLookup
+            ? "rawfile/lookup/write_lock_wait"
+            : "asset/lock_enter");
 #endif
     Sys_LockWrite(&db_hashCritSect);
 #ifdef __SWITCH__
