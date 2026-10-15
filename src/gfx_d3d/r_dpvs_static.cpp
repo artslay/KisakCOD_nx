@@ -2,9 +2,66 @@
 #include "r_dpvs.h"
 #include "r_dvars.h"
 #include <cgame/cg_local.h>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+
+static bool R_SwitchAabbAddressLooksValid(const void *address)
+{
+    const uintptr_t value = reinterpret_cast<uintptr_t>(address);
+    return value >= UINT64_C(0x100000000) && value <= UINT64_C(0x0000100000000000);
+}
+
+static void R_SwitchLogBadAabbIndexPointer(const char *stage, const GfxAabbTree *tree)
+{
+    if (!tree)
+        return;
+    const uintptr_t treeAddress = reinterpret_cast<uintptr_t>(tree);
+    if (!R_SwitchAabbAddressLooksValid(tree))
+    {
+        char message[256];
+        std::snprintf(message, sizeof(message),
+            "[KisakCOD][AABB INDEX FAULT] stage=%s invalidTree=%p\\n",
+            stage, static_cast<const void *>(tree));
+        Switch_LogWrite(message);
+        return;
+    }
+
+    const uintptr_t indexAddress = reinterpret_cast<uintptr_t>(tree->smodelIndexes);
+    if (tree->smodelIndexCount &&
+        (!tree->smodelIndexes || !R_SwitchAabbAddressLooksValid(tree->smodelIndexes)))
+    {
+        char message[384];
+        std::snprintf(message, sizeof(message),
+            "[KisakCOD][AABB INDEX FAULT] stage=%s tree=%p indices=%p count=%u childCount=%u childOffset=%d surfaces=%u start=%u models=%u\\n",
+            stage,
+            static_cast<const void *>(tree),
+            static_cast<const void *>(tree->smodelIndexes),
+            static_cast<unsigned>(tree->smodelIndexCount),
+            static_cast<unsigned>(tree->childCount),
+            tree->childrenOffset,
+            static_cast<unsigned>(tree->surfaceCount),
+            static_cast<unsigned>(tree->startSurfIndex),
+            rgp.world ? static_cast<unsigned>(rgp.world->dpvs.smodelCount) : 0u);
+        Switch_LogWrite(message);
+    }
+}
+#endif
 
 void __cdecl R_AddAabbTreeSurfacesInFrustum_r(const GfxAabbTree *tree, const DpvsClipPlaneSet *clipSet)
 {
+#ifdef __SWITCH__
+    if (!R_SwitchAabbAddressLooksValid(tree))
+    {
+        char message[256];
+        std::snprintf(message, sizeof(message),
+            "[KisakCOD][AABB INDEX FAULT] stage=dpvs_tree invalidTree=%p\\n",
+            static_cast<const void *>(tree));
+        Switch_LogWrite(message);
+        return;
+    }
+    R_SwitchLogBadAabbIndexPointer("dpvs", tree);
+#endif
     int v2; // [esp+10h] [ebp-D0h]
     int v3; // [esp+14h] [ebp-CCh]
     const DpvsPlane *v4; // [esp+18h] [ebp-C8h]
