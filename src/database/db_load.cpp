@@ -8167,7 +8167,7 @@ void __cdecl Load_MaterialTechniquePtr(bool atStreamStart)
                         std::snprintf(
                             trace,
                             sizeof(trace),
-                            "[KisakCOD][TECHNIQUE ALIAS PENDING] asset=%d rawType=%u token=%08x serialized=%p slot=%p stream=%u\\n",
+                            "[KisakCOD][TECHNIQUE ALIAS PENDING] asset=%d rawType=%u token=%08x serialized=%p slot=%p stream=%u\n",
                             g_switchCurrentAssetIndex,
                             static_cast<unsigned>(g_switchCurrentAssetRawType),
                             value,
@@ -8669,7 +8669,7 @@ void __cdecl Load_MaterialTechniqueSet(bool atStreamStart)
                         std::snprintf(
                             trace,
                             sizeof(trace),
-                            "[KisakCOD][TECHSET TECHNIQUE ALIAS PENDING] asset=%d rawType=%u index=%d token=%08x serialized=%p slot=%p stream=%u\\n",
+                            "[KisakCOD][TECHSET TECHNIQUE ALIAS PENDING] asset=%d rawType=%u index=%d token=%08x serialized=%p slot=%p stream=%u\n",
                             g_switchCurrentAssetIndex,
                             static_cast<unsigned>(g_switchCurrentAssetRawType),
                             i,
