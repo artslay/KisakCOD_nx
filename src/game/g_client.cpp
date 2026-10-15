@@ -10,6 +10,11 @@
 #include "actor.h"
 #include <server/sv_game.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 void __cdecl G_FinishSetupSpawnPoint(gentity_s *ent)
 {
     unsigned __int16 EntityHitId; // r3
@@ -565,7 +570,29 @@ void __cdecl ClientSpawn(gentity_s *ent)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_client.cpp", 624, 0, "%s", "ent->r.inuse");
     if (client->ps.clientNum != v3)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_client.cpp", 625, 0, "%s", "client->ps.clientNum == index");
-    SelectInitialSpawnPoint(v12, v13);
+    gentity_s *switchSpawnPoint = SelectInitialSpawnPoint(v12, v13);
+#ifdef __SWITCH__
+    static bool switchPlayerSpawnLogged = false;
+    if (!switchPlayerSpawnLogged)
+    {
+        switchPlayerSpawnLogged = true;
+        char trace[512];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PLAYER SPAWN] ent=%d spawn=%p spawnNum=%d flags=%d pointOrg=%.2f,%.2f,%.2f outputOrg=%.2f,%.2f,%.2f angles=%.2f,%.2f,%.2f\\n",
+            v3,
+            static_cast<void *>(switchSpawnPoint),
+            switchSpawnPoint ? switchSpawnPoint->s.number : -1,
+            switchSpawnPoint ? switchSpawnPoint->spawnflags : 0,
+            switchSpawnPoint ? switchSpawnPoint->r.currentOrigin[0] : 0.0f,
+            switchSpawnPoint ? switchSpawnPoint->r.currentOrigin[1] : 0.0f,
+            switchSpawnPoint ? switchSpawnPoint->r.currentOrigin[2] : 0.0f,
+            v12[0], v12[1], v12[2],
+            v13[0], v13[1], v13[2]);
+        Switch_LogWrite(trace);
+    }
+#endif
     v4 = ~client->ps.eFlags & 2;
     memcpy(v14, &client->pers, sizeof(v14));
     viewmodelIndex = client->ps.viewmodelIndex;
@@ -607,6 +634,19 @@ void __cdecl ClientSpawn(gentity_s *ent)
     client->ps.origin[2] = v12[2];
     client->ps.pm_flags |= 0x400u;
     SV_GetUsercmd(client - level.clients, &client->pers.cmd);
+#ifdef __SWITCH__
+    if (switchPlayerSpawnLogged)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PLAYER SPAWN] before_think ps=%.2f,%.2f,%.2f ent=%.2f,%.2f,%.2f\\n",
+            client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
+            ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2]);
+        Switch_LogWrite(trace);
+    }
+#endif
     SetClientViewAngle(ent, v13);
     SV_LinkEntity(ent);
     v9 = client->ps.pm_flags | 0x100;
@@ -626,6 +666,19 @@ void __cdecl ClientSpawn(gentity_s *ent)
     client->playerADSTargetTime = 0;
     client->ps.commandTime = level.time - 200;
     ClientThink(v3);
+#ifdef __SWITCH__
+    if (switchPlayerSpawnLogged)
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PLAYER SPAWN] after_think ps=%.2f,%.2f,%.2f ent=%.2f,%.2f,%.2f\\n",
+            client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
+            ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2]);
+        Switch_LogWrite(trace);
+    }
+#endif
     BG_PlayerStateToEntityState(&client->ps, &ent->s, 1, 1u);
     ent->r.currentOrigin[0] = client->ps.origin[0];
     ent->r.currentOrigin[1] = client->ps.origin[1];
