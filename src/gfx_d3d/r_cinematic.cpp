@@ -240,31 +240,6 @@ void __cdecl R_Cinematic_UpdateFrame_Core(
     {
         iassert( cinematicGlob.bink );
         const bool switchCinematicCanAdvance = R_Cinematic_Advance();
-#ifdef __SWITCH__
-        if (std::strstr(cinematicGlob.currentCinematicName, "simplecredits"))
-        {
-            static uint32_t switchCreditsBinkTraceCount = 0;
-            if (switchCreditsBinkTraceCount < 8 ||
-                (switchCreditsBinkTraceCount % 60) == 0 ||
-                !switchCinematicCanAdvance)
-            {
-                char trace[320];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][CREDITS BINK] update=%u name=%s frame=%u frames=%u canAdvance=%d activeFrame=%d finishedBefore=%d\n",
-                    switchCreditsBinkTraceCount,
-                    cinematicGlob.currentCinematicName,
-                    cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->FrameNum) : 0u,
-                    cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->Frames) : 0u,
-                    switchCinematicCanAdvance,
-                    cinematicGlob.activeImageFrame,
-                    cinematicGlob.cinematicFinished);
-                Switch_LogWrite(trace);
-            }
-            ++switchCreditsBinkTraceCount;
-        }
-#endif
         if (!switchCinematicCanAdvance)
         {
             cinematicGlob.cinematicFinished = 1;
@@ -1272,27 +1247,6 @@ void __cdecl R_Cinematic_DrawLetterbox_OptionalCinematic(bool drawCinematic, flo
 
 void __cdecl R_Cinematic_DrawStretchPic_Letterboxed()
 {
-#ifdef __SWITCH__
-    static uint32_t switchCinematicDrawTraceCount = 0;
-    const uint32_t traceId = switchCinematicDrawTraceCount++;
-    if (traceId < 12u || (traceId % 60u) == 0u)
-    {
-        char trace[448];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][CINEMATIC DRAW QUEUED] n=%u name=%s activeFrame=%d textureSet=%d bink=%p binkFrame=%u/%u playbackFlags=0x%x\n",
-            traceId,
-            cinematicGlob.currentCinematicName[0] ? cinematicGlob.currentCinematicName : "<none>",
-            cinematicGlob.activeImageFrame,
-            cinematicGlob.activeImageFrameTextureSet,
-            static_cast<void *>(cinematicGlob.bink),
-            cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->FrameNum) : 0u,
-            cinematicGlob.bink ? static_cast<unsigned>(cinematicGlob.bink->Frames) : 0u,
-            static_cast<unsigned>(cinematicGlob.playbackFlags));
-        Switch_LogWrite(trace);
-    }
-#endif
     R_Cinematic_DrawLetterbox_OptionalCinematic(1, 1.0);
 #ifdef __SWITCH__
     if (cinematicGlob.activeImageFrame != CINEMATIC_INVALID_IMAGE_FRAME)
