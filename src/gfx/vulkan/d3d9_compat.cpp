@@ -1041,11 +1041,17 @@ bool Switch_PrepareVulkanDeviceLossResources(VulkanBackend *backend)
             buffer->device != backend->Device())
             return false;
 
-    // Mapped storage is the authoritative backing for static and dynamic buffers.
+    // A dynamic buffer's shadow is authoritative while updates are still
+    // queued in the current command buffer; mapped storage may not include them.
     for (KisakVkBuffer *buffer : g_liveVulkanBuffers)
     {
         buffer->recoveryShadow.resize(buffer->size);
-        std::memcpy(buffer->recoveryShadow.data(), buffer->mapped, buffer->size);
+        const void *authoritative =
+            buffer->dynamic && buffer->shadowInitialized &&
+            buffer->shadow.size() == buffer->size
+                ? static_cast<const void *>(buffer->shadow.data())
+                : buffer->mapped;
+        std::memcpy(buffer->recoveryShadow.data(), authoritative, buffer->size);
     }
     for (KisakVkBuffer *buffer : g_liveVulkanBuffers)
     {
@@ -1134,6 +1140,7 @@ bool Switch_RestoreVulkanBuffers(VulkanBackend *backend)
         {
             item.owner->shadow.resize(item.owner->size);
             std::memcpy(item.owner->shadow.data(), item.owner->recoveryShadow.data(), item.owner->size);
+            item.owner->shadowInitialized = true;
         }
         item.owner->recoveryShadow.clear();
         item.owner->recoveryPending = false;
@@ -1197,11 +1204,23 @@ HRESULT KisakVkBuffer::Lock(
     if (dynamic)
     {
         if (shadow.size() != size)
+        {
             shadow.resize(size);
+            shadowInitialized = false;
+        }
         if (flags & D3DLOCK_DISCARD)
+        {
             std::fill(shadow.begin(), shadow.end(), 0);
-        else
+            shadowInitialized = true;
+        }
+        else if (!shadowInitialized)
+        {
+            // Read the current GPU backing only once. Subsequent queued uploads
+            // may not have reached mapped memory yet, so preserve our latest CPU
+            // shadow rather than replacing it with stale contents on every lock.
             std::memcpy(shadow.data(), mapped, size);
+            shadowInitialized = true;
+        }
         *out = shadow.data() + offset;
     }
     else
@@ -1223,18 +1242,34 @@ HRESULT KisakVkBuffer::Unlock()
 
     if (dynamic && !(lockFlags & D3DLOCK_READONLY) && lockSize != 0)
     {
-        // Unless NOOVERWRITE is asserted, earlier commands could still reference
-        // this byte range. Synchronize before copying the CPU shadow to the GPU buffer.
-        if (!(lockFlags & D3DLOCK_NOOVERWRITE))
+        if (lockFlags & D3DLOCK_NOOVERWRITE)
         {
-            VulkanBackend *backend = GetVulkanBackend();
-            if (backend && !backend->SynchronizeActiveFrame())
-                return E_FAIL;
+            // NOOVERWRITE promises that prior GPU commands do not read this range.
+            std::memcpy(
+                static_cast<uint8_t *>(mapped) + lockOffset,
+                shadow.data() + lockOffset,
+                lockSize);
         }
-        std::memcpy(
-            static_cast<uint8_t *>(mapped) + lockOffset,
-            shadow.data() + lockOffset,
-            lockSize);
+        else
+        {
+            // Queue an ordered GPU copy after draws that may still read this
+            // range. This avoids ending/submitting the frame and waiting for a
+            // fence on every dynamic-buffer unlock. Odd-sized/unusual ranges,
+            // an inactive frame, or an exhausted upload ring use the safe
+            // synchronized fallback.
+            VulkanBackend *backend = GetVulkanBackend();
+            const bool queued = backend && backend->QueueBufferUpdate(
+                buffer, lockOffset, shadow.data() + lockOffset, lockSize);
+            if (!queued)
+            {
+                if (backend && !backend->SynchronizeActiveFrame())
+                    return E_FAIL;
+                std::memcpy(
+                    static_cast<uint8_t *>(mapped) + lockOffset,
+                    shadow.data() + lockOffset,
+                    lockSize);
+            }
+        }
     }
 
     lockActive = false;
