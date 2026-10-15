@@ -573,9 +573,11 @@ void __cdecl ClientSpawn(gentity_s *ent)
     gentity_s *switchSpawnPoint = SelectInitialSpawnPoint(v12, v13);
 #ifdef __SWITCH__
     static bool switchPlayerSpawnLogged = false;
+    bool switchTraceThisSpawn = false;
     if (!switchPlayerSpawnLogged)
     {
         switchPlayerSpawnLogged = true;
+        switchTraceThisSpawn = true;
         char trace[512];
         std::snprintf(
             trace,
@@ -635,7 +637,7 @@ void __cdecl ClientSpawn(gentity_s *ent)
     client->ps.pm_flags |= 0x400u;
     SV_GetUsercmd(client - level.clients, &client->pers.cmd);
 #ifdef __SWITCH__
-    if (switchPlayerSpawnLogged)
+    if (switchTraceThisSpawn)
     {
         char trace[256];
         std::snprintf(
@@ -667,7 +669,7 @@ void __cdecl ClientSpawn(gentity_s *ent)
     client->ps.commandTime = level.time - 200;
     ClientThink(v3);
 #ifdef __SWITCH__
-    if (switchPlayerSpawnLogged)
+    if (switchTraceThisSpawn)
     {
         char trace[256];
         std::snprintf(
