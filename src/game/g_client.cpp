@@ -580,7 +580,7 @@ void __cdecl ClientSpawn(gentity_s *ent)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][PLAYER SPAWN] ent=%d spawn=%p spawnNum=%d flags=%d pointOrg=%.2f,%.2f,%.2f outputOrg=%.2f,%.2f,%.2f angles=%.2f,%.2f,%.2f\\n",
+            "[KisakCOD][PLAYER SPAWN] ent=%d spawn=%p spawnNum=%d flags=%d pointOrg=%.2f,%.2f,%.2f outputOrg=%.2f,%.2f,%.2f angles=%.2f,%.2f,%.2f\n",
             v3,
             static_cast<void *>(switchSpawnPoint),
             switchSpawnPoint ? switchSpawnPoint->s.number : -1,
@@ -641,7 +641,7 @@ void __cdecl ClientSpawn(gentity_s *ent)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][PLAYER SPAWN] before_think ps=%.2f,%.2f,%.2f ent=%.2f,%.2f,%.2f\\n",
+            "[KisakCOD][PLAYER SPAWN] before_think ps=%.2f,%.2f,%.2f ent=%.2f,%.2f,%.2f\n",
             client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
             ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2]);
         Switch_LogWrite(trace);
@@ -673,7 +673,7 @@ void __cdecl ClientSpawn(gentity_s *ent)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][PLAYER SPAWN] after_think ps=%.2f,%.2f,%.2f ent=%.2f,%.2f,%.2f\\n",
+            "[KisakCOD][PLAYER SPAWN] after_think ps=%.2f,%.2f,%.2f ent=%.2f,%.2f,%.2f\n",
             client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
             ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2]);
         Switch_LogWrite(trace);
