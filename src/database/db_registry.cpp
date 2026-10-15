@@ -1320,6 +1320,26 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
     iassert(IsFastFileLoad());
 
 #ifdef __SWITCH__
+    const bool traceRawFileLookup = type == ASSET_TYPE_RAWFILE;
+    if (traceRawFileLookup)
+    {
+        g_switchDbStage = "rawfile/lookup/entry";
+        const uintptr_t nameAddress = reinterpret_cast<uintptr_t>(name);
+        if (!name || nameAddress < 0x100000000ull)
+        {
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][RAWFILE LOOKUP] suspicious name=%p caller=%p asset=%d raw=%u header=%08x\n",
+                static_cast<const void *>(name),
+                __builtin_return_address(0),
+                g_switchCurrentAssetIndex,
+                static_cast<unsigned>(g_switchCurrentAssetRawType),
+                g_switchCurrentAssetHeader);
+            Switch_LogWrite(trace);
+        }
+    }
     const bool traceWeaponLookup = type == ASSET_TYPE_WEAPON;
     if (traceWeaponLookup)
         g_switchDbStage = "weapon/find/read_lock_wait";
@@ -1358,8 +1378,14 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
         g_switchDbStage = "weapon/find/read_lock_acquired";
 #endif
 
+#ifdef __SWITCH__
+    if (traceRawFileLookup)
+        g_switchDbStage = "rawfile/lookup/read_entry";
+#endif
     XAssetEntryPoolEntry *found = DB_FindXAssetEntry(type, name);
 #ifdef __SWITCH__
+    if (traceRawFileLookup)
+        g_switchDbStage = "rawfile/lookup/read_entry_done";
     if (traceWeaponLookup)
         g_switchDbStage = "weapon/find/read_lookup_done";
 #endif
@@ -1395,7 +1421,9 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
 #ifdef __SWITCH__
     g_switchDbStage = traceWeaponLookup
         ? "weapon/find/write_locked"
-        : "asset/lock_acquired";
+        : (traceRawFileLookup
+            ? "rawfile/lookup/write_locked"
+            : "asset/lock_acquired");
     if (traceDefaultMaterial)
         Switch_LogWrite("[SWITCH DBLOOKUP] after write lock\n");
 #endif
@@ -1404,9 +1432,13 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
 #ifdef __SWITCH__
     if (traceWeaponLookup)
         g_switchDbStage = "weapon/find/write_locked";
+    if (traceRawFileLookup)
+        g_switchDbStage = "rawfile/lookup/recheck_entry";
 #endif
     XAssetEntryPoolEntry *existing = DB_FindXAssetEntry(type, name);
 #ifdef __SWITCH__
+    if (traceRawFileLookup)
+        g_switchDbStage = "rawfile/lookup/recheck_entry_done";
     if (traceWeaponLookup)
         g_switchDbStage = "weapon/find/write_recheck_done";
 #endif
@@ -1414,13 +1446,29 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
     {
         assetEntry = &existing->entry;
         assetEntry->inuse = 1;
+#ifdef __SWITCH__
+        if (traceRawFileLookup)
+            g_switchDbStage = "rawfile/lookup/hit_unlock";
+#endif
         Sys_UnlockWrite(&db_hashCritSect);
+#ifdef __SWITCH__
+        if (traceRawFileLookup)
+            g_switchDbStage = "rawfile/lookup/hit_return";
+#endif
         return assetEntry->asset.header;
     }
 
     if (type == ASSET_TYPE_LOCALIZE_ENTRY || type == ASSET_TYPE_RAWFILE)
     {
+#ifdef __SWITCH__
+        if (traceRawFileLookup)
+            g_switchDbStage = "rawfile/lookup/miss_unlock";
+#endif
         Sys_UnlockWrite(&db_hashCritSect);
+#ifdef __SWITCH__
+        if (traceRawFileLookup)
+            g_switchDbStage = "rawfile/lookup/miss_return";
+#endif
         return {};
     }
 
@@ -2222,8 +2270,15 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
     uint32_t assetEntryIndex; // [esp+4h] [ebp-8h]
     XAssetEntryPoolEntry *assetEntry; // [esp+8h] [ebp-4h]
 
+#ifdef __SWITCH__
+    const bool traceRawFileRegistry = type == ASSET_TYPE_RAWFILE;
+    if (traceRawFileRegistry)
+        g_switchDbStage = "rawfile/registry/hash_enter";
+#endif
     const uint32_t hash = DB_HashForName(name, type);
 #ifdef __SWITCH__
+    if (traceRawFileRegistry)
+        g_switchDbStage = "rawfile/registry/hash_done";
     const bool traceDefaultMaterial =
         type == ASSET_TYPE_MATERIAL && name && !I_stricmp(name, "$default");
     if (traceDefaultMaterial)
@@ -2255,9 +2310,18 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         assetEntry = &g_assetEntryPool[assetEntryIndex];
         if (assetEntry->entry.asset.type == type)
         {
+#ifdef __SWITCH__
+            if (traceRawFileRegistry)
+                g_switchDbStage = "rawfile/registry/get_entry_name";
+#endif
             XAssetName = DB_GetXAssetName(&assetEntry->entry.asset);
 #ifdef __SWITCH__
-            if (Switch_IstricmpAssetName(XAssetName, name) == 0)
+            if (traceRawFileRegistry)
+                g_switchDbStage = "rawfile/registry/compare_name";
+            const int nameCompare = Switch_IstricmpAssetName(XAssetName, name);
+            if (traceRawFileRegistry)
+                g_switchDbStage = "rawfile/registry/compare_done";
+            if (nameCompare == 0)
                 return &g_assetEntryPool[assetEntryIndex];
 #else
             if (!I_stricmp(XAssetName, name))
