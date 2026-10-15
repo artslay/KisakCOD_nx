@@ -1560,19 +1560,8 @@ int __cdecl CG_DrawActiveFrame(
     FxCmd v32[9]; // [sp+50h] [-70h] BYREF
 
 //Profile_Begin(13);
-#ifdef __SWITCH__
-
-#endif
     R_ClearScene(localClientNum);
-#ifdef __SWITCH__
-
-
-#endif
     FX_BeginUpdate(localClientNum);
-#ifdef __SWITCH__
-
-
-#endif
     CG_SetCollWorldLocalClientNum(localClientNum);
     if (localClientNum)
         MyAssertHandler(
@@ -1625,13 +1614,7 @@ int __cdecl CG_DrawActiveFrame(
             "cgameGlob->frametime - cgameGlob->animFrametime >= 0",
             v18);
     }
-#ifdef __SWITCH__
-
-#endif
     CG_ProcessSnapshots(localClientNum);
-#ifdef __SWITCH__
-
-#endif
     if (!cgArray[0].snap)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_view.cpp", 1425, 0, "%s", "cgameGlob->snap");
     if (!cgArray[0].nextSnap)
@@ -1645,19 +1628,10 @@ int __cdecl CG_DrawActiveFrame(
             "cgameGlob->nextSnap->serverTime == G_GetServerSnapTime()");
     if (CL_SkipRendering())
     {
-#ifdef __SWITCH__
-
-#endif
         CG_PredictPlayerState(localClientNum);
-#ifdef __SWITCH__
-
-#endif
         //Profile_EndInternal(0);
         return 0;
     }
-#ifdef __SWITCH__
-
-#endif
     CG_VisionSetsUpdate(localClientNum);
     CG_UpdateViewOffset(localClientNum);
     if (!CG_ModelPreviewerNeedsVieworgInterpSkipped(localClientNum))
@@ -1672,9 +1646,6 @@ int __cdecl CG_DrawActiveFrame(
     FX_FillUpdateCmd(localClientNum, v32);
     //Profile_Begin(22);
     R_UpdateNonDependentEffects(v32);
-#ifdef __SWITCH__
-
-#endif
     //Profile_EndInternal(0);
     if (localClientNum)
         MyAssertHandler(
@@ -1705,16 +1676,10 @@ int __cdecl CG_DrawActiveFrame(
         cgArray[0].shellshock.duration);
     CG_ClearHudGrenades();
     CG_UpdateEntInfo(localClientNum);
-#ifdef __SWITCH__
-
-#endif
     if (CG_AddPacketEntities(localClientNum))
         viewlocked_entNum = cgArray[0].predictedPlayerState.viewlocked_entNum;
     else
         viewlocked_entNum = ENTITYNUM_NONE;
-#ifdef __SWITCH__
-
-#endif
     //CG_UpdateRumble(localClientNum); // KISAKTODO 
     if (!cgArray[0].predictedPlayerState.locationSelectionInfo)
     {
@@ -1737,9 +1702,6 @@ int __cdecl CG_DrawActiveFrame(
         PROF_SCOPED("player state");
         CG_PredictPlayerState(localClientNum);
     }
-#ifdef __SWITCH__
-
-#endif
     {
         PROF_SCOPED("view anim");
         CG_UpdateViewWeaponAnim(localClientNum);
@@ -1748,9 +1710,6 @@ int __cdecl CG_DrawActiveFrame(
         PROF_SCOPED("view values");
         CG_CalcViewValues(localClientNum);
     }
-#ifdef __SWITCH__
-
-#endif
 
     //PIXBeginNamedEvent_Copy_NoVarArgs(0xFFFFFFFF, "player entity");
     if (cl_freemove->current.integer)
@@ -1799,14 +1758,8 @@ int __cdecl CG_DrawActiveFrame(
     //PIXBeginNamedEvent_Copy_NoVarArgs(0xFFFFFFFF, "draw 2D");
     R_AddCmdProjectionSet2D();
     DrawShellshockBlend(localClientNum);
-#ifdef __SWITCH__
-
-#endif
     //Profile_Begin(350);
     CG_Draw2D(localClientNum);
-#ifdef __SWITCH__
-
-#endif
     //Profile_EndInternal(0);
     //PIXEndNamedEvent();
     if (cgArray[0].nextSnap->serverTime != G_GetServerSnapTime())
@@ -1818,14 +1771,8 @@ int __cdecl CG_DrawActiveFrame(
             "cgameGlob->nextSnap->serverTime == G_GetServerSnapTime()");
     Sys_AllowSendClientMessages();
     R_Cinematic_SetPaused((CinematicEnum)(cg_paused->current.integer != 0));
-#ifdef __SWITCH__
-
-#endif
     //Profile_Begin(25);
     CG_DrawActive(localClientNum);
-#ifdef __SWITCH__
-
-#endif
     //Profile_EndInternal(0);
     //Profile_EndInternal(0);
     return 1;
