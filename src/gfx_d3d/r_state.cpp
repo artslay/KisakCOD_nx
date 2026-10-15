@@ -577,34 +577,6 @@ const GfxImage *__cdecl R_GetTextureFromCode(
         MyAssertHandler(".\\r_state.cpp", 611, 0, "%s\n\t%s", "*samplerState & SAMPLER_FILTER_MASK", v3);
     }
     const GfxImage *image = source->input.codeImages[codeTexture];
-#ifdef __SWITCH__
-#ifdef CINEMA
-    if (codeTexture >= TEXTURE_SRC_CODE_CINEMATIC_Y &&
-        codeTexture <= TEXTURE_SRC_CODE_CINEMATIC_A)
-    {
-        static uint32_t switchCinematicSamplerTraceCount = 0;
-        const uint32_t traceId = switchCinematicSamplerTraceCount++;
-        if (traceId < 32u || (traceId % 240u) == 0u)
-        {
-            char trace[448];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][CINEMATIC CODE IMAGE] n=%u code=%u image=%p name=%s size=%ux%u texture=%p source=%p view=%u\n",
-                traceId,
-                static_cast<unsigned>(codeTexture),
-                static_cast<const void *>(image),
-                image && image->name ? image->name : "<null>",
-                image ? static_cast<unsigned>(image->width) : 0u,
-                image ? static_cast<unsigned>(image->height) : 0u,
-                image ? static_cast<void *>(image->texture.basemap) : nullptr,
-                static_cast<void *>(source),
-                static_cast<unsigned>(source->viewMode));
-            Switch_LogWrite(trace);
-        }
-    }
-#endif
-#endif
     return image;
 }
 
