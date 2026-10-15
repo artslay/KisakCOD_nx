@@ -789,7 +789,8 @@ bool VulkanBackend::CreateUniformRing()
 
     return CreateBuffer(
         m_uniformCapacity,
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &m_uniformRing, &m_uniformRingMemory,
         reinterpret_cast<void **>(&m_uniformMapped));
@@ -2777,6 +2778,74 @@ bool VulkanBackend::AllocateUniform(const void *data, size_t size, VkDescriptorB
     info->buffer = m_uniformRing;
     info->offset = offset;
     info->range = static_cast<VkDeviceSize>(size);
+    return true;
+}
+
+bool VulkanBackend::QueueBufferUpdate(
+    VkBuffer destination,
+    VkDeviceSize destinationOffset,
+    const void *data,
+    size_t size)
+{
+    // Queue-copy uploads are used for dynamic vertex/index buffers. Vulkan copy
+    // ranges must be four-byte aligned; unusual partial ranges keep the safe
+    // synchronized fallback in KisakVkBuffer::Unlock.
+    if (!m_frameActive || m_deviceLost || !m_commandBuffer ||
+        !destination || !data || size == 0 ||
+        (destinationOffset & 3u) != 0 || (size & 3u) != 0 ||
+        static_cast<VkDeviceSize>(size) >
+            std::numeric_limits<VkDeviceSize>::max() - destinationOffset)
+        return false;
+
+    VkDescriptorBufferInfo source{};
+    if (!AllocateUniform(data, size, &source))
+        return false;
+
+    // Dynamic rendering must be ended before buffer barriers/copies. The next
+    // draw's EnsureRendering call reopens it; no queue submit or GPU fence wait
+    // is necessary because old draws, this copy, and new draws stay ordered in
+    // the same command buffer.
+    EndRendering();
+
+    VkBufferMemoryBarrier beforeCopy{};
+    beforeCopy.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    beforeCopy.srcAccessMask =
+        VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+        VK_ACCESS_INDEX_READ_BIT |
+        VK_ACCESS_TRANSFER_WRITE_BIT;
+    beforeCopy.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    beforeCopy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    beforeCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    beforeCopy.buffer = destination;
+    beforeCopy.offset = destinationOffset;
+    beforeCopy.size = static_cast<VkDeviceSize>(size);
+    vkCmdPipelineBarrier(
+        m_commandBuffer,
+        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 1, &beforeCopy, 0, nullptr);
+
+    VkBufferCopy copy{};
+    copy.srcOffset = source.offset;
+    copy.dstOffset = destinationOffset;
+    copy.size = static_cast<VkDeviceSize>(size);
+    vkCmdCopyBuffer(m_commandBuffer, m_uniformRing, destination, 1, &copy);
+
+    VkBufferMemoryBarrier afterCopy{};
+    afterCopy.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    afterCopy.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    afterCopy.dstAccessMask =
+        VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT;
+    afterCopy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    afterCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    afterCopy.buffer = destination;
+    afterCopy.offset = destinationOffset;
+    afterCopy.size = static_cast<VkDeviceSize>(size);
+    vkCmdPipelineBarrier(
+        m_commandBuffer,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+        0, 0, nullptr, 1, &afterCopy, 0, nullptr);
     return true;
 }
 
