@@ -2283,10 +2283,19 @@ bool IDirect3DDevice9::EnsurePipeline()
         return false;
     }
 
+    // Dynamic-rendering pipelines are compatible only with their attachment
+    // formats; resolve them before attempting to reuse a cached pipeline.
+    const VkFormat colorFormat = m_color && m_color->texture
+        ? m_color->texture->format : m_backend->SwapchainFormat();
+    const VkFormat depthFormat = m_depth && m_depth->texture
+        ? m_depth->texture->format : m_backend->DepthFormat();
+
     uint64_t key = 0x12345678abcdef00ull;
     key = HashCombine(key, m_vertexShader->serial);
     key = HashCombine(key, m_pixelShader->serial);
     key = HashCombine(key, m_decl->serial);
+    key = HashCombine(key, static_cast<uint64_t>(colorFormat));
+    key = HashCombine(key, static_cast<uint64_t>(depthFormat));
     key = HashCombine(key, m_viewport.Width);
     key = HashCombine(key, m_viewport.Height);
     key = HashCombine(key, m_depthEnable);
@@ -2761,11 +2770,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     dynamic.dynamicStateCount = 2;
     dynamic.pDynamicStates = dynamicStates;
-
-    VkFormat colorFormat = m_color && m_color->texture
-        ? m_color->texture->format : m_backend->SwapchainFormat();
-    VkFormat depthFormat = m_depth && m_depth->texture
-        ? m_depth->texture->format : m_backend->DepthFormat();
 
     VkPipelineRenderingCreateInfo rendering{};
     rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
