@@ -15,6 +15,7 @@
 #include <atomic>
 #include <cstdint>
 extern void Switch_LogWrite(const char *msg);
+extern thread_local const char *g_switchFrameStage;
 extern bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass);
 
 static bool Switch_IsSafeMaterialShaderArgumentRange(
@@ -164,8 +165,12 @@ void __cdecl R_HW_SetVertexShaderConstant(
 void __cdecl R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
 {
 #ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/shader_arg/vertex_code_enter";
     if (!Switch_IsSafeMaterialShaderArgumentRange(routingData, 1u, "vertex_code_constant"))
+    {
+        g_switchFrameStage = "frame/render/shader_arg/vertex_code_rejected";
         return;
+    }
 #endif
     const float *data; // [esp+8h] [ebp-4h]
 
@@ -202,6 +207,14 @@ float *__cdecl R_GetCodeConstant(GfxCmdBufContext context, uint32_t constant)
 
 char __cdecl R_IsVertexShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/shader_arg/vertex_state_enter";
+    if (!Switch_IsSafeMaterialShaderArgumentRange(routingData, 1u, "vertex_constant_state"))
+    {
+        g_switchFrameStage = "frame/render/shader_arg/vertex_state_rejected";
+        return 1;
+    }
+#endif
     bcassert(routingData->dest, ARRAY_COUNT(context.state->vertexShaderConstState));
 
     if (routingData->u.codeConst.index < CONST_SRC_FIRST_CODE_MATRIX)
@@ -221,6 +234,14 @@ char __cdecl R_IsShaderMatrixUpToDate(
     GfxShaderConstantState *constant,
     const MaterialShaderArgument *routingData)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/shader_arg/matrix_state_enter";
+    if (!Switch_IsSafeMaterialShaderArgumentRange(routingData, 1u, "matrix_constant_state"))
+    {
+        g_switchFrameStage = "frame/render/shader_arg/matrix_state_rejected";
+        return 1;
+    }
+#endif
     GfxShaderConstantState newState; // [esp+4h] [ebp-10h]
     uint32_t rowCount; // [esp+Ch] [ebp-8h]
     uint32_t rowCounta; // [esp+Ch] [ebp-8h]
@@ -245,6 +266,14 @@ char __cdecl R_IsShaderConstantUpToDate(
     GfxShaderConstantState *constant,
     const MaterialShaderArgument *routingData)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/shader_arg/code_state_enter";
+    if (!Switch_IsSafeMaterialShaderArgumentRange(routingData, 1u, "code_constant_state"))
+    {
+        g_switchFrameStage = "frame/render/shader_arg/code_state_rejected";
+        return 1;
+    }
+#endif
     GfxShaderConstantState newState; // [esp+4h] [ebp-10h]
 
     iassert( source );
@@ -554,6 +583,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
 
     PROF_SCOPED("R_SetupPass");
 
+    g_switchFrameStage = "frame/render/setup_pass/entry";
     pass = &context.state->technique->passArray[passIndex];
     context.state->pass = pass;
     context.state->passIndex = passIndex;
@@ -563,6 +593,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     // pass argument array immediately before any per-pass argument traversal.
     Switch_ResolveMaterialPassArgsForRender(
         const_cast<MaterialPass *>(pass));
+    g_switchFrameStage = "frame/render/setup_pass/args_resolved";
 #endif
     material = context.state->material;
     if (material->stateBitsEntry[context.state->techType] >= (uint32_t)material->stateBitsCount)
@@ -646,6 +677,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     context.state->prim.device->SetSwitchUnlitMode(
         context.state->techType == TECHNIQUE_UNLIT);
 #endif
+    g_switchFrameStage = "frame/render/setup_pass/set_state";
     R_SetState(context.state, stateBits);
 #ifdef __SWITCH__
     // The Switch IDirect3DDevice9 compatibility interface exposes render-state
@@ -696,6 +728,9 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
         RB_LogPrint(v4);
     }
     iassert( pass->pixelShader );
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/setup_pass/set_pixel_shader";
+#endif
     R_SetPixelShader(context.state, pass->pixelShader);
     if (pass->stableArgCount && pass->args)
         R_SetPassShaderStableArguments(
@@ -738,6 +773,9 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
     const MaterialShaderArgument *arg,
     const MaterialTextureDef *texDef)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/material_sampler/entry";
+#endif
     float floatTime; // [esp+4h] [ebp-10h]
     GfxImage *image; // [esp+8h] [ebp-Ch] BYREF
     const Material *material; // [esp+Ch] [ebp-8h]
@@ -789,6 +827,9 @@ void __cdecl R_SetPassShaderPrimArguments(
     uint32_t argCount,
     const MaterialShaderArgument *arg)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/shader_args/prim_enter";
+#endif
 #ifdef __SWITCH__
     if (!Switch_IsSafeMaterialShaderArgumentRange(arg, argCount, "prim"))
         return;
@@ -861,6 +902,9 @@ void __cdecl R_SetPassShaderObjectArguments(
     const MaterialShaderArgument *arg)
 {
 #ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/shader_args/object_enter";
+#endif
+#ifdef __SWITCH__
     if (!Switch_IsSafeMaterialShaderArgumentRange(arg, argCount, "object"))
         return;
 #endif
@@ -905,6 +949,9 @@ void __cdecl R_SetPassPixelShaderStableArguments(
     uint32_t argCount,
     const MaterialShaderArgument *arg)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/shader_args/pixel_stable_enter";
+#endif
 #ifdef __SWITCH__
     if (!Switch_IsSafeMaterialShaderArgumentRange(arg, argCount, "pixel_stable"))
         return;
@@ -967,6 +1014,9 @@ void __cdecl R_SetPassVertexShaderStableArguments(
     const MaterialShaderArgument *arg)
 {
 #ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/shader_args/vertex_stable_enter";
+#endif
+#ifdef __SWITCH__
     if (!Switch_IsSafeMaterialShaderArgumentRange(arg, argCount, "vertex_stable"))
         return;
 #endif
@@ -990,6 +1040,9 @@ void __cdecl R_SetPassShaderStableArguments(
     uint32_t argCount,
     const MaterialShaderArgument *arg)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/shader_args/stable_enter";
+#endif
 #ifdef __SWITCH__
     if (!Switch_IsSafeMaterialShaderArgumentRange(arg, argCount, "stable"))
         return;
