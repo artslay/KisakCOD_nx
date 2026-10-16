@@ -4074,6 +4074,146 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite(minimalMsg);
         }
 
+        // Probe 1e: add only an alpha-component extraction to the original
+        // linked fragment shader. This isolates the new OpCompositeExtract from
+        // specialization constants, alpha comparisons, and the discard CFG.
+        if (!unpatchedPixelSpirvForProbe.empty())
+        {
+            std::vector<uint32_t> extractOnlySpirv = unpatchedPixelSpirvForProbe;
+            std::unordered_set<uint32_t> locationZeroVariables;
+            uint32_t outputVarId = 0;
+            uint32_t outputPointerType = 0;
+            uint32_t outputValueType = 0;
+            uint32_t alphaFloatType = 0;
+
+            for (size_t i = 5; i < extractOnlySpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(extractOnlySpirv, i, &wc, &op))
+                    break;
+                const uint32_t *ins = &extractOnlySpirv[i];
+                if (op == SpvOpDecorate && wc >= 4 &&
+                    ins[2] == SpvDecorationLocation && ins[3] == 0)
+                    locationZeroVariables.insert(ins[1]);
+                i += wc;
+            }
+
+            for (size_t i = 5; i < extractOnlySpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(extractOnlySpirv, i, &wc, &op))
+                    break;
+                const uint32_t *ins = &extractOnlySpirv[i];
+                if (op == SpvOpVariable && wc >= 4 &&
+                    ins[3] == SpvStorageClassOutput &&
+                    locationZeroVariables.count(ins[2]))
+                {
+                    outputVarId = ins[2];
+                    outputPointerType = ins[1];
+                    break;
+                }
+                i += wc;
+            }
+
+            for (size_t i = 5; outputPointerType && i < extractOnlySpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(extractOnlySpirv, i, &wc, &op))
+                    break;
+                const uint32_t *ins = &extractOnlySpirv[i];
+                if (op == SpvOpTypePointer && wc >= 4 && ins[1] == outputPointerType)
+                {
+                    outputValueType = ins[3];
+                    break;
+                }
+                i += wc;
+            }
+
+            for (size_t i = 5; outputValueType && i < extractOnlySpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(extractOnlySpirv, i, &wc, &op))
+                    break;
+                const uint32_t *ins = &extractOnlySpirv[i];
+                if (op == SpvOpTypeVector && wc >= 4 &&
+                    ins[1] == outputValueType && ins[3] == 4)
+                {
+                    alphaFloatType = ins[2];
+                    break;
+                }
+                i += wc;
+            }
+
+            uint32_t extractCount = 0;
+            if (outputVarId && alphaFloatType)
+            {
+                uint32_t nextProbeId = extractOnlySpirv[3];
+                std::vector<uint32_t> withExtract;
+                withExtract.reserve(extractOnlySpirv.size() + 8);
+                withExtract.insert(withExtract.end(),
+                    extractOnlySpirv.begin(), extractOnlySpirv.begin() + 5);
+                for (size_t i = 5; i < extractOnlySpirv.size();)
+                {
+                    uint32_t wc = 0;
+                    SpvOp op{};
+                    if (!SpirvIsValidInstruction(extractOnlySpirv, i, &wc, &op))
+                        break;
+                    const uint32_t *ins = &extractOnlySpirv[i];
+                    if (op == SpvOpStore && wc >= 3 && ins[1] == outputVarId)
+                    {
+                        SpirvAppend(withExtract, SpvOpCompositeExtract,
+                            {alphaFloatType, nextProbeId++, ins[2], 3});
+                        ++extractCount;
+                    }
+                    withExtract.insert(withExtract.end(),
+                        extractOnlySpirv.begin() + i,
+                        extractOnlySpirv.begin() + i + wc);
+                    i += wc;
+                }
+                withExtract[3] = nextProbeId;
+
+                VkResult extractModuleResult = VK_ERROR_UNKNOWN;
+                VkResult extractPipelineResult = VK_ERROR_UNKNOWN;
+                VkShaderModule extractModule = VK_NULL_HANDLE;
+                VkShaderModuleCreateInfo extractModuleInfo{};
+                extractModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                extractModuleInfo.codeSize = withExtract.size() * sizeof(uint32_t);
+                extractModuleInfo.pCode = withExtract.data();
+                extractModuleResult = vkCreateShaderModule(
+                    m_backend->Device(), &extractModuleInfo, nullptr, &extractModule);
+                extractPipelineResult = extractModuleResult;
+                VkPipeline extractPipeline = VK_NULL_HANDLE;
+                if (extractModuleResult == VK_SUCCESS)
+                {
+                    VkPipelineShaderStageCreateInfo extractStages[2] = {stages[0], stages[1]};
+                    extractStages[1].module = extractModule;
+                    extractStages[1].pSpecializationInfo = nullptr;
+                    VkGraphicsPipelineCreateInfo extractInfo = info;
+                    extractInfo.pStages = extractStages;
+                    extractPipelineResult = vkCreateGraphicsPipelines(
+                        m_backend->Device(), VK_NULL_HANDLE, 1, &extractInfo, nullptr, &extractPipeline);
+                    if (extractPipeline)
+                        vkDestroyPipeline(m_backend->Device(), extractPipeline, nullptr);
+                    vkDestroyShaderModule(m_backend->Device(), extractModule, nullptr);
+                }
+
+                char extractMsg[192];
+                std::snprintf(extractMsg, sizeof(extractMsg),
+                    "[KisakCOD][VK DRAW] pipeline_probe alpha_extract_only module=%d pipeline=%d stores=%u\\n",
+                    static_cast<int>(extractModuleResult),
+                    static_cast<int>(extractPipelineResult), extractCount);
+                Switch_LogWrite(extractMsg);
+            }
+            else
+            {
+                Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_probe alpha_extract_only skipped=no_vec4_output\\n");
+            }
+        }
+
         // Probe 1d: remove only the generated alpha comparison arithmetic,
         // keep the alpha capture/local variable and structured discard, and
         // force the conditional to true. This isolates comparisons/spec constants
