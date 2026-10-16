@@ -472,7 +472,7 @@ uint8_t __cdecl R_LightGridLookup(
             honorSuppression = 1;
             bestPrimaryLightWeight = cornerWeight[cornerIndex];
             primaryLightIndex = entry->primaryLightIndex;
-            memset((uint8_t *)cornerEntry, 0, 4 * cornerIndex);
+            memset(cornerEntry, 0, sizeof(cornerEntry[0]) * cornerIndex);
             continue;
         }
         v11 = entry->primaryLightIndex;
