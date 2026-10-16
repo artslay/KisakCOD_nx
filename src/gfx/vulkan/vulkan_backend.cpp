@@ -1190,26 +1190,35 @@ bool VulkanBackend::EndFrame()
 
     static uint32_t switchPresentTraceCount = 0;
     static uint32_t switchPresentActivityTraceCount = 0;
+    static uint32_t switchPresentHeartbeatTraceCount = 0;
     const uint32_t switchPresentTraceId = switchPresentTraceCount++;
     const bool switchHasPresentSource = m_presentSourceImage && m_presentSourceView;
     const bool switchTraceActivity =
         switchHasPresentSource || m_renderingActive;
+    const bool switchTraceHeartbeat =
+        switchPresentTraceId % 120u == 0u &&
+        switchPresentHeartbeatTraceCount < 8;
     const bool switchTraceThisFrame =
         switchPresentTraceId < 16 ||
-        (switchTraceActivity && switchPresentActivityTraceCount < 8);
+        (switchTraceActivity && switchPresentActivityTraceCount < 8) ||
+        switchTraceHeartbeat;
     if (switchTraceThisFrame && switchTraceActivity)
         ++switchPresentActivityTraceCount;
     if (switchTraceThisFrame)
     {
-        char trace[256];
+        if (switchTraceHeartbeat)
+            ++switchPresentHeartbeatTraceCount;
+        char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK FRAME] end_frame_begin id=%u serial=%llu source=%u size=%ux%u swapIndex=%u rendering=%u\n",
+            "[KisakCOD][VK FRAME] end_frame_begin id=%u serial=%llu source=%u size=%ux%u swapIndex=%u rendering=%u backbufferCleared=%u heartbeat=%u\n",
             switchPresentTraceId,
             static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
             switchHasPresentSource ? 1u : 0u,
             m_presentSourceWidth, m_presentSourceHeight, m_swapchainIndex,
-            m_renderingActive ? 1u : 0u);
+            m_renderingActive ? 1u : 0u,
+            m_backbufferClearedThisFrame ? 1u : 0u,
+            switchTraceHeartbeat ? 1u : 0u);
         Switch_LogWrite(trace);
     }
 
