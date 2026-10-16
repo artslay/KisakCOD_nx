@@ -14,6 +14,10 @@
 #include <cstring>
 #include <type_traits>
 
+#ifdef __SWITCH__
+extern void Switch_InitializeLoadedTechniqueSetForRender(void *techSet, bool isNewAsset);
+#endif
+
 using namespace IW3;
 
 Loader_MaterialTechniqueSet::Loader_MaterialTechniqueSet(Zone& zone, ZoneInputStream& stream)
@@ -553,4 +557,9 @@ void Loader_MaterialTechniqueSet::LoadAsset_MaterialTechniqueSet(MaterialTechniq
     
     m_asset_info = reinterpret_cast<XAssetInfo<MaterialTechniqueSet>*>(LinkAsset(AssetName<AssetTechniqueSet>(**pAsset), reallocatedAsset, assetInfo.GetDependencies(), assetInfo.GetUsedScriptStrings(), assetInfo.GetIndirectAssetReferences()));
     *pAsset = m_asset_info->Asset();
+#ifdef __SWITCH__
+    Switch_InitializeLoadedTechniqueSetForRender(
+        static_cast<void *>(*pAsset),
+        *pAsset == reallocatedAsset);
+#endif
 }
