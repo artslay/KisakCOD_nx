@@ -3035,12 +3035,10 @@ GfxIndexBufferState *RB_SwapBuffers()
     }
 
 #ifdef __SWITCH__
-    // The Vulkan backend owns presentation and GPU synchronization on Switch.
-    // Wait here so the renderer's legacy frame fence semantics remain intact.
-    g_switchFrameStage = "frame/issue/swap_fence";
-    if (g_gfxBackend)
-        g_gfxBackend->WaitForGpu();
-    g_switchFrameStage = "frame/issue/swap_fence_done";
+    // Do not vkQueueWaitIdle after every frame: it waits for both GPU work and
+    // presentation to finish, stalling the render thread. VulkanBackend waits
+    // on the frame fence before reusing frame resources and uses a dedicated
+    // present semaphore for each swapchain image.
 #else
     R_HW_InsertFence(&dx.swapFence);
 #endif
