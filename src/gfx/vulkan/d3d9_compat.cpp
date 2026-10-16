@@ -2565,30 +2565,47 @@ HRESULT IDirect3DDevice9::EndScene()
 
     static uint32_t endSceneTraceCount = 0;
     static uint32_t endSceneSourceTraceCount = 0;
+    static uint32_t endSceneDrawTraceCount = 0;
+    static uint32_t endSceneHeartbeatTraceCount = 0;
     const uint32_t endSceneTraceId = endSceneTraceCount++;
+    const bool hasDrawCalls =
+        g_switchSceneDrawPrimitiveCalls != 0 ||
+        g_switchSceneDrawIndexedCalls != 0;
+    const bool switchTraceDrawScene =
+        hasDrawCalls && endSceneDrawTraceCount < 24;
+    const bool switchTraceHeartbeat =
+        endSceneTraceId % 120u == 0u && endSceneHeartbeatTraceCount < 8;
     const bool switchTraceEndScene =
         endSceneTraceId < 16 ||
-        (queuePresentSource && endSceneSourceTraceCount < 8);
+        switchTraceDrawScene ||
+        (queuePresentSource && endSceneSourceTraceCount < 8) ||
+        switchTraceHeartbeat;
     if (switchTraceEndScene)
     {
         if (queuePresentSource)
             ++endSceneSourceTraceCount;
+        if (switchTraceDrawScene)
+            ++endSceneDrawTraceCount;
+        if (switchTraceHeartbeat)
+            ++endSceneHeartbeatTraceCount;
         const KisakVkTexture *texture =
             m_color ? m_color->texture : nullptr;
-        char trace[320];
+        char trace[448];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK FRAME] end_scene id=%u rendered=%u source=%u color=%p texture=%p size=%ux%u draws=%u/%u clears=%u\n",
+            "[KisakCOD][VK FRAME] end_scene id=%u rendered=%u source=%u target=%s color=%p texture=%p size=%ux%u draws=%u/%u clears=%u stage=%s\n",
             endSceneTraceId,
-            m_targetRendered ? 1u : 0u,
+            (m_targetRendered || hasDrawCalls) ? 1u : 0u,
             queuePresentSource ? 1u : 0u,
+            texture ? "texture" : "swapchain",
             static_cast<void *>(m_color),
             static_cast<const void *>(texture),
             texture ? texture->width : 0u,
             texture ? texture->height : 0u,
             g_switchSceneDrawPrimitiveCalls,
             g_switchSceneDrawIndexedCalls,
-            g_switchSceneClearCalls);
+            g_switchSceneClearCalls,
+            g_switchFrameStage ? g_switchFrameStage : "(unknown)");
         Switch_LogWrite(trace);
     }
 
