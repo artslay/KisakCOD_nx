@@ -261,7 +261,20 @@ int  R_SkinSceneDObjModels(
                 {
 #ifdef KISAK_SWITCH
                     const uintptr_t vertListAddress = reinterpret_cast<uintptr_t>(surface->vertList);
-                    if (surface->vertList && vertListAddress > UINT32_MAX)
+                    // Switch fastfile offsets can be wider than 32 bits after
+                    // corruption, so a simple UINT32_MAX test is not sufficient.
+                    // Native XSurface data lives in the process address range
+                    // observed for Switch heap/zone allocations; also require the
+                    // natural alignment of XRigidVertList before dereferencing.
+                    constexpr uintptr_t kSwitchNativeAddressBegin =
+                        static_cast<uintptr_t>(0x800000000ull);
+                    constexpr uintptr_t kSwitchNativeAddressEnd =
+                        static_cast<uintptr_t>(0x1000000000ull);
+                    const bool nativeVertListPointer =
+                        vertListAddress >= kSwitchNativeAddressBegin &&
+                        vertListAddress < kSwitchNativeAddressEnd &&
+                        (vertListAddress & (alignof(XRigidVertList) - 1u)) == 0;
+                    if (surface->vertList && nativeVertListPointer)
                         rigidBoneIndex = surface->vertList->boneOffset >> 6;
 
                     if (rigidBoneIndex >= boneCount)
