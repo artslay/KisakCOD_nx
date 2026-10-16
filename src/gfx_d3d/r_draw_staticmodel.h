@@ -13,7 +13,7 @@ struct GfxStaticModelDrawStream // sizeof=0x1C
     uint32_t reflectionProbeIndex;
 #ifdef __SWITCH__
     const uint32_t *primDrawSurfsBase;
-    XSurface **primDrawSurfXSurfaceBuf;
+    XSurface *const *primDrawSurfXSurfaceBuf;
 #endif
 };
 
