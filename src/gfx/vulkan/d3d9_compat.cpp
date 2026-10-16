@@ -4429,13 +4429,26 @@ bool IDirect3DDevice9::EnsurePipeline()
         Switch_LogWrite(handlesMsg);
     }
 
-    // Capture both modules and the complete native pipeline state for the
-    // pipeline 33 driver fault. The fragment hash is also matched so minor
-    // ordering changes do not silently remove the diagnostic.
+    // The vertex module hash has already created successful pipelines; the
+    // new fragment module is the most useful payload for this driver fault.
+    // Save a binary copy as well as compactly chunked Base64 so the user can
+    // choose whichever transfer method is easier.
     if (targetPipelineDump)
     {
-        LogSwitchPipelineSpirvBase64(
-            pipelineCreateSequence, "vs", m_vertexShader->spirv);
+        const char *targetPsPath = "sdmc:/switch/KisakCOD/vk_crash_33_ps.spv";
+        const bool targetPsSaved = WriteSwitchPipelineSpirv(
+            targetPsPath, m_pixelShader->spirv);
+        char targetPsMsg[256];
+        std::snprintf(
+            targetPsMsg, sizeof(targetPsMsg),
+            "[KisakCOD][VK SPIRV TARGET] seq=%u stage=ps saved=%u words=%zu bytes=%zu hash=%016llx path=%s\\n",
+            pipelineCreateSequence,
+            targetPsSaved ? 1u : 0u,
+            m_pixelShader->spirv.size(),
+            m_pixelShader->spirv.size() * sizeof(uint32_t),
+            static_cast<unsigned long long>(psSpirvHash),
+            targetPsPath);
+        Switch_LogWrite(targetPsMsg);
         LogSwitchPipelineSpirvBase64(
             pipelineCreateSequence, "ps", m_pixelShader->spirv);
 
