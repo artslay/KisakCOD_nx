@@ -253,7 +253,59 @@ static bool SwitchVirtualCommitRange(void *pointer, size_t size)
             return false;
         }
 
-        const size_t runPages = page - runStart;
+        size_t runPages = page - runStart;
+        void *const destination = virtualBase + runStart * SWITCH_VIRTUAL_PAGE_SIZE;
+
+        // A reservation can span adjacent unmapped kernel regions. svcMapMemory
+        // cannot map across a MemoryInfo boundary in one call, even when the
+        // engine's reservation table regards the whole range as free. Query and
+        // cap this run to the current free region; subsequent iterations map
+        // the remaining pages into their own backing blocks.
+        MemoryInfo destinationRegion{};
+        u32 destinationPageInfo = 0;
+        const Result destinationQuery = svcQueryMemory(
+            &destinationRegion, &destinationPageInfo,
+            reinterpret_cast<uintptr_t>(destination));
+        const uintptr_t destinationAddress = reinterpret_cast<uintptr_t>(destination);
+        const uintptr_t destinationRegionBase =
+            static_cast<uintptr_t>(destinationRegion.addr);
+        if (R_FAILED(destinationQuery) ||
+            destinationRegion.type != MemType_Unmapped ||
+            destinationRegion.size == 0 ||
+            destinationRegionBase > destinationAddress ||
+            destinationRegion.size > UINTPTR_MAX - destinationRegionBase ||
+            destinationRegionBase + static_cast<uintptr_t>(destinationRegion.size) <= destinationAddress)
+        {
+            const Result invalidDestination = R_FAILED(destinationQuery)
+                ? destinationQuery
+                : MAKERESULT(Module_Libnx, LibnxError_BadInput);
+            SwitchVirtualMemoryLog(
+                "commit_destination_not_free", destination,
+                runPages * SWITCH_VIRTUAL_PAGE_SIZE, invalidDestination);
+            return false;
+        }
+
+        const uintptr_t destinationRegionEnd =
+            destinationRegionBase + static_cast<uintptr_t>(destinationRegion.size);
+        const size_t availablePages = static_cast<size_t>(
+            (destinationRegionEnd - destinationAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
+        if (availablePages == 0)
+        {
+            SwitchVirtualMemoryLog(
+                "commit_destination_no_pages", destination,
+                runPages * SWITCH_VIRTUAL_PAGE_SIZE,
+                MAKERESULT(Module_Libnx, LibnxError_BadInput));
+            return false;
+        }
+        if (availablePages < runPages)
+        {
+            runPages = availablePages;
+            page = runStart + runPages;
+            SwitchVirtualMemoryLog(
+                "commit_split_region", destination,
+                runPages * SWITCH_VIRTUAL_PAGE_SIZE, 0);
+        }
+
         const size_t runSize = runPages * SWITCH_VIRTUAL_PAGE_SIZE;
         void *const source = std::aligned_alloc(SWITCH_VIRTUAL_PAGE_SIZE, runSize);
         if (!source)
@@ -265,7 +317,6 @@ static bool SwitchVirtualCommitRange(void *pointer, size_t size)
         // Heap backing is allocated only for pages requested by the engine.
         // Clear it before mapping: svcMapMemory protects the source while mapped.
         memset(source, 0, runSize);
-        void *const destination = virtualBase + runStart * SWITCH_VIRTUAL_PAGE_SIZE;
         const Result result = svcMapMemory(destination, source, runSize);
         if (R_FAILED(result))
         {
