@@ -4498,7 +4498,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         char renderingMsg[320];
         std::snprintf(
             renderingMsg, sizeof(renderingMsg),
-            "[KisakCOD][VK PIPELINE RENDERING] seq=%u sType=%u pNext=%p viewMask=%u colorCount=%u colorFormats=%p color0=%u depth=%u stencil=%u\\n",
+            "[KisakCOD][VK PIPELINE RENDERING] seq=%u sType=%u pNext=%p viewMask=%u colorCount=%u colorFormats=%p color0=%u depth=%u stencil=%u\n",
             pipelineCreateSequence, static_cast<unsigned int>(rendering.sType),
             const_cast<void *>(rendering.pNext), rendering.viewMask,
             rendering.colorAttachmentCount,
@@ -4513,7 +4513,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         char createMsg[320];
         std::snprintf(
             createMsg, sizeof(createMsg),
-            "[KisakCOD][VK PIPELINE CREATEINFO] seq=%u flags=%u renderPass=%p subpass=%u base=%p baseIndex=%d layout=%p stages=%u pStages=%p pNext=%p\\n",
+            "[KisakCOD][VK PIPELINE CREATEINFO] seq=%u flags=%u renderPass=%p subpass=%u base=%p baseIndex=%d layout=%p stages=%u pStages=%p pNext=%p\n",
             pipelineCreateSequence, static_cast<unsigned int>(info.flags),
             static_cast<void *>(info.renderPass), info.subpass,
             static_cast<void *>(info.basePipelineHandle), info.basePipelineIndex,
@@ -4529,7 +4529,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             char stageMsg[320];
             std::snprintf(
                 stageMsg, sizeof(stageMsg),
-                "[KisakCOD][VK PIPELINE STAGE] seq=%u index=%u sType=%u stage=0x%x flags=%u module=%p name=%s spec=%p mapCount=%u dataSize=%zu data=%p\\n",
+                "[KisakCOD][VK PIPELINE STAGE] seq=%u index=%u sType=%u stage=0x%x flags=%u module=%p name=%s spec=%p mapCount=%u dataSize=%zu data=%p\n",
                 pipelineCreateSequence, stageIndex,
                 static_cast<unsigned int>(stage.sType),
                 static_cast<unsigned int>(stage.stage),
@@ -4549,7 +4549,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             char attrMsg[160];
             std::snprintf(
                 attrMsg, sizeof(attrMsg),
-                "[KisakCOD][VK PIPELINE ATTRIBUTE] seq=%u index=%zu location=%u binding=%u format=%u offset=%u\\n",
+                "[KisakCOD][VK PIPELINE ATTRIBUTE] seq=%u index=%zu location=%u binding=%u format=%u offset=%u\n",
                 pipelineCreateSequence, attrIndex, attr.location, attr.binding,
                 static_cast<unsigned int>(attr.format), attr.offset);
             Switch_LogWrite(attrMsg);
