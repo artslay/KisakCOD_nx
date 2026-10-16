@@ -11073,7 +11073,7 @@ void __cdecl Scr_SetOrigin(gentity_s *ent, int offset)
         {
             Com_Printf(
                 CON_CHANNEL_SERVER,
-                "[KisakCOD][PLAYER SETORIGIN] ent=%d target=(%.2f,%.2f,%.2f) current=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p\\n",
+                "[KisakCOD][PLAYER SETORIGIN] ent=%d target=(%.2f,%.2f,%.2f) current=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p\n",
                 ent->s.number,
                 v4[0], v4[1], v4[2],
                 ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
