@@ -29,16 +29,16 @@ extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 
 // Last submitted-frame context is read by VulkanBackend only if queue submission fails.
-uint64_t g_switchLastBoundPipelineKey = 0;
-uint64_t g_switchLastBoundVertexShaderSerial = 0;
-uint64_t g_switchLastBoundPixelShaderSerial = 0;
-uint32_t g_switchLastDrawKind = 0; // 1=DrawPrimitiveUP, 2=DrawIndexedPrimitive
-uint32_t g_switchLastDrawIndexCount = 0;
-uint32_t g_switchLastDrawStartIndex = 0;
-int32_t g_switchLastDrawBaseVertex = 0;
-uint32_t g_switchLastDrawVertexCount = 0;
-uint32_t g_switchLastDrawPrimitiveType = 0;
-uint32_t g_switchLastDrawPrimitiveCount = 0;
+std::atomic<uint64_t> g_switchLastBoundPipelineKey{0};
+std::atomic<uint64_t> g_switchLastBoundVertexShaderSerial{0};
+std::atomic<uint64_t> g_switchLastBoundPixelShaderSerial{0};
+std::atomic<uint32_t> g_switchLastDrawKind{0}; // 1=DrawPrimitiveUP, 2=DrawIndexedPrimitive
+std::atomic<uint32_t> g_switchLastDrawIndexCount{0};
+std::atomic<uint32_t> g_switchLastDrawStartIndex{0};
+std::atomic<int32_t> g_switchLastDrawBaseVertex{0};
+std::atomic<uint32_t> g_switchLastDrawVertexCount{0};
+std::atomic<uint32_t> g_switchLastDrawPrimitiveType{0};
+std::atomic<uint32_t> g_switchLastDrawPrimitiveCount{0};
 
 namespace
 {
@@ -3666,9 +3666,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     const auto existing = m_pipelines.find(key);
     if (existing != m_pipelines.end())
     {
-        g_switchLastBoundPipelineKey = key;
-        g_switchLastBoundVertexShaderSerial = m_vertexShader->serial;
-        g_switchLastBoundPixelShaderSerial = m_pixelShader->serial;
+        g_switchLastBoundPipelineKey.store(key, std::memory_order_relaxed);
+        g_switchLastBoundVertexShaderSerial.store(m_vertexShader->serial, std::memory_order_relaxed);
+        g_switchLastBoundPixelShaderSerial.store(m_pixelShader->serial, std::memory_order_relaxed);
         m_pipelineDirty = false;
         vkCmdBindPipeline(m_backend->CommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, existing->second);
         return true;
@@ -5340,9 +5340,9 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     g_switchFrameStage = "frame/render/vulkan/pipeline/cache_insert";
     m_pipelines.emplace(key, pipeline);
-    g_switchLastBoundPipelineKey = key;
-    g_switchLastBoundVertexShaderSerial = m_vertexShader->serial;
-    g_switchLastBoundPixelShaderSerial = m_pixelShader->serial;
+    g_switchLastBoundPipelineKey.store(key, std::memory_order_relaxed);
+    g_switchLastBoundVertexShaderSerial.store(m_vertexShader->serial, std::memory_order_relaxed);
+    g_switchLastBoundPixelShaderSerial.store(m_pixelShader->serial, std::memory_order_relaxed);
     m_pipelineDirty = false;
     vkCmdBindPipeline(m_backend->CommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     return true;
@@ -5556,13 +5556,13 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     const VkDeviceSize offset = vertexInfo.offset;
     vkCmdBindVertexBuffers(
         m_backend->CommandBuffer(), 0, 1, &vertexInfo.buffer, &offset);
-    g_switchLastDrawKind = 1;
-    g_switchLastDrawIndexCount = 0;
-    g_switchLastDrawStartIndex = 0;
-    g_switchLastDrawBaseVertex = 0;
-    g_switchLastDrawVertexCount = vertexCount;
-    g_switchLastDrawPrimitiveType = primitiveType;
-    g_switchLastDrawPrimitiveCount = primitiveCount;
+    g_switchLastDrawKind.store(1, std::memory_order_relaxed);
+    g_switchLastDrawIndexCount.store(0, std::memory_order_relaxed);
+    g_switchLastDrawStartIndex.store(0, std::memory_order_relaxed);
+    g_switchLastDrawBaseVertex.store(0, std::memory_order_relaxed);
+    g_switchLastDrawVertexCount.store(vertexCount, std::memory_order_relaxed);
+    g_switchLastDrawPrimitiveType.store(primitiveType, std::memory_order_relaxed);
+    g_switchLastDrawPrimitiveCount.store(primitiveCount, std::memory_order_relaxed);
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/issue_draw";
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
     ++g_switchSceneDrawPrimitiveCalls;
@@ -5576,13 +5576,13 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 {
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
-    g_switchLastDrawKind = 2;
-    g_switchLastDrawIndexCount = indexCount;
-    g_switchLastDrawStartIndex = startIndex;
-    g_switchLastDrawBaseVertex = baseVertexIndex;
-    g_switchLastDrawVertexCount = numVertices;
-    g_switchLastDrawPrimitiveType = primitiveType;
-    g_switchLastDrawPrimitiveCount = primitiveCount;
+    g_switchLastDrawKind.store(2, std::memory_order_relaxed);
+    g_switchLastDrawIndexCount.store(indexCount, std::memory_order_relaxed);
+    g_switchLastDrawStartIndex.store(startIndex, std::memory_order_relaxed);
+    g_switchLastDrawBaseVertex.store(baseVertexIndex, std::memory_order_relaxed);
+    g_switchLastDrawVertexCount.store(numVertices, std::memory_order_relaxed);
+    g_switchLastDrawPrimitiveType.store(primitiveType, std::memory_order_relaxed);
+    g_switchLastDrawPrimitiveCount.store(primitiveCount, std::memory_order_relaxed);
     const uint64_t indexCapacity = m_indices
         ? m_indices->size / sizeof(uint16_t) : 0;
     const bool validIndexRange =
@@ -5723,7 +5723,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     static_cast<long long>(maxEffectiveVertex),
                     badStream, badStride, badElementOffset, badElementSize,
                     static_cast<unsigned long long>(badRequiredEnd), badBufferSize,
-                    static_cast<unsigned long long>(g_switchLastBoundPipelineKey));
+                    static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)));
                 Switch_LogWrite(msg);
             }
             return E_FAIL;
