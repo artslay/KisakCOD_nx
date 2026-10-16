@@ -4144,7 +4144,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     static uint64_t lastDumpPsHash = 0;
     static size_t lastDumpVsWords = 0;
     static size_t lastDumpPsWords = 0;
-    if (pipelineCreateSequence <= 8 &&
+    if ((pipelineCreateSequence <= 8 || pipelineCreateSequence >= 180) &&
         (vsSpirvHash != lastDumpVsHash || psSpirvHash != lastDumpPsHash ||
          m_vertexShader->spirv.size() != lastDumpVsWords ||
          m_pixelShader->spirv.size() != lastDumpPsWords))
@@ -4210,7 +4210,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_depthWrite ? 1u : 0u,
         static_cast<unsigned int>(m_depthFunc),
         m_blendEnable ? 1u : 0u);
-    if (pipelineCreateSequence <= 8)
+    if (pipelineCreateSequence <= 8 || pipelineCreateSequence >= 180)
     {
         Switch_LogWrite(preCreateMsg);
     }
@@ -4228,6 +4228,24 @@ bool IDirect3DDevice9::EnsurePipeline()
             static_cast<unsigned int>(depthFormat),
             static_cast<unsigned int>(m_topology));
         Switch_LogWrite(compactMsg);
+    }
+
+    if (pipelineCreateSequence >= 180)
+    {
+        char handlesMsg[320];
+        std::snprintf(
+            handlesMsg, sizeof(handlesMsg),
+            "[KisakCOD][VK PIPELINE INPUT] seq=%u device=%p layout=%p vsModule=%p psModule=%p vsWords=%zu psWords=%zu alphaTest=%u specialization=%p\n",
+            pipelineCreateSequence,
+            static_cast<void *>(m_backend->Device()),
+            static_cast<void *>(m_backend->PipelineLayout()),
+            static_cast<void *>(m_vertexShader->module),
+            static_cast<void *>(m_pixelShader->module),
+            m_vertexShader->spirv.size(),
+            m_pixelShader->spirv.size(),
+            m_alphaTest ? 1u : 0u,
+            static_cast<const void *>(stages[1].pSpecializationInfo));
+        Switch_LogWrite(handlesMsg);
     }
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
