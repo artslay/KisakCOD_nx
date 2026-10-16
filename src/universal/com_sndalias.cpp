@@ -7,76 +7,8 @@
 #include <qcommon/cmd.h>
 #include <database/database.h>
 #include "q_parse.h"
-#include <atomic>
-#include <cstdint>
-#include <cstdio>
 #ifdef __SWITCH__
 extern thread_local const char * volatile g_switchFrameStage;
-extern void Switch_LogWrite(const char *msg);
-
-namespace
-{
-std::atomic<uint32_t> g_switchSoundAliasLookupTraceCount{0};
-std::atomic<uint32_t> g_switchSoundAliasListTraceCount{0};
-
-bool SwitchLooksLikeNativeHeapPointer(const void *pointer)
-{
-    const uintptr_t address = reinterpret_cast<uintptr_t>(pointer);
-    return address >= 0x100000000ull && address < 0x0001000000000000ull;
-}
-
-void SwitchTraceSoundAliasLookup(
-    const char *name, const snd_alias_list_t *aliasList,
-    bool isDefault, const void *caller)
-{
-    const uint32_t sequence =
-        g_switchSoundAliasLookupTraceCount.fetch_add(1, std::memory_order_relaxed);
-    if (sequence >= 512)
-        return;
-
-    char message[384];
-    std::snprintf(
-        message, sizeof(message),
-        "[KisakCOD][SND ALIAS LOOKUP] n=%u caller=%p namePtr=%p name=%.*s result=%p default=%u\n",
-        sequence, caller, static_cast<const void *>(name),
-        80, name ? name : "(null)", static_cast<const void *>(aliasList),
-        isDefault ? 1u : 0u);
-    Switch_LogWrite(message);
-}
-
-void SwitchTraceSoundAliasList(
-    const snd_alias_list_t *aliasList, const snd_alias_t *firstAlias, int count)
-{
-    const uint32_t sequence =
-        g_switchSoundAliasListTraceCount.fetch_add(1, std::memory_order_relaxed);
-    if (sequence >= 512)
-        return;
-
-    const void *aliasNamePtr = nullptr;
-    const void *soundFilePtr = nullptr;
-    int sequenceValue = -1;
-    int flagsValue = -1;
-    const char *fieldStatus = "skipped";
-    if (SwitchLooksLikeNativeHeapPointer(firstAlias))
-    {
-        aliasNamePtr = static_cast<const void *>(firstAlias->aliasName);
-        soundFilePtr = static_cast<const void *>(firstAlias->soundFile);
-        sequenceValue = firstAlias->sequence;
-        flagsValue = firstAlias->flags;
-        fieldStatus = "read";
-    }
-
-    char message[384];
-    std::snprintf(
-        message, sizeof(message),
-        "[KisakCOD][SND ALIAS LIST] n=%u list=%p count=%d head=%p fields=%s aliasNamePtr=%p soundFile=%p sequence=%d flags=0x%x\n",
-        sequence, static_cast<const void *>(aliasList), count,
-        static_cast<const void *>(firstAlias), fieldStatus,
-        aliasNamePtr, soundFilePtr, sequenceValue,
-        static_cast<unsigned int>(flagsValue));
-    Switch_LogWrite(message);
-}
-}
 #endif
 
 SoundAliasGlobals g_sa;
@@ -363,10 +295,6 @@ snd_alias_list_t *__cdecl Com_FindSoundAlias_FastFile(const char *name)
     g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/db_default";
 #endif
     const bool isDefaultAliasAsset = DB_IsXAssetDefault(ASSET_TYPE_SOUND, name);
-#ifdef __SWITCH__
-    SwitchTraceSoundAliasLookup(
-        name, aliasList, isDefaultAliasAsset, __builtin_return_address(0));
-#endif
     if (!isDefaultAliasAsset)
     {
 #ifdef __SWITCH__
@@ -481,9 +409,6 @@ snd_alias_t *__cdecl Com_PickSoundAliasFromList(snd_alias_list_t *aliasList)
     if (aliasList->count)
     {
         firstAlias = aliasList->head;
-#ifdef __SWITCH__
-        SwitchTraceSoundAliasList(aliasList, firstAlias, aliasList->count);
-#endif
         bestAlias = firstAlias;
         cumulativeProbability = firstAlias->probability;
         maxSequence = firstAlias->sequence;
@@ -520,9 +445,6 @@ snd_alias_t *__cdecl Com_PickSoundAliasFromList(snd_alias_list_t *aliasList)
     }
     else
     {
-#ifdef __SWITCH__
-        SwitchTraceSoundAliasList(aliasList, nullptr, aliasList->count);
-#endif
         Com_PrintWarning(CON_CHANNEL_SOUND, "Sound not loaded: \"%s\"\n", aliasList->aliasName);
         return 0;
     }
