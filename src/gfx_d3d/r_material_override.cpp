@@ -8,6 +8,8 @@
 #include "rb_uploadshaders.h"
 
 #ifdef __SWITCH__
+#include <switch.h>
+#include <mutex>
 extern void Switch_LogWrite(const char *msg);
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
@@ -314,6 +316,77 @@ static bool Switch_IsSerializedAddress(uintptr_t address)
     return false;
 }
 
+// The Switch process can place ordinary native allocations below 4 GiB. Such
+// addresses are numerically indistinguishable from serialized 32-bit tokens,
+// so a range-only test is insufficient. Check the kernel mapping after excluding
+// live fastfile stream blocks. The alias resolver still gets first chance to
+// translate serialized references before this helper is used as a fallback.
+static bool Switch_IsMappedNativeRange(
+    uintptr_t address,
+    size_t byteCount,
+    size_t alignment)
+{
+    if (!address || address < 0x10000u || address > UINT32_MAX ||
+        !byteCount || !alignment ||
+        (address & (alignment - 1u)) != 0 ||
+        byteCount > UINTPTR_MAX - address ||
+        Switch_IsSerializedAddress(address))
+    {
+        return false;
+    }
+
+    struct CachedReadableRange
+    {
+        uintptr_t begin;
+        uintptr_t end;
+        uint32_t perm;
+    };
+    static CachedReadableRange cache[32]{};
+    static uint32_t cacheReplaceIndex = 0;
+    static std::mutex cacheMutex;
+
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        for (const CachedReadableRange &range : cache)
+        {
+            if (range.begin && address >= range.begin && address < range.end &&
+                byteCount <= range.end - address && (range.perm & Perm_R) != 0)
+                return true;
+        }
+    }
+
+    MemoryInfo info{};
+    u32 pageInfo = 0;
+    const Result queryResult = svcQueryMemory(&info, &pageInfo, address);
+    if (R_FAILED(queryResult) ||
+        info.type == MemType_Unmapped ||
+        (info.perm & Perm_R) == 0 ||
+        info.size == 0 ||
+        info.addr > UINTPTR_MAX ||
+        info.size > UINTPTR_MAX - static_cast<uintptr_t>(info.addr))
+    {
+        return false;
+    }
+
+    const uintptr_t regionBegin = static_cast<uintptr_t>(info.addr);
+    const uintptr_t regionEnd = regionBegin + static_cast<uintptr_t>(info.size);
+    if (address < regionBegin || address >= regionEnd ||
+        byteCount > regionEnd - address)
+    {
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        CachedReadableRange &slot =
+            cache[cacheReplaceIndex++ % (sizeof(cache) / sizeof(cache[0]))];
+        slot.begin = regionBegin;
+        slot.end = regionEnd;
+        slot.perm = info.perm;
+    }
+    return true;
+}
+
 // Literal shader constants may point directly into mapped fastfile data.
 // Unlike object references, such pointers need no alias conversion; only accept
 // the stream-backed form if the full four-float constant fits in its block.
@@ -361,7 +434,9 @@ static bool Switch_IsValidTechniqueSetPointer(
     // The Switch renderer's native heap objects live in the 64-bit
     // address space. Zero-extended and sign-widened 32-bit values are
     // serialized tokens, not native MaterialTechniqueSet pointers.
-    if (Switch_Is32BitSerializedPointerToken(address) ||
+    if ((Switch_Is32BitSerializedPointerToken(address) &&
+         !Switch_IsMappedNativeRange(
+             address, sizeof(MaterialTechniqueSet), alignof(MaterialTechniqueSet))) ||
         (address & (alignof(MaterialTechniqueSet) - 1u)) != 0)
         return false;
 
@@ -394,7 +469,8 @@ static bool Switch_IsValidTechniqueSetName(const char *name)
         return false;
 
     if (!Switch_IsSerializedAddress(address))
-        return !Switch_Is32BitSerializedPointerToken(address);
+        return !Switch_Is32BitSerializedPointerToken(address) ||
+               Switch_IsMappedNativeRange(address, 1u, 1u);
 
     // Names backed directly by fastfile memory must be a printable,
     // NUL-terminated string inside the containing stream block.
@@ -493,7 +569,9 @@ static void Switch_ResolveSerializedPointer(
 
     if (resolved && resolvedPointer)
     {
-        if (resolvedPointer <= UINT32_MAX ||
+        if ((resolvedPointer <= UINT32_MAX &&
+             !Switch_IsMappedNativeRange(
+                 resolvedPointer, sizeof(T), alignof(T))) ||
             (resolvedPointer & (alignof(T) - 1u)) != 0 ||
             Switch_IsSerializedAddress(resolvedPointer))
         {
@@ -502,6 +580,16 @@ static void Switch_ResolveSerializedPointer(
         }
 
         *pointer = reinterpret_cast<T *>(resolvedPointer);
+    }
+    else if (serialized32BitToken && !addressInStream &&
+             Switch_IsMappedNativeRange(
+                 serializedAddress, sizeof(T), alignof(T)))
+    {
+        // Alias/chain lookup had priority above. If no serialized reference
+        // resolved, retain a low native pointer whose complete object range is
+        // actually readable in the current process instead of nulling it simply
+        // because its numeric value fits in 32 bits.
+        return;
     }
     else if (addressInStream || serialized32BitToken)
     {
@@ -658,7 +746,9 @@ bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
     g_switchFrameStage = "frame/render/pass_args/entry";
     const uintptr_t passAddress = reinterpret_cast<uintptr_t>(pass);
     if (!pass ||
-        passAddress <= UINT32_MAX ||
+        (passAddress <= UINT32_MAX &&
+         !Switch_IsMappedNativeRange(
+             passAddress, sizeof(MaterialPass), alignof(MaterialPass))) ||
         (passAddress & (alignof(MaterialPass) - 1u)) != 0 ||
         Switch_IsSerializedAddress(passAddress))
     {
@@ -677,18 +767,23 @@ bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
     Switch_ResolvePointerForRenderIfNeeded(&pass->vertexShader, "vertexShader/pass_setup");
     Switch_ResolvePointerForRenderIfNeeded(&pass->pixelShader, "pixelShader/pass_setup");
 
-    auto validNativePointer = [](const void *pointer, size_t alignment) -> bool
+    auto validNativePointer = [](
+        const void *pointer, size_t byteCount, size_t alignment) -> bool
     {
         const uintptr_t address = reinterpret_cast<uintptr_t>(pointer);
         return pointer &&
-               address > UINT32_MAX &&
+               (address > UINT32_MAX ||
+                Switch_IsMappedNativeRange(address, byteCount, alignment)) &&
                (address & (alignment - 1u)) == 0 &&
                !Switch_IsSerializedAddress(address);
     };
 
-    if (!validNativePointer(pass->vertexDecl, alignof(MaterialVertexDeclaration)) ||
-        !validNativePointer(pass->vertexShader, alignof(MaterialVertexShader)) ||
-        !validNativePointer(pass->pixelShader, alignof(MaterialPixelShader)))
+    if (!validNativePointer(
+            pass->vertexDecl, sizeof(MaterialVertexDeclaration), alignof(MaterialVertexDeclaration)) ||
+        !validNativePointer(
+            pass->vertexShader, sizeof(MaterialVertexShader), alignof(MaterialVertexShader)) ||
+        !validNativePointer(
+            pass->pixelShader, sizeof(MaterialPixelShader), alignof(MaterialPixelShader)))
     {
         static uint32_t passPointerTraceCount = 0;
         if (passPointerTraceCount < 32u)
@@ -728,7 +823,11 @@ bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
     Switch_ResolvePointerForRenderIfNeeded(&pass->args, "args/pass_setup");
     const uintptr_t address = reinterpret_cast<uintptr_t>(pass->args);
     if (!pass->args ||
-        address <= UINT32_MAX ||
+        (address <= UINT32_MAX &&
+         !Switch_IsMappedNativeRange(
+             address,
+             static_cast<size_t>(argCount) * sizeof(MaterialShaderArgument),
+             alignof(MaterialShaderArgument))) ||
         (address & (alignof(MaterialShaderArgument) - 1u)) != 0 ||
         Switch_IsSerializedAddress(address))
     {
@@ -802,7 +901,10 @@ bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
             const bool finalStreamBackedLiteral =
                 Switch_IsStreamDataRange(literalAddress, 4u * sizeof(float));
             if (!argument.u.literalConst ||
-                literalAddress <= UINT32_MAX ||
+                (literalAddress <= UINT32_MAX &&
+                 !finalStreamBackedLiteral &&
+                 !Switch_IsMappedNativeRange(
+                     literalAddress, 4u * sizeof(float), alignof(float))) ||
                 (literalAddress & (alignof(float) - 1u)) != 0 ||
                 (Switch_IsSerializedAddress(literalAddress) &&
                  !finalStreamBackedLiteral))
@@ -865,12 +967,13 @@ static bool Switch_IsValidMaterialPointerForRender(const Material *material)
     if (!address || (address & (alignof(Material) - 1u)) != 0)
         return false;
 
-    // Native renderer material objects are high-address allocations. Preserve
-    // a genuine low-address object only if the renderer has registered that
-    // exact pointer; a truncated 32-bit copy of a live high pointer will fail.
-    if (address > UINT32_MAX &&
-        address < (1ULL << 39) &&
-        !Switch_IsSerializedAddress(address))
+    // Native renderer allocations may reside below 4 GiB on some launches.
+    // Accept a low address only when its full Material object is in a readable
+    // mapping and it is not a live serialized fastfile object.
+    if (address < (1ULL << 39) &&
+        !Switch_IsSerializedAddress(address) &&
+        (address > UINT32_MAX ||
+         Switch_IsMappedNativeRange(address, sizeof(Material), alignof(Material))))
         return true;
 
     const int registeredCount = rgp.materialCount < ARRAY_COUNT(rgp.sortedMaterials)
@@ -971,7 +1074,9 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
 
     const uintptr_t techniqueAddress =
         reinterpret_cast<uintptr_t>(technique);
-    if (techniqueAddress <= UINT32_MAX ||
+    if ((techniqueAddress <= UINT32_MAX &&
+         !Switch_IsMappedNativeRange(
+             techniqueAddress, sizeof(MaterialTechnique), alignof(MaterialTechnique))) ||
         (techniqueAddress & (alignof(MaterialTechnique) - 1u)) != 0 ||
         Switch_IsSerializedAddress(techniqueAddress))
     {
