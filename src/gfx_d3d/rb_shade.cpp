@@ -122,6 +122,12 @@ void __cdecl RB_SetTessTechnique(const Material *material, MaterialTechniqueType
 #ifdef __SWITCH__
     SwitchTraceLowMaterialInput(
         "RB_SetTessTechnique", material, techType, __builtin_return_address(0));
+    // Normalize/recover the material before comparing it with the saved
+    // tessellation state. RB_BeginSurface also validates, but doing it here
+    // avoids treating a truncated low-word pointer as a new material on every
+    // call and keeps RB_TessOverflow's saved origMaterial native and stable.
+    material = Switch_ValidateMaterialPointerForRender(
+        material, "RB_SetTessTechnique");
 #endif
     iassert(material);
     if (gfxCmdBufState.origMaterial != material || gfxCmdBufState.origTechType != techType)
