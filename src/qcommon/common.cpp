@@ -1902,7 +1902,7 @@ static float Com_ValidateCodeTimeScale(float timescale, const char *origin)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CODE TIME SCALE RECOVER] origin=%s invalid=%.9g restored=1.0\\n",
+            "[KisakCOD][CODE TIME SCALE RECOVER] origin=%s invalid=%.9g restored=1.0\n",
             origin ? origin : "unknown",
             static_cast<double>(timescale));
         Switch_LogWrite(trace);
