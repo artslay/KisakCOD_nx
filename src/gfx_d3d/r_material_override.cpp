@@ -611,26 +611,16 @@ static void Switch_ResolvePointerForRenderIfNeeded(T **pointer, const char *kind
         !Switch_Is32BitSerializedPointerToken(originalAddress))
         return;
 
-    DB_FixupSwitchPointerAliases();
+    // Resolve just this field. Running the global deferred-fixup queue from a
+    // render query may revisit pointer destinations whose owning assets have
+    // already changed; the direct alias/chain resolver below either returns a
+    // native pointer or safely nulls this unresolved field.
+    Switch_ResolveSerializedPointer(pointer, kind);
     if (!*pointer)
     {
         Switch_LogTechniqueRenderReject(
             kind, nullptr, UINT32_MAX,
             reinterpret_cast<const void *>(originalAddress));
-        return;
-    }
-
-    const uintptr_t address = reinterpret_cast<uintptr_t>(*pointer);
-    if (Switch_IsSerializedAddress(address) ||
-        Switch_Is32BitSerializedPointerToken(address))
-    {
-        Switch_ResolveSerializedPointer(pointer, kind);
-        if (!*pointer)
-        {
-            Switch_LogTechniqueRenderReject(
-                kind, nullptr, UINT32_MAX,
-                reinterpret_cast<const void *>(originalAddress));
-        }
     }
 }
 
