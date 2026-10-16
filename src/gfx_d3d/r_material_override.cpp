@@ -317,7 +317,11 @@ static bool Switch_IsValidTechniqueSetPointer(
     const uintptr_t address =
         reinterpret_cast<uintptr_t>(techSet);
 
-    if (address < 0x10000u ||
+    // The Switch renderer's native heap objects live in the 64-bit
+    // address space. A zero-extended 32-bit value is a serialized token,
+    // not a native MaterialTechniqueSet pointer, even when that token is no
+    // longer inside one of the currently tracked stream blocks.
+    if (address <= UINT32_MAX ||
         (address & (alignof(MaterialTechniqueSet) - 1u)) != 0)
         return false;
 
@@ -400,12 +404,14 @@ static void Switch_ResolveSerializedPointer(
     const uintptr_t serializedAddress =
         reinterpret_cast<uintptr_t>(*pointer);
 
-    // This helper is also called on fields that may already contain a real
-    // native ARM64 object after an inline load or an earlier alias fixup.
-    // Only serialized stream addresses need DB alias resolution; never turn a
-    // valid native Hunk pointer into nullptr merely because it has no alias
-    // entry.
-    if (!Switch_IsSerializedAddress(serializedAddress))
+    const bool addressInStream = Switch_IsSerializedAddress(serializedAddress);
+    const bool zeroExtended32BitToken = serializedAddress <= UINT32_MAX;
+
+    // A native ARM64 allocation may not have a DB alias entry, so preserve
+    // genuine 64-bit pointers outside the serialized stream. But do not mistake
+    // a zero-extended 32-bit fastfile token for a native pointer just because
+    // its source block is no longer represented in g_streamBlocks.
+    if (!addressInStream && !zeroExtended32BitToken)
     {
         if (serializedAddress < 0x10000u ||
             (serializedAddress & (alignof(T) - 1u)) != 0)
@@ -446,7 +452,7 @@ static void Switch_ResolveSerializedPointer(
 
     if (resolved && resolvedPointer)
     {
-        if (resolvedPointer < 0x10000u ||
+        if (resolvedPointer <= UINT32_MAX ||
             (resolvedPointer & (alignof(T) - 1u)) != 0 ||
             Switch_IsSerializedAddress(resolvedPointer))
         {
@@ -456,12 +462,12 @@ static void Switch_ResolveSerializedPointer(
 
         *pointer = reinterpret_cast<T *>(resolvedPointer);
     }
-    else if (Switch_IsSerializedAddress(serializedAddress))
+    else if (addressInStream || zeroExtended32BitToken)
     {
-        // Keep forward serialized references fixable until the native object
-        // has been registered in the Switch alias table. The native field must
-        // not retain the serialized stream address while that fixup is pending:
-        // the render path is allowed to observe only native pointers.
+        // Keep serialized references fixable until the native object has been
+        // registered in the Switch alias table. This also covers 32-bit offset
+        // tokens whose originating XFile block has already left g_streamBlocks.
+        // The render path must only observe a resolved native pointer or null.
         DB_AddSwitchPointerAliasFixup(
             serializedAddress,
             reinterpret_cast<uintptr_t *>(pointer));
@@ -469,8 +475,6 @@ static void Switch_ResolveSerializedPointer(
     }
     else
     {
-        // An unresolved value outside all serialized stream blocks is not a
-        // valid object address. Do not expose it to the render thread.
         *pointer = nullptr;
     }
 
