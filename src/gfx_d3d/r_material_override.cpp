@@ -670,7 +670,7 @@ bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][MATERIAL PASS REJECT] pass=%p decl=%p vs=%p ps=%p prior=%u%u%u\\n",
+                "[KisakCOD][MATERIAL PASS REJECT] pass=%p decl=%p vs=%p ps=%p prior=%u%u%u\n",
                 static_cast<void *>(pass),
                 static_cast<void *>(pass->vertexDecl),
                 static_cast<void *>(pass->vertexShader),
