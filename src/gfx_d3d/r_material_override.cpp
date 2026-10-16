@@ -517,6 +517,34 @@ static void Switch_ResolveNativeTechniquePointers(MaterialTechniqueSet *techSet)
     }
 }
 
+// Called after a technique set has been linked into the stable asset database.
+// Fastfile pointers are 32-bit serialized tokens, while renderer objects use
+// native ARM64 pointers. Do this at asset registration too, not only during a
+// later technique-remap pass: map-zone assets may appear after that pass ran.
+void Switch_InitializeLoadedTechniqueSetForRender(
+    void *rawTechniqueSet,
+    bool isNewAsset)
+{
+    auto *techSet = static_cast<MaterialTechniqueSet *>(rawTechniqueSet);
+    if (!Switch_IsValidTechniqueSetPointer(techSet))
+        return;
+
+    // remappedTechniqueSet is runtime state and is not filled by the fastfile
+    // loader. A newly inserted set starts by using its own techniques; the
+    // ordinary material override pass may replace this with a valid remap.
+    if (isNewAsset ||
+        !Switch_IsValidTechniqueSetPointer(techSet->remappedTechniqueSet))
+    {
+        techSet->remappedTechniqueSet = techSet;
+    }
+
+    Switch_ResolveNativeTechniquePointers(techSet);
+
+    MaterialTechniqueSet *remapped = techSet->remappedTechniqueSet;
+    if (Switch_IsValidTechniqueSetPointer(remapped) && remapped != techSet)
+        Switch_ResolveNativeTechniquePointers(remapped);
+}
+
 static bool Switch_IsTechniqueSetRemapCompatible(
     const MaterialTechniqueSet *source,
     const MaterialTechniqueSet *target,
