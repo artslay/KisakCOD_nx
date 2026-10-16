@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -2562,6 +2563,29 @@ HRESULT IDirect3DDevice9::EndScene()
         m_backend->ClearPresentSource();
     }
 
+    static uint32_t endSceneTraceCount = 0;
+    const uint32_t endSceneTraceId = endSceneTraceCount++;
+    if (endSceneTraceId < 8)
+    {
+        const KisakVkTexture *texture =
+            m_color ? m_color->texture : nullptr;
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK FRAME] end_scene id=%u rendered=%u source=%u color=%p texture=%p size=%ux%u draws=%u/%u clears=%u\\n",
+            endSceneTraceId,
+            m_targetRendered ? 1u : 0u,
+            queuePresentSource ? 1u : 0u,
+            static_cast<void *>(m_color),
+            static_cast<const void *>(texture),
+            texture ? texture->width : 0u,
+            texture ? texture->height : 0u,
+            g_switchSceneDrawPrimitiveCalls,
+            g_switchSceneDrawIndexedCalls,
+            g_switchSceneClearCalls);
+        Switch_LogWrite(trace);
+    }
+
     m_sceneOpen = false;
     return S_OK;
 }
@@ -4097,9 +4121,10 @@ bool IDirect3DDevice9::EnsurePipeline()
     static uint64_t lastDumpPsHash = 0;
     static size_t lastDumpVsWords = 0;
     static size_t lastDumpPsWords = 0;
-    if (vsSpirvHash != lastDumpVsHash || psSpirvHash != lastDumpPsHash ||
-        m_vertexShader->spirv.size() != lastDumpVsWords ||
-        m_pixelShader->spirv.size() != lastDumpPsWords)
+    if (pipelineCreateSequence <= 8 &&
+        (vsSpirvHash != lastDumpVsHash || psSpirvHash != lastDumpPsHash ||
+         m_vertexShader->spirv.size() != lastDumpVsWords ||
+         m_pixelShader->spirv.size() != lastDumpPsWords))
     {
         const bool vsDumpOk = WriteSwitchPipelineSpirv(
             "sdmc:/switch/KisakCOD/vk_crash_vs.spv", m_vertexShader->spirv);
@@ -4162,11 +4187,43 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_depthWrite ? 1u : 0u,
         static_cast<unsigned int>(m_depthFunc),
         m_blendEnable ? 1u : 0u);
-    Switch_LogWrite(preCreateMsg);
+    if (pipelineCreateSequence <= 8)
+    {
+        Switch_LogWrite(preCreateMsg);
+    }
+    else
+    {
+        char compactMsg[256];
+        std::snprintf(
+            compactMsg, sizeof(compactMsg),
+            "[KisakCOD][VK PIPELINE] begin seq=%u key=%016llx vs=%016llx ps=%016llx formats=%u/%u topology=%u\\n",
+            pipelineCreateSequence,
+            static_cast<unsigned long long>(key),
+            static_cast<unsigned long long>(vsSpirvHash),
+            static_cast<unsigned long long>(psSpirvHash),
+            static_cast<unsigned int>(colorFormat),
+            static_cast<unsigned int>(depthFormat),
+            static_cast<unsigned int>(m_topology));
+        Switch_LogWrite(compactMsg);
+    }
 
+    const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
     const VkResult pipelineResult = vkCreateGraphicsPipelines(
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+    const auto pipelineCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - pipelineCreateStart).count();
+    if (pipelineResult == VK_SUCCESS &&
+        (pipelineCreateSequence <= 8 || pipelineCreateElapsed >= 250))
+    {
+        char createdMsg[192];
+        std::snprintf(
+            createdMsg, sizeof(createdMsg),
+            "[KisakCOD][VK PIPELINE] ready seq=%u ms=%lld\\n",
+            pipelineCreateSequence,
+            static_cast<long long>(pipelineCreateElapsed));
+        Switch_LogWrite(createdMsg);
+    }
     if (pipelineResult != VK_SUCCESS)
     {
         char msg[640];
