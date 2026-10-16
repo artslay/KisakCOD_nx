@@ -4213,15 +4213,17 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
     const auto pipelineCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - pipelineCreateStart).count();
-    if (pipelineResult == VK_SUCCESS &&
-        (pipelineCreateSequence <= 8 || pipelineCreateElapsed >= 250))
+    if (pipelineCreateSequence <= 8 || pipelineCreateSequence >= 160 ||
+        pipelineCreateElapsed >= 250 || pipelineResult != VK_SUCCESS)
     {
-        char createdMsg[192];
+        char createdMsg[256];
         std::snprintf(
             createdMsg, sizeof(createdMsg),
-            "[KisakCOD][VK PIPELINE] ready seq=%u ms=%lld\n",
+            "[KisakCOD][VK PIPELINE] done seq=%u result=%d ms=%lld handle=%p\n",
             pipelineCreateSequence,
-            static_cast<long long>(pipelineCreateElapsed));
+            static_cast<int>(pipelineResult),
+            static_cast<long long>(pipelineCreateElapsed),
+            static_cast<void *>(pipeline));
         Switch_LogWrite(createdMsg);
     }
     if (pipelineResult != VK_SUCCESS)
