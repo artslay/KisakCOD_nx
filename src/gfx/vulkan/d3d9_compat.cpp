@@ -4144,6 +4144,8 @@ bool IDirect3DDevice9::EnsurePipeline()
             size_t arithmeticStart = patchedAlphaSpirv.size();
             size_t selectionMergeOffset = patchedAlphaSpirv.size();
             size_t branchOffset = patchedAlphaSpirv.size();
+            bool matchedStoragePattern = false;
+            bool matchedSsaPattern = false;
             for (size_t k = 0; k < entryOps.size(); ++k)
             {
                 if (entryOps[k] != SpvOpSelectionMerge ||
@@ -4165,8 +4167,9 @@ bool IDirect3DDevice9::EnsurePipeline()
                 const std::vector<SpvOp> *patterns[] = {
                     &alphaArithmeticOps, &alphaArithmeticOpsSsa
                 };
-                for (const std::vector<SpvOp> *pattern : patterns)
+                for (size_t patternIndex = 0; patternIndex < 2; ++patternIndex)
                 {
+                    const std::vector<SpvOp> *pattern = patterns[patternIndex];
                     if (k < pattern->size())
                         continue;
                     const size_t startIndex = k - pattern->size();
@@ -4184,6 +4187,8 @@ bool IDirect3DDevice9::EnsurePipeline()
                         arithmeticStart = entryOffsets[startIndex];
                         selectionMergeOffset = entryOffsets[k];
                         branchOffset = entryOffsets[k + 1];
+                        matchedStoragePattern = patternIndex == 0;
+                        matchedSsaPattern = patternIndex == 1;
                         break;
                     }
                 }
@@ -4273,10 +4278,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 static_cast<int>(mathlessModuleResult),
                 static_cast<int>(mathlessPipelineResult),
                 arithmeticStart < selectionMergeOffset ? 1u : 0u,
-                arithmeticStart < selectionMergeOffset &&
-                    entryOps.empty() == false &&
-                    std::find(entryOps.begin(), entryOps.end(), SpvOpLoad) == entryOps.end()
-                    ? "ssa" : "function_storage");
+                matchedSsaPattern ? "ssa" : (matchedStoragePattern ? "function_storage" : "none"));
             Switch_LogWrite(mathlessMsg);
         }
 
