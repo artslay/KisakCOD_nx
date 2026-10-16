@@ -256,13 +256,10 @@ int  R_SkinSceneDObjModels(
                 // Both of them have the same 1st member `int skinnedCachedOffset`
                 // In case of Rigid(56 bytes), the int is set to "-2"
                 // Otherwise, the int is set to value of `numSkinnedVerts`
-                // A rigid fastfile surface needs a valid native XRigidVertList.
-                // If its pointer is still null/a 32-bit zone offset, only recover
-                // the local bone when partBits identifies exactly one bone in this
-                // XModel. Otherwise mark this single surface hidden and report it.
                 uint32_t rigidBoneIndex = UINT32_MAX;
                 if (!surface->deformed && IsFastFileLoad() && surface->vertListCount == 1)
                 {
+#ifdef KISAK_SWITCH
                     const uintptr_t vertListAddress = reinterpret_cast<uintptr_t>(surface->vertList);
                     if (surface->vertList && vertListAddress > UINT32_MAX)
                         rigidBoneIndex = surface->vertList->boneOffset >> 6;
@@ -327,14 +324,18 @@ int  R_SkinSceneDObjModels(
                                     static_cast<uint32_t>(surface->partBits[3]));
                             }
 
-                            // This is the same four-byte sentinel used by the
-                            // existing hidden-part path, so cursor accounting in
-                            // both skin-cache traversal loops remains consistent.
+                            // Match the existing hidden-surface encoding so cursor
+                            // accounting remains consistent in both traversal loops.
                             surfPos->skinnedCachedOffset = -3;
                             surfPos = (GfxModelSkinnedSurface *)((char *)surfPos + 4);
                             continue;
                         }
                     }
+#else
+                    // Preserve native 32-bit PC behavior. Its pointers are valid
+                    // even though their numerical values fit in 32 bits.
+                    rigidBoneIndex = surface->vertList->boneOffset >> 6;
+#endif
                 }
 
                 int surfBufSize = R_PreSkinXSurface(
