@@ -1891,6 +1891,73 @@ void __cdecl Com_AdjustMaxFPS(int* maxFPS)
 {
     int maxUserCmdsPerSecond; // [esp+0h] [ebp-4h]
 
+#ifdef __SWITCH__
+    const int fixedTime = com_fixedtime ? com_fixedtime->current.integer : 0;
+    const float requestedTimeScale =
+        (com_timescale ? com_timescale->current.value : 1.0f) *
+        (dev_timescale ? dev_timescale->current.value : 1.0f) *
+        com_codeTimeScale;
+
+    // The previous implementation fed the *observed* last-frame ratio back
+    // into the frame cap. With fixedtime enabled, a 1 ms simulation step after
+    // a 1000 ms wall-clock wait produces com_timescaleValue == 0.001; capping
+    // the next frame to 1 FPS then repeats that ratio indefinitely. Fixed-time
+    // mode specifies simulation time per frame, not a slow-motion rate, so it
+    // must not drive this adaptive cap.
+    if (fixedTime > 0)
+    {
+        static uint32_t fixedTimeTraceCount = 0;
+        if (fixedTimeTraceCount < 8u)
+        {
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME TIME SCALE] mode=fixedtime fixed=%d effective=%.6f requested=%.6f cap=%d\n",
+                fixedTime,
+                com_timescaleValue,
+                requestedTimeScale,
+                *maxFPS);
+            Switch_LogWrite(trace);
+            ++fixedTimeTraceCount;
+        }
+        return;
+    }
+
+    // Base the cap on the requested time multiplier, not a previous frame's
+    // clamped delta. A hitch must not recursively reduce the next frame rate.
+    if (requestedTimeScale < 1.0f)
+    {
+        maxUserCmdsPerSecond = static_cast<int>(requestedTimeScale * 320.0f);
+        if (maxUserCmdsPerSecond < 1)
+            maxUserCmdsPerSecond = 1;
+        if (!*maxFPS || *maxFPS > maxUserCmdsPerSecond)
+            *maxFPS = maxUserCmdsPerSecond;
+    }
+
+    if (requestedTimeScale < 0.05f || com_timescaleValue < 0.05f)
+    {
+        static uint32_t slowScaleTraceCount = 0;
+        if (slowScaleTraceCount < 8u)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][FRAME TIME SCALE] mode=scaled effective=%.6f requested=%.6f com=%.6f timescale=%.6f code=%.6f fixed=%d maxFrameTime=%d cap=%d\n",
+                com_timescaleValue,
+                requestedTimeScale,
+                com_timescale ? com_timescale->current.value : 1.0f,
+                dev_timescale ? dev_timescale->current.value : 1.0f,
+                com_codeTimeScale,
+                fixedTime,
+                com_maxFrameTime ? com_maxFrameTime->current.integer : 0,
+                *maxFPS);
+            Switch_LogWrite(trace);
+            ++slowScaleTraceCount;
+        }
+    }
+#else
     if (com_timescaleValue < 1.0)
     {
         maxUserCmdsPerSecond = (int)(com_timescaleValue * 320.0);
@@ -1899,6 +1966,7 @@ void __cdecl Com_AdjustMaxFPS(int* maxFPS)
         if (!*maxFPS || *maxFPS > maxUserCmdsPerSecond)
             *maxFPS = maxUserCmdsPerSecond;
     }
+#endif
 }
 
 #ifdef KISAK_MP
