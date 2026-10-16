@@ -115,7 +115,7 @@ void __cdecl R_SetupPassPerPrimArgs(GfxCmdBufContext context)
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
-    if (pass->perPrimArgCount)
+    if (pass->perPrimArgCount && pass->args)
         R_SetPassShaderPrimArguments(context, pass->perPrimArgCount, pass->args);
 }
 
@@ -262,7 +262,7 @@ void __cdecl R_SetupPassPerObjectArgs(GfxCmdBufContext context)
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
-    if (pass->perObjArgCount)
+    if (pass->perObjArgCount && pass->args)
         R_SetPassShaderObjectArguments(context, pass->perObjArgCount, &pass->args[pass->perPrimArgCount]);
 }
 
@@ -356,7 +356,7 @@ void __cdecl R_SetupPassCriticalPixelShaderArgs(GfxCmdBufContext context)
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
-    if (pass->stableArgCount)
+    if (pass->stableArgCount && pass->args)
         R_SetPassPixelShaderStableArguments(
             context,
             pass->stableArgCount,
@@ -368,7 +368,7 @@ void __cdecl R_SetupPassVertexShaderArgs(GfxCmdBufContext context)
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
-    if (pass->stableArgCount)
+    if (pass->stableArgCount && pass->args)
         R_SetPassVertexShaderStableArguments(
             context,
             pass->stableArgCount,
