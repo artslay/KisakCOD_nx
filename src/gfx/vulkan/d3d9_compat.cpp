@@ -674,14 +674,20 @@ bool PatchFragmentShaderForAlphaTest(
         addIntType = true;
     }
 
-    // Pick non-conflicting specialization IDs.
-    uint32_t nextSpecId = 0x4B010000u;
-    while (usedSpecIds.count(nextSpecId))
-        ++nextSpecId;
-    const uint32_t funcSpecDecoration = nextSpecId++;
-    while (usedSpecIds.count(nextSpecId))
-        ++nextSpecId;
-    const uint32_t refSpecDecoration = nextSpecId++;
+    // Use compact, non-conflicting SpecId values. Large arbitrary values are
+    // legal, but some Vulkan shader compilers handle them poorly; there is no
+    // benefit to reserving a high numeric range for these two constants.
+    uint32_t nextSpecId = 0;
+    auto allocateSpecId = [&]() -> uint32_t
+    {
+        while (usedSpecIds.count(nextSpecId))
+            ++nextSpecId;
+        const uint32_t id = nextSpecId++;
+        usedSpecIds.insert(id);
+        return id;
+    };
+    const uint32_t funcSpecDecoration = allocateSpecId();
+    const uint32_t refSpecDecoration = allocateSpecId();
 
     // Result IDs come from the module's bound.
     uint32_t nextId = words[3];
