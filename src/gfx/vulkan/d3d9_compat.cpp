@@ -3700,6 +3700,25 @@ bool IDirect3DDevice9::EnsurePipeline()
             // The engine's generic declaration table is a routing table, not a
             // byte-for-byte description of materialCommands_t::verts on Switch.
             // Use the actual GfxVertex component types for shader linking and bounds checks.
+            if (static_cast<uint32_t>(element.Usage) >=
+                    static_cast<uint32_t>(MOJOSHADER_USAGE_TOTAL) ||
+                element.UsageIndex >= 16u)
+            {
+                char msg[256];
+                std::snprintf(
+                    msg, sizeof(msg),
+                    "[KisakCOD][VK DRAW] pipeline_fail=vertex_link_attribute usage=%u usageIndex=%u stream=%u offset=%u decl=%llu vs=%llu ps=%llu\\n",
+                    static_cast<unsigned int>(element.Usage),
+                    static_cast<unsigned int>(element.UsageIndex),
+                    static_cast<unsigned int>(element.Stream),
+                    static_cast<unsigned int>(element.Offset),
+                    static_cast<unsigned long long>(m_decl->serial),
+                    static_cast<unsigned long long>(m_vertexShader->serial),
+                    static_cast<unsigned long long>(m_pixelShader->serial));
+                Switch_LogWrite(msg);
+                return false;
+            }
+
             const uint8_t shaderElementType = SwitchEffectiveShaderElementType(m_decl, element);
 
             MOJOSHADER_vertexAttribute attr{};
@@ -3719,7 +3738,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             case D3DDECLTYPE_FLOAT16_4: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_HALFVECTOR4; break;
             default: attr.vertexElementFormat = MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR4; break;
             }
-            attr.usage = static_cast<MOJOSHADER_usage>(std::min<uint32_t>(element.Usage, MOJOSHADER_USAGE_TOTAL - 1));
+            attr.usage = static_cast<MOJOSHADER_usage>(element.Usage);
             attr.usageIndex = element.UsageIndex;
             attributes.push_back(attr);
         }
