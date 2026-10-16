@@ -2564,9 +2564,15 @@ HRESULT IDirect3DDevice9::EndScene()
     }
 
     static uint32_t endSceneTraceCount = 0;
+    static uint32_t endSceneSourceTraceCount = 0;
     const uint32_t endSceneTraceId = endSceneTraceCount++;
-    if (endSceneTraceId < 8)
+    const bool switchTraceEndScene =
+        endSceneTraceId < 3 ||
+        (queuePresentSource && endSceneSourceTraceCount < 8);
+    if (switchTraceEndScene)
     {
+        if (queuePresentSource)
+            ++endSceneSourceTraceCount;
         const KisakVkTexture *texture =
             m_color ? m_color->texture : nullptr;
         char trace[320];
