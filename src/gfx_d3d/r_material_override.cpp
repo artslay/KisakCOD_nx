@@ -9,6 +9,8 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
+extern int32_t g_switchCurrentAssetIndex;
+extern uint32_t g_switchCurrentAssetRawType;
 #endif
 
 $4ABF24606230B73E4E420CE33A1F14B1 mtlOverrideGlob;
