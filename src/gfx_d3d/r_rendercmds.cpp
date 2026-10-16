@@ -688,12 +688,21 @@ void __cdecl R_AddCmdDrawStretchPic(
     // Use the authored set to decide whether the material is intrinsically
     // fogable; the backend still uses the remapped set for technique selection.
     // A missing authored set is rejected conservatively.
+    // The built-in cinematic material is deliberately submitted through the
+    // 2D stretch-pic path by the Bink/video renderer. Do not reject it merely
+    // because its fastfile/remapped technique set exposes a fogable variant;
+    // that replaces the movie with $default and leaves the frame blank.
+    const bool isCinematicMaterial =
+        defaultMaterial == rgp.cinematicMaterial ||
+        (defaultMaterial && defaultMaterial->info.name &&
+         !I_stricmp(defaultMaterial->info.name, "cinematic"));
     const MaterialTechniqueSet *authoredTechniqueSet =
         defaultMaterial ? defaultMaterial->techniqueSet : nullptr;
     const bool hasFogableTechnique =
-        !authoredTechniqueSet ||
-        authoredTechniqueSet->techniques[TECHNIQUE_LIT_BEGIN] ||
-        authoredTechniqueSet->techniques[TECHNIQUE_EMISSIVE];
+        !isCinematicMaterial &&
+        (!authoredTechniqueSet ||
+         authoredTechniqueSet->techniques[TECHNIQUE_LIT_BEGIN] ||
+         authoredTechniqueSet->techniques[TECHNIQUE_EMISSIVE]);
 #else
     const bool hasFogableTechnique = Material_HasAnyFogableTechnique(defaultMaterial);
 #endif
@@ -1005,7 +1014,15 @@ void __cdecl R_AddCmdDrawStretchPicFlipST(
     else
         defaultMaterial = rgp.defaultMaterial;
     actualMaterial = defaultMaterial;
-    if (!Material_HasAnyFogableTechnique(defaultMaterial) || Material_IsDefault(defaultMaterial))
+    // Match R_AddCmdDrawStretchPic: cinematic is a valid fullscreen 2D
+    // material even when its resolved technique set also has fogable variants.
+    const bool isCinematicMaterial =
+        defaultMaterial == rgp.cinematicMaterial ||
+        (defaultMaterial && defaultMaterial->info.name &&
+         !I_stricmp(defaultMaterial->info.name, "cinematic"));
+    if (isCinematicMaterial ||
+        !Material_HasAnyFogableTechnique(defaultMaterial) ||
+        Material_IsDefault(defaultMaterial))
     {
         if ((defaultMaterial->stateFlags & 0x10) != 0)
         {
