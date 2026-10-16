@@ -469,15 +469,42 @@ void __cdecl R_Resolve(GfxCmdBufContext context, GfxImage *image)
 }
 
 #ifdef __SWITCH__
+static bool Switch_IsRegisteredRenderMaterialPointer(const Material *material)
+{
+    if (!material)
+        return false;
+
+    if (material == rgp.defaultMaterial ||
+        material == rgp.whiteMaterial ||
+        material == rgp.cinematicMaterial)
+        return true;
+
+    const int registeredCount = rgp.materialCount < ARRAY_COUNT(rgp.sortedMaterials)
+        ? static_cast<int>(rgp.materialCount)
+        : static_cast<int>(ARRAY_COUNT(rgp.sortedMaterials));
+    for (int i = 0; i < registeredCount; ++i)
+    {
+        if (rgp.sortedMaterials[i] == material)
+            return true;
+    }
+    return false;
+}
+
 static const Material *Switch_ValidateRenderCommandMaterial(
     const Material *material,
     const GfxCmdHeader *header,
     const char *commandName)
 {
     const uintptr_t ptr = reinterpret_cast<uintptr_t>(material);
+    // A 32-bit token can be numerically below the Switch user-address ceiling
+    // and still pass a range-only check. Only accept low-address materials if
+    // the exact pointer is present in the renderer's live material registry.
+    const bool registeredLowAddress =
+        ptr <= UINT32_MAX && Switch_IsRegisteredRenderMaterialPointer(material);
     const bool validAddress =
         ptr != 0 &&
         ptr < (1ULL << 39) &&
+        (ptr > UINT32_MAX || registeredLowAddress) &&
         (ptr & (alignof(Material) - 1)) == 0;
 
     if (validAddress)
@@ -551,7 +578,13 @@ void __cdecl RB_StretchPicCmdFlipST(GfxRenderCommandExecState *execState)
 {
     GfxCmdStretchPic *cmd = (GfxCmdStretchPic *)execState->cmd;
 
-    RB_DrawStretchPicFlipST(cmd->material, cmd->x, cmd->y, cmd->w, cmd->h, cmd->s0, cmd->t0, cmd->s1, cmd->t1, cmd->color, GFX_PRIM_STATS_HUD);
+#ifdef __SWITCH__
+    const Material *material = Switch_ValidateRenderCommandMaterial(
+        cmd->material, &cmd->header, "stretch_pic_flip_st");
+#else
+    const Material *material = cmd->material;
+#endif
+    RB_DrawStretchPicFlipST(material, cmd->x, cmd->y, cmd->w, cmd->h, cmd->s0, cmd->t0, cmd->s1, cmd->t1, cmd->color, GFX_PRIM_STATS_HUD);
     execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
 }
 
@@ -582,7 +615,13 @@ void __cdecl RB_StretchPicRotateXYCmd(GfxRenderCommandExecState *execState)
 
     cmd = (const GfxCmdStretchPicRotateXY *)execState->cmd;
     iassert( gfxCmdBufSourceState.viewMode == VIEW_MODE_2D );
-    RB_SetTessTechnique(cmd->material, TECHNIQUE_UNLIT);
+#ifdef __SWITCH__
+    const Material *material = Switch_ValidateRenderCommandMaterial(
+        cmd->material, &cmd->header, "stretch_pic_rotate_xy");
+#else
+    const Material *material = cmd->material;
+#endif
+    RB_SetTessTechnique(material, TECHNIQUE_UNLIT);
     R_TrackPrims(&gfxCmdBufState, GFX_PRIM_STATS_HUD);
     RB_CheckTessOverflow(4, 6);
     vertCount = tess.vertexCount;
@@ -648,7 +687,13 @@ void __cdecl RB_StretchPicRotateSTCmd(GfxRenderCommandExecState *execState)
 
     cmd = (const GfxCmdStretchPicRotateST *)execState->cmd;
     iassert( gfxCmdBufSourceState.viewMode == VIEW_MODE_2D );
-    RB_SetTessTechnique(cmd->material, TECHNIQUE_UNLIT);
+#ifdef __SWITCH__
+    const Material *material = Switch_ValidateRenderCommandMaterial(
+        cmd->material, &cmd->header, "stretch_pic_rotate_st");
+#else
+    const Material *material = cmd->material;
+#endif
+    RB_SetTessTechnique(material, TECHNIQUE_UNLIT);
     R_TrackPrims(&gfxCmdBufState, GFX_PRIM_STATS_HUD);
     vertCount = tess.vertexCount;
     indexCount = tess.indexCount;
@@ -695,7 +740,13 @@ void __cdecl RB_DrawQuadPicCmd(GfxRenderCommandExecState *execState)
 
     cmd = (const GfxCmdDrawQuadPic *)execState->cmd;
     iassert( gfxCmdBufSourceState.viewMode == VIEW_MODE_2D );
-    RB_SetTessTechnique(cmd->material, TECHNIQUE_UNLIT);
+#ifdef __SWITCH__
+    const Material *material = Switch_ValidateRenderCommandMaterial(
+        cmd->material, &cmd->header, "draw_quad_pic");
+#else
+    const Material *material = cmd->material;
+#endif
+    RB_SetTessTechnique(material, TECHNIQUE_UNLIT);
     R_TrackPrims(&gfxCmdBufState, GFX_PRIM_STATS_HUD);
     RB_CheckTessOverflow(4, 6);
     vertCount = tess.vertexCount;
@@ -719,7 +770,13 @@ void __cdecl RB_DrawFullScreenColoredQuadCmd(GfxRenderCommandExecState *execStat
 {
     GfxCmdDrawFullScreenColoredQuad *cmd = (GfxCmdDrawFullScreenColoredQuad *)execState->cmd;
 
-    RB_DrawFullScreenColoredQuad(cmd->material, cmd->s0, cmd->t0, cmd->s1, cmd->t1, cmd->color);
+#ifdef __SWITCH__
+    const Material *material = Switch_ValidateRenderCommandMaterial(
+        cmd->material, &cmd->header, "fullscreen_colored_quad");
+#else
+    const Material *material = cmd->material;
+#endif
+    RB_DrawFullScreenColoredQuad(material, cmd->s0, cmd->t0, cmd->s1, cmd->t1, cmd->color);
     execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
 }
 
