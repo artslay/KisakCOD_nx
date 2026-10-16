@@ -11071,14 +11071,26 @@ void __cdecl Scr_SetOrigin(gentity_s *ent, int offset)
         static unsigned switchPlayerSetOriginTraceCount = 0;
         if (switchPlayerSetOriginTraceCount++ < 8u)
         {
+            char *scriptFile = (char *)"";
+            int scriptLine = 0;
+            const char *codePos = nullptr;
+            if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
+            {
+                codePos = scrVmPub.function_frame->fs.pos;
+                if (codePos)
+                    Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
+            }
             Com_Printf(
                 CON_CHANNEL_SERVER,
-                "[KisakCOD][PLAYER SETORIGIN] ent=%d target=(%.2f,%.2f,%.2f) current=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p\n",
+                "[KisakCOD][PLAYER SETORIGIN] ent=%d target=(%.2f,%.2f,%.2f) current=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p script=%s:%d codePos=%p\n",
                 ent->s.number,
                 v4[0], v4[1], v4[2],
                 ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
                 ent->client->ps.pm_type,
-                static_cast<void *>(ent->tagInfo));
+                static_cast<void *>(ent->tagInfo),
+                scriptFile ? scriptFile : "",
+                scriptLine,
+                static_cast<const void *>(codePos));
         }
     }
 #endif
