@@ -41,6 +41,7 @@
 #ifdef __SWITCH__
 #include <atomic>
 #include <cstring>
+#include <cstdio>
 #endif
 
 #include <setjmp.h>
