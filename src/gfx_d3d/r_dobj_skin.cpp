@@ -1,6 +1,8 @@
 #include <universal/q_shared.h>
 #include "r_dobj_skin.h"
 
+#include <atomic>
+
 #include <vector>
 
 #include <xanim/dobj.h>
@@ -47,7 +49,8 @@ int  R_PreSkinXSurface(
     XSurface *surf,
     const GfxModelSurfaceInfo *surfaceInfo,
     uint32_t *numSkinnedVerts,
-    GfxModelSkinnedSurface *surfPos_)
+    GfxModelSkinnedSurface *surfPos_,
+    uint32_t rigidBoneIndex)
 {
     float origin[4]; // [esp+20h] [ebp-154h] BYREF
     DObjAnimMat *mat_1; // [esp+C4h] [ebp-B0h]
@@ -71,63 +74,7 @@ int  R_PreSkinXSurface(
         iassert(&rigidSurf->surf == reinterpret_cast<GfxModelSkinnedSurface *>(surfPos));
         rigidSurf->placement.scale = 1.0;
         RotTransArray = &DObjGetRotTransArray(obj)[surfaceInfo->boneIndex];
-        const uintptr_t vertListAddress = reinterpret_cast<uintptr_t>(surf->vertList);
-        if (surf->vertList && vertListAddress > UINT32_MAX)
-        {
-            offset = surf->vertList->boneOffset >> 6;
-        }
-        else
-        {
-#ifdef KISAK_SWITCH
-            // For a rigid surface, partBits encodes the same single bone as
-            // XRigidVertList::boneOffset. Recover it if a serialized 32-bit
-            // offset leaked through instead of becoming a native pointer.
-            uint32_t recoveredBone = 0;
-            uint32_t setBoneCount = 0;
-            for (uint32_t word = 0; word < 4; ++word)
-            {
-                const uint32_t bits = static_cast<uint32_t>(surf->partBits[word]);
-                for (uint32_t bit = 0; bit < 32; ++bit)
-                {
-                    if (bits & (0x80000000u >> bit))
-                    {
-                        recoveredBone = word * 32u + bit;
-                        ++setBoneCount;
-                    }
-                }
-            }
-
-            if (setBoneCount != 1 || recoveredBone >= surfaceInfo->boneCount)
-            {
-                Com_Error(
-                    ERR_DROP,
-                    "Invalid rigid XSurface vertList %p and bone partBits (count=%u, modelBones=%u)",
-                    static_cast<void *>(surf->vertList),
-                    setBoneCount,
-                    surfaceInfo->boneCount);
-                return 0;
-            }
-
-            static uint32_t switchInvalidVertListTraceCount = 0;
-            if (switchInvalidVertListTraceCount++ < 8u)
-            {
-                Com_Printf(
-                    CON_CHANNEL_ANIM,
-                    "[KisakCOD][XSURFACE RIGID BONE] invalidVertList=%p vertListCount=%u recoveredBone=%u modelBones=%u partBits=%08x,%08x,%08x,%08x\n",
-                    static_cast<void *>(surf->vertList),
-                    surf->vertListCount,
-                    recoveredBone,
-                    surfaceInfo->boneCount,
-                    static_cast<uint32_t>(surf->partBits[0]),
-                    static_cast<uint32_t>(surf->partBits[1]),
-                    static_cast<uint32_t>(surf->partBits[2]),
-                    static_cast<uint32_t>(surf->partBits[3]));
-            }
-            offset = static_cast<int>(recoveredBone);
-#else
-            offset = surf->vertList->boneOffset >> 6;
-#endif
-        }
+        offset = static_cast<int>(rigidBoneIndex);
         mat = &surfaceInfo->baseMat[offset];
 
         DObjSkelMat invBaseMat;
@@ -309,7 +256,94 @@ int  R_SkinSceneDObjModels(
                 // Both of them have the same 1st member `int skinnedCachedOffset`
                 // In case of Rigid(56 bytes), the int is set to "-2"
                 // Otherwise, the int is set to value of `numSkinnedVerts`
-                int surfBufSize = R_PreSkinXSurface(obj, surface, &targBoneIndexHigh, &numSkinnedVerts, surfPos);
+                // A rigid fastfile surface needs a valid native XRigidVertList.
+                // If its pointer is still null/a 32-bit zone offset, only recover
+                // the local bone when partBits identifies exactly one bone in this
+                // XModel. Otherwise mark this single surface hidden and report it.
+                uint32_t rigidBoneIndex = UINT32_MAX;
+                if (!surface->deformed && IsFastFileLoad() && surface->vertListCount == 1)
+                {
+                    const uintptr_t vertListAddress = reinterpret_cast<uintptr_t>(surface->vertList);
+                    if (surface->vertList && vertListAddress > UINT32_MAX)
+                        rigidBoneIndex = surface->vertList->boneOffset >> 6;
+
+                    if (rigidBoneIndex >= boneCount)
+                    {
+                        uint32_t recoveredBone = 0;
+                        uint32_t validBoneCount = 0;
+                        const uint32_t scanBoneCount = boneCount < 128u ? boneCount : 128u;
+                        for (uint32_t candidate = 0; candidate < scanBoneCount; ++candidate)
+                        {
+                            const uint32_t word = static_cast<uint32_t>(surface->partBits[candidate >> 5]);
+                            if (word & (0x80000000u >> (candidate & 0x1Fu)))
+                            {
+                                recoveredBone = candidate;
+                                ++validBoneCount;
+                            }
+                        }
+
+                        if (validBoneCount == 1)
+                        {
+                            rigidBoneIndex = recoveredBone;
+                            static std::atomic<uint32_t> recoveredTraceCount{0};
+                            if (recoveredTraceCount.fetch_add(1, std::memory_order_relaxed) < 8u)
+                            {
+                                Com_Printf(
+                                    CON_CHANNEL_ANIM,
+                                    "[KisakCOD][XSURFACE RIGID BONE] recovered model=%s modelIndex=%u surfaceIndex=%u vertList=%p vertListCount=%u bone=%u/%u partBits=%08x,%08x,%08x,%08x\n",
+                                    model->name ? model->name : "(null)",
+                                    lod,
+                                    i,
+                                    static_cast<void *>(surface->vertList),
+                                    surface->vertListCount,
+                                    recoveredBone,
+                                    boneCount,
+                                    static_cast<uint32_t>(surface->partBits[0]),
+                                    static_cast<uint32_t>(surface->partBits[1]),
+                                    static_cast<uint32_t>(surface->partBits[2]),
+                                    static_cast<uint32_t>(surface->partBits[3]));
+                            }
+                        }
+                        else
+                        {
+                            static std::atomic<uint32_t> invalidTraceCount{0};
+                            if (invalidTraceCount.fetch_add(1, std::memory_order_relaxed) < 16u)
+                            {
+                                Com_Printf(
+                                    CON_CHANNEL_ANIM,
+                                    "[KisakCOD][XSURFACE RIGID INVALID] model=%s modelIndex=%u surfaceIndex=%u surface=%p vertList=%p vertListCount=%u deformed=%u validBonesInPartBits=%u modelBones=%u partBits=%08x,%08x,%08x,%08x\n",
+                                    model->name ? model->name : "(null)",
+                                    lod,
+                                    i,
+                                    static_cast<void *>(surface),
+                                    static_cast<void *>(surface->vertList),
+                                    surface->vertListCount,
+                                    surface->deformed ? 1u : 0u,
+                                    validBoneCount,
+                                    boneCount,
+                                    static_cast<uint32_t>(surface->partBits[0]),
+                                    static_cast<uint32_t>(surface->partBits[1]),
+                                    static_cast<uint32_t>(surface->partBits[2]),
+                                    static_cast<uint32_t>(surface->partBits[3]));
+                            }
+
+                            // This is the same four-byte sentinel used by the
+                            // existing hidden-part path, so cursor accounting in
+                            // both skin-cache traversal loops remains consistent.
+                            surfPos->skinnedCachedOffset = -3;
+                            surfPos = (GfxModelSkinnedSurface *)((char *)surfPos + 4);
+                            continue;
+                        }
+                    }
+                }
+
+                int surfBufSize = R_PreSkinXSurface(
+                    obj,
+                    surface,
+                    &targBoneIndexHigh,
+                    &numSkinnedVerts,
+                    surfPos,
+                    rigidBoneIndex);
 
                 GfxModelSkinnedSurface *skinnedSurface = (GfxModelSkinnedSurface *)surfPos;
                 skinnedSurface->xsurf = surface;
