@@ -661,6 +661,7 @@ bool PatchFragmentShaderForAlphaTest(
     bool addBoolType = false;
     bool addIntType = false;
     std::unordered_set<uint32_t> usedSpecIds;
+    std::unordered_set<uint32_t> locationZeroVariables;
 
     for (size_t i = 5; i < words.size();)
     {
@@ -678,6 +679,8 @@ bool PatchFragmentShaderForAlphaTest(
         {
             if (ins[2] == SpvDecorationSpecId)
                 usedSpecIds.insert(ins[3]);
+            else if (ins[2] == SpvDecorationLocation && ins[3] == 0)
+                locationZeroVariables.insert(ins[1]);
         }
         else if (op == SpvOpTypeBool && wc >= 2)
         {
@@ -697,7 +700,10 @@ bool PatchFragmentShaderForAlphaTest(
     if (!entryFunctionId)
         return false;
 
-    // Locate the fragment output at Location 0 and its pointee type.
+    // Find the variable decorated Location 0 that is actually an Output.
+    // Fragment inputs can also use Location 0; selecting the last decoration
+    // without checking OpVariable storage class can make the patch emit OpStore
+    // to an Input variable, which NVK rejects when compiling the pipeline.
     for (size_t i = 5; i < words.size();)
     {
         uint32_t wc = 0;
@@ -706,11 +712,13 @@ bool PatchFragmentShaderForAlphaTest(
             return false;
         const uint32_t *ins = &words[i];
 
-        if (op == SpvOpDecorate && wc >= 4 &&
-            ins[2] == SpvDecorationLocation && ins[3] == 0)
+        if (op == SpvOpVariable && wc >= 4 &&
+            ins[3] == SpvStorageClassOutput &&
+            locationZeroVariables.find(ins[2]) != locationZeroVariables.end())
         {
-            outputVarId = ins[1];
+            outputVarId = ins[2];
             foundOutputLocation0 = true;
+            break;
         }
         i += wc;
     }
