@@ -859,11 +859,43 @@ static void Switch_LogTechniqueRenderReject(
     ++traceCount;
 }
 
+static bool Switch_IsValidMaterialPointerForRender(const Material *material)
+{
+    const uintptr_t address = reinterpret_cast<uintptr_t>(material);
+    if (!address || (address & (alignof(Material) - 1u)) != 0)
+        return false;
+
+    // Native renderer material objects are high-address allocations. Preserve
+    // a genuine low-address object only if the renderer has registered that
+    // exact pointer; a truncated 32-bit copy of a live high pointer will fail.
+    if (address > UINT32_MAX &&
+        address < (1ULL << 39) &&
+        !Switch_IsSerializedAddress(address))
+        return true;
+
+    const int registeredCount = rgp.materialCount < ARRAY_COUNT(rgp.sortedMaterials)
+        ? static_cast<int>(rgp.materialCount)
+        : static_cast<int>(ARRAY_COUNT(rgp.sortedMaterials));
+    for (int i = 0; i < registeredCount; ++i)
+    {
+        if (rgp.sortedMaterials[i] == material)
+            return true;
+    }
+
+    return material == rgp.defaultMaterial ||
+           material == rgp.whiteMaterial ||
+           material == rgp.cinematicMaterial;
+}
+
 MaterialTechniqueSet *Switch_ResolveMaterialTechniqueSetForRender(Material *material)
 {
     g_switchFrameStage = "frame/render/technique_resolve/set_entry";
-    if (!material)
+    if (!Switch_IsValidMaterialPointerForRender(material))
+    {
+        Switch_LogTechniqueRenderReject(
+            "materialPointer", nullptr, UINT32_MAX, material);
         return nullptr;
+    }
 
     Switch_ResolvePointerForRenderIfNeeded(
         &material->techniqueSet,
