@@ -131,7 +131,7 @@ uint32_t RB_UploadMaterialPass(
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][MATERIAL UPLOAD REJECT] reason=invalidArgs pass=%p args=%p argCount=%u techniqueUpload=1\\n",
+                    "[KisakCOD][MATERIAL UPLOAD REJECT] reason=invalidArgs pass=%p args=%p argCount=%u \n",
                     static_cast<const void *>(pass),
                     reinterpret_cast<const void *>(argsAddress),
                     static_cast<unsigned>(vertMem_140));
