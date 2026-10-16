@@ -720,9 +720,29 @@ void __cdecl XAnimCalcLeaf(XAnimInfo *info, float weightScale, DObjAnimMat *rotT
     int i; // [esp+2Ch] [ebp-8h]
     XAnimParts *parts; // [esp+30h] [ebp-4h]
 
+    iassert(info);
     iassert(info->inuse);
     parts = info->parts;
-    iassert(parts);
+    if (!parts)
+    {
+#ifdef __SWITCH__
+        Com_PrintError(
+            CON_CHANNEL_ANIM,
+            "[KisakCOD][XANIM NULL PARTS] info=%p tree=%p animIndex=%u animToModel=%u inuse=%u\n",
+            static_cast<const void *>(info),
+            static_cast<const void *>(info->tree),
+            static_cast<unsigned>(info->animIndex),
+            static_cast<unsigned>(info->animToModel),
+            info->inuse ? 1u : 0u);
+        Com_Error(
+            ERR_DROP,
+            "XAnimCalcLeaf: missing XAnimParts for animation index %u",
+            static_cast<unsigned>(info->animIndex));
+        return;
+#else
+        iassert(parts);
+#endif
+    }
     iassert(info->animToModel);
 
     animToModel = (XAnimToXModel*)SL_ConvertToString(info->animToModel);
