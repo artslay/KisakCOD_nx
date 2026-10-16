@@ -4276,13 +4276,12 @@ bool IDirect3DDevice9::EnsurePipeline()
         pipelineCreateSequence > 8 && pipelineCreateSequence <= 32;
     const bool recentPipelineDump = pipelineCreateSequence >= 180;
     // The latest run completed seq=92 and later pipelines, then faulted
-    // during the create call for seq=171. Match the shader pair as a fallback
-    // so capture stays tied to the new failure if pipeline ordering shifts.
+    // during the create call for the shader pair below. Match the pair rather
+    // than sequence alone so capture remains correct if pipeline ordering shifts.
     static bool targetPipelineCaptureLogged = false;
     const bool targetPipelineDump = !targetPipelineCaptureLogged &&
-        (pipelineCreateSequence == 171 ||
-         (vsSpirvHash == 0x0fb134cb58ee26d6ull &&
-          psSpirvHash == 0xa82798473e9a23c6ull));
+        vsSpirvHash == 0x0fb134cb58ee26d6ull &&
+        psSpirvHash == 0xa82798473e9a23c6ull;
     if (targetPipelineDump)
         targetPipelineCaptureLogged = true;
     if ((earlyPipelineDump || probePipelineDump || recentPipelineDump) &&
