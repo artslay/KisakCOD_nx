@@ -656,10 +656,8 @@ bool PatchFragmentShaderForAlphaTest(
     uint32_t outputValueType = 0;
     uint32_t floatType = 0;
     uint32_t boolType = 0;
-    uint32_t intType = 0;
     bool foundOutputLocation0 = false;
     bool addBoolType = false;
-    bool addIntType = false;
     std::unordered_set<uint32_t> usedSpecIds;
     std::unordered_set<uint32_t> locationZeroVariables;
 
@@ -685,10 +683,6 @@ bool PatchFragmentShaderForAlphaTest(
         else if (op == SpvOpTypeBool && wc >= 2)
         {
             boolType = ins[1];
-        }
-        else if (op == SpvOpTypeInt && wc >= 4 && ins[2] == 32 && ins[3] == 1)
-        {
-            intType = ins[1];
         }
         else if (op == SpvOpTypeFloat && wc >= 3 && ins[2] == 32 && !floatType)
         {
@@ -847,12 +841,6 @@ bool PatchFragmentShaderForAlphaTest(
         boolType = words[3]++;
         addBoolType = true;
     }
-    if (!intType)
-    {
-        intType = words[3]++;
-        addIntType = true;
-    }
-
     // Use compact, non-conflicting SpecId values. Large arbitrary values are
     // legal, but some Vulkan shader compilers handle them poorly; there is no
     // benefit to reserving a high numeric range for these two constants.
@@ -878,21 +866,26 @@ bool PatchFragmentShaderForAlphaTest(
     const uint32_t alphaStorage = useSsaAlphaCapture ? 0 : newId();
     const uint32_t alphaDefault = useSsaAlphaCapture ? 0 : newId();
 
+    // D3D comparison-function values 1..8 are exactly representable as float32.
+    // Keep the selector in the existing float type to avoid injecting an integer
+    // type and integer-comparison graph into otherwise float-only fragment shaders.
+    static constexpr uint32_t funcConstBits[9] = {
+        0u, 0x3f800000u, 0x40000000u, 0x40400000u, 0x40800000u,
+        0x40a00000u, 0x40c00000u, 0x40e00000u, 0x41000000u
+    };
     uint32_t funcConst[9]{};
-    for (uint32_t value = 1; value <= 8; ++value)
+    for (uint32_t value = 2; value <= 8; ++value)
         funcConst[value] = newId();
 
     std::vector<uint32_t> typeGlobals;
     if (addBoolType)
         SpirvAppend(typeGlobals, SpvOpTypeBool, {boolType});
-    if (addIntType)
-        SpirvAppend(typeGlobals, SpvOpTypeInt, {intType, 32, 1});
 
     std::vector<uint32_t> globals;
-    SpirvAppend(globals, SpvOpSpecConstant, {intType, funcSpec, 8});
-    SpirvAppend(globals, SpvOpSpecConstant, {floatType, refSpec, 0});
-    for (uint32_t value = 1; value <= 8; ++value)
-        SpirvAppend(globals, SpvOpConstant, {intType, funcConst[value], value});
+    SpirvAppend(globals, SpvOpSpecConstant, {floatType, funcSpec, funcConstBits[8]});
+    SpirvAppend(globals, SpvOpSpecConstant, {floatType, refSpec, 0u});
+    for (uint32_t value = 2; value <= 8; ++value)
+        SpirvAppend(globals, SpvOpConstant, {floatType, funcConst[value], funcConstBits[value]});
     if (!useSsaAlphaCapture)
         SpirvAppend(globals, SpvOpConstant, {floatType, alphaDefault, 0x3f800000u});
 
@@ -1112,13 +1105,13 @@ bool PatchFragmentShaderForAlphaTest(
             SpirvAppend(patched, SpvOpFOrdNotEqual, {boolType, notEqual, alpha, refSpec});
             SpirvAppend(patched, SpvOpFOrdGreaterThanEqual, {boolType, greaterEqual, alpha, refSpec});
 
-            SpirvAppend(patched, SpvOpIEqual, {boolType, f2, funcSpec, funcConst[2]});
-            SpirvAppend(patched, SpvOpIEqual, {boolType, f3, funcSpec, funcConst[3]});
-            SpirvAppend(patched, SpvOpIEqual, {boolType, f4, funcSpec, funcConst[4]});
-            SpirvAppend(patched, SpvOpIEqual, {boolType, f5, funcSpec, funcConst[5]});
-            SpirvAppend(patched, SpvOpIEqual, {boolType, f6, funcSpec, funcConst[6]});
-            SpirvAppend(patched, SpvOpIEqual, {boolType, f7, funcSpec, funcConst[7]});
-            SpirvAppend(patched, SpvOpIEqual, {boolType, f8, funcSpec, funcConst[8]});
+            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f2, funcSpec, funcConst[2]});
+            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f3, funcSpec, funcConst[3]});
+            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f4, funcSpec, funcConst[4]});
+            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f5, funcSpec, funcConst[5]});
+            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f6, funcSpec, funcConst[6]});
+            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f7, funcSpec, funcConst[7]});
+            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f8, funcSpec, funcConst[8]});
 
             SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass2, f2, less});
             SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass3, f3, equal});
@@ -3573,10 +3566,10 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     struct AlphaSpecializationData
     {
-        uint32_t func;
+        float func;
         float ref;
     } alphaSpecializationData{
-        m_alphaTest ? m_alphaFunc : 8u,
+        static_cast<float>(m_alphaTest ? m_alphaFunc : 8u),
         static_cast<float>(m_alphaRef) / 255.0f
     };
     const VkSpecializationMapEntry alphaSpecializationEntries[] = {
@@ -4241,8 +4234,8 @@ bool IDirect3DDevice9::EnsurePipeline()
                 SpvOpLoad,
                 SpvOpFOrdLessThan, SpvOpFOrdEqual, SpvOpFOrdLessThanEqual,
                 SpvOpFOrdGreaterThan, SpvOpFOrdNotEqual, SpvOpFOrdGreaterThanEqual,
-                SpvOpIEqual, SpvOpIEqual, SpvOpIEqual, SpvOpIEqual,
-                SpvOpIEqual, SpvOpIEqual, SpvOpIEqual,
+                SpvOpFOrdEqual, SpvOpFOrdEqual, SpvOpFOrdEqual, SpvOpFOrdEqual,
+                SpvOpFOrdEqual, SpvOpFOrdEqual, SpvOpFOrdEqual,
                 SpvOpLogicalAnd, SpvOpLogicalAnd, SpvOpLogicalAnd,
                 SpvOpLogicalAnd, SpvOpLogicalAnd, SpvOpLogicalAnd,
                 SpvOpLogicalOr, SpvOpLogicalOr, SpvOpLogicalOr,
