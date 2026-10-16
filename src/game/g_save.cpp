@@ -1213,15 +1213,17 @@ void __cdecl ReadActorPotentialCoverNodes(actor_s *pActor, SaveGame *save)
 
 void __cdecl WriteActor(actor_s *pActor, SaveGame *save)
 {
-    unsigned __int8 v4[3832]; // [sp+50h] [-F10h] BYREF
+    // actorFields use native offsetof() values. The legacy 3820-byte snapshot
+    // truncates fields after sentientInfo on 64-bit Switch builds.
+    unsigned __int8 v4[offsetof(actor_s, pPotentialCoverNode)];
 
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1365, 0, "%s", "save");
     SaveMemory_SaveWrite(&pActor->inuse, 1, save);
     if (pActor->inuse)
     {
-        memcpy(v4, pActor, 0xEECu);
-        G_WriteStruct(actorFields, (unsigned __int8 *)pActor, v4, 3820, save);
+        memcpy(v4, pActor, sizeof(v4));
+        G_WriteStruct(actorFields, (unsigned __int8 *)pActor, v4, sizeof(v4), save);
         WriteActorPotentialCoverNodes(pActor, save);
     }
 }
@@ -1233,7 +1235,7 @@ void __cdecl ReadActor(actor_s *pActor, SaveGame *save)
     SaveMemory_LoadRead(&pActor->inuse, 1, save);
     if (pActor->inuse)
     {
-        G_ReadStruct(actorFields, (unsigned __int8 *)pActor, 3820, save);
+        G_ReadStruct(actorFields, (unsigned __int8 *)pActor, offsetof(actor_s, pPotentialCoverNode), save);
         if (!pActor->inuse)
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1394, 0, "%s", "pActor->inuse");
         ReadActorPotentialCoverNodes(pActor, save);
@@ -1243,15 +1245,16 @@ void __cdecl ReadActor(actor_s *pActor, SaveGame *save)
 
 void __cdecl WriteSentient(sentient_s *sentient, SaveGame *save)
 {
-    unsigned __int8 v4[120]; // [sp+50h] [-90h] BYREF
+    // sentientFields use native offsetof() values, so keep the snapshot native-sized.
+    unsigned __int8 v4[sizeof(sentient_s)];
 
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1420, 0, "%s", "save");
     SaveMemory_SaveWrite(&sentient->inuse, 1, save);
     if (sentient->inuse)
     {
-        memcpy(v4, sentient, 0x74u);
-        G_WriteStruct(sentientFields, (unsigned __int8 *)sentient, v4, 116, save);
+        memcpy(v4, sentient, sizeof(v4));
+        G_WriteStruct(sentientFields, (unsigned __int8 *)sentient, v4, sizeof(v4), save);
     }
 }
 
@@ -1262,7 +1265,7 @@ void __cdecl ReadSentient(sentient_s *sentient, SaveGame *save)
     SaveMemory_LoadRead(&sentient->inuse, 1, save);
     if (sentient->inuse)
     {
-        G_ReadStruct(sentientFields, (unsigned __int8 *)sentient, 116, save);
+        G_ReadStruct(sentientFields, (unsigned __int8 *)sentient, sizeof(sentient_s), save);
         if (!sentient->inuse)
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1446, 0, "%s", "sentient->inuse");
     }
