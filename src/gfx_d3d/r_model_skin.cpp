@@ -60,7 +60,13 @@ void R_SkinXModelCmd(_WORD *data)
 
     PROF_SCOPED("R_SkinXModel");
 
+#ifdef __SWITCH__
+    // Switch uses the portable scalar implementation for the SSE skinning entry
+    // point; sys_SSE is a desktop-only dvar and is not registered on this port.
+    bool sseEnabled = r_sse_skinning && r_sse_skinning->current.enabled;
+#else
     bool sseEnabled = sys_SSE->current.enabled && r_sse_skinning->current.enabled;
+#endif
     bool sseStateUsed = false;
 
     SkinXModelCmd* skinCmd = (SkinXModelCmd*)data;
