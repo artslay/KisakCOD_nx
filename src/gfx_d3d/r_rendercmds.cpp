@@ -936,7 +936,7 @@ const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material,
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][TECHNIQUE RENDER REJECT] kind=nullPixelShaderAfterResolve set=%p techType=%u technique=%p\\n",
+            "[KisakCOD][TECHNIQUE RENDER REJECT] kind=nullPixelShaderAfterResolve set=%p techType=%u technique=%p\n",
             static_cast<const void *>(techSet),
             static_cast<unsigned>(techType),
             static_cast<const void *>(technique));
