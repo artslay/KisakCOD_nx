@@ -4441,7 +4441,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         char targetPsMsg[256];
         std::snprintf(
             targetPsMsg, sizeof(targetPsMsg),
-            "[KisakCOD][VK SPIRV TARGET] seq=%u stage=ps saved=%u words=%zu bytes=%zu hash=%016llx path=%s\\n",
+            "[KisakCOD][VK SPIRV TARGET] seq=%u stage=ps saved=%u words=%zu bytes=%zu hash=%016llx path=%s\n",
             pipelineCreateSequence,
             targetPsSaved ? 1u : 0u,
             m_pixelShader->spirv.size(),
