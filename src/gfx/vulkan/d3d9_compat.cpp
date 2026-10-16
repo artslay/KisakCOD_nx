@@ -841,6 +841,9 @@ bool PatchFragmentShaderForAlphaTest(
 
     const uint32_t funcSpec = newId();
     const uint32_t refSpec = newId();
+    const uint32_t functionPointerType = newId();
+    const uint32_t alphaStorage = newId();
+    const uint32_t alphaDefault = newId();
 
     uint32_t funcConst[9]{};
     for (uint32_t value = 1; value <= 8; ++value)
@@ -857,6 +860,7 @@ bool PatchFragmentShaderForAlphaTest(
     SpirvAppend(globals, SpvOpSpecConstant, {floatType, refSpec, 0});
     for (uint32_t value = 1; value <= 8; ++value)
         SpirvAppend(globals, SpvOpConstant, {intType, funcConst[value], value});
+    SpirvAppend(globals, SpvOpConstant, {floatType, alphaDefault, 0x3f800000u});
 
     std::vector<uint32_t> decorations;
     SpirvAppend(decorations, SpvOpDecorate, {funcSpec, SpvDecorationSpecId, funcSpecDecoration});
@@ -885,9 +889,42 @@ bool PatchFragmentShaderForAlphaTest(
         words.begin() + firstType + decorations.size(),
         typeGlobals.begin(), typeGlobals.end());
 
-    // Store the alpha from each output value in a private scalar, then apply
-    // the alpha comparison at the fragment entry point's return. This avoids
-    // both OpKill inside a called helper and changes to existing loop headers.
+    size_t typeSectionEnd = 0;
+    bool sawType = false;
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+        const uint32_t opValue = static_cast<uint32_t>(op);
+        const bool isType =
+            opValue >= static_cast<uint32_t>(SpvOpTypeVoid) &&
+            opValue <= static_cast<uint32_t>(SpvOpTypePipe);
+        if (isType)
+        {
+            sawType = true;
+            typeSectionEnd = i + wc;
+        }
+        else if (sawType)
+        {
+            break;
+        }
+        i += wc;
+    }
+    if (!typeSectionEnd)
+        return false;
+    std::vector<uint32_t> functionPointerTypeWords;
+    SpirvAppend(
+        functionPointerTypeWords, SpvOpTypePointer,
+        {functionPointerType, SpvStorageClassFunction, floatType});
+    words.insert(
+        words.begin() + typeSectionEnd,
+        functionPointerTypeWords.begin(), functionPointerTypeWords.end());
+
+    // Keep the most recently written output alpha in a Function-storage
+    // variable. This avoids reading an Output interface variable, which some
+    // Vulkan shader compilers reject, and keeps alpha-test state per invocation.
     size_t firstVariableOrFunction = words.size();
     for (size_t i = 5; i < words.size();)
     {
@@ -928,6 +965,8 @@ bool PatchFragmentShaderForAlphaTest(
     patched.insert(patched.end(), words.begin(), words.begin() + firstFunction);
 
     bool inEntry = false;
+    bool injectedFunctionVariable = false;
+    bool injectedOutputAlpha = false;
     bool injectedReturnTest = false;
     for (size_t i = firstFunction; i < words.size();)
     {
@@ -939,6 +978,30 @@ bool PatchFragmentShaderForAlphaTest(
         const uint32_t *ins = &words[i];
         if (op == SpvOpFunction && wc >= 3)
             inEntry = ins[2] == entryFunctionId;
+
+        // Function variables must be declared in the first block, directly
+        // after its label. Emit this once before the entry-point's original
+        // instructions so all stores and returns can use it.
+        if (inEntry && op == SpvOpLabel && !injectedFunctionVariable)
+        {
+            patched.insert(patched.end(), words.begin() + i, words.begin() + i + wc);
+            SpirvAppend(
+                patched, SpvOpVariable,
+                {functionPointerType, alphaStorage, SpvStorageClassFunction, alphaDefault});
+            injectedFunctionVariable = true;
+            i += wc;
+            continue;
+        }
+
+        // Capture alpha from each output store, retaining the shader's existing
+        // block layout and branch structure.
+        if (inEntry && op == SpvOpStore && wc >= 3 && ins[1] == outputVarId)
+        {
+            const uint32_t storedAlpha = newId();
+            SpirvAppend(patched, SpvOpCompositeExtract, {floatType, storedAlpha, ins[2], 3});
+            SpirvAppend(patched, SpvOpStore, {alphaStorage, storedAlpha});
+            injectedOutputAlpha = true;
+        }
 
         // OpReturn is a terminator, so replacing it with a conditional branch
         // to kill/merge labels does not split a pre-existing selection header.
@@ -974,9 +1037,7 @@ bool PatchFragmentShaderForAlphaTest(
             const uint32_t killLabel = newId();
             const uint32_t mergeLabel = newId();
 
-            const uint32_t outputValue = newId();
-            SpirvAppend(patched, SpvOpLoad, {outputValueType, outputValue, outputVarId});
-            SpirvAppend(patched, SpvOpCompositeExtract, {floatType, alpha, outputValue, 3});
+            SpirvAppend(patched, SpvOpLoad, {floatType, alpha, alphaStorage});
             SpirvAppend(patched, SpvOpFOrdLessThan, {boolType, less, alpha, refSpec});
             SpirvAppend(patched, SpvOpFOrdEqual, {boolType, equal, alpha, refSpec});
             SpirvAppend(patched, SpvOpFOrdLessThanEqual, {boolType, lessEqual, alpha, refSpec});
@@ -1020,7 +1081,7 @@ bool PatchFragmentShaderForAlphaTest(
         i += wc;
     }
 
-    if (!injectedReturnTest)
+    if (!injectedFunctionVariable || !injectedOutputAlpha || !injectedReturnTest)
         return false;
 
     char cfgReason[160]{};
