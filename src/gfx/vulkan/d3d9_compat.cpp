@@ -4351,13 +4351,15 @@ bool IDirect3DDevice9::EnsurePipeline()
 
             VkResult mathlessModuleResult = VK_ERROR_UNKNOWN;
             VkResult mathlessPipelineResult = VK_ERROR_UNKNOWN;
+            // Keep the probe binary in the parent scope: the no-specialization
+            // follow-up runs after the module/pipeline result has been logged.
+            std::vector<uint32_t> alphaMathlessSpirv;
             if (fragmentEntryId && boolTypeId &&
                 arithmeticStart < selectionMergeOffset &&
                 branchOffset < patchedAlphaSpirv.size() &&
                 firstVariableOrFunction < patchedAlphaSpirv.size())
             {
                 const uint32_t trueId = patchedAlphaSpirv[3];
-                std::vector<uint32_t> alphaMathlessSpirv;
                 alphaMathlessSpirv.reserve(patchedAlphaSpirv.size());
                 alphaMathlessSpirv.insert(
                     alphaMathlessSpirv.end(),
@@ -4424,7 +4426,8 @@ bool IDirect3DDevice9::EnsurePipeline()
             // Repeat the mathless probe after removing just the two generated
             // specialization constants and their SpecId decorations. This
             // isolates specialization globals from output extraction and CFG.
-            if (arithmeticStart < selectionMergeOffset &&
+            if (!alphaMathlessSpirv.empty() &&
+                arithmeticStart < selectionMergeOffset &&
                 (m_pixelShader->alphaFuncSpecId || m_pixelShader->alphaRefSpecId))
             {
                 std::unordered_set<uint32_t> generatedSpecResultIds;
