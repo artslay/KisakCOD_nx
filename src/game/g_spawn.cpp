@@ -960,6 +960,26 @@ void __cdecl G_ParseEntityFields(gentity_s *ent, int ignoreModel)
             v5 += 2;
         } while (v4 < level.spawnVar.numSpawnVars);
     }
+#ifdef __SWITCH__
+    // Capture the raw BSP entity key/value before G_SetOrigin and the spawn
+    // function can obscure whether an out-of-map mover was authored that way.
+    if (ent && (ent->r.currentOrigin[2] >= 4000.0f || ent->r.currentOrigin[2] <= -4000.0f))
+    {
+        const char *spawnClass = "";
+        const char *spawnOrigin = "";
+        const int hasClass = G_SpawnString(&level.spawnVar, "classname", "", &spawnClass);
+        const int hasOrigin = G_SpawnString(&level.spawnVar, "origin", "", &spawnOrigin);
+        Com_Printf(
+            CON_CHANNEL_SERVER,
+            "[KisakCOD][OFFMAP ENTITY SPAWN] ent=%u classPresent=%d class=%s originPresent=%d origin=\"%s\" parsed=(%.2f,%.2f,%.2f)\n",
+            static_cast<unsigned>(ent->s.number),
+            hasClass,
+            spawnClass ? spawnClass : "",
+            hasOrigin,
+            spawnOrigin ? spawnOrigin : "",
+            ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2]);
+    }
+#endif
     G_SetOrigin(ent, ent->r.currentOrigin);
     G_SetAngle(ent, ent->r.currentAngles);
 }
