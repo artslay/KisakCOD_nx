@@ -167,15 +167,15 @@ static bool MT_CheckSentinelAtPhase(const char *phase, uint32_t extra)
     return false;
 }
 
-// Validate the free trees at sampled allocator mutations on Switch.
-// A full walk visits every currently free node; running it after every one of
-// the first 4096 allocations/frees turns startup into an O(mutations * nodes)
-// diagnostic workload. Keep the first mutation and then sample every 256th
-// mutation within the same bounded window. The cheap sentinel/link checks at
-// each mutation remain active independently.
-static constexpr uint32_t MT_TREE_VALIDATION_MUTATION_LIMIT = 4096;
+// Validate the free trees at sampled allocator validation points on Switch.
+// A full walk visits every currently free node; running it after every
+// allocation/free check turns startup into an O(validation_points * nodes)
+// diagnostic workload. Keep the first check and then sample every 256th check
+// within the same bounded window. Cheap sentinel/link checks remain active at
+// each mutation independently.
+static constexpr uint32_t MT_TREE_VALIDATION_POINT_LIMIT = 4096;
 static constexpr uint32_t MT_TREE_VALIDATION_INTERVAL = 256;
-static uint32_t mtTreeValidationMutationCount;
+static uint32_t mtTreeValidationPointCount;
 static uint16_t mtTreeValidationGeneration;
 static uint16_t mtTreeValidationSeen[MEMORY_NODE_COUNT] = {};
 static uint16_t mtTreeValidationStack[MEMORY_NODE_COUNT] = {};
@@ -186,11 +186,11 @@ static void MT_ValidateFreeTrees(
     const char *duplicatePhase,
     uint32_t changedNode)
 {
-    if (mtInvariantReportCount || mtTreeValidationMutationCount >= MT_TREE_VALIDATION_MUTATION_LIMIT)
+    if (mtInvariantReportCount || mtTreeValidationPointCount >= MT_TREE_VALIDATION_POINT_LIMIT)
         return;
 
-    const uint32_t mutation = ++mtTreeValidationMutationCount;
-    if (mutation != 1u && (mutation % MT_TREE_VALIDATION_INTERVAL) != 0u)
+    const uint32_t validationPoint = ++mtTreeValidationPointCount;
+    if (validationPoint != 1u && (validationPoint % MT_TREE_VALIDATION_INTERVAL) != 0u
         return;
 
     // Index zero is the null-node sentinel, never an allocatable block. The
