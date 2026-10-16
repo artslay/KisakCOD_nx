@@ -856,7 +856,7 @@ void __cdecl PlayerCmd_setOrigin(scr_entref_t entref)
     // A large vertical offset drops DPVS outside the map and leaves the frame
     // with no world surfaces. Capture the originating GSC callsite only for
     // those abnormal requests; do not alter original script behavior.
-    if (v3[2] >= 4000.0f || v3[2] <= -4000.0f)
+    if (v1 && v1->client && (v3[2] >= 4000.0f || v3[2] <= -4000.0f))
     {
         char *scriptFile = (char *)"";
         int scriptLine = 0;
