@@ -3205,8 +3205,7 @@ int __cdecl G_EntLinkToInternal(gentity_s *ent, gentity_s *parent, unsigned int 
             MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_utils.cpp", 1085, 0, "%s", "checkEnt");
         if (i == ent)
             break;
-        p_parent = &i->tagInfo->parent;
-        if (!p_parent)
+        if (!i->tagInfo)
         {
             v10 = (tagInfo_s *)MT_Alloc(sizeof(tagInfo_s), MT_TYPE_TAG_INFO);
             v10->parent = parent;
@@ -3259,6 +3258,7 @@ int __cdecl G_EntLinkToInternal(gentity_s *ent, gentity_s *parent, unsigned int 
             }
             return 1;
         }
+        p_parent = &i->tagInfo->parent;
     }
     return 0;
 }
