@@ -1195,7 +1195,7 @@ bool VulkanBackend::EndFrame()
     const bool switchTraceActivity =
         switchHasPresentSource || m_renderingActive;
     const bool switchTraceThisFrame =
-        switchPresentTraceId < 3 ||
+        switchPresentTraceId < 16 ||
         (switchTraceActivity && switchPresentActivityTraceCount < 8);
     if (switchTraceThisFrame && switchTraceActivity)
         ++switchPresentActivityTraceCount;
