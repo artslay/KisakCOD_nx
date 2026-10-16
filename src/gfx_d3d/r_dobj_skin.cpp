@@ -129,6 +129,9 @@ int  R_SkinSceneDObjModels(
     // be overrun by multi-model DObjs (especially on Switch, where rigid
     // entries occupy 56 bytes each).
     uint32_t surfaceCapacity = 0;
+#ifdef KISAK_SWITCH
+    static std::atomic<uint32_t> invalidSurfaceRangeTraceCount{0};
+#endif
     for (uint32_t modelIndex = 0; modelIndex < NumModels; ++modelIndex)
     {
         const XModel *model = DObjGetModel(obj, modelIndex);
@@ -136,7 +139,31 @@ int  R_SkinSceneDObjModels(
 
         const int modelLod = sceneEnt->cull.lods[modelIndex];
         if (modelLod >= 0)
+        {
+#ifdef KISAK_SWITCH
+            if (modelLod >= MAX_LODS)
+                continue;
+
+            const XModelLodInfo &lodInfo = model->lodInfo[modelLod];
+            if (!model->surfs ||
+                lodInfo.surfIndex > model->numsurfs ||
+                lodInfo.numsurfs > static_cast<uint32_t>(model->numsurfs - lodInfo.surfIndex))
+            {
+                if (invalidSurfaceRangeTraceCount.fetch_add(1, std::memory_order_relaxed) < 16u)
+                {
+                    Com_Printf(CON_CHANNEL_ANIM,
+                        "[KisakCOD][XMODEL SURFACE RANGE] model=%s modelIndex=%u lod=%d surfIndex=%u lodSurfs=%u modelSurfs=%u numLods=%d surfs=%p phase=capacity\n",
+                        model->name ? model->name : "(null)", modelIndex, modelLod,
+                        lodInfo.surfIndex, lodInfo.numsurfs, model->numsurfs, model->numLods,
+                        static_cast<const void *>(model->surfs));
+                }
+                continue;
+            }
+            surfaceCapacity += lodInfo.numsurfs;
+#else
             surfaceCapacity += XModelGetSurfCount(model, modelLod);
+#endif
+        }
     }
 
 #ifdef KISAK_SWITCH
@@ -191,6 +218,32 @@ int  R_SkinSceneDObjModels(
 
         if (cullLod >= 0)
         {
+#ifdef KISAK_SWITCH
+            if (cullLod >= MAX_LODS)
+            {
+                lod++;
+                boneIndex += boneCount;
+                continue;
+            }
+
+            const XModelLodInfo &modelLodInfo = model->lodInfo[cullLod];
+            if (!model->surfs ||
+                modelLodInfo.surfIndex > model->numsurfs ||
+                modelLodInfo.numsurfs > static_cast<uint32_t>(model->numsurfs - modelLodInfo.surfIndex))
+            {
+                if (invalidSurfaceRangeTraceCount.fetch_add(1, std::memory_order_relaxed) < 16u)
+                {
+                    Com_Printf(CON_CHANNEL_ANIM,
+                        "[KisakCOD][XMODEL SURFACE RANGE] model=%s modelIndex=%u lod=%d surfIndex=%u lodSurfs=%u modelSurfs=%u numLods=%d surfs=%p phase=skin\n",
+                        model->name ? model->name : "(null)", lod, cullLod,
+                        modelLodInfo.surfIndex, modelLodInfo.numsurfs, model->numsurfs, model->numLods,
+                        static_cast<const void *>(model->surfs));
+                }
+                lod++;
+                boneIndex += boneCount;
+                continue;
+            }
+#endif
             targBoneIndexHigh.boneIndex = boneIndex;
             targBoneIndexHigh.baseMat = XModelGetBasePose(model);
             targBoneIndexHigh.boneCount = boneCount;
@@ -260,23 +313,10 @@ int  R_SkinSceneDObjModels(
                 if (!surface->deformed && IsFastFileLoad() && surface->vertListCount == 1)
                 {
 #ifdef KISAK_SWITCH
-                    const uintptr_t vertListAddress = reinterpret_cast<uintptr_t>(surface->vertList);
-                    // Switch fastfile offsets can be wider than 32 bits after
-                    // corruption, so a simple UINT32_MAX test is not sufficient.
-                    // Native XSurface data lives in the process address range
-                    // observed for Switch heap/zone allocations; also require the
-                    // natural alignment of XRigidVertList before dereferencing.
-                    constexpr uintptr_t kSwitchNativeAddressBegin =
-                        static_cast<uintptr_t>(0x800000000ull);
-                    constexpr uintptr_t kSwitchNativeAddressEnd =
-                        static_cast<uintptr_t>(0x1000000000ull);
-                    const bool nativeVertListPointer =
-                        vertListAddress >= kSwitchNativeAddressBegin &&
-                        vertListAddress < kSwitchNativeAddressEnd &&
-                        (vertListAddress & (alignof(XRigidVertList) - 1u)) == 0;
-                    if (surface->vertList && nativeVertListPointer)
-                        rigidBoneIndex = surface->vertList->boneOffset >> 6;
-
+                    // Do not dereference the fastfile vertList field here. The
+                    // current asset trace contains unresolved offsets and poisoned
+                    // 64-bit values; recover a rigid bone only from this surface's
+                    // local partBits, which can be bounds-checked against modelBones.
                     if (rigidBoneIndex >= boneCount)
                     {
                         uint32_t recoveredBone = 0;
