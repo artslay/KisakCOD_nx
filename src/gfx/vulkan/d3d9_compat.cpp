@@ -2567,7 +2567,7 @@ HRESULT IDirect3DDevice9::EndScene()
     static uint32_t endSceneSourceTraceCount = 0;
     const uint32_t endSceneTraceId = endSceneTraceCount++;
     const bool switchTraceEndScene =
-        endSceneTraceId < 3 ||
+        endSceneTraceId < 16 ||
         (queuePresentSource && endSceneSourceTraceCount < 8);
     if (switchTraceEndScene)
     {
