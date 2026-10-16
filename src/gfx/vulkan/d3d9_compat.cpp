@@ -3819,6 +3819,70 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite(probeMsg);
         }
 
+        // Probe 1b: keep all injected alpha-test arithmetic and structured
+        // control flow, but replace OpKill with OpReturn. This isolates whether
+        // NVK rejects the discard terminator itself or another part of the patch.
+        if (!m_pixelShader->spirv.empty())
+        {
+            std::vector<uint32_t> noKillSpirv = m_pixelShader->spirv;
+            uint32_t replacedKills = 0;
+            for (size_t i = 5; i < noKillSpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(noKillSpirv, i, &wc, &op))
+                    break;
+                if (op == SpvOpKill && wc == 1)
+                {
+                    noKillSpirv[i] = (noKillSpirv[i] & 0xFFFF0000u) |
+                        static_cast<uint32_t>(SpvOpReturn);
+                    ++replacedKills;
+                }
+                i += wc;
+            }
+
+            if (replacedKills > 0)
+            {
+                VkShaderModule noKillModule = VK_NULL_HANDLE;
+                VkShaderModuleCreateInfo noKillModuleInfo{};
+                noKillModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                noKillModuleInfo.codeSize = noKillSpirv.size() * sizeof(uint32_t);
+                noKillModuleInfo.pCode = noKillSpirv.data();
+
+                const VkResult noKillModuleResult = vkCreateShaderModule(
+                    m_backend->Device(), &noKillModuleInfo, nullptr, &noKillModule);
+                VkResult noKillPipelineResult = noKillModuleResult;
+                VkPipeline noKillPipeline = VK_NULL_HANDLE;
+                if (noKillModuleResult == VK_SUCCESS)
+                {
+                    VkPipelineShaderStageCreateInfo noKillStages[2] = {stages[0], stages[1]};
+                    noKillStages[1].module = noKillModule;
+                    noKillStages[1].pSpecializationInfo = nullptr;
+
+                    VkGraphicsPipelineCreateInfo noKillInfo = info;
+                    noKillInfo.pStages = noKillStages;
+                    noKillPipelineResult = vkCreateGraphicsPipelines(
+                        m_backend->Device(), VK_NULL_HANDLE, 1, &noKillInfo, nullptr, &noKillPipeline);
+                    if (noKillPipeline)
+                        vkDestroyPipeline(m_backend->Device(), noKillPipeline, nullptr);
+                    vkDestroyShaderModule(m_backend->Device(), noKillModule, nullptr);
+                }
+
+                char noKillMsg[192];
+                std::snprintf(
+                    noKillMsg, sizeof(noKillMsg),
+                    "[KisakCOD][VK DRAW] pipeline_probe no_kill module=%d pipeline=%d replaced=%u\\n",
+                    static_cast<int>(noKillModuleResult),
+                    static_cast<int>(noKillPipelineResult),
+                    replacedKills);
+                Switch_LogWrite(noKillMsg);
+            }
+            else
+            {
+                Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_probe no_kill skipped=no_opkill\\n");
+            }
+        }
+
         // Probe 2: use the linked fragment SPIR-V before the custom alpha-test
         // instructions were inserted, with specialization disabled. This is
         // intentionally diagnostic only; the result is not used for rendering.
