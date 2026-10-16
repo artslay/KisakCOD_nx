@@ -10,6 +10,7 @@
 #include <script/scr_stringlist.h>
 #include <qcommon/mem_track.h>
 #include <script/scr_vm.h>
+#include <script/scr_parser.h>
 #include "g_local.h"
 #include "pathnode.h"
 #include <server/sv_game.h>
