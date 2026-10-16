@@ -1,6 +1,14 @@
 #include <universal/q_shared.h>
 #include "rb_uploadshaders.h"
 #include <qcommon/threads.h>
+#ifdef __SWITCH__
+#include <atomic>
+#include <cstdint>
+#include <cstdio>
+extern MaterialTechnique *Switch_ResolveTechniqueForRender(MaterialTechniqueSet *techSet, uint32_t techType);
+extern thread_local const char *g_switchFrameStage;
+extern void Switch_LogWrite(const char *msg);
+#endif
 #include "r_dvars.h"
 #include "rb_backend.h"
 #include "r_shade.h"
@@ -101,18 +109,59 @@ uint32_t RB_UploadMaterialPass(
     uint32_t vertMem_136; // [esp+90h] [ebp-18h]
     uint32_t vertMem_140; // [esp+94h] [ebp-14h]
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/material_upload/pass_entry";
+#endif
     //argIter = a1;
     //argCount = retaddr;
+    vertMem_140 = static_cast<uint32_t>(pass->stableArgCount) +
+                  static_cast<uint32_t>(pass->perObjArgCount) +
+                  static_cast<uint32_t>(pass->perPrimArgCount);
+#ifdef __SWITCH__
+    if (vertMem_140)
+    {
+        const uintptr_t argsAddress = reinterpret_cast<uintptr_t>(pass->args);
+        if (argsAddress <= UINT32_MAX ||
+            (argsAddress & (alignof(MaterialShaderArgument) - 1u)) != 0)
+        {
+            static std::atomic<uint32_t> traceCount{0};
+            if (traceCount.fetch_add(1, std::memory_order_relaxed) < 16u)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][MATERIAL UPLOAD REJECT] reason=invalidArgs pass=%p args=%p argCount=%u techniqueUpload=1\\n",
+                    static_cast<const void *>(pass),
+                    reinterpret_cast<const void *>(argsAddress),
+                    static_cast<unsigned>(vertMem_140));
+                Switch_LogWrite(trace);
+            }
+            g_switchFrameStage = "frame/render/material_upload/reject_args";
+            return 0;
+        }
+    }
+#endif
     iassert( pass->vertexShader );
     iassert( pass->vertexShader->prog.vs );
     iassert( pass->pixelShader );
     iassert( pass->pixelShader->prog.ps );
     iassert( pass->vertexDecl );
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/material_upload/set_shaders";
+#endif
     R_SetVertexShader(gfxCmdBufContext.state, pass->vertexShader);
     R_SetPixelShader(gfxCmdBufContext.state, pass->pixelShader);
-    vertMem_140 = pass->stableArgCount + pass->perObjArgCount + pass->perPrimArgCount;
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/material_upload/args";
+#endif
     for (vertMem_136 = 0; vertMem_136 < vertMem_140; ++vertMem_136)
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/render/material_upload/arg";
+#endif
         RB_SetUploadMaterialArg(&pass->args[vertMem_136]);
+    }
     memset(v9, 0, 0x90u);
     p_prim = &gfxCmdBufContext.state->prim;
     if (vertDeclType)
@@ -132,6 +181,9 @@ uint32_t RB_UploadMaterialPass(
 
 uint32_t __cdecl RB_UploadMaterialTechnique(const MaterialTechnique *tech, uint32_t techType)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/material_upload/technique_entry";
+#endif
     uint32_t uploadCount; // [esp+0h] [ebp-Ch]
     MaterialVertexDeclType vertDeclType; // [esp+4h] [ebp-8h]
     uint32_t passIter; // [esp+8h] [ebp-4h]
@@ -182,7 +234,15 @@ void __cdecl RB_UploadShaderStep()
                 while (1)
                 {
                 LABEL_16:
+#ifdef __SWITCH__
+                    g_switchFrameStage = "frame/render/shader_upload/resolve_technique";
+                    tech = Switch_ResolveTechniqueForRender(
+                        techSet,
+                        static_cast<uint32_t>(mtlUploadGlob.techTypeIter));
+                    g_switchFrameStage = "frame/render/shader_upload/technique_resolved";
+#else
                     tech = techSet->techniques[mtlUploadGlob.techTypeIter];
+#endif
                     if (tech)
                     {
                         if ((tech->flags & 0x8000) == 0)
