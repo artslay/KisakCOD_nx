@@ -852,6 +852,7 @@ LABEL_15:
                 surfSize = sizeof(GfxModelSkinnedSurface);
             }
 #ifdef __SWITCH__
+            {
             const uintptr_t materialAddress = reinterpret_cast<uintptr_t>(*material);
             if (materialAddress < 0x10000u)
             {
@@ -883,6 +884,7 @@ LABEL_15:
                     lod,
                     materialSurfaceIndex);
                 return;
+            }
             }
 #endif
             iassert(*material);
