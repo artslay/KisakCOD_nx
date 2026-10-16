@@ -2390,8 +2390,6 @@ int __cdecl G_RunFrame(ServerFrameExtent extent, int timeCap)
     gentity_s *k; // r30
     int inuse; // r11
     bool checkAnimChange; // r11
-    int v17; // r10
-    int v18; // r10
     int v19; // r3
     gentity_s *vehEnt; // r3
     gentity_s *v21; // r30
