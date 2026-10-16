@@ -23,11 +23,30 @@ int __cdecl XModelGetSurfaces(const XModel *model, XSurface **surfaces, int lod)
     iassert(model);
     iassert(surfaces);
     iassert(lod >= 0);
-    bcassert(model->lodInfo[lod].surfIndex, model->numsurfs);
+    if (!model || !surfaces || lod < 0 || lod >= MAX_LODS)
+    {
+        if (surfaces)
+            *surfaces = nullptr;
+        return 0;
+    }
+
     const XModelLodInfo *lodInfo = model->lodInfo;
-    iassert(lodInfo->surfIndex + lodInfo->numsurfs <= model->numsurfs);
-    *surfaces = &model->surfs[lodInfo[lod].surfIndex];
-    return lodInfo[lod].numsurfs;
+    const uint32_t surfIndex = lodInfo[lod].surfIndex;
+    const uint32_t surfCount = lodInfo[lod].numsurfs;
+#ifdef KISAK_SWITCH
+    // XModel::numsurfs is the allocation size for the native surface array.
+    // Never let a corrupt LOD table read surfaces beyond that allocation.
+    if (!model->surfs || surfIndex > model->numsurfs ||
+        surfCount > static_cast<uint32_t>(model->numsurfs - surfIndex))
+    {
+        *surfaces = nullptr;
+        return 0;
+    }
+#endif
+    bcassert(surfIndex, model->numsurfs);
+    iassert(surfIndex + surfCount <= model->numsurfs);
+    *surfaces = model->surfs ? &model->surfs[surfIndex] : nullptr;
+    return static_cast<int>(surfCount);
 }
 
 XSurface *__cdecl XModelGetSurface(const XModel *model, int lod, int surfIndex)
