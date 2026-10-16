@@ -261,7 +261,6 @@ private:
     struct FrameSync
     {
         VkSemaphore imageAvailable = VK_NULL_HANDLE;
-        VkSemaphore renderFinished = VK_NULL_HANDLE;
         VkFence fence = VK_NULL_HANDLE;
     };
 
@@ -298,6 +297,9 @@ private:
     std::vector<VkImage> m_swapchainImages;
     std::vector<VkImageView> m_swapchainViews;
     std::vector<VkImageLayout> m_swapchainLayouts;
+    // A present-wait semaphore belongs to a swapchain image and is reused only
+    // after that image is acquired again. This avoids a queue-idle stall per frame.
+    std::vector<VkSemaphore> m_renderFinishedSemaphores;
 
     VkFormat m_depthFormat = VK_FORMAT_D24_UNORM_S8_UINT;
     VkImage m_defaultDepthImage = VK_NULL_HANDLE;
