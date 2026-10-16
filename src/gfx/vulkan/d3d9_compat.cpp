@@ -3979,7 +3979,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 char conditionMsg[192];
                 std::snprintf(
                     conditionMsg, sizeof(conditionMsg),
-                    "[KisakCOD][VK DRAW] pipeline_probe alpha_condition_true module=%d pipeline=%d replaced=%u\\n",
+                    "[KisakCOD][VK DRAW] pipeline_probe alpha_condition_true module=%d pipeline=%d replaced=%u\n",
                     static_cast<int>(constantConditionModuleResult),
                     static_cast<int>(constantConditionPipelineResult),
                     replacedCondition ? 1u : 0u);
@@ -3987,7 +3987,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             }
             else
             {
-                Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_probe alpha_condition_true skipped=no_bool_type\\n");
+                Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_probe alpha_condition_true skipped=no_bool_type\n");
             }
         }
 
