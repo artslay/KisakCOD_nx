@@ -654,12 +654,10 @@ bool PatchFragmentShaderForAlphaTest(
     uint32_t outputVarId = 0;
     uint32_t outputVarType = 0;
     uint32_t outputValueType = 0;
-    uint32_t voidType = 0;
     uint32_t floatType = 0;
     uint32_t boolType = 0;
     uint32_t intType = 0;
     bool foundOutputLocation0 = false;
-    bool addVoidType = false;
     bool addBoolType = false;
     bool addIntType = false;
     std::unordered_set<uint32_t> usedSpecIds;
@@ -683,10 +681,6 @@ bool PatchFragmentShaderForAlphaTest(
                 usedSpecIds.insert(ins[3]);
             else if (ins[2] == SpvDecorationLocation && ins[3] == 0)
                 locationZeroVariables.insert(ins[1]);
-        }
-        else if (op == SpvOpTypeVoid && wc >= 2)
-        {
-            voidType = ins[1];
         }
         else if (op == SpvOpTypeBool && wc >= 2)
         {
@@ -815,11 +809,6 @@ bool PatchFragmentShaderForAlphaTest(
     if (!floatType)
         return false;
 
-    if (!voidType)
-    {
-        voidType = words[3]++;
-        addVoidType = true;
-    }
     if (!boolType)
     {
         boolType = words[3]++;
@@ -858,8 +847,6 @@ bool PatchFragmentShaderForAlphaTest(
         funcConst[value] = newId();
 
     std::vector<uint32_t> typeGlobals;
-    if (addVoidType)
-        SpirvAppend(typeGlobals, SpvOpTypeVoid, {voidType});
     if (addBoolType)
         SpirvAppend(typeGlobals, SpvOpTypeBool, {boolType});
     if (addIntType)
@@ -898,49 +885,15 @@ bool PatchFragmentShaderForAlphaTest(
         words.begin() + firstType + decorations.size(),
         typeGlobals.begin(), typeGlobals.end());
 
-    // The helper function takes the output alpha and discards the fragment
-    // when the selected D3D alpha comparison fails. Keeping the branch in its
-    // own function avoids splitting an existing shader block that may already
-    // be a selection/loop header with its own structured merge instruction.
-    const uint32_t helperFunctionType = newId();
-    const uint32_t alphaTestFunction = newId();
-    const uint32_t alphaParam = newId();
-    const uint32_t helperEntryLabel = newId();
-    const uint32_t helperKillLabel = newId();
-    const uint32_t helperMergeLabel = newId();
+    // Store the alpha from each output value in a private scalar, then apply
+    // the alpha comparison at the fragment entry point's return. This avoids
+    // both OpKill inside a called helper and changes to existing loop headers.
+    const uint32_t alphaPrivatePointerType = newId();
+    const uint32_t alphaPrivateVariable = newId();
+    const uint32_t alphaDefault = newId();
 
-    const uint32_t less = newId();
-    const uint32_t equal = newId();
-    const uint32_t lessEqual = newId();
-    const uint32_t greater = newId();
-    const uint32_t notEqual = newId();
-    const uint32_t greaterEqual = newId();
-    const uint32_t f2 = newId();
-    const uint32_t f3 = newId();
-    const uint32_t f4 = newId();
-    const uint32_t f5 = newId();
-    const uint32_t f6 = newId();
-    const uint32_t f7 = newId();
-    const uint32_t f8 = newId();
-    const uint32_t pass2 = newId();
-    const uint32_t pass3 = newId();
-    const uint32_t pass4 = newId();
-    const uint32_t pass5 = newId();
-    const uint32_t pass6 = newId();
-    const uint32_t pass7 = newId();
-    const uint32_t passA = newId();
-    const uint32_t passB = newId();
-    const uint32_t passC = newId();
-    const uint32_t passD = newId();
-    const uint32_t passE = newId();
-    const uint32_t passF = newId();
-    const uint32_t discard = newId();
-
-    std::vector<uint32_t> functionTypeWords;
-    SpirvAppend(functionTypeWords, SpvOpTypeFunction, {voidType, helperFunctionType, floatType});
-
-    // Insert the helper's function type after all operand types are declared,
-    // but before constants, variables and function bodies.
+    // Add Private pointer type after all existing types, where its float operand
+    // is guaranteed to have been declared already.
     size_t typeSectionEnd = 0;
     bool sawType = false;
     for (size_t i = 5; i < words.size();)
@@ -966,12 +919,27 @@ bool PatchFragmentShaderForAlphaTest(
     }
     if (!typeSectionEnd)
         return false;
+    std::vector<uint32_t> privatePointerTypeWords;
+    SpirvAppend(
+        privatePointerTypeWords, SpvOpTypePointer,
+        {alphaPrivatePointerType, SpvStorageClassPrivate, floatType});
     words.insert(
         words.begin() + typeSectionEnd,
-        functionTypeWords.begin(), functionTypeWords.end());
+        privatePointerTypeWords.begin(), privatePointerTypeWords.end());
 
-    // Place the new constants after existing constants, but before global
-    // variables and all function bodies.
+    std::vector<uint32_t> globals;
+    SpirvAppend(globals, SpvOpSpecConstant, {intType, funcSpec, 8});
+    SpirvAppend(globals, SpvOpSpecConstant, {floatType, refSpec, 0});
+    for (uint32_t value = 1; value <= 8; ++value)
+        SpirvAppend(globals, SpvOpConstant, {intType, funcConst[value], value});
+    // Alpha defaults to 1.0 in case a shader exits without writing its output.
+    SpirvAppend(globals, SpvOpConstant, {floatType, alphaDefault, 0x3f800000u});
+    SpirvAppend(
+        globals, SpvOpVariable,
+        {alphaPrivatePointerType, alphaPrivateVariable, SpvStorageClassPrivate, alphaDefault});
+
+    // Place the generated constants and private variable after existing
+    // constants but before any global variables and function bodies.
     size_t firstVariableOrFunction = words.size();
     for (size_t i = 5; i < words.size();)
     {
@@ -1007,14 +975,13 @@ bool PatchFragmentShaderForAlphaTest(
     if (firstFunction == words.size())
         return false;
 
-    // Call a small helper immediately before each output store. No control-flow
-    // instructions are inserted into the engine-generated entry-point blocks.
     std::vector<uint32_t> patched;
-    patched.reserve(words.size() + 192);
+    patched.reserve(words.size() + 768);
     patched.insert(patched.end(), words.begin(), words.begin() + firstFunction);
 
     bool inEntry = false;
-    bool injected = false;
+    bool injectedOutputAlpha = false;
+    bool injectedReturnTest = false;
     for (size_t i = firstFunction; i < words.size();)
     {
         uint32_t wc = 0;
@@ -1026,15 +993,88 @@ bool PatchFragmentShaderForAlphaTest(
         if (op == SpvOpFunction && wc >= 3)
             inEntry = ins[2] == entryFunctionId;
 
+        // Capture the alpha value at each fragment-output store without
+        // altering its block structure or its existing branch instructions.
         if (inEntry && op == SpvOpStore && wc >= 3 && ins[1] == outputVarId)
         {
             const uint32_t alpha = newId();
-            const uint32_t callResult = newId();
             SpirvAppend(patched, SpvOpCompositeExtract, {floatType, alpha, ins[2], 3});
             SpirvAppend(
-                patched, SpvOpFunctionCall,
-                {voidType, callResult, alphaTestFunction, alpha});
-            injected = true;
+                patched, SpvOpStore,
+                {alphaPrivateVariable, alpha});
+            injectedOutputAlpha = true;
+        }
+
+        // OpReturn is a terminator, so replacing it with a conditional branch
+        // to kill/merge labels does not split a pre-existing selection header.
+        if (inEntry && op == SpvOpReturn)
+        {
+            const uint32_t alpha = newId();
+            const uint32_t less = newId();
+            const uint32_t equal = newId();
+            const uint32_t lessEqual = newId();
+            const uint32_t greater = newId();
+            const uint32_t notEqual = newId();
+            const uint32_t greaterEqual = newId();
+            const uint32_t f2 = newId();
+            const uint32_t f3 = newId();
+            const uint32_t f4 = newId();
+            const uint32_t f5 = newId();
+            const uint32_t f6 = newId();
+            const uint32_t f7 = newId();
+            const uint32_t f8 = newId();
+            const uint32_t pass2 = newId();
+            const uint32_t pass3 = newId();
+            const uint32_t pass4 = newId();
+            const uint32_t pass5 = newId();
+            const uint32_t pass6 = newId();
+            const uint32_t pass7 = newId();
+            const uint32_t passA = newId();
+            const uint32_t passB = newId();
+            const uint32_t passC = newId();
+            const uint32_t passD = newId();
+            const uint32_t passE = newId();
+            const uint32_t passF = newId();
+            const uint32_t discard = newId();
+            const uint32_t killLabel = newId();
+            const uint32_t mergeLabel = newId();
+
+            SpirvAppend(patched, SpvOpLoad, {floatType, alpha, alphaPrivateVariable});
+            SpirvAppend(patched, SpvOpFOrdLessThan, {boolType, less, alpha, refSpec});
+            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, equal, alpha, refSpec});
+            SpirvAppend(patched, SpvOpFOrdLessThanEqual, {boolType, lessEqual, alpha, refSpec});
+            SpirvAppend(patched, SpvOpFOrdGreaterThan, {boolType, greater, alpha, refSpec});
+            SpirvAppend(patched, SpvOpFOrdNotEqual, {boolType, notEqual, alpha, refSpec});
+            SpirvAppend(patched, SpvOpFOrdGreaterThanEqual, {boolType, greaterEqual, alpha, refSpec});
+
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f2, funcSpec, funcConst[2]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f3, funcSpec, funcConst[3]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f4, funcSpec, funcConst[4]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f5, funcSpec, funcConst[5]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f6, funcSpec, funcConst[6]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f7, funcSpec, funcConst[7]});
+            SpirvAppend(patched, SpvOpIEqual, {boolType, f8, funcSpec, funcConst[8]});
+
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass2, f2, less});
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass3, f3, equal});
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass4, f4, lessEqual});
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass5, f5, greater});
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass6, f6, notEqual});
+            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass7, f7, greaterEqual});
+
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passA, pass2, pass3});
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passB, passA, pass4});
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passC, passB, pass5});
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passD, passC, pass6});
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passE, passD, pass7});
+            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passF, passE, f8});
+            SpirvAppend(patched, SpvOpLogicalNot, {boolType, discard, passF});
+            SpirvAppend(patched, SpvOpSelectionMerge, {mergeLabel, 0});
+            SpirvAppend(patched, SpvOpBranchConditional, {discard, killLabel, mergeLabel});
+            SpirvAppend(patched, SpvOpLabel, {killLabel});
+            SpirvAppend(patched, SpvOpKill, {});
+            SpirvAppend(patched, SpvOpLabel, {mergeLabel});
+            injectedReturnTest = true;
         }
 
         patched.insert(patched.end(), words.begin() + i, words.begin() + i + wc);
@@ -1043,53 +1083,8 @@ bool PatchFragmentShaderForAlphaTest(
         i += wc;
     }
 
-    if (!injected)
+    if (!injectedOutputAlpha || !injectedReturnTest)
         return false;
-
-    // This function owns the conditional kill, so an existing loop/selection
-    // header in the source fragment shader remains structurally unchanged.
-    std::vector<uint32_t> helper;
-    helper.reserve(256);
-    SpirvAppend(helper, SpvOpFunction, {voidType, alphaTestFunction, 0, helperFunctionType});
-    SpirvAppend(helper, SpvOpFunctionParameter, {floatType, alphaParam});
-    SpirvAppend(helper, SpvOpLabel, {helperEntryLabel});
-    SpirvAppend(helper, SpvOpFOrdLessThan, {boolType, less, alphaParam, refSpec});
-    SpirvAppend(helper, SpvOpFOrdEqual, {boolType, equal, alphaParam, refSpec});
-    SpirvAppend(helper, SpvOpFOrdLessThanEqual, {boolType, lessEqual, alphaParam, refSpec});
-    SpirvAppend(helper, SpvOpFOrdGreaterThan, {boolType, greater, alphaParam, refSpec});
-    SpirvAppend(helper, SpvOpFOrdNotEqual, {boolType, notEqual, alphaParam, refSpec});
-    SpirvAppend(helper, SpvOpFOrdGreaterThanEqual, {boolType, greaterEqual, alphaParam, refSpec});
-
-    SpirvAppend(helper, SpvOpIEqual, {boolType, f2, funcSpec, funcConst[2]});
-    SpirvAppend(helper, SpvOpIEqual, {boolType, f3, funcSpec, funcConst[3]});
-    SpirvAppend(helper, SpvOpIEqual, {boolType, f4, funcSpec, funcConst[4]});
-    SpirvAppend(helper, SpvOpIEqual, {boolType, f5, funcSpec, funcConst[5]});
-    SpirvAppend(helper, SpvOpIEqual, {boolType, f6, funcSpec, funcConst[6]});
-    SpirvAppend(helper, SpvOpIEqual, {boolType, f7, funcSpec, funcConst[7]});
-    SpirvAppend(helper, SpvOpIEqual, {boolType, f8, funcSpec, funcConst[8]});
-
-    SpirvAppend(helper, SpvOpLogicalAnd, {boolType, pass2, f2, less});
-    SpirvAppend(helper, SpvOpLogicalAnd, {boolType, pass3, f3, equal});
-    SpirvAppend(helper, SpvOpLogicalAnd, {boolType, pass4, f4, lessEqual});
-    SpirvAppend(helper, SpvOpLogicalAnd, {boolType, pass5, f5, greater});
-    SpirvAppend(helper, SpvOpLogicalAnd, {boolType, pass6, f6, notEqual});
-    SpirvAppend(helper, SpvOpLogicalAnd, {boolType, pass7, f7, greaterEqual});
-
-    SpirvAppend(helper, SpvOpLogicalOr, {boolType, passA, pass2, pass3});
-    SpirvAppend(helper, SpvOpLogicalOr, {boolType, passB, passA, pass4});
-    SpirvAppend(helper, SpvOpLogicalOr, {boolType, passC, passB, pass5});
-    SpirvAppend(helper, SpvOpLogicalOr, {boolType, passD, passC, pass6});
-    SpirvAppend(helper, SpvOpLogicalOr, {boolType, passE, passD, pass7});
-    SpirvAppend(helper, SpvOpLogicalOr, {boolType, passF, passE, f8});
-    SpirvAppend(helper, SpvOpLogicalNot, {boolType, discard, passF});
-    SpirvAppend(helper, SpvOpSelectionMerge, {helperMergeLabel, 0});
-    SpirvAppend(helper, SpvOpBranchConditional, {discard, helperKillLabel, helperMergeLabel});
-    SpirvAppend(helper, SpvOpLabel, {helperKillLabel});
-    SpirvAppend(helper, SpvOpKill, {});
-    SpirvAppend(helper, SpvOpLabel, {helperMergeLabel});
-    SpirvAppend(helper, SpvOpReturn, {});
-    SpirvAppend(helper, SpvOpFunctionEnd, {});
-    patched.insert(patched.end(), helper.begin(), helper.end());
 
     char cfgReason[160]{};
     const bool cfgValid = ValidateSpirvPhiEdges(patched, cfgReason, sizeof(cfgReason));
