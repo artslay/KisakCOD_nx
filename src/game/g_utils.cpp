@@ -2130,22 +2130,47 @@ void __cdecl G_PlaySoundAlias(gentity_s *ent, unsigned __int16 index)
 void __cdecl G_SetOrigin(gentity_s *ent, float *origin)
 {
 #ifdef __SWITCH__
-    // Only trace off-map writes. This distinguishes an authored/spawned high
-    // script mover from a later scripted move without flooding normal frames.
+    // The global trace budget used to be consumed by entities deliberately
+    // hidden below the map, hiding the player-linked mover that matters here.
+    // Keep independent, small budgets for the player, high script movers, and
+    // unrelated off-map writes.
     if (ent && (origin[2] >= 4000.0f || origin[2] <= -4000.0f))
     {
-        static unsigned switchOffMapOriginTraceCount = 0;
-        if (switchOffMapOriginTraceCount++ < 16u)
+        static unsigned switchPlayerOriginTraceCount = 0;
+        static unsigned switchScriptMoverOriginTraceCount = 0;
+        static unsigned switchOtherOriginTraceCount = 0;
+        unsigned *traceCount = &switchOtherOriginTraceCount;
+        unsigned traceLimit = 3u;
+        const char *traceKind = "other";
+        if (ent->client)
+        {
+            traceCount = &switchPlayerOriginTraceCount;
+            traceLimit = 12u;
+            traceKind = "player";
+        }
+        else if (static_cast<int>(ent->s.eType) == 5 && origin[2] >= 4000.0f)
+        {
+            // ET value 5 is the script-mover type in this engine.
+            traceCount = &switchScriptMoverOriginTraceCount;
+            traceLimit = 12u;
+            traceKind = "script_mover";
+        }
+        if ((*traceCount)++ < traceLimit)
         {
             Com_Printf(
                 CON_CHANNEL_SERVER,
-                "[KisakCOD][OFFMAP ORIGIN WRITE] ent=%u classId=%u type=%d handler=%u old=(%.2f,%.2f,%.2f) new=(%.2f,%.2f,%.2f) caller=%p\n",
+                "[KisakCOD][OFFMAP ORIGIN WRITE] kind=%s ent=%u classId=%u type=%d handler=%u old=(%.2f,%.2f,%.2f) new=(%.2f,%.2f,%.2f) trType=%d trTime=%d trDuration=%d trDelta=(%.2f,%.2f,%.2f) caller=%p\n",
+                traceKind,
                 static_cast<unsigned>(ent->s.number),
                 static_cast<unsigned>(ent->classname),
                 static_cast<int>(ent->s.eType),
                 static_cast<unsigned>(ent->handler),
                 ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
                 origin[0], origin[1], origin[2],
+                static_cast<int>(ent->s.lerp.pos.trType),
+                ent->s.lerp.pos.trTime,
+                ent->s.lerp.pos.trDuration,
+                ent->s.lerp.pos.trDelta[0], ent->s.lerp.pos.trDelta[1], ent->s.lerp.pos.trDelta[2],
                 static_cast<const void *>(__builtin_return_address(0)));
         }
     }
