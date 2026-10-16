@@ -313,6 +313,17 @@ static bool Switch_IsSerializedAddress(uintptr_t address)
     return false;
 }
 
+static bool Switch_Is32BitSerializedPointerToken(uintptr_t address)
+{
+    if (address <= UINT32_MAX)
+        return true;
+
+    // Some old pointer paths sign-widen 32-bit tokens to 0x00000001xxxxxxxx.
+    const uint32_t high = static_cast<uint32_t>(address >> 32);
+    const uint32_t low = static_cast<uint32_t>(address);
+    return high == 1u && (low & 0x80000000u) != 0;
+}
+
 static bool Switch_IsValidTechniqueSetPointer(
     const MaterialTechniqueSet *techSet)
 {
@@ -320,10 +331,9 @@ static bool Switch_IsValidTechniqueSetPointer(
         reinterpret_cast<uintptr_t>(techSet);
 
     // The Switch renderer's native heap objects live in the 64-bit
-    // address space. A zero-extended 32-bit value is a serialized token,
-    // not a native MaterialTechniqueSet pointer, even when that token is no
-    // longer inside one of the currently tracked stream blocks.
-    if (address <= UINT32_MAX ||
+    // address space. Zero-extended and sign-widened 32-bit values are
+    // serialized tokens, not native MaterialTechniqueSet pointers.
+    if (Switch_Is32BitSerializedPointerToken(address) ||
         (address & (alignof(MaterialTechniqueSet) - 1u)) != 0)
         return false;
 
@@ -356,7 +366,7 @@ static bool Switch_IsValidTechniqueSetName(const char *name)
         return false;
 
     if (!Switch_IsSerializedAddress(address))
-        return address > UINT32_MAX;
+        return !Switch_Is32BitSerializedPointerToken(address);
 
     // Names backed directly by fastfile memory must be a printable,
     // NUL-terminated string inside the containing stream block.
@@ -407,13 +417,14 @@ static void Switch_ResolveSerializedPointer(
         reinterpret_cast<uintptr_t>(*pointer);
 
     const bool addressInStream = Switch_IsSerializedAddress(serializedAddress);
-    const bool zeroExtended32BitToken = serializedAddress <= UINT32_MAX;
+    const bool serialized32BitToken =
+        Switch_Is32BitSerializedPointerToken(serializedAddress);
 
     // A native ARM64 allocation may not have a DB alias entry, so preserve
     // genuine 64-bit pointers outside the serialized stream. But do not mistake
     // a zero-extended 32-bit fastfile token for a native pointer just because
     // its source block is no longer represented in g_streamBlocks.
-    if (!addressInStream && !zeroExtended32BitToken)
+    if (!addressInStream && !serialized32BitToken)
     {
         if (serializedAddress < 0x10000u ||
             (serializedAddress & (alignof(T) - 1u)) != 0)
@@ -464,7 +475,7 @@ static void Switch_ResolveSerializedPointer(
 
         *pointer = reinterpret_cast<T *>(resolvedPointer);
     }
-    else if (addressInStream || zeroExtended32BitToken)
+    else if (addressInStream || serialized32BitToken)
     {
         // Keep serialized references fixable until the native object has been
         // registered in the Switch alias table. This also covers 32-bit offset
@@ -474,7 +485,7 @@ static void Switch_ResolveSerializedPointer(
             serializedAddress,
             reinterpret_cast<uintptr_t *>(pointer));
 
-        if (zeroExtended32BitToken && !addressInStream)
+        if (serialized32BitToken && !addressInStream)
         {
             // This low token was not covered by a live stream block or alias.
             // Keep a small sample to reveal which asset/pointer kind still
