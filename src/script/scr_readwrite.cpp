@@ -1601,8 +1601,8 @@ void __cdecl AddSaveObjectChildren(unsigned int parentId)
     parentType = parentValue->w.type & 0x1F;
     for (i = FindLastSibling(parentId); i; i = FindPrevSibling(i))
     {
-        entryValue = (VariableValueInternal *)((char *)&scrVarGlob.variableList[VARIABLELIST_CHILD_BEGIN]
-            + __ROL4__(scrVarGlob.variableList[i + VARIABLELIST_CHILD_BEGIN].hash.id, 4));
+        entryValue = &scrVarGlob.variableList[
+            scrVarGlob.variableList[i + VARIABLELIST_CHILD_BEGIN].hash.id + VARIABLELIST_CHILD_BEGIN];
         iassert(!IsObject(entryValue));
         if (parentType == VAR_ARRAY)
         {
@@ -1766,8 +1766,8 @@ void __cdecl DoSaveObjectInfo(unsigned int parentId, MemoryFile *memFile)
         MemFile_WriteData(memFile, 2, v18);
         for (j = FindLastSibling(parentId); j; j = FindPrevSibling(j))
         {
-            v14 = (VariableValueInternal *)((char *)&scrVarGlob.variableList[VARIABLELIST_CHILD_BEGIN]
-                + __ROL4__(scrVarGlob.variableList[j + VARIABLELIST_CHILD_BEGIN].hash.id, 4));
+            v14 = &scrVarGlob.variableList[
+                scrVarGlob.variableList[j + VARIABLELIST_CHILD_BEGIN].hash.id + VARIABLELIST_CHILD_BEGIN];
             v15 = v14->w.status & 0x60;
             if (!v15 || v15 == 96)
                 MyAssertHandler(
