@@ -7,6 +7,7 @@
 
 #include <xanim/xanim.h>
 #include <script/scr_vm.h>
+#include <script/scr_parser.h>
 #include "g_main.h"
 #include <script/scr_const.h>
 #include <server/sv_game.h>
@@ -851,6 +852,37 @@ void __cdecl PlayerCmd_setOrigin(scr_entref_t entref)
         }
     }
     Scr_GetVector(0, v3);
+#ifdef __SWITCH__
+    // A large vertical offset drops DPVS outside the map and leaves the frame
+    // with no world surfaces. Capture the originating GSC callsite only for
+    // those abnormal requests; do not alter original script behavior.
+    if (v3[2] >= 4000.0f || v3[2] <= -4000.0f)
+    {
+        char *scriptFile = (char *)"";
+        int scriptLine = 0;
+        const char *codePos = nullptr;
+        if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
+        {
+            codePos = scrVmPub.function_frame->fs.pos;
+            if (codePos)
+                Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
+        }
+        Com_Printf(
+            CON_CHANNEL_SERVER,
+            "[KisakCOD][OFFMAP SETORIGIN] ent=%u arg=(%.2f,%.2f,%.2f) result=(%.2f,%.2f,%.2f) current=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p script=%s:%d codePos=%p\\n",
+            static_cast<unsigned>(v4),
+            v3[0], v3[1], v3[2],
+            v3[0], v3[1], v3[2] + 1.0f,
+            v1->client->ps.origin[0],
+            v1->client->ps.origin[1],
+            v1->client->ps.origin[2],
+            v1->client->ps.pm_type,
+            static_cast<void *>(v1->tagInfo),
+            scriptFile ? scriptFile : "",
+            scriptLine,
+            static_cast<const void *>(codePos));
+    }
+#endif
     SetClientOrigin(v1, v3);
 }
 
