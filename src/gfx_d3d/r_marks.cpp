@@ -947,7 +947,7 @@ void __cdecl R_MarkUtil_GetDObjAnimMatAndHideParts(
     const DObjAnimMat **outBoneMtxList,
     uint32_t *outHidePartBits)
 {
-    char zeroLods[32]; // [esp+30h] [ebp-38h] BYREF
+    signed char zeroLods[32]; // [esp+30h] [ebp-38h] BYREF
     int partBits[4]; // [esp+58h] [ebp-10h] BYREF
 
     PROF_SCOPED("R_MarkUtil_GetDObjAnimMatAndHideParts");
