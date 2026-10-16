@@ -574,7 +574,7 @@ void __cdecl ClientSpawn(gentity_s *ent)
     if (ent->tagInfo)
     {
         Com_Printf(CON_CHANNEL_SERVER,
-            "[KisakCOD][PLAYER SPAWN LINK] ent=%d existingTagInfo=%p ps=(%.2f,%.2f,%.2f) pm=%d\\n",
+            "[KisakCOD][PLAYER SPAWN LINK] ent=%d existingTagInfo=%p ps=(%.2f,%.2f,%.2f) pm=%d\n",
             v3, static_cast<void *>(ent->tagInfo),
             client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
             client->ps.pm_type);
@@ -710,7 +710,7 @@ void __cdecl ClientSpawn(gentity_s *ent)
     if (switchTraceThisSpawn)
     {
         Com_Printf(CON_CHANNEL_SERVER,
-            "[KisakCOD][PLAYER SPAWN] after_endframe ps=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p ent=(%.2f,%.2f,%.2f)\\n",
+            "[KisakCOD][PLAYER SPAWN] after_endframe ps=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p ent=(%.2f,%.2f,%.2f)\n",
             client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
             client->ps.pm_type, static_cast<void *>(ent->tagInfo),
             ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2]);
