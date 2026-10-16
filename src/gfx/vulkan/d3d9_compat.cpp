@@ -3788,7 +3788,10 @@ bool IDirect3DDevice9::EnsurePipeline()
                 pixelSpirv,
                 &pipelineAlphaFuncSpecId,
                 &pipelineAlphaRefSpecId,
-                m_backend->SupportsShaderDemoteToHelperInvocation()))
+                // This alpha-test block is injected at the original function return,
+                // after shader calculations and side effects. OpKill preserves the
+                // intended discard semantics while avoiding NVK's suspect demote path.
+                false))
         {
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
             return false;
