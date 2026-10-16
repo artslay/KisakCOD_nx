@@ -851,6 +851,40 @@ LABEL_15:
                 surfType = SF_XMODEL_SKINNED;
                 surfSize = sizeof(GfxModelSkinnedSurface);
             }
+#ifdef __SWITCH__
+            const uintptr_t materialAddress = reinterpret_cast<uintptr_t>(*material);
+            if (materialAddress < 0x10000u)
+            {
+                const XModelLodInfo *materialLodInfo =
+                    lod >= 0 && lod < MAX_LODS ? &model->lodInfo[lod] : nullptr;
+                const uint32_t materialSurfaceIndex =
+                    materialLodInfo ? static_cast<uint32_t>(materialLodInfo->surfIndex) + subMatIndex : subMatIndex;
+                Com_Printf(
+                    CON_CHANNEL_ANIM,
+                    "[KisakCOD][DOBJ INVALID MATERIAL] model=%s modelPtr=%p modelIndex=%u lod=%d lodSurfIndex=%u lodSurfCount=%u modelSurfs=%u materialHandles=%p materialSlot=%p material=%p surfaceIndex=%u modelSurf=%p sentinel=%d\\n",
+                    model->name ? model->name : "(null)",
+                    static_cast<const void *>(model),
+                    modelIndex,
+                    lod,
+                    materialLodInfo ? static_cast<unsigned>(materialLodInfo->surfIndex) : 0u,
+                    materialLodInfo ? static_cast<unsigned>(materialLodInfo->numsurfs) : 0u,
+                    static_cast<unsigned>(model->numsurfs),
+                    static_cast<const void *>(model->materialHandles),
+                    static_cast<void *>(material),
+                    static_cast<void *>(*material),
+                    materialSurfaceIndex,
+                    static_cast<void *>(modelSurf),
+                    *reinterpret_cast<const int32_t *>(modelSurf));
+                Com_Error(
+                    ERR_DROP,
+                    "R_AddDObjSurfacesCamera: invalid Material pointer %p for XModel %s (LOD %d surface %u)",
+                    static_cast<void *>(*material),
+                    model->name ? model->name : "(null)",
+                    lod,
+                    materialSurfaceIndex);
+                return;
+            }
+#endif
             iassert(*material);
             iassert(rgp.sortedMaterials[(*material)->info.drawSurf.fields.materialSortedIndex] == *material);
             region = (*material)->cameraRegion;
