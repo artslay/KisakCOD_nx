@@ -504,6 +504,144 @@ bool SpirvIsValidInstruction(const std::vector<uint32_t> &words, size_t offset, 
     return true;
 }
 
+// Validate the control-flow edges most likely to be affected by the alpha-test
+// rewrite. This is intentionally diagnostic: it does not attempt to replace
+// SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
+// module and reports the exact block IDs in kisakcod.log.
+bool ValidateSpirvPhiEdges(
+    const std::vector<uint32_t> &words,
+    char *reason,
+    size_t reasonCapacity)
+{
+    struct BasicBlock
+    {
+        uint32_t label = 0;
+        std::vector<uint32_t> successors;
+    };
+    struct PhiInfo
+    {
+        uint32_t block = 0;
+        std::vector<uint32_t> parents;
+    };
+
+    std::vector<BasicBlock> blocks;
+    std::vector<PhiInfo> phis;
+    std::unordered_map<uint32_t, size_t> blockIndices;
+    bool inFunction = false;
+    size_t currentBlock = std::numeric_limits<size_t>::max();
+
+    auto fail = [&](const char *kind, uint32_t block, uint32_t edge)
+    {
+        if (reason && reasonCapacity)
+            std::snprintf(reason, reasonCapacity,
+                "%s block=%u edge=%u", kind, block, edge);
+        return false;
+    };
+
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return fail("malformed_instruction", 0, static_cast<uint32_t>(i));
+
+        const uint32_t *ins = &words[i];
+        if (op == SpvOpFunction)
+        {
+            inFunction = true;
+            currentBlock = std::numeric_limits<size_t>::max();
+        }
+        else if (op == SpvOpLabel && inFunction && wc >= 2)
+        {
+            const uint32_t label = ins[1];
+            if (blockIndices.find(label) != blockIndices.end())
+                return fail("duplicate_label", label, 0);
+            currentBlock = blocks.size();
+            blockIndices.emplace(label, currentBlock);
+            blocks.push_back({label, {}});
+        }
+        else if (inFunction && currentBlock != std::numeric_limits<size_t>::max())
+        {
+            BasicBlock &block = blocks[currentBlock];
+            if (op == SpvOpPhi)
+            {
+                if (wc < 5 || ((wc - 3u) % 2u) != 0u)
+                    return fail("malformed_phi", block.label, wc);
+                PhiInfo phi;
+                phi.block = block.label;
+                for (uint32_t operand = 3; operand + 1 < wc; operand += 2)
+                    phi.parents.push_back(ins[operand + 1]);
+                phis.push_back(std::move(phi));
+            }
+            else if (op == SpvOpBranch && wc >= 2)
+            {
+                block.successors.push_back(ins[1]);
+            }
+            else if (op == SpvOpBranchConditional && wc >= 4)
+            {
+                block.successors.push_back(ins[2]);
+                block.successors.push_back(ins[3]);
+            }
+            else if (op == SpvOpSwitch && wc >= 3)
+            {
+                // MojoShader's SPIR-V output uses 32-bit selectors; each case
+                // has one literal followed by a target label.
+                block.successors.push_back(ins[2]);
+                for (uint32_t operand = 3; operand + 1 < wc; operand += 2)
+                    block.successors.push_back(ins[operand + 1]);
+            }
+        }
+
+        if (op == SpvOpFunctionEnd)
+        {
+            inFunction = false;
+            currentBlock = std::numeric_limits<size_t>::max();
+        }
+        i += wc;
+    }
+
+    std::unordered_map<uint32_t, std::unordered_set<uint32_t>> predecessors;
+    for (const BasicBlock &block : blocks)
+    {
+        for (const uint32_t successor : block.successors)
+        {
+            if (blockIndices.find(successor) == blockIndices.end())
+                return fail("branch_target_missing", block.label, successor);
+            predecessors[successor].insert(block.label);
+        }
+    }
+
+    for (const PhiInfo &phi : phis)
+    {
+        std::unordered_set<uint32_t> incoming;
+        for (const uint32_t parent : phi.parents)
+        {
+            if (!incoming.insert(parent).second)
+                return fail("duplicate_phi_parent", phi.block, parent);
+            const auto predIt = predecessors.find(phi.block);
+            if (predIt == predecessors.end() ||
+                predIt->second.find(parent) == predIt->second.end())
+                return fail("phi_not_predecessor", phi.block, parent);
+        }
+
+        const auto predIt = predecessors.find(phi.block);
+        if (predIt != predecessors.end())
+        {
+            for (const uint32_t parent : predIt->second)
+            {
+                if (incoming.find(parent) == incoming.end())
+                    return fail("phi_missing_predecessor", phi.block, parent);
+            }
+        }
+    }
+
+    if (reason && reasonCapacity)
+        std::snprintf(reason, reasonCapacity, "ok blocks=%u phis=%u",
+            static_cast<unsigned int>(blocks.size()),
+            static_cast<unsigned int>(phis.size()));
+    return true;
+}
+
 bool PatchFragmentShaderForAlphaTest(
     std::vector<uint32_t> &words,
     uint32_t *alphaFuncSpecId,
@@ -942,6 +1080,14 @@ bool PatchFragmentShaderForAlphaTest(
             i += wc;
         }
     }
+
+    char cfgReason[160]{};
+    const bool cfgValid = ValidateSpirvPhiEdges(patched, cfgReason, sizeof(cfgReason));
+    char cfgMessage[224];
+    std::snprintf(cfgMessage, sizeof(cfgMessage),
+        "[KisakCOD][VK ALPHA SPIRV CFG] valid=%u %s\n",
+        cfgValid ? 1u : 0u, cfgReason);
+    Switch_LogWrite(cfgMessage);
 
     words.swap(patched);
     words[3] = nextId;
