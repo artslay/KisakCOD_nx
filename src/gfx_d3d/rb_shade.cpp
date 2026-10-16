@@ -11,11 +11,46 @@
 #include <universal/profile.h>
 
 #ifdef __SWITCH__
+#include <cstdio>
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
 extern const Material *Switch_ValidateMaterialPointerForRender(
     const Material *material,
     const char *source);
+
+// Log only suspect low addresses before RB_BeginSurface's safe fallback. This
+// identifies whether a bad Material* first arrives through tess setup or was
+// already corrupted in the saved overflow state; it never dereferences it.
+static void SwitchTraceLowMaterialInput(
+    const char *source,
+    const Material *material,
+    MaterialTechniqueType techType,
+    const void *caller)
+{
+    const uintptr_t address = reinterpret_cast<uintptr_t>(material);
+    if (!address || address > UINT32_MAX)
+        return;
+
+    static uint32_t traceCount = 0;
+    if (traceCount >= 32u)
+        return;
+
+    char trace[448];
+    std::snprintf(
+        trace, sizeof(trace),
+        "[KisakCOD][MATERIAL INPUT] source=%s ptr=%p techType=%u caller=%p savedOrig=%p/%u tess=%u/%u stage=%s\\n",
+        source ? source : "<unknown>",
+        static_cast<const void *>(material),
+        static_cast<unsigned>(techType),
+        caller,
+        static_cast<const void *>(gfxCmdBufState.origMaterial),
+        static_cast<unsigned>(gfxCmdBufState.origTechType),
+        static_cast<unsigned>(tess.vertexCount),
+        static_cast<unsigned>(tess.indexCount),
+        g_switchFrameStage ? g_switchFrameStage : "<null>");
+    Switch_LogWrite(trace);
+    ++traceCount;
+}
 #endif
 
 
@@ -84,6 +119,10 @@ void __cdecl RB_ClearVertexDecl()
 
 void __cdecl RB_SetTessTechnique(const Material *material, MaterialTechniqueType techType)
 {
+#ifdef __SWITCH__
+    SwitchTraceLowMaterialInput(
+        "RB_SetTessTechnique", material, techType, __builtin_return_address(0));
+#endif
     iassert(material);
     if (gfxCmdBufState.origMaterial != material || gfxCmdBufState.origTechType != techType)
     {
@@ -296,6 +335,13 @@ void __cdecl RB_TessOverflow()
 {
     GfxPrimStats *primStats; // [esp+0h] [ebp-4h]
 
+#ifdef __SWITCH__
+    SwitchTraceLowMaterialInput(
+        "RB_TessOverflow",
+        gfxCmdBufState.origMaterial,
+        gfxCmdBufState.origTechType,
+        __builtin_return_address(0));
+#endif
     primStats = g_primStats;
     RB_EndTessSurface();
     RB_BeginSurface(gfxCmdBufState.origMaterial, gfxCmdBufState.origTechType);
