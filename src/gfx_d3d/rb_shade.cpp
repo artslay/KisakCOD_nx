@@ -38,7 +38,7 @@ static void SwitchTraceLowMaterialInput(
     char trace[448];
     std::snprintf(
         trace, sizeof(trace),
-        "[KisakCOD][MATERIAL INPUT] source=%s ptr=%p techType=%u caller=%p savedOrig=%p/%u tess=%u/%u stage=%s\\n",
+        "[KisakCOD][MATERIAL INPUT] source=%s ptr=%p techType=%u caller=%p savedOrig=%p/%u tess=%u/%u stage=%s\n",
         source ? source : "<unknown>",
         static_cast<const void *>(material),
         static_cast<unsigned>(techType),
