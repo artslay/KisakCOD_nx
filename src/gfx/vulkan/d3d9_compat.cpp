@@ -4505,6 +4505,81 @@ bool IDirect3DDevice9::EnsurePipeline()
                     static_cast<int>(noSpecModuleResult),
                     static_cast<int>(noSpecPipelineResult), removedSpecInstructions);
                 Switch_LogWrite(noSpecMsg);
+
+                // NVK can fail compiling a module that retains unused globals
+                // emitted for the alpha expression. Remove the now-dead integer
+                // constants (and an integer type if this patch introduced it)
+                // from the mathless shader to test extraction + discard CFG alone.
+                const uint32_t originalIdBound = unpatchedPixelSpirvForProbe.size() > 3
+                    ? unpatchedPixelSpirvForProbe[3] : UINT32_MAX;
+                std::unordered_set<uint32_t> integerTypeIds;
+                for (size_t i = 5; i < noSpecSpirv.size();)
+                {
+                    uint32_t wc = 0;
+                    SpvOp op{};
+                    if (!SpirvIsValidInstruction(noSpecSpirv, i, &wc, &op))
+                        break;
+                    const uint32_t *ins = &noSpecSpirv[i];
+                    if (op == SpvOpTypeInt && wc >= 4)
+                        integerTypeIds.insert(ins[1]);
+                    i += wc;
+                }
+
+                std::vector<uint32_t> cleanAlphaSpirv;
+                cleanAlphaSpirv.reserve(noSpecSpirv.size());
+                cleanAlphaSpirv.insert(cleanAlphaSpirv.end(),
+                    noSpecSpirv.begin(), noSpecSpirv.begin() + 5);
+                uint32_t removedDeadIntegerGlobals = 0;
+                for (size_t i = 5; i < noSpecSpirv.size();)
+                {
+                    uint32_t wc = 0;
+                    SpvOp op{};
+                    if (!SpirvIsValidInstruction(noSpecSpirv, i, &wc, &op))
+                        break;
+                    const uint32_t *ins = &noSpecSpirv[i];
+                    const bool injectedIntegerConstant =
+                        op == SpvOpConstant && wc >= 4 &&
+                        ins[2] >= originalIdBound && integerTypeIds.count(ins[1]) != 0;
+                    const bool injectedIntegerType =
+                        op == SpvOpTypeInt && wc >= 4 && ins[1] >= originalIdBound;
+                    if (injectedIntegerConstant || injectedIntegerType)
+                        ++removedDeadIntegerGlobals;
+                    else
+                        cleanAlphaSpirv.insert(cleanAlphaSpirv.end(),
+                            noSpecSpirv.begin() + i, noSpecSpirv.begin() + i + wc);
+                    i += wc;
+                }
+
+                VkResult cleanModuleResult = VK_ERROR_UNKNOWN;
+                VkResult cleanPipelineResult = VK_ERROR_UNKNOWN;
+                VkShaderModule cleanModule = VK_NULL_HANDLE;
+                VkShaderModuleCreateInfo cleanModuleInfo{};
+                cleanModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                cleanModuleInfo.codeSize = cleanAlphaSpirv.size() * sizeof(uint32_t);
+                cleanModuleInfo.pCode = cleanAlphaSpirv.data();
+                cleanModuleResult = vkCreateShaderModule(
+                    m_backend->Device(), &cleanModuleInfo, nullptr, &cleanModule);
+                cleanPipelineResult = cleanModuleResult;
+                VkPipeline cleanPipeline = VK_NULL_HANDLE;
+                if (cleanModuleResult == VK_SUCCESS)
+                {
+                    VkPipelineShaderStageCreateInfo cleanStages[2] = {stages[0], stages[1]};
+                    cleanStages[1].module = cleanModule;
+                    cleanStages[1].pSpecializationInfo = nullptr;
+                    VkGraphicsPipelineCreateInfo cleanInfo = info;
+                    cleanInfo.pStages = cleanStages;
+                    cleanPipelineResult = vkCreateGraphicsPipelines(
+                        m_backend->Device(), VK_NULL_HANDLE, 1, &cleanInfo, nullptr, &cleanPipeline);
+                    if (cleanPipeline)
+                        vkDestroyPipeline(m_backend->Device(), cleanPipeline, nullptr);
+                    vkDestroyShaderModule(m_backend->Device(), cleanModule, nullptr);
+                }
+                char cleanMsg[192];
+                std::snprintf(cleanMsg, sizeof(cleanMsg),
+                    "[KisakCOD][VK DRAW] pipeline_probe alpha_math_removed_clean_globals module=%d pipeline=%d removed=%u\n",
+                    static_cast<int>(cleanModuleResult),
+                    static_cast<int>(cleanPipelineResult), removedDeadIntegerGlobals);
+                Switch_LogWrite(cleanMsg);
             }
         }
 
