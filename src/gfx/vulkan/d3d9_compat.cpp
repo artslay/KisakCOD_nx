@@ -3883,6 +3883,114 @@ bool IDirect3DDevice9::EnsurePipeline()
             }
         }
 
+        // Probe 1c: make the injected alpha-test branch condition a constant.
+        // If pipeline creation succeeds here, declarations/control flow are
+        // accepted and the dynamic alpha comparison expression is the culprit.
+        if (!m_pixelShader->spirv.empty())
+        {
+            std::vector<uint32_t> constantAlphaCondition = m_pixelShader->spirv;
+            uint32_t boolTypeId = 0;
+            size_t firstGlobalVariable = constantAlphaCondition.size();
+            for (size_t i = 5; i < constantAlphaCondition.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(constantAlphaCondition, i, &wc, &op))
+                    break;
+                const uint32_t *ins = &constantAlphaCondition[i];
+                if (op == SpvOpTypeBool && wc >= 2)
+                    boolTypeId = ins[1];
+                if (firstGlobalVariable == constantAlphaCondition.size() &&
+                    (op == SpvOpVariable || op == SpvOpFunction))
+                    firstGlobalVariable = i;
+                i += wc;
+            }
+
+            if (boolTypeId && firstGlobalVariable < constantAlphaCondition.size())
+            {
+                const uint32_t constantTrueId = constantAlphaCondition[3]++;
+                std::vector<uint32_t> constantTrueWords;
+                SpirvAppend(constantTrueWords, SpvOpConstantTrue, {boolTypeId, constantTrueId});
+                constantAlphaCondition.insert(
+                    constantAlphaCondition.begin() + firstGlobalVariable,
+                    constantTrueWords.begin(), constantTrueWords.end());
+
+                size_t lastSelectionMerge = constantAlphaCondition.size();
+                for (size_t i = 5; i < constantAlphaCondition.size();)
+                {
+                    uint32_t wc = 0;
+                    SpvOp op{};
+                    if (!SpirvIsValidInstruction(constantAlphaCondition, i, &wc, &op))
+                        break;
+                    if (op == SpvOpSelectionMerge)
+                        lastSelectionMerge = i;
+                    i += wc;
+                }
+
+                bool replacedCondition = false;
+                if (lastSelectionMerge < constantAlphaCondition.size())
+                {
+                    for (size_t i = lastSelectionMerge; i < constantAlphaCondition.size();)
+                    {
+                        uint32_t wc = 0;
+                        SpvOp op{};
+                        if (!SpirvIsValidInstruction(constantAlphaCondition, i, &wc, &op))
+                            break;
+                        if (op == SpvOpBranchConditional && wc >= 4)
+                        {
+                            constantAlphaCondition[i + 1] = constantTrueId;
+                            replacedCondition = true;
+                            break;
+                        }
+                        if (op == SpvOpLabel)
+                            break;
+                        i += wc;
+                    }
+                }
+
+                VkResult constantConditionModuleResult = VK_ERROR_UNKNOWN;
+                VkResult constantConditionPipelineResult = VK_ERROR_UNKNOWN;
+                if (replacedCondition)
+                {
+                    VkShaderModule testModule = VK_NULL_HANDLE;
+                    VkShaderModuleCreateInfo testModuleInfo{};
+                    testModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                    testModuleInfo.codeSize = constantAlphaCondition.size() * sizeof(uint32_t);
+                    testModuleInfo.pCode = constantAlphaCondition.data();
+                    constantConditionModuleResult = vkCreateShaderModule(
+                        m_backend->Device(), &testModuleInfo, nullptr, &testModule);
+                    constantConditionPipelineResult = constantConditionModuleResult;
+                    VkPipeline testPipeline = VK_NULL_HANDLE;
+                    if (constantConditionModuleResult == VK_SUCCESS)
+                    {
+                        VkPipelineShaderStageCreateInfo testStages[2] = {stages[0], stages[1]};
+                        testStages[1].module = testModule;
+                        testStages[1].pSpecializationInfo = nullptr;
+                        VkGraphicsPipelineCreateInfo testInfo = info;
+                        testInfo.pStages = testStages;
+                        constantConditionPipelineResult = vkCreateGraphicsPipelines(
+                            m_backend->Device(), VK_NULL_HANDLE, 1, &testInfo, nullptr, &testPipeline);
+                        if (testPipeline)
+                            vkDestroyPipeline(m_backend->Device(), testPipeline, nullptr);
+                        vkDestroyShaderModule(m_backend->Device(), testModule, nullptr);
+                    }
+                }
+
+                char conditionMsg[192];
+                std::snprintf(
+                    conditionMsg, sizeof(conditionMsg),
+                    "[KisakCOD][VK DRAW] pipeline_probe alpha_condition_true module=%d pipeline=%d replaced=%u\\n",
+                    static_cast<int>(constantConditionModuleResult),
+                    static_cast<int>(constantConditionPipelineResult),
+                    replacedCondition ? 1u : 0u);
+                Switch_LogWrite(conditionMsg);
+            }
+            else
+            {
+                Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_probe alpha_condition_true skipped=no_bool_type\\n");
+            }
+        }
+
         // Probe 2: use the linked fragment SPIR-V before the custom alpha-test
         // instructions were inserted, with specialization disabled. This is
         // intentionally diagnostic only; the result is not used for rendering.
