@@ -69,7 +69,63 @@ int  R_PreSkinXSurface(
         iassert(&rigidSurf->surf == reinterpret_cast<GfxModelSkinnedSurface *>(surfPos));
         rigidSurf->placement.scale = 1.0;
         RotTransArray = &DObjGetRotTransArray(obj)[surfaceInfo->boneIndex];
-        offset = surf->vertList->boneOffset >> 6;
+        const uintptr_t vertListAddress = reinterpret_cast<uintptr_t>(surf->vertList);
+        if (surf->vertList && vertListAddress > UINT32_MAX)
+        {
+            offset = surf->vertList->boneOffset >> 6;
+        }
+        else
+        {
+#ifdef KISAK_SWITCH
+            // For a rigid surface, partBits encodes the same single bone as
+            // XRigidVertList::boneOffset. Recover it if a serialized 32-bit
+            // offset leaked through instead of becoming a native pointer.
+            uint32_t recoveredBone = 0;
+            uint32_t setBoneCount = 0;
+            for (uint32_t word = 0; word < 4; ++word)
+            {
+                const uint32_t bits = static_cast<uint32_t>(surf->partBits[word]);
+                for (uint32_t bit = 0; bit < 32; ++bit)
+                {
+                    if (bits & (0x80000000u >> bit))
+                    {
+                        recoveredBone = word * 32u + bit;
+                        ++setBoneCount;
+                    }
+                }
+            }
+
+            if (setBoneCount != 1 || recoveredBone >= surfaceInfo->boneCount)
+            {
+                Com_Error(
+                    ERR_DROP,
+                    "Invalid rigid XSurface vertList %p and bone partBits (count=%u, modelBones=%u)",
+                    static_cast<void *>(surf->vertList),
+                    setBoneCount,
+                    surfaceInfo->boneCount);
+                return 0;
+            }
+
+            static uint32_t switchInvalidVertListTraceCount = 0;
+            if (switchInvalidVertListTraceCount++ < 8u)
+            {
+                Com_Printf(
+                    CON_CHANNEL_ANIM,
+                    "[KisakCOD][XSURFACE RIGID BONE] invalidVertList=%p vertListCount=%u recoveredBone=%u modelBones=%u partBits=%08x,%08x,%08x,%08x\n",
+                    static_cast<void *>(surf->vertList),
+                    surf->vertListCount,
+                    recoveredBone,
+                    surfaceInfo->boneCount,
+                    static_cast<uint32_t>(surf->partBits[0]),
+                    static_cast<uint32_t>(surf->partBits[1]),
+                    static_cast<uint32_t>(surf->partBits[2]),
+                    static_cast<uint32_t>(surf->partBits[3]));
+            }
+            offset = static_cast<int>(recoveredBone);
+#else
+            offset = surf->vertList->boneOffset >> 6;
+#endif
+        }
         mat = &surfaceInfo->baseMat[offset];
 
         DObjSkelMat invBaseMat;
