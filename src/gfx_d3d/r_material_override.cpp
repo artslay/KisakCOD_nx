@@ -594,26 +594,43 @@ void Switch_InitializeLoadedTechniqueSetForRender(
 
 // Resolve suspect serialized references at the renderer boundary as well as
 // at asset registration: some alias/fixup paths can expose a 32-bit token late.
+static void Switch_LogTechniqueRenderReject(
+    const char *kind,
+    const MaterialTechniqueSet *techSet,
+    uint32_t techType,
+    const void *value);
+
 template <typename T>
 static void Switch_ResolvePointerForRenderIfNeeded(T **pointer, const char *kind)
 {
     if (!pointer || !*pointer)
         return;
 
-    uintptr_t address = reinterpret_cast<uintptr_t>(*pointer);
-    if (!Switch_IsSerializedAddress(address) &&
-        !Switch_Is32BitSerializedPointerToken(address))
+    const uintptr_t originalAddress = reinterpret_cast<uintptr_t>(*pointer);
+    if (!Switch_IsSerializedAddress(originalAddress) &&
+        !Switch_Is32BitSerializedPointerToken(originalAddress))
         return;
 
     DB_FixupSwitchPointerAliases();
     if (!*pointer)
+    {
+        Switch_LogTechniqueRenderReject(
+            kind, nullptr, UINT32_MAX,
+            reinterpret_cast<const void *>(originalAddress));
         return;
+    }
 
-    address = reinterpret_cast<uintptr_t>(*pointer);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(*pointer);
     if (Switch_IsSerializedAddress(address) ||
         Switch_Is32BitSerializedPointerToken(address))
     {
         Switch_ResolveSerializedPointer(pointer, kind);
+        if (!*pointer)
+        {
+            Switch_LogTechniqueRenderReject(
+                kind, nullptr, UINT32_MAX,
+                reinterpret_cast<const void *>(originalAddress));
+        }
     }
 }
 
