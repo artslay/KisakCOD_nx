@@ -887,6 +887,21 @@ static bool Switch_IsValidMaterialPointerForRender(const Material *material)
            material == rgp.cinematicMaterial;
 }
 
+const Material *Switch_ValidateMaterialPointerForRender(
+    const Material *material,
+    const char *source)
+{
+    if (Switch_IsValidMaterialPointerForRender(material))
+        return material;
+
+    Switch_LogTechniqueRenderReject(
+        source ? source : "materialPointer",
+        nullptr,
+        UINT32_MAX,
+        material);
+    return rgp.defaultMaterial;
+}
+
 MaterialTechniqueSet *Switch_ResolveMaterialTechniqueSetForRender(Material *material)
 {
     g_switchFrameStage = "frame/render/technique_resolve/set_entry";
