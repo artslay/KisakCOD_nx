@@ -4203,14 +4203,14 @@ bool IDirect3DDevice9::EnsurePipeline()
 
                 char extractMsg[192];
                 std::snprintf(extractMsg, sizeof(extractMsg),
-                    "[KisakCOD][VK DRAW] pipeline_probe alpha_extract_only module=%d pipeline=%d stores=%u\\n",
+                    "[KisakCOD][VK DRAW] pipeline_probe alpha_extract_only module=%d pipeline=%d stores=%u\n",
                     static_cast<int>(extractModuleResult),
                     static_cast<int>(extractPipelineResult), extractCount);
                 Switch_LogWrite(extractMsg);
             }
             else
             {
-                Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_probe alpha_extract_only skipped=no_vec4_output\\n");
+                Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_probe alpha_extract_only skipped=no_vec4_output\n");
             }
         }
 
