@@ -289,7 +289,7 @@ struct scr_entref_t // sizeof=0x4
 static_assert(sizeof(scr_entref_t) == 0x4);
 #endif
 
-struct scr_classStruct_t // sizeof=0xC
+struct scr_classStruct_t // sizeof=0xC on 32-bit, 0x10 on Switch
 {
     scr_classStruct_t(uint16_t _id, uint16_t _entArrayId, char _charID, const char* _name)
     {
@@ -306,7 +306,9 @@ struct scr_classStruct_t // sizeof=0xC
     // padding byte
     const char *name;
 };
-#ifndef __SWITCH__
+#ifdef __SWITCH__
+static_assert(sizeof(scr_classStruct_t) == 0x10, "scr_classStruct_t must include the native-width name pointer");
+#else
 static_assert(sizeof(scr_classStruct_t) == 0xC);
 #endif
 
