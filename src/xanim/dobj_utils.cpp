@@ -16,7 +16,7 @@ int __cdecl DObjGetNumModels(const DObj_s *obj)
     return obj->numModels;
 }
 
-int __cdecl DObjGetSurfaces(const DObj_s *obj, int *partBits, const char *lods)
+int __cdecl DObjGetSurfaces(const DObj_s *obj, int *partBits, const signed char *lods)
 {
     int j; // [esp+0h] [ebp-4Ch]
     int numBones; // [esp+4h] [ebp-48h]
@@ -39,7 +39,7 @@ int __cdecl DObjGetSurfaces(const DObj_s *obj, int *partBits, const char *lods)
     model = *models;
     numBones = XModelNumBones(*models);
     lod = *lods;
-    if (lod < 0)
+    if (lod < 0 || lod >= MAX_LODS)
     {
         surfaceCount = 0;
         partBits[0] = 0;
@@ -62,7 +62,7 @@ int __cdecl DObjGetSurfaces(const DObj_s *obj, int *partBits, const char *lods)
         modela = models[j];
         numBonesa = XModelNumBones(modela);
         loda = lods[j];
-        if (loda >= 0)
+        if (loda >= 0 && loda < MAX_LODS)
         {
             surfaceCount += modela->lodInfo[loda].numsurfs;
 
@@ -97,7 +97,7 @@ int __cdecl DObjGetSurfaces(const DObj_s *obj, int *partBits, const char *lods)
     return surfaceCount;
 }
 
-void __cdecl DObjGetSurfaceData(const DObj_s *obj, const float *origin, float scale, char *lods)
+void __cdecl DObjGetSurfaceData(const DObj_s *obj, const float *origin, float scale, signed char *lods)
 {
     XModelLodRampType lodRampType; // [esp+Ch] [ebp-18h]
     XModel *model; // [esp+10h] [ebp-14h]
