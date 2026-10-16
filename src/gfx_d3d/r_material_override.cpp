@@ -354,7 +354,7 @@ static bool Switch_IsValidTechniqueSetName(const char *name)
         return false;
 
     if (!Switch_IsSerializedAddress(address))
-        return true;
+        return address > UINT32_MAX;
 
     // Names backed directly by fastfile memory must be a printable,
     // NUL-terminated string inside the containing stream block.
@@ -471,6 +471,30 @@ static void Switch_ResolveSerializedPointer(
         DB_AddSwitchPointerAliasFixup(
             serializedAddress,
             reinterpret_cast<uintptr_t *>(pointer));
+
+        if (zeroExtended32BitToken && !addressInStream)
+        {
+            // This low token was not covered by a live stream block or alias.
+            // Keep a small sample to reveal which asset/pointer kind still
+            // has an unresolved serialized reference without flooding the log.
+            static uint32_t unresolvedTokenTraceCount = 0;
+            if (unresolvedTokenTraceCount < 16)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][UNRESOLVED MATERIAL POINTER] kind=%s token=%p destination=%p asset=%d rawType=%u\n",
+                    kind ? kind : "<unknown>",
+                    reinterpret_cast<const void *>(serializedAddress),
+                    static_cast<void *>(pointer),
+                    g_switchCurrentAssetIndex,
+                    static_cast<unsigned>(g_switchCurrentAssetRawType));
+                Switch_LogWrite(trace);
+                ++unresolvedTokenTraceCount;
+            }
+        }
+
         *pointer = nullptr;
     }
     else
