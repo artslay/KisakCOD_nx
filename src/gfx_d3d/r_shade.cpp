@@ -116,6 +116,8 @@ void __cdecl R_SetupPassPerPrimArgs(GfxCmdBufContext context)
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
+    if (!pass)
+        return;
     if (pass->perPrimArgCount && pass->args)
         R_SetPassShaderPrimArguments(context, pass->perPrimArgCount, pass->args);
 }
@@ -291,6 +293,8 @@ void __cdecl R_SetupPassPerObjectArgs(GfxCmdBufContext context)
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
+    if (!pass)
+        return;
     if (pass->perObjArgCount && pass->args)
         R_SetPassShaderObjectArguments(context, pass->perObjArgCount, &pass->args[pass->perPrimArgCount]);
 }
@@ -385,6 +389,8 @@ void __cdecl R_SetupPassCriticalPixelShaderArgs(GfxCmdBufContext context)
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
+    if (!pass)
+        return;
     if (pass->stableArgCount && pass->args)
         R_SetPassPixelShaderStableArguments(
             context,
@@ -397,6 +403,8 @@ void __cdecl R_SetupPassVertexShaderArgs(GfxCmdBufContext context)
     const MaterialPass *pass; // [esp+0h] [ebp-4h]
 
     pass = context.state->pass;
+    if (!pass)
+        return;
     if (pass->stableArgCount && pass->args)
         R_SetPassVertexShaderStableArguments(
             context,
@@ -563,6 +571,7 @@ void __cdecl R_UpdateVertexDecl(GfxCmdBufState *state)
         g_switchFrameStage = "frame/render/update_vertex_decl/rejected_pass";
         return;
     }
+    g_switchFrameStage = "frame/render/update_vertex_decl/pass_valid";
 #endif
     pass = state->pass;
     iassert( pass->vertexDecl );
@@ -610,6 +619,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     if (!Switch_ResolveMaterialPassArgsForRender(
             const_cast<MaterialPass *>(pass)))
     {
+        context.state->pass = nullptr;
         g_switchFrameStage = "frame/render/setup_pass/rejected";
         return;
     }
