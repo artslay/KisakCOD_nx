@@ -11,6 +11,7 @@
 extern void Switch_LogWrite(const char *msg);
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
+extern thread_local const char *g_switchFrameStage;
 #endif
 
 $4ABF24606230B73E4E420CE33A1F14B1 mtlOverrideGlob;
@@ -611,6 +612,7 @@ static void Switch_ResolvePointerForRenderIfNeeded(T **pointer, const char *kind
         !Switch_Is32BitSerializedPointerToken(originalAddress))
         return;
 
+    g_switchFrameStage = "frame/render/technique_resolve/resolve_field";
     // Resolve just this field. Running the global deferred-fixup queue from a
     // render query may revisit pointer destinations whose owning assets have
     // already changed; the direct alias/chain resolver below either returns a
@@ -651,6 +653,7 @@ static void Switch_LogTechniqueRenderReject(
 
 MaterialTechniqueSet *Switch_ResolveMaterialTechniqueSetForRender(Material *material)
 {
+    g_switchFrameStage = "frame/render/technique_resolve/set_entry";
     if (!material)
         return nullptr;
 
@@ -659,6 +662,7 @@ MaterialTechniqueSet *Switch_ResolveMaterialTechniqueSetForRender(Material *mate
         "material.techniqueSet");
 
     MaterialTechniqueSet *authored = material->techniqueSet;
+    g_switchFrameStage = "frame/render/technique_resolve/set_authored";
     if (!Switch_IsValidTechniqueSetPointer(authored))
     {
         Switch_LogTechniqueRenderReject(
@@ -674,6 +678,7 @@ MaterialTechniqueSet *Switch_ResolveMaterialTechniqueSetForRender(Material *mate
         "remappedTechniqueSet");
 
     MaterialTechniqueSet *remapped = authored->remappedTechniqueSet;
+    g_switchFrameStage = "frame/render/technique_resolve/set_remapped";
     if (!Switch_IsValidTechniqueSetPointer(remapped))
     {
         if (remapped)
@@ -688,6 +693,7 @@ MaterialTechniqueSet *Switch_ResolveMaterialTechniqueSetForRender(Material *mate
         remapped = authored;
     }
 
+    g_switchFrameStage = "frame/render/technique_resolve/set_return";
     return remapped;
 }
 
@@ -695,6 +701,7 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
     MaterialTechniqueSet *techSet,
     uint32_t techType)
 {
+    g_switchFrameStage = "frame/render/technique_resolve/technique_entry";
     if (!Switch_IsValidTechniqueSetPointer(techSet) ||
         techType >= TECHNIQUE_COUNT)
         return nullptr;
@@ -702,6 +709,7 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
     MaterialTechnique **techniqueSlot = &techSet->techniques[techType];
     Switch_ResolvePointerForRenderIfNeeded(techniqueSlot, "technique");
 
+    g_switchFrameStage = "frame/render/technique_resolve/technique_slot";
     MaterialTechnique *technique = *techniqueSlot;
     if (!technique)
         return nullptr;
@@ -721,6 +729,7 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
         return nullptr;
     }
 
+    g_switchFrameStage = "frame/render/technique_resolve/technique_header";
     const uint32_t passCount = static_cast<uint32_t>(technique->passCount);
     if (!passCount || passCount > 64u)
     {
@@ -734,6 +743,9 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
 
     for (uint32_t passIndex = 0; passIndex < passCount; ++passIndex)
     {
+        g_switchFrameStage = passIndex == 0
+            ? "frame/render/technique_resolve/pass0_entry"
+            : "frame/render/technique_resolve/passN_entry";
         MaterialPass *pass = &technique->passArray[passIndex];
         const bool hadVertexDecl = pass->vertexDecl != nullptr;
         const bool hadVertexShader = pass->vertexShader != nullptr;
@@ -742,6 +754,9 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
         Switch_ResolvePointerForRenderIfNeeded(&pass->vertexShader, "vertexShader/render");
         Switch_ResolvePointerForRenderIfNeeded(&pass->pixelShader, "pixelShader/render");
         Switch_ResolvePointerForRenderIfNeeded(&pass->args, "args/render");
+        g_switchFrameStage = passIndex == 0
+            ? "frame/render/technique_resolve/pass0_pointers"
+            : "frame/render/technique_resolve/passN_pointers";
 
         const uint32_t argCount =
             static_cast<uint32_t>(pass->perPrimArgCount) +
@@ -764,6 +779,7 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
         }
     }
 
+    g_switchFrameStage = "frame/render/technique_resolve/technique_return";
     return technique;
 }
 
