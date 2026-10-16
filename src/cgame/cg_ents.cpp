@@ -1444,7 +1444,7 @@ void CG_PrimaryLight(int localClientNum, centity_s *cent) {
     LerpEntityState *p_currentState = &cent->currentState;
     LerpEntityState *p_lerp = &cent->nextState.lerp;
 
-    GfxLight *light = (GfxLight *)((char *)cgArray[0].refdef.primaryLights + __ROL4__(lightIndex, 6));
+    GfxLight *light = &cgArray[0].refdef.primaryLights[lightIndex];
     const ComPrimaryLight *primaryLight = Com_GetPrimaryLight(lightIndex);
     float frameInterp = cgArray[0].frameInterpolation;
 
