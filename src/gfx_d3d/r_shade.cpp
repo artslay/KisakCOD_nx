@@ -608,7 +608,9 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
 
     PROF_SCOPED("R_SetupPass");
 
+#ifdef __SWITCH__
     g_switchFrameStage = "frame/render/setup_pass/entry";
+#endif
     pass = &context.state->technique->passArray[passIndex];
     context.state->pass = pass;
     context.state->passIndex = passIndex;
@@ -707,7 +709,9 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     context.state->prim.device->SetSwitchUnlitMode(
         context.state->techType == TECHNIQUE_UNLIT);
 #endif
+#ifdef __SWITCH__
     g_switchFrameStage = "frame/render/setup_pass/set_state";
+#endif
     R_SetState(context.state, stateBits);
 #ifdef __SWITCH__
     // The Switch IDirect3DDevice9 compatibility interface exposes render-state
