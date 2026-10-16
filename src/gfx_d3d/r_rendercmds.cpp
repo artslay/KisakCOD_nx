@@ -77,10 +77,10 @@ static int s_renderCmdWarnSize;
 
 void __cdecl TRACK_r_rendercmds()
 {
-    track_static_alloc_internal((void *)s_backEndData, 2346752, "s_backEndData", 18);
+    track_static_alloc_internal((void *)s_backEndData, sizeof(s_backEndData), "s_backEndData", 18);
     track_static_alloc_internal(g_viewInfo, 212352, "g_viewInfo", 18);
     track_static_alloc_internal(g_frontEndCmds, 32, "g_frontEndCmds", 18);
-    track_static_alloc_internal(&s_debugFrameGlob, 1173632, "s_debugFrameGlob", 0);
+    track_static_alloc_internal(&s_debugFrameGlob, sizeof(s_debugFrameGlob), "s_debugFrameGlob", 0);
     track_static_alloc_internal(&g_debugFrontEndCmds, 16, "g_debugFrontEndCmds", 0);
 }
 

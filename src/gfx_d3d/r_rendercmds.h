@@ -10,6 +10,9 @@
 
 enum CodeConstant : __int32; // r_state.h
 
+// Runtime-only sidecar pointers for the Switch 64-bit renderer.
+struct XSurface;
+
 enum GfxRenderCommand : __int32
 {                                       // ...
     RC_END_OF_LIST = 0x0,
@@ -571,6 +574,11 @@ struct __declspec(align(16)) GfxBackEndData // sizeof=0x11E780
     // padding byte
     // padding byte
     // padding byte
+#ifdef __SWITCH__
+    // The command stream keeps its original 32-bit word layout. Preserve the
+    // full native XSurface pointer for each word that carries a surface handle.
+    XSurface *primDrawSurfXSurfaceBuf[65536];
+#endif
 };
 
 void __cdecl TRACK_r_rendercmds();

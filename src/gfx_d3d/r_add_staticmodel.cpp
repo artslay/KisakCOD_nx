@@ -146,7 +146,26 @@ void __cdecl R_AddDelayedStaticModelDrawSurf(
     uint32_t count)
 {
     R_WritePrimDrawSurfInt(delayedCmdBuf, count);
+#ifdef __SWITCH__
+    // The legacy command stream is uint32_t-based. Store a word-index token and
+    // preserve the real ARM64 pointer in the frame-owned sidecar instead.
+    const int32_t surfacePosition = delayedCmdBuf->primDrawSurfPos;
+    if (!frontEndDataOut || !xsurf || surfacePosition < 0 ||
+        static_cast<uint32_t>(surfacePosition) >= ARRAY_COUNT(frontEndDataOut->primDrawSurfXSurfaceBuf))
+    {
+        Com_Error(
+            ERR_FATAL,
+            "Invalid static-model surface pointer slot (%d, surface=%p)\n",
+            surfacePosition,
+            static_cast<void *>(xsurf));
+        return;
+    }
+    const uint32_t surfaceSlot = static_cast<uint32_t>(surfacePosition);
+    frontEndDataOut->primDrawSurfXSurfaceBuf[surfaceSlot] = xsurf;
+    R_WritePrimDrawSurfInt(delayedCmdBuf, surfaceSlot);
+#else
     R_WritePrimDrawSurfInt(delayedCmdBuf, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(xsurf)));
+#endif
     R_WritePrimDrawSurfData(delayedCmdBuf, list, (count + 1) >> 1);
 }
 

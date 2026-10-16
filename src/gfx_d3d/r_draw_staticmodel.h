@@ -11,6 +11,10 @@ struct GfxStaticModelDrawStream // sizeof=0x1C
     uint32_t smodelCount;
     const uint16_t *smodelList;
     uint32_t reflectionProbeIndex;
+#ifdef __SWITCH__
+    const uint32_t *primDrawSurfsBase;
+    XSurface **primDrawSurfXSurfaceBuf;
+#endif
 };
 
 void __cdecl R_DrawStaticModelSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);

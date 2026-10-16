@@ -11,6 +11,84 @@
 #include "rb_tess.h"
 #include "r_xsurface.h"
 
+#include <cstdint>
+#include <cstdio>
+
+
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+
+static void R_LogStaticModelSurfPointerReject(const char *reason, const uint32_t *word, uint32_t slot)
+{
+    static uint32_t traceCount = 0;
+    if (traceCount++ >= 8u)
+        return;
+
+    char trace[256];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][STATIC SURF POINTER REJECT] reason=%s word=%p token=%u\n",
+        reason ? reason : "<unknown>",
+        static_cast<const void *>(word),
+        static_cast<unsigned>(slot));
+    Switch_LogWrite(trace);
+}
+#endif
+
+static XSurface *R_GetStaticModelSurfPointer(
+    const GfxStaticModelDrawStream *drawStream,
+    const uint32_t *pointerWord)
+{
+#ifdef __SWITCH__
+    if (!drawStream || !pointerWord ||
+        !drawStream->primDrawSurfsBase ||
+        !drawStream->primDrawSurfXSurfaceBuf)
+    {
+        R_LogStaticModelSurfPointerReject("missingSidecar", pointerWord, UINT32_MAX);
+        return nullptr;
+    }
+
+    const uintptr_t baseAddress = reinterpret_cast<uintptr_t>(drawStream->primDrawSurfsBase);
+    const uintptr_t wordAddress = reinterpret_cast<uintptr_t>(pointerWord);
+    if (wordAddress < baseAddress)
+    {
+        R_LogStaticModelSurfPointerReject("wordBeforeBuffer", pointerWord, UINT32_MAX);
+        return nullptr;
+    }
+
+    const uintptr_t byteOffset = wordAddress - baseAddress;
+    constexpr uintptr_t bufferBytes = sizeof(uint32_t) * 65536u;
+    if (byteOffset >= bufferBytes || (byteOffset % sizeof(uint32_t)) != 0)
+    {
+        R_LogStaticModelSurfPointerReject("wordOutsideBuffer", pointerWord, UINT32_MAX);
+        return nullptr;
+    }
+
+    const uint32_t slot = static_cast<uint32_t>(byteOffset / sizeof(uint32_t));
+    if (*pointerWord != slot)
+    {
+        R_LogStaticModelSurfPointerReject("invalidSlotToken", pointerWord, *pointerWord);
+        return nullptr;
+    }
+
+    XSurface *surface = drawStream->primDrawSurfXSurfaceBuf[slot];
+    const uintptr_t surfaceAddress = reinterpret_cast<uintptr_t>(surface);
+    if (!surface ||
+        surfaceAddress <= UINT32_MAX ||
+        (surfaceAddress & (alignof(XSurface) - 1u)) != 0)
+    {
+        R_LogStaticModelSurfPointerReject("invalidNativeSurface", pointerWord, slot);
+        return nullptr;
+    }
+    return surface;
+#else
+    (void)drawStream;
+    return reinterpret_cast<XSurface *>(static_cast<uintptr_t>(*pointerWord));
+#endif
+}
+
+
 
 void __cdecl R_SetupStaticModelPrim(XSurface *xsurf, GfxDrawPrimArgs *args, GfxCmdBufPrimState *primState)
 {
@@ -64,6 +142,10 @@ void __cdecl R_DrawStaticModelSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBuf
     XSurface *surf; // [esp+1Ch] [ebp-4h] BYREF
 
     drawStream.primDrawSurfPos = primDrawSurfPos;
+#ifdef __SWITCH__
+    drawStream.primDrawSurfsBase = context.source->input.data->primDrawSurfsBuf;
+    drawStream.primDrawSurfXSurfaceBuf = context.source->input.data->primDrawSurfXSurfaceBuf;
+#endif
     drawStream.reflectionProbeTexture = context.state->samplerTexture[1];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
     while (R_GetNextStaticModelSurf(&drawStream, &surf))
@@ -80,7 +162,14 @@ int __cdecl R_GetNextStaticModelSurf(GfxStaticModelDrawStream *drawStream, XSurf
         return 0;
     primDrawSurfPos = drawStream->primDrawSurfPos;
     drawStream->primDrawSurfPos += ((drawStream->smodelCount + 1) >> 1) + 1;
-    xsurf = (XSurface *)*primDrawSurfPos;
+    xsurf = R_GetStaticModelSurfPointer(drawStream, primDrawSurfPos);
+    if (!xsurf)
+    {
+        drawStream->localSurf = nullptr;
+        if (outSurf)
+            *outSurf = nullptr;
+        return 0;
+    }
     drawStream->smodelList = (const uint16_t *)(primDrawSurfPos + 1);
     drawStream->localSurf = xsurf;
     g_frameStatsCur.geoIndexCount += 3 * drawStream->smodelCount * xsurf->triCount;
@@ -98,6 +187,10 @@ void __cdecl R_DrawStaticModelSurf(const uint32_t *primDrawSurfPos, GfxCmdBufCon
     XSurface *surf; // [esp+1Ch] [ebp-4h] BYREF
 
     drawStream.primDrawSurfPos = primDrawSurfPos;
+#ifdef __SWITCH__
+    drawStream.primDrawSurfsBase = context.source->input.data->primDrawSurfsBuf;
+    drawStream.primDrawSurfXSurfaceBuf = context.source->input.data->primDrawSurfXSurfaceBuf;
+#endif
     drawStream.reflectionProbeTexture = context.state->samplerTexture[1];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
     while (R_GetNextStaticModelSurf(&drawStream, &surf))
@@ -182,7 +275,10 @@ int __cdecl R_GetNextStaticModelCachedSurf(GfxStaticModelDrawStream *drawStream)
     drawStream->smodelCount = *drawStream->primDrawSurfPos++;
     if (!drawStream->smodelCount)
         return 0;
-    xsurf = (XSurface *)*drawStream->primDrawSurfPos++;
+    const uint32_t *surfaceWord = drawStream->primDrawSurfPos++;
+    xsurf = R_GetStaticModelSurfPointer(drawStream, surfaceWord);
+    if (!xsurf)
+        return 0;
     drawStream->smodelList = (const unsigned short*)drawStream->primDrawSurfPos;
     drawStream->primDrawSurfPos += (drawStream->smodelCount + 1) >> 1;
     smodelDrawInst = &rgp.world->dpvs.smodelDrawInsts[R_GetCachedSModelSurf(*drawStream->smodelList)->smodelIndex];
@@ -293,6 +389,10 @@ void __cdecl R_DrawStaticModelCachedSurfLit(const uint32_t *primDrawSurfPos, Gfx
     R_SetupCachedStaticModelLighting(context.source);
     R_SetupPassPerObjectArgs(context);
     drawStream.primDrawSurfPos = primDrawSurfPos;
+#ifdef __SWITCH__
+    drawStream.primDrawSurfsBase = context.source->input.data->primDrawSurfsBuf;
+    drawStream.primDrawSurfXSurfaceBuf = context.source->input.data->primDrawSurfXSurfaceBuf;
+#endif
     drawStream.reflectionProbeTexture = context.state->samplerTexture[1];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
     while (R_GetNextStaticModelCachedSurf(&drawStream))
@@ -306,6 +406,10 @@ void __cdecl R_DrawStaticModelCachedSurf(const uint32_t *primDrawSurfPos, GfxCmd
 
     R_SetupPassPerObjectArgs(context);
     drawStream.primDrawSurfPos = primDrawSurfPos;
+#ifdef __SWITCH__
+    drawStream.primDrawSurfsBase = context.source->input.data->primDrawSurfsBuf;
+    drawStream.primDrawSurfXSurfaceBuf = context.source->input.data->primDrawSurfXSurfaceBuf;
+#endif
     drawStream.reflectionProbeTexture = context.state->samplerTexture[1];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
     while (R_GetNextStaticModelCachedSurf(&drawStream))
@@ -496,6 +600,10 @@ void __cdecl R_DrawStaticModelSkinnedSurfLit(const uint32_t *primDrawSurfPos, Gf
     R_SetCodeImageTexture(context.source, TEXTURE_SRC_CODE_DYNAMIC_SHADOWS, rgp.whiteImage);
     R_SetupPassPerObjectArgs(context);
     drawStream.primDrawSurfPos = primDrawSurfPos;
+#ifdef __SWITCH__
+    drawStream.primDrawSurfsBase = context.source->input.data->primDrawSurfsBuf;
+    drawStream.primDrawSurfXSurfaceBuf = context.source->input.data->primDrawSurfXSurfaceBuf;
+#endif
     drawStream.reflectionProbeTexture = context.state->samplerTexture[1];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
     while (R_GetNextStaticModelSurf(&drawStream, &surf))
@@ -545,6 +653,10 @@ void __cdecl R_DrawStaticModelSkinnedSurf(const uint32_t *primDrawSurfPos, GfxCm
 
     R_SetupPassPerObjectArgs(context);
     drawStream.primDrawSurfPos = primDrawSurfPos;
+#ifdef __SWITCH__
+    drawStream.primDrawSurfsBase = context.source->input.data->primDrawSurfsBuf;
+    drawStream.primDrawSurfXSurfaceBuf = context.source->input.data->primDrawSurfXSurfaceBuf;
+#endif
     drawStream.reflectionProbeTexture = context.state->samplerTexture[1];
     drawStream.customSamplerFlags = context.state->pass->customSamplerFlags;
     while (R_GetNextStaticModelSurf(&drawStream, &surf))
