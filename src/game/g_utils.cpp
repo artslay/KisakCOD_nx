@@ -3237,7 +3237,7 @@ int __cdecl G_EntLinkToInternal(gentity_s *ent, gentity_s *parent, unsigned int 
                 {
                     Com_Printf(
                         CON_CHANNEL_SERVER,
-                        "[KisakCOD][PLAYER LINK] child=%d parent=%d parentPtr=%p parentInuse=%u parentType=%d tag=%u bone=%d childOrg=(%.2f,%.2f,%.2f) parentOrg=(%.2f,%.2f,%.2f)\\n",
+                        "[KisakCOD][PLAYER LINK] child=%d parent=%d parentPtr=%p parentInuse=%u parentType=%d tag=%u bone=%d childOrg=(%.2f,%.2f,%.2f) parentOrg=(%.2f,%.2f,%.2f)\n",
                         ent->s.number,
                         parent->s.number,
                         static_cast<void *>(parent),
