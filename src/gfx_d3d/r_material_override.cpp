@@ -996,6 +996,81 @@ const Material *Switch_ValidateMaterialPointerForRender(
     if (Switch_IsValidMaterialPointerForRender(material))
         return material;
 
+    const uintptr_t address = reinterpret_cast<uintptr_t>(material);
+    if (address && address <= UINT32_MAX &&
+        (address & (alignof(Material) - 1u)) == 0)
+    {
+        // Some 32-bit renderer command paths can expose only the low word of
+        // an otherwise valid native Material*. Recover it only by matching
+        // the exact low word against the registered-material table; never
+        // synthesize high address bits from an unrelated pointer or mapping.
+        const int registeredCount =
+            rgp.materialCount < ARRAY_COUNT(rgp.sortedMaterials)
+                ? static_cast<int>(rgp.materialCount)
+                : static_cast<int>(ARRAY_COUNT(rgp.sortedMaterials));
+        const Material *candidate = nullptr;
+        int candidateIndex = -1;
+        bool ambiguous = false;
+        for (int i = 0; i < registeredCount; ++i)
+        {
+            const Material *registered = rgp.sortedMaterials[i];
+            if (!registered)
+                continue;
+
+            const uintptr_t registeredAddress =
+                reinterpret_cast<uintptr_t>(registered);
+            if (registeredAddress > UINT32_MAX &&
+                static_cast<uint32_t>(registeredAddress) ==
+                    static_cast<uint32_t>(address))
+            {
+                if (candidate && candidate != registered)
+                {
+                    ambiguous = true;
+                    break;
+                }
+
+                candidate = registered;
+                candidateIndex = i;
+            }
+        }
+
+        if (candidate && !ambiguous &&
+            Switch_IsValidMaterialPointerForRender(candidate))
+        {
+            static uint32_t recoveredTraceCount = 0;
+            if (recoveredTraceCount < 16u)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][MATERIAL PTR RECOVER] source=%s truncated=%p resolved=%p index=%d\n",
+                    source ? source : "materialPointer",
+                    reinterpret_cast<const void *>(address),
+                    static_cast<const void *>(candidate),
+                    candidateIndex);
+                Switch_LogWrite(trace);
+                ++recoveredTraceCount;
+            }
+            return candidate;
+        }
+
+        static uint32_t unresolvedTraceCount = 0;
+        if (unresolvedTraceCount < 16u)
+        {
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][MATERIAL PTR RECOVER MISS] source=%s truncated=%p matches=%s\n",
+                source ? source : "materialPointer",
+                reinterpret_cast<const void *>(address),
+                ambiguous ? "ambiguous" : "none");
+            Switch_LogWrite(trace);
+            ++unresolvedTraceCount;
+        }
+    }
+
     Switch_LogTechniqueRenderReject(
         source ? source : "materialPointer",
         nullptr,
