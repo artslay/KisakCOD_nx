@@ -11064,13 +11064,35 @@ void __cdecl Scr_SetOrigin(gentity_s *ent, int offset)
         Scr_Error("cannot directly set the origin on AI.  Use the teleport command instead.\n");
     Scr_GetVector(0, v4);
 #ifdef __SWITCH__
-    if (ent->client
-        && (v4[0] < -4096.0f || v4[0] > 4096.0f
-            || v4[1] < -4096.0f || v4[1] > 4096.0f
-            || v4[2] < -4096.0f || v4[2] > 4096.0f))
+    if (ent)
     {
+        const bool playerOffMap = ent->client
+            && (v4[0] < -4096.0f || v4[0] > 4096.0f
+                || v4[1] < -4096.0f || v4[1] > 4096.0f
+                || v4[2] < -4096.0f || v4[2] > 4096.0f);
+        // ET value 5 is the script-mover type in this engine. Trace these
+        // separately because the player is linked to one during the intro.
+        const bool highScriptMover = !ent->client
+            && static_cast<int>(ent->s.eType) == 5
+            && v4[2] >= 4000.0f;
         static unsigned switchPlayerSetOriginTraceCount = 0;
-        if (switchPlayerSetOriginTraceCount++ < 8u)
+        static unsigned switchScriptMoverSetOriginTraceCount = 0;
+        unsigned *traceCount = nullptr;
+        unsigned traceLimit = 0;
+        const char *traceKind = "";
+        if (playerOffMap)
+        {
+            traceCount = &switchPlayerSetOriginTraceCount;
+            traceLimit = 8u;
+            traceKind = "player";
+        }
+        else if (highScriptMover)
+        {
+            traceCount = &switchScriptMoverSetOriginTraceCount;
+            traceLimit = 12u;
+            traceKind = "script_mover";
+        }
+        if (traceCount && (*traceCount)++ < traceLimit)
         {
             char *scriptFile = (char *)"";
             int scriptLine = 0;
@@ -11083,11 +11105,14 @@ void __cdecl Scr_SetOrigin(gentity_s *ent, int offset)
             }
             Com_Printf(
                 CON_CHANNEL_SERVER,
-                "[KisakCOD][PLAYER SETORIGIN] ent=%d target=(%.2f,%.2f,%.2f) current=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p script=%s:%d codePos=%p\n",
+                "[KisakCOD][OFFMAP SCRIPT ORIGIN] kind=%s ent=%d type=%d handler=%u target=(%.2f,%.2f,%.2f) current=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p script=%s:%d codePos=%p\n",
+                traceKind,
                 ent->s.number,
+                static_cast<int>(ent->s.eType),
+                static_cast<unsigned>(ent->handler),
                 v4[0], v4[1], v4[2],
                 ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
-                ent->client->ps.pm_type,
+                ent->client ? ent->client->ps.pm_type : -1,
                 static_cast<void *>(ent->tagInfo),
                 scriptFile ? scriptFile : "",
                 scriptLine,
