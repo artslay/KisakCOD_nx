@@ -1189,18 +1189,27 @@ bool VulkanBackend::EndFrame()
         return true;
 
     static uint32_t switchPresentTraceCount = 0;
+    static uint32_t switchPresentActivityTraceCount = 0;
     const uint32_t switchPresentTraceId = switchPresentTraceCount++;
     const bool switchHasPresentSource = m_presentSourceImage && m_presentSourceView;
-    if (switchPresentTraceId < 8)
+    const bool switchTraceActivity =
+        switchHasPresentSource || m_renderingActive;
+    const bool switchTraceThisFrame =
+        switchPresentTraceId < 3 ||
+        (switchTraceActivity && switchPresentActivityTraceCount < 8);
+    if (switchTraceThisFrame && switchTraceActivity)
+        ++switchPresentActivityTraceCount;
+    if (switchTraceThisFrame)
     {
         char trace[256];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK FRAME] end_frame_begin id=%u serial=%llu source=%u size=%ux%u swapIndex=%u\n",
+            "[KisakCOD][VK FRAME] end_frame_begin id=%u serial=%llu source=%u size=%ux%u swapIndex=%u rendering=%u\n",
             switchPresentTraceId,
             static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
             switchHasPresentSource ? 1u : 0u,
-            m_presentSourceWidth, m_presentSourceHeight, m_swapchainIndex);
+            m_presentSourceWidth, m_presentSourceHeight, m_swapchainIndex,
+            m_renderingActive ? 1u : 0u);
         Switch_LogWrite(trace);
     }
 
@@ -1358,7 +1367,7 @@ bool VulkanBackend::EndFrame()
 
     m_frameActive = false;
 
-    if (switchPresentTraceId < 8)
+    if (switchTraceThisFrame)
     {
         char trace[192];
         std::snprintf(
