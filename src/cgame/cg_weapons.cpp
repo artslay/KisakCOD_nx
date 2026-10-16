@@ -34,6 +34,10 @@
 #include <client/cl_scrn.h>
 #endif
 
+#ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
+#endif
+
 const float MYLERP_START = 0.3f;
 const float MYLERP_END = 0.1f;
 
@@ -4183,10 +4187,7 @@ void CG_ArchiveWeaponInfo(MemoryFile *memFile)
 {
     BOOL IsWriting; // r22
     float numWeapons; // r30
-    uint32_t NumWeapons; // r3
-    int v5; // r28
-    int *p_hasAnimTree; // r30
-    const DObj_s *v7; // r3
+    weaponInfo_s *weaponInfo; // native-stride iteration
     float v8[24]; // [sp+50h] [-60h] BYREF
 
     iassert(memFile);
@@ -4205,23 +4206,26 @@ void CG_ArchiveWeaponInfo(MemoryFile *memFile)
     }
     if (LODWORD(numWeapons) > 1)
     {
-        v5 = LODWORD(numWeapons) - 1;
-        p_hasAnimTree = &cg_weaponsArray[0][1].hasAnimTree;
-        do
+        // weaponInfo_s contains native pointers on Switch. The old 18-word stride
+        // and pointer-at-minus-11-words only describe its 32-bit layout.
+        weaponInfo = &cg_weaponsArray[0][1];
+        for (int weaponIndex = 1; weaponIndex < LODWORD(numWeapons); ++weaponIndex, ++weaponInfo)
         {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/save/archive_client/cgame/weapon_info";
+#endif
             if (IsWriting)
             {
-                v7 = (const DObj_s *)*(p_hasAnimTree - 11);
-                *p_hasAnimTree = v7 && DObjGetTree(v7);
+                const DObj_s *viewModelDObj = weaponInfo->viewModelDObj;
+                weaponInfo->hasAnimTree = viewModelDObj && DObjGetTree(viewModelDObj);
             }
             iassert(memFile);
             iassert(memFile->archiveProc);
-            memFile->archiveProc(memFile, 4, (byte*)p_hasAnimTree);
+            memFile->archiveProc(memFile, 4, (byte *)&weaponInfo->hasAnimTree);
             iassert(memFile->archiveProc);
-            memFile->archiveProc(memFile, 4, (byte *)p_hasAnimTree - 1);
-            --v5;
-            p_hasAnimTree += 18;
-        } while (v5);
+            // Preserve the original save format's second four-byte archive range.
+            memFile->archiveProc(memFile, 4, (byte *)&weaponInfo->hasAnimTree - 1);
+        }
     }
     iassert(memFile);
     iassert(memFile->archiveProc);
