@@ -314,6 +314,33 @@ static bool Switch_IsSerializedAddress(uintptr_t address)
     return false;
 }
 
+// Literal shader constants may point directly into mapped fastfile data.
+// Unlike object references, such pointers need no alias conversion; only accept
+// the stream-backed form if the full four-float constant fits in its block.
+static bool Switch_IsStreamDataRange(uintptr_t address, size_t byteCount)
+{
+    if (!address || !byteCount || !g_streamBlocks)
+        return false;
+
+    for (uint32_t i = 0; i < 9u; ++i)
+    {
+        const XBlock &block = g_streamBlocks[i];
+        if (!block.data || !block.size)
+            continue;
+
+        const uintptr_t begin =
+            reinterpret_cast<uintptr_t>(block.data);
+        if (address < begin)
+            continue;
+
+        const uintptr_t offset = address - begin;
+        if (offset < block.size && byteCount <= block.size - offset)
+            return true;
+    }
+
+    return false;
+}
+
 static bool Switch_Is32BitSerializedPointerToken(uintptr_t address)
 {
     if (address <= UINT32_MAX)
@@ -759,15 +786,26 @@ bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
             argument.type == MTL_ARG_LITERAL_PIXEL_CONST)
         {
             g_switchFrameStage = "frame/render/pass_args/resolve_literal";
-            Switch_ResolvePointerForRenderIfNeeded(
-                &argument.u.literalConst,
-                "args.literalConst");
-            const uintptr_t literalAddress =
+            uintptr_t literalAddress =
                 reinterpret_cast<uintptr_t>(argument.u.literalConst);
+            const bool streamBackedLiteral =
+                Switch_IsStreamDataRange(literalAddress, 4u * sizeof(float));
+            if (!streamBackedLiteral)
+            {
+                Switch_ResolvePointerForRenderIfNeeded(
+                    &argument.u.literalConst,
+                    "args.literalConst");
+                literalAddress =
+                    reinterpret_cast<uintptr_t>(argument.u.literalConst);
+            }
+
+            const bool finalStreamBackedLiteral =
+                Switch_IsStreamDataRange(literalAddress, 4u * sizeof(float));
             if (!argument.u.literalConst ||
                 literalAddress <= UINT32_MAX ||
                 (literalAddress & (alignof(float) - 1u)) != 0 ||
-                Switch_IsSerializedAddress(literalAddress))
+                (Switch_IsSerializedAddress(literalAddress) &&
+                 !finalStreamBackedLiteral))
             {
                 static uint32_t literalTraceCount = 0;
                 if (literalTraceCount < 32u)
