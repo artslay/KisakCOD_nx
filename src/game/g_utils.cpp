@@ -2132,7 +2132,7 @@ void __cdecl G_SetOrigin(gentity_s *ent, float *origin)
 #ifdef __SWITCH__
     // Only trace off-map writes. This distinguishes an authored/spawned high
     // script mover from a later scripted move without flooding normal frames.
-    if (origin[2] >= 4000.0f || origin[2] <= -4000.0f)
+    if (ent && (origin[2] >= 4000.0f || origin[2] <= -4000.0f))
     {
         static unsigned switchOffMapOriginTraceCount = 0;
         if (switchOffMapOriginTraceCount++ < 16u)
