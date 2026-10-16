@@ -28,6 +28,18 @@
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 
+// Last submitted-frame context is read by VulkanBackend only if queue submission fails.
+uint64_t g_switchLastBoundPipelineKey = 0;
+uint64_t g_switchLastBoundVertexShaderSerial = 0;
+uint64_t g_switchLastBoundPixelShaderSerial = 0;
+uint32_t g_switchLastDrawKind = 0; // 1=DrawPrimitiveUP, 2=DrawIndexedPrimitive
+uint32_t g_switchLastDrawIndexCount = 0;
+uint32_t g_switchLastDrawStartIndex = 0;
+int32_t g_switchLastDrawBaseVertex = 0;
+uint32_t g_switchLastDrawVertexCount = 0;
+uint32_t g_switchLastDrawPrimitiveType = 0;
+uint32_t g_switchLastDrawPrimitiveCount = 0;
+
 namespace
 {
 uint32_t g_switchSceneDrawPrimitiveCalls = 0;
@@ -497,6 +509,60 @@ uint64_t HashCombine(uint64_t value, uint64_t part)
 {
     value ^= part + 0x9e3779b97f4a7c15ull + (value << 6) + (value >> 2);
     return value;
+}
+
+uint8_t SwitchEffectiveShaderElementType(
+    const IDirect3DVertexDeclaration9 *decl,
+    const _D3DVERTEXELEMENT9 &element)
+{
+    uint8_t type = element.Type;
+    if (decl && decl->switchVertDeclType == 0 && element.Stream == 0)
+    {
+        if (element.Offset == 0 &&
+            element.Usage == 0 &&
+            element.Type == D3DDECLTYPE_FLOAT3)
+            type = D3DDECLTYPE_FLOAT4;
+        else if (element.Offset == 16 &&
+                 element.Usage == 10 &&
+                 element.UsageIndex == 0 &&
+                 element.Type == D3DDECLTYPE_FLOAT4)
+            type = D3DDECLTYPE_D3DCOLOR;
+        else if (element.Offset == 20 &&
+                 element.Usage == 5 &&
+                 element.UsageIndex == 0 &&
+                 element.Type == D3DDECLTYPE_FLOAT1)
+            type = D3DDECLTYPE_FLOAT2;
+    }
+    return type;
+}
+
+uint32_t SwitchShaderElementByteSize(uint8_t type)
+{
+    switch (type)
+    {
+    case D3DDECLTYPE_FLOAT1: return 4;
+    case D3DDECLTYPE_FLOAT2: return 8;
+    case D3DDECLTYPE_FLOAT3: return 12;
+    case D3DDECLTYPE_FLOAT4: return 16;
+    case D3DDECLTYPE_D3DCOLOR:
+    case D3DDECLTYPE_UBYTE4:
+    case D3DDECLTYPE_UBYTE4N:
+    case D3DDECLTYPE_SHORT2:
+    case D3DDECLTYPE_SHORT2N:
+    case D3DDECLTYPE_USHORT2N:
+    case D3DDECLTYPE_UDEC3:
+    case D3DDECLTYPE_DEC3N:
+    case D3DDECLTYPE_FLOAT16_2:
+        return 4;
+    case D3DDECLTYPE_SHORT4:
+    case D3DDECLTYPE_SHORT4N:
+    case D3DDECLTYPE_USHORT4N:
+    case D3DDECLTYPE_FLOAT16_4:
+        return 8;
+    default:
+        // EnsurePipeline's fallback format is a four-component float attribute.
+        return 16;
+    }
 }
 
 bool DumpSpirvFile(const char *path, const std::vector<uint32_t> &words)
@@ -3600,6 +3666,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     const auto existing = m_pipelines.find(key);
     if (existing != m_pipelines.end())
     {
+        g_switchLastBoundPipelineKey = key;
+        g_switchLastBoundVertexShaderSerial = m_vertexShader->serial;
+        g_switchLastBoundPixelShaderSerial = m_pixelShader->serial;
         m_pipelineDirty = false;
         vkCmdBindPipeline(m_backend->CommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, existing->second);
         return true;
@@ -3630,31 +3699,8 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             // The engine's generic declaration table is a routing table, not a
             // byte-for-byte description of materialCommands_t::verts on Switch.
-            // Make the shader linker see the actual GfxVertex component types.
-            uint8_t shaderElementType = element.Type;
-            if (m_decl->switchVertDeclType == 0 && element.Stream == 0)
-            {
-                if (element.Offset == 0 &&
-                    element.Usage == 0 &&
-                    element.Type == D3DDECLTYPE_FLOAT3)
-                {
-                    shaderElementType = D3DDECLTYPE_FLOAT4;
-                }
-                else if (element.Offset == 16 &&
-                         element.Usage == 10 &&
-                         element.UsageIndex == 0 &&
-                         element.Type == D3DDECLTYPE_FLOAT4)
-                {
-                    shaderElementType = D3DDECLTYPE_D3DCOLOR;
-                }
-                else if (element.Offset == 20 &&
-                         element.Usage == 5 &&
-                         element.UsageIndex == 0 &&
-                         element.Type == D3DDECLTYPE_FLOAT1)
-                {
-                    shaderElementType = D3DDECLTYPE_FLOAT2;
-                }
-            }
+            // Use the actual GfxVertex component types for shader linking and bounds checks.
+            const uint8_t shaderElementType = SwitchEffectiveShaderElementType(m_decl, element);
 
             MOJOSHADER_vertexAttribute attr{};
             switch (shaderElementType)
@@ -4149,15 +4195,23 @@ bool IDirect3DDevice9::EnsurePipeline()
          m_vertexShader->spirv.size() != lastDumpVsWords ||
          m_pixelShader->spirv.size() != lastDumpPsWords))
     {
+        const bool earlyPipelineDump = pipelineCreateSequence <= 8;
         const bool vsDumpOk = WriteSwitchPipelineSpirv(
-            "sdmc:/switch/KisakCOD/vk_crash_vs.spv", m_vertexShader->spirv);
+            earlyPipelineDump
+                ? "sdmc:/switch/KisakCOD/vk_crash_vs.spv"
+                : "sdmc:/switch/KisakCOD/vk_recent_vs.spv",
+            m_vertexShader->spirv);
         const bool psDumpOk = WriteSwitchPipelineSpirv(
-            "sdmc:/switch/KisakCOD/vk_crash_ps.spv", m_pixelShader->spirv);
-        char dumpMsg[256];
+            earlyPipelineDump
+                ? "sdmc:/switch/KisakCOD/vk_crash_ps.spv"
+                : "sdmc:/switch/KisakCOD/vk_recent_ps.spv",
+            m_pixelShader->spirv);
+        char dumpMsg[288];
         std::snprintf(
             dumpMsg, sizeof(dumpMsg),
-            "[KisakCOD][VK SPIRV DUMP] seq=%u saved=%u/%u vsWords=%zu vsHash=%016llx psWords=%zu psHash=%016llx\n",
+            "[KisakCOD][VK SPIRV DUMP] seq=%u set=%s saved=%u/%u vsWords=%zu vsHash=%016llx psWords=%zu psHash=%016llx\n",
             pipelineCreateSequence,
+            earlyPipelineDump ? "early" : "recent",
             vsDumpOk ? 1u : 0u, psDumpOk ? 1u : 0u,
             m_vertexShader->spirv.size(),
             static_cast<unsigned long long>(vsSpirvHash),
@@ -5286,6 +5340,9 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     g_switchFrameStage = "frame/render/vulkan/pipeline/cache_insert";
     m_pipelines.emplace(key, pipeline);
+    g_switchLastBoundPipelineKey = key;
+    g_switchLastBoundVertexShaderSerial = m_vertexShader->serial;
+    g_switchLastBoundPixelShaderSerial = m_pixelShader->serial;
     m_pipelineDirty = false;
     vkCmdBindPipeline(m_backend->CommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     return true;
@@ -5499,6 +5556,13 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     const VkDeviceSize offset = vertexInfo.offset;
     vkCmdBindVertexBuffers(
         m_backend->CommandBuffer(), 0, 1, &vertexInfo.buffer, &offset);
+    g_switchLastDrawKind = 1;
+    g_switchLastDrawIndexCount = 0;
+    g_switchLastDrawStartIndex = 0;
+    g_switchLastDrawBaseVertex = 0;
+    g_switchLastDrawVertexCount = vertexCount;
+    g_switchLastDrawPrimitiveType = primitiveType;
+    g_switchLastDrawPrimitiveCount = primitiveCount;
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/issue_draw";
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
     ++g_switchSceneDrawPrimitiveCalls;
@@ -5512,6 +5576,13 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 {
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
+    g_switchLastDrawKind = 2;
+    g_switchLastDrawIndexCount = indexCount;
+    g_switchLastDrawStartIndex = startIndex;
+    g_switchLastDrawBaseVertex = baseVertexIndex;
+    g_switchLastDrawVertexCount = numVertices;
+    g_switchLastDrawPrimitiveType = primitiveType;
+    g_switchLastDrawPrimitiveCount = primitiveCount;
     const uint64_t indexCapacity = m_indices
         ? m_indices->size / sizeof(uint16_t) : 0;
     const bool validIndexRange =
@@ -5536,6 +5607,129 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         Switch_LogWrite(msg);
         return E_FAIL;
     }
+    // Validate the actual indexed vertex fetches before recording a draw. The
+    // engine's minVertexIndex/numVertices arguments are hints; the CPU index data
+    // and the bound VkBuffer ranges are the authoritative safety boundary.
+    const uint8_t *indexData = nullptr;
+    if (m_indices->dynamic && m_indices->shadowInitialized &&
+        m_indices->shadow.size() >= m_indices->size)
+        indexData = m_indices->shadow.data();
+    else
+        indexData = static_cast<const uint8_t *>(m_indices->mapped);
+
+    if (indexData && m_decl)
+    {
+        int64_t minEffectiveVertex = INT64_MAX;
+        int64_t maxEffectiveVertex = -1;
+        uint32_t minRawIndex = UINT32_MAX;
+        uint32_t maxRawIndex = 0;
+        bool invalidEffectiveIndex = false;
+        for (uint32_t i = 0; i < indexCount; ++i)
+        {
+            uint16_t rawIndex = 0;
+            std::memcpy(
+                &rawIndex,
+                indexData + static_cast<size_t>(startIndex + i) * sizeof(rawIndex),
+                sizeof(rawIndex));
+            minRawIndex = std::min<uint32_t>(minRawIndex, rawIndex);
+            maxRawIndex = std::max<uint32_t>(maxRawIndex, rawIndex);
+            const int64_t effectiveVertex =
+                static_cast<int64_t>(baseVertexIndex) + static_cast<int64_t>(rawIndex);
+            if (effectiveVertex < 0)
+            {
+                invalidEffectiveIndex = true;
+                break;
+            }
+            minEffectiveVertex = std::min(minEffectiveVertex, effectiveVertex);
+            maxEffectiveVertex = std::max(maxEffectiveVertex, effectiveVertex);
+        }
+
+        bool invalidVertexFetch = invalidEffectiveIndex;
+        uint32_t badStream = UINT32_MAX;
+        uint32_t badElementOffset = 0;
+        uint32_t badElementSize = 0;
+        uint32_t badStride = 0;
+        uint64_t badRequiredEnd = 0;
+        uint32_t badBufferSize = 0;
+        if (!invalidVertexFetch && maxEffectiveVertex >= 0)
+        {
+            for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
+            {
+                if (element.Stream >= 16 || !m_streams[element.Stream].buffer ||
+                    !m_streams[element.Stream].stride)
+                    continue;
+
+                const auto &stream = m_streams[element.Stream];
+                const uint32_t elementSize = SwitchShaderElementByteSize(
+                    SwitchEffectiveShaderElementType(m_decl, element));
+                if (!elementSize)
+                    continue;
+
+                const uint64_t bufferSize = stream.buffer->size;
+                const uint64_t streamOffset = stream.offset;
+                const uint64_t stride = stream.stride;
+                const uint64_t vertexIndex = static_cast<uint64_t>(maxEffectiveVertex);
+                uint64_t vertexStart = 0;
+                uint64_t requiredEnd = 0;
+                bool outOfRange = false;
+
+                if (streamOffset > bufferSize ||
+                    element.Offset > stride ||
+                    elementSize > stride - element.Offset)
+                {
+                    outOfRange = true;
+                }
+                else if (vertexIndex > (bufferSize - streamOffset) / stride)
+                {
+                    outOfRange = true;
+                }
+                else
+                {
+                    vertexStart = streamOffset + vertexIndex * stride;
+                    requiredEnd = vertexStart + element.Offset + elementSize;
+                    if (requiredEnd > bufferSize)
+                        outOfRange = true;
+                }
+
+                if (outOfRange)
+                {
+                    invalidVertexFetch = true;
+                    badStream = element.Stream;
+                    badElementOffset = element.Offset;
+                    badElementSize = elementSize;
+                    badStride = stream.stride;
+                    badRequiredEnd = requiredEnd;
+                    badBufferSize = stream.buffer->size;
+                    break;
+                }
+            }
+        }
+
+        if (invalidVertexFetch)
+        {
+            static std::atomic<uint32_t> invalidVertexFetchLogCount{0};
+            const uint32_t logId = invalidVertexFetchLogCount.fetch_add(
+                1, std::memory_order_relaxed);
+            if (logId < 16)
+            {
+                char msg[480];
+                std::snprintf(
+                    msg, sizeof(msg),
+                    "[KisakCOD][VK DRAW] fail=vertex_fetch_range log=%u prim=%u primitiveCount=%u indexCount=%u startIndex=%u baseVertex=%d rawRange=%u-%u effectiveRange=%lld-%lld stream=%u stride=%u elementOffset=%u elementSize=%u requiredEnd=%llu bufferSize=%u pipeline=%016llx\\n",
+                    logId, primitiveType, primitiveCount, indexCount, startIndex,
+                    baseVertexIndex,
+                    minRawIndex == UINT32_MAX ? 0u : minRawIndex, maxRawIndex,
+                    static_cast<long long>(minEffectiveVertex),
+                    static_cast<long long>(maxEffectiveVertex),
+                    badStream, badStride, badElementOffset, badElementSize,
+                    static_cast<unsigned long long>(badRequiredEnd), badBufferSize,
+                    static_cast<unsigned long long>(g_switchLastBoundPipelineKey));
+                Switch_LogWrite(msg);
+            }
+            return E_FAIL;
+        }
+    }
+
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/prepare_draw";
     m_topology = PrimitiveTopology(primitiveType);
 
