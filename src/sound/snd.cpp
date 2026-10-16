@@ -3712,19 +3712,36 @@ void __cdecl SND_ErrorCleanup()
 
 void __cdecl SND_Save(MemoryFile *memFile)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/sound/channel_volumes";
+#endif
     for (int i = 1; i < SND_CHANNELVOLPRIO_COUNT; ++i)
         MemFile_WriteData(memFile, 772, &g_snd.channelVolGroups[i]);
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/sound/environment";
+#endif
     for (int i = SND_ENVEFFECTPRIO_LEVEL; i < SND_ENVEFFECTPRIO_COUNT; ++i)
         MemFile_WriteData(memFile, 32, &g_snd.envEffects[i]);
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/sound/eq";
+#endif
     SND_SaveEq(memFile);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/sound/background";
+#endif
     MemFile_WriteData(memFile, 8, g_snd.background);
 
     if (g_snd.Initialized2d)
     {
         for (int i = 8; i < g_snd.max_3D_channels + 8; ++i)
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/save/archive_client/sound/3d_channel";
+#endif
             SND_Save3DChannel(i, memFile);
+        }
     }
 
     MemFile_WriteCString(memFile, (char *)"");
@@ -3732,7 +3749,12 @@ void __cdecl SND_Save(MemoryFile *memFile)
     if (g_snd.Initialized2d)
     {
         for (int i = 0; i < g_snd.max_2D_channels; ++i)
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/save/archive_client/sound/2d_channel";
+#endif
             SND_Save2DChannel(i, memFile);
+        }
     }
 
     MemFile_WriteCString(memFile, (char *)"");
@@ -3740,7 +3762,12 @@ void __cdecl SND_Save(MemoryFile *memFile)
     if (g_snd.Initialized2d)
     {
         for (int i = SND_FIRST_STREAM_CHANNEL; i < SND_FIRST_STREAM_CHANNEL + g_snd.max_stream_channels; ++i)
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/save/archive_client/sound/stream_channel";
+#endif
             SND_SaveStreamChannel(i, memFile);
+        }
     }
 
     MemFile_WriteCString(memFile, (char *)"");
@@ -3770,6 +3797,9 @@ void __cdecl SND_Save3DChannel(int chanIndex, MemoryFile *memFile)
 void __cdecl SND_SaveSoundAlias(const snd_alias_t *alias, MemoryFile *memFile)
 {
     __int16 p; // [esp+2h] [ebp-2h] BYREF
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/sound/alias";
+#endif
 
     MemFile_WriteCString(memFile, (char *)alias->aliasName);
     p = SND_GetAliasOffset(alias);
@@ -3778,6 +3808,9 @@ void __cdecl SND_SaveSoundAlias(const snd_alias_t *alias, MemoryFile *memFile)
 
 void __cdecl SND_SaveChanInfo(const snd_channel_info_t *chaninfo, MemoryFile *memFile)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/sound/channel_info";
+#endif
     float lerp; // [esp+0h] [ebp-18h] BYREF
     float basevolume; // [esp+4h] [ebp-14h] BYREF
     int startTime; // [esp+8h] [ebp-10h] BYREF
@@ -3813,6 +3846,9 @@ void __cdecl SND_SaveChanInfo(const snd_channel_info_t *chaninfo, MemoryFile *me
 
 void __cdecl SND_SaveLengthNotifyInfo(const sndLengthNotifyInfo *info, MemoryFile *memFile)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/sound/length_notify";
+#endif
     SndLengthId v2; // [esp+0h] [ebp-14h]
     void *v3; // [esp+4h] [ebp-10h] BYREF
     char v4; // [esp+Bh] [ebp-9h] BYREF
