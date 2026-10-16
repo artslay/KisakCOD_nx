@@ -11062,6 +11062,26 @@ void __cdecl Scr_SetOrigin(gentity_s *ent, int offset)
     if (ent->actor)
         Scr_Error("cannot directly set the origin on AI.  Use the teleport command instead.\n");
     Scr_GetVector(0, v4);
+#ifdef __SWITCH__
+    if (ent->client
+        && (v4[0] < -4096.0f || v4[0] > 4096.0f
+            || v4[1] < -4096.0f || v4[1] > 4096.0f
+            || v4[2] < -4096.0f || v4[2] > 4096.0f))
+    {
+        static unsigned switchPlayerSetOriginTraceCount = 0;
+        if (switchPlayerSetOriginTraceCount++ < 8u)
+        {
+            Com_Printf(
+                CON_CHANNEL_SERVER,
+                "[KisakCOD][PLAYER SETORIGIN] ent=%d target=(%.2f,%.2f,%.2f) current=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p\\n",
+                ent->s.number,
+                v4[0], v4[1], v4[2],
+                ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
+                ent->client->ps.pm_type,
+                static_cast<void *>(ent->tagInfo));
+        }
+    }
+#endif
     if ((LODWORD(v4[0]) & 0x7F800000) == 0x7F800000
         || (LODWORD(v4[1]) & 0x7F800000) == 0x7F800000
         || (LODWORD(v4[2]) & 0x7F800000) == 0x7F800000)
