@@ -823,6 +823,39 @@ LABEL_15:
             goto LABEL_14;
         model = DObjGetModel(obj, modelIndex);
         iassert( model );
+#ifdef __SWITCH__
+        {
+            if (lod >= MAX_LODS)
+            {
+                Com_Printf(CON_CHANNEL_ANIM,
+                    "[KisakCOD][DOBJ INVALID LOD] model=%s modelPtr=%p modelIndex=%u lod=%d maxLods=%u\n",
+                    model->name ? model->name : "(null)", static_cast<const void *>(model),
+                    modelIndex, lod, static_cast<unsigned>(MAX_LODS));
+                Com_Error(ERR_DROP, "R_AddDObjSurfacesCamera: invalid LOD %d for XModel %s",
+                    lod, model->name ? model->name : "(null)");
+                return;
+            }
+
+            const XModelLodInfo &lodInfo = model->lodInfo[lod];
+            const uint32_t lodSurfIndex = static_cast<uint32_t>(lodInfo.surfIndex);
+            const uint32_t lodSurfCount = static_cast<uint32_t>(lodInfo.numsurfs);
+            const uint32_t modelSurfCount = static_cast<uint32_t>(model->numsurfs);
+            if (lodSurfIndex > modelSurfCount ||
+                lodSurfCount > modelSurfCount - lodSurfIndex ||
+                (lodSurfCount != 0 && (!model->surfs || !model->materialHandles)))
+            {
+                Com_Printf(CON_CHANNEL_ANIM,
+                    "[KisakCOD][DOBJ INVALID SURFACE RANGE] model=%s modelPtr=%p modelIndex=%u lod=%d lodSurfIndex=%u lodSurfCount=%u modelSurfs=%u surfs=%p materialHandles=%p\n",
+                    model->name ? model->name : "(null)", static_cast<const void *>(model),
+                    modelIndex, lod, lodSurfIndex, lodSurfCount, modelSurfCount,
+                    static_cast<const void *>(model->surfs),
+                    static_cast<const void *>(model->materialHandles));
+                Com_Error(ERR_DROP, "R_AddDObjSurfacesCamera: invalid surface range for XModel %s (LOD %d)",
+                    model->name ? model->name : "(null)", lod);
+                return;
+            }
+        }
+#endif
         numsurfs = XModelGetSurfCount(model, lod);
         material = XModelGetSkins(model, lod);
         iassert( material );
@@ -853,38 +886,51 @@ LABEL_15:
             }
 #ifdef __SWITCH__
             {
-            const uintptr_t materialAddress = reinterpret_cast<uintptr_t>(*material);
-            if (materialAddress < 0x10000u)
-            {
-                const XModelLodInfo *materialLodInfo =
-                    lod >= 0 && lod < MAX_LODS ? &model->lodInfo[lod] : nullptr;
-                const uint32_t materialSurfaceIndex =
-                    materialLodInfo ? static_cast<uint32_t>(materialLodInfo->surfIndex) + subMatIndex : subMatIndex;
-                Com_Printf(
-                    CON_CHANNEL_ANIM,
-                    "[KisakCOD][DOBJ INVALID MATERIAL] model=%s modelPtr=%p modelIndex=%u lod=%d lodSurfIndex=%u lodSurfCount=%u modelSurfs=%u materialHandles=%p materialSlot=%p material=%p surfaceIndex=%u modelSurf=%p sentinel=%d\n",
-                    model->name ? model->name : "(null)",
-                    static_cast<const void *>(model),
-                    modelIndex,
-                    lod,
-                    materialLodInfo ? static_cast<unsigned>(materialLodInfo->surfIndex) : 0u,
-                    materialLodInfo ? static_cast<unsigned>(materialLodInfo->numsurfs) : 0u,
-                    static_cast<unsigned>(model->numsurfs),
-                    static_cast<const void *>(model->materialHandles),
-                    static_cast<void *>(material),
-                    static_cast<void *>(*material),
-                    materialSurfaceIndex,
-                    static_cast<void *>(modelSurf),
-                    *reinterpret_cast<const int32_t *>(modelSurf));
-                Com_Error(
-                    ERR_DROP,
-                    "R_AddDObjSurfacesCamera: invalid Material pointer %p for XModel %s (LOD %d surface %u)",
-                    static_cast<void *>(*material),
-                    model->name ? model->name : "(null)",
-                    lod,
-                    materialSurfaceIndex);
-                return;
-            }
+                Material *const candidateMaterial = *material;
+                int registeredMaterialIndex = -1;
+                for (int sortedIndex = 0; sortedIndex < rgp.materialCount && sortedIndex < 2048; ++sortedIndex)
+                {
+                    if (rgp.sortedMaterials[sortedIndex] == candidateMaterial)
+                    {
+                        registeredMaterialIndex = sortedIndex;
+                        break;
+                    }
+                }
+
+                if (!candidateMaterial || registeredMaterialIndex < 0)
+                {
+                    const XModelLodInfo *materialLodInfo =
+                        lod >= 0 && lod < MAX_LODS ? &model->lodInfo[lod] : nullptr;
+                    const uint32_t materialSurfaceIndex =
+                        materialLodInfo ? static_cast<uint32_t>(materialLodInfo->surfIndex) + subMatIndex : subMatIndex;
+
+                    Com_Printf(
+                        CON_CHANNEL_ANIM,
+                        "[KisakCOD][DOBJ INVALID MATERIAL] model=%s modelPtr=%p modelIndex=%u lod=%d lodSurfIndex=%u lodSurfCount=%u modelSurfs=%u materialHandles=%p materialSlot=%p material=%p surfaceIndex=%u registeredIndex=%d materialCount=%d modelSurf=%p sentinel=%d\n",
+                        model->name ? model->name : "(null)",
+                        static_cast<const void *>(model),
+                        modelIndex,
+                        lod,
+                        materialLodInfo ? static_cast<unsigned>(materialLodInfo->surfIndex) : 0u,
+                        materialLodInfo ? static_cast<unsigned>(materialLodInfo->numsurfs) : 0u,
+                        static_cast<unsigned>(model->numsurfs),
+                        static_cast<const void *>(model->materialHandles),
+                        static_cast<void *>(material),
+                        static_cast<void *>(candidateMaterial),
+                        materialSurfaceIndex,
+                        registeredMaterialIndex,
+                        rgp.materialCount,
+                        static_cast<void *>(modelSurf),
+                        *reinterpret_cast<const int32_t *>(modelSurf));
+                    Com_Error(
+                        ERR_DROP,
+                        "R_AddDObjSurfacesCamera: unregistered Material pointer %p for XModel %s (LOD %d surface %u)",
+                        static_cast<void *>(candidateMaterial),
+                        model->name ? model->name : "(null)",
+                        lod,
+                        materialSurfaceIndex);
+                    return;
+                }
             }
 #endif
             iassert(*material);
