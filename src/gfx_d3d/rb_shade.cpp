@@ -1,10 +1,5 @@
 #include <universal/q_shared.h>
 
-#ifdef __SWITCH__
-extern const Material *Switch_ValidateMaterialPointerForRender(
-    const Material *material,
-    const char *source);
-#endif
 #include "rb_shade.h"
 #include "rb_logfile.h"
 #include "rb_state.h"
@@ -18,6 +13,9 @@ extern const Material *Switch_ValidateMaterialPointerForRender(
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
+extern const Material *Switch_ValidateMaterialPointerForRender(
+    const Material *material,
+    const char *source);
 #endif
 
 
