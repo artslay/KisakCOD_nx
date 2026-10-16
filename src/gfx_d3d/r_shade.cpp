@@ -12,7 +12,39 @@
 #include "r_image.h"
 
 #ifdef __SWITCH__
+#include <atomic>
+#include <cstdint>
 extern void Switch_LogWrite(const char *msg);
+extern bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass);
+
+static bool Switch_IsSafeMaterialShaderArgumentRange(
+    const MaterialShaderArgument *arg,
+    uint32_t argCount,
+    const char *path)
+{
+    if (!argCount)
+        return true;
+
+    const uintptr_t address = reinterpret_cast<uintptr_t>(arg);
+    if (address > UINT32_MAX &&
+        (address & (alignof(MaterialShaderArgument) - 1u)) == 0)
+        return true;
+
+    static std::atomic<uint32_t> traceCount{0};
+    if (traceCount.fetch_add(1, std::memory_order_relaxed) < 32u)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][SHADER ARG REJECT] path=%s arg=%p count=%u\\n",
+            path ? path : "<unknown>",
+            reinterpret_cast<const void *>(address),
+            static_cast<unsigned>(argCount));
+        Switch_LogWrite(trace);
+    }
+    return false;
+}
 #endif
 
 
@@ -131,6 +163,10 @@ void __cdecl R_HW_SetVertexShaderConstant(
 
 void __cdecl R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
 {
+#ifdef __SWITCH__
+    if (!Switch_IsSafeMaterialShaderArgumentRange(routingData, 1u, "vertex_code_constant"))
+        return;
+#endif
     const float *data; // [esp+8h] [ebp-4h]
 
     if (!R_IsVertexShaderConstantUpToDate(context, routingData))
@@ -277,6 +313,10 @@ void __cdecl R_HW_SetPixelShaderConstant(
 
 int __cdecl R_IsPixelShaderConstantUpToDate(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
 {
+#ifdef __SWITCH__
+    if (!Switch_IsSafeMaterialShaderArgumentRange(routingData, 1u, "pixel_constant_state"))
+        return 1;
+#endif
     GfxShaderConstantState newState; // [esp+4h] [ebp-10h]
 
     bcassert(routingData->dest, ARRAY_COUNT(context.state->pixelShaderConstState));
@@ -297,6 +337,10 @@ int __cdecl R_IsPixelShaderConstantUpToDate(GfxCmdBufContext context, const Mate
 
 void __cdecl R_SetPixelShaderConstantFromCode(GfxCmdBufContext context, const MaterialShaderArgument *routingData)
 {
+#ifdef __SWITCH__
+    if (!Switch_IsSafeMaterialShaderArgumentRange(routingData, 1u, "pixel_code_constant"))
+        return;
+#endif
     iassert(context.source->constVersions[routingData->u.codeConst.index]);
     bcassert(routingData->u.codeConst.index, CONST_SRC_FIRST_CODE_MATRIX);
 
@@ -513,6 +557,13 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     pass = &context.state->technique->passArray[passIndex];
     context.state->pass = pass;
     context.state->passIndex = passIndex;
+#ifdef __SWITCH__
+    // This is the actual draw setup path. Some technique selection routes can
+    // reach it without passing through Material_GetTechnique, so resolve the
+    // pass argument array immediately before any per-pass argument traversal.
+    Switch_ResolveMaterialPassArgsForRender(
+        const_cast<MaterialPass *>(pass));
+#endif
     material = context.state->material;
     if (material->stateBitsEntry[context.state->techType] >= (uint32_t)material->stateBitsCount)
         MyAssertHandler(
@@ -646,7 +697,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     }
     iassert( pass->pixelShader );
     R_SetPixelShader(context.state, pass->pixelShader);
-    if (pass->stableArgCount)
+    if (pass->stableArgCount && pass->args)
         R_SetPassShaderStableArguments(
             context,
             pass->stableArgCount,
@@ -738,6 +789,10 @@ void __cdecl R_SetPassShaderPrimArguments(
     uint32_t argCount,
     const MaterialShaderArgument *arg)
 {
+#ifdef __SWITCH__
+    if (!Switch_IsSafeMaterialShaderArgumentRange(arg, argCount, "prim"))
+        return;
+#endif
     while (arg->type == MTL_ARG_CODE_VERTEX_CONST)
     {
         R_SetVertexShaderConstantFromCode(context, arg++);
@@ -805,6 +860,10 @@ void __cdecl R_SetPassShaderObjectArguments(
     uint32_t argCount,
     const MaterialShaderArgument *arg)
 {
+#ifdef __SWITCH__
+    if (!Switch_IsSafeMaterialShaderArgumentRange(arg, argCount, "object"))
+        return;
+#endif
     const GfxImage *image; // [esp+Ch] [ebp-8h]
     uint8_t samplerState; // [esp+13h] [ebp-1h] BYREF
 
@@ -846,6 +905,10 @@ void __cdecl R_SetPassPixelShaderStableArguments(
     uint32_t argCount,
     const MaterialShaderArgument *arg)
 {
+#ifdef __SWITCH__
+    if (!Switch_IsSafeMaterialShaderArgumentRange(arg, argCount, "pixel_stable"))
+        return;
+#endif
     const char *v3; // eax
     const Material *material; // [esp+Ch] [ebp-8h]
     const MaterialConstantDef *constDef; // [esp+10h] [ebp-4h]
@@ -903,6 +966,10 @@ void __cdecl R_SetPassVertexShaderStableArguments(
     uint32_t argCount,
     const MaterialShaderArgument *arg)
 {
+#ifdef __SWITCH__
+    if (!Switch_IsSafeMaterialShaderArgumentRange(arg, argCount, "vertex_stable"))
+        return;
+#endif
     while (arg->type < MTL_ARG_CODE_PRIM_BEGIN)
     {
         ++arg;
@@ -923,6 +990,10 @@ void __cdecl R_SetPassShaderStableArguments(
     uint32_t argCount,
     const MaterialShaderArgument *arg)
 {
+#ifdef __SWITCH__
+    if (!Switch_IsSafeMaterialShaderArgumentRange(arg, argCount, "stable"))
+        return;
+#endif
     const char *v3; // eax
     const GfxImage *image; // [esp+14h] [ebp-14h]
     const Material *material; // [esp+18h] [ebp-10h]
