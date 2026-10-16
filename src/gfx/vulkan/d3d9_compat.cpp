@@ -959,9 +959,8 @@ bool PatchFragmentShaderForAlphaTest(
             functionPointerTypeWords.begin(), functionPointerTypeWords.end());
     }
 
-    // Keep the most recently written output alpha in a Function-storage
-    // variable. This avoids reading an Output interface variable, which some
-    // Vulkan shader compilers reject, and keeps alpha-test state per invocation.
+    // The storage-based fallback keeps the most recently written output alpha
+    // per invocation without reading the Output interface variable directly.
     size_t firstVariableOrFunction = words.size();
     for (size_t i = 5; i < words.size();)
     {
@@ -1156,8 +1155,8 @@ bool PatchFragmentShaderForAlphaTest(
     const bool cfgValid = ValidateSpirvPhiEdges(patched, cfgReason, sizeof(cfgReason));
     char cfgMessage[224];
     std::snprintf(cfgMessage, sizeof(cfgMessage),
-        "[KisakCOD][VK ALPHA SPIRV CFG] valid=%u %s\n",
-        cfgValid ? 1u : 0u, cfgReason);
+        "[KisakCOD][VK ALPHA SPIRV CFG] valid=%u capture=%s %s\n",
+        cfgValid ? 1u : 0u, useSsaAlphaCapture ? "ssa" : "function_storage", cfgReason);
     Switch_LogWrite(cfgMessage);
 
     words.swap(patched);
