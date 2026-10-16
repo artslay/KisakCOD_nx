@@ -1131,7 +1131,7 @@ static int CheckReferences()
 
     for (unsigned int variableId = 1; variableId < 0x8000; ++variableId)
     {
-        const VariableValueInternal *entryValue = &scrVarGlob.variableList[variableId + 1];
+        VariableValueInternal *entryValue = &scrVarGlob.variableList[variableId + 1];
         if ((entryValue->w.status & 0x60) != 0
             && (entryValue->w.type & VAR_MASK) >= VAR_THREAD)
         {
