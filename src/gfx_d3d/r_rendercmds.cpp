@@ -880,7 +880,7 @@ const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material,
     const MaterialTechniqueSet *techSet; // [esp+4h] [ebp-4h]
 
 #ifdef __SWITCH__
-    g_switchFrameStage = "frame/render/material_get_technique";
+    g_switchFrameStage = "frame/render/material_get_technique/entry";
     const uintptr_t materialAddress = reinterpret_cast<uintptr_t>(material);
     if (!material || materialAddress < 0x100000000ULL)
     {
@@ -910,17 +910,39 @@ const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material,
 #endif
 
 #ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/material_get_technique/resolve_set";
     techSet = Switch_ResolveMaterialTechniqueSetForRender(
         const_cast<Material *>(material));
     if (!techSet)
         return nullptr;
+
+    g_switchFrameStage = "frame/render/material_get_technique/set_ready";
     technique = Switch_ResolveTechniqueForRender(
         const_cast<MaterialTechniqueSet *>(techSet),
         static_cast<uint32_t>(techType));
+    g_switchFrameStage = "frame/render/material_get_technique/technique_ready";
 #else
     techSet = Material_GetTechniqueSet(material);
     iassert( techSet );
     technique = techSet->techniques[techType];
+#endif
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/material_get_technique/shader_check";
+    if (technique && !technique->passCount)
+        return nullptr;
+    if (technique && !technique->passArray[0].pixelShader)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][TECHNIQUE RENDER REJECT] kind=nullPixelShaderAfterResolve set=%p techType=%u technique=%p\\n",
+            static_cast<const void *>(techSet),
+            static_cast<unsigned>(techType),
+            static_cast<const void *>(technique));
+        Switch_LogWrite(trace);
+        return nullptr;
+    }
 #endif
     if (technique
         && technique->passArray[0].pixelShader->prog.loadDef.loadForRenderer != r_rendererInUse->current.integer)
@@ -933,6 +955,9 @@ const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material,
             technique->passArray[0].pixelShader->prog.loadDef.loadForRenderer,
             r_rendererInUse->current.integer);
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/material_get_technique/return";
+#endif
     return technique;
 }
 
