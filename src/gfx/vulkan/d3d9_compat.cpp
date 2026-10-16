@@ -4190,28 +4190,35 @@ bool IDirect3DDevice9::EnsurePipeline()
     static uint64_t lastDumpPsHash = 0;
     static size_t lastDumpVsWords = 0;
     static size_t lastDumpPsWords = 0;
-    if ((pipelineCreateSequence <= 8 || pipelineCreateSequence >= 180) &&
+    const bool earlyPipelineDump = pipelineCreateSequence <= 8;
+    const bool probePipelineDump =
+        pipelineCreateSequence > 8 && pipelineCreateSequence <= 32;
+    const bool recentPipelineDump = pipelineCreateSequence >= 180;
+    if ((earlyPipelineDump || probePipelineDump || recentPipelineDump) &&
         (vsSpirvHash != lastDumpVsHash || psSpirvHash != lastDumpPsHash ||
          m_vertexShader->spirv.size() != lastDumpVsWords ||
          m_pixelShader->spirv.size() != lastDumpPsWords))
     {
-        const bool earlyPipelineDump = pipelineCreateSequence <= 8;
+        const char *vsDumpPath = earlyPipelineDump
+            ? "sdmc:/switch/KisakCOD/vk_crash_vs.spv"
+            : (probePipelineDump
+                ? "sdmc:/switch/KisakCOD/vk_probe_vs.spv"
+                : "sdmc:/switch/KisakCOD/vk_recent_vs.spv");
+        const char *psDumpPath = earlyPipelineDump
+            ? "sdmc:/switch/KisakCOD/vk_crash_ps.spv"
+            : (probePipelineDump
+                ? "sdmc:/switch/KisakCOD/vk_probe_ps.spv"
+                : "sdmc:/switch/KisakCOD/vk_recent_ps.spv");
         const bool vsDumpOk = WriteSwitchPipelineSpirv(
-            earlyPipelineDump
-                ? "sdmc:/switch/KisakCOD/vk_crash_vs.spv"
-                : "sdmc:/switch/KisakCOD/vk_recent_vs.spv",
-            m_vertexShader->spirv);
+            vsDumpPath, m_vertexShader->spirv);
         const bool psDumpOk = WriteSwitchPipelineSpirv(
-            earlyPipelineDump
-                ? "sdmc:/switch/KisakCOD/vk_crash_ps.spv"
-                : "sdmc:/switch/KisakCOD/vk_recent_ps.spv",
-            m_pixelShader->spirv);
-        char dumpMsg[288];
+            psDumpPath, m_pixelShader->spirv);
+        char dumpMsg[320];
         std::snprintf(
             dumpMsg, sizeof(dumpMsg),
             "[KisakCOD][VK SPIRV DUMP] seq=%u set=%s saved=%u/%u vsWords=%zu vsHash=%016llx psWords=%zu psHash=%016llx\n",
             pipelineCreateSequence,
-            earlyPipelineDump ? "early" : "recent",
+            earlyPipelineDump ? "early" : (probePipelineDump ? "probe" : "recent"),
             vsDumpOk ? 1u : 0u, psDumpOk ? 1u : 0u,
             m_vertexShader->spirv.size(),
             static_cast<unsigned long long>(vsSpirvHash),
@@ -4264,7 +4271,9 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_depthWrite ? 1u : 0u,
         static_cast<unsigned int>(m_depthFunc),
         m_blendEnable ? 1u : 0u);
-    if (pipelineCreateSequence <= 8 || pipelineCreateSequence >= 180)
+    if (pipelineCreateSequence <= 8 ||
+        (pipelineCreateSequence > 8 && pipelineCreateSequence <= 32) ||
+        pipelineCreateSequence >= 180)
     {
         Switch_LogWrite(preCreateMsg);
     }
@@ -4284,21 +4293,54 @@ bool IDirect3DDevice9::EnsurePipeline()
         Switch_LogWrite(compactMsg);
     }
 
-    if (pipelineCreateSequence >= 180)
+    if (pipelineCreateSequence <= 8 ||
+        (pipelineCreateSequence > 8 && pipelineCreateSequence <= 32) ||
+        pipelineCreateSequence >= 180)
     {
-        char handlesMsg[320];
+        char handlesMsg[768];
         std::snprintf(
             handlesMsg, sizeof(handlesMsg),
-            "[KisakCOD][VK PIPELINE INPUT] seq=%u device=%p layout=%p vsModule=%p psModule=%p vsWords=%zu psWords=%zu alphaTest=%u specialization=%p\n",
+            "[KisakCOD][VK PIPELINE INPUT] seq=%u info=%p pNext=%p device=%p layout=%p vsModule=%p psModule=%p stages=%p stageCount=%u vertexInput=%p bindings=%u attrs=%u assembly=%p topology=%u viewport=%p raster=%p multisample=%p depth=%p blend=%p dynamic=%p alphaTest=%u alphaFunc=%u alphaRef=%u specIds=%u/%u specInfo=%p specEntries=%u mapIds=%u/%u offsets=%zu/%zu sizes=%zu/%zu specData=%p dataSize=%zu values=%.3f/%.6f\n",
             pipelineCreateSequence,
+            static_cast<const void *>(&info),
+            static_cast<const void *>(info.pNext),
             static_cast<void *>(m_backend->Device()),
-            static_cast<void *>(m_backend->PipelineLayout()),
-            static_cast<void *>(m_vertexShader->module),
-            static_cast<void *>(m_pixelShader->module),
-            m_vertexShader->spirv.size(),
-            m_pixelShader->spirv.size(),
+            static_cast<void *>(info.layout),
+            static_cast<void *>(stages[0].module),
+            static_cast<void *>(stages[1].module),
+            static_cast<const void *>(info.pStages),
+            info.stageCount,
+            static_cast<const void *>(info.pVertexInputState),
+            info.pVertexInputState->vertexBindingDescriptionCount,
+            info.pVertexInputState->vertexAttributeDescriptionCount,
+            static_cast<const void *>(info.pInputAssemblyState),
+            static_cast<unsigned int>(info.pInputAssemblyState->topology),
+            static_cast<const void *>(info.pViewportState),
+            static_cast<const void *>(info.pRasterizationState),
+            static_cast<const void *>(info.pMultisampleState),
+            static_cast<const void *>(info.pDepthStencilState),
+            static_cast<const void *>(info.pColorBlendState),
+            static_cast<const void *>(info.pDynamicState),
             m_alphaTest ? 1u : 0u,
-            static_cast<const void *>(stages[1].pSpecializationInfo));
+            m_alphaFunc,
+            m_alphaRef,
+            pipelineAlphaFuncSpecId,
+            pipelineAlphaRefSpecId,
+            static_cast<const void *>(stages[1].pSpecializationInfo),
+            stages[1].pSpecializationInfo
+                ? stages[1].pSpecializationInfo->mapEntryCount : 0u,
+            alphaSpecializationEntries[0].constantID,
+            alphaSpecializationEntries[1].constantID,
+            alphaSpecializationEntries[0].offset,
+            alphaSpecializationEntries[1].offset,
+            alphaSpecializationEntries[0].size,
+            alphaSpecializationEntries[1].size,
+            stages[1].pSpecializationInfo
+                ? stages[1].pSpecializationInfo->pData : nullptr,
+            stages[1].pSpecializationInfo
+                ? stages[1].pSpecializationInfo->dataSize : 0u,
+            alphaSpecializationData.func,
+            alphaSpecializationData.ref);
         Switch_LogWrite(handlesMsg);
     }
 
