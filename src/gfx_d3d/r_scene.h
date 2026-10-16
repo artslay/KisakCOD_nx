@@ -45,7 +45,10 @@ struct GfxSceneEntityCull // sizeof=0x40
     volatile uint32_t state;
     float mins[3];
     float maxs[3];
-    char lods[32];
+    // LOD selection stores -1 for "culled/no LOD". Plain char is unsigned on
+    // the Switch AArch64 toolchain, which turns that sentinel into 255 and
+    // lets callers index XModel::lodInfo out of range.
+    signed char lods[32];
     GfxSkinnedXModelSurfs skinnedSurfs;
 };
 
