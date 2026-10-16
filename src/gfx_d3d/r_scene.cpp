@@ -1507,6 +1507,38 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
         rg.viewDir[2] = refdef->viewaxis[0][2];
         viewParmsDraw = R_AllocViewParms();
         R_SetViewParmsForScene(refdef, viewParmsDraw);
+#ifdef __SWITCH__
+        // Bounded samples while the intro camera descends; no per-frame logging.
+        static unsigned int switchCameraTrackCallCount = 0;
+        static unsigned int switchCameraTrackLogCount = 0;
+        static int switchLastCameraTrackCell = 0x7fffffff;
+        static int switchLastCameraTrackBucket = 0x7fffffff;
+        const unsigned int switchCameraTrackCall = switchCameraTrackCallCount++;
+        const int switchCameraTrackCell = R_CellForPoint(rgp.world, refdef->vieworg);
+        const int switchCameraTrackBucket =
+            static_cast<int>(refdef->vieworg[2] / 1024.0f);
+        if (switchCameraTrackLogCount < 32 &&
+            (switchCameraTrackCall < 2 ||
+             switchCameraTrackCell != switchLastCameraTrackCell ||
+             switchCameraTrackBucket != switchLastCameraTrackBucket))
+        {
+            char cameraTrace[256];
+            std::snprintf(
+                cameraTrace, sizeof(cameraTrace),
+                "[KisakCOD][CAMERA TRACK] call=%u time=%d origin=%.1f,%.1f,%.1f forwardZ=%.3f bucket=%d cell=%d priorDrawSurfs=%u\n",
+                switchCameraTrackCall,
+                refdef->time,
+                refdef->vieworg[0], refdef->vieworg[1], refdef->vieworg[2],
+                refdef->viewaxis[0][2],
+                switchCameraTrackBucket,
+                switchCameraTrackCell,
+                static_cast<unsigned>(frontEndDataOut->drawSurfCount));
+            Switch_LogWrite(cameraTrace);
+            ++switchCameraTrackLogCount;
+        }
+        switchLastCameraTrackCell = switchCameraTrackCell;
+        switchLastCameraTrackBucket = switchCameraTrackBucket;
+#endif
         R_SetSceneParms(refdef, &sceneParms);
         R_CorrectLodScale(refdef);
         iassert( scene.def.time == refdef->time );
