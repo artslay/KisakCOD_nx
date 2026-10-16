@@ -441,19 +441,28 @@ bool VulkanBackend::CreateDevice()
     const char *extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
     VkPhysicalDeviceFeatures features{};
-    VkPhysicalDeviceDynamicRenderingFeatures dynamicRendering{};
-    dynamicRendering.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
-    dynamicRendering.dynamicRendering = VK_TRUE;
+    VkPhysicalDeviceVulkan13Features vulkan13Features{};
+    vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    vulkan13Features.dynamicRendering = VK_TRUE;
 
     VkPhysicalDeviceFeatures2 features2{};
     features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    features2.pNext = &dynamicRendering;
+    features2.pNext = &vulkan13Features;
     vkGetPhysicalDeviceFeatures2(m_physicalDevice, &features2);
-    if (!dynamicRendering.dynamicRendering)
+    if (!vulkan13Features.dynamicRendering)
     {
         SetError("Vulkan dynamic rendering is unavailable");
         return false;
     }
+
+    m_shaderDemoteToHelperInvocation =
+        vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE;
+    // Do not accidentally enable every Vulkan 1.3 feature reported by the query.
+    vulkan13Features = {};
+    vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    vulkan13Features.dynamicRendering = VK_TRUE;
+    vulkan13Features.shaderDemoteToHelperInvocation =
+        m_shaderDemoteToHelperInvocation ? VK_TRUE : VK_FALSE;
 
     // Wireframe is optional in Vulkan. Query it with the core features and
     // enable it only when the physical device supports it; requesting a
@@ -466,14 +475,15 @@ bool VulkanBackend::CreateDevice()
     vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
     m_maxSamplerAnisotropy = m_samplerAnisotropy ? std::max(1.0f, properties.limits.maxSamplerAnisotropy) : 1.0f;
     m_maxSamplerLodBias = std::max(0.0f, properties.limits.maxSamplerLodBias);
-    char featureMsg[128];
+    char featureMsg[160];
     std::snprintf(featureMsg, sizeof(featureMsg),
-        "[KisakCOD][VK] fill_mode_non_solid=%u\n",
-        m_fillModeNonSolid ? 1u : 0u);
+        "[KisakCOD][VK] fill_mode_non_solid=%u shader_demote_helper=%u\n",
+        m_fillModeNonSolid ? 1u : 0u,
+        m_shaderDemoteToHelperInvocation ? 1u : 0u);
     Switch_LogWrite(featureMsg);
 
     VkDeviceCreateInfo info{};
-    info.pNext = &dynamicRendering;
+    info.pNext = &vulkan13Features;
     info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     info.queueCreateInfoCount = 1;
     info.pQueueCreateInfos = &queue;

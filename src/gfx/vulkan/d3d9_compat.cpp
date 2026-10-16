@@ -669,10 +669,91 @@ bool ValidateSpirvPhiEdges(
     return true;
 }
 
+bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
+{
+    static constexpr char extensionName[] = "SPV_EXT_demote_to_helper_invocation";
+    bool hasCapability = false;
+    bool hasExtension = false;
+
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+
+        if (op == SpvOpCapability && wc >= 2 && words[i + 1] == 5379u)
+            hasCapability = true;
+        else if (op == SpvOpExtension && wc >= 2)
+        {
+            std::string value;
+            bool terminated = false;
+            for (size_t word = i + 1; word < i + wc && !terminated; ++word)
+            {
+                for (unsigned int shift = 0; shift < 32; shift += 8)
+                {
+                    const char ch = static_cast<char>((words[word] >> shift) & 0xffu);
+                    if (!ch)
+                    {
+                        terminated = true;
+                        break;
+                    }
+                    value.push_back(ch);
+                }
+            }
+            if (terminated && value == extensionName)
+                hasExtension = true;
+        }
+        i += wc;
+    }
+
+    if (!hasCapability)
+    {
+        std::vector<uint32_t> capability;
+        SpirvAppend(capability, SpvOpCapability, {5379u});
+        size_t insertAt = 5;
+        while (insertAt < words.size())
+        {
+            uint32_t wc = 0;
+            SpvOp op{};
+            if (!SpirvIsValidInstruction(words, insertAt, &wc, &op))
+                return false;
+            if (op != SpvOpCapability)
+                break;
+            insertAt += wc;
+        }
+        words.insert(words.begin() + insertAt, capability.begin(), capability.end());
+    }
+
+    if (!hasExtension)
+    {
+        const size_t stringWords = (sizeof(extensionName) + 3u) / 4u;
+        std::vector<uint32_t> extension(1u + stringWords, 0u);
+        extension[0] = (static_cast<uint32_t>(extension.size()) << 16) |
+            static_cast<uint32_t>(SpvOpExtension);
+        std::memcpy(extension.data() + 1, extensionName, sizeof(extensionName));
+
+        size_t insertAt = 5;
+        while (insertAt < words.size())
+        {
+            uint32_t wc = 0;
+            SpvOp op{};
+            if (!SpirvIsValidInstruction(words, insertAt, &wc, &op))
+                return false;
+            if (op != SpvOpCapability && op != SpvOpExtension)
+                break;
+            insertAt += wc;
+        }
+        words.insert(words.begin() + insertAt, extension.begin(), extension.end());
+    }
+    return true;
+}
+
 bool PatchFragmentShaderForAlphaTest(
     std::vector<uint32_t> &words,
     uint32_t *alphaFuncSpecId,
-    uint32_t *alphaRefSpecId)
+    uint32_t *alphaRefSpecId,
+    bool useDemoteToHelperInvocation)
 {
     if (words.size() < 5 || words[0] != SpvMagicNumber)
         return false;
@@ -882,6 +963,9 @@ bool PatchFragmentShaderForAlphaTest(
     };
     const uint32_t funcSpecDecoration = allocateSpecId();
     const uint32_t refSpecDecoration = allocateSpecId();
+
+    if (useDemoteToHelperInvocation && !EnsureSpirvDemoteExtension(words))
+        return false;
 
     // Result IDs come from the module's bound.
     uint32_t nextId = words[3];
@@ -1157,7 +1241,17 @@ bool PatchFragmentShaderForAlphaTest(
             SpirvAppend(patched, SpvOpSelectionMerge, {mergeLabel, 0});
             SpirvAppend(patched, SpvOpBranchConditional, {discard, killLabel, mergeLabel});
             SpirvAppend(patched, SpvOpLabel, {killLabel});
-            SpirvAppend(patched, SpvOpKill, {});
+            if (useDemoteToHelperInvocation)
+            {
+                // Keep the invocation's CFG path merged rather than terminating it
+                // with OpKill; framebuffer outputs are still suppressed by demotion.
+                SpirvAppend(patched, static_cast<SpvOp>(5380u), {});
+                SpirvAppend(patched, SpvOpBranch, {mergeLabel});
+            }
+            else
+            {
+                SpirvAppend(patched, SpvOpKill, {});
+            }
             SpirvAppend(patched, SpvOpLabel, {mergeLabel});
             injectedReturnTest = true;
         }
@@ -1173,10 +1267,13 @@ bool PatchFragmentShaderForAlphaTest(
 
     char cfgReason[160]{};
     const bool cfgValid = ValidateSpirvPhiEdges(patched, cfgReason, sizeof(cfgReason));
-    char cfgMessage[224];
+    char cfgMessage[256];
     std::snprintf(cfgMessage, sizeof(cfgMessage),
-        "[KisakCOD][VK ALPHA SPIRV CFG] valid=%u capture=%s %s\n",
-        cfgValid ? 1u : 0u, useSsaAlphaCapture ? "ssa" : "function_storage", cfgReason);
+        "[KisakCOD][VK ALPHA SPIRV CFG] valid=%u capture=%s discard=%s %s\n",
+        cfgValid ? 1u : 0u,
+        useSsaAlphaCapture ? "ssa" : "function_storage",
+        useDemoteToHelperInvocation ? "demote" : "kill",
+        cfgReason);
     Switch_LogWrite(cfgMessage);
 
     words.swap(patched);
@@ -3482,7 +3579,8 @@ bool IDirect3DDevice9::EnsurePipeline()
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
                 &m_pixelShader->alphaFuncSpecId,
-                &m_pixelShader->alphaRefSpecId))
+                &m_pixelShader->alphaRefSpecId,
+                m_backend->SupportsShaderDemoteToHelperInvocation()))
         {
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
             return false;
@@ -3555,7 +3653,8 @@ bool IDirect3DDevice9::EnsurePipeline()
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
                 &m_pixelShader->alphaFuncSpecId,
-                &m_pixelShader->alphaRefSpecId))
+                &m_pixelShader->alphaRefSpecId,
+                m_backend->SupportsShaderDemoteToHelperInvocation()))
         {
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
             return false;
