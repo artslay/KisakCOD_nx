@@ -3867,7 +3867,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 pixelSpirv,
                 &pipelineAlphaFuncSpecId,
                 &pipelineAlphaRefSpecId,
-                m_backend->SupportsShaderDemoteToHelperInvocation()))
+                false))
         {
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
             return false;
