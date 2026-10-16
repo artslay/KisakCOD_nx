@@ -362,7 +362,6 @@ static bool Switch_IsMappedNativeRange(
         info.type == MemType_Unmapped ||
         (info.perm & Perm_R) == 0 ||
         info.size == 0 ||
-        info.addr > UINTPTR_MAX ||
         info.size > UINTPTR_MAX - static_cast<uintptr_t>(info.addr))
     {
         return false;
@@ -431,9 +430,9 @@ static bool Switch_IsValidTechniqueSetPointer(
     const uintptr_t address =
         reinterpret_cast<uintptr_t>(techSet);
 
-    // The Switch renderer's native heap objects live in the 64-bit
-    // address space. Zero-extended and sign-widened 32-bit values are
-    // serialized tokens, not native MaterialTechniqueSet pointers.
+    // Serialized tokens are resolved through the alias table first. If an
+    // unresolved low value is a genuinely mapped native allocation, the
+    // readable-range check below permits it despite its 32-bit numeric value.
     if ((Switch_Is32BitSerializedPointerToken(address) &&
          !Switch_IsMappedNativeRange(
              address, sizeof(MaterialTechniqueSet), alignof(MaterialTechniqueSet))) ||
