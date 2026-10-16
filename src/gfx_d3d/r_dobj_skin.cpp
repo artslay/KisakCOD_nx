@@ -154,8 +154,9 @@ int  R_SkinSceneDObjModels(
                     Com_Printf(CON_CHANNEL_ANIM,
                         "[KisakCOD][XMODEL SURFACE RANGE] model=%s modelIndex=%u lod=%d surfIndex=%u lodSurfs=%u modelSurfs=%u numLods=%d surfs=%p phase=capacity\n",
                         model->name ? model->name : "(null)", modelIndex, modelLod,
-                        lodInfo.surfIndex, lodInfo.numsurfs, model->numsurfs, model->numLods,
-                        static_cast<const void *>(model->surfs));
+                        static_cast<unsigned>(lodInfo.surfIndex), static_cast<unsigned>(lodInfo.numsurfs),
+                        static_cast<unsigned>(model->numsurfs), model->numLods,
+                        static_cast<void *>(model->surfs));
                 }
                 continue;
             }
@@ -236,8 +237,9 @@ int  R_SkinSceneDObjModels(
                     Com_Printf(CON_CHANNEL_ANIM,
                         "[KisakCOD][XMODEL SURFACE RANGE] model=%s modelIndex=%u lod=%d surfIndex=%u lodSurfs=%u modelSurfs=%u numLods=%d surfs=%p phase=skin\n",
                         model->name ? model->name : "(null)", lod, cullLod,
-                        modelLodInfo.surfIndex, modelLodInfo.numsurfs, model->numsurfs, model->numLods,
-                        static_cast<const void *>(model->surfs));
+                        static_cast<unsigned>(modelLodInfo.surfIndex), static_cast<unsigned>(modelLodInfo.numsurfs),
+                        static_cast<unsigned>(model->numsurfs), model->numLods,
+                        static_cast<void *>(model->surfs));
                 }
                 lod++;
                 boneIndex += boneCount;
