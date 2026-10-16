@@ -249,6 +249,16 @@ void __cdecl RB_DrawStretchPic(
 
     iassert(gfxCmdBufSourceState.viewMode == VIEW_MODE_2D);
 
+#ifdef __SWITCH__
+    // The video command stream can emit zero-height white-material stretch
+    // pics before the full-screen cinematic quad. They have no raster coverage;
+    // skip them before changing tessellation material or flushing a surface.
+    // Otherwise those empty quads can force an unnecessary draw of a material
+    // variant that has no usable UNLIT technique on the Switch asset path.
+    if (w == 0.0f || h == 0.0f)
+        return;
+#endif
+
     RB_SetTessTechnique(material, TECHNIQUE_UNLIT);
     R_TrackPrims(&gfxCmdBufState, statsTarget);
     RB_CheckTessOverflow(4, 6);
