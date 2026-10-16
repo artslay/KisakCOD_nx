@@ -167,11 +167,16 @@ static bool MT_CheckSentinelAtPhase(const char *phase, uint32_t extra)
     return false;
 }
 
-// Validate the free trees immediately after completed allocator mutations.
-// The full walk is intentionally limited to the first 4096 allocation/free
-// calls on Switch: this is a diagnostic window, not a permanent per-frame cost.
+// Validate the free trees at sampled allocator mutations on Switch.
+// A full walk visits every currently free node; running it after every one of
+// the first 4096 allocations/frees turns startup into an O(mutations * nodes)
+// diagnostic workload. Keep the first mutation and then sample every 256th
+// mutation within the same bounded window. The cheap sentinel/link checks at
+// each mutation remain active independently.
 static constexpr uint32_t MT_TREE_VALIDATION_MUTATION_LIMIT = 4096;
+static constexpr uint32_t MT_TREE_VALIDATION_INTERVAL = 256;
 static uint32_t mtTreeValidationMutationCount;
+static uint16_t mtTreeValidationGeneration;
 static uint16_t mtTreeValidationSeen[MEMORY_NODE_COUNT] = {};
 static uint16_t mtTreeValidationStack[MEMORY_NODE_COUNT] = {};
 
@@ -182,6 +187,10 @@ static void MT_ValidateFreeTrees(
     uint32_t changedNode)
 {
     if (mtInvariantReportCount || mtTreeValidationMutationCount >= MT_TREE_VALIDATION_MUTATION_LIMIT)
+        return;
+
+    const uint32_t mutation = ++mtTreeValidationMutationCount;
+    if (mutation != 1u && (mutation % MT_TREE_VALIDATION_INTERVAL) != 0u)
         return;
 
     // Index zero is the null-node sentinel, never an allocatable block. The
@@ -203,7 +212,7 @@ static void MT_ValidateFreeTrees(
         return;
     }
 
-    const uint16_t generation = static_cast<uint16_t>(++mtTreeValidationMutationCount);
+    const uint16_t generation = static_cast<uint16_t>(++mtTreeValidationGeneration);
 
     for (uint32_t bucket = 0; bucket <= MEMORY_NODE_BITS; ++bucket)
     {
