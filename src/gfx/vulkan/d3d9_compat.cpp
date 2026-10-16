@@ -4007,6 +4007,186 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite(minimalMsg);
         }
 
+        // Probe 1d: remove only the generated alpha comparison arithmetic,
+        // keep the alpha capture/local variable and structured discard, and
+        // force the conditional to true. This isolates comparisons/spec constants
+        // from the local-variable/declaration/CFG additions.
+        if (!m_pixelShader->spirv.empty())
+        {
+            const std::vector<uint32_t> &patchedAlphaSpirv = m_pixelShader->spirv;
+            uint32_t fragmentEntryId = 0;
+            uint32_t boolTypeId = 0;
+            for (size_t i = 5; i < patchedAlphaSpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(patchedAlphaSpirv, i, &wc, &op))
+                    break;
+                const uint32_t *ins = &patchedAlphaSpirv[i];
+                if (op == SpvOpEntryPoint && wc >= 3 && ins[1] == SpvExecutionModelFragment)
+                    fragmentEntryId = ins[2];
+                else if (op == SpvOpTypeBool && wc >= 2)
+                    boolTypeId = ins[1];
+                i += wc;
+            }
+
+            const std::vector<SpvOp> alphaArithmeticOps = {
+                SpvOpLoad,
+                SpvOpFOrdLessThan, SpvOpFOrdEqual, SpvOpFOrdLessThanEqual,
+                SpvOpFOrdGreaterThan, SpvOpFOrdNotEqual, SpvOpFOrdGreaterThanEqual,
+                SpvOpIEqual, SpvOpIEqual, SpvOpIEqual, SpvOpIEqual,
+                SpvOpIEqual, SpvOpIEqual, SpvOpIEqual,
+                SpvOpLogicalAnd, SpvOpLogicalAnd, SpvOpLogicalAnd,
+                SpvOpLogicalAnd, SpvOpLogicalAnd, SpvOpLogicalAnd,
+                SpvOpLogicalOr, SpvOpLogicalOr, SpvOpLogicalOr,
+                SpvOpLogicalOr, SpvOpLogicalOr, SpvOpLogicalOr,
+                SpvOpLogicalNot
+            };
+            const std::vector<SpvOp> alphaTailOps = {
+                SpvOpSelectionMerge, SpvOpBranchConditional, SpvOpLabel,
+                SpvOpKill, SpvOpLabel, SpvOpReturn
+            };
+
+            std::vector<size_t> entryOffsets;
+            std::vector<SpvOp> entryOps;
+            bool inFragmentEntry = false;
+            for (size_t i = 5; i < patchedAlphaSpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(patchedAlphaSpirv, i, &wc, &op))
+                    break;
+                const uint32_t *ins = &patchedAlphaSpirv[i];
+                if (op == SpvOpFunction && wc >= 3)
+                    inFragmentEntry = ins[2] == fragmentEntryId;
+                if (inFragmentEntry)
+                {
+                    entryOffsets.push_back(i);
+                    entryOps.push_back(op);
+                }
+                if (op == SpvOpFunctionEnd)
+                    inFragmentEntry = false;
+                i += wc;
+            }
+
+            size_t arithmeticStart = patchedAlphaSpirv.size();
+            size_t selectionMergeOffset = patchedAlphaSpirv.size();
+            size_t branchOffset = patchedAlphaSpirv.size();
+            for (size_t k = alphaArithmeticOps.size(); k < entryOps.size(); ++k)
+            {
+                if (entryOps[k] != SpvOpSelectionMerge)
+                    continue;
+                bool match = true;
+                const size_t startIndex = k - alphaArithmeticOps.size();
+                for (size_t j = 0; j < alphaArithmeticOps.size(); ++j)
+                {
+                    if (entryOps[startIndex + j] != alphaArithmeticOps[j])
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+                if (!match || k + alphaTailOps.size() > entryOps.size())
+                    continue;
+                for (size_t j = 0; j < alphaTailOps.size(); ++j)
+                {
+                    if (entryOps[k + j] != alphaTailOps[j])
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match)
+                {
+                    arithmeticStart = entryOffsets[startIndex];
+                    selectionMergeOffset = entryOffsets[k];
+                    branchOffset = entryOffsets[k + 1];
+                }
+            }
+
+            size_t firstVariableOrFunction = patchedAlphaSpirv.size();
+            for (size_t i = 5; i < patchedAlphaSpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(patchedAlphaSpirv, i, &wc, &op))
+                    break;
+                if (op == SpvOpVariable || op == SpvOpFunction)
+                {
+                    firstVariableOrFunction = i;
+                    break;
+                }
+                i += wc;
+            }
+
+            VkResult mathlessModuleResult = VK_ERROR_UNKNOWN;
+            VkResult mathlessPipelineResult = VK_ERROR_UNKNOWN;
+            if (fragmentEntryId && boolTypeId &&
+                arithmeticStart < selectionMergeOffset &&
+                branchOffset < patchedAlphaSpirv.size() &&
+                firstVariableOrFunction < patchedAlphaSpirv.size())
+            {
+                const uint32_t trueId = patchedAlphaSpirv[3];
+                std::vector<uint32_t> alphaMathlessSpirv;
+                alphaMathlessSpirv.reserve(patchedAlphaSpirv.size());
+                for (size_t i = 5; i < patchedAlphaSpirv.size();)
+                {
+                    uint32_t wc = 0;
+                    SpvOp op{};
+                    if (!SpirvIsValidInstruction(patchedAlphaSpirv, i, &wc, &op))
+                        break;
+                    if (i == firstVariableOrFunction)
+                        SpirvAppend(alphaMathlessSpirv, SpvOpConstantTrue, {boolTypeId, trueId});
+                    if (i >= arithmeticStart && i < selectionMergeOffset)
+                    {
+                        i += wc;
+                        continue;
+                    }
+                    const size_t outOffset = alphaMathlessSpirv.size();
+                    alphaMathlessSpirv.insert(
+                        alphaMathlessSpirv.end(),
+                        patchedAlphaSpirv.begin() + i,
+                        patchedAlphaSpirv.begin() + i + wc);
+                    if (i == branchOffset)
+                        alphaMathlessSpirv[outOffset + 1] = trueId;
+                    i += wc;
+                }
+                alphaMathlessSpirv[3] = trueId + 1;
+
+                VkShaderModule mathlessModule = VK_NULL_HANDLE;
+                VkShaderModuleCreateInfo mathlessModuleInfo{};
+                mathlessModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                mathlessModuleInfo.codeSize = alphaMathlessSpirv.size() * sizeof(uint32_t);
+                mathlessModuleInfo.pCode = alphaMathlessSpirv.data();
+                mathlessModuleResult = vkCreateShaderModule(
+                    m_backend->Device(), &mathlessModuleInfo, nullptr, &mathlessModule);
+                mathlessPipelineResult = mathlessModuleResult;
+                VkPipeline mathlessPipeline = VK_NULL_HANDLE;
+                if (mathlessModuleResult == VK_SUCCESS)
+                {
+                    VkPipelineShaderStageCreateInfo mathlessStages[2] = {stages[0], stages[1]};
+                    mathlessStages[1].module = mathlessModule;
+                    mathlessStages[1].pSpecializationInfo = nullptr;
+                    VkGraphicsPipelineCreateInfo mathlessInfo = info;
+                    mathlessInfo.pStages = mathlessStages;
+                    mathlessPipelineResult = vkCreateGraphicsPipelines(
+                        m_backend->Device(), VK_NULL_HANDLE, 1, &mathlessInfo, nullptr, &mathlessPipeline);
+                    if (mathlessPipeline)
+                        vkDestroyPipeline(m_backend->Device(), mathlessPipeline, nullptr);
+                    vkDestroyShaderModule(m_backend->Device(), mathlessModule, nullptr);
+                }
+            }
+
+            char mathlessMsg[208];
+            std::snprintf(
+                mathlessMsg, sizeof(mathlessMsg),
+                "[KisakCOD][VK DRAW] pipeline_probe alpha_math_removed module=%d pipeline=%d match=%u\\n",
+                static_cast<int>(mathlessModuleResult),
+                static_cast<int>(mathlessPipelineResult),
+                arithmeticStart < selectionMergeOffset ? 1u : 0u);
+            Switch_LogWrite(mathlessMsg);
+        }
+
         // Probe 1b: keep all injected alpha-test arithmetic and structured
         // control flow, but replace OpKill with OpReturn. This isolates whether
         // NVK rejects the discard terminator itself or another part of the patch.
