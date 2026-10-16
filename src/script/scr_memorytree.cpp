@@ -190,7 +190,7 @@ static void MT_ValidateFreeTrees(
         return;
 
     const uint32_t validationPoint = ++mtTreeValidationPointCount;
-    if (validationPoint != 1u && (validationPoint % MT_TREE_VALIDATION_INTERVAL) != 0u
+    if (validationPoint != 1u && (validationPoint % MT_TREE_VALIDATION_INTERVAL) != 0u)
         return;
 
     // Index zero is the null-node sentinel, never an allocatable block. The
