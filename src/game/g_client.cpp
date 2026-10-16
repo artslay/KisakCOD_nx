@@ -570,6 +570,21 @@ void __cdecl ClientSpawn(gentity_s *ent)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_client.cpp", 624, 0, "%s", "ent->r.inuse");
     if (client->ps.clientNum != v3)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_client.cpp", 625, 0, "%s", "client->ps.clientNum == index");
+#ifdef __SWITCH__
+    if (ent->tagInfo)
+    {
+        Com_Printf(CON_CHANNEL_SERVER,
+            "[KisakCOD][PLAYER SPAWN LINK] ent=%d existingTagInfo=%p ps=(%.2f,%.2f,%.2f) pm=%d\\n",
+            v3, static_cast<void *>(ent->tagInfo),
+            client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
+            client->ps.pm_type);
+    }
+#endif
+    // A respawning player must not retain a previous scripted/tag link:
+    // ClientEndFrame would otherwise overwrite the selected spawn origin
+    // with the linked parent transform.
+    if (ent->tagInfo)
+        G_EntUnlink(ent);
     gentity_s *switchSpawnPoint = SelectInitialSpawnPoint(v12, v13);
 #ifdef __SWITCH__
     static bool switchPlayerSpawnLogged = false;
@@ -691,6 +706,16 @@ void __cdecl ClientSpawn(gentity_s *ent)
     sentient->oldOrigin[2] = client->ps.origin[2];
     SV_LinkEntity(ent);
     ClientEndFrame(ent);
+#ifdef __SWITCH__
+    if (switchTraceThisSpawn)
+    {
+        Com_Printf(CON_CHANNEL_SERVER,
+            "[KisakCOD][PLAYER SPAWN] after_endframe ps=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p ent=(%.2f,%.2f,%.2f)\\n",
+            client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
+            client->ps.pm_type, static_cast<void *>(ent->tagInfo),
+            ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2]);
+    }
+#endif
     level.clientIsSpawning = 0;
     BG_PlayerStateToEntityState(&client->ps, &ent->s, 1, 1u);
 }
