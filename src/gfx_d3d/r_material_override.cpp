@@ -629,8 +629,64 @@ static void Switch_ResolvePointerForRenderIfNeeded(T **pointer, const char *kind
 bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
 {
     g_switchFrameStage = "frame/render/pass_args/entry";
-    if (!pass)
+    const uintptr_t passAddress = reinterpret_cast<uintptr_t>(pass);
+    if (!pass ||
+        passAddress <= UINT32_MAX ||
+        (passAddress & (alignof(MaterialPass) - 1u)) != 0 ||
+        Switch_IsSerializedAddress(passAddress))
+    {
+        g_switchFrameStage = "frame/render/pass_args/rejected_pass";
         return false;
+    }
+
+    // Resolve every pointer field used by the draw/setup paths here, not only
+    // args. R_UpdateVertexDecl reaches Material_BuildVertexDecl directly and
+    // dereferences vertexDecl->routing at +4, which is unsafe if this field is
+    // still a 32-bit fastfile token.
+    const bool hadVertexDecl = pass->vertexDecl != nullptr;
+    const bool hadVertexShader = pass->vertexShader != nullptr;
+    const bool hadPixelShader = pass->pixelShader != nullptr;
+    Switch_ResolvePointerForRenderIfNeeded(&pass->vertexDecl, "vertexDecl/pass_setup");
+    Switch_ResolvePointerForRenderIfNeeded(&pass->vertexShader, "vertexShader/pass_setup");
+    Switch_ResolvePointerForRenderIfNeeded(&pass->pixelShader, "pixelShader/pass_setup");
+
+    auto validNativePointer = [](const void *pointer, size_t alignment) -> bool
+    {
+        const uintptr_t address = reinterpret_cast<uintptr_t>(pointer);
+        return pointer &&
+               address > UINT32_MAX &&
+               (address & (alignment - 1u)) == 0 &&
+               !Switch_IsSerializedAddress(address);
+    };
+
+    if (!validNativePointer(pass->vertexDecl, alignof(MaterialVertexDeclaration)) ||
+        !validNativePointer(pass->vertexShader, alignof(MaterialVertexShader)) ||
+        !validNativePointer(pass->pixelShader, alignof(MaterialPixelShader)))
+    {
+        static uint32_t passPointerTraceCount = 0;
+        if (passPointerTraceCount < 32u)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][MATERIAL PASS REJECT] pass=%p decl=%p vs=%p ps=%p prior=%u%u%u\\n",
+                static_cast<void *>(pass),
+                static_cast<void *>(pass->vertexDecl),
+                static_cast<void *>(pass->vertexShader),
+                static_cast<void *>(pass->pixelShader),
+                hadVertexDecl ? 1u : 0u,
+                hadVertexShader ? 1u : 0u,
+                hadPixelShader ? 1u : 0u);
+            Switch_LogWrite(trace);
+            ++passPointerTraceCount;
+        }
+        pass->vertexDecl = nullptr;
+        pass->vertexShader = nullptr;
+        pass->pixelShader = nullptr;
+        g_switchFrameStage = "frame/render/pass_args/rejected_pass_pointers";
+        return false;
+    }
 
     const uint32_t argCount =
         static_cast<uint32_t>(pass->perPrimArgCount) +
