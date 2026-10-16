@@ -861,7 +861,7 @@ LABEL_15:
                     materialLodInfo ? static_cast<uint32_t>(materialLodInfo->surfIndex) + subMatIndex : subMatIndex;
                 Com_Printf(
                     CON_CHANNEL_ANIM,
-                    "[KisakCOD][DOBJ INVALID MATERIAL] model=%s modelPtr=%p modelIndex=%u lod=%d lodSurfIndex=%u lodSurfCount=%u modelSurfs=%u materialHandles=%p materialSlot=%p material=%p surfaceIndex=%u modelSurf=%p sentinel=%d\\n",
+                    "[KisakCOD][DOBJ INVALID MATERIAL] model=%s modelPtr=%p modelIndex=%u lod=%d lodSurfIndex=%u lodSurfCount=%u modelSurfs=%u materialHandles=%p materialSlot=%p material=%p surfaceIndex=%u modelSurf=%p sentinel=%d\n",
                     model->name ? model->name : "(null)",
                     static_cast<const void *>(model),
                     modelIndex,
