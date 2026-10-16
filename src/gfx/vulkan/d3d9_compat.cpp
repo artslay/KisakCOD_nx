@@ -4275,14 +4275,14 @@ bool IDirect3DDevice9::EnsurePipeline()
     const bool probePipelineDump =
         pipelineCreateSequence > 8 && pipelineCreateSequence <= 32;
     const bool recentPipelineDump = pipelineCreateSequence >= 180;
-    // The latest run completed through seq=87 and then faulted during the
-    // create call after begin seq=92. Match both shader hashes as a fallback
-    // so the earlier seq=88 pipeline with the same fragment shader is skipped.
+    // The latest run completed seq=92 and later pipelines, then faulted
+    // during the create call for seq=171. Match the shader pair as a fallback
+    // so capture stays tied to the new failure if pipeline ordering shifts.
     static bool targetPipelineCaptureLogged = false;
     const bool targetPipelineDump = !targetPipelineCaptureLogged &&
-        (pipelineCreateSequence == 92 ||
+        (pipelineCreateSequence == 171 ||
          (vsSpirvHash == 0x0fb134cb58ee26d6ull &&
-          psSpirvHash == 0xed24ab1145b0d009ull));
+          psSpirvHash == 0xa82798473e9a23c6ull));
     if (targetPipelineDump)
         targetPipelineCaptureLogged = true;
     if ((earlyPipelineDump || probePipelineDump || recentPipelineDump) &&
@@ -4435,13 +4435,29 @@ bool IDirect3DDevice9::EnsurePipeline()
         Switch_LogWrite(handlesMsg);
     }
 
-    // The vertex module hash has already created successful pipelines; the
-    // new fragment module is the most useful payload for this driver fault.
-    // Save a binary copy as well as compactly chunked Base64 so the user can
-    // choose whichever transfer method is easier.
+    // Capture both modules for the pipeline that now faults. The vertex
+    // shader appeared in earlier successful pipelines, but preserving both exact
+    // binaries lets us validate the pair and driver input instead of guessing.
     if (targetPipelineDump)
     {
-        const char *targetPsPath = "sdmc:/switch/KisakCOD/vk_crash_92_ps.spv";
+        const char *targetVsPath = "sdmc:/switch/KisakCOD/vk_crash_171_vs.spv";
+        const bool targetVsSaved = WriteSwitchPipelineSpirv(
+            targetVsPath, m_vertexShader->spirv);
+        LogSwitchPipelineSpirvBase64(
+            pipelineCreateSequence, "vs", m_vertexShader->spirv);
+        char targetVsMsg[256];
+        std::snprintf(
+            targetVsMsg, sizeof(targetVsMsg),
+            "[KisakCOD][VK SPIRV TARGET] seq=%u stage=vs saved=%u words=%zu bytes=%zu hash=%016llx path=%s\\n",
+            pipelineCreateSequence,
+            targetVsSaved ? 1u : 0u,
+            m_vertexShader->spirv.size(),
+            m_vertexShader->spirv.size() * sizeof(uint32_t),
+            static_cast<unsigned long long>(vsSpirvHash),
+            targetVsPath);
+        Switch_LogWrite(targetVsMsg);
+
+        const char *targetPsPath = "sdmc:/switch/KisakCOD/vk_crash_171_ps.spv";
         const bool targetPsSaved = WriteSwitchPipelineSpirv(
             targetPsPath, m_pixelShader->spirv);
         LogSwitchPipelineSpirvBase64(
@@ -4449,7 +4465,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         char targetPsMsg[256];
         std::snprintf(
             targetPsMsg, sizeof(targetPsMsg),
-            "[KisakCOD][VK SPIRV TARGET] seq=%u stage=ps saved=%u words=%zu bytes=%zu hash=%016llx path=%s\n",
+            "[KisakCOD][VK SPIRV TARGET] seq=%u stage=ps saved=%u words=%zu bytes=%zu hash=%016llx path=%s\\n",
             pipelineCreateSequence,
             targetPsSaved ? 1u : 0u,
             m_pixelShader->spirv.size(),
