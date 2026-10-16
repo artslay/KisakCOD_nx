@@ -1391,6 +1391,29 @@ bool VulkanBackend::EndFrame()
     {
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/present/queue_submit_failed";
+        const bool validSignalSemaphore =
+            m_swapchainIndex < m_renderFinishedSemaphores.size() &&
+            m_renderFinishedSemaphores[m_swapchainIndex] != VK_NULL_HANDLE;
+        char submitTrace[448];
+        std::snprintf(
+            submitTrace, sizeof(submitTrace),
+            "[KisakCOD][VK SUBMIT STATE] result=%d serial=%llu swapIndex=%u images=%zu layouts=%zu presentSemaphores=%zu frameActive=%u rendering=%u acquirePending=%u commandBuffer=%u queue=%u fence=%u acquireSemaphore=%u signalSemaphore=%u hasPresentSource=%u\n",
+            static_cast<int>(submitResult),
+            static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
+            m_swapchainIndex,
+            m_swapchainImages.size(),
+            m_swapchainLayouts.size(),
+            m_renderFinishedSemaphores.size(),
+            m_frameActive ? 1u : 0u,
+            m_renderingActive ? 1u : 0u,
+            m_imageAvailablePending ? 1u : 0u,
+            m_commandBuffer ? 1u : 0u,
+            m_graphicsQueue ? 1u : 0u,
+            m_sync.fence ? 1u : 0u,
+            m_sync.imageAvailable ? 1u : 0u,
+            validSignalSemaphore ? 1u : 0u,
+            m_presentSourceImage && m_presentSourceView ? 1u : 0u);
+        Switch_LogWrite(submitTrace);
 #endif
         SetError("vkQueueSubmit failed", submitResult);
         if (!m_deviceLost)
