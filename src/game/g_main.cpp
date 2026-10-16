@@ -2390,7 +2390,6 @@ int __cdecl G_RunFrame(ServerFrameExtent extent, int timeCap)
     gentity_s *k; // r30
     int inuse; // r11
     bool checkAnimChange; // r11
-    unsigned __int8 *p_inuse; // r30
     int v17; // r10
     int v18; // r10
     int v19; // r3
@@ -2522,30 +2521,30 @@ int __cdecl G_RunFrame(ServerFrameExtent extent, int timeCap)
                 level.checkAnimChange = 0;
                 if (level.num_entities > 1)
                 {
-                    p_inuse = &g_entities[1].r.inuse;
-                    do
+                    while (level.currentIndex < level.num_entities)
                     {
-                        if (*p_inuse)
+                        // Use native gentity_s member access here. The old fixed 628-byte
+                        // stride and -168-byte base adjustment were 32-bit layout assumptions.
+                        gentity_s *animEnt = &g_entities[level.currentIndex];
+                        if (animEnt->r.inuse)
                         {
                             do
                             {
-                                v17 = *((unsigned int *)p_inuse + 34);
-                                if ((v17 & 0x40000) == 0 || (v17 & 0x1000) != 0)
+                                const unsigned int flags = animEnt->flags;
+                                if ((flags & 0x40000u) == 0 || (flags & 0x1000u) != 0)
                                     break;
-                                if (!G_DObjUpdateServerTime((gentity_s *)(p_inuse - 168), 1))
+                                if (!G_DObjUpdateServerTime(animEnt, 1))
                                 {
                                     checkAnimChange = level.checkAnimChange;
                                     break;
                                 }
                                 Scr_RunCurrentThreads();
                                 checkAnimChange = 1;
-                                v18 = *p_inuse;
                                 level.checkAnimChange = 1;
-                            } while (v18);
+                            } while (animEnt->r.inuse);
                         }
-                        p_inuse += 628;
                         ++level.currentIndex;
-                    } while (level.currentIndex < level.num_entities);
+                    }
                 }
             } while (checkAnimChange);
         }
