@@ -965,6 +965,8 @@ bool PatchFragmentShaderForAlphaTest(
     patched.insert(patched.end(), words.begin(), words.begin() + firstFunction);
 
     bool inEntry = false;
+    bool entryFirstBlockSeen = false;
+    bool pendingEntryVariables = false;
     bool injectedFunctionVariable = false;
     bool injectedOutputAlpha = false;
     bool injectedReturnTest = false;
@@ -977,24 +979,42 @@ bool PatchFragmentShaderForAlphaTest(
 
         const uint32_t *ins = &words[i];
         if (op == SpvOpFunction && wc >= 3)
-            inEntry = ins[2] == entryFunctionId;
-
-        // Function variables must be declared in the first block, directly
-        // after its label. Emit this once before the entry-point's original
-        // instructions so all stores and returns can use it.
-        if (inEntry && op == SpvOpLabel && !injectedFunctionVariable)
         {
+            inEntry = ins[2] == entryFunctionId;
+            entryFirstBlockSeen = false;
+            pendingEntryVariables = false;
+        }
+
+        // Function-local variables must all appear at the start of the first
+        // block, before executable instructions. Preserve the shader's original
+        // OpLine/OpVariable prologue and append our variable only after it.
+        // Initialize it with OpStore before the first executable instruction.
+        if (inEntry && op == SpvOpLabel && !entryFirstBlockSeen)
+        {
+            entryFirstBlockSeen = true;
+            pendingEntryVariables = true;
             patched.insert(patched.end(), words.begin() + i, words.begin() + i + wc);
-            // Function-storage OpVariable declarations cannot carry a constant
-            // initializer on Vulkan's SPIR-V path. Declare the local first, then
-            // initialize it with a regular OpStore in the entry block.
+            i += wc;
+            continue;
+        }
+        if (inEntry && pendingEntryVariables)
+        {
+            const bool isFunctionVariable =
+                op == SpvOpVariable && wc >= 4 &&
+                ins[3] == SpvStorageClassFunction;
+            if (op == SpvOpLine || isFunctionVariable)
+            {
+                patched.insert(patched.end(), words.begin() + i, words.begin() + i + wc);
+                i += wc;
+                continue;
+            }
+
             SpirvAppend(
                 patched, SpvOpVariable,
                 {functionPointerType, alphaStorage, SpvStorageClassFunction});
             SpirvAppend(patched, SpvOpStore, {alphaStorage, alphaDefault});
             injectedFunctionVariable = true;
-            i += wc;
-            continue;
+            pendingEntryVariables = false;
         }
 
         // Capture alpha from each output store, retaining the shader's existing
