@@ -637,7 +637,10 @@ bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
         static_cast<uint32_t>(pass->perObjArgCount) +
         static_cast<uint32_t>(pass->stableArgCount);
     if (!argCount)
+    {
+        g_switchFrameStage = "frame/render/pass_args/empty";
         return true;
+    }
 
     Switch_ResolvePointerForRenderIfNeeded(&pass->args, "args/pass_setup");
     const uintptr_t address = reinterpret_cast<uintptr_t>(pass->args);
@@ -653,7 +656,7 @@ bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][MATERIAL PASS ARG REJECT] pass=%p args=%p argCount=%u stage=pass_setup\n",
+                "[KisakCOD][MATERIAL PASS ARG REJECT] reason=invalidArray pass=%p args=%p argCount=%u stage=pass_setup\n",
                 static_cast<void *>(pass),
                 reinterpret_cast<const void *>(address),
                 static_cast<unsigned>(argCount));
@@ -661,8 +664,76 @@ bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
             ++traceCount;
         }
         pass->args = nullptr;
-        g_switchFrameStage = "frame/render/pass_args/rejected";
+        g_switchFrameStage = "frame/render/pass_args/rejected_array";
         return false;
+    }
+
+    // The generated zone loader widens 8-byte on-disk MaterialShaderArgument
+    // entries into native ARM64 entries. Resolve any pointer-bearing literal
+    // union members here too: unlike the pass->args array, those nested fields
+    // must not remain 32-bit serialized offsets after an alias/load path.
+    for (uint32_t i = 0; i < argCount; ++i)
+    {
+        g_switchFrameStage = "frame/render/pass_args/scan_entry";
+        MaterialShaderArgument &argument = pass->args[i];
+        if (argument.type >= MLT_ARG_COUNT)
+        {
+            static uint32_t typeTraceCount = 0;
+            if (typeTraceCount < 32u)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][MATERIAL PASS ARG REJECT] reason=invalidType pass=%p args=%p index=%u type=%u count=%u\n",
+                    static_cast<void *>(pass),
+                    static_cast<void *>(pass->args),
+                    static_cast<unsigned>(i),
+                    static_cast<unsigned>(argument.type),
+                    static_cast<unsigned>(argCount));
+                Switch_LogWrite(trace);
+                ++typeTraceCount;
+            }
+            pass->args = nullptr;
+            g_switchFrameStage = "frame/render/pass_args/rejected_type";
+            return false;
+        }
+
+        if (argument.type == MTL_ARG_LITERAL_VERTEX_CONST ||
+            argument.type == MTL_ARG_LITERAL_PIXEL_CONST)
+        {
+            g_switchFrameStage = "frame/render/pass_args/resolve_literal";
+            Switch_ResolvePointerForRenderIfNeeded(
+                &argument.u.literalConst,
+                "args.literalConst");
+            const uintptr_t literalAddress =
+                reinterpret_cast<uintptr_t>(argument.u.literalConst);
+            if (!argument.u.literalConst ||
+                literalAddress <= UINT32_MAX ||
+                (literalAddress & (alignof(float) - 1u)) != 0 ||
+                Switch_IsSerializedAddress(literalAddress))
+            {
+                static uint32_t literalTraceCount = 0;
+                if (literalTraceCount < 32u)
+                {
+                    char trace[320];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[KisakCOD][MATERIAL PASS ARG REJECT] reason=invalidLiteral pass=%p args=%p index=%u type=%u literal=%p\n",
+                        static_cast<void *>(pass),
+                        static_cast<void *>(pass->args),
+                        static_cast<unsigned>(i),
+                        static_cast<unsigned>(argument.type),
+                        reinterpret_cast<const void *>(literalAddress));
+                    Switch_LogWrite(trace);
+                    ++literalTraceCount;
+                }
+                pass->args = nullptr;
+                g_switchFrameStage = "frame/render/pass_args/rejected_literal";
+                return false;
+            }
+        }
     }
 
     g_switchFrameStage = "frame/render/pass_args/ready";
