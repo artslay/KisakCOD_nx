@@ -33,6 +33,33 @@
 #include <xanim/xanim_readwrite.h>
 #include "savedevice.h"
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern thread_local const char * volatile g_switchFrameStage;
+extern void Switch_LogWrite(const char *msg);
+
+namespace
+{
+thread_local char g_switchSaveStageBuffer[192];
+
+void SwitchSavePhase(const char *stage)
+{
+    g_switchFrameStage = stage;
+    char message[256];
+    std::snprintf(message, sizeof(message), "[KisakCOD][SAVE PHASE] %s\n", stage);
+    Switch_LogWrite(message);
+}
+
+void SwitchSaveStageIndex(const char *phase, int index)
+{
+    std::snprintf(
+        g_switchSaveStageBuffer, sizeof(g_switchSaveStageBuffer),
+        "frame/save/%s/index=%d", phase, index);
+    g_switchFrameStage = g_switchSaveStageBuffer;
+}
+}
+#endif
+
 bool g_useDevSaveArea;
 
 gclient_s tempClient;
@@ -1311,8 +1338,13 @@ void __cdecl WritePathNodes(SaveGame *save)
 
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1552, 0, "%s", "save");
+    int nodeIndex = 0;
     for (i = Path_FirstNode(-1); i; i = Path_NextNode(i, -1))
     {
+#ifdef __SWITCH__
+        SwitchSaveStageIndex("write_path_nodes/node", nodeIndex);
+#endif
+        ++nodeIndex;
         v3 = v10;
         p_dynamic = &i->dynamic;
         v5 = 8;
@@ -1882,12 +1914,18 @@ void __cdecl G_SaveInitState(SaveGame *save)
 
     iassert(save);
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/init_state/start");
+#endif
     SaveMemory_StartSegment(save, 1);
     NumWeapons = BG_GetNumWeapons();
     SaveMemory_SaveWrite(&NumWeapons, 4, save);
 
     for (i = 1; i < NumWeapons; ++i)
     {
+#ifdef __SWITCH__
+        SwitchSaveStageIndex("init_state/weapon", i);
+#endif
         psz = BG_GetWeaponDef(i)->szInternalName;
 
         iassert(save);
@@ -1906,8 +1944,17 @@ void __cdecl G_SaveInitState(SaveGame *save)
         SaveMemory_SaveWrite(psz, length, save);
     }
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/init_state/items");
+#endif
     G_SaveItems(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/init_state/configstrings");
+#endif
     G_SaveInitConfigstrings(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/init_state/done");
+#endif
 }
 
 void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
@@ -1946,6 +1993,9 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
     unsigned int v62[4]; // [sp+60h] [-4A0h] BYREF
     unsigned __int8 v63[1168]; // [sp+70h] [-490h] BYREF
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/start");
+#endif
     memFile = SaveMemory_GetMemoryFile(save);
     UsedSize = MemFile_GetUsedSize(memFile);
     //ProfMem_Begin("SaveMainState", UsedSize);
@@ -1973,6 +2023,9 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
     SaveMemory_SaveWrite(&level.bPlayerIgnoreRadiusDamageLatched, 4, save);
     iassert(save);
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/dvars");
+#endif
     Dvar_SaveDvars(SaveMemory_GetMemoryFile(save), 0x1000u);
     SaveMemory_SaveWrite(g_hudelems, 44032, save);
     //ProfMem_End(v11);
@@ -1982,25 +2035,46 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
     SaveMemory_SaveWrite(&level.bDrawCompassFriendlies, 4, save);
     SaveMemory_SaveWrite(&sv_gameskill->current, 4, save);
     SaveMemory_SaveWrite(&g_player_maxhealth->current, 4, save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/ai_globals");
+#endif
     Sentient_WriteGlob(save);
     AimTarget_WriteSaveGame(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/script_pre");
+#endif
     Scr_SavePre(1);
 
     //ProfMem_End(v15);
     //ProfMem_Begin("path nodes", v17);
 
     SaveMemory_StartSegment(save, 3);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/path_validate");
+#endif
     Path_ValidateAllNodes();
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/path_nodes");
+#endif
     WritePathNodes(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/path_nodes_done");
+#endif
 
     //ProfMem_End(v19);
     //ProfMem_Begin("entities", v21);
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/entities");
+#endif
     SaveMemory_SaveWrite(&level.num_entities, 4, save);
     v22 = 0;
     i = 0;
     do
     {
+#ifdef __SWITCH__
+        SwitchSaveStageIndex("main_state/entity", v22);
+#endif
         v23 = &g_entities[v22];
         if (v23->r.inuse)
         {
@@ -2012,10 +2086,16 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
     } while (v22 < MAX_GENTITIES);
     i = -1;
     SaveMemory_SaveWrite(&i, 4, save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/entities_done");
+#endif
     v25 = MemFile_GetUsedSize(SaveMemory_GetMemoryFile(save));
     //ProfMem_End(v25);
     v27 = MemFile_GetUsedSize(SaveMemory_GetMemoryFile(save));
     //ProfMem_Begin("misc: clients, actors, vehicles", v27);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/clients");
+#endif
     WriteBadPlaces(save);
     v28 = 0;
     i = 0;
@@ -2033,23 +2113,50 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
     i = -1;
     SaveMemory_SaveWrite(&i, 4, save);
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/actors");
+#endif
     for (i = 0; i < MAX_ACTORS; ++i)
     {
+#ifdef __SWITCH__
+        SwitchSaveStageIndex("main_state/actor", i);
+#endif
         WriteActor(&level.actors[i], save);
     }
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/sentients");
+#endif
     for (i = 0; i < MAX_SENTIENTS; ++i)
     {
+#ifdef __SWITCH__
+        SwitchSaveStageIndex("main_state/sentient", i);
+#endif
         WriteSentient(&level.sentients[i], save);
     }
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/vehicles");
+#endif
     for (i = 0; i < MAX_VEHICLES; ++i)
     {
+#ifdef __SWITCH__
+        SwitchSaveStageIndex("main_state/vehicle", i);
+#endif
         WriteVehicle(&level.vehicles[i], save);
     }
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/vehicle_info");
+#endif
     G_SaveVehicleInfo(save);
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/turrets");
+#endif
     for (i = 0; i < 32; ++i)
     {
+#ifdef __SWITCH__
+        SwitchSaveStageIndex("main_state/turret", i);
+#endif
         WriteTurretInfo(&level.turrets[i], save);
     }
     for (i = 0; i < 16; ++i)
@@ -2059,7 +2166,13 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
             SaveMemory_SaveWrite(&g_scr_data.actorCorpseInfo[i].proneInfo, 24, save);
     }
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/dynamic_entities");
+#endif
     DynEnt_SaveEntities(SaveMemory_GetMemoryFile(save));
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/threat_group");
+#endif
     memcpy(v63, &g_threatBias, sizeof(threat_bias_t));
 
     iassert(save);
@@ -2083,14 +2196,23 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
     //ProfMem_End(v36);
     //ProfMem_Begin("Script", v38);
     SaveMemory_StartSegment(save, 4);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/script_post");
+#endif
     Scr_SavePost(SaveMemory_GetMemoryFile(save));
     //ProfMem_End(v40);
     //ProfMem_Begin("Animtree", v42);
     SaveMemory_StartSegment(save, 5);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/animtrees");
+#endif
     v43 = 0;
     i = 0;
     do
     {
+#ifdef __SWITCH__
+        SwitchSaveStageIndex("main_state/animtree_entity", v43);
+#endif
         if (g_entities[v43].r.inuse)
         {
             ServerDObj = Com_GetServerDObj(v43);
@@ -2114,18 +2236,45 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
         i = ++v43;
     } while (v43 < MAX_GENTITIES);
     //ProfMem_End(v49);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/script_shutdown");
+#endif
     Scr_SaveShutdown(savegame);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/check_entities");
+#endif
     G_CheckAllEntities();
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/archive_begin");
+#endif
     SV_BeginSaveGame();
     //ProfMem_Begin("client", v51);
     //ProfMem_Begin("clientState", v53);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/archive_cgame");
+#endif
     CG_SaveEntities(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/archive_client");
+#endif
     CL_ArchiveClientState(SaveMemory_GetMemoryFile(save), 6);
     //ProfMem_End(v55);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/archive_server_commands");
+#endif
     CL_ArchiveServerCommands(SaveMemory_GetMemoryFile(save));
     SV_SaveServerCommands(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/archive_viewmodel");
+#endif
     CG_SaveViewModelAnimTrees(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/archive_physics");
+#endif
     Phys_ArchiveState(SaveMemory_GetMemoryFile(save));
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/main_state/archive_done");
+#endif
     SV_EndSaveGame();
     //ProfMem_End(v57);
     //ProfMem_End(v59);
@@ -2133,11 +2282,23 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
 
 void __cdecl G_SaveState(bool savegame, SaveGame *save)
 {
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/state/validate_world");
+#endif
     CM_ValidateWorld(); // LWSS: note stubbed for now!
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 2398, 0, "%s", "save");
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/state/init_state");
+#endif
     G_SaveInitState(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/state/main_state");
+#endif
     G_SaveMainState(savegame, save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/state/done");
+#endif
 }
 
 int __cdecl G_IsSavePossible(SaveType saveType)
@@ -2172,18 +2333,39 @@ int __cdecl G_WriteGame(const PendingSave *pendingSave, int checksum, SaveGame *
     if (pendingSave == (const PendingSave *)-320)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 2434, 0, "%s", "pendingSave->screenShotName");
     Com_Printf(CON_CHANNEL_FILES, "G_WriteGame '%s' '%s'\n", pendingSave->filename, pendingSave->description);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/write_game/initialize");
+#endif
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 2438, 0, "%s", "save");
     SaveMemory_InitializeGameSave(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/write_game/source");
+#endif
     memFile = SaveMemory_GetMemoryFile(save);
     UsedSize = MemFile_GetUsedSize(memFile);
     //ProfMem_Begin("Game Save", UsedSize);
     v8 = SaveMemory_GetMemoryFile(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/write_game/script_source");
+#endif
     Scr_SaveSource(v8);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/write_game/state");
+#endif
     G_SaveState(1, save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/write_game/final_segment");
+#endif
     SaveMemory_StartSegment(save, -1);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/save/write_game/check_success");
+#endif
     if (SaveMemory_IsSuccessful(save) && BuildCleanSavePath(username, 0x40u, pendingSave->filename, pendingSave->saveType))
     {
+#ifdef __SWITCH__
+        SwitchSavePhase("frame/save/write_game/header");
+#endif
         SaveMemory_CreateHeader(
             username,
             pendingSave->description,
@@ -2195,6 +2377,9 @@ int __cdecl G_WriteGame(const PendingSave *pendingSave, int checksum, SaveGame *
             pendingSave->saveId,
             save);
         SaveMemory_FinalizeSave(save);
+#ifdef __SWITCH__
+        SwitchSavePhase("frame/save/write_game/finalized");
+#endif
         //Profile_EndInternal(0);
         v12 = SaveMemory_GetMemoryFile(save);
         v13 = MemFile_GetUsedSize(v12);
@@ -2204,6 +2389,9 @@ int __cdecl G_WriteGame(const PendingSave *pendingSave, int checksum, SaveGame *
     }
     else
     {
+#ifdef __SWITCH__
+        SwitchSavePhase("frame/save/write_game/rollback");
+#endif
         SaveMemory_RollbackSave(save);
         //Profile_EndInternal(0);
         v9 = SaveMemory_GetMemoryFile(save);
