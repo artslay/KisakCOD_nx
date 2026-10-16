@@ -75,7 +75,6 @@ static XSurface *R_GetStaticModelSurfPointer(
     XSurface *surface = drawStream->primDrawSurfXSurfaceBuf[slot];
     const uintptr_t surfaceAddress = reinterpret_cast<uintptr_t>(surface);
     if (!surface ||
-        surfaceAddress <= UINT32_MAX ||
         (surfaceAddress & (alignof(XSurface) - 1u)) != 0)
     {
         R_LogStaticModelSurfPointerReject("invalidNativeSurface", pointerWord, slot);
