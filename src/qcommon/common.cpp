@@ -42,6 +42,7 @@
 #include <atomic>
 #include <cstring>
 #include <cstdio>
+#include <cmath>
 #endif
 
 #include <setjmp.h>
@@ -144,7 +145,7 @@ int com_lastFrameTime[1];
 int com_lastFrameTime[4];
 #endif 
 int com_fullyInitialized;
-float com_codeTimeScale;
+float com_codeTimeScale = 1.0f;
 int timeClientFrame;
 
 int logfile;
@@ -1888,11 +1889,35 @@ double __cdecl Com_GetTimescaleForSnd()
     return (float)(com_timescale->current.value * dev_timescale->current.value);
 }
 
+#ifdef __SWITCH__
+static float Com_ValidateCodeTimeScale(float timescale, const char *origin)
+{
+    if (std::isfinite(timescale) && timescale > 0.0f)
+        return timescale;
+
+    static uint32_t invalidTimeScaleTraceCount = 0;
+    if (invalidTimeScaleTraceCount < 8u)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][CODE TIME SCALE RECOVER] origin=%s invalid=%.9g restored=1.0\\n",
+            origin ? origin : "unknown",
+            static_cast<double>(timescale));
+        Switch_LogWrite(trace);
+        ++invalidTimeScaleTraceCount;
+    }
+    return 1.0f;
+}
+#endif
+
 void __cdecl Com_AdjustMaxFPS(int* maxFPS)
 {
     int maxUserCmdsPerSecond; // [esp+0h] [ebp-4h]
 
 #ifdef __SWITCH__
+    com_codeTimeScale = Com_ValidateCodeTimeScale(com_codeTimeScale, "Com_AdjustMaxFPS");
     const int fixedTime = com_fixedtime ? com_fixedtime->current.integer : 0;
     const float requestedTimeScale =
         (com_timescale ? com_timescale->current.value : 1.0f) *
@@ -2368,6 +2393,9 @@ int __cdecl Com_ModifyMsec(int msec)
     int originalMsec; // [esp+1Ch] [ebp-8h]
     bool useTimescale; // [esp+23h] [ebp-1h]
 
+#ifdef __SWITCH__
+    com_codeTimeScale = Com_ValidateCodeTimeScale(com_codeTimeScale, "Com_ModifyMsec");
+#endif
     originalMsec = msec;
     if (com_fixedtime->current.integer)
     {
@@ -2822,6 +2850,9 @@ bool Com_IsRunningMenuLevel()
 
 void Com_SetTimeScale(float timescale)
 {
+#ifdef __SWITCH__
+    timescale = Com_ValidateCodeTimeScale(timescale, "Com_SetTimeScale");
+#endif
     iassert(timescale > 0);
     com_codeTimeScale = timescale;
 }
