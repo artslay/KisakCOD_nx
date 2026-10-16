@@ -728,6 +728,9 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
     for (uint32_t passIndex = 0; passIndex < passCount; ++passIndex)
     {
         MaterialPass *pass = &technique->passArray[passIndex];
+        const bool hadVertexDecl = pass->vertexDecl != nullptr;
+        const bool hadVertexShader = pass->vertexShader != nullptr;
+        const bool hadPixelShader = pass->pixelShader != nullptr;
         Switch_ResolvePointerForRenderIfNeeded(&pass->vertexDecl, "vertexDecl/render");
         Switch_ResolvePointerForRenderIfNeeded(&pass->vertexShader, "vertexShader/render");
         Switch_ResolvePointerForRenderIfNeeded(&pass->pixelShader, "pixelShader/render");
@@ -737,8 +740,13 @@ MaterialTechnique *Switch_ResolveTechniqueForRender(
             static_cast<uint32_t>(pass->perPrimArgCount) +
             static_cast<uint32_t>(pass->perObjArgCount) +
             static_cast<uint32_t>(pass->stableArgCount);
-        if (!pass->vertexDecl || !pass->vertexShader || !pass->pixelShader ||
-            (argCount && !pass->args))
+        const bool lostRequiredPointer =
+            (hadVertexDecl && !pass->vertexDecl) ||
+            (hadVertexShader && !pass->vertexShader) ||
+            (hadPixelShader && !pass->pixelShader) ||
+            (argCount && !pass->args) ||
+            (passIndex == 0 && !pass->pixelShader);
+        if (lostRequiredPointer)
         {
             Switch_LogTechniqueRenderReject(
                 passIndex == 0 ? "firstPassPointers" : "passPointers",
