@@ -4275,6 +4275,10 @@ bool IDirect3DDevice9::EnsurePipeline()
     const bool probePipelineDump =
         pipelineCreateSequence > 8 && pipelineCreateSequence <= 32;
     const bool recentPipelineDump = pipelineCreateSequence >= 180;
+    // The current Switch crash occurs during pipeline 33 creation. Match the
+    // fragment hash too, so the capture remains useful if pipeline ordering shifts.
+    const bool targetPipelineDump =
+        pipelineCreateSequence == 33 || psSpirvHash == 0xa1096e121467d816ull;
     if ((earlyPipelineDump || probePipelineDump || recentPipelineDump) &&
         (vsSpirvHash != lastDumpVsHash || psSpirvHash != lastDumpPsHash ||
          m_vertexShader->spirv.size() != lastDumpVsWords ||
@@ -4354,7 +4358,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_blendEnable ? 1u : 0u);
     if (pipelineCreateSequence <= 8 ||
         (pipelineCreateSequence > 8 && pipelineCreateSequence <= 32) ||
-        pipelineCreateSequence >= 180)
+        pipelineCreateSequence >= 180 || targetPipelineDump)
     {
         Switch_LogWrite(preCreateMsg);
     }
@@ -4376,7 +4380,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     if (pipelineCreateSequence <= 8 ||
         (pipelineCreateSequence > 8 && pipelineCreateSequence <= 32) ||
-        pipelineCreateSequence >= 180)
+        pipelineCreateSequence >= 180 || targetPipelineDump)
     {
         char handlesMsg[768];
         std::snprintf(
@@ -4425,18 +4429,20 @@ bool IDirect3DDevice9::EnsurePipeline()
         Switch_LogWrite(handlesMsg);
     }
 
-    // Sequence 24 is the current reproducible crash. Its VS binary has already
-    // created earlier pipelines successfully; capture the new PS as log text so
-    // the exact module can be validated without transferring files from SD.
-    if (pipelineCreateSequence == 24)
+    // Capture both modules and the complete native pipeline state for the
+    // pipeline 33 driver fault. The fragment hash is also matched so minor
+    // ordering changes do not silently remove the diagnostic.
+    if (targetPipelineDump)
     {
+        LogSwitchPipelineSpirvBase64(
+            pipelineCreateSequence, "vs", m_vertexShader->spirv);
         LogSwitchPipelineSpirvBase64(
             pipelineCreateSequence, "ps", m_pixelShader->spirv);
 
         char stateMsg[768];
         std::snprintf(
             stateMsg, sizeof(stateMsg),
-            "[KisakCOD][VK PIPELINE STATE] seq=%u color=%u depth=%u samples=%u topology=%u bindings=%u attrs=%u polygon=%u cull=%u frontFace=%u lineWidth=%.3f depthBias=%u/%.6g/%.6g depth=%u/%u/%u stencil=%u twoSided=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u colorMask=%u alphaToCoverage=%u sampleMask=%08x dynamic=%u layout=%p shaderModules=%p/%p\n",
+            "[KisakCOD][VK PIPELINE STATE] seq=%u color=%u depth=%u samples=%u topology=%u bindings=%u attrs=%u polygon=%u cull=%u frontFace=%u lineWidth=%.3f depthBias=%u/%.6g/%.6g depth=%u/%u/%u stencil=%u twoSided=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u colorMask=%u alphaToCoverage=%u sampleMask=%08x dynamic=%u layout=%p shaderModules=%p/%p\\n",
             pipelineCreateSequence,
             static_cast<unsigned int>(colorFormat),
             static_cast<unsigned int>(depthFormat),
