@@ -985,9 +985,13 @@ bool PatchFragmentShaderForAlphaTest(
         if (inEntry && op == SpvOpLabel && !injectedFunctionVariable)
         {
             patched.insert(patched.end(), words.begin() + i, words.begin() + i + wc);
+            // Function-storage OpVariable declarations cannot carry a constant
+            // initializer on Vulkan's SPIR-V path. Declare the local first, then
+            // initialize it with a regular OpStore in the entry block.
             SpirvAppend(
                 patched, SpvOpVariable,
-                {functionPointerType, alphaStorage, SpvStorageClassFunction, alphaDefault});
+                {functionPointerType, alphaStorage, SpvStorageClassFunction});
+            SpirvAppend(patched, SpvOpStore, {alphaStorage, alphaDefault});
             injectedFunctionVariable = true;
             i += wc;
             continue;
