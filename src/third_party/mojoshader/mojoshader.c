@@ -4012,6 +4012,32 @@ int MOJOSHADER_linkSPIRVShaders(const MOJOSHADER_parseData *vertex_spirv,
                                 const int vertexAttributeCount)
 {
 #if SUPPORT_PROFILE_SPIRV
+    // The patch table is appended to each SPIR-V output. Validate both buffers
+    // and every table index before deriving a pointer into that appended data.
+    // In particular, usageIndex indexes fixed [16] arrays below; an invalid
+    // D3D declaration must fail linking instead of corrupting memory before
+    // vkCreateGraphicsPipelines is entered.
+    if (!vertex_spirv || !pixel_spirv ||
+        !vertex_spirv->output || !pixel_spirv->output ||
+        vertexAttributeCount < 0 ||
+        (vertexAttributeCount > 0 && !vertexAttributes))
+        return 0;
+
+    const int patchTableBytes = (int) sizeof(SpirvPatchTable);
+    if (vertex_spirv->output_len <= patchTableBytes ||
+        pixel_spirv->output_len <= patchTableBytes ||
+        (vertex_spirv->output_len % (int) sizeof(uint32)) != 0 ||
+        (pixel_spirv->output_len % (int) sizeof(uint32)) != 0)
+        return 0;
+
+    for (int i = 0; i < vertexAttributeCount; ++i)
+    {
+        const MOJOSHADER_vertexAttribute *element = &vertexAttributes[i];
+        if ((unsigned int) element->usage >= (unsigned int) MOJOSHADER_USAGE_TOTAL ||
+            element->usageIndex < 0 || element->usageIndex >= 16)
+            return 0;
+    }
+
     // We have to patch the SPIR-V output to ensure type consistency. The non-float types are:
     // BYTE4  - 5
     // SHORT2 - 6
