@@ -1138,31 +1138,70 @@ void __cdecl CL_ArchiveClientState(MemoryFile *memFile, int segmentIndex)
             MemFile_StartSegment(memFile, segmentIndex);
         UsedSize = MemFile_GetUsedSize(memFile);
         //ProfMem_Begin("sound", UsedSize);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/save/archive_client/sound";
+#endif
         SND_Save(memFile);
         v5 = MemFile_GetUsedSize(memFile);
         //ProfMem_End(v5);
         MemFile_StartSegment(memFile, segmentIndex + 1);
         v6 = MemFile_GetUsedSize(memFile);
         //ProfMem_Begin("FX", v6);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/save/archive_client/fx";
+#endif
         FX_Save(0, memFile);
         v7 = MemFile_GetUsedSize(memFile);
         //ProfMem_End(v7);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/save/archive_client/settings";
+#endif
         CL_SaveSettings(memFile);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/save/archive_client/console_channels";
+#endif
         Con_SaveChannels(memFile);
     }
     else
     {
         MemFile_MoveToSegment(memFile, segmentIndex);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/restore/archive_client/sound";
+#endif
         SND_RestoreEventually(memFile);
         MemFile_MoveToSegment(memFile, segmentIndex + 1);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/restore/archive_client/fx";
+#endif
         FX_Restore(0, memFile);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/restore/archive_client/settings";
+#endif
         CL_RestoreSettings(memFile);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/restore/archive_client/console_channels";
+#endif
         Con_RestoreChannels(memFile);
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/messages";
+#endif
     CL_ArchiveMessages(memFile);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/stance";
+#endif
     MemFile_ArchiveData(memFile, 4, &clients[0].stance);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame";
+#endif
     CG_ArchiveState(0, memFile);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/fog";
+#endif
     R_ArchiveFogState(memFile);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/done";
+#endif
 }
 
 void __cdecl CL_LookupColor(unsigned __int8 c, float *color)
