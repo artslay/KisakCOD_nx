@@ -37,6 +37,33 @@ std::mutex g_vulkanResourceRegistryMutex;
 std::unordered_set<KisakVkBuffer *> g_liveVulkanBuffers;
 std::unordered_set<KisakVkShader *> g_liveVulkanShaders;
 
+uint64_t HashSpirvWords(const std::vector<uint32_t> &words)
+{
+    uint64_t hash = 14695981039346656037ull;
+    for (uint32_t word : words)
+    {
+        for (unsigned int shift = 0; shift < 32; shift += 8)
+        {
+            hash ^= static_cast<uint8_t>(word >> shift);
+            hash *= 1099511628211ull;
+        }
+    }
+    return hash;
+}
+
+bool WriteSwitchPipelineSpirv(const char *path, const std::vector<uint32_t> &words)
+{
+    FILE *file = std::fopen(path, "wb");
+    if (!file)
+        return false;
+
+    const size_t written = std::fwrite(words.data(), sizeof(uint32_t), words.size(), file);
+    const int closeResult = std::fclose(file);
+    return written == words.size() && closeResult == 0;
+}
+
+uint32_t g_switchPipelineCreateSequence = 0;
+
 void LogUnsupportedRenderState(uint32_t state, uint32_t value)
 {
     static std::mutex lock;
@@ -3820,6 +3847,80 @@ bool IDirect3DDevice9::EnsurePipeline()
     info.pDynamicState = &dynamic;
     info.layout = m_backend->PipelineLayout();
     info.renderPass = VK_NULL_HANDLE;
+
+    // Snapshot the exact shader modules passed to NVK before entering the driver.
+    // NVK can fault while compiling NIR->NAK, before vkCreateGraphicsPipelines returns.
+    const uint64_t vsSpirvHash = HashSpirvWords(m_vertexShader->spirv);
+    const uint64_t psSpirvHash = HashSpirvWords(m_pixelShader->spirv);
+    const uint32_t pipelineCreateSequence = ++g_switchPipelineCreateSequence;
+    static uint64_t lastDumpVsHash = 0;
+    static uint64_t lastDumpPsHash = 0;
+    static size_t lastDumpVsWords = 0;
+    static size_t lastDumpPsWords = 0;
+    if (vsSpirvHash != lastDumpVsHash || psSpirvHash != lastDumpPsHash ||
+        m_vertexShader->spirv.size() != lastDumpVsWords ||
+        m_pixelShader->spirv.size() != lastDumpPsWords)
+    {
+        const bool vsDumpOk = WriteSwitchPipelineSpirv(
+            "sdmc:/switch/KisakCOD/vk_crash_vs.spv", m_vertexShader->spirv);
+        const bool psDumpOk = WriteSwitchPipelineSpirv(
+            "sdmc:/switch/KisakCOD/vk_crash_ps.spv", m_pixelShader->spirv);
+        char dumpMsg[256];
+        std::snprintf(
+            dumpMsg, sizeof(dumpMsg),
+            "[KisakCOD][VK SPIRV DUMP] seq=%u saved=%u/%u vsWords=%zu vsHash=%016llx psWords=%zu psHash=%016llx\n",
+            pipelineCreateSequence,
+            vsDumpOk ? 1u : 0u, psDumpOk ? 1u : 0u,
+            m_vertexShader->spirv.size(),
+            static_cast<unsigned long long>(vsSpirvHash),
+            m_pixelShader->spirv.size(),
+            static_cast<unsigned long long>(psSpirvHash));
+        Switch_LogWrite(dumpMsg);
+        if (vsDumpOk && psDumpOk)
+        {
+            lastDumpVsHash = vsSpirvHash;
+            lastDumpPsHash = psSpirvHash;
+            lastDumpVsWords = m_vertexShader->spirv.size();
+            lastDumpPsWords = m_pixelShader->spirv.size();
+        }
+    }
+
+    const MOJOSHADER_parseData *preVs = m_vertexShader->parseData;
+    const MOJOSHADER_parseData *prePs = m_pixelShader->parseData;
+    char preCreateMsg[768];
+    std::snprintf(
+        preCreateMsg, sizeof(preCreateMsg),
+        "[KisakCOD][VK PIPELINE PRE] seq=%u key=%016llx vs={serial=%llu,words=%zu,hash=%016llx,profile=%s,type=%d,bytes=%d} ps={serial=%llu,words=%zu,hash=%016llx,profile=%s,type=%d,bytes=%d} formats=%u/%u samples=%u topology=%u bindings=%zu attrs=%zu alpha=%u/%u/%u spec=%u/%u depth=%u/%u/%u blend=%u\n",
+        pipelineCreateSequence,
+        static_cast<unsigned long long>(key),
+        static_cast<unsigned long long>(m_vertexShader->serial),
+        m_vertexShader->spirv.size(),
+        static_cast<unsigned long long>(vsSpirvHash),
+        preVs && preVs->profile ? preVs->profile : "(null)",
+        preVs ? static_cast<int>(preVs->shader_type) : -1,
+        preVs ? preVs->output_len : 0,
+        static_cast<unsigned long long>(m_pixelShader->serial),
+        m_pixelShader->spirv.size(),
+        static_cast<unsigned long long>(psSpirvHash),
+        prePs && prePs->profile ? prePs->profile : "(null)",
+        prePs ? static_cast<int>(prePs->shader_type) : -1,
+        prePs ? prePs->output_len : 0,
+        static_cast<unsigned int>(colorFormat),
+        static_cast<unsigned int>(depthFormat),
+        static_cast<unsigned int>(colorSamples),
+        static_cast<unsigned int>(m_topology),
+        bindings.size(),
+        vertexAttrs.size(),
+        m_alphaTest ? 1u : 0u,
+        m_alphaFunc,
+        m_alphaRef,
+        m_pixelShader->alphaFuncSpecId,
+        m_pixelShader->alphaRefSpecId,
+        m_depthEnable ? 1u : 0u,
+        m_depthWrite ? 1u : 0u,
+        static_cast<unsigned int>(m_depthFunc),
+        m_blendEnable ? 1u : 0u);
+    Switch_LogWrite(preCreateMsg);
 
     VkPipeline pipeline = VK_NULL_HANDLE;
     const VkResult pipelineResult = vkCreateGraphicsPipelines(
