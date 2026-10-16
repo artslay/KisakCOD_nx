@@ -114,7 +114,7 @@ void __cdecl XAnimCreate(XAnim_s* anims, uint32_t animIndex, const char* name)
     else
         parts = XAnimFindData_LoadObj(name);
 
-    if (IsFastFileLoad() || parts)
+    if (parts)
     {
         iassert(parts);
         anims->entries[animIndex].numAnims = 0;
