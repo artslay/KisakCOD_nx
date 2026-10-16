@@ -4109,6 +4109,11 @@ bool IDirect3DDevice9::EnsurePipeline()
                 SpvOpLogicalOr, SpvOpLogicalOr, SpvOpLogicalOr,
                 SpvOpLogicalNot
             };
+            // SSA capture does not emit the initial alpha-storage OpLoad.
+            // Keep a second exact pattern so this probe still isolates the
+            // generated comparison expression in either patching strategy.
+            const std::vector<SpvOp> alphaArithmeticOpsSsa(
+                alphaArithmeticOps.begin() + 1, alphaArithmeticOps.end());
             const std::vector<SpvOp> alphaTailOps = {
                 SpvOpSelectionMerge, SpvOpBranchConditional, SpvOpLabel,
                 SpvOpKill, SpvOpLabel, SpvOpReturn
@@ -4139,35 +4144,48 @@ bool IDirect3DDevice9::EnsurePipeline()
             size_t arithmeticStart = patchedAlphaSpirv.size();
             size_t selectionMergeOffset = patchedAlphaSpirv.size();
             size_t branchOffset = patchedAlphaSpirv.size();
-            for (size_t k = alphaArithmeticOps.size(); k < entryOps.size(); ++k)
+            for (size_t k = 0; k < entryOps.size(); ++k)
             {
-                if (entryOps[k] != SpvOpSelectionMerge)
+                if (entryOps[k] != SpvOpSelectionMerge ||
+                    k + alphaTailOps.size() > entryOps.size())
                     continue;
-                bool match = true;
-                const size_t startIndex = k - alphaArithmeticOps.size();
-                for (size_t j = 0; j < alphaArithmeticOps.size(); ++j)
-                {
-                    if (entryOps[startIndex + j] != alphaArithmeticOps[j])
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-                if (!match || k + alphaTailOps.size() > entryOps.size())
-                    continue;
+
+                bool tailMatch = true;
                 for (size_t j = 0; j < alphaTailOps.size(); ++j)
                 {
                     if (entryOps[k + j] != alphaTailOps[j])
                     {
-                        match = false;
+                        tailMatch = false;
                         break;
                     }
                 }
-                if (match)
+                if (!tailMatch)
+                    continue;
+
+                const std::vector<SpvOp> *patterns[] = {
+                    &alphaArithmeticOps, &alphaArithmeticOpsSsa
+                };
+                for (const std::vector<SpvOp> *pattern : patterns)
                 {
-                    arithmeticStart = entryOffsets[startIndex];
-                    selectionMergeOffset = entryOffsets[k];
-                    branchOffset = entryOffsets[k + 1];
+                    if (k < pattern->size())
+                        continue;
+                    const size_t startIndex = k - pattern->size();
+                    bool match = true;
+                    for (size_t j = 0; j < pattern->size(); ++j)
+                    {
+                        if (entryOps[startIndex + j] != (*pattern)[j])
+                        {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match)
+                    {
+                        arithmeticStart = entryOffsets[startIndex];
+                        selectionMergeOffset = entryOffsets[k];
+                        branchOffset = entryOffsets[k + 1];
+                        break;
+                    }
                 }
             }
 
@@ -4251,10 +4269,14 @@ bool IDirect3DDevice9::EnsurePipeline()
             char mathlessMsg[208];
             std::snprintf(
                 mathlessMsg, sizeof(mathlessMsg),
-                "[KisakCOD][VK DRAW] pipeline_probe alpha_math_removed module=%d pipeline=%d match=%u\n",
+                "[KisakCOD][VK DRAW] pipeline_probe alpha_math_removed module=%d pipeline=%d match=%u capture=%s\n",
                 static_cast<int>(mathlessModuleResult),
                 static_cast<int>(mathlessPipelineResult),
-                arithmeticStart < selectionMergeOffset ? 1u : 0u);
+                arithmeticStart < selectionMergeOffset ? 1u : 0u,
+                arithmeticStart < selectionMergeOffset &&
+                    entryOps.empty() == false &&
+                    std::find(entryOps.begin(), entryOps.end(), SpvOpLoad) == entryOps.end()
+                    ? "ssa" : "function_storage");
             Switch_LogWrite(mathlessMsg);
         }
 
