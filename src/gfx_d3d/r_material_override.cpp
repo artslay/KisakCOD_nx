@@ -626,6 +626,49 @@ static void Switch_ResolvePointerForRenderIfNeeded(T **pointer, const char *kind
     }
 }
 
+bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass)
+{
+    g_switchFrameStage = "frame/render/pass_args/entry";
+    if (!pass)
+        return false;
+
+    const uint32_t argCount =
+        static_cast<uint32_t>(pass->perPrimArgCount) +
+        static_cast<uint32_t>(pass->perObjArgCount) +
+        static_cast<uint32_t>(pass->stableArgCount);
+    if (!argCount)
+        return true;
+
+    Switch_ResolvePointerForRenderIfNeeded(&pass->args, "args/pass_setup");
+    const uintptr_t address = reinterpret_cast<uintptr_t>(pass->args);
+    if (!pass->args ||
+        address <= UINT32_MAX ||
+        (address & (alignof(MaterialShaderArgument) - 1u)) != 0 ||
+        Switch_IsSerializedAddress(address))
+    {
+        static uint32_t traceCount = 0;
+        if (traceCount < 32u)
+        {
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][MATERIAL PASS ARG REJECT] pass=%p args=%p argCount=%u stage=pass_setup\n",
+                static_cast<void *>(pass),
+                reinterpret_cast<const void *>(address),
+                static_cast<unsigned>(argCount));
+            Switch_LogWrite(trace);
+            ++traceCount;
+        }
+        pass->args = nullptr;
+        g_switchFrameStage = "frame/render/pass_args/rejected";
+        return false;
+    }
+
+    g_switchFrameStage = "frame/render/pass_args/ready";
+    return true;
+}
+
 static void Switch_LogTechniqueRenderReject(
     const char *kind,
     const MaterialTechniqueSet *techSet,
