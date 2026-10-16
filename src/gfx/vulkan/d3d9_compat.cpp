@@ -780,6 +780,12 @@ bool PatchFragmentShaderForAlphaTest(
 
     bool inEntry = false;
     bool injected = false;
+    // Inserting a selection before an output store splits its original block.
+    // Any OpPhi in a successor must name the new continuation block, not the
+    // original block whose terminator was moved after the injected labels.
+    std::unordered_map<uint32_t, uint32_t> remappedBlockLabels;
+    uint32_t sourceBlockLabel = 0;
+    uint32_t continuationBlockLabel = 0;
     for (size_t i = firstFunction; i < words.size();)
     {
         uint32_t wc = 0;
@@ -788,8 +794,17 @@ bool PatchFragmentShaderForAlphaTest(
             return false;
 
         const uint32_t *ins = &words[i];
-        if (op == SpvOpFunction && wc >= 3 && ins[2] == entryFunctionId)
-            inEntry = true;
+        if (op == SpvOpFunction && wc >= 3)
+        {
+            inEntry = ins[2] == entryFunctionId;
+            sourceBlockLabel = 0;
+            continuationBlockLabel = 0;
+        }
+        if (inEntry && op == SpvOpLabel && wc >= 2)
+        {
+            sourceBlockLabel = ins[1];
+            continuationBlockLabel = ins[1];
+        }
 
         if (inEntry && op == SpvOpStore && wc >= 3 && ins[1] == outputVarId)
         {
@@ -861,11 +876,32 @@ bool PatchFragmentShaderForAlphaTest(
             SpirvAppend(patched, SpvOpLabel, {killLabel});
             SpirvAppend(patched, SpvOpKill, {});
             SpirvAppend(patched, SpvOpLabel, {mergeLabel});
+            continuationBlockLabel = mergeLabel;
 
             injected = true;
         }
 
         patched.insert(patched.end(), words.begin() + i, words.begin() + i + wc);
+
+        const bool blockTerminator =
+            op == SpvOpBranch ||
+            op == SpvOpBranchConditional ||
+            op == SpvOpSwitch ||
+            op == SpvOpKill ||
+            op == SpvOpReturn ||
+            op == SpvOpReturnValue ||
+            op == SpvOpUnreachable;
+        if (inEntry && blockTerminator)
+        {
+            if (sourceBlockLabel != 0 &&
+                continuationBlockLabel != 0 &&
+                sourceBlockLabel != continuationBlockLabel)
+            {
+                remappedBlockLabels[sourceBlockLabel] = continuationBlockLabel;
+            }
+            sourceBlockLabel = 0;
+            continuationBlockLabel = 0;
+        }
 
         if (op == SpvOpFunctionEnd)
             inEntry = false;
@@ -874,6 +910,32 @@ bool PatchFragmentShaderForAlphaTest(
 
     if (!injected)
         return false;
+
+    // Repair SSA edges for blocks that were split by the alpha-test branch.
+    // The values feeding OpPhi stay valid; only their incoming predecessor
+    // label changes to the continuation block that now owns the old terminator.
+    if (!remappedBlockLabels.empty())
+    {
+        for (size_t i = 5; i < patched.size();)
+        {
+            uint32_t wc = 0;
+            SpvOp op{};
+            if (!SpirvIsValidInstruction(patched, i, &wc, &op))
+                return false;
+
+            if (op == SpvOpPhi && wc >= 5)
+            {
+                for (uint32_t operand = 3; operand + 1 < wc; operand += 2)
+                {
+                    const uint32_t oldLabel = patched[i + operand + 1];
+                    const auto remapped = remappedBlockLabels.find(oldLabel);
+                    if (remapped != remappedBlockLabels.end())
+                        patched[i + operand + 1] = remapped->second;
+                }
+            }
+            i += wc;
+        }
+    }
 
     words.swap(patched);
     words[3] = nextId;
