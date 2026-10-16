@@ -988,7 +988,6 @@ bool PatchFragmentShaderForAlphaTest(
         // Function-local variables must all appear at the start of the first
         // block, before executable instructions. Preserve the shader's original
         // OpLine/OpVariable prologue and append our variable only after it.
-        // Initialize it with OpStore before the first executable instruction.
         if (inEntry && op == SpvOpLabel && !entryFirstBlockSeen)
         {
             entryFirstBlockSeen = true;
