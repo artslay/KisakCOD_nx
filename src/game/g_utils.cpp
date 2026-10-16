@@ -3229,6 +3229,27 @@ int __cdecl G_EntLinkToInternal(gentity_s *ent, gentity_s *parent, unsigned int 
             parent->tagChildren = ent;
             scripted = ent->scripted;
             ent->tagInfo = v10;
+#ifdef __SWITCH__
+            if (ent->client)
+            {
+                static unsigned switchPlayerLinkTraceCount = 0;
+                if (switchPlayerLinkTraceCount++ < 8u)
+                {
+                    Com_Printf(
+                        CON_CHANNEL_SERVER,
+                        "[KisakCOD][PLAYER LINK] child=%d parent=%d parentPtr=%p parentInuse=%u parentType=%d tag=%u bone=%d childOrg=(%.2f,%.2f,%.2f) parentOrg=(%.2f,%.2f,%.2f)\\n",
+                        ent->s.number,
+                        parent->s.number,
+                        static_cast<void *>(parent),
+                        static_cast<unsigned>(parent->r.inuse),
+                        parent->s.eType,
+                        tagName,
+                        BoneIndex,
+                        ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
+                        parent->r.currentOrigin[0], parent->r.currentOrigin[1], parent->r.currentOrigin[2]);
+                }
+            }
+#endif
             if (scripted)
             {
                 G_CalcTagParentAxis(ent, v16);
