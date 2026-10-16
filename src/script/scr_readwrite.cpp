@@ -949,10 +949,9 @@ void __cdecl Scr_LoadPre(int sys, MemoryFile *memFile)
     scrVarPub.freeEntList = v18;
     if (scrVarDebugPub)
         ++scrVarDebugPub->extRefCount[v18];
-    v19 = 4;
-    p_entArrayId = &g_classMap[0].entArrayId;
-    do
+    for (v19 = 0; v19 < 4; ++v19)
     {
+        p_entArrayId = &g_classMap[v19].entArrayId;
         if (GetArraySize(*p_entArrayId))
             MyAssertHandler(
                 "c:\\trees\\cod3\\cod3src\\src\\script\\scr_readwrite.cpp",
@@ -969,9 +968,7 @@ void __cdecl Scr_LoadPre(int sys, MemoryFile *memFile)
         *p_entArrayId = v21;
         if (v22)
             ++v22->extRefCount[v21];
-        --v19;
-        p_entArrayId += 6;
-    } while (v19);
+    }
 }
 
 static void Scr_AddDebugExprValueRefCount(unsigned __int16 *refCount, sval_u *val)
@@ -1113,45 +1110,39 @@ static void CheckReferenceRange(unsigned int begin, unsigned int end)
 
 static int CheckReferences()
 {
-    int v0; // r11
-    unsigned int i; // r31
-    int v2; // r30
-    int v3; // r9
-    unsigned int v4; // r7
-    VariableValueInternal_w *j; // r11
-
     if (!scrVarDebugPub || scrStringDebugGlob && scrStringDebugGlob->ignoreLeaks)
         return 1;
+
     memcpy(scrVarDebugPub->refCount, scrVarDebugPub->extRefCount, sizeof(scrVarDebugPub->refCount));
     Scr_AddDebugRefCount(scrVarDebugPub->refCount);
     CheckReferenceRange(1u, 0x8001u);
     CheckReferenceRange(0x8002u, 0x18000u);
+
+    // These offsets and 16-byte strides describe the 32-bit engine layout.
+    // On Switch, use the native refCount and VariableValueInternal arrays.
     if (scrVarPub.developer)
     {
-        v0 = 1;
-        for (i = 458754; i < 0x80000; i += 2)
+        for (unsigned int variableId = 1; variableId < 0x8000; ++variableId)
         {
-            v2 = v0 + 1;
-            if (Scr_IsVariableBreakpoint(v0 + 1))
-                ++*(_WORD *)((char *)scrVarDebugPub->varUsage + i);
-            v0 = v2;
+            if (Scr_IsVariableBreakpoint(variableId + 1))
+                ++scrVarDebugPub->refCount[variableId];
         }
     }
-    v3 = 458754;
-    v4 = 16;
-    for (j = &scrVarGlob.variableList[2].w;
-        (j->status & 0x60) == 0
-        || (j->type & VAR_MASK) < VAR_THREAD
-        || *(_WORD *)((char *)scrVarDebugPub->varUsage + v3)
-        && *(unsigned __int16 *)((char *)scrVarDebugPub->varUsage + v3) == (unsigned __int16)j[-1].status + 1;
-        j += 4)
+
+    for (unsigned int variableId = 1; variableId < 0x8000; ++variableId)
     {
-        v4 += 16;
-        v3 += 2;
-        if (v4 >= 0x80000)
-            return 1;
+        const VariableValueInternal *entryValue = &scrVarGlob.variableList[variableId + 1];
+        if ((entryValue->w.status & 0x60) != 0
+            && (entryValue->w.type & VAR_MASK) >= VAR_THREAD)
+        {
+            const unsigned int refCount = scrVarDebugPub->refCount[variableId];
+            const unsigned int expectedRefCount =
+                static_cast<unsigned int>(static_cast<uint16_t>(static_cast<int>(entryValue->u))) + 1u;
+            if (!refCount || refCount != expectedRefCount)
+                return 0;
+        }
     }
-    return 0;
+    return 1;
 }
 
 void __cdecl Scr_LoadShutdown()
@@ -1863,14 +1854,8 @@ void __cdecl Scr_SavePost(MemoryFile *memFile)
     WriteId(scrVarPub.timeArrayId, 0, memFile);
     WriteId(scrVarPub.pauseArrayId, 0, memFile);
     WriteId(scrVarPub.freeEntList, 0, memFile);
-    v6 = 4;
-    p_entArrayId = &g_classMap[0].entArrayId;
-    do
-    {
-        WriteId(*p_entArrayId, 0, memFile);
-        --v6;
-        p_entArrayId += 6;
-    } while (v6);
+    for (v6 = 0; v6 < 4; ++v6)
+        WriteId(g_classMap[v6].entArrayId, 0, memFile);
 }
 
 void __cdecl AddSaveStack(const VariableStackBuffer *stackBuf)
@@ -1924,7 +1909,6 @@ void __cdecl AddSaveEntry(unsigned int type, const VariableStackBuffer *u)
 void __cdecl Scr_SavePre(int sys)
 {
     int v2; // r30
-    unsigned __int16 *p_entArrayId; // r29
     VariableValueInternal *v4; // r11
     const VariableStackBuffer *stackValue; // r3
     int v6; // r11
@@ -1944,14 +1928,8 @@ void __cdecl Scr_SavePre(int sys)
     AddSaveObject(scrVarPub.timeArrayId);
     AddSaveObject(scrVarPub.pauseArrayId);
     AddSaveObject(scrVarPub.freeEntList);
-    v2 = 4;
-    p_entArrayId = &g_classMap[0].entArrayId;
-    do
-    {
-        AddSaveObject(*p_entArrayId);
-        --v2;
-        p_entArrayId += 6;
-    } while (v2);
+    for (v2 = 0; v2 < 4; ++v2)
+        AddSaveObject(g_classMap[v2].entArrayId);
     v4 = &scrVarGlob.variableList[scrVarPub.gameId + VARIABLELIST_CHILD_BEGIN];
     stackValue = v4->u.u.stackValue;
     v6 = v4->w.type & VAR_MASK;
