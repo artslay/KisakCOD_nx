@@ -267,8 +267,6 @@ void VulkanBackend::Shutdown()
 
     if (m_sync.imageAvailable) vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
     m_sync.imageAvailable = VK_NULL_HANDLE;
-    if (m_sync.renderFinished) vkDestroySemaphore(m_device, m_sync.renderFinished, nullptr);
-    m_sync.renderFinished = VK_NULL_HANDLE;
     if (m_sync.fence) vkDestroyFence(m_device, m_sync.fence, nullptr);
     m_sync.fence = VK_NULL_HANDLE;
     if (m_immediateCommandPool)
@@ -680,6 +678,20 @@ bool VulkanBackend::CreateSwapchain()
         }
     }
 
+    VkSemaphoreCreateInfo renderFinishedInfo{};
+    renderFinishedInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    m_renderFinishedSemaphores.assign(count, VK_NULL_HANDLE);
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const VkResult semaphoreResult = vkCreateSemaphore(
+            m_device, &renderFinishedInfo, nullptr, &m_renderFinishedSemaphores[i]);
+        if (semaphoreResult != VK_SUCCESS)
+        {
+            SetError("vkCreateSemaphore for swapchain image present failed", semaphoreResult);
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -852,15 +864,6 @@ bool VulkanBackend::CreateSync()
         SetError("vkCreateSemaphore imageAvailable failed", imageAvailableResult);
         return false;
     }
-    const VkResult renderFinishedResult =
-        vkCreateSemaphore(m_device, &semaphore, nullptr, &m_sync.renderFinished);
-    if (renderFinishedResult != VK_SUCCESS)
-    {
-        SetError("vkCreateSemaphore renderFinished failed", renderFinishedResult);
-        vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
-        m_sync.imageAvailable = VK_NULL_HANDLE;
-        return false;
-    }
 
     VkFenceCreateInfo fence{};
     fence.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -870,9 +873,7 @@ bool VulkanBackend::CreateSync()
     {
         SetError("vkCreateFence failed", fenceResult);
         vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
-        vkDestroySemaphore(m_device, m_sync.renderFinished, nullptr);
         m_sync.imageAvailable = VK_NULL_HANDLE;
-        m_sync.renderFinished = VK_NULL_HANDLE;
         return false;
     }
     return true;
@@ -880,6 +881,10 @@ bool VulkanBackend::CreateSync()
 
 void VulkanBackend::DestroySwapchain()
 {
+    for (VkSemaphore semaphore : m_renderFinishedSemaphores)
+        if (semaphore) vkDestroySemaphore(m_device, semaphore, nullptr);
+    m_renderFinishedSemaphores.clear();
+
     for (VkImageView view : m_swapchainViews)
         if (view) vkDestroyImageView(m_device, view, nullptr);
     m_swapchainViews.clear();
@@ -936,13 +941,11 @@ bool VulkanBackend::RecreateSwapchain()
 
     DestroySwapchain();
 
-    // A failed acquire/present can leave the binary semaphore state uncertain.
-    // Recreate the per-frame synchronization objects after the device is idle
-    // instead of reusing a semaphore/fence that may no longer be signaled.
+    // A failed acquire/present can leave the per-frame image-available semaphore
+    // or fence state uncertain. Swapchain-image present semaphores were released
+    // by DestroySwapchain above; recreate the remaining sync objects after idle.
     if (m_sync.imageAvailable)
         vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
-    if (m_sync.renderFinished)
-        vkDestroySemaphore(m_device, m_sync.renderFinished, nullptr);
     if (m_sync.fence)
         vkDestroyFence(m_device, m_sync.fence, nullptr);
     m_sync = FrameSync{};
@@ -1188,7 +1191,10 @@ bool VulkanBackend::EndFrame()
     EndRendering();
 
     VkImage swapImage = CurrentSwapchainImage();
-    if (!swapImage || m_swapchainLayouts.size() <= m_swapchainIndex)
+    if (!swapImage ||
+        m_swapchainLayouts.size() <= m_swapchainIndex ||
+        m_renderFinishedSemaphores.size() <= m_swapchainIndex ||
+        !m_renderFinishedSemaphores[m_swapchainIndex])
     {
         SetError("Invalid swapchain image state");
         (void)RecreateSwapchain();
@@ -1264,7 +1270,7 @@ bool VulkanBackend::EndFrame()
     }
 
     // Reset only when the frame is ready to submit. If submit itself fails,
-    // RecreateSwapchain replaces this unsignaled fence and both semaphores.
+    // RecreateSwapchain replaces this unsignaled fence and image-available semaphore.
     const VkResult resetFenceResult = vkResetFences(m_device, 1, &m_sync.fence);
     if (resetFenceResult != VK_SUCCESS)
     {
@@ -1286,7 +1292,7 @@ bool VulkanBackend::EndFrame()
     submit.commandBufferCount = 1;
     submit.pCommandBuffers = &m_commandBuffer;
     submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &m_sync.renderFinished;
+    submit.pSignalSemaphores = &m_renderFinishedSemaphores[m_swapchainIndex];
 
     VkResult submitResult;
     {
@@ -1305,7 +1311,7 @@ bool VulkanBackend::EndFrame()
     VkPresentInfoKHR present{};
     present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores = &m_sync.renderFinished;
+    present.pWaitSemaphores = &m_renderFinishedSemaphores[m_swapchainIndex];
     present.swapchainCount = 1;
     present.pSwapchains = &m_swapchain;
     present.pImageIndices = &m_swapchainIndex;
