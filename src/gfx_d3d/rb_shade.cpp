@@ -11,6 +11,7 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
+extern thread_local const char *g_switchFrameStage;
 #endif
 
 
