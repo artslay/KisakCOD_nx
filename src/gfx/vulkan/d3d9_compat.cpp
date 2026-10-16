@@ -1002,17 +1002,19 @@ bool PatchFragmentShaderForAlphaTest(
             const bool isFunctionVariable =
                 op == SpvOpVariable && wc >= 4 &&
                 ins[3] == SpvStorageClassFunction;
-            if (op == SpvOpLine || isFunctionVariable)
+            if (op == SpvOpLine || op == SpvOpNoLine || isFunctionVariable)
             {
                 patched.insert(patched.end(), words.begin() + i, words.begin() + i + wc);
                 i += wc;
                 continue;
             }
 
+            // Function-storage OpVariable may legally use a constant
+            // initializer. Keep it with the declaration prologue so no
+            // executable OpStore interrupts the sequence of local variables.
             SpirvAppend(
                 patched, SpvOpVariable,
-                {functionPointerType, alphaStorage, SpvStorageClassFunction});
-            SpirvAppend(patched, SpvOpStore, {alphaStorage, alphaDefault});
+                {functionPointerType, alphaStorage, SpvStorageClassFunction, alphaDefault});
             injectedFunctionVariable = true;
             pendingEntryVariables = false;
         }
