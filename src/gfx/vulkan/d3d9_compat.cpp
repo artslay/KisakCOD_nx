@@ -1008,12 +1008,13 @@ bool PatchFragmentShaderForAlphaTest(
                 continue;
             }
 
-            // Function-storage OpVariable may legally use a constant
-            // initializer. Keep it with the declaration prologue so no
-            // executable OpStore interrupts the sequence of local variables.
+            // Keep declarations ahead of executable code. Function-local
+            // initialization is an instruction, so declare the variable without
+            // an initializer and emit OpStore after the original variable prologue.
             SpirvAppend(
                 patched, SpvOpVariable,
-                {functionPointerType, alphaStorage, SpvStorageClassFunction, alphaDefault});
+                {functionPointerType, alphaStorage, SpvStorageClassFunction});
+            SpirvAppend(patched, SpvOpStore, {alphaStorage, alphaDefault});
             injectedFunctionVariable = true;
             pendingEntryVariables = false;
         }
