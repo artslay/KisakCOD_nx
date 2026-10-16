@@ -554,10 +554,23 @@ void __cdecl R_UpdateVertexDecl(GfxCmdBufState *state)
     const MaterialPass *pass; // [esp+40h] [ebp-8h]
     const MaterialVertexShader *vertexShader; // [esp+44h] [ebp-4h]
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/update_vertex_decl/entry";
+    if (!state || !state->pass ||
+        !Switch_ResolveMaterialPassArgsForRender(
+            const_cast<MaterialPass *>(state->pass)))
+    {
+        g_switchFrameStage = "frame/render/update_vertex_decl/rejected_pass";
+        return;
+    }
+#endif
     pass = state->pass;
     iassert( pass->vertexDecl );
     vertexShader = pass->vertexShader;
     iassert( vertexShader );
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/update_vertex_decl/set_decl";
+#endif
     R_SetVertexDecl(&state->prim, pass->vertexDecl);
     iassert( pass->pixelShader );
     iassert( pass->vertexDecl->routing.decl );
@@ -568,6 +581,9 @@ void __cdecl R_UpdateVertexDecl(GfxCmdBufState *state)
             state->prim.vertDeclType,
             pass->vertexShader->name,
             state->material->info.name);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/render/update_vertex_decl/set_shader";
+#endif
     R_SetVertexShader(state, vertexShader);
 }
 
@@ -591,8 +607,12 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     // This is the actual draw setup path. Some technique selection routes can
     // reach it without passing through Material_GetTechnique, so resolve the
     // pass argument array immediately before any per-pass argument traversal.
-    Switch_ResolveMaterialPassArgsForRender(
-        const_cast<MaterialPass *>(pass));
+    if (!Switch_ResolveMaterialPassArgsForRender(
+            const_cast<MaterialPass *>(pass)))
+    {
+        g_switchFrameStage = "frame/render/setup_pass/rejected";
+        return;
+    }
     g_switchFrameStage = "frame/render/setup_pass/args_resolved";
 #endif
     material = context.state->material;
