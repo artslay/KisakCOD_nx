@@ -927,7 +927,7 @@ bool PatchFragmentShaderForAlphaTest(
         words.begin() + typeSectionEnd,
         privatePointerTypeWords.begin(), privatePointerTypeWords.end());
 
-    std::vector<uint32_t> globals;
+    globals.clear();
     SpirvAppend(globals, SpvOpSpecConstant, {intType, funcSpec, 8});
     SpirvAppend(globals, SpvOpSpecConstant, {floatType, refSpec, 0});
     for (uint32_t value = 1; value <= 8; ++value)
