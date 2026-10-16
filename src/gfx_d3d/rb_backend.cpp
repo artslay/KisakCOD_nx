@@ -497,15 +497,43 @@ static const Material *Switch_ValidateRenderCommandMaterial(
 
 void __cdecl RB_StretchPicCmd(GfxRenderCommandExecState *execState)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cmd6_stretch_pic/handler_enter";
+#endif
     GfxCmdStretchPic *cmd = (GfxCmdStretchPic *)execState->cmd;
 #ifdef __SWITCH__
     const Material *material = Switch_ValidateRenderCommandMaterial(
         cmd->material, &cmd->header, "stretch_pic");
+    g_switchFrameStage = "frame/cmd6_stretch_pic/material_checked";
+    static uint32_t switchStretchPicProbeCount = 0;
+    if (switchStretchPicProbeCount < 4u)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][STRETCH PIC CMD] #%u cmd=%p bytes=%u material=%p white=%p cinematic=%p default=%p rect=%.2fx%.2f\n",
+            static_cast<unsigned>(switchStretchPicProbeCount),
+            static_cast<const void *>(cmd),
+            static_cast<unsigned>(cmd->header.byteCount),
+            static_cast<const void *>(cmd->material),
+            static_cast<const void *>(rgp.whiteMaterial),
+            static_cast<const void *>(rgp.cinematicMaterial),
+            static_cast<const void *>(rgp.defaultMaterial),
+            cmd->w,
+            cmd->h);
+        Switch_LogWrite(trace);
+        ++switchStretchPicProbeCount;
+    }
+    g_switchFrameStage = "frame/cmd6_stretch_pic/draw_enter";
 #else
     const Material *material = cmd->material;
 #endif
 
     RB_DrawStretchPic(material, cmd->x, cmd->y, cmd->w, cmd->h, cmd->s0, cmd->t0, cmd->s1, cmd->t1, cmd->color, GFX_PRIM_STATS_HUD);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/cmd6_stretch_pic/draw_return";
+#endif
     execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
 }
 
