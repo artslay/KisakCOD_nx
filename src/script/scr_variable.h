@@ -238,7 +238,12 @@ struct VariableValueInternal // sizeof=0x10
     VariableValueInternal_v v;          // ...
     uint16_t nextSibling;       // ...
 };
-#ifndef __SWITCH__
+#ifdef __SWITCH__
+// VariableUnion contains native pointers on Switch; this makes the internal
+// script-variable record 24 bytes. Traversal must use typed indexing, not the
+// 32-bit engine's fixed 16-byte byte offsets.
+static_assert(sizeof(VariableValueInternal) == 0x18);
+#else
 static_assert(sizeof(VariableValueInternal) == 0x10);
 #endif
 
