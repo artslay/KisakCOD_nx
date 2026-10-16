@@ -1196,7 +1196,7 @@ bool VulkanBackend::EndFrame()
         char trace[256];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK FRAME] end_frame_begin id=%u serial=%llu source=%u size=%ux%u swapIndex=%u\\n",
+            "[KisakCOD][VK FRAME] end_frame_begin id=%u serial=%llu source=%u size=%ux%u swapIndex=%u\n",
             switchPresentTraceId,
             static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
             switchHasPresentSource ? 1u : 0u,
@@ -1363,7 +1363,7 @@ bool VulkanBackend::EndFrame()
         char trace[192];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK FRAME] end_frame_done id=%u result=%d source=%u\\n",
+            "[KisakCOD][VK FRAME] end_frame_done id=%u result=%d source=%u\n",
             switchPresentTraceId,
             static_cast<int>(result),
             switchHasPresentSource ? 1u : 0u);
