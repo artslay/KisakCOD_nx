@@ -3707,7 +3707,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 char msg[256];
                 std::snprintf(
                     msg, sizeof(msg),
-                    "[KisakCOD][VK DRAW] pipeline_fail=vertex_link_attribute usage=%u usageIndex=%u stream=%u offset=%u decl=%llu vs=%llu ps=%llu\\n",
+                    "[KisakCOD][VK DRAW] pipeline_fail=vertex_link_attribute usage=%u usageIndex=%u stream=%u offset=%u decl=%llu vs=%llu ps=%llu\n",
                     static_cast<unsigned int>(element.Usage),
                     static_cast<unsigned int>(element.UsageIndex),
                     static_cast<unsigned int>(element.Stream),
