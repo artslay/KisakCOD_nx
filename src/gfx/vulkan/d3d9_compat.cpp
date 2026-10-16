@@ -531,6 +531,96 @@ bool SpirvIsValidInstruction(const std::vector<uint32_t> &words, size_t offset, 
     return true;
 }
 
+ 
+// Resolve the two alpha-test SpecIds from the final fragment module, rather
+// than assuming the mutable shader-wrapper metadata still matches its SPIR-V.
+// The alpha-function specialization is the scalar spec constant used as the
+// left operand of the seven generated equality tests (values 2..8); the other
+// member of the pair is the alpha reference threshold.
+bool ResolveAlphaTestSpecializationIds(
+    const std::vector<uint32_t> &words,
+    uint32_t expectedFuncSpecId,
+    uint32_t expectedRefSpecId,
+    uint32_t *resolvedFuncSpecId,
+    uint32_t *resolvedRefSpecId)
+{
+    if (words.size() < 5 || words[0] != SpvMagicNumber ||
+        !resolvedFuncSpecId || !resolvedRefSpecId ||
+        expectedFuncSpecId == expectedRefSpecId)
+        return false;
+
+    const std::unordered_set<uint32_t> expectedSpecIds = {
+        expectedFuncSpecId, expectedRefSpecId
+    };
+    std::unordered_map<uint32_t, uint32_t> specIdByResultId;
+    std::unordered_set<uint32_t> specConstantResultIds;
+    std::unordered_map<uint32_t, uint32_t> equalLeftUseCount;
+
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+
+        const uint32_t *ins = &words[i];
+        if (op == SpvOpDecorate && wc >= 4 &&
+            ins[2] == SpvDecorationSpecId)
+        {
+            const auto existing = specIdByResultId.find(ins[1]);
+            if (existing != specIdByResultId.end() && existing->second != ins[3])
+                return false;
+            specIdByResultId[ins[1]] = ins[3];
+        }
+        else if (op == SpvOpSpecConstant && wc >= 4)
+        {
+            specConstantResultIds.insert(ins[2]);
+        }
+        else if (op == SpvOpFOrdEqual && wc >= 5)
+        {
+            ++equalLeftUseCount[ins[3]];
+        }
+        i += wc;
+    }
+
+    std::vector<std::pair<uint32_t, uint32_t>> candidates;
+    for (const auto &entry : specIdByResultId)
+    {
+        if (specConstantResultIds.count(entry.first) &&
+            expectedSpecIds.count(entry.second))
+            candidates.emplace_back(entry.first, entry.second);
+    }
+    if (candidates.size() != 2 ||
+        candidates[0].second == candidates[1].second)
+        return false;
+
+    uint32_t funcResultId = 0;
+    uint32_t funcSpecId = 0;
+    uint32_t functionCandidates = 0;
+    for (const auto &candidate : candidates)
+    {
+        const auto uses = equalLeftUseCount.find(candidate.first);
+        if (uses != equalLeftUseCount.end() && uses->second >= 7)
+        {
+            funcResultId = candidate.first;
+            funcSpecId = candidate.second;
+            ++functionCandidates;
+        }
+    }
+    if (functionCandidates != 1 || !funcResultId)
+        return false;
+
+    for (const auto &candidate : candidates)
+    {
+        if (candidate.first == funcResultId)
+            continue;
+        *resolvedFuncSpecId = funcSpecId;
+        *resolvedRefSpecId = candidate.second;
+        return true;
+    }
+    return false;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -3473,6 +3563,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     // whether the rewrite or specialization map is responsible without needing
     // to copy shader binaries off the Switch.
     std::vector<uint32_t> unpatchedPixelSpirvForProbe;
+    uint32_t pipelineAlphaFuncSpecId = m_pixelShader->alphaFuncSpecId;
+    uint32_t pipelineAlphaRefSpecId = m_pixelShader->alphaRefSpecId;
 
     if (m_vertexShader->linkedDeclarationSerial != m_decl->serial ||
         m_vertexShader->linkedPixelShaderSerial != m_pixelShader->serial)
@@ -3573,18 +3665,20 @@ bool IDirect3DDevice9::EnsurePipeline()
         // Do not rewrite every fragment shader with discard logic when D3D9
         // alpha testing is disabled. Keep that variant byte-for-byte identical
         // to the interface-linked MojoShader module.
-        m_pixelShader->alphaFuncSpecId = 0;
-        m_pixelShader->alphaRefSpecId = 0;
+        pipelineAlphaFuncSpecId = 0;
+        pipelineAlphaRefSpecId = 0;
         if (m_alphaTest &&
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
-                &m_pixelShader->alphaFuncSpecId,
-                &m_pixelShader->alphaRefSpecId,
+                &pipelineAlphaFuncSpecId,
+                &pipelineAlphaRefSpecId,
                 m_backend->SupportsShaderDemoteToHelperInvocation()))
         {
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
             return false;
         }
+        m_pixelShader->alphaFuncSpecId = pipelineAlphaFuncSpecId;
+        m_pixelShader->alphaRefSpecId = pipelineAlphaRefSpecId;
         m_pixelShader->spirv = pixelSpirv;
         m_vertexShader->spirv.assign(
             reinterpret_cast<const uint32_t *>(m_vertexShader->parseData->output),
@@ -3646,20 +3740,22 @@ bool IDirect3DDevice9::EnsurePipeline()
             return false;
         }
         unpatchedPixelSpirvForProbe = pixelSpirv;
-        m_pixelShader->alphaFuncSpecId = 0;
-        m_pixelShader->alphaRefSpecId = 0;
+        pipelineAlphaFuncSpecId = 0;
+        pipelineAlphaRefSpecId = 0;
 
         if (m_alphaTest &&
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
-                &m_pixelShader->alphaFuncSpecId,
-                &m_pixelShader->alphaRefSpecId,
+                &pipelineAlphaFuncSpecId,
+                &pipelineAlphaRefSpecId,
                 m_backend->SupportsShaderDemoteToHelperInvocation()))
         {
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
             return false;
         }
 
+        m_pixelShader->alphaFuncSpecId = pipelineAlphaFuncSpecId;
+        m_pixelShader->alphaRefSpecId = pipelineAlphaRefSpecId;
         m_pixelShader->spirv = std::move(pixelSpirv);
         VkShaderModuleCreateInfo psInfo{};
         psInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -3690,6 +3786,51 @@ bool IDirect3DDevice9::EnsurePipeline()
     stages[1].module = m_pixelShader->module;
     stages[1].pName = "main";
 
+    const uint32_t storedAlphaFuncSpecId = m_pixelShader->alphaFuncSpecId;
+    const uint32_t storedAlphaRefSpecId = m_pixelShader->alphaRefSpecId;
+    if (m_alphaTest)
+    {
+        uint32_t resolvedFuncSpecId = pipelineAlphaFuncSpecId;
+        uint32_t resolvedRefSpecId = pipelineAlphaRefSpecId;
+        if (!ResolveAlphaTestSpecializationIds(
+                m_pixelShader->spirv,
+                pipelineAlphaFuncSpecId,
+                pipelineAlphaRefSpecId,
+                &resolvedFuncSpecId,
+                &resolvedRefSpecId))
+        {
+            char specMsg[224];
+            std::snprintf(
+                specMsg, sizeof(specMsg),
+                "[KisakCOD][VK SPEC ID] failed=resolve stored=%u/%u local=%u/%u words=%zu\n",
+                storedAlphaFuncSpecId, storedAlphaRefSpecId,
+                pipelineAlphaFuncSpecId, pipelineAlphaRefSpecId,
+                m_pixelShader->spirv.size());
+            Switch_LogWrite(specMsg);
+            return false;
+        }
+
+        pipelineAlphaFuncSpecId = resolvedFuncSpecId;
+        pipelineAlphaRefSpecId = resolvedRefSpecId;
+        if (storedAlphaFuncSpecId != resolvedFuncSpecId ||
+            storedAlphaRefSpecId != resolvedRefSpecId)
+        {
+            char specMsg[224];
+            std::snprintf(
+                specMsg, sizeof(specMsg),
+                "[KisakCOD][VK SPEC ID] corrected stored=%u/%u module=%u/%u words=%zu\n",
+                storedAlphaFuncSpecId, storedAlphaRefSpecId,
+                resolvedFuncSpecId, resolvedRefSpecId,
+                m_pixelShader->spirv.size());
+            Switch_LogWrite(specMsg);
+        }
+
+        // Keep cached metadata coherent, but the pipeline uses the local IDs
+        // resolved from the exact module that was passed to vkCreateShaderModule.
+        m_pixelShader->alphaFuncSpecId = resolvedFuncSpecId;
+        m_pixelShader->alphaRefSpecId = resolvedRefSpecId;
+    }
+
     struct AlphaSpecializationData
     {
         float func;
@@ -3699,8 +3840,8 @@ bool IDirect3DDevice9::EnsurePipeline()
         static_cast<float>(m_alphaRef) / 255.0f
     };
     const VkSpecializationMapEntry alphaSpecializationEntries[] = {
-        {m_pixelShader->alphaFuncSpecId, 0, sizeof(alphaSpecializationData.func)},
-        {m_pixelShader->alphaRefSpecId, sizeof(alphaSpecializationData.func), sizeof(alphaSpecializationData.ref)}
+        {pipelineAlphaFuncSpecId, 0, sizeof(alphaSpecializationData.func)},
+        {pipelineAlphaRefSpecId, sizeof(alphaSpecializationData.func), sizeof(alphaSpecializationData.ref)}
     };
     VkSpecializationInfo alphaSpecializationInfo{};
     alphaSpecializationInfo.mapEntryCount = 2;
@@ -3989,7 +4130,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     char preCreateMsg[768];
     std::snprintf(
         preCreateMsg, sizeof(preCreateMsg),
-        "[KisakCOD][VK PIPELINE PRE] seq=%u key=%016llx vs={serial=%llu,words=%zu,hash=%016llx,profile=%s,type=%d,bytes=%d} ps={serial=%llu,words=%zu,hash=%016llx,profile=%s,type=%d,bytes=%d} formats=%u/%u samples=%u topology=%u bindings=%zu attrs=%zu alpha=%u/%u/%u spec=%u/%u depth=%u/%u/%u blend=%u\n",
+        "[KisakCOD][VK PIPELINE PRE] seq=%u key=%016llx vs={serial=%llu,words=%zu,hash=%016llx,profile=%s,type=%d,bytes=%d} ps={serial=%llu,words=%zu,hash=%016llx,profile=%s,type=%d,bytes=%d} formats=%u/%u samples=%u topology=%u bindings=%zu attrs=%zu alpha=%u/%u/%u spec=%u/%u storedSpec=%u/%u depth=%u/%u/%u blend=%u\n",
         pipelineCreateSequence,
         static_cast<unsigned long long>(key),
         static_cast<unsigned long long>(m_vertexShader->serial),
@@ -4013,8 +4154,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_alphaTest ? 1u : 0u,
         m_alphaFunc,
         m_alphaRef,
-        m_pixelShader->alphaFuncSpecId,
-        m_pixelShader->alphaRefSpecId,
+        pipelineAlphaFuncSpecId,
+        pipelineAlphaRefSpecId,
+        storedAlphaFuncSpecId,
+        storedAlphaRefSpecId,
         m_depthEnable ? 1u : 0u,
         m_depthWrite ? 1u : 0u,
         static_cast<unsigned int>(m_depthFunc),
