@@ -5715,7 +5715,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 char msg[480];
                 std::snprintf(
                     msg, sizeof(msg),
-                    "[KisakCOD][VK DRAW] fail=vertex_fetch_range log=%u prim=%u primitiveCount=%u indexCount=%u startIndex=%u baseVertex=%d rawRange=%u-%u effectiveRange=%lld-%lld stream=%u stride=%u elementOffset=%u elementSize=%u requiredEnd=%llu bufferSize=%u pipeline=%016llx\\n",
+                    "[KisakCOD][VK DRAW] fail=vertex_fetch_range log=%u prim=%u primitiveCount=%u indexCount=%u startIndex=%u baseVertex=%d rawRange=%u-%u effectiveRange=%lld-%lld stream=%u stride=%u elementOffset=%u elementSize=%u requiredEnd=%llu bufferSize=%u pipeline=%016llx\n",
                     logId, primitiveType, primitiveCount, indexCount, startIndex,
                     baseVertexIndex,
                     minRawIndex == UINT32_MAX ? 0u : minRawIndex, maxRawIndex,
