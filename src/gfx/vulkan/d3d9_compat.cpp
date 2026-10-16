@@ -4129,6 +4129,10 @@ bool IDirect3DDevice9::EnsurePipeline()
                 const uint32_t trueId = patchedAlphaSpirv[3];
                 std::vector<uint32_t> alphaMathlessSpirv;
                 alphaMathlessSpirv.reserve(patchedAlphaSpirv.size());
+                alphaMathlessSpirv.insert(
+                    alphaMathlessSpirv.end(),
+                    patchedAlphaSpirv.begin(),
+                    patchedAlphaSpirv.begin() + 5);
                 for (size_t i = 5; i < patchedAlphaSpirv.size();)
                 {
                     uint32_t wc = 0;
@@ -4180,7 +4184,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             char mathlessMsg[208];
             std::snprintf(
                 mathlessMsg, sizeof(mathlessMsg),
-                "[KisakCOD][VK DRAW] pipeline_probe alpha_math_removed module=%d pipeline=%d match=%u\\n",
+                "[KisakCOD][VK DRAW] pipeline_probe alpha_math_removed module=%d pipeline=%d match=%u\n",
                 static_cast<int>(mathlessModuleResult),
                 static_cast<int>(mathlessPipelineResult),
                 arithmeticStart < selectionMergeOffset ? 1u : 0u);
