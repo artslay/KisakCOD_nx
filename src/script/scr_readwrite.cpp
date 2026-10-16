@@ -1821,7 +1821,6 @@ void __cdecl Scr_SavePost(MemoryFile *memFile)
     unsigned __int16 *v4; // r28
     unsigned int v5; // r3
     int v6; // r30
-    unsigned __int16 *p_entArrayId; // r29
     unsigned int v8[12]; // [sp+50h] [-30h] BYREF
 
     memset(idHistory, 0, 0x20u);
