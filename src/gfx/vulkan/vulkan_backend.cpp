@@ -1378,14 +1378,20 @@ bool VulkanBackend::EndFrame()
 
     VkResult submitResult;
     {
+#ifdef __SWITCH__
         g_switchFrameStage = "frame/present/queue_submit";
+#endif
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
         submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, m_sync.fence);
+#ifdef __SWITCH__
         g_switchFrameStage = "frame/present/queue_submit_return";
+#endif
     }
     if (submitResult != VK_SUCCESS)
     {
+#ifdef __SWITCH__
         g_switchFrameStage = "frame/present/queue_submit_failed";
+#endif
         SetError("vkQueueSubmit failed", submitResult);
         if (!m_deviceLost)
             (void)RecreateSwapchain();
