@@ -46,6 +46,13 @@ static_assert(sizeof(GfxCmdDrawText2D) == 96);
 #include "rb_state.h"
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+extern MaterialTechniqueSet *Switch_ResolveMaterialTechniqueSetForRender(Material *material);
+extern MaterialTechnique *Switch_ResolveTechniqueForRender(
+    MaterialTechniqueSet *techSet,
+    uint32_t techType);
+#endif
+
 //  struct GfxBackEndData *frontEndDataOut 85827c80     gfx_d3d : r_rendercmds.obj
 GfxBackEndData *frontEndDataOut;
 //  int marker_r_rendercmds  85827cb8     gfx_d3d : r_rendercmds.obj
@@ -902,9 +909,19 @@ const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material,
     }
 #endif
 
+#ifdef __SWITCH__
+    techSet = Switch_ResolveMaterialTechniqueSetForRender(
+        const_cast<Material *>(material));
+    if (!techSet)
+        return nullptr;
+    technique = Switch_ResolveTechniqueForRender(
+        const_cast<MaterialTechniqueSet *>(techSet),
+        static_cast<uint32_t>(techType));
+#else
     techSet = Material_GetTechniqueSet(material);
     iassert( techSet );
     technique = techSet->techniques[techType];
+#endif
     if (technique
         && technique->passArray[0].pixelShader->prog.loadDef.loadForRenderer != r_rendererInUse->current.integer)
     {
@@ -922,6 +939,12 @@ const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material,
 MaterialTechniqueSet *__cdecl Material_GetTechniqueSet(const Material *material)
 {
     iassert( material );
+#ifdef __SWITCH__
+    if (!material)
+        return nullptr;
+    return Switch_ResolveMaterialTechniqueSetForRender(
+        const_cast<Material *>(material));
+#else
     if (!material->techniqueSet)
         MyAssertHandler(
             "c:\\trees\\cod3\\src\\gfx_d3d\\r_material.h",
@@ -931,6 +954,7 @@ MaterialTechniqueSet *__cdecl Material_GetTechniqueSet(const Material *material)
             "(material->techniqueSet)",
             material->info.name);
     return material->techniqueSet->remappedTechniqueSet;
+#endif
 }
 
 void __cdecl R_AddCmdDrawStretchPicFlipST(
