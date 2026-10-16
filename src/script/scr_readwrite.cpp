@@ -788,7 +788,7 @@ void __cdecl Scr_SaveShutdown(bool savegame)
     char v2; // r20
     unsigned __int16 *v3; // r25
     int v4; // r30
-    VariableValueInternal_w *p_w; // r27
+    VariableValueInternal *entryValue; // r27
     int v6; // r26
     const char *v7; // r31
 
@@ -797,13 +797,15 @@ void __cdecl Scr_SaveShutdown(bool savegame)
     {
         v3 = &scrVarPub.saveIdMap[1];
         v4 = 1;
-        p_w = &scrVarGlob.variableList[2].w;
         v6 = 0x7FFF;
         do
         {
-            if ((p_w->type & 0x60) != 0)
+            // Use native array indexing here: VariableValueInternal is 24 bytes on
+            // Switch, so the legacy p_w += 4 and p_w[-2] arithmetic miswalks records.
+            entryValue = &scrVarGlob.variableList[v4 + 1];
+            if ((entryValue->w.type & 0x60) != 0)
             {
-                if (!IsObject((VariableValueInternal *)&p_w[-2]))
+                if (!IsObject(entryValue))
                     MyAssertHandler(
                         "c:\\trees\\cod3\\cod3src\\src\\script\\scr_readwrite.cpp",
                         968,
@@ -813,7 +815,7 @@ void __cdecl Scr_SaveShutdown(bool savegame)
                 v7 = scrVarDebugPub->varUsage[v4 + 1];
                 if (!v7)
                     MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\script\\scr_readwrite.cpp", 970, 0, "%s", "pos");
-                if (!*v3 && (p_w->type & VAR_MASK) != VAR_ARRAY)
+                if (!*v3 && (entryValue->w.type & VAR_MASK) != VAR_ARRAY)
                 {
                     if (!v2)
                     {
@@ -824,7 +826,6 @@ void __cdecl Scr_SaveShutdown(bool savegame)
                 }
             }
             --v6;
-            p_w += 4;
             ++v4;
             ++v3;
         } while (v6);
