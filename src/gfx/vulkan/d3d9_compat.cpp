@@ -4275,13 +4275,13 @@ bool IDirect3DDevice9::EnsurePipeline()
     const bool probePipelineDump =
         pipelineCreateSequence > 8 && pipelineCreateSequence <= 32;
     const bool recentPipelineDump = pipelineCreateSequence >= 180;
-    // Pipeline 43 completed and rendering advanced; the latest driver fault
-    // occurs while creating pipeline 60. Capture that fragment module once.
+    // Pipelines through 68 progressed past driver creation; the latest fault
+    // follows pipeline 69. Capture its fragment module once.
     // Match its hash too, in case earlier pipeline sequencing shifts.
     static bool targetPipelineCaptureLogged = false;
     const bool targetPipelineDump = !targetPipelineCaptureLogged &&
-        (pipelineCreateSequence == 60 ||
-         psSpirvHash == 0x82117cf9b4f69a41ull);
+        (pipelineCreateSequence == 69 ||
+         psSpirvHash == 0x036fd9b95acdb931ull);
     if (targetPipelineDump)
         targetPipelineCaptureLogged = true;
     if ((earlyPipelineDump || probePipelineDump || recentPipelineDump) &&
@@ -4440,7 +4440,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     // choose whichever transfer method is easier.
     if (targetPipelineDump)
     {
-        const char *targetPsPath = "sdmc:/switch/KisakCOD/vk_crash_60_ps.spv";
+        const char *targetPsPath = "sdmc:/switch/KisakCOD/vk_crash_69_ps.spv";
         const bool targetPsSaved = WriteSwitchPipelineSpirv(
             targetPsPath, m_pixelShader->spirv);
         LogSwitchPipelineSpirvBase64(
