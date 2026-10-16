@@ -3819,6 +3819,189 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite(probeMsg);
         }
 
+        // Probe 1a: start from the known-good linked fragment module and add
+        // only a constant-conditioned structured discard. This checks whether
+        // NVK accepts the minimal entry-point control-flow shape independently
+        // of all generated alpha-test arithmetic and specialization constants.
+        if (!unpatchedPixelSpirvForProbe.empty())
+        {
+            std::vector<uint32_t> minimalKillSpirv = unpatchedPixelSpirvForProbe;
+            uint32_t boolTypeId = 0;
+            for (size_t i = 5; i < minimalKillSpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(minimalKillSpirv, i, &wc, &op))
+                    break;
+                const uint32_t *ins = &minimalKillSpirv[i];
+                if (op == SpvOpTypeBool && wc >= 2)
+                    boolTypeId = ins[1];
+                i += wc;
+            }
+
+            size_t firstType = minimalKillSpirv.size();
+            for (size_t i = 5; i < minimalKillSpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(minimalKillSpirv, i, &wc, &op))
+                    break;
+                if (static_cast<uint32_t>(op) >= static_cast<uint32_t>(SpvOpTypeVoid) &&
+                    static_cast<uint32_t>(op) <= static_cast<uint32_t>(SpvOpTypePipe))
+                {
+                    firstType = i;
+                    break;
+                }
+                i += wc;
+            }
+
+            if (!boolTypeId && firstType < minimalKillSpirv.size())
+            {
+                boolTypeId = minimalKillSpirv[3]++;
+                std::vector<uint32_t> boolTypeWords;
+                SpirvAppend(boolTypeWords, SpvOpTypeBool, {boolTypeId});
+                minimalKillSpirv.insert(
+                    minimalKillSpirv.begin() + firstType,
+                    boolTypeWords.begin(), boolTypeWords.end());
+            }
+
+            uint32_t fragmentEntryId = 0;
+            for (size_t i = 5; i < minimalKillSpirv.size();)
+            {
+                uint32_t wc = 0;
+                SpvOp op{};
+                if (!SpirvIsValidInstruction(minimalKillSpirv, i, &wc, &op))
+                    break;
+                const uint32_t *ins = &minimalKillSpirv[i];
+                if (op == SpvOpEntryPoint && wc >= 3 && ins[1] == SpvExecutionModelFragment)
+                    fragmentEntryId = ins[2];
+                i += wc;
+            }
+
+            uint32_t insertedReturns = 0;
+            if (boolTypeId)
+            {
+                const uint32_t constantTrueId = minimalKillSpirv[3]++;
+                std::vector<uint32_t> constantWords;
+                SpirvAppend(constantWords, SpvOpConstantTrue, {boolTypeId, constantTrueId});
+
+                size_t firstVariableOrFunction = minimalKillSpirv.size();
+                for (size_t i = 5; i < minimalKillSpirv.size();)
+                {
+                    uint32_t wc = 0;
+                    SpvOp op{};
+                    if (!SpirvIsValidInstruction(minimalKillSpirv, i, &wc, &op))
+                        break;
+                    if (op == SpvOpVariable || op == SpvOpFunction)
+                    {
+                        firstVariableOrFunction = i;
+                        break;
+                    }
+                    i += wc;
+                }
+
+                if (firstVariableOrFunction < minimalKillSpirv.size())
+                {
+                    minimalKillSpirv.insert(
+                        minimalKillSpirv.begin() + firstVariableOrFunction,
+                        constantWords.begin(), constantWords.end());
+
+                    size_t firstFunction = minimalKillSpirv.size();
+                    for (size_t i = 5; i < minimalKillSpirv.size();)
+                    {
+                        uint32_t wc = 0;
+                        SpvOp op{};
+                        if (!SpirvIsValidInstruction(minimalKillSpirv, i, &wc, &op))
+                            break;
+                        if (op == SpvOpFunction)
+                        {
+                            firstFunction = i;
+                            break;
+                        }
+                        i += wc;
+                    }
+
+                    std::vector<uint32_t> patchedMinimal;
+                    patchedMinimal.reserve(minimalKillSpirv.size() + 32);
+                    patchedMinimal.insert(
+                        patchedMinimal.end(),
+                        minimalKillSpirv.begin(),
+                        minimalKillSpirv.begin() + firstFunction);
+                    bool inFragmentEntry = false;
+                    for (size_t i = firstFunction; i < minimalKillSpirv.size();)
+                    {
+                        uint32_t wc = 0;
+                        SpvOp op{};
+                        if (!SpirvIsValidInstruction(minimalKillSpirv, i, &wc, &op))
+                            break;
+                        const uint32_t *ins = &minimalKillSpirv[i];
+                        if (op == SpvOpFunction && wc >= 3)
+                            inFragmentEntry = ins[2] == fragmentEntryId;
+
+                        // Resolve the actual entry-point function ID from the known-good module.
+                        if (op == SpvOpReturn && inFragmentEntry)
+                        {
+                            const uint32_t killLabel = minimalKillSpirv[3]++;
+                            const uint32_t mergeLabel = minimalKillSpirv[3]++;
+                            SpirvAppend(patchedMinimal, SpvOpSelectionMerge, {mergeLabel, 0});
+                            SpirvAppend(patchedMinimal, SpvOpBranchConditional,
+                                {constantTrueId, killLabel, mergeLabel});
+                            SpirvAppend(patchedMinimal, SpvOpLabel, {killLabel});
+                            SpirvAppend(patchedMinimal, SpvOpKill, {});
+                            SpirvAppend(patchedMinimal, SpvOpLabel, {mergeLabel});
+                            ++insertedReturns;
+                        }
+                        patchedMinimal.insert(
+                            patchedMinimal.end(),
+                            minimalKillSpirv.begin() + i,
+                            minimalKillSpirv.begin() + i + wc);
+                        if (op == SpvOpFunctionEnd)
+                            inFragmentEntry = false;
+                        i += wc;
+                    }
+                    if (insertedReturns)
+                        minimalKillSpirv.swap(patchedMinimal);
+                }
+            }
+
+            VkResult minimalModuleResult = VK_ERROR_UNKNOWN;
+            VkResult minimalPipelineResult = VK_ERROR_UNKNOWN;
+            if (insertedReturns)
+            {
+                VkShaderModule minimalModule = VK_NULL_HANDLE;
+                VkShaderModuleCreateInfo minimalModuleInfo{};
+                minimalModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                minimalModuleInfo.codeSize = minimalKillSpirv.size() * sizeof(uint32_t);
+                minimalModuleInfo.pCode = minimalKillSpirv.data();
+                minimalModuleResult = vkCreateShaderModule(
+                    m_backend->Device(), &minimalModuleInfo, nullptr, &minimalModule);
+                minimalPipelineResult = minimalModuleResult;
+                VkPipeline minimalPipeline = VK_NULL_HANDLE;
+                if (minimalModuleResult == VK_SUCCESS)
+                {
+                    VkPipelineShaderStageCreateInfo minimalStages[2] = {stages[0], stages[1]};
+                    minimalStages[1].module = minimalModule;
+                    minimalStages[1].pSpecializationInfo = nullptr;
+                    VkGraphicsPipelineCreateInfo minimalInfo = info;
+                    minimalInfo.pStages = minimalStages;
+                    minimalPipelineResult = vkCreateGraphicsPipelines(
+                        m_backend->Device(), VK_NULL_HANDLE, 1, &minimalInfo, nullptr, &minimalPipeline);
+                    if (minimalPipeline)
+                        vkDestroyPipeline(m_backend->Device(), minimalPipeline, nullptr);
+                    vkDestroyShaderModule(m_backend->Device(), minimalModule, nullptr);
+                }
+            }
+
+            char minimalMsg[192];
+            std::snprintf(
+                minimalMsg, sizeof(minimalMsg),
+                "[KisakCOD][VK DRAW] pipeline_probe minimal_kill module=%d pipeline=%d returns=%u\n",
+                static_cast<int>(minimalModuleResult),
+                static_cast<int>(minimalPipelineResult),
+                insertedReturns);
+            Switch_LogWrite(minimalMsg);
+        }
+
         // Probe 1b: keep all injected alpha-test arithmetic and structured
         // control flow, but replace OpKill with OpReturn. This isolates whether
         // NVK rejects the discard terminator itself or another part of the patch.
