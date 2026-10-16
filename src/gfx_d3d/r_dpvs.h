@@ -56,7 +56,7 @@ struct DpvsStaticCellCmd // sizeof=0xC
     uint16_t viewIndex;         // ...
 };
 
-struct DpvsEntityCmd // sizeof=0x10
+struct DpvsEntityCmd // sizeof=0x10 on 32-bit; 0x20 on Switch
 {                                       // ...
     GfxSceneEntity *sceneEnt;
     const DpvsPlane *planes;
@@ -301,7 +301,7 @@ float __cdecl R_DpvsPlaneMaxSignedDistToBox(const DpvsPlane *plane, const float 
 void R_SetCullDist(float dist);
 
 // r_dpvs_entity
-void __cdecl R_AddEntitySurfacesInFrustumCmd(uint16_t *data);
+void __cdecl R_AddEntitySurfacesInFrustumCmd(DpvsEntityCmd *data);
 bool __cdecl R_BoundsInCell(mnode_t *node, int findCellIndex, const float *mins, const float *maxs);
 bool __cdecl R_BoundsInCell_r(mnode_t *node, int findCellIndex, const float *mins, const float *maxs);
 
