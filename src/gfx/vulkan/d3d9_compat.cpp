@@ -4442,7 +4442,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         char stateMsg[768];
         std::snprintf(
             stateMsg, sizeof(stateMsg),
-            "[KisakCOD][VK PIPELINE STATE] seq=%u color=%u depth=%u samples=%u topology=%u bindings=%u attrs=%u polygon=%u cull=%u frontFace=%u lineWidth=%.3f depthBias=%u/%.6g/%.6g depth=%u/%u/%u stencil=%u twoSided=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u colorMask=%u alphaToCoverage=%u sampleMask=%08x dynamic=%u layout=%p shaderModules=%p/%p\\n",
+            "[KisakCOD][VK PIPELINE STATE] seq=%u color=%u depth=%u samples=%u topology=%u bindings=%u attrs=%u polygon=%u cull=%u frontFace=%u lineWidth=%.3f depthBias=%u/%.6g/%.6g depth=%u/%u/%u stencil=%u twoSided=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u colorMask=%u alphaToCoverage=%u sampleMask=%08x dynamic=%u layout=%p shaderModules=%p/%p\n",
             pipelineCreateSequence,
             static_cast<unsigned int>(colorFormat),
             static_cast<unsigned int>(depthFormat),
