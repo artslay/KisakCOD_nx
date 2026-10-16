@@ -2129,6 +2129,27 @@ void __cdecl G_PlaySoundAlias(gentity_s *ent, unsigned __int16 index)
 
 void __cdecl G_SetOrigin(gentity_s *ent, float *origin)
 {
+#ifdef __SWITCH__
+    // Only trace off-map writes. This distinguishes an authored/spawned high
+    // script mover from a later scripted move without flooding normal frames.
+    if (origin[2] >= 4000.0f || origin[2] <= -4000.0f)
+    {
+        static unsigned switchOffMapOriginTraceCount = 0;
+        if (switchOffMapOriginTraceCount++ < 16u)
+        {
+            Com_Printf(
+                CON_CHANNEL_SERVER,
+                "[KisakCOD][OFFMAP ORIGIN WRITE] ent=%u classId=%u type=%d handler=%u old=(%.2f,%.2f,%.2f) new=(%.2f,%.2f,%.2f) caller=%p\n",
+                static_cast<unsigned>(ent->s.number),
+                static_cast<unsigned>(ent->classname),
+                static_cast<int>(ent->s.eType),
+                static_cast<unsigned>(ent->handler),
+                ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
+                origin[0], origin[1], origin[2],
+                static_cast<const void *>(__builtin_return_address(0)));
+        }
+    }
+#endif
     if ((COERCE_UNSIGNED_INT(*origin) & 0x7F800000) == 0x7F800000
         || (COERCE_UNSIGNED_INT(origin[1]) & 0x7F800000) == 0x7F800000
         || (COERCE_UNSIGNED_INT(origin[2]) & 0x7F800000) == 0x7F800000)
