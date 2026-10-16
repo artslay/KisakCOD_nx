@@ -18,6 +18,10 @@
 #include <script/scr_const.h>
 #include "cg_view.h"
 
+#ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
+#endif
+
 const dvar_t *hud_fade_sprint;
 const dvar_t *hud_health_pulserate_injured;
 const dvar_t *hud_health_startpulse_critical;
@@ -1653,28 +1657,91 @@ void __cdecl CG_ArchiveState(int localClientNum, MemoryFile *memFile)
 {
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/weapon_info";
+#endif
     CG_ArchiveWeaponInfo(memFile);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/view_info";
+#endif
     CG_ArchiveViewInfo(cgArray, memFile);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/camera_shake";
+#endif
     CG_ArchiveCameraShake(localClientNum, memFile);
     //CG_ArchiveActiveRumbles(memFile); // KISAKRUMBLE
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/health_fade";
+#endif
     MemFile_ArchiveData(memFile, 4, &cgameGlob->healthFadeTime);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/ammo_fade";
+#endif
     MemFile_ArchiveData(memFile, 4, &cgameGlob->ammoFadeTime);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/stance_fade";
+#endif
     MemFile_ArchiveData(memFile, 4, &cgameGlob->stanceFadeTime);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/compass_fade";
+#endif
     MemFile_ArchiveData(memFile, 4, &cgameGlob->compassFadeTime);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/offhand_fade";
+#endif
     MemFile_ArchiveData(memFile, 4, &cgameGlob->offhandFadeTime);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/sprint_fade";
+#endif
     MemFile_ArchiveData(memFile, 4, &cgameGlob->sprintFadeTime);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/reticle_offset";
+#endif
     MemFile_ArchiveData(memFile, 8, cgameGlob->vehReticleOffset);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/reticle_velocity";
+#endif
     MemFile_ArchiveData(memFile, 8, cgameGlob->vehReticleVel);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/reticle_lock_start";
+#endif
     MemFile_ArchiveData(memFile, 4, &cgameGlob->vehReticleLockOnStartTime);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/reticle_lock_duration";
+#endif
     MemFile_ArchiveData(memFile, 4, &cgameGlob->vehReticleLockOnDuration);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/reticle_lock_entity";
+#endif
     MemFile_ArchiveData(memFile, 4, &cgameGlob->vehReticleLockOnEntNum);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/vision_from";
+#endif
     MemFile_ArchiveData(memFile, 160, cgameGlob->visionSetFrom);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/vision_to";
+#endif
     MemFile_ArchiveData(memFile, 160, cgameGlob->visionSetTo);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/vision_current";
+#endif
     MemFile_ArchiveData(memFile, 160, cgameGlob->visionSetCurrent);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/vision_lerp";
+#endif
     MemFile_ArchiveData(memFile, 24, cgameGlob->visionSetLerpData);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/vision_name_naked";
+#endif
     MemFile_ArchiveData(memFile, 64, cgameGlob->visionNameNaked);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/vision_name_night";
+#endif
     MemFile_ArchiveData(memFile, 64, cgameGlob->visionNameNight);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/save/archive_client/cgame/hud_elem_sound";
+#endif
     MemFile_ArchiveData(memFile, 128, cgameGlob->hudElemSound);
 }
 
