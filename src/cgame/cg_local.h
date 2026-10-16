@@ -270,7 +270,7 @@ float __cdecl HudElemWaypointHeight(int32_t localClientNum, const hudelem_s *ele
 
 // cg_weapons
 struct refdef_s;
-struct weaponInfo_s // sizeof=0x44
+struct weaponInfo_s // 32-bit: 0x44 (MP), 0x48 (SP); native Switch SP: 0x78
 {                                       // ...
     DObj_s *viewModelDObj;
     XModel *handModel;
@@ -293,6 +293,9 @@ struct weaponInfo_s // sizeof=0x44
     const char *translatedModename;
     const char *translatedAIOverlayDescription;
 };
+#ifdef __SWITCH__
+static_assert(sizeof(weaponInfo_s) == 0x78, "weaponInfo_s must retain native Switch pointer layout");
+#endif
 bool __cdecl CG_JavelinADS(int32_t localClientNum);
 int32_t __cdecl CG_WeaponDObjHandle(int32_t weaponNum);
 void __cdecl CG_RegisterWeapon(int32_t localClientNum, uint32_t weaponNum);
