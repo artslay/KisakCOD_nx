@@ -3960,7 +3960,12 @@ bool IDirect3DDevice9::EnsurePipeline()
                         i += wc;
                     }
                     if (insertedReturns)
+                    {
+                        // Label IDs were allocated while building patchedMinimal;
+                        // copy the final bound into its copied SPIR-V header.
+                        patchedMinimal[3] = minimalKillSpirv[3];
                         minimalKillSpirv.swap(patchedMinimal);
+                    }
                 }
             }
 
