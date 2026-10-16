@@ -1,6 +1,8 @@
 #include <universal/q_shared.h>
 #include "r_dobj_skin.h"
 
+#include <vector>
+
 #include <xanim/dobj.h>
 #include <xanim/xmodel.h>
 #include <xanim/dobj_utils.h>
@@ -169,12 +171,44 @@ int  R_SkinSceneDObjModels(
 
     PROF_SCOPED("R_SkinXModel");
 
+    uint32_t NumModels = DObjGetNumModels(obj);
+    if (!NumModels)
+    {
+        return 0;
+    }
+
+    // Count the maximum number of surfaces for this DObj before building its
+    // mixed rigid/skinned surface list. The old 150-entry scratch array could
+    // be overrun by multi-model DObjs (especially on Switch, where rigid
+    // entries occupy 56 bytes each).
+    uint32_t surfaceCapacity = 0;
+    for (uint32_t modelIndex = 0; modelIndex < NumModels; ++modelIndex)
+    {
+        const XModel *model = DObjGetModel(obj, modelIndex);
+        iassert(model);
+
+        const int modelLod = sceneEnt->cull.lods[modelIndex];
+        if (modelLod >= 0)
+            surfaceCapacity += XModelGetSurfCount(model, modelLod);
+    }
+
 #ifdef KISAK_SWITCH
     alignas(GfxModelRigidSurface)
-    unsigned char surfsBuffer[150 * sizeof(GfxModelRigidSurface)]{0};
+    unsigned char localSurfsBuffer[150 * sizeof(GfxModelRigidSurface)]{};
 #else
-    unsigned char surfsBuffer[150 * sizeof(GfxModelSkinnedSurface)]{0}; // ~3588
+    unsigned char localSurfsBuffer[150 * sizeof(GfxModelSkinnedSurface)]{}; // ~3588
 #endif
+    std::vector<GfxModelRigidSurface> overflowSurfsStorage;
+    unsigned char *surfsBuffer = localSurfsBuffer;
+    if (surfaceCapacity > 150)
+    {
+        // Every entry takes at most sizeof(GfxModelRigidSurface), including
+        // rigid surfaces; allocate native-aligned storage for the worst case.
+        overflowSurfsStorage.resize(surfaceCapacity);
+        surfsBuffer = reinterpret_cast<unsigned char *>(overflowSurfsStorage.data());
+        memset(surfsBuffer, 0, surfaceCapacity * sizeof(GfxModelRigidSurface));
+    }
+
     GfxModelSkinnedSurface *surfPos = (GfxModelSkinnedSurface *)surfsBuffer;
     GfxModelSurfaceInfo targBoneIndexHigh;
 
@@ -183,11 +217,6 @@ int  R_SkinSceneDObjModels(
 
     uint32 surfPartBits[7] = {};
 
-    uint32_t NumModels = DObjGetNumModels(obj);
-    if (!NumModels)
-    {
-        return 0;
-    }
     uint32_t lod = 0;
     uint32_t boneIndex = 0;
 
