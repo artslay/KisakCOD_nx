@@ -23,6 +23,19 @@ extern bool R_RecoverLostVulkanDevice();
 #include <vulkan/vulkan_vi.h>
 
 extern void Switch_LogWrite(const char *msg);
+#ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
+extern uint64_t g_switchLastBoundPipelineKey;
+extern uint64_t g_switchLastBoundVertexShaderSerial;
+extern uint64_t g_switchLastBoundPixelShaderSerial;
+extern uint32_t g_switchLastDrawKind;
+extern uint32_t g_switchLastDrawIndexCount;
+extern uint32_t g_switchLastDrawStartIndex;
+extern int32_t g_switchLastDrawBaseVertex;
+extern uint32_t g_switchLastDrawVertexCount;
+extern uint32_t g_switchLastDrawPrimitiveType;
+extern uint32_t g_switchLastDrawPrimitiveCount;
+#endif
 
 namespace
 {
@@ -144,6 +157,48 @@ void VulkanBackend::SetError(const char *message, VkResult result)
         }
     }
     Switch_LogWrite(trace);
+#ifdef __SWITCH__
+    if (result == VK_ERROR_DEVICE_LOST)
+    {
+        const char *stage = g_switchFrameStage;
+        const uint32_t imageLayout = m_swapchainIndex < m_swapchainLayouts.size()
+            ? static_cast<uint32_t>(m_swapchainLayouts[m_swapchainIndex])
+            : static_cast<uint32_t>(VK_IMAGE_LAYOUT_UNDEFINED);
+        const bool hasRenderFinishedSemaphore =
+            m_swapchainIndex < m_renderFinishedSemaphores.size() &&
+            m_renderFinishedSemaphores[m_swapchainIndex] != VK_NULL_HANDLE;
+        char context[1200];
+        std::snprintf(
+            context, sizeof(context),
+            "[KisakCOD][VK DEVICE LOST CONTEXT] operation=%s stage=%s frameSerial=%llu image=%u layout=%u frameActive=%u rendering=%u acquirePending=%u backbufferCleared=%u hasPresentSource=%u swapImage=%u swapView=%u waitSemaphore=%u signalSemaphore=%u fence=%u pipeline=%016llx vsSerial=%llu psSerial=%llu drawKind=%u primitive=%u primitiveCount=%u indexCount=%u startIndex=%u baseVertex=%d vertexCount=%u\n",
+            m_lastError.c_str(),
+            stage ? stage : "(unknown)",
+            static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
+            m_swapchainIndex,
+            imageLayout,
+            m_frameActive ? 1u : 0u,
+            m_renderingActive ? 1u : 0u,
+            m_imageAvailablePending ? 1u : 0u,
+            m_backbufferClearedThisFrame ? 1u : 0u,
+            m_presentSourceImage && m_presentSourceView ? 1u : 0u,
+            CurrentSwapchainImage() ? 1u : 0u,
+            CurrentSwapchainView() ? 1u : 0u,
+            m_sync.imageAvailable ? 1u : 0u,
+            hasRenderFinishedSemaphore ? 1u : 0u,
+            m_sync.fence ? 1u : 0u,
+            static_cast<unsigned long long>(g_switchLastBoundPipelineKey),
+            static_cast<unsigned long long>(g_switchLastBoundVertexShaderSerial),
+            static_cast<unsigned long long>(g_switchLastBoundPixelShaderSerial),
+            g_switchLastDrawKind,
+            g_switchLastDrawPrimitiveType,
+            g_switchLastDrawPrimitiveCount,
+            g_switchLastDrawIndexCount,
+            g_switchLastDrawStartIndex,
+            g_switchLastDrawBaseVertex,
+            g_switchLastDrawVertexCount);
+        Switch_LogWrite(context);
+    }
+#endif
 }
 
 const char *VulkanBackend::GetLastError() const
@@ -455,6 +510,8 @@ bool VulkanBackend::CreateDevice()
 
     m_shaderDemoteToHelperInvocation =
         vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE;
+    const bool robustBufferAccess =
+        features2.features.robustBufferAccess == VK_TRUE;
     // Do not accidentally enable every Vulkan 1.3 feature reported by the query.
     vulkan13Features = {};
     vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -467,17 +524,21 @@ bool VulkanBackend::CreateDevice()
     // non-solid polygon mode without this feature makes pipeline creation fail.
     m_fillModeNonSolid = features2.features.fillModeNonSolid == VK_TRUE;
     features.fillModeNonSolid = m_fillModeNonSolid ? VK_TRUE : VK_FALSE;
+    // Bounds-check Vulkan vertex inputs and uniform accesses. D3D9's renderer
+    // has legacy buffer ranges that must not be allowed to fault the GPU.
+    features.robustBufferAccess = robustBufferAccess ? VK_TRUE : VK_FALSE;
     m_samplerAnisotropy = features2.features.samplerAnisotropy == VK_TRUE;
     features.samplerAnisotropy = m_samplerAnisotropy ? VK_TRUE : VK_FALSE;
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
     m_maxSamplerAnisotropy = m_samplerAnisotropy ? std::max(1.0f, properties.limits.maxSamplerAnisotropy) : 1.0f;
     m_maxSamplerLodBias = std::max(0.0f, properties.limits.maxSamplerLodBias);
-    char featureMsg[160];
+    char featureMsg[192];
     std::snprintf(featureMsg, sizeof(featureMsg),
-        "[KisakCOD][VK] fill_mode_non_solid=%u shader_demote_helper=%u\n",
+        "[KisakCOD][VK] fill_mode_non_solid=%u shader_demote_helper=%u robust_buffer_access=%u\n",
         m_fillModeNonSolid ? 1u : 0u,
-        m_shaderDemoteToHelperInvocation ? 1u : 0u);
+        m_shaderDemoteToHelperInvocation ? 1u : 0u,
+        robustBufferAccess ? 1u : 0u);
     Switch_LogWrite(featureMsg);
 
     VkDeviceCreateInfo info{};
