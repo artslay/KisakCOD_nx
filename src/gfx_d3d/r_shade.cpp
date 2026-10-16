@@ -564,10 +564,16 @@ void __cdecl R_UpdateVertexDecl(GfxCmdBufState *state)
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/render/update_vertex_decl/entry";
-    if (!state || !state->pass ||
+    if (!state)
+    {
+        g_switchFrameStage = "frame/render/update_vertex_decl/rejected_state";
+        return;
+    }
+    if (!state->pass ||
         !Switch_ResolveMaterialPassArgsForRender(
             const_cast<MaterialPass *>(state->pass)))
     {
+        state->pass = nullptr;
         g_switchFrameStage = "frame/render/update_vertex_decl/rejected_pass";
         return;
     }
