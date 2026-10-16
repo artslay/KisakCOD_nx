@@ -90,13 +90,19 @@ void __cdecl RB_SetTessTechnique(const Material *material, MaterialTechniqueType
 
 void __cdecl RB_BeginSurface(const Material *material, MaterialTechniqueType techType)
 {
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/rb_begin_surface/assert_state";
+#endif
     iassert(tess.indexCount == 0);
     iassert(tess.vertexCount == 0);
 
     iassert(material);
     iassert(!g_primStats);
 
-    if (r_logFile->current.integer)
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/rb_begin_surface/log_gate";
+#endif
+    if (r_logFile && r_logFile->current.integer)
     {
         RB_LogPrint(va("---------- RB_BeginSurface( %s, %s )\n", material->info.name, RB_LogTechniqueType(techType)));
     }
@@ -112,7 +118,13 @@ void __cdecl RB_BeginSurface(const Material *material, MaterialTechniqueType tec
         gfxCmdBufState.material = R_PixelCost_GetAccumulationMaterial(material);
         gfxCmdBufState.techType = TECHNIQUE_UNLIT;
     }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/rb_begin_surface/technique_lookup";
+#endif
     gfxCmdBufState.technique = Material_GetTechnique(gfxCmdBufState.material, gfxCmdBufState.techType);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/rb_begin_surface/technique_ready";
+#endif
     iassert(gfxCmdBufState.technique);
 }
 
