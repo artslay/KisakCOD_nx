@@ -219,7 +219,6 @@ void __cdecl R_DrawTessTechnique(GfxCmdBufContext context, const GfxDrawPrimArgs
     PROF_SCOPED("RB_DrawTechnique");
 
     iassert(dx.d3d9 && dx.device);
-    iassert(context.state->material);
 
     technique = context.state ? context.state->technique : nullptr;
 #ifdef __SWITCH__
@@ -233,7 +232,7 @@ void __cdecl R_DrawTessTechnique(GfxCmdBufContext context, const GfxDrawPrimArgs
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][TESS SKIP] reason=missing_technique state=%p material=%p name_ptr=%p technique_set=%p techType=%u verts=%u indices=%u\\n",
+                "[KisakCOD][TESS SKIP] reason=missing_technique state=%p material=%p name_ptr=%p technique_set=%p techType=%u verts=%u indices=%u\n",
                 static_cast<const void *>(context.state),
                 static_cast<const void *>(material),
                 material ? static_cast<const void *>(material->info.name) : nullptr,
@@ -248,6 +247,7 @@ void __cdecl R_DrawTessTechnique(GfxCmdBufContext context, const GfxDrawPrimArgs
         return;
     }
 #endif
+    iassert(context.state->material);
     iassert(technique);
     if (!technique)
         return;
