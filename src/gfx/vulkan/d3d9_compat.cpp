@@ -4420,6 +4420,89 @@ bool IDirect3DDevice9::EnsurePipeline()
                 arithmeticStart < selectionMergeOffset ? 1u : 0u,
                 matchedSsaPattern ? "ssa" : (matchedStoragePattern ? "function_storage" : "none"));
             Switch_LogWrite(mathlessMsg);
+
+            // Repeat the mathless probe after removing just the two generated
+            // specialization constants and their SpecId decorations. This
+            // isolates specialization globals from output extraction and CFG.
+            if (arithmeticStart < selectionMergeOffset &&
+                (m_pixelShader->alphaFuncSpecId || m_pixelShader->alphaRefSpecId))
+            {
+                std::unordered_set<uint32_t> generatedSpecResultIds;
+                for (size_t i = 5; i < alphaMathlessSpirv.size();)
+                {
+                    uint32_t wc = 0;
+                    SpvOp op{};
+                    if (!SpirvIsValidInstruction(alphaMathlessSpirv, i, &wc, &op))
+                        break;
+                    const uint32_t *ins = &alphaMathlessSpirv[i];
+                    if (op == SpvOpDecorate && wc >= 4 &&
+                        ins[2] == SpvDecorationSpecId &&
+                        (ins[3] == m_pixelShader->alphaFuncSpecId ||
+                         ins[3] == m_pixelShader->alphaRefSpecId))
+                        generatedSpecResultIds.insert(ins[1]);
+                    i += wc;
+                }
+
+                std::vector<uint32_t> noSpecSpirv;
+                noSpecSpirv.reserve(alphaMathlessSpirv.size());
+                noSpecSpirv.insert(noSpecSpirv.end(),
+                    alphaMathlessSpirv.begin(), alphaMathlessSpirv.begin() + 5);
+                uint32_t removedSpecInstructions = 0;
+                for (size_t i = 5; i < alphaMathlessSpirv.size();)
+                {
+                    uint32_t wc = 0;
+                    SpvOp op{};
+                    if (!SpirvIsValidInstruction(alphaMathlessSpirv, i, &wc, &op))
+                        break;
+                    const uint32_t *ins = &alphaMathlessSpirv[i];
+                    const bool generatedDecoration =
+                        op == SpvOpDecorate && wc >= 4 &&
+                        ins[2] == SpvDecorationSpecId &&
+                        generatedSpecResultIds.count(ins[1]) != 0;
+                    const bool generatedConstant =
+                        op == SpvOpSpecConstant && wc >= 3 &&
+                        generatedSpecResultIds.count(ins[2]) != 0;
+                    if (generatedDecoration || generatedConstant)
+                        ++removedSpecInstructions;
+                    else
+                        noSpecSpirv.insert(noSpecSpirv.end(),
+                            alphaMathlessSpirv.begin() + i,
+                            alphaMathlessSpirv.begin() + i + wc);
+                    i += wc;
+                }
+
+                VkResult noSpecModuleResult = VK_ERROR_UNKNOWN;
+                VkResult noSpecPipelineResult = VK_ERROR_UNKNOWN;
+                VkShaderModule noSpecModule = VK_NULL_HANDLE;
+                VkShaderModuleCreateInfo noSpecModuleInfo{};
+                noSpecModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                noSpecModuleInfo.codeSize = noSpecSpirv.size() * sizeof(uint32_t);
+                noSpecModuleInfo.pCode = noSpecSpirv.data();
+                noSpecModuleResult = vkCreateShaderModule(
+                    m_backend->Device(), &noSpecModuleInfo, nullptr, &noSpecModule);
+                noSpecPipelineResult = noSpecModuleResult;
+                VkPipeline noSpecPipeline = VK_NULL_HANDLE;
+                if (noSpecModuleResult == VK_SUCCESS)
+                {
+                    VkPipelineShaderStageCreateInfo noSpecStages[2] = {stages[0], stages[1]};
+                    noSpecStages[1].module = noSpecModule;
+                    noSpecStages[1].pSpecializationInfo = nullptr;
+                    VkGraphicsPipelineCreateInfo noSpecInfo = info;
+                    noSpecInfo.pStages = noSpecStages;
+                    noSpecPipelineResult = vkCreateGraphicsPipelines(
+                        m_backend->Device(), VK_NULL_HANDLE, 1, &noSpecInfo, nullptr, &noSpecPipeline);
+                    if (noSpecPipeline)
+                        vkDestroyPipeline(m_backend->Device(), noSpecPipeline, nullptr);
+                    vkDestroyShaderModule(m_backend->Device(), noSpecModule, nullptr);
+                }
+
+                char noSpecMsg[192];
+                std::snprintf(noSpecMsg, sizeof(noSpecMsg),
+                    "[KisakCOD][VK DRAW] pipeline_probe alpha_math_removed_no_spec module=%d pipeline=%d removed=%u\n",
+                    static_cast<int>(noSpecModuleResult),
+                    static_cast<int>(noSpecPipelineResult), removedSpecInstructions);
+                Switch_LogWrite(noSpecMsg);
+            }
         }
 
         // Probe 1b: keep all injected alpha-test arithmetic and structured
