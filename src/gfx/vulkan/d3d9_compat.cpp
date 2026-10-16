@@ -5576,13 +5576,6 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 {
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
-    g_switchLastDrawKind.store(2, std::memory_order_relaxed);
-    g_switchLastDrawIndexCount.store(indexCount, std::memory_order_relaxed);
-    g_switchLastDrawStartIndex.store(startIndex, std::memory_order_relaxed);
-    g_switchLastDrawBaseVertex.store(baseVertexIndex, std::memory_order_relaxed);
-    g_switchLastDrawVertexCount.store(numVertices, std::memory_order_relaxed);
-    g_switchLastDrawPrimitiveType.store(primitiveType, std::memory_order_relaxed);
-    g_switchLastDrawPrimitiveCount.store(primitiveCount, std::memory_order_relaxed);
     const uint64_t indexCapacity = m_indices
         ? m_indices->size / sizeof(uint16_t) : 0;
     const bool validIndexRange =
@@ -5763,6 +5756,13 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         m_backend->CommandBuffer(), m_indices->buffer,
         0, VK_INDEX_TYPE_UINT16);
 
+    g_switchLastDrawKind.store(2, std::memory_order_relaxed);
+    g_switchLastDrawIndexCount.store(indexCount, std::memory_order_relaxed);
+    g_switchLastDrawStartIndex.store(startIndex, std::memory_order_relaxed);
+    g_switchLastDrawBaseVertex.store(baseVertexIndex, std::memory_order_relaxed);
+    g_switchLastDrawVertexCount.store(numVertices, std::memory_order_relaxed);
+    g_switchLastDrawPrimitiveType.store(primitiveType, std::memory_order_relaxed);
+    g_switchLastDrawPrimitiveCount.store(primitiveCount, std::memory_order_relaxed);
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
