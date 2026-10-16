@@ -745,6 +745,39 @@ bool PatchFragmentShaderForAlphaTest(
     if (!outputVarId)
         return false;
 
+    // The affected MojoShader fragment variant has a straight-line entry
+    // function. Capture output alpha as an SSA value in that case, avoiding
+    // Function-storage variables (and their Load/Store sequence) entirely.
+    // Keep the storage-based path for entry functions with a more complex CFG.
+    uint32_t entryBlockCount = 0;
+    uint32_t entryOutputStoreCount = 0;
+    uint32_t entryReturnCount = 0;
+    bool scanningEntryFunction = false;
+    for (size_t i = 5; i < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[i];
+        if (op == SpvOpFunction && wc >= 3)
+            scanningEntryFunction = ins[2] == entryFunctionId;
+        if (scanningEntryFunction)
+        {
+            if (op == SpvOpLabel)
+                ++entryBlockCount;
+            else if (op == SpvOpStore && wc >= 3 && ins[1] == outputVarId)
+                ++entryOutputStoreCount;
+            else if (op == SpvOpReturn)
+                ++entryReturnCount;
+        }
+        if (op == SpvOpFunctionEnd)
+            scanningEntryFunction = false;
+        i += wc;
+    }
+    const bool useSsaAlphaCapture =
+        entryBlockCount == 1 && entryOutputStoreCount != 0 && entryReturnCount == 1;
+
     // SPIR-V declarations are ordered with types before global variables, so
     // resolve the output variable type first and follow its pointer/vector types
     // in separate passes rather than relying on declaration order.
@@ -841,9 +874,9 @@ bool PatchFragmentShaderForAlphaTest(
 
     const uint32_t funcSpec = newId();
     const uint32_t refSpec = newId();
-    const uint32_t functionPointerType = newId();
-    const uint32_t alphaStorage = newId();
-    const uint32_t alphaDefault = newId();
+    const uint32_t functionPointerType = useSsaAlphaCapture ? 0 : newId();
+    const uint32_t alphaStorage = useSsaAlphaCapture ? 0 : newId();
+    const uint32_t alphaDefault = useSsaAlphaCapture ? 0 : newId();
 
     uint32_t funcConst[9]{};
     for (uint32_t value = 1; value <= 8; ++value)
@@ -860,7 +893,8 @@ bool PatchFragmentShaderForAlphaTest(
     SpirvAppend(globals, SpvOpSpecConstant, {floatType, refSpec, 0});
     for (uint32_t value = 1; value <= 8; ++value)
         SpirvAppend(globals, SpvOpConstant, {intType, funcConst[value], value});
-    SpirvAppend(globals, SpvOpConstant, {floatType, alphaDefault, 0x3f800000u});
+    if (!useSsaAlphaCapture)
+        SpirvAppend(globals, SpvOpConstant, {floatType, alphaDefault, 0x3f800000u});
 
     std::vector<uint32_t> decorations;
     SpirvAppend(decorations, SpvOpDecorate, {funcSpec, SpvDecorationSpecId, funcSpecDecoration});
@@ -889,38 +923,41 @@ bool PatchFragmentShaderForAlphaTest(
         words.begin() + firstType + decorations.size(),
         typeGlobals.begin(), typeGlobals.end());
 
-    size_t typeSectionEnd = 0;
-    bool sawType = false;
-    for (size_t i = 5; i < words.size();)
+    if (!useSsaAlphaCapture)
     {
-        uint32_t wc = 0;
-        SpvOp op{};
-        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+        size_t typeSectionEnd = 0;
+        bool sawType = false;
+        for (size_t i = 5; i < words.size();)
+        {
+            uint32_t wc = 0;
+            SpvOp op{};
+            if (!SpirvIsValidInstruction(words, i, &wc, &op))
+                return false;
+            const uint32_t opValue = static_cast<uint32_t>(op);
+            const bool isType =
+                opValue >= static_cast<uint32_t>(SpvOpTypeVoid) &&
+                opValue <= static_cast<uint32_t>(SpvOpTypePipe);
+            if (isType)
+            {
+                sawType = true;
+                typeSectionEnd = i + wc;
+            }
+            else if (sawType)
+            {
+                break;
+            }
+            i += wc;
+        }
+        if (!typeSectionEnd)
             return false;
-        const uint32_t opValue = static_cast<uint32_t>(op);
-        const bool isType =
-            opValue >= static_cast<uint32_t>(SpvOpTypeVoid) &&
-            opValue <= static_cast<uint32_t>(SpvOpTypePipe);
-        if (isType)
-        {
-            sawType = true;
-            typeSectionEnd = i + wc;
-        }
-        else if (sawType)
-        {
-            break;
-        }
-        i += wc;
+        std::vector<uint32_t> functionPointerTypeWords;
+        SpirvAppend(
+            functionPointerTypeWords, SpvOpTypePointer,
+            {functionPointerType, SpvStorageClassFunction, floatType});
+        words.insert(
+            words.begin() + typeSectionEnd,
+            functionPointerTypeWords.begin(), functionPointerTypeWords.end());
     }
-    if (!typeSectionEnd)
-        return false;
-    std::vector<uint32_t> functionPointerTypeWords;
-    SpirvAppend(
-        functionPointerTypeWords, SpvOpTypePointer,
-        {functionPointerType, SpvStorageClassFunction, floatType});
-    words.insert(
-        words.begin() + typeSectionEnd,
-        functionPointerTypeWords.begin(), functionPointerTypeWords.end());
 
     // Keep the most recently written output alpha in a Function-storage
     // variable. This avoids reading an Output interface variable, which some
@@ -967,9 +1004,10 @@ bool PatchFragmentShaderForAlphaTest(
     bool inEntry = false;
     bool entryFirstBlockSeen = false;
     bool pendingEntryVariables = false;
-    bool injectedFunctionVariable = false;
+    bool injectedFunctionVariable = useSsaAlphaCapture;
     bool injectedOutputAlpha = false;
     bool injectedReturnTest = false;
+    uint32_t currentOutputAlpha = 0;
     for (size_t i = firstFunction; i < words.size();)
     {
         uint32_t wc = 0;
@@ -991,7 +1029,7 @@ bool PatchFragmentShaderForAlphaTest(
         if (inEntry && op == SpvOpLabel && !entryFirstBlockSeen)
         {
             entryFirstBlockSeen = true;
-            pendingEntryVariables = true;
+            pendingEntryVariables = !useSsaAlphaCapture;
             patched.insert(patched.end(), words.begin() + i, words.begin() + i + wc);
             i += wc;
             continue;
@@ -1025,7 +1063,10 @@ bool PatchFragmentShaderForAlphaTest(
         {
             const uint32_t storedAlpha = newId();
             SpirvAppend(patched, SpvOpCompositeExtract, {floatType, storedAlpha, ins[2], 3});
-            SpirvAppend(patched, SpvOpStore, {alphaStorage, storedAlpha});
+            if (useSsaAlphaCapture)
+                currentOutputAlpha = storedAlpha;
+            else
+                SpirvAppend(patched, SpvOpStore, {alphaStorage, storedAlpha});
             injectedOutputAlpha = true;
         }
 
@@ -1033,7 +1074,7 @@ bool PatchFragmentShaderForAlphaTest(
         // to kill/merge labels does not split a pre-existing selection header.
         if (inEntry && op == SpvOpReturn)
         {
-            const uint32_t alpha = newId();
+            const uint32_t alpha = useSsaAlphaCapture ? currentOutputAlpha : newId();
             const uint32_t less = newId();
             const uint32_t equal = newId();
             const uint32_t lessEqual = newId();
@@ -1063,7 +1104,8 @@ bool PatchFragmentShaderForAlphaTest(
             const uint32_t killLabel = newId();
             const uint32_t mergeLabel = newId();
 
-            SpirvAppend(patched, SpvOpLoad, {floatType, alpha, alphaStorage});
+            if (!useSsaAlphaCapture)
+                SpirvAppend(patched, SpvOpLoad, {floatType, alpha, alphaStorage});
             SpirvAppend(patched, SpvOpFOrdLessThan, {boolType, less, alpha, refSpec});
             SpirvAppend(patched, SpvOpFOrdEqual, {boolType, equal, alpha, refSpec});
             SpirvAppend(patched, SpvOpFOrdLessThanEqual, {boolType, lessEqual, alpha, refSpec});
