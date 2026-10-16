@@ -75,6 +75,68 @@ bool WriteSwitchPipelineSpirv(const char *path, const std::vector<uint32_t> &wor
     return written == words.size() && closeResult == 0;
 }
 
+// The Switch SD dump may not be transferable from the device. Emit the exact
+// fragment SPIR-V as bounded, copyable log chunks for the reproducible seq=24
+// pipeline fault. Bytes are extracted explicitly in little-endian order so the
+// text can be decoded on a PC without relying on the host's binary layout.
+void LogSwitchPipelineSpirvBase64(
+    uint32_t sequence,
+    const char *stage,
+    const std::vector<uint32_t> &words)
+{
+    static constexpr char alphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const size_t byteCount = words.size() * sizeof(uint32_t);
+    const size_t encodedCapacity = ((byteCount + 2u) / 3u) * 4u;
+    std::string encoded;
+    encoded.reserve(encodedCapacity);
+
+    const auto byteAt = [&words, byteCount](size_t offset) -> uint8_t
+    {
+        if (offset >= byteCount)
+            return 0;
+        return static_cast<uint8_t>(
+            words[offset / 4u] >> ((offset % 4u) * 8u));
+    };
+
+    for (size_t offset = 0; offset < byteCount; offset += 3u)
+    {
+        const uint32_t a = byteAt(offset);
+        const uint32_t b = byteAt(offset + 1u);
+        const uint32_t c = byteAt(offset + 2u);
+        encoded.push_back(alphabet[(a >> 2) & 0x3fu]);
+        encoded.push_back(alphabet[((a & 0x03u) << 4) | ((b >> 4) & 0x0fu)]);
+        encoded.push_back(offset + 1u < byteCount
+            ? alphabet[((b & 0x0fu) << 2) | ((c >> 6) & 0x03u)] : '=');
+        encoded.push_back(offset + 2u < byteCount
+            ? alphabet[c & 0x3fu] : '=');
+    }
+
+    char header[256];
+    std::snprintf(
+        header, sizeof(header),
+        "[KisakCOD][VK SPIRV BASE64] begin seq=%u stage=%s words=%zu bytes=%zu chunksize=720 hash=%016llx\\n",
+        sequence, stage ? stage : "(null)", words.size(), byteCount,
+        static_cast<unsigned long long>(HashSpirvWords(words)));
+    Switch_LogWrite(header);
+
+    constexpr size_t chunkSize = 720u;
+    const size_t chunkCount = (encoded.size() + chunkSize - 1u) / chunkSize;
+    char line[900];
+    for (size_t i = 0; i < chunkCount; ++i)
+    {
+        const size_t offset = i * chunkSize;
+        const size_t length = std::min(chunkSize, encoded.size() - offset);
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][VK SPIRV BASE64] seq=%u stage=%s part=%zu/%zu data=%.*s\\n",
+            sequence, stage ? stage : "(null)", i + 1u, chunkCount,
+            static_cast<int>(length), encoded.data() + offset);
+        Switch_LogWrite(line);
+    }
+    Switch_LogWrite("[KisakCOD][VK SPIRV BASE64] end\\n");
+}
+
 uint32_t g_switchPipelineCreateSequence = 0;
 
 void LogUnsupportedRenderState(uint32_t state, uint32_t value)
@@ -4361,6 +4423,54 @@ bool IDirect3DDevice9::EnsurePipeline()
             alphaSpecializationData.func,
             alphaSpecializationData.ref);
         Switch_LogWrite(handlesMsg);
+    }
+
+    // Sequence 24 is the current reproducible crash. Its VS binary has already
+    // created earlier pipelines successfully; capture the new PS as log text so
+    // the exact module can be validated without transferring files from SD.
+    if (pipelineCreateSequence == 24)
+    {
+        LogSwitchPipelineSpirvBase64(
+            pipelineCreateSequence, "ps", m_pixelShader->spirv);
+
+        char stateMsg[768];
+        std::snprintf(
+            stateMsg, sizeof(stateMsg),
+            "[KisakCOD][VK PIPELINE STATE] seq=%u color=%u depth=%u samples=%u topology=%u bindings=%u attrs=%u polygon=%u cull=%u frontFace=%u lineWidth=%.3f depthBias=%u/%.6g/%.6g depth=%u/%u/%u stencil=%u twoSided=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u colorMask=%u alphaToCoverage=%u sampleMask=%08x dynamic=%u layout=%p shaderModules=%p/%p\\n",
+            pipelineCreateSequence,
+            static_cast<unsigned int>(colorFormat),
+            static_cast<unsigned int>(depthFormat),
+            static_cast<unsigned int>(colorSamples),
+            static_cast<unsigned int>(m_topology),
+            static_cast<unsigned int>(bindings.size()),
+            static_cast<unsigned int>(vertexAttrs.size()),
+            static_cast<unsigned int>(raster.polygonMode),
+            static_cast<unsigned int>(raster.cullMode),
+            static_cast<unsigned int>(raster.frontFace),
+            raster.lineWidth,
+            static_cast<unsigned int>(raster.depthBiasEnable),
+            raster.depthBiasConstantFactor,
+            raster.depthBiasSlopeFactor,
+            static_cast<unsigned int>(depth.depthTestEnable),
+            static_cast<unsigned int>(depth.depthWriteEnable),
+            static_cast<unsigned int>(depth.depthCompareOp),
+            static_cast<unsigned int>(depth.stencilTestEnable),
+            static_cast<unsigned int>(m_twoSidedStencil),
+            static_cast<unsigned int>(colorBlend.blendEnable),
+            static_cast<unsigned int>(colorBlend.srcColorBlendFactor),
+            static_cast<unsigned int>(colorBlend.dstColorBlendFactor),
+            static_cast<unsigned int>(colorBlend.srcAlphaBlendFactor),
+            static_cast<unsigned int>(colorBlend.dstAlphaBlendFactor),
+            static_cast<unsigned int>(colorBlend.colorBlendOp),
+            static_cast<unsigned int>(colorBlend.alphaBlendOp),
+            static_cast<unsigned int>(colorBlend.colorWriteMask),
+            static_cast<unsigned int>(multisample.alphaToCoverageEnable),
+            m_multisampleMask,
+            dynamic.dynamicStateCount,
+            static_cast<void *>(info.layout),
+            static_cast<void *>(stages[0].module),
+            static_cast<void *>(stages[1].module));
+        Switch_LogWrite(stateMsg);
     }
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
