@@ -221,8 +221,36 @@ void __cdecl R_DrawTessTechnique(GfxCmdBufContext context, const GfxDrawPrimArgs
     iassert(dx.d3d9 && dx.device);
     iassert(context.state->material);
 
-    technique = context.state->technique;
+    technique = context.state ? context.state->technique : nullptr;
+#ifdef __SWITCH__
+    if (!context.state || !context.state->material || !technique)
+    {
+        static uint32_t switchMissingTessTechniqueTraceCount = 0;
+        if (switchMissingTessTechniqueTraceCount < 16)
+        {
+            const Material *material = context.state ? context.state->material : nullptr;
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][TESS SKIP] reason=missing_technique state=%p material=%p name_ptr=%p technique_set=%p techType=%u verts=%u indices=%u\\n",
+                static_cast<const void *>(context.state),
+                static_cast<const void *>(material),
+                material ? static_cast<const void *>(material->info.name) : nullptr,
+                material ? static_cast<const void *>(material->techniqueSet) : nullptr,
+                context.state ? static_cast<unsigned>(context.state->techType) : 0u,
+                static_cast<unsigned>(tess.vertexCount),
+                static_cast<unsigned>(tess.indexCount));
+            Switch_LogWrite(trace);
+            ++switchMissingTessTechniqueTraceCount;
+        }
+        g_switchFrameStage = "frame/render/draw_technique/missing_technique";
+        return;
+    }
+#endif
     iassert(technique);
+    if (!technique)
+        return;
 
     if (r_logFile->current.integer)
     {
