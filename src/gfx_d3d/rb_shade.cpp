@@ -1,4 +1,10 @@
 #include <universal/q_shared.h>
+
+#ifdef __SWITCH__
+extern const Material *Switch_ValidateMaterialPointerForRender(
+    const Material *material,
+    const char *source);
+#endif
 #include "rb_shade.h"
 #include "rb_logfile.h"
 #include "rb_state.h"
@@ -92,6 +98,10 @@ void __cdecl RB_SetTessTechnique(const Material *material, MaterialTechniqueType
 void __cdecl RB_BeginSurface(const Material *material, MaterialTechniqueType techType)
 {
 #ifdef __SWITCH__
+    // Validate before logging or querying the material; a truncated UI command
+    // pointer must never reach Material_GetTechnique or material->info.name.
+    material = Switch_ValidateMaterialPointerForRender(
+        material, "RB_BeginSurface");
     g_switchFrameStage = "frame/rb_begin_surface/assert_state";
 #endif
     iassert(tess.indexCount == 0);
