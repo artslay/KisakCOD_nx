@@ -25,16 +25,16 @@ extern bool R_RecoverLostVulkanDevice();
 extern void Switch_LogWrite(const char *msg);
 #ifdef __SWITCH__
 extern thread_local const char * volatile g_switchFrameStage;
-extern uint64_t g_switchLastBoundPipelineKey;
-extern uint64_t g_switchLastBoundVertexShaderSerial;
-extern uint64_t g_switchLastBoundPixelShaderSerial;
-extern uint32_t g_switchLastDrawKind;
-extern uint32_t g_switchLastDrawIndexCount;
-extern uint32_t g_switchLastDrawStartIndex;
-extern int32_t g_switchLastDrawBaseVertex;
-extern uint32_t g_switchLastDrawVertexCount;
-extern uint32_t g_switchLastDrawPrimitiveType;
-extern uint32_t g_switchLastDrawPrimitiveCount;
+extern std::atomic<uint64_t> g_switchLastBoundPipelineKey;
+extern std::atomic<uint64_t> g_switchLastBoundVertexShaderSerial;
+extern std::atomic<uint64_t> g_switchLastBoundPixelShaderSerial;
+extern std::atomic<uint32_t> g_switchLastDrawKind;
+extern std::atomic<uint32_t> g_switchLastDrawIndexCount;
+extern std::atomic<uint32_t> g_switchLastDrawStartIndex;
+extern std::atomic<int32_t> g_switchLastDrawBaseVertex;
+extern std::atomic<uint32_t> g_switchLastDrawVertexCount;
+extern std::atomic<uint32_t> g_switchLastDrawPrimitiveType;
+extern std::atomic<uint32_t> g_switchLastDrawPrimitiveCount;
 #endif
 
 namespace
@@ -139,20 +139,22 @@ void VulkanBackend::SetError(const char *message, VkResult result)
         m_deviceLost.store(true, std::memory_order_release);
 
     char trace[384];
+    std::string errorText;
     {
         std::lock_guard<std::mutex> errorLock(m_errorMutex);
         m_lastError = message ? message : "Vulkan backend error";
+        errorText = m_lastError;
         if (result == VK_SUCCESS)
         {
             std::snprintf(
-                trace, sizeof(trace), "[KisakCOD][VK ERROR] %s\n", m_lastError.c_str());
+                trace, sizeof(trace), "[KisakCOD][VK ERROR] %s\n", errorText.c_str());
         }
         else
         {
             std::snprintf(
                 trace, sizeof(trace),
                 "[KisakCOD][VK ERROR] %s result=%d device_lost=%u\n",
-                m_lastError.c_str(), static_cast<int>(result),
+                errorText.c_str(), static_cast<int>(result),
                 m_deviceLost.load(std::memory_order_acquire) ? 1u : 0u);
         }
     }
@@ -160,42 +162,27 @@ void VulkanBackend::SetError(const char *message, VkResult result)
 #ifdef __SWITCH__
     if (result == VK_ERROR_DEVICE_LOST)
     {
+        // Device loss may be reported by the cinematic upload thread. Read only
+        // atomics/thread-local diagnostics here; never inspect renderer frame
+        // vectors or mutable frame flags from a background thread.
         const char *stage = g_switchFrameStage;
-        const uint32_t imageLayout = m_swapchainIndex < m_swapchainLayouts.size()
-            ? static_cast<uint32_t>(m_swapchainLayouts[m_swapchainIndex])
-            : static_cast<uint32_t>(VK_IMAGE_LAYOUT_UNDEFINED);
-        const bool hasRenderFinishedSemaphore =
-            m_swapchainIndex < m_renderFinishedSemaphores.size() &&
-            m_renderFinishedSemaphores[m_swapchainIndex] != VK_NULL_HANDLE;
-        char context[1200];
+        char context[768];
         std::snprintf(
             context, sizeof(context),
-            "[KisakCOD][VK DEVICE LOST CONTEXT] operation=%s stage=%s frameSerial=%llu image=%u layout=%u frameActive=%u rendering=%u acquirePending=%u backbufferCleared=%u hasPresentSource=%u swapImage=%u swapView=%u waitSemaphore=%u signalSemaphore=%u fence=%u pipeline=%016llx vsSerial=%llu psSerial=%llu drawKind=%u primitive=%u primitiveCount=%u indexCount=%u startIndex=%u baseVertex=%d vertexCount=%u\n",
-            m_lastError.c_str(),
+            "[KisakCOD][VK DEVICE LOST CONTEXT] operation=%s stage=%s frameSerial=%llu pipeline=%016llx vsSerial=%llu psSerial=%llu drawKind=%u primitive=%u primitiveCount=%u indexCount=%u startIndex=%u baseVertex=%d vertexCount=%u\n",
+            errorText.c_str(),
             stage ? stage : "(unknown)",
             static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
-            m_swapchainIndex,
-            imageLayout,
-            m_frameActive ? 1u : 0u,
-            m_renderingActive ? 1u : 0u,
-            m_imageAvailablePending ? 1u : 0u,
-            m_backbufferClearedThisFrame ? 1u : 0u,
-            m_presentSourceImage && m_presentSourceView ? 1u : 0u,
-            CurrentSwapchainImage() ? 1u : 0u,
-            CurrentSwapchainView() ? 1u : 0u,
-            m_sync.imageAvailable ? 1u : 0u,
-            hasRenderFinishedSemaphore ? 1u : 0u,
-            m_sync.fence ? 1u : 0u,
-            static_cast<unsigned long long>(g_switchLastBoundPipelineKey),
-            static_cast<unsigned long long>(g_switchLastBoundVertexShaderSerial),
-            static_cast<unsigned long long>(g_switchLastBoundPixelShaderSerial),
-            g_switchLastDrawKind,
-            g_switchLastDrawPrimitiveType,
-            g_switchLastDrawPrimitiveCount,
-            g_switchLastDrawIndexCount,
-            g_switchLastDrawStartIndex,
-            g_switchLastDrawBaseVertex,
-            g_switchLastDrawVertexCount);
+            static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)),
+            static_cast<unsigned long long>(g_switchLastBoundVertexShaderSerial.load(std::memory_order_relaxed)),
+            static_cast<unsigned long long>(g_switchLastBoundPixelShaderSerial.load(std::memory_order_relaxed)),
+            g_switchLastDrawKind.load(std::memory_order_relaxed),
+            g_switchLastDrawPrimitiveType.load(std::memory_order_relaxed),
+            g_switchLastDrawPrimitiveCount.load(std::memory_order_relaxed),
+            g_switchLastDrawIndexCount.load(std::memory_order_relaxed),
+            g_switchLastDrawStartIndex.load(std::memory_order_relaxed),
+            g_switchLastDrawBaseVertex.load(std::memory_order_relaxed),
+            g_switchLastDrawVertexCount.load(std::memory_order_relaxed));
         Switch_LogWrite(context);
     }
 #endif
@@ -1391,11 +1378,14 @@ bool VulkanBackend::EndFrame()
 
     VkResult submitResult;
     {
+        g_switchFrameStage = "frame/present/queue_submit";
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
         submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, m_sync.fence);
+        g_switchFrameStage = "frame/present/queue_submit_return";
     }
     if (submitResult != VK_SUCCESS)
     {
+        g_switchFrameStage = "frame/present/queue_submit_failed";
         SetError("vkQueueSubmit failed", submitResult);
         if (!m_deviceLost)
             (void)RecreateSwapchain();
@@ -2283,10 +2273,16 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/immediate_begin";
+#endif
     const VkResult beginResult = vkBeginCommandBuffer(command, &begin);
     if (beginResult == VK_SUCCESS)
     {
         fn(command);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/immediate_end";
+#endif
         const VkResult endResult = vkEndCommandBuffer(command);
         if (endResult == VK_SUCCESS)
         {
@@ -2302,8 +2298,14 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
 
                 VkResult submitResult;
                 {
+#ifdef __SWITCH__
+                    g_switchFrameStage = "frame/upload/immediate_queue_submit";
+#endif
                     std::lock_guard<std::mutex> queueLock(m_queueMutex);
                     submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, fence);
+#ifdef __SWITCH__
+                    g_switchFrameStage = "frame/upload/immediate_queue_submit_return";
+#endif
                 }
                 if (submitResult == VK_SUCCESS)
                 {
