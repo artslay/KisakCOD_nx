@@ -4119,7 +4119,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
             ? depthFormat : VK_FORMAT_UNDEFINED;
 
-    g_switchFrameStage = "frame/render/vulkan/pipeline/create_graphics_pipeline";
+    g_switchFrameStage = "frame/render/vulkan/pipeline/prepare_create_info";
     VkGraphicsPipelineCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     info.pNext = &rendering;
@@ -4250,8 +4250,10 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
+    g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
     const VkResult pipelineResult = vkCreateGraphicsPipelines(
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+    g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_return";
     const auto pipelineCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - pipelineCreateStart).count();
     if (pipelineCreateSequence <= 8 || pipelineCreateSequence >= 160 ||
