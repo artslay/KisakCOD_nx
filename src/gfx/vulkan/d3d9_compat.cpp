@@ -2754,6 +2754,7 @@ bool IDirect3DDevice9::BindUniformSet(
     const void *intData,
     const void *boolData)
 {
+    g_switchFrameStage = "frame/render/vulkan/uniform/entry";
     if (!parse || !m_backend)
         return false;
 
@@ -2777,6 +2778,7 @@ bool IDirect3DDevice9::BindUniformSet(
                 buffer, byteCount, result);
         };
     traceUniformBindStage("entry", nullptr, 0, 1);
+    g_switchFrameStage = "frame/render/vulkan/uniform/layout";
     if (!GetUniformLayout(parse, &layout))
     {
         traceUniformBindStage("layout_failed", nullptr, 0, 0);
@@ -2791,6 +2793,7 @@ bool IDirect3DDevice9::BindUniformSet(
         return false;
     }
 
+    g_switchFrameStage = "frame/render/vulkan/uniform/copy_data";
     const size_t size = std::max<size_t>(16, layout.size);
     if (size > g_switchUniformUploadScratch.size())
     {
@@ -2814,6 +2817,7 @@ bool IDirect3DDevice9::BindUniformSet(
             std::memcpy(dst + static_cast<size_t>(i) * 16u, &src[i], sizeof(int32_t));
     }
 
+    g_switchFrameStage = "frame/render/vulkan/uniform/allocate_ring";
     VkDescriptorBufferInfo bufferInfo{};
     if (!m_backend->AllocateUniform(bytes, size, &bufferInfo))
     {
@@ -2825,6 +2829,7 @@ bool IDirect3DDevice9::BindUniformSet(
     const size_t cacheIndex = setIndex == 1 ? 0 : 1;
     auto &cachedSets = m_uniformDescriptorSets[cacheIndex];
     const size_t cursor = m_uniformSetCursor[cacheIndex];
+    g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_allocate";
     VkDescriptorSet set = VK_NULL_HANDLE;
     if (cursor < cachedSets.size())
     {
@@ -2850,6 +2855,7 @@ bool IDirect3DDevice9::BindUniformSet(
     }
     ++m_uniformSetCursor[cacheIndex];
 
+    g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_update";
     VkWriteDescriptorSet write{};
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     write.dstSet = set;
@@ -2860,10 +2866,12 @@ bool IDirect3DDevice9::BindUniformSet(
     vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
     traceUniformBindStage("descriptor_updated", bytes, size, 1);
 
+    g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_bind";
     vkCmdBindDescriptorSets(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
         setIndex, 1, &set, 0, nullptr);
     traceUniformBindStage("descriptor_bound", bytes, size, 1);
+    g_switchFrameStage = "frame/render/vulkan/uniform/return";
     return true;
 }
 
@@ -2872,6 +2880,7 @@ bool IDirect3DDevice9::BindSamplerSet(
     uint32_t setIndex,
     IDirect3DBaseTexture9 *const (&textures)[16])
 {
+    g_switchFrameStage = "frame/render/vulkan/sampler/entry";
     if (!m_backend)
         return false;
 
@@ -2909,6 +2918,7 @@ bool IDirect3DDevice9::BindSamplerSet(
     }
     ++m_samplerSetCursor[cacheIndex];
 
+    g_switchFrameStage = "frame/render/vulkan/sampler/build_descriptors";
     std::array<VkDescriptorImageInfo,16> images{};
     std::array<VkWriteDescriptorSet,16> writes{};
     for (uint32_t i = 0; i < 16; ++i)
@@ -2965,14 +2975,19 @@ bool IDirect3DDevice9::BindSamplerSet(
         writes[i].pImageInfo = &images[i];
     }
 
+    g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_update";
     vkUpdateDescriptorSets(m_backend->Device(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+    g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_bind";
     vkCmdBindDescriptorSets(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
-        setIndex, 1, &set, 0, nullptr);    return true;
+        setIndex, 1, &set, 0, nullptr);
+    g_switchFrameStage = "frame/render/vulkan/sampler/return";
+    return true;
 }
 
 bool IDirect3DDevice9::EnsurePipeline()
 {
+    g_switchFrameStage = "frame/render/vulkan/pipeline/entry";
     if (!m_backend || !m_vertexShader || !m_pixelShader || !m_decl)
     {
         Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=missing backend_vs_ps_decl\n");
@@ -3043,6 +3058,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_ccwStencilZFail);
     key = HashCombine(key, m_ccwStencilPass);
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/cache_lookup";
     const auto existing = m_pipelines.find(key);
     if (existing != m_pipelines.end())
     {
@@ -3067,6 +3083,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_vertexShader->module = VK_NULL_HANDLE;
         m_pixelShader->module = VK_NULL_HANDLE;
 
+        g_switchFrameStage = "frame/render/vulkan/pipeline/link_attributes";
         std::vector<MOJOSHADER_vertexAttribute> attributes;
         attributes.reserve(m_decl->elements.size());
         for (const auto &element : m_decl->elements)
@@ -3121,6 +3138,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             attributes.push_back(attr);
         }
 
+        g_switchFrameStage = "frame/render/vulkan/pipeline/link_shaders";
         const int patchBytes = MOJOSHADER_linkSPIRVShaders(
             m_vertexShader->parseData,
             m_pixelShader->parseData,
@@ -3181,6 +3199,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         psInfo.codeSize = m_pixelShader->spirv.size() * sizeof(uint32_t);
         psInfo.pCode = m_pixelShader->spirv.data();
 
+        g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules";
         const VkResult vsResult =
             vkCreateShaderModule(m_backend->Device(), &vsInfo, nullptr, &m_vertexShader->module);
         const VkResult psResult =
@@ -3288,6 +3307,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     stages[1].pSpecializationInfo = m_alphaTest ? &alphaSpecializationInfo : nullptr;
 
     std::vector<VkVertexInputBindingDescription> bindings;
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams";
     for (uint32_t stream = 0; stream < 16; ++stream)
     {
         if (m_streams[stream].buffer && m_streams[stream].stride)
@@ -3508,6 +3528,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
             ? depthFormat : VK_FORMAT_UNDEFINED;
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/create_graphics_pipeline";
     VkGraphicsPipelineCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     info.pNext = &rendering;
@@ -3672,6 +3693,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         return false;
     }
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/cache_insert";
     m_pipelines.emplace(key, pipeline);
     m_pipelineDirty = false;
     vkCmdBindPipeline(m_backend->CommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -3680,30 +3702,37 @@ bool IDirect3DDevice9::EnsurePipeline()
 
 bool IDirect3DDevice9::BindDescriptorSets()
 {
+    g_switchFrameStage = "frame/render/vulkan/descriptors/entry";
     if (!m_vertexShader || !m_pixelShader)
         return false;
 
+    g_switchFrameStage = "frame/render/vulkan/descriptors/vs_sampler";
     if (!BindSamplerSet(
             VK_PIPELINE_BIND_POINT_GRAPHICS, 0, m_textures))
         return false;
+    g_switchFrameStage = "frame/render/vulkan/descriptors/ps_sampler";
     if (!BindSamplerSet(
             VK_PIPELINE_BIND_POINT_GRAPHICS, 2, m_textures))
         return false;
 
+    g_switchFrameStage = "frame/render/vulkan/descriptors/vs_uniform";
     if (!BindUniformSet(
             VK_PIPELINE_BIND_POINT_GRAPHICS, 1, m_vertexShader->parseData,
             m_vsFloat.data(), m_vsInt.data(), m_vsBool.data()))
         return false;
+    g_switchFrameStage = "frame/render/vulkan/descriptors/ps_uniform";
     if (!BindUniformSet(
             VK_PIPELINE_BIND_POINT_GRAPHICS, 3, m_pixelShader->parseData,
             m_psFloat.data(), m_psInt.data(), m_psBool.data()))
         return false;
 
+    g_switchFrameStage = "frame/render/vulkan/descriptors/return";
     return true;
 }
 
 bool IDirect3DDevice9::PrepareDraw()
 {
+    g_switchFrameStage = "frame/render/vulkan/prepare_draw/entry";
     if (!m_backend || !m_backend->IsFrameActive())
     {
         Switch_LogWrite("[KisakCOD][VK DRAW] fail=frame_inactive\n");
@@ -3763,6 +3792,7 @@ bool IDirect3DDevice9::PrepareDraw()
     const uint32_t targetHeight = m_color && m_color->texture
         ? m_color->texture->height : backBufferHeight;
 
+    g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_rendering";
     if (!m_backend->EnsureRendering(
             colorImage, colorView, colorFormat,
             depthImage, depthView, depthFormat, depthAspect,
@@ -3788,12 +3818,14 @@ bool IDirect3DDevice9::PrepareDraw()
             m_depth->level, 0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     }
 
+    g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_pipeline";
     if (!EnsurePipeline())
     {
         Switch_LogWrite("[KisakCOD][VK DRAW] fail=pipeline\n");
         return false;
     }
 
+    g_switchFrameStage = "frame/render/vulkan/prepare_draw/set_viewport";
     VkViewport viewport{};
     // D3D9 viewport coordinates use an upper-left origin with Y increasing
     // downward. Vulkan's positive viewport height uses the opposite clip-space
@@ -3844,11 +3876,13 @@ bool IDirect3DDevice9::PrepareDraw()
     };
     vkCmdSetBlendConstants(m_backend->CommandBuffer(), blendConstants);
 
+    g_switchFrameStage = "frame/render/vulkan/prepare_draw/bind_descriptors";
     if (!BindDescriptorSets())
     {
         Switch_LogWrite("[KisakCOD][VK DRAW] fail=descriptor_sets\n");
         return false;
     }
+    g_switchFrameStage = "frame/render/vulkan/prepare_draw/return";
     return true;
 }
 
@@ -3856,6 +3890,7 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     uint32_t primitiveType, uint32_t primitiveCount,
     const void *data, uint32_t stride)
 {
+    g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/entry";
     const uint32_t vertexCount = PrimitiveVertexCount(primitiveType, primitiveCount);
     if (!data || !stride || !vertexCount)
         return E_FAIL;
@@ -3863,16 +3898,20 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     if (!PrepareDraw())
         return E_FAIL;
 
+    g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/allocate_vertex";
     const VkDeviceSize bytes = static_cast<VkDeviceSize>(vertexCount) * stride;
     VkDescriptorBufferInfo vertexInfo{};
     if (!m_backend->AllocateUniform(data, static_cast<size_t>(bytes), &vertexInfo))
         return E_FAIL;
 
+    g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/bind_vertex";
     const VkDeviceSize offset = vertexInfo.offset;
     vkCmdBindVertexBuffers(
         m_backend->CommandBuffer(), 0, 1, &vertexInfo.buffer, &offset);
+    g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/issue_draw";
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
     ++g_switchSceneDrawPrimitiveCalls;
+    g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/return";
     return S_OK;
 }
 
@@ -3880,6 +3919,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     uint32_t primitiveType, int32_t baseVertexIndex, uint32_t minVertexIndex,
     uint32_t numVertices, uint32_t startIndex, uint32_t primitiveCount)
 {
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
     const uint64_t indexCapacity = m_indices
         ? m_indices->size / sizeof(uint16_t) : 0;
@@ -3905,6 +3945,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         Switch_LogWrite(msg);
         return E_FAIL;
     }
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed/prepare_draw";
     m_topology = PrimitiveTopology(primitiveType);
 
     if (!PrepareDraw())
@@ -3937,8 +3978,10 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         m_backend->CommandBuffer(), m_indices->buffer,
         0, VK_INDEX_TYPE_UINT16);
 
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed/return";
     ++g_switchSceneDrawIndexedCalls;
     (void)minVertexIndex;
     (void)numVertices;
