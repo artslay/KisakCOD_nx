@@ -869,7 +869,7 @@ void __cdecl PlayerCmd_setOrigin(scr_entref_t entref)
         }
         Com_Printf(
             CON_CHANNEL_SERVER,
-            "[KisakCOD][OFFMAP SETORIGIN] ent=%u arg=(%.2f,%.2f,%.2f) result=(%.2f,%.2f,%.2f) current=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p script=%s:%d codePos=%p\\n",
+            "[KisakCOD][OFFMAP SETORIGIN] ent=%u arg=(%.2f,%.2f,%.2f) result=(%.2f,%.2f,%.2f) current=(%.2f,%.2f,%.2f) pm=%d tagInfo=%p script=%s:%d codePos=%p\n",
             static_cast<unsigned>(v4),
             v3[0], v3[1], v3[2],
             v3[0], v3[1], v3[2] + 1.0f,
