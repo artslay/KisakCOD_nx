@@ -549,11 +549,17 @@ static void Switch_ResolveNativeTechniquePointers(MaterialTechniqueSet *techSet)
         {
             MaterialPass *pass = &technique->passArray[passIndex];
             Switch_ResolveSerializedPointer(
+                &pass->vertexDecl,
+                "vertexDecl");
+            Switch_ResolveSerializedPointer(
                 &pass->vertexShader,
                 "vertexShader");
             Switch_ResolveSerializedPointer(
                 &pass->pixelShader,
                 "pixelShader");
+            Switch_ResolveSerializedPointer(
+                &pass->args,
+                "args");
         }
     }
 }
@@ -584,6 +590,166 @@ void Switch_InitializeLoadedTechniqueSetForRender(
     MaterialTechniqueSet *remapped = techSet->remappedTechniqueSet;
     if (Switch_IsValidTechniqueSetPointer(remapped) && remapped != techSet)
         Switch_ResolveNativeTechniquePointers(remapped);
+}
+
+// Resolve suspect serialized references at the renderer boundary as well as
+// at asset registration: some alias/fixup paths can expose a 32-bit token late.
+template <typename T>
+static void Switch_ResolvePointerForRenderIfNeeded(T **pointer, const char *kind)
+{
+    if (!pointer || !*pointer)
+        return;
+
+    uintptr_t address = reinterpret_cast<uintptr_t>(*pointer);
+    if (!Switch_IsSerializedAddress(address) &&
+        !Switch_Is32BitSerializedPointerToken(address))
+        return;
+
+    DB_FixupSwitchPointerAliases();
+    if (!*pointer)
+        return;
+
+    address = reinterpret_cast<uintptr_t>(*pointer);
+    if (Switch_IsSerializedAddress(address) ||
+        Switch_Is32BitSerializedPointerToken(address))
+    {
+        Switch_ResolveSerializedPointer(pointer, kind);
+    }
+}
+
+static void Switch_LogTechniqueRenderReject(
+    const char *kind,
+    const MaterialTechniqueSet *techSet,
+    uint32_t techType,
+    const void *value)
+{
+    static uint32_t traceCount = 0;
+    if (traceCount >= 32u)
+        return;
+
+    char trace[384];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][TECHNIQUE RENDER REJECT] kind=%s set=%p techType=%u value=%p asset=%d rawType=%u\n",
+        kind ? kind : "<unknown>",
+        static_cast<const void *>(techSet),
+        static_cast<unsigned>(techType),
+        value,
+        g_switchCurrentAssetIndex,
+        static_cast<unsigned>(g_switchCurrentAssetRawType));
+    Switch_LogWrite(trace);
+    ++traceCount;
+}
+
+MaterialTechniqueSet *Switch_ResolveMaterialTechniqueSetForRender(Material *material)
+{
+    if (!material)
+        return nullptr;
+
+    Switch_ResolvePointerForRenderIfNeeded(
+        &material->techniqueSet,
+        "material.techniqueSet");
+
+    MaterialTechniqueSet *authored = material->techniqueSet;
+    if (!Switch_IsValidTechniqueSetPointer(authored))
+    {
+        Switch_LogTechniqueRenderReject(
+            "material.techniqueSet",
+            nullptr,
+            UINT32_MAX,
+            authored);
+        return nullptr;
+    }
+
+    Switch_ResolvePointerForRenderIfNeeded(
+        &authored->remappedTechniqueSet,
+        "remappedTechniqueSet");
+
+    MaterialTechniqueSet *remapped = authored->remappedTechniqueSet;
+    if (!Switch_IsValidTechniqueSetPointer(remapped))
+    {
+        if (remapped)
+        {
+            Switch_LogTechniqueRenderReject(
+                "remappedTechniqueSet",
+                authored,
+                UINT32_MAX,
+                remapped);
+        }
+        authored->remappedTechniqueSet = authored;
+        remapped = authored;
+    }
+
+    return remapped;
+}
+
+MaterialTechnique *Switch_ResolveTechniqueForRender(
+    MaterialTechniqueSet *techSet,
+    uint32_t techType)
+{
+    if (!Switch_IsValidTechniqueSetPointer(techSet) ||
+        techType >= TECHNIQUE_COUNT)
+        return nullptr;
+
+    MaterialTechnique **techniqueSlot = &techSet->techniques[techType];
+    Switch_ResolvePointerForRenderIfNeeded(techniqueSlot, "technique");
+
+    MaterialTechnique *technique = *techniqueSlot;
+    if (!technique)
+        return nullptr;
+
+    const uintptr_t techniqueAddress =
+        reinterpret_cast<uintptr_t>(technique);
+    if (techniqueAddress <= UINT32_MAX ||
+        (techniqueAddress & (alignof(MaterialTechnique) - 1u)) != 0 ||
+        Switch_IsSerializedAddress(techniqueAddress))
+    {
+        Switch_LogTechniqueRenderReject(
+            "technique",
+            techSet,
+            techType,
+            technique);
+        *techniqueSlot = nullptr;
+        return nullptr;
+    }
+
+    const uint32_t passCount = static_cast<uint32_t>(technique->passCount);
+    if (!passCount || passCount > 64u)
+    {
+        Switch_LogTechniqueRenderReject(
+            "passCount",
+            techSet,
+            techType,
+            technique);
+        return nullptr;
+    }
+
+    for (uint32_t passIndex = 0; passIndex < passCount; ++passIndex)
+    {
+        MaterialPass *pass = &technique->passArray[passIndex];
+        Switch_ResolvePointerForRenderIfNeeded(&pass->vertexDecl, "vertexDecl/render");
+        Switch_ResolvePointerForRenderIfNeeded(&pass->vertexShader, "vertexShader/render");
+        Switch_ResolvePointerForRenderIfNeeded(&pass->pixelShader, "pixelShader/render");
+        Switch_ResolvePointerForRenderIfNeeded(&pass->args, "args/render");
+
+        const uint32_t argCount =
+            static_cast<uint32_t>(pass->perPrimArgCount) +
+            static_cast<uint32_t>(pass->perObjArgCount) +
+            static_cast<uint32_t>(pass->stableArgCount);
+        if (!pass->vertexDecl || !pass->vertexShader || !pass->pixelShader ||
+            (argCount && !pass->args))
+        {
+            Switch_LogTechniqueRenderReject(
+                passIndex == 0 ? "firstPassPointers" : "passPointers",
+                techSet,
+                techType,
+                technique);
+            return nullptr;
+        }
+    }
+
+    return technique;
 }
 
 static bool Switch_IsTechniqueSetRemapCompatible(
