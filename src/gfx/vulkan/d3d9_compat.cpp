@@ -3871,7 +3871,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 char noKillMsg[192];
                 std::snprintf(
                     noKillMsg, sizeof(noKillMsg),
-                    "[KisakCOD][VK DRAW] pipeline_probe no_kill module=%d pipeline=%d replaced=%u\\n",
+                    "[KisakCOD][VK DRAW] pipeline_probe no_kill module=%d pipeline=%d replaced=%u\n",
                     static_cast<int>(noKillModuleResult),
                     static_cast<int>(noKillPipelineResult),
                     replacedKills);
@@ -3879,7 +3879,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             }
             else
             {
-                Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_probe no_kill skipped=no_opkill\\n");
+                Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_probe no_kill skipped=no_opkill\n");
             }
         }
 
