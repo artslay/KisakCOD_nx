@@ -115,7 +115,7 @@ void LogSwitchPipelineSpirvBase64(
     char header[256];
     std::snprintf(
         header, sizeof(header),
-        "[KisakCOD][VK SPIRV BASE64] begin seq=%u stage=%s words=%zu bytes=%zu chunksize=720 hash=%016llx\\n",
+        "[KisakCOD][VK SPIRV BASE64] begin seq=%u stage=%s words=%zu bytes=%zu chunksize=720 hash=%016llx\n",
         sequence, stage ? stage : "(null)", words.size(), byteCount,
         static_cast<unsigned long long>(HashSpirvWords(words)));
     Switch_LogWrite(header);
@@ -129,12 +129,12 @@ void LogSwitchPipelineSpirvBase64(
         const size_t length = std::min(chunkSize, encoded.size() - offset);
         std::snprintf(
             line, sizeof(line),
-            "[KisakCOD][VK SPIRV BASE64] seq=%u stage=%s part=%zu/%zu data=%.*s\\n",
+            "[KisakCOD][VK SPIRV BASE64] seq=%u stage=%s part=%zu/%zu data=%.*s\n",
             sequence, stage ? stage : "(null)", i + 1u, chunkCount,
             static_cast<int>(length), encoded.data() + offset);
         Switch_LogWrite(line);
     }
-    Switch_LogWrite("[KisakCOD][VK SPIRV BASE64] end\\n");
+    Switch_LogWrite("[KisakCOD][VK SPIRV BASE64] end\n");
 }
 
 uint32_t g_switchPipelineCreateSequence = 0;
@@ -4436,7 +4436,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         char stateMsg[768];
         std::snprintf(
             stateMsg, sizeof(stateMsg),
-            "[KisakCOD][VK PIPELINE STATE] seq=%u color=%u depth=%u samples=%u topology=%u bindings=%u attrs=%u polygon=%u cull=%u frontFace=%u lineWidth=%.3f depthBias=%u/%.6g/%.6g depth=%u/%u/%u stencil=%u twoSided=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u colorMask=%u alphaToCoverage=%u sampleMask=%08x dynamic=%u layout=%p shaderModules=%p/%p\\n",
+            "[KisakCOD][VK PIPELINE STATE] seq=%u color=%u depth=%u samples=%u topology=%u bindings=%u attrs=%u polygon=%u cull=%u frontFace=%u lineWidth=%.3f depthBias=%u/%.6g/%.6g depth=%u/%u/%u stencil=%u twoSided=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u colorMask=%u alphaToCoverage=%u sampleMask=%08x dynamic=%u layout=%p shaderModules=%p/%p\n",
             pipelineCreateSequence,
             static_cast<unsigned int>(colorFormat),
             static_cast<unsigned int>(depthFormat),
