@@ -2572,7 +2572,7 @@ HRESULT IDirect3DDevice9::EndScene()
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK FRAME] end_scene id=%u rendered=%u source=%u color=%p texture=%p size=%ux%u draws=%u/%u clears=%u\\n",
+            "[KisakCOD][VK FRAME] end_scene id=%u rendered=%u source=%u color=%p texture=%p size=%ux%u draws=%u/%u clears=%u\n",
             endSceneTraceId,
             m_targetRendered ? 1u : 0u,
             queuePresentSource ? 1u : 0u,
@@ -4196,7 +4196,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         char compactMsg[256];
         std::snprintf(
             compactMsg, sizeof(compactMsg),
-            "[KisakCOD][VK PIPELINE] begin seq=%u key=%016llx vs=%016llx ps=%016llx formats=%u/%u topology=%u\\n",
+            "[KisakCOD][VK PIPELINE] begin seq=%u key=%016llx vs=%016llx ps=%016llx formats=%u/%u topology=%u\n",
             pipelineCreateSequence,
             static_cast<unsigned long long>(key),
             static_cast<unsigned long long>(vsSpirvHash),
@@ -4219,7 +4219,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         char createdMsg[192];
         std::snprintf(
             createdMsg, sizeof(createdMsg),
-            "[KisakCOD][VK PIPELINE] ready seq=%u ms=%lld\\n",
+            "[KisakCOD][VK PIPELINE] ready seq=%u ms=%lld\n",
             pipelineCreateSequence,
             static_cast<long long>(pipelineCreateElapsed));
         Switch_LogWrite(createdMsg);
