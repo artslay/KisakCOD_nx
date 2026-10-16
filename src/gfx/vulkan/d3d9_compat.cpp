@@ -4494,6 +4494,66 @@ bool IDirect3DDevice9::EnsurePipeline()
             static_cast<void *>(stages[0].module),
             static_cast<void *>(stages[1].module));
         Switch_LogWrite(stateMsg);
+
+        char renderingMsg[320];
+        std::snprintf(
+            renderingMsg, sizeof(renderingMsg),
+            "[KisakCOD][VK PIPELINE RENDERING] seq=%u sType=%u pNext=%p viewMask=%u colorCount=%u colorFormats=%p color0=%u depth=%u stencil=%u\\n",
+            pipelineCreateSequence, static_cast<unsigned int>(rendering.sType),
+            const_cast<void *>(rendering.pNext), rendering.viewMask,
+            rendering.colorAttachmentCount,
+            static_cast<const void *>(rendering.pColorAttachmentFormats),
+            rendering.colorAttachmentCount && rendering.pColorAttachmentFormats
+                ? static_cast<unsigned int>(rendering.pColorAttachmentFormats[0])
+                : static_cast<unsigned int>(VK_FORMAT_UNDEFINED),
+            static_cast<unsigned int>(rendering.depthAttachmentFormat),
+            static_cast<unsigned int>(rendering.stencilAttachmentFormat));
+        Switch_LogWrite(renderingMsg);
+
+        char createMsg[320];
+        std::snprintf(
+            createMsg, sizeof(createMsg),
+            "[KisakCOD][VK PIPELINE CREATEINFO] seq=%u flags=%u renderPass=%p subpass=%u base=%p baseIndex=%d layout=%p stages=%u pStages=%p pNext=%p\\n",
+            pipelineCreateSequence, static_cast<unsigned int>(info.flags),
+            static_cast<void *>(info.renderPass), info.subpass,
+            static_cast<void *>(info.basePipelineHandle), info.basePipelineIndex,
+            static_cast<void *>(info.layout), info.stageCount,
+            static_cast<const void *>(info.pStages),
+            static_cast<const void *>(info.pNext));
+        Switch_LogWrite(createMsg);
+
+        for (uint32_t stageIndex = 0; stageIndex < info.stageCount; ++stageIndex)
+        {
+            const VkPipelineShaderStageCreateInfo &stage = info.pStages[stageIndex];
+            const VkSpecializationInfo *spec = stage.pSpecializationInfo;
+            char stageMsg[320];
+            std::snprintf(
+                stageMsg, sizeof(stageMsg),
+                "[KisakCOD][VK PIPELINE STAGE] seq=%u index=%u sType=%u stage=0x%x flags=%u module=%p name=%s spec=%p mapCount=%u dataSize=%zu data=%p\\n",
+                pipelineCreateSequence, stageIndex,
+                static_cast<unsigned int>(stage.sType),
+                static_cast<unsigned int>(stage.stage),
+                static_cast<unsigned int>(stage.flags),
+                static_cast<void *>(stage.module),
+                stage.pName ? stage.pName : "(null)",
+                static_cast<const void *>(spec),
+                spec ? spec->mapEntryCount : 0u,
+                spec ? spec->dataSize : 0u,
+                spec ? spec->pData : nullptr);
+            Switch_LogWrite(stageMsg);
+        }
+
+        for (size_t attrIndex = 0; attrIndex < vertexAttrs.size(); ++attrIndex)
+        {
+            const VkVertexInputAttributeDescription &attr = vertexAttrs[attrIndex];
+            char attrMsg[160];
+            std::snprintf(
+                attrMsg, sizeof(attrMsg),
+                "[KisakCOD][VK PIPELINE ATTRIBUTE] seq=%u index=%zu location=%u binding=%u format=%u offset=%u\\n",
+                pipelineCreateSequence, attrIndex, attr.location, attr.binding,
+                static_cast<unsigned int>(attr.format), attr.offset);
+            Switch_LogWrite(attrMsg);
+        }
     }
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
