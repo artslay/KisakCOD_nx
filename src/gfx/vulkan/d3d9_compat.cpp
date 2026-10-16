@@ -4275,13 +4275,14 @@ bool IDirect3DDevice9::EnsurePipeline()
     const bool probePipelineDump =
         pipelineCreateSequence > 8 && pipelineCreateSequence <= 32;
     const bool recentPipelineDump = pipelineCreateSequence >= 180;
-    // The latest run completed pipeline 69 and advanced through 86; the
-    // exception followed begin seq=87. Capture that fragment module once.
-    // Match its hash too, in case earlier pipeline sequencing shifts.
+    // The latest run completed through seq=87 and then faulted during the
+    // create call after begin seq=92. Match both shader hashes as a fallback
+    // so the earlier seq=88 pipeline with the same fragment shader is skipped.
     static bool targetPipelineCaptureLogged = false;
     const bool targetPipelineDump = !targetPipelineCaptureLogged &&
-        (pipelineCreateSequence == 87 ||
-         psSpirvHash == 0xed24ab1145b0d009ull);
+        (pipelineCreateSequence == 92 ||
+         (vsSpirvHash == 0x0fb134cb58ee26d6ull &&
+          psSpirvHash == 0xed24ab1145b0d009ull));
     if (targetPipelineDump)
         targetPipelineCaptureLogged = true;
     if ((earlyPipelineDump || probePipelineDump || recentPipelineDump) &&
@@ -4390,7 +4391,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         char handlesMsg[768];
         std::snprintf(
             handlesMsg, sizeof(handlesMsg),
-            "[KisakCOD][VK PIPELINE INPUT] seq=%u info=%p pNext=%p device=%p layout=%p vsModule=%p psModule=%p stages=%p stageCount=%u vertexInput=%p bindings=%u attrs=%u assembly=%p topology=%u viewport=%p raster=%p multisample=%p depth=%p blend=%p dynamic=%p alphaTest=%u alphaFunc=%u alphaRef=%u specIds=%u/%u specInfo=%p specEntries=%u mapIds=%u/%u offsets=%zu/%zu sizes=%zu/%zu specData=%p dataSize=%zu values=%.3f/%.6f\n",
+            "[KisakCOD][VK PIPELINE INPUT] seq=%u info=%p pNext=%p device=%p layout=%p vsModule=%p psModule=%p stages=%p stageCount=%u vertexInput=%p bindings=%u attrs=%u assembly=%p topology=%u viewport=%p raster=%p multisample=%p depth=%p blend=%p dynamic=%p alphaTest=%u alphaFunc=%u alphaRef=%u specIds=%u/%u specInfo=%p specEntries=%u mapIds=%u/%u offsets=%u/%u sizes=%zu/%zu specData=%p dataSize=%zu values=%.3f/%.6f\n",
             pipelineCreateSequence,
             static_cast<const void *>(&info),
             static_cast<const void *>(info.pNext),
@@ -4440,7 +4441,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     // choose whichever transfer method is easier.
     if (targetPipelineDump)
     {
-        const char *targetPsPath = "sdmc:/switch/KisakCOD/vk_crash_87_ps.spv";
+        const char *targetPsPath = "sdmc:/switch/KisakCOD/vk_crash_92_ps.spv";
         const bool targetPsSaved = WriteSwitchPipelineSpirv(
             targetPsPath, m_pixelShader->spirv);
         LogSwitchPipelineSpirvBase64(
