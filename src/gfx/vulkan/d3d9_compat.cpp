@@ -6287,6 +6287,10 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         static_cast<uint32_t>(std::min<size_t>(m_indices->size, UINT32_MAX)),
         std::memory_order_relaxed);
     g_switchLastDrawIndexDataAvailable.store(indexData ? 1u : 0u, std::memory_order_relaxed);
+    g_switchLastDrawRawIndexMin.store(UINT32_MAX, std::memory_order_relaxed);
+    g_switchLastDrawRawIndexMax.store(0, std::memory_order_relaxed);
+    g_switchLastDrawEffectiveVertexMin.store(INT64_MAX, std::memory_order_relaxed);
+    g_switchLastDrawEffectiveVertexMax.store(-1, std::memory_order_relaxed);
     uint32_t minRawIndex = UINT32_MAX;
     uint32_t maxRawIndex = 0;
     int64_t minEffectiveVertex = INT64_MAX;
