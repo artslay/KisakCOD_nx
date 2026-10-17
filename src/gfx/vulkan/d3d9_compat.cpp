@@ -46,6 +46,19 @@ thread_local volatile uintptr_t g_switchVkModuleTraceHash = 0;
 thread_local volatile uintptr_t g_switchVkModuleTraceAlphaTest = 0;
 thread_local volatile uint32_t g_switchVkModuleTraceHeader[5] = {};
 thread_local volatile uint32_t g_switchVkModuleTraceTail = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTracePhase = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTraceOwner = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTraceCache = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTraceCacheSize = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTraceKey = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTraceHandle = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTraceDevice = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTraceDeclaration = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTraceDeclarationSerial = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTraceVertexShader = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTraceVertexSerial = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTracePixelShader = 0;
+thread_local volatile uintptr_t g_switchVkPipelineTracePixelSerial = 0;
 }
 
 // Last submitted-frame context is read by VulkanBackend only if queue submission fails.
@@ -134,6 +147,70 @@ void RecordSwitchVkModuleTrace(
         g_switchVkModuleTraceTail = words[wordCount - 1u];
     }
 }
+
+void ClearSwitchVkModuleTrace()
+{
+    g_switchVkModuleTracePhase = 0;
+    g_switchVkModuleTraceDevice = 0;
+    g_switchVkModuleTraceDeclaration = 0;
+    g_switchVkModuleTraceDeclarationSerial = 0;
+    g_switchVkModuleTraceVertexShader = 0;
+    g_switchVkModuleTraceVertexSerial = 0;
+    g_switchVkModuleTracePixelShader = 0;
+    g_switchVkModuleTracePixelSerial = 0;
+    g_switchVkModuleTraceActiveShader = 0;
+    g_switchVkModuleTraceActiveSerial = 0;
+    g_switchVkModuleTraceCode = 0;
+    g_switchVkModuleTraceBytes = 0;
+    g_switchVkModuleTraceWords = 0;
+    g_switchVkModuleTraceHash = 0;
+    g_switchVkModuleTraceAlphaTest = 0;
+    for (size_t i = 0; i < 5; ++i)
+        g_switchVkModuleTraceHeader[i] = 0;
+    g_switchVkModuleTraceTail = 0;
+}
+
+void RecordSwitchVkPipelineTrace(
+    uintptr_t phase,
+    const IDirect3DDevice9 *owner,
+    const void *cache,
+    size_t cacheSize,
+    uint64_t key,
+    VkDevice device,
+    const IDirect3DVertexDeclaration9 *declaration,
+    const KisakVkShader *vertexShader,
+    const KisakVkShader *pixelShader,
+    VkPipeline pipeline)
+{
+    // Publish phase last so an exception snapshot never labels a partial record
+    // as a completed cache/bind transition.
+    g_switchVkPipelineTracePhase = 0;
+    g_switchVkPipelineTraceOwner = reinterpret_cast<uintptr_t>(owner);
+    g_switchVkPipelineTraceCache = reinterpret_cast<uintptr_t>(cache);
+    g_switchVkPipelineTraceCacheSize = cacheSize;
+    g_switchVkPipelineTraceKey = static_cast<uintptr_t>(key);
+    g_switchVkPipelineTraceHandle = reinterpret_cast<uintptr_t>(pipeline);
+    g_switchVkPipelineTraceDevice = reinterpret_cast<uintptr_t>(device);
+    g_switchVkPipelineTraceDeclaration = reinterpret_cast<uintptr_t>(declaration);
+    g_switchVkPipelineTraceDeclarationSerial = declaration ? declaration->serial : 0;
+    g_switchVkPipelineTraceVertexShader = reinterpret_cast<uintptr_t>(vertexShader);
+    g_switchVkPipelineTraceVertexSerial = vertexShader ? vertexShader->serial : 0;
+    g_switchVkPipelineTracePixelShader = reinterpret_cast<uintptr_t>(pixelShader);
+    g_switchVkPipelineTracePixelSerial = pixelShader ? pixelShader->serial : 0;
+    g_switchVkPipelineTracePhase = phase;
+}
+
+struct SwitchEnsurePipelineTraceScope
+{
+    ~SwitchEnsurePipelineTraceScope()
+    {
+        // Don't leave "cache_lookup" or a shader-module snapshot installed after
+        // a successful return. The exception handler can then distinguish a
+        // fault inside this function from a later failure in the game loop.
+        g_switchFrameStage = "frame/render/vulkan/pipeline/return";
+        ClearSwitchVkModuleTrace();
+    }
+};
 
 uint32_t g_switchPipelineCreateSequence = 0;
 
@@ -3791,6 +3868,12 @@ bool IDirect3DDevice9::BindSamplerSet(
 
 bool IDirect3DDevice9::EnsurePipeline()
 {
+    SwitchEnsurePipelineTraceScope traceScope;
+    ClearSwitchVkModuleTrace();
+    RecordSwitchVkPipelineTrace(
+        1u, this, &m_pipelines, m_pipelines.size(), 0,
+        m_backend ? m_backend->Device() : VK_NULL_HANDLE,
+        m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
     g_switchFrameStage = "frame/render/vulkan/pipeline/entry";
     if (!m_backend || !m_vertexShader || !m_pixelShader || !m_decl)
     {
@@ -3863,16 +3946,30 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_ccwStencilPass);
 
     g_switchFrameStage = "frame/render/vulkan/pipeline/cache_lookup";
+    RecordSwitchVkPipelineTrace(
+        2u, this, &m_pipelines, m_pipelines.size(), key,
+        m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
     const auto existing = m_pipelines.find(key);
     if (existing != m_pipelines.end())
     {
+        RecordSwitchVkPipelineTrace(
+            3u, this, &m_pipelines, m_pipelines.size(), key,
+            m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, existing->second);
         g_switchLastBoundPipelineKey.store(key, std::memory_order_relaxed);
         g_switchLastBoundVertexShaderSerial.store(m_vertexShader->serial, std::memory_order_relaxed);
         g_switchLastBoundPixelShaderSerial.store(m_pixelShader->serial, std::memory_order_relaxed);
         m_pipelineDirty = false;
+        g_switchFrameStage = "frame/render/vulkan/pipeline/cache_hit_bind";
         vkCmdBindPipeline(m_backend->CommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, existing->second);
+        RecordSwitchVkPipelineTrace(
+            4u, this, &m_pipelines, m_pipelines.size(), key,
+            m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, existing->second);
+        g_switchFrameStage = "frame/render/vulkan/pipeline/cache_hit_return";
         return true;
     }
+    RecordSwitchVkPipelineTrace(
+        5u, this, &m_pipelines, m_pipelines.size(), key,
+        m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
 
     // Keep the linked fragment module before our custom alpha-test rewrite.
     // If NVK rejects the final pipeline, diagnostic probes below can determine
@@ -4595,9 +4692,15 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
+    RecordSwitchVkPipelineTrace(
+        6u, this, &m_pipelines, m_pipelines.size(), key,
+        m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
     g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
     const VkResult pipelineResult = vkCreateGraphicsPipelines(
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+    RecordSwitchVkPipelineTrace(
+        7u, this, &m_pipelines, m_pipelines.size(), key,
+        m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
     g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_return";
     const auto pipelineCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - pipelineCreateStart).count();
@@ -5616,12 +5719,25 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 
     g_switchFrameStage = "frame/render/vulkan/pipeline/cache_insert";
+    RecordSwitchVkPipelineTrace(
+        8u, this, &m_pipelines, m_pipelines.size(), key,
+        m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
     m_pipelines.emplace(key, pipeline);
+    RecordSwitchVkPipelineTrace(
+        9u, this, &m_pipelines, m_pipelines.size(), key,
+        m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
     g_switchLastBoundPipelineKey.store(key, std::memory_order_relaxed);
     g_switchLastBoundVertexShaderSerial.store(m_vertexShader->serial, std::memory_order_relaxed);
     g_switchLastBoundPixelShaderSerial.store(m_pixelShader->serial, std::memory_order_relaxed);
     m_pipelineDirty = false;
+    g_switchFrameStage = "frame/render/vulkan/pipeline/new_pipeline_bind";
+    RecordSwitchVkPipelineTrace(
+        10u, this, &m_pipelines, m_pipelines.size(), key,
+        m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
     vkCmdBindPipeline(m_backend->CommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    RecordSwitchVkPipelineTrace(
+        11u, this, &m_pipelines, m_pipelines.size(), key,
+        m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
     return true;
 }
 
