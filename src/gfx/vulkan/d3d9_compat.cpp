@@ -515,22 +515,40 @@ uint8_t SwitchEffectiveShaderElementType(
     const _D3DVERTEXELEMENT9 &element)
 {
     uint8_t type = element.Type;
-    if (decl && decl->switchVertDeclType == 0 && element.Stream == 0)
+    if (decl && element.Stream == 0)
     {
-        if (element.Offset == 0 &&
+        // Position and packed texcoords in the generic GfxVertex buffer need
+        // Switch-specific decoding because the original declaration is a
+        // material routing table, not the byte layout of that transient buffer.
+        if (decl->switchVertDeclType == 0 &&
+            element.Offset == 0 &&
             element.Usage == 0 &&
             element.Type == D3DDECLTYPE_FLOAT3)
+        {
             type = D3DDECLTYPE_FLOAT4;
+        }
+        // Both GfxPackedVertex and GfxWorldVertex store GfxColor as a packed
+        // 32-bit D3DCOLOR at byte offset 16. Some engine routing entries label
+        // that field FLOAT4; treating the packed RGBA bytes as four IEEE floats
+        // corrupts COLOR0 in world/lightmapped shaders. Correct by semantic and
+        // physical field, not only for VERTDECL_GENERIC.
         else if (element.Offset == 16 &&
                  element.Usage == 10 &&
                  element.UsageIndex == 0 &&
                  element.Type == D3DDECLTYPE_FLOAT4)
+        {
             type = D3DDECLTYPE_D3DCOLOR;
-        else if (element.Offset == 20 &&
+        }
+        // The generic GfxVertex format stores packed texcoords at byte 20;
+        // world vertices store actual float texture coordinates there.
+        else if (decl->switchVertDeclType == 0 &&
+                 element.Offset == 20 &&
                  element.Usage == 5 &&
                  element.UsageIndex == 0 &&
                  element.Type == D3DDECLTYPE_FLOAT1)
+        {
             type = D3DDECLTYPE_FLOAT2;
+        }
     }
     return type;
 }
