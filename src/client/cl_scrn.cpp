@@ -140,6 +140,72 @@ static void SCR_ClearScreen()
     R_AddCmdClearScreen(1, colorBlack, 1.0, 0);
 }
 
+#ifdef __SWITCH__
+static void SCR_LogSwitchFrameState(int refreshedUI)
+{
+    static int previousConnectionState = -1;
+    static int previousActiveMenu = -1;
+    static int previousFullscreen = -1;
+    static int previousUiCatcher = -1;
+    static int previousOpenMenuCount = -1;
+    static int previousUiStarted = -1;
+    static int previousRefreshedUI = -1;
+    static int previousCinematicStarted = -1;
+    static int previousCinematicFinished = -1;
+    static int previousCinematicPending = -1;
+
+    const int connectionState = static_cast<int>(clientUIActives[0].connectionState);
+    const int activeMenu = UI_GetActiveMenu(0);
+    const int fullscreen = UI_IsFullscreen() ? 1 : 0;
+    const int uiCatcher = Key_IsCatcherActive(0, KEYCATCH_UI) ? 1 : 0;
+    const int openMenuCount = uiInfo.uiDC.openMenuCount;
+    const int uiStarted = cls.uiStarted ? 1 : 0;
+    const int cinematicStarted = R_Cinematic_IsStarted() ? 1 : 0;
+    const int cinematicFinished = R_Cinematic_IsFinished() ? 1 : 0;
+    const int cinematicPending = R_Cinematic_IsPending() ? 1 : 0;
+
+    if (connectionState != previousConnectionState ||
+        activeMenu != previousActiveMenu ||
+        fullscreen != previousFullscreen ||
+        uiCatcher != previousUiCatcher ||
+        openMenuCount != previousOpenMenuCount ||
+        uiStarted != previousUiStarted ||
+        refreshedUI != previousRefreshedUI ||
+        cinematicStarted != previousCinematicStarted ||
+        cinematicFinished != previousCinematicFinished ||
+        cinematicPending != previousCinematicPending)
+    {
+        char trace[512];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][FRAME STATE] conn=%d menu=%d fullscreen=%d uiCatch=%d openMenus=%d uiStarted=%d cgameDraw=%d cineStarted=%d cineFinished=%d cinePending=%d\n",
+            connectionState,
+            activeMenu,
+            fullscreen,
+            uiCatcher,
+            openMenuCount,
+            uiStarted,
+            refreshedUI,
+            cinematicStarted,
+            cinematicFinished,
+            cinematicPending);
+        Switch_LogWrite(trace);
+
+        previousConnectionState = connectionState;
+        previousActiveMenu = activeMenu;
+        previousFullscreen = fullscreen;
+        previousUiCatcher = uiCatcher;
+        previousOpenMenuCount = openMenuCount;
+        previousUiStarted = uiStarted;
+        previousRefreshedUI = refreshedUI;
+        previousCinematicStarted = cinematicStarted;
+        previousCinematicFinished = cinematicFinished;
+        previousCinematicPending = cinematicPending;
+    }
+}
+#endif
+
 void __cdecl SCR_DrawScreenField(int refreshedUI)
 {
     connstate_t connectionState; // r31
@@ -155,6 +221,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #endif
 
 #ifdef __SWITCH__
+    SCR_LogSwitchFrameState(refreshedUI);
     g_switchFrameDrawFieldAddress =
         reinterpret_cast<uintptr_t>(&SCR_DrawScreenField);
     g_switchFrameDrawFieldCaller =
@@ -213,7 +280,15 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
             switch (connectionState)
             {
             case CA_DISCONNECTED:
+#ifdef __SWITCH__
+                // Disconnected state normally assumes the main menu is
+                // fullscreen. Still paint an already-open UI if that menu is
+                // temporarily non-fullscreen during a menu/cinematic transition.
+                SCR_ClearScreen();
+                goto LABEL_12;
+#else
                 goto LABEL_2;
+#endif
             case CA_CINEMATIC:
 #ifdef __SWITCH__
                 g_switchFrameStage = "frame/scr/draw_field/cinematic_clear";
@@ -298,13 +373,22 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
 #endif
             goto LABEL_15;
         }
-        if (!uiCatcherActive)
-        {
 #ifdef __SWITCH__
+        // CL_CGameRendering suppresses the 3D scene whenever a fullscreen
+        // menu is visible. Do not also suppress UI paint just because the
+        // UI key catcher was cleared by a transition.
+        if (!uiCatcherActive &&
+            !UI_IsFullscreen() &&
+            !(clientUIActives[0].connectionState == CA_DISCONNECTED &&
+              uiInfo.uiDC.openMenuCount > 0))
+        {
             g_switchFrameStage = "frame/scr/draw_field/catcher_skip_inactive";
-#endif
             goto LABEL_15;
         }
+#else
+        if (!uiCatcherActive)
+            goto LABEL_15;
+#endif
 
 LABEL_14:
 #ifdef __SWITCH__
