@@ -162,7 +162,7 @@ void Switch_GamepadFrame()
     {
         char trace[320];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][PAD RAW] frame=%u style=0x%08x connected=%d buttons=0x%016llx left=(%d,%d) right=(%d,%d)\\n",
+            "[KisakCOD][PAD RAW] frame=%u style=0x%08x connected=%d buttons=0x%016llx left=(%d,%d) right=(%d,%d)\n",
             switchInputTraceFrame,
             static_cast<unsigned>(padGetStyleSet(&g_pad)),
             padIsConnected(&g_pad) ? 1 : 0,
