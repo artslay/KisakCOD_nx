@@ -29,7 +29,7 @@ static void SND_ReportZeroLengthSoundOnce(const char *soundName)
     }
 
     if (firstReport)
-        Com_PrintError(CON_CHANNEL_ERROR, "ERROR: Sound file '%s' is zero length, invalid\\n", key.c_str());
+        Com_PrintError(CON_CHANNEL_ERROR, "ERROR: Sound file '%s' is zero length, invalid\n", key.c_str());
 }
 
 #ifdef KISAK_MP
