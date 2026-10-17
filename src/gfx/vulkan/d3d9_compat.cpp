@@ -687,8 +687,35 @@ uint8_t SwitchEffectiveShaderElementType(
         {
             type = D3DDECLTYPE_FLOAT2;
         }
+        // Material_BuildVertexDecl's legacy routing table describes the world
+        // lightmap coordinate as TEXCOORD2 at offset 40. In the real
+        // GfxWorldVertex buffer, lmapCoord is float2 at byte 28; byte 40 is
+        // the packed tangent. Present the shader with the actual lightmap UV.
+        else if (decl->switchVertDeclType == 2 &&
+                 element.Offset == 40 &&
+                 element.Usage == 5 &&
+                 element.UsageIndex == 2)
+        {
+            type = D3DDECLTYPE_FLOAT2;
+        }
     }
     return type;
+}
+
+uint32_t SwitchEffectiveShaderElementOffset(
+    const IDirect3DVertexDeclaration9 *decl,
+    const _D3DVERTEXELEMENT9 &element)
+{
+    if (decl &&
+        decl->switchVertDeclType == 2 &&
+        element.Stream == 0 &&
+        element.Offset == 40 &&
+        element.Usage == 5 &&
+        element.UsageIndex == 2)
+    {
+        return 28;
+    }
+    return element.Offset;
 }
 
 uint32_t SwitchShaderElementByteSize(uint8_t type)
@@ -4074,10 +4101,11 @@ bool IDirect3DDevice9::EnsurePipeline()
                 char elementTrace[256];
                 std::snprintf(
                     elementTrace, sizeof(elementTrace),
-                    "[KisakCOD][VK VERTEX ELEMENT] n=%u i=%zu stream=%u offset=%u type=%u effective=%u usage=%u usageIndex=%u\n",
+                    "[KisakCOD][VK VERTEX ELEMENT] n=%u i=%zu stream=%u offset=%u vkOffset=%u type=%u effective=%u usage=%u usageIndex=%u\n",
                     traceIndex, elementIndex,
                     static_cast<unsigned>(element.Stream),
                     static_cast<unsigned>(element.Offset),
+                    static_cast<unsigned>(SwitchEffectiveShaderElementOffset(m_decl, element)),
                     static_cast<unsigned>(element.Type),
                     static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element)),
                     static_cast<unsigned>(element.Usage),
@@ -4437,38 +4465,13 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (element.Stream >= 16)
             continue;
 
-        // The generic declaration is used with materialCommands_t::verts,
-        // whose concrete runtime type is GfxVertex:
-        //   xyzw @0 (float4), packed BGRA color @16, float2 texCoord @20.
-        // The legacy D3D table encodes the same routing using FLOAT3/FLOAT4/FLOAT1
-        // because those source entries are also reused by packed world vertices.
-        // Preserve the original D3D declaration, but use the actual Switch
-        // memory representation when building the Vulkan vertex input state.
-        VkFormat format = VertexFormat(element.Type);
-        if (m_decl->switchVertDeclType == 0 &&
-            element.Stream == 0)
-        {
-            if (element.Offset == 0 &&
-                element.Usage == 0 &&
-                element.Type == D3DDECLTYPE_FLOAT3)
-            {
-                format = VK_FORMAT_R32G32B32A32_SFLOAT;
-            }
-            else if (element.Offset == 16 &&
-                     element.Usage == 10 &&
-                     element.UsageIndex == 0 &&
-                     element.Type == D3DDECLTYPE_FLOAT4)
-            {
-                format = VK_FORMAT_B8G8R8A8_UNORM;
-            }
-            else if (element.Offset == 20 &&
-                     element.Usage == 5 &&
-                     element.UsageIndex == 0 &&
-                     element.Type == D3DDECLTYPE_FLOAT1)
-            {
-                format = VK_FORMAT_R32G32_SFLOAT;
-            }
-        }
+        // The D3D declaration is also a legacy semantic-routing table on
+        // Switch. Resolve both its physical offset and representation against
+        // the actual transient/world vertex layout before describing Vulkan input.
+        VkFormat format = VertexFormat(
+            SwitchEffectiveShaderElementType(m_decl, element));
+        const uint32_t vertexOffset =
+            SwitchEffectiveShaderElementOffset(m_decl, element);
 
         if (format == VK_FORMAT_UNDEFINED)
         {
@@ -4501,7 +4504,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
 
         vertexAttrs.push_back({
-            location, element.Stream, format, element.Offset
+            location, element.Stream, format, vertexOffset
         });
     }
 
@@ -6094,14 +6097,16 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 const uint64_t bufferSize = stream.buffer->size;
                 const uint64_t streamOffset = stream.offset;
                 const uint64_t stride = stream.stride;
+                const uint32_t elementOffset =
+                    SwitchEffectiveShaderElementOffset(m_decl, element);
                 const uint64_t vertexIndex = static_cast<uint64_t>(maxEffectiveVertex);
                 uint64_t vertexStart = 0;
                 uint64_t requiredEnd = 0;
                 bool outOfRange = false;
 
                 if (streamOffset > bufferSize ||
-                    element.Offset > stride ||
-                    elementSize > stride - element.Offset)
+                    elementOffset > stride ||
+                    elementSize > stride - elementOffset)
                 {
                     outOfRange = true;
                 }
@@ -6112,7 +6117,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 else
                 {
                     vertexStart = streamOffset + vertexIndex * stride;
-                    requiredEnd = vertexStart + element.Offset + elementSize;
+                    requiredEnd = vertexStart + elementOffset + elementSize;
                     if (requiredEnd > bufferSize)
                         outOfRange = true;
                 }
@@ -6121,7 +6126,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 {
                     invalidVertexFetch = true;
                     badStream = element.Stream;
-                    badElementOffset = element.Offset;
+                    badElementOffset = elementOffset;
                     badElementSize = elementSize;
                     badStride = stream.stride;
                     badRequiredEnd = requiredEnd;
