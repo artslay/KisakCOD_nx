@@ -705,7 +705,7 @@ void __cdecl ClientThink_real(gentity_s *ent)
     {
         Com_Printf(
             CON_CHANNEL_SERVER,
-            "[KisakCOD][PMOVE INPUT] sample=%u cmdTime=%d move=(%d,%d,%d) pmType=%d flags=0x%x frozen=%d anglesLocked=%d tagInfo=%p origin=(%.2f,%.2f,%.2f)\n",
+            "[KisakCOD][PMOVE INPUT] sample=%u cmdTime=%d move=(%d,%d,%d) pmType=%d flags=0x%x speed=%d g_speed=%d frozen=%d anglesLocked=%d tagInfo=%p origin=(%.2f,%.2f,%.2f)\n",
             switchGameplayMoveTraceCount++,
             v39.cmd.serverTime,
             static_cast<int>(v39.cmd.forwardmove),
@@ -713,6 +713,7 @@ void __cdecl ClientThink_real(gentity_s *ent)
             static_cast<int>(v39.cmd.upmove),
             static_cast<int>(client->ps.pm_type),
             static_cast<unsigned int>(client->ps.pm_flags),
+            client->ps.speed, g_speed->current.integer,
             client->bFrozen ? 1 : 0,
             client->linkAnglesLocked ? 1 : 0,
             static_cast<void *>(ent->tagInfo),
@@ -727,8 +728,9 @@ void __cdecl ClientThink_real(gentity_s *ent)
     {
         Com_Printf(
             CON_CHANNEL_SERVER,
-            "[KisakCOD][PMOVE INPUT] result cmdTime=%d origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) flags=0x%x\n",
+            "[KisakCOD][PMOVE INPUT] result cmdTime=%d speed=%d g_speed=%d origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) flags=0x%x\n",
             v39.cmd.serverTime,
+            client->ps.speed, g_speed->current.integer,
             client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
             client->ps.velocity[0], client->ps.velocity[1], client->ps.velocity[2],
             static_cast<unsigned int>(client->ps.pm_flags));
