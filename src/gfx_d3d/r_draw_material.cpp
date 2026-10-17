@@ -206,7 +206,7 @@ int __cdecl R_SetMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf, Materi
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][MISSING LIT TECHNIQUE] sample=%u index=%u techType=%d material=%p namePtr=%p techniqueSet=%p\\n",
+                "[KisakCOD][MISSING LIT TECHNIQUE] sample=%u index=%u techType=%d material=%p namePtr=%p techniqueSet=%p\n",
                 switchMissingLitTechniqueTraceCount++,
                 materialIndex,
                 static_cast<int>(techType),
