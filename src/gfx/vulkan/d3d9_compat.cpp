@@ -1545,7 +1545,7 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
     const SwitchPipelineCrashSnapshot &snapshot = g_switchPipelineCrashSnapshot;
     if (!snapshot.valid || !snapshot.vertexSpirv || !snapshot.pixelSpirv)
     {
-        writeLine("[KisakCOD][VK CRASH PIPELINE] snapshot unavailable\\n");
+        writeLine("[KisakCOD][VK CRASH PIPELINE] snapshot unavailable\n");
         return;
     }
 
@@ -1566,7 +1566,7 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
         char header[320];
         std::snprintf(
             header, sizeof(header),
-            "[KisakCOD][VK CRASH SPIRV] seq=%u stage=%s words=%zu bytes=%zu hash=%016llx magic=%08x version=%08x generator=%08x bound=%u schema=%u\\n",
+            "[KisakCOD][VK CRASH SPIRV] seq=%u stage=%s words=%zu bytes=%zu hash=%016llx magic=%08x version=%08x generator=%08x bound=%u schema=%u\n",
             snapshot.sequence,
             stage,
             words.size(),
@@ -1618,10 +1618,10 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
                     ? alphabet[c & 0x3fu]
                     : '=';
             }
-            payload[outputOffset] = '\\0';
+            payload[outputOffset] = '\0';
             std::snprintf(
                 line, sizeof(line),
-                "[KisakCOD][VK CRASH SPIRV] seq=%u stage=%s part=%zu/%zu data=%s\\n",
+                "[KisakCOD][VK CRASH SPIRV] seq=%u stage=%s part=%zu/%zu data=%s\n",
                 snapshot.sequence, stage, part + 1u, partCount, payload);
             writeLine(line);
         }
@@ -4321,7 +4321,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         "alpha=%u/%u/%u spec=%u/%u storedSpec=%u/%u "
         "depth=%u/%u/%u stencil=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u "
         "mask=%u atoc=%u dynamic=%u layout=%p modules=%p/%p "
-        "specData=%p/%zu values=%.3f/%.6f\\n",
+        "specData=%p/%zu values=%.3f/%.6f\n",
         pipelineCreateSequence,
         static_cast<unsigned long long>(key),
         static_cast<unsigned long long>(m_vertexShader->serial),
