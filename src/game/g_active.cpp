@@ -695,13 +695,9 @@ void __cdecl ClientThink_real(gentity_s *ent)
         clipmask = 8454161;
     v39.tracemask = clipmask;
     v39.handler = 1;
-#endif
-#endif
     //Profile_Begin(27);
     Pmove(&v39);
-#endif
     //Profile_EndInternal(0);
-#endif
     v12 = ent->client;
     if (v12->ps.eventSequence != eventSequence)
         ent->r.eventTime = level.time;
