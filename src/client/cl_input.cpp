@@ -1712,6 +1712,35 @@ void __cdecl CL_WritePacket()
         {
             v7 = v6 & 0x3F;
             v8 = &clients[0].cmds[v7];
+#ifdef __SWITCH__
+            // The HID layer and CL_GamepadMove can build valid axes while the
+            // SP command loop still intentionally skips server think in
+            // cl_freemove mode. Trace this final handoff, not just raw stick
+            // values, so controller mapping and server delivery are distinct.
+            static unsigned int switchPadCommandFlowCount = 0;
+            if ((v8->forwardmove || v8->rightmove) &&
+                switchPadCommandFlowCount < 48u)
+            {
+                const bool serverThinkEnabled = cl_freemove->current.integer == 0;
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][PAD CMD FLOW] sample=%u cmd=%d time=%d move=(%d,%d,%d) buttons=0x%08x freemove=%d serverThink=%d conn=%d pm=0x%x\\n",
+                    switchPadCommandFlowCount++,
+                    cmdNumber - v4 + (v4 - v5),
+                    v8->serverTime,
+                    static_cast<int>(v8->forwardmove),
+                    static_cast<int>(v8->rightmove),
+                    static_cast<int>(v8->upmove),
+                    static_cast<unsigned int>(v8->buttons),
+                    cl_freemove->current.integer,
+                    serverThinkEnabled ? 1 : 0,
+                    static_cast<int>(clientUIActives[0].connectionState),
+                    static_cast<unsigned int>(clients[0].snap.ps.pm_flags));
+                Switch_LogWrite(trace);
+            }
+#endif
             if (!cl_freemove->current.integer)
             {
                 SV_RecordClientThink(&clients[0].cmds[v7]);
