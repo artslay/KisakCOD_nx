@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #ifndef KISAK_SP
 #error This File is SinglePlayer Only
 #endif
