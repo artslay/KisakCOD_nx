@@ -45,6 +45,15 @@ extern std::atomic<uint32_t> g_switchLastDrawStreamMask;
 extern std::atomic<uint32_t> g_switchLastDrawStream0BufferBytes;
 extern std::atomic<uint32_t> g_switchLastDrawStream0Offset;
 extern std::atomic<uint32_t> g_switchLastDrawStream0Stride;
+extern std::atomic<uint64_t> g_switchLastDrawVertexShaderSerial;
+extern std::atomic<uint64_t> g_switchLastDrawPixelShaderSerial;
+extern std::atomic<uintptr_t> g_switchLastDrawTextureImage[4];
+extern std::atomic<uintptr_t> g_switchLastDrawTextureView[4];
+extern std::atomic<uint32_t> g_switchLastDrawTextureWidth[4];
+extern std::atomic<uint32_t> g_switchLastDrawTextureHeight[4];
+extern std::atomic<uint32_t> g_switchLastDrawTextureFormat[4];
+extern std::atomic<uint32_t> g_switchLastDrawTextureSourceFormat[4];
+extern std::atomic<uint32_t> g_switchLastDrawTextureLayout[4];
 #endif
 
 namespace
@@ -204,6 +213,45 @@ void VulkanBackend::SetError(const char *message, VkResult result)
             g_switchLastDrawStream0Offset.load(std::memory_order_relaxed),
             g_switchLastDrawStream0Stride.load(std::memory_order_relaxed));
         Switch_LogWrite(context);
+        char drawTextures[1024];
+        std::snprintf(
+            drawTextures, sizeof(drawTextures),
+            "[KisakCOD][VK DEVICE LOST DRAW] vsSerial=%llu psSerial=%llu "
+            "t0=(image:%p view:%p size:%ux%u fmt:%u src:%u layout:%u) "
+            "t1=(image:%p view:%p size:%ux%u fmt:%u src:%u layout:%u) "
+            "t2=(image:%p view:%p size:%ux%u fmt:%u src:%u layout:%u) "
+            "t3=(image:%p view:%p size:%ux%u fmt:%u src:%u layout:%u)\n",
+            static_cast<unsigned long long>(g_switchLastDrawVertexShaderSerial.load(std::memory_order_relaxed)),
+            static_cast<unsigned long long>(g_switchLastDrawPixelShaderSerial.load(std::memory_order_relaxed)),
+            reinterpret_cast<void *>(g_switchLastDrawTextureImage[0].load(std::memory_order_relaxed)),
+            reinterpret_cast<void *>(g_switchLastDrawTextureView[0].load(std::memory_order_relaxed)),
+            g_switchLastDrawTextureWidth[0].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureHeight[0].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureFormat[0].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureSourceFormat[0].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureLayout[0].load(std::memory_order_relaxed),
+            reinterpret_cast<void *>(g_switchLastDrawTextureImage[1].load(std::memory_order_relaxed)),
+            reinterpret_cast<void *>(g_switchLastDrawTextureView[1].load(std::memory_order_relaxed)),
+            g_switchLastDrawTextureWidth[1].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureHeight[1].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureFormat[1].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureSourceFormat[1].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureLayout[1].load(std::memory_order_relaxed),
+            reinterpret_cast<void *>(g_switchLastDrawTextureImage[2].load(std::memory_order_relaxed)),
+            reinterpret_cast<void *>(g_switchLastDrawTextureView[2].load(std::memory_order_relaxed)),
+            g_switchLastDrawTextureWidth[2].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureHeight[2].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureFormat[2].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureSourceFormat[2].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureLayout[2].load(std::memory_order_relaxed),
+            reinterpret_cast<void *>(g_switchLastDrawTextureImage[3].load(std::memory_order_relaxed)),
+            reinterpret_cast<void *>(g_switchLastDrawTextureView[3].load(std::memory_order_relaxed)),
+            g_switchLastDrawTextureWidth[3].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureHeight[3].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureFormat[3].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureSourceFormat[3].load(std::memory_order_relaxed),
+            g_switchLastDrawTextureLayout[3].load(std::memory_order_relaxed));
+        Switch_LogWrite(drawTextures);
     }
 #endif
 }
