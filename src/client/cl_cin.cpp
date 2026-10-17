@@ -14,10 +14,24 @@ bool cin_skippable;
 extern void CL_PrepareCinematicSkipInput(int localClientNum);
 extern void Switch_LogWrite(const char *msg);
 static bool switchMapLoadingCinematicFinished;
+static bool switchMapLoadingCinematicActive;
 
 void SCR_ResetMapLoadingCinematicFinished()
 {
     switchMapLoadingCinematicFinished = false;
+    switchMapLoadingCinematicActive = false;
+}
+
+void SCR_SetMapLoadingCinematicActive(bool active)
+{
+    switchMapLoadingCinematicActive = active;
+    if (active)
+        Switch_LogWrite("[KisakCOD][CIN LOAD] map-loading cinematic marked active\n");
+}
+
+bool SCR_IsMapLoadingCinematicActive()
+{
+    return switchMapLoadingCinematicActive;
 }
 
 bool SCR_ConsumeMapLoadingCinematicFinished()
@@ -109,8 +123,19 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
         const bool hasNextCommand = nextCommand && nextCommand[0] != '\0';
 
 #ifdef __SWITCH__
-        if (cinematicFinished &&
-            CL_GetLocalClientConnectionState(localClientNum) == CA_LOADING)
+        if (switchMapLoadingCinematicActive)
+        {
+            // The load screen may transition CA_LOADING -> CA_ACTIVE before
+            // its movie reaches EOF. Retain completion across that transition.
+            switchMapLoadingCinematicFinished = true;
+            switchMapLoadingCinematicActive = false;
+            Switch_LogWrite(
+                cinematicFinished
+                    ? "[KisakCOD][CIN LOAD] loading cinematic reached EOF\n"
+                    : "[KisakCOD][CIN LOAD] loading cinematic skipped by input\n");
+        }
+        else if (cinematicFinished &&
+                 CL_GetLocalClientConnectionState(localClientNum) == CA_LOADING)
         {
             switchMapLoadingCinematicFinished = true;
             Switch_LogWrite("[KisakCOD][CIN LOAD] completed loading cinematic latched\n");
