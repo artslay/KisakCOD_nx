@@ -724,6 +724,25 @@ void __cdecl RB_PatchModelLighting(const GfxModelLightingPatch *patchList, uint3
     uint32_t lockValue; // [esp+48h] [ebp-8h]
     bool useAltUpdate; // [esp+4Fh] [ebp-1h]
 
+#ifdef __SWITCH__
+    // Trace whether dynamic-model lighting patches and their atlas are active.
+    // This is intentionally bounded to avoid dumping one entry per surface.
+    static uint32_t switchModelLightingTraceCall = 0;
+    const uint32_t switchModelLightingCall = switchModelLightingTraceCall++;
+    if (switchModelLightingCall < 8u ||
+        (switchModelLightingCall % 300u) == 0u)
+    {
+        char trace[320];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][MODEL LIGHTING] call=%u patches=%u height=%u image=%p atlas=%p alt=%d\n",
+            switchModelLightingCall, patchCount, modelLightGlob.imageHeight,
+            static_cast<void *>(modelLightGlob.image),
+            static_cast<void *>(modelLightGlob.lightImages[0]),
+            R_UseAltModelLightingUpdate() ? 1 : 0);
+        Switch_LogWrite(trace);
+    }
+#endif
+
     if (patchCount)
     {
         // GfxBackEndData owns a fixed 4096-entry model-lighting patch array.
