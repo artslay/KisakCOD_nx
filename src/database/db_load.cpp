@@ -5633,6 +5633,13 @@ void __cdecl Load_XSurface(bool atStreamStart)
         if (vertListToken == UINT32_MAX)
         {
             DB_AllocStreamPos(3);
+            // XRigidVertList is 12 bytes in the fastfile but expands to 16
+            // bytes on Switch because collisionTree becomes a native pointer.
+            // Publish the serialized array start -> native array mapping so
+            // other surfaces that reference this list never retain a pointer
+            // into the packed 32-bit stream data.
+            const uintptr_t serializedVertListAddress =
+                reinterpret_cast<uintptr_t>(DB_GetStreamPos());
             varXSurface->vertList =
                 reinterpret_cast<XRigidVertList *>(
                     DB_AllocSwitchAssetMemory(
@@ -5659,13 +5666,48 @@ void __cdecl Load_XSurface(bool atStreamStart)
                 g_switchDbStage = "xmodel/surf/vertlist_load";
             }
             Load_XRigidVertListArray(1, varXSurface->vertListCount);
+            if (varXSurface->vertListCount != 0 && serializedVertListAddress &&
+                varXSurface->vertList)
+            {
+                DB_RegisterSwitchPointerAlias(
+                    serializedVertListAddress,
+                    reinterpret_cast<uintptr_t>(varXSurface->vertList));
+                DB_FixupSwitchPointerAliases();
+            }
             if (switchTraceXModel)
                 g_switchDbStage = "xmodel/surf/vertlist_done";
         }
         else
         {
-            varXSurface->vertList = reinterpret_cast<XRigidVertList *>(
-                DB_ConvertOffsetToPointerValue(vertListToken));
+            const uintptr_t serializedVertListAddress =
+                DB_ConvertOffsetToPointerValue(vertListToken);
+            uintptr_t nativeVertListAddress = 0;
+            bool resolved = serializedVertListAddress &&
+                DB_ResolveSwitchPointerAlias(
+                    serializedVertListAddress, &nativeVertListAddress) &&
+                nativeVertListAddress;
+            if (!resolved && serializedVertListAddress)
+                resolved = DB_TryResolveSwitchSerializedAliasChain(
+                    serializedVertListAddress, &nativeVertListAddress) &&
+                    nativeVertListAddress;
+
+            if (resolved)
+            {
+                varXSurface->vertList =
+                    reinterpret_cast<XRigidVertList *>(nativeVertListAddress);
+            }
+            else
+            {
+                // Never expose the packed 12-byte records as native
+                // XRigidVertList objects. A later inline array may register
+                // this address; keep a fixup to patch the native slot then.
+                varXSurface->vertList = nullptr;
+                if (serializedVertListAddress)
+                    DB_AddSwitchPointerAliasFixup(
+                        serializedVertListAddress,
+                        reinterpret_cast<uintptr_t *>(
+                            &varXSurface->vertList));
+            }
         }
     }
 
