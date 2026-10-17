@@ -1816,13 +1816,38 @@ void __cdecl UI_Refresh()
 #endif
         if (g_currentMenuType == UIMENU_PREGAME)
         {
+#ifdef __SWITCH__
+            // The Switch loading video can be followed by an intro/fade queued
+            // from the game script. In that case the "pregame" menu may remain
+            // in the stack but no longer be visible, so the stock visibility
+            // gate never calls UI_PlayerStart and leaves a finished movie over
+            // a running game. Consume the load-completion latch only once the
+            // client is active, then finish the normal auto-continue transition.
+            if (CL_GetLocalClientConnectionState(0) == CA_ACTIVE)
+            {
+                const bool completedLoadingCinematic = SCR_ConsumeMapLoadingCinematicFinished();
+                const bool pregameVisible = Menu_IsMenuOpenAndVisible(0, "pregame");
+                const bool cinematicFinished = R_Cinematic_IsFinished();
+                const bool cinematicStillActive =
+                    R_Cinematic_IsStarted() ||
+                    R_Cinematic_IsPending() ||
+                    R_Cinematic_IsNextReady();
+
+                if ((pregameVisible && cinematicFinished) ||
+                    completedLoadingCinematic ||
+                    (!pregameVisible && !cinematicStillActive))
+                {
+                    Switch_LogWrite("[KisakCOD][CIN LOAD] completing pregame-to-game transition\\n");
+                    UI_PlayerStart();
+                }
+            }
+#else
             if (Menu_IsMenuOpenAndVisible(0, "pregame"))
             {
-                const bool cinematicFinished = R_Cinematic_IsFinished();
-                const bool completedLoadingCinematic = SCR_ConsumeMapLoadingCinematicFinished();
-                if (cinematicFinished || completedLoadingCinematic)
+                if (R_Cinematic_IsFinished())
                     UI_PlayerStart();
             }
+#endif
         }
 
         // LWSS ADD - draw cursor icon
