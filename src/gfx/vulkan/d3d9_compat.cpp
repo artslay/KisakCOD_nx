@@ -1534,6 +1534,103 @@ bool GetUniformLayout(const MOJOSHADER_parseData *parse, VulkanUniformLayout *ou
 }
 }
 
+extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const char *))
+{
+    if (!writeLine ||
+        !g_switchFrameStage ||
+        std::strcmp(g_switchFrameStage,
+            "frame/render/vulkan/pipeline/driver_create_call") != 0)
+        return;
+
+    const SwitchPipelineCrashSnapshot &snapshot = g_switchPipelineCrashSnapshot;
+    if (!snapshot.valid || !snapshot.vertexSpirv || !snapshot.pixelSpirv)
+    {
+        writeLine("[KisakCOD][VK CRASH PIPELINE] snapshot unavailable\\n");
+        return;
+    }
+
+    // This is emitted only by the libnx exception handler, so regular pipeline
+    // creation does not flood kisakcod.log or create shader dump files.
+    writeLine(snapshot.summary);
+
+    const auto dumpShader = [writeLine, &snapshot](
+        const char *stage,
+        const std::vector<uint32_t> *shaderWords)
+    {
+        if (!shaderWords)
+            return;
+
+        const std::vector<uint32_t> &words = *shaderWords;
+        const size_t byteCount = words.size() * sizeof(uint32_t);
+        const uint64_t hash = HashSpirvWords(words);
+        char header[320];
+        std::snprintf(
+            header, sizeof(header),
+            "[KisakCOD][VK CRASH SPIRV] seq=%u stage=%s words=%zu bytes=%zu hash=%016llx magic=%08x version=%08x generator=%08x bound=%u schema=%u\\n",
+            snapshot.sequence,
+            stage,
+            words.size(),
+            byteCount,
+            static_cast<unsigned long long>(hash),
+            words.size() > 0 ? words[0] : 0u,
+            words.size() > 1 ? words[1] : 0u,
+            words.size() > 2 ? words[2] : 0u,
+            words.size() > 3 ? words[3] : 0u,
+            words.size() > 4 ? words[4] : 0u);
+        writeLine(header);
+
+        // Emit the captured module as short Base64 chunks directly to the log.
+        // Encode in fixed-size stack buffers; do not allocate or touch the SD card
+        // while already inside an exception handler.
+        static constexpr char alphabet[] =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        const size_t groupCount = (byteCount + 2u) / 3u;
+        constexpr size_t groupsPerLine = 180u; // 720 Base64 characters
+        const size_t partCount = (groupCount + groupsPerLine - 1u) / groupsPerLine;
+        const auto byteAt = [&words, byteCount](size_t offset) -> uint8_t
+        {
+            if (offset >= byteCount)
+                return 0;
+            return static_cast<uint8_t>(
+                words[offset / sizeof(uint32_t)] >>
+                ((offset % sizeof(uint32_t)) * 8u));
+        };
+
+        for (size_t part = 0; part < partCount; ++part)
+        {
+            char payload[groupsPerLine * 4u + 1u];
+            char line[900];
+            size_t outputOffset = 0;
+            const size_t firstGroup = part * groupsPerLine;
+            const size_t lastGroup = std::min(groupCount, firstGroup + groupsPerLine);
+            for (size_t group = firstGroup; group < lastGroup; ++group)
+            {
+                const size_t byteOffset = group * 3u;
+                const uint32_t a = byteAt(byteOffset);
+                const uint32_t b = byteAt(byteOffset + 1u);
+                const uint32_t c = byteAt(byteOffset + 2u);
+                payload[outputOffset++] = alphabet[(a >> 2) & 0x3fu];
+                payload[outputOffset++] = alphabet[((a & 0x03u) << 4) | ((b >> 4) & 0x0fu)];
+                payload[outputOffset++] = byteOffset + 1u < byteCount
+                    ? alphabet[((b & 0x0fu) << 2) | ((c >> 6) & 0x03u)]
+                    : '=';
+                payload[outputOffset++] = byteOffset + 2u < byteCount
+                    ? alphabet[c & 0x3fu]
+                    : '=';
+            }
+            payload[outputOffset] = '\\0';
+            std::snprintf(
+                line, sizeof(line),
+                "[KisakCOD][VK CRASH SPIRV] seq=%u stage=%s part=%zu/%zu data=%s\\n",
+                snapshot.sequence, stage, part + 1u, partCount, payload);
+            writeLine(line);
+        }
+    };
+
+    dumpShader("vs", snapshot.vertexSpirv);
+    dumpShader("ps", snapshot.pixelSpirv);
+}
+
 extern "C" void Switch_DumpVulkanUniformTraceOnCrash(void (*writeLine)(const char *))
 {
     if (!writeLine)
