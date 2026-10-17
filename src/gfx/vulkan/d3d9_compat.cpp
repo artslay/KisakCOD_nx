@@ -1723,12 +1723,12 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
     }
 
     // This is emitted only by the libnx exception handler. Keep ordinary crash
-    // logs compact; the requested seq=43 fragment capture is the only full
-    // Base64 dump, otherwise two large modules obscure the useful crash context.
+    // logs compact; capture only the fragment shader for the current reproducer
+    // (pipeline 68), rather than dumping both modules for every pipeline crash.
     writeLine(snapshot.summary);
-    if (snapshot.sequence != 43u)
+    if (snapshot.sequence != 68u)
     {
-        writeLine("[KisakCOD][VK CRASH SPIRV] raw_dump=omitted; reserved for seq=43 PS capture\n");
+        writeLine("[KisakCOD][VK CRASH SPIRV] raw_dump=omitted; reserved for seq=68 PS capture\n");
         return;
     }
 
