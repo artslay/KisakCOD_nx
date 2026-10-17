@@ -112,6 +112,25 @@ extern volatile uintptr_t g_switchSkinCacheLastBuffer;
 extern volatile int32_t g_switchSkinCacheCreateCalled;
 extern volatile int32_t g_switchSkinCacheCreateHr;
 }
+extern "C" {
+extern thread_local volatile uintptr_t g_switchVkModuleTracePhase;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceDevice;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceDeclaration;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceDeclarationSerial;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceVertexShader;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceVertexSerial;
+extern thread_local volatile uintptr_t g_switchVkModuleTracePixelShader;
+extern thread_local volatile uintptr_t g_switchVkModuleTracePixelSerial;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceActiveShader;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceActiveSerial;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceCode;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceBytes;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceWords;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceHash;
+extern thread_local volatile uintptr_t g_switchVkModuleTraceAlphaTest;
+extern thread_local volatile uint32_t g_switchVkModuleTraceHeader[5];
+extern thread_local volatile uint32_t g_switchVkModuleTraceTail;
+}
 extern thread_local const char * volatile g_switchFrameStage;
 extern "C" thread_local char g_switchCgFrameStage[192];
 extern "C" thread_local const char * volatile g_switchScriptLoadStage;
@@ -296,6 +315,47 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         static_cast<unsigned long long>(g_switchSkinCacheLastBuffer),
         g_switchSkinCacheCreateCalled,
         g_switchSkinCacheCreateHr);
+    Switch_LogCrashLine(line);
+
+    const uintptr_t vkModulePhase = g_switchVkModuleTracePhase;
+    const char *vkModulePhaseName = "inactive-or-returned";
+    switch (vkModulePhase)
+    {
+        case 1u: vkModulePhaseName = "vertex-create-active"; break;
+        case 2u: vkModulePhaseName = "pixel-create-active"; break;
+        case 3u: vkModulePhaseName = "shader-modules-returned"; break;
+        case 4u: vkModulePhaseName = "pixel-variant-create-active"; break;
+        case 10u: vkModulePhaseName = "vertex-create-returned"; break;
+        case 20u: vkModulePhaseName = "pixel-create-returned"; break;
+        case 40u: vkModulePhaseName = "pixel-variant-create-returned"; break;
+        default: break;
+    }
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH VK MODULE] phase=%llu(%s) device=%p decl=%p/%llu vs=%p/%llu ps=%p/%llu active=%p/%llu code=%p bytes=%llu words=%llu hash=0x%016llx alphaTest=%llu head=%08x,%08x,%08x,%08x,%08x tail=%08x\n",
+        static_cast<unsigned long long>(vkModulePhase),
+        vkModulePhaseName,
+        reinterpret_cast<void *>(g_switchVkModuleTraceDevice),
+        reinterpret_cast<void *>(g_switchVkModuleTraceDeclaration),
+        static_cast<unsigned long long>(g_switchVkModuleTraceDeclarationSerial),
+        reinterpret_cast<void *>(g_switchVkModuleTraceVertexShader),
+        static_cast<unsigned long long>(g_switchVkModuleTraceVertexSerial),
+        reinterpret_cast<void *>(g_switchVkModuleTracePixelShader),
+        static_cast<unsigned long long>(g_switchVkModuleTracePixelSerial),
+        reinterpret_cast<void *>(g_switchVkModuleTraceActiveShader),
+        static_cast<unsigned long long>(g_switchVkModuleTraceActiveSerial),
+        reinterpret_cast<void *>(g_switchVkModuleTraceCode),
+        static_cast<unsigned long long>(g_switchVkModuleTraceBytes),
+        static_cast<unsigned long long>(g_switchVkModuleTraceWords),
+        static_cast<unsigned long long>(g_switchVkModuleTraceHash),
+        static_cast<unsigned long long>(g_switchVkModuleTraceAlphaTest),
+        static_cast<unsigned int>(g_switchVkModuleTraceHeader[0]),
+        static_cast<unsigned int>(g_switchVkModuleTraceHeader[1]),
+        static_cast<unsigned int>(g_switchVkModuleTraceHeader[2]),
+        static_cast<unsigned int>(g_switchVkModuleTraceHeader[3]),
+        static_cast<unsigned int>(g_switchVkModuleTraceHeader[4]),
+        static_cast<unsigned int>(g_switchVkModuleTraceTail));
     Switch_LogCrashLine(line);
 
     const uintptr_t pc = static_cast<uintptr_t>(ctx->pc.x);
