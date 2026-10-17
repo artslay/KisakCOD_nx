@@ -2535,10 +2535,10 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
         !I_stricmp(out, "quitgame") ||
         !I_stricmp(out, "exitgame"))
     {
-        // Run shutdown through the regular command buffer, outside the UI
-        // script traversal. This also works when the menu script closes its
-        // current menu before dispatching the exit action.
-        Cbuf_AddText(0, "quit\n");
+        // Match the original engine's Quit action. Calling the command
+        // directly avoids depending on a later command-buffer/UI frame.
+        const int controllerIndex = CL_ControllerIndexFromClientNum(localClientNum);
+        Cmd_ExecuteSingleCommand(localClientNum, controllerIndex, (char *)"quit");
         return;
     }
 
