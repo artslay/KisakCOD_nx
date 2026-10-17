@@ -254,7 +254,101 @@ void VulkanBackend::SetError(const char *message, VkResult result)
         Switch_LogWrite(drawTextures);
     }
 #endif
+#ifdef VK_EXT_device_fault
+    if (result == VK_ERROR_DEVICE_LOST)
+        LogDeviceFaultInfo();
+#endif
 }
+
+#ifdef VK_EXT_device_fault
+void VulkanBackend::LogDeviceFaultInfo()
+{
+    if (!m_deviceFaultEnabled || !m_getDeviceFaultInfo || !m_device)
+    {
+        Switch_LogWrite("[KisakCOD][VK DEVICE FAULT] enabled=0; extension unavailable\\n");
+        return;
+    }
+
+    bool expected = false;
+    if (!m_deviceFaultInfoReported.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel))
+        return;
+
+    VkDeviceFaultCountsEXT counts{};
+    counts.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT;
+    const VkResult countsResult = m_getDeviceFaultInfo(m_device, &counts, nullptr);
+
+    char summary[512];
+    std::snprintf(
+        summary, sizeof(summary),
+        "[KisakCOD][VK DEVICE FAULT] query=counts result=%d addressCount=%u vendorCount=%u vendorBinaryBytes=%llu\\n",
+        static_cast<int>(countsResult),
+        counts.addressInfoCount,
+        counts.vendorInfoCount,
+        static_cast<unsigned long long>(counts.vendorBinarySize));
+    Switch_LogWrite(summary);
+    if (countsResult != VK_SUCCESS)
+        return;
+
+    // Keep post-loss diagnostics bounded because counts are driver-controlled.
+    constexpr uint32_t kMaxFaultAddresses = 64;
+    constexpr uint32_t kMaxVendorFaults = 64;
+    const uint32_t addressCapacity = std::min(counts.addressInfoCount, kMaxFaultAddresses);
+    const uint32_t vendorCapacity = std::min(counts.vendorInfoCount, kMaxVendorFaults);
+    std::vector<VkDeviceFaultAddressInfoEXT> addresses(addressCapacity);
+    std::vector<VkDeviceFaultVendorInfoEXT> vendors(vendorCapacity);
+
+    VkDeviceFaultCountsEXT returnedCounts = counts;
+    returnedCounts.addressInfoCount = addressCapacity;
+    returnedCounts.vendorInfoCount = vendorCapacity;
+    returnedCounts.vendorBinarySize = 0;
+
+    VkDeviceFaultInfoEXT info{};
+    info.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_EXT;
+    info.pAddressInfos = addresses.empty() ? nullptr : addresses.data();
+    info.pVendorInfos = vendors.empty() ? nullptr : vendors.data();
+    info.pVendorBinaryData = nullptr;
+
+    const VkResult infoResult = m_getDeviceFaultInfo(m_device, &returnedCounts, &info);
+    char detail[768];
+    std::snprintf(
+        detail, sizeof(detail),
+        "[KisakCOD][VK DEVICE FAULT] query=details result=%d description=%.400s addresses=%u/%u vendors=%u/%u\\n",
+        static_cast<int>(infoResult),
+        info.description,
+        returnedCounts.addressInfoCount, counts.addressInfoCount,
+        returnedCounts.vendorInfoCount, counts.vendorInfoCount);
+    Switch_LogWrite(detail);
+    if (infoResult != VK_SUCCESS && infoResult != VK_INCOMPLETE)
+        return;
+
+    for (uint32_t i = 0; i < std::min(returnedCounts.addressInfoCount, addressCapacity); ++i)
+    {
+        char address[256];
+        std::snprintf(
+            address, sizeof(address),
+            "[KisakCOD][VK DEVICE FAULT ADDRESS] i=%u type=%u address=0x%llx precision=0x%llx\\n",
+            i,
+            static_cast<unsigned int>(addresses[i].addressType),
+            static_cast<unsigned long long>(addresses[i].reportedAddress),
+            static_cast<unsigned long long>(addresses[i].addressPrecision));
+        Switch_LogWrite(address);
+    }
+
+    for (uint32_t i = 0; i < std::min(returnedCounts.vendorInfoCount, vendorCapacity); ++i)
+    {
+        char vendor[768];
+        std::snprintf(
+            vendor, sizeof(vendor),
+            "[KisakCOD][VK DEVICE FAULT VENDOR] i=%u code=0x%llx data=0x%llx description=%.512s\\n",
+            i,
+            static_cast<unsigned long long>(vendors[i].vendorFaultCode),
+            static_cast<unsigned long long>(vendors[i].vendorFaultData),
+            vendors[i].description);
+        Switch_LogWrite(vendor);
+    }
+}
+#endif
 
 const char *VulkanBackend::GetLastError() const
 {
@@ -406,6 +500,11 @@ void VulkanBackend::Shutdown()
     m_uniformOffset = 0;
     m_initialized = false;
     m_deviceLost.store(false, std::memory_order_release);
+#ifdef VK_EXT_device_fault
+    m_getDeviceFaultInfo = nullptr;
+    m_deviceFaultInfoReported.store(false, std::memory_order_release);
+    m_deviceFaultEnabled = false;
+#endif
     m_fillModeNonSolid = false;
     m_samplerAnisotropy = false;
     m_maxSamplerAnisotropy = 1.0f;
@@ -546,12 +645,44 @@ bool VulkanBackend::CreateDevice()
     queue.queueCount = 1;
     queue.pQueuePriorities = &priority;
 
-    const char *extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    std::vector<const char *> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    bool deviceFaultExtensionAvailable = false;
+#ifdef VK_EXT_device_fault
+    // Device-fault support is optional; without the extension the renderer path is unchanged.
+    uint32_t extensionCount = 0;
+    VkResult extensionResult = vkEnumerateDeviceExtensionProperties(
+        m_physicalDevice, nullptr, &extensionCount, nullptr);
+    if (extensionResult == VK_SUCCESS && extensionCount)
+    {
+        std::vector<VkExtensionProperties> deviceExtensions(extensionCount);
+        extensionResult = vkEnumerateDeviceExtensionProperties(
+            m_physicalDevice, nullptr, &extensionCount, deviceExtensions.data());
+        if (extensionResult == VK_SUCCESS)
+        {
+            for (const VkExtensionProperties &extension : deviceExtensions)
+            {
+                if (std::strcmp(extension.extensionName, VK_EXT_DEVICE_FAULT_EXTENSION_NAME) == 0)
+                {
+                    deviceFaultExtensionAvailable = true;
+                    break;
+                }
+            }
+        }
+    }
+#endif
 
     VkPhysicalDeviceFeatures features{};
     VkPhysicalDeviceVulkan13Features vulkan13Features{};
     vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     vulkan13Features.dynamicRendering = VK_TRUE;
+#ifdef VK_EXT_device_fault
+    VkPhysicalDeviceFaultFeaturesEXT faultFeatures{};
+    if (deviceFaultExtensionAvailable)
+    {
+        faultFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT;
+        vulkan13Features.pNext = &faultFeatures;
+    }
+#endif
 
     VkPhysicalDeviceFeatures2 features2{};
     features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -578,6 +709,24 @@ bool VulkanBackend::CreateDevice()
     vulkan13Features.dynamicRendering = VK_TRUE;
     vulkan13Features.shaderDemoteToHelperInvocation =
         m_shaderDemoteToHelperInvocation ? VK_TRUE : VK_FALSE;
+#ifdef VK_EXT_device_fault
+    m_deviceFaultEnabled =
+        deviceFaultExtensionAvailable && faultFeatures.deviceFault == VK_TRUE;
+    m_getDeviceFaultInfo = nullptr;
+    m_deviceFaultInfoReported.store(false, std::memory_order_release);
+    if (m_deviceFaultEnabled)
+    {
+        extensions.push_back(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
+        faultFeatures.pNext = nullptr;
+        faultFeatures.deviceFault = VK_TRUE;
+        faultFeatures.deviceFaultVendorBinary = VK_FALSE;
+        vulkan13Features.pNext = &faultFeatures;
+    }
+    else
+    {
+        vulkan13Features.pNext = nullptr;
+    }
+#endif
 
     // Wireframe is optional in Vulkan. Query it with the core features and
     // enable it only when the physical device supports it; requesting a
@@ -608,8 +757,8 @@ bool VulkanBackend::CreateDevice()
     info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     info.queueCreateInfoCount = 1;
     info.pQueueCreateInfos = &queue;
-    info.enabledExtensionCount = 1;
-    info.ppEnabledExtensionNames = extensions;
+    info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+    info.ppEnabledExtensionNames = extensions.data();
     info.pEnabledFeatures = &features;
 
     const VkResult result = vkCreateDevice(m_physicalDevice, &info, nullptr, &m_device);
@@ -619,6 +768,22 @@ bool VulkanBackend::CreateDevice()
         return false;
     }
 
+#ifdef VK_EXT_device_fault
+    if (m_deviceFaultEnabled)
+    {
+        m_getDeviceFaultInfo = reinterpret_cast<PFN_vkGetDeviceFaultInfoEXT>(
+            vkGetDeviceProcAddr(m_device, "vkGetDeviceFaultInfoEXT"));
+        m_deviceFaultEnabled = m_getDeviceFaultInfo != nullptr;
+    }
+    char faultMsg[192];
+    std::snprintf(
+        faultMsg, sizeof(faultMsg),
+        "[KisakCOD][VK DEVICE FAULT] extension=%u enabled=%u function=%u\\n",
+        deviceFaultExtensionAvailable ? 1u : 0u,
+        m_deviceFaultEnabled ? 1u : 0u,
+        m_getDeviceFaultInfo ? 1u : 0u);
+    Switch_LogWrite(faultMsg);
+#endif
     vkGetDeviceQueue(m_device, m_graphicsQueueFamily, 0, &m_graphicsQueue);
     return true;
 }
