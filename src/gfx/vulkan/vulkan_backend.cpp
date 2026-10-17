@@ -2645,10 +2645,21 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
                     g_switchFrameStage = "frame/upload/immediate_queue_submit_return";
 #endif
                 }
+#ifdef __SWITCH__
+                // The old stage marker remained active through the wait and
+                // command-buffer teardown, making a crash snapshot ambiguous.
+                g_switchFrameStage = "frame/upload/immediate_queue_lock_released";
+#endif
                 if (submitResult == VK_SUCCESS)
                 {
+#ifdef __SWITCH__
+                    g_switchFrameStage = "frame/upload/immediate_wait_fence";
+#endif
                     const VkResult waitResult =
                         vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX);
+#ifdef __SWITCH__
+                    g_switchFrameStage = "frame/upload/immediate_wait_fence_return";
+#endif
                     if (waitResult == VK_SUCCESS)
                         submitted = true;
                     else
@@ -2656,9 +2667,18 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
                 }
                 else
                 {
+#ifdef __SWITCH__
+                    g_switchFrameStage = "frame/upload/immediate_submit_error";
+#endif
                     SetError("vkQueueSubmit failed for immediate submit", submitResult);
                 }
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/upload/immediate_destroy_fence";
+#endif
                 vkDestroyFence(m_device, fence, nullptr);
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/upload/immediate_destroy_fence_return";
+#endif
             }
             else
             {
@@ -2675,7 +2695,13 @@ bool VulkanBackend::ImmediateSubmit(const std::function<void(VkCommandBuffer)> &
         SetError("vkBeginCommandBuffer failed for immediate submit", beginResult);
     }
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/immediate_free_command_buffer";
+#endif
     vkFreeCommandBuffers(m_device, m_immediateCommandPool, 1, &command);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/immediate_free_command_buffer_return";
+#endif
     return submitted;
 }
 
@@ -2811,7 +2837,13 @@ bool VulkanBackend::UploadImage2D(
             0,0,nullptr,0,nullptr,1,&toShader);
     });
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/image2d_submit_return";
+#endif
     DestroyBuffer(staging, stagingMemory, true);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/image2d_staging_destroy_return";
+#endif
     (void)format;
     return submitted;
 }
@@ -2981,7 +3013,13 @@ bool VulkanBackend::UploadImages2D(const VulkanImageUpload2D *uploads, uint32_t 
             count, toFinal.data());
     });
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/images2d_submit_return";
+#endif
     DestroyBuffer(staging, stagingMemory, true);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/images2d_staging_destroy_return";
+#endif
     return submitted;
 }
 
@@ -3021,9 +3059,23 @@ bool VulkanBackend::DownloadImage2D(
         TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, oldLayout,
                         aspect, range, command);
     });
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/download2d_submit_return";
+#endif
     if (submitted)
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/download2d_copy_to_cpu";
+#endif
         std::memcpy(data, mapped, bytes);
+    }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/download2d_staging_destroy";
+#endif
     DestroyBuffer(staging, stagingMemory, true);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/download2d_staging_destroy_return";
+#endif
     return submitted;
 }
 
@@ -3121,7 +3173,13 @@ bool VulkanBackend::UploadImage3D(
             0,0,nullptr,0,nullptr,1,&barrier);
     });
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/image3d_submit_return";
+#endif
     DestroyBuffer(staging, stagingMemory, true);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/image3d_staging_destroy_return";
+#endif
     (void)format;
     return submitted;
 }
@@ -3160,9 +3218,23 @@ bool VulkanBackend::DownloadImage3D(
         TransitionImage(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, oldLayout,
                         VK_IMAGE_ASPECT_COLOR_BIT, range, command);
     });
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/download3d_submit_return";
+#endif
     if (submitted)
+    {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/download3d_copy_to_cpu";
+#endif
         std::memcpy(data, mapped, bytes);
+    }
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/download3d_staging_destroy";
+#endif
     DestroyBuffer(staging, stagingMemory, true);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/upload/download3d_staging_destroy_return";
+#endif
     return submitted;
 }
 
