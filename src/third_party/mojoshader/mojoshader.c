@@ -4112,7 +4112,8 @@ int MOJOSHADER_linkSPIRVShaders(const MOJOSHADER_parseData *vertex_spirv,
         (vertex_spirv->output_len % (int) sizeof(uint32)) != 0 ||
         (pixel_spirv->output_len % (int) sizeof(uint32)) != 0 ||
         !validate_spirv_patch_table(vertex_spirv, &vTable, &vertexCodeBytes) ||
-        !validate_spirv_patch_table(pixel_spirv, &pTable, &pixelCodeBytes))
+        !validate_spirv_patch_table(pixel_spirv, &pTable, &pixelCodeBytes) ||
+        vertexCodeBytes == 0 || pixelCodeBytes == 0)
         return -2;
 
     for (int i = 0; i < vertexAttributeCount; ++i)
