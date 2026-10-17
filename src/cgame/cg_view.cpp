@@ -1513,48 +1513,7 @@ void __cdecl CG_CalcViewValues(int localClientNum)
             cgameGlob->refdef.viewaxis,
             cgameGlob->refdefViewAngles,
             &cgameGlob->refdef.zNear);
-#ifdef __SWITCH__
-    static uint32_t switchViewOriginCallCount = 0;
-    static uint32_t switchViewOriginLogCount = 0;
-    static int switchLastViewOriginBucket = 0x7fffffff;
-    const uint32_t switchViewOriginCall = switchViewOriginCallCount++;
-    const int switchViewOriginBucket =
-        static_cast<int>(cgameGlob->refdef.vieworg[2] / 1024.0f);
-    const bool switchViewOriginBucketChanged =
-        switchViewOriginBucket != switchLastViewOriginBucket;
-    if (switchViewOriginLogCount < 32 &&
-        (switchViewOriginCall < 4 || switchViewOriginBucketChanged))
-    {
-        const playerState_s *serverPs =
-            cgameGlob->nextSnap ? &cgameGlob->nextSnap->ps : nullptr;
-        char trace[640];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][VIEW ORIGIN] call=%u predicted=%.2f,%.2f,%.2f view=%.2f,%.2f,%.2f height=%.2f pm=%d snapOrigin=%.2f,%.2f,%.2f snapPm=%d snapTime=%d nextTime=%d lerp=%.3f teleported=%d time=%d bucket=%d\n",
-            switchViewOriginCall,
-            cgameGlob->predictedPlayerState.origin[0],
-            cgameGlob->predictedPlayerState.origin[1],
-            cgameGlob->predictedPlayerState.origin[2],
-            cgameGlob->refdef.vieworg[0],
-            cgameGlob->refdef.vieworg[1],
-            cgameGlob->refdef.vieworg[2],
-            cgameGlob->predictedPlayerState.viewHeightCurrent,
-            cgameGlob->predictedPlayerState.pm_type,
-            serverPs ? serverPs->origin[0] : 0.0f,
-            serverPs ? serverPs->origin[1] : 0.0f,
-            serverPs ? serverPs->origin[2] : 0.0f,
-            serverPs ? serverPs->pm_type : -1,
-            cgameGlob->snap ? cgameGlob->snap->serverTime : -1,
-            cgameGlob->nextSnap ? cgameGlob->nextSnap->serverTime : -1,
-            cgameGlob->frameInterpolation,
-            cgameGlob->playerTeleported ? 1 : 0,
-            cgameGlob->time,
-            switchViewOriginBucket);
-        Switch_LogWrite(trace);
-        ++switchViewOriginLogCount;
-    }
-    switchLastViewOriginBucket = switchViewOriginBucket;
-#endif
+
 }
 
 void __cdecl CG_InitView(int localClientNum)
