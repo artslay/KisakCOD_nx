@@ -27,6 +27,8 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
+extern void SCR_SetMapLoadingCinematicActive(bool active);
+extern bool SCR_IsMapLoadingCinematicActive();
 extern thread_local const char *g_switchFrameStage;
 extern void Switch_UI_ResetStatementValidationCache(void);
 #endif
@@ -1729,6 +1731,22 @@ bool __cdecl UI_AllowScriptMenuResponse(int localClientNum)
 
 void UI_PlayerStart()
 {
+#ifdef __SWITCH__
+    // UI_AutoContinue() can reach UI_PlayerStart as soon as the map becomes
+    // active, before the independently-running load movie reaches EOF.
+    // Keep the load movie alive instead of stopping it just because there is
+    // no *next* cinematic queued yet.
+    if (SCR_IsMapLoadingCinematicActive() &&
+        (R_Cinematic_IsStarted() || R_Cinematic_IsPending()))
+    {
+        CL_SetSkipRendering(0);
+        UI_SetActiveMenu(0, UIMENU_NONE);
+        Switch_LogWrite("[KisakCOD][CIN LOAD] preserving active load movie through auto-continue\n");
+        return;
+    }
+    if (SCR_IsMapLoadingCinematicActive())
+        SCR_SetMapLoadingCinematicActive(false);
+#endif
     if (g_currentMenuType != UIMENU_PREGAME && g_currentMenuType != UIMENU_MAIN)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\ui\\ui_main.cpp",
