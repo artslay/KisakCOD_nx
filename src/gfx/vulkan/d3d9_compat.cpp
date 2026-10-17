@@ -94,6 +94,108 @@ std::atomic<uint32_t> g_switchLastDrawTextureLayout[4]{};
 
 namespace
 {
+constexpr size_t kSwitchRecentVulkanDrawCount = 8;
+
+struct SwitchRecentVulkanDraw
+{
+    uint64_t sequence = UINT64_MAX;
+    uint64_t frameSerial = 0;
+    uint64_t pipelineKey = 0;
+    uint64_t vertexShaderSerial = 0;
+    uint64_t pixelShaderSerial = 0;
+    uint32_t kind = 0;
+    uint32_t primitiveType = 0;
+    uint32_t primitiveCount = 0;
+    uint32_t indexCount = 0;
+    uint32_t startIndex = 0;
+    int32_t baseVertex = 0;
+    uint32_t vertexCount = 0;
+    uint32_t indexBufferBytes = 0;
+    uint32_t indexDataAvailable = 0;
+    uint32_t rawIndexMin = UINT32_MAX;
+    uint32_t rawIndexMax = 0;
+    int64_t effectiveVertexMin = INT64_MAX;
+    int64_t effectiveVertexMax = -1;
+    uint32_t streamMask = 0;
+    uint32_t stream0BufferBytes = 0;
+    uint32_t stream0Offset = 0;
+    uint32_t stream0Stride = 0;
+    uintptr_t textureView[4]{};
+    uint32_t textureWidth[4]{};
+    uint32_t textureHeight[4]{};
+    uint32_t textureFormat[4]{};
+    uint32_t textureSourceFormat[4]{};
+    uint32_t textureLayout[4]{};
+};
+
+std::array<SwitchRecentVulkanDraw, kSwitchRecentVulkanDrawCount>
+    g_switchRecentVulkanDraws{};
+std::mutex g_switchRecentVulkanDrawMutex;
+uint64_t g_switchRecentVulkanDrawSequence = 0;
+
+void RecordSwitchRecentVulkanDraw(SwitchRecentVulkanDraw draw)
+{
+    std::lock_guard<std::mutex> lock(g_switchRecentVulkanDrawMutex);
+    draw.sequence = g_switchRecentVulkanDrawSequence++;
+    g_switchRecentVulkanDraws[draw.sequence % kSwitchRecentVulkanDrawCount] = draw;
+}
+}
+
+void Switch_LogRecentVulkanDraws()
+{
+    std::array<SwitchRecentVulkanDraw, kSwitchRecentVulkanDrawCount> recent{};
+    uint64_t nextSequence = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_switchRecentVulkanDrawMutex);
+        recent = g_switchRecentVulkanDraws;
+        nextSequence = g_switchRecentVulkanDrawSequence;
+    }
+
+    const uint64_t firstSequence =
+        nextSequence > kSwitchRecentVulkanDrawCount
+            ? nextSequence - kSwitchRecentVulkanDrawCount : 0;
+    for (uint64_t sequence = firstSequence; sequence < nextSequence; ++sequence)
+    {
+        const SwitchRecentVulkanDraw &draw =
+            recent[sequence % kSwitchRecentVulkanDrawCount];
+        if (draw.sequence != sequence)
+            continue;
+
+        char trace[1280];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK DRAW HISTORY] seq=%llu frame=%llu pipeline=%016llx vs=%llu ps=%llu kind=%u prim=%u primCount=%u indexCount=%u startIndex=%u baseVertex=%d vertexCount=%u indexBytes=%u indexData=%u rawIndex=%u-%u effectiveVertex=%lld-%lld streamMask=0x%04x stream0=(bytes:%u offset:%u stride:%u) t0=(view:%p %ux%u fmt:%u src:%u layout:%u) t1=(view:%p %ux%u fmt:%u src:%u layout:%u) t2=(view:%p %ux%u fmt:%u src:%u layout:%u) t3=(view:%p %ux%u fmt:%u src:%u layout:%u)\n",
+            static_cast<unsigned long long>(draw.sequence),
+            static_cast<unsigned long long>(draw.frameSerial),
+            static_cast<unsigned long long>(draw.pipelineKey),
+            static_cast<unsigned long long>(draw.vertexShaderSerial),
+            static_cast<unsigned long long>(draw.pixelShaderSerial),
+            draw.kind, draw.primitiveType, draw.primitiveCount,
+            draw.indexCount, draw.startIndex, draw.baseVertex, draw.vertexCount,
+            draw.indexBufferBytes, draw.indexDataAvailable,
+            draw.rawIndexMin, draw.rawIndexMax,
+            static_cast<long long>(draw.effectiveVertexMin),
+            static_cast<long long>(draw.effectiveVertexMax),
+            draw.streamMask, draw.stream0BufferBytes,
+            draw.stream0Offset, draw.stream0Stride,
+            reinterpret_cast<void *>(draw.textureView[0]),
+            draw.textureWidth[0], draw.textureHeight[0], draw.textureFormat[0],
+            draw.textureSourceFormat[0], draw.textureLayout[0],
+            reinterpret_cast<void *>(draw.textureView[1]),
+            draw.textureWidth[1], draw.textureHeight[1], draw.textureFormat[1],
+            draw.textureSourceFormat[1], draw.textureLayout[1],
+            reinterpret_cast<void *>(draw.textureView[2]),
+            draw.textureWidth[2], draw.textureHeight[2], draw.textureFormat[2],
+            draw.textureSourceFormat[2], draw.textureLayout[2],
+            reinterpret_cast<void *>(draw.textureView[3]),
+            draw.textureWidth[3], draw.textureHeight[3], draw.textureFormat[3],
+            draw.textureSourceFormat[3], draw.textureLayout[3]);
+        Switch_LogWrite(trace);
+    }
+}
+
+namespace
+{
 uint32_t g_switchSceneDrawPrimitiveCalls = 0;
 uint32_t g_switchSceneDrawIndexedCalls = 0;
 uint32_t g_switchSceneClearCalls = 0;
@@ -6654,6 +6756,45 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             texture ? static_cast<uint32_t>(texture->layout) : 0u,
             std::memory_order_relaxed);
     }
+    SwitchRecentVulkanDraw recentDraw{};
+    recentDraw.frameSerial = m_backend->FrameSerial();
+    recentDraw.pipelineKey = g_switchLastBoundPipelineKey.load(std::memory_order_relaxed);
+    recentDraw.vertexShaderSerial = m_vertexShader ? m_vertexShader->serial : 0u;
+    recentDraw.pixelShaderSerial = m_pixelShader ? m_pixelShader->serial : 0u;
+    recentDraw.kind = 2;
+    recentDraw.primitiveType = primitiveType;
+    recentDraw.primitiveCount = primitiveCount;
+    recentDraw.indexCount = indexCount;
+    recentDraw.startIndex = startIndex;
+    recentDraw.baseVertex = baseVertexIndex;
+    recentDraw.vertexCount = numVertices;
+    recentDraw.indexBufferBytes = static_cast<uint32_t>(
+        std::min<size_t>(m_indices->size, UINT32_MAX));
+    recentDraw.indexDataAvailable = indexData ? 1u : 0u;
+    recentDraw.rawIndexMin = minRawIndex == UINT32_MAX ? UINT32_MAX : minRawIndex;
+    recentDraw.rawIndexMax = maxRawIndex;
+    recentDraw.effectiveVertexMin = minEffectiveVertex;
+    recentDraw.effectiveVertexMax = maxEffectiveVertex;
+    recentDraw.streamMask = boundStreamMask;
+    recentDraw.stream0BufferBytes = stream0BufferBytes;
+    recentDraw.stream0Offset = stream0Offset;
+    recentDraw.stream0Stride = stream0Stride;
+    for (uint32_t slot = 0; slot < 4; ++slot)
+    {
+        const KisakVkTexture *texture = m_textures[slot];
+        recentDraw.textureView[slot] = texture
+            ? reinterpret_cast<uintptr_t>(texture->view) : 0u;
+        recentDraw.textureWidth[slot] = texture ? texture->width : 0u;
+        recentDraw.textureHeight[slot] = texture ? texture->height : 0u;
+        recentDraw.textureFormat[slot] = texture
+            ? static_cast<uint32_t>(texture->format) : 0u;
+        recentDraw.textureSourceFormat[slot] = texture
+            ? static_cast<uint32_t>(texture->sourceFormat) : 0u;
+        recentDraw.textureLayout[slot] = texture
+            ? static_cast<uint32_t>(texture->layout) : 0u;
+    }
+    RecordSwitchRecentVulkanDraw(recentDraw);
+
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
