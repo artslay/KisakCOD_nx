@@ -2924,7 +2924,23 @@ bool VulkanBackend::AllocateUniform(const void *data, size_t size, VkDescriptorB
     const VkDeviceSize offset = (m_uniformOffset + m_uniformAlignment - 1) /
                                 m_uniformAlignment * m_uniformAlignment;
     if (offset + alignedSize > m_uniformCapacity)
+    {
+#ifdef __SWITCH__
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][VK UNIFORM RING EXHAUSTED] frame=%llu used=%llu capacity=%llu request=%zu aligned=%llu stage=%s\n",
+            static_cast<unsigned long long>(FrameSerial()),
+            static_cast<unsigned long long>(m_uniformOffset),
+            static_cast<unsigned long long>(m_uniformCapacity),
+            size,
+            static_cast<unsigned long long>(alignedSize),
+            g_switchFrameStage ? g_switchFrameStage : "(null)");
+        Switch_LogWrite(trace);
+#endif
         return false;
+    }
 
     std::memcpy(m_uniformMapped + offset, data, size);
     m_uniformOffset = offset + alignedSize;
