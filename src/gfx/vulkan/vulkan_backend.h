@@ -328,7 +328,8 @@ private:
     VkBuffer m_uniformRing = VK_NULL_HANDLE;
     VkDeviceMemory m_uniformRingMemory = VK_NULL_HANDLE;
     uint8_t *m_uniformMapped = nullptr;
-    VkDeviceSize m_uniformCapacity = 4u * 1024u * 1024u;
+    // A densely populated world can consume several MiB of per-draw constants and queued copy staging in one frame.
+    VkDeviceSize m_uniformCapacity = 16u * 1024u * 1024u;
     VkDeviceSize m_uniformOffset = 0;
     VkDeviceSize m_uniformAlignment = 256;
 
