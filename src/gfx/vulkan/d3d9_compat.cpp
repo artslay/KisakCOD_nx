@@ -3665,6 +3665,41 @@ bool IDirect3DDevice9::BindSamplerSet(
         writes[i].pImageInfo = &images[i];
     }
 
+#ifdef __SWITCH__
+    if (setIndex == 2u)
+    {
+        static uint32_t switchLightmapDescriptorTraceCount = 0;
+        KisakVkTexture *traceT2 = textures[2];
+        KisakVkTexture *traceT3 = textures[3];
+        const bool likelyLightmap =
+            (traceT2 && (traceT2->width >= 512u || traceT2->height >= 512u)) ||
+            (traceT3 && (traceT3->width >= 512u || traceT3->height >= 512u));
+        if (likelyLightmap && switchLightmapDescriptorTraceCount < 32u)
+        {
+            char trace[640];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=%u ps=%p serial=%llu t0=%p t2=%p view2=%p size2=%ux%u fmt2=%u src2=%u layout2=%u t3=%p view3=%p size3=%ux%u fmt3=%u src3=%u layout3=%u\n",
+                switchLightmapDescriptorTraceCount++,
+                static_cast<const void *>(m_pixelShader),
+                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
+                static_cast<const void *>(textures[0]),
+                static_cast<const void *>(traceT2),
+                static_cast<const void *>(traceT2 ? traceT2->view : VK_NULL_HANDLE),
+                traceT2 ? traceT2->width : 0u, traceT2 ? traceT2->height : 0u,
+                traceT2 ? static_cast<unsigned>(traceT2->format) : 0u,
+                traceT2 ? static_cast<unsigned>(traceT2->sourceFormat) : 0u,
+                traceT2 ? static_cast<unsigned>(traceT2->layout) : 0u,
+                static_cast<const void *>(traceT3),
+                static_cast<const void *>(traceT3 ? traceT3->view : VK_NULL_HANDLE),
+                traceT3 ? traceT3->width : 0u, traceT3 ? traceT3->height : 0u,
+                traceT3 ? static_cast<unsigned>(traceT3->format) : 0u,
+                traceT3 ? static_cast<unsigned>(traceT3->sourceFormat) : 0u,
+                traceT3 ? static_cast<unsigned>(traceT3->layout) : 0u);
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_update";
     vkUpdateDescriptorSets(m_backend->Device(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_bind";
