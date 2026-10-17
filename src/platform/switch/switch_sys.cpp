@@ -130,6 +130,19 @@ extern thread_local volatile uintptr_t g_switchVkModuleTraceHash;
 extern thread_local volatile uintptr_t g_switchVkModuleTraceAlphaTest;
 extern thread_local volatile uint32_t g_switchVkModuleTraceHeader[5];
 extern thread_local volatile uint32_t g_switchVkModuleTraceTail;
+extern thread_local volatile uintptr_t g_switchVkPipelineTracePhase;
+extern thread_local volatile uintptr_t g_switchVkPipelineTraceOwner;
+extern thread_local volatile uintptr_t g_switchVkPipelineTraceCache;
+extern thread_local volatile uintptr_t g_switchVkPipelineTraceCacheSize;
+extern thread_local volatile uintptr_t g_switchVkPipelineTraceKey;
+extern thread_local volatile uintptr_t g_switchVkPipelineTraceHandle;
+extern thread_local volatile uintptr_t g_switchVkPipelineTraceDevice;
+extern thread_local volatile uintptr_t g_switchVkPipelineTraceDeclaration;
+extern thread_local volatile uintptr_t g_switchVkPipelineTraceDeclarationSerial;
+extern thread_local volatile uintptr_t g_switchVkPipelineTraceVertexShader;
+extern thread_local volatile uintptr_t g_switchVkPipelineTraceVertexSerial;
+extern thread_local volatile uintptr_t g_switchVkPipelineTracePixelShader;
+extern thread_local volatile uintptr_t g_switchVkPipelineTracePixelSerial;
 }
 extern thread_local const char * volatile g_switchFrameStage;
 extern "C" thread_local char g_switchCgFrameStage[192];
@@ -356,6 +369,43 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         static_cast<unsigned int>(g_switchVkModuleTraceHeader[3]),
         static_cast<unsigned int>(g_switchVkModuleTraceHeader[4]),
         static_cast<unsigned int>(g_switchVkModuleTraceTail));
+    Switch_LogCrashLine(line);
+
+    const uintptr_t vkPipelinePhase = g_switchVkPipelineTracePhase;
+    const char *vkPipelinePhaseName = "inactive";
+    switch (vkPipelinePhase)
+    {
+        case 1u: vkPipelinePhaseName = "ensure_entry"; break;
+        case 2u: vkPipelinePhaseName = "cache_lookup_active"; break;
+        case 3u: vkPipelinePhaseName = "cache_hit_found"; break;
+        case 4u: vkPipelinePhaseName = "cache_hit_bind_returned"; break;
+        case 5u: vkPipelinePhaseName = "cache_miss_returned"; break;
+        case 6u: vkPipelinePhaseName = "graphics_create_active"; break;
+        case 7u: vkPipelinePhaseName = "graphics_create_returned"; break;
+        case 8u: vkPipelinePhaseName = "cache_insert_active"; break;
+        case 9u: vkPipelinePhaseName = "cache_insert_returned"; break;
+        case 10u: vkPipelinePhaseName = "new_pipeline_bind_active"; break;
+        case 11u: vkPipelinePhaseName = "new_pipeline_bind_returned"; break;
+        default: break;
+    }
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH VK PIPELINE CACHE] last_phase=%llu(%s) owner=%p cache=%p size=%llu key=0x%016llx pipeline=%p device=%p decl=%p/%llu vs=%p/%llu ps=%p/%llu\n",
+        static_cast<unsigned long long>(vkPipelinePhase),
+        vkPipelinePhaseName,
+        reinterpret_cast<void *>(g_switchVkPipelineTraceOwner),
+        reinterpret_cast<void *>(g_switchVkPipelineTraceCache),
+        static_cast<unsigned long long>(g_switchVkPipelineTraceCacheSize),
+        static_cast<unsigned long long>(g_switchVkPipelineTraceKey),
+        reinterpret_cast<void *>(g_switchVkPipelineTraceHandle),
+        reinterpret_cast<void *>(g_switchVkPipelineTraceDevice),
+        reinterpret_cast<void *>(g_switchVkPipelineTraceDeclaration),
+        static_cast<unsigned long long>(g_switchVkPipelineTraceDeclarationSerial),
+        reinterpret_cast<void *>(g_switchVkPipelineTraceVertexShader),
+        static_cast<unsigned long long>(g_switchVkPipelineTraceVertexSerial),
+        reinterpret_cast<void *>(g_switchVkPipelineTracePixelShader),
+        static_cast<unsigned long long>(g_switchVkPipelineTracePixelSerial));
     Switch_LogCrashLine(line);
 
     const uintptr_t pc = static_cast<uintptr_t>(ctx->pc.x);
