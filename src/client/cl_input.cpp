@@ -1016,7 +1016,11 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     // This distinguishes a Switch stick-polling problem from a later movement
     // command/state problem without flooding the SD log.
     static unsigned int switchPadMoveFrame = 0;
-    const bool tracePadMove = (++switchPadMoveFrame % 300u) == 0u;
+    const unsigned int switchPadMoveCall = switchPadMoveFrame++;
+    // Capture the first gameplay commands as well as an occasional heartbeat;
+    // the scripted intro can fail before a 300-frame diagnostic is reached.
+    const bool tracePadMove =
+        switchPadMoveCall < 24u || ((switchPadMoveCall + 1u) % 300u) == 0u;
     if (!padActive)
     {
         if (tracePadMove)
