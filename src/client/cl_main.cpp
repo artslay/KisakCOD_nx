@@ -34,6 +34,7 @@
 extern bool cin_skippable;
 
 #ifdef __SWITCH__
+extern void CL_BlockCinematicSkipUntilRelease();
 extern void Switch_LogShutdown();
 extern void Switch_LogRaw(const char *msg);
 extern void Switch_LogWrite(const char *msg);
@@ -1418,6 +1419,12 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
 
     if (connectionState == CA_CINEMATIC)
     {
+#ifdef __SWITCH__
+        // A held controller button can be re-emitted after the next clip
+        // resets key state. Require release before it can skip that next clip.
+        if (hasNextCommand)
+            CL_BlockCinematicSkipUntilRelease();
+#endif
         SCR_StopCinematic(localClientNum);
     }
     else
