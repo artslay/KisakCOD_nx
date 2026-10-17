@@ -4021,6 +4021,78 @@ bool IDirect3DDevice9::BindSamplerSet(
                 traceT3 ? static_cast<unsigned>(traceT3->layout) : 0u);
             Switch_LogWrite(trace);
         }
+
+        // Identify which D3D sampler registers the active translated pixel
+        // shader actually reads. The material-side trace proves textures are
+        // selected and have Vulkan views, but not that this shader samples the
+        // expected s0/s2/s3/s4/s5 registers.
+        static uint64_t tracedPixelSamplerSerials[32]{};
+        static uint32_t tracedPixelSamplerShaderCount = 0;
+        const MOJOSHADER_parseData *pixelParse =
+            m_pixelShader ? m_pixelShader->parseData : nullptr;
+        if (likelyLightmap && m_pixelShader && pixelParse)
+        {
+            bool alreadyTraced = false;
+            for (uint32_t i = 0; i < tracedPixelSamplerShaderCount; ++i)
+            {
+                if (tracedPixelSamplerSerials[i] == m_pixelShader->serial)
+                {
+                    alreadyTraced = true;
+                    break;
+                }
+            }
+            if (!alreadyTraced && tracedPixelSamplerShaderCount < 32u)
+            {
+                tracedPixelSamplerSerials[tracedPixelSamplerShaderCount++] =
+                    m_pixelShader->serial;
+                char samplerTrace[768];
+                size_t used = static_cast<size_t>(std::snprintf(
+                    samplerTrace, sizeof(samplerTrace),
+                    "[KisakCOD][VK PS SAMPLERS] serial=%llu count=%d",
+                    static_cast<unsigned long long>(m_pixelShader->serial),
+                    pixelParse->sampler_count));
+                const int samplerCount =
+                    pixelParse->sampler_count > 0 && pixelParse->samplers
+                        ? pixelParse->sampler_count : 0;
+                for (int i = 0; i < samplerCount && i < 12 &&
+                     used < sizeof(samplerTrace) - 80u; ++i)
+                {
+                    const MOJOSHADER_sampler &sampler = pixelParse->samplers[i];
+                    const int wrote = std::snprintf(
+                        samplerTrace + used, sizeof(samplerTrace) - used,
+                        " sampler[%d]=s%d/type%d/name=%s",
+                        i, sampler.index, static_cast<int>(sampler.type),
+                        sampler.name ? sampler.name : "<null>");
+                    if (wrote < 0)
+                        break;
+                    used += static_cast<size_t>(wrote);
+                    if (used >= sizeof(samplerTrace))
+                    {
+                        used = sizeof(samplerTrace) - 1u;
+                        break;
+                    }
+                }
+                if (samplerCount > 12 && used < sizeof(samplerTrace) - 32u)
+                {
+                    const int wrote = std::snprintf(
+                        samplerTrace + used, sizeof(samplerTrace) - used,
+                        " omitted=%d", samplerCount - 12);
+                    if (wrote > 0)
+                        used += static_cast<size_t>(wrote);
+                }
+                if (used < sizeof(samplerTrace) - 2u)
+                {
+                    samplerTrace[used++] = '\\n';
+                    samplerTrace[used] = '\\0';
+                }
+                else
+                {
+                    samplerTrace[sizeof(samplerTrace) - 2u] = '\\n';
+                    samplerTrace[sizeof(samplerTrace) - 1u] = '\\0';
+                }
+                Switch_LogWrite(samplerTrace);
+            }
+        }
     }
 #endif
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_update";
