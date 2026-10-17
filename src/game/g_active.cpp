@@ -695,80 +695,12 @@ void __cdecl ClientThink_real(gentity_s *ent)
         clipmask = 8454161;
     v39.tracemask = clipmask;
     v39.handler = 1;
-#ifdef __SWITCH__
-    static unsigned switchServerPmoveTraceCount = 0;
-    const unsigned switchPmoveTraceId = switchServerPmoveTraceCount++;
-    const bool switchTracePmove = switchPmoveTraceId < 4;
-    if (switchTracePmove)
-    {
-        Com_Printf(CON_CHANNEL_SERVER,
-            "[KisakCOD][PMOVE SERVER] n=%u phase=before ps=%p origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) psTime=%d cmdTime=%d cmd=(%d,%d,%d,0x%08x) old=(%d,%d,%d,0x%08x) handler=%u mask=0x%08x\n",
-            switchPmoveTraceId, static_cast<void *>(&client->ps),
-            client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
-            client->ps.velocity[0], client->ps.velocity[1], client->ps.velocity[2],
-            client->ps.commandTime, v39.cmd.serverTime, v39.cmd.forwardmove,
-            v39.cmd.rightmove, v39.cmd.upmove, v39.cmd.buttons,
-            v39.oldcmd.serverTime, v39.oldcmd.forwardmove, v39.oldcmd.rightmove,
-            v39.oldcmd.buttons, v39.handler, v39.tracemask);
-    }
 #endif
-#ifdef __SWITCH__
-    // Follow non-zero movement commands through the real SP server Pmove.
-    // The existing startup sample only prints the first few idle commands,
-    // so it cannot tell whether later controller input reaches the server.
-    static unsigned int switchGameplayMoveTraceCount = 0;
-    const bool switchTraceGameplayMove =
-        (v39.cmd.forwardmove != 0 || v39.cmd.rightmove != 0) &&
-        switchGameplayMoveTraceCount < 32u;
-    float switchMoveOriginBefore[3] = {
-        client->ps.origin[0], client->ps.origin[1], client->ps.origin[2]
-    };
-    if (switchTraceGameplayMove)
-    {
-        Com_Printf(
-            CON_CHANNEL_SERVER,
-            "[KisakCOD][PMOVE INPUT] sample=%u cmdTime=%d move=(%d,%d,%d) pmType=%d flags=0x%x speed=%d g_speed=%d frozen=%d anglesLocked=%d tagInfo=%p origin=(%.2f,%.2f,%.2f)\n",
-            switchGameplayMoveTraceCount++,
-            v39.cmd.serverTime,
-            static_cast<int>(v39.cmd.forwardmove),
-            static_cast<int>(v39.cmd.rightmove),
-            static_cast<int>(v39.cmd.upmove),
-            static_cast<int>(client->ps.pm_type),
-            static_cast<unsigned int>(client->ps.pm_flags),
-            client->ps.speed, g_speed->current.integer,
-            client->bFrozen ? 1 : 0,
-            client->linkAnglesLocked ? 1 : 0,
-            static_cast<void *>(ent->tagInfo),
-            switchMoveOriginBefore[0], switchMoveOriginBefore[1],
-            switchMoveOriginBefore[2]);
-    }
 #endif
     //Profile_Begin(27);
     Pmove(&v39);
-#ifdef __SWITCH__
-    if (switchTraceGameplayMove)
-    {
-        Com_Printf(
-            CON_CHANNEL_SERVER,
-            "[KisakCOD][PMOVE INPUT] result cmdTime=%d speed=%d g_speed=%d origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) flags=0x%x\n",
-            v39.cmd.serverTime,
-            client->ps.speed, g_speed->current.integer,
-            client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
-            client->ps.velocity[0], client->ps.velocity[1], client->ps.velocity[2],
-            static_cast<unsigned int>(client->ps.pm_flags));
-    }
 #endif
     //Profile_EndInternal(0);
-#ifdef __SWITCH__
-    if (switchTracePmove)
-    {
-        Com_Printf(CON_CHANNEL_SERVER,
-            "[KisakCOD][PMOVE SERVER] n=%u phase=after ps=%p origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) psTime=%d cmdTime=%d\n",
-            switchPmoveTraceId, static_cast<void *>(&client->ps),
-            client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
-            client->ps.velocity[0], client->ps.velocity[1], client->ps.velocity[2],
-            client->ps.commandTime, v39.cmd.serverTime);
-    }
 #endif
     v12 = ent->client;
     if (v12->ps.eventSequence != eventSequence)
