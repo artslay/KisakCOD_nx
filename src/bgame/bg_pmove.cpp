@@ -3158,6 +3158,62 @@ void __cdecl PM_GroundTrace(pmove_t *pm, pml_t *pml)
 
     point[2] = v2;
     PM_playerTrace(pm, &trace, start, pm->mins, pm->maxs, point, ps->clientNum, pm->tracemask);
+#ifdef __SWITCH__
+    // The stock SP ground probe spans only 0.5 units. On Switch, a floor
+    // contact can be missed at the origin's quantized boundary even though
+    // the slide trace immediately below blocks downward movement. That leaves
+    // pml.walking false and sends every input through PM_AirMove (air accel,
+    // effectively no ground friction). Retry a short 2-unit probe only when
+    // the player is not rising; accept only a genuine walkable surface.
+    if (trace.fraction == 1.0f && !trace.startsolid && !trace.allsolid &&
+        ps->velocity[2] <= 0.0f)
+    {
+        const float narrowFraction = trace.fraction;
+        const float narrowNormalZ = trace.normal[2];
+        const int narrowStartSolid = trace.startsolid ? 1 : 0;
+        const int narrowAllSolid = trace.allsolid ? 1 : 0;
+        trace_t nearGroundTrace{};
+        point[2] = ps->origin[2] - 2.0f;
+        PM_playerTrace(
+            pm, &nearGroundTrace, start, pm->mins, pm->maxs, point,
+            ps->clientNum, pm->tracemask);
+        const bool recoveredGround =
+            nearGroundTrace.fraction < 1.0f &&
+            !nearGroundTrace.startsolid &&
+            !nearGroundTrace.allsolid &&
+            nearGroundTrace.walkable &&
+            nearGroundTrace.normal[2] >= 0.7f;
+        static uint32_t switchGroundProbeLogCount = 0;
+        if (switchGroundProbeLogCount < 12u)
+        {
+            char groundTraceLog[512];
+            std::snprintf(
+                groundTraceLog, sizeof(groundTraceLog),
+                "[KisakCOD][PMOVE GROUND] sample=%u recovered=%d origin=(%.2f,%.2f,%.2f) velocityZ=%.2f gravity=%d minsZ=%.2f maxsZ=%.2f mask=0x%x narrow=(%.3f,%d,%d,nz=%.2f) probe=(%.3f,%d,%d,walkable=%d,n=(%.2f,%.2f,%.2f),surf=0x%x,contents=0x%x,ent=%u)\\n",
+                switchGroundProbeLogCount,
+                recoveredGround ? 1 : 0,
+                ps->origin[0], ps->origin[1], ps->origin[2],
+                ps->velocity[2], ps->gravity, pm->mins[2], pm->maxs[2],
+                static_cast<unsigned int>(pm->tracemask),
+                static_cast<double>(narrowFraction), narrowStartSolid,
+                narrowAllSolid, static_cast<double>(narrowNormalZ),
+                static_cast<double>(nearGroundTrace.fraction),
+                nearGroundTrace.startsolid ? 1 : 0,
+                nearGroundTrace.allsolid ? 1 : 0,
+                nearGroundTrace.walkable ? 1 : 0,
+                static_cast<double>(nearGroundTrace.normal[0]),
+                static_cast<double>(nearGroundTrace.normal[1]),
+                static_cast<double>(nearGroundTrace.normal[2]),
+                static_cast<unsigned int>(nearGroundTrace.surfaceFlags),
+                static_cast<unsigned int>(nearGroundTrace.contents),
+                static_cast<unsigned int>(Trace_GetEntityHitId(&nearGroundTrace)));
+            Switch_LogWrite(groundTraceLog);
+        }
+        ++switchGroundProbeLogCount;
+        if (recoveredGround)
+            trace = nearGroundTrace;
+    }
+#endif
     memcpy(&pml->groundTrace, &trace, sizeof(pml->groundTrace));
 
     if (!trace.allsolid || PM_CorrectAllSolid(pm, pml, &trace))
