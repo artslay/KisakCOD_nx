@@ -13,6 +13,7 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern bool SCR_IsMapLoadingCinematicActive();
 extern thread_local const char * volatile g_switchFrameStage;
 extern "C" void Switch_LogFrameTail();
 extern "C" thread_local volatile uintptr_t g_switchFrameTailReached;
@@ -218,6 +219,8 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
     // before the end-of-frame cinematic submission.
     const bool switchFullscreenCinematicNeedsTailDraw =
         clientUIActives[0].connectionState == CA_CINEMATIC && UI_IsFullscreen();
+    const bool switchMapLoadingCinematicNeedsTailDraw =
+        SCR_IsMapLoadingCinematicActive();
 #endif
 
 #ifdef __SWITCH__
@@ -266,6 +269,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
         // before UI_Refresh paints the pregame overlay.
         if (connectionState == CA_ACTIVE &&
             UI_GetActiveMenu(0) == UIMENU_PREGAME &&
+            !switchMapLoadingCinematicNeedsTailDraw &&
             R_Cinematic_IsStarted())
         {
             g_switchFrameStage = "frame/scr/draw_field/pregame_cinematic";
@@ -408,7 +412,8 @@ LABEL_15:;
     // Capture that case at function entry to avoid duplicate draws if UI_Refresh
     // changes menu state during this frame.
     if (clientUIActives[0].connectionState == CA_LOADING ||
-        switchFullscreenCinematicNeedsTailDraw)
+        switchFullscreenCinematicNeedsTailDraw ||
+        switchMapLoadingCinematicNeedsTailDraw)
     {
         g_switchFrameStage = "frame/scr/draw_field/loading_cinematic_tail";
         SCR_DrawCinematic(0);
