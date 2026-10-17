@@ -1722,15 +1722,10 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
         return;
     }
 
-    // This is emitted only by the libnx exception handler. Keep ordinary crash
-    // logs compact; capture only the fragment shader for the current reproducer
-    // (pipeline 72), rather than dumping both modules for every pipeline crash.
+    // This is emitted only by the libnx exception handler while the driver
+    // pipeline-create call is active. Capture the fragment shader for whichever
+    // pipeline actually faulted; the sequence changes as compilation progresses.
     writeLine(snapshot.summary);
-    if (snapshot.sequence != 72u)
-    {
-        writeLine("[KisakCOD][VK CRASH SPIRV] raw_dump=omitted; reserved for seq=72 PS capture\n");
-        return;
-    }
 
     const auto dumpShader = [writeLine, &snapshot](
         const char *stage,
