@@ -892,7 +892,7 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
             char trace[768];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][WORLD SAMPLER] n=%u mat=%s set=%s tech=%s ps=%s slot=%u semantic=%u tex=%s size=%ux%u image=%p texture=%p vkImage=%p view=%p vkFormat=%u srcFormat=%u layout=%u\\n",
+                "[KisakCOD][WORLD SAMPLER] n=%u mat=%s set=%s tech=%s ps=%s slot=%u semantic=%u tex=%s size=%ux%u image=%p texture=%p vkImage=%p view=%p vkFormat=%u srcFormat=%u layout=%u\n",
                 traceIndex,
                 material->info.name,
                 techniqueSet && techniqueSet->name ? techniqueSet->name : "<null>",
