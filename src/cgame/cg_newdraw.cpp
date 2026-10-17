@@ -842,7 +842,7 @@ char *__cdecl CG_GetWeaponUseString(int localClientNum, const char **secondarySt
     int cursorHintIcon; // r11
     int v5; // r30
     WeaponDef *WeaponDef; // r29
-    char *v7; // r28
+    weaponInfo_s *weaponInfo; // Switch-native weapon info
     char *v8; // r30
     char *v9; // r30
     char v11[336]; // [sp+50h] [-150h] BYREF
@@ -876,7 +876,9 @@ char *__cdecl CG_GetWeaponUseString(int localClientNum, const char **secondarySt
             "%s\n\t(localClientNum) = %i",
             "(localClientNum == 0)",
             localClientNum);
-    v7 = (char *)cg_weaponsArray + 72 * v5;
+    // weaponInfo_s has native 64-bit pointer layout on Switch (0x78 bytes),
+    // so do not use the 32-bit PC/SP stride or truncate translatedDisplayName.
+    weaponInfo = CG_GetLocalClientWeaponInfo(localClientNum, v5);
     if (WeaponDef->inventoryType)
     {
         if (WeaponDef->offhandClass == OFFHAND_CLASS_FRAG_GRENADE)
@@ -896,7 +898,7 @@ char *__cdecl CG_GetWeaponUseString(int localClientNum, const char **secondarySt
         else
             v8 = UI_SafeTranslateString("PLATFORM_PICKUPNEWWEAPON");
     }
-    *secondaryString = (const char *)*((unsigned int *)v7 + 15);
+    *secondaryString = weaponInfo ? weaponInfo->translatedDisplayName : nullptr;
     return UI_ReplaceConversionString(v8, v11);
 }
 
