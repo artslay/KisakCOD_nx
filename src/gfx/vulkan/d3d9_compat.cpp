@@ -3820,6 +3820,40 @@ bool IDirect3DDevice9::BindSamplerSet(
     if (!m_backend)
         return false;
 
+    // Determine whether any sampled subresource needs a layout transition.
+    // Vulkan image barriers are forbidden inside dynamic rendering, including
+    // when the previous draw left a rendering instance active.
+    bool needsSampledLayoutTransition = false;
+    for (KisakVkTexture *texture : textures)
+    {
+        if (!texture)
+            continue;
+        if (!texture->image || !texture->view)
+            return false;
+
+        const size_t subresourceCount =
+            static_cast<size_t>(texture->arrayLayers) * texture->mipLevels;
+        if (texture->subresourceLayouts.size() < subresourceCount)
+            texture->subresourceLayouts.resize(subresourceCount, texture->layout);
+
+        for (uint32_t layer = 0; layer < texture->arrayLayers && !needsSampledLayoutTransition; ++layer)
+        {
+            for (uint32_t level = 0; level < texture->mipLevels; ++level)
+            {
+                if (texture->GetSubresourceLayout(level, layer) !=
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                {
+                    needsSampledLayoutTransition = true;
+                    break;
+                }
+            }
+        }
+        if (needsSampledLayoutTransition)
+            break;
+    }
+    if (needsSampledLayoutTransition)
+        m_backend->EndRendering();
+
     // Reuse this layout's set at the current command-buffer slot, once the
     // preceding frame fence has signaled.
     std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
