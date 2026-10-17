@@ -3717,8 +3717,22 @@ bool IDirect3DDevice9::BindUniformSet(
             ? m_backend->VSUniformLayout() : m_backend->PSUniformLayout();
         alloc.descriptorSetCount = 1;
         alloc.pSetLayouts = &descriptorLayout;
-        if (vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set) != VK_SUCCESS)
+        const VkResult allocResult =
+            vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set);
+        if (allocResult != VK_SUCCESS)
         {
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=uniform set=%u frame=%llu cursor=%zu cached=%zu bytes=%zu result=%d\n",
+                setIndex,
+                static_cast<unsigned long long>(frameSerial),
+                cursor,
+                cachedSets.size(),
+                size,
+                static_cast<int>(allocResult));
+            Switch_LogWrite(trace);
             traceUniformBindStage("descriptor_alloc_failed", bytes, size, 0);
             return false;
         }
@@ -3785,8 +3799,23 @@ bool IDirect3DDevice9::BindSamplerSet(
         alloc.descriptorPool = m_backend->DescriptorPool();
         alloc.descriptorSetCount = 1;
         alloc.pSetLayouts = &layout;
-        if (vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set) != VK_SUCCESS)
+        const VkResult allocResult =
+            vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set);
+        if (allocResult != VK_SUCCESS)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=sampler set=%u frame=%llu cursor=%zu cached=%zu result=%d\n",
+                setIndex,
+                static_cast<unsigned long long>(frameSerial),
+                cursor,
+                cachedSets.size(),
+                static_cast<int>(allocResult));
+            Switch_LogWrite(trace);
             return false;
+        }
         cachedSets.push_back(set);
     }
     ++m_samplerSetCursor[cacheIndex];
@@ -5963,7 +5992,14 @@ bool IDirect3DDevice9::PrepareDraw()
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/bind_descriptors";
     if (!BindDescriptorSets())
     {
-        Switch_LogWrite("[KisakCOD][VK DRAW] fail=descriptor_sets\n");
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][VK DRAW] fail=descriptor_sets stage=%s frame=%llu\n",
+            g_switchFrameStage ? g_switchFrameStage : "(null)",
+            static_cast<unsigned long long>(m_backend->FrameSerial()));
+        Switch_LogWrite(trace);
         return false;
     }
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/return";
