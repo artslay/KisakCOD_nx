@@ -689,6 +689,17 @@ uint8_t SwitchEffectiveShaderElementType(
         {
             type = D3DDECLTYPE_FLOAT2;
         }
+        // GfxPackedVertex stores TEXCOORD0 as PackedTexCoords at byte 20:
+        // a pair of packed 16-bit floats, not a D3DCOLOR/byte vector. The D3D
+        // declaration is a semantic-routing table on Switch, so restore the
+        // physical FLOAT16_2 representation before building Vulkan input.
+        else if (decl->switchVertDeclType == 1 &&
+                 element.Offset == 20 &&
+                 element.Usage == 5 &&
+                 element.UsageIndex == 0)
+        {
+            type = D3DDECLTYPE_FLOAT16_2;
+        }
         else if (decl->switchVertDeclType == 2 &&
                  element.Offset == 20 &&
                  element.Usage == 5 &&
