@@ -72,6 +72,32 @@ void __cdecl R_DrawBspDrawSurfsLit(
     const MaterialPass *pass; // [esp+34h] [ebp-8h]
     uint32_t customSamplerFlags; // [esp+38h] [ebp-4h]
 
+#ifdef __SWITCH__
+    static uint32_t switchBspLitEntryTraceCount = 0;
+    if (switchBspLitEntryTraceCount < 24u)
+    {
+        const uint32_t firstCount = primDrawSurfPos
+            ? primDrawSurfPos[0] : UINT32_MAX;
+        char trace[384];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][BSP LIT ENTRY] sample=%u count=%u flags=%u pass=%p technique=%p firstCount=%u lightmaps=%u textures=(%p,%p,%p)\\n",
+            switchBspLitEntryTraceCount++, context.state->pass
+                ? static_cast<unsigned>(context.state->pass->perPrimArgCount) +
+                  static_cast<unsigned>(context.state->pass->perObjArgCount) +
+                  static_cast<unsigned>(context.state->pass->stableArgCount) : 0u,
+            context.state->pass
+                ? static_cast<unsigned>(context.state->pass->customSamplerFlags) : 0u,
+            static_cast<void *>(context.state->pass),
+            static_cast<const void *>(context.state->technique),
+            firstCount,
+            rgp.world ? static_cast<unsigned>(rgp.world->lightmapCount) : 0u,
+            static_cast<const void *>(context.state->samplerTexture[1]),
+            static_cast<const void *>(context.state->samplerTexture[2]),
+            static_cast<const void *>(context.state->samplerTexture[3]));
+        Switch_LogWrite(trace);
+    }
+#endif
     pass = context.state->pass;
     customSamplerFlags = pass->customSamplerFlags;
     if ((customSamplerFlags & 1) != 0)
@@ -353,6 +379,25 @@ void __cdecl R_DrawBspDrawSurfs(const uint32_t *primDrawSurfPos, GfxCmdBufState 
 {
     GfxTrianglesDrawStream drawStream; // [esp+0h] [ebp-30h] BYREF
 
+#ifdef __SWITCH__
+    static uint32_t switchBspGenericEntryTraceCount = 0;
+    if (switchBspGenericEntryTraceCount < 24u)
+    {
+        const uint32_t firstCount = primDrawSurfPos
+            ? primDrawSurfPos[0] : UINT32_MAX;
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][BSP GENERIC ENTRY] sample=%u firstCount=%u pass=%p technique=%p flags=%u lightmaps=%u\\n",
+            switchBspGenericEntryTraceCount++,
+            firstCount,
+            static_cast<void *>(state->pass),
+            static_cast<const void *>(state->technique),
+            state->pass ? static_cast<unsigned>(state->pass->customSamplerFlags) : 0u,
+            rgp.world ? static_cast<unsigned>(rgp.world->lightmapCount) : 0u);
+        Switch_LogWrite(trace);
+    }
+#endif
     drawStream.primDrawSurfPos = primDrawSurfPos;
     R_DrawTriangles(&drawStream, &state->prim);
 }
@@ -471,6 +516,26 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
 
 void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
 {
+#ifdef __SWITCH__
+    static uint32_t switchBspLitPreTessTraceCount = 0;
+    if (switchBspLitPreTessTraceCount < 24u)
+    {
+        const uint32_t firstCount = primDrawSurfPos
+            ? primDrawSurfPos[0] : UINT32_MAX;
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][BSP LIT PRETESS] sample=%u firstCount=%u pass=%p technique=%p flags=%u lightmaps=%u\\n",
+            switchBspLitPreTessTraceCount++,
+            firstCount,
+            static_cast<void *>(context.state->pass),
+            static_cast<const void *>(context.state->technique),
+            context.state->pass
+                ? static_cast<unsigned>(context.state->pass->customSamplerFlags) : 0u,
+            rgp.world ? static_cast<unsigned>(rgp.world->lightmapCount) : 0u);
+        Switch_LogWrite(trace);
+    }
+#endif
     uint32_t baseIndex; // [esp+4h] [ebp-28h] BYREF
     uint32_t surfIndex; // [esp+8h] [ebp-24h]
     GfxReadCmdBuf cmdBuf; // [esp+Ch] [ebp-20h] BYREF
