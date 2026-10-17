@@ -28,6 +28,26 @@
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 
+extern "C" {
+thread_local volatile uintptr_t g_switchVkModuleTracePhase = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceDevice = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceDeclaration = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceDeclarationSerial = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceVertexShader = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceVertexSerial = 0;
+thread_local volatile uintptr_t g_switchVkModuleTracePixelShader = 0;
+thread_local volatile uintptr_t g_switchVkModuleTracePixelSerial = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceActiveShader = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceActiveSerial = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceCode = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceBytes = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceWords = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceHash = 0;
+thread_local volatile uintptr_t g_switchVkModuleTraceAlphaTest = 0;
+thread_local volatile uint32_t g_switchVkModuleTraceHeader[5] = {};
+thread_local volatile uint32_t g_switchVkModuleTraceTail = 0;
+}
+
 // Last submitted-frame context is read by VulkanBackend only if queue submission fails.
 std::atomic<uint64_t> g_switchLastBoundPipelineKey{0};
 std::atomic<uint64_t> g_switchLastBoundVertexShaderSerial{0};
@@ -72,6 +92,47 @@ uint64_t HashSpirvWords(const std::vector<uint32_t> &words)
         }
     }
     return hash;
+}
+
+void RecordSwitchVkModuleTrace(
+    uintptr_t phase,
+    VkDevice device,
+    const IDirect3DVertexDeclaration9 *declaration,
+    const KisakVkShader *vertexShader,
+    const KisakVkShader *pixelShader,
+    const KisakVkShader *activeShader,
+    const VkShaderModuleCreateInfo &info,
+    bool alphaTest)
+{
+    g_switchVkModuleTracePhase = phase;
+    g_switchVkModuleTraceDevice = reinterpret_cast<uintptr_t>(device);
+    g_switchVkModuleTraceDeclaration = reinterpret_cast<uintptr_t>(declaration);
+    g_switchVkModuleTraceDeclarationSerial = declaration ? declaration->serial : 0;
+    g_switchVkModuleTraceVertexShader = reinterpret_cast<uintptr_t>(vertexShader);
+    g_switchVkModuleTraceVertexSerial = vertexShader ? vertexShader->serial : 0;
+    g_switchVkModuleTracePixelShader = reinterpret_cast<uintptr_t>(pixelShader);
+    g_switchVkModuleTracePixelSerial = pixelShader ? pixelShader->serial : 0;
+    g_switchVkModuleTraceActiveShader = reinterpret_cast<uintptr_t>(activeShader);
+    g_switchVkModuleTraceActiveSerial = activeShader ? activeShader->serial : 0;
+    g_switchVkModuleTraceCode = reinterpret_cast<uintptr_t>(info.pCode);
+    g_switchVkModuleTraceBytes = info.codeSize;
+    g_switchVkModuleTraceWords = info.codeSize / sizeof(uint32_t);
+    g_switchVkModuleTraceHash = activeShader ? HashSpirvWords(activeShader->spirv) : 0;
+    g_switchVkModuleTraceAlphaTest = alphaTest ? 1u : 0u;
+
+    for (size_t i = 0; i < 5; ++i)
+        g_switchVkModuleTraceHeader[i] = 0;
+    g_switchVkModuleTraceTail = 0;
+
+    const auto *words = static_cast<const uint32_t *>(info.pCode);
+    const size_t wordCount = info.codeSize / sizeof(uint32_t);
+    if (words && wordCount)
+    {
+        const size_t headCount = wordCount < 5u ? wordCount : 5u;
+        for (size_t i = 0; i < headCount; ++i)
+            g_switchVkModuleTraceHeader[i] = words[i];
+        g_switchVkModuleTraceTail = words[wordCount - 1u];
+    }
 }
 
 uint32_t g_switchPipelineCreateSequence = 0;
@@ -3997,13 +4058,16 @@ bool IDirect3DDevice9::EnsurePipeline()
 
 #ifdef __SWITCH__
         static uint32_t switchShaderModuleTraceCount = 0;
-        if (switchShaderModuleTraceCount < 16u)
+        const bool traceShaderModuleCall = switchShaderModuleTraceCount < 16u;
+        const uint32_t moduleTraceIndex = traceShaderModuleCall
+            ? switchShaderModuleTraceCount++ : UINT32_MAX;
+        if (traceShaderModuleCall)
         {
             char trace[640];
             std::snprintf(
                 trace, sizeof(trace),
                 "[KisakCOD][VK MODULE PREP] n=%u backend=%p device=%p decl=%p vs=%p/%llu words=%zu bytes=%zu code=%p ps=%p/%llu words=%zu bytes=%zu code=%p\n",
-                switchShaderModuleTraceCount++,
+                moduleTraceIndex,
                 static_cast<const void *>(m_backend),
                 static_cast<const void *>(m_backend->Device()),
                 static_cast<const void *>(m_decl),
@@ -4020,24 +4084,50 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite(trace);
         }
 #endif
-        g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules";
+        g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules/vs";
+        RecordSwitchVkModuleTrace(
+            1u, m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
+            m_vertexShader, vsInfo, m_alphaTest);
         const VkResult vsResult =
             vkCreateShaderModule(m_backend->Device(), &vsInfo, nullptr, &m_vertexShader->module);
+        g_switchVkModuleTracePhase = 10u;
+        g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules/vs_return";
 #ifdef __SWITCH__
-        if (switchShaderModuleTraceCount <= 16u)
+        if (traceShaderModuleCall)
         {
             char trace[192];
             std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][VK MODULE VS RETURN] result=%d module=%p\n",
-                static_cast<int>(vsResult),
+                "[KisakCOD][VK MODULE VS RETURN] n=%u result=%d module=%p\n",
+                moduleTraceIndex, static_cast<int>(vsResult),
                 static_cast<const void *>(m_vertexShader->module));
             Switch_LogWrite(trace);
         }
 #endif
-        const VkResult psResult =
-            vsResult == VK_SUCCESS
-                ? vkCreateShaderModule(m_backend->Device(), &psInfo, nullptr, &m_pixelShader->module)
-                : vsResult;
+        VkResult psResult = vsResult;
+        if (vsResult == VK_SUCCESS)
+        {
+            g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules/ps";
+            RecordSwitchVkModuleTrace(
+                2u, m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
+                m_pixelShader, psInfo, m_alphaTest);
+            psResult = vkCreateShaderModule(
+                m_backend->Device(), &psInfo, nullptr, &m_pixelShader->module);
+            g_switchVkModuleTracePhase = 20u;
+            g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules/ps_return";
+#ifdef __SWITCH__
+            if (traceShaderModuleCall)
+            {
+                char trace[192];
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][VK MODULE PS RETURN] n=%u result=%d module=%p\n",
+                    moduleTraceIndex, static_cast<int>(psResult),
+                    static_cast<const void *>(m_pixelShader->module));
+                Switch_LogWrite(trace);
+            }
+#endif
+        }
+        g_switchVkModuleTracePhase = 3u;
+        g_switchFrameStage = "frame/render/vulkan/pipeline/shader_modules_return";
         if (vsResult != VK_SUCCESS || psResult != VK_SUCCESS)
         {
             char msg[160];
@@ -4098,8 +4188,14 @@ bool IDirect3DDevice9::EnsurePipeline()
         psInfo.codeSize = m_pixelShader->spirv.size() * sizeof(uint32_t);
         psInfo.pCode = m_pixelShader->spirv.data();
 
+        g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules/ps_variant";
+        RecordSwitchVkModuleTrace(
+            4u, m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
+            m_pixelShader, psInfo, m_alphaTest);
         const VkResult psResult =
             vkCreateShaderModule(m_backend->Device(), &psInfo, nullptr, &m_pixelShader->module);
+        g_switchVkModuleTracePhase = 40u;
+        g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules/ps_variant_return";
         if (psResult != VK_SUCCESS)
         {
             char msg[128];
