@@ -1837,7 +1837,7 @@ void __cdecl UI_Refresh()
                     completedLoadingCinematic ||
                     (!pregameVisible && !cinematicStillActive))
                 {
-                    Switch_LogWrite("[KisakCOD][CIN LOAD] completing pregame-to-game transition\\n");
+                    Switch_LogWrite("[KisakCOD][CIN LOAD] completing pregame-to-game transition\n");
                     UI_PlayerStart();
                 }
             }
