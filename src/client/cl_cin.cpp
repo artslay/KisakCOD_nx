@@ -103,8 +103,21 @@ void __cdecl CL_PlayUnskippableCinematic_f()
 
 void __cdecl SCR_DrawCinematic(int32_t localClientNum)
 {
+#ifdef __SWITCH__
+    // A scripted in-game movie can be queued while the map-loading movie is
+    // still running. Do not replace the loading movie early: the original
+    // engine only reaches the queued playback after the current movie ends.
+    if (R_Cinematic_IsNextReady() &&
+        (!SCR_IsMapLoadingCinematicActive() || R_Cinematic_IsFinished()))
+    {
+        if (SCR_IsMapLoadingCinematicActive())
+            Switch_LogWrite("[KisakCOD][CIN LOAD] starting queued movie after loading movie EOF\n");
+        R_Cinematic_StartNextPlayback();
+    }
+#else
     if (R_Cinematic_IsNextReady())
         R_Cinematic_StartNextPlayback();
+#endif
     if (R_Cinematic_IsFinished())
         SCR_StopCinematic(localClientNum);
     if (R_Cinematic_IsStarted())
