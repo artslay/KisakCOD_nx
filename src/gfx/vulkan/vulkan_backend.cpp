@@ -35,6 +35,16 @@ extern std::atomic<int32_t> g_switchLastDrawBaseVertex;
 extern std::atomic<uint32_t> g_switchLastDrawVertexCount;
 extern std::atomic<uint32_t> g_switchLastDrawPrimitiveType;
 extern std::atomic<uint32_t> g_switchLastDrawPrimitiveCount;
+extern std::atomic<uint32_t> g_switchLastDrawIndexBufferBytes;
+extern std::atomic<uint32_t> g_switchLastDrawIndexDataAvailable;
+extern std::atomic<uint32_t> g_switchLastDrawRawIndexMin;
+extern std::atomic<uint32_t> g_switchLastDrawRawIndexMax;
+extern std::atomic<int64_t> g_switchLastDrawEffectiveVertexMin;
+extern std::atomic<int64_t> g_switchLastDrawEffectiveVertexMax;
+extern std::atomic<uint32_t> g_switchLastDrawStreamMask;
+extern std::atomic<uint32_t> g_switchLastDrawStream0BufferBytes;
+extern std::atomic<uint32_t> g_switchLastDrawStream0Offset;
+extern std::atomic<uint32_t> g_switchLastDrawStream0Stride;
 #endif
 
 namespace
@@ -166,10 +176,10 @@ void VulkanBackend::SetError(const char *message, VkResult result)
         // atomics/thread-local diagnostics here; never inspect renderer frame
         // vectors or mutable frame flags from a background thread.
         const char *stage = g_switchFrameStage;
-        char context[768];
+        char context[1024];
         std::snprintf(
             context, sizeof(context),
-            "[KisakCOD][VK DEVICE LOST CONTEXT] operation=%s stage=%s frameSerial=%llu pipeline=%016llx vsSerial=%llu psSerial=%llu drawKind=%u primitive=%u primitiveCount=%u indexCount=%u startIndex=%u baseVertex=%d vertexCount=%u\n",
+            "[KisakCOD][VK DEVICE LOST CONTEXT] operation=%s stage=%s frameSerial=%llu pipeline=%016llx vsSerial=%llu psSerial=%llu drawKind=%u primitive=%u primitiveCount=%u indexCount=%u startIndex=%u baseVertex=%d vertexCount=%u indexBytes=%u indexData=%u rawIndex=%u-%u effectiveVertex=%lld-%lld streamMask=0x%04x stream0=(bytes:%u offset:%u stride:%u)\n",
             errorText.c_str(),
             stage ? stage : "(unknown)",
             static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
@@ -182,7 +192,17 @@ void VulkanBackend::SetError(const char *message, VkResult result)
             g_switchLastDrawIndexCount.load(std::memory_order_relaxed),
             g_switchLastDrawStartIndex.load(std::memory_order_relaxed),
             g_switchLastDrawBaseVertex.load(std::memory_order_relaxed),
-            g_switchLastDrawVertexCount.load(std::memory_order_relaxed));
+            g_switchLastDrawVertexCount.load(std::memory_order_relaxed),
+            g_switchLastDrawIndexBufferBytes.load(std::memory_order_relaxed),
+            g_switchLastDrawIndexDataAvailable.load(std::memory_order_relaxed),
+            g_switchLastDrawRawIndexMin.load(std::memory_order_relaxed),
+            g_switchLastDrawRawIndexMax.load(std::memory_order_relaxed),
+            static_cast<long long>(g_switchLastDrawEffectiveVertexMin.load(std::memory_order_relaxed)),
+            static_cast<long long>(g_switchLastDrawEffectiveVertexMax.load(std::memory_order_relaxed)),
+            g_switchLastDrawStreamMask.load(std::memory_order_relaxed),
+            g_switchLastDrawStream0BufferBytes.load(std::memory_order_relaxed),
+            g_switchLastDrawStream0Offset.load(std::memory_order_relaxed),
+            g_switchLastDrawStream0Stride.load(std::memory_order_relaxed));
         Switch_LogWrite(context);
     }
 #endif
