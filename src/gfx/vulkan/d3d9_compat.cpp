@@ -4218,7 +4218,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             sourceVertexParse->output_len % static_cast<int>(sizeof(uint32_t)) != 0 ||
             sourcePixelParse->output_len % static_cast<int>(sizeof(uint32_t)) != 0)
         {
-            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=shader_link_invalid_source\\n");
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=shader_link_invalid_source\n");
             return false;
         }
 
@@ -4252,7 +4252,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             char msg[192];
             std::snprintf(msg, sizeof(msg),
-                "[KisakCOD][VK DRAW] pipeline_fail=shader_link patch=%d vs=%d ps=%d\\n",
+                "[KisakCOD][VK DRAW] pipeline_fail=shader_link patch=%d vs=%d ps=%d\n",
                 patchBytes,
                 linkedVertexParse.output_len,
                 linkedPixelParse.output_len);
