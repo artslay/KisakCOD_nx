@@ -3883,14 +3883,42 @@ bool IDirect3DDevice9::BindSamplerSet(
         }
         else
         {
-            if (texture->layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            if (!texture->image || !texture->view)
+                return false;
+
+            const size_t subresourceCount =
+                static_cast<size_t>(texture->arrayLayers) * texture->mipLevels;
+            if (texture->subresourceLayouts.size() < subresourceCount)
+                texture->subresourceLayouts.resize(subresourceCount, texture->layout);
+
+            // Subresources may have different layouts after mip uploads, render-target
+            // use, or partial texture locks. Transition each level/layer from its
+            // tracked layout rather than applying the aggregate layout to the whole
+            // image (which can issue an invalid oldLayout for other mip levels).
+            for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
             {
-                m_backend->TransitionImage(
-                    texture->image, texture->layout,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    GetTextureFormat(texture->sourceFormat).aspect);
-                texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                for (uint32_t level = 0; level < texture->mipLevels; ++level)
+                {
+                    const VkImageLayout oldLayout =
+                        texture->GetSubresourceLayout(level, layer);
+                    if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                        continue;
+
+                    VkImageSubresourceRange range{};
+                    range.aspectMask = GetTextureFormat(texture->sourceFormat).aspect;
+                    range.baseMipLevel = level;
+                    range.levelCount = 1;
+                    range.baseArrayLayer = layer;
+                    range.layerCount = 1;
+                    m_backend->TransitionImage(
+                        texture->image, oldLayout,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        range.aspectMask, range);
+                    texture->SetSubresourceLayout(
+                        level, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                }
             }
+            texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
             const uint32_t minFilter = m_samplerState[i][D3DSAMP_MINFILTER];
             const uint32_t magFilter = m_samplerState[i][D3DSAMP_MAGFILTER];
@@ -6085,16 +6113,6 @@ bool IDirect3DDevice9::PrepareDraw()
         ? m_color->texture->resolveImage : VK_NULL_HANDLE;
     const VkImageView resolveView = colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
         ? m_color->texture->resolveView : VK_NULL_HANDLE;
-    const VkImageLayout resolveOldLayout = colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
-        ? m_color->texture->resolveLayout : VK_IMAGE_LAYOUT_UNDEFINED;
-
-    const VkImageLayout colorOldLayout =
-        m_color && m_color->texture            ? m_color->texture->layout
-            : m_backend->CurrentSwapchainLayout();
-    const VkImageLayout depthOldLayout =
-        m_depth && m_depth->texture
-            ? m_depth->texture->layout
-            : m_backend->DefaultDepthLayout();
     uint32_t backBufferWidth = m_viewport.Width;
     uint32_t backBufferHeight = m_viewport.Height;
     uint32_t backBufferFormat = 0;
@@ -6104,32 +6122,6 @@ bool IDirect3DDevice9::PrepareDraw()
         ? m_color->texture->width : backBufferWidth;
     const uint32_t targetHeight = m_color && m_color->texture
         ? m_color->texture->height : backBufferHeight;
-
-    g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_rendering";
-    if (!m_backend->EnsureRendering(
-            colorImage, colorView, colorFormat,
-            depthImage, depthView, depthFormat, depthAspect,
-            resolveImage, resolveView, resolveOldLayout,
-            colorOldLayout, depthOldLayout,
-            targetWidth, targetHeight))
-    {
-        Switch_LogWrite("[KisakCOD][VK DRAW] fail=ensure_rendering\n");
-        return false;
-    }
-
-    if (m_color && m_color->texture)
-    {
-        m_color->texture->SetSubresourceLayout(
-            m_color->level, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        if (resolveImage)
-            m_color->texture->resolveLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        m_targetRendered = true;
-    }
-    if (m_depth && m_depth->texture)
-    {
-        m_depth->texture->SetSubresourceLayout(
-            m_depth->level, 0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-    }
 
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_pipeline";
     if (!EnsurePipeline())
@@ -6202,6 +6194,47 @@ bool IDirect3DDevice9::PrepareDraw()
         Switch_LogWrite(trace);
         return false;
     }
+    // BindDescriptorSets can transition sampled images. Such barriers must
+    // be recorded outside dynamic rendering, so begin/resume the attachment pass
+    // only after sampler layouts have been made shader-readable.
+    const VkImageLayout resolveOldLayout =
+        colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
+            ? m_color->texture->resolveLayout : VK_IMAGE_LAYOUT_UNDEFINED;
+    const VkImageLayout colorOldLayout =
+        m_color && m_color->texture
+            ? m_color->texture->GetSubresourceLayout(m_color->level)
+            : m_backend->CurrentSwapchainLayout();
+    const VkImageLayout depthOldLayout =
+        m_depth && m_depth->texture
+            ? m_depth->texture->GetSubresourceLayout(m_depth->level)
+            : m_backend->DefaultDepthLayout();
+
+    g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_rendering";
+    if (!m_backend->EnsureRendering(
+            colorImage, colorView, colorFormat,
+            depthImage, depthView, depthFormat, depthAspect,
+            resolveImage, resolveView, resolveOldLayout,
+            colorOldLayout, depthOldLayout,
+            targetWidth, targetHeight))
+    {
+        Switch_LogWrite("[KisakCOD][VK DRAW] fail=ensure_rendering\n");
+        return false;
+    }
+
+    if (m_color && m_color->texture)
+    {
+        m_color->texture->SetSubresourceLayout(
+            m_color->level, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        if (resolveImage)
+            m_color->texture->resolveLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        m_targetRendered = true;
+    }
+    if (m_depth && m_depth->texture)
+    {
+        m_depth->texture->SetSubresourceLayout(
+            m_depth->level, 0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    }
+
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/return";
     return true;
 }
