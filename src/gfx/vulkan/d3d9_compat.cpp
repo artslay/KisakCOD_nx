@@ -1722,9 +1722,15 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
         return;
     }
 
-    // This is emitted only by the libnx exception handler, so regular pipeline
-    // creation does not flood kisakcod.log or create shader dump files.
+    // This is emitted only by the libnx exception handler. Keep ordinary crash
+    // logs compact; the requested seq=43 fragment capture is the only full
+    // Base64 dump, otherwise two large modules obscure the useful crash context.
     writeLine(snapshot.summary);
+    if (snapshot.sequence != 43u)
+    {
+        writeLine("[KisakCOD][VK CRASH SPIRV] raw_dump=omitted; reserved for seq=43 PS capture\n");
+        return;
+    }
 
     const auto dumpShader = [writeLine, &snapshot](
         const char *stage,
@@ -1800,7 +1806,6 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
         }
     };
 
-    dumpShader("vs", snapshot.vertexSpirv);
     dumpShader("ps", snapshot.pixelSpirv);
 }
 
@@ -4544,6 +4549,60 @@ bool IDirect3DDevice9::EnsurePipeline()
             return false;
         }
 
+        // Invalid Vulkan vertex-input descriptions can make some drivers fault
+        // during pipeline compilation instead of returning a VkResult. The
+        // declaration table is reconstructed on Switch, so validate its actual
+        // bound stream, physical byte range, and unique shader input location.
+        const auto binding = std::find_if(
+            bindings.begin(), bindings.end(),
+            [&element](const VkVertexInputBindingDescription &candidate)
+            {
+                return candidate.binding == element.Stream;
+            });
+        if (binding == bindings.end())
+        {
+            char msg[224];
+            std::snprintf(msg, sizeof(msg),
+                "[KisakCOD][VK DRAW] pipeline_fail=vertex_binding_missing stream=%u offset=%u decl=%llu vs=%llu\n",
+                element.Stream, vertexOffset,
+                static_cast<unsigned long long>(m_decl->serial),
+                static_cast<unsigned long long>(m_vertexShader->serial));
+            Switch_LogWrite(msg);
+            return false;
+        }
+
+        const uint32_t attributeBytes =
+            SwitchShaderElementByteSize(SwitchEffectiveShaderElementType(m_decl, element));
+        if (vertexOffset > binding->stride ||
+            attributeBytes > binding->stride - vertexOffset)
+        {
+            char msg[256];
+            std::snprintf(msg, sizeof(msg),
+                "[KisakCOD][VK DRAW] pipeline_fail=vertex_range stream=%u offset=%u bytes=%u stride=%u type=%u decl=%llu vs=%llu\n",
+                element.Stream, vertexOffset, attributeBytes, binding->stride,
+                static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element)),
+                static_cast<unsigned long long>(m_decl->serial),
+                static_cast<unsigned long long>(m_vertexShader->serial));
+            Switch_LogWrite(msg);
+            return false;
+        }
+
+        for (const VkVertexInputAttributeDescription &existing : vertexAttrs)
+        {
+            if (existing.location == location)
+            {
+                char msg[256];
+                std::snprintf(msg, sizeof(msg),
+                    "[KisakCOD][VK DRAW] pipeline_fail=duplicate_vertex_location location=%u oldBinding=%u oldOffset=%u newBinding=%u newOffset=%u decl=%llu vs=%llu\n",
+                    location, existing.binding, existing.offset,
+                    element.Stream, vertexOffset,
+                    static_cast<unsigned long long>(m_decl->serial),
+                    static_cast<unsigned long long>(m_vertexShader->serial));
+                Switch_LogWrite(msg);
+                return false;
+            }
+        }
+
         vertexAttrs.push_back({
             location, element.Stream, format, vertexOffset
         });
@@ -4708,6 +4767,40 @@ bool IDirect3DDevice9::EnsurePipeline()
     const uint32_t pipelineCreateSequence = ++g_switchPipelineCreateSequence;
     const MOJOSHADER_parseData *preVs = m_vertexShader->parseData;
     const MOJOSHADER_parseData *prePs = m_pixelShader->parseData;
+
+#ifdef __SWITCH__
+    if (pipelineCreateSequence >= 30u && pipelineCreateSequence <= 40u)
+    {
+        char inputTrace[224];
+        std::snprintf(inputTrace, sizeof(inputTrace),
+            "[KisakCOD][VK PIPELINE INPUT] seq=%u key=%016llx decl=%llu vs=%llu ps=%llu bindings=%zu attrs=%zu\n",
+            pipelineCreateSequence,
+            static_cast<unsigned long long>(key),
+            static_cast<unsigned long long>(m_decl->serial),
+            static_cast<unsigned long long>(m_vertexShader->serial),
+            static_cast<unsigned long long>(m_pixelShader->serial),
+            bindings.size(), vertexAttrs.size());
+        Switch_LogWrite(inputTrace);
+        for (const VkVertexInputBindingDescription &binding : bindings)
+        {
+            char line[144];
+            std::snprintf(line, sizeof(line),
+                "[KisakCOD][VK PIPELINE BINDING] seq=%u binding=%u stride=%u rate=%u\n",
+                pipelineCreateSequence, binding.binding, binding.stride,
+                static_cast<unsigned>(binding.inputRate));
+            Switch_LogWrite(line);
+        }
+        for (const VkVertexInputAttributeDescription &attribute : vertexAttrs)
+        {
+            char line[176];
+            std::snprintf(line, sizeof(line),
+                "[KisakCOD][VK PIPELINE ATTRIBUTE] seq=%u location=%u binding=%u format=%u offset=%u\n",
+                pipelineCreateSequence, attribute.location, attribute.binding,
+                static_cast<unsigned>(attribute.format), attribute.offset);
+            Switch_LogWrite(line);
+        }
+    }
+#endif
 
     g_switchPipelineCrashSnapshot.valid = false;
     g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
