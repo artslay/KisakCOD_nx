@@ -642,6 +642,51 @@ void __cdecl R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex)
         switchLightmapStateLogged = true;
     }
 #endif
+#ifdef __SWITCH__
+    static uint32_t switchLightmapBindTraceCount = 0;
+    if (switchLightmapBindTraceCount < 32u &&
+        lmapIndex != 31 && lmapIndex < rgp.world->lightmapCount)
+    {
+        const uint32_t traceIndex = switchLightmapBindTraceCount++;
+        const Material *traceMaterial = context.state->material;
+        const MaterialTechniqueSet *traceSet =
+            traceMaterial ? traceMaterial->techniqueSet : nullptr;
+        const GfxImage *tracePrimary = rgp.world->lightmaps[lmapIndex].primary;
+        const GfxImage *traceSecondary = rgp.world->lightmaps[lmapIndex].secondary;
+        const GfxCmdBufPrimState *tracePrim = &context.state->prim;
+        char trace[1024];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][LIGHTMAP BIND] n=%u map=%u mat=%s set=%s tech=%s techFlags=0x%x worldFmt=%u decl=%u passFlags=0x%x vs=%s ps=%s psHandle=%p oldSampler=(%p,%p) wantSampler=(%p,%p) imageTex=(%p,%p) size=(%ux%u,%ux%u) streams=(%p/%u/%u,%p/%u/%u)\n",
+            traceIndex, lmapIndex,
+            traceMaterial && traceMaterial->info.name ? traceMaterial->info.name : "<null>",
+            traceSet && traceSet->name ? traceSet->name : "<null>",
+            context.state->technique && context.state->technique->name
+                ? context.state->technique->name : "<null>",
+            context.state->technique ? static_cast<unsigned>(context.state->technique->flags) : 0u,
+            traceSet ? static_cast<unsigned>(traceSet->worldVertFormat) : 0u,
+            static_cast<unsigned>(tracePrim->vertDeclType),
+            pass ? static_cast<unsigned>(pass->customSamplerFlags) : 0u,
+            pass && pass->vertexShader && pass->vertexShader->name
+                ? pass->vertexShader->name : "<null>",
+            pass && pass->pixelShader && pass->pixelShader->name
+                ? pass->pixelShader->name : "<null>",
+            static_cast<const void *>(pass && pass->pixelShader ? pass->pixelShader->prog.ps : nullptr),
+            static_cast<const void *>(context.state->samplerTexture[2]),
+            static_cast<const void *>(context.state->samplerTexture[3]),
+            static_cast<const void *>(tracePrimary ? &tracePrimary->texture : nullptr),
+            static_cast<const void *>(traceSecondary ? &traceSecondary->texture : nullptr),
+            static_cast<const void *>(tracePrimary ? tracePrimary->texture.basemap : nullptr),
+            static_cast<const void *>(traceSecondary ? traceSecondary->texture.basemap : nullptr),
+            tracePrimary ? tracePrimary->width : 0, tracePrimary ? tracePrimary->height : 0,
+            traceSecondary ? traceSecondary->width : 0, traceSecondary ? traceSecondary->height : 0,
+            static_cast<const void *>(tracePrim->streams[0].vb),
+            tracePrim->streams[0].offset, tracePrim->streams[0].stride,
+            static_cast<const void *>(tracePrim->streams[1].vb),
+            tracePrim->streams[1].offset, tracePrim->streams[1].stride);
+        Switch_LogWrite(trace);
+    }
+#endif
     if (lmapIndex == 31)
     {
         if ((pass->customSamplerFlags & 6) != 0)
