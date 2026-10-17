@@ -564,20 +564,6 @@ uint32_t SwitchShaderElementByteSize(uint8_t type)
     }
 }
 
-bool DumpSpirvFile(const char *path, const std::vector<uint32_t> &words)
-{
-    if (!path || words.empty())
-        return false;
-
-    std::FILE *file = std::fopen(path, "wb");
-    if (!file)
-        return false;
-
-    const size_t written = std::fwrite(words.data(), sizeof(uint32_t), words.size(), file);
-    const int closeResult = std::fclose(file);
-    return written == words.size() && closeResult == 0;
-}
-
 void SpirvAppend(std::vector<uint32_t> &out, SpvOp opcode, std::initializer_list<uint32_t> operands)
 {
     out.push_back((static_cast<uint32_t>(operands.size()) + 1u) << 16 | static_cast<uint32_t>(opcode));
@@ -5363,20 +5349,6 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite(
                 "[KisakCOD][VK DRAW] pipeline_probe unpatched_pixel skipped=no_cached_linked_spirv\n");
         }
-
-        const bool vertexSpirvDumped = DumpSpirvFile(
-            "sdmc:/switch/KisakCOD/vk_failed_vs.spv", m_vertexShader->spirv);
-        const bool pixelSpirvDumped = DumpSpirvFile(
-            "sdmc:/switch/KisakCOD/vk_failed_ps.spv", m_pixelShader->spirv);
-        char dumpMsg[192];
-        std::snprintf(
-            dumpMsg, sizeof(dumpMsg),
-            "[KisakCOD][VK DRAW] pipeline_spirv_dump vs=%u(%u bytes) ps=%u(%u bytes)\n",
-            vertexSpirvDumped ? 1u : 0u,
-            static_cast<unsigned int>(m_vertexShader->spirv.size() * sizeof(uint32_t)),
-            pixelSpirvDumped ? 1u : 0u,
-            static_cast<unsigned int>(m_pixelShader->spirv.size() * sizeof(uint32_t)));
-        Switch_LogWrite(dumpMsg);
 
         for (uint32_t i = 0; i < vertexAttrs.size(); ++i)
         {
