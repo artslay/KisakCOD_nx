@@ -44,10 +44,9 @@ thread_local char g_switchSaveStageBuffer[192];
 
 void SwitchSavePhase(const char *stage)
 {
+    // Keep the current stage for the crash watchdog, but don't emit one line
+    // for every internal save routine to the normal runtime log.
     g_switchFrameStage = stage;
-    char message[256];
-    std::snprintf(message, sizeof(message), "[KisakCOD][SAVE PHASE] %s\n", stage);
-    Switch_LogWrite(message);
 }
 
 void SwitchSaveStageIndex(const char *phase, int index)
