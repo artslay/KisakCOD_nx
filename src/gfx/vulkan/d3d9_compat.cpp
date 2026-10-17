@@ -2025,11 +2025,21 @@ uint32_t KisakVkBuffer::Release()
         delete this;
         return 0;
     }
-    if (mapped)
-        vkUnmapMemory(device, memory);
     VulkanBackend *backend = GetVulkanBackend();
     if (backend)
-        backend->DestroyBuffer(buffer, memory);
+    {
+        backend->DeferDestroyBuffer(buffer, memory, mapped != nullptr);
+    }
+    else
+    {
+        // The backend may already have been detached during shutdown.
+        if (mapped)
+            vkUnmapMemory(device, memory);
+        if (buffer)
+            vkDestroyBuffer(device, buffer, nullptr);
+        if (memory)
+            vkFreeMemory(device, memory, nullptr);
+    }
     buffer = VK_NULL_HANDLE;
     memory = VK_NULL_HANDLE;
     mapped = nullptr;
@@ -2165,9 +2175,9 @@ uint32_t KisakVkTexture::Release()
     if (backend)
     {
         if (resolveImage || resolveMemory || resolveView)
-            backend->DestroyImage(resolveImage, resolveMemory, resolveView);
+            backend->DeferDestroyImage(resolveImage, resolveMemory, resolveView);
         if (image || memory || view)
-            backend->DestroyImage(image, memory, view);
+            backend->DeferDestroyImage(image, memory, view);
     }
     resolveImage = VK_NULL_HANDLE;
     resolveView = VK_NULL_HANDLE;

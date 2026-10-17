@@ -106,6 +106,12 @@ public:
         VkDeviceMemory *memory,
         void **mapped = nullptr);
 
+    // Resources referenced by recorded frame commands must stay alive until the
+    // submission using them has completed. Release queues these handles for the
+    // next completed-frame fence rather than destroying them immediately.
+    void DeferDestroyBuffer(VkBuffer buffer, VkDeviceMemory memory, bool memoryMapped = false);
+    void DeferDestroyImage(VkImage image, VkDeviceMemory memory, VkImageView view);
+
     // Pass memoryMapped=true only when CreateBuffer was asked to map this allocation.
     // Persistent users unmap themselves before calling DestroyBuffer.
     void DestroyBuffer(VkBuffer buffer, VkDeviceMemory memory, bool memoryMapped = false);
@@ -278,7 +284,19 @@ private:
     bool CreateDummyTexture();
     void DestroySwapchain();
     void DestroyDefaultDepth();
+    void FlushDeferredResources();
     void SetError(const char *message, VkResult result = VK_SUCCESS);
+
+    struct DeferredResource
+    {
+        enum class Kind : uint8_t { Buffer, Image };
+        Kind kind = Kind::Buffer;
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VkImage image = VK_NULL_HANDLE;
+        VkImageView view = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        bool memoryMapped = false;
+    };
 #ifdef VK_EXT_device_fault
     void LogDeviceFaultInfo();
 #endif
@@ -318,6 +336,8 @@ private:
     std::mutex m_immediateMutex;
     std::mutex m_queueMutex;
     std::mutex m_descriptorPoolMutex;
+    std::mutex m_deferredResourcesMutex;
+    std::vector<DeferredResource> m_deferredResources;
     FrameSync m_sync{};
 
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;

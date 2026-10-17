@@ -428,6 +428,7 @@ void VulkanBackend::Shutdown()
     std::lock_guard<std::mutex> queueLock(m_queueMutex);
     if (m_device)
         vkDeviceWaitIdle(m_device);
+    FlushDeferredResources();
 
     // Dummy sampler is owned by m_samplers; destroy it only there.
     m_dummySampler = VK_NULL_HANDLE;
@@ -1296,6 +1297,10 @@ bool VulkanBackend::BeginFrame()
         return false;
     }
 
+    // The fence proves that commands from the previous frame no longer use
+    // resources released while that frame was being recorded or submitted.
+    FlushDeferredResources();
+
     // Keep the fence signaled until a command buffer is ready to submit.
     // Resetting it before vkAcquireNextImageKHR can leave an unsignaled fence
     // when acquire reports OUT_OF_DATE, making the next BeginFrame wait forever.
@@ -2115,6 +2120,70 @@ void VulkanBackend::DestroyBuffer(
         vkDestroyBuffer(m_device, buffer, nullptr);
     if (memory && m_device)
         vkFreeMemory(m_device, memory, nullptr);
+}
+
+void VulkanBackend::DeferDestroyBuffer(
+    VkBuffer buffer, VkDeviceMemory memory, bool memoryMapped)
+{
+    if (!buffer && !memory)
+        return;
+
+    DeferredResource resource{};
+    resource.kind = DeferredResource::Kind::Buffer;
+    resource.buffer = buffer;
+    resource.memory = memory;
+    resource.memoryMapped = memoryMapped;
+    std::lock_guard<std::mutex> lock(m_deferredResourcesMutex);
+    m_deferredResources.push_back(resource);
+}
+
+void VulkanBackend::DeferDestroyImage(
+    VkImage image, VkDeviceMemory memory, VkImageView view)
+{
+    if (!image && !memory && !view)
+        return;
+
+    DeferredResource resource{};
+    resource.kind = DeferredResource::Kind::Image;
+    resource.image = image;
+    resource.memory = memory;
+    resource.view = view;
+    std::lock_guard<std::mutex> lock(m_deferredResourcesMutex);
+    m_deferredResources.push_back(resource);
+}
+
+void VulkanBackend::FlushDeferredResources()
+{
+    std::vector<DeferredResource> pending;
+    {
+        std::lock_guard<std::mutex> lock(m_deferredResourcesMutex);
+        pending.swap(m_deferredResources);
+    }
+    if (pending.empty() || !m_device)
+        return;
+
+#ifdef __SWITCH__
+    static uint32_t switchDeferredFlushLogCount = 0;
+    if (switchDeferredFlushLogCount < 8)
+    {
+        char trace[160];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK RETIRE] count=%zu frame=%llu\n",
+            pending.size(),
+            static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)));
+        Switch_LogWrite(trace);
+        ++switchDeferredFlushLogCount;
+    }
+#endif
+
+    for (const DeferredResource &resource : pending)
+    {
+        if (resource.kind == DeferredResource::Kind::Buffer)
+            DestroyBuffer(resource.buffer, resource.memory, resource.memoryMapped);
+        else
+            DestroyImage(resource.image, resource.memory, resource.view);
+    }
 }
 
 bool VulkanBackend::CreateImage2D(
