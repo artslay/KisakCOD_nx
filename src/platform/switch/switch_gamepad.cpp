@@ -144,21 +144,15 @@ void Switch_GamepadFrame()
     // from command construction in CL_GamepadMove without flooding the log.
     static uint32_t switchInputTraceFrame = 0;
     static bool lastTracedAnalogActive = false;
-    static HidAnalogStickState lastTracedLeft = {};
-    static HidAnalogStickState lastTracedRight = {};
+    static u64 lastTracedButtons = 0;
     const bool analogInputActive =
         std::abs(g_leftStick.x) > 256 || std::abs(g_leftStick.y) > 256 ||
         std::abs(g_rightStick.x) > 256 || std::abs(g_rightStick.y) > 256;
-    const bool meaningfulStickChange =
-        std::abs(g_leftStick.x - lastTracedLeft.x) >= 8192 ||
-        std::abs(g_leftStick.y - lastTracedLeft.y) >= 8192 ||
-        std::abs(g_rightStick.x - lastTracedRight.x) >= 8192 ||
-        std::abs(g_rightStick.y - lastTracedRight.y) >= 8192;
     const bool traceRawInput =
         switchInputTraceFrame < 4u ||
-        (switchInputTraceFrame % 300u) == 0u ||
+        (switchInputTraceFrame % 120u) == 0u ||
         analogInputActive != lastTracedAnalogActive ||
-        (analogInputActive && meaningfulStickChange);
+        g_buttons != lastTracedButtons;
     if (traceRawInput)
     {
         char trace[320];
@@ -171,9 +165,8 @@ void Switch_GamepadFrame()
             g_leftStick.x, g_leftStick.y,
             g_rightStick.x, g_rightStick.y);
         Switch_LogWrite(trace);
-        lastTracedLeft = g_leftStick;
-        lastTracedRight = g_rightStick;
         lastTracedAnalogActive = analogInputActive;
+        lastTracedButtons = g_buttons;
     }
     ++switchInputTraceFrame;
 

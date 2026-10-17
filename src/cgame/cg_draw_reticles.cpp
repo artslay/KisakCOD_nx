@@ -108,7 +108,16 @@ void __cdecl CG_DrawNightVisionOverlay(int32_t localClientNum)
                 colorWhite,
                 cgMedia.nightVisionOverlay);
         else
-            Com_PrintWarning(CON_CHANNEL_CLIENT, "CG_DrawNightVisionOverlay(): Nightvision Assets not Precached.\n");
+        {
+            // Avoid flooding the Switch log if an asset is still missing.
+            // The precache path reports the resource pointers separately.
+            static bool warnedMissingNightVisionAssets = false;
+            if (!warnedMissingNightVisionAssets)
+            {
+                warnedMissingNightVisionAssets = true;
+                Com_PrintWarning(CON_CHANNEL_CLIENT, "CG_DrawNightVisionOverlay(): Nightvision Assets not Precached.\\n");
+            }
+        }
     }
 }
 

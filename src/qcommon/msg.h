@@ -56,11 +56,14 @@ struct usercmd_s
     int angles[3];
     unsigned __int8 weapon;
     unsigned __int8 offHandIndex;
-    char forwardmove;
-    char rightmove;
-    char upmove;
-    char pitchmove;
-    char yawmove;
+    // usercmd movement axes are signed protocol bytes on the original x86 engine.
+    // Spell out the signedness so ARM's default plain-char mode cannot turn
+    // negative stick input (e.g. -126) into a positive value (130).
+    signed char forwardmove;
+    signed char rightmove;
+    signed char upmove;
+    signed char pitchmove;
+    signed char yawmove;
     float gunPitch;
     float gunYaw;
     float gunXOfs;
