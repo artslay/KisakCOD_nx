@@ -1414,6 +1414,10 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
     connectionState = clientUIActives[0].connectionState;
     const char *nextCommand = nextmap ? nextmap->current.string : nullptr;
     const bool hasNextCommand = nextCommand && nextCommand[0] != '\0';
+#ifdef __SWITCH__
+    const bool hasQueuedNextPlayback =
+        connectionState == CA_CINEMATIC && R_Cinematic_IsNextReady();
+#endif
 
     // An Escape/controller event must not tear down UI or audio for an
     // unskippable movie. SCR_StopCinematic() protects Bink itself, but this
@@ -1428,9 +1432,9 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
     if (connectionState == CA_CINEMATIC)
     {
 #ifdef __SWITCH__
-        // A held controller button can be re-emitted after the next clip
-        // resets key state. Require release before it can skip that next clip.
-        if (hasNextCommand)
+        // A held controller button must be released before it can skip a
+        // chained command or an internally queued cinematic.
+        if (hasNextCommand || hasQueuedNextPlayback)
             CL_BlockCinematicSkipUntilRelease();
 #endif
         SCR_StopCinematic(localClientNum);
@@ -1447,12 +1451,32 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
         CL_StopLogo(localClientNum);
     }
     SND_StopSounds(SND_STOP_ALL);
+
     const bool returnToFrontend =
         connectionState == CA_DISCONNECTED ||
-        (connectionState == CA_CINEMATIC && !hasNextCommand);
+        (connectionState == CA_CINEMATIC && !hasNextCommand
+#ifdef __SWITCH__
+         && !hasQueuedNextPlayback
+#endif
+        );
+
+#ifdef __SWITCH__
+    // Loading can set this guard while the game/server state is being changed.
+    // Returning to a menu with it still set yields a cleared swapchain forever.
+    CL_SetSkipRendering(false);
+#endif
     UI_SetActiveMenu(
         localClientNum,
         returnToFrontend ? UIMENU_MAIN : UIMENU_NONE);
+
+#ifdef __SWITCH__
+    if (hasQueuedNextPlayback && !hasNextCommand)
+        Switch_LogWrite("[KisakCOD][CIN SKIP FLOW] queued follow-up kept active; rendering enabled\n");
+    else if (returnToFrontend)
+        Switch_LogWrite("[KisakCOD][CIN SKIP FLOW] returned to frontend; rendering enabled\n");
+    else
+        Switch_LogWrite("[KisakCOD][CIN SKIP FLOW] queued command continues; rendering enabled\n");
+#endif
 }
 
 // attributes: thunk

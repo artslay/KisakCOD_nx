@@ -129,11 +129,15 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
     const bool cinematicFinished = R_Cinematic_IsFinished();
     if (cin_skippable || cinematicFinished)
     {
-        // Capture the queued follow-up before clearing nextmap. With no next
-        // movie, natural EOF must hand control back to the frontend instead of
-        // leaving UIMENU_NONE active until the user presses a button.
+        // A cinematic can be followed either by a queued console command
+        // (nextmap) or by an internal R_Cinematic_SetNextPlayback request.
+        // Stopping the current clip must advance either chain instead of
+        // dropping to a blank frontend between videos.
         const char *nextCommand = nextmap ? nextmap->current.string : nullptr;
         const bool hasNextCommand = nextCommand && nextCommand[0] != '\0';
+#ifdef __SWITCH__
+        const bool hasQueuedNextPlayback = R_Cinematic_IsNextReady();
+#endif
 
 #ifdef __SWITCH__
         if (switchMapLoadingCinematicActive)
@@ -160,23 +164,38 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
         {
             if (localClientNum)
                 MyAssertHandler(
-                    "c:\\trees\\cod3\\src\\client\\../client_mp/client_mp.h",
+                    "c:\\trees\\cod3\\cod3src\\src\\client\\../client_mp/client_mp.h",
                     1120,
                     0,
                     "client doesn't index STATIC_MAX_LOCAL_CLIENTS\n\t%i not in [0, %i)",
                     localClientNum,
                     1);
-            clientUIActives[localClientNum].connectionState = CA_DISCONNECTED;
+
             if (hasNextCommand)
             {
+                clientUIActives[localClientNum].connectionState = CA_DISCONNECTED;
                 Cbuf_AddText(0, va("%s\n", nextCommand));
                 Dvar_SetString((dvar_s *)nextmap, (char*)"");
             }
-            else if (cinematicFinished && cls.uiStarted)
+#ifdef __SWITCH__
+            else if (hasQueuedNextPlayback)
             {
-                UI_SetActiveMenu(localClientNum, UIMENU_MAIN);
+                // R_Cinematic_StopPlayback() stops the current target but
+                // deliberately leaves nextCinematicName intact. Start it now
+                // and keep CA_CINEMATIC so the normal cinematic draw path
+                // continues to own the screen.
+                R_Cinematic_StartNextPlayback();
+                Switch_LogWrite("[KisakCOD][CIN SKIP FLOW] advanced to queued cinematic\n");
+            }
+#endif
+            else
+            {
+                clientUIActives[localClientNum].connectionState = CA_DISCONNECTED;
+                if (cinematicFinished && cls.uiStarted)
+                    UI_SetActiveMenu(localClientNum, UIMENU_MAIN);
             }
         }
     }
 }
+
 
