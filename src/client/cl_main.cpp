@@ -29,6 +29,10 @@
 #include <universal/profile.h>
 #include <sound/snd_local.h>
 #include <server/server.h>
+
+// Set by CL_PlayCinematic_f / CL_PlayUnskippableCinematic_f in cl_cin.cpp.
+extern bool cin_skippable;
+
 #ifdef __SWITCH__
 extern void Switch_LogShutdown();
 extern void Switch_LogRaw(const char *msg);
@@ -1399,7 +1403,18 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
             "(localClientNum == 0)",
             localClientNum);
     connectionState = clientUIActives[0].connectionState;
-    if (clientUIActives[0].connectionState == CA_CINEMATIC)
+
+    // An Escape/controller event must not tear down UI or audio for an
+    // unskippable movie. SCR_StopCinematic() protects Bink itself, but this
+    // caller also has side effects, so reject the skip before reaching them.
+    if (connectionState == CA_CINEMATIC &&
+        !cin_skippable &&
+        !R_Cinematic_IsFinished())
+    {
+        return;
+    }
+
+    if (connectionState == CA_CINEMATIC)
     {
         SCR_StopCinematic(localClientNum);
     }
