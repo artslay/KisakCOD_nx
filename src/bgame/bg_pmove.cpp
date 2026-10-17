@@ -2559,7 +2559,7 @@ void __cdecl PM_AirMove(pmove_t *pm, pml_t *pml)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][PMOVE AIR] sample=%u cmd=(%d,%d) speed=%d scale=%.3f wish=%.3f walking=%d plane=%d ground=%d tr=(%.3f,%d,%d n=%.2f,%.2f,%.2f) origin=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) vel=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) mask=0x%x\\n",
+            "[KisakCOD][PMOVE AIR] sample=%u cmd=(%d,%d) speed=%d scale=%.3f wish=%.3f walking=%d plane=%d ground=%d tr=(%.3f,%d,%d n=%.2f,%.2f,%.2f) origin=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) vel=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) mask=0x%x\n",
             switchAirMoveTraceCount++,
             static_cast<int>(pm->cmd.forwardmove),
             static_cast<int>(pm->cmd.rightmove),
@@ -2778,7 +2778,7 @@ void __cdecl PM_WalkMove(pmove_t *pm, pml_t *pml)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][PMOVE WALK] sample=%u cmd=(%d,%d) speed=%d scale=%.3f mult=%.3f wish=%.3f accel=%.2f walking=%d plane=%d ground=%d tr=(%.3f,%d,%d n=%.2f,%.2f,%.2f) origin=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) vel=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) mask=0x%x\\n",
+                "[KisakCOD][PMOVE WALK] sample=%u cmd=(%d,%d) speed=%d scale=%.3f mult=%.3f wish=%.3f accel=%.2f walking=%d plane=%d ground=%d tr=(%.3f,%d,%d n=%.2f,%.2f,%.2f) origin=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) vel=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) mask=0x%x\n",
                 switchWalkMoveTraceCount++,
                 static_cast<int>(pm->cmd.forwardmove),
                 static_cast<int>(pm->cmd.rightmove),
