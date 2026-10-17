@@ -316,17 +316,18 @@ static bool Switch_IsSerializedAddress(uintptr_t address)
     return false;
 }
 
-// The Switch process can place ordinary native allocations below 4 GiB. Such
-// addresses are numerically indistinguishable from serialized 32-bit tokens,
-// so a range-only test is insufficient. Check the kernel mapping after excluding
-// live fastfile stream blocks. The alias resolver still gets first chance to
-// translate serialized references before this helper is used as a fallback.
+// Native zone-allocator objects may reside above 4 GiB on Switch. Some of
+// those valid pointers have the same high/low-bit pattern as sign-extended
+// 32-bit fastfile tokens, so validate the actual mapped range instead of
+// rejecting every address above UINT32_MAX. Serialized data in the active
+// fastfile blocks is excluded first; pointer aliases are still resolved before
+// this helper is used to recognize a native allocation.
 static bool Switch_IsMappedNativeRange(
     uintptr_t address,
     size_t byteCount,
     size_t alignment)
 {
-    if (!address || address < 0x10000u || address > UINT32_MAX ||
+    if (!address || address < 0x10000u ||
         !byteCount || !alignment ||
         (address & (alignment - 1u)) != 0 ||
         byteCount > UINTPTR_MAX - address ||
