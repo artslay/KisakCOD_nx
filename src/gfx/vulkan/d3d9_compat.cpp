@@ -4232,17 +4232,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         return false;
     }
 
-    // Diagnostic-only A/B test: isolate NVK pipeline creation from our custom
-    // D3D9 alpha-test SPIR-V rewrite. Alpha-tested materials temporarily render
-    // without discard; remove this bypass after collecting the test result.
-    constexpr bool kSwitchDiagnosticBypassAlphaTestPatch = true;
-    const bool useAlphaTestPatch = m_alphaTest && !kSwitchDiagnosticBypassAlphaTestPatch;
-    static bool switchAlphaBypassLogged = false;
-    if (m_alphaTest && kSwitchDiagnosticBypassAlphaTestPatch && !switchAlphaBypassLogged)
-    {
-        Switch_LogWrite("[KisakCOD][VK DIAG] alpha_test_patch=bypassed specialization=disabled; diagnostic build only\n");
-        switchAlphaBypassLogged = true;
-    }
+    // Preserve D3D9 alpha-test semantics for materials such as fences and foliage.
+    // ResolveAlphaTestSpecializationIds validates the injected SpecIds against the
+    // exact fragment module before pipeline creation.
+    const bool useAlphaTestPatch = m_alphaTest;
 
     // Dynamic-rendering pipelines are compatible only with their attachment
     // formats; resolve them before attempting to reuse a cached pipeline.
