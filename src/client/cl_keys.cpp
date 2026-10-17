@@ -26,6 +26,17 @@
 #include <universal/profile.h>
 
 
+#ifdef __SWITCH__
+// If the user skips a cinematic while holding a pad button, the next movie
+// must not treat that still-held button as a second skip after UI reset.
+static bool switchCinematicSkipBlockedUntilRelease = false;
+
+void CL_BlockCinematicSkipUntilRelease()
+{
+    switchCinematicSkipBlockedUntilRelease = true;
+}
+#endif
+
 keyname_t keynames[96] =
 {
   { "TAB", K_TAB },
@@ -1488,6 +1499,22 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
 
     keys = playerKeys[localClientNum].keys;
     keys[key].down = down;
+#ifdef __SWITCH__
+    if (switchCinematicSkipBlockedUntilRelease && !down)
+    {
+        bool anySkipKeyDown = false;
+        for (int skipKey = 0; skipKey < 256; ++skipKey)
+        {
+            if ((skipKey < K_ASCII_FIRST || skipKey == K_MOUSE1) && keys[skipKey].down)
+            {
+                anySkipKeyDown = true;
+                break;
+            }
+        }
+        if (!anySkipKeyDown)
+            switchCinematicSkipBlockedUntilRelease = false;
+    }
+#endif
     if (down)
     {
         if (++keys[key].repeats == 1)
@@ -1578,6 +1605,15 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
         }
         *locSelInputState = LOC_SEL_INPUT_NONE;
         clcState = CL_GetLocalClientConnectionState(localClientNum);
+#ifdef __SWITCH__
+        if (switchCinematicSkipBlockedUntilRelease &&
+            clcState == CA_CINEMATIC &&
+            !clUI->keyCatchers &&
+            (key == K_MOUSE1 || key < K_ASCII_FIRST))
+        {
+            return;
+        }
+#endif
         if (down)
         {
             v6 = key == K_MOUSE1 || key < K_ASCII_FIRST;
@@ -1762,6 +1798,22 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
 
     keys = playerKeys[localClientNum].keys;
     keys[key].down = down;
+#ifdef __SWITCH__
+    if (switchCinematicSkipBlockedUntilRelease && !down)
+    {
+        bool anySkipKeyDown = false;
+        for (int skipKey = 0; skipKey < 256; ++skipKey)
+        {
+            if ((skipKey < K_ASCII_FIRST || skipKey == K_MOUSE1) && keys[skipKey].down)
+            {
+                anySkipKeyDown = true;
+                break;
+            }
+        }
+        if (!anySkipKeyDown)
+            switchCinematicSkipBlockedUntilRelease = false;
+    }
+#endif
     if (down)
     {
         if (++keys[key].repeats == 1)
@@ -1852,6 +1904,15 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
         *locSelInputState = LOC_SEL_INPUT_NONE;
 
         clcState = CL_GetLocalClientConnectionState(localClientNum);
+#ifdef __SWITCH__
+        if (switchCinematicSkipBlockedUntilRelease &&
+            clcState == CA_CINEMATIC &&
+            !clUI->keyCatchers &&
+            (key == K_MOUSE1 || key < K_ASCII_FIRST))
+        {
+            return;
+        }
+#endif
         if (down)
         {
             if ((key == K_MOUSE1 || key < K_ASCII_FIRST)
