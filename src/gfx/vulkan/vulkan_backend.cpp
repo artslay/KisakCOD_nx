@@ -24,6 +24,7 @@ extern bool R_RecoverLostVulkanDevice();
 
 extern void Switch_LogWrite(const char *msg);
 #ifdef __SWITCH__
+extern void Switch_LogRecentVulkanDraws();
 extern thread_local const char * volatile g_switchFrameStage;
 extern std::atomic<uint64_t> g_switchLastBoundPipelineKey;
 extern std::atomic<uint64_t> g_switchLastBoundVertexShaderSerial;
@@ -252,6 +253,7 @@ void VulkanBackend::SetError(const char *message, VkResult result)
             g_switchLastDrawTextureSourceFormat[3].load(std::memory_order_relaxed),
             g_switchLastDrawTextureLayout[3].load(std::memory_order_relaxed));
         Switch_LogWrite(drawTextures);
+        Switch_LogRecentVulkanDraws();
     }
 #endif
 #ifdef VK_EXT_device_fault
