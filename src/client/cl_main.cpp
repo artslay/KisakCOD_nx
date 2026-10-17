@@ -35,6 +35,7 @@ extern bool cin_skippable;
 
 #ifdef __SWITCH__
 extern void CL_BlockCinematicSkipUntilRelease();
+extern void SCR_SetMapLoadingCinematicActive(bool active);
 extern void Switch_LogShutdown();
 extern void Switch_LogRaw(const char *msg);
 extern void Switch_LogWrite(const char *msg);
@@ -617,7 +618,7 @@ void __cdecl CL_MapLoading_CalcMovieToPlay_FastFile(const char *inMapName, char 
 void __cdecl CL_MapLoading_StartCinematic(const char *mapname, float volume)
 {
     XAssetHeader asset; // r30
-    char movieName[264]; // [sp+50h] [-130h] BYREF
+    char movieName[264] = {}; // [sp+50h] [-130h] BYREF
 
 #ifdef KISAK_XBOX
     asset = DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, "video/cin_levels.txt");
@@ -633,6 +634,13 @@ void __cdecl CL_MapLoading_StartCinematic(const char *mapname, float volume)
         CL_MapLoading_CalcMovieToPlay_LoadObj(mapname, movieName);
 #endif
     R_Cinematic_StartPlayback(movieName, 5, volume);
+#ifdef __SWITCH__
+    // Map-load cinematics are started directly through the renderer, not the
+    // "cinematic" console command. Give them their own skippable lifecycle so
+    // finishing the map load does not silently cancel a still-playing movie.
+    cin_skippable = 1;
+    SCR_SetMapLoadingCinematicActive(movieName[0] != '\0');
+#endif
 }
 
 void __cdecl CL_MapLoading(const char *mapname)
