@@ -1409,14 +1409,18 @@ bool PatchFragmentShaderForAlphaTest(
 
     char cfgReason[160]{};
     const bool cfgValid = ValidateSpirvPhiEdges(patched, cfgReason, sizeof(cfgReason));
-    char cfgMessage[256];
-    std::snprintf(cfgMessage, sizeof(cfgMessage),
-        "[KisakCOD][VK ALPHA SPIRV CFG] valid=%u capture=%s discard=%s %s\n",
-        cfgValid ? 1u : 0u,
-        useSsaAlphaCapture ? "ssa" : "function_storage",
-        useDemoteToHelperInvocation ? "demote" : "kill",
-        cfgReason);
-    Switch_LogWrite(cfgMessage);
+    if (!cfgValid)
+    {
+        char cfgMessage[256];
+        std::snprintf(
+            cfgMessage,
+            sizeof(cfgMessage),
+            "[KisakCOD][VK ALPHA SPIRV CFG] validation failed capture=%s discard=%s reason=%s\n",
+            useSsaAlphaCapture ? "ssa" : "function_storage",
+            useDemoteToHelperInvocation ? "demote" : "kill",
+            cfgReason);
+        Switch_LogWrite(cfgMessage);
+    }
 
     words.swap(patched);
     words[3] = nextId;
