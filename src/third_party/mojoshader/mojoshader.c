@@ -4004,6 +4004,85 @@ void MOJOSHADER_freePreshader(const MOJOSHADER_preshader *preshader)
 
 #if SUPPORT_PROFILE_SPIRV
 #include <spirv/spirv.h> /* SpvOp, SpvOpConvertUToF, SpvOpConvertSToF, SpvOpCopyObject */
+
+static int validate_spirv_patch_table(
+    const MOJOSHADER_parseData *shader,
+    const SpirvPatchTable **tableOut,
+    size_t *codeBytesOut)
+{
+    if (!shader || !shader->output || shader->output_len <= 0 ||
+        (size_t)shader->output_len <= sizeof(SpirvPatchTable))
+        return 0;
+
+    const size_t outputBytes = (size_t)shader->output_len;
+    const size_t codeBytes = outputBytes - sizeof(SpirvPatchTable);
+    if (!codeBytes || (codeBytes % sizeof(uint32)) != 0)
+        return 0;
+
+    const size_t wordCount = codeBytes / sizeof(uint32);
+    const SpirvPatchTable *table =
+        (const SpirvPatchTable *)(shader->output + codeBytes);
+
+    // Every patch offset addresses an SPIR-V word, not the trailing metadata.
+    // Validate both shader interfaces before the cross-stage linker can mutate
+    // either output; malformed declarations must fail this draw, not corrupt
+    // memory during shader linking.
+    for (uint32 usage = 0; usage < MOJOSHADER_USAGE_TOTAL; ++usage)
+    {
+        for (uint32 index = 0; index < 16; ++index)
+        {
+            const uint32 attribOffset = table->attrib_offsets[usage][index];
+            const uint32 typeOffset = table->attrib_type_offsets[usage][index];
+            const uint32 loadCount =
+                table->attrib_type_load_offsets[usage][index].num_loads;
+            if ((attribOffset && (size_t)attribOffset >= wordCount) ||
+                (typeOffset && (size_t)typeOffset >= wordCount) ||
+                (size_t)loadCount > wordCount)
+                return 0;
+
+            if (loadCount != 0 &&
+                (!table->attrib_type_load_offsets[usage][index].load_types ||
+                 !table->attrib_type_load_offsets[usage][index].load_opcodes))
+                return 0;
+        }
+    }
+
+    for (uint32 index = 0; index < 16; ++index)
+    {
+        if (table->output_offsets[index] &&
+            (size_t)table->output_offsets[index] >= wordCount)
+            return 0;
+    }
+
+    if (table->pointcoord_var_offset &&
+        (size_t)table->pointcoord_var_offset >= wordCount)
+        return 0;
+    if (table->pointcoord_load_offset &&
+        (size_t)table->pointcoord_load_offset >= wordCount)
+        return 0;
+
+    const SpirvPatchEntry *entries[] = {
+        &table->vpflip, &table->array_vec4,
+        &table->array_ivec4, &table->array_bool
+    };
+    for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); ++i)
+    {
+        if (entries[i]->offset && (size_t)entries[i]->offset >= wordCount)
+            return 0;
+    }
+    for (uint32 index = 0; index < sizeof(table->samplers) / sizeof(table->samplers[0]); ++index)
+    {
+        if (table->samplers[index].offset &&
+            (size_t)table->samplers[index].offset >= wordCount)
+            return 0;
+    }
+
+    if (tableOut)
+        *tableOut = table;
+    if (codeBytesOut)
+        *codeBytesOut = codeBytes;
+    return 1;
+}
 #endif
 
 int MOJOSHADER_linkSPIRVShaders(const MOJOSHADER_parseData *vertex_spirv,
@@ -4021,14 +4100,20 @@ int MOJOSHADER_linkSPIRVShaders(const MOJOSHADER_parseData *vertex_spirv,
         !vertex_spirv->output || !pixel_spirv->output ||
         vertexAttributeCount < 0 ||
         (vertexAttributeCount > 0 && !vertexAttributes))
-        return 0;
+        return -1;
 
     const int patchTableBytes = (int) sizeof(SpirvPatchTable);
+    const SpirvPatchTable *vTable = NULL;
+    const SpirvPatchTable *pTable = NULL;
+    size_t vertexCodeBytes = 0;
+    size_t pixelCodeBytes = 0;
     if (vertex_spirv->output_len <= patchTableBytes ||
         pixel_spirv->output_len <= patchTableBytes ||
         (vertex_spirv->output_len % (int) sizeof(uint32)) != 0 ||
-        (pixel_spirv->output_len % (int) sizeof(uint32)) != 0)
-        return 0;
+        (pixel_spirv->output_len % (int) sizeof(uint32)) != 0 ||
+        !validate_spirv_patch_table(vertex_spirv, &vTable, &vertexCodeBytes) ||
+        !validate_spirv_patch_table(pixel_spirv, &pTable, &pixelCodeBytes))
+        return -2;
 
     for (int i = 0; i < vertexAttributeCount; ++i)
     {
@@ -4042,8 +4127,7 @@ int MOJOSHADER_linkSPIRVShaders(const MOJOSHADER_parseData *vertex_spirv,
     // BYTE4  - 5
     // SHORT2 - 6
     // SHORT4 - 7
-    int vDataLen = vertex_spirv->output_len - sizeof(SpirvPatchTable);
-    SpirvPatchTable *vTable = (SpirvPatchTable *) &vertex_spirv->output[vDataLen];
+    const size_t vertexWordCount = vertexCodeBytes / sizeof(uint32);
 
     for (int i = 0; i < vertexAttributeCount; i += 1)
     {
@@ -4066,23 +4150,38 @@ int MOJOSHADER_linkSPIRVShaders(const MOJOSHADER_parseData *vertex_spirv,
         }
 
         uint32 typeDeclOffset = vTable->attrib_type_offsets[element->usage][element->usageIndex];
+        if (typeDeclOffset >= vertexWordCount && typeDeclOffset != 0)
+            return -3;
+
         if (typeDeclOffset > 0) // Vertex attribs passed may not exist in the vertex shader
         {
             ((uint32*)vertex_spirv->output)[typeDeclOffset] = typeDecl;
-            for (uint32 j = 0; j < vTable->attrib_type_load_offsets[element->usage][element->usageIndex].num_loads; j += 1)
-            {
+            const uint32 loadCount =
+                vTable->attrib_type_load_offsets[element->usage][element->usageIndex].num_loads;
+            const uint32 *loadTypes =
+                vTable->attrib_type_load_offsets[element->usage][element->usageIndex].load_types;
+            const uint32 *loadOpcodes =
+                vTable->attrib_type_load_offsets[element->usage][element->usageIndex].load_opcodes;
+            if (loadCount && (!loadTypes || !loadOpcodes || loadCount > vertexWordCount))
+                return -4;
 
-                uint32 typeLoadOffset = vTable->attrib_type_load_offsets[element->usage][element->usageIndex].load_types[j];
-                uint32 opcodeLoadOffset = vTable->attrib_type_load_offsets[element->usage][element->usageIndex].load_opcodes[j];
+            for (uint32 j = 0; j < loadCount; j += 1)
+            {
+                const uint32 typeLoadOffset = loadTypes[j];
+                const uint32 opcodeLoadOffset = loadOpcodes[j];
+                if ((typeLoadOffset && (size_t)typeLoadOffset >= vertexWordCount) ||
+                    (opcodeLoadOffset && (size_t)opcodeLoadOffset >= vertexWordCount))
+                    return -5;
+
                 if (typeLoadOffset > 0)
                     ((uint32*)vertex_spirv->output)[typeLoadOffset] = typeLoad;
                 if (opcodeLoadOffset > 0)
                 {
                     uint32* ptr_to_opcode_u32 = &((uint32*)vertex_spirv->output)[opcodeLoadOffset];
                     *ptr_to_opcode_u32 = (*ptr_to_opcode_u32 & 0xFFFF0000) | opcodeLoad;
-                } // if
-            } // for
-        } // if
+                }
+            }
+        }
     } // if
 
     MOJOSHADER_spirv_link_attributes(vertex_spirv, pixel_spirv, 0);
