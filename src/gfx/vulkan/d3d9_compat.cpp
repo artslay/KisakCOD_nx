@@ -5938,103 +5938,42 @@ HRESULT IDirect3DDevice9::UpdateTexture(
 
     if (source->arrayLayers != 1)
         return E_FAIL;
+
     const uint32_t mipCount = source->mipLevels;
     if (mipCount == 0)
         return E_FAIL;
 
-    std::vector<_D3DBOX> dirty;
-    if (source->dirtyAll)
-        dirty.push_back(_D3DBOX{0, 0, 0, source->width, source->height, source->depth});
-    else
-        dirty = source->dirtyBoxes;
-    if (dirty.empty())
+    // D3D9 UpdateTexture synchronizes the source contents with the destination.
+    // For volume textures, prefer copying complete mip levels here rather than
+    // maintaining a second CPU-side dirty-region merge path. The previous
+    // implementation copied each complete volume mip and avoided packed
+    // vector<bool> state during renderer-side lighting updates.
+    if (!source->dirtyAll && source->dirtyBoxes.empty())
         return S_OK;
 
-    std::vector<_D3DBOX> mipRegions(mipCount);
-    std::vector<bool> levelUsed(mipCount, false);
-    std::vector<VkImageLayout> sourceLayouts(mipCount, VK_IMAGE_LAYOUT_UNDEFINED);
-    std::vector<VkImageLayout> destinationLayouts(mipCount, VK_IMAGE_LAYOUT_UNDEFINED);
-
-    const auto ceilDiv = [](uint32_t value, uint32_t divisor) -> uint32_t
+    uint32_t maxDimension = std::max(source->width,
+        std::max(source->height, source->depth));
+    uint32_t maxMipLevels = 1;
+    while (maxDimension > 1u)
     {
-        return value / divisor + (value % divisor != 0 ? 1u : 0u);
-    };
+        maxDimension >>= 1u;
+        ++maxMipLevels;
+    }
+    if (mipCount > maxMipLevels)
+        return E_FAIL;
+
+    std::vector<VkImageLayout> sourceLayouts(
+        mipCount, VK_IMAGE_LAYOUT_UNDEFINED);
+    std::vector<VkImageLayout> destinationLayouts(
+        mipCount, VK_IMAGE_LAYOUT_UNDEFINED);
 
     for (uint32_t level = 0; level < mipCount; ++level)
     {
-        const uint32_t width = std::max(1u, source->width >> level);
-        const uint32_t height = std::max(1u, source->height >> level);
-        const uint32_t depth = std::max(1u, source->depth >> level);
-        const uint32_t scale = uint32_t{1} << std::min(level, 31u);
-        _D3DBOX merged{};
-        bool hasRegion = false;
-
-        for (const _D3DBOX &base : dirty)
-        {
-            _D3DBOX region{};
-            region.Left = base.Left / scale;
-            region.Top = base.Top / scale;
-            region.Front = base.Front / scale;
-            region.Right = ceilDiv(base.Right, scale);
-            region.Bottom = ceilDiv(base.Bottom, scale);
-            region.Back = ceilDiv(base.Back, scale);
-
-            region.Left = std::min(region.Left, width);
-            region.Top = std::min(region.Top, height);
-            region.Front = std::min(region.Front, depth);
-            region.Right = std::min(region.Right, width);
-            region.Bottom = std::min(region.Bottom, height);
-            region.Back = std::min(region.Back, depth);
-
-            if (formatInfo.compressed)
-            {
-                region.Left &= ~3u;
-                region.Top &= ~3u;
-                region.Right = static_cast<uint32_t>(std::min<uint64_t>(
-                    width, (static_cast<uint64_t>(region.Right) + 3u) & ~uint64_t{3}));
-                region.Bottom = static_cast<uint32_t>(std::min<uint64_t>(
-                    height, (static_cast<uint64_t>(region.Bottom) + 3u) & ~uint64_t{3}));
-            }
-
-            if (region.Left >= region.Right || region.Top >= region.Bottom ||
-                region.Front >= region.Back)
-                continue;
-
-            if (!hasRegion)
-            {
-                merged = region;
-                hasRegion = true;
-            }
-            else
-            {
-                merged.Left = std::min(merged.Left, region.Left);
-                merged.Top = std::min(merged.Top, region.Top);
-                merged.Front = std::min(merged.Front, region.Front);
-                merged.Right = std::max(merged.Right, region.Right);
-                merged.Bottom = std::max(merged.Bottom, region.Bottom);
-                merged.Back = std::max(merged.Back, region.Back);
-            }
-        }
-
-        if (!hasRegion)
-            continue;
-
-        // The destination may be used later as an update source. Never copy
-        // from undefined source contents, and only transition mip levels that
-        // actually intersect the dirty volume region.
         sourceLayouts[level] = source->GetSubresourceLayout(level);
         destinationLayouts[level] = destination->GetSubresourceLayout(level);
         if (sourceLayouts[level] == VK_IMAGE_LAYOUT_UNDEFINED)
             return E_FAIL;
-        mipRegions[level] = merged;
-        levelUsed[level] = true;
     }
-
-    bool anyLevelUsed = false;
-    for (bool used : levelUsed)
-        anyLevelUsed = anyLevelUsed || used;
-    if (!anyLevelUsed)
-        return S_OK;
 
     const VkImageLayout sourceOverallLayout = source->layout;
     const bool recordInCurrentFrame = m_backend->IsFrameActive();
@@ -6044,10 +5983,6 @@ HRESULT IDirect3DDevice9::UpdateTexture(
     {
         for (uint32_t level = 0; level < mipCount; ++level)
         {
-            if (!levelUsed[level])
-                continue;
-
-            const _D3DBOX &region = mipRegions[level];
             VkImageSubresourceRange range{};
             range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             range.baseMipLevel = level;
@@ -6070,16 +6005,10 @@ HRESULT IDirect3DDevice9::UpdateTexture(
             copy.srcSubresource.baseArrayLayer = 0;
             copy.srcSubresource.layerCount = 1;
             copy.dstSubresource = copy.srcSubresource;
-            copy.srcOffset = {
-                static_cast<int32_t>(region.Left),
-                static_cast<int32_t>(region.Top),
-                static_cast<int32_t>(region.Front)
-            };
-            copy.dstOffset = copy.srcOffset;
             copy.extent = {
-                region.Right - region.Left,
-                region.Bottom - region.Top,
-                region.Back - region.Front
+                std::max(1u, source->width >> level),
+                std::max(1u, source->height >> level),
+                std::max(1u, source->depth >> level)
             };
             vkCmdCopyImage(
                 commandBuffer,
@@ -6108,13 +6037,12 @@ HRESULT IDirect3DDevice9::UpdateTexture(
 
     for (uint32_t level = 0; level < mipCount; ++level)
     {
-        if (!levelUsed[level])
-            continue;
         source->SetSubresourceLayout(level, 0, sourceLayouts[level]);
         destination->SetSubresourceLayout(
             level, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
     source->layout = sourceOverallLayout;
+    destination->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     source->dirtyAll = false;
     source->dirtyBoxes.clear();
