@@ -839,6 +839,9 @@ void __cdecl CG_UpdateCursorHints(int localClientNum)
 
 char *__cdecl CG_GetWeaponUseString(int localClientNum, const char **secondaryString)
 {
+    // Some hint paths return early (for example, grenade throwback) without a secondary name.
+    if (secondaryString)
+        *secondaryString = nullptr;
     int cursorHintIcon; // r11
     int v5; // r30
     WeaponDef *WeaponDef; // r29
