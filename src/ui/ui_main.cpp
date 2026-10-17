@@ -2529,10 +2529,30 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
 		return;
     }
 
-    if (!I_stricmp(out, "Quit"))
+    if (!I_stricmp(out, "Quit") ||
+        !I_stricmp(out, "QuitGame") ||
+        !I_stricmp(out, "ExitGame") ||
+        !I_stricmp(out, "quitgame") ||
+        !I_stricmp(out, "exitgame"))
     {
-        int controllerIndex = CL_ControllerIndexFromClientNum(0);
-        Cmd_ExecuteSingleCommand(0, controllerIndex, (char *)"quit");
+        // Run shutdown through the regular command buffer, outside the UI
+        // script traversal. This also works when the menu script closes its
+        // current menu before dispatching the exit action.
+        Cbuf_AddText(0, "quit\\n");
+        return;
+    }
+
+    if (!I_stricmp(out, "Restart") ||
+        !I_stricmp(out, "RestartMission") ||
+        !I_stricmp(out, "RestartLevel") ||
+        !I_stricmp(out, "restart_mission"))
+    {
+        // map_restart is the engine's real SP restart path. Clear the pause
+        // state first; SV_MapRestart preserves cl_paused across the restart.
+        Dvar_SetIntByName("cl_paused", 0);
+        Key_ClearStates(localClientNum);
+        Menus_CloseAll(&uiInfo.uiDC);
+        Cbuf_AddText(0, "map_restart\\n");
         return;
     }
 
@@ -2556,7 +2576,14 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
 
     if (!I_stricmp(out, "closeingame"))
     {
+#ifdef __SWITCH__
+        // On Switch the pad router gates gameplay actions while KEYCATCH_UI
+        // is set. Closing the in-game menu must release that catcher too,
+        // otherwise the menu disappears but gameplay input remains captured.
+        Key_SetCatcher(localClientNum, 0);
+#else
         Key_RemoveCatcher(localClientNum, ~KEYCATCH_UI);
+#endif
         Key_ClearStates(localClientNum);
         Dvar_SetIntByName("cl_paused", 0);
         Menus_CloseAll(&uiInfo.uiDC);
