@@ -11127,6 +11127,17 @@ void __cdecl Scr_SetOrigin(gentity_s *ent, int offset)
         Scr_Error("origin being set to NAN.");
     }
     G_SetOrigin(ent, v4);
+    // A script setOrigin on an unlinked player must update the authoritative
+    // playerState as well as gentity origin. Otherwise the next ClientThink
+    // runs Pmove from the stale playerState origin and writes it back over the
+    // script destination (notably during the off-map intro/link sequence).
+    // While linked, ClientEndFrame owns the world-space synchronization.
+    if (ent->client && !ent->tagInfo)
+    {
+        ent->client->ps.origin[0] = v4[0];
+        ent->client->ps.origin[1] = v4[1];
+        ent->client->ps.origin[2] = v4[2];
+    }
     sentient = ent->sentient;
     if (sentient)
         Sentient_InvalidateNearestNode(sentient);
