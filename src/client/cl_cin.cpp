@@ -11,6 +11,7 @@
 bool cin_skippable;
 
 #ifdef __SWITCH__
+extern void CL_PrepareCinematicSkipInput(int localClientNum);
 extern void Switch_LogWrite(const char *msg);
 static bool switchMapLoadingCinematicFinished;
 
@@ -46,6 +47,9 @@ int32_t __cdecl CIN_PlayCinematic(int32_t localClientNum, char *arg)
         MyAssertHandler(".\\client\\cl_cin.cpp", 33, 0, "%s", "arg");
     volume = SND_GetVolumeNormalized() * snd_cinematicVolumeScale->current.value;
     R_Cinematic_StartPlayback(arg, 5u, volume);
+#ifdef __SWITCH__
+    CL_PrepareCinematicSkipInput(localClientNum);
+#endif
     if (cls.uiStarted)
         UI_SetActiveMenu(localClientNum, UIMENU_NONE);
     Con_Close(localClientNum);
