@@ -354,7 +354,30 @@ uint16_t __cdecl R_CacheStaticModelSurface(
     SkinCachedStaticModelCmd skinSmodelCmd; // [esp+28h] [ebp-8h] BYREF
     uint32_t cachedVertsNeeded; // [esp+2Ch] [ebp-4h]
 
+#ifdef __SWITCH__
+    // The cache pools and their intrusive links are process-local runtime
+    // state. Refuse invalid serialized indices before indexing either array.
+    if (!lodInfo ||
+        !rgp.world ||
+        !rgp.world->dpvs.smodelDrawInsts ||
+        smodelIndex >= rgp.world->dpvs.smodelCount ||
+        smcIndex >= ARRAY_COUNT(s_cache.freelist) ||
+        lodInfo->lod >= MAX_LODS ||
+        lodInfo->smcAllocBits < 4 ||
+        lodInfo->smcAllocBits > 9)
+    {
+        SMC_LogRejectedCacheReference(
+            smodelIndex,
+            lodInfo ? lodInfo->lod : UINT32_MAX,
+            0,
+            nullptr,
+            nullptr,
+            "invalid-cache-parameters");
+        return 0;
+    }
+#else
     iassert(lodInfo);
+#endif
     iassert(lodInfo->smcAllocBits >= 4 && lodInfo->smcAllocBits <= 9);
     iassert(r_smc_enable->current.enabled);
     iassert(Sys_IsMainThread());
@@ -363,6 +386,60 @@ uint16_t __cdecl R_CacheStaticModelSurface(
         return 0;
 
     cacheIndex = rgp.world->dpvs.smodelDrawInsts[smodelIndex].smodelCacheIndex[lodInfo->lod];
+#ifdef __SWITCH__
+    if (cacheIndex)
+    {
+        bool cacheReferenceValid =
+            cacheIndex <= ARRAY_COUNT(s_cache.trees) * ARRAY_COUNT(s_cache.leafs[0]);
+        GfxCachedSModelSurf *referenceSurf = nullptr;
+        static_model_tree_t *referenceTree = nullptr;
+
+        if (cacheReferenceValid)
+        {
+            referenceSurf = &SMC_GetLeaf(cacheIndex)->cachedSurf;
+            referenceTree = &s_cache.trees[
+                (reinterpret_cast<char *>(referenceSurf) -
+                 reinterpret_cast<char *>(s_cache.leafs)) /
+                sizeof(s_cache.leafs[0])];
+
+            const uint32_t baseVertIndex = referenceSurf->baseVertIndex;
+            cacheReferenceValid =
+                referenceSurf->smodelIndex == smodelIndex &&
+                referenceSurf->lodIndex == lodInfo->lod &&
+                baseVertIndex < ARRAY_COUNT(s_cache.trees) * 512u &&
+                (baseVertIndex & 0xFu) == 0 &&
+                referenceTree->nodes[0].usedVerts > 0;
+        }
+
+        if (cacheReferenceValid)
+        {
+            const static_model_tree_list_t *next = referenceTree->usedlist.next;
+            const static_model_tree_list_t *prev = referenceTree->usedlist.prev;
+            cacheReferenceValid =
+                SMC_IsKnownTreeListLink(next) &&
+                SMC_IsKnownTreeListLink(prev);
+            if (cacheReferenceValid)
+            {
+                cacheReferenceValid =
+                    next->prev == &referenceTree->usedlist &&
+                    prev->next == &referenceTree->usedlist;
+            }
+        }
+
+        if (!cacheReferenceValid)
+        {
+            SMC_LogRejectedCacheReference(
+                smodelIndex,
+                lodInfo->lod,
+                cacheIndex,
+                referenceSurf,
+                referenceTree,
+                "stale-or-corrupt-cache-index");
+            rgp.world->dpvs.smodelDrawInsts[smodelIndex].smodelCacheIndex[lodInfo->lod] = 0;
+            cacheIndex = 0;
+        }
+    }
+#endif
     if (cacheIndex)
     {
         cachedSurf = &SMC_GetLeaf(cacheIndex)->cachedSurf;
