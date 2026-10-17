@@ -2550,9 +2550,10 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
         // map_restart is the engine's real SP restart path. Clear the pause
         // state first; SV_MapRestart preserves cl_paused across the restart.
         Dvar_SetIntByName("cl_paused", 0);
+        Key_SetCatcher(localClientNum, 0);
         Key_ClearStates(localClientNum);
         Menus_CloseAll(&uiInfo.uiDC);
-        Cbuf_AddText(0, "map_restart\n");
+        Cbuf_AddText(localClientNum, "map_restart\n");
         return;
     }
 
