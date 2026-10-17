@@ -2,6 +2,7 @@
 #include "database.h"
 
 #include <cstring>
+#include <cstdio>
 #include <xanim/xanim.h>
 #include <xanim/xmodel.h>
 
@@ -876,7 +877,32 @@ static void Switch_TranslateGfxStaticModelDrawInstSerialized(GfxStaticModelDrawI
     out->cullDist = Switch_ReadSerializedValue<float>(s, 0);
     std::memcpy(&out->placement, s + 4, sizeof(out->placement));
     Switch_SeedSerializedPointer(out->model, s, 56);
-    std::memcpy(out->smodelCacheIndex, s + 60, sizeof(out->smodelCacheIndex));
+
+    // smodelCacheIndex is a renderer runtime handle, not stable world-asset
+    // state. A value serialized by another renderer session can point into an
+    // unrelated/new SMC pool and make its intrusive list treat cache fields as
+    // pointers. Keep the source values only for a throttled diagnostic.
+    uint16_t serializedCacheIndex[ARRAY_COUNT(out->smodelCacheIndex)]{};
+    std::memcpy(serializedCacheIndex, s + 60, sizeof(serializedCacheIndex));
+    static uint32_t switchSmodelCacheResetTraceCount = 0;
+    if ((serializedCacheIndex[0] || serializedCacheIndex[1] ||
+         serializedCacheIndex[2] || serializedCacheIndex[3]) &&
+        switchSmodelCacheResetTraceCount < 8u)
+    {
+        ++switchSmodelCacheResetTraceCount;
+        char trace[192];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][SMC LOAD] cleared serialized runtime cache handles [%u,%u,%u,%u]\\n",
+            static_cast<unsigned>(serializedCacheIndex[0]),
+            static_cast<unsigned>(serializedCacheIndex[1]),
+            static_cast<unsigned>(serializedCacheIndex[2]),
+            static_cast<unsigned>(serializedCacheIndex[3]));
+        Switch_LogRaw(trace);
+    }
+    std::memset(out->smodelCacheIndex, 0, sizeof(out->smodelCacheIndex));
+
     out->reflectionProbeIndex = Switch_ReadSerializedValue<uint8_t>(s, 68);
     out->primaryLightIndex = Switch_ReadSerializedValue<uint8_t>(s, 69);
     out->lightingHandle = Switch_ReadSerializedValue<uint16_t>(s, 70);
