@@ -187,13 +187,15 @@ void __cdecl R_DrawTrianglesLit(
                         ? bspSurf->material->info.name : "<null>";
                 char trace[512];
                 std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][LIGHTMAP] sample=%u material=%s index=%u count=%u flags=0x%x override=%d sunChanged=%d inRange=%d primary=%p secondary=%p\n",
+                    "[KisakCOD][LIGHTMAP] sample=%u material=%s index=%u count=%u flags=0x%x override=%d sunChanged=%d inRange=%d primarySlot=%p primaryTex=%p secondarySlot=%p secondaryTex=%p\n",
                     traceIndex, traceMaterialName, traceLightmap,
                     drawStream->lightmapCount, drawStream->customSamplerFlags,
                     override, hasSunDirChanged ? 1 : 0,
                     traceLightmapInRange ? 1 : 0,
                     static_cast<const void *>(tracePrimary),
-                    static_cast<const void *>(traceSecondary));
+                    static_cast<const void *>(tracePrimary ? tracePrimary->basemap : nullptr),
+                    static_cast<const void *>(traceSecondary),
+                    static_cast<const void *>(traceSecondary ? traceSecondary->basemap : nullptr));
                 Switch_LogWrite(trace);
             }
 #endif
