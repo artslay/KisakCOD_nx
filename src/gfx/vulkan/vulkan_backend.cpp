@@ -499,6 +499,11 @@ bool VulkanBackend::CreateDevice()
         vulkan13Features.shaderDemoteToHelperInvocation == VK_TRUE;
     const bool robustBufferAccess =
         features2.features.robustBufferAccess == VK_TRUE;
+    // COD4 world/material images commonly use DXT1/DXT3/DXT5 (BC1/BC2/BC3).
+    // Vulkan requires textureCompressionBC to be enabled before compressed
+    // texture images can be sampled by shaders.
+    const bool textureCompressionBC =
+        features2.features.textureCompressionBC == VK_TRUE;
     // Do not accidentally enable every Vulkan 1.3 feature reported by the query.
     vulkan13Features = {};
     vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -514,18 +519,20 @@ bool VulkanBackend::CreateDevice()
     // Bounds-check Vulkan vertex inputs and uniform accesses. D3D9's renderer
     // has legacy buffer ranges that must not be allowed to fault the GPU.
     features.robustBufferAccess = robustBufferAccess ? VK_TRUE : VK_FALSE;
+    features.textureCompressionBC = textureCompressionBC ? VK_TRUE : VK_FALSE;
     m_samplerAnisotropy = features2.features.samplerAnisotropy == VK_TRUE;
     features.samplerAnisotropy = m_samplerAnisotropy ? VK_TRUE : VK_FALSE;
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
     m_maxSamplerAnisotropy = m_samplerAnisotropy ? std::max(1.0f, properties.limits.maxSamplerAnisotropy) : 1.0f;
     m_maxSamplerLodBias = std::max(0.0f, properties.limits.maxSamplerLodBias);
-    char featureMsg[192];
+    char featureMsg[224];
     std::snprintf(featureMsg, sizeof(featureMsg),
-        "[KisakCOD][VK] fill_mode_non_solid=%u shader_demote_helper=%u robust_buffer_access=%u\n",
+        "[KisakCOD][VK] fill_mode_non_solid=%u shader_demote_helper=%u robust_buffer_access=%u texture_compression_bc=%u\n",
         m_fillModeNonSolid ? 1u : 0u,
         m_shaderDemoteToHelperInvocation ? 1u : 0u,
-        robustBufferAccess ? 1u : 0u);
+        robustBufferAccess ? 1u : 0u,
+        textureCompressionBC ? 1u : 0u);
     Switch_LogWrite(featureMsg);
 
     VkDeviceCreateInfo info{};
