@@ -3,6 +3,9 @@
 #include <sound/snd_public.h>
 #include <gfx_d3d/r_cinematic.h>
 #include <qcommon/cmd.h>
+#ifdef __SWITCH__
+#include <cstdio>
+#endif
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #include <cgame_mp/cg_local_mp.h>
@@ -88,6 +91,16 @@ void __cdecl CL_PlayCinematic_f()
     // CL_PlayUnskippableCinematic_f().
     cin_skippable = 1;
     arg1 = (char *)Cmd_Argv(1);
+#ifdef __SWITCH__
+    char trace[256];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][CINEMATIC COMMAND] name=%s state=%d\n",
+        arg1 ? arg1 : "(null)",
+        static_cast<int>(clientUIActives[0].connectionState));
+    Switch_LogWrite(trace);
+#endif
     Cmd_Argv(2);
     if (!arg1 || *arg1)
         CIN_PlayCinematic(0, arg1);
