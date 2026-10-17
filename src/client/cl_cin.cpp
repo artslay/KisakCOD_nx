@@ -65,7 +65,14 @@ void __cdecl CL_PlayCinematic_f()
 {
     char *arg1; // [esp+0h] [ebp-Ch]
 
+#ifdef __SWITCH__
+    // Preserve skippable startup/menu cinematics, but do not let controller
+    // input abort a full-screen cinematic launched out of active gameplay.
+    cin_skippable =
+        CL_GetLocalClientConnectionState(0) != CA_ACTIVE;
+#else
     cin_skippable = 1;
+#endif
     arg1 = (char *)Cmd_Argv(1);
     Cmd_Argv(2);
     if (!arg1 || *arg1)
@@ -92,16 +99,17 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
 
 void __cdecl SCR_StopCinematic(int32_t localClientNum)
 {
-    if (cin_skippable || R_Cinematic_IsFinished())
+    const bool cinematicFinished = R_Cinematic_IsFinished();
+    if (cin_skippable || cinematicFinished)
     {
-        // Capture the queued follow-up before clearing nextmap. UIMENU_NONE
-        // leaves KEYCATCH_UI active, so the usual disconnected-state fallback
-        // may never reopen the main menu after the final cinematic.
+        // Capture the queued follow-up before clearing nextmap. With no next
+        // movie, natural EOF must hand control back to the frontend instead of
+        // leaving UIMENU_NONE active until the user presses a button.
         const char *nextCommand = nextmap ? nextmap->current.string : nullptr;
         const bool hasNextCommand = nextCommand && nextCommand[0] != '\0';
 
 #ifdef __SWITCH__
-        if (R_Cinematic_IsFinished() &&
+        if (cinematicFinished &&
             CL_GetLocalClientConnectionState(localClientNum) == CA_LOADING)
         {
             switchMapLoadingCinematicFinished = true;
@@ -126,7 +134,10 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
                 Cbuf_AddText(0, va("%s\n", nextCommand));
                 Dvar_SetString((dvar_s *)nextmap, (char*)"");
             }
-
+            else if (cinematicFinished && cls.uiStarted)
+            {
+                UI_SetActiveMenu(localClientNum, UIMENU_MAIN);
+            }
         }
     }
 }
