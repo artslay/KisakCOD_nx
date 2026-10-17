@@ -4759,6 +4759,20 @@ bool IDirect3DDevice9::EnsurePipeline()
     // state. The exception handler prints it only if this vkCreate call faults.
     const uint64_t vsSpirvHash = HashSpirvWords(m_vertexShader->spirv);
     const uint64_t psSpirvHash = HashSpirvWords(m_pixelShader->spirv);
+
+#ifdef __SWITCH__
+    // The crash reproduces on this exact PS/pipeline pair inside NVK's
+    // vkCreateGraphicsPipelines path. Disable driver optimization for this
+    // pipeline only to test whether the failing path is an optimizer pass.
+    if (key == 0xc665cb7839b36a01ull &&
+        psSpirvHash == 0x8b90ee0e706f2d27ull)
+    {
+        info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
+        Switch_LogWrite(
+            "[KisakCOD][VK PIPELINE] targeted disable-optimization flag for reproducible NVK crash\n");
+    }
+#endif
+
     const uint32_t pipelineCreateSequence = ++g_switchPipelineCreateSequence;
     const MOJOSHADER_parseData *preVs = m_vertexShader->parseData;
     const MOJOSHADER_parseData *prePs = m_pixelShader->parseData;
