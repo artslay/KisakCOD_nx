@@ -4274,7 +4274,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     const bool earlyPipelineDump = pipelineCreateSequence <= 8;
     const bool probePipelineDump =
         pipelineCreateSequence > 8 && pipelineCreateSequence <= 32;
-    const bool recentPipelineDump = pipelineCreateSequence >= 180;
+    // Keep the recurring runtime log compact. Shader dumps and detailed pipeline
+    // state are limited to the startup probes or the explicitly targeted shader pair.
+    const bool recentPipelineDump = false;
     // The latest run completed seq=92 and later pipelines, then faulted
     // during the create call for the shader pair below. Match the pair rather
     // than sequence alone so capture remains correct if pipeline ordering shifts.
@@ -4361,9 +4363,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_depthWrite ? 1u : 0u,
         static_cast<unsigned int>(m_depthFunc),
         m_blendEnable ? 1u : 0u);
-    if (pipelineCreateSequence <= 8 ||
-        (pipelineCreateSequence > 8 && pipelineCreateSequence <= 32) ||
-        pipelineCreateSequence >= 180 || targetPipelineDump)
+    if (pipelineCreateSequence <= 8 || targetPipelineDump)
     {
         Switch_LogWrite(preCreateMsg);
     }
@@ -4383,9 +4383,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         Switch_LogWrite(compactMsg);
     }
 
-    if (pipelineCreateSequence <= 8 ||
-        (pipelineCreateSequence > 8 && pipelineCreateSequence <= 32) ||
-        pipelineCreateSequence >= 180 || targetPipelineDump)
+    if (pipelineCreateSequence <= 8 || targetPipelineDump)
     {
         char handlesMsg[768];
         std::snprintf(
@@ -4580,7 +4578,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_return";
     const auto pipelineCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - pipelineCreateStart).count();
-    if (pipelineCreateSequence <= 8 || pipelineCreateSequence >= 160 ||
+    if (pipelineCreateSequence <= 8 ||
         pipelineCreateElapsed >= 250 || pipelineResult != VK_SUCCESS)
     {
         char createdMsg[256];
