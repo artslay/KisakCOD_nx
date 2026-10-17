@@ -80,6 +80,19 @@ struct GfxFindLightForSphere // sizeof=0x14
 
 $616C0C4E0125F5DAA7F70C1AB2F0F42D modelLightGlob;
 
+// The Switch D3D9 compatibility layer emulates LockBox with a CPU shadow and
+// uploads the edited 3D texture directly to Vulkan. The separate SYSTEMMEM +
+// UpdateTexture model-lighting path adds a second image and copy step that is
+// unnecessary for this backend and was implicated in the early-game heap fault.
+static bool R_UseAltModelLightingUpdate()
+{
+#ifdef __SWITCH__
+    return false;
+#else
+    return Dvar_GetBool("r_altModelLightingUpdate");
+#endif
+}
+
 GfxSmodelLightGlob smodelLightGlob;
 
 int s_modelLightingSampleDelta[64];
@@ -636,7 +649,7 @@ void __cdecl R_InitModelLightingImage()
 
     iassert(modelLightGlob.totalEntryLimit);
 
-    useAltUpdate = Dvar_GetBool("r_altModelLightingUpdate");
+    useAltUpdate = R_UseAltModelLightingUpdate();
     modelLightGlob.lightImages[0] = Image_AllocProg(12, IMG_CATEGORY_RAW, TS_FUNCTION);
     if (useAltUpdate)
     {
@@ -729,7 +742,7 @@ void __cdecl RB_PatchModelLighting(const GfxModelLightingPatch *patchList, uint3
         }
 
         iassert(modelLightGlob.lockedBox.pBits == NULL);
-        useAltUpdate = Dvar_GetBool("r_altModelLightingUpdate");
+        useAltUpdate = R_UseAltModelLightingUpdate();
         if (useAltUpdate)
             lightImage = modelLightGlob.lightImages[1];
         else
