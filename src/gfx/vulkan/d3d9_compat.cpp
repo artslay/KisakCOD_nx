@@ -50,6 +50,16 @@ std::mutex g_vulkanResourceRegistryMutex;
 std::unordered_set<KisakVkBuffer *> g_liveVulkanBuffers;
 std::unordered_set<KisakVkShader *> g_liveVulkanShaders;
 
+struct SwitchPipelineCrashSnapshot
+{
+    bool valid = false;
+    uint32_t sequence = 0;
+    const std::vector<uint32_t> *vertexSpirv = nullptr;
+    const std::vector<uint32_t> *pixelSpirv = nullptr;
+    char summary[1200]{};
+};
+SwitchPipelineCrashSnapshot g_switchPipelineCrashSnapshot;
+
 uint64_t HashSpirvWords(const std::vector<uint32_t> &words)
 {
     uint64_t hash = 14695981039346656037ull;
@@ -62,17 +72,6 @@ uint64_t HashSpirvWords(const std::vector<uint32_t> &words)
         }
     }
     return hash;
-}
-
-bool WriteSwitchPipelineSpirv(const char *path, const std::vector<uint32_t> &words)
-{
-    FILE *file = std::fopen(path, "wb");
-    if (!file)
-        return false;
-
-    const size_t written = std::fwrite(words.data(), sizeof(uint32_t), words.size(), file);
-    const int closeResult = std::fclose(file);
-    return written == words.size() && closeResult == 0;
 }
 
 uint32_t g_switchPipelineCreateSequence = 0;
@@ -4203,40 +4202,41 @@ bool IDirect3DDevice9::EnsurePipeline()
     info.layout = m_backend->PipelineLayout();
     info.renderPass = VK_NULL_HANDLE;
 
-    // Snapshot the exact shader modules passed to NVK before entering the driver.
-    // NVK can fault while compiling NIR->NAK, before vkCreateGraphicsPipelines returns.
+    // Keep a memory-only snapshot of the exact shader pair and compact pipeline
+    // state. The exception handler prints it only if this vkCreate call faults.
     const uint64_t vsSpirvHash = HashSpirvWords(m_vertexShader->spirv);
     const uint64_t psSpirvHash = HashSpirvWords(m_pixelShader->spirv);
     const uint32_t pipelineCreateSequence = ++g_switchPipelineCreateSequence;
-    // Keep one targeted capture for the shader pair seen at the last driver crash;
-    // all other pipelines use a single compact line in the runtime log.
-    static bool targetPipelineCaptureLogged = false;
-    const bool targetPipelineDump = !targetPipelineCaptureLogged &&
-        vsSpirvHash == 0xfef68669dda9fe8aull &&
-        psSpirvHash == 0xc277eb01379f42dbull;
-    if (targetPipelineDump)
-        targetPipelineCaptureLogged = true;
-
     const MOJOSHADER_parseData *preVs = m_vertexShader->parseData;
     const MOJOSHADER_parseData *prePs = m_pixelShader->parseData;
-    char preCreateMsg[768];
+
+    g_switchPipelineCrashSnapshot.valid = false;
+    g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
+    g_switchPipelineCrashSnapshot.vertexSpirv = &m_vertexShader->spirv;
+    g_switchPipelineCrashSnapshot.pixelSpirv = &m_pixelShader->spirv;
     std::snprintf(
-        preCreateMsg, sizeof(preCreateMsg),
-        "[KisakCOD][VK PIPELINE PRE] seq=%u key=%016llx vs={serial=%llu,words=%zu,hash=%016llx,profile=%s,type=%d,bytes=%d} ps={serial=%llu,words=%zu,hash=%016llx,profile=%s,type=%d,bytes=%d} formats=%u/%u samples=%u topology=%u bindings=%zu attrs=%zu alpha=%u/%u/%u spec=%u/%u storedSpec=%u/%u depth=%u/%u/%u blend=%u\n",
+        g_switchPipelineCrashSnapshot.summary,
+        sizeof(g_switchPipelineCrashSnapshot.summary),
+        "[KisakCOD][VK CRASH PIPELINE] seq=%u key=%016llx "
+        "vs={serial=%llu,words=%zu,hash=%016llx,version=%08x,bound=%u} "
+        "ps={serial=%llu,words=%zu,hash=%016llx,version=%08x,bound=%u} "
+        "color=%u depthFmt=%u samples=%u topology=%u bind=%zu attrs=%zu "
+        "alpha=%u/%u/%u spec=%u/%u storedSpec=%u/%u "
+        "depth=%u/%u/%u stencil=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u "
+        "mask=%u atoc=%u dynamic=%u layout=%p modules=%p/%p "
+        "specData=%p/%zu values=%.3f/%.6f\\n",
         pipelineCreateSequence,
         static_cast<unsigned long long>(key),
         static_cast<unsigned long long>(m_vertexShader->serial),
         m_vertexShader->spirv.size(),
         static_cast<unsigned long long>(vsSpirvHash),
-        preVs && preVs->profile ? preVs->profile : "(null)",
-        preVs ? static_cast<int>(preVs->shader_type) : -1,
-        preVs ? preVs->output_len : 0,
+        m_vertexShader->spirv.size() > 1 ? m_vertexShader->spirv[1] : 0u,
+        m_vertexShader->spirv.size() > 3 ? m_vertexShader->spirv[3] : 0u,
         static_cast<unsigned long long>(m_pixelShader->serial),
         m_pixelShader->spirv.size(),
         static_cast<unsigned long long>(psSpirvHash),
-        prePs && prePs->profile ? prePs->profile : "(null)",
-        prePs ? static_cast<int>(prePs->shader_type) : -1,
-        prePs ? prePs->output_len : 0,
+        m_pixelShader->spirv.size() > 1 ? m_pixelShader->spirv[1] : 0u,
+        m_pixelShader->spirv.size() > 3 ? m_pixelShader->spirv[3] : 0u,
         static_cast<unsigned int>(colorFormat),
         static_cast<unsigned int>(depthFormat),
         static_cast<unsigned int>(colorSamples),
@@ -4253,209 +4253,27 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_depthEnable ? 1u : 0u,
         m_depthWrite ? 1u : 0u,
         static_cast<unsigned int>(m_depthFunc),
-        m_blendEnable ? 1u : 0u);
-    if (pipelineCreateSequence <= 2 || targetPipelineDump)
-    {
-        Switch_LogWrite(preCreateMsg);
-    }
-    else
-    {
-        char compactMsg[256];
-        std::snprintf(
-            compactMsg, sizeof(compactMsg),
-            "[KisakCOD][VK PIPELINE] begin seq=%u key=%016llx vs=%016llx ps=%016llx formats=%u/%u topology=%u\n",
-            pipelineCreateSequence,
-            static_cast<unsigned long long>(key),
-            static_cast<unsigned long long>(vsSpirvHash),
-            static_cast<unsigned long long>(psSpirvHash),
-            static_cast<unsigned int>(colorFormat),
-            static_cast<unsigned int>(depthFormat),
-            static_cast<unsigned int>(m_topology));
-        Switch_LogWrite(compactMsg);
-    }
-
-    if (pipelineCreateSequence <= 2 || targetPipelineDump)
-    {
-        char handlesMsg[768];
-        std::snprintf(
-            handlesMsg, sizeof(handlesMsg),
-            "[KisakCOD][VK PIPELINE INPUT] seq=%u info=%p pNext=%p device=%p layout=%p vsModule=%p psModule=%p stages=%p stageCount=%u vertexInput=%p bindings=%u attrs=%u assembly=%p topology=%u viewport=%p raster=%p multisample=%p depth=%p blend=%p dynamic=%p alphaTest=%u alphaFunc=%u alphaRef=%u specIds=%u/%u specInfo=%p specEntries=%u mapIds=%u/%u offsets=%u/%u sizes=%zu/%zu specData=%p dataSize=%zu values=%.3f/%.6f\n",
-            pipelineCreateSequence,
-            static_cast<const void *>(&info),
-            static_cast<const void *>(info.pNext),
-            static_cast<void *>(m_backend->Device()),
-            static_cast<void *>(info.layout),
-            static_cast<void *>(stages[0].module),
-            static_cast<void *>(stages[1].module),
-            static_cast<const void *>(info.pStages),
-            info.stageCount,
-            static_cast<const void *>(info.pVertexInputState),
-            info.pVertexInputState->vertexBindingDescriptionCount,
-            info.pVertexInputState->vertexAttributeDescriptionCount,
-            static_cast<const void *>(info.pInputAssemblyState),
-            static_cast<unsigned int>(info.pInputAssemblyState->topology),
-            static_cast<const void *>(info.pViewportState),
-            static_cast<const void *>(info.pRasterizationState),
-            static_cast<const void *>(info.pMultisampleState),
-            static_cast<const void *>(info.pDepthStencilState),
-            static_cast<const void *>(info.pColorBlendState),
-            static_cast<const void *>(info.pDynamicState),
-            m_alphaTest ? 1u : 0u,
-            m_alphaFunc,
-            m_alphaRef,
-            pipelineAlphaFuncSpecId,
-            pipelineAlphaRefSpecId,
-            static_cast<const void *>(stages[1].pSpecializationInfo),
-            stages[1].pSpecializationInfo
-                ? stages[1].pSpecializationInfo->mapEntryCount : 0u,
-            alphaSpecializationEntries[0].constantID,
-            alphaSpecializationEntries[1].constantID,
-            alphaSpecializationEntries[0].offset,
-            alphaSpecializationEntries[1].offset,
-            alphaSpecializationEntries[0].size,
-            alphaSpecializationEntries[1].size,
-            stages[1].pSpecializationInfo
-                ? stages[1].pSpecializationInfo->pData : nullptr,
-            stages[1].pSpecializationInfo
-                ? stages[1].pSpecializationInfo->dataSize : 0u,
-            alphaSpecializationData.func,
-            alphaSpecializationData.ref);
-        Switch_LogWrite(handlesMsg);
-    }
-
-    // Capture both modules for the pipeline that now faults. The vertex
-    // shader appeared in earlier successful pipelines, but preserving both exact
-    // binaries lets us validate the pair and driver input instead of guessing.
-    if (targetPipelineDump)
-    {
-        const char *targetVsPath = "sdmc:/switch/KisakCOD/vk_crash_vs.spv";
-        const bool targetVsSaved = WriteSwitchPipelineSpirv(
-            targetVsPath, m_vertexShader->spirv);
-        char targetVsMsg[256];
-        std::snprintf(
-            targetVsMsg, sizeof(targetVsMsg),
-            "[KisakCOD][VK SPIRV TARGET] seq=%u stage=vs saved=%u words=%zu bytes=%zu hash=%016llx path=%s\n",
-            pipelineCreateSequence,
-            targetVsSaved ? 1u : 0u,
-            m_vertexShader->spirv.size(),
-            m_vertexShader->spirv.size() * sizeof(uint32_t),
-            static_cast<unsigned long long>(vsSpirvHash),
-            targetVsPath);
-        Switch_LogWrite(targetVsMsg);
-
-        const char *targetPsPath = "sdmc:/switch/KisakCOD/vk_crash_ps.spv";
-        const bool targetPsSaved = WriteSwitchPipelineSpirv(
-            targetPsPath, m_pixelShader->spirv);
-        char targetPsMsg[256];
-        std::snprintf(
-            targetPsMsg, sizeof(targetPsMsg),
-            "[KisakCOD][VK SPIRV TARGET] seq=%u stage=ps saved=%u words=%zu bytes=%zu hash=%016llx path=%s\n",
-            pipelineCreateSequence,
-            targetPsSaved ? 1u : 0u,
-            m_pixelShader->spirv.size(),
-            m_pixelShader->spirv.size() * sizeof(uint32_t),
-            static_cast<unsigned long long>(psSpirvHash),
-            targetPsPath);
-        Switch_LogWrite(targetPsMsg);
-        char stateMsg[768];
-        std::snprintf(
-            stateMsg, sizeof(stateMsg),
-            "[KisakCOD][VK PIPELINE STATE] seq=%u color=%u depth=%u samples=%u topology=%u bindings=%u attrs=%u polygon=%u cull=%u frontFace=%u lineWidth=%.3f depthBias=%u/%.6g/%.6g depth=%u/%u/%u stencil=%u twoSided=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u colorMask=%u alphaToCoverage=%u sampleMask=%08x dynamic=%u layout=%p shaderModules=%p/%p\n",
-            pipelineCreateSequence,
-            static_cast<unsigned int>(colorFormat),
-            static_cast<unsigned int>(depthFormat),
-            static_cast<unsigned int>(colorSamples),
-            static_cast<unsigned int>(m_topology),
-            static_cast<unsigned int>(bindings.size()),
-            static_cast<unsigned int>(vertexAttrs.size()),
-            static_cast<unsigned int>(raster.polygonMode),
-            static_cast<unsigned int>(raster.cullMode),
-            static_cast<unsigned int>(raster.frontFace),
-            raster.lineWidth,
-            static_cast<unsigned int>(raster.depthBiasEnable),
-            raster.depthBiasConstantFactor,
-            raster.depthBiasSlopeFactor,
-            static_cast<unsigned int>(depth.depthTestEnable),
-            static_cast<unsigned int>(depth.depthWriteEnable),
-            static_cast<unsigned int>(depth.depthCompareOp),
-            static_cast<unsigned int>(depth.stencilTestEnable),
-            static_cast<unsigned int>(m_twoSidedStencil),
-            static_cast<unsigned int>(colorBlend.blendEnable),
-            static_cast<unsigned int>(colorBlend.srcColorBlendFactor),
-            static_cast<unsigned int>(colorBlend.dstColorBlendFactor),
-            static_cast<unsigned int>(colorBlend.srcAlphaBlendFactor),
-            static_cast<unsigned int>(colorBlend.dstAlphaBlendFactor),
-            static_cast<unsigned int>(colorBlend.colorBlendOp),
-            static_cast<unsigned int>(colorBlend.alphaBlendOp),
-            static_cast<unsigned int>(colorBlend.colorWriteMask),
-            static_cast<unsigned int>(multisample.alphaToCoverageEnable),
-            m_multisampleMask,
-            dynamic.dynamicStateCount,
-            static_cast<void *>(info.layout),
-            static_cast<void *>(stages[0].module),
-            static_cast<void *>(stages[1].module));
-        Switch_LogWrite(stateMsg);
-
-        char renderingMsg[320];
-        std::snprintf(
-            renderingMsg, sizeof(renderingMsg),
-            "[KisakCOD][VK PIPELINE RENDERING] seq=%u sType=%u pNext=%p viewMask=%u colorCount=%u colorFormats=%p color0=%u depth=%u stencil=%u\n",
-            pipelineCreateSequence, static_cast<unsigned int>(rendering.sType),
-            const_cast<void *>(rendering.pNext), rendering.viewMask,
-            rendering.colorAttachmentCount,
-            static_cast<const void *>(rendering.pColorAttachmentFormats),
-            rendering.colorAttachmentCount && rendering.pColorAttachmentFormats
-                ? static_cast<unsigned int>(rendering.pColorAttachmentFormats[0])
-                : static_cast<unsigned int>(VK_FORMAT_UNDEFINED),
-            static_cast<unsigned int>(rendering.depthAttachmentFormat),
-            static_cast<unsigned int>(rendering.stencilAttachmentFormat));
-        Switch_LogWrite(renderingMsg);
-
-        char createMsg[320];
-        std::snprintf(
-            createMsg, sizeof(createMsg),
-            "[KisakCOD][VK PIPELINE CREATEINFO] seq=%u flags=%u renderPass=%p subpass=%u base=%p baseIndex=%d layout=%p stages=%u pStages=%p pNext=%p\n",
-            pipelineCreateSequence, static_cast<unsigned int>(info.flags),
-            static_cast<void *>(info.renderPass), info.subpass,
-            static_cast<void *>(info.basePipelineHandle), info.basePipelineIndex,
-            static_cast<void *>(info.layout), info.stageCount,
-            static_cast<const void *>(info.pStages),
-            static_cast<const void *>(info.pNext));
-        Switch_LogWrite(createMsg);
-
-        for (uint32_t stageIndex = 0; stageIndex < info.stageCount; ++stageIndex)
-        {
-            const VkPipelineShaderStageCreateInfo &stage = info.pStages[stageIndex];
-            const VkSpecializationInfo *spec = stage.pSpecializationInfo;
-            char stageMsg[320];
-            std::snprintf(
-                stageMsg, sizeof(stageMsg),
-                "[KisakCOD][VK PIPELINE STAGE] seq=%u index=%u sType=%u stage=0x%x flags=%u module=%p name=%s spec=%p mapCount=%u dataSize=%zu data=%p\n",
-                pipelineCreateSequence, stageIndex,
-                static_cast<unsigned int>(stage.sType),
-                static_cast<unsigned int>(stage.stage),
-                static_cast<unsigned int>(stage.flags),
-                static_cast<void *>(stage.module),
-                stage.pName ? stage.pName : "(null)",
-                static_cast<const void *>(spec),
-                spec ? spec->mapEntryCount : 0u,
-                spec ? spec->dataSize : 0u,
-                spec ? spec->pData : nullptr);
-            Switch_LogWrite(stageMsg);
-        }
-
-        for (size_t attrIndex = 0; attrIndex < vertexAttrs.size(); ++attrIndex)
-        {
-            const VkVertexInputAttributeDescription &attr = vertexAttrs[attrIndex];
-            char attrMsg[160];
-            std::snprintf(
-                attrMsg, sizeof(attrMsg),
-                "[KisakCOD][VK PIPELINE ATTRIBUTE] seq=%u index=%zu location=%u binding=%u format=%u offset=%u\n",
-                pipelineCreateSequence, attrIndex, attr.location, attr.binding,
-                static_cast<unsigned int>(attr.format), attr.offset);
-            Switch_LogWrite(attrMsg);
-        }
-    }
+        static_cast<unsigned int>(depth.stencilTestEnable),
+        static_cast<unsigned int>(colorBlend.blendEnable),
+        static_cast<unsigned int>(colorBlend.srcColorBlendFactor),
+        static_cast<unsigned int>(colorBlend.dstColorBlendFactor),
+        static_cast<unsigned int>(colorBlend.srcAlphaBlendFactor),
+        static_cast<unsigned int>(colorBlend.dstAlphaBlendFactor),
+        static_cast<unsigned int>(colorBlend.colorBlendOp),
+        static_cast<unsigned int>(colorBlend.alphaBlendOp),
+        static_cast<unsigned int>(colorBlend.colorWriteMask),
+        static_cast<unsigned int>(multisample.alphaToCoverageEnable),
+        dynamic.dynamicStateCount,
+        static_cast<void *>(info.layout),
+        static_cast<void *>(stages[0].module),
+        static_cast<void *>(stages[1].module),
+        stages[1].pSpecializationInfo
+            ? stages[1].pSpecializationInfo->pData : nullptr,
+        stages[1].pSpecializationInfo
+            ? stages[1].pSpecializationInfo->dataSize : 0u,
+        alphaSpecializationData.func,
+        alphaSpecializationData.ref);
+    g_switchPipelineCrashSnapshot.valid = true;
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
