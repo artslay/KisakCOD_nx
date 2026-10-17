@@ -313,6 +313,22 @@ void __cdecl player_die(
             v25,
             hitLoc,
             number);
+#ifdef __SWITCH__
+        if (self->s.number == 0)
+        {
+            Com_Printf(
+                CON_CHANNEL_SERVER,
+                "[KisakCOD][PLAYER DEATH] damage=%d mod=%d modName=%s weapon=%s killer=%d linked=%d parent=%d health=%d psOrigin=(%.2f,%.2f,%.2f) entOrigin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) gravity=%d pm=%d\n",
+                damage, meansOfDeath, v27, v25, number,
+                self->tagInfo ? 1 : 0,
+                self->tagInfo && self->tagInfo->parent ? self->tagInfo->parent->s.number : -1,
+                self->health,
+                client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
+                self->r.currentOrigin[0], self->r.currentOrigin[1], self->r.currentOrigin[2],
+                client->ps.velocity[0], client->ps.velocity[1], client->ps.velocity[2],
+                client->ps.gravity, client->ps.pm_type);
+        }
+#endif
         //LSP_LogString(cl_controller_in_use, v28);
         //LSP_SendLogRequest(cl_controller_in_use);
         SV_LinkEntity(self);
@@ -759,6 +775,30 @@ void __cdecl G_Damage(
                         damage = health - 1;
                 }
                 v57 = targ->health;
+#ifdef __SWITCH__
+                static unsigned switchPlayerDamageTraceCount = 0;
+                if (targ->client && targ->s.number == 0 &&
+                    switchPlayerDamageTraceCount < 16u)
+                {
+                    const char *switchModName =
+                        (mod >= 0 && mod < ARRAY_COUNT(modNames))
+                            ? SL_ConvertToStringSafe(*modNames[mod])
+                            : "invalid_mod";
+                    Com_Printf(
+                        CON_CHANNEL_SERVER,
+                        "[KisakCOD][PLAYER DAMAGE] sample=%u incoming=%d mod=%d modName=%s before=%d attacker=%d inflictor=%d linked=%d parent=%d posPS=(%.2f,%.2f,%.2f) posEnt=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) gravity=%d pm=%d invuln=%d\n",
+                        switchPlayerDamageTraceCount++, damage, mod, switchModName,
+                        v57,
+                        attacker->s.number, inflictor->s.number,
+                        targ->tagInfo ? 1 : 0,
+                        targ->tagInfo && targ->tagInfo->parent ? targ->tagInfo->parent->s.number : -1,
+                        targ->client->ps.origin[0], targ->client->ps.origin[1], targ->client->ps.origin[2],
+                        targ->r.currentOrigin[0], targ->r.currentOrigin[1], targ->r.currentOrigin[2],
+                        targ->client->ps.velocity[0], targ->client->ps.velocity[1], targ->client->ps.velocity[2],
+                        targ->client->ps.gravity, targ->client->ps.pm_type,
+                        targ->client->invulnerableEnabled ? 1 : 0);
+                }
+#endif
                 targ->health = v57 - damage;
                 if (client && client->invulnerableEnabled)
                     handleDeathInvulnerability(targ, v57, mod);
