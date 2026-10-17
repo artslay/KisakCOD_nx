@@ -265,7 +265,7 @@ void VulkanBackend::LogDeviceFaultInfo()
 {
     if (!m_deviceFaultEnabled || !m_getDeviceFaultInfo || !m_device)
     {
-        Switch_LogWrite("[KisakCOD][VK DEVICE FAULT] enabled=0; extension unavailable\\n");
+        Switch_LogWrite("[KisakCOD][VK DEVICE FAULT] enabled=0; extension unavailable\n");
         return;
     }
 
@@ -281,7 +281,7 @@ void VulkanBackend::LogDeviceFaultInfo()
     char summary[512];
     std::snprintf(
         summary, sizeof(summary),
-        "[KisakCOD][VK DEVICE FAULT] query=counts result=%d addressCount=%u vendorCount=%u vendorBinaryBytes=%llu\\n",
+        "[KisakCOD][VK DEVICE FAULT] query=counts result=%d addressCount=%u vendorCount=%u vendorBinaryBytes=%llu\n",
         static_cast<int>(countsResult),
         counts.addressInfoCount,
         counts.vendorInfoCount,
@@ -313,7 +313,7 @@ void VulkanBackend::LogDeviceFaultInfo()
     char detail[768];
     std::snprintf(
         detail, sizeof(detail),
-        "[KisakCOD][VK DEVICE FAULT] query=details result=%d description=%.400s addresses=%u/%u vendors=%u/%u\\n",
+        "[KisakCOD][VK DEVICE FAULT] query=details result=%d description=%.400s addresses=%u/%u vendors=%u/%u\n",
         static_cast<int>(infoResult),
         info.description,
         returnedCounts.addressInfoCount, counts.addressInfoCount,
@@ -327,7 +327,7 @@ void VulkanBackend::LogDeviceFaultInfo()
         char address[256];
         std::snprintf(
             address, sizeof(address),
-            "[KisakCOD][VK DEVICE FAULT ADDRESS] i=%u type=%u address=0x%llx precision=0x%llx\\n",
+            "[KisakCOD][VK DEVICE FAULT ADDRESS] i=%u type=%u address=0x%llx precision=0x%llx\n",
             i,
             static_cast<unsigned int>(addresses[i].addressType),
             static_cast<unsigned long long>(addresses[i].reportedAddress),
@@ -340,7 +340,7 @@ void VulkanBackend::LogDeviceFaultInfo()
         char vendor[768];
         std::snprintf(
             vendor, sizeof(vendor),
-            "[KisakCOD][VK DEVICE FAULT VENDOR] i=%u code=0x%llx data=0x%llx description=%.512s\\n",
+            "[KisakCOD][VK DEVICE FAULT VENDOR] i=%u code=0x%llx data=0x%llx description=%.512s\n",
             i,
             static_cast<unsigned long long>(vendors[i].vendorFaultCode),
             static_cast<unsigned long long>(vendors[i].vendorFaultData),
@@ -778,7 +778,7 @@ bool VulkanBackend::CreateDevice()
     char faultMsg[192];
     std::snprintf(
         faultMsg, sizeof(faultMsg),
-        "[KisakCOD][VK DEVICE FAULT] extension=%u enabled=%u function=%u\\n",
+        "[KisakCOD][VK DEVICE FAULT] extension=%u enabled=%u function=%u\n",
         deviceFaultExtensionAvailable ? 1u : 0u,
         m_deviceFaultEnabled ? 1u : 0u,
         m_getDeviceFaultInfo ? 1u : 0u);
