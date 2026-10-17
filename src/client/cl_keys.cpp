@@ -247,6 +247,27 @@ keyname_t keynames_localized[96] =
 //struct field_t *historyEditLines 828786f0     cl_keys.obj
 
 PlayerKeyState playerKeys[1];
+
+#ifdef __SWITCH__
+void CL_PrepareCinematicSkipInput(int localClientNum)
+{
+    // UI_SetActiveMenu(UIMENU_NONE) clears engine key states. Remember a
+    // button that was already down before that reset so it cannot be replayed
+    // as a fresh skip press in the newly-started movie.
+    if (switchCinematicSkipBlockedUntilRelease)
+        return;
+
+    for (int skipKey = 0; skipKey < 256; ++skipKey)
+    {
+        if ((skipKey < K_ASCII_FIRST || skipKey == K_MOUSE1) &&
+            playerKeys[localClientNum].keys[skipKey].down)
+        {
+            switchCinematicSkipBlockedUntilRelease = true;
+            return;
+        }
+    }
+}
+#endif
 field_t g_consoleField;
 field_t historyEditLines[32];
 char s_shortestMatch[1024];
