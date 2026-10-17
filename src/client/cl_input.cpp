@@ -1726,9 +1726,9 @@ void __cdecl CL_WritePacket()
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][PAD CMD FLOW] sample=%u cmd=%d time=%d move=(%d,%d,%d) buttons=0x%08x freemove=%d serverThink=%d conn=%d pm=0x%x\\n",
+                    "[KisakCOD][PAD CMD FLOW] sample=%u cmd=%d time=%d move=(%d,%d,%d) buttons=0x%08x freemove=%d serverThink=%d conn=%d pm=0x%x\n",
                     switchPadCommandFlowCount++,
-                    cmdNumber - v4 + (v4 - v5),
+                    cmdNumber - v4 + (v4 - v5) + 1,
                     v8->serverTime,
                     static_cast<int>(v8->forwardmove),
                     static_cast<int>(v8->rightmove),
