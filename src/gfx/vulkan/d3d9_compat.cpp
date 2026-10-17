@@ -4082,13 +4082,13 @@ bool IDirect3DDevice9::BindSamplerSet(
                 }
                 if (used < sizeof(samplerTrace) - 2u)
                 {
-                    samplerTrace[used++] = '\\n';
-                    samplerTrace[used] = '\\0';
+                    samplerTrace[used++] = '\n';
+                    samplerTrace[used] = '\0';
                 }
                 else
                 {
-                    samplerTrace[sizeof(samplerTrace) - 2u] = '\\n';
-                    samplerTrace[sizeof(samplerTrace) - 1u] = '\\0';
+                    samplerTrace[sizeof(samplerTrace) - 2u] = '\n';
+                    samplerTrace[sizeof(samplerTrace) - 1u] = '\0';
                 }
                 Switch_LogWrite(samplerTrace);
             }
