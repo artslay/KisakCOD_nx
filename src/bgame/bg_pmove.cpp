@@ -4,6 +4,10 @@
 #include "bg_local.h"
 #include <universal/profile.h>
 #include <xanim/dobj_utils.h>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 
 #ifdef KISAK_MP
 #include <game_mp/g_main_mp.h>
@@ -2528,6 +2532,18 @@ void __cdecl PM_AirMove(pmove_t *pm, pml_t *pml)
     Vec3Copy(wishvel, wishdir);
     float wishspeed = Vec3Normalize(wishdir); // [esp+58h] [ebp-38h]
 
+#ifdef __SWITCH__
+    static unsigned int switchAirMoveTraceCount = 0;
+    const bool switchTraceAirMove =
+        (pm->cmd.forwardmove != 0 || pm->cmd.rightmove != 0) &&
+        switchAirMoveTraceCount < 24u;
+    const float switchAirOriginBefore[3] = {
+        ps->origin[0], ps->origin[1], ps->origin[2]
+    };
+    const float switchAirVelocityBefore[3] = {
+        ps->velocity[0], ps->velocity[1], ps->velocity[2]
+    };
+#endif
     wishspeed = wishspeed * scale;
     PM_Accelerate(ps, pml, wishdir, wishspeed, 1.0);
 
@@ -2536,6 +2552,45 @@ void __cdecl PM_AirMove(pmove_t *pm, pml_t *pml)
 
     PM_StepSlideMove(pm, pml, 1);
     PM_SetMovementDir(pm, pml);
+#ifdef __SWITCH__
+    if (switchTraceAirMove)
+    {
+        char trace[512];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PMOVE AIR] sample=%u cmd=(%d,%d) speed=%d scale=%.3f wish=%.3f walking=%d plane=%d ground=%d tr=(%.3f,%d,%d n=%.2f,%.2f,%.2f) origin=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) vel=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) mask=0x%x\\n",
+            switchAirMoveTraceCount++,
+            static_cast<int>(pm->cmd.forwardmove),
+            static_cast<int>(pm->cmd.rightmove),
+            ps->speed,
+            static_cast<double>(scale),
+            static_cast<double>(wishspeed),
+            pml->walking ? 1 : 0,
+            pml->groundPlane ? 1 : 0,
+            ps->groundEntityNum,
+            static_cast<double>(pml->groundTrace.fraction),
+            pml->groundTrace.startsolid ? 1 : 0,
+            pml->groundTrace.allsolid ? 1 : 0,
+            static_cast<double>(pml->groundTrace.normal[0]),
+            static_cast<double>(pml->groundTrace.normal[1]),
+            static_cast<double>(pml->groundTrace.normal[2]),
+            static_cast<double>(switchAirOriginBefore[0]),
+            static_cast<double>(switchAirOriginBefore[1]),
+            static_cast<double>(switchAirOriginBefore[2]),
+            static_cast<double>(ps->origin[0]),
+            static_cast<double>(ps->origin[1]),
+            static_cast<double>(ps->origin[2]),
+            static_cast<double>(switchAirVelocityBefore[0]),
+            static_cast<double>(switchAirVelocityBefore[1]),
+            static_cast<double>(switchAirVelocityBefore[2]),
+            static_cast<double>(ps->velocity[0]),
+            static_cast<double>(ps->velocity[1]),
+            static_cast<double>(ps->velocity[2]),
+            static_cast<unsigned int>(pm->tracemask));
+        Switch_LogWrite(trace);
+    }
+#endif
 }
 
 void __cdecl PM_SetMovementDir(pmove_t *pm, pml_t *pml)
@@ -2693,6 +2748,18 @@ void __cdecl PM_WalkMove(pmove_t *pm, pml_t *pml)
         if ((ps->pm_flags & PMF_TIME_HARDLANDING) != 0)
             acceleration = acceleration * 0.25;
 
+#ifdef __SWITCH__
+        static unsigned int switchWalkMoveTraceCount = 0;
+        const bool switchTraceWalkMove =
+            (pm->cmd.forwardmove != 0 || pm->cmd.rightmove != 0) &&
+            switchWalkMoveTraceCount < 24u;
+        const float switchWalkOriginBefore[3] = {
+            ps->origin[0], ps->origin[1], ps->origin[2]
+        };
+        const float switchWalkVelocityBefore[3] = {
+            ps->velocity[0], ps->velocity[1], ps->velocity[2]
+        };
+#endif
         PM_Accelerate(ps, pml, wishdir, wishspeed, acceleration);
 
         if ((pml->groundTrace.surfaceFlags & SURF_SLICK) != 0 || (ps->pm_flags & PMF_TIME_KNOCKBACK) != 0)
@@ -2704,6 +2771,47 @@ void __cdecl PM_WalkMove(pmove_t *pm, pml_t *pml)
             PM_StepSlideMove(pm, pml, 0);
 
         PM_SetMovementDir(pm, pml);
+#ifdef __SWITCH__
+        if (switchTraceWalkMove)
+        {
+            char trace[512];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][PMOVE WALK] sample=%u cmd=(%d,%d) speed=%d scale=%.3f mult=%.3f wish=%.3f accel=%.2f walking=%d plane=%d ground=%d tr=(%.3f,%d,%d n=%.2f,%.2f,%.2f) origin=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) vel=(%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) mask=0x%x\\n",
+                switchWalkMoveTraceCount++,
+                static_cast<int>(pm->cmd.forwardmove),
+                static_cast<int>(pm->cmd.rightmove),
+                ps->speed,
+                static_cast<double>(scale),
+                static_cast<double>(ps->moveSpeedScaleMultiplier),
+                static_cast<double>(wishspeed),
+                static_cast<double>(acceleration),
+                pml->walking ? 1 : 0,
+                pml->groundPlane ? 1 : 0,
+                ps->groundEntityNum,
+                static_cast<double>(pml->groundTrace.fraction),
+                pml->groundTrace.startsolid ? 1 : 0,
+                pml->groundTrace.allsolid ? 1 : 0,
+                static_cast<double>(pml->groundTrace.normal[0]),
+                static_cast<double>(pml->groundTrace.normal[1]),
+                static_cast<double>(pml->groundTrace.normal[2]),
+                static_cast<double>(switchWalkOriginBefore[0]),
+                static_cast<double>(switchWalkOriginBefore[1]),
+                static_cast<double>(switchWalkOriginBefore[2]),
+                static_cast<double>(ps->origin[0]),
+                static_cast<double>(ps->origin[1]),
+                static_cast<double>(ps->origin[2]),
+                static_cast<double>(switchWalkVelocityBefore[0]),
+                static_cast<double>(switchWalkVelocityBefore[1]),
+                static_cast<double>(switchWalkVelocityBefore[2]),
+                static_cast<double>(ps->velocity[0]),
+                static_cast<double>(ps->velocity[1]),
+                static_cast<double>(ps->velocity[2]),
+                static_cast<unsigned int>(pm->tracemask));
+            Switch_LogWrite(trace);
+        }
+#endif
     }
 }
 
