@@ -113,7 +113,7 @@ void __cdecl RB_Draw3DInternal(const GfxViewInfo *viewInfo)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][DRAW MODE] scene=%d baseTech=%d emissiveTech=%d r_fullbright=%d r_debugShader=%d r_lightMap=%d r_colorMap=%d world=%p\\n",
+            "[KisakCOD][DRAW MODE] scene=%d baseTech=%d emissiveTech=%d r_fullbright=%d r_debugShader=%d r_lightMap=%d r_colorMap=%d world=%p\n",
             drawScene, baseTech,
             static_cast<int>(gfxDrawMethod.emissiveTechType),
             fullbright, debugShader, lightMap, colorMap,
