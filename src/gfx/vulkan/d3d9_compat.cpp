@@ -4084,6 +4084,46 @@ bool IDirect3DDevice9::EnsurePipeline()
                     static_cast<unsigned>(element.UsageIndex));
                 Switch_LogWrite(elementTrace);
             }
+
+            // Preserve the exact vertex-shader semantic interface for the
+            // first world draws. This distinguishes a missing lightmap UV
+            // declaration from a later Vulkan sampler/descriptor problem.
+            if (m_vertexShader->parseData)
+            {
+                const MOJOSHADER_parseData *parse = m_vertexShader->parseData;
+                const int attrCount = parse->attribute_count < 12
+                    ? parse->attribute_count : 12;
+                for (int attrIndex = 0; attrIndex < attrCount; ++attrIndex)
+                {
+                    const MOJOSHADER_attribute &attr = parse->attributes[attrIndex];
+                    uint32_t location = UINT32_MAX;
+                    const bool hasLocation =
+                        attr.name && ExtractShaderInputRegister(attr.name, &location);
+                    bool declarationMatch = false;
+                    for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
+                    {
+                        if (element.Usage == static_cast<uint8_t>(attr.usage) &&
+                            element.UsageIndex == attr.index)
+                        {
+                            declarationMatch = true;
+                            break;
+                        }
+                    }
+
+                    char attrTrace[320];
+                    std::snprintf(
+                        attrTrace, sizeof(attrTrace),
+                        "[KisakCOD][VK SHADER ATTR] n=%u i=%d name=%s usage=%u index=%u location=%u locationValid=%u declMatch=%u\\n",
+                        traceIndex, attrIndex,
+                        attr.name ? attr.name : "(null)",
+                        static_cast<unsigned>(attr.usage),
+                        static_cast<unsigned>(attr.index),
+                        location,
+                        hasLocation ? 1u : 0u,
+                        declarationMatch ? 1u : 0u);
+                    Switch_LogWrite(attrTrace);
+                }
+            }
         }
 #endif
         g_switchFrameStage = "frame/render/vulkan/pipeline/link_shaders";
