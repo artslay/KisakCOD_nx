@@ -528,7 +528,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
             "[KisakCOD][BSP LIT PRETESS] sample=%u firstCount=%u pass=%p technique=%p flags=%u lightmaps=%u\n",
             switchBspLitPreTessTraceCount++,
             firstCount,
-            static_cast<void *>(context.state->pass),
+            static_cast<const void *>(context.state->pass),
             static_cast<const void *>(context.state->technique),
             context.state->pass
                 ? static_cast<unsigned>(context.state->pass->customSamplerFlags) : 0u,
