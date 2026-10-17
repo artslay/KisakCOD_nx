@@ -279,6 +279,9 @@ private:
     void DestroySwapchain();
     void DestroyDefaultDepth();
     void SetError(const char *message, VkResult result = VK_SUCCESS);
+#ifdef VK_EXT_device_fault
+    void LogDeviceFaultInfo();
+#endif
 
     uint32_t m_width = 1280;
     uint32_t m_height = 720;
@@ -336,6 +339,11 @@ private:
     uint32_t m_swapchainIndex = 0;
     bool m_initialized = false;
     std::atomic<bool> m_deviceLost{false};
+#ifdef VK_EXT_device_fault
+    PFN_vkGetDeviceFaultInfoEXT m_getDeviceFaultInfo = nullptr;
+    std::atomic<bool> m_deviceFaultInfoReported{false};
+    bool m_deviceFaultEnabled = false;
+#endif
     bool m_fillModeNonSolid = false;
     bool m_samplerAnisotropy = false;
     bool m_shaderDemoteToHelperInvocation = false;
