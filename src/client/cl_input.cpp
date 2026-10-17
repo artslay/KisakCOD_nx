@@ -1017,10 +1017,31 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     // command/state problem without flooding the SD log.
     static unsigned int switchPadMoveFrame = 0;
     const unsigned int switchPadMoveCall = switchPadMoveFrame++;
-    // Capture the first gameplay commands as well as an occasional heartbeat;
-    // the scripted intro can fail before a 300-frame diagnostic is reached.
+    static bool lastTracedPadActive = false;
+    static float lastTracedPitchAxis = 0.0f;
+    static float lastTracedYawAxis = 0.0f;
+    static float lastTracedForwardAxis = 0.0f;
+    static float lastTracedRightAxis = 0.0f;
+    const bool axesChanged =
+        std::fabs(pitchAxis - lastTracedPitchAxis) >= 0.10f ||
+        std::fabs(yawAxis - lastTracedYawAxis) >= 0.10f ||
+        std::fabs(forwardAxis - lastTracedForwardAxis) >= 0.10f ||
+        std::fabs(rightAxis - lastTracedRightAxis) >= 0.10f;
+    // Capture startup, meaningful input changes and an occasional heartbeat so
+    // a held/moved stick is visible even after the initial 24 commands.
     const bool tracePadMove =
-        switchPadMoveCall < 24u || ((switchPadMoveCall + 1u) % 300u) == 0u;
+        switchPadMoveCall < 24u ||
+        ((switchPadMoveCall + 1u) % 300u) == 0u ||
+        padActive != lastTracedPadActive ||
+        (padActive && axesChanged);
+    if (tracePadMove)
+    {
+        lastTracedPadActive = padActive;
+        lastTracedPitchAxis = pitchAxis;
+        lastTracedYawAxis = yawAxis;
+        lastTracedForwardAxis = forwardAxis;
+        lastTracedRightAxis = rightAxis;
+    }
     if (!padActive)
     {
         if (tracePadMove)
