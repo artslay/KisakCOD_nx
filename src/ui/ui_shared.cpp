@@ -2538,6 +2538,7 @@ static bool Switch_UI_DispatchCloseOnlyPauseAction(
     if (isRestart)
     {
         Dvar_SetIntByName("cl_paused", 0);
+        Key_SetCatcher(dc->localClientNum, 0);
         Key_ClearStates(dc->localClientNum);
         Menus_CloseAll(dc);
         Cbuf_AddText(dc->localClientNum, "map_restart\n");
