@@ -860,6 +860,11 @@ void __cdecl ClientEndFrame(gentity_s *ent)
     {
         if (ent->tagInfo)
         {
+#ifdef __SWITCH__
+            const float switchLinkPsBefore[3] = {
+                v3->ps.origin[0], v3->ps.origin[1], v3->ps.origin[2]
+            };
+#endif
             v3->ps.pm_type = PM_DEAD_LINKED;
             if (v3->ps.stats[STAT_HEALTH] > 0)
             {
@@ -870,6 +875,42 @@ void __cdecl ClientEndFrame(gentity_s *ent)
             v5->ps.origin[0] = ent->r.currentOrigin[0];
             v5->ps.origin[1] = ent->r.currentOrigin[1];
             v5->ps.origin[2] = ent->r.currentOrigin[2];
+#ifdef __SWITCH__
+            if (ent->s.number == 0)
+            {
+                const gentity_s *switchParent =
+                    ent->tagInfo ? ent->tagInfo->parent : nullptr;
+                const float switchDeltaX = switchLinkPsBefore[0] - ent->r.currentOrigin[0];
+                const float switchDeltaY = switchLinkPsBefore[1] - ent->r.currentOrigin[1];
+                const float switchDeltaZ = switchLinkPsBefore[2] - ent->r.currentOrigin[2];
+                const bool switchOffMapLink =
+                    (switchParent && (switchParent->r.currentOrigin[2] > 4096.0f ||
+                                      switchParent->r.currentOrigin[2] < -4096.0f)) ||
+                    ent->r.currentOrigin[2] > 4096.0f ||
+                    ent->r.currentOrigin[2] < -4096.0f;
+                const bool switchLinkOriginJump =
+                    switchDeltaX > 128.0f || switchDeltaX < -128.0f ||
+                    switchDeltaY > 128.0f || switchDeltaY < -128.0f ||
+                    switchDeltaZ > 128.0f || switchDeltaZ < -128.0f;
+                static unsigned switchPlayerLinkSyncTraceCount = 0;
+                if ((switchOffMapLink || switchLinkOriginJump) &&
+                    switchPlayerLinkSyncTraceCount < 16u)
+                {
+                    Com_Printf(
+                        CON_CHANNEL_SERVER,
+                        "[KisakCOD][PLAYER LINK SYNC] sample=%u before=(%.2f,%.2f,%.2f) after=(%.2f,%.2f,%.2f) parent=%d parentOrigin=(%.2f,%.2f,%.2f) health=%d pm=%d gravity=%d velocity=(%.2f,%.2f,%.2f)\n",
+                        switchPlayerLinkSyncTraceCount++,
+                        switchLinkPsBefore[0], switchLinkPsBefore[1], switchLinkPsBefore[2],
+                        v5->ps.origin[0], v5->ps.origin[1], v5->ps.origin[2],
+                        switchParent ? switchParent->s.number : -1,
+                        switchParent ? switchParent->r.currentOrigin[0] : 0.0f,
+                        switchParent ? switchParent->r.currentOrigin[1] : 0.0f,
+                        switchParent ? switchParent->r.currentOrigin[2] : 0.0f,
+                        ent->health, v5->ps.pm_type, v5->ps.gravity,
+                        v5->ps.velocity[0], v5->ps.velocity[1], v5->ps.velocity[2]);
+                }
+            }
+#endif
         }
         else
         {
