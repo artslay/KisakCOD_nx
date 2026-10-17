@@ -2079,14 +2079,24 @@ HRESULT KisakVkBuffer::Unlock()
         }
         else
         {
-            // Queue an ordered GPU copy after draws that may still read this
-            // range. This avoids ending/submitting the frame and waiting for a
-            // fence on every dynamic-buffer unlock. Odd-sized/unusual ranges,
-            // an inactive frame, or an exhausted upload ring use the safe
-            // synchronized fallback.
+            // The queued-copy fast path is temporarily disabled on Switch while
+            // isolating NVK device loss during map rendering. Keep the existing
+            // synchronized fallback: finish all commands that may reference this
+            // buffer, wait for their fence, then update mapped memory. This costs
+            // CPU/GPU synchronization but avoids mixing buffer updates into the
+            // active command buffer until the device-lost regression is isolated.
             VulkanBackend *backend = GetVulkanBackend();
-            const bool queued = backend && backend->QueueBufferUpdate(
-                buffer, lockOffset, shadow.data() + lockOffset, lockSize);
+            constexpr bool kSwitchDisableQueuedDynamicBufferCopies = true;
+            const bool queued = !kSwitchDisableQueuedDynamicBufferCopies &&
+                backend && backend->QueueBufferUpdate(
+                    buffer, lockOffset, shadow.data() + lockOffset, lockSize);
+            if (kSwitchDisableQueuedDynamicBufferCopies)
+            {
+                static std::atomic<bool> loggedSynchronizedFallback{false};
+                if (!loggedSynchronizedFallback.exchange(true, std::memory_order_relaxed))
+                    Switch_LogWrite(
+                        "[KisakCOD][VK BUFFER UPDATE] queued_dynamic_copies=disabled synchronized_fallback=1 reason=device_lost_isolation\n");
+            }
             if (!queued)
             {
                 if (backend && !backend->SynchronizeActiveFrame())
