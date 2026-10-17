@@ -75,65 +75,6 @@ bool WriteSwitchPipelineSpirv(const char *path, const std::vector<uint32_t> &wor
     return written == words.size() && closeResult == 0;
 }
 
-// Keep the crash capture text-only: one Base64 payload, emitted once.
-void LogSwitchPipelineSpirvBase64(
-    uint32_t sequence,
-    const char *stage,
-    const std::vector<uint32_t> &words)
-{
-    static constexpr char alphabet[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    const size_t byteCount = words.size() * sizeof(uint32_t);
-    const size_t encodedCapacity = ((byteCount + 2u) / 3u) * 4u;
-    std::string encoded;
-    encoded.reserve(encodedCapacity);
-
-    const auto byteAt = [&words, byteCount](size_t offset) -> uint8_t
-    {
-        if (offset >= byteCount)
-            return 0;
-        return static_cast<uint8_t>(
-            words[offset / 4u] >> ((offset % 4u) * 8u));
-    };
-
-    for (size_t offset = 0; offset < byteCount; offset += 3u)
-    {
-        const uint32_t a = byteAt(offset);
-        const uint32_t b = byteAt(offset + 1u);
-        const uint32_t c = byteAt(offset + 2u);
-        encoded.push_back(alphabet[(a >> 2) & 0x3fu]);
-        encoded.push_back(alphabet[((a & 0x03u) << 4) | ((b >> 4) & 0x0fu)]);
-        encoded.push_back(offset + 1u < byteCount
-            ? alphabet[((b & 0x0fu) << 2) | ((c >> 6) & 0x03u)] : '=');
-        encoded.push_back(offset + 2u < byteCount
-            ? alphabet[c & 0x3fu] : '=');
-    }
-
-    char header[256];
-    std::snprintf(
-        header, sizeof(header),
-        "[KisakCOD][VK SPIRV BASE64] begin seq=%u stage=%s words=%zu bytes=%zu chunksize=720 hash=%016llx\n",
-        sequence, stage ? stage : "(null)", words.size(), byteCount,
-        static_cast<unsigned long long>(HashSpirvWords(words)));
-    Switch_LogWrite(header);
-
-    constexpr size_t chunkSize = 720u;
-    const size_t chunkCount = (encoded.size() + chunkSize - 1u) / chunkSize;
-    char line[900];
-    for (size_t i = 0; i < chunkCount; ++i)
-    {
-        const size_t offset = i * chunkSize;
-        const size_t length = std::min(chunkSize, encoded.size() - offset);
-        std::snprintf(
-            line, sizeof(line),
-            "[KisakCOD][VK SPIRV BASE64] seq=%u stage=%s part=%zu/%zu data=%.*s\n",
-            sequence, stage ? stage : "(null)", i + 1u, chunkCount,
-            static_cast<int>(length), encoded.data() + offset);
-        Switch_LogWrite(line);
-    }
-    Switch_LogWrite("[KisakCOD][VK SPIRV BASE64] end\n");
-}
-
 uint32_t g_switchPipelineCreateSequence = 0;
 
 void LogUnsupportedRenderState(uint32_t state, uint32_t value)
@@ -4267,15 +4208,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     const uint64_t vsSpirvHash = HashSpirvWords(m_vertexShader->spirv);
     const uint64_t psSpirvHash = HashSpirvWords(m_pixelShader->spirv);
     const uint32_t pipelineCreateSequence = ++g_switchPipelineCreateSequence;
-    static uint64_t lastDumpVsHash = 0;
-    static uint64_t lastDumpPsHash = 0;
-    static size_t lastDumpVsWords = 0;
-    static size_t lastDumpPsWords = 0;
-    const bool earlyPipelineDump = false;
-    const bool probePipelineDump = false;
-    // Keep the recurring runtime log compact. Shader dumps and detailed pipeline
-    // state are limited to the startup probes or the explicitly targeted shader pair.
-    const bool recentPipelineDump = false;
     // Keep one targeted capture for the shader pair seen at the last driver crash;
     // all other pipelines use a single compact line in the runtime log.
     static bool targetPipelineCaptureLogged = false;
@@ -4284,45 +4216,6 @@ bool IDirect3DDevice9::EnsurePipeline()
         psSpirvHash == 0xc277eb01379f42dbull;
     if (targetPipelineDump)
         targetPipelineCaptureLogged = true;
-    if ((earlyPipelineDump || probePipelineDump || recentPipelineDump) &&
-        (vsSpirvHash != lastDumpVsHash || psSpirvHash != lastDumpPsHash ||
-         m_vertexShader->spirv.size() != lastDumpVsWords ||
-         m_pixelShader->spirv.size() != lastDumpPsWords))
-    {
-        const char *vsDumpPath = earlyPipelineDump
-            ? "sdmc:/switch/KisakCOD/vk_crash_vs.spv"
-            : (probePipelineDump
-                ? "sdmc:/switch/KisakCOD/vk_probe_vs.spv"
-                : "sdmc:/switch/KisakCOD/vk_recent_vs.spv");
-        const char *psDumpPath = earlyPipelineDump
-            ? "sdmc:/switch/KisakCOD/vk_crash_ps.spv"
-            : (probePipelineDump
-                ? "sdmc:/switch/KisakCOD/vk_probe_ps.spv"
-                : "sdmc:/switch/KisakCOD/vk_recent_ps.spv");
-        const bool vsDumpOk = WriteSwitchPipelineSpirv(
-            vsDumpPath, m_vertexShader->spirv);
-        const bool psDumpOk = WriteSwitchPipelineSpirv(
-            psDumpPath, m_pixelShader->spirv);
-        char dumpMsg[320];
-        std::snprintf(
-            dumpMsg, sizeof(dumpMsg),
-            "[KisakCOD][VK SPIRV DUMP] seq=%u set=%s saved=%u/%u vsWords=%zu vsHash=%016llx psWords=%zu psHash=%016llx\n",
-            pipelineCreateSequence,
-            earlyPipelineDump ? "early" : (probePipelineDump ? "probe" : "recent"),
-            vsDumpOk ? 1u : 0u, psDumpOk ? 1u : 0u,
-            m_vertexShader->spirv.size(),
-            static_cast<unsigned long long>(vsSpirvHash),
-            m_pixelShader->spirv.size(),
-            static_cast<unsigned long long>(psSpirvHash));
-        Switch_LogWrite(dumpMsg);
-        if (vsDumpOk && psDumpOk)
-        {
-            lastDumpVsHash = vsSpirvHash;
-            lastDumpPsHash = psSpirvHash;
-            lastDumpVsWords = m_vertexShader->spirv.size();
-            lastDumpPsWords = m_pixelShader->spirv.size();
-        }
-    }
 
     const MOJOSHADER_parseData *preVs = m_vertexShader->parseData;
     const MOJOSHADER_parseData *prePs = m_pixelShader->parseData;
