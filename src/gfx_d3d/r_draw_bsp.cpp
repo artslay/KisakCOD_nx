@@ -81,14 +81,14 @@ void __cdecl R_DrawBspDrawSurfsLit(
         char trace[384];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][BSP LIT ENTRY] sample=%u count=%u flags=%u pass=%p technique=%p firstCount=%u lightmaps=%u textures=(%p,%p,%p)\\n",
+            "[KisakCOD][BSP LIT ENTRY] sample=%u count=%u flags=%u pass=%p technique=%p firstCount=%u lightmaps=%u textures=(%p,%p,%p)\n",
             switchBspLitEntryTraceCount++, context.state->pass
                 ? static_cast<unsigned>(context.state->pass->perPrimArgCount) +
                   static_cast<unsigned>(context.state->pass->perObjArgCount) +
                   static_cast<unsigned>(context.state->pass->stableArgCount) : 0u,
             context.state->pass
                 ? static_cast<unsigned>(context.state->pass->customSamplerFlags) : 0u,
-            static_cast<void *>(context.state->pass),
+            static_cast<const void *>(context.state->pass),
             static_cast<const void *>(context.state->technique),
             firstCount,
             rgp.world ? static_cast<unsigned>(rgp.world->lightmapCount) : 0u,
@@ -388,10 +388,10 @@ void __cdecl R_DrawBspDrawSurfs(const uint32_t *primDrawSurfPos, GfxCmdBufState 
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][BSP GENERIC ENTRY] sample=%u firstCount=%u pass=%p technique=%p flags=%u lightmaps=%u\\n",
+            "[KisakCOD][BSP GENERIC ENTRY] sample=%u firstCount=%u pass=%p technique=%p flags=%u lightmaps=%u\n",
             switchBspGenericEntryTraceCount++,
             firstCount,
-            static_cast<void *>(state->pass),
+            static_cast<const void *>(state->pass),
             static_cast<const void *>(state->technique),
             state->pass ? static_cast<unsigned>(state->pass->customSamplerFlags) : 0u,
             rgp.world ? static_cast<unsigned>(rgp.world->lightmapCount) : 0u);
@@ -525,7 +525,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][BSP LIT PRETESS] sample=%u firstCount=%u pass=%p technique=%p flags=%u lightmaps=%u\\n",
+            "[KisakCOD][BSP LIT PRETESS] sample=%u firstCount=%u pass=%p technique=%p flags=%u lightmaps=%u\n",
             switchBspLitPreTessTraceCount++,
             firstCount,
             static_cast<void *>(context.state->pass),
