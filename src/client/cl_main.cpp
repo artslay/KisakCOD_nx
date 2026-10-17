@@ -1403,6 +1403,8 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
             "(localClientNum == 0)",
             localClientNum);
     connectionState = clientUIActives[0].connectionState;
+    const char *nextCommand = nextmap ? nextmap->current.string : nullptr;
+    const bool hasNextCommand = nextCommand && nextCommand[0] != '\0';
 
     // An Escape/controller event must not tear down UI or audio for an
     // unskippable movie. SCR_StopCinematic() protects Bink itself, but this
@@ -1430,7 +1432,12 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
         CL_StopLogo(localClientNum);
     }
     SND_StopSounds(SND_STOP_ALL);
-    UI_SetActiveMenu(localClientNum, (connectionState == CA_DISCONNECTED) ? UIMENU_MAIN : UIMENU_NONE);
+    const bool returnToFrontend =
+        connectionState == CA_DISCONNECTED ||
+        (connectionState == CA_CINEMATIC && !hasNextCommand);
+    UI_SetActiveMenu(
+        localClientNum,
+        returnToFrontend ? UIMENU_MAIN : UIMENU_NONE);
 }
 
 // attributes: thunk
