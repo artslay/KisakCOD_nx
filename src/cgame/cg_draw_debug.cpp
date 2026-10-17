@@ -332,6 +332,9 @@ void DrawReplayTime(const ScreenPlacement *scrPlace, float posY)
 
 void __cdecl CG_DrawUpperRightDebugInfo(int32_t localClientNum)
 {
+    // Keep the FPS sample history current. Without this call, CG_DrawFPS can
+    // remain below its 32-frame warm-up threshold and never calculate a value.
+    CG_CalculateFPS();
 #ifdef KISAK_MP
     meminfo_t meminfo; // [esp+8h] [ebp-A8h] BYREF
     float y; // [esp+ACh] [ebp-4h]
