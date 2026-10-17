@@ -11,6 +11,27 @@
 #include <universal/com_sndalias.h>
 #include <universal/profile.h>
 
+#include <mutex>
+#include <string>
+#include <unordered_set>
+
+// Missing/empty ambience aliases can be requested every frame. Report each
+// invalid path once per session instead of flooding the engine log.
+static void SND_ReportZeroLengthSoundOnce(const char *soundName)
+{
+    static std::mutex reportMutex;
+    static std::unordered_set<std::string> reportedNames;
+    const std::string key = soundName ? soundName : "(null)";
+    bool firstReport;
+    {
+        std::lock_guard<std::mutex> lock(reportMutex);
+        firstReport = reportedNames.emplace(key).second;
+    }
+
+    if (firstReport)
+        Com_PrintError(CON_CHANNEL_ERROR, "ERROR: Sound file '%s' is zero length, invalid\\n", key.c_str());
+}
+
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
 #elif KISAK_SP
@@ -811,7 +832,7 @@ int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int
                 }
                 else
                 {
-                    Com_PrintError(CON_CHANNEL_ERROR, "ERROR: Sound file '%s' is zero length, invalid\n", realname);
+                    SND_ReportZeroLengthSoundOnce(realname);
                     return SND_SetPlaybackIdNotPlayed(index);
                 }
             }
