@@ -9,6 +9,11 @@
 #include "rb_tess.h"
 #include "r_pretess.h"
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 const int g_layerDataStride[16] = { 0, 0, 0, 8, 12, 16, 20, 24, 24, 28, 32, 32, 36, 40, 0, 0 }; // idb
 
 void __cdecl R_SetStreamSource(
@@ -160,6 +165,38 @@ void __cdecl R_DrawTrianglesLit(
                     rgp.world->surfaceCount);
             bspSurf = &rgp.world->dpvs.surfaces[surfIndex];
             tris = bspSurf;
+#ifdef __SWITCH__
+            // Record a bounded sample of actual BSP lightmap selections. This
+            // tells us whether baked-lightmap data and material sampler flags
+            // reach the Vulkan submission path before changing renderer logic.
+            static uint32_t switchLightmapTraceCount = 0;
+            if (switchLightmapTraceCount < 24u)
+            {
+                const uint32_t traceIndex = switchLightmapTraceCount++;
+                const uint32_t traceLightmap = bspSurf->lightmapIndex;
+                const bool traceLightmapInRange =
+                    traceLightmap < drawStream->lightmapCount;
+                const GfxTexture *tracePrimary =
+                    traceLightmapInRange && drawStream->lightmapPrimaryTextures
+                        ? &drawStream->lightmapPrimaryTextures[traceLightmap] : nullptr;
+                const GfxTexture *traceSecondary =
+                    traceLightmapInRange && drawStream->lightmapSecondaryTextures
+                        ? &drawStream->lightmapSecondaryTextures[traceLightmap] : nullptr;
+                const char *traceMaterialName =
+                    bspSurf->material && bspSurf->material->info.name
+                        ? bspSurf->material->info.name : "<null>";
+                char trace[512];
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][LIGHTMAP] sample=%u material=%s index=%u count=%u flags=0x%x override=%d sunChanged=%d inRange=%d primary=%p secondary=%p\n",
+                    traceIndex, traceMaterialName, traceLightmap,
+                    drawStream->lightmapCount, drawStream->customSamplerFlags,
+                    override, hasSunDirChanged ? 1 : 0,
+                    traceLightmapInRange ? 1 : 0,
+                    static_cast<const void *>(tracePrimary),
+                    static_cast<const void *>(traceSecondary));
+                Switch_LogWrite(trace);
+            }
+#endif
             if (reflectionProbeIndex == bspSurf->reflectionProbeIndex && lightmapIndex == bspSurf->lightmapIndex)
             {
                 if (baseVertex != bspSurf->tris.firstVertex || baseIndex + 3 * triCount != bspSurf->tris.baseIndex)
