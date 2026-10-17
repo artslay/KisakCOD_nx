@@ -894,7 +894,7 @@ static void Switch_TranslateGfxStaticModelDrawInstSerialized(GfxStaticModelDrawI
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][SMC LOAD] cleared serialized runtime cache handles [%u,%u,%u,%u]\\n",
+            "[KisakCOD][SMC LOAD] cleared serialized runtime cache handles [%u,%u,%u,%u]\n",
             static_cast<unsigned>(serializedCacheIndex[0]),
             static_cast<unsigned>(serializedCacheIndex[1]),
             static_cast<unsigned>(serializedCacheIndex[2]),
