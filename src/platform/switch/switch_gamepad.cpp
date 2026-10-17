@@ -14,6 +14,10 @@
 
 extern void Switch_LogWrite(const char *msg);
 
+// Stock CoD4 sets this to 0 for the "unskippablecinematic" command.
+// Controller input must honor the same flag as keyboard input.
+extern bool cin_skippable;
+
 static PadState g_pad;
 static u64 g_buttons = 0;
 static u64 g_previousButtons = 0;
@@ -140,10 +144,26 @@ void Switch_GamepadFrame()
     // release generates one key-up, even if the UI key catcher is still set.
     if (cinematicActive)
     {
-        // Use the Switch equivalents of Escape/Back explicitly. Mapping every
-        // gameplay button to Escape here causes ordinary input to cut movies off.
+        // Logos retain their normal Escape behavior. Cinematics obey the
+        // original engine's cin_skippable flag; "unskippablecinematic" must
+        // play to completion even when B/Plus is pressed.
+        const bool cinematicCanSkip =
+            connectionState == CA_LOGO || cin_skippable;
         constexpr u64 cinematicSkipButtons =
             HidNpadButton_B | HidNpadButton_Plus;
+
+        if (!cinematicCanSkip)
+        {
+            // Do not leave a synthetic Escape held across a transition to an
+            // unskippable clip.
+            if (g_cinematicSkipKeyDown)
+            {
+                CL_KeyEvent(0, K_ESCAPE, 0, Sys_Milliseconds());
+                g_cinematicSkipKeyDown = false;
+            }
+            return;
+        }
+
         if (Pressed(cinematicSkipButtons))
         {
             CL_KeyEvent(0, K_ESCAPE, 1, Sys_Milliseconds());
