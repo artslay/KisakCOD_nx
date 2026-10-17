@@ -164,7 +164,7 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
         {
             if (localClientNum)
                 MyAssertHandler(
-                    "c:\\trees\\cod3\\cod3src\\src\\client\\../client_mp/client_mp.h",
+                    "c:\\trees\\cod3\\src\\client\\../client_mp/client_mp.h",
                     1120,
                     0,
                     "client doesn't index STATIC_MAX_LOCAL_CLIENTS\n\t%i not in [0, %i)",
@@ -197,5 +197,4 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
         }
     }
 }
-
 
