@@ -4113,7 +4113,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                     char attrTrace[320];
                     std::snprintf(
                         attrTrace, sizeof(attrTrace),
-                        "[KisakCOD][VK SHADER ATTR] n=%u i=%d name=%s usage=%u index=%u location=%u locationValid=%u declMatch=%u\\n",
+                        "[KisakCOD][VK SHADER ATTR] n=%u i=%d name=%s usage=%u index=%u location=%u locationValid=%u declMatch=%u\n",
                         traceIndex, attrIndex,
                         attr.name ? attr.name : "(null)",
                         static_cast<unsigned>(attr.usage),
