@@ -304,6 +304,18 @@ void __cdecl CinematicHunk_Close(CinematicHunk *hunk)
     hunk->end = 0;
 }
 
+static bool R_Cinematic_HasMoreFrames()
+{
+#ifdef __SWITCH__
+    // Bink's end-of-stream frame counter can advance past Frames on Switch.
+    // Treat that as EOF too, or the final cinematic never reports completion.
+    return cinematicGlob.bink->FrameNum < cinematicGlob.bink->Frames;
+#else
+    // Preserve the original desktop engine's comparison semantics.
+    return cinematicGlob.bink->FrameNum != cinematicGlob.bink->Frames;
+#endif
+}
+
 char __cdecl R_Cinematic_Advance()
 {
     CinematicEnum targetPaused; // [esp+A0h] [ebp-44h]
@@ -356,7 +368,7 @@ char __cdecl R_Cinematic_Advance()
             cinematicGlob.activeImageFrameTextureSet = cinematicGlob.activeTextureSet;
         }
         Unlock_Bink_textures(dx.device, &cinematicGlob.binkTextureSet, cinematicGlob.bink);
-        if ((cinematicGlob.playbackFlags & 2) != 0 || cinematicGlob.bink->FrameNum != cinematicGlob.bink->Frames)
+        if ((cinematicGlob.playbackFlags & 2) != 0 || R_Cinematic_HasMoreFrames())
         {
             {
                 PROF_SCOPED("BinkNextFrame");
@@ -367,7 +379,7 @@ char __cdecl R_Cinematic_Advance()
 
     R_Cinematic_CheckBinkError();
 
-    if ((cinematicGlob.playbackFlags & 2) != 0 || cinematicGlob.bink->FrameNum != cinematicGlob.bink->Frames)
+    if ((cinematicGlob.playbackFlags & 2) != 0 || R_Cinematic_HasMoreFrames())
     {
         iassert( cinematicGlob.bink );
         BinkGetRealtime(cinematicGlob.bink, &binkRealtime, 0);
