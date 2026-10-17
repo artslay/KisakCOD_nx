@@ -16,6 +16,8 @@
 #include <gfx_d3d/r_dvars.h>
 #ifdef __SWITCH__
 #include <platform/switch/switch_gamepad.h>
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
 #endif
 
 const dvar_t *cl_stanceHoldTime;
@@ -1003,14 +1005,31 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         return;
 
     const int controller = CL_ControllerIndexFromClientNum(0);
-    if (!GPad_IsActive(controller))
-        return;
-
     const float pitchAxis = CL_GamepadAxisValue(0, 4);
     const float yawAxis = -CL_GamepadAxisValue(0, 3);
     const float forwardAxis = CL_GamepadAxisValue(0, 1);
     const float rightAxis = CL_GamepadAxisValue(0, 0);
     const float rightTrigger = GPad_GetButton(controller, GPAD_R_TRIG);
+    const bool padActive = GPad_IsActive(controller);
+
+    // Keep a low-rate trace of values as they enter the user-command path.
+    // This distinguishes a Switch stick-polling problem from a later movement
+    // command/state problem without flooding the SD log.
+    static unsigned int switchPadMoveFrame = 0;
+    const bool tracePadMove = (++switchPadMoveFrame % 300u) == 0u;
+    if (!padActive)
+    {
+        if (tracePadMove)
+        {
+            char trace[256];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][PAD MOVE] active=0 axes forward=%.3f right=%.3f pitch=%.3f yaw=%.3f cmd forward=%d right=%d\n",
+                forwardAxis, rightAxis, pitchAxis, yawAxis,
+                static_cast<int>(cmd->forwardmove), static_cast<int>(cmd->rightmove));
+            Switch_LogWrite(trace);
+        }
+        return;
+    }
 
     if (clients[0].snap.ps.pm_flags & 0x800)
     {
@@ -1030,6 +1049,17 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         static_cast<int>(rightAxis * moveScale + cmd->rightmove));
     cmd->forwardmove = ClampChar(
         static_cast<int>(forwardAxis * moveScale + cmd->forwardmove));
+
+    if (tracePadMove)
+    {
+        char trace[256];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][PAD MOVE] active=1 axes forward=%.3f right=%.3f pitch=%.3f yaw=%.3f cmd forward=%d right=%d pm=0x%x\n",
+            forwardAxis, rightAxis, pitchAxis, yawAxis,
+            static_cast<int>(cmd->forwardmove), static_cast<int>(cmd->rightmove),
+            static_cast<unsigned int>(clients[0].snap.ps.pm_flags));
+        Switch_LogWrite(trace);
+    }
 
     cmd->pitchmove = ClampChar(
         static_cast<int>(pitchAxis * 127.0f) + cmd->pitchmove);
