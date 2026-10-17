@@ -192,7 +192,32 @@ int __cdecl R_SetMaterial(GfxCmdBufContext context, GfxDrawSurf drawSurf, Materi
     context.state->technique = technique;
 
     if (!technique)
+    {
+#ifdef __SWITCH__
+        // A missing lit technique causes R_DrawSurfs to skip the material
+        // before the BSP lightmap sampler path is reached. Keep a bounded
+        // record of the exact technique and native references involved.
+        static uint32_t switchMissingLitTechniqueTraceCount = 0;
+        if (techType >= TECHNIQUE_LIT_BEGIN &&
+            techType < TECHNIQUE_LIT_END &&
+            switchMissingLitTechniqueTraceCount < 48u)
+        {
+            char trace[384];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][MISSING LIT TECHNIQUE] sample=%u index=%u techType=%d material=%p namePtr=%p techniqueSet=%p\\n",
+                switchMissingLitTechniqueTraceCount++,
+                materialIndex,
+                static_cast<int>(techType),
+                static_cast<void *>(material),
+                static_cast<const void *>(material ? material->info.name : nullptr),
+                static_cast<void *>(material ? material->techniqueSet : nullptr));
+            Switch_LogWrite(trace);
+        }
+#endif
         return 0;
+    }
 
     iassert(!(technique->flags & MTL_TECHFLAG_NEEDS_RESOLVED_SCENE));
 
