@@ -190,21 +190,14 @@ static size_t AL_StreamReadCallback(void *pUserData, void *pBufferOut, size_t by
     return bytesRead;
 }
 
-// FS_Seek's zip-archive branch (com_files.cpp, used whenever a streamed sound is packed into an
-// .iwd rather than sitting as a loose file on disk) doesn't implement standard SEEK_SET/CUR/END
-// semantics - its three origin values are rotated by one relative to what every caller (including
-// the original Miles snd_mss.cpp callback, and dr_wav/dr_mp3 here) assumes:
-//   want SEEK_SET (absolute)         -> must pass origin 2 to FS_Seek
-//   want SEEK_CUR (relative-to-here) -> must pass origin 0 to FS_Seek
-//   want SEEK_END (relative-to-EOF)  -> must pass origin 1 to FS_Seek
-// This is inherited unmodified from the original decompiled engine, so it isn't safe to fix inside
-// FS_Seek itself without risking every other zip-file seek in the game (save data, Miles' own
-// zip-streamed audio, etc.) - instead, rotate only here, and only for zip-backed handles; loose
-// files go through a plain FS_FileSeek/fseek and are unaffected by this.
+// The Switch FS implementation honors standard SEEK_SET/SEEK_CUR/SEEK_END
+// semantics for ZIP entries as well as loose files. Keep decoder callback origins
+// unchanged; the former origin rotation was an obsolete workaround and makes
+// dr_wav seek to the wrong offset, sometimes leaving a valid WAV with zero frames.
 static int AL_FixupZipSeekOrigin(int fsHandle, int trueOrigin)
 {
-    static const int kZipOriginRotation[3] = { 2, 0, 1 }; // SEEK_SET->2, SEEK_CUR->0, SEEK_END->1
-    return FS_IsFileInZip(fsHandle) ? kZipOriginRotation[trueOrigin] : trueOrigin;
+    (void)fsHandle;
+    return trueOrigin;
 }
 
 static bool AL_StreamSeek(AlStreamState *stream, int offset, int origin)
