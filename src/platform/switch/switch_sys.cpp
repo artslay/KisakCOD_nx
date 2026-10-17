@@ -625,7 +625,6 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][SAVE PHASE]",
         "[KisakCOD][PMOVE INPUT]",
         "[KisakCOD][PMOVE SERVER]",
-        "[KisakCOD][OFFMAP ORIGIN WRITE]",
         "[KisakCOD][SNAPSHOT SERVER]",
         "[KisakCOD][SNAPSHOT CLIENT]",
         "[KisakCOD][VIEW ORIGIN]",
