@@ -1102,8 +1102,12 @@ void __cdecl R_LoadLightmaps(GfxBspLoad *load)
                 "%s\n\t(s_world.lightmapCount) = %i",
                 "(s_world.lightmapCount <= ((93 * 1024 * 1024) / ((1024 * 1024 * 1 * 1) + (512 * 512 * 4 * 2))))",
                 s_world.lightmapCount);
-        s_world.lightmapPrimaryTextures = (GfxTexture*)Hunk_Alloc(4 * s_world.lightmapCount, "R_LoadLightmaps", 20);
-        s_world.lightmapSecondaryTextures = (GfxTexture*)Hunk_Alloc(4 * s_world.lightmapCount, "R_LoadLightmaps", 20);
+        // GfxTexture is a pointer-sized union. The original 32-bit engine
+        // allocated four bytes per entry; on Switch every entry is eight bytes.
+        // Size both arrays from the native element type to avoid overwriting
+        // adjacent hunk allocations while filling the primary/secondary slots.
+        s_world.lightmapPrimaryTextures = (GfxTexture*)Hunk_Alloc(sizeof(GfxTexture) * s_world.lightmapCount, "R_LoadLightmaps", 20);
+        s_world.lightmapSecondaryTextures = (GfxTexture*)Hunk_Alloc(sizeof(GfxTexture) * s_world.lightmapCount, "R_LoadLightmaps", 20);
     }
     else
     {
