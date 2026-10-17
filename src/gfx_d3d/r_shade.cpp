@@ -493,7 +493,7 @@ static void R_ApplyShaderDefConstants(GfxCmdBufState *state, const void *bytecod
                     HIDWORD(state->pixelShaderConstState[dst]) = -1;
                     R_HW_SetPixelShaderConstant(state->prim.device, dst, (const float *)&tok[i + 2], 1u);
                     ++defCount;
-                    highestDefRegister = std::max(highestDefRegister, dst);
+                    if (dst > highestDefRegister) highestDefRegister = dst;
                 }
             }
             else
@@ -505,7 +505,7 @@ static void R_ApplyShaderDefConstants(GfxCmdBufState *state, const void *bytecod
                 }
                 R_HW_SetVertexShaderConstant(state->prim.device, dst, (const float *)&tok[i + 2], 1u);
                 ++defCount;
-                highestDefRegister = std::max(highestDefRegister, dst);
+                if (dst > highestDefRegister) highestDefRegister = dst;
             }
             i += 6;
             continue;
