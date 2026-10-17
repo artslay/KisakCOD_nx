@@ -2466,6 +2466,98 @@ void __cdecl Script_ScriptMenuResponse(UiContext *dc, itemDef_s *item, const cha
     }
 }
 
+#ifdef __SWITCH__
+static bool Switch_UI_ContainsCaseInsensitive(const char *text, const char *needle)
+{
+    if (!text || !needle || !needle[0])
+        return false;
+
+    const size_t needleLength = std::strlen(needle);
+    for (const char *cursor = text; *cursor; ++cursor)
+    {
+        if (!I_strnicmp(cursor, needle, needleLength))
+            return true;
+    }
+    return false;
+}
+
+static bool Switch_UI_IsCloseInGameOnlyScript(const char *script)
+{
+    if (!script || !script[0])
+        return false;
+
+    const char *cursor = script;
+    char token[128];
+    bool foundCloseInGame = false;
+
+    while (String_Parse(&cursor, token, sizeof(token)))
+    {
+        if (token[0] == ';' && token[1] == '\0')
+            continue;
+
+        if (foundCloseInGame || I_stricmp(token, "closeingame"))
+            return false;
+
+        foundCloseInGame = true;
+    }
+    return foundCloseInGame;
+}
+
+static bool Switch_UI_DispatchCloseOnlyPauseAction(
+    UiContext *dc,
+    itemDef_s *item,
+    const char *script)
+{
+    // This fallback is only for the clicked item's action. Do not interpret
+    // hover/focus/escape scripts as Restart or Quit commands.
+    if (!dc || !item || script != item->action ||
+        !item->parent || !item->parent->window.name ||
+        I_stricmp(item->parent->window.name, "pausedmenu") ||
+        !Switch_UI_IsCloseInGameOnlyScript(script))
+    {
+        return false;
+    }
+
+    const char *rawText = item->text;
+    const char *translatedText = rawText ? UI_SafeTranslateString(rawText) : nullptr;
+    const char *itemName = item->window.name;
+
+    const bool isRestart =
+        Switch_UI_ContainsCaseInsensitive(itemName, "restart") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "restart") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "restart");
+
+    const bool isQuit =
+        Switch_UI_ContainsCaseInsensitive(itemName, "quit") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "quit") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "quit") ||
+        Switch_UI_ContainsCaseInsensitive(itemName, "exitgame") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "exitgame") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "exitgame");
+
+    if (isRestart)
+    {
+        Dvar_SetIntByName("cl_paused", 0);
+        Key_ClearStates(dc->localClientNum);
+        Menus_CloseAll(dc);
+        Cbuf_AddText(dc->localClientNum, "map_restart\n");
+        Switch_LogWrite("[KisakCOD][PAUSE ACTION] restart dispatched from closeingame-only pause action\n");
+        return true;
+    }
+
+    if (isQuit)
+    {
+        // Match the original UI_RunMenuScript("Quit") command path.
+        const int controllerIndex = CL_ControllerIndexFromClientNum(dc->localClientNum);
+        Cmd_ExecuteSingleCommand(dc->localClientNum, controllerIndex, (char *)"quit");
+        Switch_LogWrite("[KisakCOD][PAUSE ACTION] quit dispatched from closeingame-only pause action\n");
+        return true;
+    }
+
+    return false;
+}
+#endif
+
 void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
 {
     int v3; // [esp+0h] [ebp-1814h]
@@ -2485,6 +2577,11 @@ void __cdecl Item_RunScript(UiContext *dc, itemDef_s *item, char *s)
         !I_stricmp(item->parent->window.name, "main") &&
         s &&
         *s;
+#endif
+
+#ifdef __SWITCH__
+    if (Switch_UI_DispatchCloseOnlyPauseAction(dc, item, s))
+        return;
 #endif
 
     memset(dst, 0, sizeof(dst));
