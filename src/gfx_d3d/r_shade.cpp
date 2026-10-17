@@ -453,29 +453,23 @@ void __cdecl R_OverrideImage(GfxImage **image, const MaterialTextureDef *texdef)
     }
 }
 
-#ifdef KISAK_RADIANT
-// DOCUMENTED DIVERGENCE (white-xmodel root cause, 2026-07-02): many tools shaders keep
-// load-bearing constants as `def` immediates in their bytecode — e.g. the _dtex model
-// shaders' packed-UV half-float decompress (vs c8..c12; CTAB only binds the c0/c4
-// matrices) and vertcol_shaded's ps c0/c2. D3D9 is supposed to load def constants into
-// the register file when the shader is bound, and the binary relies on that. On the
-// live editor that guarantee does not hold: DEVPROBE at the model draw showed c10/c11
-// live (model positions need them and are correct) while c8/c9 were ZERO — which
-// collapses every UV to texel(0,0) and NaNs the fakelight vertex colour = the flat
-// white/brown models. Registers persist across shader binds, so any pass whose args
-// route a zero-valued code constant to those registers kills them for every later
-// def-reliant draw. Fix: re-apply the shader's own def constants whenever the shader
-// is bound. Idempotent when the runtime already applied them; def registers are
-// disjoint from CTAB-uniform registers within a shader, so no technique arg is
-// overridden. The tracked const state for each written dest is invalidated so a later
-// technique arg to the same register is not version-skipped. (Editor-only: the game
-// targets keep the binary's runtime-reliant behavior.)
+#if defined(KISAK_RADIANT) || defined(__SWITCH__)
+// D3D9 shader bytecode can contain load-bearing `def` immediates which populate
+// constant registers when the shader is bound. The _dtex packed-UV decompressors,
+// for example, define c8..c12 even though CTAB only binds the c0/c4 matrices. If
+// those values remain zero/stale, UVs collapse to texel(0,0) and lighting can turn
+// into flat white/brown output. The native game D3D9 runtime performs this register
+// setup implicitly; the Switch Vulkan path must mirror it before uploading the
+// uniform register file to SPIR-V. Re-apply definitions on shader binds and invalidate
+// the renderer's tracked constant cache so later explicit writes are not skipped.
 static void R_ApplyShaderDefConstants(GfxCmdBufState *state, const void *bytecode,
                                       unsigned sizeDwords, bool pixel)
 {
     const uint32_t *tok = (const uint32_t *)bytecode;
     if (!tok || sizeDwords < 2)
         return;
+    uint32_t defCount = 0;
+    uint32_t highestDefRegister = 0;
     unsigned i = 1;                              // skip the version token
     while (i < sizeDwords)
     {
@@ -498,6 +492,8 @@ static void R_ApplyShaderDefConstants(GfxCmdBufState *state, const void *bytecod
                     LODWORD(state->pixelShaderConstState[dst]) = -1;
                     HIDWORD(state->pixelShaderConstState[dst]) = -1;
                     R_HW_SetPixelShaderConstant(state->prim.device, dst, (const float *)&tok[i + 2], 1u);
+                    ++defCount;
+                    highestDefRegister = std::max(highestDefRegister, dst);
                 }
             }
             else
@@ -508,6 +504,8 @@ static void R_ApplyShaderDefConstants(GfxCmdBufState *state, const void *bytecod
                     HIDWORD(state->vertexShaderConstState[dst]) = -1;
                 }
                 R_HW_SetVertexShaderConstant(state->prim.device, dst, (const float *)&tok[i + 2], 1u);
+                ++defCount;
+                highestDefRegister = std::max(highestDefRegister, dst);
             }
             i += 6;
             continue;
@@ -518,6 +516,22 @@ static void R_ApplyShaderDefConstants(GfxCmdBufState *state, const void *bytecod
         while (i < sizeDwords && (tok[i] & 0x80000000))
             ++i;
     }
+
+#ifdef __SWITCH__
+    static std::atomic<uint32_t> switchDefTraceCount{0};
+    if (defCount)
+    {
+        const uint32_t traceIndex = switchDefTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (traceIndex < 12u)
+        {
+            char trace[192];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][SHADER DEF] stage=%s count=%u highestRegister=%u\n",
+                pixel ? "ps" : "vs", defCount, highestDefRegister);
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
 }
 #endif
 
@@ -532,7 +546,7 @@ void __cdecl R_SetPixelShader(GfxCmdBufState *state, const MaterialPixelShader *
 
         R_HW_SetPixelShader(state->prim.device, pixelShader);
         state->pixelShader = pixelShader;
-#ifdef KISAK_RADIANT
+#if defined(KISAK_RADIANT) || defined(__SWITCH__)
         R_ApplyShaderDefConstants(state, pixelShader->prog.loadDef.program,
                                   pixelShader->prog.loadDef.programSize, true);
 #endif
@@ -550,7 +564,7 @@ void __cdecl R_SetVertexShader(GfxCmdBufState *state, const MaterialVertexShader
 
         R_HW_SetVertexShader(state->prim.device, vertexShader);
         state->vertexShader = vertexShader;
-#ifdef KISAK_RADIANT
+#if defined(KISAK_RADIANT) || defined(__SWITCH__)
         R_ApplyShaderDefConstants(state, vertexShader->prog.loadDef.program,
                                   vertexShader->prog.loadDef.programSize, false);
 #endif
