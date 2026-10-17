@@ -4771,15 +4771,17 @@ bool IDirect3DDevice9::EnsurePipeline()
     const uint64_t psSpirvHash = HashSpirvWords(m_pixelShader->spirv);
 
 #ifdef __SWITCH__
-    // The crash reproduces on this exact PS/pipeline pair inside NVK's
-    // vkCreateGraphicsPipelines path. Disable driver optimization for this
-    // pipeline only to test whether the failing path is an optimizer pass.
-    if (key == 0xc665cb7839b36a01ull &&
-        psSpirvHash == 0x8b90ee0e706f2d27ull)
+    // Several distinct shader/pipeline pairs have faulted inside NVK's
+    // vkCreateGraphicsPipelines path. The per-pipeline test let the previous
+    // pair progress, but the next pair faulted. Apply the same diagnostic to
+    // every Switch graphics pipeline to test whether NVK optimization is the
+    // common trigger instead of chasing changing pipeline keys one by one.
+    info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
+    static std::atomic<bool> loggedSwitchPipelineOptimizationMode{false};
+    if (!loggedSwitchPipelineOptimizationMode.exchange(true, std::memory_order_relaxed))
     {
-        info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
         Switch_LogWrite(
-            "[KisakCOD][VK PIPELINE] targeted disable-optimization flag for reproducible NVK crash\n");
+            "[KisakCOD][VK PIPELINE] disable_optimization=all_switch_graphics_pipelines diagnostic=1\n");
     }
 #endif
 
