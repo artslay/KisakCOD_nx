@@ -3937,6 +3937,18 @@ bool IDirect3DDevice9::EnsurePipeline()
         return false;
     }
 
+    // Diagnostic-only A/B test: isolate NVK pipeline creation from our custom
+    // D3D9 alpha-test SPIR-V rewrite. Alpha-tested materials temporarily render
+    // without discard; remove this bypass after collecting the test result.
+    constexpr bool kSwitchDiagnosticBypassAlphaTestPatch = true;
+    const bool useAlphaTestPatch = m_alphaTest && !kSwitchDiagnosticBypassAlphaTestPatch;
+    static bool switchAlphaBypassLogged = false;
+    if (m_alphaTest && kSwitchDiagnosticBypassAlphaTestPatch && !switchAlphaBypassLogged)
+    {
+        Switch_LogWrite("[KisakCOD][VK DIAG] alpha_test_patch=bypassed specialization=disabled; diagnostic build only\n");
+        switchAlphaBypassLogged = true;
+    }
+
     // Dynamic-rendering pipelines are compatible only with their attachment
     // formats; resolve them before attempting to reuse a cached pipeline.
     const VkFormat colorFormat = m_color && m_color->texture
@@ -4219,7 +4231,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         // to the interface-linked MojoShader module.
         pipelineAlphaFuncSpecId = 0;
         pipelineAlphaRefSpecId = 0;
-        if (m_alphaTest &&
+        if (useAlphaTestPatch &&
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
                 &pipelineAlphaFuncSpecId,
@@ -4281,7 +4293,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules/vs";
         RecordSwitchVkModuleTrace(
             1u, m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
-            m_vertexShader, vsInfo, m_alphaTest);
+            m_vertexShader, vsInfo, useAlphaTestPatch);
         const VkResult vsResult =
             vkCreateShaderModule(m_backend->Device(), &vsInfo, nullptr, &m_vertexShader->module);
         g_switchVkModuleTracePhase = 10u;
@@ -4303,7 +4315,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules/ps";
             RecordSwitchVkModuleTrace(
                 2u, m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
-                m_pixelShader, psInfo, m_alphaTest);
+                m_pixelShader, psInfo, useAlphaTestPatch);
             psResult = vkCreateShaderModule(
                 m_backend->Device(), &psInfo, nullptr, &m_pixelShader->module);
             g_switchVkModuleTracePhase = 20u;
@@ -4342,9 +4354,9 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_vertexShader->linkedPixelShaderSerial = m_pixelShader->serial;
         m_pixelShader->linkedDeclarationSerial = m_decl->serial;
         m_pixelShader->linkedPixelShaderSerial = m_pixelShader->serial;
-        m_pixelShader->linkedAlphaTestPatch = m_alphaTest;
+        m_pixelShader->linkedAlphaTestPatch = useAlphaTestPatch;
     }
-    else if (m_pixelShader->linkedAlphaTestPatch != m_alphaTest)
+    else if (m_pixelShader->linkedAlphaTestPatch != useAlphaTestPatch)
     {
         // Alpha testing is dynamic state. Rebuild only the fragment module when
         // that state toggles; the stored linked baseline avoids running the
@@ -4363,7 +4375,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         pipelineAlphaFuncSpecId = 0;
         pipelineAlphaRefSpecId = 0;
 
-        if (m_alphaTest &&
+        if (useAlphaTestPatch &&
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
                 &pipelineAlphaFuncSpecId,
@@ -4385,7 +4397,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules/ps_variant";
         RecordSwitchVkModuleTrace(
             4u, m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
-            m_pixelShader, psInfo, m_alphaTest);
+            m_pixelShader, psInfo, useAlphaTestPatch);
         const VkResult psResult =
             vkCreateShaderModule(m_backend->Device(), &psInfo, nullptr, &m_pixelShader->module);
         g_switchVkModuleTracePhase = 40u;
@@ -4399,7 +4411,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite(msg);
             return false;
         }
-        m_pixelShader->linkedAlphaTestPatch = m_alphaTest;
+        m_pixelShader->linkedAlphaTestPatch = useAlphaTestPatch;
     }
 
     VkPipelineShaderStageCreateInfo stages[2]{};
@@ -4414,7 +4426,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     const uint32_t storedAlphaFuncSpecId = m_pixelShader->alphaFuncSpecId;
     const uint32_t storedAlphaRefSpecId = m_pixelShader->alphaRefSpecId;
-    if (m_alphaTest)
+    if (useAlphaTestPatch)
     {
         uint32_t resolvedFuncSpecId = pipelineAlphaFuncSpecId;
         uint32_t resolvedRefSpecId = pipelineAlphaRefSpecId;
@@ -4474,7 +4486,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     alphaSpecializationInfo.pMapEntries = alphaSpecializationEntries;
     alphaSpecializationInfo.dataSize = sizeof(alphaSpecializationData);
     alphaSpecializationInfo.pData = &alphaSpecializationData;
-    stages[1].pSpecializationInfo = m_alphaTest ? &alphaSpecializationInfo : nullptr;
+    stages[1].pSpecializationInfo = useAlphaTestPatch ? &alphaSpecializationInfo : nullptr;
 
     std::vector<VkVertexInputBindingDescription> bindings;
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams";
