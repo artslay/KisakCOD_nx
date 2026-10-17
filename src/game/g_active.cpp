@@ -677,7 +677,7 @@ void __cdecl ClientThink_real(gentity_s *ent)
         {
             Com_Printf(
                 CON_CHANNEL_SERVER,
-                "[KisakCOD][MOVE SPEED RECOVER] invalid=%d reset=%d applied=%d reason=nonpositive_g_speed\\n",
+                "[KisakCOD][MOVE SPEED RECOVER] invalid=%d reset=%d applied=%d reason=nonpositive_g_speed\n",
                 invalidSpeed, resetSpeed, integer);
             switchMoveSpeedRecovered = true;
         }
