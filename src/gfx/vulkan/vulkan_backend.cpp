@@ -646,8 +646,8 @@ bool VulkanBackend::CreateDevice()
     queue.pQueuePriorities = &priority;
 
     std::vector<const char *> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    bool deviceFaultExtensionAvailable = false;
 #ifdef VK_EXT_device_fault
+    bool deviceFaultExtensionAvailable = false;
     // Device-fault support is optional; without the extension the renderer path is unchanged.
     uint32_t extensionCount = 0;
     VkResult extensionResult = vkEnumerateDeviceExtensionProperties(
