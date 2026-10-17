@@ -14,10 +14,71 @@
 #include "r_utils.h"
 #include "r_xsurface.h"
 #include "r_model_lighting.h"
+#ifdef __SWITCH__
+#include <cstdio>
+#endif
 
 
 static_model_cache_t s_cache;
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+
+static bool SMC_IsKnownTreeListLink(const static_model_tree_list_t *link)
+{
+    if (!link)
+        return false;
+
+    const uintptr_t address = reinterpret_cast<uintptr_t>(link);
+    const uintptr_t firstTreeLink =
+        reinterpret_cast<uintptr_t>(&s_cache.trees[0].usedlist);
+    const uintptr_t afterLastTreeLink =
+        firstTreeLink + sizeof(s_cache.trees);
+    if (address >= firstTreeLink && address < afterLastTreeLink)
+    {
+        return ((address - firstTreeLink) % sizeof(static_model_tree_t)) == 0;
+    }
+
+    for (uint32_t pool = 0; pool < ARRAY_COUNT(s_cache.usedlist); ++pool)
+    {
+        if (link == &s_cache.usedlist[pool])
+            return true;
+    }
+    return false;
+}
+
+static void SMC_LogRejectedCacheReference(
+    uint32_t smodelIndex,
+    uint32_t lod,
+    uint32_t cacheIndex,
+    const GfxCachedSModelSurf *cachedSurf,
+    const static_model_tree_t *tree,
+    const char *reason)
+{
+    static uint32_t traceCount = 0;
+    if (traceCount++ >= 12u)
+        return;
+
+    char trace[384];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][SMC CACHE REJECT] reason=%s smodel=%u lod=%u cache=%u surf=%p baseVert=%u cachedSmodel=%u cachedLod=%u tree=%p frame=%u next=%p prev=%p\\n",
+        reason ? reason : "unknown",
+        smodelIndex,
+        lod,
+        cacheIndex,
+        static_cast<const void *>(cachedSurf),
+        cachedSurf ? cachedSurf->baseVertIndex : UINT32_MAX,
+        cachedSurf ? static_cast<unsigned>(cachedSurf->smodelIndex) : UINT32_MAX,
+        cachedSurf ? static_cast<unsigned>(cachedSurf->lodIndex) : UINT32_MAX,
+        static_cast<const void *>(tree),
+        tree ? tree->frameCount : 0u,
+        tree ? static_cast<const void *>(tree->usedlist.next) : nullptr,
+        tree ? static_cast<const void *>(tree->usedlist.prev) : nullptr);
+    Switch_LogWrite(trace);
+}
+#endif
 
 void __cdecl TRACK_r_staticmodelcache()
 {
