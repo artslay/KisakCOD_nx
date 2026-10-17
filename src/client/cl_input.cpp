@@ -1034,7 +1034,19 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     if (clients[0].snap.ps.pm_flags & 0x800)
     {
         if (cl_freemove->current.integer != 2)
+        {
+            if (tracePadMove)
+            {
+                char trace[256];
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][PAD MOVE] blocked=pm_flags axes forward=%.3f right=%.3f pitch=%.3f yaw=%.3f pm=0x%x freemove=%d\n",
+                    forwardAxis, rightAxis, pitchAxis, yawAxis,
+                    static_cast<unsigned int>(clients[0].snap.ps.pm_flags),
+                    cl_freemove->current.integer);
+                Switch_LogWrite(trace);
+            }
             return;
+        }
     }
 
     const float magnitude = std::sqrt(
