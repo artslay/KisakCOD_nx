@@ -616,6 +616,32 @@ void __cdecl R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex)
 
     iassert( rgp.world );
     pass = context.state->pass;
+#ifdef __SWITCH__
+    // Record the actual lightmap binding once, when a BSP surface with a
+    // valid lightmap reaches the renderer. patches=0 is dynamic model lighting
+    // and does not tell us whether the world's baked lightmaps are active.
+    static bool switchLightmapStateLogged = false;
+    if (!switchLightmapStateLogged && lmapIndex != 31 && lmapIndex < rgp.world->lightmapCount)
+    {
+        const GfxImage *primary = rgp.world->lightmaps[lmapIndex].primary;
+        const GfxImage *secondary = rgp.world->lightmaps[lmapIndex].secondary;
+        char trace[480];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][LIGHTMAP STATE] index=%u count=%u r_lightMap=%d r_colorMap=%d sunDirChanged=%d primary=%p %ux%u texture=%p secondary=%p %ux%u texture=%p\n",
+            lmapIndex, rgp.world->lightmapCount,
+            r_lightMap ? r_lightMap->current.integer : -999,
+            r_colorMap ? r_colorMap->current.integer : -999,
+            context.source->input.data->prim.hasSunDirChanged ? 1 : 0,
+            static_cast<const void *>(primary),
+            primary ? primary->width : 0, primary ? primary->height : 0,
+            static_cast<const void *>(primary ? primary->texture.basemap : nullptr),
+            static_cast<const void *>(secondary),
+            secondary ? secondary->width : 0, secondary ? secondary->height : 0,
+            static_cast<const void *>(secondary ? secondary->texture.basemap : nullptr));
+        Switch_LogWrite(trace);
+        switchLightmapStateLogged = true;
+    }
+#endif
     if (lmapIndex == 31)
     {
         if ((pass->customSamplerFlags & 6) != 0)
