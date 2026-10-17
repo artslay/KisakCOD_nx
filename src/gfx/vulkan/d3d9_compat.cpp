@@ -3882,6 +3882,52 @@ bool IDirect3DDevice9::EnsurePipeline()
             attributes.push_back(attr);
         }
 
+#ifdef __SWITCH__
+        static uint32_t switchShaderInterfaceTraceCount = 0;
+        if (switchShaderInterfaceTraceCount < 16u)
+        {
+            const uint32_t traceIndex = switchShaderInterfaceTraceCount++;
+            char trace[640];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK SHADER INTERFACE] n=%u decl=%p declSerial=%llu declType=%u elems=%zu vs=%p/%llu attrs=%d samplers=%d bytes=%d ps=%p/%llu attrs=%d samplers=%d bytes=%d\n",
+                traceIndex,
+                static_cast<const void *>(m_decl),
+                static_cast<unsigned long long>(m_decl->serial),
+                static_cast<unsigned>(m_decl->switchVertDeclType),
+                m_decl->elements.size(),
+                static_cast<const void *>(m_vertexShader),
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                m_vertexShader->parseData ? m_vertexShader->parseData->attribute_count : -1,
+                m_vertexShader->parseData ? m_vertexShader->parseData->sampler_count : -1,
+                m_vertexShader->parseData ? m_vertexShader->parseData->output_len : -1,
+                static_cast<const void *>(m_pixelShader),
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                m_pixelShader->parseData ? m_pixelShader->parseData->attribute_count : -1,
+                m_pixelShader->parseData ? m_pixelShader->parseData->sampler_count : -1,
+                m_pixelShader->parseData ? m_pixelShader->parseData->output_len : -1);
+            Switch_LogWrite(trace);
+
+            for (size_t elementIndex = 0;
+                 elementIndex < m_decl->elements.size() && elementIndex < 12u;
+                 ++elementIndex)
+            {
+                const _D3DVERTEXELEMENT9 &element = m_decl->elements[elementIndex];
+                char elementTrace[256];
+                std::snprintf(
+                    elementTrace, sizeof(elementTrace),
+                    "[KisakCOD][VK VERTEX ELEMENT] n=%u i=%zu stream=%u offset=%u type=%u effective=%u usage=%u usageIndex=%u\n",
+                    traceIndex, elementIndex,
+                    static_cast<unsigned>(element.Stream),
+                    static_cast<unsigned>(element.Offset),
+                    static_cast<unsigned>(element.Type),
+                    static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element)),
+                    static_cast<unsigned>(element.Usage),
+                    static_cast<unsigned>(element.UsageIndex));
+                Switch_LogWrite(elementTrace);
+            }
+        }
+#endif
         g_switchFrameStage = "frame/render/vulkan/pipeline/link_shaders";
         const int patchBytes = MOJOSHADER_linkSPIRVShaders(
             m_vertexShader->parseData,
@@ -3949,9 +3995,45 @@ bool IDirect3DDevice9::EnsurePipeline()
         psInfo.codeSize = m_pixelShader->spirv.size() * sizeof(uint32_t);
         psInfo.pCode = m_pixelShader->spirv.data();
 
+#ifdef __SWITCH__
+        static uint32_t switchShaderModuleTraceCount = 0;
+        if (switchShaderModuleTraceCount < 16u)
+        {
+            char trace[640];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK MODULE PREP] n=%u backend=%p device=%p decl=%p vs=%p/%llu words=%zu bytes=%zu code=%p ps=%p/%llu words=%zu bytes=%zu code=%p\n",
+                switchShaderModuleTraceCount++,
+                static_cast<const void *>(m_backend),
+                static_cast<const void *>(m_backend->Device()),
+                static_cast<const void *>(m_decl),
+                static_cast<const void *>(m_vertexShader),
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                m_vertexShader->spirv.size(),
+                static_cast<size_t>(vsInfo.codeSize),
+                static_cast<const void *>(vsInfo.pCode),
+                static_cast<const void *>(m_pixelShader),
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                m_pixelShader->spirv.size(),
+                static_cast<size_t>(psInfo.codeSize),
+                static_cast<const void *>(psInfo.pCode));
+            Switch_LogWrite(trace);
+        }
+#endif
         g_switchFrameStage = "frame/render/vulkan/pipeline/create_shader_modules";
         const VkResult vsResult =
             vkCreateShaderModule(m_backend->Device(), &vsInfo, nullptr, &m_vertexShader->module);
+#ifdef __SWITCH__
+        if (switchShaderModuleTraceCount <= 16u)
+        {
+            char trace[192];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VK MODULE VS RETURN] result=%d module=%p\n",
+                static_cast<int>(vsResult),
+                static_cast<const void *>(m_vertexShader->module));
+            Switch_LogWrite(trace);
+        }
+#endif
         const VkResult psResult =
             vsResult == VK_SUCCESS
                 ? vkCreateShaderModule(m_backend->Device(), &psInfo, nullptr, &m_pixelShader->module)
