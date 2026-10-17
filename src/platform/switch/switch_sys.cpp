@@ -616,6 +616,26 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][RINIT]",
         "[KisakCOD][VERTEXSHADER ",
         "[KisakCOD][SOUND]",
+        // High-volume gameplay/input traces removed from the normal log. Keep
+        // only the bounded PMOVE AIR/WALK/GROUND diagnostics that identify the
+        // active movement path and whether ground contact is being recovered.
+        "[KisakCOD][PAD RAW]",
+        "[KisakCOD][PAD MOVE]",
+        "[KisakCOD][PAD CMD FLOW]",
+        "[KisakCOD][SAVE PHASE]",
+        "[KisakCOD][PMOVE INPUT]",
+        "[KisakCOD][PMOVE SERVER]",
+        "[KisakCOD][OFFMAP ORIGIN WRITE]",
+        "[KisakCOD][SNAPSHOT SERVER]",
+        "[KisakCOD][SNAPSHOT CLIENT]",
+        "[KisakCOD][VIEW ORIGIN]",
+        "[KisakCOD][CAMERA TRACK]",
+        "[KisakCOD][CREDITS SCENE]",
+        "[KisakCOD][CREDITS SURFS]",
+        "[KisakCOD][DPVS ROOT]",
+        "[KisakCOD][DPVS CELL]",
+        "[KisakCOD][XSURFACE RIGID BONE]",
+        "[KisakCOD][MODEL LIGHTING]",
         // High-volume per-asset traces. Keep failures, zone progress, crash context,
         // script anomalies, and memory-tree invariants visible.
         "[KisakCOD][GFXIMAGE HEADER]",
