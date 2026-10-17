@@ -2508,9 +2508,9 @@ static bool Switch_UI_DispatchCloseOnlyPauseAction(
     itemDef_s *item,
     const char *script)
 {
-    // This fallback is only for the clicked item's action. Do not interpret
-    // hover/focus/escape scripts as Restart or Quit commands.
-    if (!dc || !item || script != item->action ||
+    // Limit this fallback to action/accept scripts. Do not interpret
+    // hover, focus, or escape scripts as Restart or Quit commands.
+    if (!dc || !item || (script != item->action && script != item->onAccept) ||
         !item->parent || !item->parent->window.name ||
         I_stricmp(item->parent->window.name, "pausedmenu") ||
         !Switch_UI_IsCloseInGameOnlyScript(script))
