@@ -1012,50 +1012,12 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     const float rightTrigger = GPad_GetButton(controller, GPAD_R_TRIG);
     const bool padActive = GPad_IsActive(controller);
 
-    // Keep a low-rate trace of values as they enter the user-command path.
-    // This distinguishes a Switch stick-polling problem from a later movement
-    // command/state problem without flooding the SD log.
-    static unsigned int switchPadMoveFrame = 0;
-    const unsigned int switchPadMoveCall = switchPadMoveFrame++;
-    static bool lastTracedPadActive = false;
-    // Keep controller logs useful without recording every analog step.
-    const bool tracePadMove =
-        switchPadMoveCall < 4u ||
-        ((switchPadMoveCall + 1u) % 120u) == 0u ||
-        padActive != lastTracedPadActive;
-    if (tracePadMove)
-        lastTracedPadActive = padActive;
     if (!padActive)
-    {
-        if (tracePadMove)
-        {
-            char trace[256];
-            std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][PAD MOVE] active=0 axes forward=%.3f right=%.3f pitch=%.3f yaw=%.3f cmd forward=%d right=%d\n",
-                forwardAxis, rightAxis, pitchAxis, yawAxis,
-                static_cast<int>(cmd->forwardmove), static_cast<int>(cmd->rightmove));
-            Switch_LogWrite(trace);
-        }
         return;
-    }
 
-    if (clients[0].snap.ps.pm_flags & 0x800)
-    {
-        if (cl_freemove->current.integer != 2)
-        {
-            if (tracePadMove)
-            {
-                char trace[256];
-                std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][PAD MOVE] blocked=pm_flags axes forward=%.3f right=%.3f pitch=%.3f yaw=%.3f pm=0x%x freemove=%d\n",
-                    forwardAxis, rightAxis, pitchAxis, yawAxis,
-                    static_cast<unsigned int>(clients[0].snap.ps.pm_flags),
-                    cl_freemove->current.integer);
-                Switch_LogWrite(trace);
-            }
-            return;
-        }
-    }
+    if ((clients[0].snap.ps.pm_flags & 0x800) &&
+        cl_freemove->current.integer != 2)
+        return;
 
     const float magnitude = std::sqrt(
         forwardAxis * forwardAxis +
@@ -1069,17 +1031,6 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         static_cast<int>(rightAxis * moveScale + cmd->rightmove));
     cmd->forwardmove = ClampChar(
         static_cast<int>(forwardAxis * moveScale + cmd->forwardmove));
-
-    if (tracePadMove)
-    {
-        char trace[256];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][PAD MOVE] active=1 axes forward=%.3f right=%.3f pitch=%.3f yaw=%.3f cmd forward=%d right=%d pm=0x%x\n",
-            forwardAxis, rightAxis, pitchAxis, yawAxis,
-            static_cast<int>(cmd->forwardmove), static_cast<int>(cmd->rightmove),
-            static_cast<unsigned int>(clients[0].snap.ps.pm_flags));
-        Switch_LogWrite(trace);
-    }
 
     cmd->pitchmove = ClampChar(
         static_cast<int>(pitchAxis * 127.0f) + cmd->pitchmove);
@@ -1712,35 +1663,7 @@ void __cdecl CL_WritePacket()
         {
             v7 = v6 & 0x3F;
             v8 = &clients[0].cmds[v7];
-#ifdef __SWITCH__
-            // The HID layer and CL_GamepadMove can build valid axes while the
-            // SP command loop still intentionally skips server think in
-            // cl_freemove mode. Trace this final handoff, not just raw stick
-            // values, so controller mapping and server delivery are distinct.
-            static unsigned int switchPadCommandFlowCount = 0;
-            if ((v8->forwardmove || v8->rightmove) &&
-                switchPadCommandFlowCount < 48u)
-            {
-                const bool serverThinkEnabled = cl_freemove->current.integer == 0;
-                char trace[320];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][PAD CMD FLOW] sample=%u cmd=%d time=%d move=(%d,%d,%d) buttons=0x%08x freemove=%d serverThink=%d conn=%d pm=0x%x\n",
-                    switchPadCommandFlowCount++,
-                    cmdNumber - v4 + (v4 - v5) + 1,
-                    v8->serverTime,
-                    static_cast<int>(v8->forwardmove),
-                    static_cast<int>(v8->rightmove),
-                    static_cast<int>(v8->upmove),
-                    static_cast<unsigned int>(v8->buttons),
-                    cl_freemove->current.integer,
-                    serverThinkEnabled ? 1 : 0,
-                    static_cast<int>(clientUIActives[0].connectionState),
-                    static_cast<unsigned int>(clients[0].snap.ps.pm_flags));
-                Switch_LogWrite(trace);
-            }
-#endif
+
             if (!cl_freemove->current.integer)
             {
                 SV_RecordClientThink(&clients[0].cmds[v7]);
