@@ -82,6 +82,15 @@ std::atomic<uint32_t> g_switchLastDrawStreamMask{0};
 std::atomic<uint32_t> g_switchLastDrawStream0BufferBytes{0};
 std::atomic<uint32_t> g_switchLastDrawStream0Offset{0};
 std::atomic<uint32_t> g_switchLastDrawStream0Stride{0};
+std::atomic<uint64_t> g_switchLastDrawVertexShaderSerial{0};
+std::atomic<uint64_t> g_switchLastDrawPixelShaderSerial{0};
+std::atomic<uintptr_t> g_switchLastDrawTextureImage[4]{};
+std::atomic<uintptr_t> g_switchLastDrawTextureView[4]{};
+std::atomic<uint32_t> g_switchLastDrawTextureWidth[4]{};
+std::atomic<uint32_t> g_switchLastDrawTextureHeight[4]{};
+std::atomic<uint32_t> g_switchLastDrawTextureFormat[4]{};
+std::atomic<uint32_t> g_switchLastDrawTextureSourceFormat[4]{};
+std::atomic<uint32_t> g_switchLastDrawTextureLayout[4]{};
 
 namespace
 {
@@ -6469,6 +6478,33 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     g_switchLastDrawVertexCount.store(numVertices, std::memory_order_relaxed);
     g_switchLastDrawPrimitiveType.store(primitiveType, std::memory_order_relaxed);
     g_switchLastDrawPrimitiveCount.store(primitiveCount, std::memory_order_relaxed);
+    g_switchLastDrawVertexShaderSerial.store(
+        m_vertexShader ? m_vertexShader->serial : 0u, std::memory_order_relaxed);
+    g_switchLastDrawPixelShaderSerial.store(
+        m_pixelShader ? m_pixelShader->serial : 0u, std::memory_order_relaxed);
+    for (uint32_t slot = 0; slot < 4; ++slot)
+    {
+        const KisakVkTexture *texture = m_textures[slot];
+        g_switchLastDrawTextureImage[slot].store(
+            texture ? reinterpret_cast<uintptr_t>(texture->image) : 0u,
+            std::memory_order_relaxed);
+        g_switchLastDrawTextureView[slot].store(
+            texture ? reinterpret_cast<uintptr_t>(texture->view) : 0u,
+            std::memory_order_relaxed);
+        g_switchLastDrawTextureWidth[slot].store(texture ? texture->width : 0u,
+            std::memory_order_relaxed);
+        g_switchLastDrawTextureHeight[slot].store(texture ? texture->height : 0u,
+            std::memory_order_relaxed);
+        g_switchLastDrawTextureFormat[slot].store(
+            texture ? static_cast<uint32_t>(texture->format) : 0u,
+            std::memory_order_relaxed);
+        g_switchLastDrawTextureSourceFormat[slot].store(
+            texture ? static_cast<uint32_t>(texture->sourceFormat) : 0u,
+            std::memory_order_relaxed);
+        g_switchLastDrawTextureLayout[slot].store(
+            texture ? static_cast<uint32_t>(texture->layout) : 0u,
+            std::memory_order_relaxed);
+    }
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
