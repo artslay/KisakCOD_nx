@@ -16,7 +16,8 @@
 #include <unordered_set>
 
 // Missing/empty ambience aliases can be requested every frame. Report each
-// invalid path once per session instead of flooding the engine log.
+// invalid path once per session, with enough VFS data to distinguish a missing
+// or empty asset from a stream decoder that reports a zero duration.
 static void SND_ReportZeroLengthSoundOnce(const char *soundName)
 {
     static std::mutex reportMutex;
@@ -28,8 +29,40 @@ static void SND_ReportZeroLengthSoundOnce(const char *soundName)
         firstReport = reportedNames.emplace(key).second;
     }
 
-    if (firstReport)
-        Com_PrintError(CON_CHANNEL_ERROR, "ERROR: Sound file '%s' is zero length, invalid\n", key.c_str());
+    if (!firstReport)
+        return;
+
+    int diagnosticHandle = 0;
+    const int fileSize = static_cast<int>(FS_FOpenFileRead(key.c_str(), &diagnosticHandle));
+    uint8_t header[12]{};
+    uint32_t headerBytes = 0;
+    if (diagnosticHandle > 0)
+    {
+        if (fileSize > 0)
+            headerBytes = FS_Read(header, sizeof(header), diagnosticHandle);
+        FS_FCloseFile(diagnosticHandle);
+    }
+
+    if (headerBytes == sizeof(header))
+    {
+        Com_PrintError(
+            CON_CHANNEL_ERROR,
+            "ERROR: Sound file '%s' has zero stream duration (FS bytes=%d, header=%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X)\n",
+            key.c_str(),
+            fileSize,
+            header[0], header[1], header[2], header[3],
+            header[4], header[5], header[6], header[7],
+            header[8], header[9], header[10], header[11]);
+    }
+    else
+    {
+        Com_PrintError(
+            CON_CHANNEL_ERROR,
+            "ERROR: Sound file '%s' has zero stream duration (FS bytes=%d, headerBytes=%u)\n",
+            key.c_str(),
+            fileSize,
+            static_cast<unsigned>(headerBytes));
+    }
 }
 
 #ifdef KISAK_MP
@@ -833,6 +866,8 @@ int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int
                 else
                 {
                     SND_ReportZeroLengthSoundOnce(realname);
+                    AIL_close_stream((HSTREAM)handle);
+                    milesGlob.handle_sample[index] = 0;
                     return SND_SetPlaybackIdNotPlayed(index);
                 }
             }
