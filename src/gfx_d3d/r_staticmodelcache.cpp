@@ -63,7 +63,7 @@ static void SMC_LogRejectedCacheReference(
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][SMC CACHE REJECT] reason=%s smodel=%u lod=%u cache=%u surf=%p baseVert=%u cachedSmodel=%u cachedLod=%u tree=%p frame=%u next=%p prev=%p\\n",
+        "[KisakCOD][SMC CACHE REJECT] reason=%s smodel=%u lod=%u cache=%u surf=%p baseVert=%u cachedSmodel=%u cachedLod=%u tree=%p frame=%u next=%p prev=%p\n",
         reason ? reason : "unknown",
         smodelIndex,
         lod,
