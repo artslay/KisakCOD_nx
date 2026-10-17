@@ -5669,9 +5669,20 @@ void __cdecl Load_XSurface(bool atStreamStart)
             if (varXSurface->vertListCount != 0 && serializedVertListAddress &&
                 varXSurface->vertList)
             {
-                DB_RegisterSwitchPointerAlias(
-                    serializedVertListAddress,
-                    reinterpret_cast<uintptr_t>(varXSurface->vertList));
+                // Aliases can target any record within a shared list,
+                // not just its first element. Serialized and native strides
+                // differ, so register each record's actual address pair.
+                for (uint32_t listIndex = 0;
+                     listIndex < varXSurface->vertListCount;
+                     ++listIndex)
+                {
+                    DB_RegisterSwitchPointerAlias(
+                        serializedVertListAddress +
+                            static_cast<uintptr_t>(listIndex) *
+                                sizeof(SerializedXRigidVertList_Switch),
+                        reinterpret_cast<uintptr_t>(
+                            &varXSurface->vertList[listIndex]));
+                }
                 DB_FixupSwitchPointerAliases();
             }
             if (switchTraceXModel)
