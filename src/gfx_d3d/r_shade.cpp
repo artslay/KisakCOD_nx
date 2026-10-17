@@ -872,6 +872,50 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
     if (rg.hasAnyImageOverrides)
         R_OverrideImage(&image, texDef);
 
+#ifdef __SWITCH__
+    // Trace the real image selected for world-material samplers. Lightmap
+    // descriptors alone do not prove that the diffuse/normal texture bound
+    // to the material's sampler is valid or sampled by the translated shader.
+    static std::atomic<uint32_t> switchWorldSamplerTraceCount{0};
+    if (material && material->info.name &&
+        material->info.name[0] == 'w' &&
+        material->info.name[1] == 'c' &&
+        material->info.name[2] == '/')
+    {
+        const uint32_t traceIndex =
+            switchWorldSamplerTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (traceIndex < 48u)
+        {
+            const auto *vkTexture = image ? image->texture.basemap : nullptr;
+            const MaterialTechniqueSet *techniqueSet = material->techniqueSet;
+            const MaterialPass *pass = context.state->pass;
+            char trace[768];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][WORLD SAMPLER] n=%u mat=%s set=%s tech=%s ps=%s slot=%u semantic=%u tex=%s size=%ux%u image=%p texture=%p vkImage=%p view=%p vkFormat=%u srcFormat=%u layout=%u\\n",
+                traceIndex,
+                material->info.name,
+                techniqueSet && techniqueSet->name ? techniqueSet->name : "<null>",
+                context.state->technique && context.state->technique->name
+                    ? context.state->technique->name : "<null>",
+                pass && pass->pixelShader && pass->pixelShader->name
+                    ? pass->pixelShader->name : "<null>",
+                static_cast<unsigned>(arg->dest),
+                static_cast<unsigned>(texDef->semantic),
+                image && image->name ? image->name : "<null>",
+                image ? image->width : 0u,
+                image ? image->height : 0u,
+                static_cast<const void *>(image),
+                static_cast<const void *>(vkTexture),
+                static_cast<const void *>(vkTexture ? vkTexture->image : VK_NULL_HANDLE),
+                static_cast<const void *>(vkTexture ? vkTexture->view : VK_NULL_HANDLE),
+                vkTexture ? static_cast<unsigned>(vkTexture->format) : 0u,
+                vkTexture ? static_cast<unsigned>(vkTexture->sourceFormat) : 0u,
+                vkTexture ? static_cast<unsigned>(vkTexture->layout) : 0u);
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     R_SetSampler(context, arg->dest, texDef->samplerState, image);
     return texDef;
 }
