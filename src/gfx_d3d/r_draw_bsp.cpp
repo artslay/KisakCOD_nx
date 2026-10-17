@@ -522,12 +522,27 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
     {
         const uint32_t firstCount = primDrawSurfPos
             ? primDrawSurfPos[0] : UINT32_MAX;
-        char trace[320];
+        const Material *traceMaterial = context.state->material;
+        const MaterialTechniqueSet *traceSet =
+            traceMaterial ? traceMaterial->techniqueSet : nullptr;
+        const GfxCmdBufPrimState *tracePrim = &context.state->prim;
+        char trace[768];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][BSP LIT PRETESS] sample=%u firstCount=%u pass=%p technique=%p flags=%u lightmaps=%u\n",
+            "[KisakCOD][BSP LIT PRETESS] sample=%u firstCount=%u mat=%s set=%s tech=%s techFlags=0x%x worldFmt=%u decl=%u streams=(%p/%u/%u,%p/%u/%u) pass=%p technique=%p flags=%u lightmaps=%u\n",
             switchBspLitPreTessTraceCount++,
             firstCount,
+            traceMaterial && traceMaterial->info.name ? traceMaterial->info.name : "<null>",
+            traceSet && traceSet->name ? traceSet->name : "<null>",
+            context.state->technique && context.state->technique->name
+                ? context.state->technique->name : "<null>",
+            context.state->technique ? static_cast<unsigned>(context.state->technique->flags) : 0u,
+            traceSet ? static_cast<unsigned>(traceSet->worldVertFormat) : 0u,
+            static_cast<unsigned>(tracePrim->vertDeclType),
+            static_cast<const void *>(tracePrim->streams[0].vb),
+            tracePrim->streams[0].offset, tracePrim->streams[0].stride,
+            static_cast<const void *>(tracePrim->streams[1].vb),
+            tracePrim->streams[1].offset, tracePrim->streams[1].stride,
             static_cast<const void *>(context.state->pass),
             static_cast<const void *>(context.state->technique),
             context.state->pass
