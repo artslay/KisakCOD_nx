@@ -2538,7 +2538,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
         // Run shutdown through the regular command buffer, outside the UI
         // script traversal. This also works when the menu script closes its
         // current menu before dispatching the exit action.
-        Cbuf_AddText(0, "quit\\n");
+        Cbuf_AddText(0, "quit\n");
         return;
     }
 
@@ -2552,7 +2552,7 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
         Dvar_SetIntByName("cl_paused", 0);
         Key_ClearStates(localClientNum);
         Menus_CloseAll(&uiInfo.uiDC);
-        Cbuf_AddText(0, "map_restart\\n");
+        Cbuf_AddText(0, "map_restart\n");
         return;
     }
 
