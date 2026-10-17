@@ -599,8 +599,7 @@ void Switch_LogWrite(const char *msg)
     // asset ABI investigation. Do not hide actual image-loading failures.
     if (std::strncmp(msg, "[KisakCOD][RENDER]", 18) == 0 ||
         std::strncmp(msg, "unknown UI script ", 18) == 0 ||
-        (std::strncmp(msg, "dvar '", 6) == 0 && std::strstr(msg, " doesn't exist") != nullptr) ||
-        std::strstr(msg, "R_Cinematic_BinkOpen '") != nullptr)
+        (std::strncmp(msg, "dvar '", 6) == 0 && std::strstr(msg, " doesn't exist") != nullptr))
         return;
 
     // Keep the runtime log compact. Detailed loader traces remain in source
@@ -611,11 +610,9 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][IWI ROOT] archive=",
         "[KisakCOD][BOOT] CL_InitUI:",
         "[KisakCOD][BOOT] CL_CreateDevGui:",
-        "[KisakCOD][INTRO]",
         "[KisakCOD][UI ",
         "[KisakCOD][UIMAIN]",
         "[KisakCOD][RTHREAD]",
-        "[KisakCOD][CINEMATIC]",
         "[KisakCOD][RINIT]",
         "[KisakCOD][VERTEXSHADER ",
         "[KisakCOD][SOUND]",
@@ -651,8 +648,7 @@ void Switch_LogWrite(const char *msg)
         "Switch PMem alloc begin:",
         "Switch PMem alloc end:",
         "Trying to load file ",
-        "Couldn't play stream '",
-        "R_Cinematic_BinkOpen '"
+        "Couldn't play stream '"
     };
     for (const char *prefix : kSuppressedPrefixes)
     {
