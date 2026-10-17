@@ -17,6 +17,10 @@
 #include "rb_shadowcookie.h"
 #include "r_draw_lit.h"
 #include <universal/profile.h>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 #include "rb_postfx.h"
 #include "rb_spotshadow.h"
 #include "rb_shade.h"
@@ -85,6 +89,44 @@ void __cdecl RB_Draw3DInternal(const GfxViewInfo *viewInfo)
     PROF_SCOPED("RB_Draw3D");
 
     iassert(rgp.world);
+
+#ifdef __SWITCH__
+    // Report the renderer's effective mode rather than inferring it from a
+    // config file: FULLBRIGHT/debug paths bypass the standard lit BSP pass.
+    static int lastDrawScene = -1;
+    static int lastBaseTech = -1;
+    static int lastFullbright = -1;
+    static int lastDebugShader = -1;
+    static int lastLightMap = -1;
+    static int lastColorMap = -1;
+    const int drawScene = static_cast<int>(gfxDrawMethod.drawScene);
+    const int baseTech = static_cast<int>(gfxDrawMethod.baseTechType);
+    const int fullbright = r_fullbright ? r_fullbright->current.integer : -1;
+    const int debugShader = r_debugShader ? r_debugShader->current.integer : -1;
+    const int lightMap = r_lightMap ? r_lightMap->current.integer : -1;
+    const int colorMap = r_colorMap ? r_colorMap->current.integer : -1;
+    if (drawScene != lastDrawScene || baseTech != lastBaseTech ||
+        fullbright != lastFullbright || debugShader != lastDebugShader ||
+        lightMap != lastLightMap || colorMap != lastColorMap)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][DRAW MODE] scene=%d baseTech=%d emissiveTech=%d r_fullbright=%d r_debugShader=%d r_lightMap=%d r_colorMap=%d world=%p\\n",
+            drawScene, baseTech,
+            static_cast<int>(gfxDrawMethod.emissiveTechType),
+            fullbright, debugShader, lightMap, colorMap,
+            static_cast<void *>(rgp.world));
+        Switch_LogWrite(trace);
+        lastDrawScene = drawScene;
+        lastBaseTech = baseTech;
+        lastFullbright = fullbright;
+        lastDebugShader = debugShader;
+        lastLightMap = lightMap;
+        lastColorMap = colorMap;
+    }
+#endif
 
     if (gfxDrawMethod.drawScene)
     {
