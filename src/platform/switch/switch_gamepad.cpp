@@ -138,6 +138,44 @@ void Switch_GamepadFrame()
         std::abs(g_rightStick.x) > 256 ||
         std::abs(g_rightStick.y) > 256;
 
+    // Low-volume raw HID diagnostics: report state transitions, meaningful
+    // stick changes, and a periodic sample. This separates a libnx input issue
+    // from command construction in CL_GamepadMove without flooding the log.
+    static uint32_t switchInputTraceFrame = 0;
+    static bool lastTracedAnalogActive = false;
+    static HidAnalogStickState lastTracedLeft = {};
+    static HidAnalogStickState lastTracedRight = {};
+    const bool analogInputActive =
+        std::abs(g_leftStick.x) > 256 || std::abs(g_leftStick.y) > 256 ||
+        std::abs(g_rightStick.x) > 256 || std::abs(g_rightStick.y) > 256;
+    const bool meaningfulStickChange =
+        std::abs(g_leftStick.x - lastTracedLeft.x) >= 8192 ||
+        std::abs(g_leftStick.y - lastTracedLeft.y) >= 8192 ||
+        std::abs(g_rightStick.x - lastTracedRight.x) >= 8192 ||
+        std::abs(g_rightStick.y - lastTracedRight.y) >= 8192;
+    const bool traceRawInput =
+        switchInputTraceFrame < 4u ||
+        (switchInputTraceFrame % 300u) == 0u ||
+        analogInputActive != lastTracedAnalogActive ||
+        (analogInputActive && meaningfulStickChange);
+    if (traceRawInput)
+    {
+        char trace[320];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][PAD RAW] frame=%u style=0x%08x connected=%d buttons=0x%016llx left=(%d,%d) right=(%d,%d)\\n",
+            switchInputTraceFrame,
+            static_cast<unsigned>(padGetStyleSet(&g_pad)),
+            padIsConnected(&g_pad) ? 1 : 0,
+            static_cast<unsigned long long>(g_buttons),
+            g_leftStick.x, g_leftStick.y,
+            g_rightStick.x, g_rightStick.y);
+        Switch_LogWrite(trace);
+        lastTracedLeft = g_leftStick;
+        lastTracedRight = g_rightStick;
+        lastTracedAnalogActive = analogInputActive;
+    }
+    ++switchInputTraceFrame;
+
     const connstate_t connectionState = CL_GetLocalClientConnectionState(0);
     const bool mapLoadingCinematicActive = SCR_IsMapLoadingCinematicActive();
     const bool cinematicActive =

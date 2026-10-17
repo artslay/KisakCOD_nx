@@ -228,6 +228,10 @@ void __cdecl CG_ConfigStringModifiedInternal(int localClientNum, unsigned int st
     {
         CG_StartAmbient(localClientNum);
     }
+    else if (stringIndex == CS_NIGHTVISION)
+    {
+        RegisterNightVisionAssets(localClientNum);
+    }
     else if (stringIndex)
     {
         switch (stringIndex)

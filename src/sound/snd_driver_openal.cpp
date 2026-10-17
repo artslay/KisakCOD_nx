@@ -930,6 +930,44 @@ int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int
 
     if (total_msec == 0 && totalFrames == 0)
     {
+#ifdef __SWITCH__
+        // Preserve the first bytes and source characteristics before releasing
+        // the stream. A valid RIFF header with no PCM frames differs from a
+        // truncated/empty IWD read; the existing error alone cannot tell them apart.
+        static uint32_t zeroFrameStreamTraceCount = 0;
+        if (zeroFrameStreamTraceCount < 8u)
+        {
+            ++zeroFrameStreamTraceCount;
+            const int sourceBytes = FS_filelength(stream->fsHandle);
+            const bool sourceIsZip = FS_IsFileInZip(stream->fsHandle);
+            char headerHex[64] = "unavailable";
+            if (stream->memoryData && stream->memorySize != 0)
+            {
+                headerHex[0] = 0;
+                size_t used = 0;
+                const size_t headerBytes = std::min<size_t>(stream->memorySize, 16u);
+                for (size_t i = 0; i < headerBytes && used < sizeof(headerHex); ++i)
+                {
+                    const int written = std::snprintf(
+                        headerHex + used, sizeof(headerHex) - used,
+                        "%s%02X", i ? " " : "", stream->memoryData[i]);
+                    if (written <= 0)
+                        break;
+                    used += static_cast<size_t>(written);
+                }
+            }
+
+            char trace[384];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][SOUND STREAM] zero frames file=%s bytes=%d zip=%d memoryBytes=%u frames=%llu channels=%u rate=%u header=%s\n",
+                realname, sourceBytes, sourceIsZip ? 1 : 0,
+                static_cast<unsigned>(stream->memorySize),
+                static_cast<unsigned long long>(totalFrames),
+                static_cast<unsigned>(stream->channels),
+                static_cast<unsigned>(stream->sampleRate), headerHex);
+            Switch_LogWrite(trace);
+        }
+#endif
         SND_ReleaseStreamChannel(index);
         Com_PrintError(CON_CHANNEL_ERROR, "ERROR: Sound file '%s' is zero length, invalid\n", realname);
         return SND_SetPlaybackIdNotPlayed(index);

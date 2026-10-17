@@ -1071,14 +1071,7 @@ void __cdecl CG_RegisterGraphics(int localClientNum, const char *mapname)
     cgMedia.fxKnifeBlood = FX_Register("impacts/flesh_hit_knife");
     cgMedia.fxKnifeNoBlood = FX_Register("impacts/flesh_hit_knife_noblood");
     ProfLoad_End();
-    if (*CL_GetConfigString(localClientNum, CS_NIGHTVISION) == '1')
-    {
-        ProfLoad_Begin("Register night vision assets");
-        cgMedia.nightVisionOverlay = Material_RegisterHandle("nightvision_overlay_goggles", IMAGE_TRACK_HUD);
-        cgMedia.hudIconNVG = Material_RegisterHandle("hud_icon_nvg", IMAGE_TRACK_HUD);
-        cgMedia.nightVisionGoggles = R_RegisterModel("viewmodel_NVG");
-        ProfLoad_End();
-    }
+    RegisterNightVisionAssets(localClientNum);
     SCR_UpdateLoadScreen();
 }
 
