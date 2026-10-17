@@ -795,7 +795,7 @@ static void spv_add_attrib_fixup(Context *ctx, RegisterList *r, unsigned int typ
 
     const uint32 oldLoadCount = TYPE_LOAD_OFFSET.num_loads;
     if (oldLoadCount == UINT32_MAX ||
-        static_cast<size_t>(oldLoadCount) + 1u >
+        (size_t)oldLoadCount + 1u >
             SIZE_MAX / sizeof(uint32))
     {
         ctx->out_of_memory = 1;
