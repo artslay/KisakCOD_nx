@@ -72,6 +72,16 @@ std::atomic<int32_t> g_switchLastDrawBaseVertex{0};
 std::atomic<uint32_t> g_switchLastDrawVertexCount{0};
 std::atomic<uint32_t> g_switchLastDrawPrimitiveType{0};
 std::atomic<uint32_t> g_switchLastDrawPrimitiveCount{0};
+std::atomic<uint32_t> g_switchLastDrawIndexBufferBytes{0};
+std::atomic<uint32_t> g_switchLastDrawIndexDataAvailable{0};
+std::atomic<uint32_t> g_switchLastDrawRawIndexMin{UINT32_MAX};
+std::atomic<uint32_t> g_switchLastDrawRawIndexMax{0};
+std::atomic<int64_t> g_switchLastDrawEffectiveVertexMin{INT64_MAX};
+std::atomic<int64_t> g_switchLastDrawEffectiveVertexMax{-1};
+std::atomic<uint32_t> g_switchLastDrawStreamMask{0};
+std::atomic<uint32_t> g_switchLastDrawStream0BufferBytes{0};
+std::atomic<uint32_t> g_switchLastDrawStream0Offset{0};
+std::atomic<uint32_t> g_switchLastDrawStream0Stride{0};
 
 namespace
 {
@@ -6216,6 +6226,16 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     g_switchLastDrawVertexCount.store(vertexCount, std::memory_order_relaxed);
     g_switchLastDrawPrimitiveType.store(primitiveType, std::memory_order_relaxed);
     g_switchLastDrawPrimitiveCount.store(primitiveCount, std::memory_order_relaxed);
+    g_switchLastDrawIndexBufferBytes.store(0, std::memory_order_relaxed);
+    g_switchLastDrawIndexDataAvailable.store(0, std::memory_order_relaxed);
+    g_switchLastDrawRawIndexMin.store(UINT32_MAX, std::memory_order_relaxed);
+    g_switchLastDrawRawIndexMax.store(0, std::memory_order_relaxed);
+    g_switchLastDrawEffectiveVertexMin.store(INT64_MAX, std::memory_order_relaxed);
+    g_switchLastDrawEffectiveVertexMax.store(-1, std::memory_order_relaxed);
+    g_switchLastDrawStreamMask.store(0, std::memory_order_relaxed);
+    g_switchLastDrawStream0BufferBytes.store(static_cast<uint32_t>(std::min<size_t>(bytes, UINT32_MAX)), std::memory_order_relaxed);
+    g_switchLastDrawStream0Offset.store(static_cast<uint32_t>(std::min<VkDeviceSize>(offset, UINT32_MAX)), std::memory_order_relaxed);
+    g_switchLastDrawStream0Stride.store(stride, std::memory_order_relaxed);
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/issue_draw";
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
     ++g_switchSceneDrawPrimitiveCalls;
@@ -6263,12 +6283,17 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     else
         indexData = static_cast<const uint8_t *>(m_indices->mapped);
 
+    g_switchLastDrawIndexBufferBytes.store(
+        static_cast<uint32_t>(std::min<size_t>(m_indices->size, UINT32_MAX)),
+        std::memory_order_relaxed);
+    g_switchLastDrawIndexDataAvailable.store(indexData ? 1u : 0u, std::memory_order_relaxed);
+    uint32_t minRawIndex = UINT32_MAX;
+    uint32_t maxRawIndex = 0;
+    int64_t minEffectiveVertex = INT64_MAX;
+    int64_t maxEffectiveVertex = -1;
+
     if (indexData && m_decl)
     {
-        int64_t minEffectiveVertex = INT64_MAX;
-        int64_t maxEffectiveVertex = -1;
-        uint32_t minRawIndex = UINT32_MAX;
-        uint32_t maxRawIndex = 0;
         bool invalidEffectiveIndex = false;
         for (uint32_t i = 0; i < indexCount; ++i)
         {
@@ -6289,6 +6314,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             minEffectiveVertex = std::min(minEffectiveVertex, effectiveVertex);
             maxEffectiveVertex = std::max(maxEffectiveVertex, effectiveVertex);
         }
+
+        g_switchLastDrawRawIndexMin.store(minRawIndex, std::memory_order_relaxed);
+        g_switchLastDrawRawIndexMax.store(maxRawIndex, std::memory_order_relaxed);
+        g_switchLastDrawEffectiveVertexMin.store(minEffectiveVertex, std::memory_order_relaxed);
+        g_switchLastDrawEffectiveVertexMax.store(maxEffectiveVertex, std::memory_order_relaxed);
 
         bool invalidVertexFetch = invalidEffectiveIndex;
         uint32_t badStream = UINT32_MAX;
@@ -6396,16 +6426,33 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         return E_FAIL;
     }
 
+    uint32_t boundStreamMask = 0;
+    uint32_t stream0BufferBytes = 0;
+    uint32_t stream0Offset = 0;
+    uint32_t stream0Stride = 0;
     for (uint32_t stream = 0; stream < 16; ++stream)
     {
         if (m_streams[stream].buffer && m_streams[stream].stride)
         {
             VkBuffer b = m_streams[stream].buffer->buffer;
             VkDeviceSize o = m_streams[stream].offset;
+            boundStreamMask |= 1u << stream;
+            if (stream == 0)
+            {
+                stream0BufferBytes = static_cast<uint32_t>(
+                    std::min<size_t>(m_streams[stream].buffer->size, UINT32_MAX));
+                stream0Offset = static_cast<uint32_t>(
+                    std::min<VkDeviceSize>(o, UINT32_MAX));
+                stream0Stride = m_streams[stream].stride;
+            }
             vkCmdBindVertexBuffers(
                 m_backend->CommandBuffer(), stream, 1, &b, &o);
         }
     }
+    g_switchLastDrawStreamMask.store(boundStreamMask, std::memory_order_relaxed);
+    g_switchLastDrawStream0BufferBytes.store(stream0BufferBytes, std::memory_order_relaxed);
+    g_switchLastDrawStream0Offset.store(stream0Offset, std::memory_order_relaxed);
+    g_switchLastDrawStream0Stride.store(stream0Stride, std::memory_order_relaxed);
 
     vkCmdBindIndexBuffer(
         m_backend->CommandBuffer(), m_indices->buffer,
