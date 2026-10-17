@@ -315,10 +315,19 @@ int  R_SkinSceneDObjModels(
                 if (!surface->deformed && IsFastFileLoad() && surface->vertListCount == 1)
                 {
 #ifdef KISAK_SWITCH
-                    // Do not dereference the fastfile vertList field here. The
-                    // current asset trace contains unresolved offsets and poisoned
-                    // 64-bit values; recover a rigid bone only from this surface's
-                    // local partBits, which can be bounds-checked against modelBones.
+                    // Prefer the source-of-truth rigid-bone index from the
+                    // native XRigidVertList. The Switch DB loader resolves its
+                    // serialized 12-byte records to widened native records; only
+                    // fall back to partBits if the list is genuinely unavailable
+                    // or contains an out-of-range bone offset.
+                    if (surface->vertList)
+                    {
+                        const uint32_t listBoneIndex =
+                            static_cast<uint32_t>(surface->vertList->boneOffset) >> 6;
+                        if (listBoneIndex < boneCount)
+                            rigidBoneIndex = listBoneIndex;
+                    }
+
                     if (rigidBoneIndex >= boneCount)
                     {
                         uint32_t recoveredBone = 0;
