@@ -793,11 +793,39 @@ static void spv_add_attrib_fixup(Context *ctx, RegisterList *r, unsigned int typ
     assert(r != NULL);
     #define TYPE_LOAD_OFFSET ctx->spirv.patch_table.attrib_type_load_offsets[r->usage][r->index]
 
-    next_types = (uint32*) Malloc(ctx, sizeof(uint32) * (TYPE_LOAD_OFFSET.num_loads + 1));
-    next_opcodes = (uint32*) Malloc(ctx, sizeof(uint32) * (TYPE_LOAD_OFFSET.num_loads + 1));
+    const uint32 oldLoadCount = TYPE_LOAD_OFFSET.num_loads;
+    if (oldLoadCount == UINT32_MAX ||
+        static_cast<size_t>(oldLoadCount) + 1u >
+            SIZE_MAX / sizeof(uint32))
+    {
+        ctx->out_of_memory = 1;
+        return;
+    }
 
-    memcpy(next_types, TYPE_LOAD_OFFSET.load_types, sizeof(uint32) * TYPE_LOAD_OFFSET.num_loads);
-    memcpy(next_opcodes, TYPE_LOAD_OFFSET.load_opcodes, sizeof(uint32) * TYPE_LOAD_OFFSET.num_loads);
+    next_types = (uint32*) Malloc(ctx, sizeof(uint32) * (oldLoadCount + 1u));
+    next_opcodes = (uint32*) Malloc(ctx, sizeof(uint32) * (oldLoadCount + 1u));
+    if (!next_types || !next_opcodes)
+    {
+        Free(ctx, next_types);
+        Free(ctx, next_opcodes);
+        ctx->out_of_memory = 1;
+        return;
+    }
+
+    // memcpy requires valid pointers even for a zero-byte copy on some C
+    // library implementations; the first fixup has no previous entries.
+    if (oldLoadCount != 0)
+    {
+        if (!TYPE_LOAD_OFFSET.load_types || !TYPE_LOAD_OFFSET.load_opcodes)
+        {
+            Free(ctx, next_types);
+            Free(ctx, next_opcodes);
+            ctx->out_of_memory = 1;
+            return;
+        }
+        memcpy(next_types, TYPE_LOAD_OFFSET.load_types, sizeof(uint32) * oldLoadCount);
+        memcpy(next_opcodes, TYPE_LOAD_OFFSET.load_opcodes, sizeof(uint32) * oldLoadCount);
+    }
 
     Free(ctx, TYPE_LOAD_OFFSET.load_types);
     Free(ctx, TYPE_LOAD_OFFSET.load_opcodes);
@@ -805,10 +833,10 @@ static void spv_add_attrib_fixup(Context *ctx, RegisterList *r, unsigned int typ
     TYPE_LOAD_OFFSET.load_types = next_types;
     TYPE_LOAD_OFFSET.load_opcodes = next_opcodes;
 
-    TYPE_LOAD_OFFSET.load_types[TYPE_LOAD_OFFSET.num_loads] = type_offset;
-    TYPE_LOAD_OFFSET.load_opcodes[TYPE_LOAD_OFFSET.num_loads] = opcode_offset;
+    TYPE_LOAD_OFFSET.load_types[oldLoadCount] = type_offset;
+    TYPE_LOAD_OFFSET.load_opcodes[oldLoadCount] = opcode_offset;
 
-    TYPE_LOAD_OFFSET.num_loads += 1;
+    TYPE_LOAD_OFFSET.num_loads = oldLoadCount + 1u;
     #undef TYPE_LOAD_OFFSET
 } // spv_add_attrib_fixup
 
