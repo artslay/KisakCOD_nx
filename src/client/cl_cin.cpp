@@ -65,14 +65,10 @@ void __cdecl CL_PlayCinematic_f()
 {
     char *arg1; // [esp+0h] [ebp-Ch]
 
-#ifdef __SWITCH__
-    // Preserve skippable startup/menu cinematics, but do not let controller
-    // input abort a full-screen cinematic launched out of active gameplay.
-    cin_skippable =
-        CL_GetLocalClientConnectionState(0) != CA_ACTIVE;
-#else
+    // Match the original engine: cinematic is skippable by default.
+    // The explicit unskippablecinematic command overrides this in
+    // CL_PlayUnskippableCinematic_f().
     cin_skippable = 1;
-#endif
     arg1 = (char *)Cmd_Argv(1);
     Cmd_Argv(2);
     if (!arg1 || *arg1)
