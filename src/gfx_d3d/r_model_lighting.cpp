@@ -1,4 +1,8 @@
 #include <universal/q_shared.h>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 #include "r_model_lighting.h"
 #include "r_image.h"
 #include "r_dvars.h"
@@ -707,6 +711,21 @@ void __cdecl RB_PatchModelLighting(const GfxModelLightingPatch *patchList, uint3
 
     if (patchCount)
     {
+        // GfxBackEndData owns a fixed 4096-entry model-lighting patch array.
+        // Reject an invalid count/pointer before walking it, otherwise one bad
+        // entry can turn a renderer-side upload into a later heap corruption.
+        if (!patchList || patchCount > 4096u)
+        {
+#ifdef __SWITCH__
+            char trace[192];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][MODEL LIGHTING] rejected patch list=%p count=%u capacity=4096\n",
+                static_cast<const void *>(patchList), patchCount);
+            Switch_LogWrite(trace);
+#endif
+            return;
+        }
+
         iassert(modelLightGlob.lockedBox.pBits == NULL);
         useAltUpdate = Dvar_GetBool("r_altModelLightingUpdate");
         if (useAltUpdate)
@@ -744,13 +763,72 @@ void __cdecl RB_PatchModelLighting(const GfxModelLightingPatch *patchList, uint3
                 } while (alwaysfails);
             }
         } while (alwaysfails);
+
+        // The lighting atlas is a 256 x imageHeight x 4 volume. Validate the
+        // returned D3D pitches before deriving per-sample byte offsets.
+        const int rowPitch = modelLightGlob.lockedBox.RowPitch;
+        const int slicePitch = modelLightGlob.lockedBox.SlicePitch;
+        const uint64_t lightingBufferBytes = slicePitch > 0
+            ? static_cast<uint64_t>(slicePitch) * 4u : 0u;
+        const bool invalidPitch =
+            rowPitch < 256 * 4 ||
+            slicePitch <= 0 ||
+            static_cast<uint64_t>(slicePitch) <
+                static_cast<uint64_t>(std::max(rowPitch, 0)) * modelLightGlob.imageHeight;
+        if (invalidPitch)
+        {
+#ifdef __SWITCH__
+            char trace[224];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][MODEL LIGHTING] invalid lock pitch row=%d slice=%d imageHeight=%u pBits=%p\n",
+                rowPitch, slicePitch, modelLightGlob.imageHeight,
+                modelLightGlob.lockedBox.pBits);
+            Switch_LogWrite(trace);
+#endif
+            (void)lightImage->texture.volmap->UnlockBox(0);
+            modelLightGlob.lockedBox.pBits = 0;
+            return;
+        }
+
         R_SetModelLightingSampleDeltas();
-        R_SetLightGridSampleDeltas(modelLightGlob.lockedBox.RowPitch, modelLightGlob.lockedBox.SlicePitch);
+        R_SetLightGridSampleDeltas(rowPitch, slicePitch);
         for (patchIter = 0; patchIter < patchCount; ++patchIter)
         {
             patch = &patchList[patchIter];
             modelLightingIndex = patch->modelLightingIndex;
             y0 = (modelLightingIndex >> 4) & 0xFFFFFFFC;
+
+            const uint64_t baseOffset =
+                static_cast<uint64_t>(modelLightingIndex & 0x3Fu) * 16u +
+                static_cast<uint64_t>(rowPitch) * y0;
+            const uint64_t lastSampleDelta =
+                static_cast<uint64_t>(slicePitch) * 3u +
+                static_cast<uint64_t>(rowPitch) * 3u + 12u;
+            const bool invalidPatch =
+                modelLightingIndex >= modelLightGlob.totalEntryLimit ||
+                patch->colorsCount > 8u ||
+                static_cast<uint64_t>(y0) + 4u > modelLightGlob.imageHeight ||
+                baseOffset > lightingBufferBytes ||
+                lastSampleDelta > lightingBufferBytes - baseOffset ||
+                4u > lightingBufferBytes - baseOffset - lastSampleDelta;
+            if (invalidPatch)
+            {
+#ifdef __SWITCH__
+                static uint32_t invalidPatchTraceCount = 0;
+                if (invalidPatchTraceCount++ < 8u)
+                {
+                    char trace[256];
+                    std::snprintf(trace, sizeof(trace),
+                        "[KisakCOD][MODEL LIGHTING] rejected patch iter=%u index=%u total=%u colors=%u y0=%u row=%d slice=%d base=%llu bytes=%llu\n",
+                        patchIter, modelLightingIndex, modelLightGlob.totalEntryLimit,
+                        patch->colorsCount, y0, rowPitch, slicePitch,
+                        static_cast<unsigned long long>(baseOffset),
+                        static_cast<unsigned long long>(lightingBufferBytes));
+                    Switch_LogWrite(trace);
+                }
+#endif
+                continue;
+            }
             if (useAltUpdate)
             {
                 dirtyBox.Left = 4 * (modelLightingIndex & 0x3F);
