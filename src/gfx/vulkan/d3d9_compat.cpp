@@ -4205,34 +4205,69 @@ bool IDirect3DDevice9::EnsurePipeline()
             }
         }
 #endif
+        // MojoShader's SPIR-V linker patches parseData->output in place.
+        // Material shader assets are shared by many vertex declarations and
+        // pixel-shader pairs, so linking the asset-owned buffers repeatedly
+        // accumulates interface/type edits and can hand NVK corrupted modules.
+        // Link mutable copies and leave the parsed source modules immutable.
+        const MOJOSHADER_parseData *sourceVertexParse = m_vertexShader->parseData;
+        const MOJOSHADER_parseData *sourcePixelParse = m_pixelShader->parseData;
+        if (!sourceVertexParse || !sourcePixelParse ||
+            !sourceVertexParse->output || !sourcePixelParse->output ||
+            sourceVertexParse->output_len <= 0 || sourcePixelParse->output_len <= 0 ||
+            sourceVertexParse->output_len % static_cast<int>(sizeof(uint32_t)) != 0 ||
+            sourcePixelParse->output_len % static_cast<int>(sizeof(uint32_t)) != 0)
+        {
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=shader_link_invalid_source\\n");
+            return false;
+        }
+
+        std::vector<uint32_t> linkedVertexWords(
+            static_cast<size_t>(sourceVertexParse->output_len) / sizeof(uint32_t));
+        std::vector<uint32_t> linkedPixelWords(
+            static_cast<size_t>(sourcePixelParse->output_len) / sizeof(uint32_t));
+        std::memcpy(
+            linkedVertexWords.data(), sourceVertexParse->output,
+            static_cast<size_t>(sourceVertexParse->output_len));
+        std::memcpy(
+            linkedPixelWords.data(), sourcePixelParse->output,
+            static_cast<size_t>(sourcePixelParse->output_len));
+
+        MOJOSHADER_parseData linkedVertexParse = *sourceVertexParse;
+        MOJOSHADER_parseData linkedPixelParse = *sourcePixelParse;
+        linkedVertexParse.output =
+            reinterpret_cast<const char *>(linkedVertexWords.data());
+        linkedPixelParse.output =
+            reinterpret_cast<const char *>(linkedPixelWords.data());
+
         g_switchFrameStage = "frame/render/vulkan/pipeline/link_shaders";
         const int patchBytes = MOJOSHADER_linkSPIRVShaders(
-            m_vertexShader->parseData,
-            m_pixelShader->parseData,
+            &linkedVertexParse,
+            &linkedPixelParse,
             attributes.data(),
             static_cast<int>(attributes.size()));
         if (patchBytes <= 0 ||
-            m_vertexShader->parseData->output_len <= patchBytes ||
-            m_pixelShader->parseData->output_len <= patchBytes)
+            linkedVertexParse.output_len <= patchBytes ||
+            linkedPixelParse.output_len <= patchBytes)
         {
             char msg[192];
             std::snprintf(msg, sizeof(msg),
-                "[KisakCOD][VK DRAW] pipeline_fail=shader_link patch=%d vs=%d ps=%d\n",
+                "[KisakCOD][VK DRAW] pipeline_fail=shader_link patch=%d vs=%d ps=%d\\n",
                 patchBytes,
-                m_vertexShader->parseData ? m_vertexShader->parseData->output_len : 0,
-                m_pixelShader->parseData ? m_pixelShader->parseData->output_len : 0);
+                linkedVertexParse.output_len,
+                linkedPixelParse.output_len);
             Switch_LogWrite(msg);
             return false;
         }
 
         const size_t vsBytes =
-            static_cast<size_t>(m_vertexShader->parseData->output_len - patchBytes);
+            static_cast<size_t>(linkedVertexParse.output_len - patchBytes);
         const size_t psBytes =
-            static_cast<size_t>(m_pixelShader->parseData->output_len - patchBytes);
+            static_cast<size_t>(linkedPixelParse.output_len - patchBytes);
 
         std::vector<uint32_t> pixelSpirv(
-            reinterpret_cast<const uint32_t *>(m_pixelShader->parseData->output),
-            reinterpret_cast<const uint32_t *>(m_pixelShader->parseData->output) + psBytes / sizeof(uint32_t));
+            reinterpret_cast<const uint32_t *>(linkedPixelParse.output),
+            reinterpret_cast<const uint32_t *>(linkedPixelParse.output) + psBytes / sizeof(uint32_t));
         unpatchedPixelSpirvForProbe = pixelSpirv;
         m_pixelShader->linkedSpirv = pixelSpirv;
 
@@ -4258,8 +4293,8 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_pixelShader->alphaRefSpecId = pipelineAlphaRefSpecId;
         m_pixelShader->spirv = pixelSpirv;
         m_vertexShader->spirv.assign(
-            reinterpret_cast<const uint32_t *>(m_vertexShader->parseData->output),
-            reinterpret_cast<const uint32_t *>(m_vertexShader->parseData->output) +
+            reinterpret_cast<const uint32_t *>(linkedVertexParse.output),
+            reinterpret_cast<const uint32_t *>(linkedVertexParse.output) +
                 vsBytes / sizeof(uint32_t));
 
         VkShaderModuleCreateInfo vsInfo{};
