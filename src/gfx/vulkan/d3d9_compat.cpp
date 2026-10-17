@@ -677,13 +677,22 @@ uint8_t SwitchEffectiveShaderElementType(
         {
             type = D3DDECLTYPE_D3DCOLOR;
         }
-        // The generic GfxVertex format stores packed texcoords at byte 20;
-        // world vertices store actual float texture coordinates there.
+        // Generic GfxVertex uses a packed TEXCOORD0 at byte 20 only when the
+        // routing declaration says FLOAT1. GfxWorldVertex is different: its
+        // physical texCoord is always float2 at byte 20, regardless of the
+        // legacy semantic-routing type stored in the D3D declaration.
         else if (decl->switchVertDeclType == 0 &&
                  element.Offset == 20 &&
                  element.Usage == 5 &&
                  element.UsageIndex == 0 &&
                  element.Type == D3DDECLTYPE_FLOAT1)
+        {
+            type = D3DDECLTYPE_FLOAT2;
+        }
+        else if (decl->switchVertDeclType == 2 &&
+                 element.Offset == 20 &&
+                 element.Usage == 5 &&
+                 element.UsageIndex == 0)
         {
             type = D3DDECLTYPE_FLOAT2;
         }
