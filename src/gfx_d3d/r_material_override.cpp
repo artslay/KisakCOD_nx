@@ -692,14 +692,17 @@ void Switch_InitializeLoadedTechniqueSetForRender(
     if (!Switch_IsValidTechniqueSetPointer(techSet))
         return;
 
-    // remappedTechniqueSet is runtime state and is not filled by the fastfile
-    // loader. A newly inserted set starts by using its own techniques; the
-    // ordinary material override pass may replace this with a valid remap.
-    if (isNewAsset ||
-        !Switch_IsValidTechniqueSetPointer(techSet->remappedTechniqueSet))
+    // remappedTechniqueSet is runtime state and is not serialized. The
+    // registration path may already have initialized it through
+    // Material_OriginalRemapTechniqueSet() before this post-load callback runs.
+    // Preserve that valid remap: resetting each newly inserted set to itself
+    // here undoes the renderer's sm2/ mapping and can leave world materials
+    // without the techniques required by the active draw method.
+    if (!Switch_IsValidTechniqueSetPointer(techSet->remappedTechniqueSet))
     {
         techSet->remappedTechniqueSet = techSet;
     }
+    (void)isNewAsset;
 
     Switch_ResolveNativeTechniquePointers(techSet);
 
