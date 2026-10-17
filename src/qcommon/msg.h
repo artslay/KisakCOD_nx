@@ -73,6 +73,9 @@ struct usercmd_s
     unsigned __int8 meleeChargeDist;
     char selectedLocation[2];
 };
+static_assert(sizeof(usercmd_s) == 0x38, "usercmd_s ABI size must remain 56 bytes");
+static_assert(offsetof(usercmd_s, forwardmove) == 0x16, "usercmd_s forwardmove offset changed");
+static_assert(offsetof(usercmd_s, gunPitch) == 0x1C, "usercmd_s gunPitch offset changed");
 
 struct hudelem_s;
 struct playerState_s;

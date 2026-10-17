@@ -115,7 +115,7 @@ void __cdecl CG_DrawNightVisionOverlay(int32_t localClientNum)
             if (!warnedMissingNightVisionAssets)
             {
                 warnedMissingNightVisionAssets = true;
-                Com_PrintWarning(CON_CHANNEL_CLIENT, "CG_DrawNightVisionOverlay(): Nightvision Assets not Precached.\\n");
+                Com_PrintWarning(CON_CHANNEL_CLIENT, "CG_DrawNightVisionOverlay(): Nightvision Assets not Precached.\n");
             }
         }
     }
