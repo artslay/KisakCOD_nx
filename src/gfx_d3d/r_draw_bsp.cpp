@@ -593,6 +593,40 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 R_SetupPassPerObjectArgs(context);
                 R_SetupPassPerPrimArgs(context);
             }
+#ifdef __SWITCH__
+            // Capture the actual CPU-side world vertices consumed by lit BSP
+            // surfaces. This separates bad lightmap/color payloads from the
+            // later Vulkan vertex-input/shader path without changing rendering.
+            static uint32_t switchBspLightmapVertexTraceCount = 0;
+            if (switchBspLightmapVertexTraceCount < 8u &&
+                lightmapIndex != 31u &&
+                rgp.world && rgp.world->vd.vertices &&
+                tris->firstVertex >= 0 &&
+                static_cast<uint32_t>(tris->firstVertex) < rgp.world->vertexCount)
+            {
+                const uint32_t sample = switchBspLightmapVertexTraceCount++;
+                const uint32_t firstVertex = static_cast<uint32_t>(tris->firstVertex);
+                const uint32_t available = rgp.world->vertexCount - firstVertex;
+                const uint32_t countToTrace = std::min<uint32_t>(
+                    3u, std::min<uint32_t>(tris->vertexCount, available));
+                for (uint32_t vertexIndex = 0; vertexIndex < countToTrace; ++vertexIndex)
+                {
+                    const GfxWorldVertex &vertex = rgp.world->vd.vertices[firstVertex + vertexIndex];
+                    char trace[384];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][BSP LIGHTMAP VERTEX] sample=%u surf=%u map=%u firstVertex=%u v=%u xyz=(%.3f,%.3f,%.3f) uv0=(%.6f,%.6f) lmap=(%.6f,%.6f) color=0x%08x normal=0x%08x tangent=0x%08x\n",
+                        sample, surfIndex, lightmapIndex, firstVertex, vertexIndex,
+                        vertex.xyz[0], vertex.xyz[1], vertex.xyz[2],
+                        vertex.texCoord[0], vertex.texCoord[1],
+                        vertex.lmapCoord[0], vertex.lmapCoord[1],
+                        static_cast<unsigned>(vertex.color.packed),
+                        static_cast<unsigned>(vertex.normal.packed),
+                        static_cast<unsigned>(vertex.tangent.packed));
+                    Switch_LogWrite(trace);
+                }
+            }
+#endif
             R_DrawPreTessTris(&context.state->prim, tris, baseIndex, list[index].totalTriCount);
             baseIndex += 3 * list[index].totalTriCount;
         }
