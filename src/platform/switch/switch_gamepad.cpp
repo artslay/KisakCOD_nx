@@ -11,6 +11,10 @@
 #include <client/cl_input.h>
 #include <qcommon/cmd.h>
 #include <ui/keycodes.h>
+#include <gfx_d3d/r_cinematic.h>
+
+extern void SCR_StopCinematic(int32_t localClientNum);
+extern bool SCR_IsMapLoadingCinematicActive();
 
 extern void Switch_LogWrite(const char *msg);
 
@@ -132,11 +136,46 @@ void Switch_GamepadFrame()
         std::abs(g_rightStick.y) > 256;
 
     const connstate_t connectionState = CL_GetLocalClientConnectionState(0);
+    const bool mapLoadingCinematicActive = SCR_IsMapLoadingCinematicActive();
     const bool cinematicActive =
         connectionState == CA_CINEMATIC || connectionState == CA_LOGO;
     const bool uiActive = Key_IsCatcherActive(0, KEYCATCH_UI);
     const bool gameplayActive =
         connectionState == CA_ACTIVE && !uiActive;
+    constexpr u64 cinematicSkipButtons =
+        HidNpadButton_B | HidNpadButton_Plus;
+
+    // The map-loading movie is started directly by CL_MapLoading, so the
+    // client state remains CA_LOADING (or can become CA_ACTIVE before EOF).
+    // Handle it explicitly rather than routing Escape through the generic
+    // CA_CINEMATIC path, which would only open the frontend.
+    if (mapLoadingCinematicActive &&
+        (connectionState == CA_LOADING || connectionState == CA_ACTIVE) &&
+        Pressed(cinematicSkipButtons))
+    {
+        SCR_StopCinematic(0);
+        g_cinematicSkipKeyDown = false;
+        Switch_LogWrite("[KisakCOD][CIN SKIP] map-loading cinematic skipped\n");
+        return;
+    }
+
+    // Scripted in-game cinematics run over CA_ACTIVE and therefore never enter
+    // the old CA_CINEMATIC input branch. B/Plus must cancel both the current
+    // movie and any queued successor, rather than becoming stance/pause input.
+    const bool inGameCinematicActive =
+        connectionState == CA_ACTIVE &&
+        !uiActive &&
+        !mapLoadingCinematicActive &&
+        (R_Cinematic_IsStarted() ||
+         R_Cinematic_IsPending() ||
+         R_Cinematic_IsNextReady());
+    if (inGameCinematicActive && Pressed(cinematicSkipButtons))
+    {
+        R_Cinematic_UnsetNextPlayback();
+        R_Cinematic_StopPlayback();
+        Switch_LogWrite("[KisakCOD][CIN SKIP] in-game cinematic skipped\n");
+        return;
+    }
 
     // Stock CoD4 treats keyboard/mouse buttons as cinematic-skip input.
     // Poll a combined controller-button mask while a cinematic/logo is active
@@ -149,9 +188,6 @@ void Switch_GamepadFrame()
         // play to completion even when B/Plus is pressed.
         const bool cinematicCanSkip =
             connectionState == CA_LOGO || cin_skippable;
-        constexpr u64 cinematicSkipButtons =
-            HidNpadButton_B | HidNpadButton_Plus;
-
         if (!cinematicCanSkip)
         {
             // Do not leave a synthetic Escape held across a transition to an
