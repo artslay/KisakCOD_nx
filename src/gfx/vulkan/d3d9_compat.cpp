@@ -4271,19 +4271,17 @@ bool IDirect3DDevice9::EnsurePipeline()
     static uint64_t lastDumpPsHash = 0;
     static size_t lastDumpVsWords = 0;
     static size_t lastDumpPsWords = 0;
-    const bool earlyPipelineDump = pipelineCreateSequence <= 8;
-    const bool probePipelineDump =
-        pipelineCreateSequence > 8 && pipelineCreateSequence <= 32;
+    const bool earlyPipelineDump = false;
+    const bool probePipelineDump = false;
     // Keep the recurring runtime log compact. Shader dumps and detailed pipeline
     // state are limited to the startup probes or the explicitly targeted shader pair.
     const bool recentPipelineDump = false;
-    // The latest run completed seq=92 and later pipelines, then faulted
-    // during the create call for the shader pair below. Match the pair rather
-    // than sequence alone so capture remains correct if pipeline ordering shifts.
+    // Keep one targeted capture for the shader pair seen at the last driver crash;
+    // all other pipelines use a single compact line in the runtime log.
     static bool targetPipelineCaptureLogged = false;
     const bool targetPipelineDump = !targetPipelineCaptureLogged &&
-        vsSpirvHash == 0x0fb134cb58ee26d6ull &&
-        psSpirvHash == 0xa82798473e9a23c6ull;
+        vsSpirvHash == 0xfef68669dda9fe8aull &&
+        psSpirvHash == 0xc277eb01379f42dbull;
     if (targetPipelineDump)
         targetPipelineCaptureLogged = true;
     if ((earlyPipelineDump || probePipelineDump || recentPipelineDump) &&
@@ -4363,7 +4361,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_depthWrite ? 1u : 0u,
         static_cast<unsigned int>(m_depthFunc),
         m_blendEnable ? 1u : 0u);
-    if (pipelineCreateSequence <= 8 || targetPipelineDump)
+    if (pipelineCreateSequence <= 2 || targetPipelineDump)
     {
         Switch_LogWrite(preCreateMsg);
     }
@@ -4383,7 +4381,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         Switch_LogWrite(compactMsg);
     }
 
-    if (pipelineCreateSequence <= 8 || targetPipelineDump)
+    if (pipelineCreateSequence <= 2 || targetPipelineDump)
     {
         char handlesMsg[768];
         std::snprintf(
@@ -4437,11 +4435,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     // binaries lets us validate the pair and driver input instead of guessing.
     if (targetPipelineDump)
     {
-        const char *targetVsPath = "sdmc:/switch/KisakCOD/vk_crash_171_vs.spv";
+        const char *targetVsPath = "sdmc:/switch/KisakCOD/vk_crash_vs.spv";
         const bool targetVsSaved = WriteSwitchPipelineSpirv(
             targetVsPath, m_vertexShader->spirv);
-        LogSwitchPipelineSpirvBase64(
-            pipelineCreateSequence, "vs", m_vertexShader->spirv);
         char targetVsMsg[256];
         std::snprintf(
             targetVsMsg, sizeof(targetVsMsg),
@@ -4454,11 +4450,9 @@ bool IDirect3DDevice9::EnsurePipeline()
             targetVsPath);
         Switch_LogWrite(targetVsMsg);
 
-        const char *targetPsPath = "sdmc:/switch/KisakCOD/vk_crash_171_ps.spv";
+        const char *targetPsPath = "sdmc:/switch/KisakCOD/vk_crash_ps.spv";
         const bool targetPsSaved = WriteSwitchPipelineSpirv(
             targetPsPath, m_pixelShader->spirv);
-        LogSwitchPipelineSpirvBase64(
-            pipelineCreateSequence, "ps", m_pixelShader->spirv);
         char targetPsMsg[256];
         std::snprintf(
             targetPsMsg, sizeof(targetPsMsg),
@@ -4578,7 +4572,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_return";
     const auto pipelineCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - pipelineCreateStart).count();
-    if (pipelineCreateSequence <= 8 ||
+    if (pipelineCreateSequence <= 2 ||
         pipelineCreateElapsed >= 250 || pipelineResult != VK_SUCCESS)
     {
         char createdMsg[256];
