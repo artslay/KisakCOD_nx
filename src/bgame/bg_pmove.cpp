@@ -3189,7 +3189,7 @@ void __cdecl PM_GroundTrace(pmove_t *pm, pml_t *pml)
             char groundTraceLog[512];
             std::snprintf(
                 groundTraceLog, sizeof(groundTraceLog),
-                "[KisakCOD][PMOVE GROUND] sample=%u recovered=%d origin=(%.2f,%.2f,%.2f) velocityZ=%.2f gravity=%d minsZ=%.2f maxsZ=%.2f mask=0x%x narrow=(%.3f,%d,%d,nz=%.2f) probe=(%.3f,%d,%d,walkable=%d,n=(%.2f,%.2f,%.2f),surf=0x%x,contents=0x%x,ent=%u)\\n",
+                "[KisakCOD][PMOVE GROUND] sample=%u recovered=%d origin=(%.2f,%.2f,%.2f) velocityZ=%.2f gravity=%d minsZ=%.2f maxsZ=%.2f mask=0x%x narrow=(%.3f,%d,%d,nz=%.2f) probe=(%.3f,%d,%d,walkable=%d,n=(%.2f,%.2f,%.2f),surf=0x%x,contents=0x%x,ent=%u)\n",
                 switchGroundProbeLogCount,
                 recoveredGround ? 1 : 0,
                 ps->origin[0], ps->origin[1], ps->origin[2],
