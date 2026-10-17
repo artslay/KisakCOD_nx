@@ -690,8 +690,50 @@ void __cdecl ClientThink_real(gentity_s *ent)
             v39.oldcmd.buttons, v39.handler, v39.tracemask);
     }
 #endif
+#ifdef __SWITCH__
+    // Follow non-zero movement commands through the real SP server Pmove.
+    // The existing startup sample only prints the first few idle commands,
+    // so it cannot tell whether later controller input reaches the server.
+    static unsigned int switchGameplayMoveTraceCount = 0;
+    const bool switchTraceGameplayMove =
+        (v39.cmd.forwardmove != 0 || v39.cmd.rightmove != 0) &&
+        switchGameplayMoveTraceCount < 32u;
+    float switchMoveOriginBefore[3] = {
+        client->ps.origin[0], client->ps.origin[1], client->ps.origin[2]
+    };
+    if (switchTraceGameplayMove)
+    {
+        Com_Printf(
+            CON_CHANNEL_SERVER,
+            "[KisakCOD][PMOVE INPUT] sample=%u cmdTime=%d move=(%d,%d,%d) pmType=%d flags=0x%x frozen=%d anglesLocked=%d tagInfo=%p origin=(%.2f,%.2f,%.2f)\\n",
+            switchGameplayMoveTraceCount++,
+            v39.cmd.serverTime,
+            static_cast<int>(v39.cmd.forwardmove),
+            static_cast<int>(v39.cmd.rightmove),
+            static_cast<int>(v39.cmd.upmove),
+            static_cast<int>(client->ps.pm_type),
+            static_cast<unsigned int>(client->ps.pm_flags),
+            client->bFrozen ? 1 : 0,
+            client->linkAnglesLocked ? 1 : 0,
+            static_cast<void *>(ent->tagInfo),
+            switchMoveOriginBefore[0], switchMoveOriginBefore[1],
+            switchMoveOriginBefore[2]);
+    }
+#endif
     //Profile_Begin(27);
     Pmove(&v39);
+#ifdef __SWITCH__
+    if (switchTraceGameplayMove)
+    {
+        Com_Printf(
+            CON_CHANNEL_SERVER,
+            "[KisakCOD][PMOVE INPUT] result cmdTime=%d origin=(%.2f,%.2f,%.2f) velocity=(%.2f,%.2f,%.2f) flags=0x%x\\n",
+            v39.cmd.serverTime,
+            client->ps.origin[0], client->ps.origin[1], client->ps.origin[2],
+            client->ps.velocity[0], client->ps.velocity[1], client->ps.velocity[2],
+            static_cast<unsigned int>(client->ps.pm_flags));
+    }
+#endif
     //Profile_EndInternal(0);
 #ifdef __SWITCH__
     if (switchTracePmove)
