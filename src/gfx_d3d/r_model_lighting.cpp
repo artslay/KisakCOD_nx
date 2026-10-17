@@ -1,4 +1,6 @@
 #include <universal/q_shared.h>
+#include <algorithm>
+#include <cstdint>
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
