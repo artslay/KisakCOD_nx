@@ -319,8 +319,8 @@ float CL_GamepadAxisValue(int localClientNum, int axis)
         return GPad_GetButton(0, GPAD_L_TRIG);
     case 3: // right stick X = yaw
         return NormalizeStick(g_rightStick.x);
-    case 4: // right stick Y = pitch
-        return NormalizeStick(g_rightStick.y);
+    case 4: // right stick Y = pitch; Switch positive Y must lower the engine pitch angle
+        return -NormalizeStick(g_rightStick.y);
     case 5: // right trigger = analog attack compatibility
         return GPad_GetButton(0, GPAD_R_TRIG);
     default:
