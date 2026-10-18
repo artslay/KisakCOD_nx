@@ -525,7 +525,7 @@ void R_VulkanUploadTexture(
                 char trace[512];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK IMAGE GPU VERIFY] n=%u name=%.*s size=%ux%u fmt=%u vk=%u bytes=%zu readback=%u sourceHash=%016llx gpuHash=%016llx equal=%u srcHead=%02x%02x%02x%02x%02x%02x%02x%02x gpuHead=%02x%02x%02x%02x%02x%02x%02x%02x\\n",
+                    "[KisakCOD][VK IMAGE GPU VERIFY] n=%u name=%.*s size=%ux%u fmt=%u vk=%u bytes=%zu readback=%u sourceHash=%016llx gpuHash=%016llx equal=%u srcHead=%02x%02x%02x%02x%02x%02x%02x%02x gpuHead=%02x%02x%02x%02x%02x%02x%02x%02x\n",
                     verifyIndex, 96, image->name ? image->name : "<null>",
                     width, height, static_cast<unsigned>(format),
                     static_cast<unsigned>(info.format), bytes,
