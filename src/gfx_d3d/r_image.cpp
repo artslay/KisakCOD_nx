@@ -25,6 +25,7 @@ extern uint32_t g_switchCurrentAssetRawType;
 #include "r_outdoor.h"
 
 #include <algorithm>
+#include <atomic>
 
 #ifdef __SWITCH__
 #include <vulkan/vulkan.h>
@@ -35,6 +36,7 @@ extern void Switch_LogWrite(const char *msg);
 namespace
 {
 uint32_t s_switchVulkanAllocTraceCount = 0;
+std::atomic<uint32_t> s_switchTextureUploadProbeCount{0};
 
 enum class VulkanTextureKind : uint8_t
 {
@@ -375,6 +377,44 @@ void R_VulkanUploadTexture(
 
     const VkImageLayout oldLayout = texture->GetSubresourceLayout(mipLevel, layer);
     const size_t bytes = R_VulkanImageLevelSize(format, width, height, depth);
+
+#ifdef __SWITCH__
+    // Distinguish a bad asset payload from a valid VkImage/descriptor that
+    // later renders incorrectly. Probe only the first 16 base-level world
+    // textures; hash their complete source mip and report a compact prefix.
+    if (mipLevel == 0 && image->track == 9)
+    {
+        const uint32_t probeIndex =
+            s_switchTextureUploadProbeCount.fetch_add(1, std::memory_order_relaxed);
+        if (probeIndex < 16u)
+        {
+            uint64_t hash = 14695981039346656037ull;
+            size_t zeroBytes = 0;
+            for (size_t i = 0; i < bytes; ++i)
+            {
+                hash ^= source[i];
+                hash *= 1099511628211ull;
+                zeroBytes += source[i] == 0 ? 1u : 0u;
+            }
+            const uint8_t b[8] = {
+                bytes > 0 ? source[0] : 0, bytes > 1 ? source[1] : 0,
+                bytes > 2 ? source[2] : 0, bytes > 3 ? source[3] : 0,
+                bytes > 4 ? source[4] : 0, bytes > 5 ? source[5] : 0,
+                bytes > 6 ? source[6] : 0, bytes > 7 ? source[7] : 0
+            };
+            char trace[448];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK IMAGE UPLOAD PROBE] n=%u name=%.*s size=%ux%u fmt=%u vk=%u bytes=%zu hash=%016llx zero=%zu/%zu head=%02x%02x%02x%02x%02x%02x%02x%02x\n",
+                probeIndex, 96, image->name ? image->name : "<null>",
+                width, height, static_cast<unsigned>(format),
+                static_cast<unsigned>(info.format), bytes,
+                static_cast<unsigned long long>(hash), zeroBytes, bytes,
+                b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
 
     // Preserve ordering when an initialized image is uploaded again mid-frame:
     // previously recorded draws must consume the old texels before the upload.
