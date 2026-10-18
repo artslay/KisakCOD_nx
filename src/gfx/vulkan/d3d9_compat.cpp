@@ -4292,7 +4292,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             if (used < sizeof(mapTrace) - 2u)
             {
                 mapTrace[used++] = '\n';
-                mapTrace[used] = '\\0';
+                mapTrace[used] = '\0';
                 Switch_LogWrite(mapTrace);
             }
         }
