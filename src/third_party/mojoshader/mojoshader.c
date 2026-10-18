@@ -3514,21 +3514,44 @@ static MOJOSHADER_parseData *build_parsedata(Context *ctx)
          || strcmp(retval->profile, MOJOSHADER_PROFILE_GLSPIRV) == 0)
         {
             size_t i, max;
-            int binary_size = retval->output_len - sizeof(SpirvPatchTable);
-            uint32 *binary = (uint32 *) retval->output;
-            SpirvPatchTable *table = (SpirvPatchTable *) &retval->output[binary_size];
-
-            if (table->vpflip.offset)      binary[table->vpflip.offset]      = table->vpflip.location;
-            if (table->array_vec4.offset)  binary[table->array_vec4.offset]  = table->array_vec4.location;
-            if (table->array_ivec4.offset) binary[table->array_ivec4.offset] = table->array_ivec4.location;
-            if (table->array_bool.offset)  binary[table->array_bool.offset]  = table->array_bool.location;
-
-            for (i = 0, max = STATICARRAYLEN(table->samplers); i < max; i++)
+            if (retval->output_len >= (int)sizeof(SpirvPatchTableOutput))
             {
-                SpirvPatchEntry entry = table->samplers[i];
-                if (entry.offset)
-                    binary[entry.offset] = entry.location;
-            } // for
+                const size_t tableOffset =
+                    (size_t)retval->output_len - sizeof(SpirvPatchTableOutput);
+                SpirvPatchTableOutput *table =
+                    (SpirvPatchTableOutput *)(retval->output + tableOffset);
+                uint32 *binary = (uint32 *)retval->output;
+                const size_t codeBytes = table->code_bytes;
+                const size_t codeWords = codeBytes / sizeof(uint32);
+
+                // The returned output now contains SPIR-V code, relocatable
+                // fixup arrays, and a fixed-size trailer. Patch only offsets
+                // confirmed to lie inside the code region; never interpret the
+                // trailer or its metadata as SPIR-V instructions.
+                if (codeBytes != 0 &&
+                    (codeBytes % sizeof(uint32)) == 0 &&
+                    codeBytes <= tableOffset &&
+                    (size_t)table->metadata_bytes == tableOffset - codeBytes)
+                {
+                    const SpirvPatchEntry entries[] = {
+                        table->vpflip, table->array_vec4,
+                        table->array_ivec4, table->array_bool
+                    };
+                    for (i = 0; i < sizeof(entries) / sizeof(entries[0]); ++i)
+                    {
+                        if (entries[i].offset > 0 &&
+                            (size_t)entries[i].offset < codeWords)
+                            binary[entries[i].offset] = entries[i].location;
+                    }
+
+                    for (i = 0, max = STATICARRAYLEN(table->samplers); i < max; i++)
+                    {
+                        const SpirvPatchEntry entry = table->samplers[i];
+                        if (entry.offset > 0 && (size_t)entry.offset < codeWords)
+                            binary[entry.offset] = entry.location;
+                    }
+                }
+            }
         } // if
 #endif // SUPPORT_PROFILE_SPIRV
 
