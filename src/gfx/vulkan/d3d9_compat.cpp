@@ -6890,6 +6890,88 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     }
     RecordSwitchRecentVulkanDraw(recentDraw);
 
+#ifdef __SWITCH__
+    // Capture the actual rasterization state and D3D9 constant registers for
+    // the first lightmapped world draws. The UV-route probe showed that some
+    // shader variants already have the right vertex declaration, so the next
+    // discriminant is whether the draw is clipped or receives bad transforms.
+    if (m_decl && m_decl->switchVertDeclType >= 2 &&
+        m_decl->switchVertDeclType <= 13 &&
+        m_streams[0].stride == 44 && m_vertexShader && m_pixelShader &&
+        m_pixelShader->parseData && m_pixelShader->parseData->samplers)
+    {
+        bool hasSampler3 = false;
+        for (int i = 0; i < m_pixelShader->parseData->sampler_count; ++i)
+        {
+            if (m_pixelShader->parseData->samplers[i].index == 3)
+            {
+                hasSampler3 = true;
+                break;
+            }
+        }
+        static uint32_t switchWorldDrawStateTraceCount = 0;
+        if (hasSampler3 && switchWorldDrawStateTraceCount < 4u)
+        {
+            const uint32_t traceIndex = switchWorldDrawStateTraceCount++;
+            const int32_t scissorLeft = m_scissor
+                ? m_scissorRect.left : static_cast<int32_t>(m_viewport.X);
+            const int32_t scissorTop = m_scissor
+                ? m_scissorRect.top : static_cast<int32_t>(m_viewport.Y);
+            const int32_t scissorRight = m_scissor
+                ? m_scissorRect.right
+                : static_cast<int32_t>(std::min<uint64_t>(
+                    static_cast<uint64_t>(m_viewport.X) + m_viewport.Width, INT32_MAX));
+            const int32_t scissorBottom = m_scissor
+                ? m_scissorRect.bottom
+                : static_cast<int32_t>(std::min<uint64_t>(
+                    static_cast<uint64_t>(m_viewport.Y) + m_viewport.Height, INT32_MAX));
+            char drawTrace[640];
+            std::snprintf(
+                drawTrace, sizeof(drawTrace),
+                "[KisakCOD][VK WORLD DRAW STATE] n=%u frame=%llu decl=%llu declType=%u vs=%llu ps=%llu stride=%u vbOffset=%u indexCount=%u startIndex=%u baseVertex=%d viewport=%u,%u,%u,%u scissorEnable=%u scissor=%d,%d,%d,%d cull=%u depth=%u/%u depthFunc=%u\n",
+                traceIndex,
+                static_cast<unsigned long long>(m_backend->FrameSerial()),
+                static_cast<unsigned long long>(m_decl->serial),
+                static_cast<unsigned>(m_decl->switchVertDeclType),
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                m_streams[0].stride, m_streams[0].offset,
+                indexCount, startIndex, baseVertexIndex,
+                m_viewport.X, m_viewport.Y, m_viewport.Width, m_viewport.Height,
+                m_scissor ? 1u : 0u,
+                scissorLeft, scissorTop, scissorRight, scissorBottom,
+                m_cullMode, m_depthEnable ? 1u : 0u,
+                m_depthWrite ? 1u : 0u, m_depthFunc);
+            Switch_LogWrite(drawTrace);
+
+            char constantsTrace[896];
+            std::snprintf(
+                constantsTrace, sizeof(constantsTrace),
+                "[KisakCOD][VK WORLD VS CONSTANTS] n=%u c0=(%.5g,%.5g,%.5g,%.5g) c1=(%.5g,%.5g,%.5g,%.5g) c2=(%.5g,%.5g,%.5g,%.5g) c3=(%.5g,%.5g,%.5g,%.5g) c4=(%.5g,%.5g,%.5g,%.5g) c5=(%.5g,%.5g,%.5g,%.5g) c6=(%.5g,%.5g,%.5g,%.5g) c7=(%.5g,%.5g,%.5g,%.5g)\n",
+                traceIndex,
+                m_vsFloat[0][0], m_vsFloat[0][1], m_vsFloat[0][2], m_vsFloat[0][3],
+                m_vsFloat[1][0], m_vsFloat[1][1], m_vsFloat[1][2], m_vsFloat[1][3],
+                m_vsFloat[2][0], m_vsFloat[2][1], m_vsFloat[2][2], m_vsFloat[2][3],
+                m_vsFloat[3][0], m_vsFloat[3][1], m_vsFloat[3][2], m_vsFloat[3][3],
+                m_vsFloat[4][0], m_vsFloat[4][1], m_vsFloat[4][2], m_vsFloat[4][3],
+                m_vsFloat[5][0], m_vsFloat[5][1], m_vsFloat[5][2], m_vsFloat[5][3],
+                m_vsFloat[6][0], m_vsFloat[6][1], m_vsFloat[6][2], m_vsFloat[6][3],
+                m_vsFloat[7][0], m_vsFloat[7][1], m_vsFloat[7][2], m_vsFloat[7][3]);
+            Switch_LogWrite(constantsTrace);
+
+            char pixelConstantsTrace[512];
+            std::snprintf(
+                pixelConstantsTrace, sizeof(pixelConstantsTrace),
+                "[KisakCOD][VK WORLD PS CONSTANTS] n=%u c0=(%.5g,%.5g,%.5g,%.5g) c1=(%.5g,%.5g,%.5g,%.5g) c2=(%.5g,%.5g,%.5g,%.5g) c3=(%.5g,%.5g,%.5g,%.5g)\n",
+                traceIndex,
+                m_psFloat[0][0], m_psFloat[0][1], m_psFloat[0][2], m_psFloat[0][3],
+                m_psFloat[1][0], m_psFloat[1][1], m_psFloat[1][2], m_psFloat[1][3],
+                m_psFloat[2][0], m_psFloat[2][1], m_psFloat[2][2], m_psFloat[2][3],
+                m_psFloat[3][0], m_psFloat[3][1], m_psFloat[3][2], m_psFloat[3][3]);
+            Switch_LogWrite(pixelConstantsTrace);
+        }
+    }
+#endif
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
