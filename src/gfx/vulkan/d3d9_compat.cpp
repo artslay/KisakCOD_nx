@@ -2311,12 +2311,15 @@ uint32_t KisakVkTexture::Release()
     {
         if (resolveImage || resolveMemory || resolveView)
             backend->DeferDestroyImage(resolveImage, resolveMemory, resolveView);
+        if (baseMipView)
+            backend->DeferDestroyImage(VK_NULL_HANDLE, VK_NULL_HANDLE, baseMipView);
         if (image || memory || view)
             backend->DeferDestroyImage(image, memory, view);
     }
     resolveImage = VK_NULL_HANDLE;
     resolveView = VK_NULL_HANDLE;
     resolveMemory = VK_NULL_HANDLE;
+    baseMipView = VK_NULL_HANDLE;
     image = VK_NULL_HANDLE;
     view = VK_NULL_HANDLE;
     memory = VK_NULL_HANDLE;
@@ -3995,29 +3998,33 @@ bool IDirect3DDevice9::BindSamplerSet(
         if (texture->subresourceLayouts.size() < subresourceCount)
             texture->subresourceLayouts.resize(subresourceCount, texture->layout);
 
-        // A texture is usable as soon as every layer's base mip is uploaded.
-        // Higher mips may still be streaming; leave those subresources undefined
-        // and use a sampler clamped to LOD 0 until the complete chain is ready.
         bool baseMipInitialized = true;
+        bool allSubresourcesInitialized = true;
         for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
-        {
-            if (texture->GetSubresourceLayout(0, layer) ==
-                VK_IMAGE_LAYOUT_UNDEFINED)
-            {
-                baseMipInitialized = false;
-                break;
-            }
-        }
-        if (!baseMipInitialized)
-            continue;
-
-        for (uint32_t layer = 0; layer < texture->arrayLayers && !needsSampledLayoutTransition; ++layer)
         {
             for (uint32_t level = 0; level < texture->mipLevels; ++level)
             {
                 const VkImageLayout layout = texture->GetSubresourceLayout(level, layer);
-                if (layout != VK_IMAGE_LAYOUT_UNDEFINED &&
-                    layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                if (level == 0 && layout == VK_IMAGE_LAYOUT_UNDEFINED)
+                    baseMipInitialized = false;
+                if (layout == VK_IMAGE_LAYOUT_UNDEFINED)
+                    allSubresourcesInitialized = false;
+            }
+        }
+        if (!baseMipInitialized ||
+            (!allSubresourcesInitialized && !texture->baseMipView))
+            continue;
+
+        // For an incomplete mip chain, only level zero is exposed by the
+        // baseMipView and therefore only level zero may need a barrier.
+        const uint32_t transitionMipCount =
+            allSubresourcesInitialized ? texture->mipLevels : 1u;
+        for (uint32_t layer = 0; layer < texture->arrayLayers && !needsSampledLayoutTransition; ++layer)
+        {
+            for (uint32_t level = 0; level < transitionMipCount; ++level)
+            {
+                if (texture->GetSubresourceLayout(level, layer) !=
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
                 {
                     needsSampledLayoutTransition = true;
                     break;
@@ -4115,29 +4122,30 @@ bool IDirect3DDevice9::BindSamplerSet(
                 }
             }
 
-            if (!baseMipInitialized)
+            if (!baseMipInitialized ||
+                (!allSubresourcesInitialized && !texture->baseMipView))
             {
-                // The base level is not ready yet, so this texture cannot safely
-                // contribute visible pixels. Keep the initialized fallback until
-                // the first mip upload completes.
+                // The base level is unavailable (or no safe one-mip view exists).
+                // Keep the initialized fallback rather than expose undefined data.
                 images[i].imageView = m_backend->DummyImageView();
                 images[i].sampler = m_backend->DummySampler();
                 images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             }
             else
             {
-                // Transition only uploaded subresources. Streaming can expose the
-                // base mip before the lower-resolution chain; transitioning those
-                // undefined levels would race a later upload. The sampler below
-                // clamps to LOD 0 until every layer/mip has arrived.
+                // The descriptor's view range must agree with its image layout.
+                // Use the full view only when every mip/layer is initialized;
+                // otherwise expose just base mip zero and leave incomplete levels
+                // untouched so the streaming uploader can safely fill them later.
+                const uint32_t viewMipCount =
+                    allSubresourcesInitialized ? texture->mipLevels : 1u;
                 for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
                 {
-                    for (uint32_t level = 0; level < texture->mipLevels; ++level)
+                    for (uint32_t level = 0; level < viewMipCount; ++level)
                     {
                         const VkImageLayout oldLayout =
                             texture->GetSubresourceLayout(level, layer);
-                        if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED ||
-                            oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                        if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
                             continue;
 
                         VkImageSubresourceRange range{};
@@ -4161,8 +4169,6 @@ bool IDirect3DDevice9::BindSamplerSet(
                 const uint32_t minFilter = m_samplerState[i][D3DSAMP_MINFILTER];
                 const uint32_t magFilter = m_samplerState[i][D3DSAMP_MAGFILTER];
                 const uint32_t requestedMipFilter = m_samplerState[i][D3DSAMP_MIPFILTER];
-                // maxLod=0 means the sampler never fetches an uninitialized mip,
-                // while preserving the real base texture and its alpha channel.
                 const uint32_t mipFilter = allSubresourcesInitialized
                     ? requestedMipFilter : D3DTEXF_NONE;
                 float mipLodBias = 0.0f;
@@ -4183,7 +4189,8 @@ bool IDirect3DDevice9::BindSamplerSet(
                     mipLodBias,
                     anisotropicFilter && m_backend->SupportsSamplerAnisotropy(),
                     std::min(maxAnisotropy, m_backend->MaxSamplerAnisotropy()));
-                images[i].imageView = texture->view;
+                images[i].imageView = allSubresourcesInitialized
+                    ? texture->view : texture->baseMipView;
                 images[i].sampler = sampler ? sampler : m_backend->DummySampler();
                 images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             }
