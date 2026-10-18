@@ -667,6 +667,32 @@ VkSamplerAddressMode AddressMode(uint32_t value)
     }
 }
 
+VkFormatFeatureFlags SwitchGetOptimalFormatFeatures(
+    VulkanBackend *backend, VkFormat format)
+{
+    // Format properties are immutable for a physical device; cache them so
+    // checking filter support does not add a driver query to every draw.
+    static std::mutex cacheMutex;
+    static std::unordered_map<uint32_t, VkFormatFeatureFlags> featureCache;
+    const uint32_t key = static_cast<uint32_t>(format);
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        const auto found = featureCache.find(key);
+        if (found != featureCache.end())
+            return found->second;
+    }
+
+    VkFormatProperties properties{};
+    vkGetPhysicalDeviceFormatProperties(
+        backend->PhysicalDevice(), format, &properties);
+    const VkFormatFeatureFlags features = properties.optimalTilingFeatures;
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        const auto inserted = featureCache.emplace(key, features);
+        return inserted.first->second;
+    }
+}
+
 VkPrimitiveTopology PrimitiveTopology(uint32_t value)
 {
     switch (value)
@@ -4280,12 +4306,10 @@ bool IDirect3DDevice9::BindSamplerSet(
                 // drivers that expose a sampleable compressed/legacy format
                 // without linear filtering, force a valid point-filter sampler
                 // instead of returning undefined texture samples.
-                VkFormatProperties samplerFormatProperties{};
-                vkGetPhysicalDeviceFormatProperties(
-                    m_backend->PhysicalDevice(), texture->format,
-                    &samplerFormatProperties);
+                const VkFormatFeatureFlags samplerFormatFeatures =
+                    SwitchGetOptimalFormatFeatures(m_backend, texture->format);
                 const bool supportsLinearFiltering =
-                    (samplerFormatProperties.optimalTilingFeatures &
+                    (samplerFormatFeatures &
                      VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
                 if (!supportsLinearFiltering)
                 {
@@ -4312,7 +4336,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                                 trace, sizeof(trace),
                                 "[KisakCOD][VK SAMPLER FILTER FALLBACK] format=%u features=0x%x slot=%u linear=0 fallback=point\n",
                                 static_cast<unsigned>(texture->format),
-                                static_cast<unsigned>(samplerFormatProperties.optimalTilingFeatures),
+                                static_cast<unsigned>(samplerFormatFeatures),
                                 i);
                             Switch_LogWrite(trace);
                         }
