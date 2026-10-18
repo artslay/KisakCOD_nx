@@ -97,7 +97,7 @@ uint32_t __cdecl Image_GetCardMemoryAmountForMipLevel(
     {
         if (format > D3DFMT_DXT1)
         {
-            if (format == D3DFMT_DXT3 || format == D3DFMT_DXT5)
+            if (format == D3DFMT_DXT3 || format == D3DFMT_DXT5 || format == KISAK_D3DFMT_DXN)
                 return 16 * mipDepth * ((mipHeight + 3) >> 2) * ((mipWidth + 3) >> 2);
         }
         else
@@ -372,7 +372,8 @@ void __cdecl Image_LoadDxtc(
     iassert( image );
     iassert( fileHeader );
     iassert( data );
-    if (format != D3DFMT_DXT1 && format != D3DFMT_DXT3 && format != D3DFMT_DXT5)
+    if (format != D3DFMT_DXT1 && format != D3DFMT_DXT3 &&
+        format != D3DFMT_DXT5 && format != KISAK_D3DFMT_DXN)
         MyAssertHandler(
             ".\\r_image_load_obj.cpp",
             391,
@@ -708,6 +709,9 @@ void __cdecl Image_LoadFromData(GfxImage *image, GfxImageFileHeader *fileHeader,
         break;
     case IMG_FORMAT_DXT5:
         Image_LoadDxtc(image, fileHeader, srcData, D3DFMT_DXT5, 16);
+        break;
+    case IMG_FORMAT_DXN:
+        Image_LoadDxtc(image, fileHeader, srcData, KISAK_D3DFMT_DXN, 16);
         break;
     default:
         if (!alwaysfails)

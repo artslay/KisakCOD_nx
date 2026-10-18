@@ -75,6 +75,8 @@ constexpr _D3DFORMAT D3DFMT_A32B32G32R32F = 116;
 constexpr _D3DFORMAT D3DFMT_DXT1 = 0x31545844u;
 constexpr _D3DFORMAT D3DFMT_DXT3 = 0x33545844u;
 constexpr _D3DFORMAT D3DFMT_DXT5 = 0x35545844u;
+// IW3 DXN images use the ATI2/3Dc two-channel block encoding (BC5).
+constexpr _D3DFORMAT D3DFMT_DXN = 0x32495441u;
 // Legacy CoD4/NVIDIA transparency-AA render-format FOURCC values passed
 // through D3DRS_ADAPTIVETESS_Y by the original D3D9 renderer.
 constexpr _D3DFORMAT D3DFMT_SSAA = 0x41415353u;

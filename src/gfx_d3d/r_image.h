@@ -39,6 +39,9 @@ enum GfxImageFileFormat : __int32
     IMG_FORMAT_COUNT = 0xF,
 };
 
+// Portable source-format identifier for IWI v6 DXN / ATI2 (16-byte BC5 blocks).
+constexpr _D3DFORMAT KISAK_D3DFMT_DXN = 0x32495441u;
+
 enum file_image_flags_t : __int32
 {
     IMG_FLAG_NOPICMIP = 0x1,

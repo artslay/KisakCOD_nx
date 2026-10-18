@@ -141,6 +141,8 @@ VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
     case D3DFMT_D24X8:
         return {VK_FORMAT_X8_D24_UNORM_PACK32,
                 VK_IMAGE_ASPECT_DEPTH_BIT, 4, 0, false, true};
+    case D3DFMT_DXN:
+        return {VK_FORMAT_BC5_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
     case D3DFMT_DXT1:
         return {VK_FORMAT_BC1_RGBA_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 8, true, false};
     case D3DFMT_DXT3:

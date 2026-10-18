@@ -73,6 +73,7 @@ int __cdecl Image_SourceBytesPerSlice_PC(_D3DFORMAT format, int width, int heigh
     {
     case D3DFMT_DXT3:
     case D3DFMT_DXT5:
+    case KISAK_D3DFMT_DXN:
         return 16 * ((height + 3) >> 2) * ((width + 3) >> 2);
     case D3DFMT_DXT1:
         return 8 * ((height + 3) >> 2) * ((width + 3) >> 2);
@@ -168,7 +169,7 @@ void __cdecl Image_Upload2D_CopyDataBlock_PC(
         }
         return;
     }
-    if (format == D3DFMT_DXT3 || format == D3DFMT_DXT5)
+    if (format == D3DFMT_DXT3 || format == D3DFMT_DXT5 || format == KISAK_D3DFMT_DXN)
     {
         srcStride = 16 * ((width + 3) >> 2);
         dy = 4;
