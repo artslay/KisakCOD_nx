@@ -4034,6 +4034,12 @@ bool IDirect3DDevice9::BindSamplerSet(
     bool needsSampledLayoutTransition = false;
     for (uint32_t slot = 0; slot < 16; ++slot)
     {
+        // Only textures actually sampled by this shader participate in layout
+        // tracking. Stale D3D9 bindings in inactive slots may still refer to
+        // render targets or depth images and must not force transitions.
+        if (!activeSamplers[slot])
+            continue;
+
         KisakVkTexture *texture = textures[slot];
         if (!texture)
             continue;
@@ -4152,13 +4158,18 @@ bool IDirect3DDevice9::BindSamplerSet(
     for (uint32_t i = 0; i < 16; ++i)
     {
         KisakVkTexture *texture = textures[i];
-        if (!texture)
+        if (!activeSamplers[i])
         {
-            if (activeSamplers[i])
-                return failActiveSampler(i, "texture_not_bound_at_descriptor_build");
+            // Do not expose stale bindings to shaders through inactive slots.
+            // In particular, an unused slot must not keep a render/depth target
+            // alive as a sampled image or trigger a layout transition.
             images[i].imageView = m_backend->DummyImageView();
             images[i].sampler = m_backend->DummySampler();
             images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+        else if (!texture)
+        {
+            return failActiveSampler(i, "texture_not_bound_at_descriptor_build");
         }
         else
         {
