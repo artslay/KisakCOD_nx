@@ -4018,10 +4018,9 @@ void __cdecl CG_SelectWeaponIndex(int32_t localClientNum, uint32_t weaponIndex)
     cgameGlob->weaponSelectTime = cgameGlob->time;
     if (cgameGlob->weaponSelect != weaponIndex)
     {
-        // weaponSelect == 0 means no currently selected weapon. BG_GetWeaponDef
-        // requires a nonzero index; resolving weapon 0 returns a null slot on
-        // Switch and dereferencing altWeaponIndex faults at address 0x18 when
-        // the player selects the first real weapon after spawning.
+        // weaponSelect == 0 means no currently selected weapon. Weapon index
+        // zero is the empty sentinel; do not ask BG_GetWeaponDef to resolve it
+        // or dereference altWeaponIndex from its empty slot.
         v2 = FALSE;
         if (weaponIndex && cgameGlob->weaponSelect)
         {
