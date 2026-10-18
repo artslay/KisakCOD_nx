@@ -831,23 +831,47 @@ bool VulkanBackend::CreateSwapchain()
     // format. Do not propagate UNDEFINED into vkCreateSwapchainKHR.
     if (formats.size() == 1 && formats[0].format == VK_FORMAT_UNDEFINED)
     {
-        m_swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
+        // The surface permits any format. Prefer an sRGB attachment when the
+        // presentation color space is sRGB so fragment output is encoded for
+        // the display instead of being sent as dark linear UNORM values.
+        m_swapchainFormat = formats[0].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
+            ? VK_FORMAT_B8G8R8A8_SRGB : VK_FORMAT_B8G8R8A8_UNORM;
         m_swapchainColorSpace = formats[0].colorSpace;
     }
     else
     {
-        const auto preferred = std::find_if(
-            formats.begin(), formats.end(),
-            [](const VkSurfaceFormatKHR &format)
-            {
-                return format.format == VK_FORMAT_B8G8R8A8_UNORM &&
-                       format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-            });
+        const auto findFormat = [&formats](VkFormat target)
+        {
+            return std::find_if(
+                formats.begin(), formats.end(),
+                [target](const VkSurfaceFormatKHR &format)
+                {
+                    return format.format == target &&
+                           format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+                });
+        };
+        const auto preferredSrgb = findFormat(VK_FORMAT_B8G8R8A8_SRGB);
+        const auto preferredUnorm = findFormat(VK_FORMAT_B8G8R8A8_UNORM);
         const VkSurfaceFormatKHR &selected =
-            preferred != formats.end() ? *preferred : formats.front();
+            preferredSrgb != formats.end() ? *preferredSrgb :
+            (preferredUnorm != formats.end() ? *preferredUnorm : formats.front());
         m_swapchainFormat = selected.format;
         m_swapchainColorSpace = selected.colorSpace;
     }
+
+#ifdef __SWITCH__
+    {
+        char formatTrace[160];
+        std::snprintf(
+            formatTrace, sizeof(formatTrace),
+            "[KisakCOD][VK SWAPCHAIN COLOR] format=%u colorspace=%u srgbAttachment=%u\n",
+            static_cast<unsigned>(m_swapchainFormat),
+            static_cast<unsigned>(m_swapchainColorSpace),
+            (m_swapchainFormat == VK_FORMAT_B8G8R8A8_SRGB ||
+             m_swapchainFormat == VK_FORMAT_R8G8B8A8_SRGB) ? 1u : 0u);
+        Switch_LogWrite(formatTrace);
+    }
+#endif
 
     uint32_t presentCount = 0;
     VkResult presentQueryResult = vkGetPhysicalDeviceSurfacePresentModesKHR(
