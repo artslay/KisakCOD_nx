@@ -308,6 +308,39 @@ bool R_VulkanAllocTexture(
         texture->image = VK_NULL_HANDLE;
         texture->memory = VK_NULL_HANDLE;
         texture->view = VK_NULL_HANDLE;
+        texture->baseMipView = VK_NULL_HANDLE;
+        return false;
+    }
+
+    VkImageViewCreateInfo baseViewInfo{};
+    baseViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    baseViewInfo.image = texture->image;
+    baseViewInfo.viewType = kind == VulkanTextureKind::Cube
+        ? VK_IMAGE_VIEW_TYPE_CUBE
+        : (kind == VulkanTextureKind::Texture3D
+            ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D);
+    baseViewInfo.format = info.format;
+    baseViewInfo.components = R_VulkanComponentMapping(sourceFormat);
+    baseViewInfo.subresourceRange.aspectMask = info.aspect;
+    baseViewInfo.subresourceRange.baseMipLevel = 0;
+    baseViewInfo.subresourceRange.levelCount = 1;
+    baseViewInfo.subresourceRange.baseArrayLayer = 0;
+    baseViewInfo.subresourceRange.layerCount = texture->arrayLayers;
+    const VkResult baseViewResult = vkCreateImageView(
+        backend->Device(), &baseViewInfo, nullptr, &texture->baseMipView);
+    if (baseViewResult != VK_SUCCESS)
+    {
+        char trace[192];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK IMAGE] base mip view creation failed format=%u result=%d\n",
+            static_cast<unsigned>(sourceFormat), static_cast<int>(baseViewResult));
+        Switch_LogWrite(trace);
+        backend->DestroyImage(texture->image, texture->memory, texture->view);
+        texture->image = VK_NULL_HANDLE;
+        texture->memory = VK_NULL_HANDLE;
+        texture->view = VK_NULL_HANDLE;
+        texture->baseMipView = VK_NULL_HANDLE;
         return false;
     }
 
