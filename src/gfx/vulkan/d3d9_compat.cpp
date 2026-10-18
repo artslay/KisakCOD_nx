@@ -7114,7 +7114,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             char drawTrace[640];
             std::snprintf(
                 drawTrace, sizeof(drawTrace),
-                "[KisakCOD][VK WORLD DRAW STATE] n=%u frame=%llu decl=%llu declType=%u vs=%llu ps=%llu stride=%u vbOffset=%u indexCount=%u startIndex=%u baseVertex=%d viewport=%u,%u,%u,%u scissorEnable=%u scissor=%d,%d,%d,%d cull=%u depth=%u/%u depthFunc=%u\n",
+                "[KisakCOD][VK WORLD DRAW STATE] n=%u frame=%llu decl=%llu declType=%u vs=%llu ps=%llu stride=%u vbOffset=%u indexCount=%u startIndex=%u baseVertex=%d viewport=%u,%u,%u,%u scissorEnable=%u scissor=%d,%d,%d,%d cull=%u depth=%u/%u depthFunc=%u blend=%u srcBlend=%u dstBlend=%u blendOp=%u alphaTest=%u alphaFunc=%u alphaRef=%u separateAlpha=%u srcAlpha=%u dstAlpha=%u colorWrite=0x%x unlit=%u\n",
                 traceIndex,
                 static_cast<unsigned long long>(m_backend->FrameSerial()),
                 static_cast<unsigned long long>(m_decl->serial),
@@ -7127,7 +7127,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 m_scissor ? 1u : 0u,
                 scissorLeft, scissorTop, scissorRight, scissorBottom,
                 m_cullMode, m_depthEnable ? 1u : 0u,
-                m_depthWrite ? 1u : 0u, m_depthFunc);
+                m_depthWrite ? 1u : 0u, m_depthFunc,
+                m_blendEnable ? 1u : 0u, m_srcBlend, m_dstBlend, m_blendOp,
+                m_alphaTest ? 1u : 0u, m_alphaFunc, m_alphaRef,
+                m_separateAlphaBlend ? 1u : 0u, m_srcBlendAlpha,
+                m_dstBlendAlpha, m_colorWriteMask, m_switchUnlit ? 1u : 0u);
             Switch_LogWrite(drawTrace);
 
             char constantsTrace[896];
