@@ -557,6 +557,8 @@ TextureFormatInfo GetTextureFormat(_D3DFORMAT sourceFormat)
         return {VK_FORMAT_BC2_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
     case D3DFMT_DXT5:
         return {VK_FORMAT_BC3_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
+    case D3DFMT_DXN:
+        return {VK_FORMAT_BC5_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
     default:
         return {};
     }
