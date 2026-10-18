@@ -843,96 +843,18 @@ DECLSPEC void MOJOSHADER_freeParseData(const MOJOSHADER_parseData *data);
 
 
 /*
- * You almost certainly don't need this function, unless you absolutely know
- *  why you need it without hesitation. This is useful if you're doing
- *  extremely low-level shader work or building specialized tools.
- *
- * Parse a preshader structure. This expects a buffer of bytes that represents
- *  the preshader data starting with its magic number token and ending at
- *  the end of the comment tokens that contain this preshader. Note that it
- *  does _not_ start at the beginning of the comment tokens.
- *
- * On success, this will return a MOJOSHADER_preshader. This can be
- *  deallocated later by calling MOJOSHADER_freePreshader(). On failure,
- *  this will return NULL. Unlike other MojoShader APIs, this assumes you
- *  either have a complete and valid buffer of preshader tokens or you have
- *  incomplete/corrupted data, so there is no explicit error reporting. Please
- *  note that if the system runs out of memory, this function will also return
- *  NULL without distinction.
- *
- * This function is thread safe, so long as any allocator you passed into
- *  MOJOSHADER_parsePreshader() is, too.
- */
-DECLSPEC const MOJOSHADER_preshader *MOJOSHADER_parsePreshader(const unsigned char *buf,
-                                                               const unsigned int len,
-                                                               MOJOSHADER_malloc m,
-                                                               MOJOSHADER_free f,
-                                                               void *d);
-
-
-/*
- * You almost certainly don't need this function, unless you absolutely know
- *  why you need it without hesitation. This is useful if you're doing
- *  extremely low-level shader work or building specialized tools.
- *
- * Call this to dispose of preshader parsing results when you are done with
- *  them. This will call the MOJOSHADER_free function you provided to
- *  MOJOSHADER_parsePreshader() multiple times, if you provided one.
- *  Passing a NULL here is a safe no-op.
- *
- * You only need to call this function for results from a call to
- *  MOJOSHADER_parsePreshader(). Other MojoShader structures with a preshader
- *  field, such as MOJOSHADER_parseData(), should not use this function, as
- *  the preshader will be deallocated with everything else in
- *  MOJOSHADER_freeParseData(), etc.
- *
- * This function is thread safe, so long as any allocator you passed into
- *  MOJOSHADER_parsePreshader() is, too.
- */
-DECLSPEC void MOJOSHADER_freePreshader(const MOJOSHADER_preshader *preshader);
-
-
-/* SPIR-V interface... */
-
-typedef enum
-{
-    MOJOSHADER_VERTEXELEMENTFORMAT_SINGLE,
-    MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR2,
-    MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR3,
-    MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR4,
-    MOJOSHADER_VERTEXELEMENTFORMAT_COLOR,
-    MOJOSHADER_VERTEXELEMENTFORMAT_BYTE4,
-    MOJOSHADER_VERTEXELEMENTFORMAT_SHORT2,
-    MOJOSHADER_VERTEXELEMENTFORMAT_SHORT4,
-    MOJOSHADER_VERTEXELEMENTFORMAT_NORMALIZEDSHORT2,
-    MOJOSHADER_VERTEXELEMENTFORMAT_NORMALIZEDSHORT4,
-    MOJOSHADER_VERTEXELEMENTFORMAT_HALFVECTOR2,
-    MOJOSHADER_VERTEXELEMENTFORMAT_HALFVECTOR4
-} MOJOSHADER_vertexElementFormat;
-
-typedef struct MOJOSHADER_vertexAttribute
-{
-    MOJOSHADER_usage usage;
-    MOJOSHADER_vertexElementFormat vertexElementFormat;
-    int usageIndex;
-} MOJOSHADER_vertexAttribute;
-
-/*
- * You almost certainly don't need this function, unless you absolutely know
- *  why you need it without hesitation. This is useful if you're doing
- *  extremely low-level shader work or building specialized tools.
- *
- * Call this to patch SPIR-V output returned from MOJOSHADER_parse to correctly
- *  interpret vertex input and link vertex shader output to pixel shader input.
- *
- * On success, this returns the size of the shaders' internal "patch table",
- *  which should be subtracted from the parseData's output_len when passing the
- *  final SPIR-V to your shader compiler.
+ * Link a vertex/pixel SPIR-V pair and patch the declared vertex input types.
+ * On success, returns 1 and writes the actual SPIR-V byte lengths to the output
+ * parameters. The parseData output buffers include an internal, relocatable
+ * metadata trailer; callers must pass only the returned code byte lengths to
+ * vkCreateShaderModule (or an equivalent shader-module API).
  */
 DECLSPEC int MOJOSHADER_linkSPIRVShaders(const MOJOSHADER_parseData *vertex_spirv,
                                          const MOJOSHADER_parseData *pixel_spirv,
                                          const MOJOSHADER_vertexAttribute *vertexAttributes,
-                                         const int vertexAttributeCount);
+                                         const int vertexAttributeCount,
+                                         int *vertexCodeBytesOut,
+                                         int *pixelCodeBytesOut);
 
 
 /* D3D11 interface... */
