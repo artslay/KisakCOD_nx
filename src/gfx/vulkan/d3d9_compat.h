@@ -248,6 +248,7 @@ struct KisakVkBuffer : IDirect3DResource9 {
 struct KisakVkTexture : IDirect3DResource9 {
     VkImage image=VK_NULL_HANDLE;
     VkImageView view=VK_NULL_HANDLE;
+    VkImageView baseMipView=VK_NULL_HANDLE;
     VkSampler sampler=VK_NULL_HANDLE;
     VkDeviceMemory memory=VK_NULL_HANDLE;
     VkImage resolveImage=VK_NULL_HANDLE;
