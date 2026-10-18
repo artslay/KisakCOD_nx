@@ -4244,7 +4244,8 @@ int MOJOSHADER_linkSPIRVShaders(
         }
     } // for
 
-    MOJOSHADER_spirv_link_attributes(vertex_spirv, pixel_spirv, 0);
+    if (!MOJOSHADER_spirv_link_attributes(vertex_spirv, pixel_spirv, 0))
+        return -7;
     *vertexCodeBytesOut = (int)vertexCodeBytes;
     *pixelCodeBytesOut = (int)pixelCodeBytes;
     return 1;

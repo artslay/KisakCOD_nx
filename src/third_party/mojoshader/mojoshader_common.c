@@ -1058,20 +1058,136 @@ size_t MOJOSHADER_printFloat(char *text, size_t maxlen, float arg)
 #if SUPPORT_PROFILE_SPIRV
 #include "spirv/spirv.h"
 #include "spirv/GLSL.std.450.h"
-void MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
+int MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
                                       const MOJOSHADER_parseData *pixel,
                                       int is_glspirv)
 {
+    if (!vertex || !pixel || !vertex->output || !pixel->output ||
+        vertex->output_len <= 0 || pixel->output_len <= 0 ||
+        (vertex->output_len % (int) sizeof(uint32)) != 0 ||
+        (pixel->output_len % (int) sizeof(uint32)) != 0 ||
+        vertex->attribute_count < 0 || pixel->attribute_count < 0 ||
+        vertex->output_count < 0 || pixel->output_count < 0 ||
+        vertex->attribute_count > MOJOSHADER_USAGE_TOTAL * 16 ||
+        pixel->attribute_count > MOJOSHADER_USAGE_TOTAL * 16 ||
+        vertex->output_count > MOJOSHADER_USAGE_TOTAL * 16 ||
+        pixel->output_count > MOJOSHADER_USAGE_TOTAL * 16 ||
+        (vertex->attribute_count && !vertex->attributes) ||
+        (pixel->attribute_count && !pixel->attributes) ||
+        (vertex->output_count && !vertex->outputs) ||
+        (pixel->output_count && !pixel->outputs))
+        return 0;
+
+    const size_t tableBytes = sizeof(SpirvPatchTableOutput);
+    if ((size_t) vertex->output_len <= tableBytes ||
+        (size_t) pixel->output_len <= tableBytes)
+        return 0;
+
+    const size_t vTableOffset = (size_t) vertex->output_len - tableBytes;
+    const size_t pTableOffset = (size_t) pixel->output_len - tableBytes;
+    SpirvPatchTableOutput *vTable =
+        (SpirvPatchTableOutput *)(vertex->output + vTableOffset);
+    SpirvPatchTableOutput *pTable =
+        (SpirvPatchTableOutput *)(pixel->output + pTableOffset);
+    if (vTable->code_bytes == 0 || pTable->code_bytes == 0 ||
+        (vTable->code_bytes % sizeof(uint32)) != 0 ||
+        (pTable->code_bytes % sizeof(uint32)) != 0 ||
+        (size_t) vTable->code_bytes > vTableOffset ||
+        (size_t) pTable->code_bytes > pTableOffset ||
+        (size_t) vTable->metadata_bytes != vTableOffset - vTable->code_bytes ||
+        (size_t) pTable->metadata_bytes != pTableOffset - pTable->code_bytes)
+        return 0;
+
+    const size_t vWordCount = (size_t) vTable->code_bytes / sizeof(uint32);
+    const size_t pWordCount = (size_t) pTable->code_bytes / sizeof(uint32);
+    const auto validAttribute = [](const MOJOSHADER_attribute *attribute)
+    {
+        return attribute &&
+            attribute->usage >= MOJOSHADER_USAGE_POSITION &&
+            attribute->usage < MOJOSHADER_USAGE_TOTAL &&
+            attribute->index >= 0 && attribute->index < 16;
+    };
+
+    // Preflight every offset used below before mutating either copied module.
+    // A zero pixel-input offset used to overwrite SPIR-V word zero (the magic),
+    // and a missing vertex-output offset could do the same. Reject the pair
+    // instead of writing through absent or out-of-range patch locations.
+    for (int i = 0; i < pixel->attribute_count; ++i)
+    {
+        const MOJOSHADER_attribute *attribute = &pixel->attributes[i];
+        if (attribute->usage == MOJOSHADER_USAGE_UNKNOWN ||
+            attribute->usage == MOJOSHADER_USAGE_DEPTH)
+            continue;
+        if (!validAttribute(attribute))
+            return 0;
+        if (is_glspirv && attribute->usage == MOJOSHADER_USAGE_COLOR &&
+            pTable->output_offsets[attribute->index])
+            continue;
+
+        const uint32 offset = pTable->attrib_offsets[attribute->usage][attribute->index];
+        const uint32 vertexOffset = vTable->attrib_offsets[attribute->usage][attribute->index];
+        if (offset == 0 || (size_t) offset >= pWordCount ||
+            (vertexOffset && (size_t) vertexOffset >= vWordCount))
+            return 0;
+    }
+
+    for (int i = 0; i < vertex->output_count; ++i)
+    {
+        const MOJOSHADER_attribute *attribute = &vertex->outputs[i];
+        if (!validAttribute(attribute))
+            return 0;
+        if ((attribute->usage == MOJOSHADER_USAGE_POSITION && attribute->index == 0) ||
+            (attribute->usage == MOJOSHADER_USAGE_POINTSIZE && attribute->index == 0))
+            continue;
+        if (is_glspirv && attribute->usage == MOJOSHADER_USAGE_COLOR &&
+            pTable->output_offsets[attribute->index])
+            continue;
+
+        if (!pTable->attrib_offsets[attribute->usage][attribute->index])
+        {
+            const uint32 offset = vTable->attrib_offsets[attribute->usage][attribute->index];
+            if (offset == 0 || (size_t) offset >= vWordCount)
+                return 0;
+        }
+    }
+
+    if (is_glspirv)
+    {
+        for (int i = 0; i < pixel->output_count; ++i)
+        {
+            const MOJOSHADER_attribute *attribute = &pixel->outputs[i];
+            if (!attribute)
+                return 0;
+            if (attribute->usage == MOJOSHADER_USAGE_DEPTH)
+                continue;
+            if (attribute->usage != MOJOSHADER_USAGE_COLOR ||
+                attribute->index < 0 || attribute->index >= 16)
+                return 0;
+            const uint32 outputOffset = pTable->output_offsets[attribute->index];
+            const uint32 pixelOffset = pTable->attrib_offsets[attribute->usage][attribute->index];
+            const uint32 vertexOffset = vTable->attrib_offsets[attribute->usage][attribute->index];
+            if (outputOffset == 0 || (size_t) outputOffset >= pWordCount ||
+                (pixelOffset && (size_t) pixelOffset >= pWordCount) ||
+                (vertexOffset && (size_t) vertexOffset >= vWordCount))
+                return 0;
+        }
+    }
+
+    const uint32 texcoord0Loc = pTable->attrib_offsets[MOJOSHADER_USAGE_TEXCOORD][0];
+    if (texcoord0Loc && (size_t) texcoord0Loc >= pWordCount)
+        return 0;
+    if (texcoord0Loc && vTable->attrib_offsets[MOJOSHADER_USAGE_POINTSIZE][0] > 0)
+    {
+        if (pTable->pointcoord_var_offset == 0 ||
+            pTable->pointcoord_load_offset == 0 ||
+            (size_t) pTable->pointcoord_var_offset + 1 >= pWordCount ||
+            (size_t) pTable->pointcoord_load_offset + 1 >= pWordCount)
+            return 0;
+    }
+
     int i;
     uint32 attr_loc = 0;
     uint32 vOffset, pOffset;
-    size_t vDataLen = (size_t)vertex->output_len - sizeof(SpirvPatchTableOutput);
-    size_t pDataLen = (size_t)pixel->output_len - sizeof(SpirvPatchTableOutput);
-    SpirvPatchTableOutput *vTable =
-        (SpirvPatchTableOutput *)(vertex->output + vDataLen);
-    SpirvPatchTableOutput *pTable =
-        (SpirvPatchTableOutput *)(pixel->output + pDataLen);
-    const uint32 texcoord0Loc = pTable->attrib_offsets[MOJOSHADER_USAGE_TEXCOORD][0];
 
     if (is_glspirv)
     {
@@ -1080,70 +1196,59 @@ void MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
         {
             const MOJOSHADER_attribute* pAttr = &pixel->outputs[i];
             if (pAttr->usage != MOJOSHADER_USAGE_COLOR)
-            {
-                // This should be FragDepth, which is builtin
-                assert(pAttr->usage == MOJOSHADER_USAGE_DEPTH);
                 continue;
-            } // if
 
-            // Set the loc for the output declaration...
             pOffset = pTable->output_offsets[pAttr->index];
-            assert(pOffset > 0);
             ((uint32*)pixel->output)[pOffset] = attr_loc;
 
-            // Set the same value for the vertex output/pixel input...
             pOffset = pTable->attrib_offsets[pAttr->usage][pAttr->index];
             if (pOffset)
                 ((uint32*)pixel->output)[pOffset] = attr_loc;
             vOffset = vTable->attrib_offsets[pAttr->usage][pAttr->index];
             if (vOffset)
                 ((uint32*)vertex->output)[vOffset] = attr_loc;
-
-            // ... increment location index, finally.
             attr_loc++;
-        } // for
+        }
     }
 
-    // Okay, now we can start linking pixel/vertex attributes
+    // Link pixel inputs to corresponding vertex outputs.
     for (i = 0; i < pixel->attribute_count; i++)
     {
         const MOJOSHADER_attribute *pAttr = &pixel->attributes[i];
-        if (pAttr->usage == MOJOSHADER_USAGE_UNKNOWN)
-            continue; // Probably something like VPOS, ignore!
-        if (pAttr->usage == MOJOSHADER_USAGE_DEPTH)
-            continue; // This should be FragDepth, which is builtin
-        if (is_glspirv && pAttr->usage == MOJOSHADER_USAGE_COLOR && pTable->output_offsets[pAttr->index])
+        if (pAttr->usage == MOJOSHADER_USAGE_UNKNOWN ||
+            pAttr->usage == MOJOSHADER_USAGE_DEPTH)
+            continue;
+        if (is_glspirv && pAttr->usage == MOJOSHADER_USAGE_COLOR &&
+            pTable->output_offsets[pAttr->index])
             continue;
 
-        // The input may not exist in the output list!
         pOffset = pTable->attrib_offsets[pAttr->usage][pAttr->index];
         vOffset = vTable->attrib_offsets[pAttr->usage][pAttr->index];
         ((uint32 *) pixel->output)[pOffset] = attr_loc;
         if (vOffset)
             ((uint32 *) vertex->output)[vOffset] = attr_loc;
         attr_loc++;
-    } // for
+    }
 
-    // There may be outputs not present in the input list!
+    // There may be vertex outputs not consumed by the pixel shader.
     for (i = 0; i < vertex->output_count; i++)
     {
         const MOJOSHADER_attribute *vAttr = &vertex->outputs[i];
-        assert(vAttr->usage != MOJOSHADER_USAGE_UNKNOWN);
-        if (vAttr->usage == MOJOSHADER_USAGE_POSITION && vAttr->index == 0)
+        if ((vAttr->usage == MOJOSHADER_USAGE_POSITION && vAttr->index == 0) ||
+            (vAttr->usage == MOJOSHADER_USAGE_POINTSIZE && vAttr->index == 0))
             continue;
-        if (vAttr->usage == MOJOSHADER_USAGE_POINTSIZE && vAttr->index == 0)
-            continue;
-        if (is_glspirv && vAttr->usage == MOJOSHADER_USAGE_COLOR && pTable->output_offsets[vAttr->index])
+        if (is_glspirv && vAttr->usage == MOJOSHADER_USAGE_COLOR &&
+            pTable->output_offsets[vAttr->index])
             continue;
 
         if (!pTable->attrib_offsets[vAttr->usage][vAttr->index])
         {
             vOffset = vTable->attrib_offsets[vAttr->usage][vAttr->index];
             ((uint32 *) vertex->output)[vOffset] = attr_loc++;
-        } // if
-    } // for
+        }
+    }
 
-    // gl_PointCoord support
+    // gl_PointCoord support.
     if (texcoord0Loc)
     {
         if (vTable->attrib_offsets[MOJOSHADER_USAGE_POINTSIZE][0] > 0)
@@ -1152,15 +1257,15 @@ void MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
             ((uint32 *) pixel->output)[pTable->pointcoord_load_offset + 1] = pTable->tid_vec2;
             ((uint32 *) pixel->output)[texcoord0Loc - 1] = SpvDecorationBuiltIn;
             ((uint32 *) pixel->output)[texcoord0Loc] = SpvBuiltInPointCoord;
-        } // if
+        }
         else
         {
             ((uint32 *) pixel->output)[pTable->pointcoord_var_offset + 1] = pTable->tid_pvec4i;
             ((uint32 *) pixel->output)[pTable->pointcoord_load_offset + 1] = pTable->tid_vec4;
             ((uint32 *) pixel->output)[texcoord0Loc - 1] = SpvDecorationLocation;
-            // texcoord0Loc should already have attr_loc from the above work!
-        } // else
-    } // if
+        }
+    }
+    return 1;
 } // MOJOSHADER_spirv_link_attributes
 #endif
 
