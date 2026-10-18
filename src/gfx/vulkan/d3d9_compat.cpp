@@ -4340,8 +4340,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                                 static_cast<unsigned>(samplerFormatFeatures),
                                 i,
                                 supportsLinearFiltering ? 1u : 0u,
-                                switchNvkCompressedTextureWorkaround
-                                    ? "nvk_bc_workaround" : "format_no_linear");
+                                "format_no_linear");
                             Switch_LogWrite(trace);
                         }
                     }
