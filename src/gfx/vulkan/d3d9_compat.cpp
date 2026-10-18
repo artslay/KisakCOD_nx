@@ -4256,7 +4256,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             char trace[288];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK SAMPLER NULL FALLBACK] stage=%s shader=%llu slot=%u sampler=%s type=%u frame=%llu action=white_dummy\n",
+                "[KisakCOD][VK SAMPLER NULL FALLBACK] stage=%s shader=%llu slot=%u sampler=%s type=%u frame=%llu action=typed_white_dummy\n",
                 setIndex == 0 ? "vs" : "ps",
                 static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
                 slot,
@@ -4430,10 +4430,13 @@ bool IDirect3DDevice9::BindSamplerSet(
         KisakVkTexture *texture = textures[i];
         if (!activeSamplers[i] || !texture)
         {
-            // Inactive stages and active-but-unbound D3D9 stages both need a
-            // valid Vulkan descriptor. The latter is logged above and receives
-            // the white fallback instead of aborting DrawIndexedPrimitive.
-            images[i].imageView = m_backend->DummyImageView();
+            // Inactive stages can use the ordinary 2D view because they are not
+            // referenced by this shader. An active but unbound stage must use a
+            // dummy view whose dimensionality matches the SPIR-V sampler type.
+            images[i].imageView = activeSamplers[i]
+                ? m_backend->DummyImageViewForSamplerType(
+                    static_cast<uint32_t>(activeSamplers[i]->type))
+                : m_backend->DummyImageView();
             images[i].sampler = m_backend->DummySampler();
             images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }

@@ -439,6 +439,16 @@ void VulkanBackend::Shutdown()
     m_dummyImage = VK_NULL_HANDLE;
     m_dummyMemory = VK_NULL_HANDLE;
     m_dummyImageView = VK_NULL_HANDLE;
+    if (m_dummyCubeImage)
+        DestroyImage(m_dummyCubeImage, m_dummyCubeMemory, m_dummyCubeImageView);
+    m_dummyCubeImage = VK_NULL_HANDLE;
+    m_dummyCubeMemory = VK_NULL_HANDLE;
+    m_dummyCubeImageView = VK_NULL_HANDLE;
+    if (m_dummy3DImage)
+        DestroyImage(m_dummy3DImage, m_dummy3DMemory, m_dummy3DImageView);
+    m_dummy3DImage = VK_NULL_HANDLE;
+    m_dummy3DMemory = VK_NULL_HANDLE;
+    m_dummy3DImageView = VK_NULL_HANDLE;
 
     for (VkSampler sampler : m_samplers)
         if (sampler) vkDestroySampler(m_device, sampler, nullptr);
@@ -1151,6 +1161,45 @@ bool VulkanBackend::CreateDummyTexture()
             VK_IMAGE_ASPECT_COLOR_BIT, 1, 1, 0, &white, sizeof(white)))
     {
         SetError("Failed to upload Vulkan dummy texture");
+        return false;
+    }
+
+    // A sampler declared as Cube or Volume cannot legally consume the 2D dummy
+    // view. Create white resources for each sampler dimensionality so missing
+    // bindings remain valid Vulkan descriptors on every shader variant.
+    constexpr VkImageUsageFlags dummyUsage =
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    if (!CreateImageCube(
+            1, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, dummyUsage,
+            &m_dummyCubeImage, &m_dummyCubeMemory, &m_dummyCubeImageView))
+    {
+        SetError("Failed to create Vulkan cube dummy texture");
+        return false;
+    }
+    for (uint32_t face = 0; face < 6; ++face)
+    {
+        if (!UploadImage2D(
+                m_dummyCubeImage, VK_FORMAT_R8G8B8A8_UNORM,
+                VK_IMAGE_ASPECT_COLOR_BIT, 1, 1, 0,
+                &white, sizeof(white), VK_IMAGE_LAYOUT_UNDEFINED, face))
+        {
+            SetError("Failed to upload Vulkan cube dummy texture");
+            return false;
+        }
+    }
+
+    if (!CreateImage3D(
+            1, 1, 1, 1, VK_FORMAT_R8G8B8A8_UNORM, dummyUsage,
+            &m_dummy3DImage, &m_dummy3DMemory, &m_dummy3DImageView))
+    {
+        SetError("Failed to create Vulkan 3D dummy texture");
+        return false;
+    }
+    if (!UploadImage3D(
+            m_dummy3DImage, VK_FORMAT_R8G8B8A8_UNORM,
+            1, 1, 1, 0, &white, sizeof(white)))
+    {
+        SetError("Failed to upload Vulkan 3D dummy texture");
         return false;
     }
 

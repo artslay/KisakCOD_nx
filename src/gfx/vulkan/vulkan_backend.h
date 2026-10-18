@@ -91,6 +91,13 @@ public:
     VkDescriptorSetLayout PSUniformLayout() const { return m_psUniformLayout; }
     VkImage DummyImage() const { return m_dummyImage; }
     VkImageView DummyImageView() const { return m_dummyImageView; }
+    // MOJOSHADER sampler types use 0=2D, 1=cube, 2=volume. An unbound
+    // sampler still needs an image view with the matching dimensionality.
+    VkImageView DummyImageViewForSamplerType(uint32_t samplerType) const
+    {
+        return samplerType == 1 ? m_dummyCubeImageView
+            : samplerType == 2 ? m_dummy3DImageView : m_dummyImageView;
+    }
     VkSampler DummySampler() const { return m_dummySampler; }
 
     uint32_t FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties) const;
@@ -386,6 +393,12 @@ private:
     VkImage m_dummyImage = VK_NULL_HANDLE;
     VkDeviceMemory m_dummyMemory = VK_NULL_HANDLE;
     VkImageView m_dummyImageView = VK_NULL_HANDLE;
+    VkImage m_dummyCubeImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_dummyCubeMemory = VK_NULL_HANDLE;
+    VkImageView m_dummyCubeImageView = VK_NULL_HANDLE;
+    VkImage m_dummy3DImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_dummy3DMemory = VK_NULL_HANDLE;
+    VkImageView m_dummy3DImageView = VK_NULL_HANDLE;
     VkSampler m_dummySampler = VK_NULL_HANDLE;
 
     struct Query
