@@ -26,6 +26,7 @@ extern uint32_t g_switchCurrentAssetRawType;
 
 #include <algorithm>
 #include <atomic>
+#include <cstring>
 
 #ifdef __SWITCH__
 #include <vulkan/vulkan.h>
@@ -37,6 +38,24 @@ namespace
 {
 uint32_t s_switchVulkanAllocTraceCount = 0;
 std::atomic<uint32_t> s_switchTextureUploadProbeCount{0};
+
+bool R_SwitchIsWorldTextureName(const char *name)
+{
+    if (!name)
+        return false;
+    while (*name == '~')
+        ++name;
+
+    static constexpr const char *prefixes[] = {
+        "com_", "me_", "ch_", "kh_", "icbm_", "cs_", "ap_", "camo_", "mil_"
+    };
+    for (const char *prefix : prefixes)
+    {
+        if (std::strncmp(name, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+    return false;
+}
 
 enum class VulkanTextureKind : uint8_t
 {
@@ -382,11 +401,11 @@ void R_VulkanUploadTexture(
     // Distinguish a bad asset payload from a valid VkImage/descriptor that
     // later renders incorrectly. Probe only the first 16 base-level world
     // textures; hash their complete source mip and report a compact prefix.
-    if (mipLevel == 0 && image->track == 9)
+    if (mipLevel == 0 && R_SwitchIsWorldTextureName(image->name))
     {
         const uint32_t probeIndex =
             s_switchTextureUploadProbeCount.fetch_add(1, std::memory_order_relaxed);
-        if (probeIndex < 16u)
+        if (probeIndex < 24u)
         {
             uint64_t hash = 14695981039346656037ull;
             size_t zeroBytes = 0;
@@ -402,9 +421,9 @@ void R_VulkanUploadTexture(
             char trace[448];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK IMAGE UPLOAD PROBE] n=%u name=%.*s size=%ux%u fmt=%u vk=%u bytes=%zu hash=%016llx zero=%zu/%zu head=%02x%02x%02x%02x%02x%02x%02x%02x\n",
+                "[KisakCOD][VK IMAGE UPLOAD PROBE] n=%u name=%.*s track=%d size=%ux%u fmt=%u vk=%u bytes=%zu hash=%016llx zero=%zu/%zu head=%02x%02x%02x%02x%02x%02x%02x%02x\n",
                 probeIndex, 96, image->name ? image->name : "<null>",
-                width, height, static_cast<unsigned>(format),
+                static_cast<int>(image->track), width, height, static_cast<unsigned>(format),
                 static_cast<unsigned>(info.format), bytes,
                 static_cast<unsigned long long>(hash), zeroBytes, bytes,
                 b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
