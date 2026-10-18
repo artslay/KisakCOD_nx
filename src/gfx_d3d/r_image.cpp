@@ -482,6 +482,65 @@ void R_VulkanUploadTexture(
             mipLevel, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         texture->dirtyAll = true;
         texture->dirtyBoxes.clear();
+
+#ifdef __SWITCH__
+        // Source-payload probes alone cannot distinguish bad asset bytes from
+        // a failed/incorrect transfer into the Vulkan image. Read back only
+        // the first two base-level world textures after their upload and
+        // compare actual image blocks/texels with the source bytes.
+        // DownloadImage2D restores SHADER_READ_ONLY_OPTIMAL before returning.
+        if (mipLevel == 0 && R_SwitchIsWorldTextureName(image->name))
+        {
+            static std::atomic<uint32_t> gpuVerifyCount{0};
+            const uint32_t verifyIndex =
+                gpuVerifyCount.fetch_add(1, std::memory_order_relaxed);
+            if (verifyIndex < 2u)
+            {
+                std::vector<uint8_t> readback(bytes);
+                const bool readbackOk = !readback.empty() &&
+                    backend->DownloadImage2D(
+                        texture->image, info.aspect, width, height, mipLevel,
+                        readback.data(), readback.size(),
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, layer);
+                uint64_t sourceHash = 14695981039346656037ull;
+                uint64_t gpuHash = 14695981039346656037ull;
+                uint8_t sourceHead[8]{};
+                uint8_t gpuHead[8]{};
+                for (size_t i = 0; i < bytes; ++i)
+                {
+                    sourceHash ^= source[i];
+                    sourceHash *= 1099511628211ull;
+                    if (readbackOk)
+                    {
+                        gpuHash ^= readback[i];
+                        gpuHash *= 1099511628211ull;
+                    }
+                    if (i < sizeof(sourceHead))
+                    {
+                        sourceHead[i] = source[i];
+                        if (readbackOk)
+                            gpuHead[i] = readback[i];
+                    }
+                }
+                char trace[512];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK IMAGE GPU VERIFY] n=%u name=%.*s size=%ux%u fmt=%u vk=%u bytes=%zu readback=%u sourceHash=%016llx gpuHash=%016llx equal=%u srcHead=%02x%02x%02x%02x%02x%02x%02x%02x gpuHead=%02x%02x%02x%02x%02x%02x%02x%02x\\n",
+                    verifyIndex, 96, image->name ? image->name : "<null>",
+                    width, height, static_cast<unsigned>(format),
+                    static_cast<unsigned>(info.format), bytes,
+                    readbackOk ? 1u : 0u,
+                    static_cast<unsigned long long>(sourceHash),
+                    static_cast<unsigned long long>(gpuHash),
+                    readbackOk && sourceHash == gpuHash ? 1u : 0u,
+                    sourceHead[0], sourceHead[1], sourceHead[2], sourceHead[3],
+                    sourceHead[4], sourceHead[5], sourceHead[6], sourceHead[7],
+                    gpuHead[0], gpuHead[1], gpuHead[2], gpuHead[3],
+                    gpuHead[4], gpuHead[5], gpuHead[6], gpuHead[7]);
+                Switch_LogWrite(trace);
+            }
+        }
+#endif
     }
     else
         Switch_LogWrite("[KisakCOD][VK] texture upload failed\n");
