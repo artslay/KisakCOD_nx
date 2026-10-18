@@ -3995,6 +3995,26 @@ bool IDirect3DDevice9::BindSamplerSet(
         if (texture->subresourceLayouts.size() < subresourceCount)
             texture->subresourceLayouts.resize(subresourceCount, texture->layout);
 
+        // A valid VkImageView does not imply that its texels have been uploaded
+        // or rendered. Do not transition uninitialized mips/layers just to
+        // sample undefined memory; descriptor construction below substitutes
+        // the initialized white dummy image for any incomplete texture.
+        bool allSubresourcesInitialized = true;
+        for (uint32_t layer = 0; layer < texture->arrayLayers && allSubresourcesInitialized; ++layer)
+        {
+            for (uint32_t level = 0; level < texture->mipLevels; ++level)
+            {
+                if (texture->GetSubresourceLayout(level, layer) ==
+                    VK_IMAGE_LAYOUT_UNDEFINED)
+                {
+                    allSubresourcesInitialized = false;
+                    break;
+                }
+            }
+        }
+        if (!allSubresourcesInitialized)
+            continue;
+
         for (uint32_t layer = 0; layer < texture->arrayLayers && !needsSampledLayoutTransition; ++layer)
         {
             for (uint32_t level = 0; level < texture->mipLevels; ++level)
@@ -4084,59 +4104,85 @@ bool IDirect3DDevice9::BindSamplerSet(
             if (texture->subresourceLayouts.size() < subresourceCount)
                 texture->subresourceLayouts.resize(subresourceCount, texture->layout);
 
-            // Subresources may have different layouts after mip uploads, render-target
-            // use, or partial texture locks. Transition each level/layer from its
-            // tracked layout rather than applying the aggregate layout to the whole
-            // image (which can issue an invalid oldLayout for other mip levels).
-            for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
+            bool allSubresourcesInitialized = true;
+            for (uint32_t layer = 0; layer < texture->arrayLayers && allSubresourcesInitialized; ++layer)
             {
                 for (uint32_t level = 0; level < texture->mipLevels; ++level)
                 {
-                    const VkImageLayout oldLayout =
-                        texture->GetSubresourceLayout(level, layer);
-                    if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-                        continue;
-
-                    VkImageSubresourceRange range{};
-                    range.aspectMask = GetTextureFormat(texture->sourceFormat).aspect;
-                    range.baseMipLevel = level;
-                    range.levelCount = 1;
-                    range.baseArrayLayer = layer;
-                    range.layerCount = 1;
-                    m_backend->TransitionImage(
-                        texture->image, oldLayout,
-                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        range.aspectMask, range);
-                    texture->SetSubresourceLayout(
-                        level, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                    if (texture->GetSubresourceLayout(level, layer) ==
+                        VK_IMAGE_LAYOUT_UNDEFINED)
+                    {
+                        allSubresourcesInitialized = false;
+                        break;
+                    }
                 }
             }
-            texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-            const uint32_t minFilter = m_samplerState[i][D3DSAMP_MINFILTER];
-            const uint32_t magFilter = m_samplerState[i][D3DSAMP_MAGFILTER];
-            const uint32_t mipFilter = m_samplerState[i][D3DSAMP_MIPFILTER];
-            float mipLodBias = 0.0f;
-            const uint32_t mipLodBiasBits = m_samplerState[i][D3DSAMP_MIPMAPLODBIAS];
-            std::memcpy(&mipLodBias, &mipLodBiasBits, sizeof(mipLodBias));
-            const bool anisotropicFilter =
-                minFilter == D3DTEXF_ANISOTROPIC || magFilter == D3DTEXF_ANISOTROPIC;
-            const float maxAnisotropy = static_cast<float>(
-                std::max(1u, m_samplerState[i][D3DSAMP_MAXANISOTROPY]));
-            const VkSampler sampler = m_backend->GetSampler(
-                minFilter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR,
-                magFilter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR,
-                mipFilter == D3DTEXF_POINT ? VK_SAMPLER_MIPMAP_MODE_NEAREST : VK_SAMPLER_MIPMAP_MODE_LINEAR,
-                mipFilter != D3DTEXF_NONE,
-                AddressMode(m_samplerState[i][D3DSAMP_ADDRESSU]),
-                AddressMode(m_samplerState[i][D3DSAMP_ADDRESSV]),
-                AddressMode(m_samplerState[i][D3DSAMP_ADDRESSW]),
-                mipLodBias,
-                anisotropicFilter && m_backend->SupportsSamplerAnisotropy(),
-                std::min(maxAnisotropy, m_backend->MaxSamplerAnisotropy()));
-            images[i].imageView = texture->view;
-            images[i].sampler = sampler ? sampler : m_backend->DummySampler();
-            images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            if (!allSubresourcesInitialized)
+            {
+                // Never expose undefined image contents to a shader. This also
+                // covers textures whose fastfile pixels are delayed or whose
+                // allocation succeeded but an upload did not complete.
+                images[i].imageView = m_backend->DummyImageView();
+                images[i].sampler = m_backend->DummySampler();
+                images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
+            else
+            {
+                // Subresources may have different layouts after mip uploads, render-target
+                // use, or partial texture locks. Transition each level/layer from its
+                // tracked layout rather than applying the aggregate layout to the whole
+                // image (which can issue an invalid oldLayout for other mip levels).
+                for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
+                {
+                    for (uint32_t level = 0; level < texture->mipLevels; ++level)
+                    {
+                        const VkImageLayout oldLayout =
+                            texture->GetSubresourceLayout(level, layer);
+                        if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                            continue;
+
+                        VkImageSubresourceRange range{};
+                        range.aspectMask = GetTextureFormat(texture->sourceFormat).aspect;
+                        range.baseMipLevel = level;
+                        range.levelCount = 1;
+                        range.baseArrayLayer = layer;
+                        range.layerCount = 1;
+                        m_backend->TransitionImage(
+                            texture->image, oldLayout,
+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                            range.aspectMask, range);
+                        texture->SetSubresourceLayout(
+                            level, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                    }
+                }
+                texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+                const uint32_t minFilter = m_samplerState[i][D3DSAMP_MINFILTER];
+                const uint32_t magFilter = m_samplerState[i][D3DSAMP_MAGFILTER];
+                const uint32_t mipFilter = m_samplerState[i][D3DSAMP_MIPFILTER];
+                float mipLodBias = 0.0f;
+                const uint32_t mipLodBiasBits = m_samplerState[i][D3DSAMP_MIPMAPLODBIAS];
+                std::memcpy(&mipLodBias, &mipLodBiasBits, sizeof(mipLodBias));
+                const bool anisotropicFilter =
+                    minFilter == D3DTEXF_ANISOTROPIC || magFilter == D3DTEXF_ANISOTROPIC;
+                const float maxAnisotropy = static_cast<float>(
+                    std::max(1u, m_samplerState[i][D3DSAMP_MAXANISOTROPY]));
+                const VkSampler sampler = m_backend->GetSampler(
+                    minFilter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR,
+                    magFilter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR,
+                    mipFilter == D3DTEXF_POINT ? VK_SAMPLER_MIPMAP_MODE_NEAREST : VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                    mipFilter != D3DTEXF_NONE,
+                    AddressMode(m_samplerState[i][D3DSAMP_ADDRESSU]),
+                    AddressMode(m_samplerState[i][D3DSAMP_ADDRESSV]),
+                    AddressMode(m_samplerState[i][D3DSAMP_ADDRESSW]),
+                    mipLodBias,
+                    anisotropicFilter && m_backend->SupportsSamplerAnisotropy(),
+                    std::min(maxAnisotropy, m_backend->MaxSamplerAnisotropy()));
+                images[i].imageView = texture->view;
+                images[i].sampler = sampler ? sampler : m_backend->DummySampler();
+                images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
         }
 
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -4926,11 +4972,21 @@ bool IDirect3DDevice9::EnsurePipeline()
             m_decl->switchVertDeclType >= 2 &&
             m_decl->switchVertDeclType <= 13 &&
             element.Stream == 0 &&
-            element.Usage == 5 &&
+            element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
             element.UsageIndex == 2 &&
             element.Offset == 40;
+        // GfxPackedVertex uses the same four-byte PackedUnitVec encoding at
+        // offsets 24 (normal) and 28 (tangent), but its legacy material routing
+        // labels those attributes TEXCOORD1/2 instead of NORMAL/TANGENT.
+        // Keep the source byte order for both packed model vectors as well.
+        const bool packedModelUnitVector =
+            m_decl->switchVertDeclType == 1 &&
+            element.Stream == 0 &&
+            element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
+            ((element.UsageIndex == 1 && element.Offset == 24) ||
+             (element.UsageIndex == 2 && element.Offset == 28));
         if (effectiveType == D3DDECLTYPE_D3DCOLOR &&
-            (packedUnitVectorSemantic || packedWorldTangent))
+            (packedUnitVectorSemantic || packedWorldTangent || packedModelUnitVector))
         {
             format = VK_FORMAT_R8G8B8A8_UNORM;
         }
