@@ -4459,7 +4459,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                 char trace[352];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK SAMPLER DIMENSION MISMATCH] stage=%s shader=%llu slot=%u sampler=%s samplerType=%u textureViewType=%u size=%ux%ux%u layers=%u action=typed_white_dummy\\n",
+                    "[KisakCOD][VK SAMPLER DIMENSION MISMATCH] stage=%s shader=%llu slot=%u sampler=%s samplerType=%u textureViewType=%u size=%ux%ux%u layers=%u action=typed_white_dummy\n",
                     setIndex == 0 ? "vs" : "ps",
                     static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
                     i,
