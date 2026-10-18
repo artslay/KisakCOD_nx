@@ -3995,32 +3995,29 @@ bool IDirect3DDevice9::BindSamplerSet(
         if (texture->subresourceLayouts.size() < subresourceCount)
             texture->subresourceLayouts.resize(subresourceCount, texture->layout);
 
-        // A valid VkImageView does not imply that its texels have been uploaded
-        // or rendered. Do not transition uninitialized mips/layers just to
-        // sample undefined memory; descriptor construction below substitutes
-        // the initialized white dummy image for any incomplete texture.
-        bool allSubresourcesInitialized = true;
-        for (uint32_t layer = 0; layer < texture->arrayLayers && allSubresourcesInitialized; ++layer)
+        // A texture is usable as soon as every layer's base mip is uploaded.
+        // Higher mips may still be streaming; leave those subresources undefined
+        // and use a sampler clamped to LOD 0 until the complete chain is ready.
+        bool baseMipInitialized = true;
+        for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
         {
-            for (uint32_t level = 0; level < texture->mipLevels; ++level)
+            if (texture->GetSubresourceLayout(0, layer) ==
+                VK_IMAGE_LAYOUT_UNDEFINED)
             {
-                if (texture->GetSubresourceLayout(level, layer) ==
-                    VK_IMAGE_LAYOUT_UNDEFINED)
-                {
-                    allSubresourcesInitialized = false;
-                    break;
-                }
+                baseMipInitialized = false;
+                break;
             }
         }
-        if (!allSubresourcesInitialized)
+        if (!baseMipInitialized)
             continue;
 
         for (uint32_t layer = 0; layer < texture->arrayLayers && !needsSampledLayoutTransition; ++layer)
         {
             for (uint32_t level = 0; level < texture->mipLevels; ++level)
             {
-                if (texture->GetSubresourceLayout(level, layer) !=
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                const VkImageLayout layout = texture->GetSubresourceLayout(level, layer);
+                if (layout != VK_IMAGE_LAYOUT_UNDEFINED &&
+                    layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
                 {
                     needsSampledLayoutTransition = true;
                     break;
@@ -4104,42 +4101,43 @@ bool IDirect3DDevice9::BindSamplerSet(
             if (texture->subresourceLayouts.size() < subresourceCount)
                 texture->subresourceLayouts.resize(subresourceCount, texture->layout);
 
+            bool baseMipInitialized = true;
             bool allSubresourcesInitialized = true;
-            for (uint32_t layer = 0; layer < texture->arrayLayers && allSubresourcesInitialized; ++layer)
+            for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
             {
                 for (uint32_t level = 0; level < texture->mipLevels; ++level)
                 {
-                    if (texture->GetSubresourceLayout(level, layer) ==
-                        VK_IMAGE_LAYOUT_UNDEFINED)
-                    {
+                    const VkImageLayout layout = texture->GetSubresourceLayout(level, layer);
+                    if (level == 0 && layout == VK_IMAGE_LAYOUT_UNDEFINED)
+                        baseMipInitialized = false;
+                    if (layout == VK_IMAGE_LAYOUT_UNDEFINED)
                         allSubresourcesInitialized = false;
-                        break;
-                    }
                 }
             }
 
-            if (!allSubresourcesInitialized)
+            if (!baseMipInitialized)
             {
-                // Never expose undefined image contents to a shader. This also
-                // covers textures whose fastfile pixels are delayed or whose
-                // allocation succeeded but an upload did not complete.
+                // The base level is not ready yet, so this texture cannot safely
+                // contribute visible pixels. Keep the initialized fallback until
+                // the first mip upload completes.
                 images[i].imageView = m_backend->DummyImageView();
                 images[i].sampler = m_backend->DummySampler();
                 images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             }
             else
             {
-                // Subresources may have different layouts after mip uploads, render-target
-                // use, or partial texture locks. Transition each level/layer from its
-                // tracked layout rather than applying the aggregate layout to the whole
-                // image (which can issue an invalid oldLayout for other mip levels).
+                // Transition only uploaded subresources. Streaming can expose the
+                // base mip before the lower-resolution chain; transitioning those
+                // undefined levels would race a later upload. The sampler below
+                // clamps to LOD 0 until every layer/mip has arrived.
                 for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
                 {
                     for (uint32_t level = 0; level < texture->mipLevels; ++level)
                     {
                         const VkImageLayout oldLayout =
                             texture->GetSubresourceLayout(level, layer);
-                        if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                        if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED ||
+                            oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
                             continue;
 
                         VkImageSubresourceRange range{};
@@ -4156,11 +4154,17 @@ bool IDirect3DDevice9::BindSamplerSet(
                             level, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
                     }
                 }
-                texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+                if (allSubresourcesInitialized)
+                    texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
                 const uint32_t minFilter = m_samplerState[i][D3DSAMP_MINFILTER];
                 const uint32_t magFilter = m_samplerState[i][D3DSAMP_MAGFILTER];
-                const uint32_t mipFilter = m_samplerState[i][D3DSAMP_MIPFILTER];
+                const uint32_t requestedMipFilter = m_samplerState[i][D3DSAMP_MIPFILTER];
+                // maxLod=0 means the sampler never fetches an uninitialized mip,
+                // while preserving the real base texture and its alpha channel.
+                const uint32_t mipFilter = allSubresourcesInitialized
+                    ? requestedMipFilter : D3DTEXF_NONE;
                 float mipLodBias = 0.0f;
                 const uint32_t mipLodBiasBits = m_samplerState[i][D3DSAMP_MIPMAPLODBIAS];
                 std::memcpy(&mipLodBias, &mipLodBiasBits, sizeof(mipLodBias));
