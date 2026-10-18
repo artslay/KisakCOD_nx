@@ -4216,6 +4216,24 @@ bool IDirect3DDevice9::BindSamplerSet(
         }
     }
 
+    auto samplerTypeMatchesTexture = [](
+        const KisakVkTexture *texture,
+        const MOJOSHADER_sampler *sampler) -> bool
+    {
+        if (!texture || !sampler)
+            return true;
+
+        VkImageViewType expectedViewType = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
+        switch (sampler->type)
+        {
+        case 0: expectedViewType = VK_IMAGE_VIEW_TYPE_2D; break;
+        case 1: expectedViewType = VK_IMAGE_VIEW_TYPE_CUBE; break;
+        case 2: expectedViewType = VK_IMAGE_VIEW_TYPE_3D; break;
+        default: return false;
+        }
+        return texture->viewType == expectedViewType;
+    };
+
     auto failActiveSampler = [&](uint32_t slot, const char *reason) -> bool
     {
         static uint32_t emittedFailureCount = 0;
@@ -4312,6 +4330,8 @@ bool IDirect3DDevice9::BindSamplerSet(
 
         KisakVkTexture *texture = textures[slot];
         if (!texture)
+            continue;
+        if (!samplerTypeMatchesTexture(texture, activeSamplers[slot]))
             continue;
         if (!texture->image || !texture->view)
         {
@@ -4428,7 +4448,36 @@ bool IDirect3DDevice9::BindSamplerSet(
     for (uint32_t i = 0; i < 16; ++i)
     {
         KisakVkTexture *texture = textures[i];
-        if (!activeSamplers[i] || !texture)
+        if (activeSamplers[i] && texture &&
+            !samplerTypeMatchesTexture(texture, activeSamplers[i]))
+        {
+#ifdef __SWITCH__
+            static uint32_t mismatchedSamplerTraceCount = 0;
+            if (mismatchedSamplerTraceCount < 32u)
+            {
+                const MOJOSHADER_sampler *sampler = activeSamplers[i];
+                char trace[352];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK SAMPLER DIMENSION MISMATCH] stage=%s shader=%llu slot=%u sampler=%s samplerType=%u textureViewType=%u size=%ux%ux%u layers=%u action=typed_white_dummy\\n",
+                    setIndex == 0 ? "vs" : "ps",
+                    static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
+                    i,
+                    sampler->name ? sampler->name : "<unnamed>",
+                    static_cast<unsigned>(sampler->type),
+                    static_cast<unsigned>(texture->viewType),
+                    texture->width, texture->height, texture->depth,
+                    texture->arrayLayers);
+                Switch_LogWrite(trace);
+                ++mismatchedSamplerTraceCount;
+            }
+#endif
+            images[i].imageView = m_backend->DummyImageViewForSamplerType(
+                static_cast<uint32_t>(activeSamplers[i]->type));
+            images[i].sampler = m_backend->DummySampler();
+            images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+        else if (!activeSamplers[i] || !texture)
         {
             // Inactive stages can use the ordinary 2D view because they are not
             // referenced by this shader. An active but unbound stage must use a

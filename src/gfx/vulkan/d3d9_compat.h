@@ -257,6 +257,7 @@ struct KisakVkTexture : IDirect3DResource9 {
     VkImageView resolveView=VK_NULL_HANDLE;
     VkDeviceMemory resolveMemory=VK_NULL_HANDLE;
     VkFormat format=VK_FORMAT_R8G8B8A8_UNORM;
+    VkImageViewType viewType=VK_IMAGE_VIEW_TYPE_2D;
     VkImageLayout layout=VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageLayout resolveLayout=VK_IMAGE_LAYOUT_UNDEFINED;
     VkSampleCountFlagBits samples=VK_SAMPLE_COUNT_1_BIT;

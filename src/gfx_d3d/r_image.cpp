@@ -301,6 +301,10 @@ bool R_VulkanAllocTexture(
     texture->depth = depth;
     texture->mipLevels = levels;
     texture->arrayLayers = kind == VulkanTextureKind::Cube ? 6u : 1u;
+    texture->viewType = kind == VulkanTextureKind::Cube
+        ? VK_IMAGE_VIEW_TYPE_CUBE
+        : (kind == VulkanTextureKind::Texture3D
+            ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D);
     texture->sourceFormat = sourceFormat;
     texture->format = info.format;
     texture->layout = VK_IMAGE_LAYOUT_UNDEFINED;
