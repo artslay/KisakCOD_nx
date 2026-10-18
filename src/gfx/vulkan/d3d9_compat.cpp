@@ -4283,20 +4283,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     // exact fragment module before pipeline creation.
     const bool useAlphaTestPatch = m_alphaTest;
 
-    // Visibility probe for the reported black BSP world: retain the engine's
-    // culling state everywhere except opaque, depth-tested 44-byte world vertices.
-    // If the Switch/Vulkan front-face convention is the cause, this exposes the
-    // world without changing UI, blended materials, or alpha-tested geometry.
-    const bool switchWorldCullProbe =
-        m_decl->switchVertDeclType >= 2 &&
-        m_decl->switchVertDeclType <= 13 &&
-        m_streams[0].stride == 44 &&
-        !m_blendEnable &&
-        !m_alphaTest &&
-        m_depthEnable &&
-        m_depthWrite &&
-        !m_switchUnlit;
-
     // Dynamic-rendering pipelines are compatible only with their attachment
     // formats; resolve them before attempting to reuse a cached pipeline.
     const VkFormat colorFormat = m_color && m_color->texture
@@ -4345,7 +4331,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, static_cast<uint32_t>(m_topology));
     key = HashCombine(key, m_fillMode);
     key = HashCombine(key, m_cullMode);
-    key = HashCombine(key, switchWorldCullProbe ? 1u : 0u);
     key = HashCombine(key, m_scissor);
     key = HashCombine(key, m_colorWriteMask);
     key = HashCombine(key, m_stencilEnable);
@@ -5029,31 +5014,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     //
     // D3DCULL_CW means "cull clockwise" => Vulkan culls FRONT.
     // D3DCULL_CCW means "cull counter-clockwise" => Vulkan culls BACK.
-    // Temporarily bypass culling for opaque BSP geometry to test whether a
-    // winding mismatch is hiding the world on Switch.
-    raster.cullMode = switchWorldCullProbe
+    raster.cullMode = m_cullMode == 1
         ? VK_CULL_MODE_NONE
-        : (m_cullMode == 1
-            ? VK_CULL_MODE_NONE
-            : (m_cullMode == 2 ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_BACK_BIT));
-    if (switchWorldCullProbe)
-    {
-        static uint32_t switchWorldCullProbeLogCount = 0;
-        if (switchWorldCullProbeLogCount < 8u)
-        {
-            ++switchWorldCullProbeLogCount;
-            char probeTrace[192];
-            std::snprintf(
-                probeTrace, sizeof(probeTrace),
-                "[KisakCOD][VK WORLD CULL PROBE] decl=%llu type=%u stride=%u requested=%u effective=NONE blend=%u alphaTest=%u depth=%u/%u\n",
-                static_cast<unsigned long long>(m_decl->serial),
-                static_cast<unsigned>(m_decl->switchVertDeclType),
-                m_streams[0].stride, m_cullMode,
-                m_blendEnable ? 1u : 0u, m_alphaTest ? 1u : 0u,
-                m_depthEnable ? 1u : 0u, m_depthWrite ? 1u : 0u);
-            Switch_LogWrite(probeTrace);
-        }
-    }
+        : (m_cullMode == 2 ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_BACK_BIT);
     raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
     raster.depthBiasEnable = (m_depthBias != 0.0f || m_slopeDepthBias != 0.0f) ? VK_TRUE : VK_FALSE;
     raster.depthBiasConstantFactor = m_depthBias;
