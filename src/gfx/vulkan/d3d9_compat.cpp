@@ -2210,6 +2210,9 @@ HRESULT KisakVkBuffer::Lock(
     if (!dynamic && !(flags & D3DLOCK_READONLY))
     {
         VulkanBackend *backend = GetVulkanBackend();
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/resource_lock/static_buffer_lock_sync";
+#endif
         if (backend && !backend->SynchronizeActiveFrame())
             return E_FAIL;
     }
@@ -2265,26 +2268,19 @@ HRESULT KisakVkBuffer::Unlock()
         }
         else
         {
-            // The queued-copy fast path is temporarily disabled on Switch while
-            // isolating NVK device loss during map rendering. Keep the existing
-            // synchronized fallback: finish all commands that may reference this
-            // buffer, wait for their fence, then update mapped memory. This costs
-            // CPU/GPU synchronization but avoids mixing buffer updates into the
-            // active command buffer until the device-lost regression is isolated.
+            // Preserve draw/update order in one command buffer instead of
+            // submitting and waiting for the entire active frame on each unlock.
+            // QueueBufferUpdate inserts transfer barriers around the copy, so
+            // previously recorded draws finish reading the old range before the
+            // update and later draws see the new bytes.
             VulkanBackend *backend = GetVulkanBackend();
-            constexpr bool kSwitchDisableQueuedDynamicBufferCopies = true;
-            const bool queued = !kSwitchDisableQueuedDynamicBufferCopies &&
-                backend && backend->QueueBufferUpdate(
-                    buffer, lockOffset, shadow.data() + lockOffset, lockSize);
-            if (kSwitchDisableQueuedDynamicBufferCopies)
-            {
-                static std::atomic<bool> loggedSynchronizedFallback{false};
-                if (!loggedSynchronizedFallback.exchange(true, std::memory_order_relaxed))
-                    Switch_LogWrite(
-                        "[KisakCOD][VK BUFFER UPDATE] queued_dynamic_copies=disabled synchronized_fallback=1 reason=device_lost_isolation\n");
-            }
+            const bool queued = backend && backend->QueueBufferUpdate(
+                buffer, lockOffset, shadow.data() + lockOffset, lockSize);
             if (!queued)
             {
+#ifdef __SWITCH__
+                g_switchFrameStage = "frame/resource_lock/dynamic_buffer_unlock_sync";
+#endif
                 if (backend && !backend->SynchronizeActiveFrame())
                     return E_FAIL;
                 std::memcpy(
@@ -2364,6 +2360,9 @@ HRESULT KisakVkTexture::LockRect(
         return E_FAIL;
 
     VulkanBackend *backend = GetVulkanBackend();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/resource_lock/texture_lock_rect_sync";
+#endif
     if (!backend || !backend->SynchronizeActiveFrame())
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
@@ -2409,6 +2408,9 @@ HRESULT KisakVkTexture::UnlockRect(uint32_t level)
     {
         VulkanBackend *backend = GetVulkanBackend();
         const TextureFormatInfo info = GetTextureFormat(sourceFormat);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/resource_lock/texture_unlock_rect_sync";
+#endif
         if (!backend || info.format == VK_FORMAT_UNDEFINED ||
             !backend->SynchronizeActiveFrame())
             return E_FAIL;
@@ -2495,6 +2497,9 @@ HRESULT KisakVkTexture::LockBox(
         return E_FAIL;
 
     VulkanBackend *backend = GetVulkanBackend();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/resource_lock/texture_lock_box_sync";
+#endif
     if (!backend || !backend->SynchronizeActiveFrame())
         return E_FAIL;
     const VkImageLayout old = GetSubresourceLayout(level);
@@ -2538,6 +2543,9 @@ HRESULT KisakVkTexture::UnlockBox(uint32_t level)
     {
         VulkanBackend *backend=GetVulkanBackend();
         const TextureFormatInfo info=GetTextureFormat(sourceFormat);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/resource_lock/texture_unlock_box_sync";
+#endif
         if (!backend || info.format==VK_FORMAT_UNDEFINED || info.depth ||
             !backend->SynchronizeActiveFrame())
             return E_FAIL;
