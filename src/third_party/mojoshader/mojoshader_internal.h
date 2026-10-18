@@ -655,6 +655,48 @@ typedef struct SpirvPatchTable
     uint32 output_offsets[16];
 } SpirvPatchTable;
 
+// Self-contained trailer representation stored in MOJOSHADER_parseData::output.
+// Pointer fields are not safe in a movable byte buffer: parse-time load-fixup
+// arrays are therefore serialized into the output payload and referenced by
+// byte offsets from the beginning of output. code_bytes excludes this payload
+// and the table itself; metadata_bytes is the total payload size.
+typedef struct SpirvPatchTableOutput
+{
+    SpirvPatchEntry vpflip;
+    SpirvPatchEntry array_vec4;
+    SpirvPatchEntry array_ivec4;
+    SpirvPatchEntry array_bool;
+    SpirvPatchEntry samplers[16];
+    int32 location_count;
+
+    uint32 pointcoord_var_offset;
+    uint32 pointcoord_load_offset;
+    uint32 tid_pvec2i;
+    uint32 tid_vec2;
+    uint32 tid_pvec4i;
+
+    uint32 tid_vec4;
+    uint32 tid_ivec4;
+    uint32 tid_uvec4;
+
+    uint32 tid_vec4_p;
+    uint32 tid_ivec4_p;
+    uint32 tid_uvec4_p;
+    uint32 attrib_type_offsets[MOJOSHADER_USAGE_TOTAL][16];
+    struct
+    {
+        uint32 num_loads;
+        uint32 load_types_offset;
+        uint32 load_opcodes_offset;
+    } attrib_type_load_offsets[MOJOSHADER_USAGE_TOTAL][16];
+
+    uint32 attrib_offsets[MOJOSHADER_USAGE_TOTAL][16];
+    uint32 output_offsets[16];
+
+    uint32 code_bytes;
+    uint32 metadata_bytes;
+} SpirvPatchTableOutput;
+
 void MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
                                       const MOJOSHADER_parseData *pixel,
                                       int is_glspirv);
