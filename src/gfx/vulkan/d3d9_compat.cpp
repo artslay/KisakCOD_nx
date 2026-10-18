@@ -722,10 +722,13 @@ VkFormat VertexFormat(uint8_t type)
     case D3DDECLTYPE_FLOAT3: return VK_FORMAT_R32G32B32_SFLOAT;
     case D3DDECLTYPE_FLOAT4: return VK_FORMAT_R32G32B32A32_SFLOAT;
     case D3DDECLTYPE_D3DCOLOR: return VK_FORMAT_B8G8R8A8_UNORM;
-    case D3DDECLTYPE_UBYTE4: return VK_FORMAT_R8G8B8A8_UINT;
+    // D3D9 vertex declarations feed floating-point shader input registers.
+    // The unnormalized integer formats must therefore scale integer components
+    // to floats; Vulkan UINT/SINT formats instead produce integer shader inputs.
+    case D3DDECLTYPE_UBYTE4: return VK_FORMAT_R8G8B8A8_USCALED;
     case D3DDECLTYPE_UBYTE4N: return VK_FORMAT_R8G8B8A8_UNORM;
-    case D3DDECLTYPE_SHORT2: return VK_FORMAT_R16G16_SINT;
-    case D3DDECLTYPE_SHORT4: return VK_FORMAT_R16G16B16A16_SINT;
+    case D3DDECLTYPE_SHORT2: return VK_FORMAT_R16G16_SSCALED;
+    case D3DDECLTYPE_SHORT4: return VK_FORMAT_R16G16B16A16_SSCALED;
     case D3DDECLTYPE_SHORT2N: return VK_FORMAT_R16G16_SNORM;
     case D3DDECLTYPE_SHORT4N: return VK_FORMAT_R16G16B16A16_SNORM;
     case D3DDECLTYPE_USHORT2N: return VK_FORMAT_R16G16_UNORM;
