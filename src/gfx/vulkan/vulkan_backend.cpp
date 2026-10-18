@@ -3384,23 +3384,38 @@ bool VulkanBackend::QueueBufferUpdate(
     // the same command buffer.
     EndRendering();
 
-    VkBufferMemoryBarrier beforeCopy{};
-    beforeCopy.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    beforeCopy.srcAccessMask =
+    // The copy source is host-mapped m_uniformRing. Make its newly written
+    // bytes visible to the transfer read, and order writes after prior vertex /
+    // index reads from the destination range. Coherent memory removes the need
+    // to flush, but still use an explicit HOST_WRITE -> TRANSFER_READ dependency.
+    VkBufferMemoryBarrier beforeCopy[2]{};
+    beforeCopy[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    beforeCopy[0].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+    beforeCopy[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    beforeCopy[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    beforeCopy[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    beforeCopy[0].buffer = m_uniformRing;
+    beforeCopy[0].offset = source.offset;
+    beforeCopy[0].size = static_cast<VkDeviceSize>(size);
+
+    beforeCopy[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    beforeCopy[1].srcAccessMask =
         VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
         VK_ACCESS_INDEX_READ_BIT |
         VK_ACCESS_TRANSFER_WRITE_BIT;
-    beforeCopy.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    beforeCopy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    beforeCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    beforeCopy.buffer = destination;
-    beforeCopy.offset = destinationOffset;
-    beforeCopy.size = static_cast<VkDeviceSize>(size);
+    beforeCopy[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    beforeCopy[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    beforeCopy[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    beforeCopy[1].buffer = destination;
+    beforeCopy[1].offset = destinationOffset;
+    beforeCopy[1].size = static_cast<VkDeviceSize>(size);
     vkCmdPipelineBarrier(
         m_commandBuffer,
-        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_HOST_BIT |
+            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        0, 0, nullptr, 1, &beforeCopy, 0, nullptr);
+        0, 0, nullptr, 2, beforeCopy, 0, nullptr);
 
     VkBufferCopy copy{};
     copy.srcOffset = source.offset;

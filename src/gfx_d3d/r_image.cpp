@@ -437,11 +437,26 @@ void R_VulkanUploadTexture(
     // Preserve ordering when an initialized image is uploaded again mid-frame:
     // previously recorded draws must consume the old texels before the upload.
     // First uploads to undefined levels do not need this synchronization.
-    if (oldLayout != VK_IMAGE_LAYOUT_UNDEFINED && backend->IsFrameActive() &&
-        !backend->SynchronizeActiveFrame())
+    if (oldLayout != VK_IMAGE_LAYOUT_UNDEFINED && backend->IsFrameActive())
     {
-        Switch_LogWrite("[KisakCOD][VK] reupload sync failed\n");
-        return;
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/upload/texture_reupload_sync";
+#endif
+        if (!backend->SynchronizeActiveFrame())
+        {
+            char trace[448];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK TEXTURE REUPLOAD SYNC FAIL] name=%.*s mapType=%u face=%u mip=%u size=%ux%ux%u format=%u vkFormat=%u oldLayout=%u layer=%u bytes=%zu\n",
+                96, image->name ? image->name : "<null>",
+                static_cast<unsigned>(image->mapType),
+                static_cast<unsigned>(face), mipLevel, width, height, depth,
+                static_cast<unsigned>(format), static_cast<unsigned>(info.format),
+                static_cast<unsigned>(oldLayout), layer, bytes);
+            Switch_LogWrite(trace);
+            Switch_LogWrite("[KisakCOD][VK] reupload sync failed\n");
+            return;
+        }
     }
 
     bool uploaded = false;
