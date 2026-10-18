@@ -4302,6 +4302,32 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_vertexShader->serial);
     key = HashCombine(key, m_pixelShader->serial);
     key = HashCombine(key, m_decl->serial);
+
+    // Vulkan bakes vertex input binding strides, attribute formats, and byte
+    // offsets into VkPipeline. A D3D9 declaration can be rebound to streams with
+    // a different stride, and Switch may remap the declaration's physical
+    // offsets/types for a packed or expanded world-vertex layout. Those values
+    // must participate in the cache key or a prior pipeline can fetch every
+    // later vertex using a stale layout even though the CPU-side declaration
+    // and stream bindings have changed.
+    key = HashCombine(key, static_cast<uint64_t>(m_decl->switchVertDeclType));
+    key = HashCombine(key, static_cast<uint64_t>(m_decl->elements.size()));
+    for (uint32_t stream = 0; stream < 16; ++stream)
+    {
+        key = HashCombine(key, m_streams[stream].buffer ? 1u : 0u);
+        key = HashCombine(key, m_streams[stream].stride);
+    }
+    for (const auto &element : m_decl->elements)
+    {
+        key = HashCombine(key, element.Stream);
+        key = HashCombine(key, element.Usage);
+        key = HashCombine(key, element.UsageIndex);
+        key = HashCombine(
+            key, SwitchEffectiveShaderElementType(m_decl, element));
+        key = HashCombine(
+            key, SwitchEffectiveShaderElementOffset(m_decl, element));
+    }
+
     key = HashCombine(key, static_cast<uint64_t>(colorFormat));
     key = HashCombine(key, static_cast<uint64_t>(depthFormat));
     key = HashCombine(key, static_cast<uint64_t>(colorSamples));
