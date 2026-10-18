@@ -396,12 +396,9 @@ void R_VulkanUploadTexture(
                 hash *= 1099511628211ull;
                 zeroBytes += source[i] == 0 ? 1u : 0u;
             }
-            const uint8_t b[8] = {
-                bytes > 0 ? source[0] : 0, bytes > 1 ? source[1] : 0,
-                bytes > 2 ? source[2] : 0, bytes > 3 ? source[3] : 0,
-                bytes > 4 ? source[4] : 0, bytes > 5 ? source[5] : 0,
-                bytes > 6 ? source[6] : 0, bytes > 7 ? source[7] : 0
-            };
+            uint8_t b[8]{};
+            for (size_t i = 0; i < sizeof(b) && i < bytes; ++i)
+                b[i] = source[i];
             char trace[448];
             std::snprintf(
                 trace, sizeof(trace),
