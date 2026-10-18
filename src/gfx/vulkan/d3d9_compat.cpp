@@ -3982,16 +3982,67 @@ bool IDirect3DDevice9::BindSamplerSet(
     if (!m_backend)
         return false;
 
+    const KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
+    const MOJOSHADER_parseData *activeParse =
+        activeShader ? activeShader->parseData : nullptr;
+    std::array<const MOJOSHADER_sampler *, 16> activeSamplers{};
+    if (activeParse && activeParse->samplers)
+    {
+        const int samplerCount = std::max(0, activeParse->sampler_count);
+        for (int i = 0; i < samplerCount; ++i)
+        {
+            const int samplerIndex = activeParse->samplers[i].index;
+            if (samplerIndex >= 0 &&
+                samplerIndex < static_cast<int>(activeSamplers.size()))
+                activeSamplers[static_cast<size_t>(samplerIndex)] =
+                    &activeParse->samplers[i];
+        }
+    }
+
+    auto failActiveSampler = [&](uint32_t slot, const char *reason) -> bool
+    {
+        static uint32_t emittedFailureCount = 0;
+        if (emittedFailureCount < 48)
+        {
+            const MOJOSHADER_sampler *sampler =
+                slot < activeSamplers.size() ? activeSamplers[slot] : nullptr;
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK ACTIVE SAMPLER FAIL] stage=%s shader=%llu slot=%u sampler=%s reason=%s frame=%llu\\n",
+                setIndex == 0 ? "vs" : "ps",
+                static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
+                slot,
+                sampler && sampler->name ? sampler->name : "<unnamed>",
+                reason,
+                static_cast<unsigned long long>(m_backend->FrameSerial()));
+            Switch_LogWrite(trace);
+            ++emittedFailureCount;
+        }
+        return false;
+    };
+
+    for (uint32_t slot = 0; slot < activeSamplers.size(); ++slot)
+    {
+        if (activeSamplers[slot] && !textures[slot])
+            return failActiveSampler(slot, "texture_not_bound");
+    }
+
     // Determine whether any sampled subresource needs a layout transition.
     // Vulkan image barriers are forbidden inside dynamic rendering, including
     // when the previous draw left a rendering instance active.
     bool needsSampledLayoutTransition = false;
-    for (KisakVkTexture *texture : textures)
+    for (uint32_t slot = 0; slot < 16; ++slot)
     {
+        KisakVkTexture *texture = textures[slot];
         if (!texture)
             continue;
         if (!texture->image || !texture->view)
-            return false;
+        {
+            if (activeSamplers[slot])
+                return failActiveSampler(slot, "invalid_image_or_view");
+            continue;
+        }
 
         const size_t subresourceCount =
             static_cast<size_t>(texture->arrayLayers) * texture->mipLevels;
@@ -4011,9 +4062,18 @@ bool IDirect3DDevice9::BindSamplerSet(
                     allSubresourcesInitialized = false;
             }
         }
-        if (!baseMipInitialized ||
-            (!allSubresourcesInitialized && !texture->baseMipView))
+        if (!baseMipInitialized)
+        {
+            if (activeSamplers[slot])
+                return failActiveSampler(slot, "base_mip_not_uploaded");
             continue;
+        }
+        if (!allSubresourcesInitialized && !texture->baseMipView)
+        {
+            if (activeSamplers[slot])
+                return failActiveSampler(slot, "incomplete_mips_without_base_view");
+            continue;
+        }
 
         // For an incomplete mip chain, only level zero is exposed by the
         // baseMipView and therefore only level zero may need a barrier.
@@ -4094,6 +4154,8 @@ bool IDirect3DDevice9::BindSamplerSet(
         KisakVkTexture *texture = textures[i];
         if (!texture)
         {
+            if (activeSamplers[i])
+                return failActiveSampler(i, "texture_not_bound_at_descriptor_build");
             images[i].imageView = m_backend->DummyImageView();
             images[i].sampler = m_backend->DummySampler();
             images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -4125,8 +4187,12 @@ bool IDirect3DDevice9::BindSamplerSet(
             if (!baseMipInitialized ||
                 (!allSubresourcesInitialized && !texture->baseMipView))
             {
-                // The base level is unavailable (or no safe one-mip view exists).
-                // Keep the initialized fallback rather than expose undefined data.
+                if (activeSamplers[i])
+                    return failActiveSampler(
+                        i, baseMipInitialized
+                            ? "incomplete_mips_without_base_view"
+                            : "base_mip_not_uploaded");
+                // Keep valid descriptors for shader-inactive slots only.
                 images[i].imageView = m_backend->DummyImageView();
                 images[i].sampler = m_backend->DummySampler();
                 images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -4191,6 +4257,8 @@ bool IDirect3DDevice9::BindSamplerSet(
                     std::min(maxAnisotropy, m_backend->MaxSamplerAnisotropy()));
                 images[i].imageView = allSubresourcesInitialized
                     ? texture->view : texture->baseMipView;
+                if (!sampler && activeSamplers[i])
+                    return failActiveSampler(i, "vk_sampler_creation_failed");
                 images[i].sampler = sampler ? sampler : m_backend->DummySampler();
                 images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             }
