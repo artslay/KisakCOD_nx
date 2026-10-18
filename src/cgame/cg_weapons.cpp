@@ -4021,7 +4021,7 @@ void __cdecl CG_SelectWeaponIndex(int32_t localClientNum, uint32_t weaponIndex)
         // weaponSelect == 0 means no currently selected weapon. Weapon index
         // zero is the empty sentinel; do not ask BG_GetWeaponDef to resolve it
         // or dereference altWeaponIndex from its empty slot.
-        v2 = FALSE;
+        v2 = false;
         if (weaponIndex && cgameGlob->weaponSelect)
         {
             WeaponDef *previousWeaponDef = BG_GetWeaponDef(cgameGlob->weaponSelect);
