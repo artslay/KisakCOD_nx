@@ -2274,8 +2274,22 @@ HRESULT KisakVkBuffer::Unlock()
             // previously recorded draws finish reading the old range before the
             // update and later draws see the new bytes.
             VulkanBackend *backend = GetVulkanBackend();
+#ifdef __SWITCH__
+            // Keep Switch on the synchronized update path until queued copies
+            // are validated against NVK device loss during map rendering.
+            constexpr bool kSwitchDisableQueuedDynamicBufferCopies = true;
+            static std::atomic<bool> loggedSynchronizedFallback{false};
+            if (kSwitchDisableQueuedDynamicBufferCopies &&
+                !loggedSynchronizedFallback.exchange(true, std::memory_order_relaxed))
+                Switch_LogWrite(
+                    "[KisakCOD][VK BUFFER UPDATE] queued_dynamic_copies=disabled synchronized_fallback=1 reason=device_lost_isolation\\n");
+            const bool queued = !kSwitchDisableQueuedDynamicBufferCopies &&
+                backend && backend->QueueBufferUpdate(
+                    buffer, lockOffset, shadow.data() + lockOffset, lockSize);
+#else
             const bool queued = backend && backend->QueueBufferUpdate(
                 buffer, lockOffset, shadow.data() + lockOffset, lockSize);
+#endif
             if (!queued)
             {
 #ifdef __SWITCH__
