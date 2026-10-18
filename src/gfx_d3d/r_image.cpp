@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #ifdef __SWITCH__
+extern thread_local const char * volatile g_switchFrameStage;
 extern const char * volatile g_switchDbStage;
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
