@@ -4874,8 +4874,19 @@ bool IDirect3DDevice9::EnsurePipeline()
         // The D3D declaration is also a legacy semantic-routing table on
         // Switch. Resolve both its physical offset and representation against
         // the actual transient/world vertex layout before describing Vulkan input.
-        VkFormat format = VertexFormat(
-            SwitchEffectiveShaderElementType(m_decl, element));
+        const uint8_t effectiveType =
+            SwitchEffectiveShaderElementType(m_decl, element);
+        VkFormat format = VertexFormat(effectiveType);
+        // PackedUnitVec is stored in memory as X, Y, Z, scale. D3DCOLOR's
+        // BGRA interpretation is correct for actual colors, but swaps X/Z
+        // when the same four bytes carry a packed normal/tangent vector.
+        if (effectiveType == D3DDECLTYPE_D3DCOLOR &&
+            (element.Usage == MOJOSHADER_USAGE_NORMAL ||
+             element.Usage == MOJOSHADER_USAGE_TANGENT ||
+             element.Usage == MOJOSHADER_USAGE_BINORMAL))
+        {
+            format = VK_FORMAT_R8G8B8A8_UNORM;
+        }
         const uint32_t vertexOffset =
             SwitchEffectiveShaderElementOffset(m_decl, element);
 
