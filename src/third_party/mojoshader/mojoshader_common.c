@@ -1058,6 +1058,14 @@ size_t MOJOSHADER_printFloat(char *text, size_t maxlen, float arg)
 #if SUPPORT_PROFILE_SPIRV
 #include "spirv/spirv.h"
 #include "spirv/GLSL.std.450.h"
+static int spirv_link_attribute_valid(const MOJOSHADER_attribute *attribute)
+{
+    return attribute != NULL &&
+        attribute->usage >= MOJOSHADER_USAGE_POSITION &&
+        attribute->usage < MOJOSHADER_USAGE_TOTAL &&
+        attribute->index >= 0 && attribute->index < 16;
+}
+
 int MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
                                       const MOJOSHADER_parseData *pixel,
                                       int is_glspirv)
@@ -1100,13 +1108,6 @@ int MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
 
     const size_t vWordCount = (size_t) vTable->code_bytes / sizeof(uint32);
     const size_t pWordCount = (size_t) pTable->code_bytes / sizeof(uint32);
-    const auto validAttribute = [](const MOJOSHADER_attribute *attribute)
-    {
-        return attribute &&
-            attribute->usage >= MOJOSHADER_USAGE_POSITION &&
-            attribute->usage < MOJOSHADER_USAGE_TOTAL &&
-            attribute->index >= 0 && attribute->index < 16;
-    };
 
     // Preflight every offset used below before mutating either copied module.
     // A zero pixel-input offset used to overwrite SPIR-V word zero (the magic),
@@ -1118,7 +1119,7 @@ int MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
         if (attribute->usage == MOJOSHADER_USAGE_UNKNOWN ||
             attribute->usage == MOJOSHADER_USAGE_DEPTH)
             continue;
-        if (!validAttribute(attribute))
+        if (!spirv_link_attribute_valid(attribute))
             return 0;
         if (is_glspirv && attribute->usage == MOJOSHADER_USAGE_COLOR &&
             pTable->output_offsets[attribute->index])
@@ -1134,7 +1135,7 @@ int MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
     for (int i = 0; i < vertex->output_count; ++i)
     {
         const MOJOSHADER_attribute *attribute = &vertex->outputs[i];
-        if (!validAttribute(attribute))
+        if (!spirv_link_attribute_valid(attribute))
             return 0;
         if ((attribute->usage == MOJOSHADER_USAGE_POSITION && attribute->index == 0) ||
             (attribute->usage == MOJOSHADER_USAGE_POINTSIZE && attribute->index == 0))
