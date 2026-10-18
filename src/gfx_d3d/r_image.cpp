@@ -1857,7 +1857,7 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][IMAGE FALLBACK DISABLED] name=%s semantic=%u map=%u renderer=%u\\n",
+            "[KisakCOD][IMAGE FALLBACK DISABLED] name=%s semantic=%u map=%u renderer=%u\n",
             image && image->name ? image->name : "<null>",
             image ? static_cast<unsigned>(image->semantic) : 0u,
             image ? static_cast<unsigned>(image->mapType) : 0u,
