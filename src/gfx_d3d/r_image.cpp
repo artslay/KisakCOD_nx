@@ -59,6 +59,27 @@ bool R_SwitchIsWorldTextureName(const char *name)
     return false;
 }
 
+bool R_SwitchIsLikelyColorTextureName(const char *name)
+{
+    if (!R_SwitchIsWorldTextureName(name))
+        return false;
+    while (*name == '~')
+        ++name;
+
+    // The first streamed world images are often specular/normal maps. Keep
+    // the bounded GPU readback probe on a diffuse/base-color image instead,
+    // since verifying those maps alone does not validate the color-map path.
+    static constexpr const char *nonColorTokens[] = {
+        "_spc", "spc-", "_nml", "_normal", "normal", "bump", "_s-"
+    };
+    for (const char *token : nonColorTokens)
+    {
+        if (std::strstr(name, token))
+            return false;
+    }
+    return true;
+}
+
 enum class VulkanTextureKind : uint8_t
 {
     Texture2D,
@@ -490,7 +511,7 @@ void R_VulkanUploadTexture(
         // the first two base-level world textures after their upload and
         // compare actual image blocks/texels with the source bytes.
         // DownloadImage2D restores SHADER_READ_ONLY_OPTIMAL before returning.
-        if (mipLevel == 0 && R_SwitchIsWorldTextureName(image->name))
+        if (mipLevel == 0 && R_SwitchIsLikelyColorTextureName(image->name))
         {
             static std::atomic<uint32_t> gpuVerifyCount{0};
             const uint32_t verifyIndex =
