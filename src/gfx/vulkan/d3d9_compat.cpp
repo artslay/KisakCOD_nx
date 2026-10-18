@@ -836,14 +836,14 @@ uint8_t SwitchEffectiveShaderElementType(
         {
             type = D3DDECLTYPE_FLOAT4;
         }
-        // Vertex-declaration variants 2..13 can also route the lightmap UV pair
-        // as a separate TEXCOORD1/2 input. Read its physical float2 at byte 28,
-        // not the packed normal/tangent fields at offsets 36/40.
+        // TEXCOORD1 is the separate lightmap-UV route in these world declarations.
+        // TEXCOORD2 at byte 40 is different: it aliases the packed tangent field.
+        // Treating both indices as float2 silently fed lightmap UVs to normal-mapped
+        // shaders in place of the tangent vector.
         else if (decl->switchVertDeclType >= 2 &&
                  decl->switchVertDeclType <= 13 &&
                  element.Usage == 5 &&
-                 element.UsageIndex >= 1 &&
-                 element.UsageIndex <= 2)
+                 element.UsageIndex == 1)
         {
             type = D3DDECLTYPE_FLOAT2;
         }
@@ -860,8 +860,7 @@ uint32_t SwitchEffectiveShaderElementOffset(
         decl->switchVertDeclType <= 13 &&
         element.Stream == 0 &&
         element.Usage == 5 &&
-        element.UsageIndex >= 1 &&
-        element.UsageIndex <= 2)
+        element.UsageIndex == 1)
     {
         return 28;
     }
@@ -4917,11 +4916,21 @@ bool IDirect3DDevice9::EnsurePipeline()
         VkFormat format = VertexFormat(effectiveType);
         // PackedUnitVec is stored in memory as X, Y, Z, scale. D3DCOLOR's
         // BGRA interpretation is correct for actual colors, but swaps X/Z
-        // when the same four bytes carry a packed normal/tangent vector.
+        // when these bytes carry a packed normal/tangent vector. The world
+        // declaration routes tangent as TEXCOORD2 at physical byte offset 40.
+        const bool packedUnitVectorSemantic =
+            element.Usage == MOJOSHADER_USAGE_NORMAL ||
+            element.Usage == MOJOSHADER_USAGE_TANGENT ||
+            element.Usage == MOJOSHADER_USAGE_BINORMAL;
+        const bool packedWorldTangent =
+            m_decl->switchVertDeclType >= 2 &&
+            m_decl->switchVertDeclType <= 13 &&
+            element.Stream == 0 &&
+            element.Usage == 5 &&
+            element.UsageIndex == 2 &&
+            element.Offset == 40;
         if (effectiveType == D3DDECLTYPE_D3DCOLOR &&
-            (element.Usage == MOJOSHADER_USAGE_NORMAL ||
-             element.Usage == MOJOSHADER_USAGE_TANGENT ||
-             element.Usage == MOJOSHADER_USAGE_BINORMAL))
+            (packedUnitVectorSemantic || packedWorldTangent))
         {
             format = VK_FORMAT_R8G8B8A8_UNORM;
         }
