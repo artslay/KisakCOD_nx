@@ -1065,10 +1065,12 @@ void MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
     int i;
     uint32 attr_loc = 0;
     uint32 vOffset, pOffset;
-    int vDataLen = vertex->output_len - sizeof(SpirvPatchTable);
-    int pDataLen = pixel->output_len - sizeof(SpirvPatchTable);
-    SpirvPatchTable *vTable = (SpirvPatchTable *) &vertex->output[vDataLen];
-    SpirvPatchTable *pTable = (SpirvPatchTable *) &pixel->output[pDataLen];
+    size_t vDataLen = (size_t)vertex->output_len - sizeof(SpirvPatchTableOutput);
+    size_t pDataLen = (size_t)pixel->output_len - sizeof(SpirvPatchTableOutput);
+    SpirvPatchTableOutput *vTable =
+        (SpirvPatchTableOutput *)(vertex->output + vDataLen);
+    SpirvPatchTableOutput *pTable =
+        (SpirvPatchTableOutput *)(pixel->output + pDataLen);
     const uint32 texcoord0Loc = pTable->attrib_offsets[MOJOSHADER_USAGE_TEXCOORD][0];
 
     if (is_glspirv)
