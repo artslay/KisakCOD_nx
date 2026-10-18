@@ -842,6 +842,34 @@ DECLSPEC const MOJOSHADER_parseData *MOJOSHADER_parse(const char *profile,
 DECLSPEC void MOJOSHADER_freeParseData(const MOJOSHADER_parseData *data);
 
 
+/* SPIR-V vertex input interface. Keep these definitions before the public
+ * shader-linking declaration below because this header is included by
+ * translation units that do not include MojoShader's internal headers.
+ */
+typedef enum
+{
+    MOJOSHADER_VERTEXELEMENTFORMAT_SINGLE,
+    MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR2,
+    MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR3,
+    MOJOSHADER_VERTEXELEMENTFORMAT_VECTOR4,
+    MOJOSHADER_VERTEXELEMENTFORMAT_COLOR,
+    MOJOSHADER_VERTEXELEMENTFORMAT_BYTE4,
+    MOJOSHADER_VERTEXELEMENTFORMAT_SHORT2,
+    MOJOSHADER_VERTEXELEMENTFORMAT_SHORT4,
+    MOJOSHADER_VERTEXELEMENTFORMAT_NORMALIZEDSHORT2,
+    MOJOSHADER_VERTEXELEMENTFORMAT_NORMALIZEDSHORT4,
+    MOJOSHADER_VERTEXELEMENTFORMAT_HALFVECTOR2,
+    MOJOSHADER_VERTEXELEMENTFORMAT_HALFVECTOR4
+} MOJOSHADER_vertexElementFormat;
+
+typedef struct MOJOSHADER_vertexAttribute
+{
+    MOJOSHADER_usage usage;
+    MOJOSHADER_vertexElementFormat vertexElementFormat;
+    int usageIndex;
+} MOJOSHADER_vertexAttribute;
+
+
 /*
  * Link a vertex/pixel SPIR-V pair and patch the declared vertex input types.
  * On success, returns 1 and writes the actual SPIR-V byte lengths to the output
