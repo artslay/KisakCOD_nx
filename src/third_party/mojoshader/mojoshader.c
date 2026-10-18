@@ -3055,6 +3055,9 @@ static void free_symbols(MOJOSHADER_free f, void *d, MOJOSHADER_symbol *syms,
 } // free_symbols
 
 
+/* Forward declaration: destroy_context releases parser-owned preshader state. */
+void MOJOSHADER_freePreshader(const MOJOSHADER_preshader *preshader);
+
 static void destroy_context(Context *ctx)
 {
     if (ctx != NULL)
