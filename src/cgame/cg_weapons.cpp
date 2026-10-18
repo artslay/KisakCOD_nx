@@ -4018,7 +4018,17 @@ void __cdecl CG_SelectWeaponIndex(int32_t localClientNum, uint32_t weaponIndex)
     cgameGlob->weaponSelectTime = cgameGlob->time;
     if (cgameGlob->weaponSelect != weaponIndex)
     {
-        v2 = weaponIndex && weaponIndex == BG_GetWeaponDef(cgameGlob->weaponSelect)->altWeaponIndex;
+        // weaponSelect == 0 means no currently selected weapon. BG_GetWeaponDef
+        // requires a nonzero index; resolving weapon 0 returns a null slot on
+        // Switch and dereferencing altWeaponIndex faults at address 0x18 when
+        // the player selects the first real weapon after spawning.
+        v2 = FALSE;
+        if (weaponIndex && cgameGlob->weaponSelect)
+        {
+            WeaponDef *previousWeaponDef = BG_GetWeaponDef(cgameGlob->weaponSelect);
+            v2 = previousWeaponDef &&
+                weaponIndex == previousWeaponDef->altWeaponIndex;
+        }
         validLatest = ValidLatestPrimaryWeapIdx(weaponIndex);
         if (validLatest)
             cgameGlob->weaponLatestPrimaryIdx = validLatest;
