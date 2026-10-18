@@ -28,6 +28,7 @@ extern uint32_t g_switchCurrentAssetRawType;
 #include <algorithm>
 #include <atomic>
 #include <cstring>
+#include <vector>
 
 #ifdef __SWITCH__
 #include <vulkan/vulkan.h>
