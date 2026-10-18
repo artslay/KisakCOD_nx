@@ -352,6 +352,7 @@ struct KisakVkShader : IDirect3DResource9 {
     std::vector<uint32_t> linkedSpirv;
     uint64_t linkedDeclarationSerial=0;
     uint64_t linkedPixelShaderSerial=0;
+    uint64_t linkedVertexShaderSerial=0;
     uint32_t AddRef() override
     {
         return refs.fetch_add(1, std::memory_order_relaxed) + 1;

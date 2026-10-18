@@ -4860,7 +4860,10 @@ bool IDirect3DDevice9::EnsurePipeline()
     uint32_t pipelineAlphaRefSpecId = m_pixelShader->alphaRefSpecId;
 
     if (m_vertexShader->linkedDeclarationSerial != m_decl->serial ||
-        m_vertexShader->linkedPixelShaderSerial != m_pixelShader->serial)
+        m_vertexShader->linkedPixelShaderSerial != m_pixelShader->serial ||
+        m_pixelShader->linkedDeclarationSerial != m_decl->serial ||
+        m_pixelShader->linkedVertexShaderSerial != m_vertexShader->serial ||
+        !m_vertexShader->module || !m_pixelShader->module)
     {
         if (m_vertexShader->module)
             vkDestroyShaderModule(m_backend->Device(), m_vertexShader->module, nullptr);
@@ -5269,6 +5272,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_vertexShader->linkedPixelShaderSerial = m_pixelShader->serial;
         m_pixelShader->linkedDeclarationSerial = m_decl->serial;
         m_pixelShader->linkedPixelShaderSerial = m_pixelShader->serial;
+        m_pixelShader->linkedVertexShaderSerial = m_vertexShader->serial;
         m_pixelShader->linkedAlphaTestPatch = useAlphaTestPatch;
     }
     else if (m_pixelShader->linkedAlphaTestPatch != useAlphaTestPatch)
