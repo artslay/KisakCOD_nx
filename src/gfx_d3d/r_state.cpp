@@ -1820,15 +1820,27 @@ void __cdecl R_SetSampler(
 
 
     iassert(image);
-    if (context.state->samplerTexture[samplerIndex] != &image->texture)
+    const bool textureReferenceChanged =
+        context.state->samplerTexture[samplerIndex] != &image->texture;
+    if (textureReferenceChanged)
     {
         context.state->samplerTexture[samplerIndex] = &image->texture;
         if (r_logFile->current.integer)
         {
             RB_LogPrint(va("---------- texture %i: %s\n", samplerIndex, image->name));
         }
-        R_HW_SetSamplerTexture(context.state->prim.device, samplerIndex, &image->texture);
     }
+#ifdef __SWITCH__
+    // The GfxImage/GfxTexture address can remain stable while Image_Reload
+    // replaces its basemap with a newly allocated KisakVkTexture. Keep the
+    // compatibility device in sync with the actual resource pointer even
+    // when the higher-level GfxTexture cache key has not changed. SetTexture
+    // cheaply returns if the underlying wrapper is already the same.
+    R_HW_SetSamplerTexture(context.state->prim.device, samplerIndex, &image->texture);
+#else
+    if (textureReferenceChanged)
+        R_HW_SetSamplerTexture(context.state->prim.device, samplerIndex, &image->texture);
+#endif
     iassert((samplerState & (SAMPLER_FILTER_MASK | SAMPLER_MIPMAP_MASK)) != 0);
     if (context.state->refSamplerState[samplerIndex] != samplerState)
     {
