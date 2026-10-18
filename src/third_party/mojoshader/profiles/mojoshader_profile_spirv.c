@@ -2889,11 +2889,13 @@ void emit_SPIRV_finalize(Context *ctx)
 
                 outputTable.attrib_type_load_offsets[i][j].load_types_offset =
                     (uint32) (codeBytes + metadataBytes);
-                buffer_append(ctx->output,
+                if (!buffer_append(ctx->output,
                     table->attrib_type_load_offsets[i][j].load_types,
-                    arrayBytes);
-                if (ctx->out_of_memory)
+                    arrayBytes))
+                {
+                    ctx->out_of_memory = 1;
                     break;
+                }
                 metadataBytes += arrayBytes;
 
                 if (arrayBytes > UINT32_MAX - codeBytes - metadataBytes)
@@ -2903,11 +2905,13 @@ void emit_SPIRV_finalize(Context *ctx)
                 }
                 outputTable.attrib_type_load_offsets[i][j].load_opcodes_offset =
                     (uint32) (codeBytes + metadataBytes);
-                buffer_append(ctx->output,
+                if (!buffer_append(ctx->output,
                     table->attrib_type_load_offsets[i][j].load_opcodes,
-                    arrayBytes);
-                if (ctx->out_of_memory)
+                    arrayBytes))
+                {
+                    ctx->out_of_memory = 1;
                     break;
+                }
                 metadataBytes += arrayBytes;
             }
         }
@@ -2918,7 +2922,8 @@ void emit_SPIRV_finalize(Context *ctx)
     {
         outputTable.metadata_bytes = (uint32) metadataBytes;
         push_output(ctx, &ctx->postflight);
-        buffer_append(ctx->output, &outputTable, sizeof(outputTable));
+        if (!buffer_append(ctx->output, &outputTable, sizeof(outputTable)))
+            ctx->out_of_memory = 1;
         pop_output(ctx);
     }
     else
