@@ -4311,7 +4311,24 @@ bool IDirect3DDevice9::BindSamplerSet(
                 const bool supportsLinearFiltering =
                     (samplerFormatFeatures &
                      VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
-                if (!supportsLinearFiltering)
+#ifdef __SWITCH__
+                // Some older NVK paths have had problems with linear-filtered
+                // texture sampling even when the advertised format feature bit
+                // says it is supported. CoD4's world diffuse/normal/specular
+                // images are predominantly BC1/BC3/BC5; keep a narrow workaround
+                // for those compressed formats while leaving uncompressed UI,
+                // render targets, and other textures on their requested filters.
+                const bool switchNvkCompressedTextureWorkaround =
+                    texture->format == VK_FORMAT_BC1_RGBA_UNORM_BLOCK ||
+                    texture->format == VK_FORMAT_BC2_UNORM_BLOCK ||
+                    texture->format == VK_FORMAT_BC3_UNORM_BLOCK ||
+                    texture->format == VK_FORMAT_BC5_UNORM_BLOCK;
+#else
+                const bool switchNvkCompressedTextureWorkaround = false;
+#endif
+                const bool forcePointFiltering =
+                    !supportsLinearFiltering || switchNvkCompressedTextureWorkaround;
+                if (forcePointFiltering)
                 {
                     const bool needsFallback =
                         minFilter != D3DTEXF_POINT ||
@@ -4331,13 +4348,16 @@ bool IDirect3DDevice9::BindSamplerSet(
                             switchFilterFallbackCount.fetch_add(1, std::memory_order_relaxed);
                         if (fallbackIndex < 8u)
                         {
-                            char trace[256];
+                            char trace[288];
                             std::snprintf(
                                 trace, sizeof(trace),
-                                "[KisakCOD][VK SAMPLER FILTER FALLBACK] format=%u features=0x%x slot=%u linear=0 fallback=point\n",
+                                "[KisakCOD][VK SAMPLER FILTER FALLBACK] format=%u features=0x%x slot=%u requestedLinear=%u reason=%s fallback=point\n",
                                 static_cast<unsigned>(texture->format),
                                 static_cast<unsigned>(samplerFormatFeatures),
-                                i);
+                                i,
+                                supportsLinearFiltering ? 1u : 0u,
+                                switchNvkCompressedTextureWorkaround
+                                    ? "nvk_bc_workaround" : "format_no_linear");
                             Switch_LogWrite(trace);
                         }
                     }
