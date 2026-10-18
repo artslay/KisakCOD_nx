@@ -4009,7 +4009,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK ACTIVE SAMPLER FAIL] stage=%s shader=%llu slot=%u sampler=%s reason=%s frame=%llu\\n",
+                "[KisakCOD][VK ACTIVE SAMPLER FAIL] stage=%s shader=%llu slot=%u sampler=%s reason=%s frame=%llu\n",
                 setIndex == 0 ? "vs" : "ps",
                 static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
                 slot,
