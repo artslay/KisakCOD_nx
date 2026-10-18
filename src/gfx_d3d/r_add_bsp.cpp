@@ -58,9 +58,20 @@ char __cdecl R_PreTessBspDrawSurfs(
             surfIndex = list[surfIter];
             surf = &rgp.world->dpvs.surfaces[surfIndex];
             tris = surf;
+            // totalTriCount is serialized into a uint16_t in each pre-tess
+            // draw entry. Start a new entry instead of silently wrapping when
+            // adjacent surfaces with the same vertex/lightmap/probe key exceed
+            // that representable triangle count.
+            const uint32_t currentGroupTriCount = simplifiedCount
+                ? simplifiedList[simplifiedCount - 1].totalTriCount : 0u;
+            const bool groupTriCountOverflow =
+                simplifiedCount != 0 &&
+                static_cast<uint32_t>(tris->tris.triCount) >
+                    0xFFFFu - currentGroupTriCount;
             if (baseVertex != surf->tris.firstVertex
                 || lmapIndex != surf->lightmapIndex
-                || reflectionProbeIndex != surf->reflectionProbeIndex)
+                || reflectionProbeIndex != surf->reflectionProbeIndex
+                || groupTriCountOverflow)
             {
                 baseVertex = surf->tris.firstVertex;
                 lmapIndex = surf->lightmapIndex;
@@ -70,10 +81,13 @@ char __cdecl R_PreTessBspDrawSurfs(
             }
             Com_Memcpy(&preTessIndices[copyIndex], &rgp.world->indices[tris->tris.baseIndex], 6 * tris->tris.triCount);
             copyIndex += 3 * tris->tris.triCount;
-            //v5 = tris->tris.triCount + *((uint16_t*)&copyIndex + 2 * simplifiedCount + 1);
-            // TODO(mrsteyk): @Correctness
             iassert(simplifiedCount);
-            simplifiedList[simplifiedCount - 1].totalTriCount = truncate_cast<unsigned short>(tris->tris.triCount + simplifiedList[simplifiedCount - 1].totalTriCount);
+            const uint32_t combinedTriCount =
+                static_cast<uint32_t>(tris->tris.triCount) +
+                simplifiedList[simplifiedCount - 1].totalTriCount;
+            iassert(combinedTriCount <= 0xFFFFu);
+            simplifiedList[simplifiedCount - 1].totalTriCount =
+                static_cast<uint16_t>(combinedTriCount);
         }
     }
 
