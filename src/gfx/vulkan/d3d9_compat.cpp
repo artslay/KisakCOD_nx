@@ -4256,7 +4256,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             char trace[288];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK SAMPLER NULL FALLBACK] stage=%s shader=%llu slot=%u sampler=%s type=%u frame=%llu action=white_dummy\\n",
+                "[KisakCOD][VK SAMPLER NULL FALLBACK] stage=%s shader=%llu slot=%u sampler=%s type=%u frame=%llu action=white_dummy\n",
                 setIndex == 0 ? "vs" : "ps",
                 static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
                 slot,
@@ -4291,7 +4291,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             }
             if (used < sizeof(mapTrace) - 2u)
             {
-                mapTrace[used++] = '\\n';
+                mapTrace[used++] = '\n';
                 mapTrace[used] = '\\0';
                 Switch_LogWrite(mapTrace);
             }
