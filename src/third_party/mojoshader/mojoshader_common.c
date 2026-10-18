@@ -1127,7 +1127,16 @@ int MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
 
         const uint32 offset = pTable->attrib_offsets[attribute->usage][attribute->index];
         const uint32 vertexOffset = vTable->attrib_offsets[attribute->usage][attribute->index];
+        // Every ordinary pixel input must have a matching vertex output.
+        // The one intentional exception is TEXCOORD0 sourced from PointCoord
+        // when the vertex shader writes PointSize; that built-in path is
+        // patched below and has no ordinary vertex varying to link.
+        const int pointCoordInput =
+            attribute->usage == MOJOSHADER_USAGE_TEXCOORD &&
+            attribute->index == 0 &&
+            vTable->attrib_offsets[MOJOSHADER_USAGE_POINTSIZE][0] != 0;
         if (offset == 0 || (size_t) offset >= pWordCount ||
+            (!vertexOffset && !pointCoordInput) ||
             (vertexOffset && (size_t) vertexOffset >= vWordCount))
             return 0;
     }
