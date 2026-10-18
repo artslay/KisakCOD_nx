@@ -1177,12 +1177,19 @@ int MOJOSHADER_spirv_link_attributes(const MOJOSHADER_parseData *vertex,
     const uint32 texcoord0Loc = pTable->attrib_offsets[MOJOSHADER_USAGE_TEXCOORD][0];
     if (texcoord0Loc && (size_t) texcoord0Loc >= pWordCount)
         return 0;
-    if (texcoord0Loc && vTable->attrib_offsets[MOJOSHADER_USAGE_POINTSIZE][0] > 0)
+    if (texcoord0Loc)
     {
+        // Both branches below patch the point-coordinate variable/load pair:
+        // the PointSize case changes their types, while the other case retains
+        // TEXCOORD0's Location decoration. Validate both paths before writing.
         if (pTable->pointcoord_var_offset == 0 ||
             pTable->pointcoord_load_offset == 0 ||
             (size_t) pTable->pointcoord_var_offset + 1 >= pWordCount ||
             (size_t) pTable->pointcoord_load_offset + 1 >= pWordCount)
+            return 0;
+        if (vTable->attrib_offsets[MOJOSHADER_USAGE_POINTSIZE][0] > 0 &&
+            (pTable->tid_pvec2i == 0 || pTable->tid_vec2 == 0 ||
+             pTable->tid_pvec4i == 0 || pTable->tid_vec4 == 0))
             return 0;
     }
 
