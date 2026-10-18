@@ -2282,7 +2282,7 @@ HRESULT KisakVkBuffer::Unlock()
             if (kSwitchDisableQueuedDynamicBufferCopies &&
                 !loggedSynchronizedFallback.exchange(true, std::memory_order_relaxed))
                 Switch_LogWrite(
-                    "[KisakCOD][VK BUFFER UPDATE] queued_dynamic_copies=disabled synchronized_fallback=1 reason=device_lost_isolation\\n");
+                    "[KisakCOD][VK BUFFER UPDATE] queued_dynamic_copies=disabled synchronized_fallback=1 reason=device_lost_isolation\n");
             const bool queued = !kSwitchDisableQueuedDynamicBufferCopies &&
                 backend && backend->QueueBufferUpdate(
                     buffer, lockOffset, shadow.data() + lockOffset, lockSize);
