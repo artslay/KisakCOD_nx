@@ -4723,29 +4723,35 @@ bool IDirect3DDevice9::EnsurePipeline()
             reinterpret_cast<const char *>(linkedPixelWords.data());
 
         g_switchFrameStage = "frame/render/vulkan/pipeline/link_shaders";
-        const int patchBytes = MOJOSHADER_linkSPIRVShaders(
+        int linkedVertexCodeBytes = 0;
+        int linkedPixelCodeBytes = 0;
+        const int linkResult = MOJOSHADER_linkSPIRVShaders(
             &linkedVertexParse,
             &linkedPixelParse,
             attributes.data(),
-            static_cast<int>(attributes.size()));
-        if (patchBytes <= 0 ||
-            linkedVertexParse.output_len <= patchBytes ||
-            linkedPixelParse.output_len <= patchBytes)
+            static_cast<int>(attributes.size()),
+            &linkedVertexCodeBytes,
+            &linkedPixelCodeBytes);
+        if (linkResult <= 0 ||
+            linkedVertexCodeBytes <= 0 ||
+            linkedPixelCodeBytes <= 0 ||
+            linkedVertexCodeBytes > linkedVertexParse.output_len ||
+            linkedPixelCodeBytes > linkedPixelParse.output_len ||
+            linkedVertexCodeBytes % static_cast<int>(sizeof(uint32_t)) != 0 ||
+            linkedPixelCodeBytes % static_cast<int>(sizeof(uint32_t)) != 0)
         {
             char msg[192];
             std::snprintf(msg, sizeof(msg),
-                "[KisakCOD][VK DRAW] pipeline_fail=shader_link patch=%d vs=%d ps=%d\n",
-                patchBytes,
-                linkedVertexParse.output_len,
-                linkedPixelParse.output_len);
+                "[KisakCOD][VK DRAW] pipeline_fail=shader_link result=%d vs=%d ps=%d\n",
+                linkResult,
+                linkedVertexCodeBytes,
+                linkedPixelCodeBytes);
             Switch_LogWrite(msg);
             return false;
         }
 
-        const size_t vsBytes =
-            static_cast<size_t>(linkedVertexParse.output_len - patchBytes);
-        const size_t psBytes =
-            static_cast<size_t>(linkedPixelParse.output_len - patchBytes);
+        const size_t vsBytes = static_cast<size_t>(linkedVertexCodeBytes);
+        const size_t psBytes = static_cast<size_t>(linkedPixelCodeBytes);
 
         std::vector<uint32_t> pixelSpirv(
             reinterpret_cast<const uint32_t *>(linkedPixelParse.output),
