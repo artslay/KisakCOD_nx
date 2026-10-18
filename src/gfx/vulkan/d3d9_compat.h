@@ -194,9 +194,14 @@ struct _D3DLOCKED_RECT { void *pBits=nullptr; int Pitch=0; };
 
 struct VulkanUniformLayout
 {
+    // MojoShader's Vulkan profile densely packs used constant registers into
+    // the UBO arrays. Preserve the original D3D register for each packed slot.
     uint32_t floatCount = 0;
     uint32_t intCount = 0;
     uint32_t boolCount = 0;
+    std::array<uint16_t, 256> floatRegisters{};
+    std::array<uint16_t, 256> intRegisters{};
+    std::array<uint16_t, 256> boolRegisters{};
     size_t floatOffset = 0;
     size_t intOffset = 0;
     size_t boolOffset = 0;

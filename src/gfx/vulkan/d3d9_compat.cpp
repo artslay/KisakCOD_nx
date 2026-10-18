@@ -1807,6 +1807,11 @@ bool GetUniformLayout(const MOJOSHADER_parseData *parse, VulkanUniformLayout *ou
             continue;
         }
 
+        // Constant arrays are embedded into SPIR-V by MojoShader; they do not
+        // occupy slots in its runtime uniform block.
+        if (u.constant)
+            continue;
+
         if (u.index < 0 || u.array_count < 0)
         {
             LogInvalidUniformLayout(
@@ -1825,21 +1830,41 @@ bool GetUniformLayout(const MOJOSHADER_parseData *parse, VulkanUniformLayout *ou
             return false;
         }
 
-        const uint32_t end = first + count;
+        // The SPIR-V profile assigns each declared uniform a dense array index.
+        // Build packed-index -> D3D-register maps in the same order as
+        // parseData so sparse source register sets (for example c4 and c8)
+        // still upload to the slots that the SPIR-V instructions access.
+        uint32_t *packedCount = nullptr;
+        uint16_t *registerMap = nullptr;
         switch (u.type)
         {
         case MOJOSHADER_UNIFORM_FLOAT:
-            layout.floatCount = std::max(layout.floatCount, end);
+            packedCount = &layout.floatCount;
+            registerMap = layout.floatRegisters.data();
             break;
         case MOJOSHADER_UNIFORM_INT:
-            layout.intCount = std::max(layout.intCount, end);
+            packedCount = &layout.intCount;
+            registerMap = layout.intRegisters.data();
             break;
         case MOJOSHADER_UNIFORM_BOOL:
-            layout.boolCount = std::max(layout.boolCount, end);
+            packedCount = &layout.boolCount;
+            registerMap = layout.boolRegisters.data();
             break;
         default:
             break;
         }
+
+        if (!packedCount || !registerMap || count > 256u - *packedCount)
+        {
+            LogInvalidUniformLayout(
+                "packed_register_range_overflow", parse, i,
+                static_cast<int>(u.type), u.index, u.array_count);
+            return false;
+        }
+
+        for (uint32_t j = 0; j < count; ++j)
+            registerMap[*packedCount + j] = static_cast<uint16_t>(first + j);
+        *packedCount += count;
     }
 
     layout.floatOffset = 0;
@@ -3841,17 +3866,31 @@ bool IDirect3DDevice9::BindUniformSet(
     std::memset(bytes, 0, size);
     traceUniformBindStage("scratch_ready", bytes, size, 1);
     if (layout.floatCount)
-        std::memcpy(bytes + layout.floatOffset, floatData,
-                    static_cast<size_t>(layout.floatCount) * 16u);
+    {
+        const auto *src = static_cast<const uint8_t *>(floatData);
+        for (uint32_t i = 0; i < layout.floatCount; ++i)
+            std::memcpy(
+                bytes + layout.floatOffset + static_cast<size_t>(i) * 16u,
+                src + static_cast<size_t>(layout.floatRegisters[i]) * 16u,
+                16u);
+    }
     if (layout.intCount)
-        std::memcpy(bytes + layout.intOffset, intData,
-                    static_cast<size_t>(layout.intCount) * 16u);
+    {
+        const auto *src = static_cast<const uint8_t *>(intData);
+        for (uint32_t i = 0; i < layout.intCount; ++i)
+            std::memcpy(
+                bytes + layout.intOffset + static_cast<size_t>(i) * 16u,
+                src + static_cast<size_t>(layout.intRegisters[i]) * 16u,
+                16u);
+    }
     if (layout.boolCount)
     {
         uint8_t *dst = bytes + layout.boolOffset;
         const int32_t *src = static_cast<const int32_t *>(boolData);
         for (uint32_t i = 0; i < layout.boolCount; ++i)
-            std::memcpy(dst + static_cast<size_t>(i) * 16u, &src[i], sizeof(int32_t));
+            std::memcpy(
+                dst + static_cast<size_t>(i) * 16u,
+                &src[layout.boolRegisters[i]], sizeof(int32_t));
     }
 
     g_switchFrameStage = "frame/render/vulkan/uniform/allocate_ring";
