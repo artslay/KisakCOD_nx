@@ -1848,31 +1848,23 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
     }
 #endif
 #ifdef __SWITCH__
+    // Missing renderer images must not be silently replaced with white, black,
+    // or identity-normal pixels: that hides the asset/decoder failure and makes
+    // world surfaces look valid while sampling the wrong content. The engine's
+    // intentional $white/$black builtins are created explicitly by Image_Load*;
+    // this function is only the recovery path for a failed requested image.
     {
-        char trace[384];
+        char trace[320];
         std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IMAGEFAIL] fallback enter image=%p name=%s map=%u semantic=%u "
-            "white=%p whiteTex=%p normal=%p normalTex=%p black=%p blackTex=%p\n",
-            static_cast<void *>(image),
+            trace, sizeof(trace),
+            "[KisakCOD][IMAGE FALLBACK DISABLED] name=%s semantic=%u map=%u renderer=%u\\n",
             image && image->name ? image->name : "<null>",
-            image ? static_cast<unsigned>(image->mapType) : 0u,
             image ? static_cast<unsigned>(image->semantic) : 0u,
-            static_cast<void *>(rgp.whiteImage),
-            rgp.whiteImage
-                ? static_cast<void *>(rgp.whiteImage->texture.basemap)
-                : nullptr,
-            static_cast<void *>(rgp.identityNormalMapImage),
-            rgp.identityNormalMapImage
-                ? static_cast<void *>(rgp.identityNormalMapImage->texture.basemap)
-                : nullptr,
-            static_cast<void *>(rgp.blackImage),
-            rgp.blackImage
-                ? static_cast<void *>(rgp.blackImage->texture.basemap)
-                : nullptr);
+            image ? static_cast<unsigned>(image->mapType) : 0u,
+            r_loadForRenderer ? r_loadForRenderer->current.enabled : 0u);
         Switch_LogWrite(trace);
     }
+    return 0;
 #endif
     if (image->mapType != MAPTYPE_2D)
         return 0;
