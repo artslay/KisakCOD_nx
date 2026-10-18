@@ -2813,9 +2813,131 @@ void emit_SPIRV_finalize(Context *ctx)
                      table->attrib_type_load_offsets[i][j].load_opcodes[k] += base_offset;
                 } // for
 
-    push_output(ctx, &ctx->postflight);
-    buffer_append(ctx->output, &ctx->spirv.patch_table, sizeof(ctx->spirv.patch_table));
-    pop_output(ctx);
+    // Keep the emitted patch table self-contained. The build-time table
+    // contains pointers to parser-allocated load-fixup arrays; serializing those
+    // pointers into output makes the shader depend on allocator lifetime and
+    // also breaks when the output is copied for linking. Store the arrays inline
+    // and keep only byte offsets in the output trailer.
+    SpirvPatchTableOutput outputTable;
+    memset(&outputTable, 0, sizeof(outputTable));
+    outputTable.vpflip = table->vpflip;
+    outputTable.array_vec4 = table->array_vec4;
+    outputTable.array_ivec4 = table->array_ivec4;
+    outputTable.array_bool = table->array_bool;
+    memcpy(outputTable.samplers, table->samplers, sizeof(outputTable.samplers));
+    outputTable.location_count = table->location_count;
+    outputTable.pointcoord_var_offset = table->pointcoord_var_offset;
+    outputTable.pointcoord_load_offset = table->pointcoord_load_offset;
+    outputTable.tid_pvec2i = table->tid_pvec2i;
+    outputTable.tid_vec2 = table->tid_vec2;
+    outputTable.tid_pvec4i = table->tid_pvec4i;
+    outputTable.tid_vec4 = table->tid_vec4;
+    outputTable.tid_ivec4 = table->tid_ivec4;
+    outputTable.tid_uvec4 = table->tid_uvec4;
+    outputTable.tid_vec4_p = table->tid_vec4_p;
+    outputTable.tid_ivec4_p = table->tid_ivec4_p;
+    outputTable.tid_uvec4_p = table->tid_uvec4_p;
+    memcpy(outputTable.attrib_type_offsets, table->attrib_type_offsets,
+        sizeof(outputTable.attrib_type_offsets));
+    memcpy(outputTable.attrib_offsets, table->attrib_offsets,
+        sizeof(outputTable.attrib_offsets));
+    memcpy(outputTable.output_offsets, table->output_offsets,
+        sizeof(outputTable.output_offsets));
+
+    Buffer *outputBuffers[] = {
+        ctx->preflight, ctx->globals, ctx->inputs, ctx->outputs, ctx->helpers,
+        ctx->subroutines, ctx->mainline_intro, ctx->mainline_arguments,
+        ctx->mainline_top, ctx->mainline, ctx->postflight
+    };
+    size_t codeBytes = 0;
+    for (size_t bufferIndex = 0;
+         bufferIndex < sizeof(outputBuffers) / sizeof(outputBuffers[0]);
+         ++bufferIndex)
+    {
+        if (outputBuffers[bufferIndex])
+            codeBytes += buffer_size(outputBuffers[bufferIndex]);
+    }
+
+    size_t metadataBytes = 0;
+    if (codeBytes == 0 || codeBytes > UINT32_MAX ||
+        (codeBytes % sizeof(uint32)) != 0)
+    {
+        ctx->out_of_memory = 1;
+    }
+    else
+    {
+        outputTable.code_bytes = (uint32) codeBytes;
+        push_output(ctx, &ctx->postflight);
+        for (i = 0; i < MOJOSHADER_USAGE_TOTAL && !ctx->out_of_memory; i++)
+        {
+            for (j = 0; j < 16 && !ctx->out_of_memory; j++)
+            {
+                const uint32 loadCount =
+                    table->attrib_type_load_offsets[i][j].num_loads;
+                const size_t arrayBytes = (size_t) loadCount * sizeof(uint32);
+                outputTable.attrib_type_load_offsets[i][j].num_loads = loadCount;
+                if (loadCount == 0)
+                    continue;
+
+                if (!table->attrib_type_load_offsets[i][j].load_types ||
+                    !table->attrib_type_load_offsets[i][j].load_opcodes ||
+                    arrayBytes > UINT32_MAX - codeBytes - metadataBytes)
+                {
+                    ctx->out_of_memory = 1;
+                    break;
+                }
+
+                outputTable.attrib_type_load_offsets[i][j].load_types_offset =
+                    (uint32) (codeBytes + metadataBytes);
+                buffer_append(ctx->output,
+                    table->attrib_type_load_offsets[i][j].load_types,
+                    arrayBytes);
+                if (ctx->out_of_memory)
+                    break;
+                metadataBytes += arrayBytes;
+
+                if (arrayBytes > UINT32_MAX - codeBytes - metadataBytes)
+                {
+                    ctx->out_of_memory = 1;
+                    break;
+                }
+                outputTable.attrib_type_load_offsets[i][j].load_opcodes_offset =
+                    (uint32) (codeBytes + metadataBytes);
+                buffer_append(ctx->output,
+                    table->attrib_type_load_offsets[i][j].load_opcodes,
+                    arrayBytes);
+                if (ctx->out_of_memory)
+                    break;
+                metadataBytes += arrayBytes;
+            }
+        }
+        pop_output(ctx);
+    }
+
+    if (!ctx->out_of_memory && metadataBytes <= UINT32_MAX)
+    {
+        outputTable.metadata_bytes = (uint32) metadataBytes;
+        push_output(ctx, &ctx->postflight);
+        buffer_append(ctx->output, &outputTable, sizeof(outputTable));
+        pop_output(ctx);
+    }
+    else
+    {
+        ctx->out_of_memory = 1;
+    }
+
+    // The output owns a packed copy now; release the temporary builder arrays.
+    for (i = 0; i < MOJOSHADER_USAGE_TOTAL; i++)
+    {
+        for (j = 0; j < 16; j++)
+        {
+            Free(ctx, table->attrib_type_load_offsets[i][j].load_types);
+            Free(ctx, table->attrib_type_load_offsets[i][j].load_opcodes);
+            table->attrib_type_load_offsets[i][j].load_types = NULL;
+            table->attrib_type_load_offsets[i][j].load_opcodes = NULL;
+            table->attrib_type_load_offsets[i][j].num_loads = 0;
+        }
+    }
 
     spv_componentlist_free(ctx, ctx->spirv.cl.f.next);
     spv_componentlist_free(ctx, ctx->spirv.cl.i.next);
