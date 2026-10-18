@@ -5082,6 +5082,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 #ifdef __SWITCH__
         {
             bool hasS0 = false, hasS3 = false, hasS4 = false, hasS5 = false;
+            bool hasUnboundSampler = false;
             if (sourcePixelParse->samplers)
             {
                 for (int i = 0; i < sourcePixelParse->sampler_count; ++i)
@@ -5091,25 +5092,34 @@ bool IDirect3DDevice9::EnsurePipeline()
                     hasS3 |= index == 3;
                     hasS4 |= index == 4;
                     hasS5 |= index == 5;
+                    if (index >= 0 && index < 16 && !m_textures[index])
+                        hasUnboundSampler = true;
                 }
             }
             static uint32_t tracedLightmapPairs = 0;
             static uint32_t tracedNormalMaterialPairs = 0;
+            static uint32_t tracedUnboundSamplerPairs = 0;
             const bool traceLightmap = hasS0 && hasS3 && tracedLightmapPairs < 8u;
             const bool traceNormalMaterial =
                 hasS0 && hasS4 && hasS5 && tracedNormalMaterialPairs < 6u;
-            if (traceLightmap || traceNormalMaterial)
+            const bool traceUnboundSamplers =
+                hasUnboundSampler && tracedUnboundSamplerPairs < 8u;
+            if (traceLightmap || traceNormalMaterial || traceUnboundSamplers)
             {
                 if (traceLightmap)
                     ++tracedLightmapPairs;
-                else
+                else if (traceNormalMaterial)
                     ++tracedNormalMaterialPairs;
+                else
+                    ++tracedUnboundSamplerPairs;
 
+                const char *pairKind = traceLightmap ? "lightmap" :
+                    (traceNormalMaterial ? "normal_material" : "unbound_sampler");
                 char header[320];
                 std::snprintf(
                     header, sizeof(header),
                     "[KisakCOD][VK SPIRV IFACE PAIR] kind=%s decl=%llu vs=%llu ps=%llu vsBytes=%zu psBytes=%zu psSamplers=%d\n",
-                    traceLightmap ? "lightmap" : "normal_material",
+                    pairKind,
                     static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
                     static_cast<unsigned long long>(m_vertexShader->serial),
                     static_cast<unsigned long long>(m_pixelShader->serial),
