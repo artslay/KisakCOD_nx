@@ -834,15 +834,14 @@ uint8_t SwitchEffectiveShaderElementType(
         }
         // Vertex-declaration variants 2..13 all route the 44-byte
         // GfxWorldVertex layout, including normal-mapped/specular variants.
-        // The routing table points TEXCOORD2 at legacy packed-vector offsets
-        // (36/40), but the physical lightmap UV pair is always at byte 28.
-        // Key by semantic for every world-vertex variant; limiting this to
-        // variant 2 leaves the common multi-texture lightmap shaders sampling
-        // normal/tangent bytes instead of the lightmap coordinates.
+        // Legacy material routing can label the physical lightmap UV as either
+        // TEXCOORD1 or TEXCOORD2. Both must read the expanded float2 at byte 28;
+        // the routing table's offsets 36/40 are packed normal/tangent data.
         else if (decl->switchVertDeclType >= 2 &&
                  decl->switchVertDeclType <= 13 &&
                  element.Usage == 5 &&
-                 element.UsageIndex == 2)
+                 element.UsageIndex >= 1 &&
+                 element.UsageIndex <= 2)
         {
             type = D3DDECLTYPE_FLOAT2;
         }
@@ -859,7 +858,8 @@ uint32_t SwitchEffectiveShaderElementOffset(
         decl->switchVertDeclType <= 13 &&
         element.Stream == 0 &&
         element.Usage == 5 &&
-        element.UsageIndex == 2)
+        element.UsageIndex >= 1 &&
+        element.UsageIndex <= 2)
     {
         return 28;
     }
