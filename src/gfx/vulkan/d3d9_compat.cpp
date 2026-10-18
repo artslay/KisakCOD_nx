@@ -4239,10 +4239,63 @@ bool IDirect3DDevice9::BindSamplerSet(
         return false;
     };
 
+    // A D3D9 sampler can be declared by a shader but have no texture bound
+    // for a particular material/draw. Vulkan still needs a valid descriptor
+    // in the set; do not abort the entire frame before determining whether
+    // this sampler affects the shader result. Use the backend's white dummy
+    // image for the null slot and emit bounded diagnostics for follow-up.
     for (uint32_t slot = 0; slot < activeSamplers.size(); ++slot)
     {
-        if (activeSamplers[slot] && !textures[slot])
-            return failActiveSampler(slot, "texture_not_bound");
+        if (!activeSamplers[slot] || textures[slot])
+            continue;
+
+        static uint32_t unboundSamplerTraceCount = 0;
+        if (unboundSamplerTraceCount < 32u)
+        {
+            const MOJOSHADER_sampler *sampler = activeSamplers[slot];
+            char trace[288];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK SAMPLER NULL FALLBACK] stage=%s shader=%llu slot=%u sampler=%s type=%u frame=%llu action=white_dummy\\n",
+                setIndex == 0 ? "vs" : "ps",
+                static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
+                slot,
+                sampler->name ? sampler->name : "<unnamed>",
+                static_cast<unsigned>(sampler->type),
+                static_cast<unsigned long long>(m_backend->FrameSerial()));
+            Switch_LogWrite(trace);
+            ++unboundSamplerTraceCount;
+
+            char mapTrace[768];
+            size_t used = static_cast<size_t>(std::snprintf(
+                mapTrace, sizeof(mapTrace),
+                "[KisakCOD][VK SAMPLER MAP] stage=%s shader=%llu declared=%d",
+                setIndex == 0 ? "vs" : "ps",
+                static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
+                activeParse ? activeParse->sampler_count : 0));
+            for (uint32_t i = 0; i < activeSamplers.size() &&
+                 used < sizeof(mapTrace) - 64u; ++i)
+            {
+                if (!activeSamplers[i])
+                    continue;
+                const MOJOSHADER_sampler *entry = activeSamplers[i];
+                const int written = std::snprintf(
+                    mapTrace + used, sizeof(mapTrace) - used,
+                    " s%u=%s:%s",
+                    i,
+                    entry->name ? entry->name : "<unnamed>",
+                    textures[i] ? "bound" : "null");
+                if (written < 0)
+                    break;
+                used += static_cast<size_t>(written);
+            }
+            if (used < sizeof(mapTrace) - 2u)
+            {
+                mapTrace[used++] = '\\n';
+                mapTrace[used] = '\\0';
+                Switch_LogWrite(mapTrace);
+            }
+        }
     }
 
     // Determine whether any sampled subresource needs a layout transition.
@@ -4375,18 +4428,14 @@ bool IDirect3DDevice9::BindSamplerSet(
     for (uint32_t i = 0; i < 16; ++i)
     {
         KisakVkTexture *texture = textures[i];
-        if (!activeSamplers[i])
+        if (!activeSamplers[i] || !texture)
         {
-            // Do not expose stale bindings to shaders through inactive slots.
-            // In particular, an unused slot must not keep a render/depth target
-            // alive as a sampled image or trigger a layout transition.
+            // Inactive stages and active-but-unbound D3D9 stages both need a
+            // valid Vulkan descriptor. The latter is logged above and receives
+            // the white fallback instead of aborting DrawIndexedPrimitive.
             images[i].imageView = m_backend->DummyImageView();
             images[i].sampler = m_backend->DummySampler();
             images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        }
-        else if (!texture)
-        {
-            return failActiveSampler(i, "texture_not_bound_at_descriptor_build");
         }
         else
         {
