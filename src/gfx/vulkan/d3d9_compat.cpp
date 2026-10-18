@@ -831,12 +831,13 @@ uint8_t SwitchEffectiveShaderElementType(
         {
             type = D3DDECLTYPE_FLOAT2;
         }
-        // Material_BuildVertexDecl's legacy routing table describes the world
-        // lightmap coordinate as TEXCOORD2 at offset 40. In the real
-        // GfxWorldVertex buffer, lmapCoord is float2 at byte 28; byte 40 is
-        // the packed tangent. Present the shader with the actual lightmap UV.
+        // World-material routing identifies the lightmap coordinates as
+        // TEXCOORD2, but the legacy source offset differs between shader
+        // variants (the routed declaration may say byte 36 or 40). The actual
+        // GfxWorldVertex layout always stores lmapCoord as float2 at byte 28.
+        // Select the physical representation by semantic, not the stale offset,
+        // or some lightmapped surfaces interpret packed normal/tangent bytes as UVs.
         else if (decl->switchVertDeclType == 2 &&
-                 element.Offset == 40 &&
                  element.Usage == 5 &&
                  element.UsageIndex == 2)
         {
@@ -853,7 +854,6 @@ uint32_t SwitchEffectiveShaderElementOffset(
     if (decl &&
         decl->switchVertDeclType == 2 &&
         element.Stream == 0 &&
-        element.Offset == 40 &&
         element.Usage == 5 &&
         element.UsageIndex == 2)
     {
