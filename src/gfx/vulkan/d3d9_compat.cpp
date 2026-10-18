@@ -4816,8 +4816,12 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, static_cast<uint64_t>(m_decl->elements.size()));
     for (uint32_t stream = 0; stream < 16; ++stream)
     {
-        key = HashCombine(key, m_streams[stream].buffer ? 1u : 0u);
-        key = HashCombine(key, m_streams[stream].stride);
+        const bool upStream0 = m_drawPrimitiveUPActive && stream == 0;
+        const bool streamBound = upStream0 || m_streams[stream].buffer != nullptr;
+        const uint32_t streamStride = upStream0
+            ? m_drawPrimitiveUPStride : m_streams[stream].stride;
+        key = HashCombine(key, streamBound ? 1u : 0u);
+        key = HashCombine(key, streamStride);
     }
     for (const auto &element : m_decl->elements)
     {
@@ -5463,10 +5467,14 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams";
     for (uint32_t stream = 0; stream < 16; ++stream)
     {
-        if (m_streams[stream].buffer && m_streams[stream].stride)
+        const bool upStream0 = m_drawPrimitiveUPActive && stream == 0;
+        const bool streamBound = upStream0 || m_streams[stream].buffer != nullptr;
+        const uint32_t streamStride = upStream0
+            ? m_drawPrimitiveUPStride : m_streams[stream].stride;
+        if (streamBound && streamStride)
         {
             bindings.push_back({
-                stream, m_streams[stream].stride, VK_VERTEX_INPUT_RATE_VERTEX
+                stream, streamStride, VK_VERTEX_INPUT_RATE_VERTEX
             });
         }
     }
@@ -7183,7 +7191,12 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     if (!data || !stride || !vertexCount)
         return E_FAIL;
     m_topology = PrimitiveTopology(primitiveType);
-    if (!PrepareDraw())
+    m_drawPrimitiveUPActive = true;
+    m_drawPrimitiveUPStride = stride;
+    const bool prepared = PrepareDraw();
+    m_drawPrimitiveUPActive = false;
+    m_drawPrimitiveUPStride = 0;
+    if (!prepared)
         return E_FAIL;
 
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/allocate_vertex";
