@@ -6909,8 +6909,16 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 break;
             }
         }
+        // The first world draws happen while _introscreen.gsc moves the
+        // player/camera down from z~=16000. Do not spend the one-shot trace on
+        // that scripted fly-in; wait until the camera is back near gameplay
+        // height so the captured constants describe the black-screen state.
+        const float switchWorldCameraZ = m_vsFloat[6][3];
+        const bool switchGameplayCamera =
+            switchWorldCameraZ >= -2000.0f && switchWorldCameraZ <= 2000.0f;
         static uint32_t switchWorldDrawStateTraceCount = 0;
-        if (hasSampler3 && switchWorldDrawStateTraceCount < 4u)
+        if (hasSampler3 && switchGameplayCamera &&
+            switchWorldDrawStateTraceCount < 4u)
         {
             const uint32_t traceIndex = switchWorldDrawStateTraceCount++;
             const int32_t scissorLeft = m_scissor
