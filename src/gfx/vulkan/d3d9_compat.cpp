@@ -824,14 +824,21 @@ uint8_t SwitchEffectiveShaderElementType(
         {
             type = D3DDECLTYPE_FLOAT16_2;
         }
-        // Keep the world-vertex TEXCOORD0 source in its declared FLOAT4 form.
-        // The 44-byte GfxWorldVertex stores texCoord at byte 20 immediately
-        // followed by lmapCoord at byte 28; the material source table exposes
-        // that 16-byte range as one float4 for shaders that consume .xy/.zw.
-        // Narrowing it to FLOAT2 discards the second UV pair for those variants.
-        // Vertex-declaration variants 2..13 also route standalone lightmap UVs
-        // through TEXCOORD1 or TEXCOORD2 in some materials. Those semantics must
-        // read the lmapCoord float2 at byte 28, not packed normal/tangent at 36/40.
+        // World vertex UVs are two adjacent float2 fields: texCoord at byte 20
+        // and lmapCoord at byte 28. Some material routing entries declare the
+        // TEXCOORD0 source as FLOAT3, but shaders can consume both pairs as xy/zw.
+        // Expose the full 16-byte range so the lightmap UV pair is not truncated.
+        else if (decl->switchVertDeclType >= 2 &&
+                 decl->switchVertDeclType <= 13 &&
+                 element.Offset == 20 &&
+                 element.Usage == 5 &&
+                 element.UsageIndex == 0)
+        {
+            type = D3DDECLTYPE_FLOAT4;
+        }
+        // Vertex-declaration variants 2..13 can also route the lightmap UV pair
+        // as a separate TEXCOORD1/2 input. Read its physical float2 at byte 28,
+        // not the packed normal/tangent fields at offsets 36/40.
         else if (decl->switchVertDeclType >= 2 &&
                  decl->switchVertDeclType <= 13 &&
                  element.Usage == 5 &&
