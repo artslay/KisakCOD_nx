@@ -4267,11 +4267,59 @@ bool IDirect3DDevice9::BindSamplerSet(
                 if (allSubresourcesInitialized)
                     texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-                const uint32_t minFilter = m_samplerState[i][D3DSAMP_MINFILTER];
-                const uint32_t magFilter = m_samplerState[i][D3DSAMP_MAGFILTER];
+                uint32_t minFilter = m_samplerState[i][D3DSAMP_MINFILTER];
+                uint32_t magFilter = m_samplerState[i][D3DSAMP_MAGFILTER];
                 const uint32_t requestedMipFilter = m_samplerState[i][D3DSAMP_MIPFILTER];
-                const uint32_t mipFilter = allSubresourcesInitialized
+                uint32_t mipFilter = allSubresourcesInitialized
                     ? requestedMipFilter : D3DTEXF_NONE;
+
+                // Vulkan only guarantees linear sampling when the actual image
+                // format advertises SAMPLED_IMAGE_FILTER_LINEAR. Texture upload
+                // validation above intentionally checks image/sampling support,
+                // but it does not make unsupported linear filtering legal. On
+                // drivers that expose a sampleable compressed/legacy format
+                // without linear filtering, force a valid point-filter sampler
+                // instead of returning undefined texture samples.
+                VkFormatProperties samplerFormatProperties{};
+                vkGetPhysicalDeviceFormatProperties(
+                    m_backend->PhysicalDevice(), texture->format,
+                    &samplerFormatProperties);
+                const bool supportsLinearFiltering =
+                    (samplerFormatProperties.optimalTilingFeatures &
+                     VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
+                if (!supportsLinearFiltering)
+                {
+                    const bool needsFallback =
+                        minFilter != D3DTEXF_POINT ||
+                        magFilter != D3DTEXF_POINT ||
+                        (mipFilter != D3DTEXF_NONE &&
+                         mipFilter != D3DTEXF_POINT);
+                    minFilter = D3DTEXF_POINT;
+                    magFilter = D3DTEXF_POINT;
+                    if (mipFilter != D3DTEXF_NONE)
+                        mipFilter = D3DTEXF_POINT;
+
+#ifdef __SWITCH__
+                    if (needsFallback)
+                    {
+                        static std::atomic<uint32_t> switchFilterFallbackCount{0};
+                        const uint32_t fallbackIndex =
+                            switchFilterFallbackCount.fetch_add(1, std::memory_order_relaxed);
+                        if (fallbackIndex < 8u)
+                        {
+                            char trace[256];
+                            std::snprintf(
+                                trace, sizeof(trace),
+                                "[KisakCOD][VK SAMPLER FILTER FALLBACK] format=%u features=0x%x slot=%u linear=0 fallback=point\n",
+                                static_cast<unsigned>(texture->format),
+                                static_cast<unsigned>(samplerFormatProperties.optimalTilingFeatures),
+                                i);
+                            Switch_LogWrite(trace);
+                        }
+                    }
+#endif
+                }
+
                 float mipLodBias = 0.0f;
                 const uint32_t mipLodBiasBits = m_samplerState[i][D3DSAMP_MIPMAPLODBIAS];
                 std::memcpy(&mipLodBias, &mipLodBiasBits, sizeof(mipLodBias));
