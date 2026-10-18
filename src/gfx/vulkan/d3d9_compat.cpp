@@ -5183,11 +5183,56 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
         for (const VkVertexInputAttributeDescription &attribute : vertexAttrs)
         {
-            char line[176];
-            std::snprintf(line, sizeof(line),
-                "[KisakCOD][VK PIPELINE ATTRIBUTE] seq=%u location=%u binding=%u format=%u offset=%u\n",
-                pipelineCreateSequence, attribute.location, attribute.binding,
-                static_cast<unsigned>(attribute.format), attribute.offset);
+            const _D3DVERTEXELEMENT9 *matchedElement = nullptr;
+            for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
+            {
+                if (element.Stream != attribute.binding)
+                    continue;
+
+                uint32_t elementLocation = UINT32_MAX;
+                for (int i = 0; i < preVs->attribute_count; ++i)
+                {
+                    const MOJOSHADER_attribute &shaderAttribute = preVs->attributes[i];
+                    if (shaderAttribute.usage ==
+                            static_cast<MOJOSHADER_usage>(element.Usage) &&
+                        shaderAttribute.index == element.UsageIndex &&
+                        ExtractShaderInputRegister(shaderAttribute.name, &elementLocation))
+                        break;
+                }
+                if (elementLocation == attribute.location)
+                {
+                    matchedElement = &element;
+                    break;
+                }
+            }
+
+            char line[320];
+            if (matchedElement)
+            {
+                const uint8_t effectiveType =
+                    SwitchEffectiveShaderElementType(m_decl, *matchedElement);
+                const uint32_t effectiveOffset =
+                    SwitchEffectiveShaderElementOffset(m_decl, *matchedElement);
+                std::snprintf(line, sizeof(line),
+                    "[KisakCOD][VK PIPELINE ATTRIBUTE] seq=%u location=%u binding=%u format=%u offset=%u usage=%u index=%u elementType=%u effectiveType=%u declaredOffset=%u effectiveOffset=%u route=%u\n",
+                    pipelineCreateSequence, attribute.location, attribute.binding,
+                    static_cast<unsigned>(attribute.format), attribute.offset,
+                    static_cast<unsigned>(matchedElement->Usage),
+                    static_cast<unsigned>(matchedElement->UsageIndex),
+                    static_cast<unsigned>(matchedElement->Type),
+                    static_cast<unsigned>(effectiveType),
+                    static_cast<unsigned>(matchedElement->Offset),
+                    effectiveOffset,
+                    static_cast<unsigned>(m_decl->switchVertDeclType));
+            }
+            else
+            {
+                std::snprintf(line, sizeof(line),
+                    "[KisakCOD][VK PIPELINE ATTRIBUTE] seq=%u location=%u binding=%u format=%u offset=%u semantic=unmatched route=%u\n",
+                    pipelineCreateSequence, attribute.location, attribute.binding,
+                    static_cast<unsigned>(attribute.format), attribute.offset,
+                    static_cast<unsigned>(m_decl->switchVertDeclType));
+            }
             Switch_LogWrite(line);
         }
     }
