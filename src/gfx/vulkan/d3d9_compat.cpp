@@ -824,20 +824,23 @@ uint8_t SwitchEffectiveShaderElementType(
         {
             type = D3DDECLTYPE_FLOAT16_2;
         }
-        else if (decl->switchVertDeclType == 2 &&
+        else if (decl->switchVertDeclType >= 2 &&
+                 decl->switchVertDeclType <= 13 &&
                  element.Offset == 20 &&
                  element.Usage == 5 &&
                  element.UsageIndex == 0)
         {
             type = D3DDECLTYPE_FLOAT2;
         }
-        // World-material routing identifies the lightmap coordinates as
-        // TEXCOORD2, but the legacy source offset differs between shader
-        // variants (the routed declaration may say byte 36 or 40). The actual
-        // GfxWorldVertex layout always stores lmapCoord as float2 at byte 28.
-        // Select the physical representation by semantic, not the stale offset,
-        // or some lightmapped surfaces interpret packed normal/tangent bytes as UVs.
-        else if (decl->switchVertDeclType == 2 &&
+        // Vertex-declaration variants 2..13 all route the 44-byte
+        // GfxWorldVertex layout, including normal-mapped/specular variants.
+        // The routing table points TEXCOORD2 at legacy packed-vector offsets
+        // (36/40), but the physical lightmap UV pair is always at byte 28.
+        // Key by semantic for every world-vertex variant; limiting this to
+        // variant 2 leaves the common multi-texture lightmap shaders sampling
+        // normal/tangent bytes instead of the lightmap coordinates.
+        else if (decl->switchVertDeclType >= 2 &&
+                 decl->switchVertDeclType <= 13 &&
                  element.Usage == 5 &&
                  element.UsageIndex == 2)
         {
@@ -852,7 +855,8 @@ uint32_t SwitchEffectiveShaderElementOffset(
     const _D3DVERTEXELEMENT9 &element)
 {
     if (decl &&
-        decl->switchVertDeclType == 2 &&
+        decl->switchVertDeclType >= 2 &&
+        decl->switchVertDeclType <= 13 &&
         element.Stream == 0 &&
         element.Usage == 5 &&
         element.UsageIndex == 2)
