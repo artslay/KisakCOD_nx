@@ -5854,6 +5854,27 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 #endif
 
+    // Hash the exact shader words referenced by the crash snapshot. Keep this
+    // diagnostic local to cache-miss pipeline creation so it can distinguish
+    // shader-module changes without altering the pipeline cache key.
+    const auto computeSpirvHash = [](const std::vector<uint32_t> &words) -> uint64_t
+    {
+        uint64_t hash = 14695981039346656037ull;
+        for (const uint32_t word : words)
+        {
+            uint32_t value = word;
+            for (unsigned int byte = 0; byte < sizeof(word); ++byte)
+            {
+                hash ^= static_cast<uint8_t>(value & 0xffu);
+                hash *= 1099511628211ull;
+                value >>= 8;
+            }
+        }
+        return hash;
+    };
+    const uint64_t vsSpirvHash = computeSpirvHash(m_vertexShader->spirv);
+    const uint64_t psSpirvHash = computeSpirvHash(m_pixelShader->spirv);
+
     g_switchPipelineCrashSnapshot.valid = false;
     g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
     g_switchPipelineCrashSnapshot.vertexSpirv = &m_vertexShader->spirv;
