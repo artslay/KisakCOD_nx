@@ -61,6 +61,14 @@ thread_local volatile uintptr_t g_switchVkPipelineTracePixelShader = 0;
 thread_local volatile uintptr_t g_switchVkPipelineTracePixelSerial = 0;
 }
 
+// Temporary quarantine for the exact SPIR-V modules captured when NVK/NAK
+// corrupted newlib's heap during graphics-pipeline compilation. Once a match is
+// found after shader linking, blacklist its shader object so subsequent draws
+// avoid repeating the failing compiler path. The affected draw is skipped.
+static std::atomic<uint64_t> g_switchNakCrashGuardVertexShaderSerial{0};
+static std::atomic<uint64_t> g_switchNakCrashGuardPixelShaderSerial{0};
+static std::atomic<bool> g_switchNakCrashGuardLogged{false};
+
 #ifdef __SWITCH__
 // Bounded SPIR-V reflection for the shader pairs whose textures are currently
 // missing on Switch. Source-side sampler metadata alone cannot prove the
@@ -4804,6 +4812,19 @@ bool IDirect3DDevice9::EnsurePipeline()
         return false;
     }
 
+    // Avoid re-linking/recompiling a shader object already identified as one of
+    // the two modules involved in the observed NAK heap-corruption crash.
+    const uint64_t blockedVertexSerial =
+        g_switchNakCrashGuardVertexShaderSerial.load(std::memory_order_relaxed);
+    const uint64_t blockedPixelSerial =
+        g_switchNakCrashGuardPixelShaderSerial.load(std::memory_order_relaxed);
+    if ((blockedVertexSerial != 0 && m_vertexShader->serial == blockedVertexSerial) ||
+        (blockedPixelSerial != 0 && m_pixelShader->serial == blockedPixelSerial))
+    {
+        g_switchFrameStage = "frame/render/vulkan/pipeline/skip_known_nak_crash_shader";
+        return false;
+    }
+
     // Preserve D3D9 alpha-test semantics for materials such as fences and foliage.
     // Alpha reference is baked into each fragment-module variant, so avoid
     // specialization maps when creating a pipeline on NVK.
@@ -5319,6 +5340,43 @@ bool IDirect3DDevice9::EnsurePipeline()
             ++strippedVertexDebugTraceCount;
         }
 #endif
+
+        // These are the exact linked modules captured in crash pipeline #27.
+        // Their instruction streams pass structural SPIR-V checks, but compiling
+        // them on this embedded NVK/NAK build corrupts the heap inside newlib
+        // free(). Refuse to hand either module to the driver until the bundled
+        // Mesa shader compiler can be rebuilt with a driver-side fix.
+        const uint64_t guardVertexHash = HashSpirvWords(m_vertexShader->spirv);
+        const uint64_t guardPixelHash = HashSpirvWords(m_pixelShader->spirv);
+        const bool guardVertexShader = guardVertexHash == 0xaf1d39bec3f1bf7dull;
+        const bool guardPixelShader = guardPixelHash == 0xc207b0e586f41b0aull;
+        if (guardVertexShader || guardPixelShader)
+        {
+            if (guardVertexShader)
+                g_switchNakCrashGuardVertexShaderSerial.store(
+                    m_vertexShader->serial, std::memory_order_relaxed);
+            if (guardPixelShader)
+                g_switchNakCrashGuardPixelShaderSerial.store(
+                    m_pixelShader->serial, std::memory_order_relaxed);
+
+            if (!g_switchNakCrashGuardLogged.exchange(true, std::memory_order_acq_rel))
+            {
+                char guardLine[448];
+                std::snprintf(
+                    guardLine, sizeof(guardLine),
+                    "[KisakCOD][VK PIPELINE GUARD] reason=known_nak_heap_corruption "
+                    "decl=%llu vs=%llu hash=%016llx ps=%llu hash=%016llx "
+                    "action=skip_shader_draw\\n",
+                    static_cast<unsigned long long>(m_decl->serial),
+                    static_cast<unsigned long long>(m_vertexShader->serial),
+                    static_cast<unsigned long long>(guardVertexHash),
+                    static_cast<unsigned long long>(m_pixelShader->serial),
+                    static_cast<unsigned long long>(guardPixelHash));
+                Switch_LogWrite(guardLine);
+            }
+            g_switchFrameStage = "frame/render/vulkan/pipeline/skip_known_nak_crash_shader";
+            return false;
+        }
 
         VkShaderModuleCreateInfo vsInfo{};
         vsInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -7115,7 +7173,12 @@ bool IDirect3DDevice9::PrepareDraw()
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_pipeline";
     if (!EnsurePipeline())
     {
-        Switch_LogWrite("[KisakCOD][VK DRAW] fail=pipeline\n");
+        // The known NAK crash guard deliberately drops affected draws. Avoid
+        // emitting one failure line per surface using the quarantined shader.
+        if (!g_switchFrameStage || std::strcmp(
+                g_switchFrameStage,
+                "frame/render/vulkan/pipeline/skip_known_nak_crash_shader") != 0)
+            Switch_LogWrite("[KisakCOD][VK DRAW] fail=pipeline\n");
         return false;
     }
 
