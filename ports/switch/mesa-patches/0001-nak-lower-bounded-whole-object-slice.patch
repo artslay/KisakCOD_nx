@@ -89,7 +89,7 @@ diff --git a/src/compiler/rust/lower_bounded.rs b/src/compiler/rust/lower_bounde
 diff --git a/src/nouveau/vulkan/nvk_shader.c b/src/nouveau/vulkan/nvk_shader.c
 --- a/src/nouveau/vulkan/nvk_shader.c
 +++ b/src/nouveau/vulkan/nvk_shader.c
-@@ -82,7 +82,7 @@
+@@ -82,6 +82,6 @@
     return (no_cbufs ? 1 << 12 : 0)
        | (use_edb_buffer_views ? 1 << 13 : 0)
        | (instance->drirc.misc.ssbo_align_4b ? 1 << 14 : 0)
