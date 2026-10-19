@@ -1,5 +1,5 @@
 diff --git a/src/nouveau/compiler/nak/sm50.rs b/src/nouveau/compiler/nak/sm50.rs
-index 294d71f5ca966ab49163a2954a9aaf861aced2a8..1fc4235b50d2e1a8e1c4d9e2c5d5f1c1e9f4a4aa 100644
+index 294d71f..1fc4235 100644
 --- a/src/nouveau/compiler/nak/sm50.rs
 +++ b/src/nouveau/compiler/nak/sm50.rs
 @@ -486,8 +486,8 @@ impl SM50Op for OpFAdd {
