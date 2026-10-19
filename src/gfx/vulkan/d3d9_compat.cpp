@@ -1111,92 +1111,6 @@ bool SpirvIsValidInstruction(const std::vector<uint32_t> &words, size_t offset, 
 }
 
  
-// Resolve the two alpha-test SpecIds from the final fragment module, rather
-// than assuming the mutable shader-wrapper metadata still matches its SPIR-V.
-// The alpha-function specialization is the scalar spec constant used as the
-// left operand of the seven generated equality tests (values 2..8); the other
-// member of the pair is the alpha reference threshold.
-bool ResolveAlphaTestSpecializationIds(
-    const std::vector<uint32_t> &words,
-    uint32_t expectedFuncSpecId,
-    uint32_t expectedRefSpecId,
-    uint32_t *resolvedFuncSpecId,
-    uint32_t *resolvedRefSpecId)
-{
-    if (words.size() < 5 || words[0] != SpvMagicNumber ||
-        !resolvedFuncSpecId || !resolvedRefSpecId ||
-        expectedFuncSpecId == expectedRefSpecId)
-        return false;
-
-    // This runs while every uncached graphics pipeline is being prepared.
-    // Avoid per-pipeline unordered_map/unordered_set/vector allocations here:
-    // the module already tells us the only two SpecIds we need to resolve.
-    uint32_t funcResultId = 0;
-    uint32_t refResultId = 0;
-    bool foundFuncDecoration = false;
-    bool foundRefDecoration = false;
-
-    for (size_t i = 5; i < words.size();)
-    {
-        uint32_t wc = 0;
-        SpvOp op{};
-        if (!SpirvIsValidInstruction(words, i, &wc, &op))
-            return false;
-
-        const uint32_t *ins = &words[i];
-        if (op == SpvOpDecorate && wc >= 4 &&
-            ins[2] == SpvDecorationSpecId)
-        {
-            if (ins[3] == expectedFuncSpecId)
-            {
-                if (foundFuncDecoration && funcResultId != ins[1])
-                    return false;
-                funcResultId = ins[1];
-                foundFuncDecoration = true;
-            }
-            else if (ins[3] == expectedRefSpecId)
-            {
-                if (foundRefDecoration && refResultId != ins[1])
-                    return false;
-                refResultId = ins[1];
-                foundRefDecoration = true;
-            }
-        }
-        i += wc;
-    }
-
-    if (!foundFuncDecoration || !foundRefDecoration ||
-        !funcResultId || !refResultId || funcResultId == refResultId)
-        return false;
-
-    bool funcIsSpecConstant = false;
-    bool refIsSpecConstant = false;
-    for (size_t i = 5; i < words.size();)
-    {
-        uint32_t wc = 0;
-        SpvOp op{};
-        if (!SpirvIsValidInstruction(words, i, &wc, &op))
-            return false;
-
-        const uint32_t *ins = &words[i];
-        if (op == SpvOpSpecConstant && wc >= 4)
-        {
-            funcIsSpecConstant |= ins[2] == funcResultId;
-            refIsSpecConstant |= ins[2] == refResultId;
-        }
-        i += wc;
-    }
-
-    if (!funcIsSpecConstant || !refIsSpecConstant)
-        return false;
-
-    // The patcher allocates both SpecIds from values not present in the
-    // original module. The function selector remains decorated for the stable
-    // specialization-map ABI, but the compare opcode is selected on the CPU.
-    *resolvedFuncSpecId = expectedFuncSpecId;
-    *resolvedRefSpecId = expectedRefSpecId;
-    return true;
-}
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -1418,6 +1332,7 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 bool PatchFragmentShaderForAlphaTest(
     std::vector<uint32_t> &words,
     uint32_t alphaFunc,
+    uint32_t alphaRef,
     uint32_t *alphaFuncSpecId,
     uint32_t *alphaRefSpecId,
     bool useDemoteToHelperInvocation)
@@ -1433,7 +1348,6 @@ bool PatchFragmentShaderForAlphaTest(
     uint32_t boolType = 0;
     bool foundOutputLocation0 = false;
     bool addBoolType = false;
-    std::unordered_set<uint32_t> usedSpecIds;
     std::unordered_set<uint32_t> locationZeroVariables;
 
     for (size_t i = 5; i < words.size();)
@@ -1450,9 +1364,7 @@ bool PatchFragmentShaderForAlphaTest(
         }
         else if (op == SpvOpDecorate && wc >= 4)
         {
-            if (ins[2] == SpvDecorationSpecId)
-                usedSpecIds.insert(ins[3]);
-            else if (ins[2] == SpvDecorationLocation && ins[3] == 0)
+            if (ins[2] == SpvDecorationLocation && ins[3] == 0)
                 locationZeroVariables.insert(ins[1]);
         }
         else if (op == SpvOpTypeBool && wc >= 2)
@@ -1616,21 +1528,6 @@ bool PatchFragmentShaderForAlphaTest(
         boolType = words[3]++;
         addBoolType = true;
     }
-    // Use compact, non-conflicting SpecId values. Large arbitrary values are
-    // legal, but some Vulkan shader compilers handle them poorly; there is no
-    // benefit to reserving a high numeric range for these two constants.
-    uint32_t nextSpecId = 0;
-    auto allocateSpecId = [&]() -> uint32_t
-    {
-        while (usedSpecIds.count(nextSpecId))
-            ++nextSpecId;
-        const uint32_t id = nextSpecId++;
-        usedSpecIds.insert(id);
-        return id;
-    };
-    const uint32_t funcSpecDecoration = allocateSpecId();
-    const uint32_t refSpecDecoration = allocateSpecId();
-
     if (useDemoteToHelperInvocation && !EnsureSpirvDemoteExtension(words))
         return false;
 
@@ -1638,8 +1535,7 @@ bool PatchFragmentShaderForAlphaTest(
     uint32_t nextId = words[3];
     auto newId = [&]() { return nextId++; };
 
-    const uint32_t funcSpec = newId();
-    const uint32_t refSpec = newId();
+    const uint32_t alphaRefConstant = newId();
     const uint32_t functionPointerType = useSsaAlphaCapture ? 0 : newId();
     const uint32_t alphaStorage = useSsaAlphaCapture ? 0 : newId();
     const uint32_t alphaDefault = useSsaAlphaCapture ? 0 : newId();
@@ -1650,19 +1546,19 @@ bool PatchFragmentShaderForAlphaTest(
     if (addBoolType)
         SpirvAppend(typeGlobals, SpvOpTypeBool, {boolType});
 
+    const float alphaRefValue = static_cast<float>(alphaRef) / 255.0f;
+    uint32_t alphaRefBits = 0;
+    std::memcpy(&alphaRefBits, &alphaRefValue, sizeof(alphaRefBits));
+
     std::vector<uint32_t> globals;
-    // Preserve the original specialization-map ABI for the caller, although
-    // the comparison opcode itself is now selected once on the CPU.
-    SpirvAppend(globals, SpvOpSpecConstant, {floatType, funcSpec, 0x41000000u});
-    SpirvAppend(globals, SpvOpSpecConstant, {floatType, refSpec, 0u});
+    // Bake the D3D9 alpha reference into an ordinary SPIR-V constant. This
+    // avoids Vulkan specialization maps, which crash NVK on the Switch for
+    // some otherwise valid fragment pipelines.
+    SpirvAppend(globals, SpvOpConstant, {floatType, alphaRefConstant, alphaRefBits});
     SpirvAppend(globals, SpvOpConstantTrue, {boolType, discardAlways});
     SpirvAppend(globals, SpvOpConstantFalse, {boolType, discardNever});
     if (!useSsaAlphaCapture)
         SpirvAppend(globals, SpvOpConstant, {floatType, alphaDefault, 0x3f800000u});
-
-    std::vector<uint32_t> decorations;
-    SpirvAppend(decorations, SpvOpDecorate, {funcSpec, SpvDecorationSpecId, funcSpecDecoration});
-    SpirvAppend(decorations, SpvOpDecorate, {refSpec, SpvDecorationSpecId, refSpecDecoration});
 
     size_t firstType = words.size();
     for (size_t i = 5; i < words.size();)
@@ -1682,10 +1578,7 @@ bool PatchFragmentShaderForAlphaTest(
     if (firstType == words.size())
         return false;
 
-    words.insert(words.begin() + firstType, decorations.begin(), decorations.end());
-    words.insert(
-        words.begin() + firstType + decorations.size(),
-        typeGlobals.begin(), typeGlobals.end());
+    words.insert(words.begin() + firstType, typeGlobals.begin(), typeGlobals.end());
 
     if (!useSsaAlphaCapture)
     {
@@ -1884,7 +1777,7 @@ bool PatchFragmentShaderForAlphaTest(
             if (passCompare != SpvOpNop)
             {
                 const uint32_t passes = newId();
-                SpirvAppend(patched, passCompare, {boolType, passes, alpha, refSpec});
+                SpirvAppend(patched, passCompare, {boolType, passes, alpha, alphaRefConstant});
                 // Invert a positive D3D comparison, rather than relying on its
                 // ordered inverse; NaN alpha values must also fail the test.
                 SpirvAppend(patched, SpvOpLogicalNot, {boolType, discard, passes});
@@ -1934,8 +1827,9 @@ bool PatchFragmentShaderForAlphaTest(
 
     words.swap(patched);
     words[3] = nextId;
-    *alphaFuncSpecId = funcSpecDecoration;
-    *alphaRefSpecId = refSpecDecoration;
+    // No specialization constants are emitted by this patch.
+    *alphaFuncSpecId = 0;
+    *alphaRefSpecId = 0;
     return true;
 }
 
@@ -4766,8 +4660,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 
     // Preserve D3D9 alpha-test semantics for materials such as fences and foliage.
-    // ResolveAlphaTestSpecializationIds validates the injected SpecIds against the
-    // exact fragment module before pipeline creation.
+    // Alpha reference is baked into each fragment-module variant, so avoid
+    // specialization maps when creating a pipeline on NVK.
     const bool useAlphaTestPatch = m_alphaTest;
 
     // Dynamic-rendering pipelines are compatible only with their attachment
@@ -5192,6 +5086,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
                 m_alphaFunc,
+                m_alphaRef,
                 &pipelineAlphaFuncSpecId,
                 &pipelineAlphaRefSpecId,
                 // This alpha-test block is injected at the original function return,
@@ -5315,9 +5210,12 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_pixelShader->linkedVertexShaderSerial = m_vertexShader->serial;
         m_pixelShader->linkedAlphaTestPatch = useAlphaTestPatch;
         m_pixelShader->linkedAlphaFunc = useAlphaTestPatch ? m_alphaFunc : UINT32_MAX;
+        m_pixelShader->linkedAlphaRef = useAlphaTestPatch ? m_alphaRef : UINT32_MAX;
     }
     else if (m_pixelShader->linkedAlphaTestPatch != useAlphaTestPatch ||
-             (useAlphaTestPatch && m_pixelShader->linkedAlphaFunc != m_alphaFunc))
+             (useAlphaTestPatch &&
+              (m_pixelShader->linkedAlphaFunc != m_alphaFunc ||
+               m_pixelShader->linkedAlphaRef != m_alphaRef)))
     {
         // Alpha testing is dynamic state. Rebuild only the fragment module when
         // that state toggles; the stored linked baseline avoids running the
@@ -5340,6 +5238,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
                 m_alphaFunc,
+                m_alphaRef,
                 &pipelineAlphaFuncSpecId,
                 &pipelineAlphaRefSpecId,
                 false))
@@ -5375,6 +5274,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
         m_pixelShader->linkedAlphaTestPatch = useAlphaTestPatch;
         m_pixelShader->linkedAlphaFunc = useAlphaTestPatch ? m_alphaFunc : UINT32_MAX;
+        m_pixelShader->linkedAlphaRef = useAlphaTestPatch ? m_alphaRef : UINT32_MAX;
     }
 
     VkPipelineShaderStageCreateInfo stages[2]{};
@@ -5387,71 +5287,13 @@ bool IDirect3DDevice9::EnsurePipeline()
     stages[1].module = m_pixelShader->module;
     stages[1].pName = "main";
 
-    const uint32_t storedAlphaFuncSpecId = m_pixelShader->alphaFuncSpecId;
-    const uint32_t storedAlphaRefSpecId = m_pixelShader->alphaRefSpecId;
-    if (useAlphaTestPatch)
-    {
-        uint32_t resolvedFuncSpecId = pipelineAlphaFuncSpecId;
-        uint32_t resolvedRefSpecId = pipelineAlphaRefSpecId;
-        g_switchFrameStage = "frame/render/vulkan/pipeline/resolve_alpha_specialization";
-        if (!ResolveAlphaTestSpecializationIds(
-                m_pixelShader->spirv,
-                pipelineAlphaFuncSpecId,
-                pipelineAlphaRefSpecId,
-                &resolvedFuncSpecId,
-                &resolvedRefSpecId))
-        {
-            char specMsg[224];
-            std::snprintf(
-                specMsg, sizeof(specMsg),
-                "[KisakCOD][VK SPEC ID] failed=resolve stored=%u/%u local=%u/%u words=%zu\n",
-                storedAlphaFuncSpecId, storedAlphaRefSpecId,
-                pipelineAlphaFuncSpecId, pipelineAlphaRefSpecId,
-                m_pixelShader->spirv.size());
-            Switch_LogWrite(specMsg);
-            return false;
-        }
-        g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_specialization_resolved";
-
-        pipelineAlphaFuncSpecId = resolvedFuncSpecId;
-        pipelineAlphaRefSpecId = resolvedRefSpecId;
-        if (storedAlphaFuncSpecId != resolvedFuncSpecId ||
-            storedAlphaRefSpecId != resolvedRefSpecId)
-        {
-            char specMsg[224];
-            std::snprintf(
-                specMsg, sizeof(specMsg),
-                "[KisakCOD][VK SPEC ID] corrected stored=%u/%u module=%u/%u words=%zu\n",
-                storedAlphaFuncSpecId, storedAlphaRefSpecId,
-                resolvedFuncSpecId, resolvedRefSpecId,
-                m_pixelShader->spirv.size());
-            Switch_LogWrite(specMsg);
-        }
-
-        // Keep cached metadata coherent, but the pipeline uses the local IDs
-        // resolved from the exact module that was passed to vkCreateShaderModule.
-        m_pixelShader->alphaFuncSpecId = resolvedFuncSpecId;
-        m_pixelShader->alphaRefSpecId = resolvedRefSpecId;
-    }
-
-    struct AlphaSpecializationData
-    {
-        float func;
-        float ref;
-    } alphaSpecializationData{
-        static_cast<float>(m_alphaTest ? m_alphaFunc : 8u),
-        static_cast<float>(m_alphaRef) / 255.0f
-    };
-    const VkSpecializationMapEntry alphaSpecializationEntries[] = {
-        {pipelineAlphaFuncSpecId, 0, sizeof(alphaSpecializationData.func)},
-        {pipelineAlphaRefSpecId, sizeof(alphaSpecializationData.func), sizeof(alphaSpecializationData.ref)}
-    };
-    VkSpecializationInfo alphaSpecializationInfo{};
-    alphaSpecializationInfo.mapEntryCount = 2;
-    alphaSpecializationInfo.pMapEntries = alphaSpecializationEntries;
-    alphaSpecializationInfo.dataSize = sizeof(alphaSpecializationData);
-    alphaSpecializationInfo.pData = &alphaSpecializationData;
-    stages[1].pSpecializationInfo = useAlphaTestPatch ? &alphaSpecializationInfo : nullptr;
+    // The alpha-test threshold is baked into the fragment SPIR-V as an ordinary
+    // constant. Do not pass a specialization map to NVK on Switch.
+    pipelineAlphaFuncSpecId = 0;
+    pipelineAlphaRefSpecId = 0;
+    m_pixelShader->alphaFuncSpecId = 0;
+    m_pixelShader->alphaRefSpecId = 0;
+    stages[1].pSpecializationInfo = nullptr;
 
     std::vector<VkVertexInputBindingDescription> bindings;
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams";
@@ -5889,7 +5731,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         "alpha=%u/%u/%u spec=%u/%u storedSpec=%u/%u "
         "depth=%u/%u/%u stencil=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u "
         "mask=%u atoc=%u dynamic=%u layout=%p modules=%p/%p "
-        "specData=%p/%zu values=%.3f/%.6f\n",
+        "specMap=disabled\\n",
         pipelineCreateSequence,
         static_cast<unsigned long long>(key),
         static_cast<unsigned long long>(m_vertexShader->serial),
@@ -5932,12 +5774,8 @@ bool IDirect3DDevice9::EnsurePipeline()
         static_cast<void *>(info.layout),
         static_cast<void *>(stages[0].module),
         static_cast<void *>(stages[1].module),
-        stages[1].pSpecializationInfo
-            ? stages[1].pSpecializationInfo->pData : nullptr,
-        stages[1].pSpecializationInfo
-            ? stages[1].pSpecializationInfo->dataSize : 0u,
-        alphaSpecializationData.func,
-        alphaSpecializationData.ref);
+        nullptr,
+        0u);
     g_switchPipelineCrashSnapshot.valid = true;
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
