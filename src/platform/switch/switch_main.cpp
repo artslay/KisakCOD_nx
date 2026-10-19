@@ -645,7 +645,7 @@ static bool SwitchConfigureNakNoUgpr()
     size_t tokenStart = 0;
     for (size_t i = 0; i <= currentLength; ++i)
     {
-        if (current[i] != ',' && current[i] != '\\0')
+        if (current[i] != ',' && current[i] != '\0')
             continue;
         if (i - tokenStart == sizeof("no_ugpr") - 1u &&
             std::memcmp(current + tokenStart, "no_ugpr", sizeof("no_ugpr") - 1u) == 0)
