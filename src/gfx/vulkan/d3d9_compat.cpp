@@ -5797,6 +5797,18 @@ bool IDirect3DDevice9::EnsurePipeline()
     info.layout = m_backend->PipelineLayout();
     info.renderPass = VK_NULL_HANDLE;
 
+#ifdef __SWITCH__
+    // Retain the NVK/GM20B diagnostic workaround while addressing the
+    // reproducible crash in vkCreateGraphicsPipelines on later world pipelines.
+    info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
+    static std::atomic<bool> loggedSwitchPipelineOptimizationMode{false};
+    if (!loggedSwitchPipelineOptimizationMode.exchange(true, std::memory_order_relaxed))
+    {
+        Switch_LogWrite(
+            "[KisakCOD][VK PIPELINE] disable_optimization=all_switch_graphics_pipelines diagnostic=1\\n");
+    }
+#endif
+
     // Keep a memory-only snapshot of the exact shader pair and compact pipeline
     // state. The exception handler prints it only if this vkCreate call faults.
     // Use Vulkan's normal optimization path. Forcing
