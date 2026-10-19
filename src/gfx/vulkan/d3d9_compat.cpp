@@ -5366,7 +5366,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                     guardLine, sizeof(guardLine),
                     "[KisakCOD][VK PIPELINE GUARD] reason=known_nak_heap_corruption "
                     "decl=%llu vs=%llu hash=%016llx ps=%llu hash=%016llx "
-                    "action=skip_shader_draw\\n",
+                    "action=skip_shader_draw\n",
                     static_cast<unsigned long long>(m_decl->serial),
                     static_cast<unsigned long long>(m_vertexShader->serial),
                     static_cast<unsigned long long>(guardVertexHash),
