@@ -5145,8 +5145,8 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_pixelShader->linkedSpirv = pixelSpirv;
 
         // Do not rewrite every fragment shader with discard logic when D3D9
-        // alpha testing is disabled. Keep that variant byte-for-byte identical
-        // to the interface-linked MojoShader module.
+        // alpha testing is disabled. Preserve its execution logic and only strip
+        // optional SPIR-V debug instructions before driver compilation.
         pipelineAlphaFuncSpecId = 0;
         pipelineAlphaRefSpecId = 0;
         if (useAlphaTestPatch &&
