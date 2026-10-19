@@ -5686,15 +5686,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     info.layout = m_backend->PipelineLayout();
     info.renderPass = VK_NULL_HANDLE;
 
-#ifdef __SWITCH__
-    // Use the driver's normal pipeline optimization path. Disabling optimization
-    // did not avoid the reproducible NVK pipeline-create crash and only penalized
-    // shader compilation/performance.
-#endif
-
     // Keep a memory-only snapshot of the exact shader pair and compact pipeline
     // state. The exception handler prints it only if this vkCreate call faults.
-    // Keep the NVK optimization-disable workaround enabled during diagnosis.
 
     const uint32_t pipelineCreateSequence = ++g_switchPipelineCreateSequence;
     const MOJOSHADER_parseData *preVs = m_vertexShader->parseData;
