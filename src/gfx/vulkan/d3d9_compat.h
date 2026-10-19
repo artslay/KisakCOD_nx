@@ -359,9 +359,10 @@ struct KisakVkShader : IDirect3DResource9 {
         return refs.fetch_add(1, std::memory_order_relaxed) + 1;
     }
     bool linkedAlphaTestPatch=false;
-    // The injected alpha comparison opcode depends on D3D's compare function;
-    // the reference threshold remains a Vulkan specialization constant.
+    // The injected alpha comparison opcode and reference are baked into the
+    // fragment SPIR-V; rebuild when either D3D9 state value changes.
     uint32_t linkedAlphaFunc=UINT32_MAX;
+    uint32_t linkedAlphaRef=UINT32_MAX;
     uint32_t alphaFuncSpecId=0;
     uint32_t alphaRefSpecId=0;
     uint32_t Release() override;
