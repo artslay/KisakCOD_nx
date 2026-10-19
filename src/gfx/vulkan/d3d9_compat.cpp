@@ -5799,23 +5799,12 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     // Keep a memory-only snapshot of the exact shader pair and compact pipeline
     // state. The exception handler prints it only if this vkCreate call faults.
-    const uint64_t vsSpirvHash = HashSpirvWords(m_vertexShader->spirv);
-    const uint64_t psSpirvHash = HashSpirvWords(m_pixelShader->spirv);
-
-#ifdef __SWITCH__
-    // Several distinct shader/pipeline pairs have faulted inside NVK's
-    // vkCreateGraphicsPipelines path. The per-pipeline test let the previous
-    // pair progress, but the next pair faulted. Apply the same diagnostic to
-    // every Switch graphics pipeline to test whether NVK optimization is the
-    // common trigger instead of chasing changing pipeline keys one by one.
-    info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
-    static std::atomic<bool> loggedSwitchPipelineOptimizationMode{false};
-    if (!loggedSwitchPipelineOptimizationMode.exchange(true, std::memory_order_relaxed))
-    {
-        Switch_LogWrite(
-            "[KisakCOD][VK PIPELINE] disable_optimization=all_switch_graphics_pipelines diagnostic=1\n");
-    }
-#endif
+    // Keep a memory-only snapshot of the exact shader pair and compact pipeline
+    // state. The exception handler prints it only if this vkCreate call faults.
+    // Use Vulkan's normal optimization path. Forcing
+    // VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT on every pipeline was a
+    // diagnostic experiment; it did not prevent the current NVK/GM20B crash
+    // and leaves generated alpha-test specialization logic unoptimized.
 
     const uint32_t pipelineCreateSequence = ++g_switchPipelineCreateSequence;
     const MOJOSHADER_parseData *preVs = m_vertexShader->parseData;
