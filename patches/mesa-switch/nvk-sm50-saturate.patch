@@ -2,7 +2,7 @@ diff --git a/src/nouveau/compiler/nak/sm50.rs b/src/nouveau/compiler/nak/sm50.rs
 index 294d71f..1fc4235 100644
 --- a/src/nouveau/compiler/nak/sm50.rs
 +++ b/src/nouveau/compiler/nak/sm50.rs
-@@ -486,6 +486,6 @@ impl SM50Op for OpFAdd {
+@@ -489,6 +489,6 @@ impl SM50Op for OpFAdd {
 -        if src1.as_imm_not_f20().is_some()
 -            && self.rnd_mode != FRndMode::NearestEven
 +        if src1.as_imm_not_f20().is_some()
