@@ -1128,12 +1128,13 @@ bool ResolveAlphaTestSpecializationIds(
         expectedFuncSpecId == expectedRefSpecId)
         return false;
 
-    const std::unordered_set<uint32_t> expectedSpecIds = {
-        expectedFuncSpecId, expectedRefSpecId
-    };
-    std::unordered_map<uint32_t, uint32_t> specIdByResultId;
-    std::unordered_set<uint32_t> specConstantResultIds;
-    std::unordered_map<uint32_t, uint32_t> equalLeftUseCount;
+    // This runs while every uncached graphics pipeline is being prepared.
+    // Avoid per-pipeline unordered_map/unordered_set/vector allocations here:
+    // the module already tells us the only two SpecIds we need to resolve.
+    uint32_t funcResultId = 0;
+    uint32_t refResultId = 0;
+    bool foundFuncDecoration = false;
+    bool foundRefDecoration = false;
 
     for (size_t i = 5; i < words.size();)
     {
@@ -1146,60 +1147,89 @@ bool ResolveAlphaTestSpecializationIds(
         if (op == SpvOpDecorate && wc >= 4 &&
             ins[2] == SpvDecorationSpecId)
         {
-            const auto existing = specIdByResultId.find(ins[1]);
-            if (existing != specIdByResultId.end() && existing->second != ins[3])
-                return false;
-            specIdByResultId[ins[1]] = ins[3];
-        }
-        else if (op == SpvOpSpecConstant && wc >= 4)
-        {
-            specConstantResultIds.insert(ins[2]);
-        }
-        else if (op == SpvOpFOrdEqual && wc >= 5)
-        {
-            ++equalLeftUseCount[ins[3]];
+            if (ins[3] == expectedFuncSpecId)
+            {
+                if (foundFuncDecoration && funcResultId != ins[1])
+                    return false;
+                funcResultId = ins[1];
+                foundFuncDecoration = true;
+            }
+            else if (ins[3] == expectedRefSpecId)
+            {
+                if (foundRefDecoration && refResultId != ins[1])
+                    return false;
+                refResultId = ins[1];
+                foundRefDecoration = true;
+            }
         }
         i += wc;
     }
 
-    std::vector<std::pair<uint32_t, uint32_t>> candidates;
-    for (const auto &entry : specIdByResultId)
-    {
-        if (specConstantResultIds.count(entry.first) &&
-            expectedSpecIds.count(entry.second))
-            candidates.emplace_back(entry.first, entry.second);
-    }
-    if (candidates.size() != 2 ||
-        candidates[0].second == candidates[1].second)
+    if (!foundFuncDecoration || !foundRefDecoration ||
+        !funcResultId || !refResultId || funcResultId == refResultId)
         return false;
 
-    uint32_t funcResultId = 0;
-    uint32_t funcSpecId = 0;
-    uint32_t functionCandidates = 0;
-    for (const auto &candidate : candidates)
+    bool funcIsSpecConstant = false;
+    bool refIsSpecConstant = false;
+    for (size_t i = 5; i < words.size();)
     {
-        const auto uses = equalLeftUseCount.find(candidate.first);
-        if (uses != equalLeftUseCount.end() && uses->second >= 7)
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
+
+        const uint32_t *ins = &words[i];
+        if (op == SpvOpSpecConstant && wc >= 4)
         {
-            funcResultId = candidate.first;
-            funcSpecId = candidate.second;
-            ++functionCandidates;
+            funcIsSpecConstant |= ins[2] == funcResultId;
+            refIsSpecConstant |= ins[2] == refResultId;
         }
+        i += wc;
     }
-    if (functionCandidates != 1 || !funcResultId)
+
+    if (!funcIsSpecConstant || !refIsSpecConstant)
         return false;
 
-    for (const auto &candidate : candidates)
+    // In the injected alpha test, the comparison-function constant is the
+    // left operand of seven equality tests (D3DCMP_* values 2..8). The other
+    // candidate is the alpha reference threshold.
+    uint32_t funcLeftUseCount = 0;
+    uint32_t refLeftUseCount = 0;
+    for (size_t i = 5; i < words.size();)
     {
-        if (candidate.first == funcResultId)
-            continue;
-        *resolvedFuncSpecId = funcSpecId;
-        *resolvedRefSpecId = candidate.second;
-        return true;
-    }
-    return false;
-}
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, i, &wc, &op))
+            return false;
 
+        const uint32_t *ins = &words[i];
+        if (op == SpvOpFOrdEqual && wc >= 5)
+        {
+            if (ins[3] == funcResultId && funcLeftUseCount < UINT32_MAX)
+                ++funcLeftUseCount;
+            if (ins[3] == refResultId && refLeftUseCount < UINT32_MAX)
+                ++refLeftUseCount;
+        }
+        i += wc;
+    }
+
+    const bool funcLooksLikeFunction = funcLeftUseCount >= 7;
+    const bool refLooksLikeFunction = refLeftUseCount >= 7;
+    if (funcLooksLikeFunction == refLooksLikeFunction)
+        return false;
+
+    if (funcLooksLikeFunction)
+    {
+        *resolvedFuncSpecId = expectedFuncSpecId;
+        *resolvedRefSpecId = expectedRefSpecId;
+    }
+    else
+    {
+        *resolvedFuncSpecId = expectedRefSpecId;
+        *resolvedRefSpecId = expectedFuncSpecId;
+    }
+    return true;
+}
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -5405,6 +5435,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     {
         uint32_t resolvedFuncSpecId = pipelineAlphaFuncSpecId;
         uint32_t resolvedRefSpecId = pipelineAlphaRefSpecId;
+        g_switchFrameStage = "frame/render/vulkan/pipeline/resolve_alpha_specialization";
         if (!ResolveAlphaTestSpecializationIds(
                 m_pixelShader->spirv,
                 pipelineAlphaFuncSpecId,
@@ -5422,6 +5453,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite(specMsg);
             return false;
         }
+        g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_specialization_resolved";
 
         pipelineAlphaFuncSpecId = resolvedFuncSpecId;
         pipelineAlphaRefSpecId = resolvedRefSpecId;
