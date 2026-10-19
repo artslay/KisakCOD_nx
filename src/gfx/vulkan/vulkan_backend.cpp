@@ -12,6 +12,7 @@ extern bool R_RecoverLostVulkanDevice();
 #include <cstdlib>
 #include <functional>
 #include <limits>
+#include <string>
 #include <vector>
 
 #include <switch.h>
@@ -390,27 +391,47 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         return true;
 
 #ifdef __SWITCH__
-    // The Switch Tegra X1 uses unified memory. NVK exposes a Tegra-specific
-    // NAK_DEBUG=coherent workaround for CPU/GPU cache visibility; apply it
-    // before the first Vulkan entry point unless the launcher already supplied
-    // its own NAK_DEBUG policy. Other Vulkan drivers simply ignore this NVK flag.
-    if (!std::getenv("NAK_DEBUG"))
+    // On Tegra, NVK_DEBUG=coherent makes mapped CPU/GPU memory cache-coherent.
+    // This is an NVK driver option (not NAK_DEBUG, which configures the shader
+    // compiler). Merge it with existing options before the first Vulkan call.
+    const char *existingNvkDebug = std::getenv("NVK_DEBUG");
+    std::string nvkDebug = existingNvkDebug ? existingNvkDebug : "";
+    bool hasCoherentFlag = false;
+    for (size_t start = 0; start < nvkDebug.size();)
     {
-        if (::setenv("NAK_DEBUG", "coherent", 0) == 0)
+        const size_t end = nvkDebug.find(',', start);
+        const size_t length =
+            (end == std::string::npos ? nvkDebug.size() : end) - start;
+        if (length == sizeof("coherent") - 1u &&
+            nvkDebug.compare(start, length, "coherent") == 0)
+        {
+            hasCoherentFlag = true;
+            break;
+        }
+        if (end == std::string::npos)
+            break;
+        start = end + 1u;
+    }
+    if (!hasCoherentFlag)
+    {
+        if (!nvkDebug.empty())
+            nvkDebug += ',';
+        nvkDebug += "coherent";
+        if (::setenv("NVK_DEBUG", nvkDebug.c_str(), 1) == 0)
         {
             Switch_LogWrite(
-                "[KisakCOD][VK DRIVER] defaulted NAK_DEBUG=coherent for Switch Tegra cache visibility\n");
+                "[KisakCOD][VK DRIVER] enabled NVK_DEBUG=coherent for Tegra cache visibility\\n");
         }
         else
         {
             Switch_LogWrite(
-                "[KisakCOD][VK DRIVER] could not set NAK_DEBUG=coherent; continuing with driver defaults\n");
+                "[KisakCOD][VK DRIVER] could not enable NVK_DEBUG=coherent; continuing with driver defaults\\n");
         }
     }
     else
     {
         Switch_LogWrite(
-            "[KisakCOD][VK DRIVER] preserving launcher-supplied NAK_DEBUG setting\n");
+            "[KisakCOD][VK DRIVER] NVK_DEBUG=coherent already enabled\\n");
     }
 #endif
 
