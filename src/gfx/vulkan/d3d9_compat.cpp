@@ -1849,29 +1849,29 @@ bool PatchFragmentShaderForAlphaTest(
             // key. Emit only the required ordered comparison instead of a
             // specialization-driven compare/OR graph. This reduces the IR
             // presented to Maxwell's NAK compiler on the crashing pipeline.
-            SpvOp discardCompare = SpvOpNop;
+            SpvOp passCompare = SpvOpNop;
             switch (alphaFunc)
             {
             case 1: // D3DCMP_NEVER
                 SpirvAppend(patched, SpvOpCopyObject, {boolType, discard, discardAlways});
                 break;
-            case 2: // D3DCMP_LESS: discard alpha >= ref
-                discardCompare = SpvOpFOrdGreaterThanEqual;
+            case 2: // D3DCMP_LESS
+                passCompare = SpvOpFOrdLessThan;
                 break;
-            case 3: // D3DCMP_EQUAL: discard alpha != ref
-                discardCompare = SpvOpFOrdNotEqual;
+            case 3: // D3DCMP_EQUAL
+                passCompare = SpvOpFOrdEqual;
                 break;
-            case 4: // D3DCMP_LESSEQUAL: discard alpha > ref
-                discardCompare = SpvOpFOrdGreaterThan;
+            case 4: // D3DCMP_LESSEQUAL
+                passCompare = SpvOpFOrdLessThanEqual;
                 break;
-            case 5: // D3DCMP_GREATER: discard alpha <= ref
-                discardCompare = SpvOpFOrdLessThanEqual;
+            case 5: // D3DCMP_GREATER
+                passCompare = SpvOpFOrdGreaterThan;
                 break;
-            case 6: // D3DCMP_NOTEQUAL: discard alpha == ref
-                discardCompare = SpvOpFOrdEqual;
+            case 6: // D3DCMP_NOTEQUAL
+                passCompare = SpvOpFOrdNotEqual;
                 break;
-            case 7: // D3DCMP_GREATEREQUAL: discard alpha < ref
-                discardCompare = SpvOpFOrdLessThan;
+            case 7: // D3DCMP_GREATEREQUAL
+                passCompare = SpvOpFOrdGreaterThanEqual;
                 break;
             case 8: // D3DCMP_ALWAYS
                 SpirvAppend(patched, SpvOpCopyObject, {boolType, discard, discardNever});
@@ -1881,8 +1881,14 @@ bool PatchFragmentShaderForAlphaTest(
                 SpirvAppend(patched, SpvOpCopyObject, {boolType, discard, discardAlways});
                 break;
             }
-            if (discardCompare != SpvOpNop)
-                SpirvAppend(patched, discardCompare, {boolType, discard, alpha, refSpec});
+            if (passCompare != SpvOpNop)
+            {
+                const uint32_t passes = newId();
+                SpirvAppend(patched, passCompare, {boolType, passes, alpha, refSpec});
+                // Invert a positive D3D comparison, rather than relying on its
+                // ordered inverse; NaN alpha values must also fail the test.
+                SpirvAppend(patched, SpvOpLogicalNot, {boolType, discard, passes});
+            }
 
             SpirvAppend(patched, SpvOpSelectionMerge, {mergeLabel, 0});
             SpirvAppend(patched, SpvOpBranchConditional, {discard, killLabel, mergeLabel});
