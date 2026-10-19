@@ -97,15 +97,25 @@ struct VulkanImageFormat
     bool depth = false;
 };
 
-VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
+VulkanImageFormat R_VulkanImageFormat(
+    _D3DFORMAT format,
+    uint8_t semantic = TS_2D,
+    uint8_t imageTrack = IMAGE_TRACK_MISC)
 {
+    // D3D9's legacy renderer consumes base-color maps as color values. In
+    // Vulkan, sRGB formats decode those samples to linear light before shader
+    // lighting, while normal/specular/lightmap data must remain UNORM.
+    const bool srgbColorMap =
+        semantic == TS_COLOR_MAP && imageTrack != IMAGE_TRACK_LIGHTMAP;
     switch (format)
     {
     case D3DFMT_A8R8G8B8:
     case D3DFMT_X8R8G8B8:
-        return {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+        return {srgbColorMap ? VK_FORMAT_B8G8R8A8_SRGB : VK_FORMAT_B8G8R8A8_UNORM,
+                VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_A8B8G8R8:
-        return {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+        return {srgbColorMap ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM,
+                VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_A8:
     case D3DFMT_L8:
         return {VK_FORMAT_R8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 1, 0, false, false};
@@ -167,11 +177,14 @@ VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
     case D3DFMT_DXN:
         return {VK_FORMAT_BC5_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
     case D3DFMT_DXT1:
-        return {VK_FORMAT_BC1_RGBA_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 8, true, false};
+        return {srgbColorMap ? VK_FORMAT_BC1_RGBA_SRGB_BLOCK : VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+                VK_IMAGE_ASPECT_COLOR_BIT, 0, 8, true, false};
     case D3DFMT_DXT3:
-        return {VK_FORMAT_BC2_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
+        return {srgbColorMap ? VK_FORMAT_BC2_SRGB_BLOCK : VK_FORMAT_BC2_UNORM_BLOCK,
+                VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
     case D3DFMT_DXT5:
-        return {VK_FORMAT_BC3_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
+        return {srgbColorMap ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_BC3_UNORM_BLOCK,
+                VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
     default:
         return {};
     }
@@ -256,7 +269,9 @@ bool R_VulkanAllocTexture(
     uint32_t depth,
     uint32_t levels,
     _D3DFORMAT sourceFormat,
-    int imageFlags)
+    int imageFlags,
+    uint8_t semantic,
+    uint8_t imageTrack)
 {
     if (!texture || !width || !height || !depth || !levels)
         return false;
@@ -265,7 +280,8 @@ bool R_VulkanAllocTexture(
     if (!backend)
         return false;
 
-    const VulkanImageFormat info = R_VulkanImageFormat(sourceFormat);
+    const VulkanImageFormat info =
+        R_VulkanImageFormat(sourceFormat, semantic, imageTrack);
     if (info.format == VK_FORMAT_UNDEFINED)
         return false;
 
@@ -413,7 +429,8 @@ void R_VulkanUploadTexture(
     if (!backend)
         return;
 
-    const VulkanImageFormat info = R_VulkanImageFormat(format);
+    const VulkanImageFormat info =
+        R_VulkanImageFormat(format, image->semantic, image->track);
     if (info.format == VK_FORMAT_UNDEFINED)
         return;
 
@@ -2219,7 +2236,7 @@ void __cdecl Image_CreateCubeTexture_PC(GfxImage *image,uint16_t edgeLen,uint32_
     auto *x = new KisakVkTexture;
     if (!R_VulkanAllocTexture(
             x, VulkanTextureKind::Cube, edgeLen, edgeLen, 1,
-            mipmapCount, imageFormat, 0))
+            mipmapCount, imageFormat, 0, image->semantic, image->track))
     {
         delete x;
         Com_Error(ERR_DROP, "CreateCubeTexture failed: Vulkan allocation failed");
@@ -2239,7 +2256,7 @@ void __cdecl Image_Create3DTexture_PC(GfxImage *image,uint16_t width,uint16_t he
     auto *x = new KisakVkTexture;
     if (!R_VulkanAllocTexture(
             x, VulkanTextureKind::Texture3D, width, height, depth,
-            mipmapCount, imageFormat, imageFlags))
+            mipmapCount, imageFormat, imageFlags, image->semantic, image->track))
     {
         delete x;
         Com_Error(ERR_DROP, "Create3DTexture failed: Vulkan allocation failed");
@@ -2291,7 +2308,7 @@ void __cdecl Image_Create2DTexture_PC(GfxImage *image,uint16_t width,uint16_t he
     auto *x = new KisakVkTexture;
     if (!R_VulkanAllocTexture(
             x, VulkanTextureKind::Texture2D, width, height, 1,
-            mipmapCount, imageFormat, imageFlags))
+            mipmapCount, imageFormat, imageFlags, image->semantic, image->track))
     {
         delete x;
         Com_Error(ERR_DROP, "Create2DTexture failed: Vulkan allocation failed");
