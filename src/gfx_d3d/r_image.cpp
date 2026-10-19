@@ -127,7 +127,8 @@ VulkanImageFormat R_VulkanImageFormat(
     case D3DFMT_A1R5G5B5:
         return {VK_FORMAT_A1R5G5B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_X8B8G8R8:
-        return {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+        return {srgbColorMap ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM,
+                VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_A2B10G10R10:
         return {VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_G16R16:
