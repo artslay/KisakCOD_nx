@@ -455,6 +455,51 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
             "[KisakCOD][VK DRIVER] NVK_DEBUG coherent and no_cbuf already enabled\n");
     }
 
+    // NAK_DEBUG=serial forces serial instruction execution in NVK's shader
+    // backend. Mesa documents it as a debugging/workaround option for shader
+    // dependency bugs; enable it for the Switch pipeline-compiler fault while
+    // preserving any flags supplied by the runtime.
+    const char *existingNakDebug = std::getenv("NAK_DEBUG");
+    std::string nakDebug = existingNakDebug ? existingNakDebug : "";
+    bool hasSerialFlag = false;
+    for (size_t start = 0; start < nakDebug.size();)
+    {
+        const size_t end = nakDebug.find(',', start);
+        const size_t length =
+            (end == std::string::npos ? nakDebug.size() : end) - start;
+        if (length == sizeof("serial") - 1u &&
+            nakDebug.compare(start, length, "serial") == 0)
+            hasSerialFlag = true;
+        if (end == std::string::npos)
+            break;
+        start = end + 1u;
+    }
+
+    if (!hasSerialFlag)
+    {
+        if (!nakDebug.empty())
+            nakDebug += ',';
+        nakDebug += "serial";
+        if (::setenv("NAK_DEBUG", nakDebug.c_str(), 1) != 0)
+        {
+            Switch_LogWrite(
+                "[KisakCOD][VK DRIVER] could not enable NAK_DEBUG=serial; continuing with existing options\n");
+        }
+        else
+        {
+            char nakFlagsMsg[256];
+            std::snprintf(nakFlagsMsg, sizeof(nakFlagsMsg),
+                "[KisakCOD][VK DRIVER] enabled NAK_DEBUG=%s (serial NAK execution workaround for pipeline compiler faults)\n",
+                nakDebug.c_str());
+            Switch_LogWrite(nakFlagsMsg);
+        }
+    }
+    else
+    {
+        Switch_LogWrite(
+            "[KisakCOD][VK DRIVER] NAK_DEBUG serial already enabled\n");
+    }
+
 #endif
 
     if (wndParms)
