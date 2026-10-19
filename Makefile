@@ -128,7 +128,21 @@ $(ZONELOAD_OBJECTS): CXXFLAGS += -std=gnu++23 -DARCH_x64
 
 .DEFAULT_GOAL := all
 
-.PHONY: all clean print-sources progress-init progress-done ALWAYS
+.PHONY: all clean print-sources progress-init progress-done check-switch-deps ALWAYS
+
+# Mesa/NVK's static libvulkan.a references zstd; make the missing portlib explicit
+# instead of letting ld fail later with the vague `cannot find -lzstd` message.
+check-switch-deps:
+	@if [ ! -f "$(MESA_SDK)/lib/libzstd.a" ] && [ ! -f "$(OPENAL_SDK)/lib/libzstd.a" ]; then \
+		printf '%s\n' \
+		  'ERROR: libzstd.a is required by the Mesa/NVK Vulkan archive but was not found.' \
+		  'Install the devkitPro Switch portlib from the devkitPro MSYS2 shell:' \
+		  '  pacman -S --needed switch-libzstd' \
+		  'Then rerun make.' >&2; \
+		exit 1; \
+	fi
+
+$(OBJECTS): | check-switch-deps
 
 TOTAL_OBJECTS := $(words $(OBJECTS))
 PROGRESS_FILE := $(BUILD)/.compile_count
