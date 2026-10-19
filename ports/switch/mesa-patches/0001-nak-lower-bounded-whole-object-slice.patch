@@ -1,46 +1,69 @@
 diff --git a/src/compiler/rust/lower_bounded.rs b/src/compiler/rust/lower_bounded.rs
 --- a/src/compiler/rust/lower_bounded.rs
 +++ b/src/compiler/rust/lower_bounded.rs
-@@ -183,12 +183,16 @@
-             // SAFETY:
-             //
-             // We only ever place a length or a LowerBoundedU32 in self.last.
-             // So if it's not a valid length, it must be a valid
-             // LowerBoundedU32.
+@@ -176,15 +176,19 @@
+         if self.last < Self::MAX_LEN_U32 {
+             &self.arr[0..(self.last as usize)]
+         } else {
+-            // SAFETY:
+-            //
+-            // We only ever place a length or a LowerBoundedU32 in self.last.
+-            // So if it's not a valid length, it must be a valid
+-            // LowerBoundedU32.
+-            debug_assert!(self.last >= MIN_U32);
+-            unsafe {
+-                std::slice::from_raw_parts(
+-                    &self.arr as *const _ as *const LowerBoundedU32<MIN_U32>,
++            // SAFETY:
++            //
++            // We only ever place a length or a LowerBoundedU32 in self.last.
++            // So if it's not a valid length, it must be a valid
++            // LowerBoundedU32.
 +            //
 +            // The full logical array is the complete #[repr(C)] object:
 +            // arr followed by last. Derive the pointer from self, not from
 +            // &self.arr, because this slice intentionally spans both fields.
-             debug_assert!(self.last >= MIN_U32);
-             unsafe {
-                 std::slice::from_raw_parts(
--                    &self.arr as *const _ as *const LowerBoundedU32<MIN_U32>,
++            debug_assert!(self.last >= MIN_U32);
++            unsafe {
++                std::slice::from_raw_parts(
 +                    self as *const Self as *const LowerBoundedU32<MIN_U32>,
                      Self::MAX_LEN,
                  )
              }
-@@ -203,12 +207,17 @@
-             // SAFETY:
-             //
-             // We only ever place a length or a LowerBoundedU32 in self.last.
-             // So if it's not a valid length, it must be a valid
-             // LowerBoundedU32.
+@@ -195,15 +199,20 @@
+         if self.last < Self::MAX_LEN_U32 {
+             &mut self.arr[0..(self.last as usize)]
+         } else {
+-            // SAFETY:
+-            //
+-            // We only ever place a length or a LowerBoundedU32 in self.last.
+-            // So if it's not a valid length, it must be a valid
+-            // LowerBoundedU32.
+-            debug_assert!(self.last >= MIN_U32);
+-            unsafe {
+-                std::slice::from_raw_parts_mut(
+-                    &mut self.arr as *mut _ as *mut LowerBoundedU32<MIN_U32>,
++            // SAFETY:
++            //
++            // We only ever place a length or a LowerBoundedU32 in self.last.
++            // So if it's not a valid length, it must be a valid
++            // LowerBoundedU32.
 +            //
 +            // This slice covers the complete #[repr(C)] object, including
 +            // the encoded final element in last. Use the whole-object pointer
 +            // so the mutable slice does not extend a field-derived pointer
 +            // beyond the arr field it originally referenced.
-             debug_assert!(self.last >= MIN_U32);
-             unsafe {
-                 std::slice::from_raw_parts_mut(
--                    &mut self.arr as *mut _ as *mut LowerBoundedU32<MIN_U32>,
++            debug_assert!(self.last >= MIN_U32);
++            unsafe {
++                std::slice::from_raw_parts_mut(
 +                    self as *mut Self as *mut LowerBoundedU32<MIN_U32>,
                      Self::MAX_LEN,
                  )
              }
-@@ -520,4 +528,23 @@
+@@ -529,6 +538,25 @@
+         }
      }
-
+ 
 +    #[test]
 +    fn test_u32arr_full_mut_slice_updates_encoded_tail() {
 +        type TestArray = LowerBoundedU32Array<5, 3>;
@@ -62,10 +85,11 @@ diff --git a/src/compiler/rust/lower_bounded.rs b/src/compiler/rust/lower_bounde
 +
      #[test]
      fn test_u32arr_from_slice() {
+         type TestArray = LowerBoundedU32Array<5, 3>;
 diff --git a/src/nouveau/vulkan/nvk_shader.c b/src/nouveau/vulkan/nvk_shader.c
 --- a/src/nouveau/vulkan/nvk_shader.c
 +++ b/src/nouveau/vulkan/nvk_shader.c
-@@ -82,6 +82,6 @@ nvk_physical_device_compiler_flags(const struct nvk_physical_device *pdev)
+@@ -82,7 +82,7 @@
     return (no_cbufs ? 1 << 12 : 0)
        | (use_edb_buffer_views ? 1 << 13 : 0)
        | (instance->drirc.misc.ssbo_align_4b ? 1 << 14 : 0)
