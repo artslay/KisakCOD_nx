@@ -19,7 +19,7 @@ diff --git a/src/compiler/rust/lower_bounded.rs b/src/compiler/rust/lower_bounde
                      Self::MAX_LEN,
                  )
              }
-@@ -203,12 +207,16 @@
+@@ -203,12 +207,17 @@
              // SAFETY:
              //
              // We only ever place a length or a LowerBoundedU32 in self.last.
@@ -38,7 +38,7 @@ diff --git a/src/compiler/rust/lower_bounded.rs b/src/compiler/rust/lower_bounde
                      Self::MAX_LEN,
                  )
              }
-@@ -520,4 +528,20 @@
+@@ -520,4 +528,23 @@
      }
 
 +    #[test]
@@ -65,11 +65,11 @@ diff --git a/src/compiler/rust/lower_bounded.rs b/src/compiler/rust/lower_bounde
 diff --git a/src/nouveau/vulkan/nvk_shader.c b/src/nouveau/vulkan/nvk_shader.c
 --- a/src/nouveau/vulkan/nvk_shader.c
 +++ b/src/nouveau/vulkan/nvk_shader.c
-@@ -82,7 +82,7 @@ nvk_physical_device_compiler_flags(const struct nvk_physical_device *pdev)
+@@ -82,6 +82,6 @@ nvk_physical_device_compiler_flags(const struct nvk_physical_device *pdev)
     return (no_cbufs ? 1 << 12 : 0)
        | (use_edb_buffer_views ? 1 << 13 : 0)
        | (instance->drirc.misc.ssbo_align_4b ? 1 << 14 : 0)
 -      | (UINT64_C(8) << 16) /* Interlock compiler ABI revision. */
 +      | (UINT64_C(9) << 16) /* NAK compiler correctness revision. */
        | (nak_flags << 48);
-}
+ }
