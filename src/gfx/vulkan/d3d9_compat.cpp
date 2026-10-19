@@ -5731,7 +5731,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         "alpha=%u/%u/%u spec=%u/%u storedSpec=%u/%u "
         "depth=%u/%u/%u stencil=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u "
         "mask=%u atoc=%u dynamic=%u layout=%p modules=%p/%p "
-        "specMap=disabled\\n",
+        "specMap=disabled\n",
         pipelineCreateSequence,
         static_cast<unsigned long long>(key),
         static_cast<unsigned long long>(m_vertexShader->serial),
@@ -5755,8 +5755,8 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_alphaRef,
         pipelineAlphaFuncSpecId,
         pipelineAlphaRefSpecId,
-        storedAlphaFuncSpecId,
-        storedAlphaRefSpecId,
+        0u,
+        0u,
         m_depthEnable ? 1u : 0u,
         m_depthWrite ? 1u : 0u,
         static_cast<unsigned int>(m_depthFunc),
@@ -5773,9 +5773,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         dynamic.dynamicStateCount,
         static_cast<void *>(info.layout),
         static_cast<void *>(stages[0].module),
-        static_cast<void *>(stages[1].module),
-        nullptr,
-        0u);
+        static_cast<void *>(stages[1].module));
     g_switchPipelineCrashSnapshot.valid = true;
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
