@@ -1,5 +1,7 @@
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <stdlib.h>
 #include <switch.h>
 #include <vulkan/vulkan.h>
 #include <atomic>
@@ -626,12 +628,50 @@ static void SwitchLogVulkanRuntime()
     vkDestroyInstance(instance, nullptr);
 }
 
+// NAK's uniform-address/UGPR optimization is optional on Maxwell/GM20B.
+// This port's captured crash occurs while NAK's register allocator is being
+// destroyed during graphics-pipeline compilation, with the allocator's heap
+// metadata already corrupted. Keep all shaders and draws enabled, but force
+// NAK's existing no_ugpr lowering mode so it does not take the UGPR uniform-
+// address path implicated by this register-allocation crash. Preserve other
+// NAK_DEBUG flags supplied by the user.
+static bool SwitchConfigureNakNoUgpr()
+{
+    const char *current = std::getenv("NAK_DEBUG");
+    if (!current || !*current)
+        return ::setenv("NAK_DEBUG", "no_ugpr", 1) == 0;
+
+    const size_t currentLength = std::strlen(current);
+    size_t tokenStart = 0;
+    for (size_t i = 0; i <= currentLength; ++i)
+    {
+        if (current[i] != ',' && current[i] != '\\0')
+            continue;
+        if (i - tokenStart == sizeof("no_ugpr") - 1u &&
+            std::memcmp(current + tokenStart, "no_ugpr", sizeof("no_ugpr") - 1u) == 0)
+            return true;
+        tokenStart = i + 1u;
+    }
+
+    char combined[256];
+    const int written = std::snprintf(
+        combined, sizeof(combined), "%s%sno_ugpr", current,
+        currentLength && current[currentLength - 1u] == ',' ? "" : ",");
+    if (written < 0 || static_cast<size_t>(written) >= sizeof(combined))
+        return false;
+    return ::setenv("NAK_DEBUG", combined, 1) == 0;
+}
+
 int main()
 {
+    const bool nakNoUgprConfigured = SwitchConfigureNakNoUgpr();
     Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
+    SwitchBootLog(nakNoUgprConfigured
+        ? "NAK compiler: no_ugpr mode enabled; shader compilation remains active"
+        : "WARNING: unable to enable NAK no_ugpr mode");
     SwitchBootLog("Game data: sdmc:/switch/KisakCOD/game");
     SwitchBootLog("Stage 1/7: initializing main thread");
 
