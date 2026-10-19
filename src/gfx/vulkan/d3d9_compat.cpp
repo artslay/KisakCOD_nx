@@ -5799,8 +5799,6 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     // Keep a memory-only snapshot of the exact shader pair and compact pipeline
     // state. The exception handler prints it only if this vkCreate call faults.
-    // Keep a memory-only snapshot of the exact shader pair and compact pipeline
-    // state. The exception handler prints it only if this vkCreate call faults.
     // Use Vulkan's normal optimization path. Forcing
     // VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT on every pipeline was a
     // diagnostic experiment; it did not prevent the current NVK/GM20B crash
