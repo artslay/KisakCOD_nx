@@ -5241,7 +5241,6 @@ bool IDirect3DDevice9::EnsurePipeline()
                 repairedPixelShuffleOperands);
             Switch_LogWrite(repairTrace);
         }
-#ifdef __SWITCH__
         static uint32_t strippedPixelDebugTraceCount = 0;
         if (removedPixelDebugInstructions && strippedPixelDebugTraceCount < 24u)
         {
@@ -5308,7 +5307,6 @@ bool IDirect3DDevice9::EnsurePipeline()
                 repairedVertexShuffleOperands);
             Switch_LogWrite(repairTrace);
         }
-#ifdef __SWITCH__
         static uint32_t strippedVertexDebugTraceCount = 0;
         if (removedVertexDebugInstructions && strippedVertexDebugTraceCount < 24u)
         {
