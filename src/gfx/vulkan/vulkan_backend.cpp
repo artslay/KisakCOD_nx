@@ -860,11 +860,21 @@ bool VulkanBackend::CreateSwapchain()
                            format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
                 });
         };
-        const auto preferredSrgb = findFormat(VK_FORMAT_B8G8R8A8_SRGB);
-        const auto preferredUnorm = findFormat(VK_FORMAT_B8G8R8A8_UNORM);
+
+        // Prefer an sRGB attachment for the sRGB presentation color space so
+        // Vulkan performs the linear-to-display encoding on color writes.
+        // Surface implementations are not required to expose BGRA formats:
+        // some provide only RGBA8, so test both channel orders before falling
+        // back to an UNORM swapchain (which has no automatic sRGB encoding).
+        const auto preferredBgraSrgb = findFormat(VK_FORMAT_B8G8R8A8_SRGB);
+        const auto preferredRgbaSrgb = findFormat(VK_FORMAT_R8G8B8A8_SRGB);
+        const auto preferredBgraUnorm = findFormat(VK_FORMAT_B8G8R8A8_UNORM);
+        const auto preferredRgbaUnorm = findFormat(VK_FORMAT_R8G8B8A8_UNORM);
         const VkSurfaceFormatKHR &selected =
-            preferredSrgb != formats.end() ? *preferredSrgb :
-            (preferredUnorm != formats.end() ? *preferredUnorm : formats.front());
+            preferredBgraSrgb != formats.end() ? *preferredBgraSrgb :
+            (preferredRgbaSrgb != formats.end() ? *preferredRgbaSrgb :
+            (preferredBgraUnorm != formats.end() ? *preferredBgraUnorm :
+            (preferredRgbaUnorm != formats.end() ? *preferredRgbaUnorm : formats.front())));
         m_swapchainFormat = selected.format;
         m_swapchainColorSpace = selected.colorSpace;
     }
