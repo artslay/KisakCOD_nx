@@ -5799,6 +5799,13 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchFrameStage = "frame/render/vulkan/pipeline/prepare_create_info";
     VkGraphicsPipelineCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+#ifdef __SWITCH__
+    // NVK on Tegra X1 is faulting inside pipeline compilation for complex
+    // lightmap fragment shaders after both VkShaderModules were created.
+    // Ask the implementation to skip optional pipeline optimization as a
+    // targeted compiler workaround; shader semantics remain unchanged.
+    info.flags = VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
+#endif
     info.pNext = &rendering;
     info.stageCount = 2;
     info.pStages = stages;
@@ -5932,7 +5939,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         "color=%u depthFmt=%u samples=%u topology=%u bind=%zu attrs=%zu "
         "alpha=%u/%u/%u spec=%u/%u storedSpec=%u/%u "
         "depth=%u/%u/%u stencil=%u blend=%u factors=%u/%u/%u/%u ops=%u/%u "
-        "mask=%u atoc=%u dynamic=%u layout=%p modules=%p/%p "
+        "mask=%u atoc=%u dynamic=%u pipeFlags=%u layout=%p modules=%p/%p "
         "specMap=disabled\n",
         pipelineCreateSequence,
         static_cast<unsigned long long>(key),
@@ -5973,6 +5980,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         static_cast<unsigned int>(colorBlend.colorWriteMask),
         static_cast<unsigned int>(multisample.alphaToCoverageEnable),
         dynamic.dynamicStateCount,
+        static_cast<unsigned int>(info.flags),
         static_cast<void *>(info.layout),
         static_cast<void *>(stages[0].module),
         static_cast<void *>(stages[1].module));
