@@ -5228,7 +5228,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         uint32_t repairedPixelShuffleOperands = 0;
         if (!RepairUnusedZeroVectorShuffleSource(pixelSpirv, &repairedPixelShuffleOperands))
         {
-            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=invalid_pixel_spirv_vector_shuffle\\n");
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=invalid_pixel_spirv_vector_shuffle\n");
             return false;
         }
 #ifdef __SWITCH__
@@ -5236,7 +5236,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             char repairTrace[176];
             std::snprintf(repairTrace, sizeof(repairTrace),
-                "[KisakCOD][VK SPIRV REPAIR] stage=ps serial=%llu zero_unused_shuffle_source=%u\\n",
+                "[KisakCOD][VK SPIRV REPAIR] stage=ps serial=%llu zero_unused_shuffle_source=%u\n",
                 static_cast<unsigned long long>(m_pixelShader->serial),
                 repairedPixelShuffleOperands);
             Switch_LogWrite(repairTrace);
@@ -5295,7 +5295,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (!RepairUnusedZeroVectorShuffleSource(
                 m_vertexShader->spirv, &repairedVertexShuffleOperands))
         {
-            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=invalid_vertex_spirv_vector_shuffle\\n");
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=invalid_vertex_spirv_vector_shuffle\n");
             return false;
         }
 #ifdef __SWITCH__
@@ -5303,7 +5303,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             char repairTrace[176];
             std::snprintf(repairTrace, sizeof(repairTrace),
-                "[KisakCOD][VK SPIRV REPAIR] stage=vs serial=%llu zero_unused_shuffle_source=%u\\n",
+                "[KisakCOD][VK SPIRV REPAIR] stage=vs serial=%llu zero_unused_shuffle_source=%u\n",
                 static_cast<unsigned long long>(m_vertexShader->serial),
                 repairedVertexShuffleOperands);
             Switch_LogWrite(repairTrace);
