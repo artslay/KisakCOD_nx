@@ -1190,44 +1190,11 @@ bool ResolveAlphaTestSpecializationIds(
     if (!funcIsSpecConstant || !refIsSpecConstant)
         return false;
 
-    // In the injected alpha test, the comparison-function constant is the
-    // left operand of seven equality tests (D3DCMP_* values 2..8). The other
-    // candidate is the alpha reference threshold.
-    uint32_t funcLeftUseCount = 0;
-    uint32_t refLeftUseCount = 0;
-    for (size_t i = 5; i < words.size();)
-    {
-        uint32_t wc = 0;
-        SpvOp op{};
-        if (!SpirvIsValidInstruction(words, i, &wc, &op))
-            return false;
-
-        const uint32_t *ins = &words[i];
-        if (op == SpvOpFOrdEqual && wc >= 5)
-        {
-            if (ins[3] == funcResultId && funcLeftUseCount < UINT32_MAX)
-                ++funcLeftUseCount;
-            if (ins[3] == refResultId && refLeftUseCount < UINT32_MAX)
-                ++refLeftUseCount;
-        }
-        i += wc;
-    }
-
-    const bool funcLooksLikeFunction = funcLeftUseCount >= 7;
-    const bool refLooksLikeFunction = refLeftUseCount >= 7;
-    if (funcLooksLikeFunction == refLooksLikeFunction)
-        return false;
-
-    if (funcLooksLikeFunction)
-    {
-        *resolvedFuncSpecId = expectedFuncSpecId;
-        *resolvedRefSpecId = expectedRefSpecId;
-    }
-    else
-    {
-        *resolvedFuncSpecId = expectedRefSpecId;
-        *resolvedRefSpecId = expectedFuncSpecId;
-    }
+    // The patcher allocates both SpecIds from values not present in the
+    // original module. The function selector remains decorated for the stable
+    // specialization-map ABI, but the compare opcode is selected on the CPU.
+    *resolvedFuncSpecId = expectedFuncSpecId;
+    *resolvedRefSpecId = expectedRefSpecId;
     return true;
 }
 // Validate the control-flow edges most likely to be affected by the alpha-test
@@ -1450,6 +1417,7 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 bool PatchFragmentShaderForAlphaTest(
     std::vector<uint32_t> &words,
+    uint32_t alphaFunc,
     uint32_t *alphaFuncSpecId,
     uint32_t *alphaRefSpecId,
     bool useDemoteToHelperInvocation)
@@ -1675,27 +1643,20 @@ bool PatchFragmentShaderForAlphaTest(
     const uint32_t functionPointerType = useSsaAlphaCapture ? 0 : newId();
     const uint32_t alphaStorage = useSsaAlphaCapture ? 0 : newId();
     const uint32_t alphaDefault = useSsaAlphaCapture ? 0 : newId();
-
-    // D3D comparison-function values 1..8 are exactly representable as float32.
-    // Keep the selector in the existing float type to avoid injecting an integer
-    // type and integer-comparison graph into otherwise float-only fragment shaders.
-    static constexpr uint32_t funcConstBits[9] = {
-        0u, 0x3f800000u, 0x40000000u, 0x40400000u, 0x40800000u,
-        0x40a00000u, 0x40c00000u, 0x40e00000u, 0x41000000u
-    };
-    uint32_t funcConst[9]{};
-    for (uint32_t value = 2; value <= 8; ++value)
-        funcConst[value] = newId();
+    const uint32_t discardAlways = newId();
+    const uint32_t discardNever = newId();
 
     std::vector<uint32_t> typeGlobals;
     if (addBoolType)
         SpirvAppend(typeGlobals, SpvOpTypeBool, {boolType});
 
     std::vector<uint32_t> globals;
-    SpirvAppend(globals, SpvOpSpecConstant, {floatType, funcSpec, funcConstBits[8]});
+    // Preserve the original specialization-map ABI for the caller, although
+    // the comparison opcode itself is now selected once on the CPU.
+    SpirvAppend(globals, SpvOpSpecConstant, {floatType, funcSpec, 0x41000000u});
     SpirvAppend(globals, SpvOpSpecConstant, {floatType, refSpec, 0u});
-    for (uint32_t value = 2; value <= 8; ++value)
-        SpirvAppend(globals, SpvOpConstant, {floatType, funcConst[value], funcConstBits[value]});
+    SpirvAppend(globals, SpvOpConstantTrue, {boolType, discardAlways});
+    SpirvAppend(globals, SpvOpConstantFalse, {boolType, discardNever});
     if (!useSsaAlphaCapture)
         SpirvAppend(globals, SpvOpConstant, {floatType, alphaDefault, 0x3f800000u});
 
@@ -1877,66 +1838,52 @@ bool PatchFragmentShaderForAlphaTest(
         if (inEntry && op == SpvOpReturn)
         {
             const uint32_t alpha = useSsaAlphaCapture ? currentOutputAlpha : newId();
-            const uint32_t less = newId();
-            const uint32_t equal = newId();
-            const uint32_t lessEqual = newId();
-            const uint32_t greater = newId();
-            const uint32_t notEqual = newId();
-            const uint32_t greaterEqual = newId();
-            const uint32_t f2 = newId();
-            const uint32_t f3 = newId();
-            const uint32_t f4 = newId();
-            const uint32_t f5 = newId();
-            const uint32_t f6 = newId();
-            const uint32_t f7 = newId();
-            const uint32_t f8 = newId();
-            const uint32_t pass2 = newId();
-            const uint32_t pass3 = newId();
-            const uint32_t pass4 = newId();
-            const uint32_t pass5 = newId();
-            const uint32_t pass6 = newId();
-            const uint32_t pass7 = newId();
-            const uint32_t passA = newId();
-            const uint32_t passB = newId();
-            const uint32_t passC = newId();
-            const uint32_t passD = newId();
-            const uint32_t passE = newId();
-            const uint32_t passF = newId();
             const uint32_t discard = newId();
             const uint32_t killLabel = newId();
             const uint32_t mergeLabel = newId();
 
             if (!useSsaAlphaCapture)
                 SpirvAppend(patched, SpvOpLoad, {floatType, alpha, alphaStorage});
-            SpirvAppend(patched, SpvOpFOrdLessThan, {boolType, less, alpha, refSpec});
-            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, equal, alpha, refSpec});
-            SpirvAppend(patched, SpvOpFOrdLessThanEqual, {boolType, lessEqual, alpha, refSpec});
-            SpirvAppend(patched, SpvOpFOrdGreaterThan, {boolType, greater, alpha, refSpec});
-            SpirvAppend(patched, SpvOpFOrdNotEqual, {boolType, notEqual, alpha, refSpec});
-            SpirvAppend(patched, SpvOpFOrdGreaterThanEqual, {boolType, greaterEqual, alpha, refSpec});
 
-            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f2, funcSpec, funcConst[2]});
-            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f3, funcSpec, funcConst[3]});
-            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f4, funcSpec, funcConst[4]});
-            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f5, funcSpec, funcConst[5]});
-            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f6, funcSpec, funcConst[6]});
-            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f7, funcSpec, funcConst[7]});
-            SpirvAppend(patched, SpvOpFOrdEqual, {boolType, f8, funcSpec, funcConst[8]});
+            // D3DCMP_* is pipeline state already included in the pipeline cache
+            // key. Emit only the required ordered comparison instead of a
+            // specialization-driven compare/OR graph. This reduces the IR
+            // presented to Maxwell's NAK compiler on the crashing pipeline.
+            SpvOp discardCompare = SpvOpNop;
+            switch (alphaFunc)
+            {
+            case 1: // D3DCMP_NEVER
+                SpirvAppend(patched, SpvOpCopyObject, {boolType, discard, discardAlways});
+                break;
+            case 2: // D3DCMP_LESS: discard alpha >= ref
+                discardCompare = SpvOpFOrdGreaterThanEqual;
+                break;
+            case 3: // D3DCMP_EQUAL: discard alpha != ref
+                discardCompare = SpvOpFOrdNotEqual;
+                break;
+            case 4: // D3DCMP_LESSEQUAL: discard alpha > ref
+                discardCompare = SpvOpFOrdGreaterThan;
+                break;
+            case 5: // D3DCMP_GREATER: discard alpha <= ref
+                discardCompare = SpvOpFOrdLessThanEqual;
+                break;
+            case 6: // D3DCMP_NOTEQUAL: discard alpha == ref
+                discardCompare = SpvOpFOrdEqual;
+                break;
+            case 7: // D3DCMP_GREATEREQUAL: discard alpha < ref
+                discardCompare = SpvOpFOrdLessThan;
+                break;
+            case 8: // D3DCMP_ALWAYS
+                SpirvAppend(patched, SpvOpCopyObject, {boolType, discard, discardNever});
+                break;
+            default:
+                // Invalid D3D comparison values fail closed like NEVER.
+                SpirvAppend(patched, SpvOpCopyObject, {boolType, discard, discardAlways});
+                break;
+            }
+            if (discardCompare != SpvOpNop)
+                SpirvAppend(patched, discardCompare, {boolType, discard, alpha, refSpec});
 
-            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass2, f2, less});
-            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass3, f3, equal});
-            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass4, f4, lessEqual});
-            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass5, f5, greater});
-            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass6, f6, notEqual});
-            SpirvAppend(patched, SpvOpLogicalAnd, {boolType, pass7, f7, greaterEqual});
-
-            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passA, pass2, pass3});
-            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passB, passA, pass4});
-            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passC, passB, pass5});
-            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passD, passC, pass6});
-            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passE, passD, pass7});
-            SpirvAppend(patched, SpvOpLogicalOr, {boolType, passF, passE, f8});
-            SpirvAppend(patched, SpvOpLogicalNot, {boolType, discard, passF});
             SpirvAppend(patched, SpvOpSelectionMerge, {mergeLabel, 0});
             SpirvAppend(patched, SpvOpBranchConditional, {discard, killLabel, mergeLabel});
             SpirvAppend(patched, SpvOpLabel, {killLabel});
@@ -5238,6 +5185,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (useAlphaTestPatch &&
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
+                m_alphaFunc,
                 &pipelineAlphaFuncSpecId,
                 &pipelineAlphaRefSpecId,
                 // This alpha-test block is injected at the original function return,
@@ -5360,8 +5308,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_pixelShader->linkedPixelShaderSerial = m_pixelShader->serial;
         m_pixelShader->linkedVertexShaderSerial = m_vertexShader->serial;
         m_pixelShader->linkedAlphaTestPatch = useAlphaTestPatch;
+        m_pixelShader->linkedAlphaFunc = useAlphaTestPatch ? m_alphaFunc : UINT32_MAX;
     }
-    else if (m_pixelShader->linkedAlphaTestPatch != useAlphaTestPatch)
+    else if (m_pixelShader->linkedAlphaTestPatch != useAlphaTestPatch ||
+             (useAlphaTestPatch && m_pixelShader->linkedAlphaFunc != m_alphaFunc))
     {
         // Alpha testing is dynamic state. Rebuild only the fragment module when
         // that state toggles; the stored linked baseline avoids running the
@@ -5383,6 +5333,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (useAlphaTestPatch &&
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
+                m_alphaFunc,
                 &pipelineAlphaFuncSpecId,
                 &pipelineAlphaRefSpecId,
                 false))
@@ -5417,6 +5368,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             return false;
         }
         m_pixelShader->linkedAlphaTestPatch = useAlphaTestPatch;
+        m_pixelShader->linkedAlphaFunc = useAlphaTestPatch ? m_alphaFunc : UINT32_MAX;
     }
 
     VkPipelineShaderStageCreateInfo stages[2]{};
@@ -5811,10 +5763,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     // Keep a memory-only snapshot of the exact shader pair and compact pipeline
     // state. The exception handler prints it only if this vkCreate call faults.
-    // Use Vulkan's normal optimization path. Forcing
-    // VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT on every pipeline was a
-    // diagnostic experiment; it did not prevent the current NVK/GM20B crash
-    // and leaves generated alpha-test specialization logic unoptimized.
+    // Keep the NVK optimization-disable workaround enabled during diagnosis.
 
     const uint32_t pipelineCreateSequence = ++g_switchPipelineCreateSequence;
     const MOJOSHADER_parseData *preVs = m_vertexShader->parseData;
