@@ -2095,6 +2095,7 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
         }
     };
 
+    dumpShader("vs", snapshot.vertexSpirv);
     dumpShader("ps", snapshot.pixelSpirv);
 }
 
