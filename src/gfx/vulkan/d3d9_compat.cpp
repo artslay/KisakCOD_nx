@@ -1110,6 +1110,54 @@ bool SpirvIsValidInstruction(const std::vector<uint32_t> &words, size_t offset, 
     return true;
 }
 
+// Strip optional SPIR-V debug/source instructions before passing modules to NVK.
+// They have no execution semantics. Besides reducing shader-module size, this
+// avoids driver compiler paths that inspect OpName/OpMemberName debug metadata.
+// Use opcode numbers for the debug-only instructions so this helper is compatible
+// with the SPIR-V enum version bundled by the Switch toolchain.
+bool StripSpirvDebugInstructions(
+    std::vector<uint32_t> &words,
+    uint32_t *removedInstructionCount = nullptr)
+{
+    if (words.size() < 5 || words[0] != SpvMagicNumber)
+        return false;
+
+    std::vector<uint32_t> cleaned;
+    cleaned.reserve(words.size());
+    cleaned.insert(cleaned.end(), words.begin(), words.begin() + 5);
+    uint32_t removed = 0;
+    for (size_t offset = 5; offset < words.size();)
+    {
+        const uint32_t first = words[offset];
+        const uint32_t wordCount = first >> 16;
+        const uint32_t opcode = first & 0xffffu;
+        if (!wordCount || offset + wordCount > words.size())
+            return false;
+
+        // OpSourceContinued, OpSource, OpSourceExtension, OpName,
+        // OpMemberName, OpString, OpLine, OpNoLine, OpModuleProcessed.
+        const bool debugOnly =
+            (opcode >= 2u && opcode <= 8u) ||
+            opcode == 317u || opcode == 330u;
+        if (debugOnly)
+        {
+            ++removed;
+        }
+        else
+        {
+            cleaned.insert(
+                cleaned.end(), words.begin() + offset,
+                words.begin() + offset + wordCount);
+        }
+        offset += wordCount;
+    }
+
+    words.swap(cleaned);
+    if (removedInstructionCount)
+        *removedInstructionCount = removed;
+    return true;
+}
+
  
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
@@ -5074,6 +5122,25 @@ bool IDirect3DDevice9::EnsurePipeline()
         std::vector<uint32_t> pixelSpirv(
             reinterpret_cast<const uint32_t *>(linkedPixelParse.output),
             reinterpret_cast<const uint32_t *>(linkedPixelParse.output) + psBytes / sizeof(uint32_t));
+        uint32_t removedPixelDebugInstructions = 0;
+        if (!StripSpirvDebugInstructions(pixelSpirv, &removedPixelDebugInstructions))
+        {
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=strip_pixel_spirv_debug\\n");
+            return false;
+        }
+#ifdef __SWITCH__
+        static uint32_t strippedPixelDebugTraceCount = 0;
+        if (removedPixelDebugInstructions && strippedPixelDebugTraceCount < 24u)
+        {
+            char debugTrace[160];
+            std::snprintf(debugTrace, sizeof(debugTrace),
+                "[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=%llu removed=%u words=%zu\\n",
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                removedPixelDebugInstructions, pixelSpirv.size());
+            Switch_LogWrite(debugTrace);
+            ++strippedPixelDebugTraceCount;
+        }
+#endif
         unpatchedPixelSpirvForProbe = pixelSpirv;
         m_pixelShader->linkedSpirv = pixelSpirv;
 
@@ -5104,6 +5171,26 @@ bool IDirect3DDevice9::EnsurePipeline()
             reinterpret_cast<const uint32_t *>(linkedVertexParse.output),
             reinterpret_cast<const uint32_t *>(linkedVertexParse.output) +
                 vsBytes / sizeof(uint32_t));
+        uint32_t removedVertexDebugInstructions = 0;
+        if (!StripSpirvDebugInstructions(
+                m_vertexShader->spirv, &removedVertexDebugInstructions))
+        {
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=strip_vertex_spirv_debug\\n");
+            return false;
+        }
+#ifdef __SWITCH__
+        static uint32_t strippedVertexDebugTraceCount = 0;
+        if (removedVertexDebugInstructions && strippedVertexDebugTraceCount < 24u)
+        {
+            char debugTrace[160];
+            std::snprintf(debugTrace, sizeof(debugTrace),
+                "[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=%llu removed=%u words=%zu\\n",
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                removedVertexDebugInstructions, m_vertexShader->spirv.size());
+            Switch_LogWrite(debugTrace);
+            ++strippedVertexDebugTraceCount;
+        }
+#endif
 
         VkShaderModuleCreateInfo vsInfo{};
         vsInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
