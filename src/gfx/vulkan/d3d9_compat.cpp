@@ -1822,17 +1822,18 @@ bool PatchFragmentShaderForAlphaTest(
                 SpirvAppend(patched, SpvOpCopyObject, {boolType, discard, discardAlways});
                 break;
             }
+            // Branch directly on the comparison result. Ordered SPIR-V
+            // comparisons return false for NaN, so the false edge must discard;
+            // no extra OpLogicalNot is needed in the fragment CFG.
+            const bool branchToKillOnTrue = passCompare == SpvOpNop;
             if (passCompare != SpvOpNop)
-            {
-                const uint32_t passes = newId();
-                SpirvAppend(patched, passCompare, {boolType, passes, alpha, alphaRefConstant});
-                // Invert a positive D3D comparison, rather than relying on its
-                // ordered inverse; NaN alpha values must also fail the test.
-                SpirvAppend(patched, SpvOpLogicalNot, {boolType, discard, passes});
-            }
+                SpirvAppend(patched, passCompare, {boolType, discard, alpha, alphaRefConstant});
 
             SpirvAppend(patched, SpvOpSelectionMerge, {mergeLabel, 0});
-            SpirvAppend(patched, SpvOpBranchConditional, {discard, killLabel, mergeLabel});
+            if (branchToKillOnTrue)
+                SpirvAppend(patched, SpvOpBranchConditional, {discard, killLabel, mergeLabel});
+            else
+                SpirvAppend(patched, SpvOpBranchConditional, {discard, mergeLabel, killLabel});
             SpirvAppend(patched, SpvOpLabel, {killLabel});
             if (useDemoteToHelperInvocation)
             {
@@ -5686,15 +5687,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     info.renderPass = VK_NULL_HANDLE;
 
 #ifdef __SWITCH__
-    // Retain the NVK/GM20B diagnostic workaround while addressing the
-    // reproducible crash in vkCreateGraphicsPipelines on later world pipelines.
-    info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
-    static std::atomic<bool> loggedSwitchPipelineOptimizationMode{false};
-    if (!loggedSwitchPipelineOptimizationMode.exchange(true, std::memory_order_relaxed))
-    {
-        Switch_LogWrite(
-            "[KisakCOD][VK PIPELINE] disable_optimization=all_switch_graphics_pipelines diagnostic=1\\n");
-    }
+    // Use the driver's normal pipeline optimization path. Disabling optimization
+    // did not avoid the reproducible NVK pipeline-create crash and only penalized
+    // shader compilation/performance.
 #endif
 
     // Keep a memory-only snapshot of the exact shader pair and compact pipeline
