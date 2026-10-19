@@ -9,6 +9,7 @@ extern bool R_RecoverLostVulkanDevice();
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <vector>
@@ -387,6 +388,31 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
 {
     if (m_initialized)
         return true;
+
+#ifdef __SWITCH__
+    // The Switch Tegra X1 uses unified memory. NVK exposes a Tegra-specific
+    // NAK_DEBUG=coherent workaround for CPU/GPU cache visibility; apply it
+    // before the first Vulkan entry point unless the launcher already supplied
+    // its own NAK_DEBUG policy. Other Vulkan drivers simply ignore this NVK flag.
+    if (!std::getenv("NAK_DEBUG"))
+    {
+        if (::setenv("NAK_DEBUG", "coherent", 0) == 0)
+        {
+            Switch_LogWrite(
+                "[KisakCOD][VK DRIVER] defaulted NAK_DEBUG=coherent for Switch Tegra cache visibility\n");
+        }
+        else
+        {
+            Switch_LogWrite(
+                "[KisakCOD][VK DRIVER] could not set NAK_DEBUG=coherent; continuing with driver defaults\n");
+        }
+    }
+    else
+    {
+        Switch_LogWrite(
+            "[KisakCOD][VK DRIVER] preserving launcher-supplied NAK_DEBUG setting\n");
+    }
+#endif
 
     if (wndParms)
     {
