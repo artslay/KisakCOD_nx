@@ -41,8 +41,6 @@ diff --git a/src/compiler/rust/lower_bounded.rs b/src/compiler/rust/lower_bounde
 @@ -520,4 +528,20 @@
      }
 
-     #[test]
-     fn test_u32arr_from_slice() {
 +    #[test]
 +    fn test_u32arr_full_mut_slice_updates_encoded_tail() {
 +        type TestArray = LowerBoundedU32Array<5, 3>;
@@ -62,7 +60,9 @@ diff --git a/src/compiler/rust/lower_bounded.rs b/src/compiler/rust/lower_bounde
 +        assert_eq!(arr.len(), 3);
 +    }
 +
- diff --git a/src/nouveau/vulkan/nvk_shader.c b/src/nouveau/vulkan/nvk_shader.c
+     #[test]
+     fn test_u32arr_from_slice() {
+diff --git a/src/nouveau/vulkan/nvk_shader.c b/src/nouveau/vulkan/nvk_shader.c
 --- a/src/nouveau/vulkan/nvk_shader.c
 +++ b/src/nouveau/vulkan/nvk_shader.c
 @@ -82,7 +82,7 @@ nvk_physical_device_compiler_flags(const struct nvk_physical_device *pdev)
