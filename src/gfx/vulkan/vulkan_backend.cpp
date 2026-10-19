@@ -433,6 +433,50 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         Switch_LogWrite(
             "[KisakCOD][VK DRIVER] NVK_DEBUG=coherent already enabled\n");
     }
+
+    // NAK_DEBUG=serial disables instruction-level scheduling in the NVK shader
+    // compiler. Keep this Switch workaround enabled while diagnosing the
+    // reproducible NAK crash during graphics-pipeline compilation; it can avoid
+    // dependency-sensitive code generation on Maxwell.
+    const char *existingNakDebug = std::getenv("NAK_DEBUG");
+    std::string nakDebug = existingNakDebug ? existingNakDebug : "";
+    bool hasSerialFlag = false;
+    for (size_t start = 0; start < nakDebug.size();)
+    {
+        const size_t end = nakDebug.find(',', start);
+        const size_t length =
+            (end == std::string::npos ? nakDebug.size() : end) - start;
+        if (length == sizeof("serial") - 1u &&
+            nakDebug.compare(start, length, "serial") == 0)
+        {
+            hasSerialFlag = true;
+            break;
+        }
+        if (end == std::string::npos)
+            break;
+        start = end + 1u;
+    }
+    if (!hasSerialFlag)
+    {
+        if (!nakDebug.empty())
+            nakDebug += ',';
+        nakDebug += "serial";
+        if (::setenv("NAK_DEBUG", nakDebug.c_str(), 1) == 0)
+        {
+            Switch_LogWrite(
+                "[KisakCOD][VK DRIVER] enabled NAK_DEBUG=serial compiler workaround\n");
+        }
+        else
+        {
+            Switch_LogWrite(
+                "[KisakCOD][VK DRIVER] could not enable NAK_DEBUG=serial; continuing with driver defaults\n");
+        }
+    }
+    else
+    {
+        Switch_LogWrite(
+            "[KisakCOD][VK DRIVER] NAK_DEBUG=serial already enabled\n");
+    }
 #endif
 
     if (wndParms)
