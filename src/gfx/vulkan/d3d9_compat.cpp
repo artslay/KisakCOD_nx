@@ -5799,13 +5799,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchFrameStage = "frame/render/vulkan/pipeline/prepare_create_info";
     VkGraphicsPipelineCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-#ifdef __SWITCH__
-    // NVK on Tegra X1 is faulting inside pipeline compilation for complex
-    // lightmap fragment shaders after both VkShaderModules were created.
-    // Ask the implementation to skip optional pipeline optimization as a
-    // targeted compiler workaround; shader semantics remain unchanged.
-    info.flags = VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
-#endif
     info.pNext = &rendering;
     info.stageCount = 2;
     info.pStages = stages;
