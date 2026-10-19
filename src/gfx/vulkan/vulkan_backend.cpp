@@ -391,12 +391,15 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         return true;
 
 #ifdef __SWITCH__
-    // On Tegra, NVK_DEBUG=coherent makes mapped CPU/GPU memory cache-coherent.
-    // This is an NVK driver option (not NAK_DEBUG, which configures the shader
-    // compiler). Merge it with existing options before the first Vulkan call.
+    // NVK requires coherent mapped memory on Tegra. Also disable NVK's
+    // automatic UBO-to-constant-buffer promotion: pipeline creation is faulting
+    // inside the NVK compiler on the Switch, and this avoids that compiler path
+    // while preserving the original shader and descriptor semantics.
+    // Merge options instead of overwriting flags supplied by the runtime.
     const char *existingNvkDebug = std::getenv("NVK_DEBUG");
     std::string nvkDebug = existingNvkDebug ? existingNvkDebug : "";
     bool hasCoherentFlag = false;
+    bool hasNoCbufFlag = false;
     for (size_t start = 0; start < nvkDebug.size();)
     {
         const size_t end = nvkDebug.find(',', start);
@@ -404,34 +407,52 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
             (end == std::string::npos ? nvkDebug.size() : end) - start;
         if (length == sizeof("coherent") - 1u &&
             nvkDebug.compare(start, length, "coherent") == 0)
-        {
             hasCoherentFlag = true;
-            break;
-        }
+        else if (length == sizeof("no_cbuf") - 1u &&
+            nvkDebug.compare(start, length, "no_cbuf") == 0)
+            hasNoCbufFlag = true;
+
         if (end == std::string::npos)
             break;
         start = end + 1u;
     }
+
+    bool nvkDebugChanged = false;
     if (!hasCoherentFlag)
     {
         if (!nvkDebug.empty())
             nvkDebug += ',';
         nvkDebug += "coherent";
-        if (::setenv("NVK_DEBUG", nvkDebug.c_str(), 1) == 0)
+        nvkDebugChanged = true;
+    }
+    if (!hasNoCbufFlag)
+    {
+        if (!nvkDebug.empty())
+            nvkDebug += ',';
+        nvkDebug += "no_cbuf";
+        nvkDebugChanged = true;
+    }
+
+    if (nvkDebugChanged)
+    {
+        if (::setenv("NVK_DEBUG", nvkDebug.c_str(), 1) != 0)
         {
             Switch_LogWrite(
-                "[KisakCOD][VK DRIVER] enabled NVK_DEBUG=coherent for Tegra cache visibility\n");
+                "[KisakCOD][VK DRIVER] could not enable NVK_DEBUG=no_cbuf,coherent; continuing with existing options\n");
         }
         else
         {
-            Switch_LogWrite(
-                "[KisakCOD][VK DRIVER] could not enable NVK_DEBUG=coherent; continuing with driver defaults\n");
+            char driverFlagsMsg[256];
+            std::snprintf(driverFlagsMsg, sizeof(driverFlagsMsg),
+                "[KisakCOD][VK DRIVER] enabled NVK_DEBUG=%s (Tegra coherence + disable UBO constant-buffer promotion)\n",
+                nvkDebug.c_str());
+            Switch_LogWrite(driverFlagsMsg);
         }
     }
     else
     {
         Switch_LogWrite(
-            "[KisakCOD][VK DRIVER] NVK_DEBUG=coherent already enabled\n");
+            "[KisakCOD][VK DRIVER] NVK_DEBUG coherent and no_cbuf already enabled\n");
     }
 
 #endif
