@@ -420,18 +420,18 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         if (::setenv("NVK_DEBUG", nvkDebug.c_str(), 1) == 0)
         {
             Switch_LogWrite(
-                "[KisakCOD][VK DRIVER] enabled NVK_DEBUG=coherent for Tegra cache visibility\\n");
+                "[KisakCOD][VK DRIVER] enabled NVK_DEBUG=coherent for Tegra cache visibility\n");
         }
         else
         {
             Switch_LogWrite(
-                "[KisakCOD][VK DRIVER] could not enable NVK_DEBUG=coherent; continuing with driver defaults\\n");
+                "[KisakCOD][VK DRIVER] could not enable NVK_DEBUG=coherent; continuing with driver defaults\n");
         }
     }
     else
     {
         Switch_LogWrite(
-            "[KisakCOD][VK DRIVER] NVK_DEBUG=coherent already enabled\\n");
+            "[KisakCOD][VK DRIVER] NVK_DEBUG=coherent already enabled\n");
     }
 #endif
 
