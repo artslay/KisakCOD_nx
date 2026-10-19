@@ -5125,7 +5125,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         uint32_t removedPixelDebugInstructions = 0;
         if (!StripSpirvDebugInstructions(pixelSpirv, &removedPixelDebugInstructions))
         {
-            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=strip_pixel_spirv_debug\\n");
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=strip_pixel_spirv_debug\n");
             return false;
         }
 #ifdef __SWITCH__
@@ -5134,7 +5134,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             char debugTrace[160];
             std::snprintf(debugTrace, sizeof(debugTrace),
-                "[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=%llu removed=%u words=%zu\\n",
+                "[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=%llu removed=%u words=%zu\n",
                 static_cast<unsigned long long>(m_pixelShader->serial),
                 removedPixelDebugInstructions, pixelSpirv.size());
             Switch_LogWrite(debugTrace);
@@ -5175,7 +5175,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (!StripSpirvDebugInstructions(
                 m_vertexShader->spirv, &removedVertexDebugInstructions))
         {
-            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=strip_vertex_spirv_debug\\n");
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=strip_vertex_spirv_debug\n");
             return false;
         }
 #ifdef __SWITCH__
@@ -5184,7 +5184,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             char debugTrace[160];
             std::snprintf(debugTrace, sizeof(debugTrace),
-                "[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=%llu removed=%u words=%zu\\n",
+                "[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=%llu removed=%u words=%zu\n",
                 static_cast<unsigned long long>(m_vertexShader->serial),
                 removedVertexDebugInstructions, m_vertexShader->spirv.size());
             Switch_LogWrite(debugTrace);
