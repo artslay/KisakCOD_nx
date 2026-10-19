@@ -7961,14 +7961,17 @@ HRESULT IDirect3DDevice9::Clear(
 
     if (count)
     {
-        std::vector<VkClearRect> vulkanRects;
+        VkCommandBuffer commandBuffer = m_backend->CommandBuffer();
         if (rectCount == 0)
         {
+            // Screen/depth clears are called every frame. Keep the common path
+            // allocation-free so Clear cannot enter the Switch heap allocator
+            // merely to describe one full-target rectangle.
             VkClearRect rect{};
             rect.rect.offset = {0, 0};
             rect.rect.extent = {targetWidth, targetHeight};
             rect.layerCount = 1;
-            vulkanRects.push_back(rect);
+            vkCmdClearAttachments(commandBuffer, count, attachments.data(), 1, &rect);
         }
         else
         {
@@ -7978,7 +7981,8 @@ HRESULT IDirect3DDevice9::Clear(
             const int32_t targetBottom = static_cast<int32_t>(
                 std::min<uint32_t>(targetHeight,
                     static_cast<uint32_t>(std::numeric_limits<int32_t>::max())));
-            vulkanRects.reserve(rectCount);
+            // Clear each clipped rectangle directly rather than allocating a
+            // temporary vector on the render thread.
             for (uint32_t i = 0; i < rectCount; ++i)
             {
                 const int32_t left = std::clamp(rects[i].left, 0, targetRight);
@@ -7994,14 +7998,8 @@ HRESULT IDirect3DDevice9::Clear(
                     static_cast<uint32_t>(bottom - top)
                 };
                 rect.layerCount = 1;
-                vulkanRects.push_back(rect);
+                vkCmdClearAttachments(commandBuffer, count, attachments.data(), 1, &rect);
             }
-        }
-        if (!vulkanRects.empty())
-        {
-            vkCmdClearAttachments(
-                m_backend->CommandBuffer(), count, attachments.data(),
-                static_cast<uint32_t>(vulkanRects.size()), vulkanRects.data());
         }
     }
     ++g_switchSceneClearCalls;
