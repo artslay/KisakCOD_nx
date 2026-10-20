@@ -1256,6 +1256,231 @@ bool RepairUnusedZeroVectorShuffleSource(
     return true;
 }
 
+
+// Semantics-preserving lowering of OpVectorShuffle to scalar component extracts
+// and a vector construct. Apply to every linked Switch shader rather than gating
+// pipeline creation on shader identity: this removes a frontend pattern that has
+// repeatedly reached the Tegra NVK/NAK pipeline-compiler fault.
+bool LowerSwitchSpirvVectorShuffleToCompositeOps(
+    std::vector<uint32_t> &words,
+    uint32_t *loweredCount)
+{
+    if (loweredCount)
+        *loweredCount = 0u;
+    if (words.size() < 5u || words[0] != SpvMagicNumber ||
+        words[3] < 2u || words[3] > 1000000u)
+        return false;
+
+    const uint32_t originalBound = words[3];
+    std::vector<uint32_t> resultTypeById(originalBound, 0u);
+    std::vector<uint32_t> vectorLengthByType(originalBound, 0u);
+    std::vector<uint32_t> vectorComponentTypeByType(originalBound, 0u);
+    std::vector<uint8_t> isVectorType(originalBound, 0u);
+    std::vector<size_t> shuffleOffsets;
+
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t opcode = static_cast<uint32_t>(op);
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpTypeVector && wc >= 4u &&
+            ins[1] < originalBound && ins[2] < originalBound)
+        {
+            isVectorType[ins[1]] = 1u;
+            vectorComponentTypeByType[ins[1]] = ins[2];
+            vectorLengthByType[ins[1]] = ins[3];
+        }
+
+        const bool typedResult =
+            opcode == 1u || opcode == 12u ||
+            (opcode >= 41u && opcode <= 52u) ||
+            opcode == 55u || opcode == 57u || opcode == 59u || opcode == 61u ||
+            (opcode >= 65u && opcode <= 69u) ||
+            (opcode >= 77u && opcode <= 84u) ||
+            (opcode >= 86u && opcode <= 98u) ||
+            (opcode >= 109u && opcode <= 205u) ||
+            opcode == 227u || (opcode >= 229u && opcode <= 242u) ||
+            opcode == 245u;
+        if (typedResult && wc >= 3u &&
+            ins[1] < originalBound && ins[2] < originalBound)
+            resultTypeById[ins[2]] = ins[1];
+
+        if (op == SpvOpVectorShuffle)
+            shuffleOffsets.push_back(offset);
+        offset += wc;
+    }
+    if (shuffleOffsets.empty())
+        return false;
+
+    struct ShuffleInfo
+    {
+        uint32_t resultType = 0u;
+        uint32_t resultId = 0u;
+        uint32_t vector1Id = 0u;
+        uint32_t vector2Id = 0u;
+        uint32_t scalarType = 0u;
+        uint32_t sourceWidth = 0u;
+        uint32_t sourceWidth2 = 0u;
+        std::vector<uint32_t> selectors;
+    };
+    std::unordered_map<size_t, ShuffleInfo> shuffles;
+    std::unordered_map<uint32_t, uint32_t> undefIdByScalarType;
+    std::vector<std::pair<uint32_t, uint32_t>> undefDeclarations;
+    uint32_t nextId = originalBound;
+
+    for (const size_t offset : shuffleOffsets)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op) ||
+            op != SpvOpVectorShuffle || wc < 6u)
+            return false;
+        const uint32_t *ins = &words[offset];
+        const uint32_t resultType = ins[1];
+        const uint32_t resultId = ins[2];
+        const uint32_t vector1Id = ins[3];
+        const uint32_t vector2Id = ins[4];
+        if (resultType >= originalBound || resultId == 0u ||
+            resultId >= originalBound || vector1Id == 0u ||
+            vector1Id >= originalBound || vector2Id == 0u ||
+            vector2Id >= originalBound || !isVectorType[resultType] ||
+            resultTypeById[vector1Id] == 0u ||
+            resultTypeById[vector2Id] == 0u ||
+            resultTypeById[vector1Id] >= originalBound ||
+            resultTypeById[vector2Id] >= originalBound)
+            return false;
+
+        const uint32_t vector1Type = resultTypeById[vector1Id];
+        const uint32_t vector2Type = resultTypeById[vector2Id];
+        if (!isVectorType[vector1Type] || !isVectorType[vector2Type])
+            return false;
+        const uint32_t sourceWidth = vectorLengthByType[vector1Type];
+        const uint32_t sourceWidth2 = vectorLengthByType[vector2Type];
+        const uint32_t resultWidth = vectorLengthByType[resultType];
+        const uint32_t scalarType = vectorComponentTypeByType[resultType];
+        if (sourceWidth == 0u || sourceWidth2 == 0u ||
+            resultWidth != wc - 5u ||
+            scalarType != vectorComponentTypeByType[vector1Type] ||
+            scalarType != vectorComponentTypeByType[vector2Type])
+            return false;
+
+        ShuffleInfo info;
+        info.resultType = resultType;
+        info.resultId = resultId;
+        info.vector1Id = vector1Id;
+        info.vector2Id = vector2Id;
+        info.scalarType = scalarType;
+        info.sourceWidth = sourceWidth;
+        info.sourceWidth2 = sourceWidth2;
+        info.selectors.reserve(resultWidth);
+        for (uint32_t c = 0u; c < resultWidth; ++c)
+        {
+            const uint32_t selector = ins[5u + c];
+            if (selector != 0xffffffffu &&
+                static_cast<uint64_t>(selector) >=
+                    static_cast<uint64_t>(sourceWidth) + sourceWidth2)
+                return false;
+            info.selectors.push_back(selector);
+            if (selector == 0xffffffffu &&
+                undefIdByScalarType.find(scalarType) == undefIdByScalarType.end())
+            {
+                if (nextId >= UINT32_MAX - 1u)
+                    return false;
+                const uint32_t undefId = nextId++;
+                undefIdByScalarType.emplace(scalarType, undefId);
+                undefDeclarations.emplace_back(scalarType, undefId);
+            }
+        }
+        shuffles.emplace(offset, std::move(info));
+    }
+
+    bool undefDefinitionsInserted = undefDeclarations.empty();
+    bool inFunction = false;
+    std::vector<uint32_t> rewritten;
+    rewritten.reserve(words.size() + shuffleOffsets.size() * 24u);
+    rewritten.insert(rewritten.end(), words.begin(), words.begin() + 5u);
+
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (!inFunction && !undefDefinitionsInserted &&
+            (op == SpvOpVariable || op == SpvOpFunction))
+        {
+            for (const auto &definition : undefDeclarations)
+                SpirvAppend(rewritten, SpvOpUndef,
+                    {definition.first, definition.second});
+            undefDefinitionsInserted = true;
+        }
+
+        const auto found = shuffles.find(offset);
+        if (found == shuffles.end())
+        {
+            rewritten.insert(
+                rewritten.end(), words.begin() + offset, words.begin() + offset + wc);
+        }
+        else
+        {
+            const ShuffleInfo &shuffle = found->second;
+            std::vector<uint32_t> constructOperands;
+            constructOperands.reserve(shuffle.selectors.size() + 2u);
+            constructOperands.push_back(shuffle.resultType);
+            constructOperands.push_back(shuffle.resultId);
+
+            for (const uint32_t selector : shuffle.selectors)
+            {
+                if (selector == 0xffffffffu)
+                {
+                    const auto undef = undefIdByScalarType.find(shuffle.scalarType);
+                    if (undef == undefIdByScalarType.end())
+                        return false;
+                    constructOperands.push_back(undef->second);
+                    continue;
+                }
+                if (nextId >= UINT32_MAX - 1u)
+                    return false;
+                const bool fromFirst = selector < shuffle.sourceWidth;
+                const uint32_t sourceId =
+                    fromFirst ? shuffle.vector1Id : shuffle.vector2Id;
+                const uint32_t component =
+                    fromFirst ? selector : selector - shuffle.sourceWidth;
+                if (component >=
+                    (fromFirst ? shuffle.sourceWidth : shuffle.sourceWidth2))
+                    return false;
+                const uint32_t extractedId = nextId++;
+                SpirvAppend(rewritten, SpvOpCompositeExtract,
+                    {shuffle.scalarType, extractedId, sourceId, component});
+                constructOperands.push_back(extractedId);
+            }
+
+            rewritten.push_back(
+                (static_cast<uint32_t>(constructOperands.size() + 1u) << 16) |
+                static_cast<uint32_t>(SpvOpCompositeConstruct));
+            rewritten.insert(
+                rewritten.end(), constructOperands.begin(), constructOperands.end());
+        }
+
+        if (op == SpvOpFunction)
+            inFunction = true;
+        else if (op == SpvOpFunctionEnd)
+            inFunction = false;
+        offset += wc;
+    }
+
+    if (!undefDefinitionsInserted)
+        return false;
+    rewritten[3] = nextId;
+    words.swap(rewritten);
+    if (loweredCount)
+        *loweredCount = static_cast<uint32_t>(shuffleOffsets.size());
+    return true;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -5345,6 +5570,18 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=invalid_pixel_spirv_vector_shuffle\n");
             return false;
         }
+        uint32_t loweredPixelShuffleCount = 0u;
+        if (LowerSwitchSpirvVectorShuffleToCompositeOps(
+                pixelSpirv, &loweredPixelShuffleCount) &&
+            loweredPixelShuffleCount)
+        {
+            char loweringTrace[192];
+            std::snprintf(loweringTrace, sizeof(loweringTrace),
+                "[KisakCOD][VK SPIRV LOWER] stage=ps serial=%llu vector_shuffle=%u\n",
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                loweredPixelShuffleCount);
+            Switch_LogWrite(loweringTrace);
+        }
 #ifdef __SWITCH__
         if (repairedPixelShuffleOperands)
         {
@@ -5447,6 +5684,18 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=invalid_vertex_spirv_vector_shuffle\n");
             return false;
+        }
+        uint32_t loweredVertexShuffleCount = 0u;
+        if (LowerSwitchSpirvVectorShuffleToCompositeOps(
+                m_vertexShader->spirv, &loweredVertexShuffleCount) &&
+            loweredVertexShuffleCount)
+        {
+            char loweringTrace[192];
+            std::snprintf(loweringTrace, sizeof(loweringTrace),
+                "[KisakCOD][VK SPIRV LOWER] stage=vs serial=%llu vector_shuffle=%u\n",
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                loweredVertexShuffleCount);
+            Switch_LogWrite(loweringTrace);
         }
 #ifdef __SWITCH__
         if (repairedVertexShuffleOperands)
