@@ -124,11 +124,11 @@ VkDescriptorSetLayout CreateSamplerSetLayout(VkDevice device, VkShaderStageFlags
         ? result : VK_NULL_HANDLE;
 }
 
-VkDescriptorSetLayout CreateConstantDataSetLayout(VkDevice device, VkShaderStageFlags stage)
+VkDescriptorSetLayout CreateUniformSetLayout(VkDevice device, VkShaderStageFlags stage)
 {
     VkDescriptorSetLayoutBinding binding{};
     binding.binding = 0;
-    binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     binding.descriptorCount = 1;
     binding.stageFlags = stage;
 
@@ -391,9 +391,73 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         return true;
 
 #ifdef __SWITCH__
-    // Shader constant blocks are represented by Vulkan storage-buffer descriptors
-    // in the linked SPIR-V. The allocation itself requests HOST_COHERENT memory;
-    // do not mutate Mesa's process-wide NVK_DEBUG options to select driver paths.
+    // NVK requires coherent mapped memory on Tegra. Also disable NVK's
+    // automatic UBO-to-constant-buffer promotion: pipeline creation is faulting
+    // inside the NVK compiler on the Switch, and this avoids that compiler path
+    // while preserving the original shader and descriptor semantics.
+    // Merge options instead of overwriting flags supplied by the runtime.
+    const char *existingNvkDebug = std::getenv("NVK_DEBUG");
+    std::string nvkDebug = existingNvkDebug ? existingNvkDebug : "";
+    bool hasCoherentFlag = false;
+    bool hasNoCbufFlag = false;
+    for (size_t start = 0; start < nvkDebug.size();)
+    {
+        const size_t end = nvkDebug.find(',', start);
+        const size_t length =
+            (end == std::string::npos ? nvkDebug.size() : end) - start;
+        if (length == sizeof("coherent") - 1u &&
+            nvkDebug.compare(start, length, "coherent") == 0)
+            hasCoherentFlag = true;
+        else if (length == sizeof("no_cbuf") - 1u &&
+            nvkDebug.compare(start, length, "no_cbuf") == 0)
+            hasNoCbufFlag = true;
+
+        if (end == std::string::npos)
+            break;
+        start = end + 1u;
+    }
+
+    bool nvkDebugChanged = false;
+    if (!hasCoherentFlag)
+    {
+        if (!nvkDebug.empty())
+            nvkDebug += ',';
+        nvkDebug += "coherent";
+        nvkDebugChanged = true;
+    }
+    if (!hasNoCbufFlag)
+    {
+        if (!nvkDebug.empty())
+            nvkDebug += ',';
+        nvkDebug += "no_cbuf";
+        nvkDebugChanged = true;
+    }
+
+    if (nvkDebugChanged)
+    {
+        if (::setenv("NVK_DEBUG", nvkDebug.c_str(), 1) != 0)
+        {
+            Switch_LogWrite(
+                "[KisakCOD][VK DRIVER] could not enable NVK_DEBUG=no_cbuf,coherent; continuing with existing options\n");
+        }
+        else
+        {
+            char driverFlagsMsg[256];
+            std::snprintf(driverFlagsMsg, sizeof(driverFlagsMsg),
+                "[KisakCOD][VK DRIVER] enabled NVK_DEBUG=%s (Tegra coherence + disable UBO constant-buffer promotion)\n",
+                nvkDebug.c_str());
+            Switch_LogWrite(driverFlagsMsg);
+        }
+    }
+    else
+    {
+        Switch_LogWrite(
+            "[KisakCOD][VK DRIVER] NVK_DEBUG coherent and no_cbuf already enabled\n");
+    }
+
+    // Preserve debug flags supplied by the runtime. The current A/B test
+    // keeps serial+spill but re-enables NAK uniform-GPR allocation to compare
+    // against the serial,nougpr path that still faults in _free_r.
     const char *existingNakDebug = std::getenv("NAK_DEBUG");
     std::string nakDebug = existingNakDebug ? existingNakDebug : "";
     auto hasNakFlag = [&nakDebug](const char *flag) {
@@ -1190,9 +1254,9 @@ bool VulkanBackend::CreateCommandResources()
 bool VulkanBackend::CreateDescriptorResources()
 {
     m_vsSamplerLayout = CreateSamplerSetLayout(m_device, VK_SHADER_STAGE_VERTEX_BIT);
-    m_vsUniformLayout = CreateConstantDataSetLayout(m_device, VK_SHADER_STAGE_VERTEX_BIT);
+    m_vsUniformLayout = CreateUniformSetLayout(m_device, VK_SHADER_STAGE_VERTEX_BIT);
     m_psSamplerLayout = CreateSamplerSetLayout(m_device, VK_SHADER_STAGE_FRAGMENT_BIT);
-    m_psUniformLayout = CreateConstantDataSetLayout(m_device, VK_SHADER_STAGE_FRAGMENT_BIT);
+    m_psUniformLayout = CreateUniformSetLayout(m_device, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     if (!m_vsSamplerLayout || !m_vsUniformLayout || !m_psSamplerLayout || !m_psUniformLayout)
     {
@@ -1218,7 +1282,7 @@ bool VulkanBackend::CreateDescriptorResources()
     // (two 16-sampler sets and two uniform sets per draw).
     VkDescriptorPoolSize poolSizes[] = {
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 262144},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 16384}
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 16384}
     };
     VkDescriptorPoolCreateInfo pool{};
     pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1238,11 +1302,11 @@ bool VulkanBackend::CreateUniformRing()
     VkPhysicalDeviceProperties props{};
     vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
     m_uniformAlignment = std::max<VkDeviceSize>(
-        16, props.limits.minStorageBufferOffsetAlignment);
+        16, props.limits.minUniformBufferOffsetAlignment);
 
     return CreateBuffer(
         m_uniformCapacity,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &m_uniformRing, &m_uniformRingMemory,
