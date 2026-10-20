@@ -6065,6 +6065,31 @@ bool IDirect3DDevice9::EnsurePipeline()
         static_cast<void *>(stages[1].module));
     g_switchPipelineCrashSnapshot.valid = true;
 
+#ifdef __SWITCH__
+    // The 1.3 API-version A/B test did not change the crash. Temporarily skip
+    // only the exact SPIR-V pair that faults in NAK's register allocator so
+    // rendering can progress far enough to identify the next failing shader.
+    if (vsSpirvHash == 0xaf1d39bec3f1bf7dull &&
+        psSpirvHash == 0xcd1031f57ecc7957ull)
+    {
+        static bool loggedSkippedPair = false;
+        if (!loggedSkippedPair)
+        {
+            char skipMsg[256];
+            std::snprintf(skipMsg, sizeof(skipMsg),
+                "[KisakCOD][VK PIPELINE PROBE] skipped known crashing NAK shader pair vs=%016llx ps=%016llx seq=%u\\n",
+                static_cast<unsigned long long>(vsSpirvHash),
+                static_cast<unsigned long long>(psSpirvHash),
+                pipelineCreateSequence);
+            Switch_LogWrite(skipMsg);
+            loggedSkippedPair = true;
+        }
+        g_switchPipelineCrashSnapshot.valid = false;
+        g_switchFrameStage = "frame/render/vulkan/pipeline/known_shader_pair_skipped";
+        return false;
+    }
+#endif
+
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
     RecordSwitchVkPipelineTrace(
