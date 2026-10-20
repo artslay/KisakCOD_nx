@@ -2388,6 +2388,38 @@ bool ReplaceCapturedSeq64PixelKillWithReturnForProbe(
     return true;
 }
 
+// Build a known-valid fragment stage for a hash-gated pipeline isolation probe.
+// It writes constant white to location 0 and consumes no vertex-stage inputs.
+bool BuildSwitchSeq64MinimalFragmentSpirv(std::vector<uint32_t> &words)
+{
+    words.clear();
+    words.reserve(48);
+    words.insert(words.end(), {
+        SpvMagicNumber, 0x00010000u, 0u, 11u, 0u
+    });
+    SpirvAppend(words, SpvOpCapability, {1u}); // Shader
+    SpirvAppend(words, SpvOpMemoryModel, {0u, 1u}); // Logical, GLSL450
+    SpirvAppend(words, SpvOpEntryPoint, {
+        4u, 1u, 0x6e69616du, 0u, 2u // Fragment %main "main" %outColor
+    });
+    SpirvAppend(words, SpvOpExecutionMode, {1u, 7u}); // OriginUpperLeft
+    SpirvAppend(words, SpvOpDecorate, {2u, 30u, 0u}); // Location 0
+    SpirvAppend(words, SpvOpTypeVoid, {3u});
+    SpirvAppend(words, SpvOpTypeFunction, {4u, 3u});
+    SpirvAppend(words, SpvOpTypeFloat, {5u, 32u});
+    SpirvAppend(words, SpvOpTypeVector, {6u, 5u, 4u});
+    SpirvAppend(words, SpvOpTypePointer, {7u, 3u, 6u}); // Output vec4
+    SpirvAppend(words, SpvOpConstant, {5u, 8u, 0x3f800000u});
+    SpirvAppend(words, SpvOpConstantComposite, {6u, 9u, 8u, 8u, 8u, 8u});
+    SpirvAppend(words, SpvOpVariable, {7u, 2u, 3u}); // Output
+    SpirvAppend(words, SpvOpFunction, {3u, 1u, 0u, 4u});
+    SpirvAppend(words, SpvOpLabel, {10u});
+    SpirvAppend(words, SpvOpStore, {2u, 9u});
+    SpirvAppend(words, SpvOpReturn, {});
+    SpirvAppend(words, SpvOpFunctionEnd, {});
+    return words.size() >= 5u && words[0] == SpvMagicNumber && words[3] == 11u;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -7366,6 +7398,74 @@ bool IDirect3DDevice9::EnsurePipeline()
         else
         {
             Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=seq64_native_kill_to_return failed=no_kill_or_invalid_spirv\n");
+        }
+        // Isolate the exact seq=64 vertex stage from its original pixel shader.
+        // The throwaway PS is valid SPIR-V, emits constant white at location 0,
+        // has no input varyings, and is never retained for rendering.
+        std::vector<uint32_t> seq64MinimalFragmentSpirv;
+        VkResult seq64MinimalModuleResult = VK_ERROR_UNKNOWN;
+        VkResult seq64MinimalPipelineResult = VK_ERROR_UNKNOWN;
+        VkShaderModule seq64MinimalFragmentModule = VK_NULL_HANDLE;
+        VkPipeline seq64MinimalPipeline = VK_NULL_HANDLE;
+        if (BuildSwitchSeq64MinimalFragmentSpirv(seq64MinimalFragmentSpirv))
+        {
+            VkShaderModuleCreateInfo minimalFragmentInfo{};
+            minimalFragmentInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            minimalFragmentInfo.codeSize =
+                seq64MinimalFragmentSpirv.size() * sizeof(uint32_t);
+            minimalFragmentInfo.pCode = seq64MinimalFragmentSpirv.data();
+            seq64MinimalModuleResult = vkCreateShaderModule(
+                m_backend->Device(), &minimalFragmentInfo, nullptr,
+                &seq64MinimalFragmentModule);
+            seq64MinimalPipelineResult = seq64MinimalModuleResult;
+            if (seq64MinimalModuleResult == VK_SUCCESS && seq64MinimalFragmentModule)
+            {
+                VkPipelineShaderStageCreateInfo minimalStages[2] = {
+                    stages[0], stages[1]
+                };
+                minimalStages[1].module = seq64MinimalFragmentModule;
+                minimalStages[1].pSpecializationInfo = nullptr;
+                VkGraphicsPipelineCreateInfo minimalInfo = info;
+                minimalInfo.pStages = minimalStages;
+
+                // Make the crash snapshot identify this exact probe if NVK faults.
+                RecordSwitchVkPipelineTrace(
+                    6u, this, &m_pipelines, m_pipelines.size(), key,
+                    m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
+                    VK_NULL_HANDLE);
+                Switch_LogWrite(
+                    "[KisakCOD][VK STAGE PROBE] seq=64 action=original_vs_minimal_ps begin\n");
+                g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+                seq64MinimalPipelineResult = vkCreateGraphicsPipelines(
+                    m_backend->Device(), VK_NULL_HANDLE, 1,
+                    &minimalInfo, nullptr, &seq64MinimalPipeline);
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_minimal_ps_probe_return";
+            }
+            else
+            {
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_minimal_ps_module_failed";
+            }
+
+            char minimalProbeMsg[256];
+            std::snprintf(minimalProbeMsg, sizeof(minimalProbeMsg),
+                "[KisakCOD][VK STAGE PROBE] seq=64 action=original_vs_minimal_ps module=%d pipeline=%d handle=%p\n",
+                static_cast<int>(seq64MinimalModuleResult),
+                static_cast<int>(seq64MinimalPipelineResult),
+                static_cast<void *>(seq64MinimalPipeline));
+            Switch_LogWrite(minimalProbeMsg);
+            if (seq64MinimalPipeline)
+                vkDestroyPipeline(
+                    m_backend->Device(), seq64MinimalPipeline, nullptr);
+            if (seq64MinimalFragmentModule)
+                vkDestroyShaderModule(
+                    m_backend->Device(), seq64MinimalFragmentModule, nullptr);
+        }
+        else
+        {
+            Switch_LogWrite(
+                "[KisakCOD][VK STAGE PROBE] seq=64 action=original_vs_minimal_ps skipped=builder_failed\n");
         }
     }
 #endif
