@@ -864,7 +864,8 @@ void __cdecl R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState,
 
     iassert(context.source->cameraView == info->cameraView);
     context.state->origMaterial = 0;
-    R_SetDrawSurfsShadowableLight(context.source, info);
+    if (!R_SetDrawSurfsShadowableLight(context.source, info))
+        return;
     R_Set3D(context.source);
     if (context.source->viewportIsDirty)
     {
@@ -1143,7 +1144,7 @@ void __cdecl R_ResolveSection(
         ++g_disableRendering;
         Com_Error(
             ERR_FATAL,
-            ".\\rb_backend.cpp: R_ResolveSection failed: %s\\n",
+            ".\\rb_backend.cpp: R_ResolveSection failed: %s\n",
             R_ErrorDescription(hr));
     }
 }
@@ -3537,7 +3538,7 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][FRAME TRACE] enter id=%u thread=%u data=%p drawType=0x%08x views=%u cmds=%p disable=%d target=%d\\n",
+            "[KisakCOD][FRAME TRACE] enter id=%u thread=%u data=%p drawType=0x%08x views=%u cmds=%p disable=%d target=%d\n",
             switchFrameTraceId,
             Sys_GetSwitchThreadContext(),
             static_cast<const void *>(data),
@@ -3584,7 +3585,7 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][FRAME TRACE] leave id=%u target=%d drawType=0x%08x disable=%d\\n",
+            "[KisakCOD][FRAME TRACE] leave id=%u target=%d drawType=0x%08x disable=%d\n",
             switchFrameTraceId,
             gfxCmdBufState.renderTargetId,
             static_cast<unsigned>(drawType),
