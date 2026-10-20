@@ -10058,7 +10058,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             msg, sizeof(msg),
             "[KisakCOD][VK DRAW BIND FAIL] reason=null_vk_index_handle self=%p cmd=%p indices=%p indexBytes=%zu decl=%llu vs=%llu ps=%llu\n",
             static_cast<void *>(this), reinterpret_cast<void *>(drawCommandBuffer),
-            static_cast<void *>(m_indices), m_indices->size,
+            static_cast<void *>(m_indices), static_cast<size_t>(m_indices->size),
             static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
             static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
             static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u));
@@ -10103,7 +10103,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     msg, sizeof(msg),
                     "[KisakCOD][VK DRAW BIND FAIL] reason=null_vk_vertex_handle stream=%u vb=%p offset=%llu stride=%u size=%zu\n",
                     stream, static_cast<void *>(vertexBuffer),
-                    static_cast<unsigned long long>(o), stride, vertexBuffer->size);
+                    static_cast<unsigned long long>(o), stride, static_cast<size_t>(vertexBuffer->size));
                 Switch_LogWrite(msg);
                 return E_FAIL;
             }
