@@ -677,6 +677,78 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                             static_cast<unsigned long long>(raWords[12]),
                             static_cast<unsigned long long>(raWords[13]));
                         Switch_LogCrashLine(line);
+
+                        // RegAllocator is the final member being dropped in this crash.
+                        // Walk to AssignRegsBlock's frame and dump all seven sibling
+                        // allocators; repeated owned pointers would indicate a double-free.
+                        const uintptr_t blockFrameAddress = raWords[0];
+                        if (blockFrameAddress > raFrameAddress &&
+                            blockFrameAddress - raFrameAddress <= 0x100000u &&
+                            (blockFrameAddress & (alignof(uintptr_t) - 1u)) == 0 &&
+                            blockFrameAddress <= UINTPTR_MAX - 0x18u)
+                        {
+                            const volatile uintptr_t *blockFrame =
+                                reinterpret_cast<const volatile uintptr_t *>(blockFrameAddress);
+                            const uintptr_t blockLr = blockFrame[1];
+                            const uintptr_t blockBase = blockFrame[2];
+                            const uintptr_t raLrOffset =
+                                raLr >= codeBase ? raLr - codeBase : UINTPTR_MAX;
+                            const uintptr_t blockLrOffset =
+                                blockLr >= codeBase ? blockLr - codeBase : UINTPTR_MAX;
+
+                            if (blockBase >= 0x100000000ull &&
+                                blockBase <= UINTPTR_MAX - 0x310u &&
+                                (blockBase & (alignof(uintptr_t) - 1u)) == 0)
+                            {
+                                std::snprintf(
+                                    line, sizeof(line),
+                                    "[KisakCOD][CRASH] NAK_RA_PARENT activeLrOff=0x%llx "
+                                    "parentLrOff=0x%llx parentFrame=0x%016llx "
+                                    "block=0x%016llx activeThisOffset=0x%llx\\n",
+                                    static_cast<unsigned long long>(raLrOffset),
+                                    static_cast<unsigned long long>(blockLrOffset),
+                                    static_cast<unsigned long long>(blockFrameAddress),
+                                    static_cast<unsigned long long>(blockBase),
+                                    static_cast<unsigned long long>(raThis - blockBase));
+                                Switch_LogCrashLine(line);
+
+                                // This matches the AssignRegsBlock drop call site in the
+                                // current linked NAK build (parent return PC is +0x84).
+                                if (raLrOffset != UINTPTR_MAX &&
+                                    blockLrOffset > raLrOffset &&
+                                    blockLrOffset - raLrOffset == 0x84u)
+                                {
+                                    static const uintptr_t regOffsets[7] = {
+                                        0x000u, 0x070u, 0x0e0u, 0x150u,
+                                        0x1c0u, 0x230u, 0x2a0u
+                                    };
+                                    for (unsigned int i = 0; i < 7; ++i)
+                                    {
+                                        const volatile uintptr_t *w =
+                                            reinterpret_cast<const volatile uintptr_t *>(
+                                                blockBase + regOffsets[i]);
+                                        std::snprintf(
+                                            line, sizeof(line),
+                                            "[KisakCOD][CRASH] NAK_RA_SIBLING i=%u off=0x%03llx "
+                                            "this=0x%016llx n00=%016llx p08=%016llx "
+                                            "n18=%016llx p20=%016llx n30=%016llx "
+                                            "p38=%016llx p48=%016llx n50=%016llx\\n",
+                                            i,
+                                            static_cast<unsigned long long>(regOffsets[i]),
+                                            static_cast<unsigned long long>(blockBase + regOffsets[i]),
+                                            static_cast<unsigned long long>(w[0]),
+                                            static_cast<unsigned long long>(w[1]),
+                                            static_cast<unsigned long long>(w[3]),
+                                            static_cast<unsigned long long>(w[4]),
+                                            static_cast<unsigned long long>(w[6]),
+                                            static_cast<unsigned long long>(w[7]),
+                                            static_cast<unsigned long long>(w[9]),
+                                            static_cast<unsigned long long>(w[10]));
+                                        Switch_LogCrashLine(line);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
