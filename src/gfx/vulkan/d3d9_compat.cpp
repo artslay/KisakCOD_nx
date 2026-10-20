@@ -2614,6 +2614,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         uint32_t vector2Id = 0u;
         uint32_t scalarType = 0u;
         uint32_t sourceWidth = 0u;
+        uint32_t sourceWidth2 = 0u;
         std::vector<uint32_t> selectors;
     };
     std::unordered_map<size_t, ShuffleInfo> shuffles;
@@ -2650,7 +2651,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         const uint32_t sourceWidth2 = vectorLengthByType[vector2Type];
         const uint32_t resultWidth = vectorLengthByType[resultType];
         const uint32_t scalarType = vectorComponentTypeByType[resultType];
-        if (sourceWidth == 0u || sourceWidth != sourceWidth2 ||
+        if (sourceWidth == 0u || sourceWidth2 == 0u ||
             resultWidth != wc - 5u ||
             scalarType != vectorComponentTypeByType[vector1Type] ||
             scalarType != vectorComponentTypeByType[vector2Type])
@@ -2663,11 +2664,14 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         info.vector2Id = vector2Id;
         info.scalarType = scalarType;
         info.sourceWidth = sourceWidth;
+        info.sourceWidth2 = sourceWidth2;
         info.selectors.reserve(resultWidth);
         for (uint32_t c = 0u; c < resultWidth; ++c)
         {
             const uint32_t selector = ins[5u + c];
-            if (selector != 0xffffffffu && selector >= sourceWidth * 2u)
+            if (selector != 0xffffffffu &&
+                static_cast<uint64_t>(selector) >=
+                    static_cast<uint64_t>(sourceWidth) + sourceWidth2)
                 return false;
             info.selectors.push_back(selector);
             if (selector == 0xffffffffu &&
@@ -2737,6 +2741,8 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
                     fromFirst ? shuffle.vector1Id : shuffle.vector2Id;
                 const uint32_t component =
                     fromFirst ? selector : selector - shuffle.sourceWidth;
+                if (component >= (fromFirst ? shuffle.sourceWidth : shuffle.sourceWidth2))
+                    return false;
                 const uint32_t extractedId = nextId++;
                 SpirvAppend(rewritten, SpvOpCompositeExtract,
                     {shuffle.scalarType, extractedId, sourceId, component});
