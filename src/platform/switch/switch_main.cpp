@@ -1,5 +1,7 @@
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <stdlib.h>
 #include <switch.h>
 #include <vulkan/vulkan.h>
 #include <atomic>
@@ -626,12 +628,52 @@ static void SwitchLogVulkanRuntime()
     vkDestroyInstance(instance, nullptr);
 }
 
+
+static bool SwitchConfigureNakSpillProbe()
+{
+    const char *current = std::getenv("NAK_DEBUG");
+    if (!current || !*current)
+        return ::setenv("NAK_DEBUG", "spill", 1) == 0;
+
+    const size_t currentLength = std::strlen(current);
+    size_t tokenStart = 0;
+    for (size_t i = 0; i <= currentLength; ++i)
+    {
+        if (current[i] != ',' && current[i] != '\\0')
+            continue;
+
+        size_t first = tokenStart;
+        size_t last = i;
+        while (first < last && (current[first] == ' ' || current[first] == '\\t'))
+            ++first;
+        while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\\t'))
+            --last;
+        if (last - first == sizeof("spill") - 1u &&
+            std::memcmp(current + first, "spill", sizeof("spill") - 1u) == 0)
+            return true;
+
+        tokenStart = i + 1u;
+    }
+
+    char combined[512];
+    const int written = std::snprintf(
+        combined, sizeof(combined), "%s%sspill", current,
+        current[currentLength - 1u] == ',' ? "" : ",");
+    if (written < 0 || static_cast<size_t>(written) >= sizeof(combined))
+        return false;
+    return ::setenv("NAK_DEBUG", combined, 1) == 0;
+}
+
 int main()
 {
+    const bool nakSpillProbeConfigured = SwitchConfigureNakSpillProbe();
     Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
+    Switch_LogWrite(nakSpillProbeConfigured
+        ? "[KisakCOD][NAK PROBE] allocator spill mode enabled before Mesa initialization\\n"
+        : "[KisakCOD][NAK PROBE] WARNING: failed to enable allocator spill mode\\n");
     SwitchBootLog("Game data: sdmc:/switch/KisakCOD/game");
     SwitchBootLog("Stage 1/7: initializing main thread");
 
