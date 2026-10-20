@@ -5633,7 +5633,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 {
                     char cubeProbeTrace[256];
                     std::snprintf(cubeProbeTrace, sizeof(cubeProbeTrace),
-                        "[KisakCOD][VK SPIRV REPAIR] stage=ps action=trim_unused_cube_coordinates count=%u old_hash=%016llx new_hash=%016llx\\n",
+                        "[KisakCOD][VK SPIRV REPAIR] stage=ps action=trim_unused_cube_coordinates count=%u old_hash=%016llx new_hash=%016llx\n",
                         trimmedCubeCoordinates,
                         static_cast<unsigned long long>(originalCubeProbeHash),
                         static_cast<unsigned long long>(HashSpirvWords(pixelSpirv)));
@@ -5642,7 +5642,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             }
             else
             {
-                Switch_LogWrite("[KisakCOD][VK SPIRV REPAIR] stage=ps action=trim_unused_cube_coordinates failed=invalid_module\\n");
+                Switch_LogWrite("[KisakCOD][VK SPIRV REPAIR] stage=ps action=trim_unused_cube_coordinates failed=invalid_module\n");
             }
         }
 #endif
