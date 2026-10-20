@@ -8282,14 +8282,14 @@ bool IDirect3DDevice9::EnsurePipeline()
         uint32_t loweredShuffleCount = 0u;
         bool loweredBuilt = false;
         VkResult loweredModuleResult = VK_ERROR_UNKNOWN;
-        if (!m_pixelShader->spirv.empty())
+        if (!m_pixelShader->linkedSpirv.empty())
         {
-            // Lower the exact active fragment module. It already contains the
-            // alpha-test patch and debug stripping used by this pipeline.
-            // Re-patching linkedSpirv after lowering needlessly rebuilds the
-            // alpha-test control flow and makes the candidate differ from the
-            // module that was known to be active before this workaround.
-            seq31LoweredPixelSpirv = m_pixelShader->spirv;
+            // A/B isolate the injected alpha-test CFG from the driver crash:
+            // start from the exact linked fragment baseline (before our alpha
+            // discard patch), then apply only the semantics-preserving shuffle
+            // lowering. This bypasses alpha testing for this exact shader pair
+            // solely while determining whether that CFG triggers NVK/NAK.
+            seq31LoweredPixelSpirv = m_pixelShader->linkedSpirv;
             loweredBuilt = LowerSwitchSpirvVectorShuffleToCompositeOps(
                 seq31LoweredPixelSpirv, &loweredShuffleCount) &&
                 loweredShuffleCount > 0u;
@@ -8311,18 +8311,18 @@ bool IDirect3DDevice9::EnsurePipeline()
 
         char rewriteTrace[384];
         std::snprintf(rewriteTrace, sizeof(rewriteTrace),
-            "[KisakCOD][VK SHADER REWRITE] pair=seq31_vs_af1d39bec3f1bf7d_ps_cd1031f57ecc7957 seq=%u alphaPatch=%u built=%u lowered=%u sourceActiveHash=%016llx rewrittenHash=%016llx moduleResult=%d module=%p action=%s\n",
+            "[KisakCOD][VK SHADER REWRITE] pair=seq31_vs_af1d39bec3f1bf7d_ps_cd1031f57ecc7957 seq=%u alphaPatch=%u alphaBypassProbe=1 built=%u lowered=%u sourceLinkedHash=%016llx rewrittenHash=%016llx moduleResult=%d module=%p action=%s\n",
             pipelineCreateSequence, useAlphaTestPatch ? 1u : 0u,
             loweredBuilt ? 1u : 0u, loweredShuffleCount,
             static_cast<unsigned long long>(
-                HashSpirvWords(m_pixelShader->spirv)),
+                HashSpirvWords(m_pixelShader->linkedSpirv)),
             static_cast<unsigned long long>(
                 seq31LoweredPixelSpirv.empty()
                     ? 0u : HashSpirvWords(seq31LoweredPixelSpirv)),
             static_cast<int>(loweredModuleResult),
             static_cast<void *>(seq31LoweredPixelModule),
             loweredBuilt && loweredModuleResult == VK_SUCCESS &&
-                seq31LoweredPixelModule ? "use_semantics_preserving_rewrite" :
+                seq31LoweredPixelModule ? "use_shuffle_lowered_alpha_bypass_probe" :
                                           "rewrite_unavailable");
         static uint32_t seq31RewriteTraceCount = 0u;
         if (seq31RewriteTraceCount < 12u)
