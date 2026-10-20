@@ -639,14 +639,14 @@ static bool SwitchConfigureNakSpillProbe()
     size_t tokenStart = 0;
     for (size_t i = 0; i <= currentLength; ++i)
     {
-        if (current[i] != ',' && current[i] != '\\0')
+        if (current[i] != ',' && current[i] != '\0')
             continue;
 
         size_t first = tokenStart;
         size_t last = i;
-        while (first < last && (current[first] == ' ' || current[first] == '\\t'))
+        while (first < last && (current[first] == ' ' || current[first] == '\t'))
             ++first;
-        while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\\t'))
+        while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\t'))
             --last;
         if (last - first == sizeof("spill") - 1u &&
             std::memcmp(current + first, "spill", sizeof("spill") - 1u) == 0)
@@ -663,7 +663,6 @@ static bool SwitchConfigureNakSpillProbe()
         return false;
     return ::setenv("NAK_DEBUG", combined, 1) == 0;
 }
-
 int main()
 {
     const bool nakSpillProbeConfigured = SwitchConfigureNakSpillProbe();
@@ -672,8 +671,8 @@ int main()
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
     Switch_LogWrite(nakSpillProbeConfigured
-        ? "[KisakCOD][NAK PROBE] allocator spill mode enabled before Mesa initialization\\n"
-        : "[KisakCOD][NAK PROBE] WARNING: failed to enable allocator spill mode\\n");
+        ? "[KisakCOD][NAK PROBE] allocator spill mode enabled before Mesa initialization\n"
+        : "[KisakCOD][NAK PROBE] WARNING: failed to enable allocator spill mode\n");
     SwitchBootLog("Game data: sdmc:/switch/KisakCOD/game");
     SwitchBootLog("Stage 1/7: initializing main thread");
 
