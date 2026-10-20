@@ -410,6 +410,43 @@ uint64_t HashSpirvWords(const std::vector<uint32_t> &words)
     return hash;
 }
 
+#ifdef __SWITCH__
+// Save only the exact shader variants being investigated, while the render
+// thread is healthy and before entering the driver. This avoids relying on
+// SD-card I/O from the libnx exception handler or pasting megabytes of Base64.
+bool WriteSwitchNakCandidateSpirv(
+    const char *stage, uint32_t sequence, uint64_t hash,
+    const std::vector<uint32_t> &words)
+{
+    char path[224];
+    std::snprintf(path, sizeof(path),
+        "sdmc:/switch/KisakCOD/game/nak_candidate_seq%u_%s_%016llx.spv",
+        sequence, stage, static_cast<unsigned long long>(hash));
+    FILE *file = std::fopen(path, "wb");
+    if (!file)
+    {
+        char trace[320];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][VK SPIRV CAPTURE] stage=%s seq=%u hash=%016llx open_failed path=%s\n",
+            stage, sequence, static_cast<unsigned long long>(hash), path);
+        Switch_LogWrite(trace);
+        return false;
+    }
+
+    const size_t bytes = words.size() * sizeof(uint32_t);
+    const bool writeOk = words.size() >= 5u &&
+        std::fwrite(words.data(), sizeof(uint32_t), words.size(), file) == words.size();
+    const bool closeOk = std::fclose(file) == 0;
+    char trace[320];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][VK SPIRV CAPTURE] stage=%s seq=%u hash=%016llx bytes=%zu saved=%u path=%s\n",
+        stage, sequence, static_cast<unsigned long long>(hash), bytes,
+        writeOk && closeOk ? 1u : 0u, path);
+    Switch_LogWrite(trace);
+    return writeOk && closeOk;
+}
+#endif
+
 bool TryLoadSwitchOptimizedPipeline31Spirv(
     std::vector<uint32_t> &words, const char *stage, uint64_t expectedHash)
 {
@@ -2225,6 +2262,21 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
             words.size() > 3 ? words[3] : 0u,
             words.size() > 4 ? words[4] : 0u);
         writeLine(header);
+
+#ifdef __SWITCH__
+        if (snapshot.sequence >= 30u && snapshot.sequence <= 40u &&
+            snapshot.vertexSpirv &&
+            HashSpirvWords(*snapshot.vertexSpirv) == 0xaf1d39bec3f1bf7dull)
+        {
+            char fileLine[320];
+            std::snprintf(fileLine, sizeof(fileLine),
+                "[KisakCOD][VK CRASH SPIRV FILE] seq=%u stage=%s hash=%016llx path=sdmc:/switch/KisakCOD/game/nak_candidate_seq%u_%s_%016llx.spv\\n",
+                snapshot.sequence, stage, static_cast<unsigned long long>(hash),
+                snapshot.sequence, stage, static_cast<unsigned long long>(hash));
+            writeLine(fileLine);
+            return;
+        }
+#endif
 
         // Emit the captured module as short Base64 chunks directly to the log.
         // Encode in fixed-size stack buffers; do not allocate or touch the SD card
@@ -6020,6 +6072,17 @@ bool IDirect3DDevice9::EnsurePipeline()
     const uint64_t vsSpirvHash = computeSpirvHash(m_vertexShader->spirv);
     const uint64_t psSpirvHash = computeSpirvHash(m_pixelShader->spirv);
 
+#ifdef __SWITCH__
+    if (pipelineCreateSequence >= 30u && pipelineCreateSequence <= 40u &&
+        vsSpirvHash == 0xaf1d39bec3f1bf7dull)
+    {
+        (void)WriteSwitchNakCandidateSpirv(
+            "vs", pipelineCreateSequence, vsSpirvHash, m_vertexShader->spirv);
+        (void)WriteSwitchNakCandidateSpirv(
+            "ps", pipelineCreateSequence, psSpirvHash, m_pixelShader->spirv);
+    }
+#endif
+
     g_switchPipelineCrashSnapshot.valid = false;
     g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
     g_switchPipelineCrashSnapshot.vertexSpirv = &m_vertexShader->spirv;
@@ -6081,26 +6144,27 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchPipelineCrashSnapshot.valid = true;
 
 #ifdef __SWITCH__
-    // The same vertex SPIR-V crashed NAK's register allocator with multiple
-    // fragment shaders. Temporarily skip every pipeline using this exact VS
-    // hash, rather than chasing each pixel-shader variant independently.
-    if (vsSpirvHash == 0xaf1d39bec3f1bf7dull)
+    // Keep a narrow diagnostic bypass for the first confirmed crashing pair
+    // only. Do not blacklist the shared vertex shader: other pixel variants
+    // must remain enabled so their actual compiler failures can be captured.
+    if (vsSpirvHash == 0xaf1d39bec3f1bf7dull &&
+        psSpirvHash == 0xcd1031f57ecc7957ull)
     {
-        static bool loggedSkippedVertexShader = false;
-        if (!loggedSkippedVertexShader)
+        static bool loggedSkippedPair = false;
+        if (!loggedSkippedPair)
         {
             char skipMsg[256];
             std::snprintf(skipMsg, sizeof(skipMsg),
-                "[KisakCOD][VK PIPELINE PROBE] skipped known crashing NAK vertex shader vs=%016llx ps=%016llx seq=%u\n",
+                "[KisakCOD][VK PIPELINE PROBE] skipped known crashing NAK shader pair vs=%016llx ps=%016llx seq=%u\n",
                 static_cast<unsigned long long>(vsSpirvHash),
                 static_cast<unsigned long long>(psSpirvHash),
                 pipelineCreateSequence);
             Switch_LogWrite(skipMsg);
-            loggedSkippedVertexShader = true;
+            loggedSkippedPair = true;
         }
         g_switchSkippedKnownShaderPair = true;
         g_switchPipelineCrashSnapshot.valid = false;
-        g_switchFrameStage = "frame/render/vulkan/pipeline/known_vertex_shader_skipped";
+        g_switchFrameStage = "frame/render/vulkan/pipeline/known_shader_pair_skipped";
         return false;
     }
 #endif
