@@ -1348,10 +1348,16 @@ bool RepairUnusedZeroVectorShuffleSource(
 // repeatedly reached the Tegra NVK/NAK pipeline-compiler fault.
 bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     std::vector<uint32_t> &words,
-    uint32_t *loweredCount)
+    uint32_t *loweredCount,
+    uint32_t *copyObjectCount = nullptr,
+    uint32_t *scalarExtractCount = nullptr)
 {
     if (loweredCount)
         *loweredCount = 0u;
+    if (copyObjectCount)
+        *copyObjectCount = 0u;
+    if (scalarExtractCount)
+        *scalarExtractCount = 0u;
     if (words.size() < 5u || words[0] != SpvMagicNumber ||
         words[3] < 2u || words[3] > 1000000u)
         return false;
@@ -1415,6 +1421,8 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     std::unordered_map<uint32_t, uint32_t> undefIdByScalarType;
     std::vector<std::pair<uint32_t, uint32_t>> undefDeclarations;
     uint32_t nextId = originalBound;
+    uint32_t emittedCopyObjects = 0u;
+    uint32_t emittedScalarExtracts = 0u;
 
     for (const size_t offset : shuffleOffsets)
     {
@@ -1533,6 +1541,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
             {
                 SpirvAppend(rewritten, SpvOpCopyObject,
                     {shuffle.resultType, shuffle.resultId, shuffle.vector1Id});
+                ++emittedCopyObjects;
             }
             else
             {
@@ -1581,6 +1590,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
                     const uint32_t extractedId = nextId++;
                     SpirvAppend(rewritten, SpvOpCompositeExtract,
                         {shuffle.scalarType, extractedId, sourceId, component});
+                    ++emittedScalarExtracts;
                     extractedIds.emplace(extractKey, extractedId);
                     constructOperands.push_back(extractedId);
                 }
@@ -1606,6 +1616,10 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     words.swap(rewritten);
     if (loweredCount)
         *loweredCount = static_cast<uint32_t>(shuffleOffsets.size());
+    if (copyObjectCount)
+        *copyObjectCount = emittedCopyObjects;
+    if (scalarExtractCount)
+        *scalarExtractCount = emittedScalarExtracts;
     return true;
 }
 
@@ -5699,15 +5713,18 @@ bool IDirect3DDevice9::EnsurePipeline()
             return false;
         }
         uint32_t loweredPixelShuffleCount = 0u;
+        uint32_t loweredPixelCopyObjects = 0u;
+        uint32_t loweredPixelExtracts = 0u;
+        const size_t pixelWordsBeforeLower = pixelSpirv.size();
         if (LowerSwitchSpirvVectorShuffleToCompositeOps(
-                pixelSpirv, &loweredPixelShuffleCount) &&
+                pixelSpirv, &loweredPixelShuffleCount, &loweredPixelCopyObjects, &loweredPixelExtracts) &&
             loweredPixelShuffleCount)
         {
-            char loweringTrace[192];
+            char loweringTrace[256];
             std::snprintf(loweringTrace, sizeof(loweringTrace),
-                "[KisakCOD][VK SPIRV LOWER] stage=ps serial=%llu vector_shuffle=%u\n",
+                "[KisakCOD][VK SPIRV LOWER] stage=ps serial=%llu vector_shuffle=%u copy_object=%u scalar_extract=%u words=%zu->%zu\\n",
                 static_cast<unsigned long long>(m_pixelShader->serial),
-                loweredPixelShuffleCount);
+                loweredPixelShuffleCount, loweredPixelCopyObjects, loweredPixelExtracts, pixelWordsBeforeLower, pixelSpirv.size());
             Switch_LogWrite(loweringTrace);
         }
 #ifdef __SWITCH__
@@ -5814,15 +5831,18 @@ bool IDirect3DDevice9::EnsurePipeline()
             return false;
         }
         uint32_t loweredVertexShuffleCount = 0u;
+        uint32_t loweredVertexCopyObjects = 0u;
+        uint32_t loweredVertexExtracts = 0u;
+        const size_t vertexWordsBeforeLower = m_vertexShader->spirv.size();
         if (LowerSwitchSpirvVectorShuffleToCompositeOps(
-                m_vertexShader->spirv, &loweredVertexShuffleCount) &&
+                m_vertexShader->spirv, &loweredVertexShuffleCount, &loweredVertexCopyObjects, &loweredVertexExtracts) &&
             loweredVertexShuffleCount)
         {
-            char loweringTrace[192];
+            char loweringTrace[256];
             std::snprintf(loweringTrace, sizeof(loweringTrace),
-                "[KisakCOD][VK SPIRV LOWER] stage=vs serial=%llu vector_shuffle=%u\n",
+                "[KisakCOD][VK SPIRV LOWER] stage=vs serial=%llu vector_shuffle=%u copy_object=%u scalar_extract=%u words=%zu->%zu\\n",
                 static_cast<unsigned long long>(m_vertexShader->serial),
-                loweredVertexShuffleCount);
+                loweredVertexShuffleCount, loweredVertexCopyObjects, loweredVertexExtracts, vertexWordsBeforeLower, m_vertexShader->spirv.size());
             Switch_LogWrite(loweringTrace);
         }
 #ifdef __SWITCH__
