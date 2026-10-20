@@ -3397,9 +3397,10 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
         writeLine(header);
 
 #ifdef __SWITCH__
-        if (snapshot.sequence >= 30u && snapshot.sequence <= 40u &&
-            snapshot.vertexSpirv &&
-            HashSpirvWords(*snapshot.vertexSpirv) == 0xaf1d39bec3f1bf7dull)
+        if ((snapshot.sequence >= 30u && snapshot.sequence <= 40u &&
+             snapshot.vertexSpirv &&
+             HashSpirvWords(*snapshot.vertexSpirv) == 0xaf1d39bec3f1bf7dull) ||
+            snapshot.sequence == 90u)
         {
             char fileLine[320];
             std::snprintf(fileLine, sizeof(fileLine),
@@ -7339,6 +7340,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 #ifdef __SWITCH__
     VkShaderModule seq90DemoteFragmentModule = VK_NULL_HANDLE;
     const VkShaderModule seq90OriginalFragmentModule = stages[1].module;
+    std::vector<uint32_t> seq90DemoteSpirv;
     // This exact alpha-tested shader still faults with either pipeline optimizer
     // setting. Retry its original linked fragment code using demote semantics,
     // which suppresses framebuffer writes while avoiding the OpKill terminator.
@@ -7347,7 +7349,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         psSpirvHash == 0xe708e85707181fb7ull &&
         useAlphaTestPatch && m_alphaFunc == 5u && m_alphaRef == 0u)
     {
-        std::vector<uint32_t> seq90DemoteSpirv =
+        seq90DemoteSpirv =
             unpatchedPixelSpirvForProbe.empty()
                 ? m_pixelShader->linkedSpirv
                 : unpatchedPixelSpirvForProbe;
@@ -7398,6 +7400,125 @@ bool IDirect3DDevice9::EnsurePipeline()
         Switch_LogWrite(
             "[KisakCOD][VK PIPELINE PROBE] action=seq90_enable_optimization flags=0 vs=3191a056e9509bfc ps=e708e85707181fb7\n");
     }
+
+    // Isolate this exact crashing pair before its real pipeline call:
+    // (1) original VS + trivial PS; (2) original VS + linked PS before alpha-test rewrite.
+    if (vsSpirvHash == 0x3191a056e9509bfcull &&
+        psSpirvHash == 0xe708e85707181fb7ull &&
+        useAlphaTestPatch && m_alphaFunc == 5u && m_alphaRef == 0u)
+    {
+        const auto runSeq90FragmentStageProbe = [&](
+            const char *name,
+            const std::vector<uint32_t> &probePsWords,
+            VkShaderModule probePsModule)
+        {
+            if (!probePsModule || probePsWords.empty())
+                return;
+
+            VkPipelineShaderStageCreateInfo probeStages[2] = {stages[0], stages[1]};
+            probeStages[1].module = probePsModule;
+            probeStages[1].pSpecializationInfo = nullptr;
+            VkGraphicsPipelineCreateInfo probeInfo = info;
+            probeInfo.pStages = probeStages;
+
+            g_switchPipelineCrashSnapshot.valid = true;
+            g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
+            g_switchPipelineCrashSnapshot.vertexSpirv = &m_vertexShader->spirv;
+            g_switchPipelineCrashSnapshot.pixelSpirv = &probePsWords;
+            std::snprintf(
+                g_switchPipelineCrashSnapshot.summary,
+                sizeof(g_switchPipelineCrashSnapshot.summary),
+                "[KisakCOD][VK CRASH PIPELINE] seq=%u stage_probe=%s key=%016llx vs=%016llx ps=%016llx modules=%p/%p flags=%u\n",
+                pipelineCreateSequence, name,
+                static_cast<unsigned long long>(key),
+                static_cast<unsigned long long>(vsSpirvHash),
+                static_cast<unsigned long long>(HashSpirvWords(probePsWords)),
+                static_cast<void *>(probeStages[0].module),
+                static_cast<void *>(probeStages[1].module),
+                static_cast<unsigned int>(probeInfo.flags));
+
+            (void)WriteSwitchNakCandidateSpirv(
+                "vs", pipelineCreateSequence, vsSpirvHash, m_vertexShader->spirv);
+            (void)WriteSwitchNakCandidateSpirv(
+                "ps", pipelineCreateSequence, HashSpirvWords(probePsWords), probePsWords);
+
+            char begin[224];
+            std::snprintf(begin, sizeof(begin),
+                "[KisakCOD][VK STAGE PROBE] seq=90 action=%s begin ps_hash=%016llx\n",
+                name, static_cast<unsigned long long>(HashSpirvWords(probePsWords)));
+            Switch_LogWrite(begin);
+            RecordSwitchVkPipelineTrace(
+                6u, this, &m_pipelines, m_pipelines.size(), key,
+                m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
+                VK_NULL_HANDLE);
+            g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+            VkPipeline probePipeline = VK_NULL_HANDLE;
+            const VkResult probeResult = vkCreateGraphicsPipelines(
+                m_backend->Device(), VK_NULL_HANDLE, 1,
+                &probeInfo, nullptr, &probePipeline);
+            g_switchFrameStage = "frame/render/vulkan/pipeline/seq90_stage_probe_return";
+
+            char result[256];
+            std::snprintf(result, sizeof(result),
+                "[KisakCOD][VK STAGE PROBE] seq=90 action=%s result=%d handle=%p\n",
+                name, static_cast<int>(probeResult), static_cast<void *>(probePipeline));
+            Switch_LogWrite(result);
+            if (probePipeline)
+                vkDestroyPipeline(m_backend->Device(), probePipeline, nullptr);
+        };
+
+        std::vector<uint32_t> seq90MinimalFragmentSpirv;
+        if (BuildSwitchSeq64MinimalFragmentSpirv(seq90MinimalFragmentSpirv))
+        {
+            VkShaderModuleCreateInfo minimalInfo{};
+            minimalInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            minimalInfo.codeSize = seq90MinimalFragmentSpirv.size() * sizeof(uint32_t);
+            minimalInfo.pCode = seq90MinimalFragmentSpirv.data();
+            VkShaderModule minimalModule = VK_NULL_HANDLE;
+            const VkResult minimalModuleResult = vkCreateShaderModule(
+                m_backend->Device(), &minimalInfo, nullptr, &minimalModule);
+            if (minimalModuleResult == VK_SUCCESS && minimalModule)
+                runSeq90FragmentStageProbe(
+                    "original_vs_minimal_ps", seq90MinimalFragmentSpirv, minimalModule);
+            char moduleMsg[192];
+            std::snprintf(moduleMsg, sizeof(moduleMsg),
+                "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_ps_module result=%d handle=%p\n",
+                static_cast<int>(minimalModuleResult), static_cast<void *>(minimalModule));
+            Switch_LogWrite(moduleMsg);
+            if (minimalModule)
+                vkDestroyShaderModule(m_backend->Device(), minimalModule, nullptr);
+        }
+        else
+        {
+            Switch_LogWrite("[KisakCOD][VK STAGE PROBE] seq=90 action=original_vs_minimal_ps skipped=builder_failed\n");
+        }
+
+        if (!unpatchedPixelSpirvForProbe.empty())
+        {
+            VkShaderModuleCreateInfo unpatchedInfo{};
+            unpatchedInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            unpatchedInfo.codeSize =
+                unpatchedPixelSpirvForProbe.size() * sizeof(uint32_t);
+            unpatchedInfo.pCode = unpatchedPixelSpirvForProbe.data();
+            VkShaderModule unpatchedModule = VK_NULL_HANDLE;
+            const VkResult unpatchedModuleResult = vkCreateShaderModule(
+                m_backend->Device(), &unpatchedInfo, nullptr, &unpatchedModule);
+            if (unpatchedModuleResult == VK_SUCCESS && unpatchedModule)
+                runSeq90FragmentStageProbe(
+                    "original_vs_unpatched_ps", unpatchedPixelSpirvForProbe, unpatchedModule);
+            char moduleMsg[192];
+            std::snprintf(moduleMsg, sizeof(moduleMsg),
+                "[KisakCOD][VK STAGE PROBE] seq=90 action=unpatched_ps_module result=%d handle=%p\n",
+                static_cast<int>(unpatchedModuleResult), static_cast<void *>(unpatchedModule));
+            Switch_LogWrite(moduleMsg);
+            if (unpatchedModule)
+                vkDestroyShaderModule(m_backend->Device(), unpatchedModule, nullptr);
+        }
+        else
+        {
+            Switch_LogWrite("[KisakCOD][VK STAGE PROBE] seq=90 action=original_vs_unpatched_ps skipped=no_source\n");
+        }
+    }
 #endif
 
 #ifdef __SWITCH__
@@ -7411,10 +7532,23 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 #endif
 
+    const std::vector<uint32_t> &crashPixelSpirv =
+        (seq90DemoteFragmentModule != VK_NULL_HANDLE && !seq90DemoteSpirv.empty())
+            ? seq90DemoteSpirv : m_pixelShader->spirv;
+    const uint64_t crashPixelSpirvHash = computeSpirvHash(crashPixelSpirv);
+#ifdef __SWITCH__
+    if (pipelineCreateSequence == 90u)
+    {
+        (void)WriteSwitchNakCandidateSpirv(
+            "vs", pipelineCreateSequence, vsSpirvHash, m_vertexShader->spirv);
+        (void)WriteSwitchNakCandidateSpirv(
+            "ps", pipelineCreateSequence, crashPixelSpirvHash, crashPixelSpirv);
+    }
+#endif
     g_switchPipelineCrashSnapshot.valid = false;
     g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
     g_switchPipelineCrashSnapshot.vertexSpirv = &m_vertexShader->spirv;
-    g_switchPipelineCrashSnapshot.pixelSpirv = &m_pixelShader->spirv;
+    g_switchPipelineCrashSnapshot.pixelSpirv = &crashPixelSpirv;
     std::snprintf(
         g_switchPipelineCrashSnapshot.summary,
         sizeof(g_switchPipelineCrashSnapshot.summary),
@@ -7434,10 +7568,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_vertexShader->spirv.size() > 1 ? m_vertexShader->spirv[1] : 0u,
         m_vertexShader->spirv.size() > 3 ? m_vertexShader->spirv[3] : 0u,
         static_cast<unsigned long long>(m_pixelShader->serial),
-        m_pixelShader->spirv.size(),
-        static_cast<unsigned long long>(psSpirvHash),
-        m_pixelShader->spirv.size() > 1 ? m_pixelShader->spirv[1] : 0u,
-        m_pixelShader->spirv.size() > 3 ? m_pixelShader->spirv[3] : 0u,
+        crashPixelSpirv.size(),
+        static_cast<unsigned long long>(crashPixelSpirvHash),
+        crashPixelSpirv.size() > 1 ? crashPixelSpirv[1] : 0u,
+        crashPixelSpirv.size() > 3 ? crashPixelSpirv[3] : 0u,
         static_cast<unsigned int>(colorFormat),
         static_cast<unsigned int>(depthFormat),
         static_cast<unsigned int>(colorSamples),
