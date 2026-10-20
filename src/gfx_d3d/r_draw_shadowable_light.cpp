@@ -213,39 +213,35 @@ void __cdecl R_SetShadowableLight(
     }
 }
 
-bool __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const GfxDrawSurfListInfo *info)
+void __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const GfxDrawSurfListInfo *info)
 {
     uint32_t shadowableLightIndex; // [esp+4h] [ebp-14h]
     const GfxLight *light; // [esp+14h] [ebp-4h]
 
-    if (!info)
-        return false;
+    if (!info || !info->light)
+        return;
 
-    if (info->light)
+    light = info->light;
+    shadowableLightIndex = R_GetShadowableLightIndex(source->input.data, info->viewInfo, light);
+    if (shadowableLightIndex)
     {
-        light = info->light;
-        shadowableLightIndex = R_GetShadowableLightIndex(source->input.data, info->viewInfo, light);
-        if (shadowableLightIndex)
-        {
-            const GfxLight *shadowableLight =
-                &info->viewInfo->shadowableLights[shadowableLightIndex];
-            if (shadowableLight->type != GFX_LIGHT_TYPE_DIR &&
-                !R_ValidateLightPropertiesInput(
-                    "shadowable_list", shadowableLight, shadowableLight->def,
-                    shadowableLightIndex, info->viewInfo->shadowableLightCount))
-                return false;
-            R_SetShadowableLight(source, shadowableLightIndex, info->viewInfo);
-        }
-        else
-        {
-            if (!R_ValidateLightPropertiesInput(
-                    "unshadowed_list", light, light->def, 0u,
-                    info->viewInfo ? info->viewInfo->shadowableLightCount : 0u))
-                return false;
-            R_SetLightProperties(source, light, light->def, LIGHT_HAS_NO_SHADOWMAP, 0.0);
-        }
+        const GfxLight *shadowableLight =
+            &info->viewInfo->shadowableLights[shadowableLightIndex];
+        if (shadowableLight->type != GFX_LIGHT_TYPE_DIR &&
+            !R_ValidateLightPropertiesInput(
+                "shadowable_list", shadowableLight, shadowableLight->def,
+                shadowableLightIndex, info->viewInfo->shadowableLightCount))
+            return;
+        R_SetShadowableLight(source, shadowableLightIndex, info->viewInfo);
     }
-    return true;
+    else
+    {
+        // Keep the draw-surface list alive when a light lacks its auxiliary
+        // definition. R_SetLightProperties validates its inputs and returns
+        // before dereferencing def; it must not cause R_DrawSurfs to skip all
+        // geometry belonging to this list.
+        R_SetLightProperties(source, light, light->def, LIGHT_HAS_NO_SHADOWMAP, 0.0);
+    }
 }
 
 uint32_t __cdecl R_GetShadowableLightIndex(
