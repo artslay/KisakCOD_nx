@@ -1986,6 +1986,119 @@ bool ForceCapturedSeq54AlphaTestBranchPassForProbe(
     return true;
 }
 
+
+ // Second-stage A/B probe for seq=54: the branch-condition probe above still
+ // crashes with the alpha-test OpKill block present. With that branch already
+ // forced to constant true, replace only the unreachable OpKill terminator with
+ // a branch to its existing merge block. This tests whether NAK's handling of
+ // OpKill in this generated selection is the remaining trigger; it is not a
+ // production alpha-test implementation.
+bool ReplaceCapturedSeq54AlphaKillWithBranchForProbe(
+    std::vector<uint32_t> &words,
+    uint32_t *rewrittenCount = nullptr)
+{
+    if (rewrittenCount)
+        *rewrittenCount = 0;
+    if (words.size() < 5 || words[0] != SpvMagicNumber)
+        return false;
+
+    std::unordered_set<uint32_t> trueConstants;
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (op == SpvOpConstantTrue && wc == 3u &&
+            words[offset + 2u] < words[3])
+            trueConstants.insert(words[offset + 2u]);
+        offset += wc;
+    }
+
+    size_t killOffsetToReplace = 0u;
+    uint32_t mergeLabelToBranch = 0u;
+    uint32_t matches = 0u;
+    size_t previousOffset = 0u;
+    uint32_t previousWordCount = 0u;
+    SpvOp previousOp{};
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+
+        if (op == SpvOpBranchConditional && wc == 4u &&
+            previousOp == SpvOpSelectionMerge && previousWordCount == 3u)
+        {
+            const uint32_t *branch = &words[offset];
+            const uint32_t mergeLabel = words[previousOffset + 1u];
+            if (trueConstants.find(branch[1]) != trueConstants.end() &&
+                branch[2] == mergeLabel)
+            {
+                const uint32_t killLabel = branch[3];
+                const size_t killLabelOffset = offset + wc;
+                uint32_t killLabelWc = 0u;
+                SpvOp killLabelOp{};
+                if (!SpirvIsValidInstruction(
+                        words, killLabelOffset, &killLabelWc, &killLabelOp))
+                {
+                    return false;
+                }
+                if (killLabelOp == SpvOpLabel && killLabelWc == 2u &&
+                    words[killLabelOffset + 1u] == killLabel)
+                {
+                    const size_t killOffset = killLabelOffset + killLabelWc;
+                    uint32_t killWc = 0u;
+                    SpvOp killOp{};
+                    if (!SpirvIsValidInstruction(words, killOffset, &killWc, &killOp))
+                        return false;
+                    if (killOp == SpvOpKill && killWc == 1u)
+                    {
+                        const size_t mergeOffset = killOffset + killWc;
+                        uint32_t mergeWc = 0u;
+                        SpvOp mergeOp{};
+                        if (!SpirvIsValidInstruction(
+                                words, mergeOffset, &mergeWc, &mergeOp))
+                        {
+                            return false;
+                        }
+                        if (mergeOp == SpvOpLabel && mergeWc == 2u &&
+                            words[mergeOffset + 1u] == mergeLabel)
+                        {
+                            killOffsetToReplace = killOffset;
+                            mergeLabelToBranch = mergeLabel;
+                            ++matches;
+                        }
+                    }
+                }
+            }
+        }
+
+        previousOffset = offset;
+        previousWordCount = wc;
+        previousOp = op;
+        offset += wc;
+    }
+
+    if (matches != 1u || !killOffsetToReplace)
+        return false;
+
+    std::vector<uint32_t> replaced;
+    replaced.reserve(words.size() + 1u);
+    replaced.insert(
+        replaced.end(), words.begin(), words.begin() + killOffsetToReplace);
+    replaced.push_back((2u << 16) | static_cast<uint32_t>(SpvOpBranch));
+    replaced.push_back(mergeLabelToBranch);
+    replaced.insert(
+        replaced.end(), words.begin() + killOffsetToReplace + 1u, words.end());
+    words.swap(replaced);
+
+    if (rewrittenCount)
+        *rewrittenCount = 1u;
+    return true;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -6171,6 +6284,32 @@ bool IDirect3DDevice9::EnsurePipeline()
                     static_cast<unsigned long long>(oldAlphaProbeHash),
                     static_cast<unsigned long long>(HashSpirvWords(m_pixelShader->spirv)));
                 Switch_LogWrite(alphaProbeTrace);
+
+                // Probe the still-present but now unreachable discard block. If
+                // replacing its OpKill with a merge branch lets NVK build this
+                // exact pipeline, implement an alpha-test path avoiding OpKill
+                // for affected shaders rather than disabling shaders broadly.
+                if (HashSpirvWords(m_vertexShader->spirv) == 0x997711f543b23231ull &&
+                    HashSpirvWords(m_pixelShader->spirv) == 0x3aa814f8bdee3d3eull)
+                {
+                    const uint64_t oldKillProbeHash = HashSpirvWords(m_pixelShader->spirv);
+                    uint32_t killBranchCount = 0;
+                    if (ReplaceCapturedSeq54AlphaKillWithBranchForProbe(
+                            m_pixelShader->spirv, &killBranchCount))
+                    {
+                        char killProbeTrace[256];
+                        std::snprintf(killProbeTrace, sizeof(killProbeTrace),
+                            "[KisakCOD][VK SPIRV PROBE] stage=ps action=seq54_alpha_kill_to_branch count=%u old_hash=%016llx new_hash=%016llx\n",
+                            killBranchCount,
+                            static_cast<unsigned long long>(oldKillProbeHash),
+                            static_cast<unsigned long long>(HashSpirvWords(m_pixelShader->spirv)));
+                        Switch_LogWrite(killProbeTrace);
+                    }
+                    else
+                    {
+                        Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=seq54_alpha_kill_to_branch failed=pattern_mismatch\n");
+                    }
+                }
             }
             else
             {
