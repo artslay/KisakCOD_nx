@@ -6077,7 +6077,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             char skipMsg[256];
             std::snprintf(skipMsg, sizeof(skipMsg),
-                "[KisakCOD][VK PIPELINE PROBE] skipped known crashing NAK shader pair vs=%016llx ps=%016llx seq=%u\\n",
+                "[KisakCOD][VK PIPELINE PROBE] skipped known crashing NAK shader pair vs=%016llx ps=%016llx seq=%u\n",
                 static_cast<unsigned long long>(vsSpirvHash),
                 static_cast<unsigned long long>(psSpirvHash),
                 pipelineCreateSequence);
