@@ -519,7 +519,7 @@ void TraceSwitchNakOpcodeHistogram(
     if (used + 2u < sizeof(line))
     {
         line[used++] = '\n';
-        line[used] = '\\0';
+        line[used] = '\0';
     }
     Switch_LogWrite(line);
 }
