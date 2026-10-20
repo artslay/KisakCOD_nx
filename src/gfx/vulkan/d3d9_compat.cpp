@@ -5729,26 +5729,6 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
 #endif
 
-        // Do not rewrite every fragment shader with discard logic when D3D9
-        // alpha testing is disabled. Preserve its execution logic and only strip
-        // optional SPIR-V debug instructions before driver compilation.
-        pipelineAlphaFuncSpecId = 0;
-        pipelineAlphaRefSpecId = 0;
-        if (useAlphaTestPatch &&
-            !PatchFragmentShaderForAlphaTest(
-                pixelSpirv,
-                m_alphaFunc,
-                m_alphaRef,
-                &pipelineAlphaFuncSpecId,
-                &pipelineAlphaRefSpecId,
-                // This alpha-test block is injected at the original function return,
-                // after shader calculations and side effects. OpKill preserves the
-                // intended discard semantics while avoiding NVK's suspect demote path.
-                false))
-        {
-            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
-            return false;
-        }
 #ifdef __SWITCH__
         // A captured NAK crash variant uses a float4 coordinate for a
         // non-arrayed cube sample. Vulkan permits trailing unused components;
@@ -5790,7 +5770,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 char cubeLodProbeTrace[256];
                 std::snprintf(cubeLodProbeTrace, sizeof(cubeLodProbeTrace),
-                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_lod_zero count=%u old_hash=%016llx new_hash=%016llx\\n",
+                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_lod_zero count=%u old_hash=%016llx new_hash=%016llx\n",
                     forcedCubeLodCount,
                     static_cast<unsigned long long>(oldCubeLodProbeHash),
                     static_cast<unsigned long long>(HashSpirvWords(pixelSpirv)));
@@ -5798,16 +5778,34 @@ bool IDirect3DDevice9::EnsurePipeline()
             }
             else
             {
-                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_lod_zero failed=invalid_module\\n");
+                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_lod_zero failed=invalid_module\n");
             }
         }
 #endif
-        // Store the un-alpha-patched baseline only after the hash-gated,
-        // semantics-preserving cube-coordinate normalization (and the narrow
-        // seq=33 LOD probe), so a later alpha-state rebuild cannot restore the
-        // crashing pre-normalization module.
         unpatchedPixelSpirvForProbe = pixelSpirv;
         m_pixelShader->linkedSpirv = pixelSpirv;
+
+        // Do not rewrite every fragment shader with discard logic when D3D9
+        // alpha testing is disabled. Preserve its execution logic and only strip
+        // optional SPIR-V debug instructions before driver compilation.
+        pipelineAlphaFuncSpecId = 0;
+        pipelineAlphaRefSpecId = 0;
+        if (useAlphaTestPatch &&
+            !PatchFragmentShaderForAlphaTest(
+                pixelSpirv,
+                m_alphaFunc,
+                m_alphaRef,
+                &pipelineAlphaFuncSpecId,
+                &pipelineAlphaRefSpecId,
+                // This alpha-test block is injected at the original function return,
+                // after shader calculations and side effects. OpKill preserves the
+                // intended discard semantics while avoiding NVK's suspect demote path.
+                false))
+        {
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
+            return false;
+        }
+
         m_pixelShader->alphaFuncSpecId = pipelineAlphaFuncSpecId;
         m_pixelShader->alphaRefSpecId = pipelineAlphaRefSpecId;
         m_pixelShader->spirv = pixelSpirv;
