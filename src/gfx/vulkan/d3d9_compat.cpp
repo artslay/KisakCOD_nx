@@ -8003,7 +8003,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     if (crashPixelSpirvHash == 0xe1c4cce4dc1e5bf2ull)
     {
         Switch_LogWrite(
-            "[KisakCOD][VK SPIRV TARGET] reason=seq206_crash_hash hash=e1c4cce4dc1e5bf2\\n");
+            "[KisakCOD][VK SPIRV TARGET] reason=seq206_crash_hash hash=e1c4cce4dc1e5bf2\n");
         TraceSwitchNakOpcodeHistogram(
             "vs", pipelineCreateSequence, m_vertexShader->spirv, vsSpirvHash);
         TraceSwitchNakOpcodeHistogram(
