@@ -1655,9 +1655,13 @@ bool ForceCapturedCubeSampleLodToZeroForProbe(
         if (wordCount >= 3 &&
             (opcode == static_cast<uint32_t>(SpvOpLoad) ||
              opcode == static_cast<uint32_t>(SpvOpCopyObject) ||
-             opcode == static_cast<uint32_t>(SpvOpSampledImage)) &&
+             opcode == static_cast<uint32_t>(SpvOpSampledImage) ||
+             opcode == static_cast<uint32_t>(SpvOpVectorShuffle)) &&
             ins[2] < bound)
         {
+            // The cube-coordinate canonicalization introduces an OpVectorShuffle
+            // result; retain its declared type so the subsequent, hash-gated LOD
+            // probe can still identify the normalized vec3 coordinate.
             resultTypeById[ins[2]] = ins[1];
         }
         offset += wordCount;
