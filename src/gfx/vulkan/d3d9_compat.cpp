@@ -8326,6 +8326,67 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 #endif
 
+#ifdef __SWITCH__
+    // The semantic seq90 A/B passed with extract/construct lowering. Apply that
+    // transformation only to the exact fragment module that repeatedly crashes
+    // NAK (hash 397081631095378c); preserve the original SPIR-V and cache key.
+    VkShaderModule shuffleLoweredPixelModule = VK_NULL_HANDLE;
+    const VkShaderModule originalPipelinePixelModule = stages[1].module;
+    std::vector<uint32_t> shuffleLoweredPixelSpirv;
+    uint32_t shuffleLoweredCount = 0u;
+    bool shuffleLoweringActive = false;
+    if (psSpirvHash == 0x397081631095378cull)
+    {
+        shuffleLoweredPixelSpirv = m_pixelShader->spirv;
+        const uint64_t sourcePixelHash = HashSpirvWords(shuffleLoweredPixelSpirv);
+        const bool lowered =
+            LowerSwitchSpirvVectorShuffleToCompositeOps(
+                shuffleLoweredPixelSpirv, &shuffleLoweredCount);
+        const uint64_t loweredPixelHash = HashSpirvWords(shuffleLoweredPixelSpirv);
+        VkResult loweredModuleResult = VK_ERROR_UNKNOWN;
+        if (lowered)
+        {
+            (void)WriteSwitchNakCandidateSpirv(
+                "ps_shuffle_lowered", pipelineCreateSequence,
+                loweredPixelHash, shuffleLoweredPixelSpirv);
+            VkShaderModuleCreateInfo loweredInfo{};
+            loweredInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            loweredInfo.codeSize =
+                shuffleLoweredPixelSpirv.size() * sizeof(uint32_t);
+            loweredInfo.pCode = shuffleLoweredPixelSpirv.data();
+            loweredModuleResult = vkCreateShaderModule(
+                m_backend->Device(), &loweredInfo, nullptr,
+                &shuffleLoweredPixelModule);
+        }
+        char loweringTrace[384];
+        std::snprintf(loweringTrace, sizeof(loweringTrace),
+            "[KisakCOD][VK SHUFFLE LOWER] seq=%u target_ps=397081631095378c built=%u lowered=%u source_hash=%016llx lowered_hash=%016llx module_result=%d module=%p\\n",
+            pipelineCreateSequence, lowered ? 1u : 0u, shuffleLoweredCount,
+            static_cast<unsigned long long>(sourcePixelHash),
+            static_cast<unsigned long long>(loweredPixelHash),
+            static_cast<int>(loweredModuleResult),
+            static_cast<void *>(shuffleLoweredPixelModule));
+        Switch_LogWrite(loweringTrace);
+        if (lowered && loweredModuleResult == VK_SUCCESS && shuffleLoweredPixelModule)
+        {
+            stages[1].module = shuffleLoweredPixelModule;
+            shuffleLoweringActive = true;
+            g_switchPipelineCrashSnapshot.pixelSpirv = &shuffleLoweredPixelSpirv;
+            std::snprintf(
+                g_switchPipelineCrashSnapshot.summary,
+                sizeof(g_switchPipelineCrashSnapshot.summary),
+                "[KisakCOD][VK CRASH PIPELINE] seq=%u shuffle_lowered=1 key=%016llx vs=%016llx source_ps=%016llx lowered_ps=%016llx lowered=%u module=%p\\n",
+                pipelineCreateSequence,
+                static_cast<unsigned long long>(key),
+                static_cast<unsigned long long>(vsSpirvHash),
+                static_cast<unsigned long long>(sourcePixelHash),
+                static_cast<unsigned long long>(loweredPixelHash),
+                shuffleLoweredCount,
+                static_cast<void *>(shuffleLoweredPixelModule));
+        }
+    }
+#endif
+
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
     RecordSwitchVkPipelineTrace(
@@ -8338,6 +8399,11 @@ bool IDirect3DDevice9::EnsurePipeline()
         7u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
 #ifdef __SWITCH__
+    if (shuffleLoweringActive)
+        stages[1].module = originalPipelinePixelModule;
+    if (shuffleLoweredPixelModule)
+        vkDestroyShaderModule(
+            m_backend->Device(), shuffleLoweredPixelModule, nullptr);
     if (seq90DemoteFragmentModule)
     {
         stages[1].module = seq90OriginalFragmentModule;
