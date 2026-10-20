@@ -628,11 +628,11 @@ static void SwitchLogVulkanRuntime()
     vkDestroyInstance(instance, nullptr);
 }
 
-static bool SwitchConfigureNakSpillProbe()
+static bool SwitchConfigureNakSerialProbe()
 {
     const char *current = std::getenv("NAK_DEBUG");
     if (!current || !*current)
-        return ::setenv("NAK_DEBUG", "spill", 1) == 0;
+        return ::setenv("NAK_DEBUG", "serial", 1) == 0;
 
     const size_t currentLength = std::strlen(current);
     size_t tokenStart = 0;
@@ -647,8 +647,8 @@ static bool SwitchConfigureNakSpillProbe()
             ++first;
         while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\t'))
             --last;
-        if (last - first == sizeof("spill") - 1u &&
-            std::memcmp(current + first, "spill", sizeof("spill") - 1u) == 0)
+        if (last - first == sizeof("serial") - 1u &&
+            std::memcmp(current + first, "serial", sizeof("serial") - 1u) == 0)
             return true;
 
         tokenStart = i + 1u;
@@ -656,7 +656,7 @@ static bool SwitchConfigureNakSpillProbe()
 
     char combined[512];
     const int written = std::snprintf(
-        combined, sizeof(combined), "%s%sspill", current,
+        combined, sizeof(combined), "%s%sserial", current,
         current[currentLength - 1u] == ',' ? "" : ",");
     if (written < 0 || static_cast<size_t>(written) >= sizeof(combined))
         return false;
@@ -665,20 +665,19 @@ static bool SwitchConfigureNakSpillProbe()
 
 int main()
 {
-    // This targeted diagnostic is forced for the Switch pipeline-creation crash.
-    // Home Menu launches have not supplied KISAK_NAK_FORCE_SPILL in the failing
-    // run, so set NAK_DEBUG before any Vulkan instance/device initialization.
-    // This changes the NAK allocator test mode only; every shader/pipeline is
-    // still created through the normal renderer path.
-    const bool nakSpillProbeConfigured = SwitchConfigureNakSpillProbe();
+    // Use NAK's serial instruction mode for the next pipeline-crash comparison.
+    // The forced minimal-register spill test progressed farther but still faulted
+    // inside vkCreateGraphicsPipelines. Serial mode targets instruction dependency
+    // bugs without forcing the allocator's most aggressive spill path.
+    const bool nakSpillProbeConfigured = SwitchConfigureNakSerialProbe();
     Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
     if (nakSpillProbeConfigured)
-        Switch_LogWrite("[KisakCOD][NAK PROBE] allocator spill mode enabled before Mesa initialization\n");
+        Switch_LogWrite("[KisakCOD][NAK PROBE] serial instruction mode enabled before Mesa initialization\n");
     else
-        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to enable allocator spill mode\n");
+        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to enable serial instruction mode\n");
     SwitchBootLog("Game data: sdmc:/switch/KisakCOD/game");
     SwitchBootLog("Stage 1/7: initializing main thread");
 
