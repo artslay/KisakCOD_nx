@@ -566,7 +566,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                     *reinterpret_cast<const volatile uintptr_t *>(headerAddress);
                 std::snprintf(
                     line, sizeof(line),
-                    "[KisakCOD][CRASH] MEMSET_STATE dst=0x%016llx end=0x%016llx length=0x%016llx header_addr=0x%016llx header_raw=0x%016llx header_size=0x%016llx\\n",
+                    "[KisakCOD][CRASH] MEMSET_STATE dst=0x%016llx end=0x%016llx length=0x%016llx header_addr=0x%016llx header_raw=0x%016llx header_size=0x%016llx\n",
                     static_cast<unsigned long long>(dst),
                     static_cast<unsigned long long>(end),
                     static_cast<unsigned long long>(end - dst),
@@ -579,7 +579,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
             else
             {
                 Switch_LogCrashLine(
-                    "[KisakCOD][CRASH] MEMSET_STATE invalid_dst_for_header\\n");
+                    "[KisakCOD][CRASH] MEMSET_STATE invalid_dst_for_header\n");
             }
         }
     }
