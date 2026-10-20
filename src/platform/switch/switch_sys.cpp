@@ -694,7 +694,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                             std::snprintf(
                                 line, sizeof(line),
                                 "[KisakCOD][CRASH] NAK_FIRST_PASS_FREE callerLrOff=0x%llx "
-                                "frame=0x%016llx localSp=0x%016llx len=%llu ptr=0x%016llx\\n",
+                                "frame=0x%016llx localSp=0x%016llx len=%llu ptr=0x%016llx\n",
                                 static_cast<unsigned long long>(freeCallerOffset),
                                 static_cast<unsigned long long>(raFrameAddress),
                                 static_cast<unsigned long long>(firstPassSp),
