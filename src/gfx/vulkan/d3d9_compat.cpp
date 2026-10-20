@@ -2435,7 +2435,6 @@ bool ReplaceSwitchSpirvResultOpsWithUndef(
         return false;
 
     std::unordered_map<size_t, std::pair<uint32_t, uint32_t>> undefAtOffset;
-    std::vector<uint32_t> undefDeclarations;
     bool inFunction = false;
     uint32_t count = 0u;
     for (size_t offset = 5u; offset < words.size();)
