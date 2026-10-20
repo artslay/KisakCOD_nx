@@ -663,6 +663,14 @@ static bool SwitchConfigureNakNoUgprProbe()
     return ::setenv("NAK_DEBUG", combined, 1) == 0;
 }
 
+static bool SwitchConfigureNirSkipProbe()
+{
+    // NIR_SKIP is honored by Mesa NIR pass wrappers in builds with debug
+    // pass controls enabled. Keep this narrowly targeted at the suspected
+    // pass so the next run can confirm or reject the call-stack hypothesis.
+    return ::setenv("NIR_SKIP", "nir_opt_dead_write_vars", 1) == 0;
+}
+
 int main()
 {
     // Use NAK's no-UGPR lowering mode for the next pipeline-crash comparison.
@@ -670,6 +678,7 @@ int main()
     // NAK to lower away UGPR constant-load instructions while retaining all shaders
     // and normal graphics-pipeline creation.
     const bool nakNoUgprProbeConfigured = SwitchConfigureNakNoUgprProbe();
+    const bool nirSkipProbeConfigured = SwitchConfigureNirSkipProbe();
     Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
@@ -678,6 +687,10 @@ int main()
         Switch_LogWrite("[KisakCOD][NAK PROBE] no-UGPR lowering mode enabled before Mesa initialization\n");
     else
         Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to enable no-UGPR lowering mode\n");
+    if (nirSkipProbeConfigured)
+        Switch_LogWrite("[KisakCOD][NIR PROBE] requested NIR_SKIP=nir_opt_dead_write_vars before Mesa initialization\n");
+    else
+        Switch_LogWrite("[KisakCOD][NIR PROBE] WARNING: failed to set NIR_SKIP\n");
     SwitchBootLog("Game data: sdmc:/switch/KisakCOD/game");
     SwitchBootLog("Stage 1/7: initializing main thread");
 
