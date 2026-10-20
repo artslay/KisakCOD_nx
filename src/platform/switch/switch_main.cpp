@@ -631,14 +631,14 @@ static void SwitchLogVulkanRuntime()
 static bool SwitchConfigureNakNoUgprProbe()
 {
     const char *current = std::getenv("NAK_DEBUG");
-    if (!current || !*current)
-        return ::setenv("NAK_DEBUG", "nougpr", 1) == 0;
+    const size_t currentLength = current ? std::strlen(current) : 0u;
+    bool hasNoUgpr = false;
+    bool hasSpill = false;
 
-    const size_t currentLength = std::strlen(current);
     size_t tokenStart = 0;
     for (size_t i = 0; i <= currentLength; ++i)
     {
-        if (current[i] != ',' && current[i] != '\0')
+        if (i < currentLength && current[i] != ',')
             continue;
 
         size_t first = tokenStart;
@@ -647,19 +647,43 @@ static bool SwitchConfigureNakNoUgprProbe()
             ++first;
         while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\t'))
             --last;
+
         if (last - first == sizeof("nougpr") - 1u &&
             std::memcmp(current + first, "nougpr", sizeof("nougpr") - 1u) == 0)
-            return true;
+            hasNoUgpr = true;
+        if (last - first == sizeof("spill") - 1u &&
+            std::memcmp(current + first, "spill", sizeof("spill") - 1u) == 0)
+            hasSpill = true;
 
         tokenStart = i + 1u;
     }
 
     char combined[512];
-    const int written = std::snprintf(
-        combined, sizeof(combined), "%s%snougpr", current,
-        current[currentLength - 1u] == ',' ? "" : ",");
-    if (written < 0 || static_cast<size_t>(written) >= sizeof(combined))
+    if (currentLength >= sizeof(combined))
         return false;
+    size_t used = currentLength;
+    if (currentLength != 0u)
+        std::memcpy(combined, current, currentLength);
+    combined[used] = '\0';
+
+    auto appendFlag = [&](const char *flag) {
+        const size_t flagLength = std::strlen(flag);
+        const size_t separatorLength =
+            used != 0u && combined[used - 1u] != ',' ? 1u : 0u;
+        if (used + separatorLength + flagLength >= sizeof(combined))
+            return false;
+        if (separatorLength != 0u)
+            combined[used++] = ',';
+        std::memcpy(combined + used, flag, flagLength);
+        used += flagLength;
+        combined[used] = '\0';
+        return true;
+    };
+
+    if ((!hasNoUgpr && !appendFlag("nougpr")) ||
+        (!hasSpill && !appendFlag("spill")))
+        return false;
+
     return ::setenv("NAK_DEBUG", combined, 1) == 0;
 }
 
@@ -678,16 +702,15 @@ int main()
     // NAK to lower away UGPR constant-load instructions while retaining all shaders
     // and normal graphics-pipeline creation.
     const bool nakNoUgprProbeConfigured = SwitchConfigureNakNoUgprProbe();
-    (void)::setenv("KISAK_NAK_DEBUG", "spill", 1);
     const bool nirSkipProbeConfigured = SwitchConfigureNirSkipProbe();
     Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
     if (nakNoUgprProbeConfigured)
-        Switch_LogWrite("[KisakCOD][NAK PROBE] no-UGPR lowering mode enabled before Mesa initialization\n");
+        Switch_LogWrite("[KisakCOD][NAK PROBE] NAK_DEBUG=nougpr,spill enabled before Mesa initialization\n");
     else
-        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to enable no-UGPR lowering mode\n");
+        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to set NAK_DEBUG=nougpr,spill\n");
     if (nirSkipProbeConfigured)
         Switch_LogWrite("[KisakCOD][NIR PROBE] requested NIR_SKIP=nir_opt_dead_write_vars before Mesa initialization\n");
     else
