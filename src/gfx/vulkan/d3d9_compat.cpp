@@ -455,7 +455,7 @@ void TraceSwitchNakOpcodeHistogram(
         return;
     if (words.size() < 5u || words[0] != SpvMagicNumber)
     {
-        Switch_LogWrite("[KisakCOD][VK SPIRV OPCODES] seq=64 parse=bad_header\\n");
+        Switch_LogWrite("[KisakCOD][VK SPIRV OPCODES] seq=64 parse=bad_header\n");
         return;
     }
     std::array<uint32_t, 1024> counts{};
@@ -470,7 +470,7 @@ void TraceSwitchNakOpcodeHistogram(
         {
             char bad[192];
             std::snprintf(bad, sizeof(bad),
-                "[KisakCOD][VK SPIRV OPCODES] seq=%u stage=%s parse=bad_instruction offset=%zu first=%08x remaining=%zu\\n",
+                "[KisakCOD][VK SPIRV OPCODES] seq=%u stage=%s parse=bad_instruction offset=%zu first=%08x remaining=%zu\n",
                 sequence, stage, offset, first, words.size() - offset);
             Switch_LogWrite(bad);
             return;
@@ -518,7 +518,7 @@ void TraceSwitchNakOpcodeHistogram(
     }
     if (used + 2u < sizeof(line))
     {
-        line[used++] = '\\n';
+        line[used++] = '\n';
         line[used] = '\\0';
     }
     Switch_LogWrite(line);
