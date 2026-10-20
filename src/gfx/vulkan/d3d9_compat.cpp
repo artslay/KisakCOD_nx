@@ -10500,7 +10500,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             if (textureUsed < sizeof(textureTrace) - 2u)
             {
                 textureTrace[textureUsed++] = '\n';
-                textureTrace[textureUsed] = '\\0';
+                textureTrace[textureUsed] = '\0';
                 Switch_LogWrite(textureTrace);
             }
         }
