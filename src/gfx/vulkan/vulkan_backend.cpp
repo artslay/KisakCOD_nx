@@ -477,37 +477,45 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         return false;
     };
 
+    // serial and spill are NAK compiler-debug modes, not neutral production
+    // settings: serial changes instruction execution, while spill forces a
+    // minimal GPR file. Do not inject them into every game launch. Preserve
+    // caller-provided NAK_DEBUG and allow targeted A/B tests through
+    // KISAK_NAK_DEBUG=serial,spill (or any other explicit NAK_DEBUG flags).
     bool addedNakFlag = false;
-    if (!hasNakFlag("serial"))
+    auto appendNakFlag = [&](const std::string &flag)
     {
+        if (flag.empty() || hasNakFlag(flag.c_str()))
+            return;
         if (!nakDebug.empty())
             nakDebug += ',';
-        nakDebug += "serial";
+        nakDebug += flag;
         addedNakFlag = true;
+    };
+
+    const char *requestedNakDebug = std::getenv("KISAK_NAK_DEBUG");
+    if (requestedNakDebug && *requestedNakDebug)
+    {
+        const std::string requested(requestedNakDebug);
+        for (size_t start = 0; start < requested.size();)
+        {
+            const size_t end = requested.find(',', start);
+            const size_t length =
+                (end == std::string::npos ? requested.size() : end) - start;
+            appendNakFlag(requested.substr(start, length));
+            if (end == std::string::npos)
+                break;
+            start = end + 1u;
+        }
     }
 
-    // A/B test after serial,nougpr,spill still faults in _free_r while
-    // compiling pipeline 31: leave uniform-GPR allocation enabled by default.
-    // Keep an explicit opt-out for devices/builds where the UGPR path regresses.
+    // Keep the previously available opt-in for builds where uniform-GPR
+    // allocation itself regresses; unlike the old default, it is not forced.
     const char *disableUniformGpr = std::getenv("KISAK_NAK_DISABLE_UGPR");
     const bool requestNoUgpr =
         disableUniformGpr && std::strcmp(disableUniformGpr, "1") == 0;
-    if (requestNoUgpr && !hasNakFlag("nougpr"))
-    {
-        if (!nakDebug.empty())
-            nakDebug += ',';
-        nakDebug += "nougpr";
-        addedNakFlag = true;
-    }
-
-    // Keep the same spill-path diagnostic for this uniform-GPR A/B test.
-    if (!hasNakFlag("spill"))
-    {
-        if (!nakDebug.empty())
-            nakDebug += ',';
-        nakDebug += "spill";
-        addedNakFlag = true;
-    }
+    if (requestNoUgpr)
+        appendNakFlag("nougpr");
 
     if (addedNakFlag)
     {
@@ -520,20 +528,23 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         {
             char nakFlagsMsg[384];
             std::snprintf(nakFlagsMsg, sizeof(nakFlagsMsg),
-                "[KisakCOD][VK DRIVER] enabled NAK_DEBUG=%s (set KISAK_NAK_DISABLE_UGPR=1 to opt out of uniform GPR allocation)\n",
+                "[KisakCOD][VK DRIVER] requested NAK_DEBUG=%s (set KISAK_NAK_DEBUG=serial,spill to enable diagnostic compiler modes)\n",
                 nakDebug.c_str());
             Switch_LogWrite(nakFlagsMsg);
         }
     }
-    else if (hasNakFlag("nougpr"))
+    else if (!nakDebug.empty())
     {
-        Switch_LogWrite(
-            "[KisakCOD][VK DRIVER] NAK_DEBUG includes nougpr; uniform GPR allocation is disabled\n");
+        char nakFlagsMsg[384];
+        std::snprintf(nakFlagsMsg, sizeof(nakFlagsMsg),
+            "[KisakCOD][VK DRIVER] preserving runtime NAK_DEBUG=%s; serial/spill not forced\n",
+            nakDebug.c_str());
+        Switch_LogWrite(nakFlagsMsg);
     }
     else
     {
         Switch_LogWrite(
-            "[KisakCOD][VK DRIVER] NAK_DEBUG serial,spill configured; uniform GPR allocation remains enabled\n");
+            "[KisakCOD][VK DRIVER] using default NAK compiler flags; serial/spill are opt-in diagnostics\n");
     }
 #endif
 
