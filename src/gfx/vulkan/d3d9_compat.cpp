@@ -1217,6 +1217,8 @@ bool RepairUnusedZeroVectorShuffleSource(
     }
 
     uint32_t repaired = 0u;
+    uint32_t nextId = bound;
+    std::vector<std::pair<uint32_t, uint32_t>> undefDeclarations;
     for (size_t offset = 5u; offset < words.size();)
     {
         uint32_t wordCount = 0u;
@@ -1272,10 +1274,11 @@ bool RepairUnusedZeroVectorShuffleSource(
         }
         else
         {
-            // Symmetric case: vector 1 is zero. The operation is recoverable if
-            // all defined selectors refer to vector 2 and imply exactly one
-            // possible width for the missing vector 1. With both source operands
-            // then equal to vector 2, shift those selectors back to its indices.
+            // The first source ID is reserved (zero), but the second source is
+            // valid. Materialize a legal OpUndef with the second source's vector
+            // type and keep every selector unchanged: components selected from
+            // the missing source become explicitly undefined, while components
+            // selected from the real second source keep exactly the same indices.
             if (vector2Id >= bound)
                 return false;
             const uint32_t vector2Type = resultTypeById[vector2Id];
@@ -1283,49 +1286,54 @@ bool RepairUnusedZeroVectorShuffleSource(
                 componentCountByType[vector2Type] == 0u ||
                 componentTypeByType[vector2Type] != scalarType)
                 return false;
-
-            const uint32_t width2 = componentCountByType[vector2Type];
-            uint32_t minSelector = UINT32_MAX;
-            uint32_t maxSelector = 0u;
-            bool hasDefinedSelector = false;
-            for (size_t selector = offset + 5u; selector < offset + wordCount; ++selector)
-            {
-                const uint32_t component = words[selector];
-                if (component == 0xffffffffu)
-                    continue;
-                minSelector = std::min(minSelector, component);
-                maxSelector = std::max(maxSelector, component);
-                hasDefinedSelector = true;
-            }
-
-            if (!hasDefinedSelector)
-            {
-                words[offset + 3u] = vector2Id;
-                ++repaired;
-                offset += wordCount;
-                continue;
-            }
-
-            const uint32_t minPossibleWidth =
-                maxSelector >= width2 ? maxSelector - width2 + 1u : 1u;
-            if (minPossibleWidth != minSelector ||
-                minPossibleWidth < 2u || minPossibleWidth > 4u)
+            if (nextId >= UINT32_MAX - 1u)
                 return false;
 
-            for (size_t selector = offset + 5u; selector < offset + wordCount; ++selector)
-            {
-                uint32_t &component = words[selector];
-                if (component == 0xffffffffu)
-                    continue;
-                if (component < minPossibleWidth ||
-                    component - minPossibleWidth >= width2)
-                    return false;
-                component -= minPossibleWidth;
-            }
-            words[offset + 3u] = vector2Id;
+            const uint32_t undefId = nextId++;
+            undefDeclarations.emplace_back(vector2Type, undefId);
+            words[offset + 3u] = undefId;
             ++repaired;
         }
         offset += wordCount;
+    }
+
+    if (!undefDeclarations.empty())
+    {
+        bool undefDefinitionsInserted = false;
+        bool inFunction = false;
+        std::vector<uint32_t> rewritten;
+        rewritten.reserve(words.size() + undefDeclarations.size() * 3u);
+        rewritten.insert(rewritten.end(), words.begin(), words.begin() + 5u);
+
+        for (size_t offset = 5u; offset < words.size();)
+        {
+            uint32_t wordCount = 0u;
+            SpvOp op{};
+            if (!SpirvIsValidInstruction(words, offset, &wordCount, &op))
+                return false;
+
+            if (!inFunction && !undefDefinitionsInserted &&
+                (op == SpvOpVariable || op == SpvOpFunction))
+            {
+                for (const auto &definition : undefDeclarations)
+                    SpirvAppend(rewritten, SpvOpUndef,
+                        {definition.first, definition.second});
+                undefDefinitionsInserted = true;
+            }
+
+            rewritten.insert(
+                rewritten.end(), words.begin() + offset, words.begin() + offset + wordCount);
+            if (op == SpvOpFunction)
+                inFunction = true;
+            else if (op == SpvOpFunctionEnd)
+                inFunction = false;
+            offset += wordCount;
+        }
+
+        if (!undefDefinitionsInserted)
+            return false;
+        rewritten[3] = nextId;
+        words.swap(rewritten);
     }
 
     if (repairedInstructionCount)
@@ -5664,7 +5672,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             char repairTrace[176];
             std::snprintf(repairTrace, sizeof(repairTrace),
-                "[KisakCOD][VK SPIRV REPAIR] stage=ps serial=%llu zero_unused_shuffle_source=%u\n",
+                "[KisakCOD][VK SPIRV REPAIR] stage=ps serial=%llu recovered_zero_shuffle_source=%u\n",
                 static_cast<unsigned long long>(m_pixelShader->serial),
                 repairedPixelShuffleOperands);
             Switch_LogWrite(repairTrace);
@@ -5779,7 +5787,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             char repairTrace[176];
             std::snprintf(repairTrace, sizeof(repairTrace),
-                "[KisakCOD][VK SPIRV REPAIR] stage=vs serial=%llu zero_unused_shuffle_source=%u\n",
+                "[KisakCOD][VK SPIRV REPAIR] stage=vs serial=%llu recovered_zero_shuffle_source=%u\n",
                 static_cast<unsigned long long>(m_vertexShader->serial),
                 repairedVertexShuffleOperands);
             Switch_LogWrite(repairTrace);
