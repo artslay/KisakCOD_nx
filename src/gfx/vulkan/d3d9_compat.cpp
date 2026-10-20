@@ -380,6 +380,21 @@ struct SwitchPipelineCrashSnapshot
     char summary[1200]{};
 };
 SwitchPipelineCrashSnapshot g_switchPipelineCrashSnapshot;
+thread_local bool g_switchSkippedKnownShaderPair = false;
+
+bool ConsumeSwitchSkippedKnownShaderPair()
+{
+    if (!g_switchSkippedKnownShaderPair)
+        return false;
+    g_switchSkippedKnownShaderPair = false;
+    static bool logged = false;
+    if (!logged)
+    {
+        Switch_LogWrite("[KisakCOD][VK DRAW] skipped draw for known crashing NAK shader pair; continuing frame\n");
+        logged = true;
+    }
+    return true;
+}
 
 uint64_t HashSpirvWords(const std::vector<uint32_t> &words)
 {
@@ -6084,6 +6099,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite(skipMsg);
             loggedSkippedPair = true;
         }
+        g_switchSkippedKnownShaderPair = true;
         g_switchPipelineCrashSnapshot.valid = false;
         g_switchFrameStage = "frame/render/vulkan/pipeline/known_shader_pair_skipped";
         return false;
@@ -7173,6 +7189,7 @@ bool IDirect3DDevice9::BindDescriptorSets()
 
 bool IDirect3DDevice9::PrepareDraw()
 {
+    g_switchSkippedKnownShaderPair = false;
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/entry";
     if (!m_backend || !m_backend->IsFrameActive())
     {
@@ -7226,7 +7243,8 @@ bool IDirect3DDevice9::PrepareDraw()
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_pipeline";
     if (!EnsurePipeline())
     {
-        Switch_LogWrite("[KisakCOD][VK DRAW] fail=pipeline\n");
+        if (!g_switchSkippedKnownShaderPair)
+            Switch_LogWrite("[KisakCOD][VK DRAW] fail=pipeline\n");
         return false;
     }
 
@@ -7354,7 +7372,14 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     m_drawPrimitiveUPActive = false;
     m_drawPrimitiveUPStride = 0;
     if (!prepared)
+    {
+        if (ConsumeSwitchSkippedKnownShaderPair())
+        {
+            g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/skipped_known_shader_pair";
+            return S_OK;
+        }
         return E_FAIL;
+    }
 
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/allocate_vertex";
     const VkDeviceSize bytes = static_cast<VkDeviceSize>(vertexCount) * stride;
@@ -7564,6 +7589,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 
     if (!PrepareDraw())
     {
+        if (ConsumeSwitchSkippedKnownShaderPair())
+        {
+            g_switchFrameStage = "frame/render/vulkan/draw_indexed/skipped_known_shader_pair";
+            return S_OK;
+        }
         char msg[320];
         std::snprintf(
             msg, sizeof(msg),
