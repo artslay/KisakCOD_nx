@@ -23,7 +23,7 @@ void __cdecl R_SetShadowableLight(
     GfxCmdBufSourceState *source,
     uint32_t shadowableLightIndex,
     const GfxViewInfo *viewInfo);
-bool __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const GfxDrawSurfListInfo *info);
+void __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const GfxDrawSurfListInfo *info);
 uint32_t __cdecl R_GetShadowableLightIndex(
     const GfxBackEndData *data,
     const GfxViewInfo *viewInfo,
