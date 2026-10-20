@@ -7337,6 +7337,20 @@ bool IDirect3DDevice9::EnsurePipeline()
     const uint64_t psSpirvHash = computeSpirvHash(m_pixelShader->spirv);
 
 #ifdef __SWITCH__
+    // The seq=90 pair faults inside NVK even with DISABLE_OPTIMIZATION enabled.
+    // Try the opposite compiler path for this exact captured pair only; this
+    // preserves both shaders and all fixed-function state. If it still faults,
+    // the crash snapshot identifies the optimized-path attempt unambiguously.
+    if (vsSpirvHash == 0x3191a056e9509bfcull &&
+        psSpirvHash == 0xe708e85707181fb7ull)
+    {
+        info.flags = 0u;
+        Switch_LogWrite(
+            "[KisakCOD][VK PIPELINE PROBE] action=seq90_enable_optimization flags=0 vs=3191a056e9509bfc ps=e708e85707181fb7\\n");
+    }
+#endif
+
+#ifdef __SWITCH__
     if (pipelineCreateSequence >= 30u && pipelineCreateSequence <= 40u &&
         vsSpirvHash == 0xaf1d39bec3f1bf7dull)
     {
