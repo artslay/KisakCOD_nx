@@ -545,6 +545,45 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         low32Reg);
     Switch_LogCrashLine(line);
 
+    // If memset faults in the AArch64 DC ZVA loop, capture the calloc chunk
+    // header that _calloc_r read immediately before calling memset. This only
+    // runs for the matching instruction; it does not instrument normal allocs.
+    const uintptr_t faultPc = static_cast<uintptr_t>(ctx->pc.x);
+    if ((faultPc & 3u) == 0)
+    {
+        const uint32_t faultInsn =
+            *reinterpret_cast<const volatile uint32_t *>(faultPc);
+        if ((faultInsn & 0xffffffe0u) == 0xd50b7420u)
+        {
+            const uintptr_t dst =
+                static_cast<uintptr_t>(ctx->cpu_gprs[0].x);
+            const uintptr_t end =
+                static_cast<uintptr_t>(ctx->cpu_gprs[4].x);
+            if (dst >= sizeof(uintptr_t))
+            {
+                const uintptr_t headerAddress = dst - sizeof(uintptr_t);
+                const uintptr_t headerValue =
+                    *reinterpret_cast<const volatile uintptr_t *>(headerAddress);
+                std::snprintf(
+                    line, sizeof(line),
+                    "[KisakCOD][CRASH] MEMSET_STATE dst=0x%016llx end=0x%016llx length=0x%016llx header_addr=0x%016llx header_raw=0x%016llx header_size=0x%016llx\\n",
+                    static_cast<unsigned long long>(dst),
+                    static_cast<unsigned long long>(end),
+                    static_cast<unsigned long long>(end - dst),
+                    static_cast<unsigned long long>(headerAddress),
+                    static_cast<unsigned long long>(headerValue),
+                    static_cast<unsigned long long>(
+                        headerValue & ~static_cast<uintptr_t>(3u)));
+                Switch_LogCrashLine(line);
+            }
+            else
+            {
+                Switch_LogCrashLine(
+                    "[KisakCOD][CRASH] MEMSET_STATE invalid_dst_for_header\\n");
+            }
+        }
+    }
+
     for (int i = 0; i < 29; i += 2)
     {
         if (i + 1 < 29)
