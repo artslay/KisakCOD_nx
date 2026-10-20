@@ -1424,6 +1424,12 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     uint32_t emittedCopyObjects = 0u;
     uint32_t emittedScalarExtracts = 0u;
 
+    // Reuse component extracts across shuffles in the same basic block. The
+    // source vectors are SSA values, so a prior extract remains valid for later
+    // instructions in that block. Clear at every label/function boundary to
+    // avoid carrying a value across control-flow edges where it may not dominate.
+    std::unordered_map<uint64_t, uint32_t> extractedIdsByBlock;
+
     for (const size_t offset : shuffleOffsets)
     {
         uint32_t wc = 0u;
@@ -1502,6 +1508,10 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         SpvOp op{};
         if (!SpirvIsValidInstruction(words, offset, &wc, &op))
             return false;
+
+        if (op == SpvOpFunction || op == SpvOpLabel || op == SpvOpFunctionEnd)
+            extractedIdsByBlock.clear();
+
         if (!inFunction && !undefDefinitionsInserted &&
             (op == SpvOpVariable || op == SpvOpFunction))
         {
@@ -1549,12 +1559,12 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
                 constructOperands.reserve(shuffle.selectors.size() + 2u);
                 constructOperands.push_back(shuffle.resultType);
                 constructOperands.push_back(shuffle.resultId);
-                // A swizzle often repeats a component (for example xyxx) and
-                // MojoShader also uses the same vector as both shuffle sources.
-                // Reuse each scalar extract within this one instruction instead
-                // of manufacturing duplicate SSA values for the same component.
-                std::unordered_map<uint64_t, uint32_t> extractedIds;
-                extractedIds.reserve(shuffle.selectors.size());
+                // Reuse scalar component extracts both within this shuffle and
+                // across earlier shuffles in the same basic block. Keeping these
+                // SSA temporaries shared reduces register pressure in NAK without
+                // changing the vector-shuffle results.
+                extractedIdsByBlock.reserve(
+                    extractedIdsByBlock.size() + shuffle.selectors.size());
 
                 for (const uint32_t selector : shuffle.selectors)
                 {
@@ -1578,8 +1588,8 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
 
                     const uint64_t extractKey =
                         (static_cast<uint64_t>(sourceId) << 32) | component;
-                    const auto existingExtract = extractedIds.find(extractKey);
-                    if (existingExtract != extractedIds.end())
+                    const auto existingExtract = extractedIdsByBlock.find(extractKey);
+                    if (existingExtract != extractedIdsByBlock.end())
                     {
                         constructOperands.push_back(existingExtract->second);
                         continue;
@@ -1591,7 +1601,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
                     SpirvAppend(rewritten, SpvOpCompositeExtract,
                         {shuffle.scalarType, extractedId, sourceId, component});
                     ++emittedScalarExtracts;
-                    extractedIds.emplace(extractKey, extractedId);
+                    extractedIdsByBlock.emplace(extractKey, extractedId);
                     constructOperands.push_back(extractedId);
                 }
 
