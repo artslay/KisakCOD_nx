@@ -8331,7 +8331,12 @@ bool IDirect3DDevice9::EnsurePipeline()
             loweredBuilt && loweredModuleResult == VK_SUCCESS &&
                 seq31LoweredPixelModule ? "use_semantics_preserving_rewrite" :
                                           "rewrite_unavailable");
-        Switch_LogWrite(rewriteTrace);
+        static uint32_t seq31RewriteTraceCount = 0u;
+        if (seq31RewriteTraceCount < 12u)
+        {
+            Switch_LogWrite(rewriteTrace);
+            ++seq31RewriteTraceCount;
+        }
 
         if (loweredBuilt && loweredModuleResult == VK_SUCCESS &&
             seq31LoweredPixelModule)
@@ -10450,6 +10455,54 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 m_psFloat[2][0], m_psFloat[2][1], m_psFloat[2][2], m_psFloat[2][3],
                 m_psFloat[3][0], m_psFloat[3][1], m_psFloat[3][2], m_psFloat[3][3]);
             Switch_LogWrite(pixelConstantsTrace);
+
+            // This bounded slot-by-slot snapshot connects D3D9 sampler registers
+            // to the actual Vulkan texture/view used by the first gameplay world
+            // draws. A material-name trace alone cannot prove the descriptor's
+            // binding slot is populated with that texture.
+            char textureTrace[1280];
+            size_t textureUsed = static_cast<size_t>(std::snprintf(
+                textureTrace, sizeof(textureTrace),
+                "[KisakCOD][VK WORLD BOUND SAMPLERS] n=%u ps=%llu",
+                traceIndex,
+                static_cast<unsigned long long>(m_pixelShader->serial)));
+            const MOJOSHADER_parseData *worldPixelParse = m_pixelShader->parseData;
+            const int worldSamplerCount =
+                worldPixelParse && worldPixelParse->samplers
+                    ? std::min(worldPixelParse->sampler_count, 8) : 0;
+            for (int samplerNumber = 0;
+                 samplerNumber < worldSamplerCount &&
+                 textureUsed < sizeof(textureTrace) - 160u;
+                 ++samplerNumber)
+            {
+                const MOJOSHADER_sampler &sampler =
+                    worldPixelParse->samplers[samplerNumber];
+                const int slot = sampler.index;
+                const KisakVkTexture *texture =
+                    slot >= 0 && slot < 16 ? m_textures[slot] : nullptr;
+                const int written = std::snprintf(
+                    textureTrace + textureUsed, sizeof(textureTrace) - textureUsed,
+                    " s%d=%s tex=%p view=%p size=%ux%u vk=%u src=%u layout=%u mips=%u",
+                    slot, sampler.name ? sampler.name : "<unnamed>",
+                    static_cast<const void *>(texture),
+                    static_cast<void *>(texture ? texture->view : VK_NULL_HANDLE),
+                    texture ? texture->width : 0u,
+                    texture ? texture->height : 0u,
+                    texture ? static_cast<unsigned>(texture->format) : 0u,
+                    texture ? static_cast<unsigned>(texture->sourceFormat) : 0u,
+                    texture ? static_cast<unsigned>(
+                        texture->GetSubresourceLayout(0u, 0u)) : 0u,
+                    texture ? texture->mipLevels : 0u);
+                if (written < 0)
+                    break;
+                textureUsed += static_cast<size_t>(written);
+            }
+            if (textureUsed < sizeof(textureTrace) - 2u)
+            {
+                textureTrace[textureUsed++] = '\\n';
+                textureTrace[textureUsed] = '\\0';
+                Switch_LogWrite(textureTrace);
+            }
         }
     }
 #endif
