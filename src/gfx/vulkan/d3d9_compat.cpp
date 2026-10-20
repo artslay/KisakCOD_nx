@@ -8269,67 +8269,132 @@ bool IDirect3DDevice9::EnsurePipeline()
 
 #ifdef __SWITCH__
     // This exact world shader pair was previously skipped after NVK crashed
-    // compiling OpVectorShuffle. Lower the fragment shader's shuffles to
-    // equivalent OpCompositeExtract/OpCompositeConstruct instructions instead
-    // of dropping every draw that uses this pair.
+    // compiling the pipeline. Lower OpVectorShuffle in either linked stage to
+    // equivalent OpCompositeExtract/OpCompositeConstruct instructions. Preserve
+    // alpha-test behavior: if alpha patching is active, keep the established
+    // narrow skip rather than compiling a PS that lacks that patch.
+    std::vector<uint32_t> seq31LoweredVertexSpirv;
     std::vector<uint32_t> seq31LoweredPixelSpirv;
+    VkShaderModule seq31LoweredVertexModule = VK_NULL_HANDLE;
     VkShaderModule seq31LoweredPixelModule = VK_NULL_HANDLE;
+    const VkShaderModule seq31OriginalVertexModule = stages[0].module;
     const VkShaderModule seq31OriginalPixelModule = stages[1].module;
+    bool seq31LoweredVertexActive = false;
     bool seq31LoweredPixelActive = false;
     if (vsSpirvHash == 0xaf1d39bec3f1bf7dull &&
         psSpirvHash == 0xcd1031f57ecc7957ull)
     {
-        uint32_t loweredShuffleCount = 0u;
-        seq31LoweredPixelSpirv = m_pixelShader->linkedSpirv;
-        const bool loweredBuilt = !seq31LoweredPixelSpirv.empty() &&
-            LowerSwitchSpirvVectorShuffleToCompositeOps(
-                seq31LoweredPixelSpirv, &loweredShuffleCount);
+        uint32_t loweredVertexShuffleCount = 0u;
+        uint32_t loweredPixelShuffleCount = 0u;
+        bool loweredVertexBuilt = false;
+        bool loweredPixelBuilt = false;
+        VkResult loweredVertexModuleResult = VK_ERROR_UNKNOWN;
+        VkResult loweredPixelModuleResult = VK_ERROR_UNKNOWN;
 
-        VkResult loweredModuleResult = VK_ERROR_UNKNOWN;
-        if (loweredBuilt)
+        if (!useAlphaTestPatch)
         {
-            VkShaderModuleCreateInfo loweredModuleInfo{};
-            loweredModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-            loweredModuleInfo.codeSize =
-                seq31LoweredPixelSpirv.size() * sizeof(uint32_t);
-            loweredModuleInfo.pCode = seq31LoweredPixelSpirv.data();
-            loweredModuleResult = vkCreateShaderModule(
-                m_backend->Device(), &loweredModuleInfo, nullptr,
-                &seq31LoweredPixelModule);
+            seq31LoweredVertexSpirv = m_vertexShader->linkedSpirv;
+            seq31LoweredPixelSpirv = m_pixelShader->linkedSpirv;
+            loweredVertexBuilt = !seq31LoweredVertexSpirv.empty() &&
+                LowerSwitchSpirvVectorShuffleToCompositeOps(
+                    seq31LoweredVertexSpirv, &loweredVertexShuffleCount);
+            loweredPixelBuilt = !seq31LoweredPixelSpirv.empty() &&
+                LowerSwitchSpirvVectorShuffleToCompositeOps(
+                    seq31LoweredPixelSpirv, &loweredPixelShuffleCount);
+
+            if (loweredVertexBuilt && loweredVertexShuffleCount > 0u)
+            {
+                VkShaderModuleCreateInfo moduleInfo{};
+                moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                moduleInfo.codeSize =
+                    seq31LoweredVertexSpirv.size() * sizeof(uint32_t);
+                moduleInfo.pCode = seq31LoweredVertexSpirv.data();
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq31_rewrite_vertex_module";
+                loweredVertexModuleResult = vkCreateShaderModule(
+                    m_backend->Device(), &moduleInfo, nullptr,
+                    &seq31LoweredVertexModule);
+            }
+            else if (loweredVertexBuilt)
+            {
+                loweredVertexModuleResult = VK_SUCCESS;
+            }
+
+            if (loweredPixelBuilt && loweredPixelShuffleCount > 0u)
+            {
+                VkShaderModuleCreateInfo moduleInfo{};
+                moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                moduleInfo.codeSize =
+                    seq31LoweredPixelSpirv.size() * sizeof(uint32_t);
+                moduleInfo.pCode = seq31LoweredPixelSpirv.data();
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq31_rewrite_pixel_module";
+                loweredPixelModuleResult = vkCreateShaderModule(
+                    m_backend->Device(), &moduleInfo, nullptr,
+                    &seq31LoweredPixelModule);
+            }
+            else if (loweredPixelBuilt)
+            {
+                loweredPixelModuleResult = VK_SUCCESS;
+            }
         }
 
-        char rewriteTrace[384];
+        const bool anyShuffleLowered =
+            loweredVertexShuffleCount > 0u || loweredPixelShuffleCount > 0u;
+        const bool modulesReady =
+            loweredVertexBuilt && loweredPixelBuilt &&
+            loweredVertexModuleResult == VK_SUCCESS &&
+            loweredPixelModuleResult == VK_SUCCESS &&
+            (!loweredVertexShuffleCount || seq31LoweredVertexModule) &&
+            (!loweredPixelShuffleCount || seq31LoweredPixelModule);
+        char rewriteTrace[448];
         std::snprintf(rewriteTrace, sizeof(rewriteTrace),
-            "[KisakCOD][VK SHADER REWRITE] pair=seq31_vs_af1d39bec3f1bf7d_ps_cd1031f57ecc7957 seq=%u built=%u lowered=%u sourceLinkedHash=%016llx rewrittenHash=%016llx moduleResult=%d module=%p action=%s\n",
-            pipelineCreateSequence, loweredBuilt ? 1u : 0u,
-            loweredShuffleCount,
+            "[KisakCOD][VK SHADER REWRITE] pair=seq31_vs_af1d39bec3f1bf7d_ps_cd1031f57ecc7957 seq=%u alphaPatch=%u vsBuilt=%u vsLowered=%u vsModule=%d psBuilt=%u psLowered=%u psModule=%d sourceVs=%016llx sourcePs=%016llx action=%s\n",
+            pipelineCreateSequence, useAlphaTestPatch ? 1u : 0u,
+            loweredVertexBuilt ? 1u : 0u, loweredVertexShuffleCount,
+            static_cast<int>(loweredVertexModuleResult),
+            loweredPixelBuilt ? 1u : 0u, loweredPixelShuffleCount,
+            static_cast<int>(loweredPixelModuleResult),
             static_cast<unsigned long long>(
-                HashSpirvWords(m_pixelShader->linkedSpirv)),
+                seq31LoweredVertexSpirv.empty()
+                    ? 0u : HashSpirvWords(seq31LoweredVertexSpirv)),
             static_cast<unsigned long long>(
                 seq31LoweredPixelSpirv.empty()
                     ? 0u : HashSpirvWords(seq31LoweredPixelSpirv)),
-            static_cast<int>(loweredModuleResult),
-            static_cast<void *>(seq31LoweredPixelModule),
-            loweredBuilt && loweredModuleResult == VK_SUCCESS &&
-                seq31LoweredPixelModule ? "use_semantics_preserving_rewrite" :
-                                          "rewrite_unavailable");
+            !useAlphaTestPatch && modulesReady && anyShuffleLowered
+                ? "use_semantics_preserving_rewrite" : "rewrite_unavailable");
         Switch_LogWrite(rewriteTrace);
 
-        if (loweredBuilt && loweredModuleResult == VK_SUCCESS &&
-            seq31LoweredPixelModule)
+        if (!useAlphaTestPatch && modulesReady && anyShuffleLowered)
         {
-            stages[1].module = seq31LoweredPixelModule;
-            seq31LoweredPixelActive = true;
-            g_switchPipelineCrashSnapshot.pixelSpirv =
-                &seq31LoweredPixelSpirv;
+            if (loweredVertexShuffleCount > 0u)
+            {
+                stages[0].module = seq31LoweredVertexModule;
+                seq31LoweredVertexActive = true;
+                g_switchPipelineCrashSnapshot.vertexSpirv =
+                    &seq31LoweredVertexSpirv;
+            }
+            if (loweredPixelShuffleCount > 0u)
+            {
+                stages[1].module = seq31LoweredPixelModule;
+                seq31LoweredPixelActive = true;
+                g_switchPipelineCrashSnapshot.pixelSpirv =
+                    &seq31LoweredPixelSpirv;
+            }
         }
         else
         {
+            if (seq31LoweredVertexModule)
+                vkDestroyShaderModule(
+                    m_backend->Device(), seq31LoweredVertexModule, nullptr);
+            if (seq31LoweredPixelModule)
+                vkDestroyShaderModule(
+                    m_backend->Device(), seq31LoweredPixelModule, nullptr);
             static bool loggedRewriteFailure = false;
             if (!loggedRewriteFailure)
             {
                 Switch_LogWrite(
-                    "[KisakCOD][VK PIPELINE PROBE] skip exact seq31 pair because semantic shuffle rewrite failed; other shader pairs remain enabled\n");
+                    "[KisakCOD][VK PIPELINE PROBE] skip exact seq31 pair only because safe shuffle rewrite is unavailable; other shader pairs remain enabled\n");
                 loggedRewriteFailure = true;
             }
             g_switchSkippedKnownShaderPair = true;
@@ -8340,7 +8405,6 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
     }
 #endif
-
 #ifdef __SWITCH__
     // Run the seq=64 OpKill A/B at pipeline creation, not in the shader-link
     // path: the original VkShaderModule may already be cached when this exact
@@ -8611,6 +8675,14 @@ bool IDirect3DDevice9::EnsurePipeline()
     const VkResult pipelineResult = vkCreateGraphicsPipelines(
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
 #ifdef __SWITCH__
+    if (seq31LoweredVertexActive)
+    {
+        stages[0].module = seq31OriginalVertexModule;
+        vkDestroyShaderModule(
+            m_backend->Device(), seq31LoweredVertexModule, nullptr);
+        seq31LoweredVertexModule = VK_NULL_HANDLE;
+        seq31LoweredVertexActive = false;
+    }
     if (seq31LoweredPixelActive)
     {
         stages[1].module = seq31OriginalPixelModule;
