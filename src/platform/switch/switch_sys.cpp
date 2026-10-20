@@ -681,7 +681,9 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                         // RegAllocator is the final member being dropped in this crash.
                         // Walk to AssignRegsBlock's frame and dump all seven sibling
                         // allocators; repeated owned pointers would indicate a double-free.
-                        const uintptr_t blockFrameAddress = raWords[0];
+                        const volatile uintptr_t *raFrame =
+                            reinterpret_cast<const volatile uintptr_t *>(raFrameAddress);
+                        const uintptr_t blockFrameAddress = raFrame[0];
                         if (blockFrameAddress > raFrameAddress &&
                             blockFrameAddress - raFrameAddress <= 0x100000u &&
                             (blockFrameAddress & (alignof(uintptr_t) - 1u)) == 0 &&
