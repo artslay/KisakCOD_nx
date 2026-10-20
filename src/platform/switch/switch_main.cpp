@@ -676,9 +676,9 @@ int main()
         nakSpillProbeRequested && SwitchConfigureNakSpillProbe();
     Switch_LogInit();
     if (mesaVk13OverrideSet)
-        Switch_LogWrite("[KisakCOD][VK API PROBE] forced MESA_VK_VERSION_OVERRIDE=1.3 for physical-device API version A/B test\\n");
+        Switch_LogWrite("[KisakCOD][VK API PROBE] forced MESA_VK_VERSION_OVERRIDE=1.3 for physical-device API version A/B test\n");
     else
-        Switch_LogWrite("[KisakCOD][VK API PROBE] WARNING: failed to set MESA_VK_VERSION_OVERRIDE=1.3\\n");
+        Switch_LogWrite("[KisakCOD][VK API PROBE] WARNING: failed to set MESA_VK_VERSION_OVERRIDE=1.3\n");
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
