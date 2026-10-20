@@ -1512,42 +1512,85 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         else
         {
             const ShuffleInfo &shuffle = found->second;
-            std::vector<uint32_t> constructOperands;
-            constructOperands.reserve(shuffle.selectors.size() + 2u);
-            constructOperands.push_back(shuffle.resultType);
-            constructOperands.push_back(shuffle.resultId);
-
-            for (const uint32_t selector : shuffle.selectors)
+            // A full identity shuffle is just a value copy. Preserve its result
+            // ID while avoiding dozens of scalar operations in common large shaders.
+            bool identityShuffle =
+                shuffle.resultType == shuffle.selectors.size() &&
+                resultTypeById[shuffle.vector1Id] == shuffle.resultType;
+            if (identityShuffle)
             {
-                if (selector == 0xffffffffu)
+                for (uint32_t c = 0u; c < shuffle.selectors.size(); ++c)
                 {
-                    const auto undef = undefIdByScalarType.find(shuffle.scalarType);
-                    if (undef == undefIdByScalarType.end())
-                        return false;
-                    constructOperands.push_back(undef->second);
-                    continue;
+                    if (shuffle.selectors[c] != c)
+                    {
+                        identityShuffle = false;
+                        break;
+                    }
                 }
-                if (nextId >= UINT32_MAX - 1u)
-                    return false;
-                const bool fromFirst = selector < shuffle.sourceWidth;
-                const uint32_t sourceId =
-                    fromFirst ? shuffle.vector1Id : shuffle.vector2Id;
-                const uint32_t component =
-                    fromFirst ? selector : selector - shuffle.sourceWidth;
-                if (component >=
-                    (fromFirst ? shuffle.sourceWidth : shuffle.sourceWidth2))
-                    return false;
-                const uint32_t extractedId = nextId++;
-                SpirvAppend(rewritten, SpvOpCompositeExtract,
-                    {shuffle.scalarType, extractedId, sourceId, component});
-                constructOperands.push_back(extractedId);
             }
 
-            rewritten.push_back(
-                (static_cast<uint32_t>(constructOperands.size() + 1u) << 16) |
-                static_cast<uint32_t>(SpvOpCompositeConstruct));
-            rewritten.insert(
-                rewritten.end(), constructOperands.begin(), constructOperands.end());
+            if (identityShuffle)
+            {
+                SpirvAppend(rewritten, SpvOpCopyObject,
+                    {shuffle.resultType, shuffle.resultId, shuffle.vector1Id});
+            }
+            else
+            {
+                std::vector<uint32_t> constructOperands;
+                constructOperands.reserve(shuffle.selectors.size() + 2u);
+                constructOperands.push_back(shuffle.resultType);
+                constructOperands.push_back(shuffle.resultId);
+                // A swizzle often repeats a component (for example xyxx) and
+                // MojoShader also uses the same vector as both shuffle sources.
+                // Reuse each scalar extract within this one instruction instead
+                // of manufacturing duplicate SSA values for the same component.
+                std::unordered_map<uint64_t, uint32_t> extractedIds;
+                extractedIds.reserve(shuffle.selectors.size());
+
+                for (const uint32_t selector : shuffle.selectors)
+                {
+                    if (selector == 0xffffffffu)
+                    {
+                        const auto undef = undefIdByScalarType.find(shuffle.scalarType);
+                        if (undef == undefIdByScalarType.end())
+                            return false;
+                        constructOperands.push_back(undef->second);
+                        continue;
+                    }
+
+                    const bool fromFirst = selector < shuffle.sourceWidth;
+                    const uint32_t sourceId =
+                        fromFirst ? shuffle.vector1Id : shuffle.vector2Id;
+                    const uint32_t component =
+                        fromFirst ? selector : selector - shuffle.sourceWidth;
+                    if (component >=
+                        (fromFirst ? shuffle.sourceWidth : shuffle.sourceWidth2))
+                        return false;
+
+                    const uint64_t extractKey =
+                        (static_cast<uint64_t>(sourceId) << 32) | component;
+                    const auto existingExtract = extractedIds.find(extractKey);
+                    if (existingExtract != extractedIds.end())
+                    {
+                        constructOperands.push_back(existingExtract->second);
+                        continue;
+                    }
+
+                    if (nextId >= UINT32_MAX - 1u)
+                        return false;
+                    const uint32_t extractedId = nextId++;
+                    SpirvAppend(rewritten, SpvOpCompositeExtract,
+                        {shuffle.scalarType, extractedId, sourceId, component});
+                    extractedIds.emplace(extractKey, extractedId);
+                    constructOperands.push_back(extractedId);
+                }
+
+                rewritten.push_back(
+                    (static_cast<uint32_t>(constructOperands.size() + 1u) << 16) |
+                    static_cast<uint32_t>(SpvOpCompositeConstruct));
+                rewritten.insert(
+                    rewritten.end(), constructOperands.begin(), constructOperands.end());
+            }
         }
 
         if (op == SpvOpFunction)
