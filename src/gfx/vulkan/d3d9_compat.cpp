@@ -5799,6 +5799,11 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchFrameStage = "frame/render/vulkan/pipeline/prepare_create_info";
     VkGraphicsPipelineCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    // NVK/NAK on Switch crashes during register allocation for some valid SPIR-V
+    // modules. Request an unoptimized pipeline to reduce compiler transformations
+    // while preserving shader behavior; this is an application-side mitigation,
+    // not a substitute for correcting a compiler memory-safety bug.
+    info.flags = VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
     info.pNext = &rendering;
     info.stageCount = 2;
     info.pStages = stages;
