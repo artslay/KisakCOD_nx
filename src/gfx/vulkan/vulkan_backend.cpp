@@ -455,10 +455,11 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
             "[KisakCOD][VK DRIVER] NVK_DEBUG coherent and no_cbuf already enabled\n");
     }
 
-    // Keep NAK's serial mode and disable uniform-GPR allocation while
-    // diagnosing the AssignRegsBlock teardown crash in Mesa 26.2.4. The
-    // "nougpr" flag is a focused A/B test for the uniform register-allocation
-    // path; preserve any debug flags already supplied by the runtime.
+    // Keep NAK's serial mode, but do not force "nougpr" by default.
+    // SPIR-V validation passes for the crashing pair, and the current stack
+    // faults while dropping nak_shader_from_nir's SSA map. "nougpr" changes
+    // that conversion path itself, so test it only when explicitly requested.
+    // Preserve debug flags supplied by the runtime.
     const char *existingNakDebug = std::getenv("NAK_DEBUG");
     std::string nakDebug = existingNakDebug ? existingNakDebug : "";
     auto hasNakFlag = [&nakDebug](const char *flag) {
@@ -479,15 +480,23 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
     };
 
     bool addedNakFlag = false;
-    for (const char *flag : {"serial", "nougpr"})
+    if (!hasNakFlag("serial"))
     {
-        if (!hasNakFlag(flag))
-        {
-            if (!nakDebug.empty())
-                nakDebug += ',';
-            nakDebug += flag;
-            addedNakFlag = true;
-        }
+        if (!nakDebug.empty())
+            nakDebug += ',';
+        nakDebug += "serial";
+        addedNakFlag = true;
+    }
+
+    const char *disableUniformGpr = std::getenv("KISAK_NAK_DISABLE_UGPR");
+    const bool requestNoUgpr =
+        disableUniformGpr && std::strcmp(disableUniformGpr, "1") == 0;
+    if (requestNoUgpr && !hasNakFlag("nougpr"))
+    {
+        if (!nakDebug.empty())
+            nakDebug += ',';
+        nakDebug += "nougpr";
+        addedNakFlag = true;
     }
 
     if (addedNakFlag)
@@ -495,13 +504,13 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         if (::setenv("NAK_DEBUG", nakDebug.c_str(), 1) != 0)
         {
             Switch_LogWrite(
-                "[KisakCOD][VK DRIVER] could not enable NAK_DEBUG=serial,nougpr diagnostic flags; continuing with existing options\n");
+                "[KisakCOD][VK DRIVER] could not set requested NAK_DEBUG flags; continuing with existing options\n");
         }
         else
         {
-            char nakFlagsMsg[320];
+            char nakFlagsMsg[384];
             std::snprintf(nakFlagsMsg, sizeof(nakFlagsMsg),
-                "[KisakCOD][VK DRIVER] enabled NAK_DEBUG=%s (diagnostic: serial execution + no uniform GPR allocation)\n",
+                "[KisakCOD][VK DRIVER] enabled NAK_DEBUG=%s (set KISAK_NAK_DISABLE_UGPR=1 to opt into nougpr)\n",
                 nakDebug.c_str());
             Switch_LogWrite(nakFlagsMsg);
         }
@@ -509,7 +518,7 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
     else
     {
         Switch_LogWrite(
-            "[KisakCOD][VK DRIVER] NAK_DEBUG serial,nougpr already enabled\n");
+            "[KisakCOD][VK DRIVER] NAK_DEBUG serial enabled; nougpr disabled unless KISAK_NAK_DISABLE_UGPR=1\n");
     }
 
 #endif
