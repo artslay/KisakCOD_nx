@@ -588,9 +588,13 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
     // from memset/DC ZVA faults. In this path x4 is the chunk being unlinked;
     // reading its four header/link words shows which free-list pointer is bad.
     const uintptr_t freeFaultPc = static_cast<uintptr_t>(ctx->pc.x);
-    if (ctx->far.x == 0x18u &&
-        ctx->cpu_gprs[0].x == 0u &&
-        (freeFaultPc & 3u) == 0u)
+    const uintptr_t freeFaultBase =
+        static_cast<uintptr_t>(ctx->cpu_gprs[0].x);
+    const bool freeFaultAddressMatches =
+        (freeFaultBase == 0u && ctx->far.x == 0x18u) ||
+        (freeFaultBase <= UINTPTR_MAX - 24u &&
+         ctx->far.x == freeFaultBase + 24u);
+    if (freeFaultAddressMatches && (freeFaultPc & 3u) == 0u)
     {
         const uint32_t freeFaultInsn =
             *reinterpret_cast<const volatile uint32_t *>(freeFaultPc);
