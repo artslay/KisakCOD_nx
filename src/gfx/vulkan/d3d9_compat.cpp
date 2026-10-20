@@ -1580,6 +1580,140 @@ bool NormalizeUnusedCubeSampleCoordinateComponents(
     return true;
 }
 
+// Narrow A/B probe for the captured seq=33 NAK crash. The failing module contains
+// one non-arrayed cube OpImageSampleExplicitLod whose Lod is extracted from the
+// fourth coordinate component. Keep the cube sample itself active, but force
+// only that one LOD to 0.0 to test whether dynamic cube LOD triggers NAK's fault.
+// This intentionally changes one sample's mip choice and is hash-gated to the
+// single captured shader; it is a diagnostic, not a general shader rewrite.
+bool ForceCapturedCubeSampleLodToZeroForProbe(
+    std::vector<uint32_t> &words,
+    uint32_t *rewrittenCount = nullptr)
+{
+    if (rewrittenCount)
+        *rewrittenCount = 0;
+    if (words.size() < 5 || words[0] != SpvMagicNumber)
+        return false;
+
+    const uint32_t bound = words[3];
+    if (bound < 2u || bound > 1000000u)
+        return false;
+
+    std::vector<uint32_t> resultTypeById(bound, UINT32_MAX);
+    std::vector<uint32_t> typeOpcode(bound, UINT32_MAX);
+    std::vector<uint32_t> vectorComponentType(bound, 0u);
+    std::vector<uint32_t> vectorComponentCount(bound, 0u);
+    std::vector<uint32_t> floatWidthByType(bound, 0u);
+    std::vector<uint32_t> imageDimensionByType(bound, UINT32_MAX);
+    std::vector<uint32_t> imageArrayedByType(bound, UINT32_MAX);
+    std::vector<uint32_t> imageTypeBySampledImageType(bound, UINT32_MAX);
+    uint32_t floatZeroConstantId = 0u;
+
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wordCount = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &op))
+            return false;
+
+        const uint32_t opcode = static_cast<uint32_t>(op);
+        const uint32_t *ins = &words[offset];
+        if (opcode == static_cast<uint32_t>(SpvOpTypeFloat) &&
+            wordCount >= 3 && ins[1] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            floatWidthByType[ins[1]] = ins[2];
+        }
+        else if (opcode == static_cast<uint32_t>(SpvOpTypeVector) &&
+                 wordCount >= 4 && ins[1] < bound && ins[2] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            vectorComponentType[ins[1]] = ins[2];
+            vectorComponentCount[ins[1]] = ins[3];
+        }
+        else if (opcode == static_cast<uint32_t>(SpvOpTypeImage) &&
+                 wordCount >= 9 && ins[1] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            imageDimensionByType[ins[1]] = ins[3];
+            imageArrayedByType[ins[1]] = ins[5];
+        }
+        else if (opcode == static_cast<uint32_t>(SpvOpTypeSampledImage) &&
+                 wordCount >= 3 && ins[1] < bound && ins[2] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            imageTypeBySampledImageType[ins[1]] = ins[2];
+        }
+        else if (opcode == static_cast<uint32_t>(SpvOpConstant) &&
+                 wordCount == 4 && ins[1] < bound && ins[2] < bound &&
+                 typeOpcode[ins[1]] == static_cast<uint32_t>(SpvOpTypeFloat) &&
+                 floatWidthByType[ins[1]] == 32u && ins[3] == 0u)
+        {
+            floatZeroConstantId = ins[2];
+        }
+
+        if (wordCount >= 3 &&
+            (opcode == static_cast<uint32_t>(SpvOpLoad) ||
+             opcode == static_cast<uint32_t>(SpvOpCopyObject) ||
+             opcode == static_cast<uint32_t>(SpvOpSampledImage)) &&
+            ins[2] < bound)
+        {
+            resultTypeById[ins[2]] = ins[1];
+        }
+        offset += wordCount;
+    }
+
+    if (!floatZeroConstantId || floatZeroConstantId >= bound)
+        return false;
+
+    uint32_t rewritten = 0u;
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wordCount = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &op))
+            return false;
+
+        const uint32_t opcode = static_cast<uint32_t>(op);
+        const uint32_t *ins = &words[offset];
+        // OpImageSampleExplicitLod operands are:
+        // result type, result ID, sampled image, coordinate, Image Operands mask, Lod.
+        if (opcode == static_cast<uint32_t>(SpvOpImageSampleExplicitLod) &&
+            wordCount == 7 && ins[5] == 2u && ins[3] < bound && ins[4] < bound)
+        {
+            const uint32_t sampledImageType = resultTypeById[ins[3]];
+            const uint32_t coordinateType = resultTypeById[ins[4]];
+            if (sampledImageType < bound &&
+                typeOpcode[sampledImageType] ==
+                    static_cast<uint32_t>(SpvOpTypeSampledImage))
+            {
+                const uint32_t imageType = imageTypeBySampledImageType[sampledImageType];
+                if (imageType < bound &&
+                    typeOpcode[imageType] == static_cast<uint32_t>(SpvOpTypeImage) &&
+                    imageDimensionByType[imageType] == 3u && // Cube
+                    imageArrayedByType[imageType] == 0u &&
+                    coordinateType < bound &&
+                    typeOpcode[coordinateType] ==
+                        static_cast<uint32_t>(SpvOpTypeVector) &&
+                    vectorComponentCount[coordinateType] == 3u &&
+                    vectorComponentType[coordinateType] < bound &&
+                    typeOpcode[vectorComponentType[coordinateType]] ==
+                        static_cast<uint32_t>(SpvOpTypeFloat) &&
+                    floatWidthByType[vectorComponentType[coordinateType]] == 32u)
+                {
+                    words[offset + 6u] = floatZeroConstantId;
+                    ++rewritten;
+                }
+            }
+        }
+        offset += wordCount;
+    }
+
+    if (rewrittenCount)
+        *rewrittenCount = rewritten;
+    return true;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -5594,8 +5728,6 @@ bool IDirect3DDevice9::EnsurePipeline()
             ++strippedPixelDebugTraceCount;
         }
 #endif
-        unpatchedPixelSpirvForProbe = pixelSpirv;
-        m_pixelShader->linkedSpirv = pixelSpirv;
 
         // Do not rewrite every fragment shader with discard logic when D3D9
         // alpha testing is disabled. Preserve its execution logic and only strip
@@ -5645,7 +5777,37 @@ bool IDirect3DDevice9::EnsurePipeline()
                 Switch_LogWrite("[KisakCOD][VK SPIRV REPAIR] stage=ps action=trim_unused_cube_coordinates failed=invalid_module\n");
             }
         }
+        // The coordinate-shape repair was confirmed active, but seq=33 still
+        // crashes inside vkCreateGraphicsPipelines. Isolate the remaining unique
+        // cube-sample operand: this one exact post-repair shader uses dynamic Lod
+        // extracted from coordinate.w. Probe LOD 0 without disabling the shader.
+        if (HashSpirvWords(pixelSpirv) == 0x075e167d42e8ca55ull)
+        {
+            const uint64_t oldCubeLodProbeHash = HashSpirvWords(pixelSpirv);
+            uint32_t forcedCubeLodCount = 0;
+            if (ForceCapturedCubeSampleLodToZeroForProbe(
+                    pixelSpirv, &forcedCubeLodCount))
+            {
+                char cubeLodProbeTrace[256];
+                std::snprintf(cubeLodProbeTrace, sizeof(cubeLodProbeTrace),
+                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_lod_zero count=%u old_hash=%016llx new_hash=%016llx\\n",
+                    forcedCubeLodCount,
+                    static_cast<unsigned long long>(oldCubeLodProbeHash),
+                    static_cast<unsigned long long>(HashSpirvWords(pixelSpirv)));
+                Switch_LogWrite(cubeLodProbeTrace);
+            }
+            else
+            {
+                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_lod_zero failed=invalid_module\\n");
+            }
+        }
 #endif
+        // Store the un-alpha-patched baseline only after the hash-gated,
+        // semantics-preserving cube-coordinate normalization (and the narrow
+        // seq=33 LOD probe), so a later alpha-state rebuild cannot restore the
+        // crashing pre-normalization module.
+        unpatchedPixelSpirvForProbe = pixelSpirv;
+        m_pixelShader->linkedSpirv = pixelSpirv;
         m_pixelShader->alphaFuncSpecId = pipelineAlphaFuncSpecId;
         m_pixelShader->alphaRefSpecId = pipelineAlphaRefSpecId;
         m_pixelShader->spirv = pixelSpirv;
