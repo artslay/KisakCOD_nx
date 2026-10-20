@@ -455,11 +455,11 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
             "[KisakCOD][VK DRIVER] NVK_DEBUG coherent and no_cbuf already enabled\n");
     }
 
-    // switch_main.cpp enables NAK_DEBUG=serial before any Vulkan/Mesa
-    // initialization for the current pipeline-creation crash probe. Preserve
-    // that startup setting and any runtime flags, then merge optional flags
-    // supplied through KISAK_NAK_DEBUG. Uniform-GPR allocation stays enabled
-    // unless KISAK_NAK_DISABLE_UGPR=1 is explicitly requested.
+    // switch_main.cpp enables NAK_DEBUG=nougpr before any Vulkan/Mesa
+    // initialization for the current pipeline-creation crash probe. The serial
+    // mode reproduced the same fault, so test NAK's alternate UGPR-lowering path.
+    // Preserve the startup setting and any runtime flags, then merge optional
+    // flags supplied through KISAK_NAK_DEBUG.
     const char *existingNakDebug = std::getenv("NAK_DEBUG");
     std::string nakDebug = existingNakDebug ? existingNakDebug : "";
     auto hasNakFlag = [&nakDebug](const char *flag) {
@@ -510,8 +510,8 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         }
     }
 
-    // Keep the previously available opt-in for builds where uniform-GPR
-    // allocation itself regresses; unlike the old default, it is not forced.
+    // Keep the existing KISAK_NAK_DISABLE_UGPR compatibility switch. The startup
+    // probe now enables nougpr by default, so this remains an idempotent opt-in.
     const char *disableUniformGpr = std::getenv("KISAK_NAK_DISABLE_UGPR");
     const bool requestNoUgpr =
         disableUniformGpr && std::strcmp(disableUniformGpr, "1") == 0;
