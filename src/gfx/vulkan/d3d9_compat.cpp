@@ -3630,10 +3630,11 @@ bool GetUniformLayout(const MOJOSHADER_parseData *parse, VulkanUniformLayout *ou
 
 extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const char *))
 {
-    if (!writeLine ||
-        !g_switchFrameStage ||
-        std::strcmp(g_switchFrameStage,
-            "frame/render/vulkan/pipeline/driver_create_call") != 0)
+    constexpr char pipelineStagePrefix[] = "frame/render/vulkan/pipeline/";
+    if (!writeLine || !g_switchFrameStage ||
+        std::strncmp(g_switchFrameStage, pipelineStagePrefix,
+            sizeof(pipelineStagePrefix) - 1) != 0 ||
+        !std::strstr(g_switchFrameStage, "_create_call"))
         return;
 
     const SwitchPipelineCrashSnapshot &snapshot = g_switchPipelineCrashSnapshot;
@@ -7892,7 +7893,8 @@ bool IDirect3DDevice9::EnsurePipeline()
                 6u, this, &m_pipelines, m_pipelines.size(), key,
                 m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
                 VK_NULL_HANDLE);
-            g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq90_fragment_probe_create_call";
             VkPipeline probePipeline = VK_NULL_HANDLE;
             const VkResult probeResult = vkCreateGraphicsPipelines(
                 m_backend->Device(), VK_NULL_HANDLE, 1,
@@ -8034,7 +8036,8 @@ bool IDirect3DDevice9::EnsurePipeline()
                     6u, this, &m_pipelines, m_pipelines.size(), key,
                     m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
                     VK_NULL_HANDLE);
-                g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq90_shuffle_probe_create_call";
                 probeResult = vkCreateGraphicsPipelines(
                     m_backend->Device(), VK_NULL_HANDLE, 1,
                     &probeInfo, nullptr, &probePipeline);
@@ -8124,7 +8127,8 @@ bool IDirect3DDevice9::EnsurePipeline()
                     6u, this, &m_pipelines, m_pipelines.size(), key,
                     m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
                     VK_NULL_HANDLE);
-                g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq90_composite_probe_create_call";
                 compositePipelineResult = vkCreateGraphicsPipelines(
                     m_backend->Device(), VK_NULL_HANDLE, 1,
                     &compositeInfo, nullptr, &compositePipeline);
@@ -8378,7 +8382,8 @@ bool IDirect3DDevice9::EnsurePipeline()
                     VK_NULL_HANDLE);
                 Switch_LogWrite(
                     "[KisakCOD][VK STAGE PROBE] seq=64 action=original_vs_minimal_ps begin\n");
-                g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_minimal_ps_create_call";
                 seq64MinimalPipelineResult = vkCreateGraphicsPipelines(
                     m_backend->Device(), VK_NULL_HANDLE, 1,
                     &minimalInfo, nullptr, &seq64MinimalPipeline);
@@ -8505,9 +8510,8 @@ bool IDirect3DDevice9::EnsurePipeline()
                     6u, this, &m_pipelines, m_pipelines.size(), key,
                     m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
                     VK_NULL_HANDLE);
-                g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
                 g_switchFrameStage =
-                    "frame/render/vulkan/pipeline/seq64_opcode_probe_create";
+                    "frame/render/vulkan/pipeline/seq64_opcode_probe_create_call";
                 pipelineResult = vkCreateGraphicsPipelines(
                     m_backend->Device(), VK_NULL_HANDLE, 1,
                     &probeInfo, nullptr, &probePipeline);
@@ -8555,7 +8559,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     RecordSwitchVkPipelineTrace(
         6u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
-    g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+    g_switchFrameStage = "frame/render/vulkan/pipeline/main_create_call";
     const VkResult pipelineResult = vkCreateGraphicsPipelines(
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
     RecordSwitchVkPipelineTrace(
