@@ -5816,6 +5816,12 @@ bool IDirect3DDevice9::EnsurePipeline()
     info.pDynamicState = &dynamic;
     info.layout = m_backend->PipelineLayout();
     info.renderPass = VK_NULL_HANDLE;
+#ifdef __SWITCH__
+    // NVK 26.2.x workaround experiment: disable optional graphics-pipeline
+    // optimization to test whether the pipeline-27 crash depends on an
+    // optimizer-produced vector SSA shape. Register allocation remains enabled.
+    info.flags = VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
+#endif
 
     // Keep a memory-only snapshot of the exact shader pair and compact pipeline
     // state. The exception handler prints it only if this vkCreate call faults.
