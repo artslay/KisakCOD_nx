@@ -6081,27 +6081,26 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchPipelineCrashSnapshot.valid = true;
 
 #ifdef __SWITCH__
-    // The 1.3 API-version A/B test did not change the crash. Temporarily skip
-    // only the exact SPIR-V pair that faults in NAK's register allocator so
-    // rendering can progress far enough to identify the next failing shader.
-    if (vsSpirvHash == 0xaf1d39bec3f1bf7dull &&
-        psSpirvHash == 0xcd1031f57ecc7957ull)
+    // The same vertex SPIR-V crashed NAK's register allocator with multiple
+    // fragment shaders. Temporarily skip every pipeline using this exact VS
+    // hash, rather than chasing each pixel-shader variant independently.
+    if (vsSpirvHash == 0xaf1d39bec3f1bf7dull)
     {
-        static bool loggedSkippedPair = false;
-        if (!loggedSkippedPair)
+        static bool loggedSkippedVertexShader = false;
+        if (!loggedSkippedVertexShader)
         {
             char skipMsg[256];
             std::snprintf(skipMsg, sizeof(skipMsg),
-                "[KisakCOD][VK PIPELINE PROBE] skipped known crashing NAK shader pair vs=%016llx ps=%016llx seq=%u\n",
+                "[KisakCOD][VK PIPELINE PROBE] skipped known crashing NAK vertex shader vs=%016llx ps=%016llx seq=%u\n",
                 static_cast<unsigned long long>(vsSpirvHash),
                 static_cast<unsigned long long>(psSpirvHash),
                 pipelineCreateSequence);
             Switch_LogWrite(skipMsg);
-            loggedSkippedPair = true;
+            loggedSkippedVertexShader = true;
         }
         g_switchSkippedKnownShaderPair = true;
         g_switchPipelineCrashSnapshot.valid = false;
-        g_switchFrameStage = "frame/render/vulkan/pipeline/known_shader_pair_skipped";
+        g_switchFrameStage = "frame/render/vulkan/pipeline/known_vertex_shader_skipped";
         return false;
     }
 #endif
