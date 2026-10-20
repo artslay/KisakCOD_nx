@@ -7630,7 +7630,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         else
         {
             Switch_LogWrite("[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_unpatched_ps skipped=no_source\n");
-        }        }
+        }
     }
 #endif
 
