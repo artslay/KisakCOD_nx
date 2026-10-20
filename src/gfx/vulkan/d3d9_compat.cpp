@@ -1256,6 +1256,87 @@ bool RepairUnusedZeroVectorShuffleSource(
     return true;
 }
 
+// MojoShader emits constant blocks as Uniform + Block, which Mesa NVK may
+// promote to its constant-buffer path. Represent these read-only blocks as
+// Uniform + BufferBlock instead; Vulkan maps that SPIR-V form to storage-buffer
+// descriptors without changing member offsets or packed constant-register data.
+bool ConvertUniformBlocksToStorageBuffers(
+    std::vector<uint32_t> &words,
+    uint32_t *convertedBlockCount)
+{
+    if (convertedBlockCount)
+        *convertedBlockCount = 0;
+    if (words.size() < 5 || words[0] != SpvMagicNumber)
+        return false;
+
+    std::unordered_map<uint32_t, uint32_t> uniformPointerPointee;
+    std::unordered_set<uint32_t> uniformBlockTypes;
+    std::unordered_set<uint32_t> blockDecoratedTypes;
+    std::unordered_set<uint32_t> bufferBlockDecoratedTypes;
+
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wordCount = 0;
+        SpvOp opcode{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &opcode))
+            return false;
+        const uint32_t *ins = &words[offset];
+
+        if (opcode == SpvOpTypePointer && wordCount >= 4 &&
+            ins[2] == SpvStorageClassUniform)
+        {
+            uniformPointerPointee[ins[1]] = ins[3];
+        }
+        else if (opcode == SpvOpDecorate && wordCount >= 3)
+        {
+            if (ins[2] == SpvDecorationBlock)
+                blockDecoratedTypes.insert(ins[1]);
+            else if (ins[2] == SpvDecorationBufferBlock)
+                bufferBlockDecoratedTypes.insert(ins[1]);
+        }
+        offset += wordCount;
+    }
+
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wordCount = 0;
+        SpvOp opcode{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &opcode))
+            return false;
+        const uint32_t *ins = &words[offset];
+        if (opcode == SpvOpVariable && wordCount >= 4 &&
+            ins[3] == SpvStorageClassUniform)
+        {
+            const auto pointer = uniformPointerPointee.find(ins[1]);
+            if (pointer != uniformPointerPointee.end() &&
+                blockDecoratedTypes.find(pointer->second) != blockDecoratedTypes.end())
+                uniformBlockTypes.insert(pointer->second);
+        }
+        offset += wordCount;
+    }
+
+    uint32_t converted = 0;
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wordCount = 0;
+        SpvOp opcode{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &opcode))
+            return false;
+        if (opcode == SpvOpDecorate && wordCount >= 3 &&
+            words[offset + 2] == SpvDecorationBlock &&
+            uniformBlockTypes.find(words[offset + 1]) != uniformBlockTypes.end())
+        {
+            words[offset + 2] = SpvDecorationBufferBlock;
+            ++converted;
+        }
+        offset += wordCount;
+    }
+
+    if (convertedBlockCount)
+        *convertedBlockCount = converted;
+    return true;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -4224,7 +4305,7 @@ bool IDirect3DDevice9::BindUniformSet(
     write.dstSet = set;
     write.dstBinding = 0;
     write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     write.pBufferInfo = &bufferInfo;
     vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
     traceUniformBindStage("descriptor_updated", bytes, size, 1);
@@ -5362,6 +5443,13 @@ bool IDirect3DDevice9::EnsurePipeline()
 #endif
 
 #ifdef __SWITCH__
+        uint32_t convertedPixelConstantBlocks = 0;
+        if (!ConvertUniformBlocksToStorageBuffers(
+                pixelSpirv, &convertedPixelConstantBlocks))
+        {
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=pixel_constant_block_conversion\\n");
+            return false;
+        }
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
         m_pixelShader->linkedSpirv = pixelSpirv;
 
@@ -5463,6 +5551,14 @@ bool IDirect3DDevice9::EnsurePipeline()
             ++strippedVertexDebugTraceCount;
         }
 #endif
+
+        uint32_t convertedVertexConstantBlocks = 0;
+        if (!ConvertUniformBlocksToStorageBuffers(
+                m_vertexShader->spirv, &convertedVertexConstantBlocks))
+        {
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=vertex_constant_block_conversion\\n");
+            return false;
+        }
 
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/finalize";
         VkShaderModuleCreateInfo vsInfo{};
