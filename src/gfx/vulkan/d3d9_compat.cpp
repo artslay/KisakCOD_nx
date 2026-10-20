@@ -2270,7 +2270,7 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
         {
             char fileLine[320];
             std::snprintf(fileLine, sizeof(fileLine),
-                "[KisakCOD][VK CRASH SPIRV FILE] seq=%u stage=%s hash=%016llx path=sdmc:/switch/KisakCOD/game/nak_candidate_seq%u_%s_%016llx.spv\\n",
+                "[KisakCOD][VK CRASH SPIRV FILE] seq=%u stage=%s hash=%016llx path=sdmc:/switch/KisakCOD/game/nak_candidate_seq%u_%s_%016llx.spv\n",
                 snapshot.sequence, stage, static_cast<unsigned long long>(hash),
                 snapshot.sequence, stage, static_cast<unsigned long long>(hash));
             writeLine(fileLine);
