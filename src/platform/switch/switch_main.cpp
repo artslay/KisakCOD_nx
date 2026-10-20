@@ -628,7 +628,6 @@ static void SwitchLogVulkanRuntime()
     vkDestroyInstance(instance, nullptr);
 }
 
-
 static bool SwitchConfigureNakSpillProbe()
 {
     const char *current = std::getenv("NAK_DEBUG");
@@ -663,6 +662,7 @@ static bool SwitchConfigureNakSpillProbe()
         return false;
     return ::setenv("NAK_DEBUG", combined, 1) == 0;
 }
+
 int main()
 {
     const bool nakSpillProbeConfigured = SwitchConfigureNakSpillProbe();
