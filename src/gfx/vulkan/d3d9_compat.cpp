@@ -2434,9 +2434,9 @@ bool ReplaceSwitchSpirvResultOpsWithUndef(
         firstOpcode > lastOpcode)
         return false;
 
-    std::vector<uint32_t> rewritten;
-    rewritten.reserve(words.size());
-    rewritten.insert(rewritten.end(), words.begin(), words.begin() + 5u);
+    std::unordered_map<size_t, std::pair<uint32_t, uint32_t>> undefAtOffset;
+    std::vector<uint32_t> undefDeclarations;
+    bool inFunction = false;
     uint32_t count = 0u;
     for (size_t offset = 5u; offset < words.size();)
     {
@@ -2444,26 +2444,63 @@ bool ReplaceSwitchSpirvResultOpsWithUndef(
         SpvOp op{};
         if (!SpirvIsValidInstruction(words, offset, &wc, &op))
             return false;
+        if (op == SpvOpFunction)
+            inFunction = true;
+        else if (op == SpvOpFunctionEnd)
+            inFunction = false;
+
         const uint32_t opcode = static_cast<uint32_t>(op);
-        if (opcode >= firstOpcode && opcode <= lastOpcode)
+        if (inFunction && opcode >= firstOpcode && opcode <= lastOpcode)
         {
             if (wc < 3u)
                 return false;
-            // Image sampling (87-94) and VectorShuffle (79) all have the
-            // standard Result Type / Result ID prefix.
-            SpirvAppend(rewritten, SpvOpUndef, {words[offset + 1u], words[offset + 2u]});
+            // Record the result type/ID now; OpUndef declarations are emitted
+            // in the module-scope types/constants section, not in the function.
+            undefAtOffset.emplace(
+                offset, std::make_pair(words[offset + 1u], words[offset + 2u]));
             ++count;
-        }
-        else
-        {
-            rewritten.insert(
-                rewritten.end(), words.begin() + offset, words.begin() + offset + wc);
         }
         offset += wc;
     }
-
     if (!count)
         return false;
+
+    // Insert the new OpUndef declarations after types/constants but before
+    // module-scope variables and functions, as required by SPIR-V logical layout.
+    bool defsInserted = false;
+    inFunction = false;
+    std::vector<uint32_t> rewritten;
+    rewritten.reserve(words.size() + static_cast<size_t>(count) * 3u);
+    rewritten.insert(rewritten.end(), words.begin(), words.begin() + 5u);
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (!inFunction && !defsInserted &&
+            (op == SpvOpVariable || op == SpvOpFunction))
+        {
+            for (const auto &entry : undefAtOffset)
+                SpirvAppend(rewritten, SpvOpUndef,
+                    {entry.second.first, entry.second.second});
+            defsInserted = true;
+        }
+
+        const auto undef = undefAtOffset.find(offset);
+        if (undef == undefAtOffset.end())
+            rewritten.insert(
+                rewritten.end(), words.begin() + offset, words.begin() + offset + wc);
+
+        if (op == SpvOpFunction)
+            inFunction = true;
+        else if (op == SpvOpFunctionEnd)
+            inFunction = false;
+        offset += wc;
+    }
+    if (!defsInserted)
+        return false;
+
     rewritten[3] = words[3];
     words.swap(rewritten);
     if (replacedCount)
@@ -7604,11 +7641,9 @@ bool IDirect3DDevice9::EnsurePipeline()
                 vkDestroyShaderModule(m_backend->Device(), probeModule, nullptr);
         };
 
-        // First remove both sample and shuffle results in one variant. The
-        // sample-only probe crashed inside NVK before returning, so don't repeat
-        // it here; follow the combined test with the shuffle-only comparison.
+        // Keep this boot to one potentially crashing pipeline probe so the
+        // log cleanly distinguishes an accepted combined rewrite from a driver fault.
         runSeq64PixelOpcodeProbe("sample_and_shuffle_to_undef", 87u, 94u);
-        runSeq64PixelOpcodeProbe("vector_shuffle_to_undef", 79u, 79u);
     }
 #endif
 
