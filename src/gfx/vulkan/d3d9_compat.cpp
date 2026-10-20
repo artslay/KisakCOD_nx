@@ -6645,6 +6645,72 @@ bool IDirect3DDevice9::EnsurePipeline()
             return false;
         }
 
+        const int maxInterfaceEntries =
+            static_cast<int>(MOJOSHADER_USAGE_TOTAL) * 16;
+        const auto invalidParseInterface = [maxInterfaceEntries](
+            const MOJOSHADER_parseData *parse) {
+            return parse->attribute_count < 0 ||
+                parse->attribute_count > maxInterfaceEntries ||
+                parse->output_count < 0 ||
+                parse->output_count > maxInterfaceEntries ||
+                parse->sampler_count < 0 || parse->sampler_count > 16 ||
+                (parse->attribute_count > 0 && !parse->attributes) ||
+                (parse->output_count > 0 && !parse->outputs) ||
+                (parse->sampler_count > 0 && !parse->samplers);
+        };
+        if (invalidParseInterface(sourceVertexParse) ||
+            invalidParseInterface(sourcePixelParse))
+        {
+            char msg[320];
+            std::snprintf(msg, sizeof(msg),
+                "[KisakCOD][VK LINK REJECT] reason=invalid_parse_interface decl=%llu vs=%llu vAttr=%d vOut=%d vSamplers=%d pAttr=%d pOut=%d pSamplers=%d\n",
+                static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                sourceVertexParse->attribute_count,
+                sourceVertexParse->output_count,
+                sourceVertexParse->sampler_count,
+                sourcePixelParse->attribute_count,
+                sourcePixelParse->output_count,
+                sourcePixelParse->sampler_count);
+            Switch_LogWrite(msg);
+            return false;
+        }
+
+#ifdef __SWITCH__
+        static uint32_t switchShaderLinkTraceCount = 0;
+        const bool traceShaderLink =
+            switchShaderLinkTraceCount < 256u ||
+            (m_decl && m_decl->serial == 356u &&
+             m_vertexShader->serial == 473u &&
+             m_pixelShader->serial == 651u);
+        if (traceShaderLink)
+        {
+            if (switchShaderLinkTraceCount < 256u)
+                ++switchShaderLinkTraceCount;
+            char trace[768];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VK LINK BEGIN] decl=%llu vs=%llu vParse=%p vOut=%p vLen=%d vAttrs=%p/%d vOutputs=%p/%d pParse=%p pOut=%p pLen=%d pAttrs=%p/%d pOutputs=%p/%d declAttrs=%zu\n",
+                static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                static_cast<const void *>(sourceVertexParse),
+                static_cast<const void *>(sourceVertexParse->output),
+                sourceVertexParse->output_len,
+                static_cast<const void *>(sourceVertexParse->attributes),
+                sourceVertexParse->attribute_count,
+                static_cast<const void *>(sourceVertexParse->outputs),
+                sourceVertexParse->output_count,
+                static_cast<const void *>(sourcePixelParse),
+                static_cast<const void *>(sourcePixelParse->output),
+                sourcePixelParse->output_len,
+                static_cast<const void *>(sourcePixelParse->attributes),
+                sourcePixelParse->attribute_count,
+                static_cast<const void *>(sourcePixelParse->outputs),
+                sourcePixelParse->output_count,
+                m_decl ? m_decl->elements.size() : 0u);
+            Switch_LogWrite(trace);
+        }
+#endif
+
         std::vector<uint32_t> linkedVertexWords(
             static_cast<size_t>(sourceVertexParse->output_len) / sizeof(uint32_t));
         std::vector<uint32_t> linkedPixelWords(
@@ -6663,7 +6729,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         linkedPixelParse.output =
             reinterpret_cast<const char *>(linkedPixelWords.data());
 
-        g_switchFrameStage = "frame/render/vulkan/pipeline/link_shaders";
+        g_switchFrameStage = "frame/render/vulkan/pipeline/link_shaders/call";
         int linkedVertexCodeBytes = 0;
         int linkedPixelCodeBytes = 0;
         const int linkResult = MOJOSHADER_linkSPIRVShaders(
@@ -6673,6 +6739,20 @@ bool IDirect3DDevice9::EnsurePipeline()
             static_cast<int>(attributes.size()),
             &linkedVertexCodeBytes,
             &linkedPixelCodeBytes);
+        g_switchFrameStage = "frame/render/vulkan/pipeline/link_shaders/return";
+#ifdef __SWITCH__
+        if (traceShaderLink)
+        {
+            char trace[256];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VK LINK END] decl=%llu vs=%llu ps=%llu result=%d vsBytes=%d psBytes=%d\n",
+                static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                linkResult, linkedVertexCodeBytes, linkedPixelCodeBytes);
+            Switch_LogWrite(trace);
+        }
+#endif
         if (linkResult <= 0 ||
             linkedVertexCodeBytes <= 0 ||
             linkedPixelCodeBytes <= 0 ||
@@ -6750,15 +6830,18 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
 #endif
 
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/pixel_copy";
         std::vector<uint32_t> pixelSpirv(
             reinterpret_cast<const uint32_t *>(linkedPixelParse.output),
             reinterpret_cast<const uint32_t *>(linkedPixelParse.output) + psBytes / sizeof(uint32_t));
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/pixel_strip_debug";
         uint32_t removedPixelDebugInstructions = 0;
         if (!StripSpirvDebugInstructions(pixelSpirv, &removedPixelDebugInstructions))
         {
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=strip_pixel_spirv_debug\n");
             return false;
         }
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/pixel_repair_shuffle";
         uint32_t repairedPixelShuffleOperands = 0;
         if (!RepairUnusedZeroVectorShuffleSource(pixelSpirv, &repairedPixelShuffleOperands))
         {
@@ -6864,6 +6947,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             }
         }
 #endif
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
         unpatchedPixelSpirvForProbe = pixelSpirv;
         m_pixelShader->linkedSpirv = pixelSpirv;
 
@@ -6872,6 +6956,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         // optional SPIR-V debug instructions before driver compilation.
         pipelineAlphaFuncSpecId = 0;
         pipelineAlphaRefSpecId = 0;
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/alpha_patch";
         if (useAlphaTestPatch &&
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
@@ -6891,10 +6976,12 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_pixelShader->alphaFuncSpecId = pipelineAlphaFuncSpecId;
         m_pixelShader->alphaRefSpecId = pipelineAlphaRefSpecId;
         m_pixelShader->spirv = pixelSpirv;
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/vertex_copy";
         m_vertexShader->spirv.assign(
             reinterpret_cast<const uint32_t *>(linkedVertexParse.output),
             reinterpret_cast<const uint32_t *>(linkedVertexParse.output) +
                 vsBytes / sizeof(uint32_t));
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/vertex_strip_debug";
         uint32_t removedVertexDebugInstructions = 0;
         if (!StripSpirvDebugInstructions(
                 m_vertexShader->spirv, &removedVertexDebugInstructions))
@@ -6902,6 +6989,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=strip_vertex_spirv_debug\n");
             return false;
         }
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/vertex_repair_shuffle";
         uint32_t repairedVertexShuffleOperands = 0;
         if (!RepairUnusedZeroVectorShuffleSource(
                 m_vertexShader->spirv, &repairedVertexShuffleOperands))
@@ -6932,6 +7020,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
 #endif
 
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/finalize";
         // Optional, hash-gated optimizer A/B for the one NAK register-allocation
         // crash pair. Missing files leave normal shader compilation untouched.
         (void)TryLoadSwitchOptimizedPipeline31Spirv(
