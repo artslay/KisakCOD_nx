@@ -455,10 +455,9 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
             "[KisakCOD][VK DRIVER] NVK_DEBUG coherent and no_cbuf already enabled\n");
     }
 
-    // Restore the previous stable Switch NAK configuration. The crash is
-    // inside register allocation, and the earlier serial,nougpr configuration
-    // avoids NAK's uniform-GPR allocation path. Keep an explicit opt-out for A/B.
-    // Preserve debug flags supplied by the runtime.
+    // Preserve debug flags supplied by the runtime. The current A/B test
+    // keeps serial+spill but re-enables NAK uniform-GPR allocation to compare
+    // against the serial,nougpr path that still faults in _free_r.
     const char *existingNakDebug = std::getenv("NAK_DEBUG");
     std::string nakDebug = existingNakDebug ? existingNakDebug : "";
     auto hasNakFlag = [&nakDebug](const char *flag) {
