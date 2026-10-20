@@ -7688,6 +7688,17 @@ bool IDirect3DDevice9::EnsurePipeline()
             "[KisakCOD][VK PIPELINE PROBE] action=seq337_enable_optimization flags=0 vs=768ca006570017d7 ps=885d96a3511dadde\n");
     }
 
+    // The optimized seq337 pipeline let startup progress; the next captured
+    // NVK crash is this alpha-test-disabled pair. Change only its optimization
+    // flag to determine whether the NAK optimized path avoids the compiler fault.
+    if (vsSpirvHash == 0x997711f543b23231ull &&
+        psSpirvHash == 0x51e6b9e59b26657eull)
+    {
+        info.flags = 0u;
+        Switch_LogWrite(
+            "[KisakCOD][VK PIPELINE PROBE] action=seq350_enable_optimization flags=0 vs=997711f543b23231 ps=51e6b9e59b26657e\n");
+    }
+
     // Isolate this exact crashing pair before its real pipeline call:
     // (1) original VS + trivial PS; (2) original VS + linked PS before alpha-test rewrite.
     if (vsSpirvHash == 0x3191a056e9509bfcull &&
