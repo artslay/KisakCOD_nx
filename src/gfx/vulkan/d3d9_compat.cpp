@@ -445,6 +445,84 @@ bool WriteSwitchNakCandidateSpirv(
     Switch_LogWrite(trace);
     return writeOk && closeOk;
 }
+
+// Hash-gated, bounded opcode census for the exact native seq=64 crash pair.
+void TraceSwitchNakOpcodeHistogram(
+    const char *stage, uint32_t sequence,
+    const std::vector<uint32_t> &words, uint64_t expectedHash)
+{
+    if (HashSpirvWords(words) != expectedHash)
+        return;
+    if (words.size() < 5u || words[0] != SpvMagicNumber)
+    {
+        Switch_LogWrite("[KisakCOD][VK SPIRV OPCODES] seq=64 parse=bad_header\\n");
+        return;
+    }
+    std::array<uint32_t, 1024> counts{};
+    size_t offset = 5u;
+    uint32_t instructionCount = 0u;
+    for (; offset < words.size();)
+    {
+        const uint32_t first = words[offset];
+        const uint32_t wc = first >> 16;
+        const uint32_t op = first & 0xffffu;
+        if (wc == 0u || wc > words.size() - offset)
+        {
+            char bad[192];
+            std::snprintf(bad, sizeof(bad),
+                "[KisakCOD][VK SPIRV OPCODES] seq=%u stage=%s parse=bad_instruction offset=%zu first=%08x remaining=%zu\\n",
+                sequence, stage, offset, first, words.size() - offset);
+            Switch_LogWrite(bad);
+            return;
+        }
+        if (op < counts.size())
+            ++counts[op];
+        ++instructionCount;
+        offset += wc;
+    }
+    uint32_t imageOps = 0u;
+    for (uint32_t op = 86u; op <= 107u; ++op)
+        imageOps += counts[op];
+    char line[1024];
+    int written = std::snprintf(line, sizeof(line),
+        "[KisakCOD][VK SPIRV OPCODES] seq=%u stage=%s words=%zu bound=%u instructions=%u image=%u sample=%u load=%u store=%u access=%u shuffle=%u composite=%u extinst=%u call=%u phi=%u kill=%u terminate=%u demote=%u top=",
+        sequence, stage, words.size(), words[3], instructionCount, imageOps,
+        counts[87] + counts[88] + counts[89] + counts[90] +
+            counts[91] + counts[92] + counts[93] + counts[94],
+        counts[61], counts[62], counts[65], counts[79],
+        counts[80] + counts[81] + counts[82], counts[12], counts[57],
+        counts[245], counts[252], counts[441], counts[538]);
+    if (written < 0)
+        return;
+    size_t used = static_cast<size_t>(written);
+    if (used >= sizeof(line))
+        used = sizeof(line) - 1u;
+    std::array<bool, 1024> emitted{};
+    for (unsigned int rank = 0; rank < 14u && used + 16u < sizeof(line); ++rank)
+    {
+        uint32_t bestOp = UINT32_MAX, bestCount = 0u;
+        for (uint32_t op = 0u; op < counts.size(); ++op)
+            if (!emitted[op] && counts[op] > bestCount)
+            {
+                bestOp = op;
+                bestCount = counts[op];
+            }
+        if (bestOp == UINT32_MAX)
+            break;
+        emitted[bestOp] = true;
+        const int appended = std::snprintf(line + used, sizeof(line) - used,
+            "%s%u:%u", rank ? "," : "", bestOp, bestCount);
+        if (appended < 0 || static_cast<size_t>(appended) >= sizeof(line) - used)
+            break;
+        used += static_cast<size_t>(appended);
+    }
+    if (used + 2u < sizeof(line))
+    {
+        line[used++] = '\\n';
+        line[used] = '\\0';
+    }
+    Switch_LogWrite(line);
+}
 #endif
 
 bool TryLoadSwitchOptimizedPipeline31Spirv(
@@ -7085,6 +7163,10 @@ bool IDirect3DDevice9::EnsurePipeline()
 
         std::vector<uint32_t> seq64DiagnosticPixelSpirv = m_pixelShader->spirv;
         const uint64_t oldKillReturnHash = HashSpirvWords(seq64DiagnosticPixelSpirv);
+        TraceSwitchNakOpcodeHistogram(
+            "vs", 64u, m_vertexShader->spirv, 0xcb5e4b84e2b977e4ull);
+        TraceSwitchNakOpcodeHistogram(
+            "ps", 64u, m_pixelShader->spirv, 0x397081631095378cull);
         uint32_t killReturnCount = 0u;
         if (ReplaceCapturedSeq64PixelKillWithReturnForProbe(
                 seq64DiagnosticPixelSpirv, &killReturnCount))
