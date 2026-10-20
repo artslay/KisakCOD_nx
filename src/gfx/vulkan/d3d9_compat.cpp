@@ -540,6 +540,7 @@ void TraceSwitchNakShuffleAudit(
     const uint32_t bound = words[3];
     std::vector<uint32_t> resultTypeById(bound, 0u);
     std::vector<uint32_t> vectorLengthByType(bound, 0u);
+    std::vector<uint32_t> vectorComponentTypeByType(bound, 0u);
     std::vector<uint8_t> isVectorType(bound, 0u);
 
     for (size_t offset = 5u; offset < words.size();)
@@ -557,20 +558,27 @@ void TraceSwitchNakShuffleAudit(
         }
         const uint32_t opcode = static_cast<uint32_t>(op);
         const uint32_t *ins = &words[offset];
-        if (opcode == 23u && wc >= 4u && ins[1] < bound)
+        if (opcode == 23u && wc >= 4u && ins[1] < bound && ins[2] < bound)
         {
             isVectorType[ins[1]] = 1u;
             vectorLengthByType[ins[1]] = ins[3];
+            vectorComponentTypeByType[ins[1]] = ins[2];
         }
         else if (wc >= 3u)
         {
+            // OpExtInst (12) uses the same result-type/result-ID prefix as
+            // arithmetic. Omitting it mislabels later shuffles of ExtInst
+            // results as unknown. Include other typed-result instructions too.
             const bool typedResult =
-                opcode == 1u || (opcode >= 41u && opcode <= 52u) ||
-                opcode == 57u || opcode == 59u || opcode == 61u ||
+                opcode == 1u || opcode == 12u ||
+                (opcode >= 41u && opcode <= 52u) ||
+                opcode == 55u || opcode == 57u || opcode == 59u || opcode == 61u ||
                 (opcode >= 65u && opcode <= 69u) ||
                 (opcode >= 77u && opcode <= 84u) ||
                 (opcode >= 86u && opcode <= 98u) ||
-                (opcode >= 109u && opcode <= 205u);
+                (opcode >= 109u && opcode <= 205u) ||
+                opcode == 227u || (opcode >= 229u && opcode <= 242u) ||
+                opcode == 245u;
             if (typedResult && ins[1] < bound && ins[2] < bound)
                 resultTypeById[ins[2]] = ins[1];
         }
@@ -579,6 +587,7 @@ void TraceSwitchNakShuffleAudit(
 
     uint32_t total = 0u, badWordCount = 0u, unknownType = 0u;
     uint32_t badSelector = 0u, wrongResultWidth = 0u, undefSelector = 0u;
+    uint32_t componentTypeMismatch = 0u;
     uint32_t firstOnly = 0u, secondOnly = 0u, mixed = 0u;
     uint32_t sameSource = 0u, zeroSecondSource = 0u;
     char examples[240]{};
@@ -617,12 +626,24 @@ void TraceSwitchNakShuffleAudit(
                 }
                 else
                 {
-                    const uint32_t n1 = vectorLengthByType[resultTypeById[vector1Id]];
-                    const uint32_t n2 = vectorLengthByType[resultTypeById[vector2Id]];
+                    const uint32_t sourceType1 = resultTypeById[vector1Id];
+                    const uint32_t sourceType2 = resultTypeById[vector2Id];
+                    const uint32_t n1 = vectorLengthByType[sourceType1];
+                    const uint32_t n2 = vectorLengthByType[sourceType2];
                     const uint32_t nr = vectorLengthByType[typeId];
                     if (nr != wc - 5u)
                     {
                         ++wrongResultWidth;
+                        bad = true;
+                    }
+                    // OpVectorShuffle requires the result and both inputs to
+                    // have identical scalar component types.
+                    if (vectorComponentTypeByType[typeId] !=
+                            vectorComponentTypeByType[sourceType1] ||
+                        vectorComponentTypeByType[typeId] !=
+                            vectorComponentTypeByType[sourceType2])
+                    {
+                        ++componentTypeMismatch;
                         bad = true;
                     }
                     bool used1 = false, used2 = false;
@@ -662,10 +683,10 @@ void TraceSwitchNakShuffleAudit(
 
     char line[768];
     std::snprintf(line, sizeof(line),
-        "[KisakCOD][VK SPIRV SHUFFLE] seq=%u stage=%s total=%u bad_wc=%u unknown_type=%u result_width=%u bad_selector=%u undef=%u first_only=%u second_only=%u mixed=%u same_src=%u zero_src2=%u examples=%s\n",
+        "[KisakCOD][VK SPIRV SHUFFLE] seq=%u stage=%s total=%u bad_wc=%u unknown_type=%u result_width=%u component_type_mismatch=%u bad_selector=%u undef=%u first_only=%u second_only=%u mixed=%u same_src=%u zero_src2=%u examples=%s\\n",
         sequence, stage, total, badWordCount, unknownType, wrongResultWidth,
-        badSelector, undefSelector, firstOnly, secondOnly, mixed, sameSource,
-        zeroSecondSource, examplesUsed ? examples : "none");
+        componentTypeMismatch, badSelector, undefSelector, firstOnly, secondOnly,
+        mixed, sameSource, zeroSecondSource, examplesUsed ? examples : "none");
     Switch_LogWrite(line);
 }
 
