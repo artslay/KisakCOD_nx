@@ -498,6 +498,16 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         addedNakFlag = true;
     }
 
+    // Diagnostic A/B: force NAK's register allocator through its spill path.
+    // Preserve serial+nougpr and any debug flags supplied by the runtime.
+    if (!hasNakFlag("spill"))
+    {
+        if (!nakDebug.empty())
+            nakDebug += ',';
+        nakDebug += "spill";
+        addedNakFlag = true;
+    }
+
     if (addedNakFlag)
     {
         if (::setenv("NAK_DEBUG", nakDebug.c_str(), 1) != 0)
