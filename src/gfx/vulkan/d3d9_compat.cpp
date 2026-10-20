@@ -683,7 +683,7 @@ void TraceSwitchNakShuffleAudit(
 
     char line[768];
     std::snprintf(line, sizeof(line),
-        "[KisakCOD][VK SPIRV SHUFFLE] seq=%u stage=%s total=%u bad_wc=%u unknown_type=%u result_width=%u component_type_mismatch=%u bad_selector=%u undef=%u first_only=%u second_only=%u mixed=%u same_src=%u zero_src2=%u examples=%s\\n",
+        "[KisakCOD][VK SPIRV SHUFFLE] seq=%u stage=%s total=%u bad_wc=%u unknown_type=%u result_width=%u component_type_mismatch=%u bad_selector=%u undef=%u first_only=%u second_only=%u mixed=%u same_src=%u zero_src2=%u examples=%s\n",
         sequence, stage, total, badWordCount, unknownType, wrongResultWidth,
         componentTypeMismatch, badSelector, undefSelector, firstOnly, secondOnly,
         mixed, sameSource, zeroSecondSource, examplesUsed ? examples : "none");
