@@ -5941,7 +5941,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 char cubeSampleProbeTrace[256];
                 std::snprintf(cubeSampleProbeTrace, sizeof(cubeSampleProbeTrace),
-                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_to_implicit count=%u old_hash=%016llx new_hash=%016llx\\n",
+                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_to_implicit count=%u old_hash=%016llx new_hash=%016llx\n",
                     implicitCubeSampleCount,
                     static_cast<unsigned long long>(oldCubeSampleProbeHash),
                     static_cast<unsigned long long>(HashSpirvWords(pixelSpirv)));
@@ -5949,7 +5949,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             }
             else
             {
-                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_to_implicit failed=invalid_module\\n");
+                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_to_implicit failed=invalid_module\n");
             }
         }
 #endif
