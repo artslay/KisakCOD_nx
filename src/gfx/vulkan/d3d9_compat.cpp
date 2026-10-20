@@ -1350,7 +1350,8 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     std::vector<uint32_t> &words,
     uint32_t *loweredCount,
     uint32_t *copyObjectCount = nullptr,
-    uint32_t *scalarExtractCount = nullptr)
+    uint32_t *scalarExtractCount = nullptr,
+    uint32_t *estimatedGrowthWords = nullptr)
 {
     if (loweredCount)
         *loweredCount = 0u;
@@ -1358,6 +1359,8 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         *copyObjectCount = 0u;
     if (scalarExtractCount)
         *scalarExtractCount = 0u;
+    if (estimatedGrowthWords)
+        *estimatedGrowthWords = 0u;
     if (words.size() < 5u || words[0] != SpvMagicNumber ||
         words[3] < 2u || words[3] > 1000000u)
         return false;
@@ -1368,6 +1371,8 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     std::vector<uint32_t> vectorComponentTypeByType(originalBound, 0u);
     std::vector<uint8_t> isVectorType(originalBound, 0u);
     std::vector<size_t> shuffleOffsets;
+    uint64_t estimatedGrowth = 0u;
+    constexpr uint64_t kMaxEstimatedShuffleGrowthWords = 256u;
 
     for (size_t offset = 5u; offset < words.size();)
     {
@@ -1400,10 +1405,24 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
             resultTypeById[ins[2]] = ins[1];
 
         if (op == SpvOpVectorShuffle)
+        {
+            if (wc < 6u)
+                return false;
             shuffleOffsets.push_back(offset);
+            // Replacing N selector operands grows the module by at most 4*N
+            // words (one extract per selector plus the rebuilt composite).
+            // Keep the expansion bounded; larger shaders retain valid native
+            // OpVectorShuffle instructions instead of inflating NAK's SSA IR.
+            estimatedGrowth += 4ull * static_cast<uint64_t>(wc - 5u);
+        }
         offset += wc;
     }
+    if (estimatedGrowthWords)
+        *estimatedGrowthWords = estimatedGrowth > UINT32_MAX
+            ? UINT32_MAX : static_cast<uint32_t>(estimatedGrowth);
     if (shuffleOffsets.empty())
+        return false;
+    if (estimatedGrowth > kMaxEstimatedShuffleGrowthWords)
         return false;
 
     struct ShuffleInfo
@@ -5725,11 +5744,13 @@ bool IDirect3DDevice9::EnsurePipeline()
         uint32_t loweredPixelShuffleCount = 0u;
         uint32_t loweredPixelCopyObjects = 0u;
         uint32_t loweredPixelExtracts = 0u;
+        uint32_t pixelShuffleGrowthEstimate = 0u;
         const size_t pixelWordsBeforeLower = pixelSpirv.size();
-        if (LowerSwitchSpirvVectorShuffleToCompositeOps(
-                pixelSpirv, &loweredPixelShuffleCount,
-                &loweredPixelCopyObjects, &loweredPixelExtracts) &&
-            loweredPixelShuffleCount)
+        const bool loweredPixelShuffles = LowerSwitchSpirvVectorShuffleToCompositeOps(
+            pixelSpirv, &loweredPixelShuffleCount,
+            &loweredPixelCopyObjects, &loweredPixelExtracts,
+            &pixelShuffleGrowthEstimate);
+        if (loweredPixelShuffles && loweredPixelShuffleCount)
         {
             char loweringTrace[256];
             std::snprintf(loweringTrace, sizeof(loweringTrace),
@@ -5737,6 +5758,15 @@ bool IDirect3DDevice9::EnsurePipeline()
                 static_cast<unsigned long long>(m_pixelShader->serial),
                 loweredPixelShuffleCount, loweredPixelCopyObjects,
                 loweredPixelExtracts, pixelWordsBeforeLower, pixelSpirv.size());
+            Switch_LogWrite(loweringTrace);
+        }
+        else if (pixelShuffleGrowthEstimate > 256u)
+        {
+            char loweringTrace[224];
+            std::snprintf(loweringTrace, sizeof(loweringTrace),
+                "[KisakCOD][VK SPIRV LOWER] stage=ps serial=%llu action=preserve_native reason=expansion_budget estimated_growth=%u limit=256\n",
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                pixelShuffleGrowthEstimate);
             Switch_LogWrite(loweringTrace);
         }
 #ifdef __SWITCH__
@@ -5845,11 +5875,13 @@ bool IDirect3DDevice9::EnsurePipeline()
         uint32_t loweredVertexShuffleCount = 0u;
         uint32_t loweredVertexCopyObjects = 0u;
         uint32_t loweredVertexExtracts = 0u;
+        uint32_t vertexShuffleGrowthEstimate = 0u;
         const size_t vertexWordsBeforeLower = m_vertexShader->spirv.size();
-        if (LowerSwitchSpirvVectorShuffleToCompositeOps(
-                m_vertexShader->spirv, &loweredVertexShuffleCount,
-                &loweredVertexCopyObjects, &loweredVertexExtracts) &&
-            loweredVertexShuffleCount)
+        const bool loweredVertexShuffles = LowerSwitchSpirvVectorShuffleToCompositeOps(
+            m_vertexShader->spirv, &loweredVertexShuffleCount,
+            &loweredVertexCopyObjects, &loweredVertexExtracts,
+            &vertexShuffleGrowthEstimate);
+        if (loweredVertexShuffles && loweredVertexShuffleCount)
         {
             char loweringTrace[256];
             std::snprintf(loweringTrace, sizeof(loweringTrace),
@@ -5858,6 +5890,15 @@ bool IDirect3DDevice9::EnsurePipeline()
                 loweredVertexShuffleCount, loweredVertexCopyObjects,
                 loweredVertexExtracts, vertexWordsBeforeLower,
                 m_vertexShader->spirv.size());
+            Switch_LogWrite(loweringTrace);
+        }
+        else if (vertexShuffleGrowthEstimate > 256u)
+        {
+            char loweringTrace[224];
+            std::snprintf(loweringTrace, sizeof(loweringTrace),
+                "[KisakCOD][VK SPIRV LOWER] stage=vs serial=%llu action=preserve_native reason=expansion_budget estimated_growth=%u limit=256\n",
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                vertexShuffleGrowthEstimate);
             Switch_LogWrite(loweringTrace);
         }
 #ifdef __SWITCH__
