@@ -584,6 +584,45 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         }
     }
 
+    // Diagnose newlib free-list unlink faults (STR x1, [x0, #24]) separately
+    // from memset/DC ZVA faults. In this path x4 is the chunk being unlinked;
+    // reading its four header/link words shows which free-list pointer is bad.
+    const uintptr_t freeFaultPc = static_cast<uintptr_t>(ctx->pc.x);
+    if (ctx->far.x == 0x18u &&
+        ctx->cpu_gprs[0].x == 0u &&
+        (freeFaultPc & 3u) == 0u)
+    {
+        const uint32_t freeFaultInsn =
+            *reinterpret_cast<const volatile uint32_t *>(freeFaultPc);
+        const uintptr_t node =
+            static_cast<uintptr_t>(ctx->cpu_gprs[4].x);
+        if (freeFaultInsn == 0xf9000c01u &&
+            node >= 16u &&
+            node <= UINTPTR_MAX - 24u &&
+            (node & (alignof(uintptr_t) - 1u)) == 0u)
+        {
+            const volatile uintptr_t *chunk =
+                reinterpret_cast<const volatile uintptr_t *>(node);
+            const uintptr_t prevFoot = chunk[0];
+            const uintptr_t head = chunk[1];
+            const uintptr_t fd = chunk[2];
+            const uintptr_t bk = chunk[3];
+            std::snprintf(
+                line, sizeof(line),
+                "[KisakCOD][CRASH] FREE_LIST_STATE node=0x%016llx prev_foot=0x%016llx head=0x%016llx fd=0x%016llx bk=0x%016llx x0=0x%016llx x1=0x%016llx x2=0x%016llx x3=0x%016llx\\n",
+                static_cast<unsigned long long>(node),
+                static_cast<unsigned long long>(prevFoot),
+                static_cast<unsigned long long>(head),
+                static_cast<unsigned long long>(fd),
+                static_cast<unsigned long long>(bk),
+                static_cast<unsigned long long>(ctx->cpu_gprs[0].x),
+                static_cast<unsigned long long>(ctx->cpu_gprs[1].x),
+                static_cast<unsigned long long>(ctx->cpu_gprs[2].x),
+                static_cast<unsigned long long>(ctx->cpu_gprs[3].x));
+            Switch_LogCrashLine(line);
+        }
+    }
+
     for (int i = 0; i < 29; i += 2)
     {
         if (i + 1 < 29)
