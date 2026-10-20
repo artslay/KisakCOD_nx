@@ -1,0 +1,1228 @@
+========================================
+KisakCOD Switch engine log
+Log file: sdmc:/switch/KisakCOD/kisakcod.log
+========================================
+[KisakCOD][BOOT] ========================================
+[KisakCOD][BOOT] KisakCOD Switch SP starting
+[KisakCOD][BOOT] NRO entrypoint reached
+[KisakCOD][NAK PROBE] allocator spill mode disabled; set KISAK_NAK_FORCE_SPILL=1 to enable
+[KisakCOD][BOOT] Game data: sdmc:/switch/KisakCOD/game
+[KisakCOD][BOOT] Stage 1/7: initializing main thread
+[KisakCOD][BOOT] Stage 2/7: initializing parser
+[KisakCOD][BOOT] Stage 3/7: initializing dvars
+[KisakCOD][BOOT] Stage 4/7: initializing timing
+[KisakCOD][BOOT] Stage 5/7: initializing profile
+[KisakCOD][BOOT] Stage 6/7: initializing game engine
+[KisakCOD][BOOT] Input: Switch gamepad initialized
+[KisakCOD][BOOT] Graphics: probing Vulkan runtime
+[KisakCOD][BOOT] Vulkan GPU: NVIDIA Tegra X1 (GM20B) (NVK GM20B) (vendor=0x10de device=0x0fe0)
+[KisakCOD][BOOT] Vulkan API: 1.4.354 driver=0x06802004
+[KisakCOD][BOOT] Graphics: starting engine renderer
+KisakCoD4 1.0 build switch-aarch64 13620 Oct 20 2026 10:52:12 a18fdab3d9f4
+begin $init
+----- Switch FS_Startup -----
+Switch game root: sdmc:/switch/KisakCOD/game
+Game directory: main
+-----------------------------
+execing default.cfg from disk
+execing language.cfg from disk
+execing profiles/artslay/config.cfg from disk
+execing autoexec_dev.cfg from disk
+[KisakCOD][VMEM] operation=reserve address=0x311e5000 size=16777216 result=0x0
+Switch CPU threads: 3 (coreMask=0x7)
+execing ragdoll.cfg from disk
+----- Client Initialization -----
+----- Initializing Renderer ----
+----- Initializing Renderer ----
+----- Client Initialization Complete -----
+Attempting 44 kHz 16 bit [Windows default] sound
+[KisakCOD][VK DRIVER] enabled NVK_DEBUG=coherent,no_cbuf (Tegra coherence + disable UBO constant-buffer promotion)
+[KisakCOD][VK DRIVER] enabled NAK_DEBUG=serial,nougpr (diagnostic: serial execution + no uniform GPR allocation)
+[KisakCOD][VK] fill_mode_non_solid=1 shader_demote_helper=1 robust_buffer_access=1 texture_compression_bc=1
+[KisakCOD][VK DEVICE FAULT] extension=0 enabled=0 function=0
+[KisakCOD][VK SWAPCHAIN COLOR] format=44 colorspace=0 srgbAttachment=0
+[KisakCOD][VK] surface_transform current=0x1 supported=0x1 selected=0x1
+Loading fastfile code_post_gfx
+Loading fastfile ui
+Loading fastfile common
+Switch fastfile language: english
+Loaded zone 'code_post_gfx'
+Loaded fastfile code_post_gfx (872586 bytes)
+Loaded zone 'ui'
+Loaded fastfile ui (53174 bytes)
+Loaded zone 'common'
+Loaded fastfile common (75656851 bytes)
+Vulkan frame buffer: 1280 x 720
+[KisakCOD][VK BUFFER UPDATE] queued_dynamic_copies=disabled synchronized_fallback=1 reason=device_lost_isolation
+[KisakCOD][QUERY INIT] flush_event=1 fence_events=8
+[KisakCOD][CINEMATIC] spawn begin
+[KisakCOD][CINEMATIC] events initialized
+[KisakCOD][CINEMATIC] Sys_CreateThread begin
+[KisakCOD][CINEMATIC] thread lambda entered
+isakCOD][CINEMATIC] Sys_CreateThread returned
+Texture detail is set automatically.
+Using picmip 0 on most textures, 0 on normal maps, and 0 on specular maps
+[KisakCOD][CINEMATIC] before Sys_InitThread
+[KisakCOD][CINEMATIC] after Sys_InitThread
+
+------- sound system initialization -------
+------- sound system successfully initialized -------
+[KisakCOD][INTRO] com_introPlayed=0 drawSubmitted=0 completed=0 action=queue IW_logo
+[KisakCOD][INTRO] queued IW_logo -> atvi -> cod_intro
+end $init 4432 ms
+--- Common Initialization Complete ---
+[KisakCOD][FRAME STATE] conn=0 menu=0 fullscreen=0 uiCatch=0 openMenus=0 uiStarted=0 cgameDraw=0 cineStarted=0 cineFinished=0 cinePending=0
+[KisakCOD][VK FRAME] end_scene id=0 rendered=0 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/0 clears=1 stage=frame/scr/issue_commands/cmd20_profile/profile_done
+[KisakCOD][VK FRAME] end_frame_begin id=0 serial=1 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=1
+[KisakCOD][VK FRAME] end_frame_done id=0 result=0 source=0
+[KisakCOD][FRAME STATE] conn=0 menu=0 fullscreen=0 uiCatch=0 openMenus=0 uiStarted=1 cgameDraw=0 cineStarted=0 cineFinished=0 cinePending=0
+[KisakCOD][VK FRAME] end_scene id=1 rendered=0 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/0 clears=1 stage=frame/scr/issue_commands/cmd20_profile/profile_done
+[KisakCOD][VK FRAME] end_frame_begin id=1 serial=2 source=0 size=0x0 swapIndex=1 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=1 result=0 source=0
+[KisakCOD][BOOT] Stage 7/7: engine initialized
+[KisakCOD][BOOT] Entering applet/frame loop
+[KisakCOD][FRAME TIME SCALE] mode=scaled effective=0.000000 requested=1.000000 com=1.000000 timescale=1.000000 code=1.000000 fixed=0 maxFrameTime=100 cap=0
+execing devgui_main.cfg from fastfile
+execing devgui_scriptart.cfg from fastfile
+execing devgui_visibility.cfg from fastfile
+execing devgui_renderer.cfg from fastfile
+[KisakCOD][CINEMATIC COMMAND] name=IW_logo state=0
+[KisakCOD][FRAME STATE] conn=1 menu=0 fullscreen=0 uiCatch=0 openMenus=0 uiStarted=1 cgameDraw=0 cineStarted=0 cineFinished=0 cinePending=1
+[KisakCOD][BINK CODEC] open name=sdmc:/switch/KisakCOD/game/main/video/IW_logo.bik format=bink codec=binkvideo id=135 size=1280x720 frames=211 fps=2997/100
+[KisakCOD][VK FRAME] end_scene id=2 rendered=0 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/0 clears=1 stage=frame/scr/issue_commands/cmd20_profile/profile_done
+[KisakCOD][VK FRAME] end_frame_begin id=2 serial=3 source=0 size=0x0 swapIndex=2 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=2 result=0 source=0
+[KisakCOD][FRAME STATE] conn=1 menu=0 fullscreen=0 uiCatch=0 openMenus=0 uiStarted=1 cgameDraw=0 cineStarted=1 cineFinished=0 cinePending=1
+[KisakCOD][BINK FLOW] post-first-frame wait frame=2 elapsed=22 target=34 paused=0 finished=0
+[KisakCOD][STRETCH PIC CMD] #0 cmd=0x7e646024 bytes=56 material=0x184f674f0 white=0x184f674f0 cinematic=0x184f68ef0 default=0x184f67488 rect=1280.00x0.00
+[KisakCOD][STRETCH PIC CMD] #1 cmd=0x7e64605c bytes=56 material=0x184f674f0 white=0x184f674f0 cinematic=0x184f68ef0 default=0x184f67488 rect=1280.00x0.00
+[KisakCOD][STRETCH PIC CMD] #2 cmd=0x7e646094 bytes=56 material=0x184f68ef0 white=0x184f674f0 cinematic=0x184f68ef0 default=0x184f67488 rect=1280.00x720.00
+[KisakCOD][SHADER DEF] stage=ps count=4 highestRegister=3
+[KisakCOD][SHADER DEF] stage=vs count=1 highestRegister=4
+[KisakCOD][VK SHADER INTERFACE] n=0 decl=0xb40b8e9e0 declSerial=1 declType=0 elems=3 vs=0xb45bdd300/246 attrs=3 samplers=0 bytes=6816 ps=0xb45cb06c0/247 attrs=2 samplers=4 bytes=7396
+[KisakCOD][VK VERTEX ELEMENT] n=0 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=4 usage=0 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=0 i=1 stream=0 offset=16 vkOffset=16 type=4 effective=5 usage=10 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=0 i=2 stream=0 offset=20 vkOffset=20 type=1 effective=2 usage=5 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=0 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=0 i=1 name=v1 usage=10 index=0 location=1 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=0 i=2 name=v2 usage=5 index=0 location=2 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=247 removed=12 words=606
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=246 removed=13 words=459
+[KisakCOD][VK MODULE PREP] n=0 backend=0xb40b75a60 device=0xb418f0040 decl=0xb40b8e9e0 vs=0xb45bdd300/246 words=459 bytes=1836 code=0xb469ea720 ps=0xb45cb06c0/247 words=606 bytes=2424 code=0xb45cd6020
+[KisakCOD][VK MODULE VS RETURN] n=0 result=0 module=0xb46b36980
+[KisakCOD][VK MODULE PS RETURN] n=0 result=0 module=0xb4692c420
+[KisakCOD][VK PIPELINE] done seq=1 result=0 ms=1 handle=0xb46df0140
+[KisakCOD][VK FRAME] end_scene id=3 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=3 serial=4 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=3 result=0 source=0
+[KisakCOD][STRETCH PIC CMD] #3 cmd=0x6e041024 bytes=56 material=0x184f674f0 white=0x184f674f0 cinematic=0x184f68ef0 default=0x184f67488 rect=1280.00x0.00
+[KisakCOD][VK FRAME] end_scene id=4 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=4 serial=5 source=0 size=0x0 swapIndex=1 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=4 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=5 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=5 serial=6 source=0 size=0x0 swapIndex=2 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=5 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=6 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=6 serial=7 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=6 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=7 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=7 serial=8 source=0 size=0x0 swapIndex=1 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=7 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=8 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=8 serial=9 source=0 size=0x0 swapIndex=2 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=8 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=9 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=9 serial=10 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=9 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=10 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=10 serial=11 source=0 size=0x0 swapIndex=1 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=10 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=11 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=11 serial=12 source=0 size=0x0 swapIndex=2 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=11 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=12 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=12 serial=13 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=12 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=13 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=13 serial=14 source=0 size=0x0 swapIndex=1 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=13 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=14 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=14 serial=15 source=0 size=0x0 swapIndex=2 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=14 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=15 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=15 serial=16 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=0
+[KisakCOD][VK FRAME] end_frame_done id=15 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=16 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=17 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=18 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=19 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=20 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=21 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=22 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=23 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=24 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=25 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=26 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_scene id=120 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=120 serial=121 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=1
+[KisakCOD][VK FRAME] end_frame_done id=120 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=240 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/1 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=240 serial=241 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=1
+[KisakCOD][VK FRAME] end_frame_done id=240 result=0 source=0
+[KisakCOD][CIN SKIP FLOW] queued command continues; rendering enabled
+[KisakCOD][CIN SKIP] controller button pressed
+[KisakCOD][CINEMATIC COMMAND] name=atvi state=0
+[KisakCOD][BINK CODEC] open name=sdmc:/switch/KisakCOD/game/main/video/atvi.bik format=bink codec=binkvideo id=135 size=1280x720 frames=225 fps=2997/100
+[KisakCOD][BINK FLOW] post-first-frame wait frame=2 elapsed=7 target=34 paused=0 finished=0
+[KisakCOD][CIN SKIP FLOW] queued command continues; rendering enabled
+[KisakCOD][CIN SKIP] controller button pressed
+[KisakCOD][CINEMATIC COMMAND] name=cod_intro state=0
+[KisakCOD][BINK CODEC] open name=sdmc:/switch/KisakCOD/game/main/video/cod_intro.bik format=bink codec=binkvideo id=135 size=1280x720 frames=3021 fps=2997/100
+[KisakCOD][VK RETIRE] count=18 frame=283
+[KisakCOD][BINK FLOW] post-first-frame wait frame=2 elapsed=12 target=34 paused=0 finished=0
+[KisakCOD][CIN SKIP FLOW] returned to frontend; rendering enabled
+[KisakCOD][CIN SKIP] controller button pressed
+[KisakCOD][FRAME STATE] conn=0 menu=1 fullscreen=1 uiCatch=1 openMenus=2 uiStarted=1 cgameDraw=0 cineStarted=1 cineFinished=0 cinePending=0
+Save Message First Frame Shown: 10041
+[KisakCOD][SHADER DEF] stage=vs count=1 highestRegister=8
+[KisakCOD][VK SHADER INTERFACE] n=1 decl=0xb40b8e9e0 declSerial=1 declType=0 elems=3 vs=0xb42222140/18 attrs=3 samplers=0 bytes=7632 ps=0xb44e56100/19 attrs=2 samplers=1 bytes=5572
+[KisakCOD][VK VERTEX ELEMENT] n=1 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=4 usage=0 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=1 i=1 stream=0 offset=16 vkOffset=16 type=4 effective=5 usage=10 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=1 i=2 stream=0 offset=20 vkOffset=20 type=1 effective=2 usage=5 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=1 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=1 i=1 name=v1 usage=10 index=0 location=1 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=1 i=2 name=v2 usage=5 index=0 location=2 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=19 removed=7 words=170
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=18 removed=18 words=647
+[KisakCOD][VK MODULE PREP] n=1 backend=0xb40b75a60 device=0xb418f0040 decl=0xb40b8e9e0 vs=0xb42222140/18 words=647 bytes=2588 code=0xb46959d00 ps=0xb44e56100/19 words=170 bytes=680 code=0xb44e561c0
+[KisakCOD][VK MODULE VS RETURN] n=1 result=0 module=0xb46796460
+[KisakCOD][VK MODULE PS RETURN] n=1 result=0 module=0xb4cafdc00
+[KisakCOD][VK PIPELINE] done seq=2 result=0 ms=1 handle=0xb46df3c20
+[KisakCOD][FRAME STATE] conn=0 menu=1 fullscreen=1 uiCatch=1 openMenus=2 uiStarted=1 cgameDraw=0 cineStarted=0 cineFinished=0 cinePending=0
+[KisakCOD][CIN LOAD] map-loading cinematic marked active
+[KisakCOD][FRAME STATE] conn=3 menu=6 fullscreen=1 uiCatch=0 openMenus=1 uiStarted=1 cgameDraw=0 cineStarted=0 cineFinished=0 cinePending=1
+[KisakCOD][BINK CODEC] open name=sdmc:/switch/KisakCOD/game/main/video/killhouse_load.bik format=bink codec=binkvideo id=135 size=1280x720 frames=1121 fps=2997/100
+[KisakCOD][SHADER DEF] stage=ps count=4 highestRegister=3
+[KisakCOD][SHADER DEF] stage=vs count=1 highestRegister=4
+[KisakCOD][SHADER DEF] stage=vs count=1 highestRegister=8
+[KisakCOD][SHADER DEF] stage=ps count=4 highestRegister=3
+[KisakCOD][SHADER DEF] stage=vs count=1 highestRegister=4
+[KisakCOD][SHADER DEF] stage=vs count=1 highestRegister=8
+[KisakCOD][FRAME STATE] conn=3 menu=6 fullscreen=1 uiCatch=0 openMenus=1 uiStarted=1 cgameDraw=0 cineStarted=1 cineFinished=0 cinePending=1
+[KisakCOD][VK RETIRE] count=18 frame=326
+[KisakCOD][BINK FLOW] post-first-frame wait frame=2 elapsed=36 target=34 paused=0 finished=0
+[KisakCOD][SHADER DEF] stage=ps count=4 highestRegister=3
+[KisakCOD][SHADER DEF] stage=vs count=1 highestRegister=4
+[KisakCOD][SHADER DEF] stage=vs count=1 highestRegister=8
+------ Server Initialization ------
+Server: killhouse
+Texture detail is set automatically.
+Using picmip 0 on most textures, 0 on normal maps, and 0 on specular maps
+Save Message First Frame Shown: 10765
+Loading fastfile killhouse
+^6Activating map load profiler
+[KisakCOD][VK FRAME] end_scene id=360 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/6 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=360 serial=361 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=1
+[KisakCOD][VK FRAME] end_frame_done id=360 result=0 source=0
+[KisakCOD][CLIPMAP BOX BRUSH] map=maps/killhouse.d3dbsp numMaterials=490 numBrushes=20913 brushes=0xb64522b70 box=0xb64739150 boxIndex=-1 numsides=0 axial=[-1,-1,-1;-1,-1,-1]
+[KisakCOD][BSP ASSET] zone=killhouse sourceType=11 engineType=12 registerType=11 source=0xb647419e0 name=maps/killhouse.d3dbsp registered=0x185c75620 registeredName=maps/killhouse.d3dbsp same=0
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=0 name=~me_pinewood_spc-rgbl-11 track=0 size=256x512 fmt=894720068 vk=137 bytes=131072 hash=cbdf257bd26ae9d9 zero=8531/131072 head=200171f331857422
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=1 name=~me_woodboard_02_spc-rgb&me_w~f5166db2 track=0 size=512x512 fmt=894720068 vk=137 bytes=262144 hash=2935336b758008dd zero=3462/262144 head=110af963974be404
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=2 name=me_asphalt_road1_normal track=0 size=512x512 fmt=894720068 vk=137 bytes=262144 hash=58b375d2c0ff0494 zero=497/262144 head=8b7ba74c3a634980
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=3 name=me_cargocontainergreen_ext_roof_col track=0 size=512x512 fmt=827611204 vk=134 bytes=131072 hash=eaae3cd4bd0e39ba zero=1584/131072 head=a952694af8fce0fa
+[KisakCOD][VK IMAGE GPU VERIFY] n=0 name=me_cargocontainergreen_ext_roof_col size=512x512 fmt=827611204 vk=134 bytes=131072 readback=1 sourceHash=eaae3cd4bd0e39ba gpuHash=eaae3cd4bd0e39ba equal=1 srcHead=a952694af8fce0fa gpuHead=a952694af8fce0fa
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=4 name=~me_cargocontainertop_spc-rgb~4465eb4f track=0 size=512x512 fmt=894720068 vk=137 bytes=262144 hash=5ea0354b30fc98d0 zero=17950/262144 head=263184946dd1166d
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=5 name=ch_window3x4stone_col track=0 size=512x512 fmt=827611204 vk=134 bytes=131072 hash=6f2201090d9dd222 zero=855/131072 head=694ac7392afededc
+[KisakCOD][VK IMAGE GPU VERIFY] n=1 name=ch_window3x4stone_col size=512x512 fmt=827611204 vk=134 bytes=131072 readback=1 sourceHash=6f2201090d9dd222 gpuHash=6f2201090d9dd222 equal=1 srcHead=694ac7392afededc gpuHead=694ac7392afededc
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=6 name=com_fastrope_nml track=0 size=64x64 fmt=894720068 vk=137 bytes=4096 hash=3ba6783be7667892 zero=16/4096 head=e36fb97b972e550a
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=7 name=me_cargocontainerinteriorfloor_nml track=0 size=512x512 fmt=894720068 vk=137 bytes=262144 hash=803514c3184c3e7b zero=2783/262144 head=848048876cc8866c
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=8 name=ch_corrugated_01_col track=0 size=512x512 fmt=827611204 vk=134 bytes=131072 hash=e268110646776151 zero=301/131072 head=51846e6b26a52527
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=9 name=me_adobe_top track=0 size=1024x128 fmt=894720068 vk=138 bytes=131072 hash=53aaaf914fdd539d zero=29583/131072 head=ffff000000000000
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=10 name=me_metal_grey01_nml track=0 size=512x512 fmt=894720068 vk=137 bytes=262144 hash=eadd7416df33dff8 zero=28941/262144 head=8482b11d3bb66324
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=11 name=icbm_stripedwall track=0 size=512x512 fmt=827611204 vk=134 bytes=131072 hash=13725f46b202e621 zero=1464/131072 head=ca5a8210727d5f5f
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=12 name=ch_bulletinboardpaperdecals_2_col track=0 size=512x512 fmt=894720068 vk=138 bytes=262144 hash=2b56d4c44f4f457e zero=85554/262144 head=0001000000000000
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=13 name=ch_godray01 track=0 size=128x512 fmt=827611204 vk=134 bytes=32768 hash=48f586b2cfce6b01 zero=6759/32768 head=0100000055555555
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=14 name=me_woodboard_03_nml track=0 size=512x512 fmt=894720068 vk=137 bytes=262144 hash=3a8a9250a262b309 zero=39757/262144 head=8580ed59f46d5b3e
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=15 name=me_chainlink_fence_wire_normal track=0 size=256x32 fmt=894720068 vk=137 bytes=8192 hash=cf8e2ccc92d51b77 zero=153/8192 head=867b2e3dcc58c86f
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=16 name=ch_tar_roof_nml track=0 size=512x512 fmt=894720068 vk=137 bytes=262144 hash=fe384bb9bb7d0ee5 zero=1581/262144 head=8481216ddbb61dc2
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=17 name=ch_concretewall08_nml track=0 size=512x512 fmt=894720068 vk=137 bytes=262144 hash=5893f988f31a50fd zero=4600/262144 head=8871dba66dd20846
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=18 name=kh_wall_damp2_col track=0 size=512x512 fmt=894720068 vk=138 bytes=262144 hash=a96732052933c812 zero=67568/262144 head=0001000000000000
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=19 name=~me_cargocontainer_exttrimtal~529d66cf track=0 size=64x512 fmt=894720068 vk=137 bytes=32768 hash=80bd21fe98aa9129 zero=7630/32768 head=3233000000000000
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=20 name=me_garagedoor1 track=0 size=512x512 fmt=827611204 vk=134 bytes=131072 hash=259e39f2ec11cfee zero=13161/131072 head=f8bdef7b5ff8ff55
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=21 name=~ch_door_13_spc-r34g34b34&ch_~462f33e6 track=0 size=256x512 fmt=894720068 vk=137 bytes=131072 hash=0f9362c0c4af5e12 zero=7852/131072 head=8d7b13e8274db23c
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=22 name=me_trim_metal_conduit_col track=0 size=128x1024 fmt=827611204 vk=134 bytes=65536 hash=6bfac3d04f4da096 zero=839/65536 head=339df39ca9afd70a
+[KisakCOD][VK IMAGE UPLOAD PROBE] n=23 name=~ch_concretewall02_spc-r73g73b73l-11 track=0 size=512x512 fmt=894720068 vk=137 bytes=262144 hash=222bb79b190f4529 zero=27862/262144 head=051f706ddbb6111b
+[KisakCOD][VK FRAME] end_scene id=480 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/6 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=480 serial=481 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=1
+[KisakCOD][VK FRAME] end_frame_done id=480 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=600 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/10 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=600 serial=601 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=1
+[KisakCOD][VK FRAME] end_frame_done id=600 result=0 source=0
+[KisakCOD][VK FRAME] end_scene id=720 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/12 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=720 serial=721 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=1
+[KisakCOD][VK FRAME] end_frame_done id=720 result=0 source=0
+[KisakCOD][WATCHDOG] t=25s unchanged=10s asset=-1 rawType=4294967295 header=00000000 dbStage=delayed_images/image_load serverStage=weapon/idle progressStage=boot activity=script_string/copy detail=15 script=(none) context="(unavailable)"
+[KisakCOD][VK FRAME] end_scene id=840 rendered=1 source=0 target=swapchain color=0xb47a9ed80 texture=0x0 size=0x0 draws=0/12 clears=1 stage=frame/render/vulkan/draw_indexed/return
+[KisakCOD][VK FRAME] end_frame_begin id=840 serial=841 source=0 size=0x0 swapIndex=0 rendering=0 backbufferCleared=1 heartbeat=1
+[KisakCOD][VK FRAME] end_frame_done id=840 result=0 source=0
+Loaded zone 'killhouse'
+Loaded fastfile killhouse (70391800 bytes)
+----------------------
+Game: G_SetupWeaponDef
+----------------------
+[KisakCOD][SCRIPT MAPNAME] server=killhouse lookup=killhouse selected=killhouse
+[KisakCOD][VMEM] operation=reserve address=0x7bc20000 size=16777216 result=0x0
+SP_worldspawn: sunlight=1.5 ambient=0.1 diffuse=0.35
+SP_worldspawn: raw scale=0.91
+SP_worldspawn: final scale=0.91 sunColor=(1 0.95 0.8) -> mapSunColor=(0.91 0.8645 0.728)
+flash_grenade: WEAPON_FLASHGRENADE
+fraggrenade: WEAPON_FRAGGRENADE
+SVC_DirectConnect ()
+[KisakCOD][PLAYER SPAWN] ent=0 spawn=0x1851fef08 spawnNum=213 flags=0 pointOrg=3280.00,-2064.00,0.15 outputOrg=3280.00,-2064.00,9.15 angles=0.00,164.10,0.00
+[KisakCOD][PLAYER SPAWN] before_think ps=3280.00,-2064.00,9.15 ent=3280.00,-2064.00,9.15
+[KisakCOD][PLAYER SPAWN] after_think ps=3280.00,-2064.00,9.15 ent=3280.00,-2064.00,9.15
+[KisakCOD][PLAYER SPAWN] after_endframe ps=(3280.00,-2064.00,9.15) pm=0 tagInfo=0x0 ent=(3280.00,-2064.00,9.15)
+'0' is not a valid value for dvar 'ai_accuracyDistScale'
+  Domain is any number 1.17549e-38 or bigger
+         
+         
+         
+   *
+  ***
+ *****
+*******
+ *****
+  ***
+   *
+         
+         
+         
+'0' is not a valid value for dvar 'bg_shock_soundFadeInTime'
+  Domain is any number from 0.001 to 1000
+'0' is not a valid value for dvar 'bg_shock_soundFadeOutTime'
+  Domain is any number from 0.001 to 1000
+level.script: killhouse
+PlayerCmd_giveWeapon: 'fraggrenade' index=6 ent=0
+PlayerCmd_giveWeapon: gave 'fraggrenade' to player
+PlayerCmd_giveWeapon: 'flash_grenade' index=2 ent=0
+PlayerCmd_giveWeapon: gave 'flash_grenade' to player
+PlayerCmd_SetViewmodel: model='viewhands_black_kit' modelIndex=84 ent=0
+PlayerCmd_SetViewmodel: set ps.viewmodelIndex=84 (player 0)
+[KisakCOD][OFFMAP ORIGIN WRITE] kind=other ent=240 classId=3134 type=5 handler=12 old=(2076.00,-1458.00,0.00) new=(2076.00,-1458.00,-10000.00) trType=0 trTime=0 trDuration=0 trDelta=(0.00,0.00,0.00) caller=0x182a80880
+intelligence.gsc:             intelligence items:0
+[KisakCOD][OFFMAP ORIGIN WRITE] kind=other ent=150 classId=10310 type=0 handler=4 old=(531.00,-736.00,34.00) new=(531.00,-736.00,-9966.00) trType=0 trTime=0 trDuration=0 trDelta=(0.00,0.00,0.00) caller=0x182a80880
+[KisakCOD][OFFMAP ORIGIN WRITE] kind=other ent=224 classId=10310 type=0 handler=4 old=(304.00,-2580.00,40.00) new=(304.00,-2580.00,-9960.00) trType=0 trTime=0 trDuration=0 trDelta=(0.00,0.00,0.00) caller=0x182a80880
+Loading Characters: None!
+playing ambient track exterior
+c4: WEAPON_C4
+sentient has invalid rank Mac!
+sentient has invalid rank Gaz!
+sentient has invalid rank Captain!
+[KisakCOD][OFFMAP SCRIPT ORIGIN] kind=player ent=0 type=1 handler=17 target=(3072.00,-1155.00,16005.00) current=(3072.00,-1155.00,5.00) pm=0 tagInfo=0x0 script=maps/_introscreen.gsc:922 codePos=0x7918beb4
+[KisakCOD][OFFMAP ORIGIN WRITE] kind=player ent=0 classId=3122 type=1 handler=17 old=(3072.00,-1155.00,5.00) new=(3072.00,-1155.00,16005.00) trType=1 trTime=0 trDuration=0 trDelta=(0.00,0.00,0.00) caller=0x182a80880
+[KisakCOD][OFFMAP SCRIPT ORIGIN] kind=script_mover ent=236 type=5 handler=13 target=(3072.00,-1155.00,16005.00) current=(69.00,69.00,69.00) pm=-1 tagInfo=0x0 script=maps/_introscreen.gsc:927 codePos=0x7918bee3
+[KisakCOD][OFFMAP ORIGIN WRITE] kind=script_mover ent=236 classId=3136 type=5 handler=13 old=(69.00,69.00,69.00) new=(3072.00,-1155.00,16005.00) trType=0 trTime=0 trDuration=0 trDelta=(0.00,0.00,0.00) caller=0x182a80880
+[KisakCOD][PLAYER LINK] child=0 parent=236 parentPtr=0x185202c20 parentInuse=1 parentType=5 tag=0 bone=-1 childOrg=(3072.00,-1155.00,16005.00) parentOrg=(3072.00,-1155.00,16005.00)
+[KisakCOD][SCRIPT STRING HASH FAULT] origin=unterminated_string_allocation hash=0 index=7360 steps=0 status=0x88000001 string=7360
+[KisakCOD][SCRIPT STRING HASH FAULT] origin=unterminated_string_allocation hash=0 index=7472 steps=0 status=0x88000001 string=7472
+[KisakCOD][OFFMAP ORIGIN WRITE] kind=player ent=0 classId=3122 type=1 handler=17 old=(3072.00,-1155.00,16005.00) new=(3072.00,-1155.00,16005.00) trType=0 trTime=0 trDuration=0 trDelta=(0.00,0.00,0.00) caller=0x182a9abd4
+[KisakCOD][PLAYER LINK SYNC] sample=0 before=(3072.00,-1155.00,16005.00) after=(3072.00,-1155.00,16005.00) parent=236 parentOrigin=(3072.00,-1155.00,16005.00) health=100 pm=1 gravity=0 velocity=(0.00,0.00,0.00)
+-----------------------------------
+'0' is not a valid value for dvar 'bg_shock_soundFadeInTime'
+  Domain is any number from 0.001 to 1000
+'0' is not a valid value for dvar 'bg_shock_soundFadeOutTime'
+  Domain is any number from 0.001 to 1000
+[KisakCOD][NVG PRECACHE] configstring= overlay=0x184f7f6e0 icon=0x184f7f748 model=0x184fb7c70
+CL_InitCGame:  1.31 seconds
+[KisakCOD][SCRIPT STRING HASH FAULT] origin=unterminated_string_allocation hash=0 index=7248 steps=0 status=0x89000005 string=7248
+[KisakCOD][SCRIPT STRING HASH FAULT] origin=unterminated_string_allocation hash=0 index=7248 steps=0 status=0x89000007 string=7248
+WARNING: no alias prefix defined, using default
+^6  init game dvars - 285.272 total, 15.496 self, 0.000 file, 1 hits
+^6    server demo dvars - 215.020 total, 215.020 self, 0.000 file, 1 hits
+^6    debug dvars - 54.756 total, 54.756 self, 0.000 file, 1 hits
+^6  clear config strings - 18.616 total, 18.616 self, 0.000 file, 1 hits
+^6  GScr_LoadConsts - 177.424 total, 177.424 self, 0.000 file, 1 hits
+^6  G_SetupWeaponDef - 11293.361 total, 11293.361 self, 0.000 file, 1 hits
+^6  SV_InitWriteDemo - 2824.796 total, 2824.796 self, 322.712 file, 1 hits
+^6  Load scripts and anims - 785342.529 total, 97690.793 self, 4908.332 file, 1 hits
+^6    Scr_AddSourceBuffer - 690.872 total, 690.872 self, 0.000 file, 26 hits
+^6    ScriptCompile - 686960.865 total, 53071.203 self, 0.000 file, 26 hits
+^6      Scr_AddSourceBuffer - 901.680 total, 901.680 self, 0.000 file, 31 hits
+^6      ScriptCompile - 632987.982 total, 50374.326 self, 0.000 file, 31 hits
+^6        Scr_AddSourceBuffer - 377.780 total, 377.780 self, 0.000 file, 4 hits
+^6        ScriptCompile - 582235.876 total, 33606.458 self, 0.000 file, 4 hits
+^6          Scr_AddSourceBuffer - 650.364 total, 650.364 self, 0.000 file, 1 hits
+^6          ScriptCompile - 547979.054 total, 38115.378 self, 0.000 file, 1 hits
+^6            Scr_AddSourceBuffer - 148.200 total, 148.200 self, 0.000 file, 2 hits
+^6            ScriptCompile - 509715.476 total, 10411.856 self, 0.000 file, 2 hits
+^6              Scr_AddSourceBuffer - 182.676 total, 182.676 self, 0.000 file, 2 hits
+^6              ScriptCompile - 499120.944 total, 15880.905 self, 0.000 file, 2 hits
+^6                Scr_AddSourceBuffer - 374.764 total, 374.764 self, 0.000 file, 1 hits
+^6                ScriptCompile - 482865.275 total, 13593.269 self, 0.000 file, 1 hits
+^6                  Scr_AddSourceBuffer - 162.084 total, 162.084 self, 0.000 file, 3 hits
+^6                  ScriptCompile - 469109.922 total, 10520.536 self, 0.000 file, 3 hits
+^6                    Scr_AddSourceBuffer - 159.224 total, 159.224 self, 0.000 file, 1 hits
+^6                    ScriptCompile - 458430.162 total, 12794.445 self, 0.000 file, 1 hits
+^6                      Scr_AddSourceBuffer - 214.188 total, 214.188 self, 0.000 file, 1 hits
+^6                      ScriptCompile - 445421.529 total, 26114.609 self, 0.000 file, 1 hits
+^6                        Scr_AddSourceBuffer - 596.856 total, 596.856 self, 0.000 file, 3 hits
+^6                        ScriptCompile - 418710.064 total, 93403.756 self, 0.000 file, 3 hits
+^6                          Scr_AddSourceBuffer - 1730.768 total, 1730.768 self, 0.000 file, 18 hits
+^6                          ScriptCompile - 323575.539 total, 122449.086 self, 0.000 file, 18 hits
+^6                            Scr_AddSourceBuffer - 1335.048 total, 1335.048 self, 0.000 file, 14 hits
+^6                            ScriptCompile - 199791.405 total, 67901.823 self, 0.000 file, 14 hits
+^6                              Scr_AddSourceBuffer - 772.512 total, 772.512 self, 0.000 file, 9 hits
+^6                              ScriptCompile - 131117.070 total, 22724.053 self, 0.000 file, 9 hits
+^6                                Scr_AddSourceBuffer - 154.544 total, 154.544 self, 0.000 file, 1 hits
+^6                                ScriptCompile - 108238.473 total, 12776.557 self, 0.000 file, 1 hits
+^6                                  Scr_AddSourceBuffer - 170.560 total, 170.560 self, 0.000 file, 1 hits
+^6                                  ScriptCompile - 95291.357 total, 14187.005 self, 0.000 file, 1 hits
+^6                                    Scr_AddSourceBuffer - 310.752 total, 310.752 self, 0.000 file, 6 hits
+^6                                    ScriptCompile - 80793.600 total, 22574.657 self, 0.000 file, 6 hits
+^6                                      Scr_AddSourceBuffer - 345.176 total, 345.176 self, 0.000 file, 2 hits
+^6                                      ScriptCompile - 57873.767 total, 15577.225 self, 0.000 file, 2 hits
+^6                                        Scr_AddSourceBuffer - 143.104 total, 143.104 self, 0.000 file, 2 hits
+^6                                        ScriptCompile - 42153.438 total, 13762.373 self, 0.000 file, 2 hits
+^6                                          Scr_AddSourceBuffer - 209.924 total, 209.924 self, 0.000 file, 3 hits
+^6                                          ScriptCompile - 28181.141 total, 14885.469 self, 0.000 file, 3 hits
+^6                                            Scr_AddSourceBuffer - 179.400 total, 179.400 self, 0.000 file, 2 hits
+^6                                            ScriptCompile - 13116.273 total, 6767.748 self, 0.000 file, 2 hits
+^6                                              Scr_AddSourceBuffer - 69.576 total, 69.576 self, 0.000 file, 1 hits
+^6                                              ScriptCompile - 6278.948 total, 4775.420 self, 0.000 file, 1 hits
+^6                                                Scr_AddSourceBuffer - 78.780 total, 78.780 self, 0.000 file, 1 hits
+^6                                                ScriptCompile - 1424.748 total, 1424.748 self, 0.000 file, 1 hits
+^6  G_SpawnEntitiesFromString - 36655.842 total, 36655.842 self, 0.000 file, 1 hits
+^6  Parse server info - 5.304 total, 5.304 self, 0.000 file, 1 hits
+^6  Load world - 92.716 total, 92.716 self, 0.000 file, 1 hits
+^6  Init effects system - 128.180 total, 128.180 self, 0.000 file, 1 hits
+^6  Register code assets - 176.852 total, 176.852 self, 0.000 file, 1 hits
+^6  Register items - 15.912 total, 15.912 self, 0.000 file, 1 hits
+^6  Register server models - 90.792 total, 90.792 self, 0.000 file, 1 hits
+^6  Register known effects - 33.124 total, 33.124 self, 0.000 file, 1 hits
+^6  Register shellshocks - 12184.537 total, 12184.537 self, 0.000 file, 1 hits
+^6  Register rumbles - 0.156 total, 0.156 self, 0.000 file, 1 hits
+^6  Register impact effects - 5.720 total, 5.720 self, 0.000 file, 1 hits
+^6  Register night vision assets - 1301.820 total, 1301.820 self, 0.000 file, 1 hits
+^6  Load hud menus - 54.808 total, 54.808 self, 0.000 file, 1 hits
+^6  Precache script menus - 31.148 total, 31.148 self, 0.000 file, 1 hits
+^6  Register server materials - 109.460 total, 109.460 self, 0.000 file, 1 hits
+^6  Optimize all xmodels - 0.728 total, 0.728 self, 0.000 file, 1 hits
+^6  Map init - 1289026.045 total, 1289026.045 self, 1112638.605 file, 1 hits
+
+
+^6---------- Load time hot spots ----------
+^6Map init: 1289026.045 self, 1112638.605 file, 1 hits
+^6ScriptCompile: 677692.904 self, 0.000 file, 135 hits
+^6Load scripts and anims: 97690.793 self, 4908.332 file, 1 hits
+^6G_SpawnEntitiesFromString: 36655.842 self, 0.000 file, 1 hits
+^6Register shellshocks: 12184.537 self, 0.000 file, 1 hits
+^6G_SetupWeaponDef: 11293.361 self, 0.000 file, 1 hits
+^6Scr_AddSourceBuffer: 9958.832 self, 0.000 file, 135 hits
+^6SV_InitWriteDemo: 2824.796 self, 322.712 file, 1 hits
+^6Register night vision assets: 1301.820 self, 0.000 file, 1 hits
+^6server demo dvars: 215.020 self, 0.000 file, 1 hits
+^6GScr_LoadConsts: 177.424 self, 0.000 file, 1 hits
+^6Register code assets: 176.852 self, 0.000 file, 1 hits
+^6Init effects system: 128.180 self, 0.000 file, 1 hits
+^6Register server materials: 109.460 self, 0.000 file, 1 hits
+^6Load world: 92.716 self, 0.000 file, 1 hits
+^6Register server models: 90.792 self, 0.000 file, 1 hits
+
+^6Hot spot total time: 2139619.374 self, 1117869.649 file
+
+^6Total Load Time: 31688508.5051
+^6Profiled Time: 2139855.1416
+^6Unprofiled Time: 29548653.3635
+^6File Open Time: 10517.9885, Accessed 3 times
+^6File Seek Time: 176891.7364, Accessed 1536 times
+^6File Read Time: 930459.9242, Accessed 1637 times
+Load time: 32249 msec
+execing devgui_modelpreviewer.cfg from fastfile
+execing devgui_aimassist.cfg from fastfile
+execing devgui_aimassist.cfg from fastfile
+execing devgui_main.cfg from fastfile
+execing devgui_scriptart.cfg from fastfile
+execing devgui_visibility.cfg from fastfile
+execing devgui_renderer.cfg from fastfile
+[KisakCOD][FRAME STATE] conn=4 menu=3 fullscreen=1 uiCatch=1 openMenus=1 uiStarted=1 cgameDraw=0 cineStarted=1 cineFinished=0 cinePending=1
+[KisakCOD][CIN SKIP] active-game movie skipped; returned to gameplay
+[KisakCOD][CODE TIME SCALE RECOVER] origin=Com_SetTimeScale invalid=0 restored=1.0
+[KisakCOD][FRAME STATE] conn=4 menu=0 fullscreen=0 uiCatch=0 openMenus=0 uiStarted=1 cgameDraw=1 cineStarted=1 cineFinished=0 cinePending=0
+[KisakCOD][DRAW MODE] scene=3 baseTech=7 emissiveTech=5 r_fullbright=0 r_debugShader=0 r_lightMap=1 r_colorMap=1 world=0x18507efd0
+[KisakCOD][VK SHADER INTERFACE] n=2 decl=0xb4596efa0 declSerial=100 declType=0 elems=2 vs=0xb455a2c00/142 attrs=2 samplers=0 bytes=6660 ps=0xb45b343e0/197 attrs=1 samplers=1 bytes=6936
+[KisakCOD][VK VERTEX ELEMENT] n=2 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=4 usage=0 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=2 i=1 stream=0 offset=20 vkOffset=20 type=1 effective=2 usage=5 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=2 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=2 i=1 name=v1 usage=5 index=0 location=1 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=197 removed=11 words=497
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=142 removed=11 words=430
+[KisakCOD][VK MODULE PREP] n=2 backend=0xb40b75a60 device=0xb418f0040 decl=0xb4596efa0 vs=0xb455a2c00/142 words=430 bytes=1720 code=0xb59cb2ee0 ps=0xb45b343e0/197 words=497 bytes=1988 code=0xb45b42260
+[KisakCOD][VK MODULE VS RETURN] n=2 result=0 module=0xb59cb3680
+[KisakCOD][VK MODULE PS RETURN] n=2 result=0 module=0xb59cb3de0
+[KisakCOD][MOVE SPEED RECOVER] invalid=0 reset=190 applied=190 reason=nonpositive_g_speed
+[KisakCOD][OFFMAP ORIGIN WRITE] kind=player ent=0 classId=3122 type=1 handler=17 old=(3072.00,-1155.00,16005.00) new=(3072.00,-1155.00,15215.00) trType=3 trTime=300 trDuration=50 trDelta=(0.00,0.00,0.00) caller=0x182a9abd4
+[KisakCOD][PLAYER LINK SYNC] sample=1 before=(3072.00,-1155.00,16005.00) after=(3072.00,-1155.00,15215.00) parent=236 parentOrigin=(3072.00,-1155.00,15215.00) health=100 pm=1 gravity=0 velocity=(0.00,0.00,0.00)
+[KisakCOD][OFFMAP ORIGIN WRITE] kind=player ent=0 classId=3122 type=1 handler=17 old=(3072.00,-1155.00,15215.00) new=(3072.00,-1155.00,14445.00) trType=3 trTime=300 trDuration=50 trDelta=(0.00,0.00,0.00) caller=0x182a9abd4
+[KisakCOD][PLAYER LINK SYNC] sample=2 before=(3072.00,-1155.00,15215.00) after=(3072.00,-1155.00,14445.00) parent=236 parentOrigin=(3072.00,-1155.00,14445.00) health=100 pm=1 gravity=0 velocity=(0.00,0.00,0.00)
+[KisakCOD][FRAME STATE] conn=4 menu=0 fullscreen=0 uiCatch=0 openMenus=0 uiStarted=1 cgameDraw=1 cineStarted=0 cineFinished=0 cinePending=0
+[KisakCOD][VK SHADER INTERFACE] n=3 decl=0xb42222ac0 declSerial=69 declType=1 elems=1 vs=0xb45641f00/86 attrs=1 samplers=0 bytes=7268 ps=0xb4568b900/93 attrs=0 samplers=0 bytes=5092
+[KisakCOD][VK VERTEX ELEMENT] n=3 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][OFFMAP ORIGIN WRITE] kind=player ent=0 classId=3122 type=1 handler=17 old=(3072.00,-1155.00,14445.00) new=(3072.00,-1155.00,13695.00) trType=3 trTime=311 trDuration=50 trDelta=(0.00,0.00,0.00) caller=0x182a9abd4
+[KisakCOD][PLAYER LINK SYNC] sample=3 before=(3072.00,-1155.00,14445.00) after=(3072.00,-1155.00,13695.00) parent=236 parentOrigin=(3072.00,-1155.00,13695.00) health=100 pm=1 gravity=0 velocity=(0.00,0.00,0.00)
+[KisakCOD][VK SHADER ATTR] n=3 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=93 removed=2 words=75
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=86 removed=14 words=576
+[KisakCOD][VK MODULE PREP] n=3 backend=0xb40b75a60 device=0xb418f0040 decl=0xb42222ac0 vs=0xb45641f00/86 words=576 bytes=2304 code=0xb59db9a20 ps=0xb4568b900/93 words=75 bytes=300 code=0xb4568b9c0
+[KisakCOD][VK MODULE VS RETURN] n=3 result=0 module=0xb59dba420
+[KisakCOD][VK MODULE PS RETURN] n=3 result=0 module=0xb59dbada0
+[KisakCOD][VK SHADER INTERFACE] n=4 decl=0xb45646780 declSerial=68 declType=0 elems=1 vs=0xb45641f00/86 attrs=1 samplers=0 bytes=7268 ps=0xb4596d280/99 attrs=0 samplers=0 bytes=5108
+[KisakCOD][VK VERTEX ELEMENT] n=4 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=4 usage=0 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=4 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=99 removed=2 words=79
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=86 removed=14 words=576
+[KisakCOD][VK MODULE PREP] n=4 backend=0xb40b75a60 device=0xb418f0040 decl=0xb45646780 vs=0xb45641f00/86 words=576 bytes=2304 code=0xb59dbe1e0 ps=0xb4596d280/99 words=79 bytes=316 code=0xb4596d340
+[KisakCOD][VK MODULE VS RETURN] n=4 result=0 module=0xb59dbebe0
+[KisakCOD][VK MODULE PS RETURN] n=4 result=0 module=0xb59dbf560
+[KisakCOD][VK SHADER INTERFACE] n=5 decl=0xb44df57a0 declSerial=70 declType=2 elems=1 vs=0xb45641f00/86 attrs=1 samplers=0 bytes=7268 ps=0xb4568b900/93 attrs=0 samplers=0 bytes=5092
+[KisakCOD][VK VERTEX ELEMENT] n=5 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=5 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=93 removed=2 words=75
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=86 removed=14 words=576
+[KisakCOD][VK MODULE PREP] n=5 backend=0xb40b75a60 device=0xb418f0040 decl=0xb44df57a0 vs=0xb45641f00/86 words=576 bytes=2304 code=0xb59dc2960 ps=0xb4568b900/93 words=75 bytes=300 code=0xb4568b9c0
+[KisakCOD][VK MODULE VS RETURN] n=5 result=0 module=0xb59dc3360
+[KisakCOD][VK MODULE PS RETURN] n=5 result=0 module=0xb59dc3ce0
+[KisakCOD][VK SHADER INTERFACE] n=6 decl=0xb42222ac0 declSerial=69 declType=1 elems=1 vs=0xb45641f00/86 attrs=1 samplers=0 bytes=7268 ps=0xb4568b900/93 attrs=0 samplers=0 bytes=5092
+[KisakCOD][VK VERTEX ELEMENT] n=6 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=6 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=93 removed=2 words=75
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=86 removed=14 words=576
+[KisakCOD][VK MODULE PREP] n=6 backend=0xb40b75a60 device=0xb418f0040 decl=0xb42222ac0 vs=0xb45641f00/86 words=576 bytes=2304 code=0xb59dc6240 ps=0xb4568b900/93 words=75 bytes=300 code=0xb4568b9c0
+[KisakCOD][VK MODULE VS RETURN] n=6 result=0 module=0xb59dc6c40
+[KisakCOD][VK MODULE PS RETURN] n=6 result=0 module=0xb59dc75c0
+[KisakCOD][WORLD SAMPLER] n=0 mat=wc/com_streetlines2 set=wc_l_sm_t0c0n0s0 tech=zprepass_test ps=vertcol_simple.hlsl slot=0 semantic=2 tex=com_crosswalklinewhitelong02_col size=64x1024 image=0x184f021e8 texture=0xb627a22c0 vkImage=0xb627a2400 view=0xb5ef99620 vkFormat=138 srcFormat=894720068 layout=5
+[KisakCOD][VK SHADER INTERFACE] n=7 decl=0xb5a321d20 declSerial=1024 declType=2 elems=3 vs=0xb5e7afc80/1885 attrs=3 samplers=0 bytes=7632 ps=0xb4e48dca0/1185 attrs=2 samplers=1 bytes=5572
+[KisakCOD][VK VERTEX ELEMENT] n=7 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=7 i=1 stream=0 offset=16 vkOffset=16 type=4 effective=5 usage=10 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=7 i=2 stream=0 offset=20 vkOffset=20 type=3 effective=4 usage=5 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=7 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=7 i=1 name=v1 usage=10 index=0 location=1 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=7 i=2 name=v2 usage=5 index=0 location=2 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1185 removed=7 words=170
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1885 removed=18 words=647
+[KisakCOD][VK MODULE PREP] n=7 backend=0xb40b75a60 device=0xb418f0040 decl=0xb5a321d20 vs=0xb5e7afc80/1885 words=647 bytes=2588 code=0xb5e1aa440 ps=0xb4e48dca0/1185 words=204 bytes=816 code=0xb5a394860
+[KisakCOD][VK MODULE VS RETURN] n=7 result=0 module=0xb6a3ef540
+[KisakCOD][VK MODULE PS RETURN] n=7 result=0 module=0xb47b1fae0
+[KisakCOD][VK SHADER INTERFACE] n=8 decl=0xb44df57a0 declSerial=70 declType=2 elems=1 vs=0xb45641f00/86 attrs=1 samplers=0 bytes=7268 ps=0xb4568b900/93 attrs=0 samplers=0 bytes=5092
+[KisakCOD][VK VERTEX ELEMENT] n=8 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=8 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=93 removed=2 words=75
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=86 removed=14 words=576
+[KisakCOD][VK MODULE PREP] n=8 backend=0xb40b75a60 device=0xb418f0040 decl=0xb44df57a0 vs=0xb45641f00/86 words=576 bytes=2304 code=0xb59dd1a20 ps=0xb4568b900/93 words=75 bytes=300 code=0xb4568b9c0
+[KisakCOD][VK MODULE VS RETURN] n=8 result=0 module=0xb59dd2420
+[KisakCOD][VK MODULE PS RETURN] n=8 result=0 module=0xb59dd2da0
+[KisakCOD][VK SHADER INTERFACE] n=9 decl=0xb45646780 declSerial=68 declType=0 elems=1 vs=0xb45641f00/86 attrs=1 samplers=0 bytes=7268 ps=0xb4596d280/99 attrs=0 samplers=0 bytes=5108
+[KisakCOD][VK VERTEX ELEMENT] n=9 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=4 usage=0 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=9 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=99 removed=2 words=79
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=86 removed=14 words=576
+[KisakCOD][VK MODULE PREP] n=9 backend=0xb40b75a60 device=0xb418f0040 decl=0xb45646780 vs=0xb45641f00/86 words=576 bytes=2304 code=0xb59dd7720 ps=0xb4596d280/99 words=79 bytes=316 code=0xb4596d340
+[KisakCOD][VK MODULE VS RETURN] n=9 result=0 module=0xb59dd8120
+[KisakCOD][VK MODULE PS RETURN] n=9 result=0 module=0xb59dd8aa0
+[KisakCOD][VK SHADER INTERFACE] n=10 decl=0xb5a321ce0 declSerial=1023 declType=1 elems=3 vs=0xb5ab6de80/1184 attrs=3 samplers=0 bytes=9228 ps=0xb4e48dca0/1185 attrs=2 samplers=1 bytes=5572
+[KisakCOD][VK VERTEX ELEMENT] n=10 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=10 i=1 stream=0 offset=16 vkOffset=16 type=4 effective=5 usage=10 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=10 i=2 stream=0 offset=20 vkOffset=20 type=5 effective=16 usage=5 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=10 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=10 i=1 name=v1 usage=10 index=0 location=1 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=10 i=2 name=v2 usage=5 index=0 location=2 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1185 removed=7 words=170
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1184 removed=18 words=1044
+[KisakCOD][VK MODULE PREP] n=10 backend=0xb40b75a60 device=0xb418f0040 decl=0xb5a321ce0 vs=0xb5ab6de80/1184 words=1044 bytes=4176 code=0xb59ca8f40 ps=0xb4e48dca0/1185 words=204 bytes=816 code=0xb5a394860
+[KisakCOD][VK MODULE VS RETURN] n=10 result=0 module=0xb46d11c40
+[KisakCOD][VK MODULE PS RETURN] n=10 result=0 module=0xb69369f80
+[KisakCOD][VK SHADER INTERFACE] n=11 decl=0xb5a321ce0 declSerial=1023 declType=1 elems=3 vs=0xb48fbe280/1538 attrs=3 samplers=0 bytes=10844 ps=0xb48fe5d60/1539 attrs=3 samplers=2 bytes=6976
+[KisakCOD][VK VERTEX ELEMENT] n=11 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=11 i=1 stream=0 offset=16 vkOffset=16 type=4 effective=5 usage=10 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=11 i=2 stream=0 offset=20 vkOffset=20 type=5 effective=16 usage=5 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=11 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=11 i=1 name=v1 usage=10 index=0 location=1 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=11 i=2 name=v2 usage=5 index=0 location=2 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1539 removed=13 words=498
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1538 removed=21 words=1438
+[KisakCOD][VK MODULE PREP] n=11 backend=0xb40b75a60 device=0xb418f0040 decl=0xb5a321ce0 vs=0xb48fbe280/1538 words=1438 bytes=5752 code=0xb59deb8c0 ps=0xb48fe5d60/1539 words=537 bytes=2148 code=0xb5de88880
+[KisakCOD][VK MODULE VS RETURN] n=11 result=0 module=0xb69748dc0
+[KisakCOD][VK MODULE PS RETURN] n=11 result=0 module=0xb59ded0a0
+[KisakCOD][WORLD SAMPLER] n=1 mat=wc/ch_factory_rustybeam3 set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 ps=lm_r0c0_sm3.hlsl slot=0 semantic=2 tex=ch_factory_rusty_iron size=256x64 image=0x184f01948 texture=0xb5ab689a0 vkImage=0xb5ab68aa0 view=0xb477dd840 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=0 firstCount=4 mat=wc/ch_factory_rustybeam3 set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb59f0e580/13104896/32,0x0/0/0) pass=0xb5e53fc90 technique=0xb5e53fc80 flags=4 lightmaps=3
+[KisakCOD][LIGHTMAP STATE] index=0 count=3 r_lightMap=1 r_colorMap=1 sunDirChanged=0 primary=0x184f00d48 2048x2048 texture=0xb5a58fde0 secondary=0x184f00d78 1024x2048 texture=0xb468ffbc0
+[KisakCOD][LIGHTMAP BIND] n=0 map=0 mat=wc/ch_factory_rustybeam3 set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x0) wantSampler=(0x184f00d50,0x184f00d80) imageTex=(0xb5a58fde0,0xb468ffbc0) size=(2048x2048,1024x2048) streams=(0xb59f0e580/13104896/32,0x0/0/0)
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=0 surf=0 map=0 firstVertex=0 v=0 xyz=(-522.000,635.000,457.000) uv0=(15.156250,2.500000) lmap=(0.644867,0.501801) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=0 surf=0 map=0 firstVertex=0 v=1 xyz=(-522.000,-1187.000,457.000) uv0=(-13.312500,2.500000) lmap=(0.589264,0.501801) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=0 surf=0 map=0 firstVertex=0 v=2 xyz=(-522.000,-1187.000,453.000) uv0=(-13.312500,2.750000) lmap=(0.589264,0.501923) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][VK SHADER INTERFACE] n=12 decl=0xb5a361820 declSerial=1062 declType=2 elems=4 vs=0xb46de2880/1791 attrs=4 samplers=0 bytes=10280 ps=0xb5e33fe00/1792 attrs=3 samplers=2 bytes=8424
+[KisakCOD][VK VERTEX ELEMENT] n=12 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=12 i=1 stream=0 offset=16 vkOffset=16 type=4 effective=5 usage=10 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=12 i=2 stream=0 offset=20 vkOffset=20 type=3 effective=4 usage=5 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=12 i=3 stream=0 offset=36 vkOffset=36 type=5 effective=5 usage=3 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=12 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=12 i=1 name=v1 usage=10 index=0 location=1 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=12 i=2 name=v2 usage=5 index=0 location=2 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=12 i=3 name=v3 usage=3 index=0 location=3 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV IFACE PAIR] kind=lightmap decl=1062 vs=1791 ps=1792 vsBytes=5488 psBytes=3664 psSamplers=2
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1791 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1791 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1791 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1791 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1791 id=21 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1791 id=22 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1791 id=23 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1791 id=37 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type211
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1792 id=16 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1792 id=18 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1792 id=19 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type29
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1792 id=20 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type29
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1792 id=108 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type139
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1792 id=122 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1792 id=133 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1792 removed=13 words=859
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1791 removed=21 words=1296
+[KisakCOD][VK MODULE PREP] n=12 backend=0xb40b75a60 device=0xb418f0040 decl=0xb5a361820 vs=0xb46de2880/1791 words=1296 bytes=5184 code=0xb5f0bea60 ps=0xb5e33fe00/1792 words=859 bytes=3436 code=0xb5e349ba0
+[KisakCOD][VK MODULE VS RETURN] n=12 result=0 module=0xb6a4ceb20
+[KisakCOD][VK MODULE PS RETURN] n=12 result=0 module=0xb68d261e0
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=0 ps=0xb5e33fe00 serial=1792 t0=0xb5ab689a0 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb468ffbc0 view3=0xb46d5df40 size3=1024x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][VK PS SAMPLERS] serial=1792 count=2 sampler[0]=s0/type0/name=s0 sampler[1]=s3/type0/name=s3
+[KisakCOD][LIGHTMAP BIND] n=1 map=0 mat=wc/ch_factory_rustybeam3 set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00d80) wantSampler=(0x184f00d50,0x184f00d80) imageTex=(0xb5a58fde0,0xb468ffbc0) size=(2048x2048,1024x2048) streams=(0xb46c85d00/0/44,0x0/0/0)
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=1 surf=1 map=0 firstVertex=0 v=0 xyz=(-522.000,635.000,457.000) uv0=(15.156250,2.500000) lmap=(0.644867,0.501801) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=1 surf=1 map=0 firstVertex=0 v=1 xyz=(-522.000,-1187.000,457.000) uv0=(-13.312500,2.500000) lmap=(0.589264,0.501801) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=1 surf=1 map=0 firstVertex=0 v=2 xyz=(-522.000,-1187.000,453.000) uv0=(-13.312500,2.750000) lmap=(0.589264,0.501923) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=1 ps=0xb5e33fe00 serial=1792 t0=0xb5ab689a0 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb468ffbc0 view3=0xb46d5df40 size3=1024x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=2 map=0 mat=wc/ch_factory_rustybeam3 set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00d80) wantSampler=(0x184f00d50,0x184f00d80) imageTex=(0xb5a58fde0,0xb468ffbc0) size=(2048x2048,1024x2048) streams=(0xb46c85d00/0/44,0x0/0/0)
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=2 surf=5 map=0 firstVertex=0 v=0 xyz=(-522.000,635.000,457.000) uv0=(15.156250,2.500000) lmap=(0.644867,0.501801) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=2 surf=5 map=0 firstVertex=0 v=1 xyz=(-522.000,-1187.000,457.000) uv0=(-13.312500,2.500000) lmap=(0.589264,0.501801) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=2 surf=5 map=0 firstVertex=0 v=2 xyz=(-522.000,-1187.000,453.000) uv0=(-13.312500,2.750000) lmap=(0.589264,0.501923) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=2 ps=0xb5e33fe00 serial=1792 t0=0xb5ab689a0 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb468ffbc0 view3=0xb46d5df40 size3=1024x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=3 map=0 mat=wc/ch_factory_rustybeam3 set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00d80) wantSampler=(0x184f00d50,0x184f00d80) imageTex=(0xb5a58fde0,0xb468ffbc0) size=(2048x2048,1024x2048) streams=(0xb46c85d00/0/44,0x0/0/0)
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=3 surf=7 map=0 firstVertex=0 v=0 xyz=(-522.000,635.000,457.000) uv0=(15.156250,2.500000) lmap=(0.644867,0.501801) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=3 surf=7 map=0 firstVertex=0 v=1 xyz=(-522.000,-1187.000,457.000) uv0=(-13.312500,2.500000) lmap=(0.589264,0.501801) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=3 surf=7 map=0 firstVertex=0 v=2 xyz=(-522.000,-1187.000,453.000) uv0=(-13.312500,2.750000) lmap=(0.589264,0.501923) color=0xffffffff normal=0x3f7f7f00 tangent=0x3f7ffe7f
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=3 ps=0xb5e33fe00 serial=1792 t0=0xb5ab689a0 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb468ffbc0 view3=0xb46d5df40 size3=1024x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][WORLD SAMPLER] n=2 mat=wc/me_drywall_02 set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 ps=lm_r0c0_sm3.hlsl slot=0 semantic=2 tex=me_drywall02_col size=512x512 image=0x184f03a78 texture=0xb5a2caba0 vkImage=0xb5a2cad00 view=0xb643dfba0 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=1 firstCount=2 mat=wc/me_drywall_02 set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/0/44,0x0/0/0) pass=0xb5e53fc90 technique=0xb5e53fc80 flags=4 lightmaps=3
+[KisakCOD][LIGHTMAP BIND] n=4 map=2 mat=wc/me_drywall_02 set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00d80) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/0/44,0x0/0/0)
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=4 surf=66 map=2 firstVertex=444773 v=0 xyz=(3336.000,-746.000,136.000) uv0=(16.750000,-3.031250) lmap=(0.925537,0.914062) color=0xffffffff normal=0x3f7ffe7f tangent=0x3f7f7ffe
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=4 surf=66 map=2 firstVertex=444773 v=1 xyz=(3284.000,-746.000,134.000) uv0=(16.343750,-3.015625) lmap=(0.925659,0.910889) color=0xffffffff normal=0x3f7ffe7f tangent=0x3f7f7ffe
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=4 surf=66 map=2 firstVertex=444773 v=2 xyz=(3284.000,-746.000,6.000) uv0=(16.343750,-2.015625) lmap=(0.933472,0.910889) color=0xffffffff normal=0x3f7ffe7f tangent=0x3f7f7ffe
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=4 ps=0xb5e33fe00 serial=1792 t0=0xb5a2caba0 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=5 map=2 mat=wc/me_drywall_02 set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/19570012/44,0x0/0/0)
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=5 surf=67 map=2 firstVertex=444773 v=0 xyz=(3336.000,-746.000,136.000) uv0=(16.750000,-3.031250) lmap=(0.925537,0.914062) color=0xffffffff normal=0x3f7ffe7f tangent=0x3f7f7ffe
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=5 surf=67 map=2 firstVertex=444773 v=1 xyz=(3284.000,-746.000,134.000) uv0=(16.343750,-3.015625) lmap=(0.925659,0.910889) color=0xffffffff normal=0x3f7ffe7f tangent=0x3f7f7ffe
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=5 surf=67 map=2 firstVertex=444773 v=2 xyz=(3284.000,-746.000,6.000) uv0=(16.343750,-2.015625) lmap=(0.933472,0.910889) color=0xffffffff normal=0x3f7ffe7f tangent=0x3f7f7ffe
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=5 ps=0xb5e33fe00 serial=1792 t0=0xb5a2caba0 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][WORLD SAMPLER] n=3 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 ps=lm_r0c0_sm3.hlsl slot=0 semantic=2 tex=me_wire_black size=256x32 image=0x184f04528 texture=0xb5e6c6000 vkImage=0xb5e6c6160 view=0xb4680fb40 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=2 firstCount=2 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/19570012/44,0x0/0/0) pass=0xb5e53fc90 technique=0xb5e53fc80 flags=4 lightmaps=3
+[KisakCOD][LIGHTMAP BIND] n=6 map=2 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/19570012/44,0x0/0/0)
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=6 surf=68 map=2 firstVertex=68832 v=0 xyz=(-8168.066,-2200.288,314.336) uv0=(0.900589,-115.000000) lmap=(0.267578,0.886330) color=0xffffffff normal=0x3f7f0082 tangent=0x3f7782fe
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=6 surf=68 map=2 firstVertex=68832 v=1 xyz=(-8168.066,-2200.288,315.336) uv0=(0.900589,-115.125000) lmap=(0.267517,0.886330) color=0xffffffff normal=0x3f7f0082 tangent=0x3f7782fe
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=6 surf=68 map=2 firstVertex=68832 v=2 xyz=(-8128.938,-2199.484,312.875) uv0=(1.527206,-115.125000) lmap=(0.267517,0.888778) color=0xffffffff normal=0x3f7f0082 tangent=0x3f7782fe
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=6 ps=0xb5e33fe00 serial=1792 t0=0xb5e6c6000 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=7 map=2 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/3028608/44,0x0/0/0)
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=7 surf=69 map=2 firstVertex=3351 v=0 xyz=(-9767.680,-2192.570,330.094) uv0=(1.246552,47.000000) lmap=(0.255859,0.348619) color=0xffffffff normal=0x3f7ffe82 tangent=0x3f667cfb
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=7 surf=69 map=2 firstVertex=3351 v=1 xyz=(-9806.592,-2191.783,338.023) uv0=(0.623245,47.000000) lmap=(0.255859,0.346185) color=0xffffffff normal=0x3f7ffe82 tangent=0x3f667cfb
+[KisakCOD][BSP LIGHTMAP VERTEX] sample=7 surf=69 map=2 firstVertex=3351 v=2 xyz=(-9806.592,-2191.783,337.023) uv0=(0.623245,46.875000) lmap=(0.255798,0.346185) color=0xffffffff normal=0x3f7ffe82 tangent=0x3f667cfb
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=7 ps=0xb5e33fe00 serial=1792 t0=0xb5e6c6000 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=8 map=2 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/147444/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=8 ps=0xb5e33fe00 serial=1792 t0=0xb5e6c6000 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=9 map=2 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/147444/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=9 ps=0xb5e33fe00 serial=1792 t0=0xb5e6c6000 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=10 map=2 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/147444/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=10 ps=0xb5e33fe00 serial=1792 t0=0xb5e6c6000 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=11 map=2 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/147444/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=11 ps=0xb5e33fe00 serial=1792 t0=0xb5e6c6000 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=12 map=2 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/147444/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=12 ps=0xb5e33fe00 serial=1792 t0=0xb5e6c6000 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=13 map=2 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/147444/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=13 ps=0xb5e33fe00 serial=1792 t0=0xb5e6c6000 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=14 map=2 mat=wc/me_wire_black set=wc_l_sm_r0c0 tech=lm_r0c0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0_sm3.hlsl ps=lm_r0c0_sm3.hlsl psHandle=0xb5e33fe00 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/147444/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=14 ps=0xb5e33fe00 serial=1792 t0=0xb5e6c6000 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=15 ps=0xb5e33fe00 serial=1792 t0=0xb5e6c6000 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46d4c820 view3=0xb46d53cc0 size3=512x1024 fmt3=44 src3=21 layout3=5
+[KisakCOD][WORLD SAMPLER] n=4 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 ps=lm_r0c0n0_sm3.hlsl slot=4 semantic=5 tex=ch_factory_rustybeam2bump size=128x512 image=0x184f018e8 texture=0xb644844a0 vkImage=0xb644845a0 view=0xb468fde20 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=5 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 ps=lm_r0c0n0_sm3.hlsl slot=0 semantic=2 tex=ch_factory_rustybeam2 size=128x512 image=0x184f01918 texture=0xb6932e120 vkImage=0xb6932e280 view=0xb469e4d60 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=3 firstCount=3 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/3028608/44,0x0/0/0) pass=0xb46b616c0 technique=0xb46b616b0 flags=4 lightmaps=3
+[KisakCOD][LIGHTMAP BIND] n=15 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/3028608/44,0x0/0/0)
+[KisakCOD][VK SHADER INTERFACE] n=13 decl=0xb5a361820 declSerial=1062 declType=2 elems=4 vs=0xb46db7e60/1820 attrs=4 samplers=0 bytes=10280 ps=0xb5e4fc0c0/1821 attrs=3 samplers=3 bytes=10136
+[KisakCOD][VK VERTEX ELEMENT] n=13 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=13 i=1 stream=0 offset=16 vkOffset=16 type=4 effective=5 usage=10 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=13 i=2 stream=0 offset=20 vkOffset=20 type=3 effective=4 usage=5 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=13 i=3 stream=0 offset=36 vkOffset=36 type=5 effective=5 usage=3 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=13 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=13 i=1 name=v1 usage=10 index=0 location=1 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=13 i=2 name=v2 usage=5 index=0 location=2 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=13 i=3 name=v3 usage=3 index=0 location=3 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV IFACE PAIR] kind=lightmap decl=1062 vs=1820 ps=1821 vsBytes=5488 psBytes=5376 psSamplers=3
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1820 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1820 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1820 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1820 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1820 id=21 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1820 id=22 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1820 id=23 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1820 id=37 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type211
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1821 id=16 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1821 id=18 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1821 id=19 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type30
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1821 id=20 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type30
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1821 id=21 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type30
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1821 id=173 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type204
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1821 id=187 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1821 id=198 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1821 removed=15 words=1279
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1820 removed=21 words=1296
+[KisakCOD][VK MODULE PREP] n=13 backend=0xb40b75a60 device=0xb418f0040 decl=0xb5a361820 vs=0xb46db7e60/1820 words=1296 bytes=5184 code=0xb694cea60 ps=0xb5e4fc0c0/1821 words=1279 bytes=5116 code=0xb5e282d80
+[KisakCOD][VK MODULE VS RETURN] n=13 result=0 module=0xb59b61320
+[KisakCOD][VK MODULE PS RETURN] n=13 result=0 module=0xb46cd6980
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=16 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][VK PS SAMPLERS] serial=1821 count=3 sampler[0]=s0/type0/name=s0 sampler[1]=s3/type0/name=s3 sampler[2]=s4/type0/name=s4
+[KisakCOD][LIGHTMAP BIND] n=16 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=17 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=17 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=18 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=18 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=19 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=19 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=20 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=20 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=21 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=21 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=22 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=22 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=23 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=23 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=24 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=24 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=25 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=25 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=26 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=26 map=1 mat=wc/ch_factory_rustybeam2 set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00db0,0x184f00de0) imageTex=(0xb4825a360,0xb46bfc7a0) size=(1024x2048,512x2048) streams=(0xb46c85d00/5470344/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=27 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=28 ps=0xb5e4fc0c0 serial=1821 t0=0xb6932e120 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb46bfc7a0 view3=0xb47dace80 size3=512x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][WORLD SAMPLER] n=6 mat=wc/icbm_tunnelfloor set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 ps=lm_r0c0n0_sm3.hlsl slot=4 semantic=5 tex=icbm_tunnelfloor_nml size=512x512 image=0x184f02578 texture=0xb69f48c40 vkImage=0xb69f48da0 view=0xb5ecb52e0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=7 mat=wc/icbm_tunnelfloor set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 ps=lm_r0c0n0_sm3.hlsl slot=0 semantic=2 tex=icbm_tunnelfloor size=512x512 image=0x184f025a8 texture=0xb5eab3d40 vkImage=0xb647843a0 view=0xb5e95ac00 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=4 firstCount=2 mat=wc/icbm_tunnelfloor set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/8352476/44,0x0/0/0) pass=0xb46b616c0 technique=0xb46b616b0 flags=4 lightmaps=3
+[KisakCOD][LIGHTMAP BIND] n=27 map=0 mat=wc/icbm_tunnelfloor set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00de0) wantSampler=(0x184f00d50,0x184f00d80) imageTex=(0xb5a58fde0,0xb468ffbc0) size=(2048x2048,1024x2048) streams=(0xb46c85d00/8352476/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=29 ps=0xb5e4fc0c0 serial=1821 t0=0xb5eab3d40 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb468ffbc0 view3=0xb46d5df40 size3=1024x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][LIGHTMAP BIND] n=28 map=0 mat=wc/icbm_tunnelfloor set=wc_l_sm_r0c0n0 tech=lm_r0c0n0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x4 vs=lm_tc0n0_sm3.hlsl ps=lm_r0c0n0_sm3.hlsl psHandle=0xb5e4fc0c0 oldSampler=(0x0,0x184f00d80) wantSampler=(0x184f00d50,0x184f00d80) imageTex=(0xb5a58fde0,0xb468ffbc0) size=(2048x2048,1024x2048) streams=(0xb46c85d00/19574852/44,0x0/0/0)
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=30 ps=0xb5e4fc0c0 serial=1821 t0=0xb5eab3d40 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb468ffbc0 view3=0xb46d5df40 size3=1024x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][WORLD SAMPLER] n=8 mat=wc/com_plastic_wall set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~com_plasticwall_spc-r-25g-25~9cd0bf2e size=1024x1024 image=0x184f020c8 texture=0xb69f4a340 vkImage=0xb69f4a480 view=0xb46dfdea0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=9 mat=wc/com_plastic_wall set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=com_plasticwall_nml size=1024x1024 image=0x184f020f8 texture=0xb69323140 vkImage=0xb69323240 view=0xb529181e0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=10 mat=wc/com_plastic_wall set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=com_plasticwall_col size=1024x1024 image=0x184f02128 texture=0xb5f2a9260 vkImage=0xb6a59bfe0 view=0xb6a59cd60 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=5 firstCount=16 mat=wc/com_plastic_wall set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/19574852/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][LIGHTMAP BIND] n=29 map=0 mat=wc/com_plastic_wall set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x5 vs=lm_s_tc0n0_sm3.hlsl ps=lm_r0c0n0s0_sm3.hlsl psHandle=0xb47995840 oldSampler=(0x0,0x184f00d80) wantSampler=(0x184f00d50,0x184f00d80) imageTex=(0xb5a58fde0,0xb468ffbc0) size=(2048x2048,1024x2048) streams=(0xb46c85d00/19574852/44,0x0/0/0)
+[KisakCOD][VK SHADER INTERFACE] n=14 decl=0xb4d25fd00 declSerial=1097 declType=2 elems=5 vs=0xb47995780/1770 attrs=5 samplers=0 bytes=12372 ps=0xb47995840/1771 attrs=6 samplers=5 bytes=13796
+[KisakCOD][VK VERTEX ELEMENT] n=14 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=14 i=1 stream=0 offset=16 vkOffset=16 type=4 effective=5 usage=10 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=14 i=2 stream=0 offset=20 vkOffset=20 type=3 effective=4 usage=5 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=14 i=3 stream=0 offset=36 vkOffset=36 type=5 effective=5 usage=3 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=14 i=4 stream=0 offset=40 vkOffset=40 type=5 effective=5 usage=5 usageIndex=2
+[KisakCOD][VK SHADER ATTR] n=14 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=14 i=1 name=v1 usage=10 index=0 location=1 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=14 i=2 name=v2 usage=5 index=0 location=2 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=14 i=3 name=v3 usage=3 index=0 location=3 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=14 i=4 name=v4 usage=5 index=2 location=4 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV IFACE PAIR] kind=lightmap decl=1097 vs=1770 ps=1771 vsBytes=7564 psBytes=9036 psSamplers=5
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=20 name=vs_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=22 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=23 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=24 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=25 name=vs_o4 storage=output loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=26 name=vs_o5 storage=output loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=27 name=vs_o6 storage=output loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=41 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type288
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=19 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=21 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=22 name=ps_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=23 name=ps_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=24 name=ps_v5 storage=input loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=25 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type39
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=26 name=ps_s1 storage=uniformconstant loc=-1 set=2 binding=1 type=type252
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=27 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type39
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=28 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type39
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=29 name=ps_s5 storage=uniformconstant loc=-1 set=2 binding=5 type=type39
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=268 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type345
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=327 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1771 id=339 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1771 removed=21 words=2171
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1770 removed=27 words=1791
+[KisakCOD][VK MODULE PREP] n=14 backend=0xb40b75a60 device=0xb418f0040 decl=0xb4d25fd00 vs=0xb47995780/1770 words=1791 bytes=7164 code=0xb59b91540 ps=0xb47995840/1771 words=2171 bytes=8684 code=0xb5e5fe580
+[KisakCOD][VK MODULE VS RETURN] n=14 result=0 module=0xb6a4c7040
+[KisakCOD][VK MODULE PS RETURN] n=14 result=0 module=0xb59b932e0
+[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=31 ps=0xb47995840 serial=1771 t0=0xb5f2a9260 t2=0x0 view2=0x0 size2=0x0 fmt2=0 src2=0 layout2=0 t3=0xb468ffbc0 view3=0xb46d5df40 size3=1024x2048 fmt3=44 src3=21 layout3=5
+[KisakCOD][VK PS SAMPLERS] serial=1771 count=5 sampler[0]=s0/type0/name=s0 sampler[1]=s1/type1/name=s1 sampler[2]=s3/type0/name=s3 sampler[3]=s4/type0/name=s4 sampler[4]=s5/type0/name=s5
+[KisakCOD][LIGHTMAP BIND] n=30 map=2 mat=wc/com_plastic_wall set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x5 vs=lm_s_tc0n0_sm3.hlsl ps=lm_r0c0n0s0_sm3.hlsl psHandle=0xb47995840 oldSampler=(0x0,0x184f00d80) wantSampler=(0x184f00e10,0x184f00e40) imageTex=(0xb47d3c460,0xb46d4c820) size=(1024x1024,512x1024) streams=(0xb46c85d00/9891904/44,0x0/0/0)
+[KisakCOD][LIGHTMAP BIND] n=31 map=0 mat=wc/com_plastic_wall set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 passFlags=0x5 vs=lm_s_tc0n0_sm3.hlsl ps=lm_r0c0n0s0_sm3.hlsl psHandle=0xb47995840 oldSampler=(0x0,0x184f00e40) wantSampler=(0x184f00d50,0x184f00d80) imageTex=(0xb5a58fde0,0xb468ffbc0) size=(2048x2048,1024x2048) streams=(0xb46c85d00/9891904/44,0x0/0/0)
+[KisakCOD][WORLD SAMPLER] n=11 mat=wc/ch_woodplank01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~ch_woodplank01_spc-rgb&ch_wo~f36b6198 size=512x512 image=0x184f01f18 texture=0xb693213e0 vkImage=0xb69321540 view=0xb693f4a40 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=12 mat=wc/ch_woodplank01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=ch_woodplank01_nml size=512x512 image=0x184f01f48 texture=0xb6920c000 vkImage=0xb6920c100 view=0xb69f487a0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=13 mat=wc/ch_woodplank01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=ch_woodplank01_col size=512x512 image=0x184f01f78 texture=0xb47c79740 vkImage=0xb64759900 view=0xb6475a680 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=6 firstCount=8 mat=wc/ch_woodplank01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/9891904/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=14 mat=wc/me_plaster_02 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~me_plaster_02_s-r-25g-25b-25l-86 size=512x512 image=0x184f04258 texture=0xb68c3c980 vkImage=0xb468f95c0 view=0xb468fa340 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=15 mat=wc/me_plaster_02 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=me_plaster_02b_n size=512x512 image=0x184f04288 texture=0xb68b2c8a0 vkImage=0xb68c3d000 view=0xb4d20f8c0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=16 mat=wc/me_plaster_02 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=me_plaster_02 size=512x512 image=0x184f042b8 texture=0xb6a59a280 vkImage=0xb6a59a3e0 view=0xb6a378e20 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=7 firstCount=1 mat=wc/me_plaster_02 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/9217472/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=17 mat=wc/me_particleboard set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~me_partlicleboard_spc-rgbl-11 size=256x256 image=0x184f04138 texture=0xb5f0b7a40 vkImage=0xb5f0b7ba0 view=0xb5549dd60 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=18 mat=wc/me_particleboard set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=me_partlicleboard_nml size=256x256 image=0x184f04168 texture=0xb62ccdd60 vkImage=0xb62ccdec0 view=0xb4692cb20 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=19 mat=wc/me_particleboard set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=me_partlicleboard_col size=256x256 image=0x184f04198 texture=0xb5fb39b60 vkImage=0xb5fb39cc0 view=0xb69bf9340 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=8 firstCount=20 mat=wc/me_particleboard set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/12427624/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=20 mat=wc/me_two_x_four set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~me_two_x_four_spc-rgbl-11 size=512x128 image=0x184f04378 texture=0xb6a59b160 vkImage=0xb6a59b260 view=0xb6a7eb4c0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=21 mat=wc/me_two_x_four set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=me_two_x_four_nml size=512x128 image=0x184f043a8 texture=0xb5edb50a0 vkImage=0xb5edb5200 view=0xb5e428820 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=22 mat=wc/me_two_x_four set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=me_two_x_four_col size=512x128 image=0x184f043d8 texture=0xb5f1e0020 vkImage=0xb5f1e0120 view=0xb59e48a60 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=9 firstCount=8 mat=wc/me_two_x_four set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/11108724/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=23 mat=wc/kh_concrete_01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~kh_concrete_01_spc-rgb&kh_co~88ee311a size=512x512 image=0x184f025d8 texture=0xb696d0040 vkImage=0xb696d0140 view=0xb4689c9c0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=24 mat=wc/kh_concrete_01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=kh_concrete_01_nml size=512x512 image=0x184f02608 texture=0xb69559f60 vkImage=0xb6955a0c0 view=0xb469e8d60 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=25 mat=wc/kh_concrete_01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=ch_concrete_05_col size=512x512 image=0x184f02638 texture=0xb6444b940 vkImage=0xb6444baa0 view=0xb59e6b9c0 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=10 firstCount=9 mat=wc/kh_concrete_01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/12560152/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=26 mat=wc/ship_wallmetal_painted01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~cs_metalwall_paint01_col-rgbl-11 size=512x512 image=0x184f04b28 texture=0xb6932b960 vkImage=0xb46cf4be0 view=0xb46cf7140 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=27 mat=wc/ship_wallmetal_painted01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=cs_metalwall_paint01_nml size=512x512 image=0x184f04b58 texture=0xb6982f940 vkImage=0xb5f1ea420 view=0xb6982fba0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=28 mat=wc/ship_wallmetal_painted01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=cs_metalwall_paint01_col size=512x512 image=0x184f04b88 texture=0xb6196c840 vkImage=0xb6196c940 view=0xb6476d020 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=11 firstCount=1 mat=wc/ship_wallmetal_painted01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/19590120/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=29 mat=wc/me_warehouse_corrogated set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~me_warehouse_corrogated_spc-~8674c31a size=512x512 image=0x184f04408 texture=0xb68d2fc80 vkImage=0xb64750480 view=0xb64751100 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=30 mat=wc/me_warehouse_corrogated set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=me_warehouse_corrogated_nml size=512x512 image=0x184f04438 texture=0xb6994dac0 vkImage=0xb6994dc20 view=0xb64775ec0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=31 mat=wc/me_warehouse_corrogated set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=me_warehouse_corrogated_col size=512x512 image=0x184f04468 texture=0xb5a2c7f00 vkImage=0xb5a2c8060 view=0xb5fb3e420 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=12 firstCount=1 mat=wc/me_warehouse_corrogated set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/19740600/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=32 mat=wc/ch_brick_wall_04 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~ch_brickwall04_spc-rgb&ch_br~8994aa02 size=256x256 image=0x184f00ef8 texture=0xb69df9260 vkImage=0xb69df93c0 view=0xb46e13c20 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=33 mat=wc/ch_brick_wall_04 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=ch_brickwall04_nml size=256x256 image=0x184f00f28 texture=0xb69cd80a0 vkImage=0xb69cd8200 view=0xb5290d800 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=34 mat=wc/ch_brick_wall_04 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=ch_brickwall04_col size=256x256 image=0x184f00f58 texture=0xb68d23960 vkImage=0xb68d23a60 view=0xb643d1c00 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=13 firstCount=1 mat=wc/ch_brick_wall_04 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/12786444/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=35 mat=wc/ch_brick_wall_08 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~ch_brickwall08_spc-r34g34b34~b085acbe size=512x512 image=0x184f00f88 texture=0xb693da800 vkImage=0xb6966f3e0 view=0xb55594820 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=36 mat=wc/ch_brick_wall_08 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=ch_brickwall08_nml#0 size=512x512 image=0x184f00fb8 texture=0xb6a4c9180 vkImage=0xb6a4c92e0 view=0xb6a458ca0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=37 mat=wc/ch_brick_wall_08 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=ch_brickwall08_col#0 size=512x512 image=0x184f00fe8 texture=0xb62f1c580 vkImage=0xb62f1c6e0 view=0xb69d47900 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=14 firstCount=5 mat=wc/ch_brick_wall_08 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/8364708/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=38 mat=wc/ch_concrete_04 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~ch_concrete04_s-rgb&ch_concr~677c2004 size=512x512 image=0x184f010a8 texture=0xb62eceae0 vkImage=0xb62ecec40 view=0xb6477d120 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=39 mat=wc/ch_concrete_04 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=ch_concrete04_n size=512x512 image=0x184f010d8 texture=0xb5e8cd140 vkImage=0xb69b69f40 view=0xb5e8ccfc0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=40 mat=wc/ch_concrete_04 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=ch_concrete04_col size=512x512 image=0x184f01108 texture=0xb5f05b660 vkImage=0xb5f05b760 view=0xb64754940 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=15 firstCount=1 mat=wc/ch_concrete_04 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/8390800/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=41 mat=wc/ch_concrete_ceiling_01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~ch_concrete_ceiling01_s-rgb&~00677740 size=512x512 image=0x184f01138 texture=0xb6a4ecf40 vkImage=0xb5ee56620 view=0xb6a4ed0a0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=42 mat=wc/ch_concrete_ceiling_01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=ch_concrete_ceiling01_n size=512x512 image=0x184f01168 texture=0xb5f2a9e80 vkImage=0xb5f2a9f80 view=0xb556efd60 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=43 mat=wc/ch_concrete_ceiling_01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=ch_concrete_ceiling01_col size=512x512 image=0x184f01198 texture=0xb662042a0 vkImage=0xb66204400 view=0xb5eed67e0 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=16 firstCount=2 mat=wc/ch_concrete_ceiling_01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/8395816/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=44 mat=wc/ch_concretewall02 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~ch_concretewall02_spc-r73g73b73l-11 size=512x512 image=0x184f011c8 texture=0xb5effc7c0 vkImage=0xb5effc8c0 view=0xb4783e140 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=45 mat=wc/ch_concretewall02 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=4 semantic=5 tex=ch_concretewall02_nml size=512x512 image=0x184f011f8 texture=0xb6a4ea140 vkImage=0xb6a4ea2a0 view=0xb5ed9f1a0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][WORLD SAMPLER] n=46 mat=wc/ch_concretewall02 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=0 semantic=2 tex=ch_concretewall02_col size=512x512 image=0x184f01228 texture=0xb69bfa3e0 vkImage=0xb69bfa540 view=0xb551761e0 vkFormat=134 srcFormat=827611204 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=17 firstCount=2 mat=wc/ch_concretewall02 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/19575468/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][WORLD SAMPLER] n=47 mat=wc/ch_concretewall04 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 ps=lm_r0c0n0s0_sm3.hlsl slot=5 semantic=8 tex=~ch_concretewall04_spc-r-25g-~773bbd54 size=512x512 image=0x184f01258 texture=0xb64746380 vkImage=0xb6477a760 view=0xb647464e0 vkFormat=137 srcFormat=894720068 layout=5
+[KisakCOD][BSP LIT PRETESS] sample=18 firstCount=2 mat=wc/ch_concretewall04 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/8404748/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][BSP LIT PRETESS] sample=19 firstCount=2 mat=wc/ch_concretewall08 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/8489624/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][BSP LIT PRETESS] sample=20 firstCount=1 mat=wc/ch_corrugated_01 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/8502692/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][BSP LIT PRETESS] sample=21 firstCount=1 mat=wc/ch_door_13 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/8527288/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][BSP LIT PRETESS] sample=22 firstCount=1 mat=wc/ch_factory_diamondplate2 set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/8565304/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][BSP LIT PRETESS] sample=23 firstCount=2 mat=wc/ch_factory_diamondplate_step set=wc_l_sm_r0c0n0s0 tech=lm_r0c0n0s0_sm3 techFlags=0x0 worldFmt=0 decl=2 streams=(0xb46c85d00/8581980/44,0x0/0/0) pass=0xb455c4de0 technique=0xb455c4dd0 flags=5 lightmaps=3
+[KisakCOD][VK SHADER INTERFACE] n=15 decl=0xb5a361820 declSerial=1062 declType=2 elems=4 vs=0xb5de3c140/1808 attrs=4 samplers=0 bytes=10376 ps=0xb5de38f60/1809 attrs=4 samplers=4 bytes=11628
+[KisakCOD][VK VERTEX ELEMENT] n=15 i=0 stream=0 offset=0 vkOffset=0 type=3 effective=3 usage=0 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=15 i=1 stream=0 offset=16 vkOffset=16 type=4 effective=5 usage=10 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=15 i=2 stream=0 offset=20 vkOffset=20 type=3 effective=4 usage=5 usageIndex=0
+[KisakCOD][VK VERTEX ELEMENT] n=15 i=3 stream=0 offset=36 vkOffset=36 type=5 effective=5 usage=3 usageIndex=0
+[KisakCOD][VK SHADER ATTR] n=15 i=0 name=v0 usage=0 index=0 location=0 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=15 i=1 name=v1 usage=10 index=0 location=1 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=15 i=2 name=v2 usage=5 index=0 location=2 locationValid=1 declMatch=1
+[KisakCOD][VK SHADER ATTR] n=15 i=3 name=v3 usage=3 index=0 location=3 locationValid=1 declMatch=1
+[KisakCOD][VK SPIRV IFACE PAIR] kind=lightmap decl=1062 vs=1808 ps=1809 vsBytes=5584 psBytes=6868 psSamplers=4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=21 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=22 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=23 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=24 name=vs_o4 storage=output loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=38 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type214
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1809 id=19 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1809 id=21 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1809 id=22 name=ps_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1809 id=23 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type87
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1809 id=24 name=ps_s1 storage=uniformconstant loc=-1 set=2 binding=1 type=type102
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1809 id=25 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type87
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1809 id=26 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type87
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1809 id=118 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type262
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1809 id=244 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1809 id=256 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1809 removed=18 words=1641
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1808 removed=22 words=1316
+[KisakCOD][VK MODULE PREP] n=15 backend=0xb40b75a60 device=0xb418f0040 decl=0xb5a361820 vs=0xb5de3c140/1808 words=1316 bytes=5264 code=0xb59bd5100 ps=0xb5de38f60/1809 words=1641 bytes=6564 code=0xb5e6f3300
+[KisakCOD][VK MODULE VS RETURN] n=15 result=0 module=0xb59db9a20
+[KisakCOD][VK MODULE PS RETURN] n=15 result=0 module=0xb59bd66e0
+[KisakCOD][VK PS SAMPLERS] serial=1809 count=4 sampler[0]=s0/type0/name=s0 sampler[1]=s1/type1/name=s1 sampler[2]=s3/type0/name=s3 sampler[3]=s4/type0/name=s4
+[KisakCOD][VK SPIRV IFACE PAIR] kind=lightmap decl=1097 vs=1770 ps=1889 vsBytes=7564 psBytes=10488 psSamplers=5
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=20 name=vs_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=22 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=23 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=24 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=25 name=vs_o4 storage=output loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=26 name=vs_o5 storage=output loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=27 name=vs_o6 storage=output loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1770 id=41 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type288
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=20 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=22 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=23 name=ps_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=24 name=ps_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=25 name=ps_v5 storage=input loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=26 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type48
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=27 name=ps_s1 storage=uniformconstant loc=-1 set=2 binding=1 type=type170
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=28 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type48
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=29 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type48
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=30 name=ps_s5 storage=uniformconstant loc=-1 set=2 binding=5 type=type48
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=189 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type397
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=384 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1889 id=391 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1889 removed=22 words=2530
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1770 removed=27 words=1791
+[KisakCOD][VK PS SAMPLERS] serial=1889 count=5 sampler[0]=s0/type0/name=s0 sampler[1]=s1/type1/name=s1 sampler[2]=s3/type0/name=s3 sampler[3]=s4/type0/name=s4 sampler[4]=s5/type0/name=s5
+[KisakCOD][VK SPIRV IFACE PAIR] kind=lightmap decl=1062 vs=1808 ps=1904 vsBytes=5584 psBytes=8000 psSamplers=4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=21 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=22 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=23 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=24 name=vs_o4 storage=output loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1808 id=38 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type214
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1904 id=20 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1904 id=22 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1904 id=23 name=ps_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1904 id=24 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type37
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1904 id=25 name=ps_s1 storage=uniformconstant loc=-1 set=2 binding=1 type=type192
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1904 id=26 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type37
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1904 id=27 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type37
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1904 id=212 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type303
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1904 id=290 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1904 id=297 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1904 removed=19 words=1920
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1808 removed=22 words=1316
+[KisakCOD][VK PS SAMPLERS] serial=1904 count=4 sampler[0]=s0/type0/name=s0 sampler[1]=s1/type1/name=s1 sampler[2]=s3/type0/name=s3 sampler[3]=s4/type0/name=s4
+[KisakCOD][VK SPIRV IFACE PAIR] kind=lightmap decl=1062 vs=1795 ps=1796 vsBytes=6324 psBytes=14376 psSamplers=4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1795 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1795 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1795 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1795 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1795 id=21 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1795 id=22 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1795 id=23 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1795 id=24 name=vs_o4 storage=output loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1795 id=38 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type244
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1796 id=28 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1796 id=30 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1796 id=31 name=ps_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1796 id=32 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type80
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1796 id=33 name=ps_s2 storage=uniformconstant loc=-1 set=2 binding=2 type=type80
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1796 id=34 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type80
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1796 id=35 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type80
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1796 id=37 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1796 id=59 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type549
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1796 id=543 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1796 removed=23 words=3501
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1795 removed=26 words=1489
+[KisakCOD][VK PS SAMPLERS] serial=1796 count=4 sampler[0]=s0/type0/name=s0 sampler[1]=s2/type0/name=s2 sampler[2]=s3/type0/name=s3 sampler[3]=s4/type0/name=s4
+[KisakCOD][VK SPIRV IFACE PAIR] kind=lightmap decl=1097 vs=1774 ps=1975 vsBytes=8400 psBytes=21820 psSamplers=8
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=20 name=vs_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=22 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=23 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=24 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=25 name=vs_o4 storage=output loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=26 name=vs_o5 storage=output loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=27 name=vs_o6 storage=output loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=28 name=vs_o7 storage=output loc=6 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=42 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type321
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=36 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=38 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=39 name=ps_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=40 name=ps_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=41 name=ps_v5 storage=input loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=42 name=ps_v6 storage=input loc=6 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=43 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type68
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=44 name=ps_s1 storage=uniformconstant loc=-1 set=2 binding=1 type=type401
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=45 name=ps_s2 storage=uniformconstant loc=-1 set=2 binding=2 type=type68
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=46 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type68
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=47 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type68
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=48 name=ps_s5 storage=uniformconstant loc=-1 set=2 binding=5 type=type68
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=49 name=ps_s6 storage=uniformconstant loc=-1 set=2 binding=6 type=type68
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=50 name=ps_s7 storage=uniformconstant loc=-1 set=2 binding=7 type=type68
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=52 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=59 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type833
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1975 id=827 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1975 removed=36 words=5313
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1774 removed=32 words=1984
+[KisakCOD][VK PS SAMPLERS] serial=1975 count=8 sampler[0]=s0/type0/name=s0 sampler[1]=s1/type1/name=s1 sampler[2]=s2/type0/name=s2 sampler[3]=s3/type0/name=s3 sampler[4]=s4/type0/name=s4 sampler[5]=s5/type0/name=s5 sampler[6]=s6/type0/name=s6 sampler[7]=s7/type0/name=s7
+[KisakCOD][VK SPIRV IFACE PAIR] kind=normal_material decl=1097 vs=1824 ps=1825 vsBytes=8344 psBytes=16544 psSamplers=5
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=20 name=vs_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=22 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=23 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=24 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=25 name=vs_o4 storage=output loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=26 name=vs_o5 storage=output loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=27 name=vs_o6 storage=output loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1824 id=41 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type319
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=28 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=30 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=31 name=ps_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=32 name=ps_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=33 name=ps_v5 storage=input loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=34 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type45
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=35 name=ps_s2 storage=uniformconstant loc=-1 set=2 binding=2 type=type45
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=36 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type45
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=37 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type45
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=38 name=ps_s5 storage=uniformconstant loc=-1 set=2 binding=5 type=type45
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=40 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=214 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type632
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1825 id=626 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1825 removed=26 words=4031
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1824 removed=30 words=1978
+[KisakCOD][VK PS SAMPLERS] serial=1825 count=5 sampler[0]=s0/type0/name=s0 sampler[1]=s2/type0/name=s2 sampler[2]=s3/type0/name=s3 sampler[3]=s4/type0/name=s4 sampler[4]=s5/type0/name=s5
+[KisakCOD][VK SPIRV IFACE PAIR] kind=normal_material decl=1097 vs=1774 ps=1775 vsBytes=8400 psBytes=21196 psSamplers=7
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=20 name=vs_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=22 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=23 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=24 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=25 name=vs_o4 storage=output loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=26 name=vs_o5 storage=output loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=27 name=vs_o6 storage=output loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=28 name=vs_o7 storage=output loc=6 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=42 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type321
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=33 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=35 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=36 name=ps_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=37 name=ps_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=38 name=ps_v5 storage=input loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=39 name=ps_v6 storage=input loc=6 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=40 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type53
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=41 name=ps_s1 storage=uniformconstant loc=-1 set=2 binding=1 type=type251
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=42 name=ps_s2 storage=uniformconstant loc=-1 set=2 binding=2 type=type53
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=43 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type53
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=44 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type53
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=45 name=ps_s5 storage=uniformconstant loc=-1 set=2 binding=5 type=type53
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=46 name=ps_s6 storage=uniformconstant loc=-1 set=2 binding=6 type=type53
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=48 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=103 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type809
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1775 id=803 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1775 removed=33 words=5168
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1774 removed=32 words=1984
+[KisakCOD][VK PS SAMPLERS] serial=1775 count=7 sampler[0]=s0/type0/name=s0 sampler[1]=s1/type1/name=s1 sampler[2]=s2/type0/name=s2 sampler[3]=s3/type0/name=s3 sampler[4]=s4/type0/name=s4 sampler[5]=s5/type0/name=s5 sampler[6]=s6/type0/name=s6
+[KisakCOD][VK SPIRV IFACE PAIR] kind=normal_material decl=1062 vs=1812 ps=1813 vsBytes=6420 psBytes=18880 psSamplers=6
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1812 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1812 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1812 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1812 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1812 id=21 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1812 id=22 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1812 id=23 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1812 id=24 name=vs_o4 storage=output loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1812 id=25 name=vs_o5 storage=output loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1812 id=39 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type247
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=33 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=35 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=36 name=ps_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=37 name=ps_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=38 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type87
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=39 name=ps_s1 storage=uniformconstant loc=-1 set=2 binding=1 type=type290
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=40 name=ps_s2 storage=uniformconstant loc=-1 set=2 binding=2 type=type87
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=41 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type87
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=42 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type87
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=43 name=ps_s5 storage=uniformconstant loc=-1 set=2 binding=5 type=type87
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=45 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=67 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type722
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1813 id=716 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1813 removed=31 words=4597
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1812 removed=27 words=1509
+[KisakCOD][VK PIPELINE INPUT] seq=30 key=c4091172ba96e97a decl=1062 vs=1812 ps=1813 bindings=1 attrs=4
+[KisakCOD][VK PIPELINE BINDING] seq=30 binding=0 stride=44 rate=0
+[KisakCOD][VK PIPELINE ATTRIBUTE] seq=30 location=0 binding=0 format=106 offset=0 usage=0 index=0 elementType=3 effectiveType=3 declaredOffset=0 effectiveOffset=0 route=2
+[KisakCOD][VK PIPELINE ATTRIBUTE] seq=30 location=1 binding=0 format=44 offset=16 usage=10 index=0 elementType=4 effectiveType=5 declaredOffset=16 effectiveOffset=16 route=2
+[KisakCOD][VK PIPELINE ATTRIBUTE] seq=30 location=2 binding=0 format=109 offset=20 usage=5 index=0 elementType=3 effectiveType=4 declaredOffset=20 effectiveOffset=20 route=2
+[KisakCOD][VK PIPELINE ATTRIBUTE] seq=30 location=3 binding=0 format=37 offset=36 usage=3 index=0 elementType=5 effectiveType=5 declaredOffset=36 effectiveOffset=36 route=2
+[KisakCOD][VK PS SAMPLERS] serial=1813 count=6 sampler[0]=s0/type0/name=s0 sampler[1]=s1/type1/name=s1 sampler[2]=s2/type0/name=s2 sampler[3]=s3/type0/name=s3 sampler[4]=s4/type0/name=s4 sampler[5]=s5/type0/name=s5
+[KisakCOD][VK SPIRV IFACE PAIR] kind=normal_material decl=1097 vs=1774 ps=1891 vsBytes=8400 psBytes=22432 psSamplers=7
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=16 name=vs_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=17 name=vs_v1 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=18 name=vs_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=19 name=vs_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=20 name=vs_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=22 name=vs_o1 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=23 name=vs_o2 storage=output loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=24 name=vs_o3 storage=output loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=25 name=vs_o4 storage=output loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=26 name=vs_o5 storage=output loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=27 name=vs_o6 storage=output loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=28 name=vs_o7 storage=output loc=6 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=vs serial=1774 id=42 name=vs_uniforms storage=uniform loc=-1 set=1 binding=0 type=type321
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=34 name=ps_v0 storage=input loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=36 name=ps_v2 storage=input loc=2 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=37 name=ps_v3 storage=input loc=3 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=38 name=ps_v4 storage=input loc=4 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=39 name=ps_v5 storage=input loc=5 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=40 name=ps_v6 storage=input loc=6 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=41 name=ps_s0 storage=uniformconstant loc=-1 set=2 binding=0 type=type50
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=42 name=ps_s1 storage=uniformconstant loc=-1 set=2 binding=1 type=type437
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=43 name=ps_s2 storage=uniformconstant loc=-1 set=2 binding=2 type=type50
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=44 name=ps_s3 storage=uniformconstant loc=-1 set=2 binding=3 type=type50
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=45 name=ps_s4 storage=uniformconstant loc=-1 set=2 binding=4 type=type50
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=46 name=ps_s5 storage=uniformconstant loc=-1 set=2 binding=5 type=type50
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=47 name=ps_s6 storage=uniformconstant loc=-1 set=2 binding=6 type=type50
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=263 name=ps_uniforms storage=uniform loc=-1 set=3 binding=0 type=type854
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=841 name=ps_oC0 storage=output loc=0 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV IFACE] stage=ps serial=1891 id=848 name=ps_PointCoordOrTexCoord0 storage=input loc=1 set=-1 binding=-1 type=vec4
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=ps serial=1891 removed=36 words=5465
+[KisakCOD][VK SPIRV DEBUG STRIP] stage=vs serial=1774 removed=32 words=1984
+[KisakCOD][VK PIPELINE INPUT] seq=31 key=e288be755cb74993 decl=1097 vs=1774 ps=1891 bindings=1 attrs=5
+[KisakCOD][VK PIPELINE BINDING] seq=31 binding=0 stride=44 rate=0
+[KisakCOD][VK PIPELINE ATTRIBUTE] seq=31 location=0 binding=0 format=106 offset=0 usage=0 index=0 elementType=3 effectiveType=3 declaredOffset=0 effectiveOffset=0 route=2
+[KisakCOD][VK PIPELINE ATTRIBUTE] seq=31 location=1 binding=0 format=44 offset=16 usage=10 index=0 elementType=4 effectiveType=5 declaredOffset=16 effectiveOffset=16 route=2
+[KisakCOD][VK PIPELINE ATTRIBUTE] seq=31 location=2 binding=0 format=109 offset=20 usage=5 index=0 elementType=3 effectiveType=4 declaredOffset=20 effectiveOffset=20 route=2
+[KisakCOD][VK PIPELINE ATTRIBUTE] seq=31 location=3 binding=0 format=37 offset=36 usage=3 index=0 elementType=5 effectiveType=5 declaredOffset=36 effectiveOffset=36 route=2
+[KisakCOD][VK PIPELINE ATTRIBUTE] seq=31 location=4 binding=0 format=37 offset=40 usage=5 index=2 elementType=5 effectiveType=5 declaredOffset=40 effectiveOffset=40 route=2
+========================================
+[KisakCOD][CRASH] libnx user exception
+[KisakCOD][CRASH] error_desc=0x00000101
+[KisakCOD][CRASH] pc=0x0000000183b51e0c lr=0x0000000183b51d1c
+[KisakCOD][CRASH] module_base=0x0000000182857000 pc_offset=0x00000000012fae0c lr_offset=0x00000000012fad1c
+[KisakCOD][CRASH] sp=0x000000000c395030 fp=0x000000000c395030 far=0x000000014000006a
+[KisakCOD][CRASH] pstate=0x80000000 esr=0x92000045 ec=0x24
+[KisakCOD][CRASH] FRAME_CHAIN frame_fp=0x000000000c395060 frame_lr=0x0000000182f32f08 frame_lr_offset=0x00000000006dbf08 stack_slot5=0x0000000b5e979870 caller_fp=0x000000000c3955d0 caller_lr=0x0000000182f4de48 caller_lr_offset=0x00000000006f6e48
+[KisakCOD][CRASH] thread_context=0 (main) stage=thread/ready
+[KisakCOD][CRASH] frame_stage=frame/render/vulkan/pipeline/driver_create_call tail_reached=1 after_draw=1
+[KisakCOD][CRASH] cgame_stage=frame/cgame/process_entity/player_return/index=4294967295/ent=0/type=1
+[KisakCOD][CRASH] draw_field=0x1829b2670 caller=0x1829b3220
+[KisakCOD][CRASH] static_model_index=18446744073709551615 model=0x0 xmodel=0x0
+[KisakCOD][CRASH] script_load_stage=reuse_loaded_script script=aitype/ally_sas_woodland_SMG_mp5
+[KisakCOD][CRASH] db_stage=rawfile/lookup/read_hit_return asset_index=-1 raw_type=4294967295 raw_header=0x00000000 menu_item=-1
+[KisakCOD][CRASH] asset_result=0x184dd21f0 asset_type=32 preloadDvar=0x1877b42f8
+[KisakCOD][CRASH] skincache loadForRenderer=1 pool0=0x0000000b4de91e60 pool1=0x0000000b4f54c0a0 lastBuffer=0x0000000b4f54c0a0 createCalled=2 createHr=0
+[KisakCOD][CRASH VK MODULE] phase=3(shader-modules-returned) device=0xb418f0040 decl=0xb4d25fd00/1097 vs=0xb47a9f140/1774 ps=0xb5e7b7e80/1891 active=0xb5e7b7e80/1891 code=0xb5e963a20 bytes=22076 words=5519 hash=0xcd1031f57ecc7957 alphaTest=1 head=07230203,00010000,00000000,00000363,00000000 tail=00010038
+[KisakCOD][CRASH VK PIPELINE CACHE] last_phase=6(graphics_create_active) owner=0xb421c7380 cache=0xb421cc288 size=30 key=0xe288be755cb74993 pipeline=0x0 device=0xb418f0040 decl=0xb4d25fd00/1097 vs=0xb47a9f140/1774 ps=0xb5e7b7e80/1891
+[KisakCOD][CRASH] pc_aligned=0x183b51e0c pc_delta=0
+[KisakCOD][CRASH] insn[-12] 0x183b51e00 = 0xeb01001f
+[KisakCOD][CRASH] insn[-8] 0x183b51e04 = 0x54000a00
+[KisakCOD][CRASH] insn[-4] 0x183b51e08 = 0xf9400c81
+[KisakCOD][CRASH] insn[+0] 0x183b51e0c = 0xf9000c01
+[KisakCOD][CRASH] insn[+4] 0x183b51e10 = 0xf9000820
+[KisakCOD][CRASH] insn[+8] 0x183b51e14 = 0xf90004c3
+[KisakCOD][CRASH] insn[+12] 0x183b51e18 = 0xf82268c2
+[KisakCOD][CRASH] lr_aligned=0x183b51d1c lr_delta=0
+[KisakCOD][CRASH] lr_insn[-64] 0x183b51cdc = 0xb2400021
+[KisakCOD][CRASH] lr_insn[-60] 0x183b51ce0 = 0xf9000441
+[KisakCOD][CRASH] lr_insn[-56] 0x183b51ce4 = 0xf9400063
+[KisakCOD][CRASH] lr_insn[-52] 0x183b51ce8 = 0xcb030000
+[KisakCOD][CRASH] lr_insn[-48] 0x183b51cec = 0xb0007583
+[KisakCOD][CRASH] lr_insn[-44] 0x183b51cf0 = 0xf9429c63
+[KisakCOD][CRASH] lr_insn[-40] 0x183b51cf4 = 0xf9000060
+[KisakCOD][CRASH] lr_insn[-36] 0x183b51cf8 = 0x17ffffd4
+[KisakCOD][CRASH] lr_insn[-32] 0x183b51cfc = 0x00000000
+[KisakCOD][CRASH] lr_insn[-28] 0x183b51d00 = 0xb4000901
+[KisakCOD][CRASH] lr_insn[-24] 0x183b51d04 = 0xa9bd7bfd
+[KisakCOD][CRASH] lr_insn[-20] 0x183b51d08 = 0x910003fd
+[KisakCOD][CRASH] lr_insn[-16] 0x183b51d0c = 0xf9000bf3
+[KisakCOD][CRASH] lr_insn[-12] 0x183b51d10 = 0xaa0003f3
+[KisakCOD][CRASH] lr_insn[-8] 0x183b51d14 = 0xf90017e1
+[KisakCOD][CRASH] lr_insn[-4] 0x183b51d18 = 0x940013d2
+[KisakCOD][CRASH] lr_insn[+0] 0x183b51d1c = 0xf94017e1
+[KisakCOD][CRASH] lr_insn[+4] 0x183b51d20 = 0xb0007607
+[KisakCOD][CRASH] lr_insn[+8] 0x183b51d24 = 0xf94768e7
+[KisakCOD][CRASH] lr_insn[+12] 0x183b51d28 = 0xd1004026
+[KisakCOD][CRASH] lr_insn[+16] 0x183b51d2c = 0xf94004c0
+[KisakCOD][CRASH] lr_insn[+20] 0x183b51d30 = 0xf94008e5
+[KisakCOD][CRASH] lr_insn[+24] 0x183b51d34 = 0x927ff802
+[KisakCOD][CRASH] lr_insn[+28] 0x183b51d38 = 0x8b0200c4
+[KisakCOD][CRASH] lr_insn[+32] 0x183b51d3c = 0x92400008
+[KisakCOD][CRASH] far_match_x=-1 far_low32=0x4000006a high32=0x00000001 low32_nonzero_high_reg=-1
+[KisakCOD][CRASH] x0 =0x0000000140000052 x1 =0x0000000b48387f30
+[KisakCOD][CRASH] x2 =0x0000000000000000 x3 =0x0000000000000001
+[KisakCOD][CRASH] x4 =0x0000000b5e979860 x5 =0x0000000000000000
+[KisakCOD][CRASH] x6 =0x0000000b5e979860 x7 =0x0000000184a2f200
+[KisakCOD][CRASH] x8 =0x0000000000000001 x9 =0x0000000000000004
+[KisakCOD][CRASH] x10=0x0000000100000000 x11=0x0000000000000000
+[KisakCOD][CRASH] x12=0x0000000000000000 x13=0x0000000000000000
+[KisakCOD][CRASH] x14=0x0000000080000000 x15=0x0000000000000000
+[KisakCOD][CRASH] x16=0xfffffffffffffc02 x17=0x00000000000003fd
+[KisakCOD][CRASH] x18=0x0000000b59c28855 x19=0x0000000184a2ece8
+[KisakCOD][CRASH] x20=0x00000000000003ff x21=0x00000000000000e2
+[KisakCOD][CRASH] x22=0x0000000b731e3d40 x23=0x0000000b731e8260
+[KisakCOD][CRASH] x24=0x8080008080000000 x25=0x0000000b62f52f38
+[KisakCOD][CRASH] x26=0x000000000c395500 x27=0xffffffffffffff69
+[KisakCOD][CRASH] x28=0x0000000000000098
+[KisakCOD][VK CRASH PIPELINE] seq=31 key=e288be755cb74993 vs={serial=1774,words=1984,hash=af1d39bec3f1bf7d,version=00010000,bound=323} ps={serial=1891,words=5519,hash=cd1031f57ecc7957,version=00010000,bound=867} color=44 depthFmt=129 samples=1 topology=3 bind=1 attrs=5 alpha=1/7/128 spec=0/0 storedSpec=0/0 depth=1/1/4 stencil=0 blend=0 factors=6/7/6/7 ops=0/0 mask=15 atoc=0 dynamic=3 pipeFlags=1 layout=0xb4212c640 modules=0xb5b9aaf00/0xb5b9ace80 specMap=disabled
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs words=1984 bytes=7936 hash=af1d39bec3f1bf7d magic=07230203 version=00010000 generator=00000000 bound=323 schema=0
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=1/15 data=AwIjBwAAAQAAAAAAQwEAAAAAAAARAAIAAQAAAAsABgAOAQAAR0xTTC5zdGQuNDUwAAAAAA4AAwAAAAAAAAAAAA8AEgAAAAAAAQAAAG1haW4AAAAAEAAAABEAAAASAAAAEwAAABQAAAAVAAAAFgAAABcAAAAYAAAAGQAAABoAAAAbAAAAHAAAAEcABAAQAAAAHgAAAAAAAABHAAQAEQAAAB4AAAABAAAARwAEABIAAAAeAAAAAgAAAEcABAATAAAAHgAAAAMAAABHAAQAFAAAAB4AAAAEAAAARwAEABUAAAALAAAAAAAAAEcABAAWAAAAHgAAAAAAAABHAAQAFwAAAB4AAAABAAAARwAEABgAAAAeAAAAAgAAAEcABAAZAAAAHgAAAAMAAABHAAQAGgAAAB4AAAAEAAAARwAEABsAAAAeAAAABQAAAEcABAAcAAAAHgAAAAYAAABHAAMAQQEAAAIAAABHAAQAKgAAACIAAAABAAAARwAEACoAAAAhAAAAAAAAAEcABABAAQAABgAAABAAAABIAAUAQQEAAAAAAAAjAAAAAAAAABMAAgACAAAAIQADAAMAAAACAAAAFgADAAYAAAAgAAAAKwAEAAYAAAAHAAAABAIBPCsABAAGAAAACAAAAIGAgDsrAAQABgAAAAkAAAAAAIC/KwAEAAYAAAAKAAAAwcBAPxcABAALAAAABgAAAAQAAAAsAAcA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=2/15 data=CwAAAAUAAAAHAAAACAAAAAkAAAAKAAAAKwAEAAYAAAANAAAAAACAPysABAAGAAAADgAAAAAAAAArAAQABgAAAA8AAAA7qrg/LAAHAAsAAAAMAAAADQAAAA4AAAAPAAAADgAAACAABAAnAAAAAgAAAAsAAAAXAAQAlwAAAAYAAAADAAAAFAACAAYBAAAXAAQABwEAAAYBAAAEAAAALAAHAAsAAAAIAQAADgAAAA4AAAAOAAAADgAAACsABAAGAAAACQEAAP//f38sAAcACwAAAAoBAAAJAQAACQEAAAkBAAAJAQAALAAHAAsAAAAUAQAADQAAAA0AAAANAAAADQAAACAABAA2AQAABgAAAAsAAAA7AAQANgEAACQAAAAGAAAAOwAEADYBAAAuAAAABgAAADsABAA2AQAAnQAAAAYAAAA7AAQANgEAAMUAAAAGAAAAFQAEADcBAAAgAAAAAQAAACsABAA3AQAASgAAAAAAAAArAAQANwEAAFIAAAABAAAAKwAEADcBAABaAAAAAgAAACsABAA3AQAAYgAAAAMAAAArAAQANwEAADIAAAAEAAAAKwAEADcBAAA6AAAABQAAACsABAA3AQAAQgAAAAYAAAArAAQANwEAACYAAAAHAAAAKwAEADcBAAAbAQAACAAAACsABAA3AQAAagAAAAkAAAArAAQANwEAAHIAAAAKAAAAKwAEADcBAAB6AAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=3/15 data=CwAAACsABAA3AQAAggAAAAwAAAAgAAQAOAEAAAEAAAALAAAAFwAEADkBAAA3AQAABAAAACAABAA6AQAAAQAAADkBAAAVAAQAOwEAACAAAAAAAAAAFwAEADwBAAA7AQAABAAAACAABAA9AQAAAQAAADwBAAA7AAQAOAEAABAAAAABAAAAOwAEADgBAAARAAAAAQAAADsABAA4AQAAEgAAAAEAAAA7AAQAOAEAABMAAAABAAAAOwAEADgBAAAUAAAAAQAAACAABAA+AQAAAwAAAAsAAAA7AAQAPgEAABUAAAADAAAAOwAEAD4BAAAWAAAAAwAAADsABAA+AQAAFwAAAAMAAAA7AAQAPgEAABgAAAADAAAAOwAEAD4BAAAZAAAAAwAAADsABAA+AQAAGgAAAAMAAAA7AAQAPgEAABsAAAADAAAAOwAEAD4BAAAcAAAAAwAAACsABAA3AQAAPwEAAA0AAAAcAAQAQAEAAAsAAAA/AQAAKwAEADcBAAAoAAAAAAAAAB4AAwBBAQAAQAEAACAABABCAQAAAgAAAEEBAAA7AAQAQgEAACoAAAACAAAANgAFAAIAAAABAAAAAAAAAAMAAAD4AAIABAAAAD0ABAALAAAAHQAAABAAAABTAAQACwAAAB4AAAAdAAAATwAJAAsAAAAfAAAAHgAAAB4AAAAAAAAAAQAAAAIAAAAAAAAATwAJAAsAAAAgAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=4/15 data=DAAAAAwAAAAAAAAAAAAAAAAAAAABAAAATwAJAAsAAAAhAAAADAAAAAwAAAABAAAAAQAAAAEAAAAAAAAAhQAFAAsAAAAiAAAAHwAAACAAAACBAAUACwAAACMAAAAiAAAAIQAAAD4AAwAkAAAAIwAAAD0ABAALAAAAJQAAACQAAABBAAYAJwAAACkAAAAqAAAAKAAAACYAAAA9AAQACwAAACsAAAApAAAAlAAFAAYAAAAsAAAAJQAAACsAAABQAAcACwAAAC0AAAAsAAAALAAAACwAAAAsAAAAPQAEAAsAAAAwAAAALgAAAE8ACQALAAAALwAAAC0AAAAwAAAABAAAAAUAAAAGAAAAAwAAAD4AAwAuAAAALwAAAD0ABAALAAAAMQAAACQAAABBAAYAJwAAADMAAAAqAAAAKAAAADIAAAA9AAQACwAAADQAAAAzAAAAlAAFAAYAAAA1AAAAMQAAADQAAABQAAcACwAAADYAAAA1AAAANQAAADUAAAA1AAAAPQAEAAsAAAA4AAAALgAAAE8ACQALAAAANwAAADYAAAA4AAAAAAAAAAUAAAAGAAAABwAAAD4AAwAuAAAANwAAAD0ABAALAAAAOQAAACQAAABBAAYAJwAAADsAAAAqAAAAKAAAADoAAAA9AAQACwAAADwAAAA7AAAAlAAFAAYAAAA9AAAAOQAAADwAAABQAAcACwAAAD4AAAA9AAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=5/15 data=PQAAAD0AAAA9AAAAPQAEAAsAAABAAAAALgAAAE8ACQALAAAAPwAAAD4AAABAAAAABAAAAAEAAAAGAAAABwAAAD4AAwAuAAAAPwAAAD0ABAALAAAAQQAAACQAAABBAAYAJwAAAEMAAAAqAAAAKAAAAEIAAAA9AAQACwAAAEQAAABDAAAAlAAFAAYAAABFAAAAQQAAAEQAAABQAAcACwAAAEYAAABFAAAARQAAAEUAAABFAAAAPQAEAAsAAABIAAAALgAAAE8ACQALAAAARwAAAEYAAABIAAAABAAAAAUAAAACAAAABwAAAD4AAwAuAAAARwAAAD0ABAALAAAASQAAAC4AAABBAAYAJwAAAEsAAAAqAAAAKAAAAEoAAAA9AAQACwAAAEwAAABLAAAAlAAFAAYAAABNAAAASQAAAEwAAABQAAcACwAAAE4AAABNAAAATQAAAE0AAABNAAAAPQAEAAsAAABQAAAAFQAAAE8ACQALAAAATwAAAE4AAABQAAAAAAAAAAUAAAAGAAAABwAAAD4AAwAVAAAATwAAAD0ABAALAAAAUQAAAC4AAABBAAYAJwAAAFMAAAAqAAAAKAAAAFIAAAA9AAQACwAAAFQAAABTAAAAlAAFAAYAAABVAAAAUQAAAFQAAABQAAcACwAAAFYAAABVAAAAVQAAAFUAAABVAAAAPQAEAAsAAABYAAAAFQAAAE8ACQALAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=6/15 data=VwAAAFYAAABYAAAABAAAAAEAAAAGAAAABwAAAD4AAwAVAAAAVwAAAD0ABAALAAAAWQAAAC4AAABBAAYAJwAAAFsAAAAqAAAAKAAAAFoAAAA9AAQACwAAAFwAAABbAAAAlAAFAAYAAABdAAAAWQAAAFwAAABQAAcACwAAAF4AAABdAAAAXQAAAF0AAABdAAAAPQAEAAsAAABgAAAAFQAAAE8ACQALAAAAXwAAAF4AAABgAAAABAAAAAUAAAACAAAABwAAAD4AAwAVAAAAXwAAAD0ABAALAAAAYQAAAC4AAABBAAYAJwAAAGMAAAAqAAAAKAAAAGIAAAA9AAQACwAAAGQAAABjAAAAlAAFAAYAAABlAAAAYQAAAGQAAABQAAcACwAAAGYAAABlAAAAZQAAAGUAAABlAAAAPQAEAAsAAABoAAAAFQAAAE8ACQALAAAAZwAAAGYAAABoAAAABAAAAAUAAAAGAAAAAwAAAD4AAwAVAAAAZwAAAD0ABAALAAAAaQAAAC4AAABBAAYAJwAAAGsAAAAqAAAAKAAAAGoAAAA9AAQACwAAAGwAAABrAAAAlAAFAAYAAABtAAAAaQAAAGwAAABQAAcACwAAAG4AAABtAAAAbQAAAG0AAABtAAAAPQAEAAsAAABwAAAAGwAAAE8ACQALAAAAbwAAAG4AAABwAAAAAAAAAAUAAAAGAAAABwAAAD4AAwAbAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=7/15 data=bwAAAD0ABAALAAAAcQAAAC4AAABBAAYAJwAAAHMAAAAqAAAAKAAAAHIAAAA9AAQACwAAAHQAAABzAAAAlAAFAAYAAAB1AAAAcQAAAHQAAABQAAcACwAAAHYAAAB1AAAAdQAAAHUAAAB1AAAAPQAEAAsAAAB4AAAAGwAAAE8ACQALAAAAdwAAAHYAAAB4AAAABAAAAAEAAAAGAAAABwAAAD4AAwAbAAAAdwAAAD0ABAALAAAAeQAAAC4AAABBAAYAJwAAAHsAAAAqAAAAKAAAAHoAAAA9AAQACwAAAHwAAAB7AAAAlAAFAAYAAAB9AAAAeQAAAHwAAABQAAcACwAAAH4AAAB9AAAAfQAAAH0AAAB9AAAAPQAEAAsAAACAAAAAGwAAAE8ACQALAAAAfwAAAH4AAACAAAAABAAAAAUAAAACAAAABwAAAD4AAwAbAAAAfwAAAD0ABAALAAAAgQAAAC4AAABBAAYAJwAAAIMAAAAqAAAAKAAAAIIAAAA9AAQACwAAAIQAAACDAAAAlAAFAAYAAACFAAAAgQAAAIQAAABQAAcACwAAAIYAAACFAAAAhQAAAIUAAACFAAAAPQAEAAsAAACIAAAAGwAAAE8ACQALAAAAhwAAAIYAAACIAAAABAAAAAUAAAAGAAAAAwAAAD4AAwAbAAAAhwAAAD0ABAALAAAAiQAAABMAAABTAAQACwAAAIoAAACJAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=8/15 data=TwAJAAsAAACLAAAABQAAAAUAAAAAAAAAAAAAAAAAAAABAAAATwAJAAsAAACMAAAABQAAAAUAAAACAAAAAgAAAAIAAAADAAAAhQAFAAsAAACNAAAAigAAAIsAAACBAAUACwAAAI4AAACNAAAAjAAAAD4AAwAkAAAAjgAAAD0ABAALAAAAjwAAACQAAABPAAkACwAAAJAAAACPAAAAjwAAAAMAAAADAAAAAwAAAAMAAAA9AAQACwAAAJEAAAAkAAAAhQAFAAsAAACSAAAAkAAAAJEAAAA9AAQACwAAAJQAAAAkAAAATwAJAAsAAACTAAAAkgAAAJQAAAAAAAAAAQAAAAIAAAAHAAAAPgADACQAAACTAAAAPQAEAAsAAACVAAAAJAAAAE8ACACXAAAAlgAAAJUAAACVAAAAAAAAAAEAAAACAAAAQQAGACcAAACYAAAAKgAAACgAAAAyAAAAPQAEAAsAAACZAAAAmAAAAE8ACACXAAAAmgAAAJkAAACZAAAAAAAAAAEAAAACAAAAlAAFAAYAAACbAAAAlgAAAJoAAABQAAcACwAAAJwAAACbAAAAmwAAAJsAAACbAAAAPQAEAAsAAACfAAAAnQAAAE8ACQALAAAAngAAAJwAAACfAAAAAAAAAAUAAAAGAAAABwAAAD4AAwCdAAAAngAAAD0ABAALAAAAoAAAACQAAABPAAgAlwAAAKEAAACgAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=9/15 data=oAAAAAAAAAABAAAAAgAAAEEABgAnAAAAogAAACoAAAAoAAAAOgAAAD0ABAALAAAAowAAAKIAAABPAAgAlwAAAKQAAACjAAAAowAAAAAAAAABAAAAAgAAAJQABQAGAAAApQAAAKEAAACkAAAAUAAHAAsAAACmAAAApQAAAKUAAAClAAAApQAAAD0ABAALAAAAqAAAAJ0AAABPAAkACwAAAKcAAACmAAAAqAAAAAQAAAABAAAABgAAAAcAAAA+AAMAnQAAAKcAAAA9AAQACwAAAKkAAAAkAAAATwAIAJcAAACqAAAAqQAAAKkAAAAAAAAAAQAAAAIAAABBAAYAJwAAAKsAAAAqAAAAKAAAAEIAAAA9AAQACwAAAKwAAACrAAAATwAIAJcAAACtAAAArAAAAKwAAAAAAAAAAQAAAAIAAACUAAUABgAAAK4AAACqAAAArQAAAFAABwALAAAArwAAAK4AAACuAAAArgAAAK4AAAA9AAQACwAAALEAAACdAAAATwAJAAsAAACwAAAArwAAALEAAAAEAAAABQAAAAIAAAAHAAAAPgADAJ0AAACwAAAAPQAEAAsAAACyAAAAFAAAAFMABAALAAAAswAAALIAAABPAAkACwAAALQAAAAFAAAABQAAAAAAAAAAAAAAAAAAAAEAAABPAAkACwAAALUAAAAFAAAABQAAAAIAAAACAAAAAgAAAAMAAACFAAUA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=10/15 data=CwAAALYAAACzAAAAtAAAAIEABQALAAAAtwAAALYAAAC1AAAAPgADACQAAAC3AAAAPQAEAAsAAAC4AAAAJAAAAE8ACQALAAAAuQAAALgAAAC4AAAAAwAAAAMAAAADAAAAAwAAAD0ABAALAAAAugAAACQAAACFAAUACwAAALsAAAC5AAAAugAAAD0ABAALAAAAvQAAACQAAABPAAkACwAAALwAAAC7AAAAvQAAAAAAAAABAAAAAgAAAAcAAAA+AAMAJAAAALwAAAA9AAQACwAAAL4AAAAkAAAATwAIAJcAAAC/AAAAvgAAAL4AAAAAAAAAAQAAAAIAAABBAAYAJwAAAMAAAAAqAAAAKAAAADIAAAA9AAQACwAAAMEAAADAAAAATwAIAJcAAADCAAAAwQAAAMEAAAAAAAAAAQAAAAIAAACUAAUABgAAAMMAAAC/AAAAwgAAAFAABwALAAAAxAAAAMMAAADDAAAAwwAAAMMAAAA9AAQACwAAAMcAAADFAAAATwAJAAsAAADGAAAAxAAAAMcAAAAAAAAABQAAAAYAAAAHAAAAPgADAMUAAADGAAAAPQAEAAsAAADIAAAAJAAAAE8ACACXAAAAyQAAAMgAAADIAAAAAAAAAAEAAAACAAAAQQAGACcAAADKAAAAKgAAACgAAAA6AAAAPQAEAAsAAADLAAAAygAAAE8ACACXAAAAzAAAAMsAAADLAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=11/15 data=AAAAAAEAAAACAAAAlAAFAAYAAADNAAAAyQAAAMwAAABQAAcACwAAAM4AAADNAAAAzQAAAM0AAADNAAAAPQAEAAsAAADQAAAAxQAAAE8ACQALAAAAzwAAAM4AAADQAAAABAAAAAEAAAAGAAAABwAAAD4AAwDFAAAAzwAAAD0ABAALAAAA0QAAACQAAABPAAgAlwAAANIAAADRAAAA0QAAAAAAAAABAAAAAgAAAEEABgAnAAAA0wAAACoAAAAoAAAAQgAAAD0ABAALAAAA1AAAANMAAABPAAgAlwAAANUAAADUAAAA1AAAAAAAAAABAAAAAgAAAJQABQAGAAAA1gAAANIAAADVAAAAUAAHAAsAAADXAAAA1gAAANYAAADWAAAA1gAAAD0ABAALAAAA2QAAAMUAAABPAAkACwAAANgAAADXAAAA2QAAAAQAAAAFAAAAAgAAAAcAAAA+AAMAxQAAANgAAAA9AAQACwAAANoAAACdAAAATwAJAAsAAADbAAAA2gAAANoAAAACAAAAAAAAAAEAAAADAAAAPQAEAAsAAADcAAAAxQAAAE8ACQALAAAA3QAAANwAAADcAAAAAQAAAAIAAAAAAAAAAwAAAIUABQALAAAA3gAAANsAAADdAAAAPQAEAAsAAADgAAAAJAAAAE8ACQALAAAA3wAAAN4AAADgAAAAAAAAAAEAAAACAAAABwAAAD4AAwAkAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=12/15 data=3wAAAD0ABAALAAAA4QAAAJ0AAABPAAkACwAAAOIAAADhAAAA4QAAAAEAAAACAAAAAAAAAAMAAAA9AAQACwAAAOMAAADFAAAATwAJAAsAAADkAAAA4wAAAOMAAAACAAAAAAAAAAEAAAADAAAAPQAEAAsAAADlAAAAJAAAAH8ABAALAAAA5gAAAOUAAACFAAUACwAAAOcAAADiAAAA5AAAAIEABQALAAAA6AAAAOcAAADmAAAAPQAEAAsAAADqAAAAJAAAAE8ACQALAAAA6QAAAOgAAADqAAAAAAAAAAEAAAACAAAABwAAAD4AAwAkAAAA6QAAAD0ABAALAAAA6wAAAJ0AAAA9AAQACwAAAO0AAAAYAAAATwAJAAsAAADsAAAA6wAAAO0AAAAAAAAAAQAAAAIAAAAHAAAAPgADABgAAADsAAAAPQAEAAsAAADuAAAAxQAAAD0ABAALAAAA8AAAABoAAABPAAkACwAAAO8AAADuAAAA8AAAAAAAAAABAAAAAgAAAAcAAAA+AAMAGgAAAO8AAAA9AAQACwAAAPEAAAAkAAAAPQAEAAsAAADyAAAAEAAAAFMABAALAAAA8wAAAPIAAABPAAkACwAAAPQAAADzAAAA8wAAAAMAAAADAAAAAwAAAAMAAACFAAUACwAAAPUAAADxAAAA9AAAAD0ABAALAAAA9wAAABkAAABPAAkACwAAAPYAAAD1AAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=13/15 data=9wAAAAAAAAABAAAAAgAAAAcAAAA+AAMAGQAAAPYAAAA9AAQACwAAAPgAAAAuAAAATwAIAJcAAAD5AAAA+AAAAPgAAAAAAAAAAQAAAAIAAAA9AAQACwAAAPoAAAAuAAAATwAIAJcAAAD7AAAA+gAAAPoAAAAAAAAAAQAAAAIAAACUAAUABgAAAPwAAAD5AAAA+wAAAFAABwALAAAA/QAAAPwAAAD8AAAA/AAAAPwAAAA9AAQACwAAAP8AAAAkAAAATwAJAAsAAAD+AAAA/QAAAP8AAAAAAAAABQAAAAYAAAAHAAAAPgADACQAAAD+AAAAPQAEAAsAAAAAAQAALgAAAD0ABAALAAAAAgEAABwAAABPAAkACwAAAAEBAAAAAQAAAgEAAAAAAAABAAAAAgAAAAcAAAA+AAMAHAAAAAEBAAA9AAQACwAAAAMBAAAkAAAATwAJAAsAAAAEAQAAAwEAAAMBAAAAAAAAAAAAAAAAAAAAAAAAtgAFAAcBAAALAQAABAEAAAgBAAAMAAYACwAAAAwBAAAOAQAABAAAAAQBAAAMAAYACwAAAA0BAAAOAQAAIAAAAAwBAACpAAYACwAAAAUBAAALAQAADQEAAAoBAAA9AAQACwAAABABAAAkAAAATwAJAAsAAAAPAQAABQEAABABAAAAAAAABQAAAAYAAAAHAAAAPgADACQAAAAPAQAAPQAEAAsAAAARAQAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=14/15 data=JAAAAE8ACQALAAAAEgEAABEBAAARAQAAAAAAAAAAAAAAAAAAAAAAALYABQAHAQAAFQEAABIBAAAIAQAAiAAFAAsAAAAWAQAAFAEAABIBAACpAAYACwAAABMBAAAVAQAAFgEAAAoBAAA9AAQACwAAABgBAAAkAAAATwAJAAsAAAAXAQAAEwEAABgBAAAAAAAABQAAAAYAAAAHAAAAPgADACQAAAAXAQAAPQAEAAsAAAAZAQAAJAAAAE8ACQALAAAAGgEAABkBAAAZAQAAAAAAAAAAAAAAAAAAAAAAAEEABgAnAAAAHAEAACoAAAAoAAAAGwEAAD0ABAALAAAAHQEAABwBAABPAAkACwAAAB4BAAAdAQAAHQEAAAIAAAACAAAAAgAAAAIAAABBAAYAJwAAAB8BAAAqAAAAKAAAABsBAAA9AAQACwAAACABAAAfAQAATwAJAAsAAAAhAQAAIAEAACABAAADAAAAAwAAAAMAAAADAAAAhQAFAAsAAAAiAQAAGgEAAB4BAACBAAUACwAAACMBAAAiAQAAIQEAAD0ABAALAAAAJQEAACQAAABPAAkACwAAACQBAAAjAQAAJQEAAAAAAAAFAAAABgAAAAcAAAA+AAMAJAAAACQBAAA9AAQACwAAACYBAAAkAAAATwAJAAsAAAAnAQAAJgEAACYBAAAAAAAAAAAAAAAAAAAAAAAATwAJAAsAAAAoAQAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=vs part=15/15 data=DAAAAAwAAAACAAAAAgAAAAIAAAACAAAAhQAFAAsAAAApAQAAJwEAACgBAAA9AAQACwAAACsBAAAkAAAATwAJAAsAAAAqAQAAKQEAACsBAAAAAAAABQAAAAYAAAAHAAAAPgADACQAAAAqAQAAPQAEAAsAAAAsAQAAJAAAAE8ACQALAAAALQEAACwBAAAsAQAAAAAAAAAAAAAAAAAAAAAAAAwABgALAAAALgEAAA4BAAAdAAAALQEAAAwACAALAAAALwEAAA4BAAArAAAALgEAAAgBAAAUAQAAPQAEAAsAAAAxAQAAGAAAAE8ACQALAAAAMAEAAC8BAAAxAQAABAAAAAUAAAAGAAAAAwAAAD4AAwAYAAAAMAEAAD0ABAALAAAAMgEAABEAAABTAAQACwAAADMBAAAyAQAAPgADABYAAAAzAQAAPQAEAAsAAAA0AQAAEgAAAFMABAALAAAANQEAADQBAAA+AAMAFwAAADUBAAD9AAEAOAABAA==
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps words=5519 bytes=22076 hash=cd1031f57ecc7957 magic=07230203 version=00010000 generator=00000000 bound=867 schema=0
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=1/41 data=AwIjBwAAAQAAAAAAYwMAAAAAAAARAAIAAQAAAAsABgBlAAAAR0xTTC5zdGQuNDUwAAAAAA4AAwAAAAAAAAAAAA8ADQAEAAAAAQAAAG1haW4AAAAAIgAAAFADAAAkAAAAJQAAACYAAAAnAAAAKAAAAEkDAAAQAAMAAQAAAAcAAABHAAQAKQAAACIAAAACAAAARwAEACkAAAAhAAAAAAAAAEcABAAqAAAAIgAAAAIAAABHAAQAKgAAACEAAAABAAAARwAEACsAAAAiAAAAAgAAAEcABAArAAAAIQAAAAIAAABHAAQALAAAACIAAAACAAAARwAEACwAAAAhAAAAAwAAAEcABAAtAAAAIgAAAAIAAABHAAQALQAAACEAAAAEAAAARwAEAC4AAAAiAAAAAgAAAEcABAAuAAAAIQAAAAUAAABHAAQALwAAACIAAAACAAAARwAEAC8AAAAhAAAABgAAAEcABAAiAAAAHgAAAAAAAABHAAQAUAMAAB4AAAABAAAARwAEACQAAAAeAAAAAgAAAEcABAAlAAAAHgAAAAMAAABHAAQAJgAAAB4AAAAEAAAARwAEACcAAAAeAAAABQAAAEcABAAoAAAAHgAAAAYAAABHAAQASQMAAB4AAAAAAAAARwADAFYDAAACAAAARwAEAAcBAAAiAAAAAwAAAEcABAAHAQAAIQAAAAAAAABHAAQAVQMAAAYAAAAQAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=2/41 data=SAAFAFYDAAAAAAAAIwAAAAAAAAATAAIAAgAAACEAAwADAAAAAgAAABYAAwAGAAAAIAAAACAABABZAwAABwAAAAYAAAArAAQABgAAAAcAAABcj4JAKwAEAAYAAAAIAAAAhBCCQCsABAAGAAAACQAAALgeBcArAAQABgAAAAoAAAAIIQTAFwAEAAsAAAAGAAAABAAAACwABwALAAAABQAAAAcAAAAIAAAACQAAAAoAAAArAAQABgAAAA0AAAAAAAC/KwAEAAYAAAAOAAAAAACAPysABAAGAAAADwAAAAAAAAArAAQABgAAABAAAABQChZBLAAHAAsAAAAMAAAADQAAAA4AAAAPAAAAEAAAACsABAAGAAAAEgAAAAAAAEErAAQABgAAABMAAAAAAMBAKwAEAAYAAAAUAAAAAADgQCsABAAGAAAAFQAAANnOf78sAAcACwAAABEAAAASAAAAEwAAABQAAAAVAAAAKwAEAAYAAAAXAAAAO6q4PysABAAGAAAAGAAAAAAAgDkrAAQABgAAABkAAAAAAIA+LAAHAAsAAAAWAAAAFwAAABgAAAAPAAAAGQAAACsABAAGAAAAGwAAAAAAADorAAQABgAAABwAAAAAAAC5KwAEAAYAAAAdAAAAAABAPywABwALAAAAGgAAABsAAAAcAAAADwAAAB0AAAArAAQABgAAAB8AAAAAAIBAKwAEAAYAAAAgAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=3/41 data=AABAwCsABAAGAAAAIQAAAAAAQL8sAAcACwAAAB4AAAAfAAAAIAAAAA0AAAAhAAAAGQAJADEAAAAGAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAGwADADIAAAAxAAAALAAHAAsAAABJAAAADwAAAA8AAAAPAAAADwAAABQAAgBLAAAAFwAEAEwAAABLAAAABAAAABcABACNAAAABgAAAAIAAAArAAQABgAAAKMAAAD//39/LAAHAAsAAACkAAAAowAAAKMAAACjAAAAowAAACwABwALAAAAzAAAAA4AAAAOAAAADgAAAA4AAAAXAAQA+QAAAAYAAAADAAAAIAAEAAQBAAACAAAACwAAABkACQC0AQAABgAAAAMAAAAAAAAAAAAAAAAAAAABAAAAAAAAABsAAwC1AQAAtAEAACAABABKAwAABgAAAAsAAAArAAQABgAAAFgDAACBgAA/KQADAEsAAABcAwAAKgADAEsAAABdAwAAKwAEAAYAAABbAwAAAACAPzsABABKAwAANQAAAAYAAAA7AAQASgMAAE0AAAAGAAAAOwAEAEoDAABTAAAABgAAADsABABKAwAAcAAAAAYAAAA7AAQASgMAAIAAAAAGAAAAOwAEAEoDAAAZAQAABgAAADsABABKAwAAawEAAAYAAAA7AAQASgMAAMMBAAAGAAAAOwAEAEoDAADtAQAABgAAADsABABKAwAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=4/41 data=8gEAAAYAAAA7AAQASgMAAP4BAAAGAAAAFQAEAEsDAAAgAAAAAQAAACsABABLAwAAOQMAAAAAAAArAAQASwMAADUCAAABAAAAKwAEAEsDAACrAgAAAgAAACsABABLAwAAUAEAAAMAAAArAAQASwMAAAMBAAAEAAAAKwAEAEsDAADQAQAABQAAACsABABLAwAApwEAAAYAAAAgAAQATAMAAAAAAAAyAAAAOwAEAEwDAAApAAAAAAAAACAABABNAwAAAAAAALUBAAA7AAQATQMAACoAAAAAAAAAOwAEAEwDAAArAAAAAAAAADsABABMAwAALAAAAAAAAAA7AAQATAMAAC0AAAAAAAAAOwAEAEwDAAAuAAAAAAAAADsABABMAwAALwAAAAAAAAAgAAQATgMAAAEAAAALAAAAOwAEAE4DAAAiAAAAAQAAACAABABPAwAAAQAAAI0AAAA7AAQATgMAAFADAAABAAAAOwAEAEoDAAAjAAAABgAAADsABABOAwAAJAAAAAEAAAA7AAQATgMAACUAAAABAAAAOwAEAE4DAAAmAAAAAQAAADsABABOAwAAJwAAAAEAAAA7AAQATgMAACgAAAABAAAAIAAEAFMDAAADAAAACwAAADsABABTAwAASQMAAAMAAAArAAQASwMAAFQDAAAHAAAAHAAEAFUDAAALAAAAVAMAACsABABLAwAABQEAAAAAAAAeAAMA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=5/41 data=VgMAAFUDAAAgAAQAVwMAAAIAAABWAwAAOwAEAFcDAAAHAQAAAgAAADYABQACAAAAAQAAAAAAAAADAAAA+AACAAQAAAA7AAQAWQMAAFoDAAAHAAAAPgADAFoDAABbAwAAPQAEAAsAAABRAwAAUAMAAE8ACQALAAAAUgMAAFEDAABRAwAAAAAAAAEAAAACAAAAAwAAAD4AAwAjAAAAUgMAAD0ABAALAAAAMAAAACMAAAA9AAQAMgAAADMAAAApAAAAVwAFAAsAAAA0AAAAMwAAADAAAAA+AAMANQAAADQAAAA9AAQACwAAADYAAAA1AAAAPQAEAAsAAAA3AAAAIgAAAIUABQALAAAAOAAAADYAAAA3AAAAPQAEAAsAAAA6AAAANQAAAE8ACQALAAAAOQAAADgAAAA6AAAAAAAAAAEAAAACAAAABwAAAD4AAwA1AAAAOQAAAD0ABAALAAAAOwAAADUAAABPAAkACwAAADwAAAA7AAAAOwAAAAMAAAADAAAAAwAAAAMAAAA9AAQACwAAAD0AAAAiAAAATwAJAAsAAAA+AAAAPQAAAD0AAAADAAAAAwAAAAMAAAADAAAATwAJAAsAAAA/AAAADAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAhQAFAAsAAABAAAAAPAAAAD4AAACBAAUACwAAAEEAAABAAAAAPwAAAD0ABAALAAAAQwAAADUAAABPAAkA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=6/41 data=CwAAAEIAAABBAAAAQwAAAAQAAAAFAAAABgAAAAMAAAA+AAMANQAAAEIAAAA9AAQACwAAAEQAAAA1AAAATwAJAAsAAABFAAAARAAAAEQAAAADAAAAAwAAAAMAAAADAAAAPQAEAAsAAABGAAAANQAAAE8ACQALAAAARwAAAAwAAAAMAAAAAgAAAAIAAAACAAAAAgAAAL8ABQBMAAAASgAAAEUAAABJAAAAqQAGAAsAAABIAAAASgAAAEYAAABHAAAAPQAEAAsAAABPAAAATQAAAE8ACQALAAAATgAAAEgAAABPAAAAAAAAAAEAAAACAAAABwAAAD4AAwBNAAAATgAAAD0ABAALAAAAUAAAACMAAAA9AAQAMgAAAFEAAAAuAAAAVwAFAAsAAABSAAAAUQAAAFAAAAA+AAMAUwAAAFIAAAA9AAQACwAAAFQAAABTAAAATwAJAAsAAABVAAAAVAAAAFQAAAADAAAAAQAAAAIAAAADAAAATwAJAAsAAABWAAAABQAAAAUAAAACAAAAAwAAAAIAAAADAAAAhQAFAAsAAABXAAAAVQAAAAUAAACBAAUACwAAAFgAAABXAAAAVgAAAD0ABAALAAAAWgAAADUAAABPAAkACwAAAFkAAABYAAAAWgAAAAAAAAABAAAABgAAAAcAAAA+AAMANQAAAFkAAAA9AAQACwAAAFsAAAA1AAAATwAJAAsAAABcAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=7/41 data=WwAAAFsAAAADAAAAAwAAAAMAAAADAAAAPQAEAAsAAABdAAAANQAAAE8ACQALAAAAXgAAAAwAAAAMAAAAAgAAAAIAAAACAAAAAgAAAL8ABQBMAAAAYAAAAFwAAABJAAAAqQAGAAsAAABfAAAAYAAAAF0AAABeAAAAPQAEAAsAAABiAAAANQAAAE8ACQALAAAAYQAAAF8AAABiAAAAAAAAAAEAAAAGAAAABwAAAD4AAwA1AAAAYQAAAE8ACQALAAAAYwAAAAwAAAAMAAAAAQAAAAAAAAACAAAAAwAAAAwABgALAAAAZAAAAGUAAAAEAAAAYwAAAD0ABAALAAAAZgAAACMAAABPAAkACwAAAGcAAABmAAAAZgAAAAIAAAADAAAAAgAAAAMAAACFAAUACwAAAGgAAABkAAAAZwAAAD0ABAALAAAAagAAAFMAAABPAAkACwAAAGkAAABoAAAAagAAAAAAAAABAAAABgAAAAcAAAA+AAMAUwAAAGkAAAA9AAQACwAAAGsAAABTAAAAPQAEADIAAABsAAAALAAAAFcABQALAAAAbQAAAGwAAABrAAAAPgADAFMAAABtAAAAPQAEAAsAAABuAAAAUwAAAE8ACQALAAAAbwAAAG4AAABuAAAAAwAAAAMAAAADAAAAAwAAAD0ABAALAAAAcgAAAHAAAABPAAkACwAAAHEAAABvAAAAcgAAAAAAAAAFAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=8/41 data=BgAAAAcAAAA+AAMAcAAAAHEAAAA9AAQACwAAAHMAAAAjAAAATwAJAAsAAAB0AAAADAAAAAwAAAAAAAAAAQAAAAEAAAAAAAAADAAGAAsAAAB1AAAAZQAAAAQAAAB0AAAATwAJAAsAAAB2AAAADAAAAAwAAAAAAAAAAQAAAAIAAAAAAAAADAAGAAsAAAB3AAAAZQAAAAQAAAB2AAAAhQAFAAsAAAB4AAAAcwAAAHUAAACBAAUACwAAAHkAAAB4AAAAdwAAAD0ABAALAAAAewAAAHAAAABPAAkACwAAAHoAAAB5AAAAewAAAAQAAAAFAAAAAgAAAAMAAAA+AAMAcAAAAHoAAAA9AAQACwAAAHwAAABwAAAATwAJAAsAAAB9AAAAfAAAAHwAAAACAAAAAwAAAAIAAAADAAAAPQAEADIAAAB+AAAALAAAAFcABQALAAAAfwAAAH4AAAB9AAAAPgADAIAAAAB/AAAAPQAEAAsAAACBAAAAgAAAAE8ACQALAAAAggAAAIEAAACBAAAAAwAAAAMAAAADAAAAAwAAAD0ABAALAAAAhAAAAHAAAABPAAkACwAAAIMAAACCAAAAhAAAAAQAAAABAAAABgAAAAcAAAA+AAMAcAAAAIMAAAA9AAQACwAAAIUAAABwAAAATwAJAAsAAACGAAAABQAAAAUAAAACAAAAAwAAAAIAAAADAAAAhQAFAAsAAACHAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=9/41 data=hQAAAAUAAACBAAUACwAAAIgAAACHAAAAhgAAAD0ABAALAAAAigAAAHAAAABPAAkACwAAAIkAAACIAAAAigAAAAAAAAABAAAABgAAAAcAAAA+AAMAcAAAAIkAAAA9AAQACwAAAIsAAABwAAAATwAHAI0AAACMAAAAiwAAAIsAAAAAAAAAAQAAAD0ABAALAAAAjgAAADUAAABPAAcAjQAAAI8AAACOAAAAjgAAAAAAAAABAAAAUQAFAAYAAACQAAAADAAAAAIAAACUAAUABgAAAJEAAACMAAAAjwAAAIEABQAGAAAAkgAAAJEAAACQAAAAUAAHAAsAAACTAAAAkgAAAJIAAACSAAAAkgAAAD0ABAALAAAAlQAAADUAAABPAAkACwAAAJQAAACTAAAAlQAAAAQAAAAFAAAAAgAAAAcAAAA+AAMANQAAAJQAAAA9AAQACwAAAJYAAAA1AAAATwAHAI0AAACXAAAAlgAAAJYAAAAAAAAAAQAAAD0ABAALAAAAmAAAADUAAABPAAcAjQAAAJkAAACYAAAAmAAAAAAAAAABAAAAUQAFAAYAAACaAAAADAAAAAEAAACUAAUABgAAAJsAAACXAAAAmQAAAIEABQAGAAAAnAAAAJsAAACaAAAAUAAHAAsAAACdAAAAnAAAAJwAAACcAAAAnAAAAD0ABAALAAAAnwAAAFMAAABPAAkACwAAAJ4AAACdAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=10/41 data=nwAAAAQAAAAFAAAABgAAAAMAAAA+AAMAUwAAAJ4AAAA9AAQACwAAAKAAAABTAAAATwAJAAsAAAChAAAAoAAAAKAAAAADAAAAAwAAAAMAAAADAAAAtgAFAEwAAAClAAAAoQAAAEkAAAAMAAYACwAAAKYAAABlAAAABAAAAKEAAAAMAAYACwAAAKcAAABlAAAAIAAAAKYAAACpAAYACwAAAKIAAAClAAAApwAAAKQAAAA9AAQACwAAAKkAAABTAAAATwAJAAsAAACoAAAAogAAAKkAAAAEAAAABQAAAAYAAAADAAAAPgADAFMAAACoAAAAPQAEAAsAAACqAAAAcAAAAE8ABwCNAAAAqwAAAKoAAACqAAAAAAAAAAEAAAA9AAQACwAAAKwAAABwAAAATwAHAI0AAACtAAAArAAAAKwAAAAAAAAAAQAAAFEABQAGAAAArgAAAAwAAAABAAAAlAAFAAYAAACvAAAAqwAAAK0AAACBAAUABgAAALAAAACvAAAArgAAAFAABwALAAAAsQAAALAAAACwAAAAsAAAALAAAAA9AAQACwAAALMAAABwAAAATwAJAAsAAACyAAAAsQAAALMAAAAAAAAABQAAAAYAAAAHAAAAPgADAHAAAACyAAAAPQAEAAsAAAC0AAAAcAAAAE8ACQALAAAAtQAAALQAAAC0AAAAAAAAAAAAAAAAAAAAAAAAALYABQBMAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=11/41 data=twAAALUAAABJAAAADAAGAAsAAAC4AAAAZQAAAAQAAAC1AAAADAAGAAsAAAC5AAAAZQAAACAAAAC4AAAAqQAGAAsAAAC2AAAAtwAAALkAAACkAAAAPQAEAAsAAAC7AAAAcAAAAE8ACQALAAAAugAAALYAAAC7AAAAAAAAAAUAAAAGAAAABwAAAD4AAwBwAAAAugAAAD0ABAALAAAAvAAAAFMAAABPAAkACwAAAL0AAAC8AAAAvAAAAAMAAAADAAAAAwAAAAMAAAA9AAQACwAAAL4AAABwAAAATwAJAAsAAAC/AAAAvgAAAL4AAAAAAAAAAAAAAAAAAAAAAAAAhQAFAAsAAADAAAAAvQAAAL8AAAA9AAQACwAAAMIAAABwAAAATwAJAAsAAADBAAAAwAAAAMIAAAAAAAAABQAAAAYAAAAHAAAAPgADAHAAAADBAAAAPQAEAAsAAADDAAAANQAAAE8ACQALAAAAxAAAAMMAAADDAAAAAgAAAAIAAAACAAAAAgAAAD0ABAALAAAAxQAAAHAAAABPAAkACwAAAMYAAADFAAAAxQAAAAAAAAAAAAAAAAAAAAAAAAA9AAQACwAAAMcAAABwAAAATwAJAAsAAADIAAAAxwAAAMcAAAAAAAAAAAAAAAAAAAAAAAAAhQAFAAsAAADJAAAAxAAAAMYAAACBAAUACwAAAMoAAADJAAAAyAAAAAwACAALAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=12/41 data=ywAAAGUAAAArAAAAygAAAEkAAADMAAAAPQAEAAsAAADOAAAANQAAAE8ACQALAAAAzQAAAMsAAADOAAAABAAAAAUAAAACAAAABwAAAD4AAwA1AAAAzQAAAD0ABAALAAAAzwAAAIAAAAA9AAQACwAAANAAAAA1AAAATwAJAAsAAADRAAAA0AAAANAAAAACAAAAAgAAAAIAAAACAAAAhQAFAAsAAADSAAAAzwAAANEAAAA9AAQACwAAANQAAABwAAAATwAJAAsAAADTAAAA0gAAANQAAAAAAAAAAQAAAAIAAAAHAAAAPgADAHAAAADTAAAAPQAEAAsAAADVAAAAUwAAAD0ABAALAAAA1gAAAFMAAABPAAkACwAAANcAAADWAAAA1gAAAAMAAAADAAAAAwAAAAMAAAA9AAQACwAAANgAAABwAAAAhQAFAAsAAADZAAAA1QAAANcAAACBAAUACwAAANoAAADZAAAA2AAAAD0ABAALAAAA3AAAAFMAAABPAAkACwAAANsAAADaAAAA3AAAAAAAAAABAAAAAgAAAAcAAAA+AAMAUwAAANsAAAA9AAQACwAAAN0AAAA1AAAATwAJAAsAAADeAAAA3QAAAN0AAAADAAAAAwAAAAMAAAADAAAATwAJAAsAAADfAAAADAAAAAwAAAABAAAAAQAAAAEAAAABAAAATwAJAAsAAADgAAAADAAAAAwAAAACAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=13/41 data=AgAAAAIAAAACAAAAvwAFAEwAAADiAAAA3gAAAEkAAACpAAYACwAAAOEAAADiAAAA3wAAAOAAAAA9AAQACwAAAOQAAABwAAAATwAJAAsAAADjAAAA4QAAAOQAAAAEAAAABQAAAAYAAAADAAAAPgADAHAAAADjAAAAPQAEAAsAAADlAAAAJAAAAD0ABAALAAAA5wAAAIAAAABPAAkACwAAAOYAAADlAAAA5wAAAAAAAAABAAAAAgAAAAcAAAA+AAMAgAAAAOYAAAA9AAQACwAAAOgAAAA1AAAATwAJAAsAAADpAAAA6AAAAOgAAAAAAAAAAAAAAAAAAAAAAAAAPQAEAAsAAADqAAAAJgAAAD0ABAALAAAA6wAAAIAAAACFAAUACwAAAOwAAADpAAAA6gAAAIEABQALAAAA7QAAAOwAAADrAAAAPQAEAAsAAADvAAAAgAAAAE8ACQALAAAA7gAAAO0AAADvAAAAAAAAAAEAAAACAAAABwAAAD4AAwCAAAAA7gAAAD0ABAALAAAA8AAAADUAAABPAAkACwAAAPEAAADwAAAA8AAAAAEAAAABAAAAAQAAAAEAAAA9AAQACwAAAPIAAAAlAAAAPQAEAAsAAADzAAAAgAAAAIUABQALAAAA9AAAAPEAAADyAAAAgQAFAAsAAAD1AAAA9AAAAPMAAAA9AAQACwAAAPcAAAA1AAAATwAJAAsAAAD2AAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=14/41 data=9QAAAPcAAAAAAAAAAQAAAAIAAAAHAAAAPgADADUAAAD2AAAAPQAEAAsAAAD4AAAANQAAAE8ACAD5AAAA+gAAAPgAAAD4AAAAAAAAAAEAAAACAAAAlAAFAAYAAAD7AAAA+gAAAPoAAAC2AAUASwAAAPwAAAD7AAAADwAAAAwABgAGAAAA/QAAAGUAAAAgAAAA+wAAAKkABgAGAAAA/gAAAPwAAAD9AAAAowAAAFAABwALAAAA/wAAAP4AAAD+AAAA/gAAAP4AAACFAAUACwAAAAABAAD4AAAA/wAAAD0ABAALAAAAAgEAAIAAAABPAAkACwAAAAEBAAAAAQAAAgEAAAAAAAABAAAAAgAAAAcAAAA+AAMAgAAAAAEBAABBAAYABAEAAAYBAAAHAQAABQEAAAMBAAA9AAQACwAAAAgBAAAGAQAATwAIAPkAAAAJAQAACAEAAAgBAAAAAAAAAQAAAAIAAAA9AAQACwAAAAoBAACAAAAATwAIAPkAAAALAQAACgEAAAoBAAAAAAAAAQAAAAIAAACUAAUABgAAAAwBAAAJAQAACwEAAFAABwALAAAADQEAAAwBAAAMAQAADAEAAAwBAAAMAAgACwAAAA4BAABlAAAAKwAAAA0BAABJAAAAzAAAAD0ABAALAAAAEAEAADUAAABPAAkACwAAAA8BAAAOAQAAEAEAAAAAAAAFAAAABgAAAAcAAAA+AAMA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=15/41 data=NQAAAA8BAAA9AAQACwAAABEBAAAoAAAATwAIAPkAAAASAQAAEQEAABEBAAAAAAAAAQAAAAIAAACUAAUABgAAABMBAAASAQAAEgEAALYABQBLAAAAFAEAABMBAAAPAAAADAAGAAYAAAAVAQAAZQAAACAAAAATAQAAqQAGAAYAAAAWAQAAFAEAABUBAACjAAAAUAAHAAsAAAAXAQAAFgEAABYBAAAWAQAAFgEAAIUABQALAAAAGAEAABEBAAAXAQAAPQAEAAsAAAAbAQAAGQEAAE8ACQALAAAAGgEAABgBAAAbAQAAAAAAAAEAAAACAAAABwAAAD4AAwAZAQAAGgEAAD0ABAALAAAAHAEAABkBAABPAAgA+QAAAB0BAAAcAQAAHAEAAAAAAAABAAAAAgAAAD0ABAALAAAAHgEAAIAAAABPAAgA+QAAAB8BAAAeAQAAHgEAAAAAAAABAAAAAgAAAJQABQAGAAAAIAEAAB0BAAAfAQAAUAAHAAsAAAAhAQAAIAEAACABAAAgAQAAIAEAAD0ABAALAAAAIwEAADUAAABPAAkACwAAACIBAAAhAQAAIwEAAAQAAAABAAAABgAAAAcAAAA+AAMANQAAACIBAAA9AAQACwAAACQBAAA1AAAATwAJAAsAAAAlAQAAJAEAACQBAAABAAAAAQAAAAEAAAABAAAAPQAEAAsAAAAmAQAANQAAAE8ACQALAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=16/41 data=JwEAACYBAAAmAQAAAQAAAAEAAAABAAAAAQAAAIEABQALAAAAKAEAACUBAAAnAQAAPQAEAAsAAAAqAQAANQAAAE8ACQALAAAAKQEAACgBAAAqAQAABAAAAAUAAAACAAAABwAAAD4AAwA1AAAAKQEAAD0ABAALAAAAKwEAAIAAAAA9AAQACwAAACwBAAA1AAAATwAJAAsAAAAtAQAALAEAACwBAAACAAAAAgAAAAIAAAACAAAAfwAEAAsAAAAuAQAALQEAAD0ABAALAAAALwEAABkBAACFAAUACwAAADABAAArAQAALgEAAIEABQALAAAAMQEAADABAAAvAQAAPQAEAAsAAAAzAQAAgAAAAE8ACQALAAAAMgEAADEBAAAzAQAAAAAAAAEAAAACAAAABwAAAD4AAwCAAAAAMgEAAD0ABAALAAAANAEAAIAAAABPAAgA+QAAADUBAAA0AQAANAEAAAAAAAABAAAAAgAAAEEABgAEAQAANgEAAAcBAAAFAQAAAwEAAD0ABAALAAAANwEAADYBAABPAAgA+QAAADgBAAA3AQAANwEAAAAAAAABAAAAAgAAAJQABQAGAAAAOQEAADUBAAA4AQAAUAAHAAsAAAA6AQAAOQEAADkBAAA5AQAAOQEAAD0ABAALAAAAPAEAADUAAABPAAkACwAAADsBAAA6AQAAPAEAAAQAAAAFAAAAAgAAAAcAAAA+AAMA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=17/41 data=NQAAADsBAAA9AAQACwAAAD0BAAA1AAAATwAJAAsAAAA+AQAAPQEAAD0BAAACAAAAAgAAAAIAAAACAAAATwAJAAsAAAA/AQAAEQAAABEAAAADAAAAAwAAAAMAAAADAAAAgQAFAAsAAABAAQAAPgEAAD8BAAA9AAQACwAAAEIBAAA1AAAATwAJAAsAAABBAQAAQAEAAEIBAAAEAAAABQAAAAIAAAAHAAAAPgADADUAAABBAQAAPQAEAAsAAABDAQAANQAAAE8ACQALAAAARAEAAEMBAABDAQAAAQAAAAEAAAABAAAAAQAAAAwABgALAAAARQEAAGUAAAAEAAAARAEAAH8ABAALAAAARgEAAEUBAABPAAkACwAAAEcBAAAMAAAADAAAAAEAAAABAAAAAQAAAAEAAACBAAUACwAAAEgBAABGAQAARwEAAD0ABAALAAAASgEAADUAAABPAAkACwAAAEkBAABIAQAASgEAAAQAAAABAAAABgAAAAcAAAA+AAMANQAAAEkBAABPAAkACwAAAEsBAAAMAAAADAAAAAIAAAACAAAAAgAAAAIAAAA9AAQACwAAAE0BAAAZAQAATwAJAAsAAABMAQAASwEAAE0BAAAEAAAABQAAAAIAAAAHAAAAPgADABkBAABMAQAAPQAEAAsAAABOAQAANQAAAE8ACQALAAAATwEAAE4BAABOAQAAAwAAAAMAAAADAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=18/41 data=AwAAAEEABgAEAQAAUQEAAAcBAAAFAQAAUAEAAD0ABAALAAAAUgEAAFEBAAA9AAQACwAAAFMBAAAZAQAATwAJAAsAAABUAQAAUwEAAFMBAAACAAAAAgAAAAIAAAACAAAAvwAFAEwAAABWAQAATwEAAEkAAACpAAYACwAAAFUBAABWAQAAUgEAAFQBAAA+AAMAGQEAAFUBAAA9AAQACwAAAFcBAAA1AAAATwAJAAsAAABYAQAAVwEAAFcBAAABAAAAAQAAAAEAAAABAAAAPQAEAAsAAABZAQAAGQEAAE8ACQALAAAAWgEAAFkBAABZAQAAAgAAAAIAAAACAAAAAgAAAAwABgALAAAAXAEAAGUAAAAEAAAAWAEAAAwABwALAAAAWwEAAGUAAAAaAAAAXAEAAFoBAAA9AAQACwAAAF4BAABTAAAATwAJAAsAAABdAQAAWwEAAF4BAAAEAAAABQAAAAYAAAADAAAAPgADAFMAAABdAQAAPQAEAAsAAABfAQAAUwAAAE8ACQALAAAAYAEAAF8BAABfAQAAAwAAAAMAAAADAAAAAwAAAD0ABAALAAAAYQEAABkBAABPAAkACwAAAGIBAABhAQAAYQEAAAEAAAABAAAAAQAAAAEAAAA9AAQACwAAAGMBAAAZAQAATwAJAAsAAABkAQAAYwEAAGMBAAAAAAAAAAAAAAAAAAAAAAAADAAIAAsAAABlAQAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=19/41 data=ZQAAAC4AAABkAQAAYgEAAGABAAA9AAQACwAAAGcBAAA1AAAATwAJAAsAAABmAQAAZQEAAGcBAAAEAAAAAQAAAAYAAAAHAAAAPgADADUAAABmAQAAPQAEAAsAAABoAQAAIwAAAD0ABAAyAAAAaQEAAC8AAABXAAUACwAAAGoBAABpAQAAaAEAAD4AAwBrAQAAagEAAD0ABAALAAAAbAEAADUAAABPAAkACwAAAG0BAABsAQAAbAEAAAMAAAADAAAAAwAAAAMAAAA9AAQACwAAAG4BAABrAQAATwAJAAsAAABvAQAADAAAAAwAAAACAAAAAgAAAAIAAAACAAAAvwAFAEwAAABxAQAAbQEAAEkAAACpAAYACwAAAHABAABxAQAAbgEAAG8BAAA+AAMAawEAAHABAAA9AAQACwAAAHIBAAA1AAAATwAJAAsAAABzAQAAcgEAAHIBAAABAAAAAQAAAAEAAAABAAAAPQAEAAsAAAB0AQAAawEAAIUABQALAAAAdQEAAHMBAAB0AQAAPQAEAAsAAAB3AQAAGQEAAE8ACQALAAAAdgEAAHUBAAB3AQAAAAAAAAEAAAACAAAABwAAAD4AAwAZAQAAdgEAAD0ABAALAAAAeAEAAGsBAABPAAkACwAAAHkBAAB4AQAAeAEAAAMAAAADAAAAAwAAAAMAAABPAAkACwAAAHoBAAARAAAAEQAAAAAAAAAAAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=20/41 data=AAAAAAAAAAB/AAQACwAAAHsBAAB6AQAATwAJAAsAAAB8AQAAEQAAABEAAAABAAAAAQAAAAEAAAABAAAAhQAFAAsAAAB9AQAAeQEAAHsBAACBAAUACwAAAH4BAAB9AQAAfAEAAD0ABAALAAAAgAEAAIAAAABPAAkACwAAAH8BAAB+AQAAgAEAAAQAAAAFAAAABgAAAAMAAAA+AAMAgAAAAH8BAAA9AAQACwAAAIEBAABrAQAATwAJAAsAAACCAQAAgQEAAIEBAAADAAAAAwAAAAMAAAADAAAATwAJAAsAAACDAQAADAAAAAwAAAADAAAAAwAAAAMAAAADAAAAhQAFAAsAAACEAQAAggEAAIMBAAA9AAQACwAAAIYBAAA1AAAATwAJAAsAAACFAQAAhAEAAIYBAAAEAAAAAQAAAAYAAAAHAAAAPgADADUAAACFAQAAPQAEAAsAAACHAQAANQAAAE8ACQALAAAAiAEAAIcBAACHAQAAAQAAAAEAAAABAAAAAQAAAAwABgALAAAAiQEAAGUAAAAdAAAAiAEAAD0ABAALAAAAiwEAADUAAABPAAkACwAAAIoBAACJAQAAiwEAAAQAAAABAAAABgAAAAcAAAA+AAMANQAAAIoBAAA9AAQACwAAAIwBAAA1AAAATwAJAAsAAACNAQAAjAEAAIwBAAABAAAAAQAAAAEAAAABAAAATwAJAAsAAACOAQAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=21/41 data=EQAAABEAAAACAAAAAgAAAAIAAAACAAAAgQAFAAsAAACPAQAAjQEAAI4BAAA9AAQACwAAAJEBAAA1AAAATwAJAAsAAACQAQAAjwEAAJEBAAAEAAAAAQAAAAYAAAAHAAAAPgADADUAAACQAQAAPQAEAAsAAACSAQAANQAAAE8ACQALAAAAkwEAAJIBAACSAQAAAgAAAAIAAAACAAAAAgAAAD0ABAALAAAAlAEAADUAAABPAAkACwAAAJUBAACUAQAAlAEAAAEAAAABAAAAAQAAAAEAAACFAAUACwAAAJYBAACTAQAAlQEAAD0ABAALAAAAmAEAADUAAABPAAkACwAAAJcBAACWAQAAmAEAAAQAAAABAAAABgAAAAcAAAA+AAMANQAAAJcBAAA9AAQACwAAAJkBAAA1AAAATwAJAAsAAACaAQAAmQEAAJkBAAABAAAAAQAAAAEAAAABAAAATwAJAAsAAACbAQAAFgAAABYAAAAAAAAAAAAAAAAAAAAAAAAAhQAFAAsAAACcAQAAmgEAAJsBAAA9AAQACwAAAJ4BAAA1AAAATwAJAAsAAACdAQAAnAEAAJ4BAAAEAAAAAQAAAAYAAAAHAAAAPgADADUAAACdAQAAPQAEAAsAAACfAQAANQAAAE8ACQALAAAAoAEAAJ8BAACfAQAAAQAAAAEAAAABAAAAAQAAAAwABgALAAAAoQEAAGUAAAAdAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=22/41 data=oAEAAAwACAALAAAAogEAAGUAAAArAAAAoQEAAEkAAADMAAAAPQAEAAsAAACkAQAANQAAAE8ACQALAAAAowEAAKIBAACkAQAABAAAAAEAAAAGAAAABwAAAD4AAwA1AAAAowEAAD0ABAALAAAApQEAABkBAABPAAkACwAAAKYBAAClAQAApQEAAAMAAAADAAAAAwAAAAMAAABBAAYABAEAAKgBAAAHAQAABQEAAKcBAAA9AAQACwAAAKkBAACoAQAAhQAFAAsAAACqAQAApgEAAKkBAAA9AAQACwAAAKwBAABrAQAATwAJAAsAAACrAQAAqgEAAKwBAAAAAAAAAQAAAAIAAAAHAAAAPgADAGsBAACrAQAAPQAEAAsAAACtAQAANQAAAE8ACQALAAAArgEAAK0BAACtAQAAAQAAAAEAAAABAAAAAQAAAD0ABAALAAAArwEAAGsBAACFAAUACwAAALABAACuAQAArwEAAD0ABAALAAAAsgEAAGsBAABPAAkACwAAALEBAACwAQAAsgEAAAAAAAABAAAAAgAAAAcAAAA+AAMAawEAALEBAAA9AAQAtQEAALYBAAAqAAAAPQAEAAsAAAC3AQAAgAAAAFEABQAGAAAAuAEAALcBAAADAAAAWAAHAAsAAACzAQAAtgEAALcBAAACAAAAuAEAAD4AAwCAAAAAswEAAD0ABAALAAAAuQEAAIAAAABPAAkA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=23/41 data=CwAAALoBAAC5AQAAuQEAAAMAAAADAAAAAwAAAAMAAAA9AAQACwAAALsBAACAAAAAhQAFAAsAAAC8AQAAugEAALsBAAA9AAQACwAAAL4BAACAAAAATwAJAAsAAAC9AQAAvAEAAL4BAAAAAAAAAQAAAAIAAAAHAAAAPgADAIAAAAC9AQAAPQAEAAsAAAC/AQAAIwAAAE8ACQALAAAAwAEAAL8BAAC/AQAAAgAAAAMAAAACAAAAAwAAAD0ABAAyAAAAwQEAACsAAABXAAUACwAAAMIBAADBAQAAwAEAAD4AAwDDAQAAwgEAAD0ABAALAAAAxAEAAMMBAABPAAkACwAAAMUBAADEAQAAxAEAAAAAAAAAAAAAAAAAAAAAAAAMAAYACwAAAMYBAABlAAAABAAAAMUBAAB/AAQACwAAAMcBAADGAQAATwAJAAsAAADIAQAADAAAAAwAAAABAAAAAQAAAAEAAAABAAAATwAJAAsAAADJAQAADAAAAAwAAAACAAAAAgAAAAIAAAACAAAAvwAFAEwAAADLAQAAxwEAAEkAAACpAAYACwAAAMoBAADLAQAAyAEAAMkBAAA9AAQACwAAAM0BAAA1AAAATwAJAAsAAADMAQAAygEAAM0BAAAEAAAAAQAAAAYAAAAHAAAAPgADADUAAADMAQAAPQAEAAsAAADOAQAANQAAAE8ACQALAAAAzwEAAM4BAADOAQAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=24/41 data=AAAAAAAAAAAAAAAAAAAAAEEABgAEAQAA0QEAAAcBAAAFAQAA0AEAAD0ABAALAAAA0gEAANEBAABPAAkACwAAANMBAADSAQAA0gEAAAAAAAAAAAAAAQAAAAIAAACFAAUACwAAANQBAADPAQAA0wEAAD0ABAALAAAA1gEAAMMBAABPAAkACwAAANUBAADUAQAA1gEAAAQAAAABAAAAAgAAAAMAAAA+AAMAwwEAANUBAAA9AAQACwAAANcBAAA1AAAAUQAFAAYAAADYAQAA1wEAAAEAAAA9AAQACwAAANkBAAA1AAAAUQAFAAYAAADaAQAA2QEAAAEAAAB/AAQABgAAANsBAADaAQAAtgAFAEsAAADcAQAA2AEAANsBAAD3AAMA3gEAAAAAAAD6AAQA3AEAAN0BAADjAQAA+AACAN0BAAA9AAQACwAAAN8BAADDAQAATwAJAAsAAADgAQAA3wEAAN8BAAAAAAAAAAAAAAAAAAAAAAAAPQAEAAsAAADiAQAANQAAAE8ACQALAAAA4QEAAOABAADiAQAAAAAAAAUAAAAGAAAABwAAAD4AAwA1AAAA4QEAAPkAAgDeAQAA+AACAOMBAABRAAUABgAAAOQBAAAMAAAAAQAAAD0ABAALAAAA5QEAACcAAABRAAUABgAAAOYBAADlAQAAAwAAAL4ABQBLAAAA5wEAAOQBAADmAQAA9wADAOkBAAAAAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=25/41 data=+gAEAOcBAADoAQAAmAIAAPgAAgDoAQAATwAJAAsAAADqAQAADAAAAAwAAAABAAAAAQAAAAEAAAACAAAAPQAEAAsAAADrAQAAJwAAAIUABQALAAAA7AEAAOoBAADrAQAAPgADAO0BAADsAQAAPQAEAAsAAADuAQAA7QEAAE8ACQALAAAA7wEAABoAAAAaAAAAAAAAAAEAAAACAAAAAgAAAH8ABAALAAAA8AEAAO8BAACBAAUACwAAAPEBAADuAQAA8AEAAD4AAwDyAQAA8QEAAD0ABAAyAAAA9AEAAC0AAAA9AAQACwAAAPUBAADyAQAAUQAFAAYAAAD2AQAA9QEAAAMAAABYAAcACwAAAPMBAAD0AQAA9QEAAAIAAAD2AQAAPgADAPIBAADzAQAAPQAEAAsAAAD3AQAA8gEAAE8ACQALAAAA+AEAAPcBAAD3AQAAAAAAAAAAAAAAAAAAAAAAAD0ABAALAAAA+gEAAPIBAABPAAkACwAAAPkBAAD4AQAA+gEAAAQAAAAFAAAABgAAAAMAAAA+AAMA8gEAAPkBAAA9AAQACwAAAPsBAADtAQAATwAJAAsAAAD8AQAAFgAAABYAAAABAAAAAQAAAAIAAAACAAAAgQAFAAsAAAD9AQAA+wEAAPwBAAA+AAMA/gEAAP0BAAA9AAQAMgAAAAACAAAtAAAAPQAEAAsAAAABAgAA/gEAAFEABQAGAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=26/41 data=AgIAAAECAAADAAAAWAAHAAsAAAD/AQAAAAIAAAECAAACAAAAAgIAAD4AAwD+AQAA/wEAAD0ABAALAAAAAwIAAP4BAABPAAkACwAAAAQCAAADAgAAAwIAAAAAAAAAAAAAAAAAAAAAAAA9AAQACwAAAAYCAADyAQAATwAJAAsAAAAFAgAABAIAAAYCAAAAAAAABQAAAAYAAAAHAAAAPgADAPIBAAAFAgAAPQAEAAsAAAAHAgAA7QEAAE8ACQALAAAACAIAABYAAAAWAAAAAQAAAAEAAAACAAAAAgAAAH8ABAALAAAACQIAAAgCAACBAAUACwAAAAoCAAAHAgAACQIAAD4AAwD+AQAACgIAAD0ABAAyAAAADAIAAC0AAAA9AAQACwAAAA0CAAD+AQAAUQAFAAYAAAAOAgAADQIAAAMAAABYAAcACwAAAAsCAAAMAgAADQIAAAIAAAAOAgAAPgADAP4BAAALAgAAPQAEAAsAAAAPAgAA/gEAAE8ACQALAAAAEAIAAA8CAAAPAgAAAAAAAAAAAAAAAAAAAAAAAD0ABAALAAAAEgIAAPIBAABPAAkACwAAABECAAAQAgAAEgIAAAQAAAABAAAABgAAAAcAAAA+AAMA8gEAABECAAA9AAQACwAAABMCAADtAQAATwAJAAsAAAAUAgAAGgAAABoAAAAAAAAAAQAAAAIAAAACAAAAgQAFAAsAAAAVAgAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=27/41 data=EwIAABQCAAA+AAMA7QEAABUCAAA9AAQAMgAAABcCAAAtAAAAPQAEAAsAAAAYAgAA7QEAAFEABQAGAAAAGQIAABgCAAADAAAAWAAHAAsAAAAWAgAAFwIAABgCAAACAAAAGQIAAD4AAwDtAQAAFgIAAD0ABAALAAAAGgIAAO0BAABPAAkACwAAABsCAAAaAgAAGgIAAAAAAAAAAAAAAAAAAAAAAAA9AAQACwAAAB0CAADyAQAATwAJAAsAAAAcAgAAGwIAAB0CAAAEAAAABQAAAAIAAAAHAAAAPgADAPIBAAAcAgAAPQAEAAsAAAAeAgAA8gEAAD0ABAALAAAAHwIAACcAAABPAAkACwAAACACAAAfAgAAHwIAAAIAAAACAAAAAgAAAAIAAAB/AAQACwAAACECAAAgAgAAgQAFAAsAAAAiAgAAHgIAACECAAA+AAMA7QEAACICAAA9AAQACwAAACMCAADtAQAATwAJAAsAAAAkAgAADAAAAAwAAAABAAAAAQAAAAEAAAABAAAATwAJAAsAAAAlAgAADAAAAAwAAAACAAAAAgAAAAIAAAACAAAAvwAFAEwAAAAnAgAAIwIAAEkAAACpAAYACwAAACYCAAAnAgAAJAIAACUCAAA+AAMA7QEAACYCAAA9AAQACwAAACgCAADtAQAATwAJAAsAAAApAgAAFgAAABYAAAADAAAAAwAAAAMAAAADAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=28/41 data=lAAFAAYAAAAqAgAAKAIAACkCAABQAAcACwAAACsCAAAqAgAAKgIAACoCAAAqAgAAPQAEAAsAAAAtAgAANQAAAE8ACQALAAAALAIAACsCAAAtAgAAAAAAAAUAAAAGAAAABwAAAD4AAwA1AAAALAIAAFEABQAGAAAALgIAABoAAAADAAAAPQAEAAsAAAAvAgAAJwAAAFEABQAGAAAAMAIAAC8CAAADAAAAuAAFAEsAAAAxAgAALgIAADACAAD3AAMAMwIAAAAAAAD6AAQAMQIAADICAAAzAgAA+AACADICAAA9AAQACwAAADQCAAAnAAAAQQAGAAQBAAA2AgAABwEAAAUBAAA1AgAAPQAEAAsAAAA3AgAANgIAAE8ACQALAAAAOAIAADcCAAA3AgAAAwAAAAMAAAADAAAAAwAAAEEABgAEAQAAOQIAAAcBAAAFAQAANQIAAD0ABAALAAAAOgIAADkCAACFAAUACwAAADsCAAA0AgAAOAIAAIEABQALAAAAPAIAADsCAAA6AgAAPQAEAAsAAAA+AgAA7QEAAE8ACQALAAAAPQIAADwCAAA+AgAAAAAAAAEAAAAGAAAABwAAAD4AAwDtAQAAPQIAAD0ABAALAAAAPwIAACcAAAA9AAQACwAAAEECAADtAQAATwAJAAsAAABAAgAAPwIAAEECAAAEAAAABQAAAAIAAAADAAAAPgADAO0BAABAAgAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=29/41 data=PQAEAAsAAABCAgAA7QEAAE8ACQALAAAAQwIAAAwAAAAMAAAAAQAAAAEAAAABAAAAAgAAAIUABQALAAAARAIAAEICAABDAgAAPgADAO0BAABEAgAAPQAEAAsAAABFAgAA7QEAAE8ACQALAAAARgIAABoAAAAaAAAAAAAAAAEAAAACAAAAAgAAAH8ABAALAAAARwIAAEYCAACBAAUACwAAAEgCAABFAgAARwIAAD4AAwDyAQAASAIAAD0ABAAyAAAASgIAAC0AAAA9AAQACwAAAEsCAADyAQAAUQAFAAYAAABMAgAASwIAAAMAAABYAAcACwAAAEkCAABKAgAASwIAAAIAAABMAgAAPgADAPIBAABJAgAAPQAEAAsAAABNAgAA8gEAAE8ACQALAAAATgIAAE0CAABNAgAAAAAAAAAAAAAAAAAAAAAAAD0ABAALAAAAUAIAAPIBAABPAAkACwAAAE8CAABOAgAAUAIAAAQAAAAFAAAABgAAAAMAAAA+AAMA8gEAAE8CAAA9AAQACwAAAFECAADtAQAATwAJAAsAAABSAgAAFgAAABYAAAABAAAAAQAAAAIAAAACAAAAgQAFAAsAAABTAgAAUQIAAFICAAA+AAMA/gEAAFMCAAA9AAQAMgAAAFUCAAAtAAAAPQAEAAsAAABWAgAA/gEAAFEABQAGAAAAVwIAAFYCAAADAAAAWAAHAAsAAABUAgAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=30/41 data=VQIAAFYCAAACAAAAVwIAAD4AAwD+AQAAVAIAAD0ABAALAAAAWAIAAP4BAABPAAkACwAAAFkCAABYAgAAWAIAAAAAAAAAAAAAAAAAAAAAAAA9AAQACwAAAFsCAADyAQAATwAJAAsAAABaAgAAWQIAAFsCAAAAAAAABQAAAAYAAAAHAAAAPgADAPIBAABaAgAAPQAEAAsAAABcAgAA7QEAAE8ACQALAAAAXQIAABYAAAAWAAAAAQAAAAEAAAACAAAAAgAAAH8ABAALAAAAXgIAAF0CAACBAAUACwAAAF8CAABcAgAAXgIAAD4AAwD+AQAAXwIAAD0ABAAyAAAAYQIAAC0AAAA9AAQACwAAAGICAAD+AQAAUQAFAAYAAABjAgAAYgIAAAMAAABYAAcACwAAAGACAABhAgAAYgIAAAIAAABjAgAAPgADAP4BAABgAgAAPQAEAAsAAABkAgAA/gEAAE8ACQALAAAAZQIAAGQCAABkAgAAAAAAAAAAAAAAAAAAAAAAAD0ABAALAAAAZwIAAPIBAABPAAkACwAAAGYCAABlAgAAZwIAAAQAAAABAAAABgAAAAcAAAA+AAMA8gEAAGYCAAA9AAQACwAAAGgCAADtAQAATwAJAAsAAABpAgAAGgAAABoAAAAAAAAAAQAAAAIAAAACAAAAgQAFAAsAAABqAgAAaAIAAGkCAAA+AAMA7QEAAGoCAAA9AAQA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=31/41 data=MgAAAGwCAAAtAAAAPQAEAAsAAABtAgAA7QEAAFEABQAGAAAAbgIAAG0CAAADAAAAWAAHAAsAAABrAgAAbAIAAG0CAAACAAAAbgIAAD4AAwDtAQAAawIAAD0ABAALAAAAbwIAAO0BAABPAAkACwAAAHACAABvAgAAbwIAAAAAAAAAAAAAAAAAAAAAAAA9AAQACwAAAHICAADyAQAATwAJAAsAAABxAgAAcAIAAHICAAAEAAAABQAAAAIAAAAHAAAAPgADAPIBAABxAgAAPQAEAAsAAABzAgAA8gEAAD0ABAALAAAAdAIAACcAAABPAAkACwAAAHUCAAB0AgAAdAIAAAIAAAACAAAAAgAAAAIAAAB/AAQACwAAAHYCAAB1AgAAgQAFAAsAAAB3AgAAcwIAAHYCAAA+AAMA7QEAAHcCAAA9AAQACwAAAHgCAADtAQAATwAJAAsAAAB5AgAADAAAAAwAAAABAAAAAQAAAAEAAAABAAAATwAJAAsAAAB6AgAADAAAAAwAAAACAAAAAgAAAAIAAAACAAAAvwAFAEwAAAB8AgAAeAIAAEkAAACpAAYACwAAAHsCAAB8AgAAeQIAAHoCAAA+AAMA7QEAAHsCAAA9AAQACwAAAH0CAADtAQAATwAJAAsAAAB+AgAAFgAAABYAAAADAAAAAwAAAAMAAAADAAAAlAAFAAYAAAB/AgAAfQIAAH4CAABQAAcA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=32/41 data=CwAAAIACAAB/AgAAfwIAAH8CAAB/AgAAPQAEAAsAAACCAgAANQAAAE8ACQALAAAAgQIAAIACAACCAgAABAAAAAEAAAAGAAAABwAAAD4AAwA1AAAAgQIAAD0ABAALAAAAgwIAACcAAABPAAkACwAAAIQCAACDAgAAgwIAAAMAAAADAAAAAwAAAAMAAABPAAkACwAAAIUCAAAeAAAAHgAAAAAAAAAAAAAAAAAAAAAAAABPAAkACwAAAIYCAAAeAAAAHgAAAAEAAAABAAAAAQAAAAEAAACFAAUACwAAAIcCAACEAgAAhQIAAIEABQALAAAAiAIAAIcCAACGAgAAPQAEAAsAAACKAgAANQAAAE8ACQALAAAAiQIAAIgCAACKAgAABAAAAAUAAAACAAAABwAAAD4AAwA1AAAAiQIAAD0ABAALAAAAiwIAADUAAABPAAkACwAAAIwCAACLAgAAiwIAAAIAAAACAAAAAgAAAAIAAAA9AAQACwAAAI0CAAA1AAAATwAJAAsAAACOAgAAjQIAAI0CAAABAAAAAQAAAAEAAAABAAAAPQAEAAsAAACPAgAANQAAAE8ACQALAAAAkAIAAI8CAACPAgAAAAAAAAAAAAAAAAAAAAAAAAwACAALAAAAkQIAAGUAAAAuAAAAkAIAAI4CAACMAgAAPQAEAAsAAACTAgAAUwAAAE8ACQALAAAAkgIAAJECAACTAgAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=33/41 data=BAAAAAUAAAAGAAAAAwAAAD4AAwBTAAAAkgIAAD0ABAALAAAAlAIAAFMAAABPAAkACwAAAJUCAACUAgAAlAIAAAMAAAADAAAAAwAAAAMAAAA9AAQACwAAAJcCAAA1AAAATwAJAAsAAACWAgAAlQIAAJcCAAAAAAAABQAAAAYAAAAHAAAAPgADADUAAACWAgAA+QACADMCAAD4AAIAMwIAAPkAAgDpAQAA+AACAJgCAAA9AAQACwAAAJkCAAAnAAAAQQAGAAQBAACaAgAABwEAAAUBAAA1AgAAPQAEAAsAAACbAgAAmgIAAE8ACQALAAAAnAIAAJsCAACbAgAAAwAAAAMAAAADAAAAAwAAAEEABgAEAQAAnQIAAAcBAAAFAQAANQIAAD0ABAALAAAAngIAAJ0CAACFAAUACwAAAJ8CAACZAgAAnAIAAIEABQALAAAAoAIAAJ8CAACeAgAAPQAEAAsAAACiAgAA7QEAAE8ACQALAAAAoQIAAKACAACiAgAAAAAAAAEAAAAGAAAABwAAAD4AAwDtAQAAoQIAAD0ABAALAAAAowIAAO0BAABPAAkACwAAAKQCAACjAgAAowIAAAAAAAAAAAAAAQAAAAMAAABPAAkACwAAAKUCAAAeAAAAHgAAAAAAAAACAAAAAwAAAAMAAACBAAUACwAAAKYCAACkAgAApQIAAD0ABAALAAAAqAIAADUAAABPAAkA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=34/41 data=CwAAAKcCAACmAgAAqAIAAAQAAAABAAAAAgAAAAcAAAA+AAMANQAAAKcCAAA9AAQACwAAAKkCAAA1AAAADAAGAAsAAACqAgAAZQAAAAQAAACpAgAAQQAGAAQBAACsAgAABwEAAAUBAACrAgAAPQAEAAsAAACtAgAArAIAAE8ACQALAAAArgIAAK0CAACtAgAAAAAAAAAAAAABAAAAAwAAAIUABQALAAAArwIAAKoCAACuAgAAPQAEAAsAAACxAgAANQAAAE8ACQALAAAAsAIAAK8CAACxAgAABAAAAAEAAAACAAAABwAAAD4AAwA1AAAAsAIAAD0ABAALAAAAsgIAADUAAABPAAkACwAAALMCAACyAgAAsgIAAAEAAAABAAAAAQAAAAEAAAA9AAQACwAAALQCAAA1AAAATwAJAAsAAAC1AgAAtAIAALQCAAACAAAAAgAAAAIAAAACAAAADAAHAAsAAAC2AgAAZQAAACgAAACzAgAAtQIAAD0ABAALAAAAuAIAAFMAAABPAAkACwAAALcCAAC2AgAAuAIAAAQAAAAFAAAABgAAAAMAAAA+AAMAUwAAALcCAAA9AAQACwAAALkCAABTAAAAUQAFAAYAAAC6AgAAuQIAAAMAAABRAAUABgAAALsCAAARAAAAAAAAAL4ABQBLAAAAvAIAALoCAAC7AgAA9wADAL4CAAAAAAAA+gAEALwCAAC9AgAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=35/41 data=wwIAAPgAAgC9AgAAPQAEAAsAAAC/AgAAwwEAAE8ACQALAAAAwAIAAL8CAAC/AgAAAAAAAAAAAAAAAAAAAAAAAD0ABAALAAAAwgIAADUAAABPAAkACwAAAMECAADAAgAAwgIAAAAAAAAFAAAABgAAAAcAAAA+AAMANQAAAMECAAD5AAIAvgIAAPgAAgDDAgAAPQAEAAsAAADEAgAAJwAAAD0ABAALAAAAxgIAAO0BAABPAAkACwAAAMUCAADEAgAAxgIAAAQAAAAFAAAAAgAAAAMAAAA+AAMA7QEAAMUCAAA9AAQACwAAAMcCAADtAQAATwAJAAsAAADIAgAADAAAAAwAAAABAAAAAQAAAAEAAAACAAAAhQAFAAsAAADJAgAAxwIAAMgCAAA+AAMA7QEAAMkCAAA9AAQACwAAAMoCAADtAQAATwAJAAsAAADLAgAAGgAAABoAAAAAAAAAAQAAAAIAAAACAAAAfwAEAAsAAADMAgAAywIAAIEABQALAAAAzQIAAMoCAADMAgAAPgADAPIBAADNAgAAPQAEADIAAADPAgAALQAAAD0ABAALAAAA0AIAAPIBAABRAAUABgAAANECAADQAgAAAwAAAFgABwALAAAAzgIAAM8CAADQAgAAAgAAANECAAA+AAMA8gEAAM4CAAA9AAQACwAAANICAADyAQAATwAJAAsAAADTAgAA0gIAANICAAAAAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=36/41 data=AAAAAAAAAAAAAAAAPQAEAAsAAADVAgAA8gEAAE8ACQALAAAA1AIAANMCAADVAgAABAAAAAUAAAAGAAAAAwAAAD4AAwDyAQAA1AIAAD0ABAALAAAA1gIAAO0BAABPAAkACwAAANcCAAAWAAAAFgAAAAEAAAABAAAAAgAAAAIAAACBAAUACwAAANgCAADWAgAA1wIAAD4AAwD+AQAA2AIAAD0ABAAyAAAA2gIAAC0AAAA9AAQACwAAANsCAAD+AQAAUQAFAAYAAADcAgAA2wIAAAMAAABYAAcACwAAANkCAADaAgAA2wIAAAIAAADcAgAAPgADAP4BAADZAgAAPQAEAAsAAADdAgAA/gEAAE8ACQALAAAA3gIAAN0CAADdAgAAAAAAAAAAAAAAAAAAAAAAAD0ABAALAAAA4AIAAPIBAABPAAkACwAAAN8CAADeAgAA4AIAAAAAAAAFAAAABgAAAAcAAAA+AAMA8gEAAN8CAAA9AAQACwAAAOECAADtAQAATwAJAAsAAADiAgAAFgAAABYAAAABAAAAAQAAAAIAAAACAAAAfwAEAAsAAADjAgAA4gIAAIEABQALAAAA5AIAAOECAADjAgAAPgADAP4BAADkAgAAPQAEADIAAADmAgAALQAAAD0ABAALAAAA5wIAAP4BAABRAAUABgAAAOgCAADnAgAAAwAAAFgABwALAAAA5QIAAOYCAADnAgAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=37/41 data=AgAAAOgCAAA+AAMA/gEAAOUCAAA9AAQACwAAAOkCAAD+AQAATwAJAAsAAADqAgAA6QIAAOkCAAAAAAAAAAAAAAAAAAAAAAAAPQAEAAsAAADsAgAA8gEAAE8ACQALAAAA6wIAAOoCAADsAgAABAAAAAEAAAAGAAAABwAAAD4AAwDyAQAA6wIAAD0ABAALAAAA7QIAAO0BAABPAAkACwAAAO4CAAAaAAAAGgAAAAAAAAABAAAAAgAAAAIAAACBAAUACwAAAO8CAADtAgAA7gIAAD4AAwDtAQAA7wIAAD0ABAAyAAAA8QIAAC0AAAA9AAQACwAAAPICAADtAQAAUQAFAAYAAADzAgAA8gIAAAMAAABYAAcACwAAAPACAADxAgAA8gIAAAIAAADzAgAAPgADAO0BAADwAgAAPQAEAAsAAAD0AgAA7QEAAE8ACQALAAAA9QIAAPQCAAD0AgAAAAAAAAAAAAAAAAAAAAAAAD0ABAALAAAA9wIAAPIBAABPAAkACwAAAPYCAAD1AgAA9wIAAAQAAAAFAAAAAgAAAAcAAAA+AAMA8gEAAPYCAAA9AAQACwAAAPgCAADyAQAAPQAEAAsAAAD5AgAAJwAAAE8ACQALAAAA+gIAAPkCAAD5AgAAAgAAAAIAAAACAAAAAgAAAH8ABAALAAAA+wIAAPoCAACBAAUACwAAAPwCAAD4AgAA+wIAAD4AAwDtAQAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=38/41 data=/AIAAD0ABAALAAAA/QIAAO0BAABPAAkACwAAAP4CAAAMAAAADAAAAAEAAAABAAAAAQAAAAEAAABPAAkACwAAAP8CAAAMAAAADAAAAAIAAAACAAAAAgAAAAIAAAC/AAUATAAAAAEDAAD9AgAASQAAAKkABgALAAAAAAMAAAEDAAD+AgAA/wIAAD4AAwDtAQAAAAMAAD0ABAALAAAAAgMAAO0BAABPAAkACwAAAAMDAAAWAAAAFgAAAAMAAAADAAAAAwAAAAMAAACUAAUABgAAAAQDAAACAwAAAwMAAFAABwALAAAABQMAAAQDAAAEAwAABAMAAAQDAAA9AAQACwAAAAcDAACAAAAATwAJAAsAAAAGAwAABQMAAAcDAAAEAAAABQAAAAYAAAADAAAAPgADAIAAAAAGAwAAPQAEAAsAAAAIAwAAUwAAAE8ACQALAAAACQMAAAgDAAAIAwAAAwAAAAMAAAADAAAAAwAAAE8ACQALAAAACgMAABEAAAARAAAAAgAAAAIAAAACAAAAAgAAAH8ABAALAAAACwMAAAoDAACBAAUACwAAAAwDAAAJAwAACwMAAAwACAALAAAADQMAAGUAAAArAAAADAMAAEkAAADMAAAAPQAEAAsAAAAPAwAAUwAAAE8ACQALAAAADgMAAA0DAAAPAwAABAAAAAUAAAAGAAAAAwAAAD4AAwBTAAAADgMAAD0ABAALAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=39/41 data=EAMAAFMAAABPAAkACwAAABEDAAAQAwAAEAMAAAMAAAADAAAAAwAAAAMAAAA9AAQACwAAABIDAADDAQAATwAJAAsAAAATAwAAEgMAABIDAAAAAAAAAAAAAAAAAAAAAAAAPQAEAAsAAAAUAwAAgAAAAE8ACQALAAAAFQMAABQDAAAUAwAAAwAAAAMAAAADAAAAAwAAAAwACAALAAAAFgMAAGUAAAAuAAAAFQMAABMDAAARAwAAPQAEAAsAAAAYAwAANQAAAE8ACQALAAAAFwMAABYDAAAYAwAAAAAAAAUAAAAGAAAABwAAAD4AAwA1AAAAFwMAAPkAAgC+AgAA+AACAL4CAAD5AAIA6QEAAPgAAgDpAQAA+QACAN4BAAD4AAIA3gEAAD0ABAALAAAAGQMAADUAAABPAAkACwAAABoDAAAZAwAAGQMAAAAAAAAAAAAAAAAAAAAAAAA9AAQACwAAABsDAABrAQAAPQAEAAsAAAAcAwAAgAAAAIUABQALAAAAHQMAABoDAAAbAwAAgQAFAAsAAAAeAwAAHQMAABwDAAA9AAQACwAAACADAACAAAAATwAJAAsAAAAfAwAAHgMAACADAAAAAAAAAQAAAAIAAAAHAAAAPgADAIAAAAAfAwAAPQAEAAsAAAAhAwAANQAAAE8ACQALAAAAIgMAACEDAAAhAwAAAAAAAAAAAAAAAAAAAAAAAD0ABAALAAAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=40/41 data=IwMAAMMBAABPAAkACwAAACQDAAAjAwAAIwMAAAEAAAACAAAAAwAAAAMAAAA9AAQACwAAACUDAABTAAAAhQAFAAsAAAAmAwAAIgMAACQDAACBAAUACwAAACcDAAAmAwAAJQMAAD0ABAALAAAAKQMAADUAAABPAAkACwAAACgDAAAnAwAAKQMAAAAAAAABAAAAAgAAAAcAAAA+AAMANQAAACgDAAA9AAQACwAAACoDAAAZAQAAPQAEAAsAAAArAwAAgAAAAIUABQALAAAALAMAACoDAAArAwAAPQAEAAsAAAAuAwAAUwAAAE8ACQALAAAALQMAACwDAAAuAwAAAAAAAAEAAAACAAAABwAAAD4AAwBTAAAALQMAAD0ABAALAAAALwMAAE0AAAA9AAQACwAAADADAAA1AAAAPQAEAAsAAAAxAwAAUwAAAIUABQALAAAAMgMAAC8DAAAwAwAAgQAFAAsAAAAzAwAAMgMAADEDAAA9AAQACwAAADUDAAA1AAAATwAJAAsAAAA0AwAAMwMAADUDAAAAAAAAAQAAAAIAAAAHAAAAPgADADUAAAA0AwAAPQAEAAsAAAA2AwAAJAAAAE8ACQALAAAANwMAADYDAAA2AwAAAwAAAAMAAAADAAAAAwAAAD0ABAALAAAAOAMAADUAAABBAAYABAEAADoDAAAHAQAABQEAADkDAAA9AAQACwAAADsDAAA6AwAA
+[KisakCOD][VK CRASH SPIRV] seq=31 stage=ps part=41/41 data=DAAIAAsAAAA8AwAAZQAAAC4AAAA7AwAAOAMAADcDAAA9AAQACwAAAD4DAABwAAAATwAJAAsAAAA9AwAAPAMAAD4DAAAAAAAAAQAAAAIAAAAHAAAAPgADAHAAAAA9AwAAPQAEAAsAAAA/AwAAcAAAAE8ACQALAAAAQAMAAD8DAAA/AwAAAwAAAAMAAAADAAAAAwAAAD0ABAALAAAAQgMAAE0AAABPAAkACwAAAEEDAABAAwAAQgMAAAQAAAAFAAAABgAAAAMAAAA+AAMATQAAAEEDAAA9AAQACwAAAEMDAAA1AAAATwAJAAsAAABEAwAAQwMAAEMDAAADAAAAAwAAAAMAAAADAAAAPQAEAAsAAABFAwAAcAAAAD0ABAALAAAARgMAAE0AAAC/AAUATAAAAEgDAABEAwAASQAAAKkABgALAAAARwMAAEgDAABFAwAARgMAAFEABQAGAAAAXgMAAEcDAAADAAAAPgADAFoDAABeAwAAPgADAEkDAABHAwAAPQAEAAYAAABfAwAAWgMAAL4ABQBLAAAAYAMAAF8DAABYAwAA9wADAGIDAAAAAAAA+gAEAGADAABiAwAAYQMAAPgAAgBhAwAA/AABAPgAAgBiAwAA/QABADgAAQA=
+[KisakCOD][VK UNIFORM CRASH TRACE] no cmd6 uniform events captured
+[KisakCOD][CRASH] ========================================
