@@ -8398,12 +8398,28 @@ bool IDirect3DDevice9::EnsurePipeline()
                 static_cast<int>(seq64MinimalPipelineResult),
                 static_cast<void *>(seq64MinimalPipeline));
             Switch_LogWrite(minimalProbeMsg);
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq64_minimal_ps_result_logged";
             if (seq64MinimalPipeline)
+            {
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_minimal_ps_destroy_pipeline";
                 vkDestroyPipeline(
                     m_backend->Device(), seq64MinimalPipeline, nullptr);
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_minimal_ps_pipeline_destroy_return";
+            }
             if (seq64MinimalFragmentModule)
+            {
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_minimal_ps_destroy_module";
                 vkDestroyShaderModule(
                     m_backend->Device(), seq64MinimalFragmentModule, nullptr);
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_minimal_ps_module_destroy_return";
+            }
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq64_opcode_probe_dispatch";
         }
         else
         {
@@ -8417,7 +8433,11 @@ bool IDirect3DDevice9::EnsurePipeline()
                                                   uint32_t firstOpcode,
                                                   uint32_t lastOpcode)
         {
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq64_opcode_probe_copy_pixel";
             std::vector<uint32_t> probeWords = m_pixelShader->spirv;
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq64_opcode_probe_copy_return";
             uint32_t replaced = 0u;
             bool transformed = false;
             if (std::strcmp(name, "sample_and_shuffle_to_undef") == 0)
@@ -8437,6 +8457,8 @@ bool IDirect3DDevice9::EnsurePipeline()
                 transformed = ReplaceSwitchSpirvResultOpsWithUndef(
                     probeWords, firstOpcode, lastOpcode, &replaced);
             }
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq64_opcode_probe_transform_return";
             if (!transformed)
             {
                 char skipped[192];
@@ -8451,12 +8473,18 @@ bool IDirect3DDevice9::EnsurePipeline()
             VkPipeline probePipeline = VK_NULL_HANDLE;
             VkResult moduleResult = VK_ERROR_UNKNOWN;
             VkResult pipelineResult = VK_ERROR_UNKNOWN;
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq64_opcode_probe_module_prepare";
             VkShaderModuleCreateInfo probeModuleInfo{};
             probeModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             probeModuleInfo.codeSize = probeWords.size() * sizeof(uint32_t);
             probeModuleInfo.pCode = probeWords.data();
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq64_opcode_probe_module_create";
             moduleResult = vkCreateShaderModule(
                 m_backend->Device(), &probeModuleInfo, nullptr, &probeModule);
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq64_opcode_probe_module_create_return";
             pipelineResult = moduleResult;
             if (moduleResult == VK_SUCCESS && probeModule)
             {
@@ -8478,22 +8506,40 @@ bool IDirect3DDevice9::EnsurePipeline()
                     m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
                     VK_NULL_HANDLE);
                 g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_opcode_probe_create";
                 pipelineResult = vkCreateGraphicsPipelines(
                     m_backend->Device(), VK_NULL_HANDLE, 1,
                     &probeInfo, nullptr, &probePipeline);
                 g_switchFrameStage = "frame/render/vulkan/pipeline/seq64_opcode_probe_return";
             }
 
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq64_opcode_probe_result_log";
             char result[224];
             std::snprintf(result, sizeof(result),
                 "[KisakCOD][VK STAGE PROBE] seq=64 action=%s count=%u module=%d pipeline=%d handle=%p\n",
                 name, replaced, static_cast<int>(moduleResult),
                 static_cast<int>(pipelineResult), static_cast<void *>(probePipeline));
             Switch_LogWrite(result);
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq64_opcode_probe_result_logged";
             if (probePipeline)
+            {
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_opcode_probe_destroy_pipeline";
                 vkDestroyPipeline(m_backend->Device(), probePipeline, nullptr);
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_opcode_probe_pipeline_destroy_return";
+            }
             if (probeModule)
+            {
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_opcode_probe_destroy_module";
                 vkDestroyShaderModule(m_backend->Device(), probeModule, nullptr);
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq64_opcode_probe_module_destroy_return";
+            }
         };
 
         // The combined sample+shuffle variant passed. Now leave all original
