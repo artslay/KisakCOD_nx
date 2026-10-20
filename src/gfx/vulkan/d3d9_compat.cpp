@@ -1718,6 +1718,150 @@ bool ForceCapturedCubeSampleLodToZeroForProbe(
     return true;
 }
 
+// Narrow follow-up probe for the captured seq=33 NVK crash. The previous
+// LOD=0 variant still faults in vkCreateGraphicsPipelines, so change only that
+// one non-arrayed Cube sample from ExplicitLod to ImplicitLod. This tests whether
+// NAK's explicit-LOD Cube-sampling lowering is the trigger; all other shader
+// instructions and the pipeline state remain unchanged.
+bool ConvertCapturedCubeSampleExplicitLodToImplicitForProbe(
+    std::vector<uint32_t> &words,
+    uint32_t *rewrittenCount = nullptr)
+{
+    if (rewrittenCount)
+        *rewrittenCount = 0;
+    if (words.size() < 5 || words[0] != SpvMagicNumber)
+        return false;
+
+    const uint32_t bound = words[3];
+    if (bound < 2u || bound > 1000000u)
+        return false;
+
+    std::vector<uint32_t> resultTypeById(bound, UINT32_MAX);
+    std::vector<uint32_t> typeOpcode(bound, UINT32_MAX);
+    std::vector<uint32_t> vectorComponentType(bound, 0u);
+    std::vector<uint32_t> vectorComponentCount(bound, 0u);
+    std::vector<uint32_t> floatWidthByType(bound, 0u);
+    std::vector<uint32_t> imageDimensionByType(bound, UINT32_MAX);
+    std::vector<uint32_t> imageArrayedByType(bound, UINT32_MAX);
+    std::vector<uint32_t> imageTypeBySampledImageType(bound, UINT32_MAX);
+
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wordCount = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &op))
+            return false;
+
+        const uint32_t opcode = static_cast<uint32_t>(op);
+        const uint32_t *ins = &words[offset];
+        if (opcode == static_cast<uint32_t>(SpvOpTypeFloat) &&
+            wordCount >= 3 && ins[1] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            floatWidthByType[ins[1]] = ins[2];
+        }
+        else if (opcode == static_cast<uint32_t>(SpvOpTypeVector) &&
+                 wordCount >= 4 && ins[1] < bound && ins[2] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            vectorComponentType[ins[1]] = ins[2];
+            vectorComponentCount[ins[1]] = ins[3];
+        }
+        else if (opcode == static_cast<uint32_t>(SpvOpTypeImage) &&
+                 wordCount >= 9 && ins[1] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            imageDimensionByType[ins[1]] = ins[3];
+            imageArrayedByType[ins[1]] = ins[5];
+        }
+        else if (opcode == static_cast<uint32_t>(SpvOpTypeSampledImage) &&
+                 wordCount >= 3 && ins[1] < bound && ins[2] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            imageTypeBySampledImageType[ins[1]] = ins[2];
+        }
+
+        if (wordCount >= 3 &&
+            (opcode == static_cast<uint32_t>(SpvOpLoad) ||
+             opcode == static_cast<uint32_t>(SpvOpCopyObject) ||
+             opcode == static_cast<uint32_t>(SpvOpSampledImage) ||
+             opcode == static_cast<uint32_t>(SpvOpVectorShuffle)) &&
+            ins[2] < bound)
+        {
+            resultTypeById[ins[2]] = ins[1];
+        }
+        offset += wordCount;
+    }
+
+    std::vector<uint32_t> converted;
+    converted.reserve(words.size());
+    converted.insert(converted.end(), words.begin(), words.begin() + 5);
+    uint32_t rewritten = 0;
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wordCount = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &op))
+            return false;
+
+        const uint32_t opcode = static_cast<uint32_t>(op);
+        const uint32_t *ins = &words[offset];
+        bool targetCubeSample = false;
+        if (opcode == static_cast<uint32_t>(SpvOpImageSampleExplicitLod) &&
+            wordCount == 7 && ins[5] == 2u && ins[3] < bound && ins[4] < bound)
+        {
+            const uint32_t sampledImageType = resultTypeById[ins[3]];
+            const uint32_t coordinateType = resultTypeById[ins[4]];
+            if (sampledImageType < bound &&
+                typeOpcode[sampledImageType] ==
+                    static_cast<uint32_t>(SpvOpTypeSampledImage))
+            {
+                const uint32_t imageType = imageTypeBySampledImageType[sampledImageType];
+                if (imageType < bound &&
+                    typeOpcode[imageType] == static_cast<uint32_t>(SpvOpTypeImage) &&
+                    imageDimensionByType[imageType] == 3u && // Cube
+                    imageArrayedByType[imageType] == 0u &&
+                    coordinateType < bound &&
+                    typeOpcode[coordinateType] ==
+                        static_cast<uint32_t>(SpvOpTypeVector) &&
+                    vectorComponentCount[coordinateType] == 3u &&
+                    vectorComponentType[coordinateType] < bound &&
+                    typeOpcode[vectorComponentType[coordinateType]] ==
+                        static_cast<uint32_t>(SpvOpTypeFloat) &&
+                    floatWidthByType[vectorComponentType[coordinateType]] == 32u)
+                {
+                    targetCubeSample = true;
+                }
+            }
+        }
+
+        if (targetCubeSample)
+        {
+            // ImplicitLod takes result type, result ID, sampled image and coord;
+            // omit the old image-operands mask and Lod ID (two words).
+            converted.push_back((5u << 16) |
+                static_cast<uint32_t>(SpvOpImageSampleImplicitLod));
+            converted.insert(converted.end(), words.begin() + offset + 1,
+                words.begin() + offset + 5);
+            ++rewritten;
+        }
+        else
+        {
+            converted.insert(converted.end(), words.begin() + offset,
+                words.begin() + offset + wordCount);
+        }
+        offset += wordCount;
+    }
+
+    // This one-shader probe is valid only if exactly one intended sample matched.
+    if (rewritten != 1u)
+        return false;
+    words.swap(converted);
+    if (rewrittenCount)
+        *rewrittenCount = rewritten;
+    return true;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -5783,6 +5927,29 @@ bool IDirect3DDevice9::EnsurePipeline()
             else
             {
                 Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_lod_zero failed=invalid_module\n");
+            }
+        }
+        // The explicit-Lod-to-zero variant still crashed at seq=33. Now test
+        // only the lowering path for this exact captured Cube sample by using
+        // implicit LOD, retaining the shader instead of skipping the draw.
+        if (HashSpirvWords(pixelSpirv) == 0xd30ebe76a1054e5dull)
+        {
+            const uint64_t oldCubeSampleProbeHash = HashSpirvWords(pixelSpirv);
+            uint32_t implicitCubeSampleCount = 0;
+            if (ConvertCapturedCubeSampleExplicitLodToImplicitForProbe(
+                    pixelSpirv, &implicitCubeSampleCount))
+            {
+                char cubeSampleProbeTrace[256];
+                std::snprintf(cubeSampleProbeTrace, sizeof(cubeSampleProbeTrace),
+                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_to_implicit count=%u old_hash=%016llx new_hash=%016llx\\n",
+                    implicitCubeSampleCount,
+                    static_cast<unsigned long long>(oldCubeSampleProbeHash),
+                    static_cast<unsigned long long>(HashSpirvWords(pixelSpirv)));
+                Switch_LogWrite(cubeSampleProbeTrace);
+            }
+            else
+            {
+                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=cube_explicit_to_implicit failed=invalid_module\\n");
             }
         }
 #endif
