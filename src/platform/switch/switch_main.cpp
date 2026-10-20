@@ -665,20 +665,11 @@ static bool SwitchConfigureNakSpillProbe()
 
 int main()
 {
-    // Diagnostic A/B: expose Vulkan 1.3 through VkPhysicalDeviceProperties
-    // without rebuilding Mesa, to check for application-side 1.4 feature gating.
-    const bool mesaVk13OverrideSet =
-        ::setenv("MESA_VK_VERSION_OVERRIDE", "1.3", 1) == 0;
-
     const char *forceNakSpill = std::getenv("KISAK_NAK_FORCE_SPILL");
     const bool nakSpillProbeRequested = forceNakSpill && std::strcmp(forceNakSpill, "1") == 0;
     const bool nakSpillProbeConfigured =
         nakSpillProbeRequested && SwitchConfigureNakSpillProbe();
     Switch_LogInit();
-    if (mesaVk13OverrideSet)
-        Switch_LogWrite("[KisakCOD][VK API PROBE] forced MESA_VK_VERSION_OVERRIDE=1.3 for physical-device API version A/B test\n");
-    else
-        Switch_LogWrite("[KisakCOD][VK API PROBE] WARNING: failed to set MESA_VK_VERSION_OVERRIDE=1.3\n");
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
