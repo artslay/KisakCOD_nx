@@ -678,6 +678,31 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                             static_cast<unsigned long long>(raWords[13]));
                         Switch_LogCrashLine(line);
 
+                        // In the current trace, _free_r was reached by first_pass's
+                        // Vec<u32> cleanup with a 0x400-byte local stack area. Capture
+                        // that Vec's length and data pointer directly from the saved
+                        // caller frame instead of assuming saved x19 is a RegAllocator.
+                        if (raFrameAddress >= crashStack &&
+                            raFrameAddress - crashStack == 0x430u &&
+                            raFrameAddress >= 0x400u)
+                        {
+                            const uintptr_t firstPassSp = raFrameAddress - 0x400u;
+                            const volatile uintptr_t *firstPassWords =
+                                reinterpret_cast<const volatile uintptr_t *>(firstPassSp);
+                            const uintptr_t freeCallerOffset =
+                                raLr >= codeBase ? raLr - codeBase : UINTPTR_MAX;
+                            std::snprintf(
+                                line, sizeof(line),
+                                "[KisakCOD][CRASH] NAK_FIRST_PASS_FREE callerLrOff=0x%llx "
+                                "frame=0x%016llx localSp=0x%016llx len=%llu ptr=0x%016llx\\n",
+                                static_cast<unsigned long long>(freeCallerOffset),
+                                static_cast<unsigned long long>(raFrameAddress),
+                                static_cast<unsigned long long>(firstPassSp),
+                                static_cast<unsigned long long>(firstPassWords[34]),
+                                static_cast<unsigned long long>(firstPassWords[35]));
+                            Switch_LogCrashLine(line);
+                        }
+
                         // RegAllocator is the final member being dropped in this crash.
                         // Walk to AssignRegsBlock's frame and dump all seven sibling
                         // allocators; repeated owned pointers would indicate a double-free.
