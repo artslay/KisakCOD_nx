@@ -7640,9 +7640,9 @@ bool IDirect3DDevice9::EnsurePipeline()
                 vkDestroyShaderModule(m_backend->Device(), probeModule, nullptr);
         };
 
-        // Keep this boot to one potentially crashing pipeline probe so the
-        // log cleanly distinguishes an accepted combined rewrite from a driver fault.
-        runSeq64PixelOpcodeProbe("sample_and_shuffle_to_undef", 87u, 94u);
+        // The combined sample+shuffle variant passed. Now leave all original
+        // texture samples intact and isolate only OpVectorShuffle lowering.
+        runSeq64PixelOpcodeProbe("vector_shuffle_to_undef", 79u, 79u);
     }
 #endif
 
