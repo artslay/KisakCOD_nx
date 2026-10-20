@@ -7,6 +7,47 @@
 #include <qcommon/com_bsp.h>
 #include "r_state.h"
 
+#ifdef __SWITCH__
+#include <atomic>
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
+namespace
+{
+bool R_ValidateLightPropertiesInput(
+    const char *where,
+    const GfxLight *light,
+    const GfxLightDef *def,
+    uint32_t shadowableLightIndex,
+    uint32_t shadowableLightCount)
+{
+    const bool supportedType = light &&
+        (light->type == GFX_LIGHT_TYPE_OMNI || light->type == GFX_LIGHT_TYPE_SPOT);
+    const GfxImage *attenuationImage = def ? def->attenuation.image : nullptr;
+    if (supportedType && def && attenuationImage)
+        return true;
+
+#ifdef __SWITCH__
+    static std::atomic<uint32_t> logCount{0};
+    const uint32_t logId = logCount.fetch_add(1, std::memory_order_relaxed);
+    if (logId < 16u)
+    {
+        char msg[320];
+        std::snprintf(msg, sizeof(msg),
+            "[KisakCOD][LIGHT DEF INVALID] id=%u where=%s light=%p type=%u def=%p attenuation=%p shadowableIndex=%u shadowableCount=%u action=skip_light_draw_list\n",
+            logId, where ? where : "(null)", static_cast<const void *>(light),
+            light ? static_cast<unsigned int>(light->type) : 0xffffffffu,
+            static_cast<const void *>(def),
+            static_cast<const void *>(attenuationImage),
+            shadowableLightIndex, shadowableLightCount);
+        Switch_LogWrite(msg);
+    }
+#endif
+    return false;
+}
+}
+
 
 void __cdecl R_SetLightProperties(
     GfxCmdBufSourceState *source,
@@ -21,6 +62,10 @@ void __cdecl R_SetLightProperties(
     float spotExponent; // [esp+70h] [ebp-14h]
     float specularColor[3]; // [esp+74h] [ebp-10h] BYREF
     float spotDotBias; // [esp+80h] [ebp-4h]
+
+    if (!R_ValidateLightPropertiesInput(
+            "set_light_properties", light, def, UINT32_MAX, 0u))
+        return;
 
     iassert(source->viewMode == VIEW_MODE_3D);
     iassert( light );
@@ -124,6 +169,11 @@ void __cdecl R_SetShadowableLight(
             else
             {
                 def = viewInfo->shadowableLights[shadowableLightIndex].def;
+                if (!R_ValidateLightPropertiesInput(
+                        "shadowable_light",
+                        &viewInfo->shadowableLights[shadowableLightIndex], def,
+                        shadowableLightIndex, viewInfo->shadowableLightCount))
+                    return;
                 falloffShift = (double)def->lmapLookupStart * 0.001953125;
                 falloffScale = (double)def->attenuation.image->width * 0.001953125;
                 R_UpdateCodeConstant(source, CONST_SRC_CODE_LIGHT_FALLOFF_PLACEMENT, falloffScale, 0.0, falloffShift, 0.0);
@@ -163,20 +213,39 @@ void __cdecl R_SetShadowableLight(
     }
 }
 
-void __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const GfxDrawSurfListInfo *info)
+bool __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const GfxDrawSurfListInfo *info)
 {
     uint32_t shadowableLightIndex; // [esp+4h] [ebp-14h]
     const GfxLight *light; // [esp+14h] [ebp-4h]
+
+    if (!info)
+        return false;
 
     if (info->light)
     {
         light = info->light;
         shadowableLightIndex = R_GetShadowableLightIndex(source->input.data, info->viewInfo, light);
         if (shadowableLightIndex)
+        {
+            const GfxLight *shadowableLight =
+                &info->viewInfo->shadowableLights[shadowableLightIndex];
+            if (shadowableLight->type != GFX_LIGHT_TYPE_DIR &&
+                !R_ValidateLightPropertiesInput(
+                    "shadowable_list", shadowableLight, shadowableLight->def,
+                    shadowableLightIndex, info->viewInfo->shadowableLightCount))
+                return false;
             R_SetShadowableLight(source, shadowableLightIndex, info->viewInfo);
+        }
         else
+        {
+            if (!R_ValidateLightPropertiesInput(
+                    "unshadowed_list", light, light->def, 0u,
+                    info->viewInfo ? info->viewInfo->shadowableLightCount : 0u))
+                return false;
             R_SetLightProperties(source, light, light->def, LIGHT_HAS_NO_SHADOWMAP, 0.0);
+        }
     }
+    return true;
 }
 
 uint32_t __cdecl R_GetShadowableLightIndex(
