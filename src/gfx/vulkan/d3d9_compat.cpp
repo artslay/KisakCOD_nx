@@ -523,6 +523,148 @@ void TraceSwitchNakOpcodeHistogram(
     }
     Switch_LogWrite(line);
 }
+
+// Audit every OpVectorShuffle in the exact seq=64 shader pair. NAK faults
+// during pipeline lowering; these captured modules contain many shuffles.
+// This only reports operand/type inconsistencies and does not mutate shaders.
+void TraceSwitchNakShuffleAudit(
+    const char *stage, uint32_t sequence,
+    const std::vector<uint32_t> &words, uint64_t expectedHash)
+{
+    if (HashSpirvWords(words) != expectedHash || words.size() < 5u ||
+        words[0] != SpvMagicNumber || words[3] < 2u || words[3] > 1000000u)
+        return;
+    const uint32_t bound = words[3];
+    std::vector<uint32_t> resultTypeById(bound, 0u);
+    std::vector<uint32_t> vectorLengthByType(bound, 0u);
+    std::vector<uint8_t> isVectorType(bound, 0u);
+
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+        {
+            char line[192];
+            std::snprintf(line, sizeof(line),
+                "[KisakCOD][VK SPIRV SHUFFLE] seq=%u stage=%s parse=bad_instruction offset=%zu\n",
+                sequence, stage, offset);
+            Switch_LogWrite(line);
+            return;
+        }
+        const uint32_t opcode = static_cast<uint32_t>(op);
+        const uint32_t *ins = &words[offset];
+        if (opcode == 23u && wc >= 4u && ins[1] < bound)
+        {
+            isVectorType[ins[1]] = 1u;
+            vectorLengthByType[ins[1]] = ins[3];
+        }
+        else if (wc >= 3u)
+        {
+            const bool typedResult =
+                opcode == 1u || (opcode >= 41u && opcode <= 52u) ||
+                opcode == 57u || opcode == 59u || opcode == 61u ||
+                (opcode >= 65u && opcode <= 69u) ||
+                (opcode >= 77u && opcode <= 84u) ||
+                (opcode >= 86u && opcode <= 98u) ||
+                (opcode >= 109u && opcode <= 205u);
+            if (typedResult && ins[1] < bound && ins[2] < bound)
+                resultTypeById[ins[2]] = ins[1];
+        }
+        offset += wc;
+    }
+
+    uint32_t total = 0u, badWordCount = 0u, unknownType = 0u;
+    uint32_t badSelector = 0u, wrongResultWidth = 0u, undefSelector = 0u;
+    uint32_t firstOnly = 0u, secondOnly = 0u, mixed = 0u;
+    uint32_t sameSource = 0u, zeroSecondSource = 0u;
+    char examples[240]{};
+    size_t examplesUsed = 0u;
+
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return;
+        if (op == SpvOpVectorShuffle)
+        {
+            ++total;
+            if (wc < 6u)
+            {
+                ++badWordCount;
+            }
+            else
+            {
+                const uint32_t *ins = &words[offset];
+                const uint32_t typeId = ins[1], vector1Id = ins[3], vector2Id = ins[4];
+                bool bad = false;
+                if (typeId >= bound || vector1Id == 0u || vector1Id >= bound ||
+                    vector2Id == 0u || vector2Id >= bound ||
+                    !isVectorType[typeId] ||
+                    resultTypeById[vector1Id] >= bound ||
+                    resultTypeById[vector2Id] >= bound ||
+                    !isVectorType[resultTypeById[vector1Id]] ||
+                    !isVectorType[resultTypeById[vector2Id]])
+                {
+                    ++unknownType;
+                    bad = true;
+                }
+                else
+                {
+                    const uint32_t n1 = vectorLengthByType[resultTypeById[vector1Id]];
+                    const uint32_t n2 = vectorLengthByType[resultTypeById[vector2Id]];
+                    const uint32_t nr = vectorLengthByType[typeId];
+                    if (nr != wc - 5u)
+                    {
+                        ++wrongResultWidth;
+                        bad = true;
+                    }
+                    bool used1 = false, used2 = false;
+                    for (size_t si = offset + 5u; si < offset + wc; ++si)
+                    {
+                        const uint32_t selector = words[si];
+                        if (selector == 0xffffffffu)
+                            ++undefSelector;
+                        else if (selector >= n1 + n2)
+                        {
+                            ++badSelector;
+                            bad = true;
+                        }
+                        else if (selector < n1)
+                            used1 = true;
+                        else
+                            used2 = true;
+                    }
+                    if (used1 && used2) ++mixed;
+                    else if (used1) ++firstOnly;
+                    else if (used2) ++secondOnly;
+                    if (vector1Id == vector2Id) ++sameSource;
+                    if (vector2Id == 0u) ++zeroSecondSource;
+                }
+                if (bad && examplesUsed + 36u < sizeof(examples))
+                {
+                    const int n = std::snprintf(
+                        examples + examplesUsed, sizeof(examples) - examplesUsed,
+                        "%s%zu:v1=%u,v2=%u,t=%u",
+                        examplesUsed ? ";" : "", offset, vector1Id, vector2Id, typeId);
+                    if (n > 0 && static_cast<size_t>(n) < sizeof(examples) - examplesUsed)
+                        examplesUsed += static_cast<size_t>(n);
+                }
+            }
+        }
+        offset += wc;
+    }
+
+    char line[768];
+    std::snprintf(line, sizeof(line),
+        "[KisakCOD][VK SPIRV SHUFFLE] seq=%u stage=%s total=%u bad_wc=%u unknown_type=%u result_width=%u bad_selector=%u undef=%u first_only=%u second_only=%u mixed=%u same_src=%u zero_src2=%u examples=%s\n",
+        sequence, stage, total, badWordCount, unknownType, wrongResultWidth,
+        badSelector, undefSelector, firstOnly, secondOnly, mixed, sameSource,
+        zeroSecondSource, examplesUsed ? examples : "none");
+    Switch_LogWrite(line);
+}
+
 #endif
 
 bool TryLoadSwitchOptimizedPipeline31Spirv(
@@ -7166,6 +7308,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         TraceSwitchNakOpcodeHistogram(
             "vs", 64u, m_vertexShader->spirv, 0xcb5e4b84e2b977e4ull);
         TraceSwitchNakOpcodeHistogram(
+            "ps", 64u, m_pixelShader->spirv, 0x397081631095378cull);
+        TraceSwitchNakShuffleAudit(
+            "vs", 64u, m_vertexShader->spirv, 0xcb5e4b84e2b977e4ull);
+        TraceSwitchNakShuffleAudit(
             "ps", 64u, m_pixelShader->spirv, 0x397081631095378cull);
         uint32_t killReturnCount = 0u;
         if (ReplaceCapturedSeq64PixelKillWithReturnForProbe(
