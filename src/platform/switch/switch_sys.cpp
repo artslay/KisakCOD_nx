@@ -641,10 +641,12 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                     (raFrameAddress & (alignof(uintptr_t) - 1u)) == 0 &&
                     raFrameAddress <= UINTPTR_MAX - 0x70u)
                 {
-                    const volatile uintptr_t *raFrame =
-                        reinterpret_cast<const volatile uintptr_t *>(raFrameAddress);
-                    const uintptr_t raLr = raFrame[1];
-                    const uintptr_t raThis = raFrame[2];
+                    // _free_r has its own AArch64 frame: [sp+8] is its caller LR
+                    // and [sp+16] is the caller's saved x19. In RegAllocator drop glue,
+                    // x19 holds "this" across __rust_dealloc, so read it from this frame,
+                    // not from the caller's saved x19 slot at raFrameAddress + 16.
+                    const uintptr_t raLr = freeStack[1];
+                    const uintptr_t raThis = freeStack[2];
                     if (raThis >= 0x100000000ull &&
                         raThis <= UINTPTR_MAX - 0x70u &&
                         (raThis & (alignof(uintptr_t) - 1u)) == 0)
@@ -655,7 +657,9 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                             line, sizeof(line),
                             "[KisakCOD][CRASH] NAK_RA_DROP lr=0x%016llx this=0x%016llx "
                             "q00=%016llx q08=%016llx q10=%016llx q18=%016llx "
-                            "q20=%016llx q28=%016llx q30=%016llx q38=%016llx\n",
+                            "q20=%016llx q28=%016llx q30=%016llx q38=%016llx "
+                            "q40=%016llx q48=%016llx q50=%016llx q58=%016llx "
+                            "q60=%016llx q68=%016llx\n",
                             static_cast<unsigned long long>(raLr),
                             static_cast<unsigned long long>(raThis),
                             static_cast<unsigned long long>(raWords[0]),
@@ -665,7 +669,13 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                             static_cast<unsigned long long>(raWords[4]),
                             static_cast<unsigned long long>(raWords[5]),
                             static_cast<unsigned long long>(raWords[6]),
-                            static_cast<unsigned long long>(raWords[7]));
+                            static_cast<unsigned long long>(raWords[7]),
+                            static_cast<unsigned long long>(raWords[8]),
+                            static_cast<unsigned long long>(raWords[9]),
+                            static_cast<unsigned long long>(raWords[10]),
+                            static_cast<unsigned long long>(raWords[11]),
+                            static_cast<unsigned long long>(raWords[12]),
+                            static_cast<unsigned long long>(raWords[13]));
                         Switch_LogCrashLine(line);
                     }
                 }
