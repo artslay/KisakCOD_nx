@@ -656,8 +656,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                             "[KisakCOD][CRASH] NAK_RA_DROP lr=0x%016llx this=0x%016llx "
                             "q00=%016llx q08=%016llx q10=%016llx q18=%016llx "
                             "q20=%016llx q28=%016llx q30=%016llx q38=%016llx "
-                            "q40=%016llx q48=%016llx q50=%016llx q58=%016llx "
-                            "q60=%016llx q68=%016llx freeArg=0x%016llx\n",
+                            "freeArg=0x%016llx\n",
                             static_cast<unsigned long long>(raLr),
                             static_cast<unsigned long long>(raThis),
                             static_cast<unsigned long long>(raWords[0]),
@@ -668,12 +667,6 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                             static_cast<unsigned long long>(raWords[5]),
                             static_cast<unsigned long long>(raWords[6]),
                             static_cast<unsigned long long>(raWords[7]),
-                            static_cast<unsigned long long>(raWords[8]),
-                            static_cast<unsigned long long>(raWords[9]),
-                            static_cast<unsigned long long>(raWords[10]),
-                            static_cast<unsigned long long>(raWords[11]),
-                            static_cast<unsigned long long>(raWords[12]),
-                            static_cast<unsigned long long>(raWords[13]),
                             static_cast<unsigned long long>(freeArg));
                         Switch_LogCrashLine(line);
                     }
