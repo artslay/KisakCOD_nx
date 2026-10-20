@@ -665,20 +665,20 @@ static bool SwitchConfigureNakSpillProbe()
 
 int main()
 {
-    const char *forceNakSpill = std::getenv("KISAK_NAK_FORCE_SPILL");
-    const bool nakSpillProbeRequested = forceNakSpill && std::strcmp(forceNakSpill, "1") == 0;
-    const bool nakSpillProbeConfigured =
-        nakSpillProbeRequested && SwitchConfigureNakSpillProbe();
+    // This targeted diagnostic is forced for the Switch pipeline-creation crash.
+    // Home Menu launches have not supplied KISAK_NAK_FORCE_SPILL in the failing
+    // run, so set NAK_DEBUG before any Vulkan instance/device initialization.
+    // This changes the NAK allocator test mode only; every shader/pipeline is
+    // still created through the normal renderer path.
+    const bool nakSpillProbeConfigured = SwitchConfigureNakSpillProbe();
     Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
     if (nakSpillProbeConfigured)
         Switch_LogWrite("[KisakCOD][NAK PROBE] allocator spill mode enabled before Mesa initialization\n");
-    else if (nakSpillProbeRequested)
-        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to enable allocator spill mode\n");
     else
-        Switch_LogWrite("[KisakCOD][NAK PROBE] allocator spill mode disabled; set KISAK_NAK_FORCE_SPILL=1 to enable\n");
+        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to enable allocator spill mode\n");
     SwitchBootLog("Game data: sdmc:/switch/KisakCOD/game");
     SwitchBootLog("Stage 1/7: initializing main thread");
 
