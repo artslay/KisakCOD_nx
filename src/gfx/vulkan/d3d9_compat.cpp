@@ -1881,6 +1881,7 @@ bool ForceCapturedSeq54AlphaTestBranchPassForProbe(
         return false;
 
     uint32_t trueConstantId = 0u;
+    uint32_t trueConstantTypeId = 0u;
     for (size_t offset = 5; offset < words.size();)
     {
         uint32_t wc = 0;
@@ -1892,6 +1893,7 @@ bool ForceCapturedSeq54AlphaTestBranchPassForProbe(
             ins[1] < bound && ins[2] < bound)
         {
             trueConstantId = ins[2];
+            trueConstantTypeId = ins[1];
             break;
         }
         offset += wc;
@@ -1931,7 +1933,8 @@ bool ForceCapturedSeq54AlphaTestBranchPassForProbe(
             const uint32_t *branch = &words[branchOffset];
             const uint32_t mergeLabel = words[mergeOffset + 1u];
             const uint32_t killLabel = branch[3];
-            if (branch[1] != words[offset + 2u] || branch[2] != mergeLabel)
+            if (branch[1] != words[offset + 2u] || branch[2] != mergeLabel ||
+                trueConstantTypeId != words[offset + 1u])
             {
                 offset += wc;
                 continue;
@@ -6163,7 +6166,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 char alphaProbeTrace[256];
                 std::snprintf(alphaProbeTrace, sizeof(alphaProbeTrace),
-                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=seq54_alpha_branch_pass count=%u old_hash=%016llx new_hash=%016llx\\n",
+                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=seq54_alpha_branch_pass count=%u old_hash=%016llx new_hash=%016llx\n",
                     alphaBranchCount,
                     static_cast<unsigned long long>(oldAlphaProbeHash),
                     static_cast<unsigned long long>(HashSpirvWords(m_pixelShader->spirv)));
@@ -6171,7 +6174,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             }
             else
             {
-                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=seq54_alpha_branch_pass failed=pattern_mismatch\\n");
+                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=seq54_alpha_branch_pass failed=pattern_mismatch\n");
             }
         }
 #endif
