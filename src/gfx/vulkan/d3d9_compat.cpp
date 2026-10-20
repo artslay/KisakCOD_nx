@@ -8348,7 +8348,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 "vs={serial=%llu,words=%zu,hash=%016llx} "
                 "ps={serial=%llu,words=%zu,hash=%016llx} "
                 "modules=%p/%p original_ps_module=%p source_ps_hash=%016llx "
-                "alpha=%u/%u/%u depth=%u/%u/%u specMap=disabled\n",
+                "alphaBypassProbe=1 alphaState=%u/%u/%u depth=%u/%u/%u specMap=disabled\n",
                 pipelineCreateSequence,
                 static_cast<unsigned long long>(key),
                 static_cast<unsigned long long>(m_vertexShader->serial),
