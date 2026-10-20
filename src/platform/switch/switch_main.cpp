@@ -669,12 +669,12 @@ int main()
     // The forced minimal-register spill test progressed farther but still faulted
     // inside vkCreateGraphicsPipelines. Serial mode targets instruction dependency
     // bugs without forcing the allocator's most aggressive spill path.
-    const bool nakSpillProbeConfigured = SwitchConfigureNakSerialProbe();
+    const bool nakSerialProbeConfigured = SwitchConfigureNakSerialProbe();
     Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
-    if (nakSpillProbeConfigured)
+    if (nakSerialProbeConfigured)
         Switch_LogWrite("[KisakCOD][NAK PROBE] serial instruction mode enabled before Mesa initialization\n");
     else
         Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to enable serial instruction mode\n");
