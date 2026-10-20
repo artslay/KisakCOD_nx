@@ -609,7 +609,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
             const uintptr_t bk = chunk[3];
             std::snprintf(
                 line, sizeof(line),
-                "[KisakCOD][CRASH] FREE_LIST_STATE node=0x%016llx prev_foot=0x%016llx head=0x%016llx fd=0x%016llx bk=0x%016llx x0=0x%016llx x1=0x%016llx x2=0x%016llx x3=0x%016llx\\n",
+                "[KisakCOD][CRASH] FREE_LIST_STATE node=0x%016llx prev_foot=0x%016llx head=0x%016llx fd=0x%016llx bk=0x%016llx x0=0x%016llx x1=0x%016llx x2=0x%016llx x3=0x%016llx\n",
                 static_cast<unsigned long long>(node),
                 static_cast<unsigned long long>(prevFoot),
                 static_cast<unsigned long long>(head),
