@@ -5717,14 +5717,16 @@ bool IDirect3DDevice9::EnsurePipeline()
         uint32_t loweredPixelExtracts = 0u;
         const size_t pixelWordsBeforeLower = pixelSpirv.size();
         if (LowerSwitchSpirvVectorShuffleToCompositeOps(
-                pixelSpirv, &loweredPixelShuffleCount, &loweredPixelCopyObjects, &loweredPixelExtracts) &&
+                pixelSpirv, &loweredPixelShuffleCount,
+                &loweredPixelCopyObjects, &loweredPixelExtracts) &&
             loweredPixelShuffleCount)
         {
             char loweringTrace[256];
             std::snprintf(loweringTrace, sizeof(loweringTrace),
-                "[KisakCOD][VK SPIRV LOWER] stage=ps serial=%llu vector_shuffle=%u copy_object=%u scalar_extract=%u words=%zu->%zu\\n",
+                "[KisakCOD][VK SPIRV LOWER] stage=ps serial=%llu vector_shuffle=%u copy_object=%u scalar_extract=%u words=%zu->%zu\n",
                 static_cast<unsigned long long>(m_pixelShader->serial),
-                loweredPixelShuffleCount, loweredPixelCopyObjects, loweredPixelExtracts, pixelWordsBeforeLower, pixelSpirv.size());
+                loweredPixelShuffleCount, loweredPixelCopyObjects,
+                loweredPixelExtracts, pixelWordsBeforeLower, pixelSpirv.size());
             Switch_LogWrite(loweringTrace);
         }
 #ifdef __SWITCH__
@@ -5835,14 +5837,17 @@ bool IDirect3DDevice9::EnsurePipeline()
         uint32_t loweredVertexExtracts = 0u;
         const size_t vertexWordsBeforeLower = m_vertexShader->spirv.size();
         if (LowerSwitchSpirvVectorShuffleToCompositeOps(
-                m_vertexShader->spirv, &loweredVertexShuffleCount, &loweredVertexCopyObjects, &loweredVertexExtracts) &&
+                m_vertexShader->spirv, &loweredVertexShuffleCount,
+                &loweredVertexCopyObjects, &loweredVertexExtracts) &&
             loweredVertexShuffleCount)
         {
             char loweringTrace[256];
             std::snprintf(loweringTrace, sizeof(loweringTrace),
-                "[KisakCOD][VK SPIRV LOWER] stage=vs serial=%llu vector_shuffle=%u copy_object=%u scalar_extract=%u words=%zu->%zu\\n",
+                "[KisakCOD][VK SPIRV LOWER] stage=vs serial=%llu vector_shuffle=%u copy_object=%u scalar_extract=%u words=%zu->%zu\n",
                 static_cast<unsigned long long>(m_vertexShader->serial),
-                loweredVertexShuffleCount, loweredVertexCopyObjects, loweredVertexExtracts, vertexWordsBeforeLower, m_vertexShader->spirv.size());
+                loweredVertexShuffleCount, loweredVertexCopyObjects,
+                loweredVertexExtracts, vertexWordsBeforeLower,
+                m_vertexShader->spirv.size());
             Switch_LogWrite(loweringTrace);
         }
 #ifdef __SWITCH__
