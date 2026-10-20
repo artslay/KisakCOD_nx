@@ -8282,12 +8282,24 @@ bool IDirect3DDevice9::EnsurePipeline()
         uint32_t loweredShuffleCount = 0u;
         bool loweredBuilt = false;
         VkResult loweredModuleResult = VK_ERROR_UNKNOWN;
-        if (!useAlphaTestPatch && !m_pixelShader->linkedSpirv.empty())
+        if (!m_pixelShader->linkedSpirv.empty())
         {
+            // Start from the immutable linked fragment baseline, lower only
+            // OpVectorShuffle, then re-apply the current D3D9 alpha-test rule.
+            // The old guard accidentally disabled the rewrite for alpha-tested
+            // world materials, which made the caller skip every matching draw.
             seq31LoweredPixelSpirv = m_pixelShader->linkedSpirv;
             loweredBuilt = LowerSwitchSpirvVectorShuffleToCompositeOps(
                 seq31LoweredPixelSpirv, &loweredShuffleCount) &&
                 loweredShuffleCount > 0u;
+            if (loweredBuilt && useAlphaTestPatch)
+            {
+                uint32_t rewrittenAlphaFuncSpecId = 0u;
+                uint32_t rewrittenAlphaRefSpecId = 0u;
+                loweredBuilt = PatchFragmentShaderForAlphaTest(
+                    seq31LoweredPixelSpirv, m_alphaFunc, m_alphaRef,
+                    &rewrittenAlphaFuncSpecId, &rewrittenAlphaRefSpecId, false);
+            }
         }
 
         if (loweredBuilt)
