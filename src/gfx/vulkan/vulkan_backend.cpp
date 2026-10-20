@@ -501,18 +501,27 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         addedNakFlag = true;
     }
 
+    // Keep the same spill-path diagnostic for this uniform-GPR A/B test.
+    if (!hasNakFlag("spill"))
+    {
+        if (!nakDebug.empty())
+            nakDebug += ',';
+        nakDebug += "spill";
+        addedNakFlag = true;
+    }
+
     if (addedNakFlag)
     {
         if (::setenv("NAK_DEBUG", nakDebug.c_str(), 1) != 0)
         {
             Switch_LogWrite(
-                "[KisakCOD][VK DRIVER] could not set requested NAK_DEBUG flags; continuing with existing options\\n");
+                "[KisakCOD][VK DRIVER] could not set requested NAK_DEBUG flags; continuing with existing options\n");
         }
         else
         {
             char nakFlagsMsg[384];
             std::snprintf(nakFlagsMsg, sizeof(nakFlagsMsg),
-                "[KisakCOD][VK DRIVER] enabled NAK_DEBUG=%s (set KISAK_NAK_DISABLE_UGPR=1 to opt out of uniform GPR allocation)\\n",
+                "[KisakCOD][VK DRIVER] enabled NAK_DEBUG=%s (set KISAK_NAK_DISABLE_UGPR=1 to opt out of uniform GPR allocation)\n",
                 nakDebug.c_str());
             Switch_LogWrite(nakFlagsMsg);
         }
@@ -520,12 +529,12 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
     else if (hasNakFlag("nougpr"))
     {
         Switch_LogWrite(
-            "[KisakCOD][VK DRIVER] NAK_DEBUG includes nougpr; uniform GPR allocation is disabled\\n");
+            "[KisakCOD][VK DRIVER] NAK_DEBUG includes nougpr; uniform GPR allocation is disabled\n");
     }
     else
     {
         Switch_LogWrite(
-            "[KisakCOD][VK DRIVER] NAK_DEBUG serial,spill configured; uniform GPR allocation remains enabled\\n");
+            "[KisakCOD][VK DRIVER] NAK_DEBUG serial,spill configured; uniform GPR allocation remains enabled\n");
     }
 #endif
 
