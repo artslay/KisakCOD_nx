@@ -8385,6 +8385,127 @@ bool IDirect3DDevice9::EnsurePipeline()
                 static_cast<void *>(shuffleLoweredPixelModule));
         }
     }
+    // Cross-isolate the known crashing PS with a compatible minimal VS.
+    // Probe both the original and the shuffle-lowered PS before the live pipeline;
+    // this distinguishes a PS-alone NAK failure from an original VS/PS interaction.
+    if (shuffleLoweringActive &&
+        vsSpirvHash == 0xcb5e4b84e2b977e4ull &&
+        psSpirvHash == 0x397081631095378cull)
+    {
+        std::vector<uint32_t> isolationVertexSpirv;
+        const bool isolationVertexBuilt =
+            BuildSwitchSeq90MinimalVertexSpirv(isolationVertexSpirv);
+        VkShaderModule isolationVertexModule = VK_NULL_HANDLE;
+        VkResult isolationVertexResult = VK_ERROR_UNKNOWN;
+        if (isolationVertexBuilt)
+        {
+            VkShaderModuleCreateInfo isolationVertexInfo{};
+            isolationVertexInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            isolationVertexInfo.codeSize =
+                isolationVertexSpirv.size() * sizeof(uint32_t);
+            isolationVertexInfo.pCode = isolationVertexSpirv.data();
+            isolationVertexResult = vkCreateShaderModule(
+                m_backend->Device(), &isolationVertexInfo, nullptr,
+                &isolationVertexModule);
+        }
+
+        char isolationModuleTrace[224];
+        std::snprintf(isolationModuleTrace, sizeof(isolationModuleTrace),
+            "[KisakCOD][VK PS ISOLATION] seq=%u vs_built=%u vs_module_result=%d module=%p\n",
+            pipelineCreateSequence, isolationVertexBuilt ? 1u : 0u,
+            static_cast<int>(isolationVertexResult),
+            static_cast<void *>(isolationVertexModule));
+        Switch_LogWrite(isolationModuleTrace);
+
+        if (isolationVertexResult == VK_SUCCESS && isolationVertexModule)
+        {
+            const auto runPsIsolationProbe = [&](
+                const char *name, VkShaderModule psModule,
+                const std::vector<uint32_t> &psWords)
+            {
+                VkPipelineShaderStageCreateInfo probeStages[2] = {
+                    stages[0], stages[1]
+                };
+                probeStages[0].module = isolationVertexModule;
+                probeStages[1].module = psModule;
+                probeStages[0].pSpecializationInfo = nullptr;
+                probeStages[1].pSpecializationInfo = nullptr;
+                VkGraphicsPipelineCreateInfo probeInfo = info;
+                probeInfo.pStages = probeStages;
+
+                g_switchPipelineCrashSnapshot.valid = true;
+                g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
+                g_switchPipelineCrashSnapshot.vertexSpirv = &isolationVertexSpirv;
+                g_switchPipelineCrashSnapshot.pixelSpirv = &psWords;
+                std::snprintf(
+                    g_switchPipelineCrashSnapshot.summary,
+                    sizeof(g_switchPipelineCrashSnapshot.summary),
+                    "[KisakCOD][VK CRASH PIPELINE] seq=%u stage_probe=%s key=%016llx vs=%016llx ps=%016llx modules=%p/%p flags=%u\n",
+                    pipelineCreateSequence, name,
+                    static_cast<unsigned long long>(
+                        HashSpirvWords(isolationVertexSpirv)),
+                    static_cast<unsigned long long>(HashSpirvWords(psWords)),
+                    static_cast<void *>(isolationVertexModule),
+                    static_cast<void *>(psModule),
+                    static_cast<unsigned int>(probeInfo.flags));
+
+                char begin[256];
+                std::snprintf(begin, sizeof(begin),
+                    "[KisakCOD][VK PS ISOLATION] seq=%u action=%s begin ps_hash=%016llx\n",
+                    pipelineCreateSequence, name,
+                    static_cast<unsigned long long>(HashSpirvWords(psWords)));
+                Switch_LogWrite(begin);
+                RecordSwitchVkPipelineTrace(
+                    6u, this, &m_pipelines, m_pipelines.size(), key,
+                    m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
+                    VK_NULL_HANDLE);
+                g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+                VkPipeline probePipeline = VK_NULL_HANDLE;
+                const VkResult probeResult = vkCreateGraphicsPipelines(
+                    m_backend->Device(), VK_NULL_HANDLE, 1,
+                    &probeInfo, nullptr, &probePipeline);
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/ps_isolation_probe_return";
+
+                char result[288];
+                std::snprintf(result, sizeof(result),
+                    "[KisakCOD][VK PS ISOLATION] seq=%u action=%s result=%d handle=%p\n",
+                    pipelineCreateSequence, name, static_cast<int>(probeResult),
+                    static_cast<void *>(probePipeline));
+                Switch_LogWrite(result);
+                if (probePipeline)
+                    vkDestroyPipeline(
+                        m_backend->Device(), probePipeline, nullptr);
+            };
+
+            runPsIsolationProbe(
+                "minimal_vs_original_ps", originalPipelinePixelModule,
+                m_pixelShader->spirv);
+            runPsIsolationProbe(
+                "minimal_vs_lowered_ps", shuffleLoweredPixelModule,
+                shuffleLoweredPixelSpirv);
+            vkDestroyShaderModule(
+                m_backend->Device(), isolationVertexModule, nullptr);
+        }
+
+        // Restore the snapshot to the live pipeline pair for the main create call.
+        g_switchPipelineCrashSnapshot.valid = true;
+        g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
+        g_switchPipelineCrashSnapshot.vertexSpirv = &m_vertexShader->spirv;
+        g_switchPipelineCrashSnapshot.pixelSpirv = &shuffleLoweredPixelSpirv;
+        std::snprintf(
+            g_switchPipelineCrashSnapshot.summary,
+            sizeof(g_switchPipelineCrashSnapshot.summary),
+            "[KisakCOD][VK CRASH PIPELINE] seq=%u shuffle_lowered=1 key=%016llx vs=%016llx source_ps=%016llx lowered_ps=%016llx lowered=%u module=%p\n",
+            pipelineCreateSequence,
+            static_cast<unsigned long long>(key),
+            static_cast<unsigned long long>(vsSpirvHash),
+            static_cast<unsigned long long>(psSpirvHash),
+            static_cast<unsigned long long>(
+                HashSpirvWords(shuffleLoweredPixelSpirv)),
+            shuffleLoweredCount,
+            static_cast<void *>(shuffleLoweredPixelModule));
+    }
 #endif
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
