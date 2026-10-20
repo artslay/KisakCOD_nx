@@ -455,7 +455,7 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
             "[KisakCOD][VK DRIVER] NVK_DEBUG coherent and no_cbuf already enabled\n");
     }
 
-    // switch_main.cpp enables NAK_DEBUG=spill before any Vulkan/Mesa
+    // switch_main.cpp enables NAK_DEBUG=serial before any Vulkan/Mesa
     // initialization for the current pipeline-creation crash probe. Preserve
     // that startup setting and any runtime flags, then merge optional flags
     // supplied through KISAK_NAK_DEBUG. Uniform-GPR allocation stays enabled
@@ -479,10 +479,10 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         return false;
     };
 
-    // Spill is intentionally enabled by switch_main.cpp for this focused
-    // allocator probe. Keep serial opt-in because it changes instruction
-    // execution. Preserve all NAK_DEBUG flags and allow additional targeted
-    // tests through KISAK_NAK_DEBUG (for example, serial or annotate).
+    // Serial instruction execution is intentionally enabled by switch_main.cpp
+    // for this focused dependency-bug probe. Preserve all NAK_DEBUG flags and
+    // allow additional targeted tests through KISAK_NAK_DEBUG (for example,
+    // spill or annotate).
     bool addedNakFlag = false;
     auto appendNakFlag = [&](const std::string &flag)
     {
