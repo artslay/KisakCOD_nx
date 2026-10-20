@@ -7532,9 +7532,13 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 #endif
 
+#ifdef __SWITCH__
     const std::vector<uint32_t> &crashPixelSpirv =
         (seq90DemoteFragmentModule != VK_NULL_HANDLE && !seq90DemoteSpirv.empty())
             ? seq90DemoteSpirv : m_pixelShader->spirv;
+#else
+    const std::vector<uint32_t> &crashPixelSpirv = m_pixelShader->spirv;
+#endif
     const uint64_t crashPixelSpirvHash = computeSpirvHash(crashPixelSpirv);
 #ifdef __SWITCH__
     if (pipelineCreateSequence == 90u)
