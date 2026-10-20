@@ -487,24 +487,17 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         addedNakFlag = true;
     }
 
-    const char *useUniformGpr = std::getenv("KISAK_NAK_ENABLE_UGPR");
-    const bool requestUniformGpr =
-        useUniformGpr && std::strcmp(useUniformGpr, "1") == 0;
-    if (!requestUniformGpr && !hasNakFlag("nougpr"))
+    // A/B test after serial,nougpr,spill still faults in _free_r while
+    // compiling pipeline 31: leave uniform-GPR allocation enabled by default.
+    // Keep an explicit opt-out for devices/builds where the UGPR path regresses.
+    const char *disableUniformGpr = std::getenv("KISAK_NAK_DISABLE_UGPR");
+    const bool requestNoUgpr =
+        disableUniformGpr && std::strcmp(disableUniformGpr, "1") == 0;
+    if (requestNoUgpr && !hasNakFlag("nougpr"))
     {
         if (!nakDebug.empty())
             nakDebug += ',';
         nakDebug += "nougpr";
-        addedNakFlag = true;
-    }
-
-    // Diagnostic A/B: force NAK's register allocator through its spill path.
-    // Preserve serial+nougpr and any debug flags supplied by the runtime.
-    if (!hasNakFlag("spill"))
-    {
-        if (!nakDebug.empty())
-            nakDebug += ',';
-        nakDebug += "spill";
         addedNakFlag = true;
     }
 
@@ -513,23 +506,27 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         if (::setenv("NAK_DEBUG", nakDebug.c_str(), 1) != 0)
         {
             Switch_LogWrite(
-                "[KisakCOD][VK DRIVER] could not set requested NAK_DEBUG flags; continuing with existing options\n");
+                "[KisakCOD][VK DRIVER] could not set requested NAK_DEBUG flags; continuing with existing options\\n");
         }
         else
         {
             char nakFlagsMsg[384];
             std::snprintf(nakFlagsMsg, sizeof(nakFlagsMsg),
-                "[KisakCOD][VK DRIVER] enabled NAK_DEBUG=%s (set KISAK_NAK_ENABLE_UGPR=1 to opt into uniform GPR allocation)\n",
+                "[KisakCOD][VK DRIVER] enabled NAK_DEBUG=%s (set KISAK_NAK_DISABLE_UGPR=1 to opt out of uniform GPR allocation)\\n",
                 nakDebug.c_str());
             Switch_LogWrite(nakFlagsMsg);
         }
     }
+    else if (hasNakFlag("nougpr"))
+    {
+        Switch_LogWrite(
+            "[KisakCOD][VK DRIVER] NAK_DEBUG includes nougpr; uniform GPR allocation is disabled\\n");
+    }
     else
     {
         Switch_LogWrite(
-            "[KisakCOD][VK DRIVER] NAK_DEBUG serial,nougpr configured; uniform GPR allocation remains opt-in\n");
+            "[KisakCOD][VK DRIVER] NAK_DEBUG serial,spill configured; uniform GPR allocation remains enabled\\n");
     }
-
 #endif
 
     if (wndParms)
