@@ -8360,7 +8360,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
         char loweringTrace[384];
         std::snprintf(loweringTrace, sizeof(loweringTrace),
-            "[KisakCOD][VK SHUFFLE LOWER] seq=%u target_ps=397081631095378c built=%u lowered=%u source_hash=%016llx lowered_hash=%016llx module_result=%d module=%p\\n",
+            "[KisakCOD][VK SHUFFLE LOWER] seq=%u target_ps=397081631095378c built=%u lowered=%u source_hash=%016llx lowered_hash=%016llx module_result=%d module=%p\n",
             pipelineCreateSequence, lowered ? 1u : 0u, shuffleLoweredCount,
             static_cast<unsigned long long>(sourcePixelHash),
             static_cast<unsigned long long>(loweredPixelHash),
@@ -8375,7 +8375,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             std::snprintf(
                 g_switchPipelineCrashSnapshot.summary,
                 sizeof(g_switchPipelineCrashSnapshot.summary),
-                "[KisakCOD][VK CRASH PIPELINE] seq=%u shuffle_lowered=1 key=%016llx vs=%016llx source_ps=%016llx lowered_ps=%016llx lowered=%u module=%p\\n",
+                "[KisakCOD][VK CRASH PIPELINE] seq=%u shuffle_lowered=1 key=%016llx vs=%016llx source_ps=%016llx lowered_ps=%016llx lowered=%u module=%p\n",
                 pipelineCreateSequence,
                 static_cast<unsigned long long>(key),
                 static_cast<unsigned long long>(vsSpirvHash),
