@@ -7346,7 +7346,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     {
         info.flags = 0u;
         Switch_LogWrite(
-            "[KisakCOD][VK PIPELINE PROBE] action=seq90_enable_optimization flags=0 vs=3191a056e9509bfc ps=e708e85707181fb7\\n");
+            "[KisakCOD][VK PIPELINE PROBE] action=seq90_enable_optimization flags=0 vs=3191a056e9509bfc ps=e708e85707181fb7\n");
     }
 #endif
 
