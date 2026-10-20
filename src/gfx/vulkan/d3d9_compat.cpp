@@ -7563,7 +7563,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 
             char shuffleProbeTrace[320];
             std::snprintf(shuffleProbeTrace, sizeof(shuffleProbeTrace),
-                "[KisakCOD][VK STAGE PROBE] seq=90 action=ps_vector_shuffle_to_undef built=%u replaced=%u source_hash=%016llx probe_hash=%016llx\\n",
+                "[KisakCOD][VK STAGE PROBE] seq=90 action=ps_vector_shuffle_to_undef built=%u replaced=%u source_hash=%016llx probe_hash=%016llx\n",
                 seq90ShuffleProbeBuilt ? 1u : 0u, seq90ShuffleUndefCount,
                 static_cast<unsigned long long>(seq90SourcePsHash),
                 static_cast<unsigned long long>(seq90ShuffleProbeHash));
@@ -7612,7 +7612,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 std::snprintf(
                     g_switchPipelineCrashSnapshot.summary,
                     sizeof(g_switchPipelineCrashSnapshot.summary),
-                    "[KisakCOD][VK CRASH PIPELINE] seq=%u stage_probe=minimal_vs_ps_vector_shuffle_to_undef key=%016llx vs=%016llx ps=%016llx modules=%p/%p flags=%u\\n",
+                    "[KisakCOD][VK CRASH PIPELINE] seq=%u stage_probe=minimal_vs_ps_vector_shuffle_to_undef key=%016llx vs=%016llx ps=%016llx modules=%p/%p flags=%u\n",
                     pipelineCreateSequence,
                     static_cast<unsigned long long>(key),
                     static_cast<unsigned long long>(HashSpirvWords(minimalVertexSpirv)),
@@ -7628,7 +7628,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                     seq90ShuffleProbeSpirv);
 
                 Switch_LogWrite(
-                    "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_ps_vector_shuffle_to_undef begin\\n");
+                    "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_ps_vector_shuffle_to_undef begin\n");
                 RecordSwitchVkPipelineTrace(
                     6u, this, &m_pipelines, m_pipelines.size(), key,
                     m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
@@ -7643,7 +7643,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 
             char moduleMsg[384];
             std::snprintf(moduleMsg, sizeof(moduleMsg),
-                "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_ps_vector_shuffle_to_undef built=%u replaced=%u vs_module=%d ps_module=%d pipeline=%d handle=%p\\n",
+                "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_ps_vector_shuffle_to_undef built=%u replaced=%u vs_module=%d ps_module=%d pipeline=%d handle=%p\n",
                 seq90ShuffleProbeBuilt ? 1u : 0u,
                 seq90ShuffleUndefCount,
                 static_cast<int>(minimalVertexResult),
