@@ -6362,38 +6362,6 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
 #endif
 
-#ifdef __SWITCH__
-        // Capture the exact seq=64 shader pair before any diagnostic mutation,
-        // and isolate source OpKill in its PS. These hashes came from the
-        // observed seq=64 crash (alphaTest=0), so no other pipeline is touched.
-        if (HashSpirvWords(m_vertexShader->spirv) == 0xcb5e4b84e2b977e4ull &&
-            HashSpirvWords(m_pixelShader->spirv) == 0x397081631095378cull)
-        {
-            (void)WriteSwitchNakCandidateSpirv(
-                "vs", 64u, 0xcb5e4b84e2b977e4ull, m_vertexShader->spirv);
-            (void)WriteSwitchNakCandidateSpirv(
-                "ps", 64u, 0x397081631095378cull, m_pixelShader->spirv);
-
-            const uint64_t oldKillReturnHash = HashSpirvWords(m_pixelShader->spirv);
-            uint32_t killReturnCount = 0u;
-            if (ReplaceCapturedSeq64PixelKillWithReturnForProbe(
-                    m_pixelShader->spirv, &killReturnCount))
-            {
-                char killReturnTrace[256];
-                std::snprintf(killReturnTrace, sizeof(killReturnTrace),
-                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=seq64_native_kill_to_return count=%u old_hash=%016llx new_hash=%016llx\n",
-                    killReturnCount,
-                    static_cast<unsigned long long>(oldKillReturnHash),
-                    static_cast<unsigned long long>(HashSpirvWords(m_pixelShader->spirv)));
-                Switch_LogWrite(killReturnTrace);
-            }
-            else
-            {
-                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=seq64_native_kill_to_return failed=no_kill_or_invalid_spirv\n");
-            }
-        }
-#endif
-
         VkShaderModuleCreateInfo vsInfo{};
         vsInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         vsInfo.codeSize = m_vertexShader->spirv.size() * sizeof(uint32_t);
@@ -7101,6 +7069,54 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 #endif
 
+#ifdef __SWITCH__
+    // Run the seq=64 OpKill A/B at pipeline creation, not in the shader-link
+    // path: the original VkShaderModule may already be cached when this exact
+    // shader pair first reaches NAK. Keep the cached/original module untouched.
+    VkShaderModule seq64DiagnosticPsModule = VK_NULL_HANDLE;
+    const VkShaderModule seq64OriginalPsModule = stages[1].module;
+    if (vsSpirvHash == 0xcb5e4b84e2b977e4ull &&
+        psSpirvHash == 0x397081631095378cull)
+    {
+        (void)WriteSwitchNakCandidateSpirv(
+            "vs", 64u, 0xcb5e4b84e2b977e4ull, m_vertexShader->spirv);
+        (void)WriteSwitchNakCandidateSpirv(
+            "ps", 64u, 0x397081631095378cull, m_pixelShader->spirv);
+
+        std::vector<uint32_t> seq64DiagnosticPixelSpirv = m_pixelShader->spirv;
+        const uint64_t oldKillReturnHash = HashSpirvWords(seq64DiagnosticPixelSpirv);
+        uint32_t killReturnCount = 0u;
+        if (ReplaceCapturedSeq64PixelKillWithReturnForProbe(
+                seq64DiagnosticPixelSpirv, &killReturnCount))
+        {
+            VkShaderModuleCreateInfo seq64ProbeModuleInfo{};
+            seq64ProbeModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            seq64ProbeModuleInfo.codeSize =
+                seq64DiagnosticPixelSpirv.size() * sizeof(uint32_t);
+            seq64ProbeModuleInfo.pCode = seq64DiagnosticPixelSpirv.data();
+
+            const VkResult seq64ProbeModuleResult = vkCreateShaderModule(
+                m_backend->Device(), &seq64ProbeModuleInfo, nullptr,
+                &seq64DiagnosticPsModule);
+            char killReturnTrace[320];
+            std::snprintf(killReturnTrace, sizeof(killReturnTrace),
+                "[KisakCOD][VK SPIRV PROBE] stage=ps action=seq64_native_kill_to_return count=%u old_hash=%016llx new_hash=%016llx module_result=%d module=%p\n",
+                killReturnCount,
+                static_cast<unsigned long long>(oldKillReturnHash),
+                static_cast<unsigned long long>(HashSpirvWords(seq64DiagnosticPixelSpirv)),
+                static_cast<int>(seq64ProbeModuleResult),
+                static_cast<void *>(seq64DiagnosticPsModule));
+            Switch_LogWrite(killReturnTrace);
+            if (seq64ProbeModuleResult == VK_SUCCESS && seq64DiagnosticPsModule)
+                stages[1].module = seq64DiagnosticPsModule;
+        }
+        else
+        {
+            Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=seq64_native_kill_to_return failed=no_kill_or_invalid_spirv\n");
+        }
+    }
+#endif
+
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
     RecordSwitchVkPipelineTrace(
@@ -7112,6 +7128,15 @@ bool IDirect3DDevice9::EnsurePipeline()
     RecordSwitchVkPipelineTrace(
         7u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
+#ifdef __SWITCH__
+    if (seq64DiagnosticPsModule)
+    {
+        stages[1].module = seq64OriginalPsModule;
+        vkDestroyShaderModule(
+            m_backend->Device(), seq64DiagnosticPsModule, nullptr);
+        seq64DiagnosticPsModule = VK_NULL_HANDLE;
+    }
+#endif
     g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_return";
     const auto pipelineCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - pipelineCreateStart).count();
