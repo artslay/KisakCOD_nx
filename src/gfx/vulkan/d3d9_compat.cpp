@@ -10021,27 +10021,116 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         return E_FAIL;
     }
 
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/validate";
+    const VkCommandBuffer drawCommandBuffer =
+        m_backend ? m_backend->CommandBuffer() : VK_NULL_HANDLE;
+    if (!m_backend || drawCommandBuffer == VK_NULL_HANDLE)
+    {
+        char msg[320];
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK DRAW BIND FAIL] reason=null_command_buffer self=%p backend=%p cmd=%p decl=%p vs=%p ps=%p indices=%p\n",
+            static_cast<void *>(this), static_cast<void *>(m_backend),
+            reinterpret_cast<void *>(drawCommandBuffer),
+            static_cast<void *>(m_decl), static_cast<void *>(m_vertexShader),
+            static_cast<void *>(m_pixelShader), static_cast<void *>(m_indices));
+        Switch_LogWrite(msg);
+        return E_FAIL;
+    }
+    if (!m_indices)
+    {
+        char msg[256];
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK DRAW BIND FAIL] reason=null_index_buffer self=%p cmd=%p decl=%p vs=%p ps=%p\n",
+            static_cast<void *>(this), reinterpret_cast<void *>(drawCommandBuffer),
+            static_cast<void *>(m_decl), static_cast<void *>(m_vertexShader),
+            static_cast<void *>(m_pixelShader));
+        Switch_LogWrite(msg);
+        return E_FAIL;
+    }
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/index_prepare";
+    const VkBuffer drawIndexBuffer = m_indices->buffer;
+    if (drawIndexBuffer == VK_NULL_HANDLE)
+    {
+        char msg[320];
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK DRAW BIND FAIL] reason=null_vk_index_handle self=%p cmd=%p indices=%p indexBytes=%zu decl=%llu vs=%llu ps=%llu\n",
+            static_cast<void *>(this), reinterpret_cast<void *>(drawCommandBuffer),
+            static_cast<void *>(m_indices), m_indices->size,
+            static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
+            static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+            static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u));
+        Switch_LogWrite(msg);
+        return E_FAIL;
+    }
+
     uint32_t boundStreamMask = 0;
     uint32_t stream0BufferBytes = 0;
     uint32_t stream0Offset = 0;
     uint32_t stream0Stride = 0;
+    static uint32_t switchDrawBindTraceCount = 0;
     for (uint32_t stream = 0; stream < 16; ++stream)
     {
-        if (m_streams[stream].buffer && m_streams[stream].stride)
+        g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/stream_scan";
+        IDirect3DVertexBuffer9 *vertexBuffer = m_streams[stream].buffer;
+        const uint32_t stride = m_streams[stream].stride;
+        const VkDeviceSize o = m_streams[stream].offset;
+        if (vertexBuffer && stride)
         {
-            VkBuffer b = m_streams[stream].buffer->buffer;
-            VkDeviceSize o = m_streams[stream].offset;
+            if (switchDrawBindTraceCount < 64u)
+            {
+                char msg[384];
+                std::snprintf(
+                    msg, sizeof(msg),
+                    "[KisakCOD][VK DRAW STREAM BEGIN] n=%u stream=%u self=%p cmd=%p vb=%p offset=%llu stride=%u indices=%p ib=%p\n",
+                    switchDrawBindTraceCount, stream, static_cast<void *>(this),
+                    reinterpret_cast<void *>(drawCommandBuffer),
+                    static_cast<void *>(vertexBuffer),
+                    static_cast<unsigned long long>(o), stride,
+                    static_cast<void *>(m_indices),
+                    reinterpret_cast<void *>(drawIndexBuffer));
+                Switch_LogWrite(msg);
+            }
+
+            g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/vertex_buffer_read";
+            VkBuffer b = vertexBuffer->buffer;
+            if (b == VK_NULL_HANDLE)
+            {
+                char msg[320];
+                std::snprintf(
+                    msg, sizeof(msg),
+                    "[KisakCOD][VK DRAW BIND FAIL] reason=null_vk_vertex_handle stream=%u vb=%p offset=%llu stride=%u size=%zu\n",
+                    stream, static_cast<void *>(vertexBuffer),
+                    static_cast<unsigned long long>(o), stride, vertexBuffer->size);
+                Switch_LogWrite(msg);
+                return E_FAIL;
+            }
             boundStreamMask |= 1u << stream;
             if (stream == 0)
             {
                 stream0BufferBytes = static_cast<uint32_t>(
-                    std::min<size_t>(m_streams[stream].buffer->size, UINT32_MAX));
+                    std::min<size_t>(vertexBuffer->size, UINT32_MAX));
                 stream0Offset = static_cast<uint32_t>(
                     std::min<VkDeviceSize>(o, UINT32_MAX));
-                stream0Stride = m_streams[stream].stride;
+                stream0Stride = stride;
             }
-            vkCmdBindVertexBuffers(
-                m_backend->CommandBuffer(), stream, 1, &b, &o);
+            g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/vertex_buffer_call";
+            vkCmdBindVertexBuffers(drawCommandBuffer, stream, 1, &b, &o);
+            g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/vertex_buffer_return";
+            if (switchDrawBindTraceCount < 64u)
+            {
+                char msg[224];
+                std::snprintf(
+                    msg, sizeof(msg),
+                    "[KisakCOD][VK DRAW STREAM END] n=%u stream=%u buffer=%p offset=%llu\n",
+                    switchDrawBindTraceCount, stream,
+                    reinterpret_cast<void *>(b),
+                    static_cast<unsigned long long>(o));
+                Switch_LogWrite(msg);
+                ++switchDrawBindTraceCount;
+            }
         }
     }
     g_switchLastDrawStreamMask.store(boundStreamMask, std::memory_order_relaxed);
@@ -10049,9 +10138,23 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     g_switchLastDrawStream0Offset.store(stream0Offset, std::memory_order_relaxed);
     g_switchLastDrawStream0Stride.store(stream0Stride, std::memory_order_relaxed);
 
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/index_call";
+    if (switchDrawBindTraceCount < 64u)
+    {
+        char msg[320];
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][VK DRAW INDEX BEGIN] n=%u self=%p cmd=%p indices=%p buffer=%p bytes=%zu count=%u start=%u\n",
+            switchDrawBindTraceCount, static_cast<void *>(this),
+            reinterpret_cast<void *>(drawCommandBuffer), static_cast<void *>(m_indices),
+            reinterpret_cast<void *>(drawIndexBuffer), m_indices->size,
+            indexCount, startIndex);
+        Switch_LogWrite(msg);
+        ++switchDrawBindTraceCount;
+    }
     vkCmdBindIndexBuffer(
-        m_backend->CommandBuffer(), m_indices->buffer,
-        0, VK_INDEX_TYPE_UINT16);
+        drawCommandBuffer, drawIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/index_return";
 
     g_switchLastDrawKind.store(2, std::memory_order_relaxed);
     g_switchLastDrawIndexCount.store(indexCount, std::memory_order_relaxed);
