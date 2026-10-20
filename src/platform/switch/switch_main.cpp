@@ -628,11 +628,11 @@ static void SwitchLogVulkanRuntime()
     vkDestroyInstance(instance, nullptr);
 }
 
-static bool SwitchConfigureNakSerialProbe()
+static bool SwitchConfigureNakNoUgprProbe()
 {
     const char *current = std::getenv("NAK_DEBUG");
     if (!current || !*current)
-        return ::setenv("NAK_DEBUG", "serial", 1) == 0;
+        return ::setenv("NAK_DEBUG", "nougpr", 1) == 0;
 
     const size_t currentLength = std::strlen(current);
     size_t tokenStart = 0;
@@ -647,8 +647,8 @@ static bool SwitchConfigureNakSerialProbe()
             ++first;
         while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\t'))
             --last;
-        if (last - first == sizeof("serial") - 1u &&
-            std::memcmp(current + first, "serial", sizeof("serial") - 1u) == 0)
+        if (last - first == sizeof("nougpr") - 1u &&
+            std::memcmp(current + first, "nougpr", sizeof("nougpr") - 1u) == 0)
             return true;
 
         tokenStart = i + 1u;
@@ -656,7 +656,7 @@ static bool SwitchConfigureNakSerialProbe()
 
     char combined[512];
     const int written = std::snprintf(
-        combined, sizeof(combined), "%s%sserial", current,
+        combined, sizeof(combined), "%s%snougpr", current,
         current[currentLength - 1u] == ',' ? "" : ",");
     if (written < 0 || static_cast<size_t>(written) >= sizeof(combined))
         return false;
@@ -665,19 +665,19 @@ static bool SwitchConfigureNakSerialProbe()
 
 int main()
 {
-    // Use NAK's serial instruction mode for the next pipeline-crash comparison.
-    // The forced minimal-register spill test progressed farther but still faulted
-    // inside vkCreateGraphicsPipelines. Serial mode targets instruction dependency
-    // bugs without forcing the allocator's most aggressive spill path.
-    const bool nakSerialProbeConfigured = SwitchConfigureNakSerialProbe();
+    // Use NAK's no-UGPR lowering mode for the next pipeline-crash comparison.
+    // Serial instruction mode reproduced the same allocator crash; this mode asks
+    // NAK to lower away UGPR constant-load instructions while retaining all shaders
+    // and normal graphics-pipeline creation.
+    const bool nakNoUgprProbeConfigured = SwitchConfigureNakNoUgprProbe();
     Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
-    if (nakSerialProbeConfigured)
-        Switch_LogWrite("[KisakCOD][NAK PROBE] serial instruction mode enabled before Mesa initialization\n");
+    if (nakNoUgprProbeConfigured)
+        Switch_LogWrite("[KisakCOD][NAK PROBE] no-UGPR lowering mode enabled before Mesa initialization\n");
     else
-        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to enable serial instruction mode\n");
+        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to enable no-UGPR lowering mode\n");
     SwitchBootLog("Game data: sdmc:/switch/KisakCOD/game");
     SwitchBootLog("Stage 1/7: initializing main thread");
 
