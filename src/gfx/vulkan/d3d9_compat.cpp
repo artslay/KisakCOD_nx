@@ -1256,85 +1256,6 @@ bool RepairUnusedZeroVectorShuffleSource(
     return true;
 }
 
-// MojoShader emits constant blocks as Uniform + Block, which Mesa NVK may
-// promote to its constant-buffer path. Represent these read-only blocks as
-// Uniform + BufferBlock instead; Vulkan maps that SPIR-V form to storage-buffer
-// descriptors without changing member offsets or packed constant-register data.
-bool ConvertUniformBlocksToStorageBuffers(
-    std::vector<uint32_t> &words,
-    uint32_t *convertedBlockCount)
-{
-    if (convertedBlockCount)
-        *convertedBlockCount = 0;
-    if (words.size() < 5 || words[0] != SpvMagicNumber)
-        return false;
-
-    std::unordered_map<uint32_t, uint32_t> uniformPointerPointee;
-    std::unordered_set<uint32_t> uniformBlockTypes;
-    std::unordered_set<uint32_t> blockDecoratedTypes;
-
-
-    for (size_t offset = 5; offset < words.size();)
-    {
-        uint32_t wordCount = 0;
-        SpvOp opcode{};
-        if (!SpirvIsValidInstruction(words, offset, &wordCount, &opcode))
-            return false;
-        const uint32_t *ins = &words[offset];
-
-        if (opcode == SpvOpTypePointer && wordCount >= 4 &&
-            ins[2] == SpvStorageClassUniform)
-        {
-            uniformPointerPointee[ins[1]] = ins[3];
-        }
-        else if (opcode == SpvOpDecorate && wordCount >= 3)
-        {
-            if (ins[2] == SpvDecorationBlock)
-                blockDecoratedTypes.insert(ins[1]);
-        }
-        offset += wordCount;
-    }
-
-    for (size_t offset = 5; offset < words.size();)
-    {
-        uint32_t wordCount = 0;
-        SpvOp opcode{};
-        if (!SpirvIsValidInstruction(words, offset, &wordCount, &opcode))
-            return false;
-        const uint32_t *ins = &words[offset];
-        if (opcode == SpvOpVariable && wordCount >= 4 &&
-            ins[3] == SpvStorageClassUniform)
-        {
-            const auto pointer = uniformPointerPointee.find(ins[1]);
-            if (pointer != uniformPointerPointee.end() &&
-                blockDecoratedTypes.find(pointer->second) != blockDecoratedTypes.end())
-                uniformBlockTypes.insert(pointer->second);
-        }
-        offset += wordCount;
-    }
-
-    uint32_t converted = 0;
-    for (size_t offset = 5; offset < words.size();)
-    {
-        uint32_t wordCount = 0;
-        SpvOp opcode{};
-        if (!SpirvIsValidInstruction(words, offset, &wordCount, &opcode))
-            return false;
-        if (opcode == SpvOpDecorate && wordCount >= 3 &&
-            words[offset + 2] == SpvDecorationBlock &&
-            uniformBlockTypes.find(words[offset + 1]) != uniformBlockTypes.end())
-        {
-            words[offset + 2] = SpvDecorationBufferBlock;
-            ++converted;
-        }
-        offset += wordCount;
-    }
-
-    if (convertedBlockCount)
-        *convertedBlockCount = converted;
-    return true;
-}
-
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -2594,22 +2515,28 @@ HRESULT KisakVkBuffer::Unlock()
         }
         else
         {
-            // D3DLOCK_DISCARD invalidates the previous contents of the entire
-            // dynamic buffer, not just the caller's locked subrange. This wrapper
-            // initializes the discarded shadow to zero, so upload that complete
-            // shadow to prevent stale bytes from surviving in the Vulkan buffer.
-            // All other locks update only their written range.
+            // Preserve draw/update order in one command buffer instead of
+            // submitting and waiting for the entire active frame on each unlock.
+            // QueueBufferUpdate inserts transfer barriers around the copy, so
+            // previously recorded draws finish reading the old range before the
+            // update and later draws see the new bytes.
             VulkanBackend *backend = GetVulkanBackend();
-            const bool discardWholeBuffer = (lockFlags & D3DLOCK_DISCARD) != 0;
-            const uint32_t uploadOffset = discardWholeBuffer ? 0u : lockOffset;
-            const size_t uploadSize = discardWholeBuffer ? size : lockSize;
-            const uint8_t *uploadData = shadow.data() + uploadOffset;
-
-            // Prefer an ordered transfer in the current command buffer. The
-            // backend validates copy alignment and ring capacity; only unsupported
-            // ranges or allocation pressure take the synchronized host-write path.
+#ifdef __SWITCH__
+            // Keep Switch on the synchronized update path until queued copies
+            // are validated against NVK device loss during map rendering.
+            constexpr bool kSwitchDisableQueuedDynamicBufferCopies = true;
+            static std::atomic<bool> loggedSynchronizedFallback{false};
+            if (kSwitchDisableQueuedDynamicBufferCopies &&
+                !loggedSynchronizedFallback.exchange(true, std::memory_order_relaxed))
+                Switch_LogWrite(
+                    "[KisakCOD][VK BUFFER UPDATE] queued_dynamic_copies=disabled synchronized_fallback=1 reason=device_lost_isolation\n");
+            const bool queued = !kSwitchDisableQueuedDynamicBufferCopies &&
+                backend && backend->QueueBufferUpdate(
+                    buffer, lockOffset, shadow.data() + lockOffset, lockSize);
+#else
             const bool queued = backend && backend->QueueBufferUpdate(
-                buffer, uploadOffset, uploadData, uploadSize);
+                buffer, lockOffset, shadow.data() + lockOffset, lockSize);
+#endif
             if (!queued)
             {
 #ifdef __SWITCH__
@@ -4303,7 +4230,7 @@ bool IDirect3DDevice9::BindUniformSet(
     write.dstSet = set;
     write.dstBinding = 0;
     write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     write.pBufferInfo = &bufferInfo;
     vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
     traceUniformBindStage("descriptor_updated", bytes, size, 1);
@@ -5034,9 +4961,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         5u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
 
-    // Keep the linked fragment module before the D3D9 alpha-test rewrite.
-    // Retaining this baseline lets us rebuild the fragment module whenever the
-    // alpha-test state changes without repeatedly patching already-patched words.
+    // Keep the linked fragment module before our custom alpha-test rewrite.
+    // If NVK rejects the final pipeline, diagnostic probes below can determine
+    // whether the rewrite or specialization map is responsible without needing
+    // to copy shader binaries off the Switch.
     uint32_t pipelineAlphaFuncSpecId = m_pixelShader->alphaFuncSpecId;
     uint32_t pipelineAlphaRefSpecId = m_pixelShader->alphaRefSpecId;
 
@@ -5441,13 +5369,6 @@ bool IDirect3DDevice9::EnsurePipeline()
 #endif
 
 #ifdef __SWITCH__
-        uint32_t convertedPixelConstantBlocks = 0;
-        if (!ConvertUniformBlocksToStorageBuffers(
-                pixelSpirv, &convertedPixelConstantBlocks))
-        {
-            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=pixel_constant_block_conversion\n");
-            return false;
-        }
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
         m_pixelShader->linkedSpirv = pixelSpirv;
 
@@ -5549,14 +5470,6 @@ bool IDirect3DDevice9::EnsurePipeline()
             ++strippedVertexDebugTraceCount;
         }
 #endif
-
-        uint32_t convertedVertexConstantBlocks = 0;
-        if (!ConvertUniformBlocksToStorageBuffers(
-                m_vertexShader->spirv, &convertedVertexConstantBlocks))
-        {
-            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=vertex_constant_block_conversion\n");
-            return false;
-        }
 
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/finalize";
         VkShaderModuleCreateInfo vsInfo{};
