@@ -395,6 +395,74 @@ uint64_t HashSpirvWords(const std::vector<uint32_t> &words)
     return hash;
 }
 
+bool TryLoadSwitchOptimizedPipeline31Spirv(
+    std::vector<uint32_t> &words, const char *stage, uint64_t expectedHash)
+{
+    if (HashSpirvWords(words) != expectedHash)
+        return false;
+
+    char path[160];
+    std::snprintf(path, sizeof(path),
+        "sdmc:/switch/KisakCOD/game/pipeline31_%s.opt.spv", stage);
+    static bool vsMissingLogged = false;
+    static bool psMissingLogged = false;
+    bool &missingLogged = std::strcmp(stage, "vs") == 0
+        ? vsMissingLogged : psMissingLogged;
+
+    FILE *file = std::fopen(path, "rb");
+    if (!file)
+    {
+        if (!missingLogged)
+        {
+            char trace[320];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VK SPIRV OVERRIDE] stage=%s source_hash=%016llx candidate=1 file_missing=%s\n",
+                stage, static_cast<unsigned long long>(expectedHash), path);
+            Switch_LogWrite(trace);
+            missingLogged = true;
+        }
+        return false;
+    }
+
+    bool valid = std::fseek(file, 0, SEEK_END) == 0;
+    const long fileBytes = valid ? std::ftell(file) : -1;
+    valid = valid && fileBytes >= 20 && fileBytes <= 4 * 1024 * 1024
+        && (fileBytes % static_cast<long>(sizeof(uint32_t))) == 0
+        && std::fseek(file, 0, SEEK_SET) == 0;
+
+    std::vector<uint32_t> replacement;
+    if (valid)
+    {
+        replacement.resize(static_cast<size_t>(fileBytes) / sizeof(uint32_t));
+        valid = std::fread(replacement.data(), 1, static_cast<size_t>(fileBytes), file)
+            == static_cast<size_t>(fileBytes);
+    }
+    std::fclose(file);
+
+    valid = valid && replacement.size() >= 5u
+        && replacement[0] == 0x07230203u
+        && replacement[3] > 0u && replacement[3] <= 0x100000u;
+    if (!valid)
+    {
+        char trace[256];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][VK SPIRV OVERRIDE] stage=%s rejected_file=%s\n",
+            stage, path);
+        Switch_LogWrite(trace);
+        return false;
+    }
+
+    const size_t originalWords = words.size();
+    words.swap(replacement);
+    char trace[320];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][VK SPIRV OVERRIDE] stage=%s source_hash=%016llx applied=1 old_words=%zu new_words=%zu\n",
+        stage, static_cast<unsigned long long>(expectedHash),
+        originalWords, words.size());
+    Switch_LogWrite(trace);
+    return true;
+}
+
 void RecordSwitchVkModuleTrace(
     uintptr_t phase,
     VkDevice device,
@@ -5319,6 +5387,13 @@ bool IDirect3DDevice9::EnsurePipeline()
             ++strippedVertexDebugTraceCount;
         }
 #endif
+
+        // Optional, hash-gated optimizer A/B for the one NAK register-allocation
+        // crash pair. Missing files leave normal shader compilation untouched.
+        (void)TryLoadSwitchOptimizedPipeline31Spirv(
+            m_vertexShader->spirv, "vs", 0xaf1d39bec3f1bf7dull);
+        (void)TryLoadSwitchOptimizedPipeline31Spirv(
+            m_pixelShader->spirv, "ps", 0xcd1031f57ecc7957ull);
 
         VkShaderModuleCreateInfo vsInfo{};
         vsInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
