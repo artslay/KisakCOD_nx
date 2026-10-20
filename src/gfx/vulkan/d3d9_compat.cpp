@@ -598,6 +598,8 @@ void TraceSwitchNakShuffleAudit(
             {
                 const uint32_t *ins = &words[offset];
                 const uint32_t typeId = ins[1], vector1Id = ins[3], vector2Id = ins[4];
+                if (vector2Id == 0u)
+                    ++zeroSecondSource;
                 bool bad = false;
                 if (typeId >= bound || vector1Id == 0u || vector1Id >= bound ||
                     vector2Id == 0u || vector2Id >= bound ||
@@ -640,7 +642,6 @@ void TraceSwitchNakShuffleAudit(
                     else if (used1) ++firstOnly;
                     else if (used2) ++secondOnly;
                     if (vector1Id == vector2Id) ++sameSource;
-                    if (vector2Id == 0u) ++zeroSecondSource;
                 }
                 if (bad && examplesUsed + 36u < sizeof(examples))
                 {
