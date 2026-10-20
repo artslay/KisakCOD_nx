@@ -8338,6 +8338,36 @@ bool IDirect3DDevice9::EnsurePipeline()
             seq31LoweredPixelActive = true;
             g_switchPipelineCrashSnapshot.pixelSpirv =
                 &seq31LoweredPixelSpirv;
+            // Refresh the exception snapshot after replacing stages[1].module.
+            // Otherwise the crash report pairs the rewritten SPIR-V hash with
+            // stale original-module handles, which obscures the actual driver input.
+            std::snprintf(
+                g_switchPipelineCrashSnapshot.summary,
+                sizeof(g_switchPipelineCrashSnapshot.summary),
+                "[KisakCOD][VK CRASH PIPELINE] seq=%u key=%016llx rewrite=active "
+                "vs={serial=%llu,words=%zu,hash=%016llx} "
+                "ps={serial=%llu,words=%zu,hash=%016llx} "
+                "modules=%p/%p original_ps_module=%p source_ps_hash=%016llx "
+                "alpha=%u/%u/%u depth=%u/%u/%u specMap=disabled\n",
+                pipelineCreateSequence,
+                static_cast<unsigned long long>(key),
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                m_vertexShader->spirv.size(),
+                static_cast<unsigned long long>(vsSpirvHash),
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                seq31LoweredPixelSpirv.size(),
+                static_cast<unsigned long long>(
+                    HashSpirvWords(seq31LoweredPixelSpirv)),
+                static_cast<void *>(stages[0].module),
+                static_cast<void *>(stages[1].module),
+                static_cast<void *>(seq31OriginalPixelModule),
+                static_cast<unsigned long long>(psSpirvHash),
+                m_alphaTest ? 1u : 0u,
+                m_alphaFunc,
+                m_alphaRef,
+                m_depthEnable ? 1u : 0u,
+                m_depthWrite ? 1u : 0u,
+                static_cast<unsigned int>(m_depthFunc));
         }
         else
         {
