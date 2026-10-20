@@ -1272,7 +1272,7 @@ bool ConvertUniformBlocksToStorageBuffers(
     std::unordered_map<uint32_t, uint32_t> uniformPointerPointee;
     std::unordered_set<uint32_t> uniformBlockTypes;
     std::unordered_set<uint32_t> blockDecoratedTypes;
-    std::unordered_set<uint32_t> bufferBlockDecoratedTypes;
+
 
     for (size_t offset = 5; offset < words.size();)
     {
@@ -1291,8 +1291,6 @@ bool ConvertUniformBlocksToStorageBuffers(
         {
             if (ins[2] == SpvDecorationBlock)
                 blockDecoratedTypes.insert(ins[1]);
-            else if (ins[2] == SpvDecorationBufferBlock)
-                bufferBlockDecoratedTypes.insert(ins[1]);
         }
         offset += wordCount;
     }
@@ -5447,7 +5445,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (!ConvertUniformBlocksToStorageBuffers(
                 pixelSpirv, &convertedPixelConstantBlocks))
         {
-            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=pixel_constant_block_conversion\\n");
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=pixel_constant_block_conversion\n");
             return false;
         }
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
@@ -5556,7 +5554,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (!ConvertUniformBlocksToStorageBuffers(
                 m_vertexShader->spirv, &convertedVertexConstantBlocks))
         {
-            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=vertex_constant_block_conversion\\n");
+            Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=vertex_constant_block_conversion\n");
             return false;
         }
 
