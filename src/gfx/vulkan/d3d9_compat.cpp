@@ -261,6 +261,9 @@ std::atomic<uint32_t> g_switchLastDrawTextureLayout[4]{};
 
 namespace
 {
+bool SpirvIsValidInstruction(
+    const std::vector<uint32_t> &words, size_t offset,
+    uint32_t *wordCount, SpvOp *opcode);
 constexpr size_t kSwitchRecentVulkanDrawCount = 8;
 
 struct SwitchRecentVulkanDraw
