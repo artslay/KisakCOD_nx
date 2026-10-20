@@ -7997,6 +7997,22 @@ bool IDirect3DDevice9::EnsurePipeline()
 #endif
     const uint64_t crashPixelSpirvHash = computeSpirvHash(crashPixelSpirv);
 #ifdef __SWITCH__
+    // The latest runtime faults on this exact, post-alpha-patch fragment shader.
+    // Record a bounded opcode census and validate each shuffle operand so the next
+    // log tells us whether the seq90 finding also applies to this smaller PS.
+    if (crashPixelSpirvHash == 0xe1c4cce4dc1e5bf2ull)
+    {
+        Switch_LogWrite(
+            "[KisakCOD][VK SPIRV TARGET] reason=seq206_crash_hash hash=e1c4cce4dc1e5bf2\\n");
+        TraceSwitchNakOpcodeHistogram(
+            "vs", pipelineCreateSequence, m_vertexShader->spirv, vsSpirvHash);
+        TraceSwitchNakOpcodeHistogram(
+            "ps", pipelineCreateSequence, crashPixelSpirv, crashPixelSpirvHash);
+        TraceSwitchNakShuffleAudit(
+            "vs", pipelineCreateSequence, m_vertexShader->spirv, vsSpirvHash);
+        TraceSwitchNakShuffleAudit(
+            "ps", pipelineCreateSequence, crashPixelSpirv, crashPixelSpirvHash);
+    }
     if (pipelineCreateSequence == 90u)
     {
         (void)WriteSwitchNakCandidateSpirv(
