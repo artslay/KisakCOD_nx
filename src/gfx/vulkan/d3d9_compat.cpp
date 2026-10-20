@@ -2420,6 +2420,57 @@ bool BuildSwitchSeq64MinimalFragmentSpirv(std::vector<uint32_t> &words)
     return words.size() >= 5u && words[0] == SpvMagicNumber && words[3] == 11u;
 }
 
+// Replace selected typed-result SPIR-V operations with OpUndef while preserving
+// their result type/ID. This is an isolated compiler probe, never used by rendering.
+bool ReplaceSwitchSpirvResultOpsWithUndef(
+    std::vector<uint32_t> &words,
+    uint32_t firstOpcode,
+    uint32_t lastOpcode,
+    uint32_t *replacedCount)
+{
+    if (replacedCount)
+        *replacedCount = 0u;
+    if (words.size() < 5u || words[0] != SpvMagicNumber ||
+        firstOpcode > lastOpcode)
+        return false;
+
+    std::vector<uint32_t> rewritten;
+    rewritten.reserve(words.size());
+    rewritten.insert(rewritten.end(), words.begin(), words.begin() + 5u);
+    uint32_t count = 0u;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t opcode = static_cast<uint32_t>(op);
+        if (opcode >= firstOpcode && opcode <= lastOpcode)
+        {
+            if (wc < 3u)
+                return false;
+            // Image sampling (87-94) and VectorShuffle (79) all have the
+            // standard Result Type / Result ID prefix.
+            SpirvAppend(rewritten, SpvOpUndef, {words[offset + 1u], words[offset + 2u]});
+            ++count;
+        }
+        else
+        {
+            rewritten.insert(
+                rewritten.end(), words.begin() + offset, words.begin() + offset + wc);
+        }
+        offset += wc;
+    }
+
+    if (!count)
+        return false;
+    rewritten[3] = words[3];
+    words.swap(rewritten);
+    if (replacedCount)
+        *replacedCount = count;
+    return true;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -7467,6 +7518,78 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite(
                 "[KisakCOD][VK STAGE PROBE] seq=64 action=original_vs_minimal_ps skipped=builder_failed\n");
         }
+        // If the simple PS succeeds, selectively turn off the original PS texture
+        // samples, then its vector shuffles. Each variant keeps all other original
+        // instructions/result IDs and is discarded immediately after the probe.
+        const auto runSeq64PixelOpcodeProbe = [&](const char *name,
+                                                  uint32_t firstOpcode,
+                                                  uint32_t lastOpcode)
+        {
+            std::vector<uint32_t> probeWords = m_pixelShader->spirv;
+            uint32_t replaced = 0u;
+            if (!ReplaceSwitchSpirvResultOpsWithUndef(
+                    probeWords, firstOpcode, lastOpcode, &replaced))
+            {
+                char skipped[192];
+                std::snprintf(skipped, sizeof(skipped),
+                    "[KisakCOD][VK STAGE PROBE] seq=64 action=%s skipped=no_matching_ops_or_invalid_spirv\n",
+                    name);
+                Switch_LogWrite(skipped);
+                return;
+            }
+
+            VkShaderModule probeModule = VK_NULL_HANDLE;
+            VkPipeline probePipeline = VK_NULL_HANDLE;
+            VkResult moduleResult = VK_ERROR_UNKNOWN;
+            VkResult pipelineResult = VK_ERROR_UNKNOWN;
+            VkShaderModuleCreateInfo probeModuleInfo{};
+            probeModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            probeModuleInfo.codeSize = probeWords.size() * sizeof(uint32_t);
+            probeModuleInfo.pCode = probeWords.data();
+            moduleResult = vkCreateShaderModule(
+                m_backend->Device(), &probeModuleInfo, nullptr, &probeModule);
+            pipelineResult = moduleResult;
+            if (moduleResult == VK_SUCCESS && probeModule)
+            {
+                VkPipelineShaderStageCreateInfo probeStages[2] = {
+                    stages[0], stages[1]
+                };
+                probeStages[1].module = probeModule;
+                probeStages[1].pSpecializationInfo = nullptr;
+                VkGraphicsPipelineCreateInfo probeInfo = info;
+                probeInfo.pStages = probeStages;
+
+                char begin[192];
+                std::snprintf(begin, sizeof(begin),
+                    "[KisakCOD][VK STAGE PROBE] seq=64 action=%s count=%u begin\n",
+                    name, replaced);
+                Switch_LogWrite(begin);
+                RecordSwitchVkPipelineTrace(
+                    6u, this, &m_pipelines, m_pipelines.size(), key,
+                    m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
+                    VK_NULL_HANDLE);
+                g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+                pipelineResult = vkCreateGraphicsPipelines(
+                    m_backend->Device(), VK_NULL_HANDLE, 1,
+                    &probeInfo, nullptr, &probePipeline);
+                g_switchFrameStage = "frame/render/vulkan/pipeline/seq64_opcode_probe_return";
+            }
+
+            char result[224];
+            std::snprintf(result, sizeof(result),
+                "[KisakCOD][VK STAGE PROBE] seq=64 action=%s count=%u module=%d pipeline=%d handle=%p\n",
+                name, replaced, static_cast<int>(moduleResult),
+                static_cast<int>(pipelineResult), static_cast<void *>(probePipeline));
+            Switch_LogWrite(result);
+            if (probePipeline)
+                vkDestroyPipeline(m_backend->Device(), probePipeline, nullptr);
+            if (probeModule)
+                vkDestroyShaderModule(m_backend->Device(), probeModule, nullptr);
+        };
+
+        // SPIR-V opcodes 87..94 are the ImageSample variants.
+        runSeq64PixelOpcodeProbe("sample_ops_to_undef", 87u, 94u);
+        runSeq64PixelOpcodeProbe("vector_shuffle_to_undef", 79u, 79u);
     }
 #endif
 
