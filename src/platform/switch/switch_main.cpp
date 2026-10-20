@@ -678,6 +678,7 @@ int main()
     // NAK to lower away UGPR constant-load instructions while retaining all shaders
     // and normal graphics-pipeline creation.
     const bool nakNoUgprProbeConfigured = SwitchConfigureNakNoUgprProbe();
+    (void)::setenv("KISAK_NAK_DEBUG", "spill", 1);
     const bool nirSkipProbeConfigured = SwitchConfigureNirSkipProbe();
     Switch_LogInit();
     SwitchBootLog("========================================");
