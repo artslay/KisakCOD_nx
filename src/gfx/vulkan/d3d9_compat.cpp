@@ -7666,6 +7666,17 @@ bool IDirect3DDevice9::EnsurePipeline()
             "[KisakCOD][VK PIPELINE PROBE] action=seq90_enable_optimization flags=0 vs=3191a056e9509bfc ps=e708e85707181fb7\n");
     }
 
+    // A/B for the exact seq64 shader pair: both stages compile independently,
+    // while their linked pipeline faults even with optimization disabled. Retry
+    // this pair with normal pipeline optimization before adding shader rewrites.
+    if (vsSpirvHash == 0xcb5e4b84e2b977e4ull &&
+        psSpirvHash == 0x397081631095378cull)
+    {
+        info.flags = 0u;
+        Switch_LogWrite(
+            "[KisakCOD][VK PIPELINE PROBE] action=seq64_enable_optimization flags=0 vs=cb5e4b84e2b977e4 ps=397081631095378c\n");
+    }
+
     // Isolate this exact crashing pair before its real pipeline call:
     // (1) original VS + trivial PS; (2) original VS + linked PS before alpha-test rewrite.
     if (vsSpirvHash == 0x3191a056e9509bfcull &&
@@ -8326,187 +8337,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 #endif
 
-#ifdef __SWITCH__
-    // The semantic seq90 A/B passed with extract/construct lowering. Apply that
-    // transformation only to the exact fragment module that repeatedly crashes
-    // NAK (hash 397081631095378c); preserve the original SPIR-V and cache key.
-    VkShaderModule shuffleLoweredPixelModule = VK_NULL_HANDLE;
-    const VkShaderModule originalPipelinePixelModule = stages[1].module;
-    std::vector<uint32_t> shuffleLoweredPixelSpirv;
-    uint32_t shuffleLoweredCount = 0u;
-    bool shuffleLoweringActive = false;
-    if (psSpirvHash == 0x397081631095378cull)
-    {
-        shuffleLoweredPixelSpirv = m_pixelShader->spirv;
-        const uint64_t sourcePixelHash = HashSpirvWords(shuffleLoweredPixelSpirv);
-        const bool lowered =
-            LowerSwitchSpirvVectorShuffleToCompositeOps(
-                shuffleLoweredPixelSpirv, &shuffleLoweredCount);
-        const uint64_t loweredPixelHash = HashSpirvWords(shuffleLoweredPixelSpirv);
-        VkResult loweredModuleResult = VK_ERROR_UNKNOWN;
-        if (lowered)
-        {
-            (void)WriteSwitchNakCandidateSpirv(
-                "ps_shuffle_lowered", pipelineCreateSequence,
-                loweredPixelHash, shuffleLoweredPixelSpirv);
-            VkShaderModuleCreateInfo loweredInfo{};
-            loweredInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-            loweredInfo.codeSize =
-                shuffleLoweredPixelSpirv.size() * sizeof(uint32_t);
-            loweredInfo.pCode = shuffleLoweredPixelSpirv.data();
-            loweredModuleResult = vkCreateShaderModule(
-                m_backend->Device(), &loweredInfo, nullptr,
-                &shuffleLoweredPixelModule);
-        }
-        char loweringTrace[384];
-        std::snprintf(loweringTrace, sizeof(loweringTrace),
-            "[KisakCOD][VK SHUFFLE LOWER] seq=%u target_ps=397081631095378c built=%u lowered=%u source_hash=%016llx lowered_hash=%016llx module_result=%d module=%p\n",
-            pipelineCreateSequence, lowered ? 1u : 0u, shuffleLoweredCount,
-            static_cast<unsigned long long>(sourcePixelHash),
-            static_cast<unsigned long long>(loweredPixelHash),
-            static_cast<int>(loweredModuleResult),
-            static_cast<void *>(shuffleLoweredPixelModule));
-        Switch_LogWrite(loweringTrace);
-        if (lowered && loweredModuleResult == VK_SUCCESS && shuffleLoweredPixelModule)
-        {
-            stages[1].module = shuffleLoweredPixelModule;
-            shuffleLoweringActive = true;
-            g_switchPipelineCrashSnapshot.pixelSpirv = &shuffleLoweredPixelSpirv;
-            std::snprintf(
-                g_switchPipelineCrashSnapshot.summary,
-                sizeof(g_switchPipelineCrashSnapshot.summary),
-                "[KisakCOD][VK CRASH PIPELINE] seq=%u shuffle_lowered=1 key=%016llx vs=%016llx source_ps=%016llx lowered_ps=%016llx lowered=%u module=%p\n",
-                pipelineCreateSequence,
-                static_cast<unsigned long long>(key),
-                static_cast<unsigned long long>(vsSpirvHash),
-                static_cast<unsigned long long>(sourcePixelHash),
-                static_cast<unsigned long long>(loweredPixelHash),
-                shuffleLoweredCount,
-                static_cast<void *>(shuffleLoweredPixelModule));
-        }
-    }
-    // Cross-isolate the known crashing PS with a compatible minimal VS.
-    // Probe both the original and the shuffle-lowered PS before the live pipeline;
-    // this distinguishes a PS-alone NAK failure from an original VS/PS interaction.
-    if (shuffleLoweringActive &&
-        vsSpirvHash == 0xcb5e4b84e2b977e4ull &&
-        psSpirvHash == 0x397081631095378cull)
-    {
-        std::vector<uint32_t> isolationVertexSpirv;
-        const bool isolationVertexBuilt =
-            BuildSwitchSeq90MinimalVertexSpirv(isolationVertexSpirv);
-        VkShaderModule isolationVertexModule = VK_NULL_HANDLE;
-        VkResult isolationVertexResult = VK_ERROR_UNKNOWN;
-        if (isolationVertexBuilt)
-        {
-            VkShaderModuleCreateInfo isolationVertexInfo{};
-            isolationVertexInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-            isolationVertexInfo.codeSize =
-                isolationVertexSpirv.size() * sizeof(uint32_t);
-            isolationVertexInfo.pCode = isolationVertexSpirv.data();
-            isolationVertexResult = vkCreateShaderModule(
-                m_backend->Device(), &isolationVertexInfo, nullptr,
-                &isolationVertexModule);
-        }
 
-        char isolationModuleTrace[224];
-        std::snprintf(isolationModuleTrace, sizeof(isolationModuleTrace),
-            "[KisakCOD][VK PS ISOLATION] seq=%u vs_built=%u vs_module_result=%d module=%p\n",
-            pipelineCreateSequence, isolationVertexBuilt ? 1u : 0u,
-            static_cast<int>(isolationVertexResult),
-            static_cast<void *>(isolationVertexModule));
-        Switch_LogWrite(isolationModuleTrace);
-
-        if (isolationVertexResult == VK_SUCCESS && isolationVertexModule)
-        {
-            const auto runPsIsolationProbe = [&](
-                const char *name, VkShaderModule psModule,
-                const std::vector<uint32_t> &psWords)
-            {
-                VkPipelineShaderStageCreateInfo probeStages[2] = {
-                    stages[0], stages[1]
-                };
-                probeStages[0].module = isolationVertexModule;
-                probeStages[1].module = psModule;
-                probeStages[0].pSpecializationInfo = nullptr;
-                probeStages[1].pSpecializationInfo = nullptr;
-                VkGraphicsPipelineCreateInfo probeInfo = info;
-                probeInfo.pStages = probeStages;
-
-                g_switchPipelineCrashSnapshot.valid = true;
-                g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
-                g_switchPipelineCrashSnapshot.vertexSpirv = &isolationVertexSpirv;
-                g_switchPipelineCrashSnapshot.pixelSpirv = &psWords;
-                std::snprintf(
-                    g_switchPipelineCrashSnapshot.summary,
-                    sizeof(g_switchPipelineCrashSnapshot.summary),
-                    "[KisakCOD][VK CRASH PIPELINE] seq=%u stage_probe=%s key=%016llx vs=%016llx ps=%016llx modules=%p/%p flags=%u\n",
-                    pipelineCreateSequence, name,
-                    static_cast<unsigned long long>(
-                        HashSpirvWords(isolationVertexSpirv)),
-                    static_cast<unsigned long long>(HashSpirvWords(psWords)),
-                    static_cast<void *>(isolationVertexModule),
-                    static_cast<void *>(psModule),
-                    static_cast<unsigned int>(probeInfo.flags));
-
-                char begin[256];
-                std::snprintf(begin, sizeof(begin),
-                    "[KisakCOD][VK PS ISOLATION] seq=%u action=%s begin ps_hash=%016llx\n",
-                    pipelineCreateSequence, name,
-                    static_cast<unsigned long long>(HashSpirvWords(psWords)));
-                Switch_LogWrite(begin);
-                RecordSwitchVkPipelineTrace(
-                    6u, this, &m_pipelines, m_pipelines.size(), key,
-                    m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
-                    VK_NULL_HANDLE);
-                g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
-                VkPipeline probePipeline = VK_NULL_HANDLE;
-                const VkResult probeResult = vkCreateGraphicsPipelines(
-                    m_backend->Device(), VK_NULL_HANDLE, 1,
-                    &probeInfo, nullptr, &probePipeline);
-                g_switchFrameStage =
-                    "frame/render/vulkan/pipeline/ps_isolation_probe_return";
-
-                char result[288];
-                std::snprintf(result, sizeof(result),
-                    "[KisakCOD][VK PS ISOLATION] seq=%u action=%s result=%d handle=%p\n",
-                    pipelineCreateSequence, name, static_cast<int>(probeResult),
-                    static_cast<void *>(probePipeline));
-                Switch_LogWrite(result);
-                if (probePipeline)
-                    vkDestroyPipeline(
-                        m_backend->Device(), probePipeline, nullptr);
-            };
-
-            runPsIsolationProbe(
-                "minimal_vs_original_ps", originalPipelinePixelModule,
-                m_pixelShader->spirv);
-            runPsIsolationProbe(
-                "minimal_vs_lowered_ps", shuffleLoweredPixelModule,
-                shuffleLoweredPixelSpirv);
-            vkDestroyShaderModule(
-                m_backend->Device(), isolationVertexModule, nullptr);
-        }
-
-        // Restore the snapshot to the live pipeline pair for the main create call.
-        g_switchPipelineCrashSnapshot.valid = true;
-        g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
-        g_switchPipelineCrashSnapshot.vertexSpirv = &m_vertexShader->spirv;
-        g_switchPipelineCrashSnapshot.pixelSpirv = &shuffleLoweredPixelSpirv;
-        std::snprintf(
-            g_switchPipelineCrashSnapshot.summary,
-            sizeof(g_switchPipelineCrashSnapshot.summary),
-            "[KisakCOD][VK CRASH PIPELINE] seq=%u shuffle_lowered=1 key=%016llx vs=%016llx source_ps=%016llx lowered_ps=%016llx lowered=%u module=%p\n",
-            pipelineCreateSequence,
-            static_cast<unsigned long long>(key),
-            static_cast<unsigned long long>(vsSpirvHash),
-            static_cast<unsigned long long>(psSpirvHash),
-            static_cast<unsigned long long>(
-                HashSpirvWords(shuffleLoweredPixelSpirv)),
-            shuffleLoweredCount,
-            static_cast<void *>(shuffleLoweredPixelModule));
-    }
-#endif
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
@@ -8520,11 +8351,6 @@ bool IDirect3DDevice9::EnsurePipeline()
         7u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
 #ifdef __SWITCH__
-    if (shuffleLoweringActive)
-        stages[1].module = originalPipelinePixelModule;
-    if (shuffleLoweredPixelModule)
-        vkDestroyShaderModule(
-            m_backend->Device(), shuffleLoweredPixelModule, nullptr);
     if (seq90DemoteFragmentModule)
     {
         stages[1].module = seq90OriginalFragmentModule;
