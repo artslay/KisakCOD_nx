@@ -455,9 +455,11 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
             "[KisakCOD][VK DRIVER] NVK_DEBUG coherent and no_cbuf already enabled\n");
     }
 
-    // Preserve debug flags supplied by the runtime. The current A/B test
-    // keeps serial+spill but re-enables NAK uniform-GPR allocation to compare
-    // against the serial,nougpr path that still faults in _free_r.
+    // switch_main.cpp enables NAK_DEBUG=spill before any Vulkan/Mesa
+    // initialization for the current pipeline-creation crash probe. Preserve
+    // that startup setting and any runtime flags, then merge optional flags
+    // supplied through KISAK_NAK_DEBUG. Uniform-GPR allocation stays enabled
+    // unless KISAK_NAK_DISABLE_UGPR=1 is explicitly requested.
     const char *existingNakDebug = std::getenv("NAK_DEBUG");
     std::string nakDebug = existingNakDebug ? existingNakDebug : "";
     auto hasNakFlag = [&nakDebug](const char *flag) {
@@ -477,11 +479,10 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         return false;
     };
 
-    // serial and spill are NAK compiler-debug modes, not neutral production
-    // settings: serial changes instruction execution, while spill forces a
-    // minimal GPR file. Do not inject them into every game launch. Preserve
-    // caller-provided NAK_DEBUG and allow targeted A/B tests through
-    // KISAK_NAK_DEBUG=serial,spill (or any other explicit NAK_DEBUG flags).
+    // Spill is intentionally enabled by switch_main.cpp for this focused
+    // allocator probe. Keep serial opt-in because it changes instruction
+    // execution. Preserve all NAK_DEBUG flags and allow additional targeted
+    // tests through KISAK_NAK_DEBUG (for example, serial or annotate).
     bool addedNakFlag = false;
     auto appendNakFlag = [&](const std::string &flag)
     {
@@ -537,7 +538,7 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
     {
         char nakFlagsMsg[384];
         std::snprintf(nakFlagsMsg, sizeof(nakFlagsMsg),
-            "[KisakCOD][VK DRIVER] preserving runtime NAK_DEBUG=%s; serial/spill not forced\n",
+            "[KisakCOD][VK DRIVER] preserving configured NAK_DEBUG=%s; no additional NAK flags requested\n",
             nakDebug.c_str());
         Switch_LogWrite(nakFlagsMsg);
     }
