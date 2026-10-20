@@ -1515,7 +1515,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
             // A full identity shuffle is just a value copy. Preserve its result
             // ID while avoiding dozens of scalar operations in common large shaders.
             bool identityShuffle =
-                shuffle.resultType == shuffle.selectors.size() &&
+                vectorLengthByType[shuffle.resultType] == shuffle.selectors.size() &&
                 resultTypeById[shuffle.vector1Id] == shuffle.resultType;
             if (identityShuffle)
             {
