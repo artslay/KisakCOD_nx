@@ -7527,8 +7527,25 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             std::vector<uint32_t> probeWords = m_pixelShader->spirv;
             uint32_t replaced = 0u;
-            if (!ReplaceSwitchSpirvResultOpsWithUndef(
-                    probeWords, firstOpcode, lastOpcode, &replaced))
+            bool transformed = false;
+            if (std::strcmp(name, "sample_and_shuffle_to_undef") == 0)
+            {
+                uint32_t sampleCount = 0u;
+                uint32_t shuffleCount = 0u;
+                const bool sampleOk = ReplaceSwitchSpirvResultOpsWithUndef(
+                    probeWords, 87u, 94u, &sampleCount);
+                const bool shuffleOk = sampleOk &&
+                    ReplaceSwitchSpirvResultOpsWithUndef(
+                        probeWords, 79u, 79u, &shuffleCount);
+                transformed = sampleOk && shuffleOk;
+                replaced = sampleCount + shuffleCount;
+            }
+            else
+            {
+                transformed = ReplaceSwitchSpirvResultOpsWithUndef(
+                    probeWords, firstOpcode, lastOpcode, &replaced);
+            }
+            if (!transformed)
             {
                 char skipped[192];
                 std::snprintf(skipped, sizeof(skipped),
@@ -7587,8 +7604,10 @@ bool IDirect3DDevice9::EnsurePipeline()
                 vkDestroyShaderModule(m_backend->Device(), probeModule, nullptr);
         };
 
-        // SPIR-V opcodes 87..94 are the ImageSample variants.
-        runSeq64PixelOpcodeProbe("sample_ops_to_undef", 87u, 94u);
+        // First remove both sample and shuffle results in one variant. The
+        // sample-only probe crashed inside NVK before returning, so don't repeat
+        // it here; follow the combined test with the shuffle-only comparison.
+        runSeq64PixelOpcodeProbe("sample_and_shuffle_to_undef", 87u, 94u);
         runSeq64PixelOpcodeProbe("vector_shuffle_to_undef", 79u, 79u);
     }
 #endif
