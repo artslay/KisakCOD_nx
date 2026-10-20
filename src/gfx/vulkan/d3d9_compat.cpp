@@ -2515,28 +2515,22 @@ HRESULT KisakVkBuffer::Unlock()
         }
         else
         {
-            // Preserve draw/update order in one command buffer instead of
-            // submitting and waiting for the entire active frame on each unlock.
-            // QueueBufferUpdate inserts transfer barriers around the copy, so
-            // previously recorded draws finish reading the old range before the
-            // update and later draws see the new bytes.
+            // D3DLOCK_DISCARD invalidates the previous contents of the entire
+            // dynamic buffer, not just the caller's locked subrange. This wrapper
+            // initializes the discarded shadow to zero, so upload that complete
+            // shadow to prevent stale bytes from surviving in the Vulkan buffer.
+            // All other locks update only their written range.
             VulkanBackend *backend = GetVulkanBackend();
-#ifdef __SWITCH__
-            // Keep Switch on the synchronized update path until queued copies
-            // are validated against NVK device loss during map rendering.
-            constexpr bool kSwitchDisableQueuedDynamicBufferCopies = true;
-            static std::atomic<bool> loggedSynchronizedFallback{false};
-            if (kSwitchDisableQueuedDynamicBufferCopies &&
-                !loggedSynchronizedFallback.exchange(true, std::memory_order_relaxed))
-                Switch_LogWrite(
-                    "[KisakCOD][VK BUFFER UPDATE] queued_dynamic_copies=disabled synchronized_fallback=1 reason=device_lost_isolation\n");
-            const bool queued = !kSwitchDisableQueuedDynamicBufferCopies &&
-                backend && backend->QueueBufferUpdate(
-                    buffer, lockOffset, shadow.data() + lockOffset, lockSize);
-#else
+            const bool discardWholeBuffer = (lockFlags & D3DLOCK_DISCARD) != 0;
+            const uint32_t uploadOffset = discardWholeBuffer ? 0u : lockOffset;
+            const size_t uploadSize = discardWholeBuffer ? size : lockSize;
+            const uint8_t *uploadData = shadow.data() + uploadOffset;
+
+            // Prefer an ordered transfer in the current command buffer. The
+            // backend validates copy alignment and ring capacity; only unsupported
+            // ranges or allocation pressure take the synchronized host-write path.
             const bool queued = backend && backend->QueueBufferUpdate(
-                buffer, lockOffset, shadow.data() + lockOffset, lockSize);
-#endif
+                buffer, uploadOffset, uploadData, uploadSize);
             if (!queued)
             {
 #ifdef __SWITCH__
@@ -4961,10 +4955,9 @@ bool IDirect3DDevice9::EnsurePipeline()
         5u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
 
-    // Keep the linked fragment module before our custom alpha-test rewrite.
-    // If NVK rejects the final pipeline, diagnostic probes below can determine
-    // whether the rewrite or specialization map is responsible without needing
-    // to copy shader binaries off the Switch.
+    // Keep the linked fragment module before the D3D9 alpha-test rewrite.
+    // Retaining this baseline lets us rebuild the fragment module whenever the
+    // alpha-test state changes without repeatedly patching already-patched words.
     uint32_t pipelineAlphaFuncSpecId = m_pixelShader->alphaFuncSpecId;
     uint32_t pipelineAlphaRefSpecId = m_pixelShader->alphaRefSpecId;
 
