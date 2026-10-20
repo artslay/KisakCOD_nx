@@ -864,8 +864,7 @@ void __cdecl R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState,
 
     iassert(context.source->cameraView == info->cameraView);
     context.state->origMaterial = 0;
-    if (!R_SetDrawSurfsShadowableLight(context.source, info))
-        return;
+    R_SetDrawSurfsShadowableLight(context.source, info);
     R_Set3D(context.source);
     if (context.source->viewportIsDirty)
     {
