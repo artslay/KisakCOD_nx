@@ -2099,6 +2099,50 @@ bool ReplaceCapturedSeq54AlphaKillWithBranchForProbe(
     return true;
 }
 
+
+ // Hash-gated diagnostic for the next confirmed NVK crash, seq=64. Unlike the
+ // seq=54 variant this shader has alpha testing disabled; test whether an
+ // original shader discard (OpKill) hits the same NAK failure path. Replace
+ // OpKill with OpReturn only in this exact captured pixel shader. This is an
+ // A/B diagnostic and deliberately does not claim equivalent discard semantics.
+bool ReplaceCapturedSeq64PixelKillWithReturnForProbe(
+    std::vector<uint32_t> &words,
+    uint32_t *replacedCount = nullptr)
+{
+    if (replacedCount)
+        *replacedCount = 0;
+    if (words.size() < 5u || words[0] != SpvMagicNumber)
+        return false;
+
+    std::vector<size_t> killOffsets;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (op == SpvOpKill)
+        {
+            if (wc != 1u)
+                return false;
+            killOffsets.push_back(offset);
+        }
+        offset += wc;
+    }
+
+    if (killOffsets.empty())
+        return false;
+
+    for (const size_t offset : killOffsets)
+    {
+        words[offset] = (words[offset] & 0xffff0000u) |
+            static_cast<uint32_t>(SpvOpReturn);
+    }
+    if (replacedCount)
+        *replacedCount = static_cast<uint32_t>(killOffsets.size());
+    return true;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -6314,6 +6358,38 @@ bool IDirect3DDevice9::EnsurePipeline()
             else
             {
                 Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=seq54_alpha_branch_pass failed=pattern_mismatch\n");
+            }
+        }
+#endif
+
+#ifdef __SWITCH__
+        // Capture the exact seq=64 shader pair before any diagnostic mutation,
+        // and isolate source OpKill in its PS. These hashes came from the
+        // observed seq=64 crash (alphaTest=0), so no other pipeline is touched.
+        if (HashSpirvWords(m_vertexShader->spirv) == 0xcb5e4b84e2b977e4ull &&
+            HashSpirvWords(m_pixelShader->spirv) == 0x397081631095378cull)
+        {
+            (void)WriteSwitchNakCandidateSpirv(
+                "vs", 64u, 0xcb5e4b84e2b977e4ull, m_vertexShader->spirv);
+            (void)WriteSwitchNakCandidateSpirv(
+                "ps", 64u, 0x397081631095378cull, m_pixelShader->spirv);
+
+            const uint64_t oldKillReturnHash = HashSpirvWords(m_pixelShader->spirv);
+            uint32_t killReturnCount = 0u;
+            if (ReplaceCapturedSeq64PixelKillWithReturnForProbe(
+                    m_pixelShader->spirv, &killReturnCount))
+            {
+                char killReturnTrace[256];
+                std::snprintf(killReturnTrace, sizeof(killReturnTrace),
+                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=seq64_native_kill_to_return count=%u old_hash=%016llx new_hash=%016llx\n",
+                    killReturnCount,
+                    static_cast<unsigned long long>(oldKillReturnHash),
+                    static_cast<unsigned long long>(HashSpirvWords(m_pixelShader->spirv)));
+                Switch_LogWrite(killReturnTrace);
+            }
+            else
+            {
+                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=seq64_native_kill_to_return failed=no_kill_or_invalid_spirv\n");
             }
         }
 #endif
