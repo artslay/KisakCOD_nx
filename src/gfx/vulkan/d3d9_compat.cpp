@@ -1862,6 +1862,127 @@ bool ConvertCapturedCubeSampleExplicitLodToImplicitForProbe(
     return true;
 }
 
+// Diagnostic-only probe for the captured seq=54 NAK pipeline crash. Its
+// pixel shader is the exact alpha-test-patched variant below. Replace only the
+// generated GREATEREQUAL branch condition with SPIR-V true, leaving the shader
+// body and the kill/merge structure in place. If NAK then compiles the pipeline,
+// the injected alpha predicate is implicated; this is not the final alpha-test fix.
+bool ForceCapturedSeq54AlphaTestBranchPassForProbe(
+    std::vector<uint32_t> &words,
+    uint32_t *rewrittenCount = nullptr)
+{
+    if (rewrittenCount)
+        *rewrittenCount = 0;
+    if (words.size() < 5 || words[0] != SpvMagicNumber)
+        return false;
+
+    const uint32_t bound = words[3];
+    if (bound < 2u || bound > 1000000u)
+        return false;
+
+    uint32_t trueConstantId = 0u;
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpConstantTrue && wc == 3u &&
+            ins[1] < bound && ins[2] < bound)
+        {
+            trueConstantId = ins[2];
+            break;
+        }
+        offset += wc;
+    }
+    if (!trueConstantId)
+        return false;
+
+    size_t matchedConditionWord = 0u;
+    uint32_t matches = 0u;
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (op == SpvOpFOrdGreaterThanEqual && wc == 5u)
+        {
+            const size_t mergeOffset = offset + wc;
+            uint32_t mergeWc = 0;
+            SpvOp mergeOp{};
+            if (!SpirvIsValidInstruction(words, mergeOffset, &mergeWc, &mergeOp) ||
+                mergeOp != SpvOpSelectionMerge || mergeWc != 3u)
+            {
+                offset += wc;
+                continue;
+            }
+
+            const size_t branchOffset = mergeOffset + mergeWc;
+            uint32_t branchWc = 0;
+            SpvOp branchOp{};
+            if (!SpirvIsValidInstruction(words, branchOffset, &branchWc, &branchOp) ||
+                branchOp != SpvOpBranchConditional || branchWc != 4u)
+            {
+                offset += wc;
+                continue;
+            }
+            const uint32_t *branch = &words[branchOffset];
+            const uint32_t mergeLabel = words[mergeOffset + 1u];
+            const uint32_t killLabel = branch[3];
+            if (branch[1] != words[offset + 2u] || branch[2] != mergeLabel)
+            {
+                offset += wc;
+                continue;
+            }
+
+            const size_t killOffset = branchOffset + branchWc;
+            uint32_t killLabelWc = 0;
+            SpvOp killLabelOp{};
+            if (!SpirvIsValidInstruction(words, killOffset, &killLabelWc, &killLabelOp) ||
+                killLabelOp != SpvOpLabel || killLabelWc != 2u ||
+                words[killOffset + 1u] != killLabel)
+            {
+                offset += wc;
+                continue;
+            }
+            const size_t killInstructionOffset = killOffset + killLabelWc;
+            uint32_t killWc = 0;
+            SpvOp killOp{};
+            if (!SpirvIsValidInstruction(
+                    words, killInstructionOffset, &killWc, &killOp) ||
+                killOp != SpvOpKill || killWc != 1u)
+            {
+                offset += wc;
+                continue;
+            }
+            const size_t finalMergeOffset = killInstructionOffset + killWc;
+            uint32_t finalMergeWc = 0;
+            SpvOp finalMergeOp{};
+            if (!SpirvIsValidInstruction(
+                    words, finalMergeOffset, &finalMergeWc, &finalMergeOp) ||
+                finalMergeOp != SpvOpLabel || finalMergeWc != 2u ||
+                words[finalMergeOffset + 1u] != mergeLabel)
+            {
+                offset += wc;
+                continue;
+            }
+
+            matchedConditionWord = branchOffset + 1u;
+            ++matches;
+        }
+        offset += wc;
+    }
+
+    if (matches != 1u || !matchedConditionWord)
+        return false;
+    words[matchedConditionWord] = trueConstantId;
+    if (rewrittenCount)
+        *rewrittenCount = 1u;
+    return true;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -6027,6 +6148,33 @@ bool IDirect3DDevice9::EnsurePipeline()
             m_vertexShader->spirv, "vs", 0xaf1d39bec3f1bf7dull);
         (void)TryLoadSwitchOptimizedPipeline31Spirv(
             m_pixelShader->spirv, "ps", 0xcd1031f57ecc7957ull);
+
+#ifdef __SWITCH__
+        // seq=54 reached a new NVK fault with this exact patched PS. Flip only
+        // its generated GREATEREQUAL alpha-test branch to true for an A/B run.
+        // Hash gates include both stages; no other materials or shaders change.
+        if (HashSpirvWords(m_vertexShader->spirv) == 0x997711f543b23231ull &&
+            HashSpirvWords(m_pixelShader->spirv) == 0xd7f23c11a554213aull)
+        {
+            const uint64_t oldAlphaProbeHash = HashSpirvWords(m_pixelShader->spirv);
+            uint32_t alphaBranchCount = 0;
+            if (ForceCapturedSeq54AlphaTestBranchPassForProbe(
+                    m_pixelShader->spirv, &alphaBranchCount))
+            {
+                char alphaProbeTrace[256];
+                std::snprintf(alphaProbeTrace, sizeof(alphaProbeTrace),
+                    "[KisakCOD][VK SPIRV PROBE] stage=ps action=seq54_alpha_branch_pass count=%u old_hash=%016llx new_hash=%016llx\\n",
+                    alphaBranchCount,
+                    static_cast<unsigned long long>(oldAlphaProbeHash),
+                    static_cast<unsigned long long>(HashSpirvWords(m_pixelShader->spirv)));
+                Switch_LogWrite(alphaProbeTrace);
+            }
+            else
+            {
+                Switch_LogWrite("[KisakCOD][VK SPIRV PROBE] stage=ps action=seq54_alpha_branch_pass failed=pattern_mismatch\\n");
+            }
+        }
+#endif
 
         VkShaderModuleCreateInfo vsInfo{};
         vsInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
