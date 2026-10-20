@@ -7337,10 +7337,60 @@ bool IDirect3DDevice9::EnsurePipeline()
     const uint64_t psSpirvHash = computeSpirvHash(m_pixelShader->spirv);
 
 #ifdef __SWITCH__
-    // The seq=90 pair faults inside NVK even with DISABLE_OPTIMIZATION enabled.
-    // Try the opposite compiler path for this exact captured pair only; this
-    // preserves both shaders and all fixed-function state. If it still faults,
-    // the crash snapshot identifies the optimized-path attempt unambiguously.
+    VkShaderModule seq90DemoteFragmentModule = VK_NULL_HANDLE;
+    const VkShaderModule seq90OriginalFragmentModule = stages[1].module;
+    // This exact alpha-tested shader still faults with either pipeline optimizer
+    // setting. Retry its original linked fragment code using demote semantics,
+    // which suppresses framebuffer writes while avoiding the OpKill terminator.
+    // The comparison and alpha reference remain unchanged; no shader is disabled.
+    if (vsSpirvHash == 0x3191a056e9509bfcull &&
+        psSpirvHash == 0xe708e85707181fb7ull &&
+        useAlphaTestPatch && m_alphaFunc == 5u && m_alphaRef == 0u)
+    {
+        std::vector<uint32_t> seq90DemoteSpirv =
+            unpatchedPixelSpirvForProbe.empty()
+                ? m_pixelShader->linkedSpirv
+                : unpatchedPixelSpirvForProbe;
+        uint32_t seq90DemoteFuncSpecId = 0u;
+        uint32_t seq90DemoteRefSpecId = 0u;
+        const bool seq90DemotePatched = !seq90DemoteSpirv.empty() &&
+            PatchFragmentShaderForAlphaTest(
+                seq90DemoteSpirv, m_alphaFunc, m_alphaRef,
+                &seq90DemoteFuncSpecId, &seq90DemoteRefSpecId, true);
+
+        VkResult seq90DemoteModuleResult = VK_ERROR_UNKNOWN;
+        if (seq90DemotePatched)
+        {
+            VkShaderModuleCreateInfo seq90DemoteModuleInfo{};
+            seq90DemoteModuleInfo.sType =
+                VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            seq90DemoteModuleInfo.codeSize =
+                seq90DemoteSpirv.size() * sizeof(uint32_t);
+            seq90DemoteModuleInfo.pCode = seq90DemoteSpirv.data();
+            seq90DemoteModuleResult = vkCreateShaderModule(
+                m_backend->Device(), &seq90DemoteModuleInfo, nullptr,
+                &seq90DemoteFragmentModule);
+        }
+
+        char seq90DemoteTrace[256];
+        std::snprintf(seq90DemoteTrace, sizeof(seq90DemoteTrace),
+            "[KisakCOD][VK PIPELINE PROBE] action=seq90_alpha_demote patched=%u module_result=%d module=%p words=%zu hash=%016llx\n",
+            seq90DemotePatched ? 1u : 0u,
+            static_cast<int>(seq90DemoteModuleResult),
+            static_cast<void *>(seq90DemoteFragmentModule),
+            seq90DemoteSpirv.size(),
+            static_cast<unsigned long long>(
+                seq90DemoteSpirv.empty() ? 0u : computeSpirvHash(seq90DemoteSpirv)));
+        Switch_LogWrite(seq90DemoteTrace);
+
+        if (seq90DemoteModuleResult == VK_SUCCESS &&
+            seq90DemoteFragmentModule)
+        {
+            stages[1].module = seq90DemoteFragmentModule;
+        }
+    }
+    // Keep compilation optimization enabled for this captured pair as a second
+    // independently controlled variable; the prior unoptimized attempt crashed.
     if (vsSpirvHash == 0x3191a056e9509bfcull &&
         psSpirvHash == 0xe708e85707181fb7ull)
     {
@@ -7672,6 +7722,13 @@ bool IDirect3DDevice9::EnsurePipeline()
         7u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
 #ifdef __SWITCH__
+    if (seq90DemoteFragmentModule)
+    {
+        stages[1].module = seq90OriginalFragmentModule;
+        vkDestroyShaderModule(
+            m_backend->Device(), seq90DemoteFragmentModule, nullptr);
+        seq90DemoteFragmentModule = VK_NULL_HANDLE;
+    }
     if (seq64DiagnosticPsModule)
     {
         stages[1].module = seq64OriginalPsModule;
