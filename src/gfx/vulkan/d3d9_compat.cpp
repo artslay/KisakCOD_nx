@@ -2998,9 +2998,11 @@ bool PatchFragmentShaderForAlphaTest(
     uint32_t *alphaRefSpecId,
     bool useDemoteToHelperInvocation)
 {
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/validate_header";
     if (words.size() < 5 || words[0] != SpvMagicNumber)
         return false;
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/scan_decorations";
     uint32_t entryFunctionId = 0;
     uint32_t outputVarId = 0;
     uint32_t outputVarType = 0;
@@ -3039,6 +3041,7 @@ bool PatchFragmentShaderForAlphaTest(
         i += wc;
     }
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/scan_output_variable";
     if (!entryFunctionId)
         return false;
 
@@ -3087,6 +3090,7 @@ bool PatchFragmentShaderForAlphaTest(
     if (!outputVarId)
         return false;
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/scan_entry_cfg";
     // The affected MojoShader fragment variant has a straight-line entry
     // function. Capture output alpha as an SSA value in that case, avoiding
     // Function-storage variables (and their Load/Store sequence) entirely.
@@ -3120,6 +3124,7 @@ bool PatchFragmentShaderForAlphaTest(
     const bool useSsaAlphaCapture =
         entryBlockCount == 1 && entryOutputStoreCount != 0 && entryReturnCount == 1;
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/resolve_output_type";
     // SPIR-V declarations are ordered with types before global variables, so
     // resolve the output variable type first and follow its pointer/vector types
     // in separate passes rather than relying on declaration order.
@@ -3181,6 +3186,7 @@ bool PatchFragmentShaderForAlphaTest(
         i += wc;
     }
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/prepare_ids";
     if (!floatType)
         return false;
 
@@ -3221,6 +3227,7 @@ bool PatchFragmentShaderForAlphaTest(
     if (!useSsaAlphaCapture)
         SpirvAppend(globals, SpvOpConstant, {floatType, alphaDefault, 0x3f800000u});
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/find_type_insertion";
     size_t firstType = words.size();
     for (size_t i = 5; i < words.size();)
     {
@@ -3239,6 +3246,7 @@ bool PatchFragmentShaderForAlphaTest(
     if (firstType == words.size())
         return false;
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/insert_type_globals";
     words.insert(words.begin() + firstType, typeGlobals.begin(), typeGlobals.end());
 
     if (!useSsaAlphaCapture)
@@ -3277,6 +3285,7 @@ bool PatchFragmentShaderForAlphaTest(
             functionPointerTypeWords.begin(), functionPointerTypeWords.end());
     }
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/insert_pointer_type";
     // The storage-based fallback keeps the most recently written output alpha
     // per invocation without reading the Output interface variable directly.
     size_t firstVariableOrFunction = words.size();
@@ -3295,6 +3304,7 @@ bool PatchFragmentShaderForAlphaTest(
     }
     if (firstVariableOrFunction == words.size())
         return false;
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/insert_constants";
     words.insert(words.begin() + firstVariableOrFunction, globals.begin(), globals.end());
 
     size_t firstFunction = words.size();
@@ -3314,6 +3324,7 @@ bool PatchFragmentShaderForAlphaTest(
     if (firstFunction == words.size())
         return false;
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/rewrite_function";
     std::vector<uint32_t> patched;
     patched.reserve(words.size() + 768);
     patched.insert(patched.end(), words.begin(), words.begin() + firstFunction);
@@ -3472,6 +3483,7 @@ bool PatchFragmentShaderForAlphaTest(
     if (!injectedFunctionVariable || !injectedOutputAlpha || !injectedReturnTest)
         return false;
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/validate_cfg";
     char cfgReason[160]{};
     const bool cfgValid = ValidateSpirvPhiEdges(patched, cfgReason, sizeof(cfgReason));
     if (!cfgValid)
@@ -3487,6 +3499,7 @@ bool PatchFragmentShaderForAlphaTest(
         Switch_LogWrite(cfgMessage);
     }
 
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/commit_words";
     words.swap(patched);
     words[3] = nextId;
     // No specialization constants are emitted by this patch.
@@ -6956,7 +6969,20 @@ bool IDirect3DDevice9::EnsurePipeline()
         // optional SPIR-V debug instructions before driver compilation.
         pipelineAlphaFuncSpecId = 0;
         pipelineAlphaRefSpecId = 0;
-        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/alpha_patch";
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/alpha_patch/call";
+#ifdef __SWITCH__
+        if (m_decl && m_decl->serial == 356u &&
+            m_vertexShader->serial == 473u && m_pixelShader->serial == 651u)
+        {
+            char trace[224];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VK ALPHA BEGIN] enabled=%u func=%u ref=%u words=%zu data=%p capacity=%zu\n",
+                useAlphaTestPatch ? 1u : 0u, m_alphaFunc, m_alphaRef,
+                pixelSpirv.size(), static_cast<const void *>(pixelSpirv.data()),
+                pixelSpirv.capacity());
+            Switch_LogWrite(trace);
+        }
+#endif
         if (useAlphaTestPatch &&
             !PatchFragmentShaderForAlphaTest(
                 pixelSpirv,
@@ -6973,8 +6999,25 @@ bool IDirect3DDevice9::EnsurePipeline()
             return false;
         }
 
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/alpha_patch/return";
+#ifdef __SWITCH__
+        if (m_decl && m_decl->serial == 356u &&
+            m_vertexShader->serial == 473u && m_pixelShader->serial == 651u)
+        {
+            char trace[192];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VK ALPHA END] enabled=%u funcSpec=%u refSpec=%u words=%zu data=%p capacity=%zu\n",
+                useAlphaTestPatch ? 1u : 0u,
+                pipelineAlphaFuncSpecId, pipelineAlphaRefSpecId,
+                pixelSpirv.size(), static_cast<const void *>(pixelSpirv.data()),
+                pixelSpirv.capacity());
+            Switch_LogWrite(trace);
+        }
+#endif
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/alpha_patch/store_state";
         m_pixelShader->alphaFuncSpecId = pipelineAlphaFuncSpecId;
         m_pixelShader->alphaRefSpecId = pipelineAlphaRefSpecId;
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/alpha_patch/copy_pixel_vector";
         m_pixelShader->spirv = pixelSpirv;
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/vertex_copy";
         m_vertexShader->spirv.assign(
