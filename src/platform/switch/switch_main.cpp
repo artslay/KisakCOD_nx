@@ -665,14 +665,20 @@ static bool SwitchConfigureNakSpillProbe()
 
 int main()
 {
-    const bool nakSpillProbeConfigured = SwitchConfigureNakSpillProbe();
+    const char *forceNakSpill = std::getenv("KISAK_NAK_FORCE_SPILL");
+    const bool nakSpillProbeRequested = forceNakSpill && std::strcmp(forceNakSpill, "1") == 0;
+    const bool nakSpillProbeConfigured =
+        nakSpillProbeRequested && SwitchConfigureNakSpillProbe();
     Switch_LogInit();
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
-    Switch_LogWrite(nakSpillProbeConfigured
-        ? "[KisakCOD][NAK PROBE] allocator spill mode enabled before Mesa initialization\n"
-        : "[KisakCOD][NAK PROBE] WARNING: failed to enable allocator spill mode\n");
+    if (nakSpillProbeConfigured)
+        Switch_LogWrite("[KisakCOD][NAK PROBE] allocator spill mode enabled before Mesa initialization\n");
+    else if (nakSpillProbeRequested)
+        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to enable allocator spill mode\n");
+    else
+        Switch_LogWrite("[KisakCOD][NAK PROBE] allocator spill mode disabled; set KISAK_NAK_FORCE_SPILL=1 to enable\n");
     SwitchBootLog("Game data: sdmc:/switch/KisakCOD/game");
     SwitchBootLog("Stage 1/7: initializing main thread");
 
