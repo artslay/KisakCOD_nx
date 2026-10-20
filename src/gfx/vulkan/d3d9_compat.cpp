@@ -1374,6 +1374,212 @@ bool RepairUnusedZeroVectorShuffleSource(
     return true;
 }
 
+// Canonicalize redundant trailing coordinates on non-arrayed cube-map sampling.
+// D3D shader registers are float4 even when the operation consumes only xyz.
+// SPIR-V permits unused trailing coordinate components, but trimming them gives
+// NAK the exact 3-component cube coordinate without changing sample semantics.
+bool NormalizeUnusedCubeSampleCoordinateComponents(
+    std::vector<uint32_t> &words,
+    uint32_t *rewrittenCount = nullptr)
+{
+    if (rewrittenCount)
+        *rewrittenCount = 0;
+    if (words.size() < 5 || words[0] != SpvMagicNumber)
+        return false;
+
+    const uint32_t bound = words[3];
+    if (bound < 2u || bound > 1000000u)
+        return false;
+
+    std::vector<uint32_t> resultTypeById(bound, UINT32_MAX);
+    std::vector<uint32_t> typeOpcode(bound, UINT32_MAX);
+    std::vector<uint32_t> vectorComponentType(bound, 0u);
+    std::vector<uint32_t> vectorComponentCount(bound, 0u);
+    std::vector<uint32_t> floatWidthByType(bound, 0u);
+    std::vector<uint32_t> imageDimensionByType(bound, UINT32_MAX);
+    std::vector<uint32_t> imageArrayedByType(bound, UINT32_MAX);
+    std::vector<uint32_t> imageTypeBySampledImageType(bound, UINT32_MAX);
+
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wordCount = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &op))
+            return false;
+        const uint32_t opcode = static_cast<uint32_t>(op);
+        const uint32_t *ins = &words[offset];
+        if (opcode == static_cast<uint32_t>(SpvOpTypeFloat) && wordCount >= 3 &&
+            ins[1] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            floatWidthByType[ins[1]] = ins[2];
+        }
+        else if (opcode == static_cast<uint32_t>(SpvOpTypeVector) && wordCount >= 4 &&
+            ins[1] < bound && ins[2] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            vectorComponentType[ins[1]] = ins[2];
+            vectorComponentCount[ins[1]] = ins[3];
+        }
+        else if (opcode == static_cast<uint32_t>(SpvOpTypeImage) && wordCount >= 9 &&
+            ins[1] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            imageDimensionByType[ins[1]] = ins[3];
+            imageArrayedByType[ins[1]] = ins[5];
+        }
+        else if (opcode == static_cast<uint32_t>(SpvOpTypeSampledImage) &&
+            wordCount >= 3 && ins[1] < bound && ins[2] < bound)
+        {
+            typeOpcode[ins[1]] = opcode;
+            imageTypeBySampledImageType[ins[1]] = ins[2];
+        }
+
+        // Track result types for values used as sampled-image and coordinate IDs.
+        // These are the result-type/result-ID form of the relevant instructions.
+        if (wordCount >= 3 &&
+            (opcode == static_cast<uint32_t>(SpvOpLoad) ||
+             opcode == static_cast<uint32_t>(SpvOpCopyObject) ||
+             opcode == static_cast<uint32_t>(SpvOpVectorShuffle) ||
+             opcode == static_cast<uint32_t>(SpvOpSampledImage) ||
+             (opcode >= 87u && opcode <= 90u)) &&
+            ins[2] < bound)
+        {
+            resultTypeById[ins[2]] = ins[1];
+        }
+        offset += wordCount;
+    }
+
+    uint32_t vector3FloatType = 0;
+    for (uint32_t id = 1; id < bound; ++id)
+    {
+        if (typeOpcode[id] == static_cast<uint32_t>(SpvOpTypeVector) &&
+            vectorComponentCount[id] == 3u &&
+            vectorComponentType[id] < bound &&
+            typeOpcode[vectorComponentType[id]] == static_cast<uint32_t>(SpvOpTypeFloat) &&
+            floatWidthByType[vectorComponentType[id]] == 32u)
+        {
+            vector3FloatType = id;
+            break;
+        }
+    }
+
+    struct CubeCoordinateRewrite
+    {
+        size_t instructionOffset;
+        uint32_t coordinateId;
+        uint32_t vector3TypeId;
+        uint32_t newId;
+    };
+    std::vector<CubeCoordinateRewrite> rewrites;
+
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wordCount = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &op))
+            return false;
+        const uint32_t opcode = static_cast<uint32_t>(op);
+        const uint32_t *ins = &words[offset];
+
+        // OpImageSample{Implicit/Explicit}Lod and the depth-reference forms.
+        // Projected sampling has different coordinate semantics and is untouched.
+        if (opcode >= 87u && opcode <= 90u && wordCount >= 5)
+        {
+            const uint32_t sampledImageId = ins[3];
+            const uint32_t coordinateId = ins[4];
+            if (sampledImageId < bound && coordinateId < bound)
+            {
+                const uint32_t sampledImageType = resultTypeById[sampledImageId];
+                if (sampledImageType < bound &&
+                    typeOpcode[sampledImageType] ==
+                        static_cast<uint32_t>(SpvOpTypeSampledImage))
+                {
+                    const uint32_t imageType =
+                        imageTypeBySampledImageType[sampledImageType];
+                    const uint32_t coordinateType = resultTypeById[coordinateId];
+                    if (imageType < bound && coordinateType < bound &&
+                        typeOpcode[imageType] == static_cast<uint32_t>(SpvOpTypeImage) &&
+                        imageDimensionByType[imageType] == 3u && // Cube
+                        imageArrayedByType[imageType] == 0u &&
+                        typeOpcode[coordinateType] ==
+                            static_cast<uint32_t>(SpvOpTypeVector) &&
+                        vectorComponentCount[coordinateType] > 3u &&
+                        vector3FloatType != 0u &&
+                        vectorComponentType[coordinateType] ==
+                            vectorComponentType[vector3FloatType])
+                    {
+                        if (bound > UINT32_MAX - rewrites.size() - 1u)
+                            return false;
+                        rewrites.push_back({
+                            offset, coordinateId, vector3FloatType,
+                            bound + static_cast<uint32_t>(rewrites.size())
+                        });
+                    }
+                }
+            }
+        }
+        offset += wordCount;
+    }
+
+    if (rewrites.empty())
+        return true;
+
+    std::vector<uint32_t> normalized;
+    normalized.reserve(words.size() + rewrites.size() * 8u);
+    normalized.insert(normalized.end(), words.begin(), words.begin() + 5);
+    normalized[3] = bound + static_cast<uint32_t>(rewrites.size());
+
+    size_t rewriteIndex = 0;
+    for (size_t offset = 5; offset < words.size();)
+    {
+        uint32_t wordCount = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &op))
+            return false;
+
+        if (rewriteIndex < rewrites.size() &&
+            rewrites[rewriteIndex].instructionOffset == offset)
+        {
+            const CubeCoordinateRewrite &rewrite = rewrites[rewriteIndex++];
+            // OpVectorShuffle(result type, result ID, coord, coord, x, y, z).
+            normalized.push_back((8u << 16) |
+                static_cast<uint32_t>(SpvOpVectorShuffle));
+            normalized.push_back(rewrite.vector3TypeId);
+            normalized.push_back(rewrite.newId);
+            normalized.push_back(rewrite.coordinateId);
+            normalized.push_back(rewrite.coordinateId);
+            normalized.push_back(0u);
+            normalized.push_back(1u);
+            normalized.push_back(2u);
+
+            for (size_t i = 0; i < wordCount; ++i)
+            {
+                uint32_t word = words[offset + i];
+                // For an image-sample instruction, Coordinate is operand #4
+                // counting the instruction word, i.e. offset + 4.
+                if (i == 4u)
+                    word = rewrite.newId;
+                normalized.push_back(word);
+            }
+        }
+        else
+        {
+            normalized.insert(
+                normalized.end(), words.begin() + offset,
+                words.begin() + offset + wordCount);
+        }
+        offset += wordCount;
+    }
+
+    if (rewriteIndex != rewrites.size())
+        return false;
+    words.swap(normalized);
+    if (rewrittenCount)
+        *rewrittenCount = static_cast<uint32_t>(rewrites.size());
+    return true;
+}
+
 // Validate the control-flow edges most likely to be affected by the alpha-test
 // rewrite. This is intentionally diagnostic: it does not attempt to replace
 // SPIR-V Tools, but detects missing/extra OpPhi predecessors before NVK sees the
@@ -5411,6 +5617,35 @@ bool IDirect3DDevice9::EnsurePipeline()
             Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=alpha_patch\n");
             return false;
         }
+#ifdef __SWITCH__
+        // A captured NAK crash variant uses a float4 coordinate for a
+        // non-arrayed cube sample. Vulkan permits trailing unused components;
+        // the first three are the actual cube direction. Test the semantic-
+        // preserving vec4->vec3 canonicalization only on that exact SPIR-V.
+        if (HashSpirvWords(pixelSpirv) == 0x35c2c2a12145c8d5ull)
+        {
+            const uint64_t originalCubeProbeHash = HashSpirvWords(pixelSpirv);
+            uint32_t trimmedCubeCoordinates = 0;
+            if (NormalizeUnusedCubeSampleCoordinateComponents(
+                    pixelSpirv, &trimmedCubeCoordinates))
+            {
+                if (trimmedCubeCoordinates)
+                {
+                    char cubeProbeTrace[256];
+                    std::snprintf(cubeProbeTrace, sizeof(cubeProbeTrace),
+                        "[KisakCOD][VK SPIRV REPAIR] stage=ps action=trim_unused_cube_coordinates count=%u old_hash=%016llx new_hash=%016llx\\n",
+                        trimmedCubeCoordinates,
+                        static_cast<unsigned long long>(originalCubeProbeHash),
+                        static_cast<unsigned long long>(HashSpirvWords(pixelSpirv)));
+                    Switch_LogWrite(cubeProbeTrace);
+                }
+            }
+            else
+            {
+                Switch_LogWrite("[KisakCOD][VK SPIRV REPAIR] stage=ps action=trim_unused_cube_coordinates failed=invalid_module\\n");
+            }
+        }
+#endif
         m_pixelShader->alphaFuncSpecId = pipelineAlphaFuncSpecId;
         m_pixelShader->alphaRefSpecId = pipelineAlphaRefSpecId;
         m_pixelShader->spirv = pixelSpirv;
