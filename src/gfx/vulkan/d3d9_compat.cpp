@@ -7535,8 +7535,9 @@ bool IDirect3DDevice9::EnsurePipeline()
 
         if (!unpatchedPixelSpirvForProbe.empty())
         {
-            // Match every PS input with a synthetic vec4 output so a crash here
-            // implicates fragment code rather than the original VS/PS interface pair.
+            // Test one opcode family in the exact unpatched fragment shader. The
+            // original module remains untouched; only a diagnostic copy has each
+            // OpVectorShuffle replaced by an OpUndef with the same type/result ID.
             std::vector<uint32_t> minimalVertexSpirv;
             const bool minimalVertexBuilt =
                 BuildSwitchSeq90MinimalVertexSpirv(minimalVertexSpirv);
@@ -7544,6 +7545,30 @@ bool IDirect3DDevice9::EnsurePipeline()
             VkShaderModule unpatchedModule = VK_NULL_HANDLE;
             VkResult minimalVertexResult = VK_ERROR_UNKNOWN;
             VkResult unpatchedModuleResult = VK_ERROR_UNKNOWN;
+
+            std::vector<uint32_t> seq90ShuffleProbeSpirv = unpatchedPixelSpirvForProbe;
+            uint32_t seq90ShuffleUndefCount = 0u;
+            const uint64_t seq90SourcePsHash =
+                HashSpirvWords(unpatchedPixelSpirvForProbe);
+            const bool seq90ShuffleProbeBuilt =
+                ReplaceSwitchSpirvResultOpsWithUndef(
+                    seq90ShuffleProbeSpirv, 79u, 79u, &seq90ShuffleUndefCount);
+            const uint64_t seq90ShuffleProbeHash =
+                HashSpirvWords(seq90ShuffleProbeSpirv);
+            TraceSwitchNakOpcodeHistogram(
+                "ps", 90u, unpatchedPixelSpirvForProbe, 0x6acbd62485d0c7bfull);
+            if (seq90ShuffleProbeBuilt)
+                TraceSwitchNakOpcodeHistogram(
+                    "ps", 90u, seq90ShuffleProbeSpirv, seq90ShuffleProbeHash);
+
+            char shuffleProbeTrace[320];
+            std::snprintf(shuffleProbeTrace, sizeof(shuffleProbeTrace),
+                "[KisakCOD][VK STAGE PROBE] seq=90 action=ps_vector_shuffle_to_undef built=%u replaced=%u source_hash=%016llx probe_hash=%016llx\\n",
+                seq90ShuffleProbeBuilt ? 1u : 0u, seq90ShuffleUndefCount,
+                static_cast<unsigned long long>(seq90SourcePsHash),
+                static_cast<unsigned long long>(seq90ShuffleProbeHash));
+            Switch_LogWrite(shuffleProbeTrace);
+
             if (minimalVertexBuilt)
             {
                 VkShaderModuleCreateInfo minimalVertexInfo{};
@@ -7555,17 +7580,21 @@ bool IDirect3DDevice9::EnsurePipeline()
                     m_backend->Device(), &minimalVertexInfo, nullptr, &minimalVertexModule);
             }
 
-            VkShaderModuleCreateInfo unpatchedInfo{};
-            unpatchedInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-            unpatchedInfo.codeSize =
-                unpatchedPixelSpirvForProbe.size() * sizeof(uint32_t);
-            unpatchedInfo.pCode = unpatchedPixelSpirvForProbe.data();
-            unpatchedModuleResult = vkCreateShaderModule(
-                m_backend->Device(), &unpatchedInfo, nullptr, &unpatchedModule);
+            if (seq90ShuffleProbeBuilt)
+            {
+                VkShaderModuleCreateInfo shuffleProbeInfo{};
+                shuffleProbeInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                shuffleProbeInfo.codeSize =
+                    seq90ShuffleProbeSpirv.size() * sizeof(uint32_t);
+                shuffleProbeInfo.pCode = seq90ShuffleProbeSpirv.data();
+                unpatchedModuleResult = vkCreateShaderModule(
+                    m_backend->Device(), &shuffleProbeInfo, nullptr, &unpatchedModule);
+            }
 
             VkResult probeResult = VK_ERROR_UNKNOWN;
             VkPipeline probePipeline = VK_NULL_HANDLE;
-            if (minimalVertexResult == VK_SUCCESS && minimalVertexModule &&
+            if (seq90ShuffleProbeBuilt &&
+                minimalVertexResult == VK_SUCCESS && minimalVertexModule &&
                 unpatchedModuleResult == VK_SUCCESS && unpatchedModule)
             {
                 VkPipelineShaderStageCreateInfo probeStages[2] = {stages[0], stages[1]};
@@ -7579,15 +7608,15 @@ bool IDirect3DDevice9::EnsurePipeline()
                 g_switchPipelineCrashSnapshot.valid = true;
                 g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
                 g_switchPipelineCrashSnapshot.vertexSpirv = &minimalVertexSpirv;
-                g_switchPipelineCrashSnapshot.pixelSpirv = &unpatchedPixelSpirvForProbe;
+                g_switchPipelineCrashSnapshot.pixelSpirv = &seq90ShuffleProbeSpirv;
                 std::snprintf(
                     g_switchPipelineCrashSnapshot.summary,
                     sizeof(g_switchPipelineCrashSnapshot.summary),
-                    "[KisakCOD][VK CRASH PIPELINE] seq=%u stage_probe=minimal_vs_unpatched_ps key=%016llx vs=%016llx ps=%016llx modules=%p/%p flags=%u\n",
+                    "[KisakCOD][VK CRASH PIPELINE] seq=%u stage_probe=minimal_vs_ps_vector_shuffle_to_undef key=%016llx vs=%016llx ps=%016llx modules=%p/%p flags=%u\\n",
                     pipelineCreateSequence,
                     static_cast<unsigned long long>(key),
                     static_cast<unsigned long long>(HashSpirvWords(minimalVertexSpirv)),
-                    static_cast<unsigned long long>(HashSpirvWords(unpatchedPixelSpirvForProbe)),
+                    static_cast<unsigned long long>(seq90ShuffleProbeHash),
                     static_cast<void *>(minimalVertexModule),
                     static_cast<void *>(unpatchedModule),
                     static_cast<unsigned int>(probeInfo.flags));
@@ -7595,11 +7624,11 @@ bool IDirect3DDevice9::EnsurePipeline()
                     "vs", pipelineCreateSequence, HashSpirvWords(minimalVertexSpirv),
                     minimalVertexSpirv);
                 (void)WriteSwitchNakCandidateSpirv(
-                    "ps", pipelineCreateSequence, HashSpirvWords(unpatchedPixelSpirvForProbe),
-                    unpatchedPixelSpirvForProbe);
+                    "ps", pipelineCreateSequence, seq90ShuffleProbeHash,
+                    seq90ShuffleProbeSpirv);
 
                 Switch_LogWrite(
-                    "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_unpatched_ps begin\n");
+                    "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_ps_vector_shuffle_to_undef begin\\n");
                 RecordSwitchVkPipelineTrace(
                     6u, this, &m_pipelines, m_pipelines.size(), key,
                     m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
@@ -7609,12 +7638,14 @@ bool IDirect3DDevice9::EnsurePipeline()
                     m_backend->Device(), VK_NULL_HANDLE, 1,
                     &probeInfo, nullptr, &probePipeline);
                 g_switchFrameStage =
-                    "frame/render/vulkan/pipeline/seq90_minimal_vs_probe_return";
+                    "frame/render/vulkan/pipeline/seq90_shuffle_probe_return";
             }
 
-            char moduleMsg[320];
+            char moduleMsg[384];
             std::snprintf(moduleMsg, sizeof(moduleMsg),
-                "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_unpatched_ps vs_module=%d ps_module=%d pipeline=%d handle=%p\n",
+                "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_ps_vector_shuffle_to_undef built=%u replaced=%u vs_module=%d ps_module=%d pipeline=%d handle=%p\\n",
+                seq90ShuffleProbeBuilt ? 1u : 0u,
+                seq90ShuffleUndefCount,
                 static_cast<int>(minimalVertexResult),
                 static_cast<int>(unpatchedModuleResult),
                 static_cast<int>(probeResult),
