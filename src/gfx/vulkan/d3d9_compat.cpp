@@ -8268,28 +8268,76 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchPipelineCrashSnapshot.valid = true;
 
 #ifdef __SWITCH__
-    // Keep a narrow diagnostic bypass for the first confirmed crashing pair
-    // only. Do not blacklist the shared vertex shader: other pixel variants
-    // must remain enabled so their actual compiler failures can be captured.
+    // This exact world shader pair was previously skipped after NVK crashed
+    // compiling OpVectorShuffle. Lower the fragment shader's shuffles to
+    // equivalent OpCompositeExtract/OpCompositeConstruct instructions instead
+    // of dropping every draw that uses this pair.
+    std::vector<uint32_t> seq31LoweredPixelSpirv;
+    VkShaderModule seq31LoweredPixelModule = VK_NULL_HANDLE;
+    const VkShaderModule seq31OriginalPixelModule = stages[1].module;
+    bool seq31LoweredPixelActive = false;
     if (vsSpirvHash == 0xaf1d39bec3f1bf7dull &&
         psSpirvHash == 0xcd1031f57ecc7957ull)
     {
-        static bool loggedSkippedPair = false;
-        if (!loggedSkippedPair)
+        uint32_t loweredShuffleCount = 0u;
+        seq31LoweredPixelSpirv = m_pixelShader->linkedSpirv;
+        const bool loweredBuilt = !seq31LoweredPixelSpirv.empty() &&
+            LowerSwitchSpirvVectorShuffleToCompositeOps(
+                seq31LoweredPixelSpirv, &loweredShuffleCount);
+
+        VkResult loweredModuleResult = VK_ERROR_UNKNOWN;
+        if (loweredBuilt)
         {
-            char skipMsg[256];
-            std::snprintf(skipMsg, sizeof(skipMsg),
-                "[KisakCOD][VK PIPELINE PROBE] skipped known crashing NAK shader pair vs=%016llx ps=%016llx seq=%u\n",
-                static_cast<unsigned long long>(vsSpirvHash),
-                static_cast<unsigned long long>(psSpirvHash),
-                pipelineCreateSequence);
-            Switch_LogWrite(skipMsg);
-            loggedSkippedPair = true;
+            VkShaderModuleCreateInfo loweredModuleInfo{};
+            loweredModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            loweredModuleInfo.codeSize =
+                seq31LoweredPixelSpirv.size() * sizeof(uint32_t);
+            loweredModuleInfo.pCode = seq31LoweredPixelSpirv.data();
+            loweredModuleResult = vkCreateShaderModule(
+                m_backend->Device(), &loweredModuleInfo, nullptr,
+                &seq31LoweredPixelModule);
         }
-        g_switchSkippedKnownShaderPair = true;
-        g_switchPipelineCrashSnapshot.valid = false;
-        g_switchFrameStage = "frame/render/vulkan/pipeline/known_shader_pair_skipped";
-        return false;
+
+        char rewriteTrace[384];
+        std::snprintf(rewriteTrace, sizeof(rewriteTrace),
+            "[KisakCOD][VK SHADER REWRITE] pair=seq31_vs_af1d39bec3f1bf7d_ps_cd1031f57ecc7957 seq=%u built=%u lowered=%u sourceLinkedHash=%016llx rewrittenHash=%016llx moduleResult=%d module=%p action=%s\n",
+            pipelineCreateSequence, loweredBuilt ? 1u : 0u,
+            loweredShuffleCount,
+            static_cast<unsigned long long>(
+                HashSpirvWords(m_pixelShader->linkedSpirv)),
+            static_cast<unsigned long long>(
+                seq31LoweredPixelSpirv.empty()
+                    ? 0u : HashSpirvWords(seq31LoweredPixelSpirv)),
+            static_cast<int>(loweredModuleResult),
+            static_cast<void *>(seq31LoweredPixelModule),
+            loweredBuilt && loweredModuleResult == VK_SUCCESS &&
+                seq31LoweredPixelModule ? "use_semantics_preserving_rewrite" :
+                                          "rewrite_unavailable");
+        Switch_LogWrite(rewriteTrace);
+
+        if (loweredBuilt && loweredModuleResult == VK_SUCCESS &&
+            seq31LoweredPixelModule)
+        {
+            stages[1].module = seq31LoweredPixelModule;
+            seq31LoweredPixelActive = true;
+            g_switchPipelineCrashSnapshot.pixelSpirv =
+                &seq31LoweredPixelSpirv;
+        }
+        else
+        {
+            static bool loggedRewriteFailure = false;
+            if (!loggedRewriteFailure)
+            {
+                Switch_LogWrite(
+                    "[KisakCOD][VK PIPELINE PROBE] skip exact seq31 pair because semantic shuffle rewrite failed; other shader pairs remain enabled\n");
+                loggedRewriteFailure = true;
+            }
+            g_switchSkippedKnownShaderPair = true;
+            g_switchPipelineCrashSnapshot.valid = false;
+            g_switchFrameStage =
+                "frame/render/vulkan/pipeline/seq31_rewrite_unavailable";
+            return false;
+        }
     }
 #endif
 
@@ -8562,6 +8610,16 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchFrameStage = "frame/render/vulkan/pipeline/main_create_call";
     const VkResult pipelineResult = vkCreateGraphicsPipelines(
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+#ifdef __SWITCH__
+    if (seq31LoweredPixelActive)
+    {
+        stages[1].module = seq31OriginalPixelModule;
+        vkDestroyShaderModule(
+            m_backend->Device(), seq31LoweredPixelModule, nullptr);
+        seq31LoweredPixelModule = VK_NULL_HANDLE;
+        seq31LoweredPixelActive = false;
+    }
+#endif
     RecordSwitchVkPipelineTrace(
         7u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
