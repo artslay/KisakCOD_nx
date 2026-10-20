@@ -632,9 +632,13 @@ static bool SwitchConfigureNakNoUgprProbe()
 {
     const char *current = std::getenv("NAK_DEBUG");
     const size_t currentLength = current ? std::strlen(current) : 0u;
+    char combined[512] = {};
+    size_t used = 0;
     bool hasNoUgpr = false;
-    bool hasSpill = false;
 
+    // Keep caller-requested NAK debug flags but remove the exact "spill" token.
+    // Forced spilling is the variable under test; leaving it enabled would make
+    // the no-spill comparison invalid even when inherited from the environment.
     size_t tokenStart = 0;
     for (size_t i = 0; i <= currentLength; ++i)
     {
@@ -648,41 +652,44 @@ static bool SwitchConfigureNakNoUgprProbe()
         while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\t'))
             --last;
 
-        if (last - first == sizeof("nougpr") - 1u &&
-            std::memcmp(current + first, "nougpr", sizeof("nougpr") - 1u) == 0)
+        const size_t tokenLength = last - first;
+        const bool isSpill =
+            tokenLength == sizeof("spill") - 1u &&
+            std::memcmp(current + first, "spill", sizeof("spill") - 1u) == 0;
+        const bool isNoUgpr =
+            tokenLength == sizeof("nougpr") - 1u &&
+            std::memcmp(current + first, "nougpr", sizeof("nougpr") - 1u) == 0;
+
+        if (isNoUgpr)
             hasNoUgpr = true;
-        if (last - first == sizeof("spill") - 1u &&
-            std::memcmp(current + first, "spill", sizeof("spill") - 1u) == 0)
-            hasSpill = true;
+
+        if (tokenLength != 0u && !isSpill)
+        {
+            const size_t separatorLength = used != 0u ? 1u : 0u;
+            if (used + separatorLength + tokenLength >= sizeof(combined))
+                return false;
+            if (separatorLength != 0u)
+                combined[used++] = ',';
+            std::memcpy(combined + used, current + first, tokenLength);
+            used += tokenLength;
+            combined[used] = '\0';
+        }
 
         tokenStart = i + 1u;
     }
 
-    char combined[512];
-    if (currentLength >= sizeof(combined))
-        return false;
-    size_t used = currentLength;
-    if (currentLength != 0u)
-        std::memcpy(combined, current, currentLength);
-    combined[used] = '\0';
-
-    auto appendFlag = [&](const char *flag) {
-        const size_t flagLength = std::strlen(flag);
-        const size_t separatorLength =
-            used != 0u && combined[used - 1u] != ',' ? 1u : 0u;
+    if (!hasNoUgpr)
+    {
+        const size_t separatorLength = used != 0u ? 1u : 0u;
+        const size_t flagLength = sizeof("nougpr") - 1u;
         if (used + separatorLength + flagLength >= sizeof(combined))
             return false;
         if (separatorLength != 0u)
             combined[used++] = ',';
-        std::memcpy(combined + used, flag, flagLength);
+        std::memcpy(combined + used, "nougpr", flagLength);
         used += flagLength;
         combined[used] = '\0';
-        return true;
-    };
-
-    if ((!hasNoUgpr && !appendFlag("nougpr")) ||
-        (!hasSpill && !appendFlag("spill")))
-        return false;
+    }
 
     return ::setenv("NAK_DEBUG", combined, 1) == 0;
 }
@@ -697,10 +704,9 @@ static bool SwitchConfigureNirSkipProbe()
 
 int main()
 {
-    // Use NAK's no-UGPR lowering mode for the next pipeline-crash comparison.
-    // Serial instruction mode reproduced the same allocator crash; this mode asks
-    // NAK to lower away UGPR constant-load instructions while retaining all shaders
-    // and normal graphics-pipeline creation.
+    // Use NAK's no-UGPR lowering mode for the next pipeline-crash comparison,
+    // but explicitly remove forced spilling so this run isolates the spill path.
+    // Retain all shaders and normal graphics-pipeline creation.
     const bool nakNoUgprProbeConfigured = SwitchConfigureNakNoUgprProbe();
     const bool nirSkipProbeConfigured = SwitchConfigureNirSkipProbe();
     Switch_LogInit();
@@ -708,9 +714,9 @@ int main()
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
     if (nakNoUgprProbeConfigured)
-        Switch_LogWrite("[KisakCOD][NAK PROBE] NAK_DEBUG=nougpr,spill enabled before Mesa initialization\n");
+        Switch_LogWrite("[KisakCOD][NAK PROBE] NAK_DEBUG=nougpr; forced spill disabled before Mesa initialization\n");
     else
-        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to set NAK_DEBUG=nougpr,spill\n");
+        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to configure NAK_DEBUG=nougpr without spill\n");
     if (nirSkipProbeConfigured)
         Switch_LogWrite("[KisakCOD][NIR PROBE] requested NIR_SKIP=nir_opt_dead_write_vars before Mesa initialization\n");
     else
