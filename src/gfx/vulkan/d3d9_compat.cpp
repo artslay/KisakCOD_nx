@@ -2420,6 +2420,46 @@ bool BuildSwitchSeq64MinimalFragmentSpirv(std::vector<uint32_t> &words)
     return words.size() >= 5u && words[0] == SpvMagicNumber && words[3] == 11u;
 }
 
+// Build a diagnostic vertex stage that writes Position and vec4 varyings at
+// locations 0..7. It consumes no vertex attributes and is used only to separate
+// fragment-shader compilation from the original VS/PS interface pairing.
+bool BuildSwitchSeq90MinimalVertexSpirv(std::vector<uint32_t> &words)
+{
+    words.clear();
+    words.reserve(96);
+    words.insert(words.end(), {
+        SpvMagicNumber, 0x00010000u, 0u, 27u, 0u
+    });
+    SpirvAppend(words, SpvOpCapability, {1u}); // Shader
+    SpirvAppend(words, SpvOpMemoryModel, {0u, 1u}); // Logical, GLSL450
+    SpirvAppend(words, SpvOpEntryPoint, {
+        0u, 1u, 0x6e69616du, 0u, // Vertex %main "main"
+        17u, 18u, 19u, 20u, 21u, 22u, 23u, 24u, 25u
+    });
+    SpirvAppend(words, SpvOpDecorate, {17u, 11u, 0u}); // BuiltIn Position
+    for (uint32_t location = 0; location < 8u; ++location)
+        SpirvAppend(words, SpvOpDecorate, {18u + location, 30u, location});
+
+    SpirvAppend(words, SpvOpTypeVoid, {10u});
+    SpirvAppend(words, SpvOpTypeFunction, {11u, 10u});
+    SpirvAppend(words, SpvOpTypeFloat, {12u, 32u});
+    SpirvAppend(words, SpvOpTypeVector, {13u, 12u, 4u});
+    SpirvAppend(words, SpvOpTypePointer, {14u, 3u, 13u}); // Output vec4
+    SpirvAppend(words, SpvOpConstant, {12u, 15u, 0u});
+    SpirvAppend(words, SpvOpConstantComposite, {13u, 16u, 15u, 15u, 15u, 15u});
+    SpirvAppend(words, SpvOpVariable, {14u, 17u, 3u}); // Position
+    for (uint32_t variable = 18u; variable <= 25u; ++variable)
+        SpirvAppend(words, SpvOpVariable, {14u, variable, 3u});
+    SpirvAppend(words, SpvOpFunction, {10u, 1u, 0u, 11u});
+    SpirvAppend(words, SpvOpLabel, {26u});
+    SpirvAppend(words, SpvOpStore, {17u, 16u});
+    for (uint32_t variable = 18u; variable <= 25u; ++variable)
+        SpirvAppend(words, SpvOpStore, {variable, 16u});
+    SpirvAppend(words, SpvOpReturn, {});
+    SpirvAppend(words, SpvOpFunctionEnd, {});
+    return words.size() >= 5u && words[0] == SpvMagicNumber && words[3] == 27u;
+}
+
 // Replace selected typed-result SPIR-V operations with OpUndef while preserving
 // their result type/ID. This is an isolated compiler probe, never used by rendering.
 bool ReplaceSwitchSpirvResultOpsWithUndef(
@@ -7495,29 +7535,102 @@ bool IDirect3DDevice9::EnsurePipeline()
 
         if (!unpatchedPixelSpirvForProbe.empty())
         {
+            // Match every PS input with a synthetic vec4 output so a crash here
+            // implicates fragment code rather than the original VS/PS interface pair.
+            std::vector<uint32_t> minimalVertexSpirv;
+            const bool minimalVertexBuilt =
+                BuildSwitchSeq90MinimalVertexSpirv(minimalVertexSpirv);
+            VkShaderModule minimalVertexModule = VK_NULL_HANDLE;
+            VkShaderModule unpatchedModule = VK_NULL_HANDLE;
+            VkResult minimalVertexResult = VK_ERROR_UNKNOWN;
+            VkResult unpatchedModuleResult = VK_ERROR_UNKNOWN;
+            if (minimalVertexBuilt)
+            {
+                VkShaderModuleCreateInfo minimalVertexInfo{};
+                minimalVertexInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                minimalVertexInfo.codeSize =
+                    minimalVertexSpirv.size() * sizeof(uint32_t);
+                minimalVertexInfo.pCode = minimalVertexSpirv.data();
+                minimalVertexResult = vkCreateShaderModule(
+                    m_backend->Device(), &minimalVertexInfo, nullptr, &minimalVertexModule);
+            }
+
             VkShaderModuleCreateInfo unpatchedInfo{};
             unpatchedInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             unpatchedInfo.codeSize =
                 unpatchedPixelSpirvForProbe.size() * sizeof(uint32_t);
             unpatchedInfo.pCode = unpatchedPixelSpirvForProbe.data();
-            VkShaderModule unpatchedModule = VK_NULL_HANDLE;
-            const VkResult unpatchedModuleResult = vkCreateShaderModule(
+            unpatchedModuleResult = vkCreateShaderModule(
                 m_backend->Device(), &unpatchedInfo, nullptr, &unpatchedModule);
-            if (unpatchedModuleResult == VK_SUCCESS && unpatchedModule)
-                runSeq90FragmentStageProbe(
-                    "original_vs_unpatched_ps", unpatchedPixelSpirvForProbe, unpatchedModule);
-            char moduleMsg[192];
+
+            VkResult probeResult = VK_ERROR_UNKNOWN;
+            VkPipeline probePipeline = VK_NULL_HANDLE;
+            if (minimalVertexResult == VK_SUCCESS && minimalVertexModule &&
+                unpatchedModuleResult == VK_SUCCESS && unpatchedModule)
+            {
+                VkPipelineShaderStageCreateInfo probeStages[2] = {stages[0], stages[1]};
+                probeStages[0].module = minimalVertexModule;
+                probeStages[0].pSpecializationInfo = nullptr;
+                probeStages[1].module = unpatchedModule;
+                probeStages[1].pSpecializationInfo = nullptr;
+                VkGraphicsPipelineCreateInfo probeInfo = info;
+                probeInfo.pStages = probeStages;
+
+                g_switchPipelineCrashSnapshot.valid = true;
+                g_switchPipelineCrashSnapshot.sequence = pipelineCreateSequence;
+                g_switchPipelineCrashSnapshot.vertexSpirv = &minimalVertexSpirv;
+                g_switchPipelineCrashSnapshot.pixelSpirv = &unpatchedPixelSpirvForProbe;
+                std::snprintf(
+                    g_switchPipelineCrashSnapshot.summary,
+                    sizeof(g_switchPipelineCrashSnapshot.summary),
+                    "[KisakCOD][VK CRASH PIPELINE] seq=%u stage_probe=minimal_vs_unpatched_ps key=%016llx vs=%016llx ps=%016llx modules=%p/%p flags=%u\n",
+                    pipelineCreateSequence,
+                    static_cast<unsigned long long>(key),
+                    static_cast<unsigned long long>(HashSpirvWords(minimalVertexSpirv)),
+                    static_cast<unsigned long long>(HashSpirvWords(unpatchedPixelSpirvForProbe)),
+                    static_cast<void *>(minimalVertexModule),
+                    static_cast<void *>(unpatchedModule),
+                    static_cast<unsigned int>(probeInfo.flags));
+                (void)WriteSwitchNakCandidateSpirv(
+                    "vs", pipelineCreateSequence, HashSpirvWords(minimalVertexSpirv),
+                    minimalVertexSpirv);
+                (void)WriteSwitchNakCandidateSpirv(
+                    "ps", pipelineCreateSequence, HashSpirvWords(unpatchedPixelSpirvForProbe),
+                    unpatchedPixelSpirvForProbe);
+
+                Switch_LogWrite(
+                    "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_unpatched_ps begin\n");
+                RecordSwitchVkPipelineTrace(
+                    6u, this, &m_pipelines, m_pipelines.size(), key,
+                    m_backend->Device(), m_decl, m_vertexShader, m_pixelShader,
+                    VK_NULL_HANDLE);
+                g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_call";
+                probeResult = vkCreateGraphicsPipelines(
+                    m_backend->Device(), VK_NULL_HANDLE, 1,
+                    &probeInfo, nullptr, &probePipeline);
+                g_switchFrameStage =
+                    "frame/render/vulkan/pipeline/seq90_minimal_vs_probe_return";
+            }
+
+            char moduleMsg[320];
             std::snprintf(moduleMsg, sizeof(moduleMsg),
-                "[KisakCOD][VK STAGE PROBE] seq=90 action=unpatched_ps_module result=%d handle=%p\n",
-                static_cast<int>(unpatchedModuleResult), static_cast<void *>(unpatchedModule));
+                "[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_unpatched_ps vs_module=%d ps_module=%d pipeline=%d handle=%p\n",
+                static_cast<int>(minimalVertexResult),
+                static_cast<int>(unpatchedModuleResult),
+                static_cast<int>(probeResult),
+                static_cast<void *>(probePipeline));
             Switch_LogWrite(moduleMsg);
+            if (probePipeline)
+                vkDestroyPipeline(m_backend->Device(), probePipeline, nullptr);
+            if (minimalVertexModule)
+                vkDestroyShaderModule(m_backend->Device(), minimalVertexModule, nullptr);
             if (unpatchedModule)
                 vkDestroyShaderModule(m_backend->Device(), unpatchedModule, nullptr);
         }
         else
         {
-            Switch_LogWrite("[KisakCOD][VK STAGE PROBE] seq=90 action=original_vs_unpatched_ps skipped=no_source\n");
-        }
+            Switch_LogWrite("[KisakCOD][VK STAGE PROBE] seq=90 action=minimal_vs_unpatched_ps skipped=no_source\n");
+        }        }
     }
 #endif
 
