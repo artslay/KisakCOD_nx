@@ -7699,6 +7699,17 @@ bool IDirect3DDevice9::EnsurePipeline()
             "[KisakCOD][VK PIPELINE PROBE] action=seq350_enable_optimization flags=0 vs=997711f543b23231 ps=51e6b9e59b26657e\n");
     }
 
+    // Latest crash was in a tiny, alpha-test-disabled pipeline pair. Change
+    // only VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT for this exact pair;
+    // retain both original shader modules and all fixed-function state.
+    if (vsSpirvHash == 0xf06255f90ce0d9efull &&
+        psSpirvHash == 0xf0fe7170325a257bull)
+    {
+        info.flags = 0u;
+        Switch_LogWrite(
+            "[KisakCOD][VK PIPELINE PROBE] action=seq388_enable_optimization flags=0 vs=f06255f90ce0d9ef ps=f0fe7170325a257b\n");
+    }
+
     // Isolate this exact crashing pair before its real pipeline call:
     // (1) original VS + trivial PS; (2) original VS + linked PS before alpha-test rewrite.
     if (vsSpirvHash == 0x3191a056e9509bfcull &&
