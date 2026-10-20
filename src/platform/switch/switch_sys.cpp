@@ -706,7 +706,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                                     line, sizeof(line),
                                     "[KisakCOD][CRASH] NAK_RA_PARENT activeLrOff=0x%llx "
                                     "parentLrOff=0x%llx parentFrame=0x%016llx "
-                                    "block=0x%016llx activeThisOffset=0x%llx\\n",
+                                    "block=0x%016llx activeThisOffset=0x%llx\n",
                                     static_cast<unsigned long long>(raLrOffset),
                                     static_cast<unsigned long long>(blockLrOffset),
                                     static_cast<unsigned long long>(blockFrameAddress),
@@ -734,7 +734,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                                             "[KisakCOD][CRASH] NAK_RA_SIBLING i=%u off=0x%03llx "
                                             "this=0x%016llx n00=%016llx p08=%016llx "
                                             "n18=%016llx p20=%016llx n30=%016llx "
-                                            "p38=%016llx p48=%016llx n50=%016llx\\n",
+                                            "p38=%016llx p48=%016llx n50=%016llx\n",
                                             i,
                                             static_cast<unsigned long long>(regOffsets[i]),
                                             static_cast<unsigned long long>(blockBase + regOffsets[i]),
