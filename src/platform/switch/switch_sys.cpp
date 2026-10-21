@@ -405,7 +405,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
                 historyLine, sizeof(historyLine),
                 "[KisakCOD][HEAP BAD ALLOC HISTORY] seq=%llu op=%c "
                 "ptr=0x%016llx size=%llu callerOff=0x%llx "
-                "headerSeen=%llu head=0x%016llx\\n",
+                "headerSeen=%llu head=0x%016llx\n",
                 static_cast<unsigned long long>(sequence),
                 static_cast<char>(operation),
                 static_cast<unsigned long long>(pointer),
