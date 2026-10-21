@@ -258,7 +258,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
     std::snprintf(
         summary, sizeof(summary),
         "[KisakCOD][HEAP TRACE] target=0x%016llx window=%llu..%llu "
-        "total=%llu matches=%llu (M=malloc,F=free)\n",
+        "total=%llu matches=%llu (M=malloc,C=calloc,R=realloc,F=free; successful realloc logs F then R)\n",
         static_cast<unsigned long long>(target),
         static_cast<unsigned long long>(begin),
         static_cast<unsigned long long>(end),
@@ -340,6 +340,8 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
 
 extern "C" void *__real_malloc(size_t size);
 extern "C" void __real_free(void *pointer);
+extern "C" void *__real_calloc(size_t count, size_t size);
+extern "C" void *__real_realloc(void *pointer, size_t size);
 
 extern "C" __attribute__((noinline)) void *__wrap_malloc(size_t size)
 {
@@ -360,6 +362,42 @@ extern "C" __attribute__((noinline)) void __wrap_free(void *pointer)
         0u,
         reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     __real_free(pointer);
+}
+
+extern "C" __attribute__((noinline)) void *__wrap_calloc(
+    size_t count, size_t size)
+{
+    void *pointer = __real_calloc(count, size);
+    const size_t maxSize = static_cast<size_t>(-1);
+    const size_t bytes =
+        size != 0u && count > maxSize / size ? maxSize : count * size;
+    Switch_HeapTraceRecord(
+        'C',
+        reinterpret_cast<uintptr_t>(pointer),
+        static_cast<uintptr_t>(bytes),
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    return pointer;
+}
+
+extern "C" __attribute__((noinline)) void *__wrap_realloc(
+    void *pointer, size_t size)
+{
+    void *replacement = __real_realloc(pointer, size);
+    const uintptr_t caller =
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    // A failed non-zero realloc preserves the old allocation. Record the
+    // implicit free only after success (or a zero-size deallocation request).
+    if (pointer && (replacement || size == 0u))
+    {
+        Switch_HeapTraceRecord(
+            'F', reinterpret_cast<uintptr_t>(pointer), 0u, caller);
+    }
+    Switch_HeapTraceRecord(
+        'R',
+        reinterpret_cast<uintptr_t>(replacement),
+        static_cast<uintptr_t>(size),
+        caller);
+    return replacement;
 }
 #endif
 
@@ -802,13 +840,16 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         static_cast<uintptr_t>(ctx->cpu_gprs[0].x);
     const uintptr_t freeFaultBk =
         static_cast<uintptr_t>(ctx->cpu_gprs[1].x);
+    const bool freeFaultFdAddressMatches =
+        (freeFaultFd == 0u && ctx->far.x == 0x18u) ||
+        (freeFaultFd <= UINTPTR_MAX - 24u &&
+         ctx->far.x == freeFaultFd + 24u);
+    const bool freeFaultBkAddressMatches =
+        (freeFaultBk == 0u && ctx->far.x == 0x10u) ||
+        (freeFaultBk <= UINTPTR_MAX - 16u &&
+         ctx->far.x == freeFaultBk + 16u);
     const bool freeFaultAddressMatches =
-        ((freeFaultFd == 0u && ctx->far.x == 0x18u) ||
-         (freeFaultFd <= UINTPTR_MAX - 24u &&
-          ctx->far.x == freeFaultFd + 24u)) ||
-        ((freeFaultBk == 0u && ctx->far.x == 0x10u) ||
-         (freeFaultBk <= UINTPTR_MAX - 16u &&
-          ctx->far.x == freeFaultBk + 16u));
+        freeFaultFdAddressMatches || freeFaultBkAddressMatches;
     if (freeFaultAddressMatches && (freeFaultPc & 3u) == 0u)
     {
         const uint32_t freeFaultInsn =
@@ -827,14 +868,59 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
             const uintptr_t head = chunk[1];
             const uintptr_t fd = chunk[2];
             const uintptr_t bk = chunk[3];
+            const uintptr_t chunkSize =
+                head & ~static_cast<uintptr_t>(3u);
+            const uintptr_t allocatorState =
+                static_cast<uintptr_t>(ctx->cpu_gprs[7].x);
+            const uintptr_t freeSentinel =
+                allocatorState != 0u &&
+                allocatorState <= UINTPTR_MAX - 0x10u
+                    ? allocatorState + 0x10u : 0u;
+            const bool fdAligned =
+                (fd & (alignof(uintptr_t) - 1u)) == 0u;
+            const bool bkAligned =
+                (bk & (alignof(uintptr_t) - 1u)) == 0u;
+            const uintptr_t stackPointer =
+                static_cast<uintptr_t>(ctx->sp.x);
+            uintptr_t freeArg = 0u;
+            if (stackPointer != 0u &&
+                stackPointer <= UINTPTR_MAX - 40u &&
+                (stackPointer & (alignof(uintptr_t) - 1u)) == 0u)
+            {
+                // _free_r saves its original pointer argument at [sp+40].
+                // This is a read-only crash snapshot; don't dereference fd/bk
+                // here because either link may be the corrupt address.
+                freeArg = *reinterpret_cast<const volatile uintptr_t *>(
+                    stackPointer + 40u);
+            }
+            const uintptr_t freeChunk =
+                freeArg >= 16u ? freeArg - 16u : 0u;
+            const uintptr_t faultTarget = freeFaultFdAddressMatches
+                ? freeFaultFd
+                : (freeFaultBkAddressMatches ? freeFaultBk : 0u);
+            const char *faultLink = freeFaultFdAddressMatches
+                ? "fd"
+                : (freeFaultBkAddressMatches ? "bk" : "unknown");
             std::snprintf(
                 line, sizeof(line),
-                "[KisakCOD][CRASH] FREE_LIST_STATE node=0x%016llx prev_foot=0x%016llx head=0x%016llx fd=0x%016llx bk=0x%016llx x0=0x%016llx x1=0x%016llx x2=0x%016llx x3=0x%016llx\n",
+                "[KisakCOD][CRASH] FREE_LIST_STATE node=0x%016llx head=0x%016llx chunk_size=0x%llx prev_foot=0x%016llx fd=0x%016llx bk=0x%016llx sentinel=0x%016llx fd_aligned8=%u bk_aligned8=%u fd_is_sentinel=%u bk_is_sentinel=%u fault_link=%s fault_target=0x%016llx free_arg=0x%016llx free_chunk=0x%016llx far=0x%016llx insn=0x%08x x0=0x%016llx x1=0x%016llx x2=0x%016llx x3=0x%016llx\n",
                 static_cast<unsigned long long>(node),
-                static_cast<unsigned long long>(prevFoot),
                 static_cast<unsigned long long>(head),
+                static_cast<unsigned long long>(chunkSize),
+                static_cast<unsigned long long>(prevFoot),
                 static_cast<unsigned long long>(fd),
                 static_cast<unsigned long long>(bk),
+                static_cast<unsigned long long>(freeSentinel),
+                static_cast<unsigned int>(fdAligned),
+                static_cast<unsigned int>(bkAligned),
+                static_cast<unsigned int>(fd == freeSentinel && freeSentinel != 0u),
+                static_cast<unsigned int>(bk == freeSentinel && freeSentinel != 0u),
+                faultLink,
+                static_cast<unsigned long long>(faultTarget),
+                static_cast<unsigned long long>(freeArg),
+                static_cast<unsigned long long>(freeChunk),
+                static_cast<unsigned long long>(ctx->far.x),
+                freeFaultInsn,
                 static_cast<unsigned long long>(ctx->cpu_gprs[0].x),
                 static_cast<unsigned long long>(ctx->cpu_gprs[1].x),
                 static_cast<unsigned long long>(ctx->cpu_gprs[2].x),

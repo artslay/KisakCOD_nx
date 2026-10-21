@@ -35,7 +35,7 @@ LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libn
 # Enable only for the diagnostic build: make KISAK_SWITCH_HEAP_TRACE=1
 ifeq ($(KISAK_SWITCH_HEAP_TRACE),1)
 CPPFLAGS += -DKISAK_SWITCH_HEAP_TRACE
-LDFLAGS += -Wl,--wrap=malloc,--wrap=free
+LDFLAGS += -Wl,--wrap=malloc,--wrap=free,--wrap=calloc,--wrap=realloc
 endif
 # OpenAL Soft in devkitPro uses its SDL2 playback backend. The Switch build
 # supplies the minimal SDL2 audio ABI locally through switch_sdl2_audio.cpp,
