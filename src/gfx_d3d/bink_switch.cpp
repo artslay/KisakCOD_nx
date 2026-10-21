@@ -58,16 +58,61 @@ struct SwitchBinkState
     bool paused;
     bool convertedAllocated;
     uint32_t decodedFrames;
+    uint32_t packetUnrefCount;
     uint32_t fpsNum;
     uint32_t fpsDen;
     uint32_t startTicks;
 };
+
+extern "C" {
+thread_local char g_switchBinkPacketTrace[512] = "no Bink packet reference release captured";
+}
 
 static char g_switchBinkError[256] = "";
 
 static SwitchBinkState *Switch_BinkState(HBINK bink)
 {
     return bink ? reinterpret_cast<SwitchBinkState *>(bink->ioptr) : nullptr;
+}
+
+static void Switch_BinkRecordPacketRef(
+    const SwitchBinkState *state,
+    const AVPacket *packet,
+    const char *phase,
+    const char *reason,
+    uint32_t sequence)
+{
+    const AVBufferRef *reference = packet ? packet->buf : nullptr;
+    std::snprintf(
+        g_switchBinkPacketTrace,
+        sizeof(g_switchBinkPacketTrace),
+        "n=%u phase=%s reason=%s state=%p packet=%p bufref=%p buffer=%p packetData=%p packetSize=%d stream=%d sideData=%d pts=%lld dts=%lld refData=%p refSize=%zu",
+        static_cast<unsigned>(sequence),
+        phase ? phase : "(null)",
+        reason ? reason : "(null)",
+        const_cast<SwitchBinkState *>(state),
+        const_cast<AVPacket *>(packet),
+        const_cast<AVBufferRef *>(reference),
+        reference ? reinterpret_cast<void *>(reference->buffer) : nullptr,
+        packet ? static_cast<void *>(packet->data) : nullptr,
+        packet ? packet->size : 0,
+        packet ? packet->stream_index : -1,
+        packet ? packet->side_data_elems : 0,
+        static_cast<long long>(packet ? packet->pts : AV_NOPTS_VALUE),
+        static_cast<long long>(packet ? packet->dts : AV_NOPTS_VALUE),
+        reference ? static_cast<void *>(reference->data) : nullptr,
+        reference ? reference->size : 0u);
+}
+
+static void Switch_BinkUnrefPacket(SwitchBinkState *state, const char *reason)
+{
+    if (!state || !state->packet)
+        return;
+
+    const uint32_t sequence = state->packetUnrefCount++;
+    Switch_BinkRecordPacketRef(state, state->packet, "before_unref", reason, sequence);
+    av_packet_unref(state->packet);
+    Switch_BinkRecordPacketRef(state, state->packet, "after_unref", reason, sequence);
 }
 
 static void Switch_BinkSetError(const char *message)
@@ -222,7 +267,12 @@ static void Switch_BinkFreeState(SwitchBinkState *state)
     }
 
     if (state->packet)
+    {
+        const uint32_t sequence = state->packetUnrefCount++;
+        Switch_BinkRecordPacketRef(state, state->packet, "before_free", "Switch_BinkFreeState", sequence);
         av_packet_free(&state->packet);
+        Switch_BinkRecordPacketRef(state, nullptr, "after_free", "Switch_BinkFreeState", sequence);
+    }
     if (state->frame)
         av_frame_free(&state->frame);
     if (state->codec)
@@ -536,7 +586,7 @@ static bool Switch_BinkDecodeNext(SwitchBinkState *state)
                 return false;
             }
 
-            av_packet_unref(state->packet);
+            Switch_BinkUnrefPacket(state, "video_packet_accepted");
             state->packetPending = false;
             continue;
         }
@@ -572,13 +622,13 @@ static bool Switch_BinkDecodeNext(SwitchBinkState *state)
         if (state->packet->stream_index == state->audioStreamIndex)
         {
             Switch_BinkDecodeAudioPacket(state, state->packet);
-            av_packet_unref(state->packet);
+            Switch_BinkUnrefPacket(state, "audio_packet_consumed");
             continue;
         }
 
         if (state->packet->stream_index != state->videoStreamIndex)
         {
-            av_packet_unref(state->packet);
+            Switch_BinkUnrefPacket(state, "unhandled_stream_packet");
             continue;
         }
 
