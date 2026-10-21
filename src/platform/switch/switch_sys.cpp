@@ -562,7 +562,7 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
         std::snprintf(
             probe, sizeof(probe),
             "[KisakCOD][REALLOC PROBE] caller=0x%016llx "
-            "callerOff=0x%llx ptr=0x%016llx size=%llu\\n",
+            "callerOff=0x%llx ptr=0x%016llx size=%llu\n",
             static_cast<unsigned long long>(caller),
             static_cast<unsigned long long>(callerOffset),
             static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(pointer)),
