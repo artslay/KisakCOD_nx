@@ -1742,11 +1742,57 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         *copyObjectCount = emittedCopyObjects;
     if (scalarExtractCount)
         *scalarExtractCount = emittedScalarExtracts;
-    // The exception handler uses this stage if a temporary container fails
-    // while being destroyed as the function returns.
+    // Release each scratch buffer explicitly with a distinct crash stage.
+    // This both keeps the return path deterministic and identifies which buffer
+    // has damaged allocator metadata if a later Switch run still faults.
     g_switchFrameStage = pixelStage
-        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/destroy_temporaries"
-        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/destroy_temporaries";
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/free_construct_operands"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/free_construct_operands";
+    std::vector<uint32_t>().swap(constructOperands);
+
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/free_rewritten_words"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/free_rewritten_words";
+    std::vector<uint32_t>().swap(rewritten);
+
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/free_extract_cache"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/free_extract_cache";
+    std::vector<std::pair<uint64_t, uint32_t>>().swap(extractedIdsByBlock);
+
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/free_undef_declarations"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/free_undef_declarations";
+    std::vector<std::pair<uint32_t, uint32_t>>().swap(undefDeclarations);
+
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/free_undef_lookup"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/free_undef_lookup";
+    std::vector<std::pair<uint32_t, uint32_t>>().swap(undefIdByScalarType);
+
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/free_selector_words"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/free_selector_words";
+    std::vector<uint32_t>().swap(selectorWords);
+
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/free_shuffle_plan"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/free_shuffle_plan";
+    std::vector<ShuffleInfo>().swap(shuffles);
+
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/free_type_metadata"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/free_type_metadata";
+    std::vector<uint32_t>().swap(resultTypeById);
+    std::vector<uint32_t>().swap(vectorLengthByType);
+    std::vector<uint32_t>().swap(vectorComponentTypeByType);
+    std::vector<uint8_t>().swap(isVectorType);
+
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/free_offsets"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/free_offsets";
+    std::vector<size_t>().swap(shuffleOffsets);
+
     return true;
 }
 
