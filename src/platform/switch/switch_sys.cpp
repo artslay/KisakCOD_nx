@@ -179,6 +179,8 @@ struct SwitchHeapTraceEvent
     uintptr_t pointer;
     uintptr_t size;
     uintptr_t caller;
+    uintptr_t allocationChunkPrevFoot;
+    uintptr_t allocationChunkHead;
 };
 
 alignas(64) static SwitchHeapTraceEvent g_switchHeapTrace[kSwitchHeapTraceCount]{};
@@ -193,6 +195,21 @@ static void Switch_HeapTraceRecord(
     if (!pointer)
         return;
 
+    uintptr_t allocationChunkPrevFoot = 0u;
+    uintptr_t allocationChunkHead = 0u;
+    if ((operation == 'M' || operation == 'C' || operation == 'R') &&
+        pointer >= 2u * sizeof(uintptr_t) &&
+        (pointer & (alignof(uintptr_t) - 1u)) == 0u)
+    {
+        // Snapshot the newlib chunk header immediately after allocation.
+        // This allows the crash dump to distinguish a pre-existing bad chunk
+        // from metadata overwritten later during NAK shader compilation.
+        const volatile uintptr_t *chunk = reinterpret_cast<const volatile uintptr_t *>(
+            pointer - 2u * sizeof(uintptr_t));
+        allocationChunkPrevFoot = chunk[0];
+        allocationChunkHead = chunk[1];
+    }
+
     const uintptr_t sequence = __atomic_fetch_add(
         &g_switchHeapTraceNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
     SwitchHeapTraceEvent &event =
@@ -203,6 +220,8 @@ static void Switch_HeapTraceRecord(
     __atomic_store_n(&event.pointer, pointer, __ATOMIC_RELAXED);
     __atomic_store_n(&event.size, size, __ATOMIC_RELAXED);
     __atomic_store_n(&event.caller, caller, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.allocationChunkPrevFoot, allocationChunkPrevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.allocationChunkHead, allocationChunkHead, __ATOMIC_RELAXED);
     __atomic_store_n(&event.sequence, sequence + 1u, __ATOMIC_RELEASE);
 }
 
@@ -231,6 +250,10 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             __atomic_load_n(&event.size, __ATOMIC_RELAXED);
         const uintptr_t caller =
             __atomic_load_n(&event.caller, __ATOMIC_RELAXED);
+        const uintptr_t allocationChunkPrevFoot =
+            __atomic_load_n(&event.allocationChunkPrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t allocationChunkHead =
+            __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
         const uintptr_t second =
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
 
@@ -243,13 +266,16 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
         std::snprintf(
             line, sizeof(line),
             "[KisakCOD][HEAP TRACE] seq=%llu op=%c ptr=0x%016llx "
-            "size=%llu caller=0x%016llx callerOff=0x%llx\n",
+            "size=%llu caller=0x%016llx callerOff=0x%llx "
+            "alloc_prev=0x%016llx alloc_head=0x%016llx\n",
             static_cast<unsigned long long>(sequence),
             static_cast<char>(operation),
             static_cast<unsigned long long>(pointer),
             static_cast<unsigned long long>(size),
             static_cast<unsigned long long>(caller),
-            static_cast<unsigned long long>(callerOffset));
+            static_cast<unsigned long long>(callerOffset),
+            static_cast<unsigned long long>(allocationChunkPrevFoot),
+            static_cast<unsigned long long>(allocationChunkHead));
         Switch_LogCrashLine(line);
         ++matches;
     }
@@ -294,6 +320,10 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             __atomic_load_n(&event.size, __ATOMIC_RELAXED);
         const uintptr_t caller =
             __atomic_load_n(&event.caller, __ATOMIC_RELAXED);
+        const uintptr_t allocationChunkPrevFoot =
+            __atomic_load_n(&event.allocationChunkPrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t allocationChunkHead =
+            __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
         const uintptr_t second =
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
 
@@ -313,13 +343,16 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
         std::snprintf(
             nearLine, sizeof(nearLine),
             "[KisakCOD][HEAP NEAR] seq=%llu op=%c ptr=0x%016llx "
-            "distance=0x%llx size=%llu callerOff=0x%llx\n",
+            "distance=0x%llx size=%llu callerOff=0x%llx "
+            "alloc_prev=0x%016llx alloc_head=0x%016llx\n",
             static_cast<unsigned long long>(sequence),
             static_cast<char>(operation),
             static_cast<unsigned long long>(pointer),
             static_cast<unsigned long long>(distance),
             static_cast<unsigned long long>(size),
-            static_cast<unsigned long long>(callerOffset));
+            static_cast<unsigned long long>(callerOffset),
+            static_cast<unsigned long long>(allocationChunkPrevFoot),
+            static_cast<unsigned long long>(allocationChunkHead));
         Switch_LogCrashLine(nearLine);
         ++nearPrinted;
     }
