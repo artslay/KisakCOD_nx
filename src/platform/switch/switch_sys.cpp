@@ -602,7 +602,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             "raw_m20=0x%016llx raw_m18=0x%016llx "
             "prev=0x%016llx head=0x%016llx "
             "raw_p00=0x%016llx raw_p08=0x%016llx "
-            "raw_p10=0x%016llx raw_p18=0x%016llx\\n",
+            "raw_p10=0x%016llx raw_p18=0x%016llx\n",
             static_cast<unsigned long long>(generation - 1u),
             static_cast<unsigned long long>(pointer),
             static_cast<unsigned long long>(size),
