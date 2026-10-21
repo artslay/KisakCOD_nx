@@ -55,6 +55,13 @@ namespace
 {
 constexpr size_t SWITCH_VIRTUAL_PAGE_SIZE = 0x1000u;
 constexpr size_t SWITCH_VIRTUAL_RESERVATION_COUNT = 1024;
+// Kernel-managed ThreadLocal pages are placed independently of libnx's
+// user-space virtmem reservation list. Keep medium-sized arenas out of the
+// stack-region hole allocator so a later thread creation cannot occupy a page
+// that the engine expects to commit. Small transient HunkUser blocks retain
+// lazy mapping, while very large arenas must retain the sparse backing policy.
+constexpr size_t SWITCH_VIRTUAL_HEAP_BACKED_MIN_SIZE = 0x00800000u;
+constexpr size_t SWITCH_VIRTUAL_HEAP_BACKED_MAX_SIZE = 0x01000000u;
 
 struct SwitchVirtualReservation
 {
@@ -64,6 +71,7 @@ struct SwitchVirtualReservation
     uint8_t *committedPages = nullptr;
     uint32_t *backingBlockIndices = nullptr;
     size_t pageCount = 0;
+    bool heapBacked = false;
 };
 
 struct SwitchVirtualBackingBlock
@@ -226,6 +234,22 @@ static bool SwitchVirtualCommitRange(void *pointer, size_t size)
     const size_t firstPage = static_cast<size_t>((mapStart - baseAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
     const size_t endPage = static_cast<size_t>((mapEnd - baseAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
     auto *const virtualBase = static_cast<uint8_t *>(reservation->base);
+
+    // Heap-backed reservations are already contiguous, page-aligned memory.
+    // Track logical commits and zero pages on their first commit, but do not
+    // map/unmap through the stack region (where the kernel can place ThreadLocal).
+    if (reservation->heapBacked)
+    {
+        for (size_t page = firstPage; page < endPage; ++page)
+        {
+            if (SwitchVirtualPageIsCommitted(*reservation, page))
+                continue;
+            memset(virtualBase + page * SWITCH_VIRTUAL_PAGE_SIZE, 0,
+                   SWITCH_VIRTUAL_PAGE_SIZE);
+            SwitchVirtualSetPageCommitted(*reservation, page, true);
+        }
+        return true;
+    }
 
     size_t page = firstPage;
     while (page < endPage)
@@ -418,6 +442,22 @@ static bool SwitchVirtualDecommitRange(void *pointer, size_t size)
     const uintptr_t baseAddress = reinterpret_cast<uintptr_t>(reservation->base);
     const size_t firstPage = static_cast<size_t>((mapStart - baseAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
     const size_t endPage = static_cast<size_t>((mapEnd - baseAddress) / SWITCH_VIRTUAL_PAGE_SIZE);
+    if (reservation->heapBacked)
+    {
+        auto *const virtualBase = static_cast<uint8_t *>(reservation->base);
+        for (size_t page = firstPage; page < endPage; ++page)
+        {
+            if (!SwitchVirtualPageIsCommitted(*reservation, page))
+                continue;
+            // Heap pages cannot be made inaccessible independently of their
+            // malloc allocation. Preserve VirtualAlloc's zero-on-recommit
+            // behavior and keep the allocation stable until VirtualFree.
+            memset(virtualBase + page * SWITCH_VIRTUAL_PAGE_SIZE, 0,
+                   SWITCH_VIRTUAL_PAGE_SIZE);
+            SwitchVirtualSetPageCommitted(*reservation, page, false);
+        }
+        return true;
+    }
     Result result = 0;
     return SwitchVirtualUnmapPagesLocked(*reservation, firstPage, endPage, &result);
 }
@@ -464,6 +504,36 @@ static void *SwitchVirtualReserve(int32_t requestedSize)
     }
     std::fill(backingBlockIndices, backingBlockIndices + pageCount,
               SWITCH_VIRTUAL_NO_BACKING_BLOCK);
+
+    // Medium-sized, long-lived arenas are safer as direct heap allocations.
+    // svcCreateThread can create kernel ThreadLocal mappings independently of
+    // the libnx reservation list, which means an uncommitted page inside a
+    // sparse stack-region reservation can later become occupied. Bound this
+    // eager fallback to 8-16 MiB; smaller transient arenas retain lazy commits,
+    // and large hunk reservations do not force their entire size into the heap.
+    if (reserveSize >= SWITCH_VIRTUAL_HEAP_BACKED_MIN_SIZE &&
+        reserveSize <= SWITCH_VIRTUAL_HEAP_BACKED_MAX_SIZE)
+    {
+        void *const heapBase =
+            std::aligned_alloc(SWITCH_VIRTUAL_PAGE_SIZE, reserveSize);
+        if (!heapBase)
+        {
+            std::free(committedPages);
+            std::free(backingBlockIndices);
+            errno = ENOMEM;
+            return nullptr;
+        }
+        memset(heapBase, 0, reserveSize);
+        slot->base = heapBase;
+        slot->size = reserveSize;
+        slot->reservation = nullptr;
+        slot->committedPages = committedPages;
+        slot->backingBlockIndices = backingBlockIndices;
+        slot->pageCount = pageCount;
+        slot->heapBacked = true;
+        SwitchVirtualMemoryLog("reserve_heap_backed", heapBase, reserveSize, 0);
+        return heapBase;
+    }
 
     // MapMemory (unlike MapPhysicalMemory) can map existing heap-backed pages
     // into the stack region without requiring an NPDM SystemResource allowance.
@@ -514,6 +584,15 @@ static bool SwitchVirtualReleaseReservation(void *pointer)
             "release_unknown", pointer, 0,
             MAKERESULT(Module_Libnx, LibnxError_BadInput));
         return false;
+    }
+
+    if (reservation->heapBacked)
+    {
+        std::free(reservation->base);
+        std::free(reservation->committedPages);
+        std::free(reservation->backingBlockIndices);
+        *reservation = SwitchVirtualReservation{};
+        return true;
     }
 
     Result result = 0;
