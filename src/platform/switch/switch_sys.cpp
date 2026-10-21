@@ -219,6 +219,7 @@ static constexpr uintptr_t kSwitchHeapFreeHistoryCount = 262144u;
 struct SwitchHeapFreeHistoryEvent
 {
     uintptr_t sequence;
+    uintptr_t traceSequence;
     uintptr_t pointer;
     uintptr_t prevFoot;
     uintptr_t head;
@@ -244,6 +245,8 @@ static bool Switch_HeapTraceFindLastFree(
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
         if (first != sequence + 1u)
             continue;
+        const uintptr_t traceSequence =
+            __atomic_load_n(&event.traceSequence, __ATOMIC_RELAXED);
         const uintptr_t eventPointer =
             __atomic_load_n(&event.pointer, __ATOMIC_RELAXED);
         const uintptr_t prevFoot =
@@ -254,7 +257,7 @@ static bool Switch_HeapTraceFindLastFree(
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
         if (first == second && eventPointer == pointer)
         {
-            *sequenceOut = sequence;
+            *sequenceOut = traceSequence;
             *prevFootOut = prevFoot;
             *headOut = head;
             return true;
@@ -479,9 +482,13 @@ static void Switch_HeapTraceRecord(
         }
     }
 
+    const uintptr_t sequence = __atomic_fetch_add(
+        &g_switchHeapTraceNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
+
     // Preserve real-free entry metadata separately from the shorter event
     // ring. This captures the last known header before _free_r can coalesce or
     // insert the chunk, allowing a later malformed malloc to compare lifetimes.
+    // traceSequence uses the main allocator-event sequence for direct correlation.
     if (freeEvent && (headerSnapshot & 1u) != 0u)
     {
         const uintptr_t freeSequence = __atomic_fetch_add(
@@ -490,14 +497,12 @@ static void Switch_HeapTraceRecord(
             g_switchHeapFreeHistory[
                 freeSequence & (kSwitchHeapFreeHistoryCount - 1u)];
         __atomic_store_n(&freeEventRecord.sequence, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&freeEventRecord.traceSequence, sequence, __ATOMIC_RELAXED);
         __atomic_store_n(&freeEventRecord.pointer, pointer, __ATOMIC_RELAXED);
         __atomic_store_n(&freeEventRecord.prevFoot, allocationChunkPrevFoot, __ATOMIC_RELAXED);
         __atomic_store_n(&freeEventRecord.head, allocationChunkHead, __ATOMIC_RELAXED);
         __atomic_store_n(&freeEventRecord.sequence, freeSequence + 1u, __ATOMIC_RELEASE);
     }
-
-    const uintptr_t sequence = __atomic_fetch_add(
-        &g_switchHeapTraceNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
     SwitchHeapTraceEvent &event =
         g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
 
