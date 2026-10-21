@@ -1396,14 +1396,43 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         return false;
 
     const uint32_t originalBound = words[3];
-    std::vector<uint32_t> resultTypeById(originalBound, 0u);
-    std::vector<uint32_t> vectorLengthByType(originalBound, 0u);
-    std::vector<uint32_t> vectorComponentTypeByType(originalBound, 0u);
-    std::vector<uint8_t> isVectorType(originalBound, 0u);
     std::vector<size_t> shuffleOffsets;
     uint64_t estimatedGrowth = 0u;
     constexpr uint64_t kMaxEstimatedShuffleGrowthWords = 256u;
 
+    // First inspect only the instruction stream. Most shaders have no vector
+    // shuffles, and many others exceed the rewrite budget. Neither case needs
+    // the ID-bound-sized metadata tables below; allocating them before deciding
+    // whether to rewrite needlessly churns the Switch heap for every pipeline.
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (op == SpvOpVectorShuffle)
+        {
+            if (wc < 6u)
+                return false;
+            shuffleOffsets.push_back(offset);
+            // Replacing N selector operands grows the module by at most 4*N
+            // words (one extract per selector plus the rebuilt composite).
+            estimatedGrowth += 4ull * static_cast<uint64_t>(wc - 5u);
+        }
+        offset += wc;
+    }
+    if (estimatedGrowthWords)
+        *estimatedGrowthWords = estimatedGrowth > UINT32_MAX
+            ? UINT32_MAX : static_cast<uint32_t>(estimatedGrowth);
+    if (shuffleOffsets.empty() || estimatedGrowth > kMaxEstimatedShuffleGrowthWords)
+        return false;
+
+    std::vector<uint32_t> resultTypeById(originalBound, 0u);
+    std::vector<uint32_t> vectorLengthByType(originalBound, 0u);
+    std::vector<uint32_t> vectorComponentTypeByType(originalBound, 0u);
+    std::vector<uint8_t> isVectorType(originalBound, 0u);
+
+    // Only budget-eligible modules get lookup tables, used by the rewrite pass.
     for (size_t offset = 5u; offset < words.size();)
     {
         uint32_t wc = 0u;
@@ -1433,27 +1462,8 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         if (typedResult && wc >= 3u &&
             ins[1] < originalBound && ins[2] < originalBound)
             resultTypeById[ins[2]] = ins[1];
-
-        if (op == SpvOpVectorShuffle)
-        {
-            if (wc < 6u)
-                return false;
-            shuffleOffsets.push_back(offset);
-            // Replacing N selector operands grows the module by at most 4*N
-            // words (one extract per selector plus the rebuilt composite).
-            // Keep the expansion bounded; larger shaders retain valid native
-            // OpVectorShuffle instructions instead of inflating NAK's SSA IR.
-            estimatedGrowth += 4ull * static_cast<uint64_t>(wc - 5u);
-        }
         offset += wc;
     }
-    if (estimatedGrowthWords)
-        *estimatedGrowthWords = estimatedGrowth > UINT32_MAX
-            ? UINT32_MAX : static_cast<uint32_t>(estimatedGrowth);
-    if (shuffleOffsets.empty())
-        return false;
-    if (estimatedGrowth > kMaxEstimatedShuffleGrowthWords)
-        return false;
 
     struct ShuffleInfo
     {
@@ -5782,6 +5792,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         uint32_t loweredPixelExtracts = 0u;
         uint32_t pixelShuffleGrowthEstimate = 0u;
         const size_t pixelWordsBeforeLower = pixelSpirv.size();
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle";
         const bool loweredPixelShuffles = LowerSwitchSpirvVectorShuffleToCompositeOps(
             pixelSpirv, &loweredPixelShuffleCount,
             &loweredPixelCopyObjects, &loweredPixelExtracts,
@@ -5913,6 +5924,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         uint32_t loweredVertexExtracts = 0u;
         uint32_t vertexShuffleGrowthEstimate = 0u;
         const size_t vertexWordsBeforeLower = m_vertexShader->spirv.size();
+        g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle";
         const bool loweredVertexShuffles = LowerSwitchSpirvVectorShuffleToCompositeOps(
             m_vertexShader->spirv, &loweredVertexShuffleCount,
             &loweredVertexCopyObjects, &loweredVertexExtracts,
