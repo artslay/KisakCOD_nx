@@ -674,7 +674,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                             "ctrlBit=%u ctrlOffset=0x%llx bucket=0x%016llx "
                             "fieldM24=0x%016llx fieldM16=0x%016llx "
                             "fieldM08=0x%016llx freeArg=0x%016llx "
-                            "dataMatches=%u\\n",
+                            "dataMatches=%u\n",
                             static_cast<unsigned long long>(callerLr),
                             static_cast<unsigned long long>(callerLrOffset),
                             static_cast<unsigned long long>(tableCursor),
