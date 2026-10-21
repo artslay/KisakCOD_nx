@@ -233,6 +233,79 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
     const uintptr_t codeBase = reinterpret_cast<uintptr_t>(__code_start);
     uintptr_t matches = 0;
 
+    // Also report allocation-time chunk headers whose size field is zero.
+    // This catches damaged metadata on a newly returned allocation, even if
+    // it is not the pointer that ultimately faults in free().
+    uintptr_t badAllocMatches = 0u;
+    uintptr_t badAllocPrinted = 0u;
+    constexpr uintptr_t kMaxBadAllocLines = 32u;
+    for (uintptr_t sequence = begin; sequence < end; ++sequence)
+    {
+        const SwitchHeapTraceEvent &event =
+            g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
+        const uintptr_t first =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (first != sequence + 1u)
+            continue;
+
+        const uintptr_t operation =
+            __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
+        const uintptr_t pointer =
+            __atomic_load_n(&event.pointer, __ATOMIC_RELAXED);
+        const uintptr_t size =
+            __atomic_load_n(&event.size, __ATOMIC_RELAXED);
+        const uintptr_t caller =
+            __atomic_load_n(&event.caller, __ATOMIC_RELAXED);
+        const uintptr_t allocationChunkPrevFoot =
+            __atomic_load_n(&event.allocationChunkPrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t allocationChunkHead =
+            __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
+        const uintptr_t second =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+
+        if (first != second || pointer == 0u ||
+            (operation != static_cast<uintptr_t>('M') &&
+             operation != static_cast<uintptr_t>('C') &&
+             operation != static_cast<uintptr_t>('R')) ||
+            (allocationChunkHead & ~static_cast<uintptr_t>(7u)) != 0u)
+        {
+            continue;
+        }
+
+        ++badAllocMatches;
+        if (badAllocPrinted >= kMaxBadAllocLines)
+            continue;
+
+        const uintptr_t callerOffset =
+            caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
+        char badLine[384];
+        std::snprintf(
+            badLine, sizeof(badLine),
+            "[KisakCOD][HEAP BAD ALLOC] seq=%llu op=%c ptr=0x%016llx "
+            "requested=%llu callerOff=0x%llx alloc_prev=0x%016llx "
+            "alloc_head=0x%016llx head_size=0\n",
+            static_cast<unsigned long long>(sequence),
+            static_cast<char>(operation),
+            static_cast<unsigned long long>(pointer),
+            static_cast<unsigned long long>(size),
+            static_cast<unsigned long long>(callerOffset),
+            static_cast<unsigned long long>(allocationChunkPrevFoot),
+            static_cast<unsigned long long>(allocationChunkHead));
+        Switch_LogCrashLine(badLine);
+        ++badAllocPrinted;
+    }
+
+    char badSummary[192];
+    std::snprintf(
+        badSummary, sizeof(badSummary),
+        "[KisakCOD][HEAP BAD ALLOC] total=%llu printed=%llu "
+        "window=%llu..%llu (head & ~7 == 0)\n",
+        static_cast<unsigned long long>(badAllocMatches),
+        static_cast<unsigned long long>(badAllocPrinted),
+        static_cast<unsigned long long>(begin),
+        static_cast<unsigned long long>(end));
+    Switch_LogCrashLine(badSummary);
+
     for (uintptr_t sequence = begin; sequence < end; ++sequence)
     {
         const SwitchHeapTraceEvent &event =
