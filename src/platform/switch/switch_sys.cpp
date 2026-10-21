@@ -845,7 +845,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
     if (g_switchNakReallocActive != 0u && g_switchNakReallocPointer != 0u)
     {
         Switch_LogCrashLine(
-            "[KisakCOD][HEAP TRACE] active NAK realloc; source pointer history follows\\n");
+            "[KisakCOD][HEAP TRACE] active NAK realloc; source pointer history follows\n");
         Switch_DumpHeapTraceForPointer(g_switchNakReallocPointer);
     }
 #endif
