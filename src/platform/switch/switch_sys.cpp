@@ -583,38 +583,39 @@ extern "C" void *__real_realloc(void *pointer, size_t size);
 // Newlib's allocator uses a recursive lock. Hold the same lock across the
 // real allocation/free and the diagnostic metadata snapshot, so another
 // allocator user cannot mutate the chunk between those two operations.
-extern "C" void __malloc_lock(void);
-extern "C" void __malloc_unlock(void);
+// malloc.h declares these hooks with struct _reent*; use Newlib's current
+// reentrancy context. The underlying Switch lock is recursive, so the call
+// made inside __real_malloc/__real_free is safe to nest.
 
 extern "C" __attribute__((noinline)) void *__wrap_malloc(size_t size)
 {
-    __malloc_lock();
+    __malloc_lock(_REENT);
     void *pointer = __real_malloc(size);
     Switch_HeapTraceRecord(
         'M',
         reinterpret_cast<uintptr_t>(pointer),
         static_cast<uintptr_t>(size),
         reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
-    __malloc_unlock();
+    __malloc_unlock(_REENT);
     return pointer;
 }
 
 extern "C" __attribute__((noinline)) void __wrap_free(void *pointer)
 {
-    __malloc_lock();
+    __malloc_lock(_REENT);
     Switch_HeapTraceRecord(
         'F',
         reinterpret_cast<uintptr_t>(pointer),
         0u,
         reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     __real_free(pointer);
-    __malloc_unlock();
+    __malloc_unlock(_REENT);
 }
 
 extern "C" __attribute__((noinline)) void *__wrap_calloc(
     size_t count, size_t size)
 {
-    __malloc_lock();
+    __malloc_lock(_REENT);
     void *pointer = __real_calloc(count, size);
     const size_t maxSize = static_cast<size_t>(-1);
     const size_t bytes =
@@ -624,7 +625,7 @@ extern "C" __attribute__((noinline)) void *__wrap_calloc(
         reinterpret_cast<uintptr_t>(pointer),
         static_cast<uintptr_t>(bytes),
         reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
-    __malloc_unlock();
+    __malloc_unlock(_REENT);
     return pointer;
 }
 
@@ -652,7 +653,7 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
         g_switchNakReallocActive = 1u;
     }
 
-    __malloc_lock();
+    __malloc_lock(_REENT);
     void *replacement = __real_realloc(pointer, size);
     if (nakRawVecRealloc)
         g_switchNakReallocActive = 0u;
@@ -668,7 +669,7 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
         reinterpret_cast<uintptr_t>(replacement),
         static_cast<uintptr_t>(size),
         caller);
-    __malloc_unlock();
+    __malloc_unlock(_REENT);
     return replacement;
 }
 #endif
