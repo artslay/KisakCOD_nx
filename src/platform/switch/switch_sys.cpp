@@ -456,12 +456,17 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
     switch (threadContext)
     {
         case THREAD_CONTEXT_MAIN: threadName = "main"; break;
-        case THREAD_CONTEXT_SERVER: threadName = "server"; break;
         case THREAD_CONTEXT_BACKEND: threadName = "backend"; break;
+        case THREAD_CONTEXT_SERVER: threadName = "server"; break;
+        case THREAD_CONTEXT_CINEMATIC: threadName = "cinematic"; break;
+        case THREAD_CONTEXT_TITLE_SERVER: threadName = "title_server"; break;
         case THREAD_CONTEXT_DATABASE: threadName = "database"; break;
+        case THREAD_CONTEXT_STREAM: threadName = "stream"; break;
+        case THREAD_CONTEXT_SNDSTREAMPACKETCALLBACK: threadName = "snd_stream_callback"; break;
+        case THREAD_CONTEXT_SERVER_DEMO: threadName = "server_demo"; break;
         default:
             if (threadContext >= THREAD_CONTEXT_WORKER0 &&
-                threadContext < THREAD_CONTEXT_WORKER0 + 32)
+                threadContext < THREAD_CONTEXT_SERVER)
                 threadName = "worker";
             break;
     }
