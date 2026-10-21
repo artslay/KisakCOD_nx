@@ -35,6 +35,16 @@ static thread_local volatile uintptr_t g_switchNakReallocCallerOffset = 0u;
 static thread_local volatile uintptr_t g_switchNakReallocPointer = 0u;
 static thread_local volatile uintptr_t g_switchNakReallocSize = 0u;
 
+// Snapshot calloc's input before entering Newlib. If _calloc_r faults while
+// zeroing its result, __wrap_calloc never returns and post-call tracing cannot
+// report the request that led to the invalid memset range.
+static thread_local volatile uintptr_t g_switchNakCallocActive = 0u;
+static thread_local volatile uintptr_t g_switchNakCallocCaller = 0u;
+static thread_local volatile uintptr_t g_switchNakCallocCallerOffset = 0u;
+static thread_local volatile uintptr_t g_switchNakCallocCount = 0u;
+static thread_local volatile uintptr_t g_switchNakCallocElementSize = 0u;
+static thread_local volatile uintptr_t g_switchNakCallocRequestedBytes = 0u;
+
 static char g_switchDeferredDiag[1024 * 1024];
 static size_t g_switchDeferredDiagUsed = 0;
 
@@ -615,16 +625,30 @@ extern "C" __attribute__((noinline)) void __wrap_free(void *pointer)
 extern "C" __attribute__((noinline)) void *__wrap_calloc(
     size_t count, size_t size)
 {
-    __malloc_lock(_REENT);
-    void *pointer = __real_calloc(count, size);
+    const uintptr_t caller =
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    const uintptr_t codeBase = reinterpret_cast<uintptr_t>(__code_start);
+    const uintptr_t callerOffset =
+        caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
     const size_t maxSize = static_cast<size_t>(-1);
-    const size_t bytes =
-        size != 0u && count > maxSize / size ? maxSize : count * size;
+    const bool sizeOverflow = size != 0u && count > maxSize / size;
+    const size_t bytes = sizeOverflow ? maxSize : count * size;
+
+    __malloc_lock(_REENT);
+    g_switchNakCallocCaller = caller;
+    g_switchNakCallocCallerOffset = callerOffset;
+    g_switchNakCallocCount = static_cast<uintptr_t>(count);
+    g_switchNakCallocElementSize = static_cast<uintptr_t>(size);
+    g_switchNakCallocRequestedBytes = static_cast<uintptr_t>(bytes);
+    g_switchNakCallocActive = 1u;
+
+    void *pointer = __real_calloc(count, size);
+    g_switchNakCallocActive = 0u;
     Switch_HeapTraceRecord(
         'C',
         reinterpret_cast<uintptr_t>(pointer),
         static_cast<uintptr_t>(bytes),
-        reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+        caller);
     __malloc_unlock(_REENT);
     return pointer;
 }
@@ -726,6 +750,26 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         static_cast<unsigned long long>(g_switchNakReallocCallerOffset),
         static_cast<unsigned long long>(g_switchNakReallocPointer),
         static_cast<unsigned long long>(g_switchNakReallocSize),
+        static_cast<unsigned long long>(ctx->cpu_gprs[0].x),
+        static_cast<unsigned long long>(ctx->cpu_gprs[1].x),
+        static_cast<unsigned long long>(ctx->cpu_gprs[2].x),
+        static_cast<unsigned long long>(ctx->cpu_gprs[3].x),
+        static_cast<unsigned long long>(ctx->cpu_gprs[4].x),
+        static_cast<unsigned long long>(ctx->cpu_gprs[5].x));
+    Switch_LogCrashLine(line);
+
+    std::snprintf(
+        line, sizeof(line),
+        "[KisakCOD][CRASH CALLOC STATE] active=%llu "
+        "caller=0x%016llx callerOff=0x%llx count=%llu elementSize=%llu "
+        "requestedBytes=0x%016llx x0=0x%016llx x1=0x%016llx "
+        "x2=0x%016llx x3=0x%016llx x4=0x%016llx x5=0x%016llx\n",
+        static_cast<unsigned long long>(g_switchNakCallocActive),
+        static_cast<unsigned long long>(g_switchNakCallocCaller),
+        static_cast<unsigned long long>(g_switchNakCallocCallerOffset),
+        static_cast<unsigned long long>(g_switchNakCallocCount),
+        static_cast<unsigned long long>(g_switchNakCallocElementSize),
+        static_cast<unsigned long long>(g_switchNakCallocRequestedBytes),
         static_cast<unsigned long long>(ctx->cpu_gprs[0].x),
         static_cast<unsigned long long>(ctx->cpu_gprs[1].x),
         static_cast<unsigned long long>(ctx->cpu_gprs[2].x),
