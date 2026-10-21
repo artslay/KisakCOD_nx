@@ -166,6 +166,132 @@ static void Switch_LogCrashLine(const char *line)
     Switch_LogWrite(line);
 }
 
+#if defined(KISAK_SWITCH_HEAP_TRACE)
+namespace
+{
+static constexpr uintptr_t kSwitchHeapTraceCount = 32768u;
+
+struct SwitchHeapTraceEvent
+{
+    uintptr_t sequence;
+    uintptr_t operation;
+    uintptr_t pointer;
+    uintptr_t size;
+    uintptr_t caller;
+};
+
+alignas(64) static SwitchHeapTraceEvent g_switchHeapTrace[kSwitchHeapTraceCount]{};
+static uintptr_t g_switchHeapTraceNext = 0;
+
+static void Switch_HeapTraceRecord(
+    char operation,
+    uintptr_t pointer,
+    uintptr_t size,
+    uintptr_t caller)
+{
+    if (!pointer)
+        return;
+
+    const uintptr_t sequence = __atomic_fetch_add(
+        &g_switchHeapTraceNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
+    SwitchHeapTraceEvent &event =
+        g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
+
+    __atomic_store_n(&event.sequence, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+    __atomic_store_n(&event.operation, static_cast<uintptr_t>(operation), __ATOMIC_RELAXED);
+    __atomic_store_n(&event.pointer, pointer, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.size, size, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.caller, caller, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.sequence, sequence + 1u, __ATOMIC_RELEASE);
+}
+
+static void Switch_DumpHeapTraceForPointer(uintptr_t target)
+{
+    const uintptr_t end = __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_ACQUIRE);
+    const uintptr_t begin =
+        end > kSwitchHeapTraceCount ? end - kSwitchHeapTraceCount : 0u;
+    const uintptr_t codeBase = reinterpret_cast<uintptr_t>(__code_start);
+    uintptr_t matches = 0;
+
+    for (uintptr_t sequence = begin; sequence < end; ++sequence)
+    {
+        const SwitchHeapTraceEvent &event =
+            g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
+        const uintptr_t first =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (first != sequence + 1u)
+            continue;
+
+        const uintptr_t operation =
+            __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
+        const uintptr_t pointer =
+            __atomic_load_n(&event.pointer, __ATOMIC_RELAXED);
+        const uintptr_t size =
+            __atomic_load_n(&event.size, __ATOMIC_RELAXED);
+        const uintptr_t caller =
+            __atomic_load_n(&event.caller, __ATOMIC_RELAXED);
+        const uintptr_t second =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+
+        if (first != second || pointer != target)
+            continue;
+
+        char line[512];
+        const uintptr_t callerOffset =
+            caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][HEAP TRACE] seq=%llu op=%c ptr=0x%016llx "
+            "size=%llu caller=0x%016llx callerOff=0x%llx\n",
+            static_cast<unsigned long long>(sequence),
+            static_cast<char>(operation),
+            static_cast<unsigned long long>(pointer),
+            static_cast<unsigned long long>(size),
+            static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(callerOffset));
+        Switch_LogCrashLine(line);
+        ++matches;
+    }
+
+    char summary[256];
+    std::snprintf(
+        summary, sizeof(summary),
+        "[KisakCOD][HEAP TRACE] target=0x%016llx window=%llu..%llu "
+        "total=%llu matches=%llu (M=malloc,F=free)\n",
+        static_cast<unsigned long long>(target),
+        static_cast<unsigned long long>(begin),
+        static_cast<unsigned long long>(end),
+        static_cast<unsigned long long>(end),
+        static_cast<unsigned long long>(matches));
+    Switch_LogCrashLine(summary);
+}
+} // namespace
+
+extern "C" void *__real_malloc(size_t size);
+extern "C" void __real_free(void *pointer);
+
+extern "C" __attribute__((noinline)) void *__wrap_malloc(size_t size)
+{
+    void *pointer = __real_malloc(size);
+    Switch_HeapTraceRecord(
+        'M',
+        reinterpret_cast<uintptr_t>(pointer),
+        static_cast<uintptr_t>(size),
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    return pointer;
+}
+
+extern "C" __attribute__((noinline)) void __wrap_free(void *pointer)
+{
+    Switch_HeapTraceRecord(
+        'F',
+        reinterpret_cast<uintptr_t>(pointer),
+        0u,
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    __real_free(pointer);
+}
+#endif
+
 extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
 {
     if (!ctx)
@@ -720,6 +846,10 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                     // In for_each_instr_dst_mut, the data pointer is at [FP-24].
                     // Keep the adjacent words raw until their exact roles are proven.
                     const uintptr_t rustFreeArg = freeStack[5];
+#if defined(KISAK_SWITCH_HEAP_TRACE)
+                    // Dump the target allocation history now that _free_r's argument is known.
+                    Switch_DumpHeapTraceForPointer(rustFreeArg);
+#endif
                     const uintptr_t schedulerCallerOffset =
                         raLr >= codeBase ? raLr - codeBase : UINTPTR_MAX;
 

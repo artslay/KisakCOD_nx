@@ -31,6 +31,12 @@ CXXFLAGS    := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-rtti -fno
 CPPFLAGS    += -DGIT_COMMIT=\"$(GIT_COMMIT)\"
 CFLAGS      := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-plt -std=gnu17 -MMD -MP -Wno-old-style-definition
 LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libnx/lib -specs=$(DEVKITPRO)/libnx/switch.specs -Wl,--gc-sections,-Bsymbolic
+# Optional heap-event ring for diagnosing Rust/NVK allocator corruption.
+# Enable only for the diagnostic build: make KISAK_SWITCH_HEAP_TRACE=1
+ifeq ($(KISAK_SWITCH_HEAP_TRACE),1)
+CPPFLAGS += -DKISAK_SWITCH_HEAP_TRACE
+LDFLAGS += -Wl,--wrap=malloc,--wrap=free
+endif
 # OpenAL Soft in devkitPro uses its SDL2 playback backend. The Switch build
 # supplies the minimal SDL2 audio ABI locally through switch_sdl2_audio.cpp,
 # so libSDL2/libEGL are not linked into the game and Vulkan remains the only
