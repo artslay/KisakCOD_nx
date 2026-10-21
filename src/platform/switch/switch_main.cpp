@@ -645,9 +645,9 @@ static bool SwitchConfigureNakDefaultProbe()
 
         size_t first = tokenStart;
         size_t last = i;
-        while (first < last && (current[first] == ' ' || current[first] == '\\t'))
+        while (first < last && (current[first] == ' ' || current[first] == '\t'))
             ++first;
-        while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\\t'))
+        while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\t'))
             --last;
 
         const size_t tokenLength = last - first;
@@ -666,7 +666,7 @@ static bool SwitchConfigureNakDefaultProbe()
                 combined[used++] = ',';
             std::memcpy(combined + used, current + first, tokenLength);
             used += tokenLength;
-            combined[used] = '\\0';
+            combined[used] = '\0';
         }
 
         tokenStart = i + 1u;
@@ -694,10 +694,10 @@ int main()
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
-    if (nakNoUgprProbeConfigured)
-        Switch_LogWrite("[KisakCOD][NAK PROBE] NAK_DEBUG=nougpr; forced spill disabled before Mesa initialization\n");
+    if (nakDebugConfigured)
+        Switch_LogWrite("[KisakCOD][NAK PROBE] forced nougpr/spill disabled before Mesa initialization\n");
     else
-        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to configure NAK_DEBUG=nougpr without spill\n");
+        Switch_LogWrite("[KisakCOD][NAK PROBE] WARNING: failed to remove forced nougpr/spill flags\n");
     if (nirSkipProbeConfigured)
         Switch_LogWrite("[KisakCOD][NIR PROBE] requested NIR_SKIP=nir_opt_dead_write_vars before Mesa initialization\n");
     else
