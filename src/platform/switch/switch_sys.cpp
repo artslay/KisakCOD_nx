@@ -228,6 +228,9 @@ struct SwitchHeapLifeHistoryEvent
     uintptr_t pointer;
     uintptr_t prevFoot;
     uintptr_t head;
+    uintptr_t postSeen;
+    uintptr_t postPrevFoot;
+    uintptr_t postHead;
 };
 alignas(64) static SwitchHeapLifeHistoryEvent
     g_switchHeapLifeHistory[kSwitchHeapLifeHistoryCount]{};
@@ -235,7 +238,9 @@ static uintptr_t g_switchHeapLifeHistoryNext = 0;
 
 static bool Switch_HeapTraceFindLastPointerEvent(
     uintptr_t pointer, uintptr_t *operationOut, uintptr_t *sequenceOut,
-    uintptr_t *prevFootOut, uintptr_t *headOut)
+    uintptr_t *prevFootOut, uintptr_t *headOut,
+    uintptr_t *postSeenOut, uintptr_t *postPrevFootOut,
+    uintptr_t *postHeadOut)
 {
     const uintptr_t end = __atomic_load_n(
         &g_switchHeapLifeHistoryNext, __ATOMIC_ACQUIRE);
@@ -260,6 +265,12 @@ static bool Switch_HeapTraceFindLastPointerEvent(
             __atomic_load_n(&event.prevFoot, __ATOMIC_RELAXED);
         const uintptr_t head =
             __atomic_load_n(&event.head, __ATOMIC_RELAXED);
+        const uintptr_t postSeen =
+            __atomic_load_n(&event.postSeen, __ATOMIC_ACQUIRE);
+        const uintptr_t postPrevFoot =
+            __atomic_load_n(&event.postPrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t postHead =
+            __atomic_load_n(&event.postHead, __ATOMIC_RELAXED);
         const uintptr_t second =
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
         if (first == second && eventPointer == pointer)
@@ -268,10 +279,45 @@ static bool Switch_HeapTraceFindLastPointerEvent(
             *sequenceOut = traceSequence;
             *prevFootOut = prevFoot;
             *headOut = head;
+            *postSeenOut = postSeen;
+            *postPrevFootOut = postPrevFoot;
+            *postHeadOut = postHead;
             return true;
         }
     }
     return false;
+}
+
+// Called immediately after the real free, while the allocator lock is still
+// held. This distinguishes damage in _free_r from damage while the chunk waits
+// in a free bin or while a later malloc unlinks/reuses it.
+static void Switch_HeapTraceRememberFreePost(uintptr_t pointer)
+{
+    if (pointer < 2u * sizeof(uintptr_t) ||
+        (pointer & (alignof(uintptr_t) - 1u)) != 0u)
+        return;
+    const uintptr_t end = __atomic_load_n(
+        &g_switchHeapLifeHistoryNext, __ATOMIC_ACQUIRE);
+    if (end == 0u)
+        return;
+    const uintptr_t index = end - 1u;
+    SwitchHeapLifeHistoryEvent &event =
+        g_switchHeapLifeHistory[index & (kSwitchHeapLifeHistoryCount - 1u)];
+    const uintptr_t expectedSequence = index + 1u;
+    if (__atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE) != expectedSequence ||
+        __atomic_load_n(&event.operation, __ATOMIC_RELAXED) !=
+            static_cast<uintptr_t>('F') ||
+        __atomic_load_n(&event.pointer, __ATOMIC_RELAXED) != pointer)
+        return;
+
+    const volatile uintptr_t *chunk =
+        reinterpret_cast<const volatile uintptr_t *>(
+            pointer - 2u * sizeof(uintptr_t));
+    const uintptr_t prevFoot = chunk[0];
+    const uintptr_t head = chunk[1];
+    __atomic_store_n(&event.postPrevFoot, prevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.postHead, head, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.postSeen, static_cast<uintptr_t>(1), __ATOMIC_RELEASE);
 }
 
 static constexpr uintptr_t kSwitchHeapBadPointerCount = 32u;
@@ -294,6 +340,9 @@ struct SwitchHeapBadPointerSnapshot
     uintptr_t priorEventSequence;
     uintptr_t priorEventPrevFoot;
     uintptr_t priorEventHead;
+    uintptr_t priorEventPostSeen;
+    uintptr_t priorEventPostPrevFoot;
+    uintptr_t priorEventPostHead;
     uintptr_t words[8]; // pointer[-4]..pointer[+3]
     uintptr_t linkSnapshotMask;
     uintptr_t fdNext;
@@ -373,15 +422,22 @@ static void Switch_HeapTraceRememberBadPointer(
     uintptr_t priorEventSequence = 0u;
     uintptr_t priorEventPrevFoot = 0u;
     uintptr_t priorEventHead = 0u;
+    uintptr_t priorEventPostSeen = 0u;
+    uintptr_t priorEventPostPrevFoot = 0u;
+    uintptr_t priorEventPostHead = 0u;
     const bool priorEventSeen = Switch_HeapTraceFindLastPointerEvent(
         pointer, &priorEventOperation, &priorEventSequence,
-        &priorEventPrevFoot, &priorEventHead);
+        &priorEventPrevFoot, &priorEventHead,
+        &priorEventPostSeen, &priorEventPostPrevFoot, &priorEventPostHead);
     __atomic_store_n(&snapshot.priorEventSeen,
         static_cast<uintptr_t>(priorEventSeen), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.priorEventOperation, priorEventOperation, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.priorEventSequence, priorEventSequence, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.priorEventPrevFoot, priorEventPrevFoot, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.priorEventHead, priorEventHead, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostSeen, priorEventPostSeen, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostPrevFoot, priorEventPostPrevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostHead, priorEventPostHead, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.linkSnapshotMask, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
@@ -521,6 +577,9 @@ static void Switch_HeapTraceRecord(
         __atomic_store_n(&lifeEvent.pointer, pointer, __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.prevFoot, lifePrevFoot, __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.head, lifeHead, __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postSeen, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postPrevFoot, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postHead, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.sequence, lifeSequence + 1u, __ATOMIC_RELEASE);
     }
     SwitchHeapTraceEvent &event =
@@ -787,6 +846,12 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             __atomic_load_n(&snapshot.priorEventPrevFoot, __ATOMIC_RELAXED);
         const uintptr_t priorEventHead =
             __atomic_load_n(&snapshot.priorEventHead, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostSeen =
+            __atomic_load_n(&snapshot.priorEventPostSeen, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostPrevFoot =
+            __atomic_load_n(&snapshot.priorEventPostPrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostHead =
+            __atomic_load_n(&snapshot.priorEventPostHead, __ATOMIC_RELAXED);
         uintptr_t words[8]{};
         for (uintptr_t j = 0; j < 8u; ++j)
             words[j] = __atomic_load_n(&snapshot.words[j], __ATOMIC_RELAXED);
@@ -817,6 +882,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             "source=0x%016llx source_prev=0x%016llx source_head=0x%016llx "
             "priorEventSeen=%u priorEventOp=%c priorEventSeq=%llu "
             "priorEventPrev=0x%016llx priorEventHead=0x%016llx "
+            "priorPostSeen=%u priorPostPrev=0x%016llx priorPostHead=0x%016llx "
             "linksSeen=0x%llx fd_next=0x%016llx fd_prev=0x%016llx "
             "bk_next=0x%016llx bk_prev=0x%016llx "
             "fd_prev_eq_bk=%u bk_next_eq_fd=%u\n",
@@ -842,6 +908,9 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             static_cast<unsigned long long>(priorEventSequence),
             static_cast<unsigned long long>(priorEventPrevFoot),
             static_cast<unsigned long long>(priorEventHead),
+            static_cast<unsigned int>(priorEventPostSeen),
+            static_cast<unsigned long long>(priorEventPostPrevFoot),
+            static_cast<unsigned long long>(priorEventPostHead),
             static_cast<unsigned long long>(linkMask),
             static_cast<unsigned long long>(fdNext),
             static_cast<unsigned long long>(fdPrev),
@@ -1162,6 +1231,7 @@ extern "C" __attribute__((noinline)) void __wrap_free(void *pointer)
         0u,
         reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     __real_free(pointer);
+    Switch_HeapTraceRememberFreePost(reinterpret_cast<uintptr_t>(pointer));
     __malloc_unlock(_REENT);
 }
 
@@ -1255,6 +1325,7 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
         Switch_HeapTraceRecord(
             'F', reinterpret_cast<uintptr_t>(pointer), 0u, caller,
             0u, sourceChunkPrevFoot, sourceChunkHead, true);
+        Switch_HeapTraceRememberFreePost(reinterpret_cast<uintptr_t>(pointer));
     }
     Switch_HeapTraceRecord(
         'R',
