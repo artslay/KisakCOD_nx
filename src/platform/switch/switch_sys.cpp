@@ -251,8 +251,13 @@ static bool Switch_HeapTraceReadWordPair(
 // transition after the same address has already been reused.
 // A bounded event ring plus pre/post allocator metadata. Keep the history
 // compact enough for Switch while retaining enough lifetimes to find reuse.
-static constexpr uintptr_t kSwitchHeapLifeHistoryCount = 262144u;
-struct SwitchHeapLifeHistoryEvent
+// Maintain one recent state per pointer in a bounded four-way hash table.
+// This avoids losing a block's last F/M event after the global history wraps.
+// Replacing the old 262144-event ring also reduces diagnostic memory usage.
+static constexpr uintptr_t kSwitchHeapPointerStateSetCount = 32768u;
+static constexpr uintptr_t kSwitchHeapPointerStateWays = 4u;
+
+struct SwitchHeapPointerState
 {
     uintptr_t sequence;
     uintptr_t traceSequence;
@@ -301,91 +306,131 @@ struct SwitchHeapPointerEventInfo
     uintptr_t postBkNext = 0u;
     uintptr_t postBkPrev = 0u;
 };
-alignas(64) static SwitchHeapLifeHistoryEvent
-    g_switchHeapLifeHistory[kSwitchHeapLifeHistoryCount]{};
-static uintptr_t g_switchHeapLifeHistoryNext = 0;
+
+alignas(64) static SwitchHeapPointerState g_switchHeapPointerStates[
+    kSwitchHeapPointerStateSetCount * kSwitchHeapPointerStateWays]{};
+static uintptr_t g_switchHeapPointerStateEvictions = 0u;
+
+static uintptr_t Switch_HeapTracePointerStateSet(uintptr_t pointer)
+{
+    uintptr_t hash = (pointer >> 4u) ^ (pointer >> 17u) ^
+        (pointer >> 29u) ^ (pointer >> 41u);
+    hash ^= hash >> 13u;
+    hash *= static_cast<uintptr_t>(0x9e3779b97f4a7c15ull);
+    hash ^= hash >> 23u;
+    return hash & (kSwitchHeapPointerStateSetCount - 1u);
+}
+
+static SwitchHeapPointerState *Switch_HeapTraceGetPointerState(
+    uintptr_t pointer, bool create)
+{
+    if (pointer == 0u)
+        return nullptr;
+
+    const uintptr_t firstSlot =
+        Switch_HeapTracePointerStateSet(pointer) * kSwitchHeapPointerStateWays;
+    SwitchHeapPointerState *empty = nullptr;
+    SwitchHeapPointerState *oldest = nullptr;
+    uintptr_t oldestSequence = UINTPTR_MAX;
+    for (uintptr_t way = 0u; way < kSwitchHeapPointerStateWays; ++way)
+    {
+        SwitchHeapPointerState &slot = g_switchHeapPointerStates[firstSlot + way];
+        const uintptr_t slotPointer =
+            __atomic_load_n(&slot.pointer, __ATOMIC_ACQUIRE);
+        if (slotPointer == pointer)
+            return &slot;
+        if (slotPointer == 0u)
+        {
+            if (!empty)
+                empty = &slot;
+            continue;
+        }
+        const uintptr_t slotSequence =
+            __atomic_load_n(&slot.traceSequence, __ATOMIC_RELAXED);
+        if (slotSequence < oldestSequence)
+        {
+            oldestSequence = slotSequence;
+            oldest = &slot;
+        }
+    }
+    if (!create)
+        return nullptr;
+    if (empty)
+        return empty;
+
+    __atomic_fetch_add(
+        &g_switchHeapPointerStateEvictions, static_cast<uintptr_t>(1),
+        __ATOMIC_RELAXED);
+    return oldest;
+}
 
 static bool Switch_HeapTraceFindLastPointerEvent(
     uintptr_t pointer, SwitchHeapPointerEventInfo *out)
 {
-    const uintptr_t end = __atomic_load_n(
-        &g_switchHeapLifeHistoryNext, __ATOMIC_ACQUIRE);
-    const uintptr_t begin = end > kSwitchHeapLifeHistoryCount
-        ? end - kSwitchHeapLifeHistoryCount : 0u;
-    for (uintptr_t cursor = end; cursor > begin;)
-    {
-        const uintptr_t sequence = --cursor;
-        const SwitchHeapLifeHistoryEvent &event =
-            g_switchHeapLifeHistory[sequence & (kSwitchHeapLifeHistoryCount - 1u)];
-        const uintptr_t first =
-            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
-        if (first != sequence + 1u)
-            continue;
+    SwitchHeapPointerState *slot =
+        Switch_HeapTraceGetPointerState(pointer, false);
+    if (!slot)
+        return false;
 
-        SwitchHeapPointerEventInfo info{};
-        info.traceSequence = __atomic_load_n(&event.traceSequence, __ATOMIC_RELAXED);
-        info.operation = __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
-        const uintptr_t eventPointer =
-            __atomic_load_n(&event.pointer, __ATOMIC_RELAXED);
-        info.prevFoot = __atomic_load_n(&event.prevFoot, __ATOMIC_RELAXED);
-        info.head = __atomic_load_n(&event.head, __ATOMIC_RELAXED);
-        info.preNeighborSeen =
-            __atomic_load_n(&event.preNeighborSeen, __ATOMIC_RELAXED);
-        info.preNeighborPrevFoot =
-            __atomic_load_n(&event.preNeighborPrevFoot, __ATOMIC_RELAXED);
-        info.preNeighborHead =
-            __atomic_load_n(&event.preNeighborHead, __ATOMIC_RELAXED);
-        info.postSeen = __atomic_load_n(&event.postSeen, __ATOMIC_ACQUIRE);
-        info.postPrevFoot = __atomic_load_n(&event.postPrevFoot, __ATOMIC_RELAXED);
-        info.postHead = __atomic_load_n(&event.postHead, __ATOMIC_RELAXED);
-        info.postNeighborSeen =
-            __atomic_load_n(&event.postNeighborSeen, __ATOMIC_RELAXED);
-        info.postNeighborPrevFoot =
-            __atomic_load_n(&event.postNeighborPrevFoot, __ATOMIC_RELAXED);
-        info.postNeighborHead =
-            __atomic_load_n(&event.postNeighborHead, __ATOMIC_RELAXED);
-        info.postLinksSeen = __atomic_load_n(&event.postLinksSeen, __ATOMIC_RELAXED);
-        info.postFd = __atomic_load_n(&event.postFd, __ATOMIC_RELAXED);
-        info.postBk = __atomic_load_n(&event.postBk, __ATOMIC_RELAXED);
-        info.postFdNext = __atomic_load_n(&event.postFdNext, __ATOMIC_RELAXED);
-        info.postFdPrev = __atomic_load_n(&event.postFdPrev, __ATOMIC_RELAXED);
-        info.postBkNext = __atomic_load_n(&event.postBkNext, __ATOMIC_RELAXED);
-        info.postBkPrev = __atomic_load_n(&event.postBkPrev, __ATOMIC_RELAXED);
+    const uintptr_t first = __atomic_load_n(&slot->sequence, __ATOMIC_ACQUIRE);
+    const uintptr_t slotPointer =
+        __atomic_load_n(&slot->pointer, __ATOMIC_ACQUIRE);
+    if (first == 0u || slotPointer != pointer)
+        return false;
 
-        const uintptr_t second =
-            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
-        if (first == second && eventPointer == pointer)
-        {
-            *out = info;
-            return true;
-        }
-    }
-    return false;
+    SwitchHeapPointerEventInfo info{};
+    info.traceSequence = __atomic_load_n(&slot->traceSequence, __ATOMIC_RELAXED);
+    info.operation = __atomic_load_n(&slot->operation, __ATOMIC_RELAXED);
+    info.prevFoot = __atomic_load_n(&slot->prevFoot, __ATOMIC_RELAXED);
+    info.head = __atomic_load_n(&slot->head, __ATOMIC_RELAXED);
+    info.preNeighborSeen =
+        __atomic_load_n(&slot->preNeighborSeen, __ATOMIC_RELAXED);
+    info.preNeighborPrevFoot =
+        __atomic_load_n(&slot->preNeighborPrevFoot, __ATOMIC_RELAXED);
+    info.preNeighborHead =
+        __atomic_load_n(&slot->preNeighborHead, __ATOMIC_RELAXED);
+    info.postSeen = __atomic_load_n(&slot->postSeen, __ATOMIC_ACQUIRE);
+    info.postPrevFoot = __atomic_load_n(&slot->postPrevFoot, __ATOMIC_RELAXED);
+    info.postHead = __atomic_load_n(&slot->postHead, __ATOMIC_RELAXED);
+    info.postNeighborSeen =
+        __atomic_load_n(&slot->postNeighborSeen, __ATOMIC_RELAXED);
+    info.postNeighborPrevFoot =
+        __atomic_load_n(&slot->postNeighborPrevFoot, __ATOMIC_RELAXED);
+    info.postNeighborHead =
+        __atomic_load_n(&slot->postNeighborHead, __ATOMIC_RELAXED);
+    info.postLinksSeen = __atomic_load_n(&slot->postLinksSeen, __ATOMIC_RELAXED);
+    info.postFd = __atomic_load_n(&slot->postFd, __ATOMIC_RELAXED);
+    info.postBk = __atomic_load_n(&slot->postBk, __ATOMIC_RELAXED);
+    info.postFdNext = __atomic_load_n(&slot->postFdNext, __ATOMIC_RELAXED);
+    info.postFdPrev = __atomic_load_n(&slot->postFdPrev, __ATOMIC_RELAXED);
+    info.postBkNext = __atomic_load_n(&slot->postBkNext, __ATOMIC_RELAXED);
+    info.postBkPrev = __atomic_load_n(&slot->postBkPrev, __ATOMIC_RELAXED);
+
+    const uintptr_t second = __atomic_load_n(&slot->sequence, __ATOMIC_ACQUIRE);
+    if (first != second ||
+        __atomic_load_n(&slot->pointer, __ATOMIC_ACQUIRE) != pointer)
+        return false;
+    *out = info;
+    return true;
 }
 
+// Called immediately after the real free, while the allocator lock is still
+// held. Capture the chunk header, physical successor, and free-list links.
 static bool Switch_HeapTraceReadFreeLinks(
     uintptr_t node, uintptr_t *next, uintptr_t *previous);
 
-// Called immediately after the real free, while the allocator lock is still
-// held. Capture the chunk header, its old physical successor, and any free-list
-// links now present in the payload, before another allocator operation runs.
 static void Switch_HeapTraceRememberFreePost(uintptr_t pointer)
 {
     if (pointer < 2u * sizeof(uintptr_t) ||
         (pointer & (alignof(uintptr_t) - 1u)) != 0u)
         return;
-    const uintptr_t end = __atomic_load_n(
-        &g_switchHeapLifeHistoryNext, __ATOMIC_ACQUIRE);
-    if (end == 0u)
-        return;
-    const uintptr_t index = end - 1u;
-    SwitchHeapLifeHistoryEvent &event =
-        g_switchHeapLifeHistory[index & (kSwitchHeapLifeHistoryCount - 1u)];
-    const uintptr_t expectedSequence = index + 1u;
-    if (__atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE) != expectedSequence ||
-        __atomic_load_n(&event.operation, __ATOMIC_RELAXED) !=
+
+    SwitchHeapPointerState *event =
+        Switch_HeapTraceGetPointerState(pointer, false);
+    if (!event ||
+        __atomic_load_n(&event->operation, __ATOMIC_RELAXED) !=
             static_cast<uintptr_t>('F') ||
-        __atomic_load_n(&event.pointer, __ATOMIC_RELAXED) != pointer)
+        __atomic_load_n(&event->pointer, __ATOMIC_ACQUIRE) != pointer)
         return;
 
     uintptr_t prevFoot = 0u;
@@ -393,10 +438,10 @@ static void Switch_HeapTraceRememberFreePost(uintptr_t pointer)
     if (!Switch_HeapTraceReadWordPair(
             pointer - 2u * sizeof(uintptr_t), &prevFoot, &head))
         return;
-    __atomic_store_n(&event.postPrevFoot, prevFoot, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.postHead, head, __ATOMIC_RELAXED);
+    __atomic_store_n(&event->postPrevFoot, prevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&event->postHead, head, __ATOMIC_RELAXED);
 
-    const uintptr_t oldHead = __atomic_load_n(&event.head, __ATOMIC_RELAXED);
+    const uintptr_t oldHead = __atomic_load_n(&event->head, __ATOMIC_RELAXED);
     const uintptr_t oldChunkSize = oldHead & ~static_cast<uintptr_t>(7u);
     uintptr_t postNeighborPrev = 0u;
     uintptr_t postNeighborHead = 0u;
@@ -404,8 +449,7 @@ static void Switch_HeapTraceRememberFreePost(uintptr_t pointer)
     if (oldChunkSize >= 4u * sizeof(uintptr_t) &&
         oldChunkSize <= 0x01000000u &&
         (oldChunkSize & (alignof(uintptr_t) - 1u)) == 0u &&
-        pointer - 2u * sizeof(uintptr_t) <=
-            UINTPTR_MAX - oldChunkSize)
+        pointer - 2u * sizeof(uintptr_t) <= UINTPTR_MAX - oldChunkSize)
     {
         const uintptr_t nextAddress =
             pointer - 2u * sizeof(uintptr_t) + oldChunkSize;
@@ -413,11 +457,11 @@ static void Switch_HeapTraceRememberFreePost(uintptr_t pointer)
             Switch_HeapTraceReadWordPair(
                 nextAddress, &postNeighborPrev, &postNeighborHead));
     }
-    __atomic_store_n(&event.postNeighborPrevFoot,
+    __atomic_store_n(&event->postNeighborPrevFoot,
         postNeighborPrev, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.postNeighborHead,
+    __atomic_store_n(&event->postNeighborHead,
         postNeighborHead, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.postNeighborSeen, postNeighborSeen, __ATOMIC_RELAXED);
+    __atomic_store_n(&event->postNeighborSeen, postNeighborSeen, __ATOMIC_RELAXED);
 
     uintptr_t postFd = 0u;
     uintptr_t postBk = 0u;
@@ -433,14 +477,14 @@ static void Switch_HeapTraceRememberFreePost(uintptr_t pointer)
         if (Switch_HeapTraceReadFreeLinks(postBk, &bkNext, &bkPrev))
             linksSeen |= 2u;
     }
-    __atomic_store_n(&event.postFd, postFd, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.postBk, postBk, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.postFdNext, fdNext, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.postFdPrev, fdPrev, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.postBkNext, bkNext, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.postBkPrev, bkPrev, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.postLinksSeen, linksSeen, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.postSeen, static_cast<uintptr_t>(1), __ATOMIC_RELEASE);
+    __atomic_store_n(&event->postFd, postFd, __ATOMIC_RELAXED);
+    __atomic_store_n(&event->postBk, postBk, __ATOMIC_RELAXED);
+    __atomic_store_n(&event->postFdNext, fdNext, __ATOMIC_RELAXED);
+    __atomic_store_n(&event->postFdPrev, fdPrev, __ATOMIC_RELAXED);
+    __atomic_store_n(&event->postBkNext, bkNext, __ATOMIC_RELAXED);
+    __atomic_store_n(&event->postBkPrev, bkPrev, __ATOMIC_RELAXED);
+    __atomic_store_n(&event->postLinksSeen, linksSeen, __ATOMIC_RELAXED);
+    __atomic_store_n(&event->postSeen, static_cast<uintptr_t>(1), __ATOMIC_RELEASE);
 }
 
 static constexpr uintptr_t kSwitchHeapBadPointerCount = 32u;
@@ -479,6 +523,7 @@ struct SwitchHeapBadPointerSnapshot
     uintptr_t priorEventPostFdPrev;
     uintptr_t priorEventPostBkNext;
     uintptr_t priorEventPostBkPrev;
+    uintptr_t pointerStateEvictions;
     uintptr_t words[8]; // pointer[-4]..pointer[+3]
     uintptr_t linkSnapshotMask;
     uintptr_t fdNext;
@@ -579,6 +624,8 @@ static void Switch_HeapTraceRememberBadPointer(
     __atomic_store_n(&snapshot.priorEventPostFdPrev, priorEvent.postFdPrev, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.priorEventPostBkNext, priorEvent.postBkNext, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.priorEventPostBkPrev, priorEvent.postBkPrev, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.pointerStateEvictions,
+        __atomic_load_n(&g_switchHeapPointerStateEvictions, __ATOMIC_RELAXED), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.linkSnapshotMask, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
@@ -697,55 +744,56 @@ static void Switch_HeapTraceRecord(
     const uintptr_t sequence = __atomic_fetch_add(
         &g_switchHeapTraceNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
 
-    // Record pointer-lifetime transitions in allocator sequence order. For a
-    // real free, metadata is sampled just before _free_r; for a realloc-move
-    // free, use the source header sampled before calling Newlib.
+    // Record the latest event for this exact pointer, so its lifetime remains
+    // observable beyond the old global event-ring window.
     const bool recordRealFree =
         freeEvent && (headerSnapshot & 1u) != 0u;
     const bool recordReallocFree =
         syntheticReallocFree && pointer != 0u;
     if (allocationEvent || recordRealFree || recordReallocFree)
     {
-        const uintptr_t lifeSequence = __atomic_fetch_add(
-            &g_switchHeapLifeHistoryNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
-        SwitchHeapLifeHistoryEvent &lifeEvent =
-            g_switchHeapLifeHistory[
-                lifeSequence & (kSwitchHeapLifeHistoryCount - 1u)];
-        const uintptr_t lifePrevFoot = recordReallocFree
-            ? reallocSourcePrevFoot : allocationChunkPrevFoot;
-        const uintptr_t lifeHead = recordReallocFree
-            ? reallocSourceHead : allocationChunkHead;
-        const bool lifePreNeighborSeen =
-            (recordRealFree && (headerSnapshot & 2u) != 0u) ||
-            (recordReallocFree && reallocSourceNextSeen);
-        const uintptr_t lifePreNeighborPrev =
-            recordReallocFree ? reallocSourceNextPrevFoot : nextChunkPrevFoot;
-        const uintptr_t lifePreNeighborHead =
-            recordReallocFree ? reallocSourceNextHead : nextChunkHead;
-        __atomic_store_n(&lifeEvent.sequence, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.traceSequence, sequence, __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.operation, static_cast<uintptr_t>(operation), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.pointer, pointer, __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.prevFoot, lifePrevFoot, __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.head, lifeHead, __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.preNeighborSeen,
-            static_cast<uintptr_t>(lifePreNeighborSeen), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.preNeighborPrevFoot, lifePreNeighborPrev, __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.preNeighborHead, lifePreNeighborHead, __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postSeen, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postPrevFoot, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postHead, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postNeighborSeen, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postNeighborPrevFoot, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postNeighborHead, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postLinksSeen, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postFd, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postBk, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postFdNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postFdPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postBkNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.postBkPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&lifeEvent.sequence, lifeSequence + 1u, __ATOMIC_RELEASE);
+        SwitchHeapPointerState *state =
+            Switch_HeapTraceGetPointerState(pointer, true);
+        if (state)
+        {
+            const uintptr_t statePrevFoot = recordReallocFree
+                ? reallocSourcePrevFoot : allocationChunkPrevFoot;
+            const uintptr_t stateHead = recordReallocFree
+                ? reallocSourceHead : allocationChunkHead;
+            const bool statePreNeighborSeen =
+                (recordRealFree && (headerSnapshot & 2u) != 0u) ||
+                (recordReallocFree && reallocSourceNextSeen);
+            const uintptr_t statePreNeighborPrev =
+                recordReallocFree ? reallocSourceNextPrevFoot : nextChunkPrevFoot;
+            const uintptr_t statePreNeighborHead =
+                recordReallocFree ? reallocSourceNextHead : nextChunkHead;
+
+            __atomic_store_n(&state->pointer, static_cast<uintptr_t>(0), __ATOMIC_RELEASE);
+            __atomic_store_n(&state->sequence, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->traceSequence, sequence, __ATOMIC_RELAXED);
+            __atomic_store_n(&state->operation, static_cast<uintptr_t>(operation), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->prevFoot, statePrevFoot, __ATOMIC_RELAXED);
+            __atomic_store_n(&state->head, stateHead, __ATOMIC_RELAXED);
+            __atomic_store_n(&state->preNeighborSeen,
+                static_cast<uintptr_t>(statePreNeighborSeen), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->preNeighborPrevFoot, statePreNeighborPrev, __ATOMIC_RELAXED);
+            __atomic_store_n(&state->preNeighborHead, statePreNeighborHead, __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postSeen, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postPrevFoot, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postHead, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postNeighborSeen, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postNeighborPrevFoot, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postNeighborHead, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postLinksSeen, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postFd, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postBk, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postFdNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postFdPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postBkNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->postBkPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+            __atomic_store_n(&state->sequence, sequence + 1u, __ATOMIC_RELEASE);
+            __atomic_store_n(&state->pointer, pointer, __ATOMIC_RELEASE);
+        }
     }
     SwitchHeapTraceEvent &event =
         g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
@@ -1043,6 +1091,8 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             __atomic_load_n(&snapshot.priorEventPostBkNext, __ATOMIC_RELAXED);
         const uintptr_t priorEventPostBkPrev =
             __atomic_load_n(&snapshot.priorEventPostBkPrev, __ATOMIC_RELAXED);
+        const uintptr_t pointerStateEvictions =
+            __atomic_load_n(&snapshot.pointerStateEvictions, __ATOMIC_RELAXED);
         uintptr_t words[8]{};
         for (uintptr_t j = 0; j < 8u; ++j)
             words[j] = __atomic_load_n(&snapshot.words[j], __ATOMIC_RELAXED);
@@ -1079,6 +1129,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             "priorPostLinksSeen=0x%llx priorPostFd=0x%016llx priorPostBk=0x%016llx "
             "priorPostFdNext=0x%016llx priorPostFdPrev=0x%016llx "
             "priorPostBkNext=0x%016llx priorPostBkPrev=0x%016llx "
+            "stateEvictions=%llu "
             "linksSeen=0x%llx fd_next=0x%016llx fd_prev=0x%016llx "
             "bk_next=0x%016llx bk_prev=0x%016llx "
             "fd_prev_eq_bk=%u bk_next_eq_fd=%u\n",
@@ -1120,6 +1171,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             static_cast<unsigned long long>(priorEventPostFdPrev),
             static_cast<unsigned long long>(priorEventPostBkNext),
             static_cast<unsigned long long>(priorEventPostBkPrev),
+            static_cast<unsigned long long>(pointerStateEvictions),
             static_cast<unsigned long long>(linkMask),
             static_cast<unsigned long long>(fdNext),
             static_cast<unsigned long long>(fdPrev),
