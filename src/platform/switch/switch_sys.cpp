@@ -839,6 +839,17 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         static_cast<unsigned long long>(ctx->cpu_gprs[5].x));
     Switch_LogCrashLine(line);
 
+#if defined(KISAK_SWITCH_HEAP_TRACE)
+    // If RawVec::finish_grow faults inside Newlib realloc, inspect the trace
+    // history for its source allocation before unrelated crash diagnostics.
+    if (g_switchNakReallocActive != 0u && g_switchNakReallocPointer != 0u)
+    {
+        Switch_LogCrashLine(
+            "[KisakCOD][HEAP TRACE] active NAK realloc; source pointer history follows\\n");
+        Switch_DumpHeapTraceForPointer(g_switchNakReallocPointer);
+    }
+#endif
+
     std::snprintf(
         line, sizeof(line),
         "[KisakCOD][CRASH CALLOC STATE] active=%llu "
