@@ -363,6 +363,9 @@ static bool Switch_HeapTraceFindLastPointerEvent(
     return false;
 }
 
+static bool Switch_HeapTraceReadFreeLinks(
+    uintptr_t node, uintptr_t *next, uintptr_t *previous);
+
 // Called immediately after the real free, while the allocator lock is still
 // held. Capture the chunk header, its old physical successor, and any free-list
 // links now present in the payload, before another allocator operation runs.
@@ -441,9 +444,6 @@ static void Switch_HeapTraceRememberFreePost(uintptr_t pointer)
 }
 
 static constexpr uintptr_t kSwitchHeapBadPointerCount = 32u;
-
-static bool Switch_HeapTraceReadFreeLinks(
-    uintptr_t node, uintptr_t *next, uintptr_t *previous);
 
 // A tiny side ring captures the physical words around malformed allocation
 // headers immediately on malloc return. Keeping this out of the main event ring
