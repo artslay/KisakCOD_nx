@@ -312,7 +312,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
         std::snprintf(
             nearLine, sizeof(nearLine),
             "[KisakCOD][HEAP NEAR] seq=%llu op=%c ptr=0x%016llx "
-            "distance=0x%llx size=%llu callerOff=0x%llx\\n",
+            "distance=0x%llx size=%llu callerOff=0x%llx\n",
             static_cast<unsigned long long>(sequence),
             static_cast<char>(operation),
             static_cast<unsigned long long>(pointer),
@@ -327,7 +327,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
     std::snprintf(
         nearSummary, sizeof(nearSummary),
         "[KisakCOD][HEAP NEAR] range=0x%016llx..0x%016llx "
-        "matches=%llu printed=%llu limit=%llu\\n",
+        "matches=%llu printed=%llu limit=%llu\n",
         static_cast<unsigned long long>(nearBegin),
         static_cast<unsigned long long>(nearEnd),
         static_cast<unsigned long long>(nearMatches),
