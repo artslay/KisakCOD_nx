@@ -245,7 +245,8 @@ static void Switch_HeapTraceRecord(
     uintptr_t caller,
     uintptr_t reallocSourcePointer = 0u,
     uintptr_t reallocSourcePrevFoot = 0u,
-    uintptr_t reallocSourceHead = 0u)
+    uintptr_t reallocSourceHead = 0u,
+    bool syntheticReallocFree = false)
 {
     if (!pointer)
         return;
@@ -257,7 +258,10 @@ static void Switch_HeapTraceRecord(
     uintptr_t nextChunkHead = 0u;
     const bool allocationEvent =
         operation == 'M' || operation == 'C' || operation == 'R';
-    const bool freeEvent = operation == 'F';
+    // realloc's old-pointer F is a bookkeeping event emitted after realloc;
+    // it is not a pre-free snapshot. The following R event has the true source
+    // header captured before calling Newlib.
+    const bool freeEvent = operation == 'F' && !syntheticReallocFree;
     const bool suspectFree =
         freeEvent && Switch_HeapTraceIsKnownBadPointer(pointer);
     if ((allocationEvent || freeEvent || suspectFree) &&
@@ -820,7 +824,8 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
     if (pointer && (replacement || size == 0u))
     {
         Switch_HeapTraceRecord(
-            'F', reinterpret_cast<uintptr_t>(pointer), 0u, caller);
+            'F', reinterpret_cast<uintptr_t>(pointer), 0u, caller,
+            0u, 0u, 0u, true);
     }
     Switch_HeapTraceRecord(
         'R',
