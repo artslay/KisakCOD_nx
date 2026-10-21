@@ -489,18 +489,26 @@ static void Switch_HeapTraceRecord(
     // ring. This captures the last known header before _free_r can coalesce or
     // insert the chunk, allowing a later malformed malloc to compare lifetimes.
     // traceSequence uses the main allocator-event sequence for direct correlation.
-    if (freeEvent && (headerSnapshot & 1u) != 0u)
+    const bool recordRealFree =
+        freeEvent && (headerSnapshot & 1u) != 0u;
+    const bool recordReallocFree =
+        syntheticReallocFree && pointer != 0u;
+    if (recordRealFree || recordReallocFree)
     {
         const uintptr_t freeSequence = __atomic_fetch_add(
             &g_switchHeapFreeHistoryNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
         SwitchHeapFreeHistoryEvent &freeEventRecord =
             g_switchHeapFreeHistory[
                 freeSequence & (kSwitchHeapFreeHistoryCount - 1u)];
+        const uintptr_t freePrevFoot =
+            recordReallocFree ? reallocSourcePrevFoot : allocationChunkPrevFoot;
+        const uintptr_t freeHead =
+            recordReallocFree ? reallocSourceHead : allocationChunkHead;
         __atomic_store_n(&freeEventRecord.sequence, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
         __atomic_store_n(&freeEventRecord.traceSequence, sequence, __ATOMIC_RELAXED);
         __atomic_store_n(&freeEventRecord.pointer, pointer, __ATOMIC_RELAXED);
-        __atomic_store_n(&freeEventRecord.prevFoot, allocationChunkPrevFoot, __ATOMIC_RELAXED);
-        __atomic_store_n(&freeEventRecord.head, allocationChunkHead, __ATOMIC_RELAXED);
+        __atomic_store_n(&freeEventRecord.prevFoot, freePrevFoot, __ATOMIC_RELAXED);
+        __atomic_store_n(&freeEventRecord.head, freeHead, __ATOMIC_RELAXED);
         __atomic_store_n(&freeEventRecord.sequence, freeSequence + 1u, __ATOMIC_RELEASE);
     }
     SwitchHeapTraceEvent &event =
@@ -1224,13 +1232,14 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
     void *replacement = __real_realloc(pointer, size);
     if (nakRawVecRealloc)
         g_switchNakReallocActive = 0u;
-    // A failed non-zero realloc preserves the old allocation. Record the
-    // implicit free only after success (or a zero-size deallocation request).
-    if (pointer && (replacement || size == 0u))
+    // A successful realloc that moves storage implicitly frees the old
+    // chunk. Capture its pre-call header from sourceChunk*; do not log an F for
+    // an in-place realloc because that pointer was not freed.
+    if (pointer && ((replacement && replacement != pointer) || size == 0u))
     {
         Switch_HeapTraceRecord(
             'F', reinterpret_cast<uintptr_t>(pointer), 0u, caller,
-            0u, 0u, 0u, true);
+            0u, sourceChunkPrevFoot, sourceChunkHead, true);
     }
     Switch_HeapTraceRecord(
         'R',
