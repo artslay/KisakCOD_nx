@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cstdint>
 #include <stdlib.h>
 #include <switch.h>
 #include <vulkan/vulkan.h>
@@ -27,6 +28,43 @@ extern uint32_t g_switchCurrentAssetRawType;
 extern uint32_t g_switchCurrentAssetHeader;
 extern const char * volatile g_switchDbStage;
 extern const char * volatile g_switchServerInitStage;
+
+extern "C" void *__aarch64_read_tp(void);
+
+struct SwitchRustTlsStatus
+{
+    uintptr_t softThreadPointer = 0;
+    uintptr_t hardwareBefore = 0;
+    uintptr_t hardwareAfter = 0;
+    bool installed = false;
+};
+
+// Mesa's Rust std was built with hardware TPIDR_EL0 TLS accesses, while
+// devkitA64's Switch ABI uses the soft thread-pointer accessor. Bridge the
+// current thread's already-initialized soft TP into TPIDR_EL0 for Rust code.
+static SwitchRustTlsStatus SwitchInstallRustTlsPointer()
+{
+    SwitchRustTlsStatus status{};
+    asm volatile("mrs %0, tpidr_el0" : "=r"(status.hardwareBefore));
+    status.softThreadPointer = reinterpret_cast<uintptr_t>(__aarch64_read_tp());
+
+    if (status.hardwareBefore == 0 && status.softThreadPointer != 0)
+    {
+        asm volatile("msr tpidr_el0, %0"
+                     :
+                     : "r"(status.softThreadPointer)
+                     : "memory");
+        status.installed = true;
+    }
+
+    asm volatile("mrs %0, tpidr_el0" : "=r"(status.hardwareAfter));
+    return status;
+}
+
+extern "C" void SwitchPrepareRustTlsForCurrentThread()
+{
+    (void)SwitchInstallRustTlsPointer();
+}
 
 static std::atomic<const char *> g_switchProgressStage{"boot"};
 static std::atomic<uint32_t> g_switchProgressDetail{UINT32_MAX};
@@ -685,12 +723,24 @@ static bool SwitchConfigureNirSkipProbe()
 
 int main()
 {
+    const SwitchRustTlsStatus rustTlsStatus = SwitchInstallRustTlsPointer();
+
     // Restore NAK's default register allocation for the next crash comparison.
     // Remove forced nougpr/spill modes while retaining all shaders and unrelated
     // NAK_DEBUG flags; this tests the compiler without either forced allocator mode.
     const bool nakDebugConfigured = SwitchConfigureNakDefaultProbe();
     const bool nirSkipProbeConfigured = SwitchConfigureNirSkipProbe();
     Switch_LogInit();
+    char tlsLine[224];
+    std::snprintf(
+        tlsLine,
+        sizeof(tlsLine),
+        "[KisakCOD][RUST TLS] soft_tp=0x%016llx tpidr_before=0x%016llx tpidr_after=0x%016llx installed=%u\\n",
+        static_cast<unsigned long long>(rustTlsStatus.softThreadPointer),
+        static_cast<unsigned long long>(rustTlsStatus.hardwareBefore),
+        static_cast<unsigned long long>(rustTlsStatus.hardwareAfter),
+        rustTlsStatus.installed ? 1u : 0u);
+    Switch_LogWrite(tlsLine);
     SwitchBootLog("========================================");
     SwitchBootLog("KisakCOD Switch SP starting");
     SwitchBootLog("NRO entrypoint reached");
