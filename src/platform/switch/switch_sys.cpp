@@ -465,6 +465,8 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
                 __atomic_load_n(&event.size, __ATOMIC_RELAXED);
             const uintptr_t caller =
                 __atomic_load_n(&event.caller, __ATOMIC_RELAXED);
+            const uintptr_t allocationChunkPrevFoot =
+                __atomic_load_n(&event.allocationChunkPrevFoot, __ATOMIC_RELAXED);
             const uintptr_t allocationChunkHead =
                 __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
             const uintptr_t reallocSourcePointer =
