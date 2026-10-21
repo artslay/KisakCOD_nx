@@ -723,6 +723,45 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                     const uintptr_t schedulerCallerOffset =
                         raLr >= codeBase ? raLr - codeBase : UINTPTR_MAX;
 
+                    // ScheduleUnit::schedule returns from __rust_dealloc at 0x6cf9e4.
+                    // The call site loads the element count from [sp+176], the data
+                    // pointer from [sp+184], and multiplies count by 21 (InstrCount).
+                    // With FP=sp_at_entry-96, and SP=FP-0x350, these are FP-0x2a0
+                    // and FP-0x298 respectively. Confirm those live spill slots
+                    // against the allocator's original free argument.
+                    if (schedulerCallerOffset == 0x6cf9e4u &&
+                        raFrameAddress >= 0x2a0u)
+                    {
+                        const volatile uintptr_t *callerFrame =
+                            reinterpret_cast<const volatile uintptr_t *>(
+                                raFrameAddress);
+                        const uintptr_t layoutUnits =
+                            static_cast<uintptr_t>(callerFrame[-84]); // FP-0x2a0
+                        const uintptr_t dataSlotPtr =
+                            static_cast<uintptr_t>(callerFrame[-83]); // FP-0x298
+                        const uintptr_t adjacentM2a8 =
+                            static_cast<uintptr_t>(callerFrame[-85]); // FP-0x2a8
+                        const uintptr_t adjacentM290 =
+                            static_cast<uintptr_t>(callerFrame[-82]); // FP-0x290
+                        const uintptr_t byteSize =
+                            layoutUnits <= UINTPTR_MAX / 21u
+                                ? layoutUnits * 21u : UINTPTR_MAX;
+                        std::snprintf(
+                            line, sizeof(line),
+                            "[KisakCOD][CRASH] NAK_SCHEDULE_COUNTS_FREE "
+                            "site=0x6cf9e4 freeArg=0x%016llx dataSlotPtr=0x%016llx "
+                            "layoutUnits=%llu elemSize=21 bytes=0x%llx "
+                            "argMatches=%u fp_m2a8=0x%016llx fp_m290=0x%016llx\n",
+                            static_cast<unsigned long long>(rustFreeArg),
+                            static_cast<unsigned long long>(dataSlotPtr),
+                            static_cast<unsigned long long>(layoutUnits),
+                            static_cast<unsigned long long>(byteSize),
+                            static_cast<unsigned int>(dataSlotPtr == rustFreeArg),
+                            static_cast<unsigned long long>(adjacentM2a8),
+                            static_cast<unsigned long long>(adjacentM290));
+                        Switch_LogCrashLine(line);
+                    }
+
                     // sched_buffer has three distinct Vec deallocation sites.
                     // Return address 0x6a4f40 follows the BL at 0x6a4f3c:
                     // x0 comes from [FP-56], len from [FP-64], element size 16.
