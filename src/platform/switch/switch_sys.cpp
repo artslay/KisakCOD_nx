@@ -25,6 +25,16 @@ static int g_switchLogFd = -1;
 static const char *const kSwitchLogPath = "sdmc:/switch/KisakCOD/kisakcod.log";
 static bool g_switchScreenLog = false;
 
+// Snapshot the NAK RawVec realloc currently executing. These are only written
+// by the matching wrapper call and read at the start of the exception report,
+// so a fault inside Newlib can report the exact request without logging each
+// allocation or touching the potentially damaged heap.
+static thread_local volatile uintptr_t g_switchNakReallocActive = 0u;
+static thread_local volatile uintptr_t g_switchNakReallocCaller = 0u;
+static thread_local volatile uintptr_t g_switchNakReallocCallerOffset = 0u;
+static thread_local volatile uintptr_t g_switchNakReallocPointer = 0u;
+static thread_local volatile uintptr_t g_switchNakReallocSize = 0u;
+
 static char g_switchDeferredDiag[1024 * 1024];
 static size_t g_switchDeferredDiagUsed = 0;
 
@@ -552,25 +562,25 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
     const uintptr_t codeBase = reinterpret_cast<uintptr_t>(__code_start);
     const uintptr_t callerOffset =
         caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
+    const bool nakRawVecRealloc =
+        callerOffset == static_cast<uintptr_t>(0x918a8u);
 
-    // Trace only the NAK RawVec growth call site identified by addr2line.
-    // Log arguments before entering Newlib; do not inspect the possibly
-    // corrupted allocation or its allocator metadata here.
-    if (callerOffset == static_cast<uintptr_t>(0x918a8u))
+    // Keep the active request in TLS instead of logging every RawVec growth.
+    // If Newlib faults before returning, the exception handler can report this
+    // exact pointer/size together with the CPU registers at the faulting PC.
+    if (nakRawVecRealloc)
     {
-        char probe[256];
-        std::snprintf(
-            probe, sizeof(probe),
-            "[KisakCOD][REALLOC PROBE] caller=0x%016llx "
-            "callerOff=0x%llx ptr=0x%016llx size=%llu\n",
-            static_cast<unsigned long long>(caller),
-            static_cast<unsigned long long>(callerOffset),
-            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(pointer)),
-            static_cast<unsigned long long>(size));
-        Switch_LogCrashLine(probe);
+        g_switchNakReallocCaller = caller;
+        g_switchNakReallocCallerOffset = callerOffset;
+        g_switchNakReallocPointer =
+            reinterpret_cast<uintptr_t>(pointer);
+        g_switchNakReallocSize = static_cast<uintptr_t>(size);
+        g_switchNakReallocActive = 1u;
     }
 
     void *replacement = __real_realloc(pointer, size);
+    if (nakRawVecRealloc)
+        g_switchNakReallocActive = 0u;
     // A failed non-zero realloc preserves the old allocation. Record the
     // implicit free only after success (or a zero-size deallocation request).
     if (pointer && (replacement || size == 0u))
@@ -623,6 +633,28 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         ctx->pstate,
         ctx->esr,
         (ctx->esr >> 26) & 0x3f);
+    Switch_LogCrashLine(line);
+
+    // Emit the active NAK realloc request and the fault-time register snapshot
+    // before deeper diagnostics. x0-x5 are raw registers: memcpy may already
+    // have advanced them, so the saved realloc pointer/size are logged too.
+    std::snprintf(
+        line, sizeof(line),
+        "[KisakCOD][CRASH REALLOC STATE] active=%llu "
+        "caller=0x%016llx callerOff=0x%llx ptr=0x%016llx size=%llu "
+        "x0=0x%016llx x1=0x%016llx x2=0x%016llx "
+        "x3=0x%016llx x4=0x%016llx x5=0x%016llx\n",
+        static_cast<unsigned long long>(g_switchNakReallocActive),
+        static_cast<unsigned long long>(g_switchNakReallocCaller),
+        static_cast<unsigned long long>(g_switchNakReallocCallerOffset),
+        static_cast<unsigned long long>(g_switchNakReallocPointer),
+        static_cast<unsigned long long>(g_switchNakReallocSize),
+        static_cast<unsigned long long>(ctx->cpu_gprs[0].x),
+        static_cast<unsigned long long>(ctx->cpu_gprs[1].x),
+        static_cast<unsigned long long>(ctx->cpu_gprs[2].x),
+        static_cast<unsigned long long>(ctx->cpu_gprs[3].x),
+        static_cast<unsigned long long>(ctx->cpu_gprs[4].x),
+        static_cast<unsigned long long>(ctx->cpu_gprs[5].x));
     Switch_LogCrashLine(line);
 
     // Record the current and caller frame chain for any exception. Do not
