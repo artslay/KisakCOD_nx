@@ -1948,6 +1948,12 @@ bool PatchFragmentShaderForAlphaTest(
         i += wc;
     }
 
+    // The location set is not consulted after resolving the output variable.
+    // Release its nodes before the subsequent SPIR-V vector rewrites so a bad
+    // node header is detected at this boundary, rather than at function exit.
+    g_switchFrameStage = "frame/render/vulkan/pipeline/alpha_patch/release_location_set";
+    locationZeroVariables.clear();
+
     // Prefer Location 0, but tolerate modules that omit an explicit location.
     if (!foundOutputLocation0)
     {
