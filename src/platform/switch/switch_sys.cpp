@@ -222,6 +222,10 @@ struct SwitchHeapBadPointerSnapshot
     uintptr_t pointer;
     uintptr_t size;
     uintptr_t caller;
+    uintptr_t operation;
+    uintptr_t sourcePointer;
+    uintptr_t sourcePrevFoot;
+    uintptr_t sourceHead;
     uintptr_t words[8]; // pointer[-4]..pointer[+3]
     uintptr_t linkSnapshotMask;
     uintptr_t fdNext;
@@ -281,7 +285,8 @@ static bool Switch_HeapTraceIsKnownBadPointer(uintptr_t pointer)
 }
 
 static void Switch_HeapTraceRememberBadPointer(
-    uintptr_t pointer, uintptr_t size, uintptr_t caller)
+    uintptr_t pointer, uintptr_t size, uintptr_t caller, char operation,
+    uintptr_t sourcePointer, uintptr_t sourcePrevFoot, uintptr_t sourceHead)
 {
     const uintptr_t sequence = __atomic_fetch_add(
         &g_switchHeapBadPointerNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
@@ -292,6 +297,10 @@ static void Switch_HeapTraceRememberBadPointer(
     __atomic_store_n(&snapshot.pointer, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.size, size, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.caller, caller, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.operation, static_cast<uintptr_t>(operation), __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.sourcePointer, sourcePointer, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.sourcePrevFoot, sourcePrevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.sourceHead, sourceHead, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.linkSnapshotMask, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
@@ -310,19 +319,21 @@ static void Switch_HeapTraceRememberBadPointer(
         __atomic_store_n(&snapshot.words[i], value, __ATOMIC_RELAXED);
     }
 
-    // A just-removed free chunk retains fd/bk in its user payload. malloc must
-    // have repaired both neighbors: fd->bk should equal bk, and bk->fd should
-    // equal fd. If either relation is already broken at return, the corruption
-    // is in the allocator's free-list state, not the caller's Vec element write.
+    // Only malloc can return a reused free chunk whose payload may still hold
+    // its former free-list links. A realloc result can preserve existing Vec
+    // bytes at user[0..1], so do not misinterpret those bytes as fd/bk pointers.
     uintptr_t fdNext = 0u;
     uintptr_t fdPrev = 0u;
     uintptr_t bkNext = 0u;
     uintptr_t bkPrev = 0u;
     uintptr_t linkMask = 0u;
-    if (Switch_HeapTraceReadFreeLinks(user[0], &fdNext, &fdPrev))
-        linkMask |= 1u;
-    if (Switch_HeapTraceReadFreeLinks(user[1], &bkNext, &bkPrev))
-        linkMask |= 2u;
+    if (operation == 'M')
+    {
+        if (Switch_HeapTraceReadFreeLinks(user[0], &fdNext, &fdPrev))
+            linkMask |= 1u;
+        if (Switch_HeapTraceReadFreeLinks(user[1], &bkNext, &bkPrev))
+            linkMask |= 2u;
+    }
     __atomic_store_n(&snapshot.linkSnapshotMask, linkMask, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdNext, fdNext, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdPrev, fdPrev, __ATOMIC_RELAXED);
@@ -375,7 +386,9 @@ static void Switch_HeapTraceRecord(
         if (allocationEvent &&
             (allocationChunkHead & ~static_cast<uintptr_t>(7u)) == 0u)
         {
-            Switch_HeapTraceRememberBadPointer(pointer, size, caller);
+            Switch_HeapTraceRememberBadPointer(
+                pointer, size, caller, operation,
+                reallocSourcePointer, reallocSourcePrevFoot, reallocSourceHead);
         }
 
         // Snapshot the successor for plausible chunks only. A corrupt size
@@ -648,6 +661,14 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             __atomic_load_n(&snapshot.size, __ATOMIC_RELAXED);
         const uintptr_t caller =
             __atomic_load_n(&snapshot.caller, __ATOMIC_RELAXED);
+        const uintptr_t operation =
+            __atomic_load_n(&snapshot.operation, __ATOMIC_RELAXED);
+        const uintptr_t sourcePointer =
+            __atomic_load_n(&snapshot.sourcePointer, __ATOMIC_RELAXED);
+        const uintptr_t sourcePrevFoot =
+            __atomic_load_n(&snapshot.sourcePrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t sourceHead =
+            __atomic_load_n(&snapshot.sourceHead, __ATOMIC_RELAXED);
         uintptr_t words[8]{};
         for (uintptr_t j = 0; j < 8u; ++j)
             words[j] = __atomic_load_n(&snapshot.words[j], __ATOMIC_RELAXED);
@@ -669,16 +690,18 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
         char snapshotLine[1024];
         std::snprintf(
             snapshotLine, sizeof(snapshotLine),
-            "[KisakCOD][HEAP BAD SNAPSHOT] generation=%llu ptr=0x%016llx "
+            "[KisakCOD][HEAP BAD SNAPSHOT] generation=%llu op=%c ptr=0x%016llx "
             "requested=%llu callerOff=0x%llx targetMatch=%u "
             "raw_m20=0x%016llx raw_m18=0x%016llx "
             "prev=0x%016llx head=0x%016llx "
             "raw_p00=0x%016llx raw_p08=0x%016llx "
             "raw_p10=0x%016llx raw_p18=0x%016llx "
+            "source=0x%016llx source_prev=0x%016llx source_head=0x%016llx "
             "linksSeen=0x%llx fd_next=0x%016llx fd_prev=0x%016llx "
             "bk_next=0x%016llx bk_prev=0x%016llx "
             "fd_prev_eq_bk=%u bk_next_eq_fd=%u\n",
             static_cast<unsigned long long>(generation - 1u),
+            static_cast<char>(operation),
             static_cast<unsigned long long>(pointer),
             static_cast<unsigned long long>(size),
             static_cast<unsigned long long>(callerOffset),
@@ -691,6 +714,9 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             static_cast<unsigned long long>(words[5]),
             static_cast<unsigned long long>(words[6]),
             static_cast<unsigned long long>(words[7]),
+            static_cast<unsigned long long>(sourcePointer),
+            static_cast<unsigned long long>(sourcePrevFoot),
+            static_cast<unsigned long long>(sourceHead),
             static_cast<unsigned long long>(linkMask),
             static_cast<unsigned long long>(fdNext),
             static_cast<unsigned long long>(fdPrev),
