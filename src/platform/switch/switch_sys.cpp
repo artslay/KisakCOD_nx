@@ -710,23 +710,31 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         }
     }
 
-    // Diagnose newlib free-list unlink faults (STR x1, [x0, #24]) separately
-    // from memset/DC ZVA faults. In this path x4 is the chunk being unlinked;
-    // reading its four header/link words shows which free-list pointer is bad.
+    // Diagnose both newlib free-list unlink stores:
+    //   str x1, [x0, #24]  (forward link is invalid)
+    //   str x0, [x1, #16]  (backward link is invalid)
+    // FAR identifies which link was dereferenced. In either path x4 is the
+    // chunk being unlinked; its four words help identify earlier corruption.
     const uintptr_t freeFaultPc = static_cast<uintptr_t>(ctx->pc.x);
-    const uintptr_t freeFaultBase =
+    const uintptr_t freeFaultFd =
         static_cast<uintptr_t>(ctx->cpu_gprs[0].x);
+    const uintptr_t freeFaultBk =
+        static_cast<uintptr_t>(ctx->cpu_gprs[1].x);
     const bool freeFaultAddressMatches =
-        (freeFaultBase == 0u && ctx->far.x == 0x18u) ||
-        (freeFaultBase <= UINTPTR_MAX - 24u &&
-         ctx->far.x == freeFaultBase + 24u);
+        ((freeFaultFd == 0u && ctx->far.x == 0x18u) ||
+         (freeFaultFd <= UINTPTR_MAX - 24u &&
+          ctx->far.x == freeFaultFd + 24u)) ||
+        ((freeFaultBk == 0u && ctx->far.x == 0x10u) ||
+         (freeFaultBk <= UINTPTR_MAX - 16u &&
+          ctx->far.x == freeFaultBk + 16u));
     if (freeFaultAddressMatches && (freeFaultPc & 3u) == 0u)
     {
         const uint32_t freeFaultInsn =
             *reinterpret_cast<const volatile uint32_t *>(freeFaultPc);
         const uintptr_t node =
             static_cast<uintptr_t>(ctx->cpu_gprs[4].x);
-        if (freeFaultInsn == 0xf9000c01u &&
+        if ((freeFaultInsn == 0xf9000c01u ||
+             freeFaultInsn == 0xf9000820u) &&
             node >= 16u &&
             node <= UINTPTR_MAX - 24u &&
             (node & (alignof(uintptr_t) - 1u)) == 0u)
