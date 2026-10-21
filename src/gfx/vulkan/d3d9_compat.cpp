@@ -1405,7 +1405,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     std::vector<size_t> shuffleOffsets;
     uint64_t estimatedGrowth = 0u;
     uint64_t totalSelectorCount = 0u;
-    constexpr uint64_t kMaxEstimatedShuffleGrowthWords = 8192u;
+    constexpr uint64_t kMaxEstimatedShuffleGrowthWords = 1024u;
 
     // First inspect only the instruction stream. Most shaders have no vector
     // shuffles, and many others exceed the rewrite budget. Neither case needs
@@ -4296,6 +4296,23 @@ HRESULT IDirect3DDevice9::SetTexture(uint32_t stage, IDirect3DBaseTexture9 *tex)
     m_textures[stage] = tex;
     if (old)
         old->Release();
+#ifdef __SWITCH__
+    // Capture whether the engine's lightmap sampler registers actually reach
+    // the Vulkan compatibility device, including later clears/replacements.
+    static uint32_t switchLightmapTextureSetTraceCount = 0;
+    if ((stage == 2u || stage == 3u) &&
+        switchLightmapTextureSetTraceCount < 128u)
+    {
+        char trace[224];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK SET TEXTURE] n=%u stage=%u old=%p requested=%p stored=%p\n",
+            switchLightmapTextureSetTraceCount++, stage,
+            static_cast<void *>(old), static_cast<void *>(tex),
+            static_cast<void *>(m_textures[stage]));
+        Switch_LogWrite(trace);
+    }
+#endif
     return S_OK;
 }
 
@@ -5911,11 +5928,11 @@ bool IDirect3DDevice9::EnsurePipeline()
                 loweredPixelExtracts, pixelWordsBeforeLower, pixelSpirv.size());
             Switch_LogWrite(loweringTrace);
         }
-        else if (pixelShuffleGrowthEstimate > 8192u)
+        else if (pixelShuffleGrowthEstimate > 1024u)
         {
             char loweringTrace[224];
             std::snprintf(loweringTrace, sizeof(loweringTrace),
-                "[KisakCOD][VK SPIRV LOWER] stage=ps serial=%llu action=preserve_native reason=expansion_budget estimated_growth=%u limit=8192\n",
+                "[KisakCOD][VK SPIRV LOWER] stage=ps serial=%llu action=preserve_native reason=expansion_budget estimated_growth=%u limit=1024\n",
                 static_cast<unsigned long long>(m_pixelShader->serial),
                 pixelShuffleGrowthEstimate);
             Switch_LogWrite(loweringTrace);
@@ -6044,11 +6061,11 @@ bool IDirect3DDevice9::EnsurePipeline()
                 m_vertexShader->spirv.size());
             Switch_LogWrite(loweringTrace);
         }
-        else if (vertexShuffleGrowthEstimate > 8192u)
+        else if (vertexShuffleGrowthEstimate > 1024u)
         {
             char loweringTrace[224];
             std::snprintf(loweringTrace, sizeof(loweringTrace),
-                "[KisakCOD][VK SPIRV LOWER] stage=vs serial=%llu action=preserve_native reason=expansion_budget estimated_growth=%u limit=8192\n",
+                "[KisakCOD][VK SPIRV LOWER] stage=vs serial=%llu action=preserve_native reason=expansion_budget estimated_growth=%u limit=1024\n",
                 static_cast<unsigned long long>(m_vertexShader->serial),
                 vertexShuffleGrowthEstimate);
             Switch_LogWrite(loweringTrace);
