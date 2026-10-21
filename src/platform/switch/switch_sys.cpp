@@ -796,6 +796,72 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                         Switch_LogCrashLine(line);
                     }
 
+                    if (schedulerCallerOffset == 0x708ed0u &&
+                        raFrameAddress >= 0x100u &&
+                        raFrameAddress > crashStack &&
+                        raFrameAddress - crashStack <= 0x1000u &&
+                        (raFrameAddress & (alignof(uintptr_t) - 1u)) == 0)
+                    {
+                        // assign_regs frees a Vec buffer here: x23 is the
+                        // data pointer and x20 is its capacity; element size is 8.
+                        const uintptr_t vecPtr =
+                            static_cast<uintptr_t>(ctx->cpu_gprs[23].x);
+                        const uintptr_t vecCapacity =
+                            static_cast<uintptr_t>(ctx->cpu_gprs[20].x);
+                        const uintptr_t byteSize =
+                            vecCapacity <= UINTPTR_MAX / sizeof(uintptr_t)
+                                ? vecCapacity * sizeof(uintptr_t) : UINTPTR_MAX;
+                        const volatile uintptr_t *callerFrame =
+                            reinterpret_cast<const volatile uintptr_t *>(
+                                raFrameAddress);
+                        const uintptr_t fpM136 = callerFrame[-17];
+                        const uintptr_t fpM128 = callerFrame[-16];
+                        const uintptr_t fpM120 = callerFrame[-15];
+                        const uintptr_t fpM112 = callerFrame[-14];
+                        const uintptr_t fpM104 = callerFrame[-13];
+                        const uintptr_t fpM096 = callerFrame[-12];
+                        const uintptr_t fpM088 = callerFrame[-11];
+                        const uintptr_t fpM080 = callerFrame[-10];
+                        const uintptr_t fpM072 = callerFrame[-9];
+                        const uintptr_t fpM064 = callerFrame[-8];
+                        const uintptr_t fpM056 = callerFrame[-7];
+                        const uintptr_t fpM048 = callerFrame[-6];
+                        const uintptr_t fpM040 = callerFrame[-5];
+                        const uintptr_t fpM032 = callerFrame[-4];
+                        std::snprintf(
+                            line, sizeof(line),
+                            "[KisakCOD][CRASH] NAK_ASSIGN_REGS_FREE "
+                            "site=0x708ed0 freeArg=0x%016llx x23=0x%016llx "
+                            "x20_capacity=%llu bytes=0x%llx argMatches=%u "
+                            "fp_m136=0x%016llx fp_m128=0x%016llx "
+                            "fp_m120=0x%016llx fp_m112=0x%016llx "
+                            "fp_m104=0x%016llx fp_m96=0x%016llx "
+                            "fp_m88=0x%016llx fp_m80=0x%016llx "
+                            "fp_m72=0x%016llx fp_m64=0x%016llx "
+                            "fp_m56=0x%016llx fp_m48=0x%016llx "
+                            "fp_m40=0x%016llx fp_m32=0x%016llx\n",
+                            static_cast<unsigned long long>(rustFreeArg),
+                            static_cast<unsigned long long>(vecPtr),
+                            static_cast<unsigned long long>(vecCapacity),
+                            static_cast<unsigned long long>(byteSize),
+                            static_cast<unsigned int>(rustFreeArg == vecPtr),
+                            static_cast<unsigned long long>(fpM136),
+                            static_cast<unsigned long long>(fpM128),
+                            static_cast<unsigned long long>(fpM120),
+                            static_cast<unsigned long long>(fpM112),
+                            static_cast<unsigned long long>(fpM104),
+                            static_cast<unsigned long long>(fpM096),
+                            static_cast<unsigned long long>(fpM088),
+                            static_cast<unsigned long long>(fpM080),
+                            static_cast<unsigned long long>(fpM072),
+                            static_cast<unsigned long long>(fpM064),
+                            static_cast<unsigned long long>(fpM056),
+                            static_cast<unsigned long long>(fpM048),
+                            static_cast<unsigned long long>(fpM040),
+                            static_cast<unsigned long long>(fpM032));
+                        Switch_LogCrashLine(line);
+                    }
+
                     if (raFrameAddress >= 24u &&
                         (raFrameAddress & (alignof(uintptr_t) - 1u)) == 0)
                     {
