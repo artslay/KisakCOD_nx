@@ -253,19 +253,23 @@ static void Switch_HeapTraceRecord(
     uintptr_t allocationChunkPrevFoot = 0u;
     uintptr_t allocationChunkHead = 0u;
     uintptr_t headerSnapshot = 0u;
+    uintptr_t nextChunkPrevFoot = 0u;
+    uintptr_t nextChunkHead = 0u;
     const bool allocationEvent =
         operation == 'M' || operation == 'C' || operation == 'R';
+    const bool freeEvent = operation == 'F';
     const bool suspectFree =
-        operation == 'F' && Switch_HeapTraceIsKnownBadPointer(pointer);
-    if ((allocationEvent || suspectFree) &&
+        freeEvent && Switch_HeapTraceIsKnownBadPointer(pointer);
+    if ((allocationEvent || freeEvent || suspectFree) &&
         pointer >= 2u * sizeof(uintptr_t) &&
         (pointer & (alignof(uintptr_t) - 1u)) == 0u)
     {
-        // Snapshot metadata immediately after allocation. If that allocation
-        // returned a malformed header, take a second snapshot immediately
-        // before its matching free so we can see whether it changed in between.
-        const volatile uintptr_t *chunk = reinterpret_cast<const volatile uintptr_t *>(
-            pointer - 2u * sizeof(uintptr_t));
+        // Snapshot every free before Newlib mutates its links. The bad malloc
+        // is already malformed on return, so the preceding frees are the
+        // remaining way to identify the first operation that damaged the heap.
+        const uintptr_t chunkAddress = pointer - 2u * sizeof(uintptr_t);
+        const volatile uintptr_t *chunk =
+            reinterpret_cast<const volatile uintptr_t *>(chunkAddress);
         allocationChunkPrevFoot = chunk[0];
         allocationChunkHead = chunk[1];
         headerSnapshot = 1u;
@@ -273,6 +277,27 @@ static void Switch_HeapTraceRecord(
             (allocationChunkHead & ~static_cast<uintptr_t>(7u)) == 0u)
         {
             Switch_HeapTraceRememberBadPointer(pointer);
+        }
+
+        // Snapshot the successor for plausible chunks only. A corrupt size
+        // must not turn crash reporting into an arbitrary memory read.
+        if (freeEvent)
+        {
+            const uintptr_t chunkSize =
+                allocationChunkHead & ~static_cast<uintptr_t>(7u);
+            constexpr uintptr_t kMaxNeighborSnapshotSize = 0x01000000u;
+            if (chunkSize >= 4u * sizeof(uintptr_t) &&
+                (chunkSize & (alignof(uintptr_t) - 1u)) == 0u &&
+                chunkSize <= kMaxNeighborSnapshotSize &&
+                chunkAddress <= UINTPTR_MAX - chunkSize - 2u * sizeof(uintptr_t))
+            {
+                const volatile uintptr_t *nextChunk =
+                    reinterpret_cast<const volatile uintptr_t *>(
+                        chunkAddress + chunkSize);
+                nextChunkPrevFoot = nextChunk[0];
+                nextChunkHead = nextChunk[1];
+                headerSnapshot |= 2u;
+            }
         }
     }
 
@@ -290,8 +315,16 @@ static void Switch_HeapTraceRecord(
     __atomic_store_n(&event.allocationChunkHead, allocationChunkHead, __ATOMIC_RELAXED);
     __atomic_store_n(&event.headerSnapshot, headerSnapshot, __ATOMIC_RELAXED);
     __atomic_store_n(&event.reallocSourcePointer, reallocSourcePointer, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.reallocSourcePrevFoot, reallocSourcePrevFoot, __ATOMIC_RELAXED);
-    __atomic_store_n(&event.reallocSourceHead, reallocSourceHead, __ATOMIC_RELAXED);
+    // F events use the realloc-source slots for successor metadata; R events
+    // retain the pre-realloc source chunk values exactly as before.
+    __atomic_store_n(
+        &event.reallocSourcePrevFoot,
+        freeEvent ? nextChunkPrevFoot : reallocSourcePrevFoot,
+        __ATOMIC_RELAXED);
+    __atomic_store_n(
+        &event.reallocSourceHead,
+        freeEvent ? nextChunkHead : reallocSourceHead,
+        __ATOMIC_RELAXED);
     __atomic_store_n(&event.sequence, sequence + 1u, __ATOMIC_RELEASE);
 }
 
@@ -432,6 +465,8 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
                 __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
             const uintptr_t reallocSourcePointer =
                 __atomic_load_n(&event.reallocSourcePointer, __ATOMIC_RELAXED);
+            const uintptr_t reallocSourcePrevFoot =
+                __atomic_load_n(&event.reallocSourcePrevFoot, __ATOMIC_RELAXED);
             const uintptr_t reallocSourceHead =
                 __atomic_load_n(&event.reallocSourceHead, __ATOMIC_RELAXED);
             const uintptr_t headerSnapshot =
@@ -443,22 +478,34 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
 
             const uintptr_t callerOffset =
                 caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
-            char historyLine[448];
+            const bool historyFree = operation == static_cast<uintptr_t>('F');
+            char historyLine[600];
             std::snprintf(
                 historyLine, sizeof(historyLine),
                 "[KisakCOD][HEAP BAD ALLOC HISTORY] seq=%llu op=%c "
                 "ptr=0x%016llx size=%llu callerOff=0x%llx "
-                "headerSeen=%llu head=0x%016llx source=0x%016llx "
-                "source_head=0x%016llx\n",
+                "headerSeen=%llu prev=0x%016llx head=0x%016llx "
+                "neighborSeen=%llu neighbor_prev=0x%016llx neighbor_head=0x%016llx "
+                "source=0x%016llx source_prev=0x%016llx source_head=0x%016llx\n",
                 static_cast<unsigned long long>(sequence),
                 static_cast<char>(operation),
                 static_cast<unsigned long long>(pointer),
                 static_cast<unsigned long long>(size),
                 static_cast<unsigned long long>(callerOffset),
-                static_cast<unsigned long long>(headerSnapshot),
+                static_cast<unsigned long long>(headerSnapshot & 1u),
+                static_cast<unsigned long long>(allocationChunkPrevFoot),
                 static_cast<unsigned long long>(allocationChunkHead),
+                static_cast<unsigned long long>(
+                    historyFree && (headerSnapshot & 2u) != 0u),
+                static_cast<unsigned long long>(
+                    historyFree ? reallocSourcePrevFoot : 0u),
+                static_cast<unsigned long long>(
+                    historyFree ? reallocSourceHead : 0u),
                 static_cast<unsigned long long>(reallocSourcePointer),
-                static_cast<unsigned long long>(reallocSourceHead));
+                static_cast<unsigned long long>(
+                    historyFree ? 0u : reallocSourcePrevFoot),
+                static_cast<unsigned long long>(
+                    historyFree ? 0u : reallocSourceHead));
             Switch_LogCrashLine(historyLine);
         }
     }
@@ -501,20 +548,24 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
         const uintptr_t headerSnapshot =
             __atomic_load_n(&event.headerSnapshot, __ATOMIC_RELAXED);
-        if (operation == static_cast<uintptr_t>('F') && headerSnapshot != 0u)
+        if (operation == static_cast<uintptr_t>('F') && (headerSnapshot & 1u) != 0u)
         {
             std::snprintf(
                 line, sizeof(line),
                 "[KisakCOD][HEAP TRACE] seq=%llu op=F ptr=0x%016llx "
                 "size=%llu caller=0x%016llx callerOff=0x%llx "
-                "free_prev=0x%016llx free_head=0x%016llx\n",
+                "free_prev=0x%016llx free_head=0x%016llx "
+                "neighborSeen=%u neighbor_prev=0x%016llx neighbor_head=0x%016llx\n",
                 static_cast<unsigned long long>(sequence),
                 static_cast<unsigned long long>(pointer),
                 static_cast<unsigned long long>(size),
                 static_cast<unsigned long long>(caller),
                 static_cast<unsigned long long>(callerOffset),
                 static_cast<unsigned long long>(allocationChunkPrevFoot),
-                static_cast<unsigned long long>(allocationChunkHead));
+                static_cast<unsigned long long>(allocationChunkHead),
+                static_cast<unsigned int>((headerSnapshot & 2u) != 0u),
+                static_cast<unsigned long long>(reallocSourcePrevFoot),
+                static_cast<unsigned long long>(reallocSourceHead));
         }
         else if (operation == static_cast<uintptr_t>('R'))
         {
