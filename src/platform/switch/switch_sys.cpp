@@ -720,6 +720,82 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                     // In for_each_instr_dst_mut, the data pointer is at [FP-24].
                     // Keep the adjacent words raw until their exact roles are proven.
                     const uintptr_t rustFreeArg = freeStack[5];
+                    const uintptr_t schedulerCallerOffset =
+                        raLr >= codeBase ? raLr - codeBase : UINTPTR_MAX;
+
+                    // sched_buffer has three distinct Vec deallocation sites.
+                    // Return address 0x6a4f40 follows the BL at 0x6a4f3c:
+                    // x0 comes from [FP-56], len from [FP-64], element size 16.
+                    // 0x6a4f58 is the next Vec ([FP-80]/[FP-88]); 0x6a4f1c
+                    // is a register-backed Vec (x23 pointer, x25 length).
+                    if (schedulerCallerOffset == 0x6a4f1cu)
+                    {
+                        const uintptr_t vecPtr =
+                            static_cast<uintptr_t>(ctx->cpu_gprs[23].x);
+                        const uintptr_t vecLen =
+                            static_cast<uintptr_t>(ctx->cpu_gprs[25].x);
+                        std::snprintf(
+                            line, sizeof(line),
+                            "[KisakCOD][CRASH] NAK_SCHED_BUFFER_FREE "
+                            "site=0x6a4f1c freeArg=0x%016llx vecPtrX23=0x%016llx "
+                            "vecLenX25=%llu argMatches=%u\n",
+                            static_cast<unsigned long long>(rustFreeArg),
+                            static_cast<unsigned long long>(vecPtr),
+                            static_cast<unsigned long long>(vecLen),
+                            static_cast<unsigned int>(rustFreeArg == vecPtr));
+                        Switch_LogCrashLine(line);
+                    }
+                    else if ((schedulerCallerOffset == 0x6a4f40u ||
+                              schedulerCallerOffset == 0x6a4f58u) &&
+                             raFrameAddress >= 0x100u &&
+                             (raFrameAddress & (alignof(uintptr_t) - 1u)) == 0)
+                    {
+                        const volatile uintptr_t *callerFrame =
+                            reinterpret_cast<const volatile uintptr_t *>(
+                                raFrameAddress);
+                        const uintptr_t vec1Ptr =
+                            static_cast<uintptr_t>(callerFrame[-7]);  // FP-56
+                        const uintptr_t vec1Len =
+                            static_cast<uintptr_t>(callerFrame[-8]);  // FP-64
+                        const uintptr_t vec2Ptr =
+                            static_cast<uintptr_t>(callerFrame[-10]); // FP-80
+                        const uintptr_t vec2Len =
+                            static_cast<uintptr_t>(callerFrame[-11]); // FP-88
+                        const uintptr_t other1 =
+                            static_cast<uintptr_t>(callerFrame[-6]);   // FP-48
+                        const uintptr_t other2 =
+                            static_cast<uintptr_t>(callerFrame[-9]);   // FP-72
+                        const uintptr_t callsitePtr =
+                            schedulerCallerOffset == 0x6a4f40u
+                                ? vec1Ptr : vec2Ptr;
+                        const uintptr_t callsiteLen =
+                            schedulerCallerOffset == 0x6a4f40u
+                                ? vec1Len : vec2Len;
+                        const uintptr_t byteSize =
+                            callsiteLen <= UINTPTR_MAX / 16u
+                                ? callsiteLen * 16u : UINTPTR_MAX;
+                        std::snprintf(
+                            line, sizeof(line),
+                            "[KisakCOD][CRASH] NAK_SCHED_BUFFER_FREE "
+                            "site=0x%llx freeArg=0x%016llx vecPtr=0x%016llx "
+                            "vecLen=%llu elemSize=16 bytes=0x%llx argMatches=%u "
+                            "vec1Ptr=0x%016llx vec1Len=%llu fp_m48=0x%016llx "
+                            "vec2Ptr=0x%016llx vec2Len=%llu fp_m72=0x%016llx\n",
+                            static_cast<unsigned long long>(schedulerCallerOffset),
+                            static_cast<unsigned long long>(rustFreeArg),
+                            static_cast<unsigned long long>(callsitePtr),
+                            static_cast<unsigned long long>(callsiteLen),
+                            static_cast<unsigned long long>(byteSize),
+                            static_cast<unsigned int>(callsitePtr == rustFreeArg),
+                            static_cast<unsigned long long>(vec1Ptr),
+                            static_cast<unsigned long long>(vec1Len),
+                            static_cast<unsigned long long>(other1),
+                            static_cast<unsigned long long>(vec2Ptr),
+                            static_cast<unsigned long long>(vec2Len),
+                            static_cast<unsigned long long>(other2));
+                        Switch_LogCrashLine(line);
+                    }
+
                     if (raFrameAddress >= 24u &&
                         (raFrameAddress & (alignof(uintptr_t) - 1u)) == 0)
                     {
