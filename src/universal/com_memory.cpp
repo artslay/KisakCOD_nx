@@ -279,6 +279,28 @@ static bool SwitchVirtualCommitRange(void *pointer, size_t size)
             const Result invalidDestination = R_FAILED(destinationQuery)
                 ? destinationQuery
                 : MAKERESULT(Module_Libnx, LibnxError_BadInput);
+            char line[640];
+            std::snprintf(
+                line, sizeof(line),
+                "[KisakCOD][VMEM DEST NOT FREE] dst=%p size=%llu queryRc=0x%x "
+                "regionBase=%p regionSize=%llu type=0x%x attr=0x%x perm=0x%x "
+                "pageInfo=0x%x reservationBase=%p reservationSize=%llu "
+                "pages=%llu..%llu failedPage=%llu committed=%u\n",
+                destination,
+                static_cast<unsigned long long>(runPages * SWITCH_VIRTUAL_PAGE_SIZE),
+                static_cast<unsigned>(destinationQuery),
+                reinterpret_cast<void *>(destinationRegionBase),
+                static_cast<unsigned long long>(destinationRegion.size),
+                destinationRegion.type, destinationRegion.attr, destinationRegion.perm,
+                destinationPageInfo,
+                reservation->base,
+                static_cast<unsigned long long>(reservation->size),
+                static_cast<unsigned long long>(firstPage),
+                static_cast<unsigned long long>(endPage),
+                static_cast<unsigned long long>(page),
+                static_cast<unsigned>(page < reservation->pageCount &&
+                    SwitchVirtualPageIsCommitted(*reservation, page)));
+            Switch_LogWrite(line);
             SwitchVirtualMemoryLog(
                 "commit_destination_not_free", destination,
                 runPages * SWITCH_VIRTUAL_PAGE_SIZE, invalidDestination);
