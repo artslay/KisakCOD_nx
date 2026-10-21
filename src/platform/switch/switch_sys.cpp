@@ -34,6 +34,8 @@ static thread_local volatile uintptr_t g_switchNakReallocCaller = 0u;
 static thread_local volatile uintptr_t g_switchNakReallocCallerOffset = 0u;
 static thread_local volatile uintptr_t g_switchNakReallocPointer = 0u;
 static thread_local volatile uintptr_t g_switchNakReallocSize = 0u;
+static thread_local volatile uintptr_t g_switchNakReallocSourcePrevFoot = 0u;
+static thread_local volatile uintptr_t g_switchNakReallocSourceHead = 0u;
 
 // Snapshot calloc's input before entering Newlib. If _calloc_r faults while
 // zeroing its result, __wrap_calloc never returns and post-call tracing cannot
@@ -724,6 +726,8 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
         g_switchNakReallocPointer =
             reinterpret_cast<uintptr_t>(pointer);
         g_switchNakReallocSize = static_cast<uintptr_t>(size);
+        g_switchNakReallocSourcePrevFoot = 0u;
+        g_switchNakReallocSourceHead = 0u;
         g_switchNakReallocActive = 1u;
     }
 
@@ -740,6 +744,13 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
                 sourcePointer - 2u * sizeof(uintptr_t));
         sourceChunkPrevFoot = sourceChunk[0];
         sourceChunkHead = sourceChunk[1];
+    }
+    if (nakRawVecRealloc)
+    {
+        // Preserve the pre-realloc chunk metadata in TLS: realloc can fault
+        // before the normal heap trace event records either its input or result.
+        g_switchNakReallocSourcePrevFoot = sourceChunkPrevFoot;
+        g_switchNakReallocSourceHead = sourceChunkHead;
     }
 
     void *replacement = __real_realloc(pointer, size);
@@ -810,6 +821,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         line, sizeof(line),
         "[KisakCOD][CRASH REALLOC STATE] active=%llu "
         "caller=0x%016llx callerOff=0x%llx ptr=0x%016llx size=%llu "
+        "source_prev=0x%016llx source_head=0x%016llx "
         "x0=0x%016llx x1=0x%016llx x2=0x%016llx "
         "x3=0x%016llx x4=0x%016llx x5=0x%016llx\n",
         static_cast<unsigned long long>(g_switchNakReallocActive),
@@ -817,6 +829,8 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         static_cast<unsigned long long>(g_switchNakReallocCallerOffset),
         static_cast<unsigned long long>(g_switchNakReallocPointer),
         static_cast<unsigned long long>(g_switchNakReallocSize),
+        static_cast<unsigned long long>(g_switchNakReallocSourcePrevFoot),
+        static_cast<unsigned long long>(g_switchNakReallocSourceHead),
         static_cast<unsigned long long>(ctx->cpu_gprs[0].x),
         static_cast<unsigned long long>(ctx->cpu_gprs[1].x),
         static_cast<unsigned long long>(ctx->cpu_gprs[2].x),
