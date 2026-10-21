@@ -625,6 +625,73 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                 static_cast<unsigned long long>(ctx->cpu_gprs[3].x));
             Switch_LogCrashLine(line);
 
+            // In hashbrown::RawTable::drop, x22 is the bucket cursor and x24
+            // contains the control-byte high-bit mask. Recreate the exact
+            // candidate expression used by the NAK loop, then inspect the
+            // Vec<SSAValue> words immediately before that bucket. Only perform
+            // these reads for the current NAK text range and plausible heap data.
+            const uintptr_t callerLrSlot =
+                static_cast<uintptr_t>(ctx->sp.x) + sizeof(uintptr_t);
+            const uintptr_t callerLr =
+                *reinterpret_cast<const volatile uintptr_t *>(callerLrSlot);
+            const uintptr_t callerLrOffset =
+                callerLr >= codeBase ? callerLr - codeBase : UINTPTR_MAX;
+            const uintptr_t tableCursor =
+                static_cast<uintptr_t>(ctx->cpu_gprs[22].x);
+            const uintptr_t ctrlMask =
+                static_cast<uintptr_t>(ctx->cpu_gprs[24].x);
+            unsigned int ctrlBit = 0;
+            while (ctrlBit < 64u &&
+                   ((ctrlMask >> ctrlBit) & static_cast<uintptr_t>(1u)) == 0u)
+                ++ctrlBit;
+
+            if (callerLrOffset >= 0x600000u &&
+                callerLrOffset < 0x800000u &&
+                ctrlBit < 64u)
+            {
+                const uintptr_t ctrlOffset =
+                    (static_cast<uintptr_t>(ctrlBit) << 2u) & 0x1e0u;
+                if (tableCursor >= 0x100000000ull + ctrlOffset + 24u &&
+                    tableCursor <= UINTPTR_MAX - 8u)
+                {
+                    const uintptr_t bucketAddress = tableCursor - ctrlOffset;
+                    if ((bucketAddress & (alignof(uintptr_t) - 1u)) == 0u)
+                    {
+                        const volatile uintptr_t *bucketWords =
+                            reinterpret_cast<const volatile uintptr_t *>(
+                                bucketAddress - 24u);
+                        const uintptr_t fieldM24 = bucketWords[0];
+                        const uintptr_t fieldM16 = bucketWords[1];
+                        const uintptr_t fieldM08 = bucketWords[2];
+                        const uintptr_t rustFreeArg =
+                            *reinterpret_cast<const volatile uintptr_t *>(
+                                static_cast<uintptr_t>(ctx->sp.x) + 40u);
+                        std::snprintf(
+                            line, sizeof(line),
+                            "[KisakCOD][CRASH] NAK_HASHBROWN_DROP "
+                            "callerLr=0x%016llx callerOff=0x%llx "
+                            "cursorX22=0x%016llx ctrlMaskX24=0x%016llx "
+                            "ctrlBit=%u ctrlOffset=0x%llx bucket=0x%016llx "
+                            "fieldM24=0x%016llx fieldM16=0x%016llx "
+                            "fieldM08=0x%016llx freeArg=0x%016llx "
+                            "dataMatches=%u\\n",
+                            static_cast<unsigned long long>(callerLr),
+                            static_cast<unsigned long long>(callerLrOffset),
+                            static_cast<unsigned long long>(tableCursor),
+                            static_cast<unsigned long long>(ctrlMask),
+                            ctrlBit,
+                            static_cast<unsigned long long>(ctrlOffset),
+                            static_cast<unsigned long long>(bucketAddress),
+                            static_cast<unsigned long long>(fieldM24),
+                            static_cast<unsigned long long>(fieldM16),
+                            static_cast<unsigned long long>(fieldM08),
+                            static_cast<unsigned long long>(rustFreeArg),
+                            static_cast<unsigned int>(fieldM16 == rustFreeArg));
+                        Switch_LogCrashLine(line);
+                    }
+                }
+            }
+
             // When a free-list unlink fault occurs during NAK compilation, capture
             // the active caller's saved x19. RegAllocator's drop glue keeps "this"
             // in x19 and saves it at frame_fp + 16; dumping its raw fields lets us
@@ -653,7 +720,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                     // In for_each_instr_dst_mut, the data pointer is at [FP-24].
                     // Keep the adjacent words raw until their exact roles are proven.
                     const uintptr_t rustFreeArg = freeStack[5];
-                    if (raFrameAddress >= 0x100000000ull + 24u &&
+                    if (raFrameAddress >= 24u &&
                         (raFrameAddress & (alignof(uintptr_t) - 1u)) == 0)
                     {
                         const volatile uintptr_t *callerSlots =
@@ -669,7 +736,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
 
                         std::snprintf(
                             line, sizeof(line),
-                            "[KisakCOD][CRASH] NAK_DST_VEC "
+                            "[KisakCOD][CRASH] NAK_CALLER_FRAME_WORDS "
                             "callerLr=0x%016llx callerFp=0x%016llx "
                             "freeArg=0x%016llx fp_m24=0x%016llx "
                             "fp_m16=0x%016llx fp_m08=0x%016llx "
