@@ -1405,12 +1405,12 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     std::vector<size_t> shuffleOffsets;
     uint64_t estimatedGrowth = 0u;
     uint64_t totalSelectorCount = 0u;
-    constexpr uint64_t kMaxEstimatedShuffleGrowthWords = 1024u;
 
-    // First inspect only the instruction stream. Most shaders have no vector
-    // shuffles, and many others exceed the rewrite budget. Neither case needs
-    // the ID-bound-sized metadata tables below; allocating them before deciding
-    // whether to rewrite needlessly churns the Switch heap for every pipeline.
+    // Scan before building ID metadata, but do not bypass this compatibility
+    // rewrite for complex shaders. The old 1024-word threshold left precisely
+    // the largest NAK/NVK workloads with native OpVectorShuffle instructions,
+    // the pattern this pass exists to lower. Each selector may need one
+    // five-word OpCompositeExtract; use that conservative bound for reserve.
     for (size_t offset = 5u; offset < words.size();)
     {
         uint32_t wc = 0u;
@@ -1422,10 +1422,16 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
             if (wc < 6u)
                 return false;
             shuffleOffsets.push_back(offset);
-            // Replacing N selector operands grows the module by at most 4*N
-            // words (one extract per selector plus the rebuilt composite).
+            // Selector operands remain as composite constituents; each
+            // emitted OpCompositeExtract adds five words. Use that conservative
+            // upper bound for allocation planning, including identity shuffles.
             const uint64_t selectorCount = static_cast<uint64_t>(wc - 5u);
-            estimatedGrowth += 4ull * selectorCount;
+            if (selectorCount >
+                (std::numeric_limits<uint64_t>::max() - estimatedGrowth) / 5ull ||
+                selectorCount >
+                std::numeric_limits<uint64_t>::max() - totalSelectorCount)
+                return false;
+            estimatedGrowth += 5ull * selectorCount;
             totalSelectorCount += selectorCount;
         }
         offset += wc;
@@ -1433,7 +1439,9 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     if (estimatedGrowthWords)
         *estimatedGrowthWords = estimatedGrowth > UINT32_MAX
             ? UINT32_MAX : static_cast<uint32_t>(estimatedGrowth);
-    if (shuffleOffsets.empty() || estimatedGrowth > kMaxEstimatedShuffleGrowthWords)
+    if (shuffleOffsets.empty() ||
+        estimatedGrowth > static_cast<uint64_t>(
+            std::numeric_limits<size_t>::max() - words.size()))
         return false;
 
     g_switchFrameStage = pixelStage
@@ -1444,7 +1452,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     std::vector<uint32_t> vectorComponentTypeByType(originalBound, 0u);
     std::vector<uint8_t> isVectorType(originalBound, 0u);
 
-    // Only budget-eligible modules get lookup tables, used by the rewrite pass.
+    // Build lookup tables only when there is work to rewrite.
     for (size_t offset = 5u; offset < words.size();)
     {
         uint32_t wc = 0u;
