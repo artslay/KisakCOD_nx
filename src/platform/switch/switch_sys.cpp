@@ -647,6 +647,53 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                     // not from the caller's saved x19 slot at raFrameAddress + 16.
                     const uintptr_t raLr = freeStack[1];
                     const uintptr_t raThis = freeStack[2];
+
+                    // Capture the NAK RegTracker Vec at its deallocation call site
+                    // without assuming the caller's saved x19 is an object pointer.
+                    // In for_each_instr_dst_mut, the data pointer is at [FP-24].
+                    // Keep the adjacent words raw until their exact roles are proven.
+                    const uintptr_t rustFreeArg = freeStack[5];
+                    if (raFrameAddress >= 0x100000000ull + 24u &&
+                        (raFrameAddress & (alignof(uintptr_t) - 1u)) == 0)
+                    {
+                        const volatile uintptr_t *callerSlots =
+                            reinterpret_cast<const volatile uintptr_t *>(
+                                raFrameAddress - 24u);
+                        const uintptr_t fpMinus24 = callerSlots[0];
+                        const uintptr_t fpMinus16 = callerSlots[1];
+                        const uintptr_t fpMinus08 = callerSlots[2];
+                        const uintptr_t faultNode =
+                            static_cast<uintptr_t>(ctx->cpu_gprs[4].x);
+                        const uintptr_t freeChunk =
+                            static_cast<uintptr_t>(ctx->cpu_gprs[6].x);
+
+                        std::snprintf(
+                            line, sizeof(line),
+                            "[KisakCOD][CRASH] NAK_DST_VEC "
+                            "callerLr=0x%016llx callerFp=0x%016llx "
+                            "freeArg=0x%016llx fp_m24=0x%016llx "
+                            "fp_m16=0x%016llx fp_m08=0x%016llx "
+                            "argMatchesFpM24=%u savedX19=0x%016llx "
+                            "faultNodeX4=0x%016llx freeChunkX6=0x%016llx "
+                            "fdX0=0x%016llx bkX1=0x%016llx "
+                            "chunkPrev=0x%016llx chunkHead=0x%016llx\\n",
+                            static_cast<unsigned long long>(raLr),
+                            static_cast<unsigned long long>(raFrameAddress),
+                            static_cast<unsigned long long>(rustFreeArg),
+                            static_cast<unsigned long long>(fpMinus24),
+                            static_cast<unsigned long long>(fpMinus16),
+                            static_cast<unsigned long long>(fpMinus08),
+                            static_cast<unsigned int>(fpMinus24 == rustFreeArg),
+                            static_cast<unsigned long long>(raThis),
+                            static_cast<unsigned long long>(faultNode),
+                            static_cast<unsigned long long>(freeChunk),
+                            static_cast<unsigned long long>(ctx->cpu_gprs[0].x),
+                            static_cast<unsigned long long>(ctx->cpu_gprs[1].x),
+                            static_cast<unsigned long long>(prevFoot),
+                            static_cast<unsigned long long>(head));
+                        Switch_LogCrashLine(line);
+                    }
+
                     if (raThis >= 0x100000000ull &&
                         raThis <= UINTPTR_MAX - 0x70u &&
                         (raThis & (alignof(uintptr_t) - 1u)) == 0)
