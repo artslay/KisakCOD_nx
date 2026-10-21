@@ -212,14 +212,46 @@ struct SwitchHeapTraceEvent
 alignas(64) static SwitchHeapTraceEvent g_switchHeapTrace[kSwitchHeapTraceCount]{};
 static uintptr_t g_switchHeapTraceNext = 0;
 
+// Safe read of two adjacent heap words, used only by opt-in diagnostics.
+// svcQueryMemory validates the mapping before the actual load.
+static bool Switch_HeapTraceReadWordPair(
+    uintptr_t address, uintptr_t *first, uintptr_t *second)
+{
+    if ((address & (alignof(uintptr_t) - 1u)) != 0u ||
+        address > UINTPTR_MAX - 2u * sizeof(uintptr_t))
+        return false;
+
+    MemoryInfo info{};
+    u32 pageInfo = 0u;
+    if (R_FAILED(svcQueryMemory(&info, &pageInfo, address)) ||
+        (info.perm & Perm_R) == 0u)
+        return false;
+
+    const uintptr_t regionStart = static_cast<uintptr_t>(info.addr);
+    const uintptr_t regionSize = static_cast<uintptr_t>(info.size);
+    if (regionStart > UINTPTR_MAX - regionSize)
+        return false;
+    const uintptr_t regionEnd = regionStart + regionSize;
+    if (address < regionStart ||
+        address + 2u * sizeof(uintptr_t) > regionEnd)
+        return false;
+
+    const volatile uintptr_t *words =
+        reinterpret_cast<const volatile uintptr_t *>(address);
+    *first = words[0];
+    *second = words[1];
+    return true;
+}
+
 // Keep a longer, compact history of real frees. The main allocator event ring
 // is intentionally short; a malformed chunk can remain in a bin for many
 // thousands of operations before malloc returns it again.
 // Unified pointer-lifetime journal. Unlike a free-only journal, it records
 // allocations too, so an old free cannot be mistaken for the last lifetime
 // transition after the same address has already been reused.
-// Cover a longer allocator lifetime window than the prior free-only ring.
-static constexpr uintptr_t kSwitchHeapLifeHistoryCount = 524288u;
+// A bounded event ring plus pre/post allocator metadata. Keep the history
+// compact enough for Switch while retaining enough lifetimes to find reuse.
+static constexpr uintptr_t kSwitchHeapLifeHistoryCount = 262144u;
 struct SwitchHeapLifeHistoryEvent
 {
     uintptr_t sequence;
@@ -228,19 +260,53 @@ struct SwitchHeapLifeHistoryEvent
     uintptr_t pointer;
     uintptr_t prevFoot;
     uintptr_t head;
+    uintptr_t preNeighborSeen;
+    uintptr_t preNeighborPrevFoot;
+    uintptr_t preNeighborHead;
     uintptr_t postSeen;
     uintptr_t postPrevFoot;
     uintptr_t postHead;
+    uintptr_t postNeighborSeen;
+    uintptr_t postNeighborPrevFoot;
+    uintptr_t postNeighborHead;
+    uintptr_t postLinksSeen;
+    uintptr_t postFd;
+    uintptr_t postBk;
+    uintptr_t postFdNext;
+    uintptr_t postFdPrev;
+    uintptr_t postBkNext;
+    uintptr_t postBkPrev;
+};
+
+struct SwitchHeapPointerEventInfo
+{
+    uintptr_t operation = 0u;
+    uintptr_t traceSequence = 0u;
+    uintptr_t prevFoot = 0u;
+    uintptr_t head = 0u;
+    uintptr_t postSeen = 0u;
+    uintptr_t postPrevFoot = 0u;
+    uintptr_t postHead = 0u;
+    uintptr_t preNeighborSeen = 0u;
+    uintptr_t preNeighborPrevFoot = 0u;
+    uintptr_t preNeighborHead = 0u;
+    uintptr_t postNeighborSeen = 0u;
+    uintptr_t postNeighborPrevFoot = 0u;
+    uintptr_t postNeighborHead = 0u;
+    uintptr_t postLinksSeen = 0u;
+    uintptr_t postFd = 0u;
+    uintptr_t postBk = 0u;
+    uintptr_t postFdNext = 0u;
+    uintptr_t postFdPrev = 0u;
+    uintptr_t postBkNext = 0u;
+    uintptr_t postBkPrev = 0u;
 };
 alignas(64) static SwitchHeapLifeHistoryEvent
     g_switchHeapLifeHistory[kSwitchHeapLifeHistoryCount]{};
 static uintptr_t g_switchHeapLifeHistoryNext = 0;
 
 static bool Switch_HeapTraceFindLastPointerEvent(
-    uintptr_t pointer, uintptr_t *operationOut, uintptr_t *sequenceOut,
-    uintptr_t *prevFootOut, uintptr_t *headOut,
-    uintptr_t *postSeenOut, uintptr_t *postPrevFootOut,
-    uintptr_t *postHeadOut)
+    uintptr_t pointer, SwitchHeapPointerEventInfo *out)
 {
     const uintptr_t end = __atomic_load_n(
         &g_switchHeapLifeHistoryNext, __ATOMIC_ACQUIRE);
@@ -255,33 +321,42 @@ static bool Switch_HeapTraceFindLastPointerEvent(
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
         if (first != sequence + 1u)
             continue;
-        const uintptr_t traceSequence =
-            __atomic_load_n(&event.traceSequence, __ATOMIC_RELAXED);
-        const uintptr_t operation =
-            __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
+
+        SwitchHeapPointerEventInfo info{};
+        info.traceSequence = __atomic_load_n(&event.traceSequence, __ATOMIC_RELAXED);
+        info.operation = __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
         const uintptr_t eventPointer =
             __atomic_load_n(&event.pointer, __ATOMIC_RELAXED);
-        const uintptr_t prevFoot =
-            __atomic_load_n(&event.prevFoot, __ATOMIC_RELAXED);
-        const uintptr_t head =
-            __atomic_load_n(&event.head, __ATOMIC_RELAXED);
-        const uintptr_t postSeen =
-            __atomic_load_n(&event.postSeen, __ATOMIC_ACQUIRE);
-        const uintptr_t postPrevFoot =
-            __atomic_load_n(&event.postPrevFoot, __ATOMIC_RELAXED);
-        const uintptr_t postHead =
-            __atomic_load_n(&event.postHead, __ATOMIC_RELAXED);
+        info.prevFoot = __atomic_load_n(&event.prevFoot, __ATOMIC_RELAXED);
+        info.head = __atomic_load_n(&event.head, __ATOMIC_RELAXED);
+        info.preNeighborSeen =
+            __atomic_load_n(&event.preNeighborSeen, __ATOMIC_RELAXED);
+        info.preNeighborPrevFoot =
+            __atomic_load_n(&event.preNeighborPrevFoot, __ATOMIC_RELAXED);
+        info.preNeighborHead =
+            __atomic_load_n(&event.preNeighborHead, __ATOMIC_RELAXED);
+        info.postSeen = __atomic_load_n(&event.postSeen, __ATOMIC_ACQUIRE);
+        info.postPrevFoot = __atomic_load_n(&event.postPrevFoot, __ATOMIC_RELAXED);
+        info.postHead = __atomic_load_n(&event.postHead, __ATOMIC_RELAXED);
+        info.postNeighborSeen =
+            __atomic_load_n(&event.postNeighborSeen, __ATOMIC_RELAXED);
+        info.postNeighborPrevFoot =
+            __atomic_load_n(&event.postNeighborPrevFoot, __ATOMIC_RELAXED);
+        info.postNeighborHead =
+            __atomic_load_n(&event.postNeighborHead, __ATOMIC_RELAXED);
+        info.postLinksSeen = __atomic_load_n(&event.postLinksSeen, __ATOMIC_RELAXED);
+        info.postFd = __atomic_load_n(&event.postFd, __ATOMIC_RELAXED);
+        info.postBk = __atomic_load_n(&event.postBk, __ATOMIC_RELAXED);
+        info.postFdNext = __atomic_load_n(&event.postFdNext, __ATOMIC_RELAXED);
+        info.postFdPrev = __atomic_load_n(&event.postFdPrev, __ATOMIC_RELAXED);
+        info.postBkNext = __atomic_load_n(&event.postBkNext, __ATOMIC_RELAXED);
+        info.postBkPrev = __atomic_load_n(&event.postBkPrev, __ATOMIC_RELAXED);
+
         const uintptr_t second =
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
         if (first == second && eventPointer == pointer)
         {
-            *operationOut = operation;
-            *sequenceOut = traceSequence;
-            *prevFootOut = prevFoot;
-            *headOut = head;
-            *postSeenOut = postSeen;
-            *postPrevFootOut = postPrevFoot;
-            *postHeadOut = postHead;
+            *out = info;
             return true;
         }
     }
@@ -289,8 +364,8 @@ static bool Switch_HeapTraceFindLastPointerEvent(
 }
 
 // Called immediately after the real free, while the allocator lock is still
-// held. This distinguishes damage in _free_r from damage while the chunk waits
-// in a free bin or while a later malloc unlinks/reuses it.
+// held. Capture the chunk header, its old physical successor, and any free-list
+// links now present in the payload, before another allocator operation runs.
 static void Switch_HeapTraceRememberFreePost(uintptr_t pointer)
 {
     if (pointer < 2u * sizeof(uintptr_t) ||
@@ -310,17 +385,65 @@ static void Switch_HeapTraceRememberFreePost(uintptr_t pointer)
         __atomic_load_n(&event.pointer, __ATOMIC_RELAXED) != pointer)
         return;
 
-    const volatile uintptr_t *chunk =
-        reinterpret_cast<const volatile uintptr_t *>(
-            pointer - 2u * sizeof(uintptr_t));
-    const uintptr_t prevFoot = chunk[0];
-    const uintptr_t head = chunk[1];
+    uintptr_t prevFoot = 0u;
+    uintptr_t head = 0u;
+    if (!Switch_HeapTraceReadWordPair(
+            pointer - 2u * sizeof(uintptr_t), &prevFoot, &head))
+        return;
     __atomic_store_n(&event.postPrevFoot, prevFoot, __ATOMIC_RELAXED);
     __atomic_store_n(&event.postHead, head, __ATOMIC_RELAXED);
+
+    const uintptr_t oldHead = __atomic_load_n(&event.head, __ATOMIC_RELAXED);
+    const uintptr_t oldChunkSize = oldHead & ~static_cast<uintptr_t>(7u);
+    uintptr_t postNeighborPrev = 0u;
+    uintptr_t postNeighborHead = 0u;
+    uintptr_t postNeighborSeen = 0u;
+    if (oldChunkSize >= 4u * sizeof(uintptr_t) &&
+        oldChunkSize <= 0x01000000u &&
+        (oldChunkSize & (alignof(uintptr_t) - 1u)) == 0u &&
+        pointer - 2u * sizeof(uintptr_t) <=
+            UINTPTR_MAX - oldChunkSize)
+    {
+        const uintptr_t nextAddress =
+            pointer - 2u * sizeof(uintptr_t) + oldChunkSize;
+        postNeighborSeen = static_cast<uintptr_t>(
+            Switch_HeapTraceReadWordPair(
+                nextAddress, &postNeighborPrev, &postNeighborHead));
+    }
+    __atomic_store_n(&event.postNeighborPrevFoot,
+        postNeighborPrev, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.postNeighborHead,
+        postNeighborHead, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.postNeighborSeen, postNeighborSeen, __ATOMIC_RELAXED);
+
+    uintptr_t postFd = 0u;
+    uintptr_t postBk = 0u;
+    uintptr_t fdNext = 0u;
+    uintptr_t fdPrev = 0u;
+    uintptr_t bkNext = 0u;
+    uintptr_t bkPrev = 0u;
+    uintptr_t linksSeen = 0u;
+    if (Switch_HeapTraceReadWordPair(pointer, &postFd, &postBk))
+    {
+        if (Switch_HeapTraceReadFreeLinks(postFd, &fdNext, &fdPrev))
+            linksSeen |= 1u;
+        if (Switch_HeapTraceReadFreeLinks(postBk, &bkNext, &bkPrev))
+            linksSeen |= 2u;
+    }
+    __atomic_store_n(&event.postFd, postFd, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.postBk, postBk, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.postFdNext, fdNext, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.postFdPrev, fdPrev, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.postBkNext, bkNext, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.postBkPrev, bkPrev, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.postLinksSeen, linksSeen, __ATOMIC_RELAXED);
     __atomic_store_n(&event.postSeen, static_cast<uintptr_t>(1), __ATOMIC_RELEASE);
 }
 
 static constexpr uintptr_t kSwitchHeapBadPointerCount = 32u;
+
+static bool Switch_HeapTraceReadFreeLinks(
+    uintptr_t node, uintptr_t *next, uintptr_t *previous);
 
 // A tiny side ring captures the physical words around malformed allocation
 // headers immediately on malloc return. Keeping this out of the main event ring
@@ -343,6 +466,19 @@ struct SwitchHeapBadPointerSnapshot
     uintptr_t priorEventPostSeen;
     uintptr_t priorEventPostPrevFoot;
     uintptr_t priorEventPostHead;
+    uintptr_t priorEventPreNeighborSeen;
+    uintptr_t priorEventPreNeighborPrevFoot;
+    uintptr_t priorEventPreNeighborHead;
+    uintptr_t priorEventPostNeighborSeen;
+    uintptr_t priorEventPostNeighborPrevFoot;
+    uintptr_t priorEventPostNeighborHead;
+    uintptr_t priorEventPostLinksSeen;
+    uintptr_t priorEventPostFd;
+    uintptr_t priorEventPostBk;
+    uintptr_t priorEventPostFdNext;
+    uintptr_t priorEventPostFdPrev;
+    uintptr_t priorEventPostBkNext;
+    uintptr_t priorEventPostBkPrev;
     uintptr_t words[8]; // pointer[-4]..pointer[+3]
     uintptr_t linkSnapshotMask;
     uintptr_t fdNext;
@@ -418,26 +554,31 @@ static void Switch_HeapTraceRememberBadPointer(
     __atomic_store_n(&snapshot.sourcePointer, sourcePointer, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.sourcePrevFoot, sourcePrevFoot, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.sourceHead, sourceHead, __ATOMIC_RELAXED);
-    uintptr_t priorEventOperation = 0u;
-    uintptr_t priorEventSequence = 0u;
-    uintptr_t priorEventPrevFoot = 0u;
-    uintptr_t priorEventHead = 0u;
-    uintptr_t priorEventPostSeen = 0u;
-    uintptr_t priorEventPostPrevFoot = 0u;
-    uintptr_t priorEventPostHead = 0u;
-    const bool priorEventSeen = Switch_HeapTraceFindLastPointerEvent(
-        pointer, &priorEventOperation, &priorEventSequence,
-        &priorEventPrevFoot, &priorEventHead,
-        &priorEventPostSeen, &priorEventPostPrevFoot, &priorEventPostHead);
+    SwitchHeapPointerEventInfo priorEvent{};
+    const bool priorEventSeen =
+        Switch_HeapTraceFindLastPointerEvent(pointer, &priorEvent);
     __atomic_store_n(&snapshot.priorEventSeen,
         static_cast<uintptr_t>(priorEventSeen), __ATOMIC_RELAXED);
-    __atomic_store_n(&snapshot.priorEventOperation, priorEventOperation, __ATOMIC_RELAXED);
-    __atomic_store_n(&snapshot.priorEventSequence, priorEventSequence, __ATOMIC_RELAXED);
-    __atomic_store_n(&snapshot.priorEventPrevFoot, priorEventPrevFoot, __ATOMIC_RELAXED);
-    __atomic_store_n(&snapshot.priorEventHead, priorEventHead, __ATOMIC_RELAXED);
-    __atomic_store_n(&snapshot.priorEventPostSeen, priorEventPostSeen, __ATOMIC_RELAXED);
-    __atomic_store_n(&snapshot.priorEventPostPrevFoot, priorEventPostPrevFoot, __ATOMIC_RELAXED);
-    __atomic_store_n(&snapshot.priorEventPostHead, priorEventPostHead, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventOperation, priorEvent.operation, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventSequence, priorEvent.traceSequence, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPrevFoot, priorEvent.prevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventHead, priorEvent.head, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostSeen, priorEvent.postSeen, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostPrevFoot, priorEvent.postPrevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostHead, priorEvent.postHead, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPreNeighborSeen, priorEvent.preNeighborSeen, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPreNeighborPrevFoot, priorEvent.preNeighborPrevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPreNeighborHead, priorEvent.preNeighborHead, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostNeighborSeen, priorEvent.postNeighborSeen, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostNeighborPrevFoot, priorEvent.postNeighborPrevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostNeighborHead, priorEvent.postNeighborHead, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostLinksSeen, priorEvent.postLinksSeen, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostFd, priorEvent.postFd, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostBk, priorEvent.postBk, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostFdNext, priorEvent.postFdNext, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostFdPrev, priorEvent.postFdPrev, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostBkNext, priorEvent.postBkNext, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPostBkPrev, priorEvent.postBkPrev, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.linkSnapshotMask, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
@@ -489,7 +630,10 @@ static void Switch_HeapTraceRecord(
     uintptr_t reallocSourcePointer = 0u,
     uintptr_t reallocSourcePrevFoot = 0u,
     uintptr_t reallocSourceHead = 0u,
-    bool syntheticReallocFree = false)
+    bool syntheticReallocFree = false,
+    uintptr_t reallocSourceNextPrevFoot = 0u,
+    uintptr_t reallocSourceNextHead = 0u,
+    bool reallocSourceNextSeen = false)
 {
     if (!pointer)
         return;
@@ -571,15 +715,36 @@ static void Switch_HeapTraceRecord(
             ? reallocSourcePrevFoot : allocationChunkPrevFoot;
         const uintptr_t lifeHead = recordReallocFree
             ? reallocSourceHead : allocationChunkHead;
+        const bool lifePreNeighborSeen =
+            (recordRealFree && (headerSnapshot & 2u) != 0u) ||
+            (recordReallocFree && reallocSourceNextSeen);
+        const uintptr_t lifePreNeighborPrev =
+            recordReallocFree ? reallocSourceNextPrevFoot : nextChunkPrevFoot;
+        const uintptr_t lifePreNeighborHead =
+            recordReallocFree ? reallocSourceNextHead : nextChunkHead;
         __atomic_store_n(&lifeEvent.sequence, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.traceSequence, sequence, __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.operation, static_cast<uintptr_t>(operation), __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.pointer, pointer, __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.prevFoot, lifePrevFoot, __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.head, lifeHead, __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.preNeighborSeen,
+            static_cast<uintptr_t>(lifePreNeighborSeen), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.preNeighborPrevFoot, lifePreNeighborPrev, __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.preNeighborHead, lifePreNeighborHead, __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.postSeen, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.postPrevFoot, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.postHead, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postNeighborSeen, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postNeighborPrevFoot, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postNeighborHead, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postLinksSeen, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postFd, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postBk, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postFdNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postFdPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postBkNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.postBkPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
         __atomic_store_n(&lifeEvent.sequence, lifeSequence + 1u, __ATOMIC_RELEASE);
     }
     SwitchHeapTraceEvent &event =
@@ -852,6 +1017,32 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             __atomic_load_n(&snapshot.priorEventPostPrevFoot, __ATOMIC_RELAXED);
         const uintptr_t priorEventPostHead =
             __atomic_load_n(&snapshot.priorEventPostHead, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPreNeighborSeen =
+            __atomic_load_n(&snapshot.priorEventPreNeighborSeen, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPreNeighborPrevFoot =
+            __atomic_load_n(&snapshot.priorEventPreNeighborPrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPreNeighborHead =
+            __atomic_load_n(&snapshot.priorEventPreNeighborHead, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostNeighborSeen =
+            __atomic_load_n(&snapshot.priorEventPostNeighborSeen, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostNeighborPrevFoot =
+            __atomic_load_n(&snapshot.priorEventPostNeighborPrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostNeighborHead =
+            __atomic_load_n(&snapshot.priorEventPostNeighborHead, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostLinksSeen =
+            __atomic_load_n(&snapshot.priorEventPostLinksSeen, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostFd =
+            __atomic_load_n(&snapshot.priorEventPostFd, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostBk =
+            __atomic_load_n(&snapshot.priorEventPostBk, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostFdNext =
+            __atomic_load_n(&snapshot.priorEventPostFdNext, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostFdPrev =
+            __atomic_load_n(&snapshot.priorEventPostFdPrev, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostBkNext =
+            __atomic_load_n(&snapshot.priorEventPostBkNext, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPostBkPrev =
+            __atomic_load_n(&snapshot.priorEventPostBkPrev, __ATOMIC_RELAXED);
         uintptr_t words[8]{};
         for (uintptr_t j = 0; j < 8u; ++j)
             words[j] = __atomic_load_n(&snapshot.words[j], __ATOMIC_RELAXED);
@@ -870,7 +1061,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
 
         const uintptr_t callerOffset =
             caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
-        char snapshotLine[1024];
+        char snapshotLine[2048];
         std::snprintf(
             snapshotLine, sizeof(snapshotLine),
             "[KisakCOD][HEAP BAD SNAPSHOT] generation=%llu op=%c ptr=0x%016llx "
@@ -883,6 +1074,11 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             "priorEventSeen=%u priorEventOp=%c priorEventSeq=%llu "
             "priorEventPrev=0x%016llx priorEventHead=0x%016llx "
             "priorPostSeen=%u priorPostPrev=0x%016llx priorPostHead=0x%016llx "
+            "priorPreNextSeen=%u priorPreNextPrev=0x%016llx priorPreNextHead=0x%016llx "
+            "priorPostNextSeen=%u priorPostNextPrev=0x%016llx priorPostNextHead=0x%016llx "
+            "priorPostLinksSeen=0x%llx priorPostFd=0x%016llx priorPostBk=0x%016llx "
+            "priorPostFdNext=0x%016llx priorPostFdPrev=0x%016llx "
+            "priorPostBkNext=0x%016llx priorPostBkPrev=0x%016llx "
             "linksSeen=0x%llx fd_next=0x%016llx fd_prev=0x%016llx "
             "bk_next=0x%016llx bk_prev=0x%016llx "
             "fd_prev_eq_bk=%u bk_next_eq_fd=%u\n",
@@ -911,6 +1107,19 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             static_cast<unsigned int>(priorEventPostSeen),
             static_cast<unsigned long long>(priorEventPostPrevFoot),
             static_cast<unsigned long long>(priorEventPostHead),
+            static_cast<unsigned int>(priorEventPreNeighborSeen),
+            static_cast<unsigned long long>(priorEventPreNeighborPrevFoot),
+            static_cast<unsigned long long>(priorEventPreNeighborHead),
+            static_cast<unsigned int>(priorEventPostNeighborSeen),
+            static_cast<unsigned long long>(priorEventPostNeighborPrevFoot),
+            static_cast<unsigned long long>(priorEventPostNeighborHead),
+            static_cast<unsigned long long>(priorEventPostLinksSeen),
+            static_cast<unsigned long long>(priorEventPostFd),
+            static_cast<unsigned long long>(priorEventPostBk),
+            static_cast<unsigned long long>(priorEventPostFdNext),
+            static_cast<unsigned long long>(priorEventPostFdPrev),
+            static_cast<unsigned long long>(priorEventPostBkNext),
+            static_cast<unsigned long long>(priorEventPostBkPrev),
             static_cast<unsigned long long>(linkMask),
             static_cast<unsigned long long>(fdNext),
             static_cast<unsigned long long>(fdPrev),
@@ -1295,6 +1504,9 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
     __malloc_lock(_REENT);
     uintptr_t sourceChunkPrevFoot = 0u;
     uintptr_t sourceChunkHead = 0u;
+    uintptr_t sourceNextPrevFoot = 0u;
+    uintptr_t sourceNextHead = 0u;
+    bool sourceNextSeen = false;
     const uintptr_t sourcePointer = reinterpret_cast<uintptr_t>(pointer);
     if (pointer &&
         sourcePointer >= 2u * sizeof(uintptr_t) &&
@@ -1305,6 +1517,18 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
                 sourcePointer - 2u * sizeof(uintptr_t));
         sourceChunkPrevFoot = sourceChunk[0];
         sourceChunkHead = sourceChunk[1];
+        const uintptr_t sourceChunkSize =
+            sourceChunkHead & ~static_cast<uintptr_t>(7u);
+        if (sourceChunkSize >= 4u * sizeof(uintptr_t) &&
+            sourceChunkSize <= 0x01000000u &&
+            (sourceChunkSize & (alignof(uintptr_t) - 1u)) == 0u &&
+            sourcePointer - 2u * sizeof(uintptr_t) <=
+                UINTPTR_MAX - sourceChunkSize)
+        {
+            sourceNextSeen = Switch_HeapTraceReadWordPair(
+                sourcePointer - 2u * sizeof(uintptr_t) + sourceChunkSize,
+                &sourceNextPrevFoot, &sourceNextHead);
+        }
     }
     if (nakRawVecRealloc)
     {
@@ -1324,7 +1548,8 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
     {
         Switch_HeapTraceRecord(
             'F', reinterpret_cast<uintptr_t>(pointer), 0u, caller,
-            0u, sourceChunkPrevFoot, sourceChunkHead, true);
+            0u, sourceChunkPrevFoot, sourceChunkHead, true,
+            sourceNextPrevFoot, sourceNextHead, sourceNextSeen);
         Switch_HeapTraceRememberFreePost(reinterpret_cast<uintptr_t>(pointer));
     }
     Switch_HeapTraceRecord(
