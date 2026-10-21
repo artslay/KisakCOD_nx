@@ -1170,9 +1170,39 @@ bool RepairUnusedZeroVectorShuffleSource(
     std::vector<uint32_t> &words,
     uint32_t *repairedInstructionCount = nullptr)
 {
+    if (repairedInstructionCount)
+        *repairedInstructionCount = 0u;
     if (words.size() < 5u || words[0] != SpvMagicNumber ||
         words[3] <= 1u || words[3] > 1000000u)
         return false;
+
+    // This repair is needed only for the legacy module pattern where a shuffle
+    // uses reserved SPIR-V ID 0 as one of its two source vectors. Most linked
+    // shaders contain no such instruction. Detect that case before allocating
+    // three ID-bound-sized lookup tables; doing those allocations for every
+    // pipeline needlessly churns the Switch heap and can make unrelated heap
+    // corruption surface while these temporary vectors are being destroyed.
+    bool hasZeroSourceShuffle = false;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wordCount = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wordCount, &op))
+            return false;
+        if (op == SpvOpVectorShuffle)
+        {
+            if (wordCount < 6u)
+                return false;
+            if (words[offset + 3u] == 0u || words[offset + 4u] == 0u)
+            {
+                hasZeroSourceShuffle = true;
+                break;
+            }
+        }
+        offset += wordCount;
+    }
+    if (!hasZeroSourceShuffle)
+        return true;
 
     const uint32_t bound = words[3];
     std::vector<uint32_t> resultTypeById(bound, 0u);
