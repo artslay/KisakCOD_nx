@@ -12,6 +12,7 @@
 #include <setjmp.h>
 
 extern void Sys_Print(const char *text);
+extern "C" void SwitchPrepareRustTlsForCurrentThread();
 
 static thread_local void *g_switchThreadValues[4] = {};
 void *g_threadValues[THREAD_CONTEXT_COUNT][4] = {};
@@ -235,6 +236,7 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
 
     g_switchThreadStage = "create/thread_ctor";
     g_threads[context] = std::thread([function, context] {
+        SwitchPrepareRustTlsForCurrentThread();
         if (context == THREAD_CONTEXT_CINEMATIC)
             Switch_LogWrite("[KisakCOD][CINEMATIC] thread lambda entered\n");
         if (context == THREAD_CONTEXT_CINEMATIC)
