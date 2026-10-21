@@ -157,6 +157,7 @@ extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldAddress;
 extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldCaller;
 extern "C" uint32_t Sys_GetSwitchThreadContext();
 extern "C" const char *Sys_GetSwitchThreadStage();
+extern "C" thread_local char g_switchBinkPacketTrace[512];
 extern "C" void Switch_DumpVulkanUniformTraceOnCrash(void (*writeLine)(const char *));
 extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const char *));
 
@@ -486,6 +487,12 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         g_switchCgFrameStage[0] ? g_switchCgFrameStage : "(unset)",
         reinterpret_cast<void *>(g_switchFrameDrawFieldAddress),
         reinterpret_cast<void *>(g_switchFrameDrawFieldCaller));
+    Switch_LogCrashLine(line);
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[KisakCOD][CRASH] bink_packet_ref=%s\n",
+        g_switchBinkPacketTrace[0] ? g_switchBinkPacketTrace : "(empty)");
     Switch_LogCrashLine(line);
     std::snprintf(
         line,
