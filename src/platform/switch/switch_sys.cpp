@@ -264,6 +264,76 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
         static_cast<unsigned long long>(end),
         static_cast<unsigned long long>(matches));
     Switch_LogCrashLine(summary);
+
+    // A corrupt chunk header is often overwritten by an adjacent allocation.
+    // Print allocation/free events whose returned pointer is near the damaged
+    // chunk, preserving event order, so we can identify likely neighbors.
+    constexpr uintptr_t kNeighborhood = 0x100u;
+    constexpr uintptr_t kMaxNearLines = 64u;
+    const uintptr_t nearBegin = target > kNeighborhood ? target - kNeighborhood : 0u;
+    const uintptr_t nearEnd =
+        target <= UINTPTR_MAX - kNeighborhood ? target + kNeighborhood : UINTPTR_MAX;
+    uintptr_t nearMatches = 0u;
+    uintptr_t nearPrinted = 0u;
+
+    for (uintptr_t sequence = begin; sequence < end; ++sequence)
+    {
+        const SwitchHeapTraceEvent &event =
+            g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
+        const uintptr_t first =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (first != sequence + 1u)
+            continue;
+
+        const uintptr_t operation =
+            __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
+        const uintptr_t pointer =
+            __atomic_load_n(&event.pointer, __ATOMIC_RELAXED);
+        const uintptr_t size =
+            __atomic_load_n(&event.size, __ATOMIC_RELAXED);
+        const uintptr_t caller =
+            __atomic_load_n(&event.caller, __ATOMIC_RELAXED);
+        const uintptr_t second =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+
+        if (first != second || pointer == target ||
+            pointer < nearBegin || pointer > nearEnd)
+            continue;
+
+        ++nearMatches;
+        if (nearPrinted >= kMaxNearLines)
+            continue;
+
+        const uintptr_t distance =
+            pointer > target ? pointer - target : target - pointer;
+        const uintptr_t callerOffset =
+            caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
+        char nearLine[384];
+        std::snprintf(
+            nearLine, sizeof(nearLine),
+            "[KisakCOD][HEAP NEAR] seq=%llu op=%c ptr=0x%016llx "
+            "distance=0x%llx size=%llu callerOff=0x%llx\\n",
+            static_cast<unsigned long long>(sequence),
+            static_cast<char>(operation),
+            static_cast<unsigned long long>(pointer),
+            static_cast<unsigned long long>(distance),
+            static_cast<unsigned long long>(size),
+            static_cast<unsigned long long>(callerOffset));
+        Switch_LogCrashLine(nearLine);
+        ++nearPrinted;
+    }
+
+    char nearSummary[192];
+    std::snprintf(
+        nearSummary, sizeof(nearSummary),
+        "[KisakCOD][HEAP NEAR] range=0x%016llx..0x%016llx "
+        "matches=%llu printed=%llu limit=%llu\\n",
+        static_cast<unsigned long long>(nearBegin),
+        static_cast<unsigned long long>(nearEnd),
+        static_cast<unsigned long long>(nearMatches),
+        static_cast<unsigned long long>(nearPrinted),
+        static_cast<unsigned long long>(kMaxNearLines));
+    Switch_LogCrashLine(nearSummary);
 }
 } // namespace
 
