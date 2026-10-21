@@ -319,9 +319,9 @@ static void Switch_HeapTraceRememberBadPointer(
     uintptr_t bkNext = 0u;
     uintptr_t bkPrev = 0u;
     uintptr_t linkMask = 0u;
-    if (Switch_HeapTraceReadFreeLinks(words[4], &fdNext, &fdPrev))
+    if (Switch_HeapTraceReadFreeLinks(user[0], &fdNext, &fdPrev))
         linkMask |= 1u;
-    if (Switch_HeapTraceReadFreeLinks(words[5], &bkNext, &bkPrev))
+    if (Switch_HeapTraceReadFreeLinks(user[1], &bkNext, &bkPrev))
         linkMask |= 2u;
     __atomic_store_n(&snapshot.linkSnapshotMask, linkMask, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdNext, fdNext, __ATOMIC_RELAXED);
