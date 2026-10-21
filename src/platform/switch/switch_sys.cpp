@@ -215,38 +215,44 @@ static uintptr_t g_switchHeapTraceNext = 0;
 // Keep a longer, compact history of real frees. The main allocator event ring
 // is intentionally short; a malformed chunk can remain in a bin for many
 // thousands of operations before malloc returns it again.
-static constexpr uintptr_t kSwitchHeapFreeHistoryCount = 262144u;
-struct SwitchHeapFreeHistoryEvent
+// Unified pointer-lifetime journal. Unlike a free-only journal, it records
+// allocations too, so an old free cannot be mistaken for the last lifetime
+// transition after the same address has already been reused.
+static constexpr uintptr_t kSwitchHeapLifeHistoryCount = 262144u;
+struct SwitchHeapLifeHistoryEvent
 {
     uintptr_t sequence;
     uintptr_t traceSequence;
+    uintptr_t operation;
     uintptr_t pointer;
     uintptr_t prevFoot;
     uintptr_t head;
 };
-alignas(64) static SwitchHeapFreeHistoryEvent
-    g_switchHeapFreeHistory[kSwitchHeapFreeHistoryCount]{};
-static uintptr_t g_switchHeapFreeHistoryNext = 0;
+alignas(64) static SwitchHeapLifeHistoryEvent
+    g_switchHeapLifeHistory[kSwitchHeapLifeHistoryCount]{};
+static uintptr_t g_switchHeapLifeHistoryNext = 0;
 
-static bool Switch_HeapTraceFindLastFree(
-    uintptr_t pointer, uintptr_t *sequenceOut,
+static bool Switch_HeapTraceFindLastPointerEvent(
+    uintptr_t pointer, uintptr_t *operationOut, uintptr_t *sequenceOut,
     uintptr_t *prevFootOut, uintptr_t *headOut)
 {
     const uintptr_t end = __atomic_load_n(
-        &g_switchHeapFreeHistoryNext, __ATOMIC_ACQUIRE);
-    const uintptr_t begin = end > kSwitchHeapFreeHistoryCount
-        ? end - kSwitchHeapFreeHistoryCount : 0u;
+        &g_switchHeapLifeHistoryNext, __ATOMIC_ACQUIRE);
+    const uintptr_t begin = end > kSwitchHeapLifeHistoryCount
+        ? end - kSwitchHeapLifeHistoryCount : 0u;
     for (uintptr_t cursor = end; cursor > begin;)
     {
         const uintptr_t sequence = --cursor;
-        const SwitchHeapFreeHistoryEvent &event =
-            g_switchHeapFreeHistory[sequence & (kSwitchHeapFreeHistoryCount - 1u)];
+        const SwitchHeapLifeHistoryEvent &event =
+            g_switchHeapLifeHistory[sequence & (kSwitchHeapLifeHistoryCount - 1u)];
         const uintptr_t first =
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
         if (first != sequence + 1u)
             continue;
         const uintptr_t traceSequence =
             __atomic_load_n(&event.traceSequence, __ATOMIC_RELAXED);
+        const uintptr_t operation =
+            __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
         const uintptr_t eventPointer =
             __atomic_load_n(&event.pointer, __ATOMIC_RELAXED);
         const uintptr_t prevFoot =
@@ -257,6 +263,7 @@ static bool Switch_HeapTraceFindLastFree(
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
         if (first == second && eventPointer == pointer)
         {
+            *operationOut = operation;
             *sequenceOut = traceSequence;
             *prevFootOut = prevFoot;
             *headOut = head;
@@ -281,10 +288,11 @@ struct SwitchHeapBadPointerSnapshot
     uintptr_t sourcePointer;
     uintptr_t sourcePrevFoot;
     uintptr_t sourceHead;
-    uintptr_t priorFreeSeen;
-    uintptr_t priorFreeSequence;
-    uintptr_t priorFreePrevFoot;
-    uintptr_t priorFreeHead;
+    uintptr_t priorEventSeen;
+    uintptr_t priorEventOperation;
+    uintptr_t priorEventSequence;
+    uintptr_t priorEventPrevFoot;
+    uintptr_t priorEventHead;
     uintptr_t words[8]; // pointer[-4]..pointer[+3]
     uintptr_t linkSnapshotMask;
     uintptr_t fdNext;
@@ -360,16 +368,19 @@ static void Switch_HeapTraceRememberBadPointer(
     __atomic_store_n(&snapshot.sourcePointer, sourcePointer, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.sourcePrevFoot, sourcePrevFoot, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.sourceHead, sourceHead, __ATOMIC_RELAXED);
-    uintptr_t priorFreeSequence = 0u;
-    uintptr_t priorFreePrevFoot = 0u;
-    uintptr_t priorFreeHead = 0u;
-    const bool priorFreeSeen = Switch_HeapTraceFindLastFree(
-        pointer, &priorFreeSequence, &priorFreePrevFoot, &priorFreeHead);
-    __atomic_store_n(&snapshot.priorFreeSeen,
-        static_cast<uintptr_t>(priorFreeSeen), __ATOMIC_RELAXED);
-    __atomic_store_n(&snapshot.priorFreeSequence, priorFreeSequence, __ATOMIC_RELAXED);
-    __atomic_store_n(&snapshot.priorFreePrevFoot, priorFreePrevFoot, __ATOMIC_RELAXED);
-    __atomic_store_n(&snapshot.priorFreeHead, priorFreeHead, __ATOMIC_RELAXED);
+    uintptr_t priorEventOperation = 0u;
+    uintptr_t priorEventSequence = 0u;
+    uintptr_t priorEventPrevFoot = 0u;
+    uintptr_t priorEventHead = 0u;
+    const bool priorEventSeen = Switch_HeapTraceFindLastPointerEvent(
+        pointer, &priorEventOperation, &priorEventSequence,
+        &priorEventPrevFoot, &priorEventHead);
+    __atomic_store_n(&snapshot.priorEventSeen,
+        static_cast<uintptr_t>(priorEventSeen), __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventOperation, priorEventOperation, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventSequence, priorEventSequence, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventPrevFoot, priorEventPrevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.priorEventHead, priorEventHead, __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.linkSnapshotMask, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdNext, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
     __atomic_store_n(&snapshot.fdPrev, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
@@ -485,31 +496,31 @@ static void Switch_HeapTraceRecord(
     const uintptr_t sequence = __atomic_fetch_add(
         &g_switchHeapTraceNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
 
-    // Preserve real-free entry metadata separately from the shorter event
-    // ring. This captures the last known header before _free_r can coalesce or
-    // insert the chunk, allowing a later malformed malloc to compare lifetimes.
-    // traceSequence uses the main allocator-event sequence for direct correlation.
+    // Record pointer-lifetime transitions in allocator sequence order. For a
+    // real free, metadata is sampled just before _free_r; for a realloc-move
+    // free, use the source header sampled before calling Newlib.
     const bool recordRealFree =
         freeEvent && (headerSnapshot & 1u) != 0u;
     const bool recordReallocFree =
         syntheticReallocFree && pointer != 0u;
-    if (recordRealFree || recordReallocFree)
+    if (allocationEvent || recordRealFree || recordReallocFree)
     {
-        const uintptr_t freeSequence = __atomic_fetch_add(
-            &g_switchHeapFreeHistoryNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
-        SwitchHeapFreeHistoryEvent &freeEventRecord =
-            g_switchHeapFreeHistory[
-                freeSequence & (kSwitchHeapFreeHistoryCount - 1u)];
-        const uintptr_t freePrevFoot =
-            recordReallocFree ? reallocSourcePrevFoot : allocationChunkPrevFoot;
-        const uintptr_t freeHead =
-            recordReallocFree ? reallocSourceHead : allocationChunkHead;
-        __atomic_store_n(&freeEventRecord.sequence, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
-        __atomic_store_n(&freeEventRecord.traceSequence, sequence, __ATOMIC_RELAXED);
-        __atomic_store_n(&freeEventRecord.pointer, pointer, __ATOMIC_RELAXED);
-        __atomic_store_n(&freeEventRecord.prevFoot, freePrevFoot, __ATOMIC_RELAXED);
-        __atomic_store_n(&freeEventRecord.head, freeHead, __ATOMIC_RELAXED);
-        __atomic_store_n(&freeEventRecord.sequence, freeSequence + 1u, __ATOMIC_RELEASE);
+        const uintptr_t lifeSequence = __atomic_fetch_add(
+            &g_switchHeapLifeHistoryNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
+        SwitchHeapLifeHistoryEvent &lifeEvent =
+            g_switchHeapLifeHistory[
+                lifeSequence & (kSwitchHeapLifeHistoryCount - 1u)];
+        const uintptr_t lifePrevFoot = recordReallocFree
+            ? reallocSourcePrevFoot : allocationChunkPrevFoot;
+        const uintptr_t lifeHead = recordReallocFree
+            ? reallocSourceHead : allocationChunkHead;
+        __atomic_store_n(&lifeEvent.sequence, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.traceSequence, sequence, __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.operation, static_cast<uintptr_t>(operation), __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.pointer, pointer, __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.prevFoot, lifePrevFoot, __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.head, lifeHead, __ATOMIC_RELAXED);
+        __atomic_store_n(&lifeEvent.sequence, lifeSequence + 1u, __ATOMIC_RELEASE);
     }
     SwitchHeapTraceEvent &event =
         g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
@@ -765,14 +776,16 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             __atomic_load_n(&snapshot.sourcePrevFoot, __ATOMIC_RELAXED);
         const uintptr_t sourceHead =
             __atomic_load_n(&snapshot.sourceHead, __ATOMIC_RELAXED);
-        const uintptr_t priorFreeSeen =
-            __atomic_load_n(&snapshot.priorFreeSeen, __ATOMIC_RELAXED);
-        const uintptr_t priorFreeSequence =
-            __atomic_load_n(&snapshot.priorFreeSequence, __ATOMIC_RELAXED);
-        const uintptr_t priorFreePrevFoot =
-            __atomic_load_n(&snapshot.priorFreePrevFoot, __ATOMIC_RELAXED);
-        const uintptr_t priorFreeHead =
-            __atomic_load_n(&snapshot.priorFreeHead, __ATOMIC_RELAXED);
+        const uintptr_t priorEventSeen =
+            __atomic_load_n(&snapshot.priorEventSeen, __ATOMIC_RELAXED);
+        const uintptr_t priorEventOperation =
+            __atomic_load_n(&snapshot.priorEventOperation, __ATOMIC_RELAXED);
+        const uintptr_t priorEventSequence =
+            __atomic_load_n(&snapshot.priorEventSequence, __ATOMIC_RELAXED);
+        const uintptr_t priorEventPrevFoot =
+            __atomic_load_n(&snapshot.priorEventPrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t priorEventHead =
+            __atomic_load_n(&snapshot.priorEventHead, __ATOMIC_RELAXED);
         uintptr_t words[8]{};
         for (uintptr_t j = 0; j < 8u; ++j)
             words[j] = __atomic_load_n(&snapshot.words[j], __ATOMIC_RELAXED);
@@ -801,8 +814,8 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             "raw_p00=0x%016llx raw_p08=0x%016llx "
             "raw_p10=0x%016llx raw_p18=0x%016llx "
             "source=0x%016llx source_prev=0x%016llx source_head=0x%016llx "
-            "priorFreeSeen=%u priorFreeSeq=%llu priorFreePrev=0x%016llx "
-            "priorFreeHead=0x%016llx "
+            "priorEventSeen=%u priorEventOp=%c priorEventSeq=%llu "
+            "priorEventPrev=0x%016llx priorEventHead=0x%016llx "
             "linksSeen=0x%llx fd_next=0x%016llx fd_prev=0x%016llx "
             "bk_next=0x%016llx bk_prev=0x%016llx "
             "fd_prev_eq_bk=%u bk_next_eq_fd=%u\n",
@@ -823,10 +836,11 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             static_cast<unsigned long long>(sourcePointer),
             static_cast<unsigned long long>(sourcePrevFoot),
             static_cast<unsigned long long>(sourceHead),
-            static_cast<unsigned int>(priorFreeSeen),
-            static_cast<unsigned long long>(priorFreeSequence),
-            static_cast<unsigned long long>(priorFreePrevFoot),
-            static_cast<unsigned long long>(priorFreeHead),
+            static_cast<unsigned int>(priorEventSeen),
+            static_cast<char>(priorEventOperation),
+            static_cast<unsigned long long>(priorEventSequence),
+            static_cast<unsigned long long>(priorEventPrevFoot),
+            static_cast<unsigned long long>(priorEventHead),
             static_cast<unsigned long long>(linkMask),
             static_cast<unsigned long long>(fdNext),
             static_cast<unsigned long long>(fdPrev),
