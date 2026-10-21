@@ -547,9 +547,30 @@ extern "C" __attribute__((noinline)) void *__wrap_calloc(
 extern "C" __attribute__((noinline)) void *__wrap_realloc(
     void *pointer, size_t size)
 {
-    void *replacement = __real_realloc(pointer, size);
     const uintptr_t caller =
         reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    const uintptr_t codeBase = reinterpret_cast<uintptr_t>(__code_start);
+    const uintptr_t callerOffset =
+        caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
+
+    // Trace only the NAK RawVec growth call site identified by addr2line.
+    // Log arguments before entering Newlib; do not inspect the possibly
+    // corrupted allocation or its allocator metadata here.
+    if (callerOffset == static_cast<uintptr_t>(0x918a8u))
+    {
+        char probe[256];
+        std::snprintf(
+            probe, sizeof(probe),
+            "[KisakCOD][REALLOC PROBE] caller=0x%016llx "
+            "callerOff=0x%llx ptr=0x%016llx size=%llu\\n",
+            static_cast<unsigned long long>(caller),
+            static_cast<unsigned long long>(callerOffset),
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(pointer)),
+            static_cast<unsigned long long>(size));
+        Switch_LogCrashLine(probe);
+    }
+
+    void *replacement = __real_realloc(pointer, size);
     // A failed non-zero realloc preserves the old allocation. Record the
     // implicit free only after success (or a zero-size deallocation request).
     if (pointer && (replacement || size == 0u))
