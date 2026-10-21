@@ -402,8 +402,16 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
         if (historyBegin < begin)
             historyBegin = begin;
 
+        // Include the first malformed allocation and the following allocator
+        // events. Without the post-window, a nearby bad malloc is reported in
+        // the summary but its subsequent free/reuse sequence is omitted.
+        constexpr uintptr_t kBadAllocHistoryAfter = 12u;
+        uintptr_t historyEnd = firstBadAllocSequence + kBadAllocHistoryAfter + 1u;
+        if (historyEnd < firstBadAllocSequence || historyEnd > end)
+            historyEnd = end;
+
         for (uintptr_t sequence = historyBegin;
-             sequence < firstBadAllocSequence; ++sequence)
+             sequence < historyEnd; ++sequence)
         {
             const SwitchHeapTraceEvent &event =
                 g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
