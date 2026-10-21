@@ -1377,6 +1377,7 @@ bool RepairUnusedZeroVectorShuffleSource(
 // pipeline creation on shader identity: this removes a frontend pattern that has
 // repeatedly reached the Tegra NVK/NAK pipeline-compiler fault.
 bool LowerSwitchSpirvVectorShuffleToCompositeOps(
+    const char *shaderStage,
     std::vector<uint32_t> &words,
     uint32_t *loweredCount,
     uint32_t *copyObjectCount = nullptr,
@@ -1395,9 +1396,15 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         words[3] < 2u || words[3] > 1000000u)
         return false;
 
+    const bool pixelStage = shaderStage && std::strcmp(shaderStage, "ps") == 0;
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/scan"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/scan";
+
     const uint32_t originalBound = words[3];
     std::vector<size_t> shuffleOffsets;
     uint64_t estimatedGrowth = 0u;
+    uint64_t totalSelectorCount = 0u;
     constexpr uint64_t kMaxEstimatedShuffleGrowthWords = 256u;
 
     // First inspect only the instruction stream. Most shaders have no vector
@@ -1417,7 +1424,9 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
             shuffleOffsets.push_back(offset);
             // Replacing N selector operands grows the module by at most 4*N
             // words (one extract per selector plus the rebuilt composite).
-            estimatedGrowth += 4ull * static_cast<uint64_t>(wc - 5u);
+            const uint64_t selectorCount = static_cast<uint64_t>(wc - 5u);
+            estimatedGrowth += 4ull * selectorCount;
+            totalSelectorCount += selectorCount;
         }
         offset += wc;
     }
@@ -1427,6 +1436,9 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     if (shuffleOffsets.empty() || estimatedGrowth > kMaxEstimatedShuffleGrowthWords)
         return false;
 
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/metadata"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/metadata";
     std::vector<uint32_t> resultTypeById(originalBound, 0u);
     std::vector<uint32_t> vectorLengthByType(originalBound, 0u);
     std::vector<uint32_t> vectorComponentTypeByType(originalBound, 0u);
@@ -1465,8 +1477,12 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         offset += wc;
     }
 
+    // Keep the rewrite plan compact and flat. Nested selector vectors inside
+    // unordered_map nodes caused allocator failures during teardown on Switch;
+    // this representation uses one selector buffer and indexed metadata instead.
     struct ShuffleInfo
     {
+        size_t instructionOffset = 0u;
         uint32_t resultType = 0u;
         uint32_t resultId = 0u;
         uint32_t vector1Id = 0u;
@@ -1474,10 +1490,14 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         uint32_t scalarType = 0u;
         uint32_t sourceWidth = 0u;
         uint32_t sourceWidth2 = 0u;
-        std::vector<uint32_t> selectors;
+        size_t selectorOffset = 0u;
+        uint32_t selectorCount = 0u;
     };
-    std::unordered_map<size_t, ShuffleInfo> shuffles;
-    std::unordered_map<uint32_t, uint32_t> undefIdByScalarType;
+    std::vector<ShuffleInfo> shuffles;
+    shuffles.reserve(shuffleOffsets.size());
+    std::vector<uint32_t> selectorWords;
+    selectorWords.reserve(static_cast<size_t>(totalSelectorCount));
+    std::vector<std::pair<uint32_t, uint32_t>> undefIdByScalarType;
     std::vector<std::pair<uint32_t, uint32_t>> undefDeclarations;
     uint32_t nextId = originalBound;
     uint32_t emittedCopyObjects = 0u;
@@ -1487,7 +1507,8 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     // source vectors are SSA values, so a prior extract remains valid for later
     // instructions in that block. Clear at every label/function boundary to
     // avoid carrying a value across control-flow edges where it may not dominate.
-    std::unordered_map<uint64_t, uint32_t> extractedIdsByBlock;
+    std::vector<std::pair<uint64_t, uint32_t>> extractedIdsByBlock;
+    extractedIdsByBlock.reserve(static_cast<size_t>(totalSelectorCount));
 
     for (const size_t offset : shuffleOffsets)
     {
@@ -1526,6 +1547,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
             return false;
 
         ShuffleInfo info;
+        info.instructionOffset = offset;
         info.resultType = resultType;
         info.resultId = resultId;
         info.vector1Id = vector1Id;
@@ -1533,7 +1555,8 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         info.scalarType = scalarType;
         info.sourceWidth = sourceWidth;
         info.sourceWidth2 = sourceWidth2;
-        info.selectors.reserve(resultWidth);
+        info.selectorOffset = selectorWords.size();
+        info.selectorCount = resultWidth;
         for (uint32_t c = 0u; c < resultWidth; ++c)
         {
             const uint32_t selector = ins[5u + c];
@@ -1541,24 +1564,38 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
                 static_cast<uint64_t>(selector) >=
                     static_cast<uint64_t>(sourceWidth) + sourceWidth2)
                 return false;
-            info.selectors.push_back(selector);
-            if (selector == 0xffffffffu &&
-                undefIdByScalarType.find(scalarType) == undefIdByScalarType.end())
+            selectorWords.push_back(selector);
+            if (selector == 0xffffffffu)
             {
-                if (nextId >= UINT32_MAX - 1u)
-                    return false;
-                const uint32_t undefId = nextId++;
-                undefIdByScalarType.emplace(scalarType, undefId);
-                undefDeclarations.emplace_back(scalarType, undefId);
+                const auto undef = std::find_if(
+                    undefIdByScalarType.begin(), undefIdByScalarType.end(),
+                    [scalarType](const std::pair<uint32_t, uint32_t> &entry)
+                    {
+                        return entry.first == scalarType;
+                    });
+                if (undef == undefIdByScalarType.end())
+                {
+                    if (nextId >= UINT32_MAX - 1u)
+                        return false;
+                    const uint32_t undefId = nextId++;
+                    undefIdByScalarType.emplace_back(scalarType, undefId);
+                    undefDeclarations.emplace_back(scalarType, undefId);
+                }
             }
         }
-        shuffles.emplace(offset, std::move(info));
+        shuffles.push_back(info);
     }
 
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/rewrite"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/rewrite";
     bool undefDefinitionsInserted = undefDeclarations.empty();
     bool inFunction = false;
+    size_t shuffleIndex = 0u;
     std::vector<uint32_t> rewritten;
-    rewritten.reserve(words.size() + shuffleOffsets.size() * 24u);
+    rewritten.reserve(words.size() + static_cast<size_t>(estimatedGrowth));
+    std::vector<uint32_t> constructOperands;
+    constructOperands.reserve(static_cast<size_t>(totalSelectorCount) + 2u);
     rewritten.insert(rewritten.end(), words.begin(), words.begin() + 5u);
 
     for (size_t offset = 5u; offset < words.size();)
@@ -1580,25 +1617,26 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
             undefDefinitionsInserted = true;
         }
 
-        const auto found = shuffles.find(offset);
-        if (found == shuffles.end())
+        const bool hasShuffle = shuffleIndex < shuffles.size() &&
+            shuffles[shuffleIndex].instructionOffset == offset;
+        if (!hasShuffle)
         {
             rewritten.insert(
                 rewritten.end(), words.begin() + offset, words.begin() + offset + wc);
         }
         else
         {
-            const ShuffleInfo &shuffle = found->second;
+            const ShuffleInfo &shuffle = shuffles[shuffleIndex++];
             // A full identity shuffle is just a value copy. Preserve its result
             // ID while avoiding dozens of scalar operations in common large shaders.
             bool identityShuffle =
-                vectorLengthByType[shuffle.resultType] == shuffle.selectors.size() &&
+                vectorLengthByType[shuffle.resultType] == shuffle.selectorCount &&
                 resultTypeById[shuffle.vector1Id] == shuffle.resultType;
             if (identityShuffle)
             {
-                for (uint32_t c = 0u; c < shuffle.selectors.size(); ++c)
+                for (uint32_t c = 0u; c < shuffle.selectorCount; ++c)
                 {
-                    if (shuffle.selectors[c] != c)
+                    if (selectorWords[shuffle.selectorOffset + c] != c)
                     {
                         identityShuffle = false;
                         break;
@@ -1614,25 +1652,32 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
             }
             else
             {
-                std::vector<uint32_t> constructOperands;
-                constructOperands.reserve(shuffle.selectors.size() + 2u);
+                constructOperands.clear();
                 constructOperands.push_back(shuffle.resultType);
                 constructOperands.push_back(shuffle.resultId);
                 // Reuse scalar component extracts both within this shuffle and
                 // across earlier shuffles in the same basic block. Keeping these
                 // SSA temporaries shared reduces register pressure in NAK without
                 // changing the vector-shuffle results.
-                extractedIdsByBlock.reserve(
-                    extractedIdsByBlock.size() + shuffle.selectors.size());
-
-                for (const uint32_t selector : shuffle.selectors)
+                for (uint32_t selectorIndex = 0u;
+                     selectorIndex < shuffle.selectorCount; ++selectorIndex)
                 {
+                    const uint32_t selector =
+                        selectorWords[shuffle.selectorOffset + selectorIndex];
                     if (selector == 0xffffffffu)
                     {
-                        const auto undef = undefIdByScalarType.find(shuffle.scalarType);
-                        if (undef == undefIdByScalarType.end())
+                        uint32_t undefId = 0u;
+                        for (const auto &entry : undefIdByScalarType)
+                        {
+                            if (entry.first == shuffle.scalarType)
+                            {
+                                undefId = entry.second;
+                                break;
+                            }
+                        }
+                        if (undefId == 0u)
                             return false;
-                        constructOperands.push_back(undef->second);
+                        constructOperands.push_back(undefId);
                         continue;
                     }
 
@@ -1647,7 +1692,12 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
 
                     const uint64_t extractKey =
                         (static_cast<uint64_t>(sourceId) << 32) | component;
-                    const auto existingExtract = extractedIdsByBlock.find(extractKey);
+                    const auto existingExtract = std::find_if(
+                        extractedIdsByBlock.begin(), extractedIdsByBlock.end(),
+                        [extractKey](const std::pair<uint64_t, uint32_t> &entry)
+                        {
+                            return entry.first == extractKey;
+                        });
                     if (existingExtract != extractedIdsByBlock.end())
                     {
                         constructOperands.push_back(existingExtract->second);
@@ -1660,7 +1710,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
                     SpirvAppend(rewritten, SpvOpCompositeExtract,
                         {shuffle.scalarType, extractedId, sourceId, component});
                     ++emittedScalarExtracts;
-                    extractedIdsByBlock.emplace(extractKey, extractedId);
+                    extractedIdsByBlock.emplace_back(extractKey, extractedId);
                     constructOperands.push_back(extractedId);
                 }
 
@@ -1679,8 +1729,11 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         offset += wc;
     }
 
-    if (!undefDefinitionsInserted)
+    if (!undefDefinitionsInserted || shuffleIndex != shuffles.size())
         return false;
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/commit"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/commit";
     rewritten[3] = nextId;
     words.swap(rewritten);
     if (loweredCount)
@@ -1689,6 +1742,11 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
         *copyObjectCount = emittedCopyObjects;
     if (scalarExtractCount)
         *scalarExtractCount = emittedScalarExtracts;
+    // The exception handler uses this stage if a temporary container fails
+    // while being destroyed as the function returns.
+    g_switchFrameStage = pixelStage
+        ? "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle/destroy_temporaries"
+        : "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle/destroy_temporaries";
     return true;
 }
 
@@ -5794,7 +5852,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         const size_t pixelWordsBeforeLower = pixelSpirv.size();
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/pixel_lower_shuffle";
         const bool loweredPixelShuffles = LowerSwitchSpirvVectorShuffleToCompositeOps(
-            pixelSpirv, &loweredPixelShuffleCount,
+            "ps", pixelSpirv, &loweredPixelShuffleCount,
             &loweredPixelCopyObjects, &loweredPixelExtracts,
             &pixelShuffleGrowthEstimate);
         if (loweredPixelShuffles && loweredPixelShuffleCount)
@@ -5926,7 +5984,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         const size_t vertexWordsBeforeLower = m_vertexShader->spirv.size();
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/vertex_lower_shuffle";
         const bool loweredVertexShuffles = LowerSwitchSpirvVectorShuffleToCompositeOps(
-            m_vertexShader->spirv, &loweredVertexShuffleCount,
+            "vs", m_vertexShader->spirv, &loweredVertexShuffleCount,
             &loweredVertexCopyObjects, &loweredVertexExtracts,
             &vertexShuffleGrowthEstimate);
         if (loweredVertexShuffles && loweredVertexShuffleCount)
