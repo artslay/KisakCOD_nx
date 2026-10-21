@@ -628,17 +628,15 @@ static void SwitchLogVulkanRuntime()
     vkDestroyInstance(instance, nullptr);
 }
 
-static bool SwitchConfigureNakNoUgprProbe()
+static bool SwitchConfigureNakDefaultProbe()
 {
     const char *current = std::getenv("NAK_DEBUG");
     const size_t currentLength = current ? std::strlen(current) : 0u;
     char combined[512] = {};
     size_t used = 0;
-    bool hasNoUgpr = false;
 
-    // Keep caller-requested NAK debug flags but remove the exact "spill" token.
-    // Forced spilling is the variable under test; leaving it enabled would make
-    // the no-spill comparison invalid even when inherited from the environment.
+    // Remove the two forced register-allocation modes used during diagnosis.
+    // Keep unrelated caller-provided NAK_DEBUG flags unchanged.
     size_t tokenStart = 0;
     for (size_t i = 0; i <= currentLength; ++i)
     {
@@ -647,23 +645,19 @@ static bool SwitchConfigureNakNoUgprProbe()
 
         size_t first = tokenStart;
         size_t last = i;
-        while (first < last && (current[first] == ' ' || current[first] == '\t'))
+        while (first < last && (current[first] == ' ' || current[first] == '\\t'))
             ++first;
-        while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\t'))
+        while (last > first && (current[last - 1] == ' ' || current[last - 1] == '\\t'))
             --last;
 
         const size_t tokenLength = last - first;
-        const bool isSpill =
-            tokenLength == sizeof("spill") - 1u &&
-            std::memcmp(current + first, "spill", sizeof("spill") - 1u) == 0;
-        const bool isNoUgpr =
-            tokenLength == sizeof("nougpr") - 1u &&
-            std::memcmp(current + first, "nougpr", sizeof("nougpr") - 1u) == 0;
+        const bool isForcedRegisterMode =
+            (tokenLength == sizeof("nougpr") - 1u &&
+             std::memcmp(current + first, "nougpr", sizeof("nougpr") - 1u) == 0) ||
+            (tokenLength == sizeof("spill") - 1u &&
+             std::memcmp(current + first, "spill", sizeof("spill") - 1u) == 0);
 
-        if (isNoUgpr)
-            hasNoUgpr = true;
-
-        if (tokenLength != 0u && !isSpill)
+        if (tokenLength != 0u && !isForcedRegisterMode)
         {
             const size_t separatorLength = used != 0u ? 1u : 0u;
             if (used + separatorLength + tokenLength >= sizeof(combined))
@@ -672,23 +666,10 @@ static bool SwitchConfigureNakNoUgprProbe()
                 combined[used++] = ',';
             std::memcpy(combined + used, current + first, tokenLength);
             used += tokenLength;
-            combined[used] = '\0';
+            combined[used] = '\\0';
         }
 
         tokenStart = i + 1u;
-    }
-
-    if (!hasNoUgpr)
-    {
-        const size_t separatorLength = used != 0u ? 1u : 0u;
-        const size_t flagLength = sizeof("nougpr") - 1u;
-        if (used + separatorLength + flagLength >= sizeof(combined))
-            return false;
-        if (separatorLength != 0u)
-            combined[used++] = ',';
-        std::memcpy(combined + used, "nougpr", flagLength);
-        used += flagLength;
-        combined[used] = '\0';
     }
 
     return ::setenv("NAK_DEBUG", combined, 1) == 0;
@@ -704,10 +685,10 @@ static bool SwitchConfigureNirSkipProbe()
 
 int main()
 {
-    // Use NAK's no-UGPR lowering mode for the next pipeline-crash comparison,
-    // but explicitly remove forced spilling so this run isolates the spill path.
-    // Retain all shaders and normal graphics-pipeline creation.
-    const bool nakNoUgprProbeConfigured = SwitchConfigureNakNoUgprProbe();
+    // Restore NAK's default register allocation for the next crash comparison.
+    // Remove forced nougpr/spill modes while retaining all shaders and unrelated
+    // NAK_DEBUG flags; this tests the compiler without either forced allocator mode.
+    const bool nakDebugConfigured = SwitchConfigureNakDefaultProbe();
     const bool nirSkipProbeConfigured = SwitchConfigureNirSkipProbe();
     Switch_LogInit();
     SwitchBootLog("========================================");
