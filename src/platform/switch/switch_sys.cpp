@@ -525,7 +525,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
     std::snprintf(
         badChunkSummary, sizeof(badChunkSummary),
         "[KisakCOD][HEAP BAD CHUNK] total=%llu printed=%llu "
-        "window=%llu..%llu (chunk size < 0x20)\\n",
+        "window=%llu..%llu (chunk size < 0x20)\n",
         static_cast<unsigned long long>(badChunkMatches),
         static_cast<unsigned long long>(badChunkPrinted),
         static_cast<unsigned long long>(begin),
