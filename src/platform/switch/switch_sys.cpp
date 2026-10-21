@@ -426,6 +426,112 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
         static_cast<unsigned long long>(end));
     Switch_LogCrashLine(badSummary);
 
+    // Report every allocator event in the retained ring whose chunk header
+    // was already impossible at the time we sampled it. The older BAD ALLOC
+    // scan only considered returned allocations; a malformed header observed
+    // before free is equally important because it may be the operation that
+    // first exposes an invalid pointer or double-free.
+    uintptr_t badChunkMatches = 0u;
+    uintptr_t badChunkPrinted = 0u;
+    constexpr uintptr_t kMaxBadChunkLines = 32u;
+    for (uintptr_t sequence = begin; sequence < end; ++sequence)
+    {
+        const SwitchHeapTraceEvent &event =
+            g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
+        const uintptr_t first =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (first != sequence + 1u)
+            continue;
+
+        const uintptr_t operation =
+            __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
+        const uintptr_t pointer =
+            __atomic_load_n(&event.pointer, __ATOMIC_RELAXED);
+        const uintptr_t size =
+            __atomic_load_n(&event.size, __ATOMIC_RELAXED);
+        const uintptr_t caller =
+            __atomic_load_n(&event.caller, __ATOMIC_RELAXED);
+        const uintptr_t head =
+            __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
+        const uintptr_t headerSnapshot =
+            __atomic_load_n(&event.headerSnapshot, __ATOMIC_RELAXED);
+        const uintptr_t sourcePointer =
+            __atomic_load_n(&event.reallocSourcePointer, __ATOMIC_RELAXED);
+        const uintptr_t sourceHead =
+            __atomic_load_n(&event.reallocSourceHead, __ATOMIC_RELAXED);
+        const uintptr_t sourcePrevFoot =
+            __atomic_load_n(&event.reallocSourcePrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t second =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (first != second || pointer == 0u)
+            continue;
+
+        const uintptr_t chunkBytes = head & ~static_cast<uintptr_t>(7u);
+        const bool hasHeader = (headerSnapshot & 1u) != 0u;
+        const bool malformedCurrent = hasHeader && chunkBytes < 0x20u;
+        const bool reallocSourceObserved =
+            operation == static_cast<uintptr_t>('R') && sourcePointer != 0u;
+        const uintptr_t sourceChunkBytes =
+            sourceHead & ~static_cast<uintptr_t>(7u);
+        const bool malformedReallocSource =
+            reallocSourceObserved && sourceChunkBytes < 0x20u;
+        if (!malformedCurrent && !malformedReallocSource)
+            continue;
+
+        ++badChunkMatches;
+        if (badChunkPrinted >= kMaxBadChunkLines)
+            continue;
+
+        const uintptr_t callerOffset =
+            caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
+        const bool isFree = operation == static_cast<uintptr_t>('F');
+        const bool neighborSeen = isFree && (headerSnapshot & 2u) != 0u;
+        const uintptr_t neighborPrev =
+            __atomic_load_n(&event.reallocSourcePrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t neighborHead =
+            __atomic_load_n(&event.reallocSourceHead, __ATOMIC_RELAXED);
+        char badChunkLine[640];
+        std::snprintf(
+            badChunkLine, sizeof(badChunkLine),
+            "[KisakCOD][HEAP BAD CHUNK] seq=%llu op=%c ptr=0x%016llx "
+            "size=%llu callerOff=0x%llx currentSeen=%u currentPrev=0x%016llx "
+            "currentHead=0x%016llx currentBytes=0x%llx "
+            "source=0x%016llx sourcePrev=0x%016llx sourceHead=0x%016llx "
+            "sourceBytes=0x%llx neighborSeen=%u neighborPrev=0x%016llx "
+            "neighborHead=0x%016llx\n",
+            static_cast<unsigned long long>(sequence),
+            static_cast<char>(operation),
+            static_cast<unsigned long long>(pointer),
+            static_cast<unsigned long long>(size),
+            static_cast<unsigned long long>(callerOffset),
+            static_cast<unsigned int>(hasHeader),
+            static_cast<unsigned long long>(
+                __atomic_load_n(&event.allocationChunkPrevFoot, __ATOMIC_RELAXED)),
+            static_cast<unsigned long long>(head),
+            static_cast<unsigned long long>(chunkBytes),
+            static_cast<unsigned long long>(sourcePointer),
+            static_cast<unsigned long long>(isFree ? 0u : sourcePrevFoot),
+            static_cast<unsigned long long>(isFree ? 0u : sourceHead),
+            static_cast<unsigned long long>(
+                malformedReallocSource ? sourceChunkBytes : 0u),
+            static_cast<unsigned int>(neighborSeen),
+            static_cast<unsigned long long>(neighborSeen ? neighborPrev : 0u),
+            static_cast<unsigned long long>(neighborSeen ? neighborHead : 0u));
+        Switch_LogCrashLine(badChunkLine);
+        ++badChunkPrinted;
+    }
+
+    char badChunkSummary[192];
+    std::snprintf(
+        badChunkSummary, sizeof(badChunkSummary),
+        "[KisakCOD][HEAP BAD CHUNK] total=%llu printed=%llu "
+        "window=%llu..%llu (chunk size < 0x20)\\n",
+        static_cast<unsigned long long>(badChunkMatches),
+        static_cast<unsigned long long>(badChunkPrinted),
+        static_cast<unsigned long long>(begin),
+        static_cast<unsigned long long>(end));
+    Switch_LogCrashLine(badChunkSummary);
+
     // Show a small, chronological window immediately before the first
     // allocation whose chunk-size bits were already zero at allocation time.
     // This can reveal recent allocator reuse/free patterns without logging the
