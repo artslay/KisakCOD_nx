@@ -6445,7 +6445,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         char summary[320];
         std::snprintf(
             summary, sizeof(summary),
-            "[KisakCOD][VK WORLD INPUT] n=%u createSeq=%u key=%016llx decl=%llu route=%u vs=%llu ps=%llu stride=%u attrs=%zu vsInputs=%d psSamplers=%d\\n",
+            "[KisakCOD][VK WORLD INPUT] n=%u createSeq=%u key=%016llx decl=%llu route=%u vs=%llu ps=%llu stride=%u attrs=%zu vsInputs=%d psSamplers=%d\n",
             traceId, pipelineCreateSequence,
             static_cast<unsigned long long>(key),
             static_cast<unsigned long long>(m_decl->serial),
@@ -6492,7 +6492,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                     SwitchEffectiveShaderElementOffset(m_decl, *elementMatch);
                 std::snprintf(
                     attrLine, sizeof(attrLine),
-                    "[KisakCOD][VK WORLD ATTR] n=%u loc=%u shader=%s vkFormat=%u binding=%u offset=%u usage=%u index=%u declType=%u effectiveType=%u declaredOffset=%u effectiveOffset=%u bytes=%u\\n",
+                    "[KisakCOD][VK WORLD ATTR] n=%u loc=%u shader=%s vkFormat=%u binding=%u offset=%u usage=%u index=%u declType=%u effectiveType=%u declaredOffset=%u effectiveOffset=%u bytes=%u\n",
                     traceId, attribute.location,
                     shaderMatch->name ? shaderMatch->name : "<null>",
                     static_cast<unsigned>(attribute.format), attribute.binding,
@@ -6507,7 +6507,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     attrLine, sizeof(attrLine),
-                    "[KisakCOD][VK WORLD ATTR] n=%u loc=%u shader=<unmatched> vkFormat=%u binding=%u offset=%u\\n",
+                    "[KisakCOD][VK WORLD ATTR] n=%u loc=%u shader=<unmatched> vkFormat=%u binding=%u offset=%u\n",
                     traceId, attribute.location,
                     static_cast<unsigned>(attribute.format), attribute.binding,
                     attribute.offset);
