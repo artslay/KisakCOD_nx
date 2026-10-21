@@ -6432,6 +6432,90 @@ bool IDirect3DDevice9::EnsurePipeline()
     const MOJOSHADER_parseData *prePs = m_pixelShader->parseData;
 
 #ifdef __SWITCH__
+    // The general pipeline trace covers only a fixed sequence window, which
+    // can miss the actual gameplay shader after the intro. Trace a small number
+    // of real world-vertex layouts by route and physical stride instead.
+    static uint32_t switchWorldVertexInputTraceCount = 0;
+    if (m_decl && m_decl->switchVertDeclType >= 2 &&
+        m_decl->switchVertDeclType <= 13 &&
+        m_streams[0].stride == 44 && preVs && prePs &&
+        switchWorldVertexInputTraceCount < 16u)
+    {
+        const uint32_t traceId = switchWorldVertexInputTraceCount++;
+        char summary[320];
+        std::snprintf(
+            summary, sizeof(summary),
+            "[KisakCOD][VK WORLD INPUT] n=%u createSeq=%u key=%016llx decl=%llu route=%u vs=%llu ps=%llu stride=%u attrs=%zu vsInputs=%d psSamplers=%d\\n",
+            traceId, pipelineCreateSequence,
+            static_cast<unsigned long long>(key),
+            static_cast<unsigned long long>(m_decl->serial),
+            static_cast<unsigned>(m_decl->switchVertDeclType),
+            static_cast<unsigned long long>(m_vertexShader->serial),
+            static_cast<unsigned long long>(m_pixelShader->serial),
+            static_cast<unsigned>(m_streams[0].stride), vertexAttrs.size(),
+            preVs->attribute_count, std::max(0, prePs->sampler_count));
+        Switch_LogWrite(summary);
+
+        for (const VkVertexInputAttributeDescription &attribute : vertexAttrs)
+        {
+            const _D3DVERTEXELEMENT9 *elementMatch = nullptr;
+            const MOJOSHADER_attribute *shaderMatch = nullptr;
+            for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
+            {
+                if (element.Stream != attribute.binding)
+                    continue;
+                for (int i = 0; i < preVs->attribute_count; ++i)
+                {
+                    const MOJOSHADER_attribute &candidate = preVs->attributes[i];
+                    uint32_t location = UINT32_MAX;
+                    if (candidate.usage ==
+                            static_cast<MOJOSHADER_usage>(element.Usage) &&
+                        candidate.index == element.UsageIndex &&
+                        ExtractShaderInputRegister(candidate.name, &location) &&
+                        location == attribute.location)
+                    {
+                        elementMatch = &element;
+                        shaderMatch = &candidate;
+                        break;
+                    }
+                }
+                if (elementMatch)
+                    break;
+            }
+
+            char attrLine[352];
+            if (elementMatch && shaderMatch)
+            {
+                const uint8_t effectiveType =
+                    SwitchEffectiveShaderElementType(m_decl, *elementMatch);
+                const uint32_t effectiveOffset =
+                    SwitchEffectiveShaderElementOffset(m_decl, *elementMatch);
+                std::snprintf(
+                    attrLine, sizeof(attrLine),
+                    "[KisakCOD][VK WORLD ATTR] n=%u loc=%u shader=%s vkFormat=%u binding=%u offset=%u usage=%u index=%u declType=%u effectiveType=%u declaredOffset=%u effectiveOffset=%u bytes=%u\\n",
+                    traceId, attribute.location,
+                    shaderMatch->name ? shaderMatch->name : "<null>",
+                    static_cast<unsigned>(attribute.format), attribute.binding,
+                    attribute.offset, static_cast<unsigned>(elementMatch->Usage),
+                    static_cast<unsigned>(elementMatch->UsageIndex),
+                    static_cast<unsigned>(elementMatch->Type),
+                    static_cast<unsigned>(effectiveType),
+                    static_cast<unsigned>(elementMatch->Offset), effectiveOffset,
+                    SwitchShaderElementByteSize(effectiveType));
+            }
+            else
+            {
+                std::snprintf(
+                    attrLine, sizeof(attrLine),
+                    "[KisakCOD][VK WORLD ATTR] n=%u loc=%u shader=<unmatched> vkFormat=%u binding=%u offset=%u\\n",
+                    traceId, attribute.location,
+                    static_cast<unsigned>(attribute.format), attribute.binding,
+                    attribute.offset);
+            }
+            Switch_LogWrite(attrLine);
+        }
+    }
+
     if (pipelineCreateSequence >= 30u && pipelineCreateSequence <= 40u)
     {
         char inputTrace[224];
