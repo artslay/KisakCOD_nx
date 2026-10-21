@@ -243,8 +243,19 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
             Switch_LogWrite("[KisakCOD][CINEMATIC] before Sys_InitThread\n");
         Sys_InitThread(context);
         if (context == THREAD_CONTEXT_CINEMATIC)
-            Switch_LogWrite("[KisakCOD][CINEMATIC] after Sys_InitThread\n");
+        {
+            char line[192];
+            std::snprintf(
+                line, sizeof(line),
+                "[KisakCOD][CINEMATIC] callback enter context=%u function=0x%llx\n",
+                static_cast<unsigned>(context),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<uintptr_t>(function)));
+            Switch_LogWrite(line);
+        }
+        g_switchThreadStage = "thread/callback_enter";
         function((uint32_t)context);
+        g_switchThreadStage = "thread/callback_return";
         g_threadAlive[context] = false;
     });
     g_switchThreadStage = "create/thread_ctor_done";
