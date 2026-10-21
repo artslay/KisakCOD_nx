@@ -202,6 +202,9 @@ struct SwitchHeapTraceEvent
     uintptr_t allocationChunkPrevFoot;
     uintptr_t allocationChunkHead;
     uintptr_t headerSnapshot;
+    uintptr_t reallocSourcePointer;
+    uintptr_t reallocSourcePrevFoot;
+    uintptr_t reallocSourceHead;
 };
 
 alignas(64) static SwitchHeapTraceEvent g_switchHeapTrace[kSwitchHeapTraceCount]{};
@@ -237,7 +240,10 @@ static void Switch_HeapTraceRecord(
     char operation,
     uintptr_t pointer,
     uintptr_t size,
-    uintptr_t caller)
+    uintptr_t caller,
+    uintptr_t reallocSourcePointer = 0u,
+    uintptr_t reallocSourcePrevFoot = 0u,
+    uintptr_t reallocSourceHead = 0u)
 {
     if (!pointer)
         return;
@@ -281,6 +287,9 @@ static void Switch_HeapTraceRecord(
     __atomic_store_n(&event.allocationChunkPrevFoot, allocationChunkPrevFoot, __ATOMIC_RELAXED);
     __atomic_store_n(&event.allocationChunkHead, allocationChunkHead, __ATOMIC_RELAXED);
     __atomic_store_n(&event.headerSnapshot, headerSnapshot, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.reallocSourcePointer, reallocSourcePointer, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.reallocSourcePrevFoot, reallocSourcePrevFoot, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.reallocSourceHead, reallocSourceHead, __ATOMIC_RELAXED);
     __atomic_store_n(&event.sequence, sequence + 1u, __ATOMIC_RELEASE);
 }
 
@@ -320,6 +329,12 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             __atomic_load_n(&event.allocationChunkPrevFoot, __ATOMIC_RELAXED);
         const uintptr_t allocationChunkHead =
             __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
+        const uintptr_t reallocSourcePointer =
+            __atomic_load_n(&event.reallocSourcePointer, __ATOMIC_RELAXED);
+        const uintptr_t reallocSourcePrevFoot =
+            __atomic_load_n(&event.reallocSourcePrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t reallocSourceHead =
+            __atomic_load_n(&event.reallocSourceHead, __ATOMIC_RELAXED);
         const uintptr_t second =
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
 
@@ -340,19 +355,23 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
 
         const uintptr_t callerOffset =
             caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
-        char badLine[384];
+        char badLine[512];
         std::snprintf(
             badLine, sizeof(badLine),
             "[KisakCOD][HEAP BAD ALLOC] seq=%llu op=%c ptr=0x%016llx "
             "requested=%llu callerOff=0x%llx alloc_prev=0x%016llx "
-            "alloc_head=0x%016llx head_size=0\n",
+            "alloc_head=0x%016llx source=0x%016llx source_prev=0x%016llx "
+            "source_head=0x%016llx head_size=0\n",
             static_cast<unsigned long long>(sequence),
             static_cast<char>(operation),
             static_cast<unsigned long long>(pointer),
             static_cast<unsigned long long>(size),
             static_cast<unsigned long long>(callerOffset),
             static_cast<unsigned long long>(allocationChunkPrevFoot),
-            static_cast<unsigned long long>(allocationChunkHead));
+            static_cast<unsigned long long>(allocationChunkHead),
+            static_cast<unsigned long long>(reallocSourcePointer),
+            static_cast<unsigned long long>(reallocSourcePrevFoot),
+            static_cast<unsigned long long>(reallocSourceHead));
         Switch_LogCrashLine(badLine);
         ++badAllocPrinted;
     }
@@ -401,6 +420,10 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
                 __atomic_load_n(&event.caller, __ATOMIC_RELAXED);
             const uintptr_t allocationChunkHead =
                 __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
+            const uintptr_t reallocSourcePointer =
+                __atomic_load_n(&event.reallocSourcePointer, __ATOMIC_RELAXED);
+            const uintptr_t reallocSourceHead =
+                __atomic_load_n(&event.reallocSourceHead, __ATOMIC_RELAXED);
             const uintptr_t headerSnapshot =
                 __atomic_load_n(&event.headerSnapshot, __ATOMIC_RELAXED);
             const uintptr_t second =
@@ -410,19 +433,22 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
 
             const uintptr_t callerOffset =
                 caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
-            char historyLine[320];
+            char historyLine[448];
             std::snprintf(
                 historyLine, sizeof(historyLine),
                 "[KisakCOD][HEAP BAD ALLOC HISTORY] seq=%llu op=%c "
                 "ptr=0x%016llx size=%llu callerOff=0x%llx "
-                "headerSeen=%llu head=0x%016llx\n",
+                "headerSeen=%llu head=0x%016llx source=0x%016llx "
+                "source_head=0x%016llx\n",
                 static_cast<unsigned long long>(sequence),
                 static_cast<char>(operation),
                 static_cast<unsigned long long>(pointer),
                 static_cast<unsigned long long>(size),
                 static_cast<unsigned long long>(callerOffset),
                 static_cast<unsigned long long>(headerSnapshot),
-                static_cast<unsigned long long>(allocationChunkHead));
+                static_cast<unsigned long long>(allocationChunkHead),
+                static_cast<unsigned long long>(reallocSourcePointer),
+                static_cast<unsigned long long>(reallocSourceHead));
             Switch_LogCrashLine(historyLine);
         }
     }
@@ -448,6 +474,12 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             __atomic_load_n(&event.allocationChunkPrevFoot, __ATOMIC_RELAXED);
         const uintptr_t allocationChunkHead =
             __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
+        const uintptr_t reallocSourcePointer =
+            __atomic_load_n(&event.reallocSourcePointer, __ATOMIC_RELAXED);
+        const uintptr_t reallocSourcePrevFoot =
+            __atomic_load_n(&event.reallocSourcePrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t reallocSourceHead =
+            __atomic_load_n(&event.reallocSourceHead, __ATOMIC_RELAXED);
         const uintptr_t second =
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
 
@@ -473,6 +505,24 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
                 static_cast<unsigned long long>(callerOffset),
                 static_cast<unsigned long long>(allocationChunkPrevFoot),
                 static_cast<unsigned long long>(allocationChunkHead));
+        }
+        else if (operation == static_cast<uintptr_t>('R'))
+        {
+            std::snprintf(
+                line, sizeof(line),
+                "[KisakCOD][HEAP TRACE] seq=%llu op=R ptr=0x%016llx "
+                "size=%llu callerOff=0x%llx alloc_prev=0x%016llx "
+                "alloc_head=0x%016llx source=0x%016llx "
+                "source_prev=0x%016llx source_head=0x%016llx\n",
+                static_cast<unsigned long long>(sequence),
+                static_cast<unsigned long long>(pointer),
+                static_cast<unsigned long long>(size),
+                static_cast<unsigned long long>(callerOffset),
+                static_cast<unsigned long long>(allocationChunkPrevFoot),
+                static_cast<unsigned long long>(allocationChunkHead),
+                static_cast<unsigned long long>(reallocSourcePointer),
+                static_cast<unsigned long long>(reallocSourcePrevFoot),
+                static_cast<unsigned long long>(reallocSourceHead));
         }
         else
         {
@@ -678,6 +728,20 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
     }
 
     __malloc_lock(_REENT);
+    uintptr_t sourceChunkPrevFoot = 0u;
+    uintptr_t sourceChunkHead = 0u;
+    const uintptr_t sourcePointer = reinterpret_cast<uintptr_t>(pointer);
+    if (pointer &&
+        sourcePointer >= 2u * sizeof(uintptr_t) &&
+        (sourcePointer & (alignof(uintptr_t) - 1u)) == 0u)
+    {
+        const volatile uintptr_t *sourceChunk =
+            reinterpret_cast<const volatile uintptr_t *>(
+                sourcePointer - 2u * sizeof(uintptr_t));
+        sourceChunkPrevFoot = sourceChunk[0];
+        sourceChunkHead = sourceChunk[1];
+    }
+
     void *replacement = __real_realloc(pointer, size);
     if (nakRawVecRealloc)
         g_switchNakReallocActive = 0u;
@@ -692,7 +756,10 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
         'R',
         reinterpret_cast<uintptr_t>(replacement),
         static_cast<uintptr_t>(size),
-        caller);
+        caller,
+        sourcePointer,
+        sourceChunkPrevFoot,
+        sourceChunkHead);
     __malloc_unlock(_REENT);
     return replacement;
 }
