@@ -676,7 +676,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
                             "argMatchesFpM24=%u savedX19=0x%016llx "
                             "faultNodeX4=0x%016llx freeChunkX6=0x%016llx "
                             "fdX0=0x%016llx bkX1=0x%016llx "
-                            "chunkPrev=0x%016llx chunkHead=0x%016llx\\n",
+                            "chunkPrev=0x%016llx chunkHead=0x%016llx\n",
                             static_cast<unsigned long long>(raLr),
                             static_cast<unsigned long long>(raFrameAddress),
                             static_cast<unsigned long long>(rustFreeArg),
