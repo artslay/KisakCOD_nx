@@ -287,6 +287,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
     // it is not the pointer that ultimately faults in free().
     uintptr_t badAllocMatches = 0u;
     uintptr_t badAllocPrinted = 0u;
+    uintptr_t firstBadAllocSequence = UINTPTR_MAX;
     constexpr uintptr_t kMaxBadAllocLines = 32u;
     for (uintptr_t sequence = begin; sequence < end; ++sequence)
     {
@@ -322,6 +323,8 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
         }
 
         ++badAllocMatches;
+        if (firstBadAllocSequence == UINTPTR_MAX)
+            firstBadAllocSequence = sequence;
         if (badAllocPrinted >= kMaxBadAllocLines)
             continue;
 
@@ -354,6 +357,65 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
         static_cast<unsigned long long>(begin),
         static_cast<unsigned long long>(end));
     Switch_LogCrashLine(badSummary);
+
+    // Show a small, chronological window immediately before the first
+    // allocation whose chunk-size bits were already zero at allocation time.
+    // This can reveal recent allocator reuse/free patterns without logging the
+    // full multi-million-event heap trace or reading more heap memory.
+    if (firstBadAllocSequence != UINTPTR_MAX)
+    {
+        constexpr uintptr_t kBadAllocHistoryCount = 32u;
+        uintptr_t historyBegin =
+            firstBadAllocSequence > kBadAllocHistoryCount
+                ? firstBadAllocSequence - kBadAllocHistoryCount : 0u;
+        if (historyBegin < begin)
+            historyBegin = begin;
+
+        for (uintptr_t sequence = historyBegin;
+             sequence < firstBadAllocSequence; ++sequence)
+        {
+            const SwitchHeapTraceEvent &event =
+                g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
+            const uintptr_t first =
+                __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+            if (first != sequence + 1u)
+                continue;
+
+            const uintptr_t operation =
+                __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
+            const uintptr_t pointer =
+                __atomic_load_n(&event.pointer, __ATOMIC_RELAXED);
+            const uintptr_t size =
+                __atomic_load_n(&event.size, __ATOMIC_RELAXED);
+            const uintptr_t caller =
+                __atomic_load_n(&event.caller, __ATOMIC_RELAXED);
+            const uintptr_t allocationChunkHead =
+                __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
+            const uintptr_t headerSnapshot =
+                __atomic_load_n(&event.headerSnapshot, __ATOMIC_RELAXED);
+            const uintptr_t second =
+                __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+            if (first != second)
+                continue;
+
+            const uintptr_t callerOffset =
+                caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
+            char historyLine[320];
+            std::snprintf(
+                historyLine, sizeof(historyLine),
+                "[KisakCOD][HEAP BAD ALLOC HISTORY] seq=%llu op=%c "
+                "ptr=0x%016llx size=%llu callerOff=0x%llx "
+                "headerSeen=%llu head=0x%016llx\\n",
+                static_cast<unsigned long long>(sequence),
+                static_cast<char>(operation),
+                static_cast<unsigned long long>(pointer),
+                static_cast<unsigned long long>(size),
+                static_cast<unsigned long long>(callerOffset),
+                static_cast<unsigned long long>(headerSnapshot),
+                static_cast<unsigned long long>(allocationChunkHead));
+            Switch_LogCrashLine(historyLine);
+        }
+    }
 
     for (uintptr_t sequence = begin; sequence < end; ++sequence)
     {
