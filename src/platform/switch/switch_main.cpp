@@ -48,7 +48,13 @@ static SwitchRustTlsStatus SwitchInstallRustTlsPointer()
     asm volatile("mrs %0, tpidr_el0" : "=r"(status.hardwareBefore));
     status.softThreadPointer = reinterpret_cast<uintptr_t>(__aarch64_read_tp());
 
-    if (status.hardwareBefore == 0 && status.softThreadPointer != 0)
+    // Rust in Mesa reads TPIDR_EL0, but the Switch toolchain keeps the
+    // current thread's TLS base in its software TP register. Always make the
+    // hardware register match this thread's actual soft TLS base; a non-zero
+    // value is not evidence that it belongs to this thread or uses the layout
+    // expected by Mesa's Rust standard library.
+    if (status.softThreadPointer != 0 &&
+        status.hardwareBefore != status.softThreadPointer)
     {
         asm volatile("msr tpidr_el0, %0"
                      :
@@ -715,6 +721,10 @@ static bool SwitchConfigureNakDefaultProbe()
 
 int main()
 {
+    // Do not allow an inherited Mesa debug setting to skip NIR optimization
+    // passes; production shader compilation must run the complete pass chain.
+    (void)::unsetenv("NIR_SKIP");
+
     const SwitchRustTlsStatus rustTlsStatus = SwitchInstallRustTlsPointer();
 
     // Restore NAK's default register allocation for the next crash comparison.
