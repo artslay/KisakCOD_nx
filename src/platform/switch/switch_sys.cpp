@@ -212,7 +212,20 @@ struct SwitchHeapTraceEvent
 alignas(64) static SwitchHeapTraceEvent g_switchHeapTrace[kSwitchHeapTraceCount]{};
 static uintptr_t g_switchHeapTraceNext = 0;
 static constexpr uintptr_t kSwitchHeapBadPointerCount = 32u;
-static uintptr_t g_switchHeapBadPointers[kSwitchHeapBadPointerCount]{};
+
+// A tiny side ring captures the physical words around malformed allocation
+// headers immediately on malloc return. Keeping this out of the main event ring
+// avoids adding several megabytes to every diagnostic build.
+struct SwitchHeapBadPointerSnapshot
+{
+    uintptr_t generation;
+    uintptr_t pointer;
+    uintptr_t size;
+    uintptr_t caller;
+    uintptr_t words[8]; // pointer[-4]..pointer[+3]
+};
+static SwitchHeapBadPointerSnapshot
+    g_switchHeapBadPointers[kSwitchHeapBadPointerCount]{};
 static uintptr_t g_switchHeapBadPointerNext = 0;
 
 static bool Switch_HeapTraceIsKnownBadPointer(uintptr_t pointer)
@@ -223,19 +236,39 @@ static bool Switch_HeapTraceIsKnownBadPointer(uintptr_t pointer)
         count < kSwitchHeapBadPointerCount ? count : kSwitchHeapBadPointerCount;
     for (uintptr_t i = 0; i < limit; ++i)
     {
-        if (__atomic_load_n(&g_switchHeapBadPointers[i], __ATOMIC_RELAXED) == pointer)
+        if (__atomic_load_n(&g_switchHeapBadPointers[i].pointer, __ATOMIC_ACQUIRE) == pointer)
             return true;
     }
     return false;
 }
 
-static void Switch_HeapTraceRememberBadPointer(uintptr_t pointer)
+static void Switch_HeapTraceRememberBadPointer(
+    uintptr_t pointer, uintptr_t size, uintptr_t caller)
 {
     const uintptr_t sequence = __atomic_fetch_add(
         &g_switchHeapBadPointerNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
-    __atomic_store_n(
-        &g_switchHeapBadPointers[sequence & (kSwitchHeapBadPointerCount - 1u)],
-        pointer, __ATOMIC_RELEASE);
+    SwitchHeapBadPointerSnapshot &snapshot =
+        g_switchHeapBadPointers[sequence & (kSwitchHeapBadPointerCount - 1u)];
+
+    __atomic_store_n(&snapshot.generation, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.pointer, static_cast<uintptr_t>(0), __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.size, size, __ATOMIC_RELAXED);
+    __atomic_store_n(&snapshot.caller, caller, __ATOMIC_RELAXED);
+
+    // The malloc result is non-null and aligned. Capture both the two words
+    // immediately before the chunk header and the next words after the user
+    // pointer. This is performed while the malloc lock is still held.
+    const volatile uintptr_t *user =
+        reinterpret_cast<const volatile uintptr_t *>(pointer);
+    for (uintptr_t i = 0; i < 8u; ++i)
+    {
+        const intptr_t wordOffset = static_cast<intptr_t>(i) - 4;
+        const uintptr_t value = user[wordOffset];
+        __atomic_store_n(&snapshot.words[i], value, __ATOMIC_RELAXED);
+    }
+
+    __atomic_store_n(&snapshot.pointer, pointer, __ATOMIC_RELEASE);
+    __atomic_store_n(&snapshot.generation, sequence + 1u, __ATOMIC_RELEASE);
 }
 
 static void Switch_HeapTraceRecord(
@@ -280,7 +313,7 @@ static void Switch_HeapTraceRecord(
         if (allocationEvent &&
             (allocationChunkHead & ~static_cast<uintptr_t>(7u)) == 0u)
         {
-            Switch_HeapTraceRememberBadPointer(pointer);
+            Switch_HeapTraceRememberBadPointer(pointer, size, caller);
         }
 
         // Snapshot the successor for plausible chunks only. A corrupt size
@@ -531,6 +564,60 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
         static_cast<unsigned long long>(begin),
         static_cast<unsigned long long>(end));
     Switch_LogCrashLine(badChunkSummary);
+
+    // Print the preserved raw neighborhood from each malformed allocation.
+    // These words were captured at malloc return, not reconstructed at crash
+    // time after later frees or allocator mutations.
+    const uintptr_t badSnapshotCount = __atomic_load_n(
+        &g_switchHeapBadPointerNext, __ATOMIC_ACQUIRE);
+    const uintptr_t badSnapshotLimit =
+        badSnapshotCount < kSwitchHeapBadPointerCount
+            ? badSnapshotCount : kSwitchHeapBadPointerCount;
+    for (uintptr_t i = 0; i < badSnapshotLimit; ++i)
+    {
+        const SwitchHeapBadPointerSnapshot &snapshot = g_switchHeapBadPointers[i];
+        const uintptr_t generation =
+            __atomic_load_n(&snapshot.generation, __ATOMIC_ACQUIRE);
+        if (generation == 0u)
+            continue;
+        const uintptr_t pointer =
+            __atomic_load_n(&snapshot.pointer, __ATOMIC_ACQUIRE);
+        const uintptr_t size =
+            __atomic_load_n(&snapshot.size, __ATOMIC_RELAXED);
+        const uintptr_t caller =
+            __atomic_load_n(&snapshot.caller, __ATOMIC_RELAXED);
+        uintptr_t words[8]{};
+        for (uintptr_t j = 0; j < 8u; ++j)
+            words[j] = __atomic_load_n(&snapshot.words[j], __ATOMIC_RELAXED);
+        if (pointer == 0u)
+            continue;
+
+        const uintptr_t callerOffset =
+            caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
+        char snapshotLine[768];
+        std::snprintf(
+            snapshotLine, sizeof(snapshotLine),
+            "[KisakCOD][HEAP BAD SNAPSHOT] generation=%llu ptr=0x%016llx "
+            "requested=%llu callerOff=0x%llx targetMatch=%u "
+            "raw_m20=0x%016llx raw_m18=0x%016llx "
+            "prev=0x%016llx head=0x%016llx "
+            "raw_p00=0x%016llx raw_p08=0x%016llx "
+            "raw_p10=0x%016llx raw_p18=0x%016llx\\n",
+            static_cast<unsigned long long>(generation - 1u),
+            static_cast<unsigned long long>(pointer),
+            static_cast<unsigned long long>(size),
+            static_cast<unsigned long long>(callerOffset),
+            static_cast<unsigned int>(pointer == target),
+            static_cast<unsigned long long>(words[0]),
+            static_cast<unsigned long long>(words[1]),
+            static_cast<unsigned long long>(words[2]),
+            static_cast<unsigned long long>(words[3]),
+            static_cast<unsigned long long>(words[4]),
+            static_cast<unsigned long long>(words[5]),
+            static_cast<unsigned long long>(words[6]),
+            static_cast<unsigned long long>(words[7]));
+        Switch_LogCrashLine(snapshotLine);
+    }
 
     // Show a small, chronological window immediately before the first
     // allocation whose chunk-size bits were already zero at allocation time.
