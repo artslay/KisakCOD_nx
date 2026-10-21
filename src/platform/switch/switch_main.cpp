@@ -735,7 +735,7 @@ int main()
     std::snprintf(
         tlsLine,
         sizeof(tlsLine),
-        "[KisakCOD][RUST TLS] soft_tp=0x%016llx tpidr_before=0x%016llx tpidr_after=0x%016llx installed=%u\\n",
+        "[KisakCOD][RUST TLS] soft_tp=0x%016llx tpidr_before=0x%016llx tpidr_after=0x%016llx installed=%u\n",
         static_cast<unsigned long long>(rustTlsStatus.softThreadPointer),
         static_cast<unsigned long long>(rustTlsStatus.hardwareBefore),
         static_cast<unsigned long long>(rustTlsStatus.hardwareAfter),
