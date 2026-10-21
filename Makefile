@@ -36,6 +36,10 @@ LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libn
 ifeq ($(KISAK_SWITCH_HEAP_TRACE),1)
 CPPFLAGS += -DKISAK_SWITCH_HEAP_TRACE
 LDFLAGS += -Wl,--wrap=malloc,--wrap=free,--wrap=calloc,--wrap=realloc
+# Make does not track command-line flag changes as dependencies. The wrapper
+# definitions live in switch_sys.cpp, so force that one object to rebuild when
+# heap tracing is requested; this avoids stale objects with unresolved __wrap_*.
+$(BUILD)/src/platform/switch/switch_sys.o: ALWAYS
 endif
 # OpenAL Soft in devkitPro uses its SDL2 playback backend. The Switch build
 # supplies the minimal SDL2 audio ABI locally through switch_sdl2_audio.cpp,
