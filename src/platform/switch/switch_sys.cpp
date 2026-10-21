@@ -218,7 +218,8 @@ static uintptr_t g_switchHeapTraceNext = 0;
 // Unified pointer-lifetime journal. Unlike a free-only journal, it records
 // allocations too, so an old free cannot be mistaken for the last lifetime
 // transition after the same address has already been reused.
-static constexpr uintptr_t kSwitchHeapLifeHistoryCount = 262144u;
+// Cover a longer allocator lifetime window than the prior free-only ring.
+static constexpr uintptr_t kSwitchHeapLifeHistoryCount = 524288u;
 struct SwitchHeapLifeHistoryEvent
 {
     uintptr_t sequence;
@@ -837,7 +838,7 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
             static_cast<unsigned long long>(sourcePrevFoot),
             static_cast<unsigned long long>(sourceHead),
             static_cast<unsigned int>(priorEventSeen),
-            static_cast<char>(priorEventOperation),
+            static_cast<char>(priorEventOperation != 0u ? priorEventOperation : static_cast<uintptr_t>('-')),
             static_cast<unsigned long long>(priorEventSequence),
             static_cast<unsigned long long>(priorEventPrevFoot),
             static_cast<unsigned long long>(priorEventHead),
