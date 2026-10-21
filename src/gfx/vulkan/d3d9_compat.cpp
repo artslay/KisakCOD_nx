@@ -1405,7 +1405,7 @@ bool LowerSwitchSpirvVectorShuffleToCompositeOps(
     std::vector<size_t> shuffleOffsets;
     uint64_t estimatedGrowth = 0u;
     uint64_t totalSelectorCount = 0u;
-    constexpr uint64_t kMaxEstimatedShuffleGrowthWords = 256u;
+    constexpr uint64_t kMaxEstimatedShuffleGrowthWords = 8192u;
 
     // First inspect only the instruction stream. Most shaders have no vector
     // shuffles, and many others exceed the rewrite budget. Neither case needs
@@ -5911,11 +5911,11 @@ bool IDirect3DDevice9::EnsurePipeline()
                 loweredPixelExtracts, pixelWordsBeforeLower, pixelSpirv.size());
             Switch_LogWrite(loweringTrace);
         }
-        else if (pixelShuffleGrowthEstimate > 256u)
+        else if (pixelShuffleGrowthEstimate > 8192u)
         {
             char loweringTrace[224];
             std::snprintf(loweringTrace, sizeof(loweringTrace),
-                "[KisakCOD][VK SPIRV LOWER] stage=ps serial=%llu action=preserve_native reason=expansion_budget estimated_growth=%u limit=256\n",
+                "[KisakCOD][VK SPIRV LOWER] stage=ps serial=%llu action=preserve_native reason=expansion_budget estimated_growth=%u limit=8192\n",
                 static_cast<unsigned long long>(m_pixelShader->serial),
                 pixelShuffleGrowthEstimate);
             Switch_LogWrite(loweringTrace);
@@ -6044,11 +6044,11 @@ bool IDirect3DDevice9::EnsurePipeline()
                 m_vertexShader->spirv.size());
             Switch_LogWrite(loweringTrace);
         }
-        else if (vertexShuffleGrowthEstimate > 256u)
+        else if (vertexShuffleGrowthEstimate > 8192u)
         {
             char loweringTrace[224];
             std::snprintf(loweringTrace, sizeof(loweringTrace),
-                "[KisakCOD][VK SPIRV LOWER] stage=vs serial=%llu action=preserve_native reason=expansion_budget estimated_growth=%u limit=256\n",
+                "[KisakCOD][VK SPIRV LOWER] stage=vs serial=%llu action=preserve_native reason=expansion_budget estimated_growth=%u limit=8192\n",
                 static_cast<unsigned long long>(m_vertexShader->serial),
                 vertexShuffleGrowthEstimate);
             Switch_LogWrite(loweringTrace);
