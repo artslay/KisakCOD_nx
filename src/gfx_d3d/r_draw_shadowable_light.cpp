@@ -73,7 +73,7 @@ void R_SetFallbackLightAttenuationSampler(
         char msg[256];
         std::snprintf(
             msg, sizeof(msg),
-            "[KisakCOD][LIGHT DEF FALLBACK] n=%u where=%s image=%p name=%s action=bind_black_attenuation\\n",
+            "[KisakCOD][LIGHT DEF FALLBACK] n=%u where=%s image=%p name=%s action=bind_safe_attenuation\n",
             n, where ? where : "(null)", static_cast<const void *>(fallback),
             fallback->name ? fallback->name : "(unnamed)");
         Switch_LogWrite(msg);
