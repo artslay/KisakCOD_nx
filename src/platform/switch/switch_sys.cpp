@@ -3619,10 +3619,35 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][FONT FALLBACK]",
         "[KisakCOD][CODE IMAGES]",
 
-        // Renderer investigation traces are deliberately suppressed in normal
-        // logs. Preserve actual VK errors/failures, VK FRAME/VK PIPELINE,
-        // VK SWAPCHAIN COLOR, device-fault/crash snapshots, and the current
-        // solid-color test, but omit success-path introspection.
+        // Verbose world/material diagnostics were useful during asset binding
+        // investigation, but overwhelm the normal log. Keep actual failures,
+        // crash snapshots, watchdog, concise frame/pipeline summaries, and
+        // explicitly enabled color-test results.
+        "[KisakCOD][SHADER DEF]",
+        "[KisakCOD][STRETCH PIC CMD]",
+        "[KisakCOD][FRAME STATE]",
+        "[KisakCOD][CINEMATIC COMMAND]",
+        "[KisakCOD][BINK CODEC]",
+        "[KisakCOD][BINK FLOW]",
+        "[KisakCOD][CIN SKIP]",
+        "[KisakCOD][PLAYER SPAWN]",
+        "[KisakCOD][PLAYER LINK]",
+        "[KisakCOD][PLAYER LINK SYNC]",
+        "[KisakCOD][OFFMAP ORIGIN WRITE]",
+        "[KisakCOD][OFFMAP SCRIPT ORIGIN]",
+        "[KisakCOD][PMOVE AIR]",
+        "[KisakCOD][CLIPMAP BOX BRUSH]",
+        "[KisakCOD][BSP ASSET]",
+        "[KisakCOD][WORLD SAMPLER]",
+        "[KisakCOD][BSP LIT PRETESS]",
+        "[KisakCOD][BSP LIGHTMAP VERTEX]",
+        "[KisakCOD][LIGHTMAP STATE]",
+        "[KisakCOD][LIGHTMAP BIND]",
+        "[KisakCOD][VK IMAGE UPLOAD PROBE]",
+        "[KisakCOD][VK IMAGE GPU VERIFY]",
+
+        // Renderer internals: preserve real error/failure records and compact
+        // VK FRAME/VK PIPELINE summaries; suppress routine implementation traces.
         "[KisakCOD][VK SPIRV IFACE]",
         "[KisakCOD][VK SET TEXTURE]",
         "[KisakCOD][VK SAMPLER MAP]",
