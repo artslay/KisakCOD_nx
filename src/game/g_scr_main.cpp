@@ -8051,35 +8051,24 @@ void Scr_BadPlace_Delete()
 
 void Scr_BadPlace_Cylinder()
 {
-    unsigned int ConstString; // r31
-    long double v1; // fp2
-    long double v2; // fp2
-    double Float; // fp1
-    int v4; // r8
-    int v5; // r7
-    int TeamFlags; // r5
-    int v7; // [sp+50h] [-40h]
-    badplace_arc_t v8; // [sp+60h] [-30h] BYREF
+    unsigned int name;
+    badplace_arc_t badplace = {};
 
     if (Scr_GetNumParam() >= 5)
     {
-        if (*Scr_GetString(0))
-            ConstString = Scr_GetConstString(0);
-        else
-            ConstString = 0;
-        *(double *)&v1 = (float)(Scr_GetFloat(1) * (float)1000.0);
-        v2 = ceil(v1);
-        v7 = (int)(float)*(double *)&v2;
-        Scr_GetVector(2u, v8.origin);
-        v8.radius = Scr_GetFloat(3);
-        Float = Scr_GetFloat(4);
-        v8.angle0 = 0.0;
-        v8.angle1 = 360.0;
-        v8.halfheight = (float)Float * (float)0.5;
-        TeamFlags = Scr_GetTeamFlags(5u, "badplace_cylinder");
-        if (!TeamFlags)
-            TeamFlags = 14;
-        Path_MakeArcBadPlace(ConstString, v7, TeamFlags, &v8);
+        const char *nameString = Scr_GetString(0);
+        name = *nameString ? Scr_GetConstString(0) : 0;
+        const int duration = static_cast<int>(ceil(static_cast<double>(Scr_GetFloat(1) * 1000.0f)));
+        Scr_GetVector(2u, badplace.origin);
+        badplace.radius = Scr_GetFloat(3);
+        const float height = Scr_GetFloat(4);
+        badplace.angle0 = 0.0f;
+        badplace.angle1 = 360.0f;
+        badplace.halfheight = height * 0.5f;
+        int teamFlags = Scr_GetTeamFlags(5u, "badplace_cylinder");
+        if (!teamFlags)
+            teamFlags = 14;
+        Path_MakeArcBadPlace(name, duration, teamFlags, &badplace);
     }
     else
     {
@@ -8089,58 +8078,45 @@ void Scr_BadPlace_Cylinder()
 
 void Scr_BadPlace_Arc()
 {
-    unsigned int ConstString; // r31
-    long double v1; // fp2
-    long double v2; // fp2
-    double v3; // fp31
-    double Float; // fp1
-    double angle1; // fp0
-    int v6; // r8
-    int v7; // r7
-    int TeamFlags; // r5
-    int v9; // [sp+50h] [-60h]
-    float v10[6]; // [sp+58h] [-58h] BYREF
-    badplace_arc_t v11; // [sp+70h] [-40h] BYREF
+    unsigned int name;
+    badplace_arc_t badplace = {};
 
     if (Scr_GetNumParam() >= 8)
     {
-        if (*Scr_GetString(0))
-            ConstString = Scr_GetConstString(0);
-        else
-            ConstString = 0;
-        *(double *)&v1 = (float)(Scr_GetFloat(1) * (float)1000.0);
-        v2 = ceil(v1);
-        v9 = (int)(float)*(double *)&v2;
-        Scr_GetVector(2u, v11.origin);
-        v11.radius = Scr_GetFloat(3);
-        v11.halfheight = Scr_GetFloat(4) * (float)0.5;
-        Scr_GetVector(5u, v10);
-        v3 = vectoyaw(v10);
-        v11.angle0 = (float)v3 - Scr_GetFloat(6);
-        if (v11.angle0 > v3)
+        const char *nameString = Scr_GetString(0);
+        name = *nameString ? Scr_GetConstString(0) : 0;
+        const int duration = static_cast<int>(ceil(static_cast<double>(Scr_GetFloat(1) * 1000.0f)));
+        float direction[4];
+        Scr_GetVector(2u, badplace.origin);
+        badplace.radius = Scr_GetFloat(3);
+        badplace.halfheight = Scr_GetFloat(4) * 0.5f;
+        Scr_GetVector(5u, direction);
+        const float yaw = vectoyaw(direction);
+        badplace.angle0 = yaw - Scr_GetFloat(6);
+        if (badplace.angle0 > yaw)
             Scr_Error("left angle < 0 in badplace_arc\n");
-        Float = Scr_GetFloat(7);
-        angle1 = (float)((float)Float + (float)v3);
-        v11.angle1 = (float)Float + (float)v3;
-        if (angle1 < v3)
+        const float rightAngle = Scr_GetFloat(7);
+        float angle1 = rightAngle + yaw;
+        badplace.angle1 = rightAngle + yaw;
+        if (angle1 < yaw)
         {
             Scr_Error("right angle < 0 in badplace_arc\n");
-            angle1 = v11.angle1;
+            angle1 = badplace.angle1;
         }
-        if ((float)((float)angle1 - v11.angle0) < 360.0)
+        if (angle1 - badplace.angle0 < 360.0f)
         {
-            v11.angle0 = AngleNormalize360(v11.angle0);
-            v11.angle1 = AngleNormalize360(v11.angle1);
+            badplace.angle0 = AngleNormalize360(badplace.angle0);
+            badplace.angle1 = AngleNormalize360(badplace.angle1);
         }
         else
         {
-            v11.angle1 = 360.0;
-            v11.angle0 = 0.0;
+            badplace.angle1 = 360.0f;
+            badplace.angle0 = 0.0f;
         }
-        TeamFlags = Scr_GetTeamFlags(8u, "badplace_arc");
-        if (!TeamFlags)
-            TeamFlags = 14;
-        Path_MakeArcBadPlace(ConstString, v9, TeamFlags, &v11);
+        int teamFlags = Scr_GetTeamFlags(8u, "badplace_arc");
+        if (!teamFlags)
+            teamFlags = 14;
+        Path_MakeArcBadPlace(name, duration, teamFlags, &badplace);
     }
     else
     {
@@ -8150,27 +8126,18 @@ void Scr_BadPlace_Arc()
 
 void Scr_BadPlace_Brush()
 {
-    unsigned int ConstString; // r30
-    long double v1; // fp2
-    long double v2; // fp2
-    gentity_s *Entity; // r31
-    int TeamFlags; // r5
-    int v5; // [sp+50h] [-20h]
+    unsigned int name;
 
     if (Scr_GetNumParam() >= 3)
     {
-        if (*Scr_GetString(0))
-            ConstString = Scr_GetConstString(0);
-        else
-            ConstString = 0;
-        *(double *)&v1 = (float)(Scr_GetFloat(1) * (float)1000.0);
-        v2 = ceil(v1);
-        v5 = (int)(float)*(double *)&v2;
-        Entity = Scr_GetEntity(2);
-        TeamFlags = Scr_GetTeamFlags(3u, "badplace_brush");
-        if (!TeamFlags)
-            TeamFlags = 14;
-        Path_MakeBrushBadPlace(ConstString, v5, TeamFlags, Entity);
+        const char *nameString = Scr_GetString(0);
+        name = *nameString ? Scr_GetConstString(0) : 0;
+        const int duration = static_cast<int>(ceil(static_cast<double>(Scr_GetFloat(1) * 1000.0f)));
+        gentity_s *ent = Scr_GetEntity(2);
+        int teamFlags = Scr_GetTeamFlags(3u, "badplace_brush");
+        if (!teamFlags)
+            teamFlags = 14;
+        Path_MakeBrushBadPlace(name, duration, teamFlags, ent);
     }
     else
     {
@@ -9183,50 +9150,36 @@ void __cdecl GScr_DumpAnims(scr_entref_t entref)
 
 void __cdecl GScr_ShellShock(scr_entref_t entref)
 {
-    gentity_s *PlayerEntity; // r29
-    const char *String; // r31
-    int v3; // r30
-    const char *v4; // r3
-    long double v5; // fp2
-    __int64 v6; // r10
-    long double v7; // fp2
-    unsigned int v8; // r31
-    double v9; // r4
-    const char *v10; // r3
-    char v11[1056]; // [sp+60h] [-420h] BYREF
-
-    PlayerEntity = GetPlayerEntity(entref);
+    gentity_s *player = GetPlayerEntity(entref);
     if (Scr_GetNumParam() < 2)
         Scr_Error("USAGE: <player> shellshock(<shellshockname>, <duration>)\n");
-    if (!chaplinCheat->current.enabled || Scr_GetNumParam() >= 3 && Scr_GetInt(2))
+    if (chaplinCheat->current.enabled && !(Scr_GetNumParam() >= 3 && Scr_GetInt(2)))
+        return;
+
+    const char *name = Scr_GetString(0);
+    int shellshockIndex = 1;
+    char configString[1056];
+    for (; shellshockIndex < 16; ++shellshockIndex)
     {
-        String = Scr_GetString(0);
-        v3 = 1;
-        while (1)
-        {
-            SV_GetConfigstring(v3 + 2503, v11, 1024); // CS_SHELLSHOCKS (PC SP, was Xbox 2535)
-            if (!I_stricmp(v11, String))
-                break;
-            if (++v3 >= 16)
-            {
-                v4 = va("shellshock '%s' was not precached\n", String);
-                Scr_Error(v4);
-                return;
-            }
-        }
-        *(double *)&v5 = (float)((float)(Scr_GetFloat(1) * (float)1000.0) + (float)0.5);
-        v7 = floor(v5);
-        v8 = (int)(float)*(double *)&v7;
-        if (v8 > 0xEA60)
-        {
-            v10 = va("Shellshock duration %.3f seconds too long", (float)v8 * 0.001f);
-            Scr_ParamError(1u, v10);
-        }
-        PlayerEntity->client->ps.shellshockIndex = v3;
-        PlayerEntity->client->ps.shellshockTime = level.time;
-        PlayerEntity->client->ps.shellshockDuration = v8;
-        PlayerEntity->client->ps.pm_flags |= 0x10000u;
+        SV_GetConfigstring(shellshockIndex + 2503, configString, 1024);
+        if (!I_stricmp(configString, name))
+            break;
     }
+    if (shellshockIndex >= 16)
+    {
+        Scr_Error(va("shellshock '%s' was not precached\n", name));
+        return;
+    }
+
+    const int durationMs = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(1));
+    const unsigned int duration = static_cast<unsigned int>(durationMs);
+    if (duration > 0xEA60u)
+        Scr_ParamError(1u, va("Shellshock duration %.3f seconds too long", static_cast<float>(duration) * 0.001f));
+
+    player->client->ps.shellshockIndex = shellshockIndex;
+    player->client->ps.shellshockTime = level.time;
+    player->client->ps.shellshockDuration = duration;
+    player->client->ps.pm_flags |= 0x10000u;
 }
 
 void __cdecl GScr_StopShellShock(scr_entref_t entref)
