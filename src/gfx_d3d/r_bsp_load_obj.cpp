@@ -3548,10 +3548,10 @@ int R_PostLoadEntities()
     uint32_t smodelIndexb; // [esp+520h] [ebp-4h]
 
     iassert( rgl.staticModelReflectionProbesLoaded );
-    smodelCombinedInsts = (GfxStaticModelCombinedInst*)Z_Malloc(104 * s_world.dpvs.smodelCount, "R_PostLoadEntities", 21);
+    smodelCombinedInsts = (GfxStaticModelCombinedInst*)Z_Malloc(sizeof(GfxStaticModelCombinedInst) * s_world.dpvs.smodelCount, "R_PostLoadEntities", 21);
     for (smodelIndex = 0; smodelIndex < s_world.dpvs.smodelCount; ++smodelIndex)
     {
-        qmemcpy(&smodelCombinedInsts[smodelIndex], &s_world.dpvs.smodelDrawInsts[smodelIndex], 0x4Cu);
+        qmemcpy(&smodelCombinedInsts[smodelIndex].smodelDrawInst, &s_world.dpvs.smodelDrawInsts[smodelIndex], sizeof(smodelCombinedInsts[smodelIndex].smodelDrawInst));
         qmemcpy(
             &smodelCombinedInsts[smodelIndex].smodelInst,
             &s_world.dpvs.smodelInsts[smodelIndex],
