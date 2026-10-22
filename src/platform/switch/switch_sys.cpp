@@ -592,6 +592,17 @@ static uintptr_t g_switchHeapBin4AuditLastRequested = 0u;
 static uintptr_t g_switchHeapBin4AuditLastResult = 0u;
 static uintptr_t g_switchHeapBin4AuditLastNodeCount = 0u;
 
+struct SwitchHeapAuditMemoryRange
+{
+    uintptr_t begin;
+    uintptr_t end;
+};
+
+static constexpr uintptr_t kSwitchHeapAuditRangeCount = 16u;
+static SwitchHeapAuditMemoryRange
+    g_switchHeapAuditRanges[kSwitchHeapAuditRangeCount]{};
+static uintptr_t g_switchHeapAuditRangeNext = 0u;
+
 static bool Switch_HeapTraceReadBin4AuditChunk(
     uintptr_t address, SwitchHeapBin4AuditChunk *out)
 {
@@ -600,20 +611,48 @@ static bool Switch_HeapTraceReadBin4AuditChunk(
         address > UINTPTR_MAX - sizeof(SwitchHeapBin4AuditChunk))
         return false;
 
-    MemoryInfo info{};
-    u32 pageInfo = 0u;
-    if (R_FAILED(svcQueryMemory(&info, &pageInfo, address)) ||
-        (info.perm & Perm_R) == 0u)
-        return false;
+    const uintptr_t requestEnd =
+        address + sizeof(SwitchHeapBin4AuditChunk);
+    bool mapped = false;
+    for (uintptr_t i = 0u; i < kSwitchHeapAuditRangeCount; ++i)
+    {
+        const uintptr_t begin =
+            __atomic_load_n(&g_switchHeapAuditRanges[i].begin, __ATOMIC_ACQUIRE);
+        const uintptr_t end =
+            __atomic_load_n(&g_switchHeapAuditRanges[i].end, __ATOMIC_RELAXED);
+        if (begin != 0u && address >= begin && requestEnd <= end)
+        {
+            mapped = true;
+            break;
+        }
+    }
 
-    const uintptr_t regionStart = static_cast<uintptr_t>(info.addr);
-    const uintptr_t regionSize = static_cast<uintptr_t>(info.size);
-    if (regionStart > UINTPTR_MAX - regionSize)
-        return false;
-    const uintptr_t regionEnd = regionStart + regionSize;
-    if (address < regionStart ||
-        address + sizeof(SwitchHeapBin4AuditChunk) > regionEnd)
-        return false;
+    if (!mapped)
+    {
+        MemoryInfo info{};
+        u32 pageInfo = 0u;
+        if (R_FAILED(svcQueryMemory(&info, &pageInfo, address)) ||
+            (info.perm & Perm_R) == 0u)
+            return false;
+
+        const uintptr_t regionStart = static_cast<uintptr_t>(info.addr);
+        const uintptr_t regionSize = static_cast<uintptr_t>(info.size);
+        if (regionStart > UINTPTR_MAX - regionSize)
+            return false;
+        const uintptr_t regionEnd = regionStart + regionSize;
+        if (address < regionStart || requestEnd > regionEnd)
+            return false;
+
+        const uintptr_t slot = __atomic_fetch_add(
+            &g_switchHeapAuditRangeNext, static_cast<uintptr_t>(1),
+            __ATOMIC_RELAXED) % kSwitchHeapAuditRangeCount;
+        __atomic_store_n(&g_switchHeapAuditRanges[slot].begin,
+            static_cast<uintptr_t>(0), __ATOMIC_RELEASE);
+        __atomic_store_n(&g_switchHeapAuditRanges[slot].end,
+            regionEnd, __ATOMIC_RELAXED);
+        __atomic_store_n(&g_switchHeapAuditRanges[slot].begin,
+            regionStart, __ATOMIC_RELEASE);
+    }
 
     const volatile uintptr_t *words =
         reinterpret_cast<const volatile uintptr_t *>(address);
@@ -1718,9 +1757,15 @@ extern "C" __attribute__((noinline)) void *__wrap_malloc(size_t size)
         reinterpret_cast<uintptr_t>(__builtin_return_address(0));
     __malloc_lock(_REENT);
 #if defined(KISAK_SWITCH_HEAP_TRACE)
+    const uintptr_t auditSequence =
+        __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
+    const uintptr_t auditCallerOffset =
+        caller >= reinterpret_cast<uintptr_t>(__code_start)
+            ? caller - reinterpret_cast<uintptr_t>(__code_start) : UINTPTR_MAX;
     const bool auditBin4 =
-        size <= 24u ||
-        ((__atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED) & 0x3ffu) == 0u);
+        (auditCallerOffset == 0x6d1e38u && size == 8u) ||
+        (auditCallerOffset == 0x6ca6b8u && size == 21u) ||
+        ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'M', caller, 0u,
             static_cast<uintptr_t>(size), 0u);
@@ -1751,9 +1796,11 @@ extern "C" __attribute__((noinline)) void __wrap_free(void *pointer)
         caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
     __malloc_lock(_REENT);
 #if defined(KISAK_SWITCH_HEAP_TRACE)
+    const uintptr_t auditSequence =
+        __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
     const bool auditBin4 =
-        (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
-        ((__atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED) & 0x3ffu) == 0u);
+        callerOffset == 0x6d2ca4u ||
+        ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'F', caller,
             reinterpret_cast<uintptr_t>(pointer), 0u, 0u);
@@ -1788,10 +1835,12 @@ extern "C" __attribute__((noinline)) void *__wrap_calloc(
 
     __malloc_lock(_REENT);
 #if defined(KISAK_SWITCH_HEAP_TRACE)
+    const uintptr_t auditSequence =
+        __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
     const bool auditBin4 =
-        bytes <= 24u ||
-        (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
-        ((__atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED) & 0x3ffu) == 0u);
+        (callerOffset >= 0x600000u && callerOffset < 0x800000u &&
+         (auditSequence & 0x3ffu) == 0u) ||
+        ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'C', caller, 0u,
             static_cast<uintptr_t>(bytes), 0u);
@@ -1849,9 +1898,12 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
 
     __malloc_lock(_REENT);
 #if defined(KISAK_SWITCH_HEAP_TRACE)
+    const uintptr_t auditSequence =
+        __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
     const bool auditBin4 =
-        (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
-        ((__atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED) & 0x3ffu) == 0u);
+        (callerOffset >= 0x600000u && callerOffset < 0x800000u &&
+         (auditSequence & 0x3ffu) == 0u) ||
+        ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'R', caller,
             reinterpret_cast<uintptr_t>(pointer),
