@@ -237,6 +237,18 @@ void __cdecl CG_RegisterWeapon(int32_t localClientNum, uint32_t weaponNum)
     }
 }
 
+// The legacy client hunk allocator may return 4-byte-aligned storage. Native
+// Switch pointers require XAnim objects to be aligned to their natural alignment.
+static void* __cdecl CG_Hunk_AllocXAnimClientAligned(int size)
+{
+    const size_t alignment = alignof(XAnimTree_s);
+    void* allocation = Hunk_AllocXAnimClient(size + static_cast<int>(alignment - 1));
+    const uintptr_t address = reinterpret_cast<uintptr_t>(allocation);
+    const uintptr_t alignedAddress =
+        (address + static_cast<uintptr_t>(alignment - 1)) & ~static_cast<uintptr_t>(alignment - 1);
+    return reinterpret_cast<void*>(alignedAddress);
+}
+
 XAnimTree_s *__cdecl CG_CreateWeaponViewModelXAnim(WeaponDef *weapDef)
 {
     int32_t v2; // [esp+0h] [ebp-14h]
@@ -245,7 +257,7 @@ XAnimTree_s *__cdecl CG_CreateWeaponViewModelXAnim(WeaponDef *weapDef)
     XAnim_s *pAnims; // [esp+10h] [ebp-4h]
 
     iassert(weapDef);
-    pAnims = XAnimCreateAnims("VIEWMODEL", NUM_WEAP_ANIMS, Hunk_AllocXAnimClient);
+    pAnims = XAnimCreateAnims("VIEWMODEL", NUM_WEAP_ANIMS, CG_Hunk_AllocXAnimClientAligned);
     iassert(pAnims);
     XAnimBlend(pAnims, WEAP_ANIM_ROOT, "root", 1, 32, 0);
     for (animIndex = WEAP_ANIM_IDLE; animIndex < NUM_WEAP_ANIMS; ++animIndex)
@@ -257,7 +269,7 @@ XAnimTree_s *__cdecl CG_CreateWeaponViewModelXAnim(WeaponDef *weapDef)
 
         BG_CreateXAnim(pAnims, animIndex, (char *)weapDef->szXAnims[v2]);
     }
-    pAnimTree = XAnimCreateTree(pAnims, Hunk_AllocXAnimClient);
+    pAnimTree = XAnimCreateTree(pAnims, CG_Hunk_AllocXAnimClientAligned);
     iassert(pAnimTree);
     if (!weapDef->szXAnims[WEAP_ANIM_IDLE] || !*weapDef->szXAnims[WEAP_ANIM_IDLE])
         Com_Error(ERR_DROP, "CG_RegisterWeapon: No idle anim specified for [%s]", weapDef->szDisplayName);
