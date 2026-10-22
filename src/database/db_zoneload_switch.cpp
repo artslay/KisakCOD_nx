@@ -468,10 +468,10 @@ void *LinkAsset(void *context, int assetType, void *asset)
             nativeWeapon->projectileModel = reinterpret_cast<::XModel *>(modelPointers[37]);
         }
 
-        // Resolve weapon sounds only after converting the OAT asset to the
-        // engine's native layout. FixupWeapon reads/writes engine WeaponDef
-        // offsets and must not be run against IW3::WeaponDef storage.
-        FixupWeapon(state, nativeWeapon);
+        // Keep sound alias-name references untouched here. OAT links assets in
+        // zone-stream order, so a weapon can be seen before its snd_alias_list_t
+        // has been registered. Resolving it now can cache an empty default list
+        // permanently. Resolve all weapon sounds after the zone's assets are linked.
         header.weapon = nativeWeapon;
     }
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
@@ -552,6 +552,31 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
     void *const zone = KisakZone_Load(zoneName, blocks, hooks, error, sizeof(error));
     if (!zone)
         Com_Error(ERR_DROP, "Fastfile for zone '%s' could not be loaded: %s", zoneName, error);
+
+    // Resolve weapon sounds only after KisakZone_Load has registered every asset
+    // in this zone. More importantly, repeat the pass over previously loaded
+    // zones: a weapon from common can reference an alias that is supplied by the
+    // subsequently loaded map zone. Re-resolving by the alias name refreshes a
+    // pointer that previously landed on the empty default asset.
+    std::vector<WeaponDef *> weaponsToFix;
+    {
+        std::lock_guard<std::mutex> lock(s_zoneHandlesMutex);
+        for (auto &zoneEntry : s_zoneHandles)
+        {
+            for (auto &weapon : zoneEntry.second.nativeWeaponCopies)
+            {
+                if (weapon)
+                    weaponsToFix.push_back(weapon.get());
+            }
+        }
+    }
+    for (WeaponDef *weapon : weaponsToFix)
+        FixupWeapon(state, weapon);
+    for (auto &weapon : state.nativeWeaponCopies)
+    {
+        if (weapon)
+            FixupWeapon(state, weapon.get());
+    }
 
     {
         std::lock_guard<std::mutex> lock(s_zoneHandlesMutex);
