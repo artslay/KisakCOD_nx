@@ -3257,22 +3257,11 @@ void __cdecl PlayerCmd_SetClientDvars(scr_entref_t entref)
 
 void __cdecl PlayerCmd_BeginLocationSelection(scr_entref_t entref)
 {
-    gentity_s *v1; // r28
-    const char *v2; // r3
-    const char *String; // r3
-    int LocSelIndex; // r3
-    int v5; // r30
-    long double v6; // fp2
-    double Float; // fp31
-    long double v8; // fp2
-    unsigned int v9; // r31
-    unsigned __int16 v10; // [sp+A4h] [+14h]
-
-    v10 = entref.entnum;
+    gentity_s *player;
     if (entref.classnum)
     {
         Scr_ObjectError("not an entity");
-        v1 = 0;
+        player = nullptr;
     }
     else
     {
@@ -3283,53 +3272,48 @@ void __cdecl PlayerCmd_BeginLocationSelection(scr_entref_t entref)
                 0,
                 "%s",
                 "entref.entnum < MAX_GENTITIES");
-        v1 = &g_entities[v10];
-        if (!v1->client)
-        {
-            v2 = va("entity %i is not a player", v10);
-            Scr_ObjectError(v2);
-        }
+        player = &g_entities[entref.entnum];
+        if (!player->client)
+            Scr_ObjectError(va("entity %i is not a player", entref.entnum));
     }
-    if (!v1->client)
+    if (!player->client)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_client_script_cmd.cpp", 2441, 0, "%s", "pSelf->client");
-    String = Scr_GetString(0);
-    LocSelIndex = GScr_GetLocSelIndex(String);
-    v5 = LocSelIndex;
-    if (LocSelIndex < 1 || LocSelIndex > 4)
+
+    const char *selectorName = Scr_GetString(0);
+    const int selector = GScr_GetLocSelIndex(selectorName);
+    if (selector < 1 || selector > 4)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\g_client_script_cmd.cpp",
             2445,
             0,
             "locSelIndex not in [1, MAX_LOC_SEL_MTLS + 1]\n\t%i not in [%i, %i]",
-            LocSelIndex,
+            selector,
             1,
             4);
-    if (Scr_GetNumParam() < 2)
+
+    float normalizedRadius = 0.15000001f;
+    if (Scr_GetNumParam() >= 2)
     {
-        *(double *)&v6 = 0.15000001;
-    }
-    else
-    {
-        Float = Scr_GetFloat(1);
-        if (Float <= 0.0)
+        const float radius = Scr_GetFloat(1);
+        if (radius <= 0.0f)
             Scr_ParamError(1u, "Radius of location selector must be greater than zero\n");
-        if (level.compassMapWorldSize[1] <= 0.0)
-            *(double *)&v6 = ClampFloat((float)((float)Float * (float)0.001), 0.0, 1.0);
+        if (level.compassMapWorldSize[1] <= 0.0f)
+            normalizedRadius = ClampFloat(radius * 0.001f, 0.0f, 1.0f);
         else
-            *(double *)&v6 = ClampFloat((float)((float)Float / level.compassMapWorldSize[1]), 0.0, 1.0);
+            normalizedRadius = ClampFloat(radius / level.compassMapWorldSize[1], 0.0f, 1.0f);
     }
-    *(double *)&v6 = (float)((float)((float)*(double *)&v6 * (float)63.0) + (float)0.5);
-    v8 = floor(v6);
-    v9 = (int)(float)*(double *)&v8;
-    if (v9 >= 0x40)
+
+    const float scaledRadius = normalizedRadius * 63.0f + 0.5f;
+    const unsigned int radiusBits = static_cast<unsigned int>(floor(static_cast<double>(scaledRadius)));
+    if (radiusBits >= 0x40u)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\g_client_script_cmd.cpp",
             2468,
             0,
             "radiusBits doesn't index (1 << LOC_SEL_RADIUS_BITS)\n\t%i not in [0, %i)",
-            (int)(float)*(double *)&v8,
+            static_cast<int>(radiusBits),
             64);
-    v1->client->ps.locationSelectionInfo = (4 * v9) | v5;
+    player->client->ps.locationSelectionInfo = (4 * radiusBits) | selector;
 }
 
 void __cdecl PlayerCmd_EndLocationSelection(scr_entref_t entref)
