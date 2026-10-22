@@ -1406,7 +1406,11 @@ int __cdecl R_EmitPointLightPartitionSurfs(
         drawSurfCount = frontEndDataOut->drawSurfCount - firstDrawSurf;
         if (drawSurfCount)
         {
-            memcpy(partition, light, 0x40u);
+            // GfxLight's 0x40-byte size is its original 32-bit layout.
+            // Native Switch pointers enlarge the structure; copying the old
+            // serialized size drops the trailing def pointer and leaves
+            // point-light passes without their attenuation image.
+            memcpy(&partition->light, light, sizeof(partition->light));
             partition->info.drawSurfs = &frontEndDataOut->drawSurfs[firstDrawSurf];
             partitions[partitionCount++].info.drawSurfCount = drawSurfCount;
         }
