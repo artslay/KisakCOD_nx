@@ -381,9 +381,6 @@ void __cdecl Sentient_SetEnemy(sentient_s *self, gentity_s *enemy, int bNotify)
 
 sentient_s *__cdecl Sentient_FirstSentient(int iTeamFlags)
 {
-    int v2; // r10
-    team_t *i; // r11
-
     if (iTeamFlags > 31)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\sentient.cpp",
@@ -391,13 +388,17 @@ sentient_s *__cdecl Sentient_FirstSentient(int iTeamFlags)
             0,
             "%s",
             "iTeamFlags <= (1 << TEAM_NUM_TEAMS) - 1");
-    v2 = 0;
-    for (i = &level.sentients->eTeam; !*((_BYTE *)i + 106) || ((1 << *i) & iTeamFlags) == 0; i += 29)
+
+    // The old byte offset (+106) and 29-word stride describe the 32-bit
+    // sentient_s layout. On Switch, pointer fields change the native layout;
+    // inspect each actual array entry and its fields instead.
+    for (int index = 0; index < MAX_SENTIENTS; ++index)
     {
-        if (++v2 >= 33)
-            return 0;
+        sentient_s *sentient = &level.sentients[index];
+        if (sentient->inuse && ((1 << sentient->eTeam) & iTeamFlags) != 0)
+            return sentient;
     }
-    return &level.sentients[v2];
+    return 0;
 }
 
 sentient_s *__cdecl Sentient_NextSentient(sentient_s *pPrevSentient, int iTeamFlags)
