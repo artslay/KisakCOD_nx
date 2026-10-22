@@ -1739,14 +1739,15 @@ static char* __cdecl Z_TryMallocGarbage(int32_t size, const char* name, int32_t 
 #if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
 __attribute__((noinline))
 #endif
-static uint32_t* __cdecl Z_TryMalloc(int32_t size, const char* name, int32_t type)
+#if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
+static uint32_t* __cdecl Z_TryMalloc(
+    int32_t size, const char* name, int32_t type, uintptr_t ownerCaller)
+#else
+static uint32_t* __cdecl Z_TryMalloc(
+    int32_t size, const char* name, int32_t type)
+#endif
 {
     uint32_t* buf; // [esp+0h] [ebp-4h]
-#if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
-    const uintptr_t ownerCaller =
-        reinterpret_cast<uintptr_t>(__builtin_return_address(0));
-#endif
-
     buf = (uint32_t*)Z_TryMallocGarbage(size, name, type);
     if (buf)
     {
@@ -1769,11 +1770,19 @@ static void __cdecl Z_MallocFailed(int32_t size)
     Sys_OutOfMemErrorInternal(".\\universal\\com_memory.cpp", 593);
 }
 
+#if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
+__attribute__((noinline))
+#endif
 void* Z_Malloc(int32_t size, const char* name, int32_t type)
 {
     uint32_t* buf; // [esp+0h] [ebp-4h]
-
+#if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
+    const uintptr_t ownerCaller =
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    buf = Z_TryMalloc(size, name, type, ownerCaller);
+#else
     buf = Z_TryMalloc(size, name, type);
+#endif
 
     //if (!buf)
     //    Z_MallocFailed(size + 32);
