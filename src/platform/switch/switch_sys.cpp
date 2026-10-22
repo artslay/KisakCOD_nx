@@ -738,6 +738,62 @@ static void Switch_HeapTraceReportBin4Fault(
         static_cast<unsigned long long>(lastResult),
         static_cast<unsigned long long>(lastNodeCount));
     Switch_LogCrashLine(line);
+
+    // Preserve a short chronological allocator tail around the first bad bin
+    // observation. If the bin is corrupt at phase B, the current call did not
+    // necessarily perform the damaging write.
+    constexpr uintptr_t kSwitchHeapBin4HistoryCount = 24u;
+    const uintptr_t historyEnd =
+        __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_ACQUIRE);
+    const uintptr_t historyBegin =
+        historyEnd > kSwitchHeapBin4HistoryCount
+            ? historyEnd - kSwitchHeapBin4HistoryCount : 0u;
+    for (uintptr_t sequence = historyBegin; sequence < historyEnd; ++sequence)
+    {
+        const SwitchHeapTraceEvent &event =
+            g_switchHeapTrace[sequence & (kSwitchHeapTraceCount - 1u)];
+        const uintptr_t first =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (first != sequence + 1u)
+            continue;
+
+        const uintptr_t eventOperation =
+            __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
+        const uintptr_t eventPointer =
+            __atomic_load_n(&event.pointer, __ATOMIC_RELAXED);
+        const uintptr_t eventSize =
+            __atomic_load_n(&event.size, __ATOMIC_RELAXED);
+        const uintptr_t eventCaller =
+            __atomic_load_n(&event.caller, __ATOMIC_RELAXED);
+        const uintptr_t eventPrev =
+            __atomic_load_n(&event.allocationChunkPrevFoot, __ATOMIC_RELAXED);
+        const uintptr_t eventHead =
+            __atomic_load_n(&event.allocationChunkHead, __ATOMIC_RELAXED);
+        const uintptr_t eventHeaderSnapshot =
+            __atomic_load_n(&event.headerSnapshot, __ATOMIC_RELAXED);
+        const uintptr_t second =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (first != second)
+            continue;
+
+        const uintptr_t eventCallerOffset =
+            eventCaller >= codeBase ? eventCaller - codeBase : UINTPTR_MAX;
+        char historyLine[384];
+        std::snprintf(
+            historyLine, sizeof(historyLine),
+            "[KisakCOD][HEAP BIN4 HISTORY] seq=%llu op=%c "
+            "ptr=0x%016llx size=%llu callerOff=0x%llx "
+            "headerSeen=%u prev=0x%016llx head=0x%016llx\\n",
+            static_cast<unsigned long long>(sequence),
+            static_cast<char>(eventOperation),
+            static_cast<unsigned long long>(eventPointer),
+            static_cast<unsigned long long>(eventSize),
+            static_cast<unsigned long long>(eventCallerOffset),
+            static_cast<unsigned int>((eventHeaderSnapshot & 1u) != 0u),
+            static_cast<unsigned long long>(eventPrev),
+            static_cast<unsigned long long>(eventHead));
+        Switch_LogCrashLine(historyLine);
+    }
 }
 
 static void Switch_HeapTraceAuditBin4(
@@ -1837,10 +1893,7 @@ extern "C" __attribute__((noinline)) void *__wrap_calloc(
 #if defined(KISAK_SWITCH_HEAP_TRACE)
     const uintptr_t auditSequence =
         __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
-    const bool auditBin4 =
-        (callerOffset >= 0x600000u && callerOffset < 0x800000u &&
-         (auditSequence & 0x3ffu) == 0u) ||
-        ((auditSequence & 0x3ffu) == 0u);
+    const bool auditBin4 = (auditSequence & 0x3ffu) == 0u;
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'C', caller, 0u,
             static_cast<uintptr_t>(bytes), 0u);
