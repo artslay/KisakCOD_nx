@@ -28,7 +28,8 @@
 #include <switch/kernel/virtmem.h>
 extern void Switch_LogWrite(const char *msg);
 #if defined(KISAK_SWITCH_HEAP_TRACE)
-extern "C" void Switch_HeapTraceProbeZMalloc(void *pointer, size_t size, char stage);
+extern "C" void Switch_HeapTraceProbeZMalloc(
+    void *pointer, size_t size, char stage, uintptr_t ownerCaller, int32_t type);
 #endif
 extern void __cdecl R_ShutdownImagesForHunkClear();
 #endif
@@ -1736,18 +1737,27 @@ static char* __cdecl Z_TryMallocGarbage(int32_t size, const char* name, int32_t 
 }
 
 static uint32_t* __cdecl Z_TryMalloc(int32_t size, const char* name, int32_t type)
+#if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
+    __attribute__((noinline))
+#endif
 {
     uint32_t* buf; // [esp+0h] [ebp-4h]
+#if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
+    const uintptr_t ownerCaller =
+        reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+#endif
 
     buf = (uint32_t*)Z_TryMallocGarbage(size, name, type);
     if (buf)
     {
 #if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
-        Switch_HeapTraceProbeZMalloc(buf, static_cast<size_t>(size), 'B');
+        Switch_HeapTraceProbeZMalloc(
+            buf, static_cast<size_t>(size), 'B', ownerCaller, type);
 #endif
         Com_Memset(buf, 0, size);
 #if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
-        Switch_HeapTraceProbeZMalloc(buf, static_cast<size_t>(size), 'A');
+        Switch_HeapTraceProbeZMalloc(
+            buf, static_cast<size_t>(size), 'A', ownerCaller, type);
 #endif
     }
     return buf;
