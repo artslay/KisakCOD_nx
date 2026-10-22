@@ -69,9 +69,33 @@ public:
     VkCommandBuffer CommandBuffer() const { return m_commandBuffer; }
     VkQueue GraphicsQueue() const { return m_graphicsQueue; }
     VkFormat SwapchainFormat() const { return m_swapchainFormat; }
+    VkFormat CurrentBackbufferFormat() const
+    {
+        return m_srgbBackbufferImage ? m_srgbBackbufferFormat : m_swapchainFormat;
+    }
     VkFormat DepthFormat() const { return m_depthFormat; }
     VkImage CurrentSwapchainImage() const;
     VkImageView CurrentSwapchainView() const;
+    VkImage CurrentBackbufferImage() const
+    {
+        return m_srgbBackbufferImage ? m_srgbBackbufferImage : CurrentSwapchainImage();
+    }
+    VkImageView CurrentBackbufferView() const
+    {
+        return m_srgbBackbufferImage ? m_srgbBackbufferView : CurrentSwapchainView();
+    }
+    VkImageLayout CurrentBackbufferLayout() const
+    {
+        return m_srgbBackbufferImage ? m_srgbBackbufferLayout : CurrentSwapchainLayout();
+    }
+    void SetCurrentBackbufferLayout(VkImageLayout layout)
+    {
+        if (m_srgbBackbufferImage)
+            m_srgbBackbufferLayout = layout;
+        else
+            SetCurrentSwapchainLayout(layout);
+    }
+    bool UsesSrgbBackbuffer() const { return m_srgbBackbufferImage != VK_NULL_HANDLE; }
     VkImageView DefaultDepthView() const { return m_defaultDepthView; }
     VkImage DefaultDepthImage() const { return m_defaultDepthImage; }
     VkImageLayout DefaultDepthLayout() const { return m_defaultDepthLayout; }
@@ -325,6 +349,17 @@ private:
     std::vector<VkImage> m_swapchainImages;
     std::vector<VkImageView> m_swapchainViews;
     std::vector<VkImageLayout> m_swapchainLayouts;
+
+    // Some Switch surfaces expose only UNORM swapchain formats even when the
+    // presentation colorspace is sRGB. Render the default framebuffer into an
+    // sRGB-compatible image and copy its already-encoded bits into that UNORM
+    // swapchain image to preserve display brightness.
+    VkImage m_srgbBackbufferImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_srgbBackbufferMemory = VK_NULL_HANDLE;
+    VkImageView m_srgbBackbufferView = VK_NULL_HANDLE;
+    VkFormat m_srgbBackbufferFormat = VK_FORMAT_UNDEFINED;
+    VkImageLayout m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
     // A present-wait semaphore belongs to a swapchain image and is reused only
     // after that image is acquired again. This avoids a queue-idle stall per frame.
     std::vector<VkSemaphore> m_renderFinishedSemaphores;
