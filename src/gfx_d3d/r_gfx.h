@@ -498,7 +498,7 @@ struct GfxLightDef // sizeof=0x10
     int lmapLookupStart;
 };
 
-struct GfxLight // sizeof=0x40
+struct GfxLight // sizeof=0x40 on 32-bit builds
 {                                       // ...
     uint8_t type;
     uint8_t canUseShadowMap;
@@ -513,12 +513,20 @@ struct GfxLight // sizeof=0x40
     uint32_t spotShadowIndex;
     GfxLightDef* def;
 };
+#ifdef __SWITCH__
+static_assert(offsetof(GfxLight, def) == 64, "Switch GfxLight def offset mismatch");
+static_assert(sizeof(GfxLight) == 72, "Switch GfxLight must use native 64-bit pointer layout");
+#endif
 
-struct GfxReflectionProbe // sizeof=0x10
+struct GfxReflectionProbe // sizeof=0x10 on 32-bit builds
 {
     float origin[3];
     GfxImage* reflectionImage;
 };
+#ifdef __SWITCH__
+static_assert(offsetof(GfxReflectionProbe, reflectionImage) == 16, "Switch reflection-probe image offset mismatch");
+static_assert(sizeof(GfxReflectionProbe) == 24, "Switch reflection probe must use native 64-bit pointer layout");
+#endif
 
 struct GfxWorldDpvsPlanes // sizeof=0x10
 {                                       // ...
@@ -593,11 +601,14 @@ struct GfxCell // sizeof=0x38
     uint8_t* reflectionProbes;
 };
 
-struct GfxLightmapArray // sizeof=0x8
+struct GfxLightmapArray // sizeof=0x8 on 32-bit builds
 {
     GfxImage* primary;
     GfxImage* secondary;
 };
+#ifdef __SWITCH__
+static_assert(sizeof(GfxLightmapArray) == 16, "Switch lightmap array must contain two native pointers");
+#endif
 
 struct GfxLightGridEntry // sizeof=0x4
 {                                       // ...
