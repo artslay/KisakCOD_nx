@@ -35,7 +35,7 @@ bool R_ValidateLightPropertiesInput(
     {
         char msg[320];
         std::snprintf(msg, sizeof(msg),
-            "[KisakCOD][LIGHT DEF INVALID] id=%u where=%s light=%p type=%u def=%p attenuation=%p shadowableIndex=%u shadowableCount=%u action=skip_light_draw_list\n",
+            "[KisakCOD][LIGHT DEF INVALID] id=%u where=%s light=%p type=%u def=%p attenuation=%p shadowableIndex=%u shadowableCount=%u action=attenuation_fallback\n",
             logId, where ? where : "(null)", static_cast<const void *>(light),
             light ? static_cast<unsigned int>(light->type) : 0xffffffffu,
             static_cast<const void *>(def),
@@ -46,6 +46,40 @@ bool R_ValidateLightPropertiesInput(
 #endif
     return false;
 }
+
+#ifdef __SWITCH__
+// Invalid dynamic lights must not leave the code-image slot null. Shader
+// argument setup treats a missing attenuationSampler as ERR_DROP, which can
+// turn an otherwise skippable light into a frame-ending failure. A black
+// attenuation image makes the malformed light contribute nothing while
+// preserving the rest of the draw list.
+void R_SetFallbackLightAttenuationSampler(
+    GfxCmdBufSourceState *source,
+    const char *where)
+{
+    const GfxImage *fallback = rgp.blackImage ? rgp.blackImage : rgp.whiteImage;
+    if (!source || !fallback)
+        return;
+
+    R_SetCodeImageTexture(
+        source, TEXTURE_SRC_CODE_LIGHT_ATTENUATION, fallback);
+    R_SetCodeImageSamplerState(
+        source, TEXTURE_SRC_CODE_LIGHT_ATTENUATION, SAMPLER_FILTER_LINEAR);
+
+    static std::atomic<uint32_t> fallbackCount{0};
+    const uint32_t n = fallbackCount.fetch_add(1, std::memory_order_relaxed);
+    if (n < 16u)
+    {
+        char msg[256];
+        std::snprintf(
+            msg, sizeof(msg),
+            "[KisakCOD][LIGHT DEF FALLBACK] n=%u where=%s image=%p name=%s action=bind_black_attenuation\\n",
+            n, where ? where : "(null)", static_cast<const void *>(fallback),
+            fallback->name ? fallback->name : "(unnamed)");
+        Switch_LogWrite(msg);
+    }
+}
+#endif
 }
 
 
@@ -65,7 +99,12 @@ void __cdecl R_SetLightProperties(
 
     if (!R_ValidateLightPropertiesInput(
             "set_light_properties", light, def, UINT32_MAX, 0u))
+    {
+#ifdef __SWITCH__
+        R_SetFallbackLightAttenuationSampler(source, "set_light_properties");
+#endif
         return;
+    }
 
     iassert(source->viewMode == VIEW_MODE_3D);
     iassert( light );
@@ -173,7 +212,12 @@ void __cdecl R_SetShadowableLight(
                         "shadowable_light",
                         &viewInfo->shadowableLights[shadowableLightIndex], def,
                         shadowableLightIndex, viewInfo->shadowableLightCount))
+                {
+#ifdef __SWITCH__
+                    R_SetFallbackLightAttenuationSampler(source, "shadowable_light");
+#endif
                     return;
+                }
                 falloffShift = (double)def->lmapLookupStart * 0.001953125;
                 falloffScale = (double)def->attenuation.image->width * 0.001953125;
                 R_UpdateCodeConstant(source, CONST_SRC_CODE_LIGHT_FALLOFF_PLACEMENT, falloffScale, 0.0, falloffShift, 0.0);
@@ -231,7 +275,12 @@ void __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const G
             !R_ValidateLightPropertiesInput(
                 "shadowable_list", shadowableLight, shadowableLight->def,
                 shadowableLightIndex, info->viewInfo->shadowableLightCount))
+        {
+#ifdef __SWITCH__
+            R_SetFallbackLightAttenuationSampler(source, "shadowable_list");
+#endif
             return;
+        }
         R_SetShadowableLight(source, shadowableLightIndex, info->viewInfo);
     }
     else
