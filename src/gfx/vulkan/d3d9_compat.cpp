@@ -2025,13 +2025,17 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0DebugTargetSerial()
 {
+    // Switch homebrew launchers do not necessarily pass arbitrary host
+    // environment variables through to the title. Keep the known shader as the
+    // default target so the diagnostic is usable without launcher-side setup.
+    // Explicitly setting the variable to "0" disables the test.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_SERIAL");
     if (!value || !*value)
-        return 0;
+        return 1792u;
 
     char *end = nullptr;
     const unsigned long long serial = std::strtoull(value, &end, 0);
-    if (end == value || !end || *end != '\0' || serial == 0)
+    if (end == value || !end || *end != '\0' || serial > UINT64_MAX)
         return 0;
     return static_cast<uint64_t>(serial);
 }
@@ -5698,6 +5702,35 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_backend ? m_backend->Device() : VK_NULL_HANDLE,
         m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
     g_switchFrameStage = "frame/render/vulkan/pipeline/entry";
+#ifdef __SWITCH__
+    {
+        static bool s0TestArmedTraceWritten = false;
+        static bool s0TestTargetSeenTraceWritten = false;
+        const uint64_t targetSerial = SwitchPsS0DebugTargetSerial();
+        if (!s0TestArmedTraceWritten)
+        {
+            s0TestArmedTraceWritten = true;
+            char trace[224];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK PS S0 TEST] action=armed target=%llu source=%s\n",
+                static_cast<unsigned long long>(targetSerial),
+                std::getenv("KISAK_VK_DEBUG_PS_S0_SERIAL") ? "env" : "default");
+            Switch_LogWrite(trace);
+        }
+        if (!s0TestTargetSeenTraceWritten && m_pixelShader &&
+            targetSerial != 0u && m_pixelShader->serial == targetSerial)
+        {
+            s0TestTargetSeenTraceWritten = true;
+            char trace[224];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK PS S0 TEST] action=target_seen serial=%llu\n",
+                static_cast<unsigned long long>(m_pixelShader->serial));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     if (!m_backend || !m_vertexShader || !m_pixelShader || !m_decl)
     {
         Switch_LogWrite("[KisakCOD][VK DRAW] pipeline_fail=missing backend_vs_ps_decl\n");
