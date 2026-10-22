@@ -7150,32 +7150,27 @@ void GScr_IsCinematicPlaying()
 
 void GScr_Earthquake()
 {
-    double Float; // fp30
-    long double v1; // fp2
-    long double v2; // fp2
-    double v3; // fp29
-    gentity_s *v4; // r3
-    int v5; // [sp+50h] [-40h]
-    float v6[4]; // [sp+58h] [-38h] BYREF
+    const float scale = Scr_GetFloat(0);
+    const float durationSeconds = Scr_GetFloat(1);
+    const float durationMilliseconds = durationSeconds * 1000.0f + 0.5f;
+    const int duration = static_cast<int>(floor(static_cast<double>(durationMilliseconds)));
+    float origin[4];
 
-    Float = Scr_GetFloat(0);
-    *(double *)&v1 = (float)((float)(Scr_GetFloat(1) * (float)1000.0) + (float)0.5);
-    v2 = floor(v1);
-    v5 = (int)(float)*(double *)&v2;
-    Scr_GetVector(2u, v6);
-    v3 = Scr_GetFloat(3);
-    if (Float <= 0.0)
+    Scr_GetVector(2u, origin);
+    const float radius = Scr_GetFloat(3);
+
+    if (scale <= 0.0f)
         Scr_ParamError(0, "Scale must be greater than 0");
-    if (v5 <= 0)
+    if (duration <= 0)
         Scr_ParamError(1u, "duration must be greater than 0");
-    if (v3 <= 0.0)
+    if (radius <= 0.0f)
         Scr_ParamError(3u, "Radius must be greater than 0");
     if (g_earthquakeEnable->current.enabled)
     {
-        v4 = G_TempEntity(v6, 65);
-        v4->s.lerp.u.turret.gunAngles[0] = Float;
-        v4->s.lerp.u.turret.gunAngles[1] = v3;
-        v4->s.lerp.u.earthquake.duration = v5;
+        gentity_s *ent = G_TempEntity(origin, 65);
+        ent->s.lerp.u.turret.gunAngles[0] = scale;
+        ent->s.lerp.u.turret.gunAngles[1] = radius;
+        ent->s.lerp.u.earthquake.duration = duration;
     }
 }
 
