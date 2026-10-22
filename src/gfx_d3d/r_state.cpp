@@ -577,13 +577,7 @@ const GfxImage *__cdecl R_GetTextureFromCode(
         MyAssertHandler(".\\r_state.cpp", 611, 0, "%s\n\t%s", "*samplerState & SAMPLER_FILTER_MASK", v3);
     }
     const GfxImage *image = source->input.codeImages[codeTexture];
-#ifdef __SWITCH__
-    // Source states can predate RB_InitCodeImages or inherit a missing light
-    // definition from a map. Keep attenuationSampler valid in that case;
-    // valid lights still replace this neutral fallback with their own image.
-    if (!image && codeTexture == TEXTURE_SRC_CODE_LIGHT_ATTENUATION)
-        image = rgp.whiteImage;
-#endif
+
     return image;
 }
 
