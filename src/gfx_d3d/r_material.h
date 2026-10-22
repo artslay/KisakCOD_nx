@@ -821,11 +821,15 @@ struct Material // sizeof=0x50
 #endif // KISAK_RADIANT
 #endif // __SWITCH__
 
-struct MaterialMemory // sizeof=0x8
+struct MaterialMemory // sizeof=0x8 on 32-bit builds
 {                                       // ...
     Material* material;
     int memory;
 };
+#ifdef __SWITCH__
+static_assert(offsetof(MaterialMemory, memory) == 8, "Switch MaterialMemory offset mismatch");
+static_assert(sizeof(MaterialMemory) == 16, "Switch MaterialMemory must use native 64-bit pointer layout");
+#endif
 
 struct stream_source_info_t // sizeof=0x3
 {                                       // ...
