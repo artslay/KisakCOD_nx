@@ -1416,15 +1416,6 @@ bool VulkanBackend::CreateSync()
 
 void VulkanBackend::DestroySwapchain()
 {
-    if (m_srgbBackbufferImage || m_srgbBackbufferView || m_srgbBackbufferMemory)
-        DestroyImage(
-            m_srgbBackbufferImage, m_srgbBackbufferMemory, m_srgbBackbufferView);
-    m_srgbBackbufferImage = VK_NULL_HANDLE;
-    m_srgbBackbufferMemory = VK_NULL_HANDLE;
-    m_srgbBackbufferView = VK_NULL_HANDLE;
-    m_srgbBackbufferFormat = VK_FORMAT_UNDEFINED;
-    m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
     for (VkSemaphore semaphore : m_renderFinishedSemaphores)
         if (semaphore) vkDestroySemaphore(m_device, semaphore, nullptr);
     m_renderFinishedSemaphores.clear();
