@@ -1618,7 +1618,8 @@ void __cdecl CG_FreeWeapons(int localClientNum)
                     0,
                     "%s\n\t(localClientNum) = %i",
                     "(localClientNum == 0)",
-                    localClientNum);            if (weaponInfo->tree)
+                    localClientNum);
+            if (weaponInfo->tree)
             {
                 XAnimFreeTree(weaponInfo->tree, 0);
                 weaponInfo->tree = 0;
@@ -1629,6 +1630,7 @@ void __cdecl CG_FreeWeapons(int localClientNum)
     }
     memset(cg_weaponsArray[localClientNum], 0, sizeof(cg_weaponsArray[localClientNum]));
 }
+
 void __cdecl CG_Shutdown(int localClientNum)
 {
     int i; // r30
