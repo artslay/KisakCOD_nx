@@ -912,6 +912,48 @@ static void Switch_HeapTraceAuditBin4(
         index, __ATOMIC_RELEASE);
 }
 
+// Cheaply inspect only the first node in Newlib smallbin 4 at every
+// allocator boundary. If it becomes malformed between the slower full audits,
+// immediately run the full validator and capture the responsible boundary.
+static void Switch_HeapTraceProbeBin4Head(
+    char phase, char operation, uintptr_t caller, uintptr_t argument,
+    uintptr_t requested, uintptr_t result)
+{
+    if (__atomic_load_n(
+            &g_switchHeapBin4AuditReported, __ATOMIC_ACQUIRE) != 0u)
+        return;
+
+    const uintptr_t sentinel =
+        reinterpret_cast<uintptr_t>(&__malloc_av_[8]);
+    SwitchHeapBin4AuditChunk root{};
+    if (!Switch_HeapTraceReadBin4AuditChunk(sentinel, &root))
+    {
+        Switch_HeapTraceAuditBin4(
+            phase, operation, caller, argument, requested, result);
+        return;
+    }
+    if (root.fd == sentinel)
+        return;
+
+    SwitchHeapBin4AuditChunk first{};
+    if (root.fd == 0u ||
+        (root.fd & (alignof(uintptr_t) - 1u)) != 0u ||
+        !Switch_HeapTraceReadBin4AuditChunk(root.fd, &first))
+    {
+        Switch_HeapTraceAuditBin4(
+            phase, operation, caller, argument, requested, result);
+        return;
+    }
+
+    const uintptr_t chunkSize =
+        first.head & ~static_cast<uintptr_t>(3u);
+    if (chunkSize != 0x20u || first.bk != sentinel || first.fd == 0u)
+    {
+        Switch_HeapTraceAuditBin4(
+            phase, operation, caller, argument, requested, result);
+    }
+}
+
 static SwitchHeapBadPointerSnapshot
     g_switchHeapBadPointers[kSwitchHeapBadPointerCount]{};
 static uintptr_t g_switchHeapBadPointerNext = 0;
@@ -1885,6 +1927,8 @@ extern "C" __attribute__((noinline)) void *__wrap_malloc(size_t size)
         auditCallerOffset == 0x38d774u ||
         (auditCallerOffset >= 0x600000u && auditCallerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
+    Switch_HeapTraceProbeBin4Head('B', 'M', caller, 0u,
+        static_cast<uintptr_t>(size), 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'M', caller, 0u,
             static_cast<uintptr_t>(size), 0u);
@@ -1901,6 +1945,9 @@ extern "C" __attribute__((noinline)) void *__wrap_malloc(size_t size)
             reinterpret_cast<uintptr_t>(pointer),
             static_cast<uintptr_t>(size),
             reinterpret_cast<uintptr_t>(pointer));
+    Switch_HeapTraceProbeBin4Head('A', 'M', caller,
+        reinterpret_cast<uintptr_t>(pointer), static_cast<uintptr_t>(size),
+        reinterpret_cast<uintptr_t>(pointer));
 #endif
     __malloc_unlock(_REENT);
     return pointer;
@@ -1921,6 +1968,8 @@ extern "C" __attribute__((noinline)) void __wrap_free(void *pointer)
         callerOffset == 0x38d774u ||
         (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
+    Switch_HeapTraceProbeBin4Head('B', 'F', caller,
+        reinterpret_cast<uintptr_t>(pointer), 0u, 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'F', caller,
             reinterpret_cast<uintptr_t>(pointer), 0u, 0u);
@@ -1937,6 +1986,9 @@ extern "C" __attribute__((noinline)) void __wrap_free(void *pointer)
         Switch_HeapTraceAuditBin4('A', 'F', caller,
             reinterpret_cast<uintptr_t>(pointer), 0u,
             reinterpret_cast<uintptr_t>(pointer));
+    Switch_HeapTraceProbeBin4Head('A', 'F', caller,
+        reinterpret_cast<uintptr_t>(pointer), 0u,
+        reinterpret_cast<uintptr_t>(pointer));
 #endif
     __malloc_unlock(_REENT);
 }
@@ -1962,6 +2014,8 @@ extern "C" __attribute__((noinline)) void *__wrap_calloc(
         callerOffset == 0x38d774u ||
         (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
+    Switch_HeapTraceProbeBin4Head('B', 'C', caller, 0u,
+        static_cast<uintptr_t>(bytes), 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'C', caller, 0u,
             static_cast<uintptr_t>(bytes), 0u);
@@ -1986,6 +2040,9 @@ extern "C" __attribute__((noinline)) void *__wrap_calloc(
             reinterpret_cast<uintptr_t>(pointer),
             static_cast<uintptr_t>(bytes),
             reinterpret_cast<uintptr_t>(pointer));
+    Switch_HeapTraceProbeBin4Head('A', 'C', caller,
+        reinterpret_cast<uintptr_t>(pointer), static_cast<uintptr_t>(bytes),
+        reinterpret_cast<uintptr_t>(pointer));
 #endif
     __malloc_unlock(_REENT);
     return pointer;
@@ -2025,6 +2082,8 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
         callerOffset == 0x38d774u ||
         (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
+    Switch_HeapTraceProbeBin4Head('B', 'R', caller,
+        reinterpret_cast<uintptr_t>(pointer), static_cast<uintptr_t>(size), 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'R', caller,
             reinterpret_cast<uintptr_t>(pointer),
@@ -2094,6 +2153,9 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
             reinterpret_cast<uintptr_t>(replacement),
             static_cast<uintptr_t>(size),
             reinterpret_cast<uintptr_t>(replacement));
+    Switch_HeapTraceProbeBin4Head('A', 'R', caller,
+        reinterpret_cast<uintptr_t>(pointer), static_cast<uintptr_t>(size),
+        reinterpret_cast<uintptr_t>(replacement));
 #endif
     __malloc_unlock(_REENT);
     return replacement;
