@@ -2025,26 +2025,54 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
-    // Switch homebrew launchers do not necessarily pass arbitrary host
-    // environment variables through to the title. Keep the known shader as the
-    // default target so the diagnostic is usable without launcher-side setup.
-    // Explicitly setting the variable to "0" disables the test.
+    // Default to all lightmap-style PS variants using both base/detail slot s0
+    // and lightmap slot s3. A numeric value narrows the test to one PS serial;
+    // "off" or "0" explicitly disables it. No launcher environment is needed.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
-    if (!value || !*value)
-        return 1792u;
+    if (!value || !*value || std::strcmp(value, "all") == 0)
+        return 0u;
+    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+        return UINT64_MAX;
 
     char *end = nullptr;
     const unsigned long long serial = std::strtoull(value, &end, 0);
-    if (end == value || !end || *end != '\0' || serial > UINT64_MAX)
-        return 0;
+    if (end == value || !end || *end != '\0' || serial == 0u ||
+        serial > UINT64_MAX)
+        return UINT64_MAX;
     return static_cast<uint64_t>(serial);
+}
+
+bool SwitchPsColorDebugTargetMatches(
+    uint64_t targetSerial,
+    uint64_t actualSerial,
+    const MOJOSHADER_parseData *parse)
+{
+    if (targetSerial == UINT64_MAX || actualSerial == 0u)
+        return false;
+    if (targetSerial != 0u)
+        return targetSerial == actualSerial;
+
+    // In wildcard mode restrict the noisy solid-color test to shaders that
+    // declare both s0 and s3, the relevant texture/lightmap pair in this scene.
+    // Other shaders (UI, video, particles) remain untouched unless selected by
+    // an explicit numeric serial.
+    if (!parse || parse->sampler_count <= 0 || !parse->samplers)
+        return false;
+    bool hasS0 = false;
+    bool hasS3 = false;
+    for (int i = 0; i < parse->sampler_count; ++i)
+    {
+        hasS0 |= parse->samplers[i].index == 0;
+        hasS3 |= parse->samplers[i].index == 3;
+    }
+    return hasS0 && hasS3;
 }
 
 // Strong diagnostic for the remaining black/missing-texture rendering bug.
 // Replace every store to fragment output Location 0 for one selected pixel
-// shader with a constant opaque magenta. This bypasses sampling, constants,
-// lighting and blending inputs computed by the shader. No sampler or resource
-// state is touched; the test is opt-in-by-target and defaults to PS 1792.
+// shader with a constant opaque magenta. This bypasses texture sampling and
+// shader lighting for the selected PS while leaving rasterization, attachment,
+// and Vulkan blend state unchanged. No texture descriptor is modified.
 bool PatchFragmentShaderToSolidMagenta(
     std::vector<uint32_t> &words,
     uint64_t targetSerial,
@@ -5719,29 +5747,51 @@ bool IDirect3DDevice9::EnsurePipeline()
 #ifdef __SWITCH__
     {
         static bool psColorTestArmedTraceWritten = false;
-        static bool psColorTestTargetSeenTraceWritten = false;
+        static uint64_t psColorTestSeenSerials[32]{};
+        static uint32_t psColorTestSeenSerialCount = 0u;
         const uint64_t targetSerial = SwitchPsColorDebugTargetSerial();
         if (!psColorTestArmedTraceWritten)
         {
             psColorTestArmedTraceWritten = true;
             char trace[224];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK PS COLOR TEST] action=armed target=%llu source=%s\n",
-                static_cast<unsigned long long>(targetSerial),
-                std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL") ? "env" : "default");
+            const char *targetLabel = targetSerial == 0u ? "all_s0_s3" :
+                (targetSerial == UINT64_MAX ? "disabled" : nullptr);
+            if (targetLabel)
+            {
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK PS COLOR TEST] action=armed target=%s source=%s\\n",
+                    targetLabel,
+                    std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL") ? "env" : "default");
+            }
+            else
+            {
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK PS COLOR TEST] action=armed target=%llu source=env\\n",
+                    static_cast<unsigned long long>(targetSerial));
+            }
             Switch_LogWrite(trace);
         }
-        if (!psColorTestTargetSeenTraceWritten && m_pixelShader &&
-            targetSerial != 0u && m_pixelShader->serial == targetSerial)
+        const uint64_t actualSerial = m_pixelShader ? m_pixelShader->serial : 0u;
+        if (SwitchPsColorDebugTargetMatches(
+                targetSerial, actualSerial,
+                m_pixelShader ? m_pixelShader->parseData : nullptr))
         {
-            psColorTestTargetSeenTraceWritten = true;
-            char trace[224];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK PS COLOR TEST] action=target_seen serial=%llu\n",
-                static_cast<unsigned long long>(m_pixelShader->serial));
-            Switch_LogWrite(trace);
+            bool alreadySeen = false;
+            for (uint32_t i = 0; i < psColorTestSeenSerialCount; ++i)
+                alreadySeen |= psColorTestSeenSerials[i] == actualSerial;
+            if (!alreadySeen && psColorTestSeenSerialCount < 32u)
+            {
+                psColorTestSeenSerials[psColorTestSeenSerialCount++] = actualSerial;
+                char trace[224];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK PS COLOR TEST] action=target_seen serial=%llu scope=%s\\n",
+                    static_cast<unsigned long long>(actualSerial),
+                    targetSerial == 0u ? "all_s0_s3" : "serial");
+                Switch_LogWrite(trace);
+            }
         }
     }
 #endif
@@ -6315,10 +6365,12 @@ bool IDirect3DDevice9::EnsurePipeline()
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
         const uint64_t debugPsColorSerial = SwitchPsColorDebugTargetSerial();
-        if (debugPsColorSerial != 0u && debugPsColorSerial == m_pixelShader->serial)
+        if (SwitchPsColorDebugTargetMatches(
+                debugPsColorSerial, m_pixelShader->serial, m_pixelShader->parseData))
         {
+            // The matcher has already checked wildcard vs. exact-serial scope.
             (void)PatchFragmentShaderToSolidMagenta(
-                pixelSpirv, debugPsColorSerial, m_pixelShader->serial);
+                pixelSpirv, m_pixelShader->serial, m_pixelShader->serial);
         }
         m_pixelShader->linkedSpirv = pixelSpirv;
 
