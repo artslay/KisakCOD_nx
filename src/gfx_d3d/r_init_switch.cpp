@@ -63,6 +63,12 @@ static bool s_switchVulkanRecoveryInProgress = false;
 static bool s_switchVulkanRecoveryFailed = false;
 static bool s_switchVulkanRecoveryFatal = false;
 
+// RB_SetInitialState belongs to one fresh renderer/device initialization. A
+// preserved device takes R_InitGraphicsApi's early return; device recreation
+// resets this guard and performs the initialization once for the new device.
+static bool s_switchInitialStateApplied = false;
+static uint32_t s_switchInitialStateCallCount = 0;
+
 void TRACK_r_init()
 {
     track_static_alloc_internal(&rgp, sizeof(rgp), "rgp", 18);
@@ -336,6 +342,12 @@ void R_InitGraphicsApi() {
         return;
     }
 
+    // This path creates/recreates the renderer device. The initial-state setup
+    // must run once after render targets and GPU queries exist, before R_Init()
+    // continues into scene and renderer-system initialization.
+    s_switchInitialStateApplied = false;
+    s_switchInitialStateCallCount = 0;
+
     // Initialize a backend only after a full shutdown has discarded it.
     if (!g_gfxBackend)
     {
@@ -422,6 +434,40 @@ void R_InitGraphicsApi() {
 #ifdef __SWITCH__
     Switch_LogWrite("[KisakCOD][RINIT] after R_Cinematic_Init\n");
 #endif
+
+    // Mirror the original r_init.cpp R_InitHardware ordering:
+    // R_CreateForInitOrReset() has created the framebuffer/depth targets and
+    // query ring; cinematic initialization is complete; now establish the
+    // initial D3D-compatible state before the caller runs R_InitScene() and
+    // R_InitSystems(). Keep this guarded to one call per fresh device.
+    if (!s_switchInitialStateApplied)
+    {
+        ++s_switchInitialStateCallCount;
+        const auto &framebuffer = gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER];
+        char trace[256];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][RINIT STATE] action=begin count=%u device=%p color=%p size=%ux%u\n",
+            s_switchInitialStateCallCount,
+            static_cast<void *>(dx.device),
+            static_cast<void *>(framebuffer.surface.color),
+            framebuffer.width, framebuffer.height);
+        Switch_LogWrite(trace);
+
+        RB_SetInitialState();
+        s_switchInitialStateApplied = true;
+
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][RINIT STATE] action=complete count=%u order=before_scene_and_systems\n",
+            s_switchInitialStateCallCount);
+        Switch_LogWrite(trace);
+    }
+    else
+    {
+        Switch_LogWrite(
+            "[KisakCOD][RINIT STATE] action=duplicate_skipped reason=already_applied\n");
+    }
 }
 void R_InitSystems()
 {
