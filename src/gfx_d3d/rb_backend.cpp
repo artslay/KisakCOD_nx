@@ -3698,11 +3698,7 @@ void __cdecl RB_InitCodeImages()
     gfxCmdBufInput.codeImageSamplerStates[TEXTURE_SRC_CODE_SKY] = SAMPLER_FILTER_SHIFT;
     rg.codeImageNames[TEXTURE_SRC_CODE_SKY] = "sampler.sky";
 
-    // Valid light passes replace this with their GfxLightDef attenuation image.
-    // Keep a neutral, valid image for startup/invalid light records so a pass
-    // that references attenuationSampler cannot drop the whole map on a null
-    // code-image binding.
-    gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_LIGHT_ATTENUATION] = rgp.whiteImage;
+    gfxCmdBufInput.codeImages[TEXTURE_SRC_CODE_LIGHT_ATTENUATION] = 0;
     gfxCmdBufInput.codeImageSamplerStates[TEXTURE_SRC_CODE_LIGHT_ATTENUATION] = SAMPLER_FILTER_SHIFT;
     rg.codeImageNames[TEXTURE_SRC_CODE_LIGHT_ATTENUATION] = "attenuationSampler";
 
