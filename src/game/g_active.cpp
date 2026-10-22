@@ -588,7 +588,6 @@ void __cdecl ClientThink_real(gentity_s *ent)
     gclient_s *client; // r30
     usercmd_s *p_cmd; // r25
     unsigned int v5; // r11
-    long double v7; // fp2
     int eventSequence; // r28
     double v9; // fp0
     int integer; // r11
@@ -656,10 +655,10 @@ void __cdecl ClientThink_real(gentity_s *ent)
 	{
 		client->ps.pm_type = ent->tagInfo ? PM_NORMAL_LINKED : PM_NORMAL;
 	}
-    v7 = floor((g_gravity->current.value + 0.5f));
+    const int playerGravity = static_cast<int>(floor(static_cast<double>(g_gravity->current.value + 0.5f)));
     eventSequence = client->ps.eventSequence;
     v9 = (float)(client->ps.aimSpreadScale * (float)0.0039215689);
-    client->ps.gravity = (int)(float)*(double *)&v7;
+    client->ps.gravity = playerGravity;
     integer = g_speed->current.integer;
 #ifdef __SWITCH__
     // A zero g_speed leaves valid controller movement commands inert in
