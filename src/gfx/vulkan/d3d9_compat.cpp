@@ -2023,6 +2023,24 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
     return true;
 }
 
+uint64_t SwitchPsS0CenterTestTargetSerial()
+{
+    // Keep the test limited to one known world PS by default. A decimal/hex
+    // serial can be supplied for another shader; "off" or "0" disables it.
+    const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL");
+    if (!value || !*value)
+        return 1792u;
+    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+        return UINT64_MAX;
+
+    char *end = nullptr;
+    const unsigned long long serial = std::strtoull(value, &end, 0);
+    if (end == value || !end || *end != '\\0' || serial == 0u ||
+        serial > UINT64_MAX)
+        return UINT64_MAX;
+    return static_cast<uint64_t>(serial);
+}
+
 uint64_t SwitchPsColorDebugTargetSerial()
 {
     // Keep normal gameplay unchanged. A specific serial opts in to the solid
@@ -2073,6 +2091,402 @@ bool SwitchPsColorDebugTargetMatches(
 // shader with a constant opaque magenta. This bypasses texture sampling and
 // shader lighting for the selected PS while leaving rasterization, attachment,
 // and Vulkan blend state unchanged. No texture descriptor is modified.
+bool PatchFragmentShaderToOutputS0AtCenter(
+    std::vector<uint32_t> &words,
+    uint64_t targetSerial,
+    uint64_t actualSerial)
+{
+    if (!targetSerial || targetSerial == UINT64_MAX ||
+        targetSerial != actualSerial)
+        return false;
+
+    uint32_t descriptorId = 0u;
+    uint32_t outputId = 0u;
+    uint32_t outputType = 0u;
+    uint32_t floatType = 0u;
+    uint32_t vec2Type = 0u;
+    uint32_t entryFunctionId = 0u;
+    std::vector<std::pair<uint32_t, uint32_t>> pointerTypes;
+    std::vector<std::pair<uint32_t, uint32_t>> vectorTypes;
+    struct Decoration
+    {
+        uint32_t id = 0u;
+        uint32_t set = UINT32_MAX;
+        uint32_t binding = UINT32_MAX;
+        uint32_t location = UINT32_MAX;
+    };
+    struct Variable
+    {
+        uint32_t id = 0u;
+        uint32_t pointerType = 0u;
+        uint32_t storage = UINT32_MAX;
+    };
+    std::vector<Decoration> decorations;
+    std::vector<Variable> variables;
+
+    static uint64_t loggedSuccessSerials[128]{};
+    static size_t loggedSuccessCount = 0u;
+    static uint32_t loggedSkipCount = 0u;
+    const auto logResult = [&](const char *action, uint32_t sampleId,
+                               uint32_t sampleType, uint32_t coordType,
+                               uint32_t block)
+    {
+        const bool success = std::strcmp(action, "patched_s0_center") == 0;
+        if (success)
+        {
+            for (size_t i = 0; i < loggedSuccessCount; ++i)
+                if (loggedSuccessSerials[i] == actualSerial)
+                    return;
+            if (loggedSuccessCount >=
+                sizeof(loggedSuccessSerials) / sizeof(loggedSuccessSerials[0]))
+                return;
+            loggedSuccessSerials[loggedSuccessCount++] = actualSerial;
+        }
+        else if (loggedSkipCount++ >= 8u)
+        {
+            return;
+        }
+
+        char trace[352];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK PS S0 CENTER TEST] target=%llu actual=%llu action=%s descriptor=%u sample=%u sampleType=%u output=%u outputType=%u coordType=%u vec2Type=%u block=%u\n",
+            static_cast<unsigned long long>(targetSerial),
+            static_cast<unsigned long long>(actualSerial),
+            action, descriptorId, sampleId, sampleType, outputId, outputType,
+            coordType, vec2Type, block);
+        Switch_LogWrite(trace);
+    };
+
+    if (words.size() < 5u || words[0] != SpvMagicNumber ||
+        words[3] <= 1u || words[3] > 65536u ||
+        words[3] > UINT32_MAX - 2u)
+    {
+        logResult("skip_invalid_module", 0u, 0u, 0u, 0u);
+        return false;
+    }
+    const uint32_t bound = words[3];
+
+    // Resolve the s0 descriptor (set 2, binding 0), Location 0 output,
+    // scalar/vector types, and storage-class pointer types.
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+        {
+            logResult("skip_invalid_instruction", 0u, 0u, 0u, 0u);
+            return false;
+        }
+        const uint32_t *ins = &words[offset];
+
+        if (op == SpvOpEntryPoint && wc >= 4u &&
+            ins[1] == SpvExecutionModelFragment)
+        {
+            entryFunctionId = ins[2];
+        }
+        else if (op == SpvOpDecorate && wc >= 4u && ins[1] < bound)
+        {
+            const uint32_t id = ins[1];
+            auto it = std::find_if(
+                decorations.begin(), decorations.end(),
+                [id](const Decoration &d) { return d.id == id; });
+            if (it == decorations.end())
+            {
+                decorations.push_back(Decoration{});
+                it = decorations.end() - 1;
+                it->id = id;
+            }
+            if (ins[2] == SpvDecorationDescriptorSet)
+                it->set = ins[3];
+            else if (ins[2] == SpvDecorationBinding)
+                it->binding = ins[3];
+            else if (ins[2] == SpvDecorationLocation)
+                it->location = ins[3];
+        }
+        else if (op == SpvOpTypeFloat && wc >= 3u &&
+                 ins[1] < bound && ins[2] == 32u)
+        {
+            floatType = ins[1];
+        }
+        else if (op == SpvOpTypeVector && wc >= 4u && ins[1] < bound)
+        {
+            vectorTypes.emplace_back(ins[1], ins[2]);
+        }
+        else if (op == SpvOpTypePointer && wc >= 4u && ins[1] < bound)
+        {
+            pointerTypes.emplace_back(ins[1], ins[3]);
+        }
+        else if (op == SpvOpVariable && wc >= 4u && ins[2] < bound &&
+                 (ins[3] == SpvStorageClassUniformConstant ||
+                  ins[3] == SpvStorageClassOutput))
+        {
+            variables.push_back({ins[2], ins[1], ins[3]});
+        }
+
+        offset += wc;
+    }
+
+    for (const auto &vt : vectorTypes)
+    {
+        if (vt.second == floatType && vt.first != 0u)
+        {
+            // Find the float vec2 by its component count from OpTypeVector.
+            // The component count is recovered in the dedicated pass below.
+        }
+    }
+    // Retain the component count as well; there can be vec2 and vec4 types.
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpTypeVector && wc >= 4u &&
+            ins[2] == floatType && ins[3] == 2u)
+        {
+            vec2Type = ins[1];
+            break;
+        }
+        offset += wc;
+    }
+
+    for (const Variable &v : variables)
+    {
+        const auto d = std::find_if(
+            decorations.begin(), decorations.end(),
+            [&v](const Decoration &item) { return item.id == v.id; });
+        if (v.storage == SpvStorageClassUniformConstant &&
+            d != decorations.end() && d->set == 2u && d->binding == 0u)
+        {
+            if (descriptorId && descriptorId != v.id)
+            {
+                logResult("skip_ambiguous_s0", 0u, 0u, 0u, 0u);
+                return false;
+            }
+            descriptorId = v.id;
+        }
+        else if (v.storage == SpvStorageClassOutput &&
+                 d != decorations.end() && d->location == 0u)
+        {
+            if (outputId && outputId != v.id)
+            {
+                logResult("skip_ambiguous_output", 0u, 0u, 0u, 0u);
+                return false;
+            }
+            outputId = v.id;
+            const auto p = std::find_if(
+                pointerTypes.begin(), pointerTypes.end(),
+                [&v](const auto &item) { return item.first == v.pointerType; });
+            if (p != pointerTypes.end())
+                outputType = p->second;
+        }
+    }
+
+    if (!entryFunctionId || !descriptorId || !outputId ||
+        !outputType || !floatType || !vec2Type)
+    {
+        logResult("skip_missing_spirv_interface", 0u, 0u, 0u, 0u);
+        return false;
+    }
+
+    std::vector<uint32_t> s0DerivedIds;
+    const auto isS0Derived = [&](uint32_t id)
+    {
+        return std::find(s0DerivedIds.begin(), s0DerivedIds.end(), id) !=
+            s0DerivedIds.end();
+    };
+    const auto addS0Derived = [&](uint32_t id)
+    {
+        if (id && id < bound && !isS0Derived(id))
+            s0DerivedIds.push_back(id);
+    };
+
+    uint32_t currentFunction = 0u;
+    uint32_t currentBlock = 0u;
+    uint32_t sampleId = 0u;
+    uint32_t sampleType = 0u;
+    uint32_t sampleCoordId = 0u;
+    uint32_t sampleCoordType = 0u;
+    uint32_t sampleBlock = 0u;
+    size_t sampleOffset = SIZE_MAX;
+    size_t outputStoreOffset = SIZE_MAX;
+    uint32_t outputStoreBlock = 0u;
+
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+        {
+            logResult("skip_invalid_instruction", sampleId, sampleType,
+                      sampleCoordType, sampleBlock);
+            return false;
+        }
+        const uint32_t *ins = &words[offset];
+
+        if (op == SpvOpFunction && wc >= 5u)
+        {
+            currentFunction = ins[2];
+            currentBlock = 0u;
+        }
+        else if (op == SpvOpFunctionEnd)
+        {
+            currentFunction = 0u;
+            currentBlock = 0u;
+        }
+        else if (currentFunction == entryFunctionId &&
+                 op == SpvOpLabel && wc >= 2u)
+        {
+            currentBlock = ins[1];
+        }
+        else if (currentFunction == entryFunctionId &&
+                 op == SpvOpLoad && wc >= 4u &&
+                 ins[3] == descriptorId)
+        {
+            addS0Derived(ins[2]);
+        }
+        else if (currentFunction == entryFunctionId &&
+                 op == SpvOpSampledImage && wc >= 5u &&
+                 (isS0Derived(ins[3]) || isS0Derived(ins[4])))
+        {
+            addS0Derived(ins[2]);
+        }
+        else if (currentFunction == entryFunctionId &&
+                 op == SpvOpImageSampleImplicitLod && wc >= 5u &&
+                 isS0Derived(ins[3]) && !sampleId)
+        {
+            sampleType = ins[1];
+            sampleId = ins[2];
+            sampleCoordId = ins[4];
+            sampleOffset = offset;
+            sampleBlock = currentBlock;
+        }
+        else if (currentFunction == entryFunctionId &&
+                 op == SpvOpStore && wc >= 3u && ins[1] == outputId &&
+                 currentBlock && currentBlock == sampleBlock &&
+                 sampleOffset != SIZE_MAX && offset > sampleOffset)
+        {
+            outputStoreOffset = offset;
+            outputStoreBlock = currentBlock;
+        }
+
+        offset += wc;
+    }
+
+    if (!sampleId || sampleOffset == SIZE_MAX)
+    {
+        logResult("skip_no_2d_s0_sample", 0u, 0u, 0u, 0u);
+        return false;
+    }
+    if (outputStoreOffset == SIZE_MAX || outputStoreBlock != sampleBlock)
+    {
+        logResult("skip_no_output_store_after_sample", sampleId, sampleType,
+                  0u, sampleBlock);
+        return false;
+    }
+    if (sampleType != outputType)
+    {
+        logResult("skip_sample_output_type_mismatch", sampleId, sampleType,
+                  0u, sampleBlock);
+        return false;
+    }
+
+    // The s0 test only supports an ordinary 2D implicit-LOD sample. Derive the
+    // original coordinate's result type and require that it is float2 before
+    // replacing it with the constant center coordinate.
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[offset];
+        if ((op == SpvOpLoad || op == SpvOpCopyObject) && wc >= 4u &&
+            ins[2] == sampleCoordId)
+        {
+            sampleCoordType = ins[1];
+            break;
+        }
+        offset += wc;
+    }
+    // Some frontends produce a coordinate ID directly from a vector operation.
+    if (!sampleCoordType)
+    {
+        for (size_t offset = 5u; offset < words.size();)
+        {
+            uint32_t wc = 0u;
+            SpvOp op{};
+            if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+                return false;
+            const uint32_t *ins = &words[offset];
+            if ((op == SpvOpVectorShuffle || op == SpvOpCompositeConstruct ||
+                 op == SpvOpCompositeExtract || op == SpvOpFAdd ||
+                 op == SpvOpFMul || op == SpvOpFSub) &&
+                wc >= 3u && ins[2] == sampleCoordId)
+            {
+                sampleCoordType = ins[1];
+                break;
+            }
+            offset += wc;
+        }
+    }
+    if (sampleCoordType != vec2Type)
+    {
+        logResult("skip_s0_coordinates_not_float2", sampleId, sampleType,
+                  sampleCoordType, sampleBlock);
+        return false;
+    }
+
+    const uint32_t halfId = bound;
+    const uint32_t centerCoordId = bound + 1u;
+    const uint32_t coordWord[] = {
+        (4u << 16) | static_cast<uint32_t>(SpvOpConstant),
+        floatType, halfId, 0x3f000000u, // 0.5f
+        (5u << 16) | static_cast<uint32_t>(SpvOpConstantComposite),
+        vec2Type, centerCoordId, halfId, halfId
+    };
+
+    // Insert new constants into the module's global constant section before
+    // the first global OpVariable (and therefore before every function).
+    size_t insertionOffset = SIZE_MAX;
+    bool insideFunction = false;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (op == SpvOpFunction)
+            insideFunction = true;
+        if (!insideFunction && op == SpvOpVariable)
+        {
+            insertionOffset = offset;
+            break;
+        }
+        offset += wc;
+    }
+    if (insertionOffset == SIZE_MAX)
+    {
+        logResult("skip_no_global_variable_section", sampleId, sampleType,
+                  sampleCoordType, sampleBlock);
+        return false;
+    }
+
+    // Patch before inserting constants, since insertion changes instruction offsets.
+    words[sampleOffset + 4u] = centerCoordId;
+    words[outputStoreOffset + 2u] = sampleId;
+    words.insert(
+        words.begin() + static_cast<std::ptrdiff_t>(insertionOffset),
+        std::begin(coordWord), std::end(coordWord));
+    words[3] = bound + 2u;
+
+    logResult("patched_s0_center", sampleId, sampleType,
+              sampleCoordType, sampleBlock);
+    return true;
+}
+
 bool PatchFragmentShaderToSolidMagenta(
     std::vector<uint32_t> &words,
     uint64_t targetSerial,
@@ -5766,6 +6180,33 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchFrameStage = "frame/render/vulkan/pipeline/entry";
 #ifdef __SWITCH__
     {
+        static bool psS0CenterTestArmedTraceWritten = false;
+        static bool psS0CenterTargetSeenTraceWritten = false;
+        const uint64_t centerTarget = SwitchPsS0CenterTestTargetSerial();
+        if (!psS0CenterTestArmedTraceWritten)
+        {
+            psS0CenterTestArmedTraceWritten = true;
+            char trace[192];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=%llu source=%s\\n",
+                static_cast<unsigned long long>(centerTarget),
+                std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL") ? "env" : "default");
+            Switch_LogWrite(trace);
+        }
+        if (!psS0CenterTargetSeenTraceWritten && m_pixelShader &&
+            centerTarget != UINT64_MAX && m_pixelShader->serial == centerTarget)
+        {
+            psS0CenterTargetSeenTraceWritten = true;
+            char trace[192];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK PS S0 CENTER TEST] action=target_seen serial=%llu\\n",
+                static_cast<unsigned long long>(m_pixelShader->serial));
+            Switch_LogWrite(trace);
+        }
+    }
+    {
         static bool psColorTestArmedTraceWritten = false;
         static uint64_t psColorTestSeenSerials[32]{};
         static uint32_t psColorTestSeenSerialCount = 0u;
@@ -6384,6 +6825,13 @@ bool IDirect3DDevice9::EnsurePipeline()
 
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
+        const uint64_t debugPsS0CenterSerial = SwitchPsS0CenterTestTargetSerial();
+        if (debugPsS0CenterSerial != UINT64_MAX &&
+            debugPsS0CenterSerial == m_pixelShader->serial)
+        {
+            (void)PatchFragmentShaderToOutputS0AtCenter(
+                pixelSpirv, debugPsS0CenterSerial, m_pixelShader->serial);
+        }
         const uint64_t debugPsColorSerial = SwitchPsColorDebugTargetSerial();
         if (SwitchPsColorDebugTargetMatches(
                 debugPsColorSerial, m_pixelShader->serial, m_pixelShader->parseData))
