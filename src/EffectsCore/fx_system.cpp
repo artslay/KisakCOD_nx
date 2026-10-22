@@ -527,7 +527,7 @@ void __cdecl FX_FreePool_Generic_FxElem_(FxElem* item, volatile int32_t* firstFr
 {
     volatile uint32_t freedIndex; // [esp+4h] [ebp-4h]
 
-    freedIndex = ((char*)item - (char*)pool) / 40;
+    freedIndex = ((char*)item - (char*)pool) / sizeof(*pool);
     if (freedIndex >= 0x800)
         MyAssertHandler(
             ".\\EffectsCore\\fx_system.cpp",
