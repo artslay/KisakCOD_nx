@@ -726,7 +726,78 @@ static void Switch_HeapTraceReportBin4Fault(
     const uintptr_t lastNodeCount =
         __atomic_load_n(&g_switchHeapBin4AuditLastNodeCount, __ATOMIC_RELAXED);
 
-    char line[896];
+    // Put a compact, self-identifying probe summary directly in the first
+    // fault line as well. This remains useful when logs are filtered to AUDIT
+    // lines or later diagnostic output is cut off by a crash.
+    const uintptr_t probeEnd =
+        __atomic_load_n(&g_switchHeapBin4ProbeNext, __ATOMIC_ACQUIRE);
+    uintptr_t probeGoodN = UINTPTR_MAX;
+    uintptr_t probeGoodTrace = 0u;
+    uintptr_t probeGoodPhase = 0u;
+    uintptr_t probeGoodOperation = 0u;
+    uintptr_t probeGoodThread = 0u;
+    uintptr_t probeGoodCaller = 0u;
+    uintptr_t probeGoodRootFd = 0u;
+    uintptr_t probeGoodRootBk = 0u;
+    uintptr_t probeGoodHead = 0u;
+    uintptr_t probeGoodFd = 0u;
+    uintptr_t probeGoodBk = 0u;
+    for (uintptr_t cursor = probeEnd; cursor > 0u; --cursor)
+    {
+        const uintptr_t sequence = cursor - 1u;
+        const SwitchHeapBin4ProbeEvent &event =
+            g_switchHeapBin4ProbeEvents[sequence & (kSwitchHeapBin4ProbeCount - 1u)];
+        const uintptr_t firstSequence =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (firstSequence != sequence + 1u)
+            continue;
+        const uintptr_t readableMask =
+            __atomic_load_n(&event.readableMask, __ATOMIC_RELAXED);
+        const uintptr_t eventRootFd =
+            __atomic_load_n(&event.rootFd, __ATOMIC_RELAXED);
+        const uintptr_t eventRootBk =
+            __atomic_load_n(&event.rootBk, __ATOMIC_RELAXED);
+        const uintptr_t eventHead =
+            __atomic_load_n(&event.firstHead, __ATOMIC_RELAXED);
+        const uintptr_t eventFd =
+            __atomic_load_n(&event.firstFd, __ATOMIC_RELAXED);
+        const uintptr_t eventBk =
+            __atomic_load_n(&event.firstBk, __ATOMIC_RELAXED);
+        const uintptr_t eventTrace =
+            __atomic_load_n(&event.traceNext, __ATOMIC_RELAXED);
+        const uintptr_t eventPhase =
+            __atomic_load_n(&event.phase, __ATOMIC_RELAXED);
+        const uintptr_t eventOperation =
+            __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
+        const uintptr_t eventThread =
+            __atomic_load_n(&event.threadId, __ATOMIC_RELAXED);
+        const uintptr_t eventCaller =
+            __atomic_load_n(&event.callerOffset, __ATOMIC_RELAXED);
+        const uintptr_t secondSequence =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (firstSequence != secondSequence || (readableMask & 1u) == 0u)
+            continue;
+        const bool good = eventRootFd == sentinel ||
+            ((readableMask & 2u) != 0u &&
+             (eventHead & ~static_cast<uintptr_t>(3u)) == 0x20u &&
+             eventBk == sentinel && eventFd != 0u);
+        if (!good)
+            continue;
+        probeGoodN = sequence;
+        probeGoodTrace = eventTrace;
+        probeGoodPhase = eventPhase;
+        probeGoodOperation = eventOperation;
+        probeGoodThread = eventThread;
+        probeGoodCaller = eventCaller;
+        probeGoodRootFd = eventRootFd;
+        probeGoodRootBk = eventRootBk;
+        probeGoodHead = eventHead;
+        probeGoodFd = eventFd;
+        probeGoodBk = eventBk;
+        break;
+    }
+
+    char line[1400];
     std::snprintf(
         line, sizeof(line),
         "[KisakCOD][HEAP BIN4 AUDIT] reason=%s phase=%c op=%c "
@@ -738,7 +809,12 @@ static void Switch_HeapTraceReportBin4Fault(
         "lastGoodSeq=%llu lastGoodTid=%llu lastGoodPhase=%c lastGoodOp=%c "
         "lastGoodCallerOff=0x%llx lastGoodArgument=0x%016llx "
         "lastGoodRequested=%llu lastGoodResult=0x%016llx "
-        "lastGoodNodes=%llu\n",
+        "lastGoodNodes=%llu probeV=1 probeCount=%llu "
+        "probeGoodN=%llu probeGoodTrace=%llu probeGoodPhase=%c "
+        "probeGoodOp=%c probeGoodTid=%llu probeGoodCaller=0x%llx "
+        "probeGoodRootFd=0x%016llx probeGoodRootBk=0x%016llx "
+        "probeGoodHead=0x%016llx probeGoodFd=0x%016llx "
+        "probeGoodBk=0x%016llx\n",
         reason ? reason : "unknown",
         phase, operation,
         static_cast<unsigned long long>(nextSequence),
@@ -767,7 +843,19 @@ static void Switch_HeapTraceReportBin4Fault(
         static_cast<unsigned long long>(lastArgument),
         static_cast<unsigned long long>(lastRequested),
         static_cast<unsigned long long>(lastResult),
-        static_cast<unsigned long long>(lastNodeCount));
+        static_cast<unsigned long long>(lastNodeCount),
+        static_cast<unsigned long long>(probeEnd),
+        static_cast<unsigned long long>(probeGoodN),
+        static_cast<unsigned long long>(probeGoodTrace),
+        static_cast<char>(probeGoodPhase ? probeGoodPhase : '-'),
+        static_cast<char>(probeGoodOperation ? probeGoodOperation : '-'),
+        static_cast<unsigned long long>(probeGoodThread),
+        static_cast<unsigned long long>(probeGoodCaller),
+        static_cast<unsigned long long>(probeGoodRootFd),
+        static_cast<unsigned long long>(probeGoodRootBk),
+        static_cast<unsigned long long>(probeGoodHead),
+        static_cast<unsigned long long>(probeGoodFd),
+        static_cast<unsigned long long>(probeGoodBk));
     Switch_LogCrashLine(line);
 
     // The lightweight probe runs at every malloc/free/calloc/realloc boundary.
