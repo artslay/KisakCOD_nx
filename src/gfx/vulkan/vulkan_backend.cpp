@@ -2153,12 +2153,12 @@ void VulkanBackend::Clear(float r, float g, float b, float a)
         return;
 
     const bool hasPresentSource = m_presentSourceImage && m_presentSourceView;
-    const VkImage colorImage = hasPresentSource ? m_presentSourceImage : CurrentSwapchainImage();
-    const VkImageView colorView = hasPresentSource ? m_presentSourceView : CurrentSwapchainView();
-    const VkFormat colorFormat = hasPresentSource ? m_presentSourceFormat : m_swapchainFormat;
+    const VkImage colorImage = hasPresentSource ? m_presentSourceImage : CurrentBackbufferImage();
+    const VkImageView colorView = hasPresentSource ? m_presentSourceView : CurrentBackbufferView();
+    const VkFormat colorFormat = hasPresentSource ? m_presentSourceFormat : CurrentBackbufferFormat();
     const VkImageLayout colorLayout = hasPresentSource
         ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        : CurrentSwapchainLayout();
+        : CurrentBackbufferLayout();
     const uint32_t width = hasPresentSource ? m_presentSourceWidth : m_width;
     const uint32_t height = hasPresentSource ? m_presentSourceHeight : m_height;
 
