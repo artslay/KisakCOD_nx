@@ -1209,7 +1209,7 @@ Scr_WatchElement_s *__cdecl Scr_CreateWatchElement(char *text, Scr_WatchElement_
 {
     Scr_WatchElement_s *element; // [esp+0h] [ebp-4h]
 
-    element = (Scr_WatchElement_s *)Scr_AllocDebugMem(100, name);
+    element = (Scr_WatchElement_s *)Scr_AllocDebugMem(sizeof(Scr_WatchElement_s), name);
     memset((uint8_t *)element, 0, sizeof(Scr_WatchElement_s));
     element->valueText = CopyString((char *)"");
     element->refText = CopyString(text);
@@ -1408,7 +1408,7 @@ bool __cdecl Scr_RefToVariable(uint32_t id, int isObject)
     {
         if (!scrDebuggerGlob.add)
             return 0;
-        breakpoints = (Scr_WatchElementDoubleNode_t *)Scr_AllocDebugMem(8, "Scr_RefToVariable1");
+        breakpoints = (Scr_WatchElementDoubleNode_t *)Scr_AllocDebugMem(sizeof(Scr_WatchElementDoubleNode_t), "Scr_RefToVariable1");
         breakpoints->list = 0;
         breakpoints->removedList = 0;
         scrDebuggerGlob.variableBreakpoints[ida] = breakpoints;
@@ -2723,8 +2723,8 @@ void Scr_SetChildCountRemote()
     sameType = Sys_ReadDebugSocketInt() != 0;
     oldElements = parentElement->childArrayHead;
     oldChildCount = parentElement->childCount;
-    newElements = (Scr_WatchElement_s *)Scr_AllocDebugMem(100 * count, "Scr_SetChildCountRemote");
-    memset((uint8_t *)newElements, 0, 100 * count);
+    newElements = (Scr_WatchElement_s *)Scr_AllocDebugMem((int)(sizeof(Scr_WatchElement_s) * count), "Scr_SetChildCountRemote");
+    memset((uint8_t *)newElements, 0, sizeof(Scr_WatchElement_s) * count);
     oldIndex = 0;
     newIndex = 0;
     for (nameIndex = 0; nameIndex < count; ++nameIndex)
