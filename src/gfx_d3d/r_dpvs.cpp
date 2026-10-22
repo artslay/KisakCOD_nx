@@ -2525,7 +2525,7 @@ void __cdecl R_InitSceneData(int localClientNum)
     for (cellIndex = 0; cellIndex < 2 * cellCount; ++cellIndex)
         Com_Memset(&rgp.world->dpvsPlanes.sceneEntCellBits[128 * cellIndex + offset], 0, 4 * (gfxCfg.entCount >> 5));
     memset((uint8_t *)dpvsGlob.entVisBits[localClientNum], 0, 4 * (gfxCfg.entCount >> 5));
-    memset((uint8_t *)scene.dpvs.entInfo[localClientNum], 0, 4 * gfxCfg.entCount);
+    memset(scene.dpvs.entInfo[localClientNum], 0, sizeof(*scene.dpvs.entInfo[localClientNum]) * gfxCfg.entCount);
 }
 
 void __cdecl DynEntCl_InitFilter()
@@ -2560,7 +2560,7 @@ void __cdecl R_InitSceneBuffers()
             4 * (gfxCfg.entCount >> 5),
             "R_InitSceneBuffers");
         scene.dpvs.entInfo[localClientNum] = (GfxEntCellRefInfo *)R_AllocGlobalVariable(
-            4 * gfxCfg.entCount,
+            sizeof(*scene.dpvs.entInfo[localClientNum]) * gfxCfg.entCount,
             "R_InitSceneBuffers");
     }
 }
