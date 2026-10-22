@@ -1596,18 +1596,21 @@ void __cdecl CG_Init(int localClientNum, int savegame)
 
 void __cdecl CG_FreeWeapons(int localClientNum)
 {
-    unsigned int v2; // r26
-    XAnimTree_s **p_tree; // r30
-    int v4; // r3
+    unsigned int weaponIndex;
+    weaponInfo_s *weaponInfo;
+    int dobjHandle;
 
-    v2 = 1;
+    weaponIndex = 1;
     if (BG_GetNumWeapons() > 1)
     {
-        p_tree = &cg_weaponsArray[0][1].tree;
+        // Use the native weaponInfo_s stride. The old p_tree += 18 step
+        // assumes the 32-bit structure layout and lands inside other fields
+        // when weaponInfo_s contains native 64-bit pointers on Switch.
+        weaponInfo = &cg_weaponsArray[0][1];
         do
         {
-            v4 = CG_WeaponDObjHandle(v2);
-            Com_SafeClientDObjFree(v4, localClientNum);
+            dobjHandle = CG_WeaponDObjHandle(weaponIndex);
+            Com_SafeClientDObjFree(dobjHandle, localClientNum);
             if (localClientNum)
                 MyAssertHandler(
                     "c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_local.h",
@@ -1615,19 +1618,17 @@ void __cdecl CG_FreeWeapons(int localClientNum)
                     0,
                     "%s\n\t(localClientNum) = %i",
                     "(localClientNum == 0)",
-                    localClientNum);
-            if (*p_tree)
+                    localClientNum);            if (weaponInfo->tree)
             {
-                XAnimFreeTree(*p_tree, 0);
-                *p_tree = 0;
+                XAnimFreeTree(weaponInfo->tree, 0);
+                weaponInfo->tree = 0;
             }
-            ++v2;
-            p_tree += 18;
-        } while (v2 < BG_GetNumWeapons());
+            ++weaponIndex;
+            ++weaponInfo;
+        } while (weaponIndex < BG_GetNumWeapons());
     }
-    memset(cg_weaponsArray[localClientNum], 0, sizeof(weaponInfo_s[128]));
+    memset(cg_weaponsArray[localClientNum], 0, sizeof(cg_weaponsArray[localClientNum]));
 }
-
 void __cdecl CG_Shutdown(int localClientNum)
 {
     int i; // r30
