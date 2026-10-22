@@ -491,12 +491,18 @@ struct GfxLightImage // sizeof=0x8
     // padding byte
 };
 
-struct GfxLightDef // sizeof=0x10
+struct GfxLightDef // sizeof=0x10 on 32-bit builds
 {                                       // ...
     const char* name;
     GfxLightImage attenuation;
     int lmapLookupStart;
 };
+#ifdef __SWITCH__
+static_assert(sizeof(GfxLightImage) == 16, "Switch GfxLightImage must use native pointer layout");
+static_assert(offsetof(GfxLightDef, attenuation) == 8, "Switch GfxLightDef attenuation offset mismatch");
+static_assert(offsetof(GfxLightDef, lmapLookupStart) == 24, "Switch GfxLightDef lookup offset mismatch");
+static_assert(sizeof(GfxLightDef) == 32, "Switch GfxLightDef must use native 64-bit pointer layout");
+#endif
 
 struct GfxLight // sizeof=0x40 on 32-bit builds
 {                                       // ...
