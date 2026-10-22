@@ -323,6 +323,13 @@ struct GfxSurface // sizeof=0x30
     uint8_t flags;
     float bounds[2][3];
 };
+#ifdef __SWITCH__
+static_assert(offsetof(GfxSurface, material) == 16, "Switch GfxSurface material offset mismatch");
+static_assert(offsetof(GfxSurface, bounds) == 28, "Switch GfxSurface bounds offset mismatch");
+static_assert(sizeof(GfxSurface) == 56, "Switch GfxSurface must use native 64-bit pointer layout");
+#else
+static_assert(sizeof(GfxSurface) == 0x30);
+#endif
 
 struct GfxCullGroup // sizeof=0x20
 {
