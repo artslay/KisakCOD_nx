@@ -2104,10 +2104,9 @@ bool PatchFragmentShaderToOutputS0AtCenter(
     uint32_t outputId = 0u;
     uint32_t outputType = 0u;
     uint32_t floatType = 0u;
-    uint32_t vec2Type = 0u;
     uint32_t entryFunctionId = 0u;
     std::vector<std::pair<uint32_t, uint32_t>> pointerTypes;
-    std::vector<std::pair<uint32_t, uint32_t>> vectorTypes;
+
     struct Decoration
     {
         uint32_t id = 0u;
@@ -2129,7 +2128,7 @@ bool PatchFragmentShaderToOutputS0AtCenter(
     static uint32_t loggedSkipCount = 0u;
     const auto logResult = [&](const char *action, uint32_t sampleId,
                                uint32_t sampleType, uint32_t coordType,
-                               uint32_t block)
+                               uint32_t coordComponents, uint32_t block)
     {
         const bool success = std::strcmp(action, "patched_s0_center") == 0;
         if (success)
@@ -2150,19 +2149,19 @@ bool PatchFragmentShaderToOutputS0AtCenter(
         char trace[352];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK PS S0 CENTER TEST] target=%llu actual=%llu action=%s descriptor=%u sample=%u sampleType=%u output=%u outputType=%u coordType=%u vec2Type=%u block=%u\n",
+            "[KisakCOD][VK PS S0 CENTER TEST] target=%llu actual=%llu action=%s descriptor=%u sample=%u sampleType=%u output=%u outputType=%u coordType=%u coordComponents=%u block=%u\n",
             static_cast<unsigned long long>(targetSerial),
             static_cast<unsigned long long>(actualSerial),
             action, descriptorId, sampleId, sampleType, outputId, outputType,
-            coordType, vec2Type, block);
+            coordType, coordComponents, block);
         Switch_LogWrite(trace);
     };
 
     if (words.size() < 5u || words[0] != SpvMagicNumber ||
         words[3] <= 1u || words[3] > 65536u ||
-        words[3] > UINT32_MAX - 2u)
+        words[3] > UINT32_MAX - 3u)
     {
-        logResult("skip_invalid_module", 0u, 0u, 0u, 0u);
+        logResult("skip_invalid_module", 0u, 0u, 0u, 0u, 0u);
         return false;
     }
     const uint32_t bound = words[3];
@@ -2175,7 +2174,7 @@ bool PatchFragmentShaderToOutputS0AtCenter(
         SpvOp op{};
         if (!SpirvIsValidInstruction(words, offset, &wc, &op))
         {
-            logResult("skip_invalid_instruction", 0u, 0u, 0u, 0u);
+            logResult("skip_invalid_instruction", 0u, 0u, 0u, 0u, 0u);
             return false;
         }
         const uint32_t *ins = &words[offset];
@@ -2209,10 +2208,6 @@ bool PatchFragmentShaderToOutputS0AtCenter(
         {
             floatType = ins[1];
         }
-        else if (op == SpvOpTypeVector && wc >= 4u && ins[1] < bound)
-        {
-            vectorTypes.emplace_back(ins[1], ins[2]);
-        }
         else if (op == SpvOpTypePointer && wc >= 4u && ins[1] < bound)
         {
             pointerTypes.emplace_back(ins[1], ins[3]);
@@ -2227,31 +2222,6 @@ bool PatchFragmentShaderToOutputS0AtCenter(
         offset += wc;
     }
 
-    for (const auto &vt : vectorTypes)
-    {
-        if (vt.second == floatType && vt.first != 0u)
-        {
-            // Find the float vec2 by its component count from OpTypeVector.
-            // The component count is recovered in the dedicated pass below.
-        }
-    }
-    // Retain the component count as well; there can be vec2 and vec4 types.
-    for (size_t offset = 5u; offset < words.size();)
-    {
-        uint32_t wc = 0u;
-        SpvOp op{};
-        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
-            return false;
-        const uint32_t *ins = &words[offset];
-        if (op == SpvOpTypeVector && wc >= 4u &&
-            ins[2] == floatType && ins[3] == 2u)
-        {
-            vec2Type = ins[1];
-            break;
-        }
-        offset += wc;
-    }
-
     for (const Variable &v : variables)
     {
         const auto d = std::find_if(
@@ -2262,7 +2232,7 @@ bool PatchFragmentShaderToOutputS0AtCenter(
         {
             if (descriptorId && descriptorId != v.id)
             {
-                logResult("skip_ambiguous_s0", 0u, 0u, 0u, 0u);
+                logResult("skip_ambiguous_s0", 0u, 0u, 0u, 0u, 0u);
                 return false;
             }
             descriptorId = v.id;
@@ -2272,7 +2242,7 @@ bool PatchFragmentShaderToOutputS0AtCenter(
         {
             if (outputId && outputId != v.id)
             {
-                logResult("skip_ambiguous_output", 0u, 0u, 0u, 0u);
+                logResult("skip_ambiguous_output", 0u, 0u, 0u, 0u, 0u);
                 return false;
             }
             outputId = v.id;
@@ -2285,9 +2255,9 @@ bool PatchFragmentShaderToOutputS0AtCenter(
     }
 
     if (!entryFunctionId || !descriptorId || !outputId ||
-        !outputType || !floatType || !vec2Type)
+        !outputType || !floatType)
     {
-        logResult("skip_missing_spirv_interface", 0u, 0u, 0u, 0u);
+        logResult("skip_missing_spirv_interface", 0u, 0u, 0u, 0u, 0u);
         return false;
     }
 
@@ -2308,7 +2278,6 @@ bool PatchFragmentShaderToOutputS0AtCenter(
     uint32_t sampleId = 0u;
     uint32_t sampleType = 0u;
     uint32_t sampleCoordId = 0u;
-    uint32_t sampleCoordType = 0u;
     uint32_t sampleBlock = 0u;
     size_t sampleOffset = SIZE_MAX;
     size_t outputStoreOffset = SIZE_MAX;
@@ -2321,7 +2290,7 @@ bool PatchFragmentShaderToOutputS0AtCenter(
         if (!SpirvIsValidInstruction(words, offset, &wc, &op))
         {
             logResult("skip_invalid_instruction", sampleId, sampleType,
-                      sampleCoordType, sampleBlock);
+                      0u, 0u, sampleBlock);
             return false;
         }
         const uint32_t *ins = &words[offset];
@@ -2377,25 +2346,24 @@ bool PatchFragmentShaderToOutputS0AtCenter(
 
     if (!sampleId || sampleOffset == SIZE_MAX)
     {
-        logResult("skip_no_2d_s0_sample", 0u, 0u, 0u, 0u);
+        logResult("skip_no_2d_s0_sample", 0u, 0u, 0u, 0u, 0u);
         return false;
     }
     if (outputStoreOffset == SIZE_MAX || outputStoreBlock != sampleBlock)
     {
         logResult("skip_no_output_store_after_sample", sampleId, sampleType,
-                  0u, sampleBlock);
+                  0u, 0u, sampleBlock);
         return false;
     }
     if (sampleType != outputType)
     {
         logResult("skip_sample_output_type_mismatch", sampleId, sampleType,
-                  0u, sampleBlock);
+                  0u, 0u, sampleBlock);
         return false;
     }
 
-    // The s0 test only supports an ordinary 2D implicit-LOD sample. Derive the
-    // original coordinate's result type and require that it is float2 before
-    // replacing it with the constant center coordinate.
+    // Determine the result type of the existing coordinate ID.
+    uint32_t sampleCoordType = 0u;
     for (size_t offset = 5u; offset < words.size();)
     {
         uint32_t wc = 0u;
@@ -2403,53 +2371,73 @@ bool PatchFragmentShaderToOutputS0AtCenter(
         if (!SpirvIsValidInstruction(words, offset, &wc, &op))
             return false;
         const uint32_t *ins = &words[offset];
-        if ((op == SpvOpLoad || op == SpvOpCopyObject) && wc >= 4u &&
-            ins[2] == sampleCoordId)
+        const bool resultTypeAndId =
+            op == SpvOpLoad || op == SpvOpCopyObject ||
+            op == SpvOpVectorShuffle || op == SpvOpCompositeConstruct ||
+            op == SpvOpCompositeExtract || op == SpvOpFAdd ||
+            op == SpvOpFSub || op == SpvOpFMul || op == SpvOpFDiv ||
+            op == SpvOpExtInst;
+        if (resultTypeAndId && wc >= 3u && ins[2] == sampleCoordId)
         {
             sampleCoordType = ins[1];
             break;
         }
         offset += wc;
     }
-    // Some frontends produce a coordinate ID directly from a vector operation.
     if (!sampleCoordType)
     {
-        for (size_t offset = 5u; offset < words.size();)
-        {
-            uint32_t wc = 0u;
-            SpvOp op{};
-            if (!SpirvIsValidInstruction(words, offset, &wc, &op))
-                return false;
-            const uint32_t *ins = &words[offset];
-            if ((op == SpvOpVectorShuffle || op == SpvOpCompositeConstruct ||
-                 op == SpvOpCompositeExtract || op == SpvOpFAdd ||
-                 op == SpvOpFMul || op == SpvOpFSub) &&
-                wc >= 3u && ins[2] == sampleCoordId)
-            {
-                sampleCoordType = ins[1];
-                break;
-            }
-            offset += wc;
-        }
-    }
-    if (sampleCoordType != vec2Type)
-    {
-        logResult("skip_s0_coordinates_not_float2", sampleId, sampleType,
-                  sampleCoordType, sampleBlock);
+        logResult("skip_unknown_coordinate_type", sampleId, sampleType,
+                  0u, 0u, sampleBlock);
         return false;
     }
 
-    const uint32_t halfId = bound;
-    const uint32_t centerCoordId = bound + 1u;
-    const uint32_t coordWord[] = {
-        (4u << 16) | static_cast<uint32_t>(SpvOpConstant),
-        floatType, halfId, 0x3f000000u, // 0.5f
-        (5u << 16) | static_cast<uint32_t>(SpvOpConstantComposite),
-        vec2Type, centerCoordId, halfId, halfId
-    };
+    uint32_t coordComponents = 0u;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpTypeVector && wc >= 4u &&
+            ins[1] == sampleCoordType && ins[2] == floatType)
+        {
+            coordComponents = ins[3];
+            break;
+        }
+        offset += wc;
+    }
+    if (coordComponents < 2u || coordComponents > 4u)
+    {
+        logResult("skip_coordinate_not_float_vector", sampleId, sampleType,
+                  sampleCoordType, coordComponents, sampleBlock);
+        return false;
+    }
 
-    // Insert new constants into the module's global constant section before
-    // the first global OpVariable (and therefore before every function).
+    // Construct the coordinate using the original vector type: (0.5, 0.5)
+    // for the 2D UV, and zero for any extra components in legacy shader IR.
+    const uint32_t halfId = bound;
+    const uint32_t zeroId = bound + 1u;
+    const uint32_t centerCoordId = bound + 2u;
+    std::vector<uint32_t> declarations;
+    declarations.reserve(static_cast<size_t>(8u + coordComponents));
+    declarations.push_back((4u << 16) | static_cast<uint32_t>(SpvOpConstant));
+    declarations.push_back(floatType);
+    declarations.push_back(halfId);
+    declarations.push_back(0x3f000000u); // 0.5f
+    declarations.push_back((4u << 16) | static_cast<uint32_t>(SpvOpConstant));
+    declarations.push_back(floatType);
+    declarations.push_back(zeroId);
+    declarations.push_back(0x00000000u); // 0.0f
+    declarations.push_back(((3u + coordComponents) << 16) |
+                           static_cast<uint32_t>(SpvOpConstantComposite));
+    declarations.push_back(sampleCoordType);
+    declarations.push_back(centerCoordId);
+    for (uint32_t component = 0; component < coordComponents; ++component)
+        declarations.push_back(component < 2u ? halfId : zeroId);
+
+    // Insert constants into the global constant section before the first global
+    // variable. This keeps SPIR-V logical section ordering valid.
     size_t insertionOffset = SIZE_MAX;
     bool insideFunction = false;
     for (size_t offset = 5u; offset < words.size();)
@@ -2470,20 +2458,20 @@ bool PatchFragmentShaderToOutputS0AtCenter(
     if (insertionOffset == SIZE_MAX)
     {
         logResult("skip_no_global_variable_section", sampleId, sampleType,
-                  sampleCoordType, sampleBlock);
+                  sampleCoordType, coordComponents, sampleBlock);
         return false;
     }
 
-    // Patch before inserting constants, since insertion changes instruction offsets.
+    // Patch before inserting declarations, because insertion shifts offsets.
     words[sampleOffset + 4u] = centerCoordId;
     words[outputStoreOffset + 2u] = sampleId;
     words.insert(
         words.begin() + static_cast<std::ptrdiff_t>(insertionOffset),
-        std::begin(coordWord), std::end(coordWord));
-    words[3] = bound + 2u;
+        declarations.begin(), declarations.end());
+    words[3] = bound + 3u;
 
     logResult("patched_s0_center", sampleId, sampleType,
-              sampleCoordType, sampleBlock);
+              sampleCoordType, coordComponents, sampleBlock);
     return true;
 }
 
