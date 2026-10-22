@@ -45,6 +45,14 @@ extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
 #include "actor_state.h"
 #include <script/scr_memorytree.h>
 
+// The original 32-bit build used double precision for these timing calculations.
+// Keep the intermediate width explicit on Switch, where long double is 16 bytes.
+static int Scr_RoundSecondsToMilliseconds(float seconds)
+{
+    const float milliseconds = seconds * 1000.0f + 0.5f;
+    return static_cast<int>(floor(static_cast<double>(milliseconds)));
+}
+
 const BuiltinMethodDef methods[104] =
 {
   { "startscriptedanim", ActorCmd_StartScriptedAnim, 0 },
@@ -1500,14 +1508,9 @@ void GScr_GetDvarInt()
 
 void GScr_GetDvarFloat()
 {
-    const char *String; // r3
-    const char *VariantString; // r3
-    long double v2; // fp2
-
-    String = Scr_GetString(0);
-    VariantString = SV_Archived_Dvar_GetVariantString(String);
-    v2 = atof(VariantString);
-    Scr_AddFloat((float)*(double *)&v2);
+    const char *name = Scr_GetString(0);
+    const char *value = SV_Archived_Dvar_GetVariantString(name);
+    Scr_AddFloat(static_cast<float>(atof(value)));
 }
 
 void GScr_GetDebugDvar()
@@ -1543,14 +1546,9 @@ void GScr_GetDebugDvarInt()
 
 void GScr_GetDebugDvarFloat()
 {
-    const char *String; // r3
-    const char *VariantString; // r3
-    long double v2; // fp2
-
-    String = Scr_GetString(0);
-    VariantString = Dvar_GetVariantString(String);
-    v2 = atof(VariantString);
-    Scr_AddFloat((float)*(double *)&v2);
+    const char *name = Scr_GetString(0);
+    const char *value = Dvar_GetVariantString(name);
+    Scr_AddFloat(static_cast<float>(atof(value)));
 }
 
 void GScr_SetDvar()
@@ -5543,91 +5541,46 @@ void Scr_RandomFloatRange()
 
 void GScr_sin()
 {
-    long double v0; // fp2
-    long double v1; // fp2
-
-    *(double *)&v0 = (float)(DEG2RAD( Scr_GetFloat(0) ));
-    v1 = sin(v0);
-    Scr_AddFloat((float)*(double *)&v1);
+    const double radians = static_cast<float>(DEG2RAD(Scr_GetFloat(0)));
+    Scr_AddFloat(static_cast<float>(sin(radians)));
 }
 
 void GScr_cos()
 {
-    long double v0; // fp2
-    long double v1; // fp2
-
-    *(double *)&v0 = (float)(DEG2RAD( Scr_GetFloat(0) ));
-    v1 = cos(v0);
-    Scr_AddFloat((float)*(double *)&v1);
+    const double radians = static_cast<float>(DEG2RAD(Scr_GetFloat(0)));
+    Scr_AddFloat(static_cast<float>(cos(radians)));
 }
 
 void GScr_tan()
 {
-    double v0; // fp31
-    long double v1; // fp2
-    long double v2; // fp2
-    double v3; // fp30
-    long double v4; // fp2
-    double v5; // fp31
-
-    v0 = (float)(DEG2RAD( Scr_GetFloat(0) ));
-    *(double *)&v1 = v0;
-    v2 = sin(v1);
-    v3 = (float)*(double *)&v2;
-    *(double *)&v2 = v0;
-    v4 = cos(v2);
-    v5 = (float)*(double *)&v4;
-    if (v5 == 0.0)
+    const double radians = static_cast<float>(DEG2RAD(Scr_GetFloat(0)));
+    const float sine = static_cast<float>(sin(radians));
+    const float cosine = static_cast<float>(cos(radians));
+    if (cosine == 0.0f)
         Scr_Error("divide by 0");
-    Scr_AddFloat((float)((float)v3 / (float)v5));
+    Scr_AddFloat(sine / cosine);
 }
 
 void GScr_asin()
 {
-    long double v0; // fp2
-    double v1; // fp31
-    const char *v2; // r3
-    long double v3; // fp2
-
-    *(double *)&v0 = Scr_GetFloat(0);
-    v1 = *(double *)&v0;
-    if (*(double *)&v0 < -1.0 || *(double *)&v0 > 1.0)
-    {
-        v2 = va("%g out of range", *(double *)&v0);
-        Scr_Error(v2);
-    }
-    *(double *)&v0 = v1;
-    v3 = asin(v0);
-    Scr_AddFloat((float)RAD2DEG( (float)*(double *)&v3 ));
+    const double value = Scr_GetFloat(0);
+    if (value < -1.0 || value > 1.0)
+        Scr_Error(va("%g out of range", value));
+    Scr_AddFloat(static_cast<float>(RAD2DEG(static_cast<float>(asin(value)))));
 }
 
 void GScr_acos()
 {
-    long double v0; // fp2
-    double v1; // fp31
-    const char *v2; // r3
-    long double v3; // fp2
-
-    *(double *)&v0 = Scr_GetFloat(0);
-    v1 = *(double *)&v0;
-    if (*(double *)&v0 < -1.0 || *(double *)&v0 > 1.0)
-    {
-        v2 = va("%g out of range", *(double *)&v0);
-        Scr_Error(v2);
-    }
-    *(double *)&v0 = v1;
-    v3 = acos(v0);
-    Scr_AddFloat((float)RAD2DEG( (float)*(double *)&v3 ));
+    const double value = Scr_GetFloat(0);
+    if (value < -1.0 || value > 1.0)
+        Scr_Error(va("%g out of range", value));
+    Scr_AddFloat(static_cast<float>(RAD2DEG(static_cast<float>(acos(value)))));
 }
 
 void GScr_atan()
 {
-    long double v0; // fp2
-    long double v1; // fp2
-
-    *(double *)&v0 = Scr_GetFloat(0);
-    v1 = atan(v0);
-    Scr_AddFloat((float)RAD2DEG( (float)*(double *)&v1 ));
+    const double value = Scr_GetFloat(0);
+    Scr_AddFloat(static_cast<float>(RAD2DEG(static_cast<float>(atan(value)))));
 }
 
 void GScr_CastInt()
@@ -5724,22 +5677,12 @@ void GScr_max()
 
 void GScr_floor()
 {
-    long double v0; // fp2
-    long double v1; // fp2
-
-    *(double *)&v0 = Scr_GetFloat(0);
-    v1 = floor(v0);
-    Scr_AddFloat((float)*(double *)&v1);
+    Scr_AddFloat(static_cast<float>(floor(static_cast<double>(Scr_GetFloat(0)))));
 }
 
 void GScr_ceil()
 {
-    long double v0; // fp2
-    long double v1; // fp2
-
-    *(double *)&v0 = Scr_GetFloat(0);
-    v1 = ceil(v0);
-    Scr_AddFloat((float)*(double *)&v1);
+    Scr_AddFloat(static_cast<float>(ceil(static_cast<double>(Scr_GetFloat(0)))));
 }
 
 void GScr_sqrt()
@@ -6230,40 +6173,30 @@ void Scr_MusicPlay()
 
 void Scr_MusicStop()
 {
-    unsigned int NumParam; // r3
-    const char *v1; // r3
-    long double v2; // fp2
-    long double v3; // fp2
-    int v4; // r31
-    const char *v5; // r3
-    const char *v6; // r3
+    unsigned int numParams;
+    int fadeMilliseconds;
+    const char *message;
 
     if (!chaplinCheat->current.enabled || Scr_GetNumParam() >= 2 && Scr_GetInt(1))
     {
-        NumParam = Scr_GetNumParam();
-        if (NumParam)
+        numParams = Scr_GetNumParam();
+        if (numParams)
         {
-            if (NumParam >= 3)
+            if (numParams >= 3)
             {
-                v1 = va("Incorrect number of parameters\n");
-                Scr_Error(v1);
+                message = va("Incorrect number of parameters\n");
+                Scr_Error(message);
                 return;
             }
-            *(double *)&v2 = (float)((float)(Scr_GetFloat(0) * (float)1000.0) + (float)0.5);
-            v3 = floor(v2);
-            v4 = (int)(float)*(double *)&v3;
-            if (v4 < 0)
-            {
-                v5 = va("musicStop: fade time must be >= 0\n");
-                Scr_Error(v5);
-            }
+            fadeMilliseconds = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(0));
+            if (fadeMilliseconds < 0)
+                Scr_Error("musicStop: fade time must be >= 0\n");
         }
         else
         {
-            v4 = 0;
+            fadeMilliseconds = 0;
         }
-        v6 = va("mu_stop %i", v4);
-        SV_GameSendServerCommand(-1, v6);
+        SV_GameSendServerCommand(-1, va("mu_stop %i", fadeMilliseconds));
     }
 }
 
@@ -6528,72 +6461,48 @@ int __cdecl GScr_GetLocSelIndex(const char *mtlName)
 
 void Scr_AmbientPlay()
 {
-    int v0; // r30
-    unsigned int NumParam; // r3
-    const char *v2; // r3
-    long double v3; // fp2
-    long double v4; // fp2
-    const char *name; // r31
+    int fadeMilliseconds = 0;
+    const unsigned int numParams = Scr_GetNumParam();
 
-    v0 = 0;
-    NumParam = Scr_GetNumParam();
-    if (NumParam != 1)
+    if (numParams != 1)
     {
-        if (NumParam != 2)
+        if (numParams != 2)
         {
-            v2 = va("Incorrect number of parameters");
-            Scr_Error(v2);
+            Scr_Error(va("Incorrect number of parameters"));
             return;
         }
-        *(double *)&v3 = (float)((float)(Scr_GetFloat(1) * (float)1000.0) + (float)0.5);
-        v4 = floor(v3);
-        v0 = (int)(float)*(double *)&v4;
+        fadeMilliseconds = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(1));
     }
-    name = Scr_GetString(0);
+
+    const char *name = Scr_GetString(0);
     if (!*name)
-    {
         Scr_Error(va("ambientPlay: alias name cannot be the empty string... use stop or fade version\n"));
-    }
-    if (v0 < 0)
-    {
+    if (fadeMilliseconds < 0)
         Scr_Error(va("ambientPlay: fade time must be >= 0\n"));
-    }
     if (!Com_FindSoundAlias(name))
-    {
         Scr_ParamError(0, va("unknown sound alias '%s'", name));
-    }
-    SV_SetConfigstring(CS_AMBIENT, va("n\\%s\\t\\%i", name, level.time + v0));
+
+    SV_SetConfigstring(CS_AMBIENT, va("n\\%s\\t\\%i", name, level.time + fadeMilliseconds));
 }
 
 void Scr_AmbientStop()
 {
-    unsigned int NumParam; // r3
-    long double v2; // fp2
-    long double v3; // fp2
-    int v4; // r31
+    int fadeMilliseconds = 0;
+    const unsigned int numParams = Scr_GetNumParam();
 
-    NumParam = Scr_GetNumParam();
-    if (NumParam)
+    if (numParams)
     {
-        if (NumParam != 1)
+        if (numParams != 1)
         {
             Scr_Error(va("Incorrect number of parameters\n"));
             return;
         }
-        *(double *)&v2 = (float)((float)(Scr_GetFloat(0) * (float)1000.0) + (float)0.5);
-        v3 = floor(v2);
-        v4 = (int)(float)*(double *)&v3;
-        if (v4 < 0)
-        {
-            Scr_Error(va("ambientStop: fade time must be >= 0\n"));
-        }
-    }
-    else
-    {
-        v4 = 0;
+        fadeMilliseconds = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(0));
+        if (fadeMilliseconds < 0)
+            Scr_Error("ambientStop: fade time must be >= 0\n");
     }
 
-    SV_SetConfigstring(CS_AMBIENT, va("t\\%i", level.time + v4));
+    SV_SetConfigstring(CS_AMBIENT, va("t\\%i", level.time + fadeMilliseconds));
 }
 
 void __cdecl Scr_CheckForSaveErrors(int saveId)
@@ -6923,42 +6832,30 @@ void __cdecl GScr_SightConeTrace(scr_entref_t entref)
 
 void GScr_ChangeLevel()
 {
-    gentity_s *v0; // r31
-    unsigned int NumParam; // r3
-    long double v2; // fp2
-    long double v3; // fp2
-    const char *String; // r30
-    long double v5; // fp2
-    long double v6; // fp2
-
-    v0 = G_Find(0, offsetof(gentity_s, classname), scr_const.player);
-    if (!v0)
+    gentity_s *player = G_Find(0, offsetof(gentity_s, classname), scr_const.player);
+    if (!player)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_scr_main.cpp", 7856, 0, "%s", "player");
-    if (v0->health > 0 && !g_reloading->current.integer)
+    if (player->health <= 0 || g_reloading->current.integer)
+        return;
+
+    const unsigned int numParams = Scr_GetNumParam();
+    if (numParams != 1)
     {
-        NumParam = Scr_GetNumParam();
-        if (NumParam != 1)
+        if (numParams != 2)
         {
-            if (NumParam != 2)
-            {
-                *(double *)&v2 = (float)((float)(Scr_GetFloat(2) * (float)1000.0) + (float)0.5);
-                v3 = floor(v2);
-                level.exitTime = (int)(float)*(double *)&v3;
-                if ((int)(float)*(double *)&v3 < 0)
-                    Scr_ParamError(1u, "exitTime cannot be negative");
-            }
-            level.savepersist = Scr_GetInt(1);
+            level.exitTime = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(2));
+            if (level.exitTime < 0)
+                Scr_ParamError(1u, "exitTime cannot be negative");
         }
-        String = Scr_GetString(0);
-        if (Scr_GetNumParam() > 2 && g_changelevel_time->current.value > 0.0)
-        {
-            *(double *)&v5 = (float)((float)(g_changelevel_time->current.value * (float)1000.0) + (float)0.5);
-            v6 = floor(v5);
-            level.exitTime = (int)(float)*(double *)&v6;
-        }
-        level.changelevel = 1;
-        G_SetNextMap(String);
+        level.savepersist = Scr_GetInt(1);
     }
+
+    const char *mapName = Scr_GetString(0);
+    if (Scr_GetNumParam() > 2 && g_changelevel_time->current.value > 0.0f)
+        level.exitTime = Scr_RoundSecondsToMilliseconds(g_changelevel_time->current.value);
+
+    level.changelevel = 1;
+    G_SetNextMap(mapName);
 }
 
 void GScr_MissionSuccess()
@@ -7054,33 +6951,23 @@ void __cdecl GScr_SetMissionDvar()
 
 void GScr_Cinematic()
 {
-    long double v0; // fp2
-    long double v1; // fp2
-    const char *String; // r30
-    long double v3; // fp2
-    long double v4; // fp2
+    if (g_reloading->current.integer)
+        return;
 
-    if (!g_reloading->current.integer)
+    if (Scr_GetNumParam() != 1)
     {
-        if (Scr_GetNumParam() != 1)
-        {
-            *(double *)&v0 = (float)((float)(Scr_GetFloat(1) * (float)1000.0) + (float)0.5);
-            v1 = floor(v0);
-            level.exitTime = (int)(float)*(double *)&v1;
-            if ((int)(float)*(double *)&v1 < 0)
-                Scr_ParamError(1u, "exitTime cannot be negative");
-        }
-        String = Scr_GetString(0);
-        if (Scr_GetNumParam() > 2 && g_changelevel_time->current.value > 0.0)
-        {
-            *(double *)&v3 = (float)((float)(g_changelevel_time->current.value * (float)1000.0) + (float)0.5);
-            v4 = floor(v3);
-            level.exitTime = (int)(float)*(double *)&v4;
-        }
-        level.changelevel = 1;
-        I_strncpyz(level.cinematic, String, 64);
-        level.bMissionSuccess = 1;
+        level.exitTime = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(1));
+        if (level.exitTime < 0)
+            Scr_ParamError(1u, "exitTime cannot be negative");
     }
+
+    const char *name = Scr_GetString(0);
+    if (Scr_GetNumParam() > 2 && g_changelevel_time->current.value > 0.0f)
+        level.exitTime = Scr_RoundSecondsToMilliseconds(g_changelevel_time->current.value);
+
+    level.changelevel = 1;
+    I_strncpyz(level.cinematic, name, 64);
+    level.bMissionSuccess = 1;
 }
 
 void GScr_CinematicInGame()
@@ -7817,27 +7704,18 @@ skipAxes:
 
 void Scr_TriggerFX()
 {
-    gentity_s *Entity; // r31
-    long double v1; // fp2
-    long double v2; // fp2
-
     if (!Scr_GetNumParam() || Scr_GetNumParam() > 2)
         Scr_Error("Incorrect number of parameters");
-    Entity = Scr_GetEntity(0);
-    if (!Entity)
+    gentity_s *ent = Scr_GetEntity(0);
+    if (!ent)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_scr_main.cpp", 9098, 0, "%s", "ent");
-    if (Entity->s.eType != ET_FX)
+    if (ent->s.eType != ET_FX)
         Scr_ParamError(0, "entity wasn't created with 'newFx'");
+
     if (Scr_GetNumParam() == 2)
-    {
-        *(double *)&v1 = (float)((float)(Scr_GetFloat(1) * (float)1000.0) + (float)0.5);
-        v2 = floor(v1);
-        Entity->s.time2 = (int)(float)*(double *)&v2;
-    }
+        ent->s.time2 = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(1));
     else
-    {
-        Entity->s.time2 = level.time;
-    }
+        ent->s.time2 = level.time;
 }
 
 void Scr_GetFXVis()
@@ -8010,48 +7888,34 @@ void Scr_SetExponentialFog()
 
 void Scr_VisionSetNaked()
 {
-    unsigned int NumParam; // r3
-    long double v1; // fp2
-    long double v2; // fp2
-    int v5; // [sp+50h] [-10h]
-
-    v5 = 1000;
-    NumParam = Scr_GetNumParam();
-    if (NumParam != 1)
+    int transitionMilliseconds = 1000;
+    const unsigned int numParams = Scr_GetNumParam();
+    if (numParams != 1)
     {
-        if (NumParam != 2)
+        if (numParams != 2)
         {
             Scr_Error("USAGE: VisionSetNaked( <visionset name>, <transition time> )\n");
             return;
         }
-        *(double *)&v1 = (float)((float)(Scr_GetFloat(1) * (float)1000.0) + (float)0.5);
-        v2 = floor(v1);
-        v5 = (int)(float)*(double *)&v2;
+        transitionMilliseconds = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(1));
     }
-    SV_SetConfigstring(CS_VISIONSET_NAKED, va("\"%s\" %i", Scr_GetString(0), v5));
+    SV_SetConfigstring(CS_VISIONSET_NAKED, va("\\\"%s\\\" %i", Scr_GetString(0), transitionMilliseconds));
 }
 
 void Scr_VisionSetNight()
 {
-    unsigned int NumParam; // r3
-    long double v1; // fp2
-    long double v2; // fp2
-    int v5; // [sp+50h] [-10h]
-
-    v5 = 1000;
-    NumParam = Scr_GetNumParam();
-    if (NumParam != 1)
+    int transitionMilliseconds = 1000;
+    const unsigned int numParams = Scr_GetNumParam();
+    if (numParams != 1)
     {
-        if (NumParam != 2)
+        if (numParams != 2)
         {
             Scr_Error("USAGE: VisionSetNight( <visionset name>, <transition time> )\n");
             return;
         }
-        *(double *)&v1 = (float)((float)(Scr_GetFloat(1) * (float)1000.0) + (float)0.5);
-        v2 = floor(v1);
-        v5 = (int)(float)*(double *)&v2;
+        transitionMilliseconds = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(1));
     }
-    SV_SetConfigstring(CS_VISIONSET_NIGHT, va("\"%s\" %i", Scr_GetString(0), v5));
+    SV_SetConfigstring(CS_VISIONSET_NIGHT, va("\\\"%s\\\" %i", Scr_GetString(0), transitionMilliseconds));
 }
 
 void Scr_SetCullDist()
