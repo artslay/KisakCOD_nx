@@ -2035,7 +2035,7 @@ uint64_t SwitchPsS0CenterTestTargetSerial()
 
     char *end = nullptr;
     const unsigned long long serial = std::strtoull(value, &end, 0);
-    if (end == value || !end || *end != '\\0' || serial == 0u ||
+    if (end == value || !end || *end != '\0' || serial == 0u ||
         serial > UINT64_MAX)
         return UINT64_MAX;
     return static_cast<uint64_t>(serial);
@@ -6189,7 +6189,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             char trace[192];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=%llu source=%s\\n",
+                "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=%llu source=%s\n",
                 static_cast<unsigned long long>(centerTarget),
                 std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL") ? "env" : "default");
             Switch_LogWrite(trace);
@@ -6201,7 +6201,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             char trace[192];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK PS S0 CENTER TEST] action=target_seen serial=%llu\\n",
+                "[KisakCOD][VK PS S0 CENTER TEST] action=target_seen serial=%llu\n",
                 static_cast<unsigned long long>(m_pixelShader->serial));
             Switch_LogWrite(trace);
         }
