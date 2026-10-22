@@ -36,7 +36,7 @@ struct GfxShadowedLightHistory // sizeof=0x48
     uint32_t lastUpdateTime;
 };
 
-struct GfxShadowGeometry // sizeof=0xC
+struct GfxShadowGeometry // sizeof=0xC on 32-bit builds
 {
     uint16_t surfaceCount;
     uint16_t smodelCount;
@@ -49,18 +49,26 @@ struct GfxLightRegionAxis // sizeof=0x14
     float midPoint;
     float halfSize;
 };
-struct GfxLightRegionHull // sizeof=0x50
+struct GfxLightRegionHull // sizeof=0x50 on 32-bit builds
 {
     float kdopMidPoint[9];
     float kdopHalfSize[9];
     uint32_t axisCount;
     GfxLightRegionAxis *axis;
 };
-struct GfxLightRegion // sizeof=0x8
+struct GfxLightRegion // sizeof=0x8 on 32-bit builds
 {
     uint32_t hullCount;
     GfxLightRegionHull *hulls;
 };
+#ifdef __SWITCH__
+static_assert(offsetof(GfxShadowGeometry, sortedSurfIndex) == 8, "Switch shadow geometry pointer offset mismatch");
+static_assert(sizeof(GfxShadowGeometry) == 24, "Switch shadow geometry must use native pointer layout");
+static_assert(offsetof(GfxLightRegionHull, axis) == 80, "Switch light-region hull pointer offset mismatch");
+static_assert(sizeof(GfxLightRegionHull) == 88, "Switch light-region hull must use native pointer layout");
+static_assert(offsetof(GfxLightRegion, hulls) == 8, "Switch light-region pointer offset mismatch");
+static_assert(sizeof(GfxLightRegion) == 16, "Switch light region must use native pointer layout");
+#endif
 
 void __cdecl R_ClearShadowedPrimaryLightHistory(int localClientNum);
 void __cdecl R_AddDynamicShadowableLight(GfxViewInfo *viewInfo, const GfxLight *visibleLight);
