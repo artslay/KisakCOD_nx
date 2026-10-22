@@ -1174,76 +1174,6 @@ bool VulkanBackend::CreateSwapchain()
         }
     }
 
-    // If the surface only advertises UNORM while claiming an sRGB presentation
-    // colorspace, Vulkan cannot encode linear fragment output on the swapchain
-    // attachment itself. Use a private sRGB color attachment in that case;
-    // EndFrame copies its already encoded texels to the UNORM swapchain.
-    if (m_swapchainColorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR &&
-        m_swapchainFormat != VK_FORMAT_B8G8R8A8_SRGB &&
-        m_swapchainFormat != VK_FORMAT_R8G8B8A8_SRGB)
-    {
-        VkFormat srgbFormat = VK_FORMAT_UNDEFINED;
-        if (m_swapchainFormat == VK_FORMAT_B8G8R8A8_UNORM)
-            srgbFormat = VK_FORMAT_B8G8R8A8_SRGB;
-        else if (m_swapchainFormat == VK_FORMAT_R8G8B8A8_UNORM)
-            srgbFormat = VK_FORMAT_R8G8B8A8_SRGB;
-
-        const VkImageUsageFlags srgbUsage =
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-            VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-            VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        VkImageFormatProperties srgbProperties{};
-        const VkResult srgbSupport = srgbFormat != VK_FORMAT_UNDEFINED
-            ? vkGetPhysicalDeviceImageFormatProperties(
-                  m_physicalDevice, srgbFormat, VK_IMAGE_TYPE_2D,
-                  VK_IMAGE_TILING_OPTIMAL, srgbUsage, 0, &srgbProperties)
-            : VK_ERROR_FORMAT_NOT_SUPPORTED;
-        if (srgbSupport == VK_SUCCESS &&
-            CreateImage2D(
-                m_width, m_height, 1, srgbFormat, srgbUsage,
-                VK_IMAGE_ASPECT_COLOR_BIT,
-                &m_srgbBackbufferImage, &m_srgbBackbufferMemory,
-                &m_srgbBackbufferView))
-        {
-            m_srgbBackbufferFormat = srgbFormat;
-            m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            char gammaTargetTrace[192];
-            std::snprintf(
-                gammaTargetTrace, sizeof(gammaTargetTrace),
-                "[KisakCOD][VK GAMMA BACKBUFFER] active=1 format=%u "
-                "swapchainFormat=%u size=%ux%u\n",
-                static_cast<unsigned>(srgbFormat),
-                static_cast<unsigned>(m_swapchainFormat),
-                m_width, m_height);
-            Switch_LogWrite(gammaTargetTrace);
-        }
-        else
-        {
-            char gammaTargetTrace[192];
-            std::snprintf(
-                gammaTargetTrace, sizeof(gammaTargetTrace),
-                "[KisakCOD][VK GAMMA BACKBUFFER] active=0 format=%u "
-                "swapchainFormat=%u supportResult=%d\n",
-                static_cast<unsigned>(srgbFormat),
-                static_cast<unsigned>(m_swapchainFormat),
-                static_cast<int>(srgbSupport));
-            Switch_LogWrite(gammaTargetTrace);
-            m_srgbBackbufferImage = VK_NULL_HANDLE;
-            m_srgbBackbufferMemory = VK_NULL_HANDLE;
-            m_srgbBackbufferView = VK_NULL_HANDLE;
-            m_srgbBackbufferFormat = VK_FORMAT_UNDEFINED;
-            m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        }
-    }
-    else
-    {
-        m_srgbBackbufferImage = VK_NULL_HANDLE;
-        m_srgbBackbufferMemory = VK_NULL_HANDLE;
-        m_srgbBackbufferView = VK_NULL_HANDLE;
-        m_srgbBackbufferFormat = VK_FORMAT_UNDEFINED;
-        m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    }
-
     VkSemaphoreCreateInfo renderFinishedInfo{};
     renderFinishedInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     m_renderFinishedSemaphores.assign(count, VK_NULL_HANDLE);
@@ -1861,93 +1791,31 @@ bool VulkanBackend::EndFrame()
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             VK_IMAGE_ASPECT_COLOR_BIT);
 
-        if (m_srgbBackbufferImage)
-        {
-            // Encode an UNORM offscreen present source by blitting into the sRGB
-            // attachment, then copy those encoded bytes into the UNORM swapchain.
-            TransitionImage(
-                m_srgbBackbufferImage,
-                m_srgbBackbufferLayout,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_IMAGE_ASPECT_COLOR_BIT);
+        TransitionImage(
+            swapImage,
+            m_swapchainLayouts[m_swapchainIndex],
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
 
-            VkImageBlit encodeBlit{};
-            encodeBlit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            encodeBlit.srcSubresource.layerCount = 1;
-            encodeBlit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            encodeBlit.dstSubresource.layerCount = 1;
-            encodeBlit.srcOffsets[0] = {0, 0, 0};
-            encodeBlit.srcOffsets[1] = {
-                static_cast<int32_t>(m_presentSourceWidth),
-                static_cast<int32_t>(m_presentSourceHeight), 1};
-            encodeBlit.dstOffsets[0] = {0, 0, 0};
-            encodeBlit.dstOffsets[1] = {
-                static_cast<int32_t>(m_width),
-                static_cast<int32_t>(m_height), 1};
-            vkCmdBlitImage(
-                m_commandBuffer,
-                m_presentSourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                m_srgbBackbufferImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1, &encodeBlit, VK_FILTER_LINEAR);
+        VkImageBlit blit{};
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.layerCount = 1;
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.layerCount = 1;
+        blit.srcOffsets[0] = {0, 0, 0};
+        blit.srcOffsets[1] = {
+            static_cast<int32_t>(m_presentSourceWidth),
+            static_cast<int32_t>(m_presentSourceHeight), 1};
+        blit.dstOffsets[0] = {0, 0, 0};
+        blit.dstOffsets[1] = {
+            static_cast<int32_t>(m_width),
+            static_cast<int32_t>(m_height), 1};
 
-            TransitionImage(
-                m_srgbBackbufferImage,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                VK_IMAGE_ASPECT_COLOR_BIT);
-            TransitionImage(
-                swapImage,
-                m_swapchainLayouts[m_swapchainIndex],
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_IMAGE_ASPECT_COLOR_BIT);
-
-            VkImageCopy encodedCopy{};
-            encodedCopy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            encodedCopy.srcSubresource.layerCount = 1;
-            encodedCopy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            encodedCopy.dstSubresource.layerCount = 1;
-            encodedCopy.extent = {m_width, m_height, 1};
-            vkCmdCopyImage(
-                m_commandBuffer,
-                m_srgbBackbufferImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1, &encodedCopy);
-
-            TransitionImage(
-                m_srgbBackbufferImage,
-                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_IMAGE_ASPECT_COLOR_BIT);
-            m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        }
-        else
-        {
-            TransitionImage(
-                swapImage,
-                m_swapchainLayouts[m_swapchainIndex],
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_IMAGE_ASPECT_COLOR_BIT);
-
-            VkImageBlit blit{};
-            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blit.srcSubresource.layerCount = 1;
-            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blit.dstSubresource.layerCount = 1;
-            blit.srcOffsets[0] = {0, 0, 0};
-            blit.srcOffsets[1] = {
-                static_cast<int32_t>(m_presentSourceWidth),
-                static_cast<int32_t>(m_presentSourceHeight), 1};
-            blit.dstOffsets[0] = {0, 0, 0};
-            blit.dstOffsets[1] = {
-                static_cast<int32_t>(m_width),
-                static_cast<int32_t>(m_height), 1};
-
-            vkCmdBlitImage(
-                m_commandBuffer,
-                m_presentSourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1, &blit, VK_FILTER_LINEAR);
-        }
+        vkCmdBlitImage(
+            m_commandBuffer,
+            m_presentSourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &blit, VK_FILTER_LINEAR);
 
         // The compatibility render target remains in COLOR_ATTACHMENT_OPTIMAL
         // between frames. Restore its tracked layout after the present blit.
@@ -1957,47 +1825,6 @@ bool VulkanBackend::EndFrame()
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_IMAGE_ASPECT_COLOR_BIT);
 
-        TransitionImage(
-            swapImage,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            VK_IMAGE_ASPECT_COLOR_BIT);
-        m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    }
-    else if (m_srgbBackbufferImage && m_backbufferClearedThisFrame)
-    {
-        // Direct-to-backbuffer rendering uses the sRGB attachment above. Its
-        // stored texels are already display-encoded, so copy rather than blit:
-        // blitting sRGB into UNORM would decode them and reintroduce the dark frame.
-        TransitionImage(
-            m_srgbBackbufferImage,
-            m_srgbBackbufferLayout,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
-        TransitionImage(
-            swapImage,
-            m_swapchainLayouts[m_swapchainIndex],
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
-
-        VkImageCopy encodedCopy{};
-        encodedCopy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        encodedCopy.srcSubresource.layerCount = 1;
-        encodedCopy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        encodedCopy.dstSubresource.layerCount = 1;
-        encodedCopy.extent = {m_width, m_height, 1};
-        vkCmdCopyImage(
-            m_commandBuffer,
-            m_srgbBackbufferImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &encodedCopy);
-
-        TransitionImage(
-            m_srgbBackbufferImage,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
-        m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         TransitionImage(
             swapImage,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -2153,12 +1980,12 @@ void VulkanBackend::Clear(float r, float g, float b, float a)
         return;
 
     const bool hasPresentSource = m_presentSourceImage && m_presentSourceView;
-    const VkImage colorImage = hasPresentSource ? m_presentSourceImage : CurrentBackbufferImage();
-    const VkImageView colorView = hasPresentSource ? m_presentSourceView : CurrentBackbufferView();
-    const VkFormat colorFormat = hasPresentSource ? m_presentSourceFormat : CurrentBackbufferFormat();
+    const VkImage colorImage = hasPresentSource ? m_presentSourceImage : CurrentSwapchainImage();
+    const VkImageView colorView = hasPresentSource ? m_presentSourceView : CurrentSwapchainView();
+    const VkFormat colorFormat = hasPresentSource ? m_presentSourceFormat : m_swapchainFormat;
     const VkImageLayout colorLayout = hasPresentSource
         ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        : CurrentBackbufferLayout();
+        : CurrentSwapchainLayout();
     const uint32_t width = hasPresentSource ? m_presentSourceWidth : m_width;
     const uint32_t height = hasPresentSource ? m_presentSourceHeight : m_height;
 
@@ -2401,7 +2228,7 @@ bool VulkanBackend::GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_
     if (height)
         *height = m_height;
     if (format)
-        *format = static_cast<uint32_t>(CurrentBackbufferFormat());
+        *format = static_cast<uint32_t>(m_swapchainFormat);
     return m_swapchain != VK_NULL_HANDLE && !m_swapchainImages.empty();
 }
 
@@ -3887,8 +3714,8 @@ bool VulkanBackend::EnsureRendering(
         colorOldLayout,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_ASPECT_COLOR_BIT);
-    if (colorImage == CurrentBackbufferImage())
-        SetCurrentBackbufferLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    if (colorImage == CurrentSwapchainImage())
+        m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     if (depthImage && depthView)
     {
@@ -3909,7 +3736,7 @@ bool VulkanBackend::EnsureRendering(
     }
 
     const bool clearUninitializedColor = colorOldLayout == VK_IMAGE_LAYOUT_UNDEFINED;
-    const bool clearBackbuffer = colorImage == CurrentBackbufferImage() && !m_backbufferClearedThisFrame;
+    const bool clearBackbuffer = colorImage == CurrentSwapchainImage() && !m_backbufferClearedThisFrame;
 
     VkRenderingAttachmentInfo color{};
     color.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
