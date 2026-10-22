@@ -5760,7 +5760,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS COLOR TEST] action=armed target=%s source=%s\\n",
+                    "[KisakCOD][VK PS COLOR TEST] action=armed target=%s source=%s\n",
                     targetLabel,
                     std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL") ? "env" : "default");
             }
@@ -5768,7 +5768,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS COLOR TEST] action=armed target=%llu source=env\\n",
+                    "[KisakCOD][VK PS COLOR TEST] action=armed target=%llu source=env\n",
                     static_cast<unsigned long long>(targetSerial));
             }
             Switch_LogWrite(trace);
@@ -5787,7 +5787,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 char trace[224];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS COLOR TEST] action=target_seen serial=%llu scope=%s\\n",
+                    "[KisakCOD][VK PS COLOR TEST] action=target_seen serial=%llu scope=%s\n",
                     static_cast<unsigned long long>(actualSerial),
                     targetSerial == 0u ? "all_s0_s3" : "serial");
                 Switch_LogWrite(trace);
