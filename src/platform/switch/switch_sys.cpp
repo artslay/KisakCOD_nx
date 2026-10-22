@@ -1820,6 +1820,7 @@ extern "C" __attribute__((noinline)) void *__wrap_malloc(size_t size)
             ? caller - reinterpret_cast<uintptr_t>(__code_start) : UINTPTR_MAX;
     const bool auditBin4 =
         size <= 24u ||
+        auditCallerOffset == 0x38d774u ||
         (auditCallerOffset >= 0x600000u && auditCallerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
@@ -1855,6 +1856,7 @@ extern "C" __attribute__((noinline)) void __wrap_free(void *pointer)
     const uintptr_t auditSequence =
         __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
     const bool auditBin4 =
+        callerOffset == 0x38d774u ||
         (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
@@ -1895,6 +1897,7 @@ extern "C" __attribute__((noinline)) void *__wrap_calloc(
         __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
     const bool auditBin4 =
         bytes <= 24u ||
+        callerOffset == 0x38d774u ||
         (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
@@ -1957,6 +1960,7 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
     const uintptr_t auditSequence =
         __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
     const bool auditBin4 =
+        callerOffset == 0x38d774u ||
         (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
