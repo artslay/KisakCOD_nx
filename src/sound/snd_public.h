@@ -187,9 +187,12 @@ struct LoadedSound // sizeof=0x2C
     const char *name;
     MssSoundCOD4 sound;
 };
-#ifndef __SWITCH__
+#ifdef __SWITCH__
+static_assert(sizeof(_AILSOUNDINFO_COD4) == 48, "Switch sound info must use native pointer layout");
+static_assert(sizeof(MssSoundCOD4) == 56, "Switch MSS sound must use native pointer layout");
+static_assert(sizeof(LoadedSound) == 64, "Switch LoadedSound must use native 64-bit pointer layout");
+#else
 static_assert(sizeof(LoadedSound) == 44);
-
 #endif
 struct StreamFileNameRaw // sizeof=0x8
 {                                       // ...
