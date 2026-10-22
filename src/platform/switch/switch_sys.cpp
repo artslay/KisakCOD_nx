@@ -822,7 +822,10 @@ static void Switch_HeapTraceReportBin4Fault(
     }
 
     const uintptr_t zMallocPointer = g_switchHeapZMallocProbePointer;
-    const uintptr_t zMallocMatches = zMallocPointer == probeGoodResult;
+    const uintptr_t zMallocAdjacentMatch =
+        zMallocPointer != 0u &&
+        zMallocPointer <= UINTPTR_MAX - 0x60u &&
+        zMallocPointer + 0x60u == node;
     const uintptr_t zMallocOwnerOffset = g_switchHeapZMallocProbeOwnerOffset;
     const uintptr_t zMallocRequested = g_switchHeapZMallocProbeRequested;
     const uintptr_t zMallocType = g_switchHeapZMallocProbeType;
@@ -851,7 +854,7 @@ static void Switch_HeapTraceReportBin4Fault(
         "probeGoodResult=0x%016llx "
         "probeGoodRootFd=0x%016llx probeGoodRootBk=0x%016llx "
         "probeGoodHead=0x%016llx probeGoodFd=0x%016llx "
-        "probeGoodBk=0x%016llx zMallocMatch=%llu "
+        "probeGoodBk=0x%016llx zMallocAdjacentMatch=%llu "
         "zMallocPtr=0x%016llx zMallocReq=%llu zMallocType=%llu "
         "zMallocOwnerOff=0x%llx zMallocStage=%c "
         "zBeforePrev=0x%016llx zBeforeHead=0x%016llx "
@@ -900,7 +903,7 @@ static void Switch_HeapTraceReportBin4Fault(
         static_cast<unsigned long long>(probeGoodHead),
         static_cast<unsigned long long>(probeGoodFd),
         static_cast<unsigned long long>(probeGoodBk),
-        static_cast<unsigned long long>(zMallocMatches),
+        static_cast<unsigned long long>(zMallocAdjacentMatch),
         static_cast<unsigned long long>(zMallocPointer),
         static_cast<unsigned long long>(zMallocRequested),
         static_cast<unsigned long long>(zMallocType),
