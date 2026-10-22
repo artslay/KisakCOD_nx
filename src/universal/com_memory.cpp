@@ -27,6 +27,9 @@
 #include <switch.h>
 #include <switch/kernel/virtmem.h>
 extern void Switch_LogWrite(const char *msg);
+#if defined(KISAK_SWITCH_HEAP_TRACE)
+extern "C" void Switch_HeapTraceProbeZMalloc(void *pointer, size_t size, char stage);
+#endif
 extern void __cdecl R_ShutdownImagesForHunkClear();
 #endif
 struct HunkUser
@@ -1738,7 +1741,15 @@ static uint32_t* __cdecl Z_TryMalloc(int32_t size, const char* name, int32_t typ
 
     buf = (uint32_t*)Z_TryMallocGarbage(size, name, type);
     if (buf)
+    {
+#if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
+        Switch_HeapTraceProbeZMalloc(buf, static_cast<size_t>(size), 'B');
+#endif
         Com_Memset(buf, 0, size);
+#if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
+        Switch_HeapTraceProbeZMalloc(buf, static_cast<size_t>(size), 'A');
+#endif
+    }
     return buf;
 }
 
