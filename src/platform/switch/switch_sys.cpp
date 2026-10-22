@@ -593,6 +593,30 @@ static uintptr_t g_switchHeapBin4AuditLastResult = 0u;
 static uintptr_t g_switchHeapBin4AuditLastNodeCount = 0u;
 static uintptr_t g_switchHeapBin4AuditLastThreadId = 0u;
 
+struct SwitchHeapBin4ProbeEvent
+{
+    uintptr_t sequence;
+    uintptr_t traceNext;
+    uintptr_t phase;
+    uintptr_t operation;
+    uintptr_t callerOffset;
+    uintptr_t argument;
+    uintptr_t requested;
+    uintptr_t result;
+    uintptr_t threadId;
+    uintptr_t rootFd;
+    uintptr_t rootBk;
+    uintptr_t firstHead;
+    uintptr_t firstFd;
+    uintptr_t firstBk;
+    uintptr_t readableMask;
+};
+
+static constexpr uintptr_t kSwitchHeapBin4ProbeCount = 256u;
+static SwitchHeapBin4ProbeEvent
+    g_switchHeapBin4ProbeEvents[kSwitchHeapBin4ProbeCount]{};
+static uintptr_t g_switchHeapBin4ProbeNext = 0u;
+
 struct SwitchHeapAuditMemoryRange
 {
     uintptr_t begin;
@@ -745,6 +769,82 @@ static void Switch_HeapTraceReportBin4Fault(
         static_cast<unsigned long long>(lastResult),
         static_cast<unsigned long long>(lastNodeCount));
     Switch_LogCrashLine(line);
+
+    // The lightweight probe runs at every malloc/free/calloc/realloc boundary.
+    // Dump its ring so we can identify the exact operation at which the bin's
+    // front node changed from valid to malformed, even if it was not caught by
+    // a full list walk until later.
+    constexpr uintptr_t kProbeHistoryCount = 64u;
+    const uintptr_t probeEnd =
+        __atomic_load_n(&g_switchHeapBin4ProbeNext, __ATOMIC_ACQUIRE);
+    const uintptr_t probeBegin =
+        probeEnd > kProbeHistoryCount ? probeEnd - kProbeHistoryCount : 0u;
+    for (uintptr_t sequence = probeBegin; sequence < probeEnd; ++sequence)
+    {
+        const SwitchHeapBin4ProbeEvent &event =
+            g_switchHeapBin4ProbeEvents[sequence & (kSwitchHeapBin4ProbeCount - 1u)];
+        const uintptr_t firstSequence =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (firstSequence != sequence + 1u)
+            continue;
+        const uintptr_t traceNext =
+            __atomic_load_n(&event.traceNext, __ATOMIC_RELAXED);
+        const uintptr_t eventPhase =
+            __atomic_load_n(&event.phase, __ATOMIC_RELAXED);
+        const uintptr_t eventOperation =
+            __atomic_load_n(&event.operation, __ATOMIC_RELAXED);
+        const uintptr_t eventCallerOffset =
+            __atomic_load_n(&event.callerOffset, __ATOMIC_RELAXED);
+        const uintptr_t eventArgument =
+            __atomic_load_n(&event.argument, __ATOMIC_RELAXED);
+        const uintptr_t eventRequested =
+            __atomic_load_n(&event.requested, __ATOMIC_RELAXED);
+        const uintptr_t eventResult =
+            __atomic_load_n(&event.result, __ATOMIC_RELAXED);
+        const uintptr_t eventThreadId =
+            __atomic_load_n(&event.threadId, __ATOMIC_RELAXED);
+        const uintptr_t rootFd =
+            __atomic_load_n(&event.rootFd, __ATOMIC_RELAXED);
+        const uintptr_t rootBk =
+            __atomic_load_n(&event.rootBk, __ATOMIC_RELAXED);
+        const uintptr_t firstHead =
+            __atomic_load_n(&event.firstHead, __ATOMIC_RELAXED);
+        const uintptr_t firstFd =
+            __atomic_load_n(&event.firstFd, __ATOMIC_RELAXED);
+        const uintptr_t firstBk =
+            __atomic_load_n(&event.firstBk, __ATOMIC_RELAXED);
+        const uintptr_t readableMask =
+            __atomic_load_n(&event.readableMask, __ATOMIC_RELAXED);
+        const uintptr_t secondSequence =
+            __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
+        if (firstSequence != secondSequence)
+            continue;
+
+        char probeLine[448];
+        std::snprintf(
+            probeLine, sizeof(probeLine),
+            "[KisakCOD][HEAP BIN4 PROBE] n=%llu traceNext=%llu "
+            "phase=%c op=%c tid=%llu callerOff=0x%llx "
+            "argument=0x%016llx requested=%llu result=0x%016llx "
+            "rootFd=0x%016llx rootBk=0x%016llx readable=%llu "
+            "head=0x%016llx fd=0x%016llx bk=0x%016llx\n",
+            static_cast<unsigned long long>(sequence),
+            static_cast<unsigned long long>(traceNext),
+            static_cast<char>(eventPhase),
+            static_cast<char>(eventOperation),
+            static_cast<unsigned long long>(eventThreadId),
+            static_cast<unsigned long long>(eventCallerOffset),
+            static_cast<unsigned long long>(eventArgument),
+            static_cast<unsigned long long>(eventRequested),
+            static_cast<unsigned long long>(eventResult),
+            static_cast<unsigned long long>(rootFd),
+            static_cast<unsigned long long>(rootBk),
+            static_cast<unsigned long long>(readableMask),
+            static_cast<unsigned long long>(firstHead),
+            static_cast<unsigned long long>(firstFd),
+            static_cast<unsigned long long>(firstBk));
+        Switch_LogCrashLine(probeLine);
+    }
 
     // Preserve a short chronological allocator tail around the first bad bin
     // observation. If the bin is corrupt at phase B, the current call did not
@@ -923,10 +1023,49 @@ static void Switch_HeapTraceProbeBin4Head(
             &g_switchHeapBin4AuditReported, __ATOMIC_ACQUIRE) != 0u)
         return;
 
+    const uintptr_t codeBase = reinterpret_cast<uintptr_t>(__code_start);
+    const uintptr_t callerOffset =
+        caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
     const uintptr_t sentinel =
         reinterpret_cast<uintptr_t>(&__malloc_av_[8]);
     SwitchHeapBin4AuditChunk root{};
-    if (!Switch_HeapTraceReadBin4AuditChunk(sentinel, &root))
+    SwitchHeapBin4AuditChunk first{};
+    const bool rootReadable =
+        Switch_HeapTraceReadBin4AuditChunk(sentinel, &root);
+    bool firstReadable = false;
+    if (rootReadable && root.fd != sentinel && root.fd != 0u &&
+        (root.fd & (alignof(uintptr_t) - 1u)) == 0u)
+    {
+        firstReadable = Switch_HeapTraceReadBin4AuditChunk(root.fd, &first);
+    }
+
+    u64 threadId = 0u;
+    (void)svcGetThreadId(&threadId, CUR_THREAD_HANDLE);
+    const uintptr_t probeSequence = __atomic_fetch_add(
+        &g_switchHeapBin4ProbeNext, static_cast<uintptr_t>(1), __ATOMIC_RELAXED);
+    SwitchHeapBin4ProbeEvent &event =
+        g_switchHeapBin4ProbeEvents[probeSequence & (kSwitchHeapBin4ProbeCount - 1u)];
+    __atomic_store_n(&event.sequence, static_cast<uintptr_t>(0), __ATOMIC_RELEASE);
+    __atomic_store_n(&event.traceNext,
+        __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_ACQUIRE), __ATOMIC_RELAXED);
+    __atomic_store_n(&event.phase, static_cast<uintptr_t>(phase), __ATOMIC_RELAXED);
+    __atomic_store_n(&event.operation, static_cast<uintptr_t>(operation), __ATOMIC_RELAXED);
+    __atomic_store_n(&event.callerOffset, callerOffset, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.argument, argument, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.requested, requested, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.result, result, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.threadId, static_cast<uintptr_t>(threadId), __ATOMIC_RELAXED);
+    __atomic_store_n(&event.rootFd, rootReadable ? root.fd : 0u, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.rootBk, rootReadable ? root.bk : 0u, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.firstHead, firstReadable ? first.head : 0u, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.firstFd, firstReadable ? first.fd : 0u, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.firstBk, firstReadable ? first.bk : 0u, __ATOMIC_RELAXED);
+    __atomic_store_n(&event.readableMask,
+        static_cast<uintptr_t>((rootReadable ? 1u : 0u) | (firstReadable ? 2u : 0u)),
+        __ATOMIC_RELAXED);
+    __atomic_store_n(&event.sequence, probeSequence + 1u, __ATOMIC_RELEASE);
+
+    if (!rootReadable)
     {
         Switch_HeapTraceAuditBin4(
             phase, operation, caller, argument, requested, result);
@@ -934,11 +1073,7 @@ static void Switch_HeapTraceProbeBin4Head(
     }
     if (root.fd == sentinel)
         return;
-
-    SwitchHeapBin4AuditChunk first{};
-    if (root.fd == 0u ||
-        (root.fd & (alignof(uintptr_t) - 1u)) != 0u ||
-        !Switch_HeapTraceReadBin4AuditChunk(root.fd, &first))
+    if (!firstReadable)
     {
         Switch_HeapTraceAuditBin4(
             phase, operation, caller, argument, requested, result);
