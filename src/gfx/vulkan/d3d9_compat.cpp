@@ -3718,8 +3718,8 @@ HRESULT IDirect3DDevice9::StretchRect(
     }
     else if (source->defaultFramebuffer)
     {
-        srcImage = m_backend->CurrentSwapchainImage();
-        srcOldLayout = m_backend->CurrentSwapchainLayout();
+        srcImage = m_backend->CurrentBackbufferImage();
+        srcOldLayout = m_backend->CurrentBackbufferLayout();
         uint32_t srcFormat = 0;
         if (!m_backend->GetBackBufferDesc(&srcW, &srcH, &srcFormat) || !srcImage)
             return E_FAIL;
@@ -3836,7 +3836,7 @@ HRESULT IDirect3DDevice9::StretchRect(
     }
     else if (source->defaultFramebuffer)
     {
-        m_backend->SetCurrentSwapchainLayout(srcOldLayout);
+        m_backend->SetCurrentBackbufferLayout(srcOldLayout);
     }
     dst->SetSubresourceLayout(dstLevel, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     dst->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -5415,7 +5415,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     // Dynamic-rendering pipelines are compatible only with their attachment
     // formats; resolve them before attempting to reuse a cached pipeline.
     const VkFormat colorFormat = m_color && m_color->texture
-        ? m_color->texture->format : m_backend->SwapchainFormat();
+        ? m_color->texture->format : m_backend->CurrentBackbufferFormat();
     const VkFormat depthFormat = m_depth && m_depth->texture
         ? m_depth->texture->format : m_backend->DepthFormat();
     const VkSampleCountFlagBits colorSamples = m_color && m_color->texture
@@ -6999,11 +6999,11 @@ bool IDirect3DDevice9::PrepareDraw()
     }
 
     VkImage colorImage = m_color && m_color->texture
-        ? m_color->texture->image : m_backend->CurrentSwapchainImage();
+        ? m_color->texture->image : m_backend->CurrentBackbufferImage();
     VkImageView colorView = m_color && m_color->texture
-        ? m_color->texture->view : m_backend->CurrentSwapchainView();
+        ? m_color->texture->view : m_backend->CurrentBackbufferView();
     VkFormat colorFormat = m_color && m_color->texture
-        ? m_color->texture->format : m_backend->SwapchainFormat();
+        ? m_color->texture->format : m_backend->CurrentBackbufferFormat();
 
     VkImage depthImage = m_depth && m_depth->texture
         ? m_depth->texture->image : m_backend->DefaultDepthImage();
@@ -7121,7 +7121,7 @@ bool IDirect3DDevice9::PrepareDraw()
     const VkImageLayout colorOldLayout =
         m_color && m_color->texture
             ? m_color->texture->GetSubresourceLayout(m_color->level)
-            : m_backend->CurrentSwapchainLayout();
+            : m_backend->CurrentBackbufferLayout();
     const VkImageLayout depthOldLayout =
         m_depth && m_depth->texture
             ? m_depth->texture->GetSubresourceLayout(m_depth->level)
@@ -8031,14 +8031,14 @@ HRESULT IDirect3DDevice9::Clear(
         ? m_color->texture->resolveLayout : VK_IMAGE_LAYOUT_UNDEFINED;
 
     if (m_backend->EnsureRendering(
-            m_color && m_color->texture ? m_color->texture->image : m_backend->CurrentSwapchainImage(),
-            m_color && m_color->texture ? m_color->texture->view : m_backend->CurrentSwapchainView(),
-            m_color && m_color->texture ? m_color->texture->format : m_backend->SwapchainFormat(),
+            m_color && m_color->texture ? m_color->texture->image : m_backend->CurrentBackbufferImage(),
+            m_color && m_color->texture ? m_color->texture->view : m_backend->CurrentBackbufferView(),
+            m_color && m_color->texture ? m_color->texture->format : m_backend->CurrentBackbufferFormat(),
             m_depth && m_depth->texture ? m_depth->texture->image : m_backend->DefaultDepthImage(),
             m_depth && m_depth->texture ? m_depth->texture->view : m_backend->DefaultDepthView(),
             depthFormat, depthAspect,
             resolveImage, resolveView, resolveOldLayout,
-            m_color && m_color->texture ? m_color->texture->layout : m_backend->CurrentSwapchainLayout(),
+            m_color && m_color->texture ? m_color->texture->layout : m_backend->CurrentBackbufferLayout(),
             m_depth && m_depth->texture ? m_depth->texture->layout : m_backend->DefaultDepthLayout(),
             targetWidth, targetHeight))
     {
