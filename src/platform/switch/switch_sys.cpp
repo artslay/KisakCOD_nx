@@ -737,6 +737,9 @@ static void Switch_HeapTraceReportBin4Fault(
     uintptr_t probeGoodOperation = 0u;
     uintptr_t probeGoodThread = 0u;
     uintptr_t probeGoodCaller = 0u;
+    uintptr_t probeGoodArgument = 0u;
+    uintptr_t probeGoodRequested = 0u;
+    uintptr_t probeGoodResult = 0u;
     uintptr_t probeGoodRootFd = 0u;
     uintptr_t probeGoodRootBk = 0u;
     uintptr_t probeGoodHead = 0u;
@@ -773,6 +776,12 @@ static void Switch_HeapTraceReportBin4Fault(
             __atomic_load_n(&event.threadId, __ATOMIC_RELAXED);
         const uintptr_t eventCaller =
             __atomic_load_n(&event.callerOffset, __ATOMIC_RELAXED);
+        const uintptr_t eventArgument =
+            __atomic_load_n(&event.argument, __ATOMIC_RELAXED);
+        const uintptr_t eventRequested =
+            __atomic_load_n(&event.requested, __ATOMIC_RELAXED);
+        const uintptr_t eventResult =
+            __atomic_load_n(&event.result, __ATOMIC_RELAXED);
         const uintptr_t secondSequence =
             __atomic_load_n(&event.sequence, __ATOMIC_ACQUIRE);
         if (firstSequence != secondSequence || (readableMask & 1u) == 0u)
@@ -789,6 +798,9 @@ static void Switch_HeapTraceReportBin4Fault(
         probeGoodOperation = eventOperation;
         probeGoodThread = eventThread;
         probeGoodCaller = eventCaller;
+        probeGoodArgument = eventArgument;
+        probeGoodRequested = eventRequested;
+        probeGoodResult = eventResult;
         probeGoodRootFd = eventRootFd;
         probeGoodRootBk = eventRootBk;
         probeGoodHead = eventHead;
@@ -812,6 +824,8 @@ static void Switch_HeapTraceReportBin4Fault(
         "lastGoodNodes=%llu probeV=1 probeCount=%llu "
         "probeGoodN=%llu probeGoodTrace=%llu probeGoodPhase=%c "
         "probeGoodOp=%c probeGoodTid=%llu probeGoodCaller=0x%llx "
+        "probeGoodArg=0x%016llx probeGoodReq=%llu "
+        "probeGoodResult=0x%016llx "
         "probeGoodRootFd=0x%016llx probeGoodRootBk=0x%016llx "
         "probeGoodHead=0x%016llx probeGoodFd=0x%016llx "
         "probeGoodBk=0x%016llx\n",
@@ -851,6 +865,9 @@ static void Switch_HeapTraceReportBin4Fault(
         static_cast<char>(probeGoodOperation ? probeGoodOperation : '-'),
         static_cast<unsigned long long>(probeGoodThread),
         static_cast<unsigned long long>(probeGoodCaller),
+        static_cast<unsigned long long>(probeGoodArgument),
+        static_cast<unsigned long long>(probeGoodRequested),
+        static_cast<unsigned long long>(probeGoodResult),
         static_cast<unsigned long long>(probeGoodRootFd),
         static_cast<unsigned long long>(probeGoodRootBk),
         static_cast<unsigned long long>(probeGoodHead),
