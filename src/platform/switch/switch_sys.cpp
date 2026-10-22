@@ -591,6 +591,7 @@ static uintptr_t g_switchHeapBin4AuditLastArgument = 0u;
 static uintptr_t g_switchHeapBin4AuditLastRequested = 0u;
 static uintptr_t g_switchHeapBin4AuditLastResult = 0u;
 static uintptr_t g_switchHeapBin4AuditLastNodeCount = 0u;
+static uintptr_t g_switchHeapBin4AuditLastThreadId = 0u;
 
 struct SwitchHeapAuditMemoryRange
 {
@@ -680,6 +681,10 @@ static void Switch_HeapTraceReportBin4Fault(
         caller >= codeBase ? caller - codeBase : UINTPTR_MAX;
     const uintptr_t nextSequence =
         __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_ACQUIRE);
+    u64 currentThreadId = 0u;
+    (void)svcGetThreadId(&currentThreadId, CUR_THREAD_HANDLE);
+    const uintptr_t lastThreadId =
+        __atomic_load_n(&g_switchHeapBin4AuditLastThreadId, __ATOMIC_RELAXED);
     const uintptr_t lastSequence =
         __atomic_load_n(&g_switchHeapBin4AuditLastSequence, __ATOMIC_RELAXED);
     const uintptr_t lastPhase =
@@ -701,18 +706,19 @@ static void Switch_HeapTraceReportBin4Fault(
     std::snprintf(
         line, sizeof(line),
         "[KisakCOD][HEAP BIN4 AUDIT] reason=%s phase=%c op=%c "
-        "traceNext=%llu callerOff=0x%llx argument=0x%016llx "
+        "traceNext=%llu tid=%llu callerOff=0x%llx argument=0x%016llx "
         "requested=%llu result=0x%016llx sentinel=0x%016llx "
         "rootFd=0x%016llx rootBk=0x%016llx index=%llu "
         "node=0x%016llx previous=0x%016llx prevFoot=0x%016llx "
         "head=0x%016llx chunkSize=0x%llx fd=0x%016llx bk=0x%016llx "
-        "lastGoodSeq=%llu lastGoodPhase=%c lastGoodOp=%c "
+        "lastGoodSeq=%llu lastGoodTid=%llu lastGoodPhase=%c lastGoodOp=%c "
         "lastGoodCallerOff=0x%llx lastGoodArgument=0x%016llx "
         "lastGoodRequested=%llu lastGoodResult=0x%016llx "
         "lastGoodNodes=%llu\n",
         reason ? reason : "unknown",
         phase, operation,
         static_cast<unsigned long long>(nextSequence),
+        static_cast<unsigned long long>(currentThreadId),
         static_cast<unsigned long long>(callerOffset),
         static_cast<unsigned long long>(argument),
         static_cast<unsigned long long>(requested),
@@ -730,6 +736,7 @@ static void Switch_HeapTraceReportBin4Fault(
         static_cast<unsigned long long>(chunk ? chunk->fd : 0u),
         static_cast<unsigned long long>(chunk ? chunk->bk : 0u),
         static_cast<unsigned long long>(lastSequence),
+        static_cast<unsigned long long>(lastThreadId),
         static_cast<char>(lastPhase ? lastPhase : '-'),
         static_cast<char>(lastOperation ? lastOperation : '-'),
         static_cast<unsigned long long>(lastCaller),
@@ -883,6 +890,10 @@ static void Switch_HeapTraceAuditBin4(
 
     const uintptr_t nextSequence =
         __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_ACQUIRE);
+    u64 currentThreadId = 0u;
+    (void)svcGetThreadId(&currentThreadId, CUR_THREAD_HANDLE);
+    __atomic_store_n(&g_switchHeapBin4AuditLastThreadId,
+        static_cast<uintptr_t>(currentThreadId), __ATOMIC_RELAXED);
     __atomic_store_n(&g_switchHeapBin4AuditLastSequence,
         nextSequence, __ATOMIC_RELAXED);
     __atomic_store_n(&g_switchHeapBin4AuditLastPhase,
@@ -1794,6 +1805,57 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
     Switch_LogCrashLine(nearSummary);
 }
 } // namespace
+
+extern "C" void Switch_HeapTraceProbeZMalloc(
+    void *pointer, size_t size, char stage)
+{
+#if defined(KISAK_SWITCH_HEAP_TRACE)
+    if (!pointer || size != 100u)
+        return;
+
+    const uintptr_t user = reinterpret_cast<uintptr_t>(pointer);
+    if (user < 2u * sizeof(uintptr_t) ||
+        (user & (alignof(uintptr_t) - 1u)) != 0u)
+        return;
+
+    const uintptr_t allocationHead =
+        *reinterpret_cast<const volatile uintptr_t *>(
+            user - sizeof(uintptr_t));
+    if ((allocationHead & ~static_cast<uintptr_t>(7u)) != 0x70u)
+        return;
+
+    const uintptr_t adjacentAddress = user + 0x60u;
+    SwitchHeapBin4AuditChunk adjacent{};
+    const bool adjacentReadable =
+        Switch_HeapTraceReadBin4AuditChunk(adjacentAddress, &adjacent);
+    u64 threadId = 0u;
+    (void)svcGetThreadId(&threadId, CUR_THREAD_HANDLE);
+
+    char line[448];
+    std::snprintf(
+        line, sizeof(line),
+        "[KisakCOD][HEAP ZMALLOC PROBE] stage=%c tid=%llu "
+        "ptr=0x%016llx requested=%llu allocHead=0x%016llx "
+        "adjacent=0x%016llx readable=%u prevFoot=0x%016llx "
+        "head=0x%016llx fd=0x%016llx bk=0x%016llx\n",
+        stage,
+        static_cast<unsigned long long>(threadId),
+        static_cast<unsigned long long>(user),
+        static_cast<unsigned long long>(size),
+        static_cast<unsigned long long>(allocationHead),
+        static_cast<unsigned long long>(adjacentAddress),
+        static_cast<unsigned int>(adjacentReadable),
+        static_cast<unsigned long long>(adjacentReadable ? adjacent.prevFoot : 0u),
+        static_cast<unsigned long long>(adjacentReadable ? adjacent.head : 0u),
+        static_cast<unsigned long long>(adjacentReadable ? adjacent.fd : 0u),
+        static_cast<unsigned long long>(adjacentReadable ? adjacent.bk : 0u));
+    Switch_LogCrashLine(line);
+#else
+    (void)pointer;
+    (void)size;
+    (void)stage;
+#endif
+}
 
 extern "C" void *__real_malloc(size_t size);
 extern "C" void __real_free(void *pointer);
