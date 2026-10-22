@@ -7038,9 +7038,7 @@ void GScr_IsCinematicPlaying()
 void GScr_Earthquake()
 {
     const float scale = Scr_GetFloat(0);
-    const float durationSeconds = Scr_GetFloat(1);
-    const float durationMilliseconds = durationSeconds * 1000.0f + 0.5f;
-    const int duration = static_cast<int>(floor(static_cast<double>(durationMilliseconds)));
+    const int duration = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(1));
     float origin[4];
 
     Scr_GetVector(2u, origin);
@@ -7899,7 +7897,7 @@ void Scr_VisionSetNaked()
         }
         transitionMilliseconds = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(1));
     }
-    SV_SetConfigstring(CS_VISIONSET_NAKED, va("\\\"%s\\\" %i", Scr_GetString(0), transitionMilliseconds));
+    SV_SetConfigstring(CS_VISIONSET_NAKED, va("\"%s\" %i", Scr_GetString(0), transitionMilliseconds));
 }
 
 void Scr_VisionSetNight()
@@ -7915,7 +7913,7 @@ void Scr_VisionSetNight()
         }
         transitionMilliseconds = Scr_RoundSecondsToMilliseconds(Scr_GetFloat(1));
     }
-    SV_SetConfigstring(CS_VISIONSET_NIGHT, va("\\\"%s\\\" %i", Scr_GetString(0), transitionMilliseconds));
+    SV_SetConfigstring(CS_VISIONSET_NIGHT, va("\"%s\" %i", Scr_GetString(0), transitionMilliseconds));
 }
 
 void Scr_SetCullDist()
