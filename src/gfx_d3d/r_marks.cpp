@@ -7,6 +7,24 @@
 #include <EffectsCore/fx_system.h>
 #include "r_model_skin.h"
 #include <universal/profile.h>
+#include <vector>
+
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
+static void R_AABBTreeSurfacesIterative(
+    GfxAabbTree *root,
+    uint32_t nodeCount,
+    const float *mins,
+    const float *maxs,
+    int(__cdecl *allowSurf)(int, void *),
+    void *callbackContext,
+    GfxSurface **surfList,
+    uint32_t surfListSize,
+    uint32_t *surfCount);
+
 
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
@@ -192,7 +210,144 @@ void __cdecl R_CellSurfaces(
                 }
             }
         }
-        R_AABBTreeSurfaces_r(cell->aabbTree, mins, maxs, allowSurf, callbackContext, surfList, surfListSize, surfCount);
+        R_AABBTreeSurfacesIterative(cell->aabbTree, static_cast<uint32_t>(cell->aabbTreeCount), mins, maxs, allowSurf, callbackContext, surfList, surfListSize, surfCount);
+    }
+}
+
+static unsigned int s_aabbTraversalFaultCount;
+
+static void R_LogAabbTraversalFault(
+    const char *reason,
+    const GfxAabbTree *root,
+    const GfxAabbTree *tree,
+    uint32_t nodeCount,
+    uint32_t visited)
+{
+    if (s_aabbTraversalFaultCount >= 8)
+        return;
+    ++s_aabbTraversalFaultCount;
+#ifdef __SWITCH__
+    char message[384];
+    std::snprintf(message, sizeof(message),
+        "[KisakCOD][AABB SURFACE TRAVERSAL FAULT] reason=%s root=%p node=%p nodeCount=%u visited=%u\n",
+        reason, static_cast<const void *>(root), static_cast<const void *>(tree),
+        static_cast<unsigned>(nodeCount), static_cast<unsigned>(visited));
+    Switch_LogWrite(message);
+#else
+    Com_PrintWarning(CON_CHANNEL_GFX,
+        "AABB surface traversal stopped: %s (root=%p node=%p nodes=%u visited=%u)\n",
+        reason, static_cast<const void *>(root), static_cast<const void *>(tree),
+        static_cast<unsigned>(nodeCount), static_cast<unsigned>(visited));
+#endif
+}
+
+static void R_AABBTreeSurfacesIterative(
+    GfxAabbTree *root,
+    uint32_t nodeCount,
+    const float *mins,
+    const float *maxs,
+    int(__cdecl *allowSurf)(int, void *),
+    void *callbackContext,
+    GfxSurface **surfList,
+    uint32_t surfListSize,
+    uint32_t *surfCount)
+{
+    if (!root || !nodeCount ||
+        nodeCount > static_cast<uint64_t>(UINTPTR_MAX) / sizeof(GfxAabbTree))
+    {
+        R_LogAabbTraversalFault("invalid_root_or_node_count", root, root, nodeCount, 0);
+        return;
+    }
+
+    const uintptr_t rootAddress = reinterpret_cast<uintptr_t>(root);
+    const uintptr_t treeBytes = static_cast<uintptr_t>(nodeCount) * sizeof(GfxAabbTree);
+    if (rootAddress > UINTPTR_MAX - treeBytes)
+    {
+        R_LogAabbTraversalFault("tree_address_overflow", root, root, nodeCount, 0);
+        return;
+    }
+    const uintptr_t arrayEnd = rootAddress + treeBytes;
+
+    std::vector<GfxAabbTree *> pending;
+    pending.reserve(nodeCount < 64u ? nodeCount : 64u);
+    pending.push_back(root);
+    uint32_t visited = 0;
+
+    while (!pending.empty() && *surfCount < surfListSize)
+    {
+        GfxAabbTree *tree = pending.back();
+        pending.pop_back();
+
+        const uintptr_t treeAddress = reinterpret_cast<uintptr_t>(tree);
+        if (treeAddress < rootAddress || treeAddress >= arrayEnd ||
+            (treeAddress - rootAddress) % sizeof(GfxAabbTree) != 0)
+        {
+            R_LogAabbTraversalFault("node_outside_tree_array_or_misaligned", root, tree, nodeCount, visited);
+            return;
+        }
+        if (++visited > nodeCount)
+        {
+            R_LogAabbTraversalFault("cycle_or_node_count_mismatch", root, tree, nodeCount, visited);
+            return;
+        }
+
+        if (!(*mins <= static_cast<double>(tree->maxs[0]) &&
+              *maxs >= static_cast<double>(tree->mins[0]) &&
+              mins[1] <= static_cast<double>(tree->maxs[1]) &&
+              maxs[1] >= static_cast<double>(tree->mins[1]) &&
+              mins[2] <= static_cast<double>(tree->maxs[2]) &&
+              maxs[2] >= static_cast<double>(tree->mins[2])))
+            continue;
+
+        if (tree->childCount)
+        {
+            const int offset = tree->childrenOffset;
+            if (offset <= 0 || offset % static_cast<int>(sizeof(GfxAabbTree)) != 0)
+            {
+                R_LogAabbTraversalFault("invalid_child_offset", root, tree, nodeCount, visited);
+                return;
+            }
+
+            const uintptr_t childrenAddress = treeAddress + static_cast<uintptr_t>(offset);
+            if (childrenAddress < rootAddress || childrenAddress > arrayEnd ||
+                static_cast<uintptr_t>(tree->childCount) >
+                    (arrayEnd - childrenAddress) / sizeof(GfxAabbTree))
+            {
+                R_LogAabbTraversalFault("children_outside_tree_array", root, tree, nodeCount, visited);
+                return;
+            }
+
+            auto *children = reinterpret_cast<GfxAabbTree *>(childrenAddress);
+            // Push in reverse so the traversal order matches the original recursive
+            // child 0..N-1 walk, without consuming one Switch stack frame per node.
+            for (uint32_t childIndex = tree->childCount; childIndex > 0; --childIndex)
+                pending.push_back(&children[childIndex - 1]);
+            continue;
+        }
+
+        uint32_t surfNodeIndex = 0;
+        uint32_t surfIndex = tree->startSurfIndex;
+        while (surfNodeIndex < tree->surfaceCount && *surfCount < surfListSize)
+        {
+            const uint32_t remappedSurfIndex = rgp.world->dpvs.sortedSurfIndex[surfIndex];
+            if (allowSurf(remappedSurfIndex, callbackContext))
+            {
+                GfxSurface *surf = &rgp.world->dpvs.surfaces[remappedSurfIndex];
+                if (*mins <= static_cast<double>(surf->bounds[1][0]) &&
+                    *maxs >= static_cast<double>(surf->bounds[0][0]) &&
+                    mins[1] <= static_cast<double>(surf->bounds[1][1]) &&
+                    maxs[1] >= static_cast<double>(surf->bounds[0][1]) &&
+                    mins[2] <= static_cast<double>(surf->bounds[1][2]) &&
+                    maxs[2] >= static_cast<double>(surf->bounds[0][2]))
+                {
+                    for (uint32_t listIndex = 0; listIndex < *surfCount; ++listIndex)
+                        iassert(surfList[listIndex] != surf);
+                    surfList[(*surfCount)++] = surf;
+                }
+            }
+            ++surfNodeIndex;
+            ++surfIndex;
+        }
     }
 }
 
@@ -206,64 +361,23 @@ void __cdecl R_AABBTreeSurfaces_r(
     uint32_t surfListSize,
     uint32_t *surfCount)
 {
-    uint32_t listIndex; // [esp+0h] [ebp-1Ch]
-    GfxAabbTree *children; // [esp+4h] [ebp-18h]
-    uint32_t surfIndex; // [esp+8h] [ebp-14h]
-    uint32_t childIndex; // [esp+Ch] [ebp-10h]
-    uint32_t remappedSurfIndex; // [esp+10h] [ebp-Ch]
-    GfxSurface *surf; // [esp+14h] [ebp-8h]
-    uint32_t surfNodeIndex; // [esp+18h] [ebp-4h]
+    if (!rgp.world || !rgp.world->cells || !tree)
+        return;
 
-    if (*mins <= (double)tree->maxs[0]
-        && *maxs >= (double)tree->mins[0]
-        && mins[1] <= (double)tree->maxs[1]
-        && maxs[1] >= (double)tree->mins[1]
-        && mins[2] <= (double)tree->maxs[2]
-        && maxs[2] >= (double)tree->mins[2])
+    // The exported entry point is expected to receive a cell's root tree. The
+    // cell carries the exact flat-array node count needed to bound traversal.
+    for (int cellIndex = 0; cellIndex < rgp.world->dpvsPlanes.cellCount; ++cellIndex)
     {
-        if (tree->childCount)
+        GfxCell *cell = &rgp.world->cells[cellIndex];
+        if (cell->aabbTree == tree)
         {
-            children = (GfxAabbTree *)((char *)tree + tree->childrenOffset);
-            for (childIndex = 0; childIndex < tree->childCount; ++childIndex)
-                R_AABBTreeSurfaces_r(
-                    &children[childIndex],
-                    mins,
-                    maxs,
-                    allowSurf,
-                    callbackContext,
-                    surfList,
-                    surfListSize,
-                    surfCount);
-        }
-        else
-        {
-            surfNodeIndex = 0;
-            surfIndex = tree->startSurfIndex;
-            while (surfNodeIndex < tree->surfaceCount && *surfCount < surfListSize)
-            {
-                remappedSurfIndex = rgp.world->dpvs.sortedSurfIndex[surfIndex];
-                if (allowSurf(remappedSurfIndex, callbackContext))
-                {
-                    surf = &rgp.world->dpvs.surfaces[remappedSurfIndex];
-                    if (*mins <= (double)surf->bounds[1][0]
-                        && *maxs >= (double)surf->bounds[0][0]
-                        && mins[1] <= (double)surf->bounds[1][1]
-                        && maxs[1] >= (double)surf->bounds[0][1]
-                        && mins[2] <= (double)surf->bounds[1][2]
-                        && maxs[2] >= (double)surf->bounds[0][2])
-                    {
-                        for (listIndex = 0; listIndex < *surfCount; ++listIndex)
-                        {
-                            iassert( surfList[listIndex] != surf );
-                        }
-                        surfList[(*surfCount)++] = surf;
-                    }
-                }
-                ++surfNodeIndex;
-                ++surfIndex;
-            }
+            R_AABBTreeSurfacesIterative(tree, static_cast<uint32_t>(cell->aabbTreeCount),
+                mins, maxs, allowSurf, callbackContext, surfList, surfListSize, surfCount);
+            return;
         }
     }
+
+    R_LogAabbTraversalFault("root_not_owned_by_world_cell", tree, tree, 0, 0);
 }
 
 void __cdecl R_AddSurfaceToList(GfxSurface *surf, GfxSurface **surfList, uint32_t *surfCount)
