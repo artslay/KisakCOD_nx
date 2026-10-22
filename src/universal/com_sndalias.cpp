@@ -735,7 +735,7 @@ void __cdecl Com_UnloadSoundAliases(snd_alias_system_t system)
         {
             *(&g_sa.soundFileInfo[-4].count + 3 * system) = 0;
             g_sa.aliasInfo[system].count = 0;
-            memset((uint8_t *)g_sa.hash, 0, 4 * g_sa.hashSize);
+            memset(g_sa.hash, 0, sizeof(*g_sa.hash) * g_sa.hashSize);
             g_sa.hashUsed = 0;
         }
         else if (g_sa.aliasInfo[system].count)
@@ -1264,8 +1264,8 @@ void __cdecl Com_InitSoundAliasHash(uint32_t aliasCount)
 {
     g_sa.hashUsed = 0;
     g_sa.hashSize = (3 * aliasCount + 1) >> 1;
-    g_sa.hash = (snd_alias_list_t**)CM_Hunk_Alloc(4 * ((3 * aliasCount + 1) >> 1), "Com_InitSoundAliasHash", 15);
-    memset(g_sa.hash, 0, 4 * ((3 * aliasCount + 1) >> 1));
+    g_sa.hash = (snd_alias_list_t**)CM_Hunk_Alloc(sizeof(*g_sa.hash) * g_sa.hashSize, "Com_InitSoundAliasHash", 15);
+    memset(g_sa.hash, 0, sizeof(*g_sa.hash) * g_sa.hashSize);
 }
 
 cmd_function_s Com_RefreshSpeakerMaps_f_VAR;
