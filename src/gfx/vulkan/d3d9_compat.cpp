@@ -15,6 +15,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <limits>
@@ -2019,6 +2020,302 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
         }
         words.insert(words.begin() + insertAt, extension.begin(), extension.end());
     }
+    return true;
+}
+
+uint64_t SwitchPsS0DebugTargetSerial()
+{
+    const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_SERIAL");
+    if (!value || !*value)
+        return 0;
+
+    char *end = nullptr;
+    const unsigned long long serial = std::strtoull(value, &end, 0);
+    if (end == value || !end || *end != '\0' || serial == 0)
+        return 0;
+    return static_cast<uint64_t>(serial);
+}
+
+// Opt-in pixel-shader diagnostic. For exactly one PS serial, replace the final
+// location-0 output store with the vec4 result of that shader's s0 sample.
+// No instructions or descriptors are added: the existing sample result must
+// dominate the final output store in the same basic block and have the same
+// type. Otherwise the original shader is left intact and the reason is logged.
+bool PatchFragmentShaderToOutputS0(
+    std::vector<uint32_t> &words,
+    uint64_t targetSerial,
+    uint64_t actualSerial)
+{
+    if (!targetSerial || targetSerial != actualSerial)
+        return false;
+
+    uint32_t descriptorId = 0;
+    uint32_t outputId = 0;
+    uint32_t outputType = 0;
+    uint32_t sampleId = 0;
+    uint32_t sampleType = 0;
+    uint32_t originalValueId = 0;
+    uint32_t sampleBlock = 0;
+    size_t sampleOffset = SIZE_MAX;
+    size_t outputStoreOffset = SIZE_MAX;
+    uint32_t outputStoreBlock = 0;
+
+    const auto logResult = [&](const char *action)
+    {
+        char trace[384];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK PS S0 TEST] target=%llu actual=%llu action=%s set=2 binding=0 descriptor=%u sample=%u sampleType=%u output=%u outputType=%u original=%u block=%u\n",
+            static_cast<unsigned long long>(targetSerial),
+            static_cast<unsigned long long>(actualSerial),
+            action, descriptorId, sampleId, sampleType, outputId,
+            outputType, originalValueId, sampleBlock);
+        Switch_LogWrite(trace);
+    };
+
+    if (words.size() < 5u || words[0] != SpvMagicNumber ||
+        words[3] <= 1u || words[3] > 65536u)
+    {
+        logResult("skip_invalid_module");
+        return false;
+    }
+    const uint32_t bound = words[3];
+
+    struct DecorationInfo
+    {
+        uint32_t id = 0;
+        uint32_t descriptorSet = UINT32_MAX;
+        uint32_t binding = UINT32_MAX;
+        uint32_t location = UINT32_MAX;
+    };
+    struct VariableInfo
+    {
+        uint32_t id = 0;
+        uint32_t type = 0;
+        uint32_t storage = UINT32_MAX;
+    };
+    struct PointerInfo
+    {
+        uint32_t id = 0;
+        uint32_t pointee = 0;
+    };
+
+    // Keep the metadata lists proportional to declarations in the module
+    // rather than allocating arrays sized by the SPIR-V ID bound on the Switch.
+    std::vector<DecorationInfo> decorations;
+    std::vector<VariableInfo> variables;
+    std::vector<PointerInfo> pointers;
+    uint32_t entryFunctionId = 0;
+
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+        {
+            logResult("skip_invalid_instruction");
+            return false;
+        }
+        const uint32_t *ins = &words[offset];
+
+        if (op == SpvOpEntryPoint && wc >= 4u &&
+            ins[1] == SpvExecutionModelFragment)
+        {
+            entryFunctionId = ins[2];
+        }
+        else if (op == SpvOpDecorate && wc >= 4u && ins[1] < bound)
+        {
+            const uint32_t decoratedId = ins[1];
+            auto it = std::find_if(
+                decorations.begin(), decorations.end(),
+                [decoratedId](const DecorationInfo &item) {
+                    return item.id == decoratedId;
+                });
+            if (it == decorations.end())
+            {
+                decorations.push_back(DecorationInfo{});
+                it = decorations.end() - 1;
+                it->id = decoratedId;
+            }
+
+            if (ins[2] == SpvDecorationDescriptorSet)
+                it->descriptorSet = ins[3];
+            else if (ins[2] == SpvDecorationBinding)
+                it->binding = ins[3];
+            else if (ins[2] == SpvDecorationLocation)
+                it->location = ins[3];
+        }
+        else if (op == SpvOpVariable && wc >= 4u &&
+                 ins[2] < bound &&
+                 (ins[3] == SpvStorageClassUniformConstant ||
+                  ins[3] == SpvStorageClassOutput))
+        {
+            variables.push_back({ins[2], ins[1], ins[3]});
+        }
+        else if (op == SpvOpTypePointer && wc >= 4u && ins[1] < bound)
+        {
+            pointers.push_back({ins[1], ins[3]});
+        }
+
+        offset += wc;
+    }
+
+    if (!entryFunctionId)
+    {
+        logResult("skip_no_fragment_entry");
+        return false;
+    }
+
+    for (const VariableInfo &variable : variables)
+    {
+        const auto decoration = std::find_if(
+            decorations.begin(), decorations.end(),
+            [&variable](const DecorationInfo &item) {
+                return item.id == variable.id;
+            });
+        if (variable.storage == SpvStorageClassUniformConstant &&
+            decoration != decorations.end() &&
+            decoration->descriptorSet == 2u && decoration->binding == 0u)
+        {
+            if (descriptorId && descriptorId != variable.id)
+            {
+                logResult("skip_ambiguous_s0_descriptor");
+                return false;
+            }
+            descriptorId = variable.id;
+        }
+        if (variable.storage == SpvStorageClassOutput &&
+            decoration != decorations.end() && decoration->location == 0u)
+        {
+            if (outputId && outputId != variable.id)
+            {
+                logResult("skip_ambiguous_color_output");
+                return false;
+            }
+            outputId = variable.id;
+            const auto pointer = std::find_if(
+                pointers.begin(), pointers.end(),
+                [&variable](const PointerInfo &item) {
+                    return item.id == variable.type;
+                });
+            if (pointer != pointers.end())
+                outputType = pointer->pointee;
+        }
+    }
+
+    if (!descriptorId)
+    {
+        logResult("skip_no_s0_descriptor");
+        return false;
+    }
+    if (!outputId || !outputType)
+    {
+        logResult("skip_no_color_output");
+        return false;
+    }
+
+    std::vector<uint32_t> s0DerivedIds;
+    const auto isS0Derived = [&](uint32_t id)
+    {
+        return std::find(s0DerivedIds.begin(), s0DerivedIds.end(), id) !=
+            s0DerivedIds.end();
+    };
+    const auto addS0Derived = [&](uint32_t id)
+    {
+        if (id && id < bound && !isS0Derived(id))
+            s0DerivedIds.push_back(id);
+    };
+
+    uint32_t currentFunction = 0;
+    uint32_t currentBlock = 0;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+        {
+            logResult("skip_invalid_instruction");
+            return false;
+        }
+        const uint32_t *ins = &words[offset];
+
+        if (op == SpvOpFunction && wc >= 5u)
+        {
+            currentFunction = ins[2];
+            currentBlock = 0;
+        }
+        else if (op == SpvOpFunctionEnd)
+        {
+            currentFunction = 0;
+            currentBlock = 0;
+        }
+        else if (currentFunction == entryFunctionId && op == SpvOpLabel && wc >= 2u)
+        {
+            currentBlock = ins[1];
+        }
+        else if (currentFunction == entryFunctionId &&
+                 op == SpvOpLoad && wc >= 4u &&
+                 ins[3] == descriptorId)
+        {
+            addS0Derived(ins[2]);
+        }
+        else if (currentFunction == entryFunctionId &&
+                 op == SpvOpSampledImage && wc >= 5u &&
+                 (isS0Derived(ins[3]) || isS0Derived(ins[4])))
+        {
+            addS0Derived(ins[2]);
+        }
+        else if (currentFunction == entryFunctionId &&
+                 (static_cast<uint32_t>(op) == 87u || // OpImageSampleImplicitLod
+                  static_cast<uint32_t>(op) == 88u || // OpImageSampleExplicitLod
+                  static_cast<uint32_t>(op) == 91u || // OpImageSampleProjImplicitLod
+                  static_cast<uint32_t>(op) == 92u) && // OpImageSampleProjExplicitLod
+                 wc >= 5u && isS0Derived(ins[3]))
+        {
+            if (!sampleId)
+            {
+                sampleType = ins[1];
+                sampleId = ins[2];
+                sampleOffset = offset;
+                sampleBlock = currentBlock;
+            }
+        }
+        else if (currentFunction == entryFunctionId &&
+                 op == SpvOpStore && wc >= 3u && ins[1] == outputId)
+        {
+            outputStoreOffset = offset;
+            outputStoreBlock = currentBlock;
+            originalValueId = ins[2];
+        }
+
+        offset += wc;
+    }
+
+    if (!sampleId || sampleOffset == SIZE_MAX)
+    {
+        logResult("skip_no_s0_sample");
+        return false;
+    }
+    if (outputStoreOffset == SIZE_MAX)
+    {
+        logResult("skip_no_color_store");
+        return false;
+    }
+    if (sampleType != outputType)
+    {
+        logResult("skip_sample_output_type_mismatch");
+        return false;
+    }
+    if (!sampleBlock || sampleBlock != outputStoreBlock ||
+        sampleOffset >= outputStoreOffset)
+    {
+        logResult("skip_sample_not_in_final_store_block");
+        return false;
+    }
+
+    // OpStore operands are {Pointer, Object}; only its Object operand changes.
+    words[outputStoreOffset + 2u] = sampleId;
+    logResult("patched_final_color_to_s0");
     return true;
 }
 
@@ -5970,6 +6267,12 @@ bool IDirect3DDevice9::EnsurePipeline()
 
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
+        const uint64_t debugPsS0Serial = SwitchPsS0DebugTargetSerial();
+        if (debugPsS0Serial != 0u && debugPsS0Serial == m_pixelShader->serial)
+        {
+            (void)PatchFragmentShaderToOutputS0(
+                pixelSpirv, debugPsS0Serial, m_pixelShader->serial);
+        }
         m_pixelShader->linkedSpirv = pixelSpirv;
 
         // Do not rewrite every fragment shader with discard logic when D3D9
