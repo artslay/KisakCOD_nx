@@ -3799,10 +3799,10 @@ void __cdecl Load_LoadedSoundPtr(bool atStreamStart)
             // Preserve that 32-bit fastfile alignment when the native object
             // lives in persistent ARM64 Hunk memory.
             DB_AllocStreamPos(3);
-            // LoadedSound is 48 bytes natively on AArch64 (8-byte pointers), while the
-            // CoD4 fastfile serializes only 44 bytes. Do not place the native object directly
-            // in the stream buffer: the subsequent raw PCM payload starts after 44 serialized
-            // bytes and would overwrite the upper half of sound.data.
+            // LoadedSound is 64 bytes natively on AArch64; the CoD4 fastfile
+            // serializes only 44 bytes with 32-bit pointers. Do not place the native object
+            // directly in the stream buffer: the raw PCM payload follows those 44 serialized
+            // bytes and would overwrite the native pointer fields.
             *varLoadedSoundPtr = reinterpret_cast<LoadedSound *>(
                 DB_AllocSwitchAssetMemory(
                     static_cast<uint32_t>(sizeof(LoadedSound)),
