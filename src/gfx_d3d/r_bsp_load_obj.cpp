@@ -1587,7 +1587,7 @@ void __cdecl R_LoadSurfaces(GfxBspLoad *load)
     indices = (const unsigned short*)Com_GetBspLump(lumpType, 2u, &indexCount);
     iassert( (surfCount <= 65536) );
     s_world.surfaceCount = surfCount;
-    s_world.dpvs.surfaces = (GfxSurface*)Hunk_Alloc(48 * surfCount, "R_LoadSurfaces", 20);
+    s_world.dpvs.surfaces = (GfxSurface*)Hunk_Alloc(sizeof(GfxSurface) * surfCount, "R_LoadSurfaces", 20);
     s_world.indexCount = 0;
     for (surfIndex = 0; surfIndex < surfCount; ++surfIndex)
     {
