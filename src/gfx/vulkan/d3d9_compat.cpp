@@ -2025,14 +2025,14 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
-    // Default to all lightmap-style PS variants using both base/detail slot s0
-    // and lightmap slot s3. A numeric value narrows the test to one PS serial;
-    // "off" or "0" explicitly disables it. No launcher environment is needed.
+    // Keep normal gameplay unchanged. A specific serial opts in to the solid
+    // magenta diagnostic; "all" explicitly enables the broad s0+s3 experiment.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
-    if (!value || !*value || std::strcmp(value, "all") == 0)
-        return 0u;
-    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+    if (!value || !*value ||
+        std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
+    if (std::strcmp(value, "all") == 0)
+        return 0u;
 
     char *end = nullptr;
     const unsigned long long serial = std::strtoull(value, &end, 0);
