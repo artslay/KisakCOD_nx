@@ -1819,8 +1819,8 @@ extern "C" __attribute__((noinline)) void *__wrap_malloc(size_t size)
         caller >= reinterpret_cast<uintptr_t>(__code_start)
             ? caller - reinterpret_cast<uintptr_t>(__code_start) : UINTPTR_MAX;
     const bool auditBin4 =
-        (auditCallerOffset == 0x6d1e38u && size == 8u) ||
-        (auditCallerOffset == 0x6ca6b8u && size == 21u) ||
+        size <= 24u ||
+        (auditCallerOffset >= 0x600000u && auditCallerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'M', caller, 0u,
@@ -1855,7 +1855,7 @@ extern "C" __attribute__((noinline)) void __wrap_free(void *pointer)
     const uintptr_t auditSequence =
         __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
     const bool auditBin4 =
-        callerOffset == 0x6d2ca4u ||
+        (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'F', caller,
@@ -1893,7 +1893,10 @@ extern "C" __attribute__((noinline)) void *__wrap_calloc(
 #if defined(KISAK_SWITCH_HEAP_TRACE)
     const uintptr_t auditSequence =
         __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
-    const bool auditBin4 = (auditSequence & 0x3ffu) == 0u;
+    const bool auditBin4 =
+        bytes <= 24u ||
+        (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
+        ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'C', caller, 0u,
             static_cast<uintptr_t>(bytes), 0u);
@@ -1954,8 +1957,7 @@ extern "C" __attribute__((noinline)) void *__wrap_realloc(
     const uintptr_t auditSequence =
         __atomic_load_n(&g_switchHeapTraceNext, __ATOMIC_RELAXED);
     const bool auditBin4 =
-        (callerOffset >= 0x600000u && callerOffset < 0x800000u &&
-         (auditSequence & 0x3ffu) == 0u) ||
+        (callerOffset >= 0x600000u && callerOffset < 0x800000u) ||
         ((auditSequence & 0x3ffu) == 0u);
     if (auditBin4)
         Switch_HeapTraceAuditBin4('B', 'R', caller,
