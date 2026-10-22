@@ -1736,10 +1736,10 @@ static char* __cdecl Z_TryMallocGarbage(int32_t size, const char* name, int32_t 
     return buf;
 }
 
-static uint32_t* __cdecl Z_TryMalloc(int32_t size, const char* name, int32_t type)
 #if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
-    __attribute__((noinline))
+__attribute__((noinline))
 #endif
+static uint32_t* __cdecl Z_TryMalloc(int32_t size, const char* name, int32_t type)
 {
     uint32_t* buf; // [esp+0h] [ebp-4h]
 #if defined(__SWITCH__) && defined(KISAK_SWITCH_HEAP_TRACE)
