@@ -57,12 +57,17 @@ static bool Released(u64 mask)
     return !IsDown(g_buttons, mask) && IsDown(g_previousButtons, mask);
 }
 
-static void SendKeyEdge(u64 mask, int key)
+static void SendKeyEdge(u64 mask, int key, bool allowDown = true)
 {
     if (Pressed(mask))
-        CL_KeyEvent(0, key, 1, Sys_Milliseconds());
+    {
+        if (allowDown)
+            CL_KeyEvent(0, key, 1, Sys_Milliseconds());
+    }
     else if (Released(mask))
+    {
         CL_KeyEvent(0, key, 0, Sys_Milliseconds());
+    }
 }
 
 static void SendActionEdge(
@@ -254,12 +259,12 @@ void Switch_GamepadFrame()
     // outside the menu as well.
     SendKeyEdge(HidNpadButton_Plus, K_ESCAPE);
 
-    // The XBox/PS3 SP control model already exists in cl_input.cpp:
-    // A = jump, B = stance, X = use/reload, RT = fire, LT = ADS,
-    // LB = smoke, RB = frag, LS = sprint, RS = melee.
+    // The XBox/PS3 SP control model already exists in cl_input.cpp.
+    // X sends the normal R key event so the stock +reload binding and any
+    // level-script checks for the R key see the same press/release as a keyboard.
     SendActionEdge(HidNpadButton_A, IN_UpDown, IN_UpUp, gameplayActive);
     SendActionEdge(HidNpadButton_B, IN_Stance_Down, IN_Stance_Up, gameplayActive);
-    SendActionEdge(HidNpadButton_X, IN_UseReload_Down, IN_UseReload_Up, gameplayActive);
+    SendKeyEdge(HidNpadButton_X, 'r', gameplayActive);
     SendActionEdge(HidNpadButton_ZR, IN_Attack_Down, IN_Attack_Up, gameplayActive);
     SendActionEdge(HidNpadButton_ZL, IN_SpeedDown, IN_SpeedUp, gameplayActive);
     SendActionEdge(HidNpadButton_R, IN_Frag_Down, IN_Frag_Up, gameplayActive);

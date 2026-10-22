@@ -148,8 +148,10 @@ XAnimParts *__cdecl XAnimClone(XAnimParts *fromParts, void *(__cdecl *Alloc)(int
     __int16 notifyInfoIndex; // [esp+18h] [ebp-8h]
     uint16_t *boneNames; // [esp+1Ch] [ebp-4h]
 
-    toParts = (XAnimParts*)Alloc(88);
-    qmemcpy(toParts, fromParts, sizeof(XAnimParts));
+    // XAnimParts contains native pointers on Switch; the original 88-byte
+    // allocation is only valid for the 32-bit asset layout.
+    toParts = (XAnimParts*)Alloc(static_cast<int>(sizeof(*toParts)));
+    qmemcpy(toParts, fromParts, sizeof(*toParts));
     boneNames = toParts->names;
     size = toParts->boneCount[9];
     for (i = 0; i < size; ++i)

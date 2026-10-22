@@ -964,8 +964,10 @@ XAnimParts *__cdecl XAnimLoadFile(char *name, void *(__cdecl *Alloc)(int))
     int randomDataByteCount; // [esp+14DCh] [ebp-8h]
     int randomDataIntCount; // [esp+14E0h] [ebp-4h]
 
+#ifndef __SWITCH__
     iassert(sizeof(XAnimPartTransPtr) == 8);
     iassert(sizeof(XAnimParts) == 88);
+#endif
 
 #ifdef _DEBUG
     if (!g_checkBoneOrder)
