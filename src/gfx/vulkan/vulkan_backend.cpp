@@ -1174,6 +1174,76 @@ bool VulkanBackend::CreateSwapchain()
         }
     }
 
+    // If the surface only advertises UNORM while claiming an sRGB presentation
+    // colorspace, Vulkan cannot encode linear fragment output on the swapchain
+    // attachment itself. Use a private sRGB color attachment in that case;
+    // EndFrame copies its already encoded texels to the UNORM swapchain.
+    if (m_swapchainColorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR &&
+        m_swapchainFormat != VK_FORMAT_B8G8R8A8_SRGB &&
+        m_swapchainFormat != VK_FORMAT_R8G8B8A8_SRGB)
+    {
+        VkFormat srgbFormat = VK_FORMAT_UNDEFINED;
+        if (m_swapchainFormat == VK_FORMAT_B8G8R8A8_UNORM)
+            srgbFormat = VK_FORMAT_B8G8R8A8_SRGB;
+        else if (m_swapchainFormat == VK_FORMAT_R8G8B8A8_UNORM)
+            srgbFormat = VK_FORMAT_R8G8B8A8_SRGB;
+
+        const VkImageUsageFlags srgbUsage =
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        VkImageFormatProperties srgbProperties{};
+        const VkResult srgbSupport = srgbFormat != VK_FORMAT_UNDEFINED
+            ? vkGetPhysicalDeviceImageFormatProperties(
+                  m_physicalDevice, srgbFormat, VK_IMAGE_TYPE_2D,
+                  VK_IMAGE_TILING_OPTIMAL, srgbUsage, 0, &srgbProperties)
+            : VK_ERROR_FORMAT_NOT_SUPPORTED;
+        if (srgbSupport == VK_SUCCESS &&
+            CreateImage2D(
+                m_width, m_height, 1, srgbFormat, srgbUsage,
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                &m_srgbBackbufferImage, &m_srgbBackbufferMemory,
+                &m_srgbBackbufferView))
+        {
+            m_srgbBackbufferFormat = srgbFormat;
+            m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            char gammaTargetTrace[192];
+            std::snprintf(
+                gammaTargetTrace, sizeof(gammaTargetTrace),
+                "[KisakCOD][VK GAMMA BACKBUFFER] active=1 format=%u "
+                "swapchainFormat=%u size=%ux%u\n",
+                static_cast<unsigned>(srgbFormat),
+                static_cast<unsigned>(m_swapchainFormat),
+                m_width, m_height);
+            Switch_LogWrite(gammaTargetTrace);
+        }
+        else
+        {
+            char gammaTargetTrace[192];
+            std::snprintf(
+                gammaTargetTrace, sizeof(gammaTargetTrace),
+                "[KisakCOD][VK GAMMA BACKBUFFER] active=0 format=%u "
+                "swapchainFormat=%u supportResult=%d\n",
+                static_cast<unsigned>(srgbFormat),
+                static_cast<unsigned>(m_swapchainFormat),
+                static_cast<int>(srgbSupport));
+            Switch_LogWrite(gammaTargetTrace);
+            m_srgbBackbufferImage = VK_NULL_HANDLE;
+            m_srgbBackbufferMemory = VK_NULL_HANDLE;
+            m_srgbBackbufferView = VK_NULL_HANDLE;
+            m_srgbBackbufferFormat = VK_FORMAT_UNDEFINED;
+            m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        }
+    }
+    else
+    {
+        m_srgbBackbufferImage = VK_NULL_HANDLE;
+        m_srgbBackbufferMemory = VK_NULL_HANDLE;
+        m_srgbBackbufferView = VK_NULL_HANDLE;
+        m_srgbBackbufferFormat = VK_FORMAT_UNDEFINED;
+        m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    }
+
     VkSemaphoreCreateInfo renderFinishedInfo{};
     renderFinishedInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     m_renderFinishedSemaphores.assign(count, VK_NULL_HANDLE);
@@ -1416,6 +1486,15 @@ bool VulkanBackend::CreateSync()
 
 void VulkanBackend::DestroySwapchain()
 {
+    if (m_srgbBackbufferImage || m_srgbBackbufferView || m_srgbBackbufferMemory)
+        DestroyImage(
+            m_srgbBackbufferImage, m_srgbBackbufferMemory, m_srgbBackbufferView);
+    m_srgbBackbufferImage = VK_NULL_HANDLE;
+    m_srgbBackbufferMemory = VK_NULL_HANDLE;
+    m_srgbBackbufferView = VK_NULL_HANDLE;
+    m_srgbBackbufferFormat = VK_FORMAT_UNDEFINED;
+    m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
     for (VkSemaphore semaphore : m_renderFinishedSemaphores)
         if (semaphore) vkDestroySemaphore(m_device, semaphore, nullptr);
     m_renderFinishedSemaphores.clear();
@@ -2219,7 +2298,7 @@ bool VulkanBackend::GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_
     if (height)
         *height = m_height;
     if (format)
-        *format = static_cast<uint32_t>(m_swapchainFormat);
+        *format = static_cast<uint32_t>(CurrentBackbufferFormat());
     return m_swapchain != VK_NULL_HANDLE && !m_swapchainImages.empty();
 }
 
@@ -3705,8 +3784,8 @@ bool VulkanBackend::EnsureRendering(
         colorOldLayout,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_ASPECT_COLOR_BIT);
-    if (colorImage == CurrentSwapchainImage())
-        m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    if (colorImage == CurrentBackbufferImage())
+        SetCurrentBackbufferLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
     if (depthImage && depthView)
     {
@@ -3727,7 +3806,7 @@ bool VulkanBackend::EnsureRendering(
     }
 
     const bool clearUninitializedColor = colorOldLayout == VK_IMAGE_LAYOUT_UNDEFINED;
-    const bool clearBackbuffer = colorImage == CurrentSwapchainImage() && !m_backbufferClearedThisFrame;
+    const bool clearBackbuffer = colorImage == CurrentBackbufferImage() && !m_backbufferClearedThisFrame;
 
     VkRenderingAttachmentInfo color{};
     color.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
