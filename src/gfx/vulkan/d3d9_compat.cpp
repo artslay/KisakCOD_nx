@@ -2097,6 +2097,26 @@ bool PatchFragmentShaderToSolidMagenta(
                                uint32_t outputType, uint32_t scalarType,
                                uint32_t magentaId)
     {
+        // The same shader serial can be linked into several pipelines. Report
+        // each distinct result once instead of repeating it for every declaration.
+        static uint64_t loggedSerials[128]{};
+        static char loggedActions[128][48]{};
+        static size_t loggedCount = 0u;
+        const size_t actionLength = std::strlen(action);
+        if (actionLength >= sizeof(loggedActions[0]))
+            return;
+        for (size_t i = 0; i < loggedCount; ++i)
+        {
+            if (loggedSerials[i] == actualSerial &&
+                std::strcmp(loggedActions[i], action) == 0)
+                return;
+        }
+        if (loggedCount >= sizeof(loggedSerials) / sizeof(loggedSerials[0]))
+            return;
+        loggedSerials[loggedCount] = actualSerial;
+        std::memcpy(loggedActions[loggedCount], action, actionLength + 1u);
+        ++loggedCount;
+
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
