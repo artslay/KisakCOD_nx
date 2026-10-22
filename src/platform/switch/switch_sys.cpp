@@ -863,11 +863,11 @@ static void Switch_HeapTraceReportBin4Fault(
     // front node changed from valid to malformed, even if it was not caught by
     // a full list walk until later.
     constexpr uintptr_t kProbeHistoryCount = 64u;
-    const uintptr_t probeEnd =
+    const uintptr_t probeHistoryEnd =
         __atomic_load_n(&g_switchHeapBin4ProbeNext, __ATOMIC_ACQUIRE);
     const uintptr_t probeBegin =
-        probeEnd > kProbeHistoryCount ? probeEnd - kProbeHistoryCount : 0u;
-    for (uintptr_t sequence = probeBegin; sequence < probeEnd; ++sequence)
+        probeHistoryEnd > kProbeHistoryCount ? probeHistoryEnd - kProbeHistoryCount : 0u;
+    for (uintptr_t sequence = probeBegin; sequence < probeHistoryEnd; ++sequence)
     {
         const SwitchHeapBin4ProbeEvent &event =
             g_switchHeapBin4ProbeEvents[sequence & (kSwitchHeapBin4ProbeCount - 1u)];
