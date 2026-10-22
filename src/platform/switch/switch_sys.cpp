@@ -3622,9 +3622,8 @@ void Switch_LogWrite(const char *msg)
         // Renderer investigation traces are deliberately suppressed in normal
         // logs. Preserve actual VK errors/failures, VK FRAME/VK PIPELINE,
         // VK SWAPCHAIN COLOR, device-fault/crash snapshots, and the current
-        // opt-in-by-code solid-color test, but omit success-path introspection.
+        // solid-color test, but omit success-path introspection.
         "[KisakCOD][VK SPIRV IFACE]",
-        "[KisakCOD][VK DRAW HISTORY]",
         "[KisakCOD][VK SET TEXTURE]",
         "[KisakCOD][VK SAMPLER MAP]",
         "[KisakCOD][VK LIGHTMAP DESCRIPTORS]",
