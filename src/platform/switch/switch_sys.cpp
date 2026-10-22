@@ -783,7 +783,7 @@ static void Switch_HeapTraceReportBin4Fault(
             historyLine, sizeof(historyLine),
             "[KisakCOD][HEAP BIN4 HISTORY] seq=%llu op=%c "
             "ptr=0x%016llx size=%llu callerOff=0x%llx "
-            "headerSeen=%u prev=0x%016llx head=0x%016llx\\n",
+            "headerSeen=%u prev=0x%016llx head=0x%016llx\n",
             static_cast<unsigned long long>(sequence),
             static_cast<char>(eventOperation),
             static_cast<unsigned long long>(eventPointer),
