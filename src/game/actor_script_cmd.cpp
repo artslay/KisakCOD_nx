@@ -1819,37 +1819,33 @@ void __cdecl ActorCmd_OrientMode(scr_entref_t entref)
 
 void __cdecl ActorCmd_GetMotionAngle(scr_entref_t entref)
 {
-    actor_s *v1; // r31
-    double v2; // fp1
-    double v3; // fp31
-    long double v4; // fp2
-    long double v5; // fp2
-    double v6; // fp1
-    double v7; // fp1
+    actor_s *actor = Actor_Get(entref);
+    float motionAngle;
 
-    v1 = Actor_Get(entref);
-    if ((float)((float)(v1->Physics.vVelocity[0] * v1->Physics.vVelocity[0])
-        + (float)(v1->Physics.vVelocity[1] * v1->Physics.vVelocity[1])) <= 1.0)
+    const float horizontalSpeedSquared =
+        actor->Physics.vVelocity[0] * actor->Physics.vVelocity[0] +
+        actor->Physics.vVelocity[1] * actor->Physics.vVelocity[1];
+    if (horizontalSpeedSquared <= 1.0f)
     {
-        if (Actor_HasPath(v1))
+        if (Actor_HasPath(actor))
         {
-            v7 = vectoyaw(v1->Path.lookaheadDir);
-            v6 = AngleSubtract(v7, v1->ent->r.currentAngles[1]);
+            const float pathYaw = static_cast<float>(vectoyaw(actor->Path.lookaheadDir));
+            motionAngle = static_cast<float>(AngleSubtract(pathYaw, actor->ent->r.currentAngles[1]));
         }
         else
         {
-            v6 = 0.0;
+            motionAngle = 0.0f;
         }
     }
     else
     {
-        v2 = vectoyaw(v1->Physics.vVelocity);
-        v3 = (float)((float)((float)v2 - v1->ent->r.currentAngles[1]) * (float)0.0027777778);
-        *(double *)&v4 = (float)((float)((float)((float)v2 - v1->ent->r.currentAngles[1]) * (float)0.0027777778) + (float)0.5);
-        v5 = floor(v4);
-        v6 = (float)((float)((float)v3 - (float)*(double *)&v5) * (float)360.0);
+        const float velocityYaw = static_cast<float>(vectoyaw(actor->Physics.vVelocity));
+        const float turns = (velocityYaw - actor->ent->r.currentAngles[1]) * 0.0027777778f;
+        const float roundedTurns = turns + 0.5f;
+        const float wholeTurns = static_cast<float>(floor(static_cast<double>(roundedTurns)));
+        motionAngle = (turns - wholeTurns) * 360.0f;
     }
-    Scr_AddFloat(v6);
+    Scr_AddFloat(motionAngle);
 }
 
 void __cdecl ActorCmd_GetAnglesToLikelyEnemyPath(scr_entref_t entref)
