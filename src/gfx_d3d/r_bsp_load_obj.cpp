@@ -496,7 +496,7 @@ void R_LoadSunSettings()
 
     text = Com_GetBspLump(LUMP_ENTITIES, 1u, &size);
     R_ParseSunLight(&s_world.sunParse, (char*)text);
-    s_world.sunLight = (GfxLight*)Hunk_Alloc(0x40u, "R_LoadSunSettings", 20);
+    s_world.sunLight = (GfxLight*)Hunk_Alloc(sizeof(GfxLight), "R_LoadSunSettings", 20);
     R_InterpretSunLightParseParamsIntoLights(&s_world.sunParse, s_world.sunLight);
 }
 
@@ -540,14 +540,14 @@ void R_LoadLightRegions()
     const DiskLightRegion *diskRegions; // [esp+34h] [ebp-8h]
     uint32_t regionIter; // [esp+38h] [ebp-4h]
 
-    s_world.lightRegion = (GfxLightRegion*)Hunk_Alloc(8 * s_world.primaryLightCount, "R_LoadLightRegions", 20);
+    s_world.lightRegion = (GfxLightRegion*)Hunk_Alloc(sizeof(GfxLightRegion) * s_world.primaryLightCount, "R_LoadLightRegions", 20);
     diskRegions = (DiskLightRegion*)Com_GetBspLump(LUMP_LIGHTREGIONS, 1u, &regionCount);
     s_world.lightGrid.hasLightRegions = diskRegions != 0;
     if (diskRegions)
     {
         diskHulls = Com_GetBspLump(LUMP_LIGHTREGION_HULLS, 0x4Cu, &hullCount);
         diskAxes = (unsigned char*)Com_GetBspLump(LUMP_LIGHTREGION_AXES, 0x14u, &axisCount);
-        hulls = (GfxLightRegionHull*)Hunk_Alloc(80 * hullCount, "R_LoadLightRegionHulls", 20);
+        hulls = (GfxLightRegionHull*)Hunk_Alloc(sizeof(GfxLightRegionHull) * hullCount, "R_LoadLightRegionHulls", 20);
         axes = Hunk_Alloc(20 * axisCount, "R_LoadLightRegionAxes", 20);
         if (regionCount != s_world.primaryLightCount)
             MyAssertHandler(
@@ -1024,7 +1024,7 @@ void __cdecl R_LoadLightmaps(GfxBspLoad *load)
         if (!len)
             memset(primaryImage, 0xFFu, totalImageSize);
         imageFlags = 56;
-        s_world.lightmaps = (GfxLightmapArray*)Hunk_Alloc(0x100u, "R_LoadLightmaps", 20);
+        s_world.lightmaps = (GfxLightmapArray*)Hunk_Alloc(sizeof(GfxLightmapArray) * 32u, "R_LoadLightmaps", 20);
         newLmapIndex = 0;
         oldLmapBaseIndex = 0;
         while (oldLmapBaseIndex < oldLmapCount)
@@ -1120,7 +1120,7 @@ GfxShadowGeometry *R_AllocShadowGeometryHeaderMemory()
     GfxShadowGeometry *result; // eax
 
     iassert( s_world.shadowGeom == NULL );
-    result = (GfxShadowGeometry*)Hunk_Alloc(12 * s_world.primaryLightCount, "R_AllocShadowGeometryHeaderMemory", 20);
+    result = (GfxShadowGeometry*)Hunk_Alloc(sizeof(GfxShadowGeometry) * s_world.primaryLightCount, "R_AllocShadowGeometryHeaderMemory", 20);
     s_world.shadowGeom = result;
     return result;
 }
@@ -1474,7 +1474,7 @@ void __cdecl R_CreateMaterialList()
     }
     if (s_world.materialMemoryCount)
     {
-        s_world.materialMemory = (MaterialMemory*)Hunk_Alloc(8 * s_world.materialMemoryCount, "R_CreateMaterialList", 20);
+        s_world.materialMemory = (MaterialMemory*)Hunk_Alloc(sizeof(MaterialMemory) * s_world.materialMemoryCount, "R_CreateMaterialList", 20);
         index = 0;
         for (hashIndexa = 0; hashIndexa < 0x800u; ++hashIndexa)
         {
@@ -2936,7 +2936,7 @@ void __cdecl R_LoadEntities(uint32_t bspVersion)
         if (!I_stricmp(spawnVars[0][1], "misc_model"))
             ++smodelCount;
     }
-    s_world.dpvs.smodelDrawInsts = (GfxStaticModelDrawInst*)Hunk_Alloc(76 * smodelCount, "R_LoadEntities", 21);
+    s_world.dpvs.smodelDrawInsts = (GfxStaticModelDrawInst*)Hunk_Alloc(sizeof(GfxStaticModelDrawInst) * smodelCount, "R_LoadEntities", 21);
     s_world.dpvs.smodelInsts = (GfxStaticModelInst*)Hunk_Alloc(28 * smodelCount, "R_LoadEntities", 21);
     s_world.dpvs.smodelCount = 0;
     text = startPos;
@@ -3987,7 +3987,7 @@ uint32_t __cdecl R_OptimalSModelResourceStats(GfxWorld *world, GfxSModelSurfStat
     iassert( world );
     if (!world->dpvs.smodelCount)
         return 0;
-    drawInstArray = (const GfxStaticModelDrawInst **)Hunk_AllocateTempMemory(4 * world->dpvs.smodelCount, "R_AssignSModelCacheResources");
+    drawInstArray = (const GfxStaticModelDrawInst **)Hunk_AllocateTempMemory(sizeof(*drawInstArray) * world->dpvs.smodelCount, "R_AssignSModelCacheResources");
     for (smodelIter = 0; smodelIter != world->dpvs.smodelCount; ++smodelIter)
         drawInstArray[smodelIter] = &world->dpvs.smodelDrawInsts[smodelIter];
     //std::_Sort<int *, int, bool(__cdecl *)(int, int)>(
