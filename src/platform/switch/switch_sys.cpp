@@ -617,6 +617,18 @@ static SwitchHeapBin4ProbeEvent
     g_switchHeapBin4ProbeEvents[kSwitchHeapBin4ProbeCount]{};
 static uintptr_t g_switchHeapBin4ProbeNext = 0u;
 
+// Last Z_TryMalloc(100) around its clearing memset, kept per thread so a
+// one-line bin fault can name the owner of the exact adjacent allocation.
+static thread_local uintptr_t g_switchHeapZMallocProbePointer = 0u;
+static thread_local uintptr_t g_switchHeapZMallocProbeOwnerOffset = 0u;
+static thread_local uintptr_t g_switchHeapZMallocProbeRequested = 0u;
+static thread_local uintptr_t g_switchHeapZMallocProbeType = 0u;
+static thread_local uintptr_t g_switchHeapZMallocProbeStage = 0u;
+static thread_local uintptr_t g_switchHeapZMallocBeforePrevFoot = 0u;
+static thread_local uintptr_t g_switchHeapZMallocBeforeHead = 0u;
+static thread_local uintptr_t g_switchHeapZMallocAfterPrevFoot = 0u;
+static thread_local uintptr_t g_switchHeapZMallocAfterHead = 0u;
+
 struct SwitchHeapAuditMemoryRange
 {
     uintptr_t begin;
@@ -809,7 +821,18 @@ static void Switch_HeapTraceReportBin4Fault(
         break;
     }
 
-    char line[1400];
+    const uintptr_t zMallocPointer = g_switchHeapZMallocProbePointer;
+    const uintptr_t zMallocMatches = zMallocPointer == probeGoodResult;
+    const uintptr_t zMallocOwnerOffset = g_switchHeapZMallocProbeOwnerOffset;
+    const uintptr_t zMallocRequested = g_switchHeapZMallocProbeRequested;
+    const uintptr_t zMallocType = g_switchHeapZMallocProbeType;
+    const uintptr_t zMallocStage = g_switchHeapZMallocProbeStage;
+    const uintptr_t zMallocBeforePrev = g_switchHeapZMallocBeforePrevFoot;
+    const uintptr_t zMallocBeforeHead = g_switchHeapZMallocBeforeHead;
+    const uintptr_t zMallocAfterPrev = g_switchHeapZMallocAfterPrevFoot;
+    const uintptr_t zMallocAfterHead = g_switchHeapZMallocAfterHead;
+
+    char line[1792];
     std::snprintf(
         line, sizeof(line),
         "[KisakCOD][HEAP BIN4 AUDIT] reason=%s phase=%c op=%c "
@@ -828,7 +851,11 @@ static void Switch_HeapTraceReportBin4Fault(
         "probeGoodResult=0x%016llx "
         "probeGoodRootFd=0x%016llx probeGoodRootBk=0x%016llx "
         "probeGoodHead=0x%016llx probeGoodFd=0x%016llx "
-        "probeGoodBk=0x%016llx\n",
+        "probeGoodBk=0x%016llx zMallocMatch=%llu "
+        "zMallocPtr=0x%016llx zMallocReq=%llu zMallocType=%llu "
+        "zMallocOwnerOff=0x%llx zMallocStage=%c "
+        "zBeforePrev=0x%016llx zBeforeHead=0x%016llx "
+        "zAfterPrev=0x%016llx zAfterHead=0x%016llx\n",
         reason ? reason : "unknown",
         phase, operation,
         static_cast<unsigned long long>(nextSequence),
@@ -872,7 +899,17 @@ static void Switch_HeapTraceReportBin4Fault(
         static_cast<unsigned long long>(probeGoodRootBk),
         static_cast<unsigned long long>(probeGoodHead),
         static_cast<unsigned long long>(probeGoodFd),
-        static_cast<unsigned long long>(probeGoodBk));
+        static_cast<unsigned long long>(probeGoodBk),
+        static_cast<unsigned long long>(zMallocMatches),
+        static_cast<unsigned long long>(zMallocPointer),
+        static_cast<unsigned long long>(zMallocRequested),
+        static_cast<unsigned long long>(zMallocType),
+        static_cast<unsigned long long>(zMallocOwnerOffset),
+        static_cast<char>(zMallocStage ? zMallocStage : '-'),
+        static_cast<unsigned long long>(zMallocBeforePrev),
+        static_cast<unsigned long long>(zMallocBeforeHead),
+        static_cast<unsigned long long>(zMallocAfterPrev),
+        static_cast<unsigned long long>(zMallocAfterHead));
     Switch_LogCrashLine(line);
 
     // The lightweight probe runs at every malloc/free/calloc/realloc boundary.
@@ -2089,13 +2126,20 @@ static void Switch_DumpHeapTraceForPointer(uintptr_t target)
 } // namespace
 
 extern "C" void Switch_HeapTraceProbeZMalloc(
-    void *pointer, size_t size, char stage)
+    void *pointer, size_t size, char stage, uintptr_t ownerCaller, int32_t type)
 {
 #if defined(KISAK_SWITCH_HEAP_TRACE)
     if (!pointer || size != 100u)
         return;
 
     const uintptr_t user = reinterpret_cast<uintptr_t>(pointer);
+    const uintptr_t codeBase = reinterpret_cast<uintptr_t>(__code_start);
+    g_switchHeapZMallocProbePointer = user;
+    g_switchHeapZMallocProbeOwnerOffset =
+        ownerCaller >= codeBase ? ownerCaller - codeBase : UINTPTR_MAX;
+    g_switchHeapZMallocProbeRequested = static_cast<uintptr_t>(size);
+    g_switchHeapZMallocProbeType = static_cast<uintptr_t>(type);
+    g_switchHeapZMallocProbeStage = static_cast<uintptr_t>(stage);
     if (user < 2u * sizeof(uintptr_t) ||
         (user & (alignof(uintptr_t) - 1u)) != 0u)
         return;
@@ -2110,6 +2154,17 @@ extern "C" void Switch_HeapTraceProbeZMalloc(
     SwitchHeapBin4AuditChunk adjacent{};
     const bool adjacentReadable =
         Switch_HeapTraceReadBin4AuditChunk(adjacentAddress, &adjacent);
+    if (stage == 'B')
+    {
+        g_switchHeapZMallocBeforePrevFoot = adjacentReadable ? adjacent.prevFoot : 0u;
+        g_switchHeapZMallocBeforeHead = adjacentReadable ? adjacent.head : 0u;
+    }
+    else if (stage == 'A')
+    {
+        g_switchHeapZMallocAfterPrevFoot = adjacentReadable ? adjacent.prevFoot : 0u;
+        g_switchHeapZMallocAfterHead = adjacentReadable ? adjacent.head : 0u;
+    }
+
     u64 threadId = 0u;
     (void)svcGetThreadId(&threadId, CUR_THREAD_HANDLE);
 
@@ -2136,6 +2191,8 @@ extern "C" void Switch_HeapTraceProbeZMalloc(
     (void)pointer;
     (void)size;
     (void)stage;
+    (void)ownerCaller;
+    (void)type;
 #endif
 }
 
