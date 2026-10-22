@@ -1861,31 +1861,93 @@ bool VulkanBackend::EndFrame()
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
             VK_IMAGE_ASPECT_COLOR_BIT);
 
-        TransitionImage(
-            swapImage,
-            m_swapchainLayouts[m_swapchainIndex],
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
+        if (m_srgbBackbufferImage)
+        {
+            // Encode an UNORM offscreen present source by blitting into the sRGB
+            // attachment, then copy those encoded bytes into the UNORM swapchain.
+            TransitionImage(
+                m_srgbBackbufferImage,
+                m_srgbBackbufferLayout,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT);
 
-        VkImageBlit blit{};
-        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.srcSubresource.layerCount = 1;
-        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.dstSubresource.layerCount = 1;
-        blit.srcOffsets[0] = {0, 0, 0};
-        blit.srcOffsets[1] = {
-            static_cast<int32_t>(m_presentSourceWidth),
-            static_cast<int32_t>(m_presentSourceHeight), 1};
-        blit.dstOffsets[0] = {0, 0, 0};
-        blit.dstOffsets[1] = {
-            static_cast<int32_t>(m_width),
-            static_cast<int32_t>(m_height), 1};
+            VkImageBlit encodeBlit{};
+            encodeBlit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            encodeBlit.srcSubresource.layerCount = 1;
+            encodeBlit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            encodeBlit.dstSubresource.layerCount = 1;
+            encodeBlit.srcOffsets[0] = {0, 0, 0};
+            encodeBlit.srcOffsets[1] = {
+                static_cast<int32_t>(m_presentSourceWidth),
+                static_cast<int32_t>(m_presentSourceHeight), 1};
+            encodeBlit.dstOffsets[0] = {0, 0, 0};
+            encodeBlit.dstOffsets[1] = {
+                static_cast<int32_t>(m_width),
+                static_cast<int32_t>(m_height), 1};
+            vkCmdBlitImage(
+                m_commandBuffer,
+                m_presentSourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                m_srgbBackbufferImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &encodeBlit, VK_FILTER_LINEAR);
 
-        vkCmdBlitImage(
-            m_commandBuffer,
-            m_presentSourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1, &blit, VK_FILTER_LINEAR);
+            TransitionImage(
+                m_srgbBackbufferImage,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT);
+            TransitionImage(
+                swapImage,
+                m_swapchainLayouts[m_swapchainIndex],
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT);
+
+            VkImageCopy encodedCopy{};
+            encodedCopy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            encodedCopy.srcSubresource.layerCount = 1;
+            encodedCopy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            encodedCopy.dstSubresource.layerCount = 1;
+            encodedCopy.extent = {m_width, m_height, 1};
+            vkCmdCopyImage(
+                m_commandBuffer,
+                m_srgbBackbufferImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &encodedCopy);
+
+            TransitionImage(
+                m_srgbBackbufferImage,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT);
+            m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        }
+        else
+        {
+            TransitionImage(
+                swapImage,
+                m_swapchainLayouts[m_swapchainIndex],
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_ASPECT_COLOR_BIT);
+
+            VkImageBlit blit{};
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.layerCount = 1;
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.layerCount = 1;
+            blit.srcOffsets[0] = {0, 0, 0};
+            blit.srcOffsets[1] = {
+                static_cast<int32_t>(m_presentSourceWidth),
+                static_cast<int32_t>(m_presentSourceHeight), 1};
+            blit.dstOffsets[0] = {0, 0, 0};
+            blit.dstOffsets[1] = {
+                static_cast<int32_t>(m_width),
+                static_cast<int32_t>(m_height), 1};
+
+            vkCmdBlitImage(
+                m_commandBuffer,
+                m_presentSourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &blit, VK_FILTER_LINEAR);
+        }
 
         // The compatibility render target remains in COLOR_ATTACHMENT_OPTIMAL
         // between frames. Restore its tracked layout after the present blit.
@@ -1895,6 +1957,47 @@ bool VulkanBackend::EndFrame()
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             VK_IMAGE_ASPECT_COLOR_BIT);
 
+        TransitionImage(
+            swapImage,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+        m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    }
+    else if (m_srgbBackbufferImage && m_backbufferClearedThisFrame)
+    {
+        // Direct-to-backbuffer rendering uses the sRGB attachment above. Its
+        // stored texels are already display-encoded, so copy rather than blit:
+        // blitting sRGB into UNORM would decode them and reintroduce the dark frame.
+        TransitionImage(
+            m_srgbBackbufferImage,
+            m_srgbBackbufferLayout,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+        TransitionImage(
+            swapImage,
+            m_swapchainLayouts[m_swapchainIndex],
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+
+        VkImageCopy encodedCopy{};
+        encodedCopy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        encodedCopy.srcSubresource.layerCount = 1;
+        encodedCopy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        encodedCopy.dstSubresource.layerCount = 1;
+        encodedCopy.extent = {m_width, m_height, 1};
+        vkCmdCopyImage(
+            m_commandBuffer,
+            m_srgbBackbufferImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            swapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1, &encodedCopy);
+
+        TransitionImage(
+            m_srgbBackbufferImage,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_ASPECT_COLOR_BIT);
+        m_srgbBackbufferLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         TransitionImage(
             swapImage,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
