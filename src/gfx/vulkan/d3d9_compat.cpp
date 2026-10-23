@@ -8264,7 +8264,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     // deliberately at draw time (not pipeline creation) and has no camera-height
     // gate, so pipeline-cache hits and scripted camera movement cannot hide it.
     static uint32_t switchLightmapDrawRouteTraceCount = 0;
-    if (switchLightmapDrawRouteTraceCount < 12u &&
+    const float switchLightmapCameraZ = m_vsFloat[6][3];
+    const bool switchLightmapGameplayCamera =
+        switchLightmapCameraZ >= -2000.0f && switchLightmapCameraZ <= 2000.0f;
+    if (switchLightmapGameplayCamera &&
+        switchLightmapDrawRouteTraceCount < 12u &&
         m_pixelShader && m_pixelShader->parseData &&
         m_pixelShader->parseData->samplers)
     {
@@ -8324,12 +8328,59 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 minRawIndex == UINT32_MAX ? 0u : minRawIndex, maxRawIndex,
                 static_cast<long long>(minEffectiveVertex),
                 static_cast<long long>(maxEffectiveVertex),
-                m_vsFloat[6][3],
+                switchLightmapCameraZ,
                 m_viewport.X, m_viewport.Y, m_viewport.Width, m_viewport.Height,
                 m_cullMode, m_depthEnable ? 1u : 0u, m_depthWrite ? 1u : 0u,
                 m_blendEnable ? 1u : 0u, m_colorWriteMask,
                 tex0, tex1, tex2, tex3);
             Switch_LogWrite(trace);
+
+            // Record which physical declaration element feeds each actual
+            // vertex-shader input on the gameplay draw. This catches semantic
+            // matches that exist by name but point at the wrong world-vertex bytes.
+            if (m_vertexShader && m_vertexShader->parseData &&
+                m_vertexShader->parseData->attributes)
+            {
+                const MOJOSHADER_parseData *vsParse = m_vertexShader->parseData;
+                const int attrLimit = std::min(vsParse->attribute_count, 12);
+                for (int attrIndex = 0; attrIndex < attrLimit; ++attrIndex)
+                {
+                    const MOJOSHADER_attribute &attr = vsParse->attributes[attrIndex];
+                    const _D3DVERTEXELEMENT9 *matched = nullptr;
+                    if (m_decl)
+                    {
+                        for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
+                        {
+                            if (element.Stream < 16 &&
+                                element.Usage == static_cast<uint8_t>(attr.usage) &&
+                                element.UsageIndex == attr.index)
+                            {
+                                matched = &element;
+                                break;
+                            }
+                        }
+                    }
+                    uint32_t location = UINT32_MAX;
+                    const bool locationValid =
+                        attr.name && ExtractShaderInputRegister(attr.name, &location);
+                    char attrTrace[320];
+                    std::snprintf(
+                        attrTrace, sizeof(attrTrace),
+                        "[KisakCOD][VK LIGHTMAP DRAW ATTR] n=%u i=%d name=%s usage=%u index=%u location=%u locationValid=%u matched=%u stream=%u declaredOffset=%u effectiveOffset=%u declaredType=%u effectiveType=%u bytes=%u stride=%u\\n",
+                        traceIndex, attrIndex, attr.name ? attr.name : "<null>",
+                        static_cast<unsigned>(attr.usage), static_cast<unsigned>(attr.index),
+                        location, locationValid ? 1u : 0u, matched ? 1u : 0u,
+                        matched ? static_cast<unsigned>(matched->Stream) : UINT32_MAX,
+                        matched ? static_cast<unsigned>(matched->Offset) : UINT32_MAX,
+                        matched ? static_cast<unsigned>(SwitchEffectiveShaderElementOffset(m_decl, *matched)) : UINT32_MAX,
+                        matched ? static_cast<unsigned>(matched->Type) : UINT32_MAX,
+                        matched ? static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, *matched)) : UINT32_MAX,
+                        matched ? SwitchShaderElementByteSize(SwitchEffectiveShaderElementType(m_decl, *matched)) : 0u,
+                        matched && matched->Stream < 16 ? m_streams[matched->Stream].stride : 0u);
+                    Switch_LogWrite(attrTrace);
+                }
+            }
+
             if (m_decl)
             {
                 const size_t elementLimit = std::min<size_t>(m_decl->elements.size(), 12u);
