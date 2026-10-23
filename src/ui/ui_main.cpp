@@ -2769,9 +2769,9 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
 
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open";
 #endif
-        const int switchMainMenuOpenResult = Menus_OpenByName(&uiInfo.uiDC, "main");
 #ifdef __SWITCH__
         {
+            const int switchMainMenuOpenResult = Menus_OpenByName(&uiInfo.uiDC, "main");
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
@@ -2784,6 +2784,8 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
                 cls.uiStarted ? 1 : 0);
             Switch_LogWrite(trace);
         }
+#else
+        Menus_OpenByName(&uiInfo.uiDC, "main");
 #endif
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open_done";
