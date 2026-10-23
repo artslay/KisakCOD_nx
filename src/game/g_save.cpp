@@ -1813,32 +1813,37 @@ void __cdecl G_SaveItems(SaveGame *save)
 
 void __cdecl G_SaveWeaponCue(SaveGame *save)
 {
-    EntHandle *droppedWeaponCue;
-    unsigned int serializedEntity;
-
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1956, 0, "%s", "save");
+
+    constexpr int kWeaponCueCount = ARRAY_COUNT(level.droppedWeaponCue);
+    unsigned int serializedEntities[kWeaponCueCount]{};
 #ifdef __SWITCH__
     SwitchSaveCursorTrace("save_weapon_cue_begin", save, 0);
 #endif
-    droppedWeaponCue = level.droppedWeaponCue;
-    do
+
+    // Serialize the fixed cue table as one logical block. MemFile's zero-run
+    // encoding keeps state across writes; a single block also keeps the fixed
+    // table boundary identical on save and load without changing its contents.
+    for (int slot = 0; slot < kWeaponCueCount; ++slot)
     {
+        EntHandle *droppedWeaponCue = &level.droppedWeaponCue[slot];
         const int number = droppedWeaponCue->number;
         if (number && (number > MAX_GENTITIES || !g_entities[number - 1].r.inuse))
             MyAssertHandler(
                 "c:\\trees\\cod3\\cod3src\\src\\game\\g_public.h",
                 336,
                 0,
-                "%s\n\t(number - 1) = %i",
+                "%s\\n\\t(number - 1) = %i",
                 "(!number || (number <= MAX_GENTITIES && g_entities[number - 1].r.inuse))",
                 number - 1);
-        serializedEntity = number ? static_cast<unsigned int>(droppedWeaponCue->entnum() + 1) : 0u;
-        SaveMemory_SaveWrite(&serializedEntity, sizeof(serializedEntity), save);
-        ++droppedWeaponCue;
-    } while (droppedWeaponCue < &level.droppedWeaponCue[ARRAY_COUNT(level.droppedWeaponCue)]);
+        serializedEntities[slot] =
+            number ? static_cast<unsigned int>(droppedWeaponCue->entnum() + 1) : 0u;
+    }
+
+    SaveMemory_SaveWrite(serializedEntities, sizeof(serializedEntities), save);
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("save_weapon_cue_end", save, ARRAY_COUNT(level.droppedWeaponCue));
+    SwitchSaveCursorTrace("save_weapon_cue_end", save, kWeaponCueCount);
 #endif
 }
 
@@ -1856,35 +1861,32 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
     SwitchSaveCursorTrace("load_weapon_cue_begin", save, kWeaponCueCount);
 #endif
 
-    // Read the fixed-size table completely before rejecting corrupt indices.
-    // The old error path could continue into g_entities[value - 1] after
-    // Com_Error returned, turning a malformed save into an ARM64 memory fault.
+    // Read the fixed-size table in the same single block used by the writer.
+    SaveMemory_LoadRead(savedEntityNumbers, sizeof(savedEntityNumbers), save);
+    if (memFile && memFile->memoryOverflow)
+    {
+#ifdef __SWITCH__
+        char trace[256];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][WEAPON CUE LOAD] result=truncated_table count=%d segment=%d used=%d start=%d\\n",
+            kWeaponCueCount, memFile->segmentIndex, memFile->bytesUsed, memFile->segmentStart);
+        Switch_LogWrite(trace);
+#endif
+        Com_Error(ERR_DROP, "G_LoadWeaponCue: save data ended in cue table");
+        return;
+    }
+
     for (int slot = 0; slot < kWeaponCueCount; ++slot)
     {
-        int savedEntity = 0;
-        SaveMemory_LoadRead(&savedEntity, sizeof(savedEntity), save);
-        if (memFile && memFile->memoryOverflow)
-        {
-#ifdef __SWITCH__
-            char trace[256];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][WEAPON CUE LOAD] result=truncated slot=%d segment=%d used=%d start=%d\n",
-                slot, memFile->segmentIndex, memFile->bytesUsed, memFile->segmentStart);
-            Switch_LogWrite(trace);
-#endif
-            Com_Error(ERR_DROP, "G_LoadWeaponCue: save data ended at cue %d", slot);
-            return;
-        }
-
-        savedEntityNumbers[slot] = savedEntity;
+        const int savedEntity = savedEntityNumbers[slot];
         if (savedEntity < 0 || savedEntity > MAX_GENTITIES)
         {
 #ifdef __SWITCH__
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][WEAPON CUE LOAD] result=invalid_index slot=%d value=%d max=%d segment=%d used=%d start=%d\n",
+                "[KisakCOD][WEAPON CUE LOAD] result=invalid_index slot=%d value=%d max=%d segment=%d used=%d start=%d\\n",
                 slot, savedEntity, MAX_GENTITIES,
                 memFile ? memFile->segmentIndex : -1,
                 memFile ? memFile->bytesUsed : -1,
@@ -1928,8 +1930,8 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
                 "c:\\trees\\cod3\\cod3src\\src\\game\\g_public.h",
                 336,
                 0,
-                "%s\n\t(number - 1) = %i",
-                "(!number || g_entities[number - 1].r.inuse)",
+                "%s\\n\\t(number - 1) = %i",
+                "(!number || (number <= MAX_GENTITIES && g_entities[number - 1].r.inuse))",
                 existingNumber - 1);
         if (existingNumber)
             MyAssertHandler(
