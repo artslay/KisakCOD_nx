@@ -37,6 +37,7 @@
 #ifdef __SWITCH__
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <gfx/gfx_backend.h>
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
@@ -2931,7 +2932,7 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
                 static_cast<void *>(cmd->font->material),
                 static_cast<void *>(cmd->font->glyphs),
                 cmd->font->glyphCount,
-                static_cast<unsigned>(std::strlen(cmd->text)),
+                static_cast<unsigned>(strlen(cmd->text)),
                 cmd->maxChars, cmd->x, cmd->y, cmd->xScale, cmd->yScale,
                 static_cast<unsigned>(cmd->renderFlags), cmd->text);
             Switch_LogWrite(trace);
