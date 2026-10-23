@@ -1643,8 +1643,6 @@ bool __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1795, 0, "%s", "save");
 
     memFile = SaveMemory_GetMemoryFile(save);
-#ifdef __SWITCH__
-#endif
 
     for (int i = 0; i < iCount; ++i)
     {
@@ -1689,8 +1687,6 @@ bool __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
         SV_SetConfigstring(i + iFirst, stringBuffer);
     }
 
-#ifdef __SWITCH__
-#endif
     return true;
 }
 
@@ -1834,8 +1830,6 @@ void __cdecl G_SaveWeaponCue(SaveGame *save)
 
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1956, 0, "%s", "save");
-#ifdef __SWITCH__
-#endif
     droppedWeaponCue = level.droppedWeaponCue;
     do
     {
@@ -1852,8 +1846,6 @@ void __cdecl G_SaveWeaponCue(SaveGame *save)
         SaveMemory_SaveWrite(&serializedEntity, sizeof(serializedEntity), save);
         ++droppedWeaponCue;
     } while (droppedWeaponCue < &level.droppedWeaponCue[ARRAY_COUNT(level.droppedWeaponCue)]);
-#ifdef __SWITCH__
-#endif
 }
 
 void __cdecl G_LoadWeaponCue(SaveGame *save)
@@ -1866,8 +1858,6 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
     int firstInvalidSlot = -1;
     int firstInvalidValue = 0;
     MemoryFile *memFile = SaveMemory_GetMemoryFile(save);
-#ifdef __SWITCH__
-#endif
 
     // Read the fixed-size table completely before rejecting corrupt indices.
     // The old error path could continue into g_entities[value - 1] after
@@ -1912,8 +1902,6 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
         }
     }
 
-#ifdef __SWITCH__
-#endif
     if (firstInvalidSlot >= 0)
     {
         Com_Error(
@@ -2294,8 +2282,6 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
 #ifdef __SWITCH__
     SwitchSavePhase("frame/save/main_state/dynamic_entities");
 #endif
-#ifdef __SWITCH__
-#endif
     DynEnt_SaveEntities(SaveMemory_GetMemoryFile(save));
 #ifdef __SWITCH__
     SwitchSavePhase("frame/save/main_state/threat_group");
@@ -2312,8 +2298,6 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
         SaveMemory_SaveWrite(g_AIEVlisteners, sizeof(AIEventListener) * listenerCount, save);
 
     iassert(level.currentTriggerListSize == 0);
-#ifdef __SWITCH__
-#endif
     SaveMemory_SaveWrite(&level.pendingTriggerListSize, 4, save);
     SaveMemory_SaveWrite(level.pendingTriggerList, 12 * level.pendingTriggerListSize, save);
     G_SaveWeaponCue(save);
@@ -2951,11 +2935,7 @@ bool __cdecl G_LoadMainState(SaveGame *save)
 
     level.actorCorpseCount = 16;
 
-#ifdef __SWITCH__
-#endif
     DynEnt_LoadEntities(SaveMemory_GetMemoryFile(save));
-#ifdef __SWITCH__
-#endif
 
     G_ReadStruct(threatGroupFields, (unsigned __int8 *)&g_threatBias, sizeof(threat_bias_t), save);
 
@@ -2965,8 +2945,6 @@ bool __cdecl G_LoadMainState(SaveGame *save)
     if (listenerCount < 0 ||
         listenerCount > static_cast<int>(ARRAY_COUNT(g_AIEVlisteners)))
     {
-#ifdef __SWITCH__
-#endif
         Com_Error(
             ERR_DROP,
             "G_LoadMainState: AI event listener count out of range (%d, max %d)",
@@ -2987,8 +2965,6 @@ bool __cdecl G_LoadMainState(SaveGame *save)
     if (pendingTriggerCount < 0 ||
         pendingTriggerCount > static_cast<int>(ARRAY_COUNT(level.pendingTriggerList)))
     {
-#ifdef __SWITCH__
-#endif
         Com_Error(
             ERR_DROP,
             "G_LoadMainState: pending trigger count out of range (%d, max %d)",
@@ -2997,8 +2973,6 @@ bool __cdecl G_LoadMainState(SaveGame *save)
         return false;
     }
     level.pendingTriggerListSize = pendingTriggerCount;
-#ifdef __SWITCH__
-#endif
     SaveMemory_LoadRead(
         level.pendingTriggerList,
         static_cast<int>(sizeof(level.pendingTriggerList[0]) * pendingTriggerCount),
@@ -3009,15 +2983,9 @@ bool __cdecl G_LoadMainState(SaveGame *save)
         !G_LoadConfigstrings(59, 32, save))
         return false;
 
-#ifdef __SWITCH__
-#endif
     G_LoadTargets();
     Missile_LoadAttractors(memFile);
-#ifdef __SWITCH__
-#endif
     Cmd_LoadNotifications(memFile);
-#ifdef __SWITCH__
-#endif
     SaveMemory_MoveToSegment(save, 5);
 
     v17 = 0;
