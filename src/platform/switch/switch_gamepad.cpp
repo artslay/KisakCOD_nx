@@ -329,8 +329,17 @@ void Switch_GamepadFrame()
     if ((g_buttons & kConsoleShortcutButtons) != kConsoleShortcutButtons)
         g_consoleShortcutConsumed = false;
 
+    // Pressed(mask) intentionally means "any bit changed down", which is
+    // correct for multi-button cinematic skip masks but wrong for an AND-style
+    // shortcut. Require both stick-click bits to be down and the pair to have
+    // been incomplete in the previous sample. A single L3 or R3 must not open
+    // the console.
+    const bool consoleShortcutPressed =
+        (g_buttons & kConsoleShortcutButtons) == kConsoleShortcutButtons &&
+        (g_previousButtons & kConsoleShortcutButtons) != kConsoleShortcutButtons;
+
     if (!cinematicActive && !activeGameCinematic &&
-        !mapLoadingCinematicActive && Pressed(kConsoleShortcutButtons))
+        !mapLoadingCinematicActive && consoleShortcutPressed)
     {
         g_consoleShortcutConsumed = true;
         if (gameplayActive)
