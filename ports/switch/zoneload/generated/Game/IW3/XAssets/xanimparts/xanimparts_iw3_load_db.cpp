@@ -384,7 +384,7 @@ void Loader_XAnimParts::Load_XAnimDeltaPart(const bool atStreamStart)
     if (varXAnimDeltaPart->trans)
     {
         // Alloc first for alignment, then proceed to read as game does
-        m_stream.Alloc(alignof(XAnimPartTrans));
+        m_stream.Alloc(4);
         const auto allocSize = LoadDynamicFill_XAnimPartTrans(m_stream.LoadWithFill(0));
         varXAnimDeltaPart->trans = static_cast<XAnimPartTrans*>(m_stream.AllocOutOfBlock(0, allocSize));
         varXAnimPartTrans = varXAnimDeltaPart->trans;
@@ -394,7 +394,7 @@ void Loader_XAnimParts::Load_XAnimDeltaPart(const bool atStreamStart)
     if (varXAnimDeltaPart->quat)
     {
         // Alloc first for alignment, then proceed to read as game does
-        m_stream.Alloc(alignof(XAnimDeltaPartQuat));
+        m_stream.Alloc(4);
         const auto allocSize = LoadDynamicFill_XAnimDeltaPartQuat(m_stream.LoadWithFill(0));
         varXAnimDeltaPart->quat = static_cast<XAnimDeltaPartQuat*>(m_stream.AllocOutOfBlock(0, allocSize));
         varXAnimDeltaPartQuat = varXAnimDeltaPart->quat;
