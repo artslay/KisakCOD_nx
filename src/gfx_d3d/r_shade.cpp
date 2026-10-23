@@ -712,6 +712,58 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
         Switch_LogWrite(trace);
         ++switchUiPassTraceCount;
     }
+    {
+        static uint32_t switchFontPassTraceCount = 0;
+        const bool isFontAtlas =
+            !I_stricmp(switchUiMaterialName, "fonts/gamefonts_pc") ||
+            !I_stricmp(switchUiMaterialName, "fonts/gamefonts_pc_glow") ||
+            !I_stricmp(switchUiMaterialName, "fonts/devfonts") ||
+            !I_stricmp(switchUiMaterialName, "fonts/devfonts_glow");
+        if (isFontAtlas && switchFontPassTraceCount < 24u)
+        {
+            const MaterialTextureDef *texture =
+                material->textureTable && material->textureCount
+                    ? &material->textureTable[0] : nullptr;
+            const GfxImage *image =
+                texture && texture->semantic != TS_WATER_MAP
+                    ? texture->u.image : nullptr;
+            const uintptr_t imageAddress = reinterpret_cast<uintptr_t>(image);
+            const bool safeImage =
+                image && imageAddress > UINT32_MAX &&
+                imageAddress < (1ULL << 39) &&
+                (imageAddress & (alignof(GfxImage) - 1u)) == 0;
+            const auto *vkTexture =
+                safeImage ? image->texture.basemap : nullptr;
+            char fontTrace[768];
+            std::snprintf(
+                fontTrace, sizeof(fontTrace),
+                "[KisakCOD][FONT PASS] n=%u material=%s techType=%u pass=%u view=%u state=%08x/%08x image=%s imagePtr=%p imageSafe=%u size=%ux%u vkTexture=%p vkView=%p format=%u layout=%u vs=%s ps=%s args=%p counts=%u,%u,%u\\n",
+                static_cast<unsigned>(switchFontPassTraceCount),
+                switchUiMaterialName,
+                static_cast<unsigned>(context.state->techType),
+                static_cast<unsigned>(passIndex),
+                static_cast<unsigned>(context.source->viewMode),
+                static_cast<unsigned>(stateBits[0]),
+                static_cast<unsigned>(stateBits[1]),
+                safeImage && image->name ? image->name : "<unreadable>",
+                static_cast<const void *>(image),
+                safeImage ? 1u : 0u,
+                safeImage ? image->width : 0u,
+                safeImage ? image->height : 0u,
+                static_cast<const void *>(vkTexture),
+                static_cast<const void *>(vkTexture ? vkTexture->view : VK_NULL_HANDLE),
+                vkTexture ? static_cast<unsigned>(vkTexture->format) : 0u,
+                vkTexture ? static_cast<unsigned>(vkTexture->layout) : 0u,
+                pass->vertexShader && pass->vertexShader->name ? pass->vertexShader->name : "<null>",
+                pass->pixelShader && pass->pixelShader->name ? pass->pixelShader->name : "<null>",
+                static_cast<const void *>(pass->args),
+                static_cast<unsigned>(pass->perPrimArgCount),
+                static_cast<unsigned>(pass->perObjArgCount),
+                static_cast<unsigned>(pass->stableArgCount));
+            Switch_LogWrite(fontTrace);
+            ++switchFontPassTraceCount;
+        }
+    }
 #endif
 #ifdef KISAK_RADIANT
     // IDB R_SetupPass @0x53c563: for 2D draws the binary forces the low 6 (depth-state) bits of
@@ -913,6 +965,53 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
                 vkTexture ? static_cast<unsigned>(vkTexture->sourceFormat) : 0u,
                 vkTexture ? static_cast<unsigned>(vkTexture->layout) : 0u);
             Switch_LogWrite(trace);
+        }
+    }
+#endif
+#ifdef __SWITCH__
+    {
+        static std::atomic<uint32_t> switchFontSamplerTraceCount{0};
+        const char *fontMaterialName =
+            material && material->info.name ? material->info.name : "";
+        const bool isFontAtlas =
+            !I_stricmp(fontMaterialName, "fonts/gamefonts_pc") ||
+            !I_stricmp(fontMaterialName, "fonts/gamefonts_pc_glow") ||
+            !I_stricmp(fontMaterialName, "fonts/devfonts") ||
+            !I_stricmp(fontMaterialName, "fonts/devfonts_glow");
+        const uint32_t traceIndex = isFontAtlas
+            ? switchFontSamplerTraceCount.fetch_add(1, std::memory_order_relaxed)
+            : 24u;
+        if (isFontAtlas && traceIndex < 24u)
+        {
+            const uintptr_t imageAddress = reinterpret_cast<uintptr_t>(image);
+            const bool safeImage =
+                image && imageAddress > UINT32_MAX &&
+                imageAddress < (1ULL << 39) &&
+                (imageAddress & (alignof(GfxImage) - 1u)) == 0;
+            const auto *vkTexture =
+                safeImage ? image->texture.basemap : nullptr;
+            const MaterialPass *pass = context.state->pass;
+            char fontTrace[640];
+            std::snprintf(
+                fontTrace, sizeof(fontTrace),
+                "[KisakCOD][FONT SAMPLER] n=%u mat=%s ps=%s slot=%u semantic=%u sampler=%u image=%s imagePtr=%p safe=%u size=%ux%u vkTexture=%p vkView=%p format=%u layout=%u\\n",
+                static_cast<unsigned>(traceIndex),
+                fontMaterialName,
+                pass && pass->pixelShader && pass->pixelShader->name
+                    ? pass->pixelShader->name : "<null>",
+                static_cast<unsigned>(arg->dest),
+                static_cast<unsigned>(texDef->semantic),
+                static_cast<unsigned>(texDef->samplerState),
+                safeImage && image->name ? image->name : "<unreadable>",
+                static_cast<const void *>(image),
+                safeImage ? 1u : 0u,
+                safeImage ? image->width : 0u,
+                safeImage ? image->height : 0u,
+                static_cast<const void *>(vkTexture),
+                static_cast<const void *>(vkTexture ? vkTexture->view : VK_NULL_HANDLE),
+                vkTexture ? static_cast<unsigned>(vkTexture->format) : 0u,
+                vkTexture ? static_cast<unsigned>(vkTexture->layout) : 0u);
+            Switch_LogWrite(fontTrace);
         }
     }
 #endif
