@@ -5452,7 +5452,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             char trace[512];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK ACTIVE SAMPLER FAIL] stage=%s shader=%llu slot=%u sampler=%s reason=%s frame=%llu texture=%p image=%.95s size=%ux%u mips=%u layers=%u format=%u baseLayout=%u\\n",
+                "[KisakCOD][VK ACTIVE SAMPLER FAIL] stage=%s shader=%llu slot=%u sampler=%s reason=%s frame=%llu texture=%p image=%.95s size=%ux%u mips=%u layers=%u format=%u baseLayout=%u\n",
                 setIndex == 0 ? "vs" : "ps",
                 static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
                 slot,
@@ -5489,7 +5489,7 @@ bool IDirect3DDevice9::BindSamplerSet(
         char trace[512];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK ACTIVE SAMPLER FALLBACK] stage=%s shader=%llu slot=%u sampler=%s reason=%s frame=%llu texture=%p image=%.95s size=%ux%u mips=%u layers=%u format=%u baseLayout=%u\\n",
+            "[KisakCOD][VK ACTIVE SAMPLER FALLBACK] stage=%s shader=%llu slot=%u sampler=%s reason=%s frame=%llu texture=%p image=%.95s size=%ux%u mips=%u layers=%u format=%u baseLayout=%u\n",
             setIndex == 0 ? "vs" : "ps",
             static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
             slot,
