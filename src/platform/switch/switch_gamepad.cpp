@@ -400,6 +400,12 @@ void Switch_GamepadFrame()
     // through the standard key path so the stock +activate binding runs.
     SendKeyEdge(HidNpadButton_Y, 'f', gameplayActive);
 
+    // Weapon cycling uses CoD4's stock mouse-wheel bindings. D-pad left moves
+    // to the previous weapon and D-pad right to the next one; don't send these
+    // key events while the menu owns the D-pad.
+    SendKeyEdge(HidNpadButton_Left, K_MWHEELDOWN, gameplayActive);
+    SendKeyEdge(HidNpadButton_Right, K_MWHEELUP, gameplayActive);
+
     // D-pad up is night vision during gameplay.
     if (gameplayActive)
     {
