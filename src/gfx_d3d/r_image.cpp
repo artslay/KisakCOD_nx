@@ -26,7 +26,6 @@ extern uint32_t g_switchCurrentAssetRawType;
 #include "r_outdoor.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cstring>
 #include <vector>
 
@@ -38,7 +37,6 @@ extern void Switch_LogWrite(const char *msg);
 
 namespace
 {
-uint32_t s_switchVulkanAllocTraceCount = 0;
 
 
 enum class VulkanTextureKind : uint8_t
@@ -358,7 +356,6 @@ bool R_VulkanAllocTexture(
         return false;
     }
 
-    ++s_switchVulkanAllocTraceCount;
     return true;
 }
 
@@ -910,18 +907,12 @@ void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
                 image->cardMemory.platform[0] = 0;
                 image->cardMemory.platform[1] = 0;
 
-#ifdef __SWITCH__
-#endif
 
                 if (!Image_LoadFromFile(image))
                 {
-#ifdef __SWITCH__
-#endif
 
                     const bool fallback = Image_AssignDefaultTexture(image);
 
-#ifdef __SWITCH__
-#endif
                 }
 
                 DB_LoadedExternalData(externalDataSize);
@@ -979,32 +970,9 @@ GfxImage *__cdecl Image_Register_FastFile(const char *imageName)
                 break;
 
 #ifdef __SWITCH__
-            if (!I_stricmp(imageName, "$white"))
-            {
-                const uintptr_t candidateName =
-                    reinterpret_cast<uintptr_t>(image->name);
-                char trace[256];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[SWITCH IMGBOOT] $white probe hash=%u image=%p name=%p\n",
-                    static_cast<unsigned>(hashIndex),
-                    static_cast<void *>(image),
-                    static_cast<const void *>(image->name));
-                Switch_LogWrite(trace);
-
-                if (candidateName < 0x10000u)
-                {
-                    std::snprintf(
-                        trace,
-                        sizeof(trace),
-                        "[SWITCH IMGBOOT] $white INVALID image name ptr=%p hash=%u\n",
-                        static_cast<const void *>(image->name),
-                        static_cast<unsigned>(hashIndex));
-                    Switch_LogWrite(trace);
-                    return nullptr;
-                }
-            }
+            if (!I_stricmp(imageName, "$white") &&
+                reinterpret_cast<uintptr_t>(image->name) < 0x10000u)
+                return nullptr;
 #endif
             if (!I_stricmp(image->name, imageName))
                 return Image_IsProg(image) ? nullptr : image;
@@ -1159,11 +1127,7 @@ GfxImage *__cdecl Image_LoadBuiltin(char *name, uint8_t semantic, uint8_t imageT
 
     image = Image_Alloc(name, IMG_CATEGORY_AUTO_GENERATED, semantic, imageTrack);
     iassert(image);
-#ifdef __SWITCH__
-#endif
     constructorTable[tableIndex].LoadCallback(image);
-#ifdef __SWITCH__
-#endif
     return image;
 }
 
@@ -1214,8 +1178,6 @@ GfxImage *__cdecl Image_Alloc(
 
     iassert( name );
     v5 = strlen(name);
-#ifdef __SWITCH__
-#endif
     // GfxImage is 48 bytes on Switch (36 bytes on 32-bit PC).
     // v5 + 37 was the serialized 32-bit allocation and under-allocates the
     // native ARM64 object by 12 bytes before the inline name.
@@ -1224,55 +1186,9 @@ GfxImage *__cdecl Image_Alloc(
         "Image_Alloc",
         22);
     iassert( image );
-#ifdef __SWITCH__
-    const bool traceWhite = name && name[0] == '$' &&
-        std::strcmp(name, "$white") == 0;
-    if (traceWhite)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IMGBOOT] $white alloc image=%p size=%u struct=%u nameField=%u\n",
-            static_cast<void *>(image),
-            static_cast<unsigned>(sizeof(GfxImage) + v5 + 1),
-            static_cast<unsigned>(sizeof(GfxImage)),
-            static_cast<unsigned>(offsetof(GfxImage, name)));
-        Switch_LogWrite(trace);
-    }
-#endif
-#ifdef __SWITCH__
-#endif
     image->name = (const char *)&image[1];
-#ifdef __SWITCH__
-    if (traceWhite)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IMGBOOT] $white name slot=%p image=%p\n",
-            static_cast<const void *>(image->name),
-            static_cast<void *>(image));
-        Switch_LogWrite(trace);
-    }
-#endif
     Image_Construct(name, v5 + 1, category, semantic, imageTrack, image);
-#ifdef __SWITCH__
-#endif
     const int hashLocation = Image_GetAvailableHashLocation(name);
-#ifdef __SWITCH__
-    if (traceWhite)
-    {
-        char trace[160];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[SWITCH IMGBOOT] $white hash slot=%d\n",
-            hashLocation);
-        Switch_LogWrite(trace);
-    }
-#endif
     imageGlobals.imageHashTable[hashLocation] = image;
     return image;
 }

@@ -627,18 +627,9 @@ static Material *Switch_FindLoadedMaterialByName(const char *name)
 
 Material *__cdecl Material_Register_FastFile(const char *name)
 {
+    XAssetHeader header = DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name);    XAssetHeader header = DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name);
 #ifdef __SWITCH__
-    extern void Switch_LogRaw(const char *msg);
-    char trace[256];
-    std::snprintf(trace, sizeof(trace), "[SWITCH MATERIAL TRACE] before DB_FindXAssetHeader name=%s\n", name);
-    Switch_LogRaw(trace);
-#endif
-    XAssetHeader header = DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name);
-#ifdef __SWITCH__
-    std::snprintf(trace, sizeof(trace), "[SWITCH MATERIAL TRACE] after DB_FindXAssetHeader name=%s material=%p\n", name, (void *)header.material);
-    Switch_LogRaw(trace);
-
-    // DB_FindXAssetHeader may return a default clone if a serialized material
+    // DB_FindXAssetHeader may return a default clone    // DB_FindXAssetHeader may return a default clone if a serialized material
     // alias was not resolved. Recover only an exact-name Material that already
     // exists in the renderer/DB registries. This handles dynamic selected-menu
     // materials like button_highlight_end and prevents the default blue square.
@@ -649,26 +640,7 @@ Material *__cdecl Material_Register_FastFile(const char *name)
     {
         Material *loaded = Switch_FindLoadedMaterialByName(name);
         if (loaded)
-        {
             header.material = loaded;
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][MATERIAL RECOVER] name=%s material=%p\n",
-                name,
-                static_cast<void *>(loaded));
-            Switch_LogRaw(trace);
-        }
-        else if (!I_stricmp(name, "button_highlight_end"))
-        {
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][MATERIAL MISS] name=%s registered=%u\n",
-                name,
-                static_cast<unsigned>(rgp.materialCount));
-            Switch_LogRaw(trace);
-        }
     }
 #endif
     return header.material;

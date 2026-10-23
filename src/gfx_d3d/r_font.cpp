@@ -97,49 +97,8 @@ Font_s *__cdecl R_RegisterFont_FastFile(const char *fontName)
         font->material = material;
         font->glowMaterial = glowMaterial;
 
-        char trace[448];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][FONT RESOLVE] name=%s font=%p materialName=%s material=%p glowName=%s glow=%p dev=%u\n",
-            fontName ? fontName : "<null>",
-            static_cast<void *>(font),
-            materialName,
-            static_cast<void *>(material),
-            glowMaterialName,
-            static_cast<void *>(glowMaterial),
-            devFont ? 1u : 0u);
-        Switch_LogWrite(trace);
     }
 
-    static uint32_t switchFontTraceCount = 0;
-    if (switchFontTraceCount < 16)
-    {
-        const uintptr_t fontPtr = reinterpret_cast<uintptr_t>(font);
-        const uintptr_t namePtr =
-            font && fontPtr < (1ULL << 39)
-                ? reinterpret_cast<uintptr_t>(font->fontName)
-                : 0;
-        const char *loadedName =
-            namePtr && namePtr < (1ULL << 39)
-                ? font->fontName
-                : nullptr;
-        char trace[448];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][FONT] lookup name=%s font=%p loadedName=%s px=%d glyphs=%d material=%p glow=%p glyphData=%p\n",
-            fontName ? fontName : "<null>",
-            static_cast<void *>(font),
-            loadedName ? loadedName : "<null>",
-            font && fontPtr < (1ULL << 39) ? font->pixelHeight : -1,
-            font && fontPtr < (1ULL << 39) ? font->glyphCount : -1,
-            font && fontPtr < (1ULL << 39) ? static_cast<void *>(font->material) : nullptr,
-            font && fontPtr < (1ULL << 39) ? static_cast<void *>(font->glowMaterial) : nullptr,
-            font && fontPtr < (1ULL << 39) ? static_cast<void *>(font->glyphs) : nullptr);
-        Switch_LogWrite(trace);
-        ++switchFontTraceCount;
-    }
 #endif
     return font;
 }
