@@ -618,6 +618,38 @@ void __cdecl R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex)
     iassert( rgp.world );
     pass = context.state->pass;
 #ifdef __SWITCH__
+    // Always record a few calls, including surfaces whose lightmap index is
+    // the sentinel 31. The earlier trace only logged valid indices, which could
+    // hide a mismatch between a lightmapped material and its BSP surface data.
+    static uint32_t switchLightmapCallTraceCount = 0;
+    if (switchLightmapCallTraceCount < 32u)
+    {
+        const uint32_t traceIndex = switchLightmapCallTraceCount++;
+        const bool traceMapValid = rgp.world->lightmaps &&
+            lmapIndex < static_cast<uint32_t>(rgp.world->lightmapCount);
+        const GfxImage *tracePrimary = traceMapValid
+            ? rgp.world->lightmaps[lmapIndex].primary : nullptr;
+        const GfxImage *traceSecondary = traceMapValid
+            ? rgp.world->lightmaps[lmapIndex].secondary : nullptr;
+        char trace[704];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][LIGHTMAP CALL] n=%u map=%u mapCount=%u valid=%u flags=0x%x r_lightMap=%d sunChanged=%u primary=%s/%p tex=%p secondary=%s/%p tex=%p sampler2=%p sampler3=%p\n",
+            traceIndex, lmapIndex, rgp.world->lightmapCount,
+            traceMapValid ? 1u : 0u,
+            pass ? static_cast<unsigned>(pass->customSamplerFlags) : 0u,
+            r_lightMap ? r_lightMap->current.integer : -999,
+            context.source->input.data->prim.hasSunDirChanged ? 1u : 0u,
+            tracePrimary && tracePrimary->name ? tracePrimary->name : "<null>",
+            static_cast<const void *>(tracePrimary),
+            static_cast<const void *>(tracePrimary ? tracePrimary->texture.basemap : nullptr),
+            traceSecondary && traceSecondary->name ? traceSecondary->name : "<null>",
+            static_cast<const void *>(traceSecondary),
+            static_cast<const void *>(traceSecondary ? traceSecondary->texture.basemap : nullptr),
+            static_cast<const void *>(context.state->samplerTexture[2]),
+            static_cast<const void *>(context.state->samplerTexture[3]));
+        Switch_LogWrite(trace);
+    }
     // Record the actual lightmap binding once, when a BSP surface with a
     // valid lightmap reaches the renderer. patches=0 is dynamic model lighting
     // and does not tell us whether the world's baked lightmaps are active.
