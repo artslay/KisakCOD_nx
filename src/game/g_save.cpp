@@ -1798,7 +1798,7 @@ void __cdecl G_SaveWeaponCue(SaveGame *save)
         const int number = droppedWeaponCue->number;
         if (number && (number > MAX_GENTITIES || !g_entities[number - 1].r.inuse))
             MyAssertHandler(
-                "c:\\trees\\cod3\\src\\game\\g_public.h",
+                "c:\\trees\\cod3\\cod3src\\src\\game\\g_public.h",
                 336,
                 0,
                 "%s\n\t(number - 1) = %i",
@@ -1896,7 +1896,7 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
         }
         if (existingNumber && !g_entities[existingNumber - 1].r.inuse)
             MyAssertHandler(
-                "c:\\trees\\cod3\\src\\game\\g_public.h",
+                "c:\\trees\\cod3\\cod3src\\src\\game\\g_public.h",
                 336,
                 0,
                 "%s\n\t(number - 1) = %i",
