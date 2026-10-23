@@ -11,6 +11,10 @@
 #include "r_shadowcookie.h"
 #include "r_sky.h"
 #include <database/database.h>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 
 
 //struct GfxWorld s_world    85b28080     gfx_d3d : r_bsp.obj // LWSS: moved to db_registry for DEDICATED
@@ -157,8 +161,32 @@ void __cdecl R_LoadWorld(char *name, int *checksum, int savegame)
         rgp.world->reflectionProbeTextures[reflectionProbeIndex].basemap = rgp.world->reflectionProbes[reflectionProbeIndex].reflectionImage->texture.basemap;
     for (lightmapIndex = 0; lightmapIndex < rgp.world->lightmapCount; ++lightmapIndex)
     {
-        rgp.world->lightmapPrimaryTextures[lightmapIndex].basemap = rgp.world->lightmaps[lightmapIndex].primary->texture.basemap;
-        rgp.world->lightmapSecondaryTextures[lightmapIndex].basemap = rgp.world->lightmaps[lightmapIndex].secondary->texture.basemap;
+        GfxImage *const primary = rgp.world->lightmaps[lightmapIndex].primary;
+        GfxImage *const secondary = rgp.world->lightmaps[lightmapIndex].secondary;
+        rgp.world->lightmapPrimaryTextures[lightmapIndex].basemap = primary ? primary->texture.basemap : nullptr;
+        rgp.world->lightmapSecondaryTextures[lightmapIndex].basemap = secondary ? secondary->texture.basemap : nullptr;
+#ifdef __SWITCH__
+        if (lightmapIndex < 12)
+        {
+            char trace[768];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][WORLD LIGHTMAP LOAD] world=%s map=%d/%d primary=%s image=%p size=%ux%u delay=%u tex=%p cache=%p secondary=%s image=%p size=%ux%u delay=%u tex=%p cache=%p\n",
+                rgp.world->name ? rgp.world->name : "<unnamed>",
+                lightmapIndex, rgp.world->lightmapCount,
+                primary && primary->name ? primary->name : "<null>",
+                static_cast<void *>(primary), primary ? primary->width : 0,
+                primary ? primary->height : 0, primary ? primary->delayLoadPixels : 0,
+                static_cast<void *>(primary ? primary->texture.basemap : nullptr),
+                static_cast<void *>(rgp.world->lightmapPrimaryTextures[lightmapIndex].basemap),
+                secondary && secondary->name ? secondary->name : "<null>",
+                static_cast<void *>(secondary), secondary ? secondary->width : 0,
+                secondary ? secondary->height : 0, secondary ? secondary->delayLoadPixels : 0,
+                static_cast<void *>(secondary ? secondary->texture.basemap : nullptr),
+                static_cast<void *>(rgp.world->lightmapSecondaryTextures[lightmapIndex].basemap));
+            Switch_LogWrite(trace);
+        }
+#endif
     }
 }
 
