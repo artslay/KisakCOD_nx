@@ -737,7 +737,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
             char fontTrace[768];
             std::snprintf(
                 fontTrace, sizeof(fontTrace),
-                "[KisakCOD][FONT PASS] n=%u material=%s techType=%u pass=%u view=%u state=%08x/%08x image=%s imagePtr=%p imageSafe=%u size=%ux%u vkTexture=%p vkView=%p format=%u layout=%u vs=%s ps=%s args=%p counts=%u,%u,%u\\n",
+                "[KisakCOD][FONT PASS] n=%u material=%s techType=%u pass=%u view=%u state=%08x/%08x image=%s imagePtr=%p imageSafe=%u size=%ux%u vkTexture=%p vkView=%p format=%u layout=%u vs=%s ps=%s args=%p counts=%u,%u,%u\n",
                 static_cast<unsigned>(switchFontPassTraceCount),
                 switchUiMaterialName,
                 static_cast<unsigned>(context.state->techType),
@@ -994,7 +994,7 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
             char fontTrace[640];
             std::snprintf(
                 fontTrace, sizeof(fontTrace),
-                "[KisakCOD][FONT SAMPLER] n=%u mat=%s ps=%s slot=%u semantic=%u sampler=%u image=%s imagePtr=%p safe=%u size=%ux%u vkTexture=%p vkView=%p format=%u layout=%u\\n",
+                "[KisakCOD][FONT SAMPLER] n=%u mat=%s ps=%s slot=%u semantic=%u sampler=%u image=%s imagePtr=%p safe=%u size=%ux%u vkTexture=%p vkView=%p format=%u layout=%u\n",
                 static_cast<unsigned>(traceIndex),
                 fontMaterialName,
                 pass && pass->pixelShader && pass->pixelShader->name
