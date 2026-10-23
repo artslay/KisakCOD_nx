@@ -114,10 +114,20 @@ static bool g_consoleShortcutConsumed = false;
 
 static void Switch_ShowConsoleKeyboard()
 {
-    // Use the engine's own console catcher and input path. The Switch keyboard
-    // only supplies text; CL_ConsoleCharEvent and Enter perform normal command
-    // history, echo, autocomplete cleanup, and command-buffer submission.
+    // L3+R3 toggles the console. If it is already open, close it instead of
+    // reopening the system keyboard and leaving the user without a clear exit.
+    if (Con_IsActive(0))
+    {
+        Con_CloseConsole(0);
+        Switch_LogWrite("[KisakCOD][CONSOLE KEYBOARD] console_closed\\n");
+        return;
+    }
+
+    // Open both the command prompt and the output log. Without explicitly
+    // enabling the output window, Con_DrawSolidConsole only draws the input
+    // field, hiding the command echo and all ordinary console output.
     Con_OpenConsole(0);
+    Con_OpenConsoleOutput(0);
 
     SwkbdConfig keyboard{};
     const Result createResult = swkbdCreate(&keyboard, 0);
