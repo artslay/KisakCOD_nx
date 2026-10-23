@@ -248,6 +248,9 @@ struct KisakVkBuffer : IDirect3DResource9 {
 };
 
 struct KisakVkTexture : IDirect3DResource9 {
+    // Copied from the owning GfxImage so Switch logs identify texture assets
+    // even when their first upload never happened.
+    char debugName[96] = "<unlabeled>";
     VkImage image=VK_NULL_HANDLE;
     VkImageView view=VK_NULL_HANDLE;
     VkImageView baseMipView=VK_NULL_HANDLE;
