@@ -1655,27 +1655,66 @@ void __cdecl G_SaveConfigstrings(int iFirst, int iCount, SaveGame *save)
     }
 }
 
-void __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
+bool __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
 {
-    int i; // r31
-    int v7; // r30
-    _WORD v8[8]; // [sp+50h] [-470h] BYREF
-    char v9[1120]; // [sp+60h] [-460h] BYREF
+    char stringBuffer[1120];
+    MemoryFile *memFile;
 
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1795, 0, "%s", "save");
-    for (i = 0; i < iCount; ++i)
+
+    memFile = SaveMemory_GetMemoryFile(save);
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("load_configstrings_begin", save, iFirst);
+#endif
+
+    for (int i = 0; i < iCount; ++i)
     {
-        if (!save)
-            MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 640, 0, "%s", "save");
-        SaveMemory_LoadRead(v8, 2, save);
-        v7 = v8[0];
-        if (v8[0] >= 0x400u)
+        unsigned short stringLength = 0;
+        SaveMemory_LoadRead(&stringLength, sizeof(stringLength), save);
+
+        if ((memFile && memFile->memoryOverflow) || stringLength >= 1024)
+        {
+#ifdef __SWITCH__
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][SAVE LOAD INVALID] phase=configstrings group=%d index=%d length=%u segment=%d used=%d start=%d overflow=%u\\n",
+                iFirst, iFirst + i, static_cast<unsigned int>(stringLength),
+                memFile ? memFile->segmentIndex : -1,
+                memFile ? memFile->bytesUsed : -1,
+                memFile ? memFile->segmentStart : -1,
+                memFile && memFile->memoryOverflow ? 1u : 0u);
+            Switch_LogWrite(trace);
+#endif
             Com_Error(ERR_DROP, "GAME_ERR_SAVEGAME_BAD");
-        SaveMemory_LoadRead(v9, v7, save);
-        v9[v7] = 0;
-        SV_SetConfigstring(i + iFirst, v9);
+            return false;
+        }
+
+        SaveMemory_LoadRead(stringBuffer, stringLength, save);
+        if (memFile && memFile->memoryOverflow)
+        {
+#ifdef __SWITCH__
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][SAVE LOAD INVALID] phase=configstring_data group=%d index=%d length=%u segment=%d used=%d start=%d\\n",
+                iFirst, iFirst + i, static_cast<unsigned int>(stringLength),
+                memFile->segmentIndex, memFile->bytesUsed, memFile->segmentStart);
+            Switch_LogWrite(trace);
+#endif
+            Com_Error(ERR_DROP, "GAME_ERR_SAVEGAME_BAD");
+            return false;
+        }
+
+        stringBuffer[stringLength] = 0;
+        SV_SetConfigstring(i + iFirst, stringBuffer);
     }
+
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("load_configstrings_end", save, iFirst + iCount);
+#endif
+    return true;
 }
 
 void __cdecl G_LoadModelPrecacheList(SaveGame *save)
@@ -2973,12 +3012,24 @@ bool __cdecl G_LoadMainState(SaveGame *save)
         static_cast<int>(sizeof(level.pendingTriggerList[0]) * pendingTriggerCount),
         save);
     G_LoadWeaponCue(save);
-    G_LoadConfigstrings(11, 16, save);
-    G_LoadConfigstrings(27, 32, save);
-    G_LoadConfigstrings(59, 32, save);
+    if (!G_LoadConfigstrings(11, 16, save) ||
+        !G_LoadConfigstrings(27, 32, save) ||
+        !G_LoadConfigstrings(59, 32, save))
+        return false;
+
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("load_before_missile_attractors", save, 0);
+#endif
     G_LoadTargets();
     Missile_LoadAttractors(memFile);
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("load_after_missile_attractors", save, 0);
+    SwitchSaveCursorTrace("load_before_command_notifications", save, 0);
+#endif
     Cmd_LoadNotifications(memFile);
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("load_after_command_notifications", save, 0);
+#endif
     SaveMemory_MoveToSegment(save, 5);
 
     v17 = 0;
