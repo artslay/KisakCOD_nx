@@ -630,6 +630,14 @@ void FixupEffect(const FxEffectDef *effect)
     }
 }
 
+static void __cdecl CollectRegisteredWeaponForSoundFixup(
+    XAssetHeader header, void *context)
+{
+    auto *const weapons = static_cast<std::vector<WeaponDef *> *>(context);
+    if (weapons && header.weapon)
+        weapons->push_back(header.weapon);
+}
+
 void FixupWeapon(ZoneLoadState &state, WeaponDef *weapon)
 {
     for (snd_alias_list_t **sound : {
@@ -1039,6 +1047,15 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
         weaponsToFix.end(),
         state.weaponsToNormalize.begin(),
         state.weaponsToNormalize.end());
+
+    // Enumerate the live DB registry including override entries. Some asset
+    // types register zone-backed objects directly, while duplicate/override
+    // paths may retain a different WeaponDef than the staging copy. Resolve
+    // aliases on exactly the objects gameplay can retrieve.
+    DB_EnumXAssets(
+        ASSET_TYPE_WEAPON, CollectRegisteredWeaponForSoundFixup,
+        &weaponsToFix, true);
+
     for (auto &weapon : state.nativeWeaponCopies)
     {
         if (weapon)
