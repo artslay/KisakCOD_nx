@@ -34,6 +34,7 @@
 #include "savedevice.h"
 
 #ifdef __SWITCH__
+#include <client/cl_input.h>
 #include <cstdio>
 extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
@@ -3192,6 +3193,9 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
     {
         SV_GetUsercmd(0, &level.clients->pers.cmd);
         InitClientDeltaAngles(level.clients);
+#ifdef __SWITCH__
+        CL_TraceGamepadAfterSavegameLoad(&level.clients->ps, &level.clients->pers.cmd);
+#endif
     }
     G_PruneLoadedCorpses();
     //Profile_EndInternal(0);
