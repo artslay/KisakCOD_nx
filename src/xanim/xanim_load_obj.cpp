@@ -1518,15 +1518,13 @@ XAnimParts *__cdecl XAnimLoadFile(char *name, void *(__cdecl *Alloc)(int))
         v56 = parts->boneCount[5];
         while (animPartIndex < v56)
         {
+            XAnimPartTrans *trans = transPtrs[animPartIndex];
             *dataByte++ = static_cast<uint8_t>(transPartIndices[animPartIndex]);
-            *dataShort = *reinterpret_cast<uint16_t *>(transPtrs[animPartIndex]);
-            tableSize = (uint16_t)*dataShort++;
-            *dataInt = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 4);
-            dataInt[1] = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 8);
-            dataInt[2] = *(_DWORD *)(transPtrs[animPartIndex] + 12);
-            dataInt[3] = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 16);
-            dataInt[4] = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 20);
-            dataInt[5] = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 24);
+            tableSize = trans->size;
+            *dataShort++ = tableSize;
+            // Store the decoded float bit patterns in the packed integer stream.
+            memcpy(dataInt, trans->u.frames.mins, sizeof(trans->u.frames.mins));
+            memcpy(dataInt + 3, trans->u.frames.size, sizeof(trans->u.frames.size));
             v43 = 0;
             while (v43 <= tableSize)
             {
@@ -1540,22 +1538,20 @@ XAnimParts *__cdecl XAnimLoadFile(char *name, void *(__cdecl *Alloc)(int))
                 &dataByte,
                 &dataShort,
                 &indices,
-                reinterpret_cast<XAnimDynamicIndices *>(transPtrs[animPartIndex++] + 32),
+                &transPtrs[animPartIndex++]->u.frames.indices,
                 useSmallIndices);
             dataInt += 6;
         }
         v56 += parts->boneCount[6];
         while (animPartIndex < v56)
         {
+            XAnimPartTrans *trans = transPtrs[animPartIndex];
             *dataByte++ = static_cast<uint8_t>(transPartIndices[animPartIndex]);
-            *dataShort = *reinterpret_cast<uint16_t *>(transPtrs[animPartIndex]);
-            tableSize = (uint16_t)*dataShort++;
-            *dataInt = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 4);
-            dataInt[1] = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 8);
-            dataInt[2] = *(_DWORD *)(transPtrs[animPartIndex] + 12);
-            dataInt[3] = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 16);
-            dataInt[4] = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 20);
-            dataInt[5] = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 24);
+            tableSize = trans->size;
+            *dataShort++ = tableSize;
+            // Store the decoded float bit patterns in the packed integer stream.
+            memcpy(dataInt, trans->u.frames.mins, sizeof(trans->u.frames.mins));
+            memcpy(dataInt + 3, trans->u.frames.size, sizeof(trans->u.frames.size));
             v43 = 0;
             while (v43 <= tableSize)
             {
@@ -1577,9 +1573,9 @@ XAnimParts *__cdecl XAnimLoadFile(char *name, void *(__cdecl *Alloc)(int))
         while (animPartIndex < v56)
         {
             *dataByte = static_cast<uint8_t>(transPartIndices[animPartIndex]);
-            *dataInt = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 4);
-            dataInt[1] = *reinterpret_cast<int32_t *>(transPtrs[animPartIndex] + 8);
-            dataInt[2] = *(_DWORD *)(transPtrs[animPartIndex++] + 12);
+            // A TRANS_NO_SIZE part stores three raw float values in frame0.
+            memcpy(dataInt, transPtrs[animPartIndex]->u.frame0, sizeof(transPtrs[animPartIndex]->u.frame0));
+            ++animPartIndex;
             ++dataByte;
             dataInt += 3;
         }
