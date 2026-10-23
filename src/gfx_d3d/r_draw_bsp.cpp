@@ -584,6 +584,51 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                     rgp.world->surfaceCount);
             bspSurf = &rgp.world->dpvs.surfaces[surfIndex];
             tris = &bspSurf->tris;
+#ifdef __SWITCH__
+            // This marker is intentionally adjacent to the real pre-tess surface
+            // read: it distinguishes queued material routes from surfaces that
+            // actually reach BSP lightmap selection on the GPU submission path.
+            static uint32_t switchBspPreTessSurfaceTraceCount = 0;
+            if (switchBspPreTessSurfaceTraceCount < 24u)
+            {
+                const uint32_t traceIndex = switchBspPreTessSurfaceTraceCount++;
+                const uint32_t traceMapIndex = bspSurf->lightmapIndex;
+                const bool traceMapValid = rgp.world->lightmaps &&
+                    traceMapIndex < static_cast<uint32_t>(rgp.world->lightmapCount);
+                const GfxImage *tracePrimary = traceMapValid
+                    ? rgp.world->lightmaps[traceMapIndex].primary : nullptr;
+                const GfxImage *traceSecondary = traceMapValid
+                    ? rgp.world->lightmaps[traceMapIndex].secondary : nullptr;
+                const GfxWorldVertex *traceVertices = rgp.world->vd.vertices;
+                const bool traceVertexValid = traceVertices && tris->firstVertex >= 0 &&
+                    static_cast<uint32_t>(tris->firstVertex) < rgp.world->vertexCount;
+                char trace[768];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][BSP PRETESS SURFACE] n=%u surf=%u map=%u mapCount=%u flags=0x%x material=%s primary=%s/%p tex=%p secondary=%s/%p tex=%p firstVertex=%u vertexCount=%u vertices=%p xyz=(%.3f,%.3f,%.3f) uv=(%.5f,%.5f) lmap=(%.5f,%.5f)\n",
+                    traceIndex, surfIndex, traceMapIndex, rgp.world->lightmapCount,
+                    context.state->pass
+                        ? static_cast<unsigned>(context.state->pass->customSamplerFlags) : 0u,
+                    bspSurf->material && bspSurf->material->info.name
+                        ? bspSurf->material->info.name : "<null>",
+                    tracePrimary && tracePrimary->name ? tracePrimary->name : "<null>",
+                    static_cast<const void *>(tracePrimary),
+                    static_cast<const void *>(tracePrimary ? tracePrimary->texture.basemap : nullptr),
+                    traceSecondary && traceSecondary->name ? traceSecondary->name : "<null>",
+                    static_cast<const void *>(traceSecondary),
+                    static_cast<const void *>(traceSecondary ? traceSecondary->texture.basemap : nullptr),
+                    tris->firstVertex, tris->vertexCount,
+                    static_cast<const void *>(traceVertices),
+                    traceVertexValid ? traceVertices[tris->firstVertex].xyz[0] : 0.0f,
+                    traceVertexValid ? traceVertices[tris->firstVertex].xyz[1] : 0.0f,
+                    traceVertexValid ? traceVertices[tris->firstVertex].xyz[2] : 0.0f,
+                    traceVertexValid ? traceVertices[tris->firstVertex].texCoord[0] : 0.0f,
+                    traceVertexValid ? traceVertices[tris->firstVertex].texCoord[1] : 0.0f,
+                    traceVertexValid ? traceVertices[tris->firstVertex].lmapCoord[0] : 0.0f,
+                    traceVertexValid ? traceVertices[tris->firstVertex].lmapCoord[1] : 0.0f);
+                Switch_LogWrite(trace);
+            }
+#endif
             if (reflectionProbeIndex != bspSurf->reflectionProbeIndex || lightmapIndex != bspSurf->lightmapIndex)
             {
                 reflectionProbeIndex = bspSurf->reflectionProbeIndex;
