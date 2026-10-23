@@ -1814,7 +1814,7 @@ void __cdecl G_SaveItems(SaveGame *save)
 void __cdecl G_SaveWeaponCue(SaveGame *save)
 {
     if (!save)
-        MyAssertHandler("c:\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1956, 0, "%s", "save");
+        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1956, 0, "%s", "save");
 
     constexpr int kWeaponCueCount = ARRAY_COUNT(level.droppedWeaponCue);
     unsigned int serializedEntities[kWeaponCueCount]{};
@@ -1831,7 +1831,7 @@ void __cdecl G_SaveWeaponCue(SaveGame *save)
         const int number = droppedWeaponCue->number;
         if (number && (number > MAX_GENTITIES || !g_entities[number - 1].r.inuse))
             MyAssertHandler(
-                "c:\trees\\cod3\\cod3src\\src\\game\\g_public.h",
+                "c:\\trees\\cod3\\cod3src\\src\\game\\g_public.h",
                 336,
                 0,
                 "%s\n\t(number - 1) = %i",
@@ -1850,7 +1850,7 @@ void __cdecl G_SaveWeaponCue(SaveGame *save)
 void __cdecl G_LoadWeaponCue(SaveGame *save)
 {
     if (!save)
-        MyAssertHandler("c:\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1979, 0, "%s", "save");
+        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1979, 0, "%s", "save");
 
     constexpr int kWeaponCueCount = ARRAY_COUNT(level.droppedWeaponCue);
     int savedEntityNumbers[kWeaponCueCount]{};
@@ -1927,7 +1927,7 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
         }
         if (existingNumber && !g_entities[existingNumber - 1].r.inuse)
             MyAssertHandler(
-                "c:\trees\\cod3\\cod3src\\src\\game\\g_public.h",
+                "c:\\trees\\cod3\\cod3src\\src\\game\\g_public.h",
                 336,
                 0,
                 "%s\n\t(number - 1) = %i",
@@ -1935,7 +1935,7 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
                 existingNumber - 1);
         if (existingNumber)
             MyAssertHandler(
-                "c:\trees\\cod3\\cod3src\\src\\game\\g_save.cpp",
+                "c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp",
                 1984,
                 0,
                 "%s",
