@@ -1821,6 +1821,41 @@ void __cdecl R_SetSampler(
 
 
     iassert(image);
+#ifdef __SWITCH__
+    // A null basemap here means the engine selected an image but never supplied
+    // a Vulkan texture for it. Track the source before SetTexture propagates null
+    // into the D3D9 compatibility device.
+    if (!image->texture.basemap && samplerIndex < 16u)
+    {
+        static uint32_t switchNullBaseMapTraceCount[16]{};
+        if (switchNullBaseMapTraceCount[samplerIndex] < 4u)
+        {
+            const uint32_t traceIndex = switchNullBaseMapTraceCount[samplerIndex]++;
+            const auto *switchMaterial = context.state ? context.state->material : nullptr;
+            const auto *switchTechnique = context.state ? context.state->technique : nullptr;
+            const auto *switchPass = context.state ? context.state->pass : nullptr;
+            char trace[640];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][SAMPLER SOURCE NULL] n=%u slot=%u image=%s size=%ux%u imagePtr=%p textureRef=%p basemap=%p material=%s tech=%s vs=%s ps=%s\\n",
+                traceIndex, samplerIndex,
+                image->name ? image->name : "<unnamed>",
+                image->width, image->height,
+                static_cast<const void *>(image),
+                static_cast<const void *>(&image->texture),
+                static_cast<const void *>(image->texture.basemap),
+                switchMaterial && switchMaterial->info.name
+                    ? switchMaterial->info.name : "<none>",
+                switchTechnique && switchTechnique->name
+                    ? switchTechnique->name : "<none>",
+                switchPass && switchPass->vertexShader && switchPass->vertexShader->name
+                    ? switchPass->vertexShader->name : "<none>",
+                switchPass && switchPass->pixelShader && switchPass->pixelShader->name
+                    ? switchPass->pixelShader->name : "<none>");
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     const bool textureReferenceChanged =
         context.state->samplerTexture[samplerIndex] != &image->texture;
     if (textureReferenceChanged)
@@ -2316,6 +2351,28 @@ void __cdecl R_UpdateViewport(GfxCmdBufSourceState *source, GfxViewport *viewpor
 
 void __cdecl R_DisableSampler(GfxCmdBufState *state, uint32_t samplerIndex)
 {
+#ifdef __SWITCH__
+    // Distinguish a deliberate sampler clear (for example during image
+    // unbinding) from an image whose GfxTexture::basemap was never populated.
+    if (samplerIndex < 16u)
+    {
+        static uint32_t switchSamplerClearTraceCount[16]{};
+        if (switchSamplerClearTraceCount[samplerIndex] < 4u)
+        {
+            const uint32_t traceIndex = switchSamplerClearTraceCount[samplerIndex]++;
+            const auto *oldTexture = state->samplerTexture[samplerIndex];
+            const auto *oldBasemap = oldTexture ? oldTexture->basemap : nullptr;
+            char trace[256];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][SAMPLER EXPLICIT CLEAR] n=%u slot=%u oldTexture=%p oldBasemap=%p\\n",
+                traceIndex, samplerIndex,
+                static_cast<const void *>(oldTexture),
+                static_cast<const void *>(oldBasemap));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     state->samplerTexture[samplerIndex] = 0;
     R_HW_DisableSampler(state->prim.device, samplerIndex);
 }
