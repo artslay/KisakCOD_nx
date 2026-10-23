@@ -8468,6 +8468,77 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     RecordSwitchRecentVulkanDraw(recentDraw);
 
 #ifdef __SWITCH__
+    // Keep a small live snapshot even when the process does not crash. The
+    // crash-only history is not useful for a stable black screen where draw
+    // commands are submitted but the visible result remains empty.
+    static uint32_t switchLiveDrawTraceCount = 0;
+    if (switchLiveDrawTraceCount < 12u)
+    {
+        const uint32_t traceIndex = switchLiveDrawTraceCount++;
+        const KisakVkTexture *traceTexture[4] = {
+            m_textures[0], m_textures[1], m_textures[2], m_textures[3]
+        };
+        char trace[1536];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK DRAW LIVE] n=%u frame=%llu target=%s targetView=%p targetFormat=%u targetSize=%ux%u viewport=%u,%u,%u,%u depthRange=%.3f..%.3f scissor=%u,%d,%d,%d,%d decl=%llu declType=%u vs=%llu(%s) ps=%llu(%s) pipeline=%016llx prim=%u pcount=%u icount=%u start=%u base=%d raw=%u-%u effective=%lld-%lld streams=0x%04x vb0=%u/%u/%u cull=%u depth=%u/%u/%u alphaTest=%u/%u/%u colorMask=0x%x blend=%u textures=t0:%p/%ux%u/f%u/l%u,t1:%p/%ux%u/f%u/l%u,t2:%p/%ux%u/f%u/l%u,t3:%p/%ux%u/f%u/l%u\n",
+            traceIndex,
+            static_cast<unsigned long long>(m_backend->FrameSerial()),
+            m_color && m_color->texture ? "texture" : "swapchain",
+            static_cast<void *>(m_color && m_color->texture
+                ? reinterpret_cast<void *>(m_color->texture->view)
+                : reinterpret_cast<void *>(m_backend->CurrentSwapchainView())),
+            static_cast<unsigned>(m_color && m_color->texture
+                ? m_color->texture->format : m_backend->SwapchainFormat()),
+            m_color && m_color->texture ? m_color->texture->width : m_backend->Width(),
+            m_color && m_color->texture ? m_color->texture->height : m_backend->Height(),
+            m_viewport.X, m_viewport.Y, m_viewport.Width, m_viewport.Height,
+            m_viewport.MinZ, m_viewport.MaxZ,
+            m_scissor ? 1u : 0u,
+            m_scissorRect.left, m_scissorRect.top,
+            m_scissorRect.right, m_scissorRect.bottom,
+            static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
+            static_cast<unsigned>(m_decl ? m_decl->switchVertDeclType : 0u),
+            static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+            m_vertexShader && m_vertexShader->parseData && m_vertexShader->parseData->profile
+                ? m_vertexShader->parseData->profile : "(null)",
+            static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
+            m_pixelShader && m_pixelShader->parseData && m_pixelShader->parseData->profile
+                ? m_pixelShader->parseData->profile : "(null)",
+            static_cast<unsigned long long>(recentDraw.pipelineKey),
+            primitiveType, primitiveCount, indexCount, startIndex, baseVertexIndex,
+            minRawIndex == UINT32_MAX ? UINT32_MAX : minRawIndex, maxRawIndex,
+            static_cast<long long>(minEffectiveVertex),
+            static_cast<long long>(maxEffectiveVertex),
+            boundStreamMask, stream0BufferBytes, stream0Offset, stream0Stride,
+            m_cullMode, m_depthEnable ? 1u : 0u, m_depthWrite ? 1u : 0u,
+            m_depthFunc, m_alphaTest ? 1u : 0u, m_alphaFunc, m_alphaRef,
+            m_colorWriteMask, m_blendEnable ? 1u : 0u,
+            static_cast<void *>(traceTexture[0] ? traceTexture[0]->view : VK_NULL_HANDLE),
+            traceTexture[0] ? traceTexture[0]->width : 0u,
+            traceTexture[0] ? traceTexture[0]->height : 0u,
+            traceTexture[0] ? static_cast<unsigned>(traceTexture[0]->format) : 0u,
+            traceTexture[0] ? static_cast<unsigned>(traceTexture[0]->layout) : 0u,
+            static_cast<void *>(traceTexture[1] ? traceTexture[1]->view : VK_NULL_HANDLE),
+            traceTexture[1] ? traceTexture[1]->width : 0u,
+            traceTexture[1] ? traceTexture[1]->height : 0u,
+            traceTexture[1] ? static_cast<unsigned>(traceTexture[1]->format) : 0u,
+            traceTexture[1] ? static_cast<unsigned>(traceTexture[1]->layout) : 0u,
+            static_cast<void *>(traceTexture[2] ? traceTexture[2]->view : VK_NULL_HANDLE),
+            traceTexture[2] ? traceTexture[2]->width : 0u,
+            traceTexture[2] ? traceTexture[2]->height : 0u,
+            traceTexture[2] ? static_cast<unsigned>(traceTexture[2]->format) : 0u,
+            traceTexture[2] ? static_cast<unsigned>(traceTexture[2]->layout) : 0u,
+            static_cast<void *>(traceTexture[3] ? traceTexture[3]->view : VK_NULL_HANDLE),
+            traceTexture[3] ? traceTexture[3]->width : 0u,
+            traceTexture[3] ? traceTexture[3]->height : 0u,
+            traceTexture[3] ? static_cast<unsigned>(traceTexture[3]->format) : 0u,
+            traceTexture[3] ? static_cast<unsigned>(traceTexture[3]->layout) : 0u);
+        Switch_LogWrite(trace);
+    }
+#endif
+
+#ifdef __SWITCH__
     // Capture the actual rasterization state and D3D9 constant registers for
     // the first lightmapped world draws. The UV-route probe showed that some
     // shader variants already have the right vertex declaration, so the next
