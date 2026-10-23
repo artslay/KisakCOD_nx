@@ -2047,7 +2047,6 @@ int __cdecl R_AddMarkFragment_0_(
     FxMarkTri *tris,
     int maxPoints,
     const GfxPackedVertex **triVerts,
-    const float (*transformNormalMatrix)[3],
     FxMarkPoint *points)
 {
     float out3[3]; // [esp+8h] [ebp-D8h] BYREF
@@ -2132,7 +2131,6 @@ char __cdecl R_MarkFragment_DoTriangle_0_(
     const float (*clipPlanes)[4],
     const GfxMarkContext *markContext,
     const GfxPackedVertex **triVerts,
-    const float (*transformNormalMatrix)[3],
     FxModelMarkPoint(*clipPoints)[9])
 {
     int fragmentPointCount; // [esp+0h] [ebp-4h]
@@ -2146,7 +2144,6 @@ char __cdecl R_MarkFragment_DoTriangle_0_(
         &markInfo->tris[markInfo->usedTriCount],
         markInfo->maxPoints - markInfo->usedPointCount,
         triVerts,
-        transformNormalMatrix,
         &markInfo->points[markInfo->usedPointCount]);
     if (fragmentPointCount == -1)
         return 0;
@@ -2166,6 +2163,11 @@ char __cdecl R_MarkFragment_DoTriangle_0_(
     return 1;
 }
 
+#if defined(KISAK_SWITCH) || defined(__SWITCH__)
+static_assert(sizeof(MarkModelCoreContext) == 0x38,
+    "MarkModelCoreContext must contain seven 64-bit pointers on Switch");
+#endif
+
 bool __cdecl R_MarkModelCoreCallback_0_(
     void *contextAsVoid,
     const GfxPackedVertex **triVerts0,
@@ -2174,6 +2176,7 @@ bool __cdecl R_MarkModelCoreCallback_0_(
     float *vertWeights; // [esp+2Ch] [ebp-1D8h]
     float *xyz; // [esp+30h] [ebp-1D4h]
     const GfxPackedVertex *v6; // [esp+34h] [ebp-1D0h]
+    MarkModelCoreContext *context = static_cast<MarkModelCoreContext *>(contextAsVoid);
     FxModelMarkPoint clipPoints[2][9]; // [esp+4Ch] [ebp-1B8h] BYREF
     int vertIndex; // [esp+200h] [ebp-4h]
 
@@ -2191,16 +2194,15 @@ bool __cdecl R_MarkModelCoreCallback_0_(
         clipPoints[0][vertIndex].vertWeights[vertIndex] = 1.0;
     }
     return R_MarkFragment_IsTriangleRejected(
-        *(const float**)((uintptr_t)contextAsVoid + 12),
+        context->markDir,
         clipPoints[0][0].xyz,
         clipPoints[0][1].xyz,
         clipPoints[0][2].xyz)
         || R_MarkFragment_DoTriangle_0_(
-            *(MarkInfo**)contextAsVoid,
-            *(const float(**)[4])((uintptr_t)contextAsVoid + 16),
-            *(const GfxMarkContext**)((uintptr_t)contextAsVoid + 4),
+            context->markInfo,
+            context->clipPlanes,
+            context->markContext,
             triVerts1,
-            *(const float(**)[3])((uintptr_t)contextAsVoid + 24),
             clipPoints) != 0;
 }
 
