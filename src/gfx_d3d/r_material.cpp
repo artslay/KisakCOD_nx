@@ -627,9 +627,9 @@ static Material *Switch_FindLoadedMaterialByName(const char *name)
 
 Material *__cdecl Material_Register_FastFile(const char *name)
 {
-    XAssetHeader header = DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name);    XAssetHeader header = DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name);
+    XAssetHeader header = DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name);
 #ifdef __SWITCH__
-    // DB_FindXAssetHeader may return a default clone    // DB_FindXAssetHeader may return a default clone if a serialized material
+    // DB_FindXAssetHeader may return a default clone if a serialized material
     // alias was not resolved. Recover only an exact-name Material that already
     // exists in the renderer/DB registries. This handles dynamic selected-menu
     // materials like button_highlight_end and prevents the default blue square.
