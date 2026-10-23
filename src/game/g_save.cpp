@@ -1679,7 +1679,7 @@ bool __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][SAVE LOAD INVALID] phase=configstrings group=%d index=%d length=%u segment=%d used=%d start=%d overflow=%u\\n",
+                "[KisakCOD][SAVE LOAD INVALID] phase=configstrings group=%d index=%d length=%u segment=%d used=%d start=%d overflow=%u\n",
                 iFirst, iFirst + i, static_cast<unsigned int>(stringLength),
                 memFile ? memFile->segmentIndex : -1,
                 memFile ? memFile->bytesUsed : -1,
@@ -1698,7 +1698,7 @@ bool __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][SAVE LOAD INVALID] phase=configstring_data group=%d index=%d length=%u segment=%d used=%d start=%d\\n",
+                "[KisakCOD][SAVE LOAD INVALID] phase=configstring_data group=%d index=%d length=%u segment=%d used=%d start=%d\n",
                 iFirst, iFirst + i, static_cast<unsigned int>(stringLength),
                 memFile->segmentIndex, memFile->bytesUsed, memFile->segmentStart);
             Switch_LogWrite(trace);
