@@ -176,13 +176,12 @@ static void Switch_ShowConsoleKeyboard()
         CL_ConsoleCharEvent(0, static_cast<int32_t>(*character));
     }
 
-    const uint32_t eventTime = Sys_Milliseconds();
-    CL_KeyEvent(0, K_ENTER, 1, eventTime);
-    CL_KeyEvent(0, K_ENTER, 0, eventTime);
-
-    char trace[160];
+    // Keep the text in the engine's input field after the Switch keyboard
+    // closes. Immediate Enter cleared g_consoleField in the same frame, so
+    // the command was invisible and could not be reviewed. Press A to run it.
+    char trace[192];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][CONSOLE KEYBOARD] submitted bytes=%zu\n",
+        "[KisakCOD][CONSOLE KEYBOARD] staged bytes=%zu\n",
         std::strlen(command));
     Switch_LogWrite(trace);
 }
@@ -342,6 +341,17 @@ void Switch_GamepadFrame()
         Switch_ShowConsoleKeyboard();
         // Opening/closing the console may block for the software keyboard.
         // Do not also process this same controller edge as a gameplay action.
+        return;
+    }
+
+    // In the console, A submits the visible command through the engine's
+    // normal key path; B removes the previous character. Keep gameplay input
+    // blocked while the console owns input.
+    if (consoleActive)
+    {
+        SendKeyEdge(HidNpadButton_A, K_ENTER);
+        if (Pressed(HidNpadButton_B))
+            CL_ConsoleCharEvent(0, '\b');
         return;
     }
 
