@@ -4,6 +4,7 @@
 #include <gfx_d3d/r_model.h>
 #include <universal/com_files.h>
 #include <qcommon/qcommon.h>
+#include <cstddef>
 
 enum $69AF8E44C9D6025F282D494F15F1F016 : __int32
 {
@@ -274,7 +275,7 @@ XModelPieces *__cdecl XModelPiecesLoadFile(const char *name, void *(__cdecl *All
 
     if (version == 1)
     {
-        xmodelPieces = (XModelPieces *)Alloc(12);
+        xmodelPieces = (XModelPieces *)Alloc(sizeof(*xmodelPieces));
         iassert(xmodelPieces);
         xmodelPieces->numpieces = Buf_Read<unsigned short>(&pos);
         xmodelPieces->pieces = (XModelPiece *)Alloc(sizeof(XModelPiece) * xmodelPieces->numpieces);
