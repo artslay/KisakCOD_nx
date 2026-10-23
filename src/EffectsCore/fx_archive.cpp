@@ -31,7 +31,7 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     static_assert(offsetof(FxSystem, isArchiving) + sizeof(bool) <= 2656,
         "FxSystem isArchiving must be present in the archived prefix");
 #endif
-    const FxSystem *restoredSystem = static_cast<const FxSystem *>(p);
+    FxSystem *restoredSystem = static_cast<FxSystem *>(p);
     if (!restoredSystem->isArchiving || restoredSystem->iteratorCount)
         Com_Error(ERR_DROP, "Invalid save file");
     FX_LinkSystemBuffers((FxSystem *)p, systemBuffers);
@@ -42,7 +42,7 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     relocationDistance = static_cast<int32_t>(reinterpret_cast<uintptr_t>(p) - static_cast<uintptr_t>(static_cast<uint32_t>(v2)));
     FX_RelocateSystem((FxSystem *)p, relocationDistance);
     FX_RestorePhysicsData((FxSystem *)p, memFile);
-    *((_BYTE *)p + 2526) = 0;
+    restoredSystem->isArchiving = false;
 }
 
 void __cdecl FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *table)
