@@ -476,6 +476,123 @@ void NormalizeXModelMaterialReferences(XModel *model)
     }
 }
 
+// CoD4's PackedTexCoords are not IEEE-754 binary16 values. Decode the game's
+// custom 16-bit coordinate encoding on the CPU, then repack as IEEE half floats
+// in the GPU copy so the existing VK_FORMAT_R16G16_SFLOAT vertex input is valid.
+static uint16_t SwitchFloatToHalf(float value)
+{
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+
+    const uint32_t sign = (bits >> 16) & 0x8000u;
+    const uint32_t floatExponent = (bits >> 23) & 0xffu;
+    uint32_t exponent = floatExponent ? floatExponent - 127u + 15u : 0u;
+    uint32_t mantissa = bits & 0x7fffffu;
+
+    if (floatExponent == 0xffu)
+    {
+        if (!mantissa)
+            return static_cast<uint16_t>(sign | 0x7c00u);
+        uint32_t payload = mantissa >> 13;
+        return static_cast<uint16_t>(sign | 0x7c00u | payload | (payload == 0u));
+    }
+
+    if (!floatExponent)
+        return static_cast<uint16_t>(sign);
+
+    if (exponent >= 31u)
+        return static_cast<uint16_t>(sign | 0x7c00u);
+
+    if (static_cast<int32_t>(exponent) <= 0)
+    {
+        const int32_t halfExponent = static_cast<int32_t>(floatExponent) - 127 + 15;
+        if (halfExponent < -10)
+            return static_cast<uint16_t>(sign);
+
+        mantissa |= 0x800000u;
+        const uint32_t shift = static_cast<uint32_t>(14 - halfExponent);
+        const uint32_t rounding = (1u << (shift - 1u)) - 1u +
+            ((mantissa >> shift) & 1u);
+        return static_cast<uint16_t>(sign | ((mantissa + rounding) >> shift));
+    }
+
+    uint32_t roundedMantissa = mantissa + 0x0fffu + ((mantissa >> 13) & 1u);
+    if (roundedMantissa & 0x800000u)
+    {
+        roundedMantissa = 0;
+        ++exponent;
+        if (exponent >= 31u)
+            return static_cast<uint16_t>(sign | 0x7c00u);
+    }
+    return static_cast<uint16_t>(sign | (exponent << 10) | (roundedMantissa >> 13));
+}
+
+void ConvertPackedModelTexCoordsForVulkan(
+    const ZoneLoadState &state,
+    XZoneMemory *zoneMem)
+{
+    if (!zoneMem || !zoneMem->lockedVertexData ||
+        !zoneMem->blocks[7].data || !zoneMem->blocks[7].size)
+        return;
+
+    const uintptr_t blockStart =
+        reinterpret_cast<uintptr_t>(zoneMem->blocks[7].data);
+    const size_t blockSize = static_cast<size_t>(zoneMem->blocks[7].size);
+    const uint8_t *sourceBlock = zoneMem->blocks[7].data;
+    uint8_t *gpuBlock = zoneMem->lockedVertexData;
+    std::unordered_set<size_t> convertedVertexOffsets;
+
+    for (const XModel *model : state.modelsToNormalize)
+    {
+        if (!model || !model->surfs)
+            continue;
+
+        for (uint32_t surfaceIndex = 0;
+             surfaceIndex < static_cast<uint32_t>(model->numsurfs);
+             ++surfaceIndex)
+        {
+            const XSurface &surface = model->surfs[surfaceIndex];
+            if (!surface.verts0 || !surface.vertCount)
+                continue;
+
+            const uintptr_t vertexAddress =
+                reinterpret_cast<uintptr_t>(surface.verts0);
+            if (vertexAddress < blockStart)
+                continue;
+
+            const uintptr_t offsetAddress = vertexAddress - blockStart;
+            if (offsetAddress > blockSize)
+                continue;
+            const size_t vertexOffset = static_cast<size_t>(offsetAddress);
+            const size_t vertexBytes =
+                static_cast<size_t>(surface.vertCount) * sizeof(GfxPackedVertex);
+            if (vertexBytes > blockSize - vertexOffset)
+                continue;
+
+            for (uint32_t vertexIndex = 0;
+                 vertexIndex < surface.vertCount;
+                 ++vertexIndex)
+            {
+                const size_t offset = vertexOffset +
+                    static_cast<size_t>(vertexIndex) * sizeof(GfxPackedVertex);
+                if (!convertedVertexOffsets.insert(offset).second)
+                    continue;
+
+                const auto *sourceVertex =
+                    reinterpret_cast<const GfxPackedVertex *>(sourceBlock + offset);
+                float texCoord[2]{};
+                Vec2UnpackTexCoords(sourceVertex->texCoord, texCoord);
+                const uint32_t packedHalfTexCoords =
+                    static_cast<uint32_t>(SwitchFloatToHalf(texCoord[0])) |
+                    (static_cast<uint32_t>(SwitchFloatToHalf(texCoord[1])) << 16);
+                std::memcpy(
+                    gpuBlock + offset + offsetof(GfxPackedVertex, texCoord),
+                    &packedHalfTexCoords, sizeof(packedHalfTexCoords));
+            }
+        }
+    }
+}
+
 void FixupGfxWorld(GfxWorld *world)
 {
     Load_VertexBuffer(&world->vd.worldVb, reinterpret_cast<uint8_t *>(world->vd.vertices), 44 * world->vertexCount);
@@ -920,7 +1037,10 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
     // The 32-bit loader copied the vertex and index blocks into the locked static
     // buffers as it left them (DB_SetStreamIndex); the data is complete now.
     if (zoneMem->lockedVertexData && zoneMem->blocks[7].size)
+    {
         memcpy(zoneMem->lockedVertexData, zoneMem->blocks[7].data, zoneMem->blocks[7].size);
+        ConvertPackedModelTexCoordsForVulkan(state, zoneMem);
+    }
     if (zoneMem->lockedIndexData && zoneMem->blocks[8].size)
         memcpy(zoneMem->lockedIndexData, zoneMem->blocks[8].data, zoneMem->blocks[8].size);
 }
