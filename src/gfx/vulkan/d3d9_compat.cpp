@@ -8478,6 +8478,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         const KisakVkTexture *traceTexture[4] = {
             m_textures[0], m_textures[1], m_textures[2], m_textures[3]
         };
+        uint32_t traceBackBufferWidth = m_viewport.Width;
+        uint32_t traceBackBufferHeight = m_viewport.Height;
+        uint32_t traceBackBufferFormat = 0;
+        (void)m_backend->GetBackBufferDesc(
+            &traceBackBufferWidth, &traceBackBufferHeight, &traceBackBufferFormat);
         char trace[1536];
         std::snprintf(
             trace, sizeof(trace),
@@ -8490,8 +8495,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 : reinterpret_cast<void *>(m_backend->CurrentSwapchainView())),
             static_cast<unsigned>(m_color && m_color->texture
                 ? m_color->texture->format : m_backend->SwapchainFormat()),
-            m_color && m_color->texture ? m_color->texture->width : m_backend->Width(),
-            m_color && m_color->texture ? m_color->texture->height : m_backend->Height(),
+            m_color && m_color->texture ? m_color->texture->width : traceBackBufferWidth,
+            m_color && m_color->texture ? m_color->texture->height : traceBackBufferHeight,
             m_viewport.X, m_viewport.Y, m_viewport.Width, m_viewport.Height,
             m_viewport.MinZ, m_viewport.MaxZ,
             m_scissor ? 1u : 0u,
