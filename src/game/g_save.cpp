@@ -2743,7 +2743,7 @@ void __cdecl G_InitLoadGame(SaveGame *save)
     G_LoadInitConfigstrings(save);
 }
 
-void __cdecl G_LoadMainState(SaveGame *save)
+bool __cdecl G_LoadMainState(SaveGame *save)
 {
     MemoryFile *memFile; // r21
     int i; // r5
@@ -2939,7 +2939,7 @@ void __cdecl G_LoadMainState(SaveGame *save)
             "G_LoadMainState: AI event listener count out of range (%d, max %d)",
             listenerCount,
             static_cast<int>(ARRAY_COUNT(g_AIEVlisteners)));
-        return;
+        return false;
     }
     Actor_EventListener_SetCount(listenerCount);
     if (listenerCount)
@@ -3037,6 +3037,7 @@ void __cdecl G_LoadMainState(SaveGame *save)
     Scr_LoadShutdown();
     SV_LocateGameData(level.gentities, level.num_entities, sizeof(gentity_s), &level.clients->ps, sizeof(gclient_s)); // KISAKTODO: pointer type on ps
     level.initializing = 0;
+    return true;
 }
 
 void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
@@ -3065,7 +3066,8 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
     {
         G_SaveError(ERR_DROP, SAVE_ERROR_CORRUPT_SAVE, "The save file has become corrupted.");
     }
-    G_LoadMainState(save);
+    if (!G_LoadMainState(save))
+        return;
     SaveMemory_FinalizeLoad(save);
     RandomSeed = G_GetRandomSeed();
     level.demoplaying = SV_InitDemo((int *)&RandomSeed);
