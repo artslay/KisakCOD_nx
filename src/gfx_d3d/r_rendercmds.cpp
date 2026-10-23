@@ -898,7 +898,7 @@ bool __cdecl Material_HasAnyFogableTechnique(const Material *material)
             const uint32_t traceId =
                 switchFontFogBypassCount.fetch_add(1, std::memory_order_relaxed);
             if (traceId == 0)
-                Switch_LogWrite("[KisakCOD][TEXT2D] bypass fogability rejection for font atlas materials\\n");
+                Switch_LogWrite("[KisakCOD][TEXT2D] bypass fogability rejection for font atlas materials\n");
             return false;
         }
     }
