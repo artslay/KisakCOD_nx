@@ -1444,6 +1444,12 @@ void __cdecl G_ShutdownGame(int clearScripts)
     }
     G_FreeVehiclePaths();
     Actor_ClearThreatBiasGroups();
+#ifdef __SWITCH__
+    // The Switch fastfile reload can release DB_ZONE_GAME weapon assets.
+    // Clear cached WeaponDef pointers even when script state is preserved;
+    // G_LoadGame will rebuild the registry before restoring saved weapons.
+    Com_FreeWeaponInfoMemory(1);
+#endif
     Scr_SetString(&level.cachedTagMat.name, 0);
     Scr_SetString(&level.cachedEntTargetTagMat.name, 0);
     if (!clearScripts || (v2 = 0, !level.savepersist))

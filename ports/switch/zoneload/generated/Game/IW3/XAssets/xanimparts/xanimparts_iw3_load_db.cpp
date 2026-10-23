@@ -384,7 +384,7 @@ void Loader_XAnimParts::Load_XAnimDeltaPart(const bool atStreamStart)
     if (varXAnimDeltaPart->trans)
     {
         // Alloc first for alignment, then proceed to read as game does
-        m_stream.Alloc(4);
+        m_stream.Alloc(alignof(XAnimPartTrans));
         const auto allocSize = LoadDynamicFill_XAnimPartTrans(m_stream.LoadWithFill(0));
         varXAnimDeltaPart->trans = static_cast<XAnimPartTrans*>(m_stream.AllocOutOfBlock(0, allocSize));
         varXAnimPartTrans = varXAnimDeltaPart->trans;
@@ -394,7 +394,7 @@ void Loader_XAnimParts::Load_XAnimDeltaPart(const bool atStreamStart)
     if (varXAnimDeltaPart->quat)
     {
         // Alloc first for alignment, then proceed to read as game does
-        m_stream.Alloc(4);
+        m_stream.Alloc(alignof(XAnimDeltaPartQuat));
         const auto allocSize = LoadDynamicFill_XAnimDeltaPartQuat(m_stream.LoadWithFill(0));
         varXAnimDeltaPart->quat = static_cast<XAnimDeltaPartQuat*>(m_stream.AllocOutOfBlock(0, allocSize));
         varXAnimDeltaPartQuat = varXAnimDeltaPart->quat;
@@ -590,7 +590,7 @@ void Loader_XAnimParts::Load_XAnimParts(const bool atStreamStart)
     
     if (varXAnimParts->deltaPart)
     {
-        varXAnimParts->deltaPart = m_stream.AllocOutOfBlock<XAnimDeltaPart>(4);
+        varXAnimParts->deltaPart = m_stream.AllocOutOfBlock<XAnimDeltaPart>(alignof(XAnimDeltaPart));
         varXAnimDeltaPart = varXAnimParts->deltaPart;
         Load_XAnimDeltaPart(true);
     }
@@ -650,7 +650,7 @@ void Loader_XAnimParts::LoadPtr_XAnimParts(const bool atStreamStart)
         const auto zonePtrType = GetZonePointerType(*varXAnimPartsPtr);
         if (zonePtrType == ZonePointerType::FOLLOWING || zonePtrType == ZonePointerType::INSERT)
         {
-            *varXAnimPartsPtr = m_stream.AllocOutOfBlock<XAnimParts>(4);
+            *varXAnimPartsPtr = m_stream.AllocOutOfBlock<XAnimParts>(alignof(XAnimParts));
             
             uintptr_t toInsertLookupEntry = 0;
             if (zonePtrType == ZonePointerType::INSERT)

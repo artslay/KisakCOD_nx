@@ -163,12 +163,21 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
         minTime = 1;
     fpsMin = SnapFloatToInt(1000.0f / maxTime);
     fps = SnapFloatToInt(32000.0f / total);
+#ifdef __SWITCH__
+    // Keep Switch on the numeric counter even if an archived/devgui config
+    // changes cg_drawFPS to Extra or Verbose. Those modes place the "FPS"
+    // label over the value when the debug-font scale is zero on this port.
+    s = va("%i FPS", fps);
+    return (float)(y + (float)CG_DrawDevString(
+        scrPlace, farRight, y, 0.75f, 0.75f, s, colorWhite, 6, cgMedia.smallDevFont) * 0.75f);
+#else
     if (cg_drawFPS->current.integer == 1)
     {
         s = va("%i FPS", fps);
         return (float)(y + (float)CG_DrawDevString(
             scrPlace, farRight, y, 0.75f, 0.75f, s, colorWhite, 6, cgMedia.smallDevFont) * 0.75f);
     }
+#endif
 #ifdef KISAK_SP
     v10 = cg_small_dev_string_fontscale->current.value * (R_TextWidth(" cg ms/frame", 0, cgMedia.smallDevFont) * 0.75f);
 #else
@@ -349,8 +358,12 @@ void __cdecl CG_DrawUpperRightDebugInfo(int32_t localClientNum)
     R_TrackStatistics(0);
     y = cg_debugInfoCornerOffset->current.vector[1];
 
+#ifdef __SWITCH__
+    y = CG_DrawFPS(&scrPlaceFull, y, &meminfo);
+#else
     if (cg_drawFPS->current.integer)
         y = CG_DrawFPS(&scrPlaceFull, y, &meminfo);
+#endif
 
     if (com_statmon->current.enabled)
         y = CG_DrawStatmon(&scrPlaceFull, y, &meminfo);
@@ -368,8 +381,12 @@ void __cdecl CG_DrawUpperRightDebugInfo(int32_t localClientNum)
 
         y = cg_debugInfoCornerOffset->current.vector[1];
 
+#ifdef __SWITCH__
+        y = CG_DrawFPS(&scrPlaceFull, y, &v4);
+#else
         if (cg_drawFPS->current.integer)
             y = CG_DrawFPS(&scrPlaceFull, y, &v4);
+#endif
 
         if (com_statmon->current.enabled)
             y = CG_DrawStatmon(&scrPlaceFull, y, &v4);
