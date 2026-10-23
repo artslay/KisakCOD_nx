@@ -1837,7 +1837,7 @@ void __cdecl R_SetSampler(
             char trace[640];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][SAMPLER SOURCE NULL] n=%u slot=%u image=%s size=%ux%u imagePtr=%p textureRef=%p basemap=%p material=%s tech=%s vs=%s ps=%s\\n",
+                "[KisakCOD][SAMPLER SOURCE NULL] n=%u slot=%u image=%s size=%ux%u imagePtr=%p textureRef=%p basemap=%p material=%s tech=%s vs=%s ps=%s\n",
                 traceIndex, samplerIndex,
                 image->name ? image->name : "<unnamed>",
                 image->width, image->height,
@@ -2365,7 +2365,7 @@ void __cdecl R_DisableSampler(GfxCmdBufState *state, uint32_t samplerIndex)
             char trace[256];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][SAMPLER EXPLICIT CLEAR] n=%u slot=%u oldTexture=%p oldBasemap=%p\\n",
+                "[KisakCOD][SAMPLER EXPLICIT CLEAR] n=%u slot=%u oldTexture=%p oldBasemap=%p\n",
                 traceIndex, samplerIndex,
                 static_cast<const void *>(oldTexture),
                 static_cast<const void *>(oldBasemap));
