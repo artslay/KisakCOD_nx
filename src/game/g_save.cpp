@@ -2807,18 +2807,45 @@ bool __cdecl G_LoadMainState(SaveGame *save)
 
     iassert(save);
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/free_entities");
+#endif
     G_FreeEntities();
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/destroy_hudelems");
+#endif
     HudElem_DestroyAll();
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/free_pathnode_script_info");
+#endif
     G_FreePathnodesScriptInfo();
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/free_vehicle_path_script_info");
+#endif
     G_FreeVehiclePathsScriptInfo();
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/clear_threat_groups");
+#endif
     Actor_ClearThreatBiasGroups();
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/unregister_notifications");
+#endif
     Cmd_UnregisterAllNotifications();
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/shutdown_script_system");
+#endif
     Scr_ShutdownSystem(1, 1);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/shutdown_script_system_done");
+#endif
     Path_ValidateAllNodes();
     memFile = SaveMemory_GetMemoryFile(save);
 
     level.initializing = 1;
 
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/read_segment2");
+#endif
     SaveMemory_MoveToSegment(save, 2);
     SaveMemory_LoadRead(&level.time, 4, save);
     SaveMemory_LoadRead(&level.framenum, 4, save);
