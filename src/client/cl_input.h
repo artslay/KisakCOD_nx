@@ -107,9 +107,6 @@ void __cdecl CL_AddCurrentStanceToCmd(usercmd_s *cmd);
 void __cdecl CL_KeyMove(usercmd_s *cmd);
 int __cdecl CL_AllowInput();
 void __cdecl CL_GamepadMove(usercmd_s *cmd);
-#ifdef __SWITCH__
-void __cdecl CL_ResetInputAfterSavegameLoad(const playerState_s *loadedPlayerState);
-#endif
 void __cdecl CL_GetMouseMovement(clientActive_t *cl, float *mx, float *my);
 void __cdecl CL_MouseMove(usercmd_s *cmd);
 void __cdecl CL_UpdateCmdButton(int *cmdButtons, int kbButton, int buttonFlag);
