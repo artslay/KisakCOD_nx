@@ -8480,9 +8480,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         };
         uint32_t traceBackBufferWidth = m_viewport.Width;
         uint32_t traceBackBufferHeight = m_viewport.Height;
-        uint32_t traceBackBufferFormat = 0;
         (void)m_backend->GetBackBufferDesc(
-            &traceBackBufferWidth, &traceBackBufferHeight, &traceBackBufferFormat);
+            &traceBackBufferWidth, &traceBackBufferHeight, nullptr);
         char trace[1536];
         std::snprintf(
             trace, sizeof(trace),
