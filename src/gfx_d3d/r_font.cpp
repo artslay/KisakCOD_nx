@@ -71,13 +71,11 @@ Font_s *__cdecl R_RegisterFont_FastFile(const char *fontName)
 {
     Font_s *font = DB_FindXAssetHeader(ASSET_TYPE_FONT, fontName).font;
 #ifdef __SWITCH__
-    // The serialized Font_s stores Material* handles as 32-bit zone aliases.
-    // DB_AddXAsset() can replace the temporary loader object with the canonical
-    // Font_s from the native asset pool, so unresolved aliases on the temporary
-    // object must not be the final source of truth. The retail code_post_gfx
-    // zone contains the two actual font materials used by the nine standard
-    // fonts: fonts/gamefonts_pc(_glow) and fonts/devfonts(_glow).
-    if (font && font->material == nullptr)
+    // Serialized Font_s material pointers can be non-null 32-bit zone aliases,
+    // not usable native ARM64 Material pointers. Therefore a null-only fallback
+    // is insufficient: the alias can look non-null yet still refer to no font
+    // material. Rebind both handles from the live asset pool on every lookup.
+    if (font)
     {
         const bool devFont =
             fontName &&
@@ -94,20 +92,22 @@ Font_s *__cdecl R_RegisterFont_FastFile(const char *fontName)
         Material *glowMaterial =
             DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, glowMaterialName).material;
 
-        if (material)
-            font->material = material;
-        if (glowMaterial)
-            font->glowMaterial = glowMaterial;
+        // Clear unresolved serialized aliases rather than leaving an invalid
+        // handle for Material_FromHandle() to dereference later.
+        font->material = material;
+        font->glowMaterial = glowMaterial;
 
         char trace[448];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][FONT FALLBACK] name=%s font=%p material=%p glow=%p dev=%u\n",
+            "[KisakCOD][FONT RESOLVE] name=%s font=%p materialName=%s material=%p glowName=%s glow=%p dev=%u\n",
             fontName ? fontName : "<null>",
             static_cast<void *>(font),
-            static_cast<void *>(font->material),
-            static_cast<void *>(font->glowMaterial),
+            materialName,
+            static_cast<void *>(material),
+            glowMaterialName,
+            static_cast<void *>(glowMaterial),
             devFont ? 1u : 0u);
         Switch_LogWrite(trace);
     }
