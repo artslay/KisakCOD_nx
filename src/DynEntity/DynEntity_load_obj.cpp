@@ -624,8 +624,9 @@ void __cdecl DynEnt_LoadEntities(MemoryFile *memFile)
         MemFile_ReadData(memFile, sizeof(DynEntityPose) * count, (uint8_t *)cm.dynEntPoseList[drawType]);
 
 #ifdef KISAK_SWITCH
-        // Save files keep the original 32-bit DynEntityClient layout.
-        // physObjId in the save stream is not a live pointer and is therefore discarded.
+        // The save stream stores the original 32-bit client fields for every
+        // dynent first. The has-physics flags and optional BodyState records
+        // follow as a separate table, so do not consume them in this loop.
         for (uint16_t dynEntId = 0; dynEntId < count; ++dynEntId)
         {
             auto *client = &cm.dynEntClientList[drawType][dynEntId];
@@ -635,10 +636,19 @@ void __cdecl DynEnt_LoadEntities(MemoryFile *memFile)
             MemFile_ReadData(memFile, sizeof(client->flags), (uint8_t *)&client->flags);
             MemFile_ReadData(memFile, sizeof(client->lightingHandle), (uint8_t *)&client->lightingHandle);
             MemFile_ReadData(memFile, sizeof(client->health), (uint8_t *)&client->health);
+            client->physObjId = 0;
+        }
+#else
+        MemFile_ReadData(memFile, sizeof(DynEntityClient) * count, (uint8_t *)cm.dynEntClientList[drawType]);
+#endif
 
+        // Keep this second pass in the same order as DynEnt_SaveEntities:
+        // one has-physics byte, followed by BodyState if present, per dynent.
+        for (uint16_t dynEntId = 0; dynEntId < count; ++dynEntId)
+        {
+            auto *client = &cm.dynEntClientList[drawType][dynEntId];
             uint8_t hasPhys = 0;
             MemFile_ReadData(memFile, sizeof(hasPhys), &hasPhys);
-
             if (hasPhys)
             {
                 client->physObjId = static_cast<DynEntityPhysObjId>(
@@ -655,31 +665,6 @@ void __cdecl DynEnt_LoadEntities(MemoryFile *memFile)
             if ((client->flags & DYNENT_CL_LINKED) == 0)
                 DynEntCl_UnlinkEntity(dynEntId, (DynEntityCollType)drawType);
         }
-#else
-        MemFile_ReadData(memFile, sizeof(DynEntityClient) * count, (uint8_t *)cm.dynEntClientList[drawType]);
-
-        for (uint16_t dynEntId = 0; dynEntId < count; ++dynEntId)
-        {
-            uint8_t hasPhys = 0;
-            MemFile_ReadData(memFile, sizeof(hasPhys), &hasPhys);
-            if (hasPhys)
-            {
-                cm.dynEntClientList[drawType][dynEntId].physObjId =
-                    static_cast<DynEntityPhysObjId>(
-                        reinterpret_cast<uintptr_t>(Phys_ObjLoad(PHYS_WORLD_DYNENT, memFile)));
-                DynEnt_SetPhysObjCollision(
-                    &cm.dynEntDefList[drawType][dynEntId],
-                    DynEnt_PhysObjFromId(cm.dynEntClientList[drawType][dynEntId].physObjId));
-            }
-            else
-            {
-                cm.dynEntClientList[drawType][dynEntId].physObjId = 0;
-            }
-
-            if ((cm.dynEntClientList[drawType][dynEntId].flags & DYNENT_CL_LINKED) == 0)
-                DynEntCl_UnlinkEntity(dynEntId, (DynEntityCollType)drawType);
-        }
-#endif
     }
 }
 #endif // KISAK_SP
