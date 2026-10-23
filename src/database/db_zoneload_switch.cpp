@@ -69,6 +69,13 @@ struct ZoneLoadState
 
     // Retained for bounded BSP registration diagnostics.
     const char *zoneName = nullptr;
+    // OAT bypasses Load_GfxImageAsset, so make stream-backed image names
+    // zone-owned before DB_LoadDelayedImages runs after Load_DelayStream.
+    KisakZoneBlocks blocks{};
+    uint32_t imageNamesSeen = 0;
+    uint32_t imageNamesStabilized = 0;
+    uint32_t imageNamesOutsideBlocks = 0;
+    uint32_t imageNamesInvalid = 0;
 };
 
 struct ZoneHandle
@@ -83,6 +90,107 @@ std::map<XZoneMemory *, ZoneHandle> s_zoneHandles;
 bool FirstVisit(ZoneLoadState &state, void *object)
 {
     return object && state.processed.insert(object).second;
+}
+
+void StabilizeZoneImageName(ZoneLoadState &state, GfxImage *image)
+{
+    if (!image)
+        return;
+
+    ++state.imageNamesSeen;
+    const char *const sourceName = image->name;
+    if (!sourceName)
+    {
+        ++state.imageNamesInvalid;
+        return;
+    }
+
+    const uintptr_t nameAddress = reinterpret_cast<uintptr_t>(sourceName);
+    uint32_t sourceBlock = UINT32_MAX;
+    size_t readableBytes = 0;
+    for (uint32_t blockIndex = 0; blockIndex < 9; ++blockIndex)
+    {
+        const uint8_t *const blockData = state.blocks.data[blockIndex];
+        const size_t blockSize = state.blocks.size[blockIndex];
+        if (!blockData || !blockSize)
+            continue;
+
+        const uintptr_t blockAddress = reinterpret_cast<uintptr_t>(blockData);
+        if (nameAddress >= blockAddress &&
+            nameAddress - blockAddress < blockSize)
+        {
+            sourceBlock = blockIndex;
+            readableBytes = blockSize - (nameAddress - blockAddress);
+            break;
+        }
+    }
+
+    // Names outside the active zone blocks are already externally owned; don't
+    // dereference or copy them here. Only copy names whose bounds we can prove.
+    if (sourceBlock == UINT32_MAX)
+    {
+        ++state.imageNamesOutsideBlocks;
+        return;
+    }
+
+    constexpr size_t kMaxImageNameBytes = 256;
+    if (readableBytes > kMaxImageNameBytes)
+        readableBytes = kMaxImageNameBytes;
+    const char *const terminator = static_cast<const char *>(
+        std::memchr(sourceName, 0, readableBytes));
+    if (!terminator)
+    {
+        ++state.imageNamesInvalid;
+        return;
+    }
+
+    const size_t nameSize = static_cast<size_t>(terminator - sourceName) + 1;
+    if (nameSize <= 1 || nameSize > kMaxImageNameBytes)
+    {
+        ++state.imageNamesInvalid;
+        return;
+    }
+    for (size_t i = 0; i + 1 < nameSize; ++i)
+    {
+        const unsigned char ch = static_cast<unsigned char>(sourceName[i]);
+        if (ch < 0x20 || ch > 0x7e)
+        {
+            ++state.imageNamesInvalid;
+            return;
+        }
+    }
+
+    uint8_t *const stableName = DB_AllocSwitchAssetMemory(
+        static_cast<uint32_t>(nameSize), "SwitchOATGfxImageName", 22);
+    if (!stableName)
+    {
+        ++state.imageNamesInvalid;
+        return;
+    }
+    std::memcpy(stableName, sourceName, nameSize);
+    image->name = reinterpret_cast<const char *>(stableName);
+    ++state.imageNamesStabilized;
+
+#ifdef __SWITCH__
+    static uint32_t traceCount = 0;
+    if (traceCount < 24u)
+    {
+        char trace[448];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][OAT IMAGE NAME STABLE] n=%u zone=%s image=%p source=%p stable=%p name=%s bytes=%zu block=%u delay=%u\n",
+            traceCount++,
+            state.zoneName ? state.zoneName : "<unknown>",
+            static_cast<void *>(image),
+            static_cast<const void *>(sourceName),
+            static_cast<void *>(stableName),
+            image->name,
+            nameSize,
+            sourceBlock,
+            static_cast<unsigned>(image->delayLoadPixels));
+        Switch_LogWrite(trace);
+    }
+#endif
 }
 
 size_t ReadZoneData(void *context, void *buffer, size_t length)
@@ -454,6 +562,12 @@ void *LinkAsset(void *context, int assetType, void *asset)
 
     switch (type)
     {
+    case ASSET_TYPE_IMAGE:
+        // Unlike the legacy Load_GfxImageAsset path, OAT links images directly
+        // through DB_AddXAsset. Copy their stream-backed XStrings now, before
+        // Load_DelayStream invalidates the source and before the delayed IWI pass.
+        StabilizeZoneImageName(state, static_cast<GfxImage *>(asset));
+        break;
     case ASSET_TYPE_XMODEL:
         FixupXModel(static_cast<XModel *>(asset));
         break;
@@ -601,6 +715,7 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
 
     ZoneLoadState state;
     state.zoneName = zoneName;
+    state.blocks = blocks;
     KisakZoneHooks hooks{};
     hooks.context = &state;
     hooks.read = ReadZoneData;
@@ -615,6 +730,21 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
     void *const zone = KisakZone_Load(zoneName, blocks, hooks, error, sizeof(error));
     if (!zone)
         Com_Error(ERR_DROP, "Fastfile for zone '%s' could not be loaded: %s", zoneName, error);
+
+#ifdef __SWITCH__
+    {
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][OAT IMAGE NAME SUMMARY] zone=%s seen=%u stabilized=%u outside=%u invalid=%u\n",
+            zoneName ? zoneName : "<unknown>",
+            state.imageNamesSeen,
+            state.imageNamesStabilized,
+            state.imageNamesOutsideBlocks,
+            state.imageNamesInvalid);
+        Switch_LogWrite(trace);
+    }
+#endif
 
     // Resolve weapon sounds only after KisakZone_Load has registered every asset
     // in this zone. More importantly, repeat the pass over previously loaded
