@@ -34,6 +34,7 @@
 #include "savedevice.h"
 
 #ifdef __SWITCH__
+#include <client/cl_input.h>
 #include <cstdio>
 extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
@@ -3191,7 +3192,21 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
     if (!SV_UsingDemoSave())
     {
         SV_GetUsercmd(0, &level.clients->pers.cmd);
+#ifdef __SWITCH__
+        // A savegame restores the saved player view, but the live client can
+        // still have angles from before the load. Seed the first post-load
+        // command from the restored view before recalculating delta angles.
+        for (int i = 0; i < 3; ++i)
+        {
+            level.clients->pers.cmd.angles[i] =
+                static_cast<unsigned __int16>(
+                    static_cast<int>(level.clients->ps.viewangles[i] * 182.04445f));
+        }
+#endif
         InitClientDeltaAngles(level.clients);
+#ifdef __SWITCH__
+        CL_ResetInputAfterSavegameLoad(&level.clients->ps);
+#endif
     }
     G_PruneLoadedCorpses();
     //Profile_EndInternal(0);
