@@ -12,6 +12,7 @@
 extern void Switch_SetProgressPhase(const char *phase);
 extern void Switch_SetProgressDetail(uint32_t detail);
 extern void Switch_LogWrite(const char *msg);
+extern thread_local const char * volatile g_switchFrameStage;
 #endif
 
 #include "scr_memorytree.h"
@@ -121,6 +122,19 @@ static void Switch_ReportStringLengthMismatch(
         Switch_LogWrite(line);
 }
 
+static void Switch_SetStringShutdownStage(uint32_t user, uint32_t bucket, const char *phase)
+{
+    static thread_local char stage[128];
+    std::snprintf(
+        stage,
+        sizeof(stage),
+        "frame/script_string/shutdown/user=%u/bucket=%u/%s",
+        user,
+        bucket,
+        phase ? phase : "unknown");
+    g_switchFrameStage = stage;
+}
+
 static bool Switch_GetStringAllocation(
     uint32_t handle,
     RefString **refString,
@@ -128,8 +142,12 @@ static bool Switch_GetStringAllocation(
     uint32_t *allocationSize,
     uint32_t *storedLength,
     const char *origin,
-    uintptr_t caller)
+    uintptr_t caller,
+    const char **failureReason = nullptr)
 {
+    if (failureReason)
+        *failureReason = nullptr;
+
     uint32_t type = 0;
     uint32_t size = 0;
     if (!MT_GetIndexAllocationInfo(handle, &type, &size) ||
@@ -137,6 +155,8 @@ static bool Switch_GetStringAllocation(
         static_cast<uint64_t>(handle) + (uint64_t{1} << size) > MEMORY_NODE_COUNT ||
         (handle & ((uint32_t{1} << size) - 1u)) != 0)
     {
+        if (failureReason)
+            *failureReason = "invalid_allocation_metadata";
         Switch_ReportStaleStringHandle(origin, handle, type, size, caller);
         return false;
     }
@@ -150,6 +170,8 @@ static bool Switch_GetStringAllocation(
     constexpr size_t stringOffset = offsetof(RefString, str);
     if (allocationBytes <= stringOffset)
     {
+        if (failureReason)
+            *failureReason = "allocation_too_small";
         Switch_ReportStaleStringHandle(origin, handle, type, size, caller);
         return false;
     }
@@ -167,6 +189,8 @@ static bool Switch_GetStringAllocation(
     }
     if (static_cast<size_t>(terminatorOffset) >= available)
     {
+        if (failureReason)
+            *failureReason = "unterminated_string_allocation";
         Switch_ReportStringHashChainFault(
             "unterminated_string_allocation", 0, handle, 0, ref->data, handle);
         return false;
@@ -360,54 +384,65 @@ void SL_Shutdown()
 
 void SL_ShutdownSystem(uint32_t user)
 {
-	iassert(user);
-
-	Sys_EnterCriticalSection(CRITSECT_SCRIPT_STRING);
-
-	for (uint32_t hash = 1; hash < STRINGLIST_SIZE; ++hash)
-	{
-		do
-		{
-			if ((scrStringGlob.hashTable[hash].status_next & HASH_STAT_MASK) == 0)
-				break;
+    iassert(user);
 
 #ifdef KISAK_SWITCH
-			uint32_t stringHandle = scrStringGlob.hashTable[hash].u.prev;
-			uint32_t allocationType = 0;
-			uint32_t allocationSize = 0;
-			bool hasAllocation = MT_GetIndexAllocationInfo(
-					stringHandle, &allocationType, &allocationSize);
-			uint32_t storedLength = 0;
-			RefString* refStr = nullptr;
-			if (!Switch_GetStringAllocation(
-					stringHandle, &refStr, &allocationType, &allocationSize,
-					&storedLength, "SL_ShutdownSystem",
-					reinterpret_cast<uintptr_t>(__builtin_return_address(0))))
-			{
-				char line[256];
-				std::snprintf(
-					line, sizeof(line),
-					"[KisakCOD][SCRIPT STRING SHUTDOWN REJECT] user=%u bucket=%u status=0x%08x handle=%u allocated=%u allocation=%u/%u\n",
-					user, hash, scrStringGlob.hashTable[hash].status_next,
-					stringHandle, hasAllocation ? 1u : 0u, allocationType, allocationSize);
-				Switch_LogWrite(line);
-				break;
-			}
+    Switch_SetStringShutdownStage(user, 0, "enter");
+#endif
+    Sys_EnterCriticalSection(CRITSECT_SCRIPT_STRING);
+
+    for (uint32_t hash = 1; hash < STRINGLIST_SIZE; ++hash)
+    {
+        do
+        {
+            if ((scrStringGlob.hashTable[hash].status_next & HASH_STAT_MASK) == 0)
+                break;
+
+#ifdef KISAK_SWITCH
+            Switch_SetStringShutdownStage(user, hash, "validate");
+            uint32_t stringHandle = scrStringGlob.hashTable[hash].u.prev;
+            uint32_t allocationType = 0;
+            uint32_t allocationSize = 0;
+            bool hasAllocation = MT_GetIndexAllocationInfo(
+                stringHandle, &allocationType, &allocationSize);
+            uint32_t storedLength = 0;
+            RefString* refStr = nullptr;
+            const char *rejectReason = nullptr;
+            if (!Switch_GetStringAllocation(
+                    stringHandle, &refStr, &allocationType, &allocationSize,
+                    &storedLength, "SL_ShutdownSystem",
+                    reinterpret_cast<uintptr_t>(__builtin_return_address(0)),
+                    &rejectReason))
+            {
+                Switch_SetStringShutdownStage(user, hash, "reject");
+                char line[320];
+                std::snprintf(
+                    line, sizeof(line),
+                    "[KisakCOD][SCRIPT STRING SHUTDOWN REJECT] user=%u bucket=%u status=0x%08x handle=%u allocated=%u allocation=%u/%u reason=%s\\n",
+                    user, hash, scrStringGlob.hashTable[hash].status_next,
+                    stringHandle, hasAllocation ? 1u : 0u, allocationType, allocationSize,
+                    rejectReason ? rejectReason : "unknown");
+                Switch_LogWrite(line);
+                break;
+            }
 #else
-			RefString* refStr = GetRefString(scrStringGlob.hashTable[hash].u.prev);
+            RefString* refStr = GetRefString(scrStringGlob.hashTable[hash].u.prev);
 #endif
 
-			if (((uint8_t)user & refStr->user) == 0)
-				break;
+            if (((uint8_t)user & refStr->user) == 0)
+                break;
 
-			refStr->data = ((uint8_t)(~(uint8_t)user & HIWORD(refStr->data)) << 16) | refStr->data & 0xFF00FFFF;
+            refStr->data = ((uint8_t)(~(uint8_t)user & HIWORD(refStr->data)) << 16) | refStr->data & 0xFF00FFFF;
 
-			scrStringGlob.nextFreeEntry = 0;
-			SL_RemoveRefToString(scrStringGlob.hashTable[hash].u.prev);
-		} while (scrStringGlob.nextFreeEntry);
-	}
+#ifdef KISAK_SWITCH
+            Switch_SetStringShutdownStage(user, hash, "remove_ref");
+#endif
+            scrStringGlob.nextFreeEntry = 0;
+            SL_RemoveRefToString(scrStringGlob.hashTable[hash].u.prev);
+        } while (scrStringGlob.nextFreeEntry);
+    }
 
-	Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
+    Sys_LeaveCriticalSection(CRITSECT_SCRIPT_STRING);
 }
 
 int SL_IsLowercaseString(uint32_t stringValue)
