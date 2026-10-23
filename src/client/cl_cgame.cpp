@@ -38,6 +38,18 @@ static void Switch_SetClientSoundAliasStage(const char *phase)
     std::snprintf(g_switchCgFrameStage, sizeof(g_switchCgFrameStage), "frame/cgame/sound_alias/%s", phase ? phase : "(null)");
     g_switchFrameStage = g_switchCgFrameStage;
 }
+
+static thread_local char g_switchArchiveClientStage[96];
+static void Switch_SetArchiveClientStage(MemoryFile *memFile, const char *phase)
+{
+    std::snprintf(
+        g_switchArchiveClientStage,
+        sizeof(g_switchArchiveClientStage),
+        "frame/%s/archive_client/%s",
+        MemFile_IsWriting(memFile) ? "save" : "restore",
+        phase ? phase : "(null)");
+    g_switchFrameStage = g_switchArchiveClientStage;
+}
 #endif
 
 char bigConfigString[8192];
@@ -1139,7 +1151,7 @@ void __cdecl CL_ArchiveClientState(MemoryFile *memFile, int segmentIndex)
         UsedSize = MemFile_GetUsedSize(memFile);
         //ProfMem_Begin("sound", UsedSize);
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/save/archive_client/sound";
+        Switch_SetArchiveClientStage(memFile, "sound");
 #endif
         SND_Save(memFile);
         v5 = MemFile_GetUsedSize(memFile);
@@ -1148,17 +1160,17 @@ void __cdecl CL_ArchiveClientState(MemoryFile *memFile, int segmentIndex)
         v6 = MemFile_GetUsedSize(memFile);
         //ProfMem_Begin("FX", v6);
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/save/archive_client/fx";
+        Switch_SetArchiveClientStage(memFile, "fx");
 #endif
         FX_Save(0, memFile);
         v7 = MemFile_GetUsedSize(memFile);
         //ProfMem_End(v7);
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/save/archive_client/settings";
+        Switch_SetArchiveClientStage(memFile, "settings");
 #endif
         CL_SaveSettings(memFile);
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/save/archive_client/console_channels";
+        Switch_SetArchiveClientStage(memFile, "console_channels");
 #endif
         Con_SaveChannels(memFile);
     }
@@ -1166,41 +1178,41 @@ void __cdecl CL_ArchiveClientState(MemoryFile *memFile, int segmentIndex)
     {
         MemFile_MoveToSegment(memFile, segmentIndex);
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/restore/archive_client/sound";
+        Switch_SetArchiveClientStage(memFile, "sound");
 #endif
         SND_RestoreEventually(memFile);
         MemFile_MoveToSegment(memFile, segmentIndex + 1);
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/restore/archive_client/fx";
+        Switch_SetArchiveClientStage(memFile, "fx");
 #endif
         FX_Restore(0, memFile);
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/restore/archive_client/settings";
+        Switch_SetArchiveClientStage(memFile, "settings");
 #endif
         CL_RestoreSettings(memFile);
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/restore/archive_client/console_channels";
+        Switch_SetArchiveClientStage(memFile, "console_channels");
 #endif
         Con_RestoreChannels(memFile);
     }
 #ifdef __SWITCH__
-    g_switchFrameStage = "frame/save/archive_client/messages";
+    Switch_SetArchiveClientStage(memFile, "messages");
 #endif
     CL_ArchiveMessages(memFile);
 #ifdef __SWITCH__
-    g_switchFrameStage = "frame/save/archive_client/stance";
+    Switch_SetArchiveClientStage(memFile, "stance");
 #endif
     MemFile_ArchiveData(memFile, 4, &clients[0].stance);
 #ifdef __SWITCH__
-    g_switchFrameStage = "frame/save/archive_client/cgame";
+    Switch_SetArchiveClientStage(memFile, "cgame");
 #endif
     CG_ArchiveState(0, memFile);
 #ifdef __SWITCH__
-    g_switchFrameStage = "frame/save/archive_client/fog";
+    Switch_SetArchiveClientStage(memFile, "fog");
 #endif
     R_ArchiveFogState(memFile);
 #ifdef __SWITCH__
-    g_switchFrameStage = "frame/save/archive_client/done";
+    Switch_SetArchiveClientStage(memFile, "done");
 #endif
 }
 
