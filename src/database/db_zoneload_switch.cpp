@@ -122,9 +122,20 @@ const char *ResolveAssetName(void *context, const char *name)
 
 void LoadImageData(void *context, void *loadDef, void *imagePointer)
 {
-    (void)context;
     (void)loadDef;
     auto *image = static_cast<GfxImage *>(imagePointer);
+
+    // OAT's generic XString loader can leave a GfxImage name pointing at a
+    // serialized XString slot instead of the actual characters. Resolve that
+    // chain before Load_Texture builds "images/<name>.iwi", and before the
+    // generated loader registers the image by name.
+    if (image && image->name)
+    {
+        const char *resolvedName = ResolveAssetName(context, image->name);
+        if (resolvedName)
+            image->name = resolvedName;
+    }
+
     Load_Texture(&image->texture, image);
 }
 
