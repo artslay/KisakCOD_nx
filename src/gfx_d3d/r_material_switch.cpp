@@ -44,22 +44,40 @@ Material *__cdecl Material_Duplicate(Material *mtlCopy, char *name)
     if (mtlCopy->stateBitsTable && mtlCopy->stateBitsCount)
     {
         const size_t bytes = sizeof(GfxStateBits) * mtlCopy->stateBitsCount;
-        material->stateBitsTable = reinterpret_cast<GfxStateBits *>(Material_Alloc(bytes));
-        std::memcpy(material->stateBitsTable, mtlCopy->stateBitsTable, bytes);
+        auto *stateBitsCopy = reinterpret_cast<GfxStateBits *>(Material_Alloc(bytes));
+        if (!stateBitsCopy)
+        {
+            Com_Error(ERR_FATAL, "Failed to duplicate material '%s': state-bits allocation failed\n", name);
+            return nullptr;
+        }
+        std::memcpy(stateBitsCopy, mtlCopy->stateBitsTable, bytes);
+        material->stateBitsTable = stateBitsCopy;
     }
 
     if (mtlCopy->textureTable && mtlCopy->textureCount)
     {
         const size_t bytes = sizeof(MaterialTextureDef) * mtlCopy->textureCount;
-        material->textureTable = reinterpret_cast<MaterialTextureDef *>(Material_Alloc(bytes));
-        std::memcpy(material->textureTable, mtlCopy->textureTable, bytes);
+        auto *textureCopy = reinterpret_cast<MaterialTextureDef *>(Material_Alloc(bytes));
+        if (!textureCopy)
+        {
+            Com_Error(ERR_FATAL, "Failed to duplicate material '%s': texture-table allocation failed\n", name);
+            return nullptr;
+        }
+        std::memcpy(textureCopy, mtlCopy->textureTable, bytes);
+        material->textureTable = textureCopy;
     }
 
     if (mtlCopy->constantTable && mtlCopy->constantCount)
     {
         const size_t bytes = sizeof(MaterialConstantDef) * mtlCopy->constantCount;
-        material->constantTable = reinterpret_cast<MaterialConstantDef *>(Material_Alloc(bytes));
-        std::memcpy(material->constantTable, mtlCopy->constantTable, bytes);
+        auto *constantCopy = reinterpret_cast<MaterialConstantDef *>(Material_Alloc(bytes));
+        if (!constantCopy)
+        {
+            Com_Error(ERR_FATAL, "Failed to duplicate material '%s': constant-table allocation failed\n", name);
+            return nullptr;
+        }
+        std::memcpy(constantCopy, mtlCopy->constantTable, bytes);
+        material->constantTable = constantCopy;
     }
 
     Material_Add(material, hashIndex);
