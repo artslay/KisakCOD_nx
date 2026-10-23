@@ -31,6 +31,20 @@ const dvar_t *cl_anglespeedkey;
 
 unsigned int frame_msec;
 int old_com_frameTime;
+#ifdef __SWITCH__
+namespace
+{
+bool s_traceGamepadAfterSavegameLoad = false;
+float s_loadServerViewAngles[3]{};
+float s_loadServerDeltaAngles[3]{};
+int s_loadCmdAngles[3]{};
+float s_loadClientViewAngles[3]{};
+float s_loadClientSnapViewAngles[3]{};
+float s_loadClientSnapDeltaAngles[3]{};
+int s_loadFrameTime = 0;
+int s_loadComFrameTime = 0;
+}
+#endif
 
 #define KEY_LEFT 0
 #define KEY_RIGHT 1
@@ -998,6 +1012,29 @@ int __cdecl CL_AllowInput()
     return result;
 }
 
+#ifdef __SWITCH__
+void __cdecl CL_TraceGamepadAfterSavegameLoad(
+    const playerState_s *loadedPlayerState,
+    const usercmd_s *loadedCmd)
+{
+    if (!loadedPlayerState || !loadedCmd)
+        return;
+
+    for (int i = 0; i < 3; ++i)
+    {
+        s_loadServerViewAngles[i] = loadedPlayerState->viewangles[i];
+        s_loadServerDeltaAngles[i] = loadedPlayerState->delta_angles[i];
+        s_loadCmdAngles[i] = loadedCmd->angles[i];
+        s_loadClientViewAngles[i] = clients[0].viewangles[i];
+        s_loadClientSnapViewAngles[i] = clients[0].snap.ps.viewangles[i];
+        s_loadClientSnapDeltaAngles[i] = clients[0].snap.ps.delta_angles[i];
+    }
+    s_loadFrameTime = cls.frametime;
+    s_loadComFrameTime = com_frameTime;
+    s_traceGamepadAfterSavegameLoad = true;
+}
+#endif
+
 void __cdecl CL_GamepadMove(usercmd_s *cmd)
 {
 #ifdef __SWITCH__
@@ -1027,10 +1064,33 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     if (magnitude > 1.0f)
         moveScale /= magnitude;
 
+    const int cmdRightBeforePad = cmd->rightmove;
+    const int cmdForwardBeforePad = cmd->forwardmove;
     cmd->rightmove = ClampChar(
         static_cast<int>(rightAxis * moveScale + cmd->rightmove));
     cmd->forwardmove = ClampChar(
         static_cast<int>(forwardAxis * moveScale + cmd->forwardmove));
+
+    if (s_traceGamepadAfterSavegameLoad)
+    {
+        char trace[768];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][INPUT AFTER LOAD] serverView=(%.2f,%.2f,%.2f) serverDelta=(%.2f,%.2f,%.2f) cmdAngles=(%d,%d,%d) clientView=(%.2f,%.2f,%.2f) snapView=(%.2f,%.2f,%.2f) snapDelta=(%.2f,%.2f,%.2f) axis=(%.3f,%.3f,%.3f,%.3f) mapped=(forward=%.3f,right=%.3f,pitch=%.3f,yaw=%.3f) moveBefore=(%d,%d) moveAfter=(%d,%d) frame=(%d,%d)\n",
+            s_loadServerViewAngles[0], s_loadServerViewAngles[1], s_loadServerViewAngles[2],
+            s_loadServerDeltaAngles[0], s_loadServerDeltaAngles[1], s_loadServerDeltaAngles[2],
+            s_loadCmdAngles[0], s_loadCmdAngles[1], s_loadCmdAngles[2],
+            s_loadClientViewAngles[0], s_loadClientViewAngles[1], s_loadClientViewAngles[2],
+            s_loadClientSnapViewAngles[0], s_loadClientSnapViewAngles[1], s_loadClientSnapViewAngles[2],
+            s_loadClientSnapDeltaAngles[0], s_loadClientSnapDeltaAngles[1], s_loadClientSnapDeltaAngles[2],
+            CL_GamepadAxisValue(0, 0), CL_GamepadAxisValue(0, 1),
+            CL_GamepadAxisValue(0, 3), CL_GamepadAxisValue(0, 4),
+            forwardAxis, rightAxis, pitchAxis, yawAxis,
+            cmdForwardBeforePad, cmdRightBeforePad, cmd->forwardmove, cmd->rightmove,
+            cls.frametime, s_loadFrameTime);
+        Switch_LogWrite(trace);
+        s_traceGamepadAfterSavegameLoad = false;
+    }
 
     cmd->pitchmove = ClampChar(
         static_cast<int>(pitchAxis * 127.0f) + cmd->pitchmove);
