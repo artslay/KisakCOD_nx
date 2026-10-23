@@ -2026,12 +2026,11 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0CenterTestTargetSerial()
 {
-    // Keep the test limited to one known world PS by default. A decimal/hex
-    // serial can be supplied for another shader; "off" or "0" disables it.
+    // Rewriting a fragment shader is diagnostic-only and must be explicitly
+    // requested. An absent setting must leave all production shaders intact.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL");
-    if (!value || !*value)
-        return 1792u;
-    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+    if (!value || !*value ||
+        std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
 
     char *end = nullptr;
