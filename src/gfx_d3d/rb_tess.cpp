@@ -1,4 +1,8 @@
 #include <universal/q_shared.h>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 #include "rb_tess.h"
 #include "r_dvars.h"
 #include "r_shade.h"
@@ -1378,6 +1382,40 @@ uint32_t __cdecl R_TessTrianglesPreTessList(const GfxDrawSurfListArgs *listArgs,
     if (context.state->prim.indexBuffer != ib)
         R_ChangeIndices(&context.state->prim, ib);
     primDrawSurfPos = &data->primDrawSurfsBuf[info->drawSurfs[listArgs->firstDrawSurfIndex].fields.objectId];
+#ifdef __SWITCH__
+    {
+        static uint32_t switchBspTessRouteTraceCount = 0;
+        if (switchBspTessRouteTraceCount < 48u)
+        {
+            const Material *traceMaterial = context.state ? context.state->material : nullptr;
+            const MaterialTechniqueSet *traceSet =
+                traceMaterial ? traceMaterial->techniqueSet : nullptr;
+            const MaterialTechnique *traceTechnique =
+                context.state ? context.state->technique : nullptr;
+            const MaterialPass *tracePass = context.state ? context.state->pass : nullptr;
+            char trace[704];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][BSP TESS ROUTE] path=pretess n=%u baseTech=%u branch=%s firstDraw=%u objectId=%u commandCount=%u mat=%s set=%s tech=%s passFlags=0x%x vs=%s ps=%s world=%p\\n",
+                switchBspTessRouteTraceCount++,
+                static_cast<unsigned>(baseTechType),
+                baseTechType == TECHNIQUE_LIT_BEGIN ? "lit" : "ordinary",
+                listArgs->firstDrawSurfIndex,
+                info->drawSurfs[listArgs->firstDrawSurfIndex].fields.objectId,
+                primDrawSurfPos ? primDrawSurfPos[0] : UINT32_MAX,
+                traceMaterial && traceMaterial->info.name ? traceMaterial->info.name : "<null>",
+                traceSet && traceSet->name ? traceSet->name : "<null>",
+                traceTechnique && traceTechnique->name ? traceTechnique->name : "<null>",
+                tracePass ? static_cast<unsigned>(tracePass->customSamplerFlags) : 0u,
+                tracePass && tracePass->vertexShader && tracePass->vertexShader->name
+                    ? tracePass->vertexShader->name : "<null>",
+                tracePass && tracePass->pixelShader && tracePass->pixelShader->name
+                    ? tracePass->pixelShader->name : "<null>",
+                static_cast<void *>(rgp.world));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     R_TrackPrims(context.state, GFX_PRIM_STATS_WORLD);
     if (baseTechType == TECHNIQUE_LIT_BEGIN)
         R_DrawBspDrawSurfsLitPreTess(primDrawSurfPos, context);
@@ -1424,6 +1462,40 @@ uint32_t __cdecl R_TessTrianglesList(const GfxDrawSurfListArgs *listArgs, GfxCmd
     }
 
     primDrawSurfPos = &commonSource->input.data->primDrawSurfsBuf[info->drawSurfs[listArgs->firstDrawSurfIndex].fields.objectId];
+#ifdef __SWITCH__
+    {
+        static uint32_t switchBspTessRouteTraceCount = 0;
+        if (switchBspTessRouteTraceCount < 48u)
+        {
+            const Material *traceMaterial = context.state ? context.state->material : nullptr;
+            const MaterialTechniqueSet *traceSet =
+                traceMaterial ? traceMaterial->techniqueSet : nullptr;
+            const MaterialTechnique *traceTechnique =
+                context.state ? context.state->technique : nullptr;
+            const MaterialPass *tracePass = context.state ? context.state->pass : nullptr;
+            char trace[704];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][BSP TESS ROUTE] path=tess n=%u baseTech=%u branch=%s firstDraw=%u objectId=%u commandCount=%u mat=%s set=%s tech=%s passFlags=0x%x vs=%s ps=%s world=%p\\n",
+                switchBspTessRouteTraceCount++,
+                static_cast<unsigned>(baseTechType),
+                baseTechType == TECHNIQUE_LIT ? "lit" : "ordinary",
+                listArgs->firstDrawSurfIndex,
+                info->drawSurfs[listArgs->firstDrawSurfIndex].fields.objectId,
+                primDrawSurfPos ? primDrawSurfPos[0] : UINT32_MAX,
+                traceMaterial && traceMaterial->info.name ? traceMaterial->info.name : "<null>",
+                traceSet && traceSet->name ? traceSet->name : "<null>",
+                traceTechnique && traceTechnique->name ? traceTechnique->name : "<null>",
+                tracePass ? static_cast<unsigned>(tracePass->customSamplerFlags) : 0u,
+                tracePass && tracePass->vertexShader && tracePass->vertexShader->name
+                    ? tracePass->vertexShader->name : "<null>",
+                tracePass && tracePass->pixelShader && tracePass->pixelShader->name
+                    ? tracePass->pixelShader->name : "<null>",
+                static_cast<void *>(rgp.world));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     R_TrackPrims(context.state, GFX_PRIM_STATS_WORLD);
 
     if (baseTechType == TECHNIQUE_LIT)
