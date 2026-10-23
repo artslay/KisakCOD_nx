@@ -8,6 +8,8 @@
 #include <database/database.h>
 #include "q_parse.h"
 #ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 #endif
 
@@ -458,6 +460,52 @@ snd_alias_t *__cdecl Com_PickSoundAlias(const char *aliasname)
 #endif
     aliasList = Com_FindSoundAlias(aliasname);
 #ifdef __SWITCH__
+    if (aliasList && aliasList->count == 0)
+    {
+        // Sound-not-loaded warnings are caused by a registered alias list with
+        // no entries, which is different from audio-device initialization
+        // failure or a missing XAsset. Report each alias name once so repeated
+        // gunfire requests do not drown out other missing sounds.
+        static char tracedEmptyAliasNames[32][64]{};
+        static uint32_t tracedEmptyAliasCount = 0;
+        const char *listName = aliasList->aliasName
+            ? aliasList->aliasName : (aliasname ? aliasname : "<null>");
+        bool alreadyTraced = false;
+        for (uint32_t i = 0; i < tracedEmptyAliasCount; ++i)
+        {
+            if (!I_stricmp(tracedEmptyAliasNames[i], listName))
+            {
+                alreadyTraced = true;
+                break;
+            }
+        }
+        if (!alreadyTraced && tracedEmptyAliasCount < ARRAY_COUNT(tracedEmptyAliasNames))
+        {
+            std::snprintf(
+                tracedEmptyAliasNames[tracedEmptyAliasCount],
+                sizeof(tracedEmptyAliasNames[tracedEmptyAliasCount]),
+                "%s", listName);
+            ++tracedEmptyAliasCount;
+
+            char trace[512];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][SOUND EMPTY ALIAS] request=%s listName=%s list=%p head=%p count=%d fastFile=%u initialized=%u,%u,%u aliasCounts=%d,%d,%d\n",
+                aliasname ? aliasname : "<null>",
+                listName,
+                static_cast<void *>(aliasList),
+                static_cast<void *>(aliasList->head),
+                aliasList->count,
+                IsFastFileLoad() ? 1u : 0u,
+                g_sa.initialized[0] ? 1u : 0u,
+                g_sa.initialized[1] ? 1u : 0u,
+                g_sa.initialized[2] ? 1u : 0u,
+                g_sa.aliasInfo[0].count,
+                g_sa.aliasInfo[1].count,
+                g_sa.aliasInfo[2].count);
+            Switch_LogWrite(trace);
+        }
+    }
     g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/pick_list";
 #endif
     snd_alias_t *pickedAlias = Com_PickSoundAliasFromList(aliasList);
