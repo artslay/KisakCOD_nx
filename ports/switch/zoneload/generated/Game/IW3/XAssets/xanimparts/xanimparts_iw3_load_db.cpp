@@ -590,7 +590,7 @@ void Loader_XAnimParts::Load_XAnimParts(const bool atStreamStart)
     
     if (varXAnimParts->deltaPart)
     {
-        varXAnimParts->deltaPart = m_stream.AllocOutOfBlock<XAnimDeltaPart>(alignof(XAnimDeltaPart));
+        varXAnimParts->deltaPart = m_stream.AllocOutOfBlock<XAnimDeltaPart>(4);
         varXAnimDeltaPart = varXAnimParts->deltaPart;
         Load_XAnimDeltaPart(true);
     }
@@ -650,7 +650,7 @@ void Loader_XAnimParts::LoadPtr_XAnimParts(const bool atStreamStart)
         const auto zonePtrType = GetZonePointerType(*varXAnimPartsPtr);
         if (zonePtrType == ZonePointerType::FOLLOWING || zonePtrType == ZonePointerType::INSERT)
         {
-            *varXAnimPartsPtr = m_stream.AllocOutOfBlock<XAnimParts>(alignof(XAnimParts));
+            *varXAnimPartsPtr = m_stream.AllocOutOfBlock<XAnimParts>(4);
             
             uintptr_t toInsertLookupEntry = 0;
             if (zonePtrType == ZonePointerType::INSERT)
