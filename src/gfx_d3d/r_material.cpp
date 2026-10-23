@@ -485,7 +485,18 @@ IDirect3DVertexDeclaration9 *__cdecl Material_BuildVertexDecl(
 
         elemTable[elemIndexInsert].Stream = sourceInfo->Stream;
         elemTable[elemIndexInsert].Offset = sourceInfo->Offset;
+#ifdef __SWITCH__
+        // s_streamSourceInfo retains native D3DDECLTYPE numbers
+        // (FLOAT4=3, D3DCOLOR=4, UBYTE4=5), while the Switch D3D9
+        // compatibility enum reserves zero and starts FLOAT1 at one.
+        // Convert at the declaration boundary; without this, packed normal
+        // and tangent bytes are treated as normalized D3DCOLOR and the world
+        // FLOAT4 position loses its binormalSign component.
+        elemTable[elemIndexInsert].Type =
+            static_cast<uint8_t>(sourceInfo->Type + 1u);
+#else
         elemTable[elemIndexInsert].Type = sourceInfo->Type;
+#endif
         elemTable[elemIndexInsert].Method = 0;
         elemTable[elemIndexInsert].Usage = destInfo->Usage;
         elemTable[elemIndexInsert].UsageIndex = destInfo->UsageIndex;
