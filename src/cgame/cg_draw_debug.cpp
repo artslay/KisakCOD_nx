@@ -163,6 +163,12 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
         minTime = 1;
     fpsMin = SnapFloatToInt(1000.0f / maxTime);
     fps = SnapFloatToInt(32000.0f / total);
+    if (cg_drawFPS->current.integer == 1)
+    {
+        s = va("%i FPS", fps);
+        return (float)(y + (float)CG_DrawDevString(
+            scrPlace, farRight, y, 0.75f, 0.75f, s, colorWhite, 6, cgMedia.smallDevFont) * 0.75f);
+    }
 #ifdef KISAK_SP
     v10 = cg_small_dev_string_fontscale->current.value * (R_TextWidth(" cg ms/frame", 0, cgMedia.smallDevFont) * 0.75f);
 #else
