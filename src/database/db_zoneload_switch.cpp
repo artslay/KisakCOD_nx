@@ -60,6 +60,8 @@ struct ZoneLoadState
     std::vector<uint16_t> scriptStrings;
     std::unordered_set<void *> processed;
     std::unordered_map<MaterialVertexDeclaration *, MaterialVertexDeclaration *> vertexDecls;
+    // Retain zone-local and canonical material objects for a post-link image fixup.
+    std::vector<Material *> materialsToNormalize;
 
     // Weapon assets are copied into native 64-bit layout before registration. Their
     // storage must outlive LinkAsset and remain valid for as long as this zone is loaded.
@@ -185,6 +187,58 @@ void FixupMaterial(ZoneLoadState &state, Material *material)
         MaterialTextureDef &def = material->textureTable[textureIndex];
         if (def.semantic == TS_WATER_MAP && FirstVisit(state, def.u.water))
             Load_PicmipWater(&def.u.water);
+    }
+}
+
+void NormalizeMaterialImageReferences(Material *material)
+{
+    if (!material || !material->textureTable)
+        return;
+
+    for (unsigned textureIndex = 0;
+         textureIndex < material->textureCount;
+         ++textureIndex)
+    {
+        MaterialTextureDef &texture = material->textureTable[textureIndex];
+        if (texture.semantic == TS_WATER_MAP || !texture.u.image ||
+            !texture.u.image->name || !texture.u.image->name[0])
+            continue;
+
+        GfxImage *const sourceImage = texture.u.image;
+        const char *const imageName = sourceImage->name;
+        const XAssetHeader registered =
+            DB_FindXAssetHeader(ASSET_TYPE_IMAGE, imageName);
+        GfxImage *const canonicalImage = registered.image;
+
+        // A lookup miss may return the image type's default asset. Only redirect
+        // when the registered image's name matches the original reference.
+        if (!canonicalImage || !canonicalImage->name ||
+            I_stricmp(canonicalImage->name, imageName) != 0 ||
+            canonicalImage == sourceImage)
+            continue;
+
+#ifdef __SWITCH__
+        static uint32_t switchImageReferenceFixupCount = 0;
+        if (switchImageReferenceFixupCount < 48u)
+        {
+            char trace[512];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][MATERIAL IMAGE FIXUP] n=%u material=%s slot=%u image=%s source=%p sourceTex=%p canonical=%p canonicalTex=%p sourceDelay=%u canonicalDelay=%u\n",
+                switchImageReferenceFixupCount++,
+                material->info.name ? material->info.name : "<unnamed>",
+                textureIndex,
+                imageName,
+                static_cast<void *>(sourceImage),
+                static_cast<void *>(sourceImage->texture.basemap),
+                static_cast<void *>(canonicalImage),
+                static_cast<void *>(canonicalImage->texture.basemap),
+                static_cast<unsigned>(sourceImage->delayLoadPixels),
+                static_cast<unsigned>(canonicalImage->delayLoadPixels));
+            Switch_LogWrite(trace);
+        }
+#endif
+        texture.u.image = canonicalImage;
     }
 }
 
@@ -476,6 +530,15 @@ void *LinkAsset(void *context, int assetType, void *asset)
     }
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
 
+    if (type == ASSET_TYPE_MATERIAL)
+    {
+        // References in dependent assets may still target the zone-local
+        // material even when the registry selects a canonical older material.
+        state.materialsToNormalize.push_back(static_cast<Material *>(asset));
+        if (registered.material && registered.material != asset)
+            state.materialsToNormalize.push_back(registered.material);
+    }
+
 #ifdef __SWITCH__
     // Keep BSP registration visible with one bounded record per clip-map asset.
     // The map can finish loading all zone data yet fail the later engine lookup
@@ -558,6 +621,19 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
     // zones: a weapon from common can reference an alias that is supplied by the
     // subsequently loaded map zone. Re-resolving by the alias name refreshes a
     // pointer that previously landed on the empty default asset.
+    // OAT pointer lookups may preserve a zone-local GfxImage in a material's
+    // texture table. The delayed IWI pass updates the canonical DB image, not
+    // that copy. Normalize after every asset (including forward references)
+    // has been linked, before db_file_load.cpp performs delayed image loading.
+    {
+        std::unordered_set<Material *> normalizedMaterials;
+        for (Material *material : state.materialsToNormalize)
+        {
+            if (material && normalizedMaterials.insert(material).second)
+                NormalizeMaterialImageReferences(material);
+        }
+    }
+
     std::vector<WeaponDef *> weaponsToFix;
     {
         std::lock_guard<std::mutex> lock(s_zoneHandlesMutex);
