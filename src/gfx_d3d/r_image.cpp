@@ -540,27 +540,6 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
             if (!image->texture.basemap)
             {
                 HRESULT hr = dx.device->TestCooperativeLevel();
-#ifdef __SWITCH__
-                char trace[448];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][IMAGE DELAY FATAL] #%u image=%p namePtr=%p "
-                    "name=%.*s hr=%08x basemap=%p whiteTex=%p normalTex=%p blackTex=%p\n",
-                    static_cast<unsigned>(switchDelayImageIndex),
-                    static_cast<void *>(image),
-                    image ? static_cast<const void *>(image->name) : nullptr,
-                    160,
-                    (image && image->name) ? image->name : "<null>",
-                    static_cast<unsigned>(hr),
-                    image ? static_cast<void *>(image->texture.basemap) : nullptr,
-                    rgp.whiteImage ? static_cast<void *>(rgp.whiteImage->texture.basemap) : nullptr,
-                    rgp.identityNormalMapImage
-                        ? static_cast<void *>(rgp.identityNormalMapImage->texture.basemap)
-                        : nullptr,
-                    rgp.blackImage ? static_cast<void *>(rgp.blackImage->texture.basemap) : nullptr);
-                Switch_LogWrite(trace);
-#endif
                 if (hr != 0x88760868 && hr != 0x88760869)
                     Com_Error(
                         ERR_DROP,
