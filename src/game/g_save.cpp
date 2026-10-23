@@ -56,6 +56,27 @@ void SwitchSaveStageIndex(const char *phase, int index)
         "frame/save/%s/index=%d", phase, index);
     g_switchFrameStage = g_switchSaveStageBuffer;
 }
+    void SwitchSaveCursorTrace(const char *phase, SaveGame *save, int detail)
+    {
+        if (!save)
+            return;
+        MemoryFile *memFile = SaveMemory_GetMemoryFile(save);
+        if (!memFile)
+            return;
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][SAVE CURSOR] phase=%s segment=%d used=%d start=%d buffer=%d overflow=%u compressed=%u detail=%d\\n",
+            phase ? phase : "<none>",
+            memFile->segmentIndex,
+            memFile->bytesUsed,
+            memFile->segmentStart,
+            memFile->bufferSize,
+            memFile->memoryOverflow ? 1u : 0u,
+            memFile->compress ? 1u : 0u,
+            detail);
+        Switch_LogWrite(trace);
+    }
 }
 #endif
 
@@ -1763,74 +1784,135 @@ void __cdecl G_SaveItems(SaveGame *save)
 
 void __cdecl G_SaveWeaponCue(SaveGame *save)
 {
-    EntHandle *droppedWeaponCue; // r31
-    int number; // r11
-    unsigned int v4; // [sp+50h] [-50h] BYREF
+    EntHandle *droppedWeaponCue;
+    unsigned int serializedEntity;
 
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1956, 0, "%s", "save");
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("save_weapon_cue_begin", save, 0);
+#endif
     droppedWeaponCue = level.droppedWeaponCue;
     do
     {
-        number = droppedWeaponCue->number;
-        if (droppedWeaponCue->number && !g_entities[number - 1].r.inuse)
+        const int number = droppedWeaponCue->number;
+        if (number && (number > MAX_GENTITIES || !g_entities[number - 1].r.inuse))
             MyAssertHandler(
-                "c:\\trees\\cod3\\cod3src\\src\\game\\g_public.h",
+                "c:\\trees\\cod3\\src\\game\\g_public.h",
                 336,
                 0,
-                "%s\n\t(number - 1) = %i",
-                "(!number || g_entities[number - 1].r.inuse)",
+                "%s\\n\\t(number - 1) = %i",
+                "(!number || (number <= MAX_GENTITIES && g_entities[number - 1].r.inuse))",
                 number - 1);
-        if (droppedWeaponCue->number)
-            v4 = droppedWeaponCue->entnum() + 1;
-        else
-            v4 = 0;
-        SaveMemory_SaveWrite(&v4, 4, save);
+        serializedEntity = number ? static_cast<unsigned int>(droppedWeaponCue->entnum() + 1) : 0u;
+        SaveMemory_SaveWrite(&serializedEntity, sizeof(serializedEntity), save);
         ++droppedWeaponCue;
-    } while (droppedWeaponCue < &level.droppedWeaponCue[32]);
+    } while (droppedWeaponCue < &level.droppedWeaponCue[ARRAY_COUNT(level.droppedWeaponCue)]);
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("save_weapon_cue_end", save, ARRAY_COUNT(level.droppedWeaponCue));
+#endif
 }
 
 void __cdecl G_LoadWeaponCue(SaveGame *save)
 {
-    EntHandle *droppedWeaponCue; // r30
-    int number; // r11
-    int v4; // r5
-    bool v5; // cr58
-    int v6; // [sp+50h] [-70h] BYREF
-
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1979, 0, "%s", "save");
-    droppedWeaponCue = level.droppedWeaponCue;
-    do
+
+    constexpr int kWeaponCueCount = ARRAY_COUNT(level.droppedWeaponCue);
+    int savedEntityNumbers[kWeaponCueCount]{};
+    int firstInvalidSlot = -1;
+    int firstInvalidValue = 0;
+    MemoryFile *memFile = SaveMemory_GetMemoryFile(save);
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("load_weapon_cue_begin", save, kWeaponCueCount);
+#endif
+
+    // Read the fixed-size table completely before rejecting corrupt indices.
+    // The old error path could continue into g_entities[value - 1] after
+    // Com_Error returned, turning a malformed save into an ARM64 memory fault.
+    for (int slot = 0; slot < kWeaponCueCount; ++slot)
     {
-        SaveMemory_LoadRead(&v6, 4, save);
-        number = droppedWeaponCue->number;
-        if (droppedWeaponCue->number && !g_entities[number - 1].r.inuse)
+        int savedEntity = 0;
+        SaveMemory_LoadRead(&savedEntity, sizeof(savedEntity), save);
+        if (memFile && memFile->memoryOverflow)
+        {
+#ifdef __SWITCH__
+            char trace[256];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][WEAPON CUE LOAD] result=truncated slot=%d segment=%d used=%d start=%d\\n",
+                slot, memFile->segmentIndex, memFile->bytesUsed, memFile->segmentStart);
+            Switch_LogWrite(trace);
+#endif
+            Com_Error(ERR_DROP, "G_LoadWeaponCue: save data ended at cue %d", slot);
+            return;
+        }
+
+        savedEntityNumbers[slot] = savedEntity;
+        if (savedEntity < 0 || savedEntity > MAX_GENTITIES)
+        {
+#ifdef __SWITCH__
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][WEAPON CUE LOAD] result=invalid_index slot=%d value=%d max=%d segment=%d used=%d start=%d\\n",
+                slot, savedEntity, MAX_GENTITIES,
+                memFile ? memFile->segmentIndex : -1,
+                memFile ? memFile->bytesUsed : -1,
+                memFile ? memFile->segmentStart : -1);
+            Switch_LogWrite(trace);
+#endif
+            if (firstInvalidSlot < 0)
+            {
+                firstInvalidSlot = slot;
+                firstInvalidValue = savedEntity;
+            }
+        }
+    }
+
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("load_weapon_cue_end", save, firstInvalidSlot);
+#endif
+    if (firstInvalidSlot >= 0)
+    {
+        Com_Error(
+            ERR_DROP,
+            "G_LoadWeaponCue: entity out of range at slot %d (%d, max %d)",
+            firstInvalidSlot, firstInvalidValue, MAX_GENTITIES);
+        return;
+    }
+
+    for (int slot = 0; slot < kWeaponCueCount; ++slot)
+    {
+        EntHandle *droppedWeaponCue = &level.droppedWeaponCue[slot];
+        const int existingNumber = droppedWeaponCue->number;
+        if (existingNumber > MAX_GENTITIES)
+        {
+            Com_Error(
+                ERR_DROP,
+                "G_LoadWeaponCue: existing cue handle out of range at slot %d (%d)",
+                slot, existingNumber);
+            return;
+        }
+        if (existingNumber && !g_entities[existingNumber - 1].r.inuse)
             MyAssertHandler(
-                "c:\\trees\\cod3\\cod3src\\src\\game\\g_public.h",
+                "c:\\trees\\cod3\\src\\game\\g_public.h",
                 336,
                 0,
-                "%s\n\t(number - 1) = %i",
+                "%s\\n\\t(number - 1) = %i",
                 "(!number || g_entities[number - 1].r.inuse)",
-                number - 1);
-        if (droppedWeaponCue->number)
+                existingNumber - 1);
+        if (existingNumber)
             MyAssertHandler(
                 "c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp",
                 1984,
                 0,
                 "%s",
                 "!level.droppedWeaponCue[i].isDefined()");
-        v4 = v6;
-        if (v6 > MAX_GENTITIES || (v5 = v6 == 0, v6 < 0))
-        {
-            Com_Error(ERR_DROP, "G_LoadWeaponCue: entity out of range (%i)", v6);
-            v4 = v6;
-            v5 = v6 == 0;
-        }
-        if (!v5)
-            droppedWeaponCue->setEnt(&g_entities[v4 - 1]);
-        ++droppedWeaponCue;
-    } while (droppedWeaponCue < &level.droppedWeaponCue[32]);
+
+        if (savedEntityNumbers[slot] != 0)
+            droppedWeaponCue->setEnt(&g_entities[savedEntityNumbers[slot] - 1]);
+    }
 }
 
 void __cdecl G_SaveDvars(SaveGame *save)
@@ -2171,8 +2253,12 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
 #ifdef __SWITCH__
     SwitchSavePhase("frame/save/main_state/dynamic_entities");
 #endif
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("save_dynent_begin", save, 0);
+#endif
     DynEnt_SaveEntities(SaveMemory_GetMemoryFile(save));
 #ifdef __SWITCH__
+    SwitchSaveCursorTrace("save_dynent_end", save, 0);
     SwitchSavePhase("frame/save/main_state/threat_group");
 #endif
     memcpy(v63, &g_threatBias, sizeof(threat_bias_t));
@@ -2187,6 +2273,9 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
         SaveMemory_SaveWrite(g_AIEVlisteners, sizeof(AIEventListener) * listenerCount, save);
 
     iassert(level.currentTriggerListSize == 0);
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("save_before_pending_triggers", save, level.pendingTriggerListSize);
+#endif
     SaveMemory_SaveWrite(&level.pendingTriggerListSize, 4, save);
     SaveMemory_SaveWrite(level.pendingTriggerList, 12 * level.pendingTriggerListSize, save);
     G_SaveWeaponCue(save);
@@ -2797,7 +2886,13 @@ void __cdecl G_LoadMainState(SaveGame *save)
 
     level.actorCorpseCount = 16;
 
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("load_dynent_begin", save, 0);
+#endif
     DynEnt_LoadEntities(SaveMemory_GetMemoryFile(save));
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("load_dynent_end", save, 0);
+#endif
 
     G_ReadStruct(threatGroupFields, (unsigned __int8 *)&g_threatBias, sizeof(threat_bias_t), save);
 
@@ -2809,8 +2904,29 @@ void __cdecl G_LoadMainState(SaveGame *save)
         SaveMemory_LoadRead(g_AIEVlisteners, sizeof(AIEventListener) * listenerCount, save);
 
     iassert(level.currentTriggerListSize == 0);
-    SaveMemory_LoadRead(&level.pendingTriggerListSize, 4, save);
-    SaveMemory_LoadRead(level.pendingTriggerList, 12 * level.pendingTriggerListSize, save);
+    int pendingTriggerCount = 0;
+    SaveMemory_LoadRead(&pendingTriggerCount, sizeof(pendingTriggerCount), save);
+    if (pendingTriggerCount < 0 ||
+        pendingTriggerCount > static_cast<int>(ARRAY_COUNT(level.pendingTriggerList)))
+    {
+#ifdef __SWITCH__
+        SwitchSaveCursorTrace("load_invalid_pending_trigger_count", save, pendingTriggerCount);
+#endif
+        Com_Error(
+            ERR_DROP,
+            "G_LoadMainState: pending trigger count out of range (%d, max %d)",
+            pendingTriggerCount,
+            static_cast<int>(ARRAY_COUNT(level.pendingTriggerList)));
+        return;
+    }
+    level.pendingTriggerListSize = pendingTriggerCount;
+#ifdef __SWITCH__
+    SwitchSaveCursorTrace("load_before_pending_triggers", save, pendingTriggerCount);
+#endif
+    SaveMemory_LoadRead(
+        level.pendingTriggerList,
+        static_cast<int>(sizeof(level.pendingTriggerList[0]) * pendingTriggerCount),
+        save);
     G_LoadWeaponCue(save);
     G_LoadConfigstrings(11, 16, save);
     G_LoadConfigstrings(27, 32, save);
