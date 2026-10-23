@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 #include <client/client.h>
 #include <client/cl_input.h>
