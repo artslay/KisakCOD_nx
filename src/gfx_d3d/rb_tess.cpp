@@ -1396,7 +1396,7 @@ uint32_t __cdecl R_TessTrianglesPreTessList(const GfxDrawSurfListArgs *listArgs,
             char trace[704];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][BSP TESS ROUTE] path=pretess n=%u baseTech=%u branch=%s firstDraw=%u objectId=%u commandCount=%u mat=%s set=%s tech=%s passFlags=0x%x vs=%s ps=%s world=%p\\n",
+                "[KisakCOD][BSP TESS ROUTE] path=pretess n=%u baseTech=%u branch=%s firstDraw=%u objectId=%u commandCount=%u mat=%s set=%s tech=%s passFlags=0x%x vs=%s ps=%s world=%p\n",
                 switchBspTessRouteTraceCount++,
                 static_cast<unsigned>(baseTechType),
                 baseTechType == TECHNIQUE_LIT_BEGIN ? "lit" : "ordinary",
@@ -1476,7 +1476,7 @@ uint32_t __cdecl R_TessTrianglesList(const GfxDrawSurfListArgs *listArgs, GfxCmd
             char trace[704];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][BSP TESS ROUTE] path=tess n=%u baseTech=%u branch=%s firstDraw=%u objectId=%u commandCount=%u mat=%s set=%s tech=%s passFlags=0x%x vs=%s ps=%s world=%p\\n",
+                "[KisakCOD][BSP TESS ROUTE] path=tess n=%u baseTech=%u branch=%s firstDraw=%u objectId=%u commandCount=%u mat=%s set=%s tech=%s passFlags=0x%x vs=%s ps=%s world=%p\n",
                 switchBspTessRouteTraceCount++,
                 static_cast<unsigned>(baseTechType),
                 baseTechType == TECHNIQUE_LIT ? "lit" : "ordinary",
