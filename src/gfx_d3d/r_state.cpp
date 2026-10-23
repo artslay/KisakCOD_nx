@@ -635,7 +635,7 @@ void __cdecl R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex)
         std::snprintf(
             trace, sizeof(trace),
             "[KisakCOD][LIGHTMAP CALL] n=%u map=%u mapCount=%u valid=%u flags=0x%x r_lightMap=%d sunChanged=%u primary=%s/%p tex=%p secondary=%s/%p tex=%p sampler2=%p sampler3=%p\n",
-            traceIndex, lmapIndex, rgp.world->lightmapCount,
+            traceIndex, lmapIndex, static_cast<unsigned>(rgp.world->lightmapCount),
             traceMapValid ? 1u : 0u,
             pass ? static_cast<unsigned>(pass->customSamplerFlags) : 0u,
             r_lightMap ? r_lightMap->current.integer : -999,
