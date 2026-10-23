@@ -1933,15 +1933,11 @@ void __cdecl DrawText2D(
     material = Material_FromHandle(font->material);
     iassert( material );
 #ifdef __SWITCH__
-    const char *switchTextFontName =
-        font->fontName ? font->fontName : "<null>";
-    const bool switchIsConsoleFont =
-        !I_stricmp(switchTextFontName, "fonts/consoleFont");
-    static uint32_t switchConsoleFontDrawTraceCount = 0;
-    static uint32_t switchConsoleFontGlyphTraceCount = 0;
-    if (switchIsConsoleFont && switchConsoleFontDrawTraceCount < 24u)
-    {
-}
+    
+    
+    
+    
+    
     g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/base_material";
 #endif
     if ((renderFlags & 0x40) != 0 && (!fxMaterial || !fxMaterial->techniqueSet))
@@ -2100,10 +2096,7 @@ void __cdecl DrawText2D(
                         }
                         glyph = R_GetCharacterGlyph(font, letter);
 #ifdef __SWITCH__
-                        if (switchIsConsoleFont &&
-                            switchConsoleFontGlyphTraceCount < 32u)
-                        {
-}
+                        
 #endif
                         if (letter == origLetter)
                         {
@@ -2818,13 +2811,10 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
     }
     g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/enter";
     {
-        static uint32_t switchConsoleTextCommandTraceCount = 0;
+        
         const char *name =
             cmd->font && cmd->font->fontName ? cmd->font->fontName : "<null>";
-        if (!I_stricmp(name, "fonts/consoleFont") &&
-            switchConsoleTextCommandTraceCount < 24u)
-        {
-}
+        
     }
 #endif
     v1 = DEG2RAD( cmd->rotation );

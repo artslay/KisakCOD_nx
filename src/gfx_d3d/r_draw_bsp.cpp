@@ -73,10 +73,8 @@ void __cdecl R_DrawBspDrawSurfsLit(
     uint32_t customSamplerFlags; // [esp+38h] [ebp-4h]
 
 #ifdef __SWITCH__
-    static uint32_t switchBspLitEntryTraceCount = 0;
-    if (switchBspLitEntryTraceCount < 24u)
-    {
-}
+    
+    
 #endif
     pass = context.state->pass;
     customSamplerFlags = pass->customSamplerFlags;
@@ -175,10 +173,8 @@ void __cdecl R_DrawTrianglesLit(
             // Record a bounded sample of actual BSP lightmap selections. This
             // tells us whether baked-lightmap data and material sampler flags
             // reach the Vulkan submission path before changing renderer logic.
-            static uint32_t switchLightmapTraceCount = 0;
-            if (switchLightmapTraceCount < 24u)
-            {
-}
+            
+            
 #endif
             if (reflectionProbeIndex == bspSurf->reflectionProbeIndex && lightmapIndex == bspSurf->lightmapIndex)
             {
@@ -335,10 +331,8 @@ void __cdecl R_DrawBspDrawSurfs(const uint32_t *primDrawSurfPos, GfxCmdBufState 
     GfxTrianglesDrawStream drawStream; // [esp+0h] [ebp-30h] BYREF
 
 #ifdef __SWITCH__
-    static uint32_t switchBspGenericEntryTraceCount = 0;
-    if (switchBspGenericEntryTraceCount < 24u)
-    {
-}
+    
+    
 #endif
     drawStream.primDrawSurfPos = primDrawSurfPos;
     R_DrawTriangles(&drawStream, &state->prim);
@@ -459,10 +453,8 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
 void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
 {
 #ifdef __SWITCH__
-    static uint32_t switchBspLitPreTessTraceCount = 0;
-    if (switchBspLitPreTessTraceCount < 24u)
-    {
-}
+    
+    
 #endif
     uint32_t baseIndex; // [esp+4h] [ebp-28h] BYREF
     uint32_t surfIndex; // [esp+8h] [ebp-24h]
@@ -501,10 +493,8 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
             // This marker is intentionally adjacent to the real pre-tess surface
             // read: it distinguishes queued material routes from surfaces that
             // actually reach BSP lightmap selection on the GPU submission path.
-            static uint32_t switchBspPreTessSurfaceTraceCount = 0;
-            if (switchBspPreTessSurfaceTraceCount < 24u)
-            {
-}
+            
+            
 #endif
             if (reflectionProbeIndex != bspSurf->reflectionProbeIndex || lightmapIndex != bspSurf->lightmapIndex)
             {
@@ -515,27 +505,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 R_SetupPassPerObjectArgs(context);
                 R_SetupPassPerPrimArgs(context);
             }
-#ifdef __SWITCH__
-            // Capture the actual CPU-side world vertices consumed by lit BSP
-            // surfaces. This separates bad lightmap/color payloads from the
-            // later Vulkan vertex-input/shader path without changing rendering.
-            static uint32_t switchBspLightmapVertexTraceCount = 0;
-            if (switchBspLightmapVertexTraceCount < 8u &&
-                lightmapIndex != 31u &&
-                rgp.world && rgp.world->vd.vertices &&
-                tris->firstVertex >= 0 &&
-                static_cast<uint32_t>(tris->firstVertex) < rgp.world->vertexCount)
-            {
-                const uint32_t sample = switchBspLightmapVertexTraceCount++;
-                const uint32_t firstVertex = static_cast<uint32_t>(tris->firstVertex);
-                const uint32_t available = rgp.world->vertexCount - firstVertex;
-                const uint32_t countToTrace = std::min<uint32_t>(
-                    3u, std::min<uint32_t>(tris->vertexCount, available));
-                for (uint32_t vertexIndex = 0; vertexIndex < countToTrace; ++vertexIndex)
-                {
-}
-            }
-#endif
+
             R_DrawPreTessTris(&context.state->prim, tris, baseIndex, list[index].totalTriCount);
             baseIndex += 3 * list[index].totalTriCount;
         }

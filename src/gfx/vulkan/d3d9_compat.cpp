@@ -5072,11 +5072,8 @@ HRESULT IDirect3DDevice9::SetTexture(uint32_t stage, IDirect3DBaseTexture9 *tex)
 #ifdef __SWITCH__
     // Capture whether the engine's lightmap sampler registers actually reach
     // the Vulkan compatibility device, including later clears/replacements.
-    static uint32_t switchLightmapTextureSetTraceCount = 0;
-    if ((stage == 2u || stage == 3u) &&
-        switchLightmapTextureSetTraceCount < 128u)
-    {
-}
+    
+    
 #endif
     return S_OK;
 }
@@ -5639,25 +5636,7 @@ bool IDirect3DDevice9::BindSamplerSet(
         return false;
     };
 
-    // A D3D9 sampler can be declared by a shader but have no texture bound
-    // for a particular material/draw. Vulkan still needs a valid descriptor
-    // in the set; do not abort the entire frame before determining whether
-    // this sampler affects the shader result. Use the backend's white dummy
-    // image for the null slot and emit bounded diagnostics for follow-up.
-    for (uint32_t slot = 0; slot < activeSamplers.size(); ++slot)
-    {
-        if (!activeSamplers[slot] || textures[slot])
-            continue;
-
-        // A single global cap let vertex-stage misses consume the whole
-        // budget before pixel-stage misses were reported. Keep a small budget
-        // for each stage/slot pair so missing world textures remain diagnosable.
-        static uint32_t unboundSamplerTraceCount[2][16]{};
-        const uint32_t traceStage = setIndex == 0 ? 0u : 1u;
-        if (unboundSamplerTraceCount[traceStage][slot] < 2u)
-        {
-}
-    }
+    
 
     // Determine whether any sampled subresource needs a layout transition.
     // Vulkan image barriers are forbidden inside dynamic rendering, including
@@ -5795,10 +5774,8 @@ bool IDirect3DDevice9::BindSamplerSet(
             !samplerTypeMatchesTexture(texture, activeSamplers[i]))
         {
 #ifdef __SWITCH__
-            static uint32_t mismatchedSamplerTraceCount = 0;
-            if (mismatchedSamplerTraceCount < 32u)
-            {
-}
+            
+            
 #endif
             images[i].imageView = m_backend->DummyImageViewForSamplerType(
                 static_cast<uint32_t>(activeSamplers[i]->type));
@@ -5921,15 +5898,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                         mipFilter = D3DTEXF_POINT;
 
 #ifdef __SWITCH__
-                    if (needsFallback)
-                    {
-                        static std::atomic<uint32_t> switchFilterFallbackCount{0};
-                        const uint32_t fallbackIndex =
-                            switchFilterFallbackCount.fetch_add(1, std::memory_order_relaxed);
-                        if (fallbackIndex < 8u)
-                        {
-}
-                    }
+                    
 #endif
                 }
 
@@ -5968,44 +5937,7 @@ bool IDirect3DDevice9::BindSamplerSet(
         writes[i].pImageInfo = &images[i];
     }
 
-#ifdef __SWITCH__
-    if (setIndex == 2u)
-    {
-        static uint32_t switchLightmapDescriptorTraceCount = 0;
-        KisakVkTexture *traceT2 = textures[2];
-        KisakVkTexture *traceT3 = textures[3];
-        const bool likelyLightmap =
-            (traceT2 && (traceT2->width >= 512u || traceT2->height >= 512u)) ||
-            (traceT3 && (traceT3->width >= 512u || traceT3->height >= 512u));
-        if (likelyLightmap && switchLightmapDescriptorTraceCount < 32u)
-        {
-}
 
-        // Identify which D3D sampler registers the active translated pixel
-        // shader actually reads. The material-side trace proves textures are
-        // selected and have Vulkan views, but not that this shader samples the
-        // expected s0/s2/s3/s4/s5 registers.
-        static uint64_t tracedPixelSamplerSerials[32]{};
-        static uint32_t tracedPixelSamplerShaderCount = 0;
-        const MOJOSHADER_parseData *pixelParse =
-            m_pixelShader ? m_pixelShader->parseData : nullptr;
-        if (likelyLightmap && m_pixelShader && pixelParse)
-        {
-            bool alreadyTraced = false;
-            for (uint32_t i = 0; i < tracedPixelSamplerShaderCount; ++i)
-            {
-                if (tracedPixelSamplerSerials[i] == m_pixelShader->serial)
-                {
-                    alreadyTraced = true;
-                    break;
-                }
-            }
-            if (!alreadyTraced && tracedPixelSamplerShaderCount < 32u)
-            {
-}
-        }
-    }
-#endif
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_update";
     vkUpdateDescriptorSets(m_backend->Device(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_bind";
@@ -7323,13 +7255,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     // The general pipeline trace covers only a fixed sequence window, which
     // can miss the actual gameplay shader after the intro. Trace a small number
     // of real world-vertex layouts by route and physical stride instead.
-    static uint32_t switchWorldVertexInputTraceCount = 0;
-    if (m_decl && m_decl->switchVertDeclType >= 2 &&
-        m_decl->switchVertDeclType <= 13 &&
-        m_streams[0].stride == 44 && preVs && prePs &&
-        switchWorldVertexInputTraceCount < 16u)
-    {
-}
+    
+    
 
     if (pipelineCreateSequence >= 30u && pipelineCreateSequence <= 40u)
     {
@@ -8041,35 +7968,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         return E_FAIL;
     }
 
-#ifdef __SWITCH__
-    // Capture the actual indexed draw that consumes the lightmap sampler. This is
-    // deliberately at draw time (not pipeline creation) and has no camera-height
-    // gate, so pipeline-cache hits and scripted camera movement cannot hide it.
-    static uint32_t switchLightmapDrawRouteTraceCount = 0;
-    const float switchLightmapCameraZ = m_vsFloat[6][3];
-    const bool switchLightmapGameplayCamera =
-        switchLightmapCameraZ >= -2000.0f && switchLightmapCameraZ <= 2000.0f;
-    if (switchLightmapGameplayCamera &&
-        switchLightmapDrawRouteTraceCount < 12u &&
-        m_pixelShader && m_pixelShader->parseData &&
-        m_pixelShader->parseData->samplers)
-    {
-        bool hasLightmapSecondarySampler = false;
-        for (int samplerIndex = 0;
-             samplerIndex < m_pixelShader->parseData->sampler_count;
-             ++samplerIndex)
-        {
-            if (m_pixelShader->parseData->samplers[samplerIndex].index == 3)
-            {
-                hasLightmapSecondarySampler = true;
-                break;
-            }
-        }
-        if (hasLightmapSecondarySampler)
-        {
-}
-    }
-#endif
+
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/validate";
     const VkCommandBuffer drawCommandBuffer =
         m_backend ? m_backend->CommandBuffer() : VK_NULL_HANDLE;
@@ -8278,39 +8177,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     }
     RecordSwitchRecentVulkanDraw(recentDraw);
 
-#ifdef __SWITCH__
-    // Capture the actual rasterization state and D3D9 constant registers for
-    // the first lightmapped world draws. The UV-route probe showed that some
-    // shader variants already have the right vertex declaration, so the next
-    // discriminant is whether the draw is clipped or receives bad transforms.
-    if (m_decl && m_decl->switchVertDeclType >= 2 &&
-        m_decl->switchVertDeclType <= 13 &&
-        m_streams[0].stride == 44 && m_vertexShader && m_pixelShader &&
-        m_pixelShader->parseData && m_pixelShader->parseData->samplers)
-    {
-        bool hasSampler3 = false;
-        for (int i = 0; i < m_pixelShader->parseData->sampler_count; ++i)
-        {
-            if (m_pixelShader->parseData->samplers[i].index == 3)
-            {
-                hasSampler3 = true;
-                break;
-            }
-        }
-        // The first world draws happen while _introscreen.gsc moves the
-        // player/camera down from z~=16000. Do not spend the one-shot trace on
-        // that scripted fly-in; wait until the camera is back near gameplay
-        // height so the captured constants describe the black-screen state.
-        const float switchWorldCameraZ = m_vsFloat[6][3];
-        const bool switchGameplayCamera =
-            switchWorldCameraZ >= -2000.0f && switchWorldCameraZ <= 2000.0f;
-        static uint32_t switchWorldDrawStateTraceCount = 0;
-        if (hasSampler3 && switchGameplayCamera &&
-            switchWorldDrawStateTraceCount < 4u)
-        {
-}
-    }
-#endif
+
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);

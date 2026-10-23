@@ -664,27 +664,14 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     // Record the authored UI pass before it reaches the Vulkan state cache.
     // This is intentionally upstream of device draw calls: some UI render paths
     // can batch or defer geometry, so a draw-side-only trace can miss the pass.
-    static uint32_t switchUiPassTraceCount = 0;
+    
     static uint32_t switchUiBlendTraceCount = 0;
     const char *switchUiMaterialName =
         material->info.name ? material->info.name : "";
     const bool switchUiMaterial =
         !I_stricmp(switchUiMaterialName, "gradient_fadein") ||
         !I_stricmp(switchUiMaterialName, "button_highlight_end");
-    if (switchUiMaterial && switchUiPassTraceCount < 32)
-    {
-}
-    {
-        static uint32_t switchFontPassTraceCount = 0;
-        const bool isFontAtlas =
-            !I_stricmp(switchUiMaterialName, "fonts/gamefonts_pc") ||
-            !I_stricmp(switchUiMaterialName, "fonts/gamefonts_pc_glow") ||
-            !I_stricmp(switchUiMaterialName, "fonts/devfonts") ||
-            !I_stricmp(switchUiMaterialName, "fonts/devfonts_glow");
-        if (isFontAtlas && switchFontPassTraceCount < 24u)
-        {
-}
-    }
+    
 #endif
 #ifdef KISAK_RADIANT
     // IDB R_SetupPass @0x53c563: for 2D draws the binary forces the low 6 (depth-state) bits of
@@ -845,41 +832,8 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
     if (rg.hasAnyImageOverrides)
         R_OverrideImage(&image, texDef);
 
-#ifdef __SWITCH__
-    // Trace the real image selected for world-material samplers. Lightmap
-    // descriptors alone do not prove that the diffuse/normal texture bound
-    // to the material's sampler is valid or sampled by the translated shader.
-    static std::atomic<uint32_t> switchWorldSamplerTraceCount{0};
-    if (material && material->info.name &&
-        material->info.name[0] == 'w' &&
-        material->info.name[1] == 'c' &&
-        material->info.name[2] == '/')
-    {
-        const uint32_t traceIndex =
-            switchWorldSamplerTraceCount.fetch_add(1, std::memory_order_relaxed);
-        if (traceIndex < 48u)
-        {
-}
-    }
-#endif
-#ifdef __SWITCH__
-    {
-        static std::atomic<uint32_t> switchFontSamplerTraceCount{0};
-        const char *fontMaterialName =
-            material && material->info.name ? material->info.name : "";
-        const bool isFontAtlas =
-            !I_stricmp(fontMaterialName, "fonts/gamefonts_pc") ||
-            !I_stricmp(fontMaterialName, "fonts/gamefonts_pc_glow") ||
-            !I_stricmp(fontMaterialName, "fonts/devfonts") ||
-            !I_stricmp(fontMaterialName, "fonts/devfonts_glow");
-        const uint32_t traceIndex = isFontAtlas
-            ? switchFontSamplerTraceCount.fetch_add(1, std::memory_order_relaxed)
-            : 24u;
-        if (isFontAtlas && traceIndex < 24u)
-        {
-}
-    }
-#endif
+
+
     R_SetSampler(context, arg->dest, texDef->samplerState, image);
     return texDef;
 }

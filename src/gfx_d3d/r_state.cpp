@@ -621,24 +621,17 @@ void __cdecl R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex)
     // Always record a few calls, including surfaces whose lightmap index is
     // the sentinel 31. The earlier trace only logged valid indices, which could
     // hide a mismatch between a lightmapped material and its BSP surface data.
-    static uint32_t switchLightmapCallTraceCount = 0;
-    if (switchLightmapCallTraceCount < 32u)
-    {
-}
+    
+    
     // Record the actual lightmap binding once, when a BSP surface with a
     // valid lightmap reaches the renderer. patches=0 is dynamic model lighting
     // and does not tell us whether the world's baked lightmaps are active.
-    static bool switchLightmapStateLogged = false;
-    if (!switchLightmapStateLogged && lmapIndex != 31 && lmapIndex < rgp.world->lightmapCount)
-    {
-}
+    
+    
 #endif
 #ifdef __SWITCH__
-    static uint32_t switchLightmapBindTraceCount = 0;
-    if (switchLightmapBindTraceCount < 32u &&
-        lmapIndex != 31 && lmapIndex < rgp.world->lightmapCount)
-    {
-}
+    
+    
 #endif
     if (lmapIndex == 31)
     {
@@ -1777,13 +1770,7 @@ void __cdecl R_SetSampler(
     // A null basemap here means the engine selected an image but never supplied
     // a Vulkan texture for it. Track the source before SetTexture propagates null
     // into the D3D9 compatibility device.
-    if (!image->texture.basemap && samplerIndex < 16u)
-    {
-        static uint32_t switchNullBaseMapTraceCount[16]{};
-        if (switchNullBaseMapTraceCount[samplerIndex] < 4u)
-        {
-}
-    }
+    
 #endif
     const bool textureReferenceChanged =
         context.state->samplerTexture[samplerIndex] != &image->texture;
@@ -2283,13 +2270,7 @@ void __cdecl R_DisableSampler(GfxCmdBufState *state, uint32_t samplerIndex)
 #ifdef __SWITCH__
     // Distinguish a deliberate sampler clear (for example during image
     // unbinding) from an image whose GfxTexture::basemap was never populated.
-    if (samplerIndex < 16u)
-    {
-        static uint32_t switchSamplerClearTraceCount[16]{};
-        if (switchSamplerClearTraceCount[samplerIndex] < 4u)
-        {
-}
-    }
+    
 #endif
     state->samplerTexture[samplerIndex] = 0;
     R_HW_DisableSampler(state->prim.device, samplerIndex);

@@ -174,10 +174,8 @@ void StabilizeZoneImageName(ZoneLoadState &state, GfxImage *image)
     ++state.imageNamesStabilized;
 
 #ifdef __SWITCH__
-    static uint32_t traceCount = 0;
-    if (traceCount < 24u)
-    {
-}
+    
+    
 #endif
 }
 
@@ -314,10 +312,8 @@ void NormalizeMaterialImageReferences(Material *material)
             continue;
 
 #ifdef __SWITCH__
-        static uint32_t switchImageReferenceFixupCount = 0;
-        if (switchImageReferenceFixupCount < 48u)
-        {
-}
+        
+        
 #endif
         texture.u.image = canonicalImage;
     }
@@ -377,10 +373,8 @@ GfxImage *NormalizeWorldImageReference(
         return sourceImage;
 
 #ifdef __SWITCH__
-    static uint32_t switchWorldImageFixupCount = 0;
-    if (switchWorldImageFixupCount < 64u)
-    {
-}
+    
+    
 #endif
     return canonicalImage;
 }
@@ -444,10 +438,8 @@ static void NormalizeMaterialReference(
 
     *materialSlot = canonicalMaterial;
 #ifdef __SWITCH__
-    static uint32_t switchMaterialReferenceFixupCount = 0;
-    if (switchMaterialReferenceFixupCount < 48u)
-    {
-}
+    
+    
 #endif
 }
 
@@ -858,8 +850,6 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
         Com_Error(ERR_DROP, "Fastfile for zone '%s' could not be loaded: %s", zoneName, error);
 
 #ifdef __SWITCH__
-    {
-}
 #endif
 
     // Resolve weapon sounds only after KisakZone_Load has registered every asset

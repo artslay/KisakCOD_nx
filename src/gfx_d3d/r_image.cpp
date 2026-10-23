@@ -39,46 +39,7 @@ extern void Switch_LogWrite(const char *msg);
 namespace
 {
 uint32_t s_switchVulkanAllocTraceCount = 0;
-std::atomic<uint32_t> s_switchTextureUploadProbeCount{0};
 
-bool R_SwitchIsWorldTextureName(const char *name)
-{
-    if (!name)
-        return false;
-    while (*name == '~')
-        ++name;
-
-    static constexpr const char *prefixes[] = {
-        "com_", "me_", "ch_", "kh_", "icbm_", "cs_", "ap_", "camo_", "mil_"
-    };
-    for (const char *prefix : prefixes)
-    {
-        if (std::strncmp(name, prefix, std::strlen(prefix)) == 0)
-            return true;
-    }
-    return false;
-}
-
-bool R_SwitchIsLikelyColorTextureName(const char *name)
-{
-    if (!R_SwitchIsWorldTextureName(name))
-        return false;
-    while (*name == '~')
-        ++name;
-
-    // The first streamed world images are often specular/normal maps. Keep
-    // the bounded GPU readback probe on a diffuse/base-color image instead,
-    // since verifying those maps alone does not validate the color-map path.
-    static constexpr const char *nonColorTokens[] = {
-        "_spc", "spc-", "_nml", "_normal", "normal", "bump", "_s-"
-    };
-    for (const char *token : nonColorTokens)
-    {
-        if (std::strstr(name, token))
-            return false;
-    }
-    return true;
-}
 
 enum class VulkanTextureKind : uint8_t
 {
@@ -429,19 +390,7 @@ void R_VulkanUploadTexture(
     const VkImageLayout oldLayout = texture->GetSubresourceLayout(mipLevel, layer);
     const size_t bytes = R_VulkanImageLevelSize(format, width, height, depth);
 
-#ifdef __SWITCH__
-    // Distinguish a bad asset payload from a valid VkImage/descriptor that
-    // later renders incorrectly. Probe only the first 16 base-level world
-    // textures; hash their complete source mip and report a compact prefix.
-    if (mipLevel == 0 && R_SwitchIsWorldTextureName(image->name))
-    {
-        const uint32_t probeIndex =
-            s_switchTextureUploadProbeCount.fetch_add(1, std::memory_order_relaxed);
-        if (probeIndex < 24u)
-        {
-}
-    }
-#endif
+
 
     // Preserve ordering when an initialized image is uploaded again mid-frame:
     // previously recorded draws must consume the old texels before the upload.
@@ -491,22 +440,7 @@ void R_VulkanUploadTexture(
         texture->dirtyAll = true;
         texture->dirtyBoxes.clear();
 
-#ifdef __SWITCH__
-        // Source-payload probes alone cannot distinguish bad asset bytes from
-        // a failed/incorrect transfer into the Vulkan image. Read back only
-        // the first two base-level world textures after their upload and
-        // compare actual image blocks/texels with the source bytes.
-        // DownloadImage2D restores SHADER_READ_ONLY_OPTIMAL before returning.
-        if (mipLevel == 0 && R_SwitchIsLikelyColorTextureName(image->name))
-        {
-            static std::atomic<uint32_t> gpuVerifyCount{0};
-            const uint32_t verifyIndex =
-                gpuVerifyCount.fetch_add(1, std::memory_order_relaxed);
-            if (verifyIndex < 2u)
-            {
-}
-        }
-#endif
+
     }
     else
         Switch_LogWrite("[KisakCOD][VK] texture upload failed\n");
@@ -584,14 +518,8 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
     GfxImage *image = header.image;
 #ifdef __SWITCH__
     g_switchDbStage = "delayed_images/item";
-    static uint32_t switchDelayImageCount = 0;
-    const uint32_t switchDelayImageIndex = switchDelayImageCount++;
-    const bool switchTraceDelayImage =
-        switchDelayImageIndex < 16 || (switchDelayImageIndex % 128u) == 0;
-    if (switchTraceDelayImage)
-    {
-}
 #endif
+
 
 
     if (image->delayLoadPixels)
@@ -983,8 +911,6 @@ void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
                 image->cardMemory.platform[1] = 0;
 
 #ifdef __SWITCH__
-                {
-}
 #endif
 
                 if (!Image_LoadFromFile(image))
@@ -995,8 +921,6 @@ void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
                     const bool fallback = Image_AssignDefaultTexture(image);
 
 #ifdef __SWITCH__
-                    {
-}
 #endif
                 }
 
@@ -1574,8 +1498,6 @@ void R_InitCodeImages()
             R_GenerateOutdoorImage(outdoorImage);
     }
 
-    {
-}
 #endif
 }
 
@@ -1885,16 +1807,7 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
         }
     }
 #endif
-#ifdef __SWITCH__
-    // Missing renderer images must not be silently replaced with white, black,
-    // or identity-normal pixels: that hides the asset/decoder failure and makes
-    // world surfaces look valid while sampling the wrong content. The engine's
-    // intentional $white/$black builtins are created explicitly by Image_Load*;
-    // this function is only the recovery path for a failed requested image.
-    {
-}
-    return 0;
-#endif
+
     if (image->mapType != MAPTYPE_2D)
         return 0;
     const GfxImage *defaultImage = rgp.whiteImage;
