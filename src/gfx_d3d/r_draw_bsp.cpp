@@ -76,27 +76,7 @@ void __cdecl R_DrawBspDrawSurfsLit(
     static uint32_t switchBspLitEntryTraceCount = 0;
     if (switchBspLitEntryTraceCount < 24u)
     {
-        const uint32_t firstCount = primDrawSurfPos
-            ? primDrawSurfPos[0] : UINT32_MAX;
-        char trace[384];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][BSP LIT ENTRY] sample=%u count=%u flags=%u pass=%p technique=%p firstCount=%u lightmaps=%u textures=(%p,%p,%p)\n",
-            switchBspLitEntryTraceCount++, context.state->pass
-                ? static_cast<unsigned>(context.state->pass->perPrimArgCount) +
-                  static_cast<unsigned>(context.state->pass->perObjArgCount) +
-                  static_cast<unsigned>(context.state->pass->stableArgCount) : 0u,
-            context.state->pass
-                ? static_cast<unsigned>(context.state->pass->customSamplerFlags) : 0u,
-            static_cast<const void *>(context.state->pass),
-            static_cast<const void *>(context.state->technique),
-            firstCount,
-            rgp.world ? static_cast<unsigned>(rgp.world->lightmapCount) : 0u,
-            static_cast<const void *>(context.state->samplerTexture[1]),
-            static_cast<const void *>(context.state->samplerTexture[2]),
-            static_cast<const void *>(context.state->samplerTexture[3]));
-        Switch_LogWrite(trace);
-    }
+}
 #endif
     pass = context.state->pass;
     customSamplerFlags = pass->customSamplerFlags;
@@ -198,32 +178,7 @@ void __cdecl R_DrawTrianglesLit(
             static uint32_t switchLightmapTraceCount = 0;
             if (switchLightmapTraceCount < 24u)
             {
-                const uint32_t traceIndex = switchLightmapTraceCount++;
-                const uint32_t traceLightmap = bspSurf->lightmapIndex;
-                const bool traceLightmapInRange =
-                    traceLightmap < drawStream->lightmapCount;
-                const GfxTexture *tracePrimary =
-                    traceLightmapInRange && drawStream->lightmapPrimaryTextures
-                        ? &drawStream->lightmapPrimaryTextures[traceLightmap] : nullptr;
-                const GfxTexture *traceSecondary =
-                    traceLightmapInRange && drawStream->lightmapSecondaryTextures
-                        ? &drawStream->lightmapSecondaryTextures[traceLightmap] : nullptr;
-                const char *traceMaterialName =
-                    bspSurf->material && bspSurf->material->info.name
-                        ? bspSurf->material->info.name : "<null>";
-                char trace[512];
-                std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][LIGHTMAP] sample=%u material=%s index=%u count=%u flags=0x%x override=%d sunChanged=%d inRange=%d primarySlot=%p primaryTex=%p secondarySlot=%p secondaryTex=%p\n",
-                    traceIndex, traceMaterialName, traceLightmap,
-                    drawStream->lightmapCount, drawStream->customSamplerFlags,
-                    override, hasSunDirChanged ? 1 : 0,
-                    traceLightmapInRange ? 1 : 0,
-                    static_cast<const void *>(tracePrimary),
-                    static_cast<const void *>(tracePrimary ? tracePrimary->basemap : nullptr),
-                    static_cast<const void *>(traceSecondary),
-                    static_cast<const void *>(traceSecondary ? traceSecondary->basemap : nullptr));
-                Switch_LogWrite(trace);
-            }
+}
 #endif
             if (reflectionProbeIndex == bspSurf->reflectionProbeIndex && lightmapIndex == bspSurf->lightmapIndex)
             {
@@ -383,20 +338,7 @@ void __cdecl R_DrawBspDrawSurfs(const uint32_t *primDrawSurfPos, GfxCmdBufState 
     static uint32_t switchBspGenericEntryTraceCount = 0;
     if (switchBspGenericEntryTraceCount < 24u)
     {
-        const uint32_t firstCount = primDrawSurfPos
-            ? primDrawSurfPos[0] : UINT32_MAX;
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][BSP GENERIC ENTRY] sample=%u firstCount=%u pass=%p technique=%p flags=%u lightmaps=%u\n",
-            switchBspGenericEntryTraceCount++,
-            firstCount,
-            static_cast<const void *>(state->pass),
-            static_cast<const void *>(state->technique),
-            state->pass ? static_cast<unsigned>(state->pass->customSamplerFlags) : 0u,
-            rgp.world ? static_cast<unsigned>(rgp.world->lightmapCount) : 0u);
-        Switch_LogWrite(trace);
-    }
+}
 #endif
     drawStream.primDrawSurfPos = primDrawSurfPos;
     R_DrawTriangles(&drawStream, &state->prim);
@@ -520,36 +462,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
     static uint32_t switchBspLitPreTessTraceCount = 0;
     if (switchBspLitPreTessTraceCount < 24u)
     {
-        const uint32_t firstCount = primDrawSurfPos
-            ? primDrawSurfPos[0] : UINT32_MAX;
-        const Material *traceMaterial = context.state->material;
-        const MaterialTechniqueSet *traceSet =
-            traceMaterial ? traceMaterial->techniqueSet : nullptr;
-        const GfxCmdBufPrimState *tracePrim = &context.state->prim;
-        char trace[768];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][BSP LIT PRETESS] sample=%u firstCount=%u mat=%s set=%s tech=%s techFlags=0x%x worldFmt=%u decl=%u streams=(%p/%u/%u,%p/%u/%u) pass=%p technique=%p flags=%u lightmaps=%u\n",
-            switchBspLitPreTessTraceCount++,
-            firstCount,
-            traceMaterial && traceMaterial->info.name ? traceMaterial->info.name : "<null>",
-            traceSet && traceSet->name ? traceSet->name : "<null>",
-            context.state->technique && context.state->technique->name
-                ? context.state->technique->name : "<null>",
-            context.state->technique ? static_cast<unsigned>(context.state->technique->flags) : 0u,
-            traceSet ? static_cast<unsigned>(traceSet->worldVertFormat) : 0u,
-            static_cast<unsigned>(tracePrim->vertDeclType),
-            static_cast<const void *>(tracePrim->streams[0].vb),
-            tracePrim->streams[0].offset, tracePrim->streams[0].stride,
-            static_cast<const void *>(tracePrim->streams[1].vb),
-            tracePrim->streams[1].offset, tracePrim->streams[1].stride,
-            static_cast<const void *>(context.state->pass),
-            static_cast<const void *>(context.state->technique),
-            context.state->pass
-                ? static_cast<unsigned>(context.state->pass->customSamplerFlags) : 0u,
-            rgp.world ? static_cast<unsigned>(rgp.world->lightmapCount) : 0u);
-        Switch_LogWrite(trace);
-    }
+}
 #endif
     uint32_t baseIndex; // [esp+4h] [ebp-28h] BYREF
     uint32_t surfIndex; // [esp+8h] [ebp-24h]
@@ -591,43 +504,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
             static uint32_t switchBspPreTessSurfaceTraceCount = 0;
             if (switchBspPreTessSurfaceTraceCount < 24u)
             {
-                const uint32_t traceIndex = switchBspPreTessSurfaceTraceCount++;
-                const uint32_t traceMapIndex = bspSurf->lightmapIndex;
-                const bool traceMapValid = rgp.world->lightmaps &&
-                    traceMapIndex < static_cast<uint32_t>(rgp.world->lightmapCount);
-                const GfxImage *tracePrimary = traceMapValid
-                    ? rgp.world->lightmaps[traceMapIndex].primary : nullptr;
-                const GfxImage *traceSecondary = traceMapValid
-                    ? rgp.world->lightmaps[traceMapIndex].secondary : nullptr;
-                const GfxWorldVertex *traceVertices = rgp.world->vd.vertices;
-                const bool traceVertexValid = traceVertices && tris->firstVertex >= 0 &&
-                    static_cast<uint32_t>(tris->firstVertex) < rgp.world->vertexCount;
-                char trace[768];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][BSP PRETESS SURFACE] n=%u surf=%u map=%u mapCount=%u flags=0x%x material=%s primary=%s/%p tex=%p secondary=%s/%p tex=%p firstVertex=%u vertexCount=%u vertices=%p xyz=(%.3f,%.3f,%.3f) uv=(%.5f,%.5f) lmap=(%.5f,%.5f)\n",
-                    traceIndex, surfIndex, traceMapIndex, static_cast<unsigned>(rgp.world->lightmapCount),
-                    context.state->pass
-                        ? static_cast<unsigned>(context.state->pass->customSamplerFlags) : 0u,
-                    bspSurf->material && bspSurf->material->info.name
-                        ? bspSurf->material->info.name : "<null>",
-                    tracePrimary && tracePrimary->name ? tracePrimary->name : "<null>",
-                    static_cast<const void *>(tracePrimary),
-                    static_cast<const void *>(tracePrimary ? tracePrimary->texture.basemap : nullptr),
-                    traceSecondary && traceSecondary->name ? traceSecondary->name : "<null>",
-                    static_cast<const void *>(traceSecondary),
-                    static_cast<const void *>(traceSecondary ? traceSecondary->texture.basemap : nullptr),
-                    static_cast<unsigned>(tris->firstVertex), static_cast<unsigned>(tris->vertexCount),
-                    static_cast<const void *>(traceVertices),
-                    traceVertexValid ? traceVertices[tris->firstVertex].xyz[0] : 0.0f,
-                    traceVertexValid ? traceVertices[tris->firstVertex].xyz[1] : 0.0f,
-                    traceVertexValid ? traceVertices[tris->firstVertex].xyz[2] : 0.0f,
-                    traceVertexValid ? traceVertices[tris->firstVertex].texCoord[0] : 0.0f,
-                    traceVertexValid ? traceVertices[tris->firstVertex].texCoord[1] : 0.0f,
-                    traceVertexValid ? traceVertices[tris->firstVertex].lmapCoord[0] : 0.0f,
-                    traceVertexValid ? traceVertices[tris->firstVertex].lmapCoord[1] : 0.0f);
-                Switch_LogWrite(trace);
-            }
+}
 #endif
             if (reflectionProbeIndex != bspSurf->reflectionProbeIndex || lightmapIndex != bspSurf->lightmapIndex)
             {
@@ -656,20 +533,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                     3u, std::min<uint32_t>(tris->vertexCount, available));
                 for (uint32_t vertexIndex = 0; vertexIndex < countToTrace; ++vertexIndex)
                 {
-                    const GfxWorldVertex &vertex = rgp.world->vd.vertices[firstVertex + vertexIndex];
-                    char trace[384];
-                    std::snprintf(
-                        trace, sizeof(trace),
-                        "[KisakCOD][BSP LIGHTMAP VERTEX] sample=%u surf=%u map=%u firstVertex=%u v=%u xyz=(%.3f,%.3f,%.3f) uv0=(%.6f,%.6f) lmap=(%.6f,%.6f) color=0x%08x normal=0x%08x tangent=0x%08x\n",
-                        sample, surfIndex, lightmapIndex, firstVertex, vertexIndex,
-                        vertex.xyz[0], vertex.xyz[1], vertex.xyz[2],
-                        vertex.texCoord[0], vertex.texCoord[1],
-                        vertex.lmapCoord[0], vertex.lmapCoord[1],
-                        static_cast<unsigned>(vertex.color.packed),
-                        static_cast<unsigned>(vertex.normal.packed),
-                        static_cast<unsigned>(vertex.tangent.packed));
-                    Switch_LogWrite(trace);
-                }
+}
             }
 #endif
             R_DrawPreTessTris(&context.state->prim, tris, baseIndex, list[index].totalTriCount);

@@ -673,45 +673,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
         !I_stricmp(switchUiMaterialName, "button_highlight_end");
     if (switchUiMaterial && switchUiPassTraceCount < 32)
     {
-        const MaterialTextureDef *switchTexture =
-            material->textureTable && material->textureCount
-                ? &material->textureTable[0] : nullptr;
-        const GfxImage *switchImage =
-            switchTexture && switchTexture->semantic != TS_WATER_MAP
-                ? switchTexture->u.image : nullptr;
-        const char *switchImageName =
-            switchImage && switchImage->name ? switchImage->name : "<null>";
-        char trace[768];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][UI PASS] material=%s image0=%s techType=%u pass=%u "
-            "view=%u entry=%u stateCount=%u state0=%08x state1=%08x "
-            "blend=%u src=%u dst=%u op=%u srcA=%u dstA=%u opA=%u "
-            "vertexShader=%s pixelShader=%s\n",
-            switchUiMaterialName,
-            switchImageName,
-            static_cast<unsigned>(context.state->techType),
-            static_cast<unsigned>(passIndex),
-            static_cast<unsigned>(context.source->viewMode),
-            static_cast<unsigned>(material->stateBitsEntry[context.state->techType]),
-            static_cast<unsigned>(material->stateBitsCount),
-            static_cast<unsigned>(stateBits[0]),
-            static_cast<unsigned>(stateBits[1]),
-            (stateBits[0] & 0x700u) != 0 ? 1u : 0u,
-            static_cast<unsigned>(stateBits[0] & 0xFu),
-            static_cast<unsigned>((stateBits[0] >> 4) & 0xFu),
-            static_cast<unsigned>((stateBits[0] >> 8) & 0x7u),
-            static_cast<unsigned>((stateBits[0] >> 16) & 0xFu),
-            static_cast<unsigned>((stateBits[0] >> 20) & 0xFu),
-            static_cast<unsigned>((stateBits[0] >> 24) & 0x7u),
-            pass->vertexShader && pass->vertexShader->name
-                ? pass->vertexShader->name : "<null>",
-            pass->pixelShader && pass->pixelShader->name
-                ? pass->pixelShader->name : "<null>");
-        Switch_LogWrite(trace);
-        ++switchUiPassTraceCount;
-    }
+}
     {
         static uint32_t switchFontPassTraceCount = 0;
         const bool isFontAtlas =
@@ -721,48 +683,7 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
             !I_stricmp(switchUiMaterialName, "fonts/devfonts_glow");
         if (isFontAtlas && switchFontPassTraceCount < 24u)
         {
-            const MaterialTextureDef *texture =
-                material->textureTable && material->textureCount
-                    ? &material->textureTable[0] : nullptr;
-            const GfxImage *image =
-                texture && texture->semantic != TS_WATER_MAP
-                    ? texture->u.image : nullptr;
-            const uintptr_t imageAddress = reinterpret_cast<uintptr_t>(image);
-            const bool safeImage =
-                image && imageAddress > UINT32_MAX &&
-                imageAddress < (1ULL << 39) &&
-                (imageAddress & (alignof(GfxImage) - 1u)) == 0;
-            const auto *vkTexture =
-                safeImage ? image->texture.basemap : nullptr;
-            char fontTrace[768];
-            std::snprintf(
-                fontTrace, sizeof(fontTrace),
-                "[KisakCOD][FONT PASS] n=%u material=%s techType=%u pass=%u view=%u state=%08x/%08x image=%s imagePtr=%p imageSafe=%u size=%ux%u vkTexture=%p vkView=%p format=%u layout=%u vs=%s ps=%s args=%p counts=%u,%u,%u\n",
-                static_cast<unsigned>(switchFontPassTraceCount),
-                switchUiMaterialName,
-                static_cast<unsigned>(context.state->techType),
-                static_cast<unsigned>(passIndex),
-                static_cast<unsigned>(context.source->viewMode),
-                static_cast<unsigned>(stateBits[0]),
-                static_cast<unsigned>(stateBits[1]),
-                safeImage && image->name ? image->name : "<unreadable>",
-                static_cast<const void *>(image),
-                safeImage ? 1u : 0u,
-                safeImage ? image->width : 0u,
-                safeImage ? image->height : 0u,
-                static_cast<const void *>(vkTexture),
-                static_cast<const void *>(vkTexture ? vkTexture->view : VK_NULL_HANDLE),
-                vkTexture ? static_cast<unsigned>(vkTexture->format) : 0u,
-                vkTexture ? static_cast<unsigned>(vkTexture->layout) : 0u,
-                pass->vertexShader && pass->vertexShader->name ? pass->vertexShader->name : "<null>",
-                pass->pixelShader && pass->pixelShader->name ? pass->pixelShader->name : "<null>",
-                static_cast<const void *>(pass->args),
-                static_cast<unsigned>(pass->perPrimArgCount),
-                static_cast<unsigned>(pass->perObjArgCount),
-                static_cast<unsigned>(pass->stableArgCount));
-            Switch_LogWrite(fontTrace);
-            ++switchFontPassTraceCount;
-        }
+}
     }
 #endif
 #ifdef KISAK_RADIANT
@@ -938,34 +859,7 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
             switchWorldSamplerTraceCount.fetch_add(1, std::memory_order_relaxed);
         if (traceIndex < 48u)
         {
-            const auto *vkTexture = image ? image->texture.basemap : nullptr;
-            const MaterialTechniqueSet *techniqueSet = material->techniqueSet;
-            const MaterialPass *pass = context.state->pass;
-            char trace[768];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][WORLD SAMPLER] n=%u mat=%s set=%s tech=%s ps=%s slot=%u semantic=%u tex=%s size=%ux%u image=%p texture=%p vkImage=%p view=%p vkFormat=%u srcFormat=%u layout=%u\n",
-                traceIndex,
-                material->info.name,
-                techniqueSet && techniqueSet->name ? techniqueSet->name : "<null>",
-                context.state->technique && context.state->technique->name
-                    ? context.state->technique->name : "<null>",
-                pass && pass->pixelShader && pass->pixelShader->name
-                    ? pass->pixelShader->name : "<null>",
-                static_cast<unsigned>(arg->dest),
-                static_cast<unsigned>(texDef->semantic),
-                image && image->name ? image->name : "<null>",
-                image ? image->width : 0u,
-                image ? image->height : 0u,
-                static_cast<const void *>(image),
-                static_cast<const void *>(vkTexture),
-                static_cast<const void *>(vkTexture ? vkTexture->image : VK_NULL_HANDLE),
-                static_cast<const void *>(vkTexture ? vkTexture->view : VK_NULL_HANDLE),
-                vkTexture ? static_cast<unsigned>(vkTexture->format) : 0u,
-                vkTexture ? static_cast<unsigned>(vkTexture->sourceFormat) : 0u,
-                vkTexture ? static_cast<unsigned>(vkTexture->layout) : 0u);
-            Switch_LogWrite(trace);
-        }
+}
     }
 #endif
 #ifdef __SWITCH__
@@ -983,36 +877,7 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
             : 24u;
         if (isFontAtlas && traceIndex < 24u)
         {
-            const uintptr_t imageAddress = reinterpret_cast<uintptr_t>(image);
-            const bool safeImage =
-                image && imageAddress > UINT32_MAX &&
-                imageAddress < (1ULL << 39) &&
-                (imageAddress & (alignof(GfxImage) - 1u)) == 0;
-            const auto *vkTexture =
-                safeImage ? image->texture.basemap : nullptr;
-            const MaterialPass *pass = context.state->pass;
-            char fontTrace[640];
-            std::snprintf(
-                fontTrace, sizeof(fontTrace),
-                "[KisakCOD][FONT SAMPLER] n=%u mat=%s ps=%s slot=%u semantic=%u sampler=%u image=%s imagePtr=%p safe=%u size=%ux%u vkTexture=%p vkView=%p format=%u layout=%u\n",
-                static_cast<unsigned>(traceIndex),
-                fontMaterialName,
-                pass && pass->pixelShader && pass->pixelShader->name
-                    ? pass->pixelShader->name : "<null>",
-                static_cast<unsigned>(arg->dest),
-                static_cast<unsigned>(texDef->semantic),
-                static_cast<unsigned>(texDef->samplerState),
-                safeImage && image->name ? image->name : "<unreadable>",
-                static_cast<const void *>(image),
-                safeImage ? 1u : 0u,
-                safeImage ? image->width : 0u,
-                safeImage ? image->height : 0u,
-                static_cast<const void *>(vkTexture),
-                static_cast<const void *>(vkTexture ? vkTexture->view : VK_NULL_HANDLE),
-                vkTexture ? static_cast<unsigned>(vkTexture->format) : 0u,
-                vkTexture ? static_cast<unsigned>(vkTexture->layout) : 0u);
-            Switch_LogWrite(fontTrace);
-        }
+}
     }
 #endif
     R_SetSampler(context, arg->dest, texDef->samplerState, image);

@@ -5076,15 +5076,7 @@ HRESULT IDirect3DDevice9::SetTexture(uint32_t stage, IDirect3DBaseTexture9 *tex)
     if ((stage == 2u || stage == 3u) &&
         switchLightmapTextureSetTraceCount < 128u)
     {
-        char trace[224];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][VK SET TEXTURE] n=%u stage=%u old=%p requested=%p stored=%p\n",
-            switchLightmapTextureSetTraceCount++, stage,
-            static_cast<void *>(old), static_cast<void *>(tex),
-            static_cast<void *>(m_textures[stage]));
-        Switch_LogWrite(trace);
-    }
+}
 #endif
     return S_OK;
 }
@@ -5664,50 +5656,7 @@ bool IDirect3DDevice9::BindSamplerSet(
         const uint32_t traceStage = setIndex == 0 ? 0u : 1u;
         if (unboundSamplerTraceCount[traceStage][slot] < 2u)
         {
-            const MOJOSHADER_sampler *sampler = activeSamplers[slot];
-            char trace[288];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK SAMPLER NULL FALLBACK] stage=%s shader=%llu slot=%u sampler=%s type=%u frame=%llu action=typed_white_dummy\n",
-                setIndex == 0 ? "vs" : "ps",
-                static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
-                slot,
-                sampler->name ? sampler->name : "<unnamed>",
-                static_cast<unsigned>(sampler->type),
-                static_cast<unsigned long long>(m_backend->FrameSerial()));
-            Switch_LogWrite(trace);
-            ++unboundSamplerTraceCount[traceStage][slot];
-
-            char mapTrace[768];
-            size_t used = static_cast<size_t>(std::snprintf(
-                mapTrace, sizeof(mapTrace),
-                "[KisakCOD][VK SAMPLER MAP] stage=%s shader=%llu declared=%d",
-                setIndex == 0 ? "vs" : "ps",
-                static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
-                activeParse ? activeParse->sampler_count : 0));
-            for (uint32_t i = 0; i < activeSamplers.size() &&
-                 used < sizeof(mapTrace) - 64u; ++i)
-            {
-                if (!activeSamplers[i])
-                    continue;
-                const MOJOSHADER_sampler *entry = activeSamplers[i];
-                const int written = std::snprintf(
-                    mapTrace + used, sizeof(mapTrace) - used,
-                    " s%u=%s:%s",
-                    i,
-                    entry->name ? entry->name : "<unnamed>",
-                    textures[i] ? "bound" : "null");
-                if (written < 0)
-                    break;
-                used += static_cast<size_t>(written);
-            }
-            if (used < sizeof(mapTrace) - 2u)
-            {
-                mapTrace[used++] = '\n';
-                mapTrace[used] = '\0';
-                Switch_LogWrite(mapTrace);
-            }
-        }
+}
     }
 
     // Determine whether any sampled subresource needs a layout transition.
@@ -5849,22 +5798,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             static uint32_t mismatchedSamplerTraceCount = 0;
             if (mismatchedSamplerTraceCount < 32u)
             {
-                const MOJOSHADER_sampler *sampler = activeSamplers[i];
-                char trace[352];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK SAMPLER DIMENSION MISMATCH] stage=%s shader=%llu slot=%u sampler=%s samplerType=%u textureViewType=%u size=%ux%ux%u layers=%u action=typed_white_dummy\n",
-                    setIndex == 0 ? "vs" : "ps",
-                    static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
-                    i,
-                    sampler->name ? sampler->name : "<unnamed>",
-                    static_cast<unsigned>(sampler->type),
-                    static_cast<unsigned>(texture->viewType),
-                    texture->width, texture->height, texture->depth,
-                    texture->arrayLayers);
-                Switch_LogWrite(trace);
-                ++mismatchedSamplerTraceCount;
-            }
+}
 #endif
             images[i].imageView = m_backend->DummyImageViewForSamplerType(
                 static_cast<uint32_t>(activeSamplers[i]->type));
@@ -5994,17 +5928,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                             switchFilterFallbackCount.fetch_add(1, std::memory_order_relaxed);
                         if (fallbackIndex < 8u)
                         {
-                            char trace[288];
-                            std::snprintf(
-                                trace, sizeof(trace),
-                                "[KisakCOD][VK SAMPLER FILTER FALLBACK] format=%u features=0x%x slot=%u requestedLinear=%u reason=%s fallback=point\n",
-                                static_cast<unsigned>(texture->format),
-                                static_cast<unsigned>(samplerFormatFeatures),
-                                i,
-                                supportsLinearFiltering ? 1u : 0u,
-                                "format_no_linear");
-                            Switch_LogWrite(trace);
-                        }
+}
                     }
 #endif
                 }
@@ -6055,28 +5979,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             (traceT3 && (traceT3->width >= 512u || traceT3->height >= 512u));
         if (likelyLightmap && switchLightmapDescriptorTraceCount < 32u)
         {
-            char trace[640];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK LIGHTMAP DESCRIPTORS] n=%u ps=%p serial=%llu t0=%p t2=%p view2=%p size2=%ux%u fmt2=%u src2=%u layout2=%u t3=%p view3=%p size3=%ux%u fmt3=%u src3=%u layout3=%u\n",
-                switchLightmapDescriptorTraceCount++,
-                static_cast<const void *>(m_pixelShader),
-                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
-                static_cast<const void *>(textures[0]),
-                static_cast<const void *>(traceT2),
-                static_cast<const void *>(traceT2 ? traceT2->view : VK_NULL_HANDLE),
-                traceT2 ? traceT2->width : 0u, traceT2 ? traceT2->height : 0u,
-                traceT2 ? static_cast<unsigned>(traceT2->format) : 0u,
-                traceT2 ? static_cast<unsigned>(traceT2->sourceFormat) : 0u,
-                traceT2 ? static_cast<unsigned>(traceT2->layout) : 0u,
-                static_cast<const void *>(traceT3),
-                static_cast<const void *>(traceT3 ? traceT3->view : VK_NULL_HANDLE),
-                traceT3 ? traceT3->width : 0u, traceT3 ? traceT3->height : 0u,
-                traceT3 ? static_cast<unsigned>(traceT3->format) : 0u,
-                traceT3 ? static_cast<unsigned>(traceT3->sourceFormat) : 0u,
-                traceT3 ? static_cast<unsigned>(traceT3->layout) : 0u);
-            Switch_LogWrite(trace);
-        }
+}
 
         // Identify which D3D sampler registers the active translated pixel
         // shader actually reads. The material-side trace proves textures are
@@ -6099,55 +6002,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             }
             if (!alreadyTraced && tracedPixelSamplerShaderCount < 32u)
             {
-                tracedPixelSamplerSerials[tracedPixelSamplerShaderCount++] =
-                    m_pixelShader->serial;
-                char samplerTrace[768];
-                size_t used = static_cast<size_t>(std::snprintf(
-                    samplerTrace, sizeof(samplerTrace),
-                    "[KisakCOD][VK PS SAMPLERS] serial=%llu count=%d",
-                    static_cast<unsigned long long>(m_pixelShader->serial),
-                    pixelParse->sampler_count));
-                const int samplerCount =
-                    pixelParse->sampler_count > 0 && pixelParse->samplers
-                        ? pixelParse->sampler_count : 0;
-                for (int i = 0; i < samplerCount && i < 12 &&
-                     used < sizeof(samplerTrace) - 80u; ++i)
-                {
-                    const MOJOSHADER_sampler &sampler = pixelParse->samplers[i];
-                    const int wrote = std::snprintf(
-                        samplerTrace + used, sizeof(samplerTrace) - used,
-                        " sampler[%d]=s%d/type%d/name=%s",
-                        i, sampler.index, static_cast<int>(sampler.type),
-                        sampler.name ? sampler.name : "<null>");
-                    if (wrote < 0)
-                        break;
-                    used += static_cast<size_t>(wrote);
-                    if (used >= sizeof(samplerTrace))
-                    {
-                        used = sizeof(samplerTrace) - 1u;
-                        break;
-                    }
-                }
-                if (samplerCount > 12 && used < sizeof(samplerTrace) - 32u)
-                {
-                    const int wrote = std::snprintf(
-                        samplerTrace + used, sizeof(samplerTrace) - used,
-                        " omitted=%d", samplerCount - 12);
-                    if (wrote > 0)
-                        used += static_cast<size_t>(wrote);
-                }
-                if (used < sizeof(samplerTrace) - 2u)
-                {
-                    samplerTrace[used++] = '\n';
-                    samplerTrace[used] = '\0';
-                }
-                else
-                {
-                    samplerTrace[sizeof(samplerTrace) - 2u] = '\n';
-                    samplerTrace[sizeof(samplerTrace) - 1u] = '\0';
-                }
-                Switch_LogWrite(samplerTrace);
-            }
+}
         }
     }
 #endif
@@ -7474,80 +7329,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_streams[0].stride == 44 && preVs && prePs &&
         switchWorldVertexInputTraceCount < 16u)
     {
-        const uint32_t traceId = switchWorldVertexInputTraceCount++;
-        char summary[320];
-        std::snprintf(
-            summary, sizeof(summary),
-            "[KisakCOD][VK WORLD INPUT] n=%u createSeq=%u key=%016llx decl=%llu route=%u vs=%llu ps=%llu stride=%u attrs=%zu vsInputs=%d psSamplers=%d\n",
-            traceId, pipelineCreateSequence,
-            static_cast<unsigned long long>(key),
-            static_cast<unsigned long long>(m_decl->serial),
-            static_cast<unsigned>(m_decl->switchVertDeclType),
-            static_cast<unsigned long long>(m_vertexShader->serial),
-            static_cast<unsigned long long>(m_pixelShader->serial),
-            static_cast<unsigned>(m_streams[0].stride), vertexAttrs.size(),
-            preVs->attribute_count, std::max(0, prePs->sampler_count));
-        Switch_LogWrite(summary);
-
-        for (const VkVertexInputAttributeDescription &attribute : vertexAttrs)
-        {
-            const _D3DVERTEXELEMENT9 *elementMatch = nullptr;
-            const MOJOSHADER_attribute *shaderMatch = nullptr;
-            for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
-            {
-                if (element.Stream != attribute.binding)
-                    continue;
-                for (int i = 0; i < preVs->attribute_count; ++i)
-                {
-                    const MOJOSHADER_attribute &candidate = preVs->attributes[i];
-                    uint32_t location = UINT32_MAX;
-                    if (candidate.usage ==
-                            static_cast<MOJOSHADER_usage>(element.Usage) &&
-                        candidate.index == element.UsageIndex &&
-                        ExtractShaderInputRegister(candidate.name, &location) &&
-                        location == attribute.location)
-                    {
-                        elementMatch = &element;
-                        shaderMatch = &candidate;
-                        break;
-                    }
-                }
-                if (elementMatch)
-                    break;
-            }
-
-            char attrLine[352];
-            if (elementMatch && shaderMatch)
-            {
-                const uint8_t effectiveType =
-                    SwitchEffectiveShaderElementType(m_decl, *elementMatch);
-                const uint32_t effectiveOffset =
-                    SwitchEffectiveShaderElementOffset(m_decl, *elementMatch);
-                std::snprintf(
-                    attrLine, sizeof(attrLine),
-                    "[KisakCOD][VK WORLD ATTR] n=%u loc=%u shader=%s vkFormat=%u binding=%u offset=%u usage=%u index=%u declType=%u effectiveType=%u declaredOffset=%u effectiveOffset=%u bytes=%u\n",
-                    traceId, attribute.location,
-                    shaderMatch->name ? shaderMatch->name : "<null>",
-                    static_cast<unsigned>(attribute.format), attribute.binding,
-                    attribute.offset, static_cast<unsigned>(elementMatch->Usage),
-                    static_cast<unsigned>(elementMatch->UsageIndex),
-                    static_cast<unsigned>(elementMatch->Type),
-                    static_cast<unsigned>(effectiveType),
-                    static_cast<unsigned>(elementMatch->Offset), effectiveOffset,
-                    SwitchShaderElementByteSize(effectiveType));
-            }
-            else
-            {
-                std::snprintf(
-                    attrLine, sizeof(attrLine),
-                    "[KisakCOD][VK WORLD ATTR] n=%u loc=%u shader=<unmatched> vkFormat=%u binding=%u offset=%u\n",
-                    traceId, attribute.location,
-                    static_cast<unsigned>(attribute.format), attribute.binding,
-                    attribute.offset);
-            }
-            Switch_LogWrite(attrLine);
-        }
-    }
+}
 
     if (pipelineCreateSequence >= 30u && pipelineCreateSequence <= 40u)
     {
@@ -8285,124 +8067,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         }
         if (hasLightmapSecondarySampler)
         {
-            const uint32_t traceIndex = switchLightmapDrawRouteTraceCount++;
-            const auto describeTexture = [](const KisakVkTexture *texture,
-                                            char *dst, size_t dstSize)
-            {
-                std::snprintf(
-                    dst, dstSize,
-                    "%p/%p:%ux%u:f%u/src%u/l%u",
-                    texture ? reinterpret_cast<void *>(texture->image) : nullptr,
-                    texture ? reinterpret_cast<void *>(texture->view) : nullptr,
-                    texture ? texture->width : 0u,
-                    texture ? texture->height : 0u,
-                    texture ? static_cast<unsigned>(texture->format) : 0u,
-                    texture ? static_cast<unsigned>(texture->sourceFormat) : 0u,
-                    texture ? static_cast<unsigned>(texture->layout) : 0u);
-            };
-            char tex0[128], tex1[128], tex2[128], tex3[128];
-            describeTexture(m_textures[0], tex0, sizeof(tex0));
-            describeTexture(m_textures[1], tex1, sizeof(tex1));
-            describeTexture(m_textures[2], tex2, sizeof(tex2));
-            describeTexture(m_textures[3], tex3, sizeof(tex3));
-            const auto *stream0 = &m_streams[0];
-            const auto *stream1 = &m_streams[1];
-            char trace[1408];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK LIGHTMAP DRAW ROUTE] n=%u decl=%p declSerial=%llu route=%u elems=%zu vs=%llu ps=%llu stride0=%u offset0=%llu vb0=%p vb0Bytes=%zu stride1=%u offset1=%llu vb1=%p vb1Bytes=%zu indexCount=%u start=%u base=%d raw=%u-%u effective=%lld-%lld cameraZ=%.4f viewport=%u,%u,%u,%u cull=%u depth=%u/%u blend=%u colorWrite=0x%x textures=(s0:%s s1:%s s2:%s s3:%s)\n",
-                traceIndex,
-                static_cast<const void *>(m_decl),
-                static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
-                static_cast<unsigned>(m_decl ? m_decl->switchVertDeclType : 0xFFu),
-                m_decl ? m_decl->elements.size() : 0u,
-                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
-                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
-                stream0->stride, static_cast<unsigned long long>(stream0->offset),
-                static_cast<void *>(stream0->buffer),
-                stream0->buffer ? static_cast<size_t>(stream0->buffer->size) : 0u,
-                stream1->stride, static_cast<unsigned long long>(stream1->offset),
-                static_cast<void *>(stream1->buffer),
-                stream1->buffer ? static_cast<size_t>(stream1->buffer->size) : 0u,
-                indexCount, startIndex, baseVertexIndex,
-                minRawIndex == UINT32_MAX ? 0u : minRawIndex, maxRawIndex,
-                static_cast<long long>(minEffectiveVertex),
-                static_cast<long long>(maxEffectiveVertex),
-                switchLightmapCameraZ,
-                m_viewport.X, m_viewport.Y, m_viewport.Width, m_viewport.Height,
-                m_cullMode, m_depthEnable ? 1u : 0u, m_depthWrite ? 1u : 0u,
-                m_blendEnable ? 1u : 0u, m_colorWriteMask,
-                tex0, tex1, tex2, tex3);
-            Switch_LogWrite(trace);
-
-            // Record which physical declaration element feeds each actual
-            // vertex-shader input on the gameplay draw. This catches semantic
-            // matches that exist by name but point at the wrong world-vertex bytes.
-            if (m_vertexShader && m_vertexShader->parseData &&
-                m_vertexShader->parseData->attributes)
-            {
-                const MOJOSHADER_parseData *vsParse = m_vertexShader->parseData;
-                const int attrLimit = std::min(vsParse->attribute_count, 12);
-                for (int attrIndex = 0; attrIndex < attrLimit; ++attrIndex)
-                {
-                    const MOJOSHADER_attribute &attr = vsParse->attributes[attrIndex];
-                    const _D3DVERTEXELEMENT9 *matched = nullptr;
-                    if (m_decl)
-                    {
-                        for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
-                        {
-                            if (element.Stream < 16 &&
-                                element.Usage == static_cast<uint8_t>(attr.usage) &&
-                                element.UsageIndex == attr.index)
-                            {
-                                matched = &element;
-                                break;
-                            }
-                        }
-                    }
-                    uint32_t location = UINT32_MAX;
-                    const bool locationValid =
-                        attr.name && ExtractShaderInputRegister(attr.name, &location);
-                    char attrTrace[320];
-                    std::snprintf(
-                        attrTrace, sizeof(attrTrace),
-                        "[KisakCOD][VK LIGHTMAP DRAW ATTR] n=%u i=%d name=%s usage=%u index=%u location=%u locationValid=%u matched=%u stream=%u declaredOffset=%u effectiveOffset=%u declaredType=%u effectiveType=%u bytes=%u stride=%u\n",
-                        traceIndex, attrIndex, attr.name ? attr.name : "<null>",
-                        static_cast<unsigned>(attr.usage), static_cast<unsigned>(attr.index),
-                        location, locationValid ? 1u : 0u, matched ? 1u : 0u,
-                        matched ? static_cast<unsigned>(matched->Stream) : UINT32_MAX,
-                        matched ? static_cast<unsigned>(matched->Offset) : UINT32_MAX,
-                        matched ? static_cast<unsigned>(SwitchEffectiveShaderElementOffset(m_decl, *matched)) : UINT32_MAX,
-                        matched ? static_cast<unsigned>(matched->Type) : UINT32_MAX,
-                        matched ? static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, *matched)) : UINT32_MAX,
-                        matched ? SwitchShaderElementByteSize(SwitchEffectiveShaderElementType(m_decl, *matched)) : 0u,
-                        matched && matched->Stream < 16 ? m_streams[matched->Stream].stride : 0u);
-                    Switch_LogWrite(attrTrace);
-                }
-            }
-
-            if (m_decl)
-            {
-                const size_t elementLimit = std::min<size_t>(m_decl->elements.size(), 12u);
-                for (size_t elementIndex = 0; elementIndex < elementLimit; ++elementIndex)
-                {
-                    const _D3DVERTEXELEMENT9 &element = m_decl->elements[elementIndex];
-                    char elementTrace[256];
-                    std::snprintf(
-                        elementTrace, sizeof(elementTrace),
-                        "[KisakCOD][VK LIGHTMAP DRAW ELEMENT] n=%u i=%zu stream=%u offset=%u effectiveOffset=%u type=%u effectiveType=%u usage=%u usageIndex=%u\n",
-                        traceIndex, elementIndex,
-                        static_cast<unsigned>(element.Stream),
-                        static_cast<unsigned>(element.Offset),
-                        static_cast<unsigned>(SwitchEffectiveShaderElementOffset(m_decl, element)),
-                        static_cast<unsigned>(element.Type),
-                        static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element)),
-                        static_cast<unsigned>(element.Usage),
-                        static_cast<unsigned>(element.UsageIndex));
-                    Switch_LogWrite(elementTrace);
-                }
-            }
-        }
+}
     }
 #endif
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/validate";
@@ -8643,116 +8308,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         if (hasSampler3 && switchGameplayCamera &&
             switchWorldDrawStateTraceCount < 4u)
         {
-            const uint32_t traceIndex = switchWorldDrawStateTraceCount++;
-            const int32_t scissorLeft = m_scissor
-                ? m_scissorRect.left : static_cast<int32_t>(m_viewport.X);
-            const int32_t scissorTop = m_scissor
-                ? m_scissorRect.top : static_cast<int32_t>(m_viewport.Y);
-            const int32_t scissorRight = m_scissor
-                ? m_scissorRect.right
-                : static_cast<int32_t>(std::min<uint64_t>(
-                    static_cast<uint64_t>(m_viewport.X) + m_viewport.Width, INT32_MAX));
-            const int32_t scissorBottom = m_scissor
-                ? m_scissorRect.bottom
-                : static_cast<int32_t>(std::min<uint64_t>(
-                    static_cast<uint64_t>(m_viewport.Y) + m_viewport.Height, INT32_MAX));
-            char drawTrace[640];
-            std::snprintf(
-                drawTrace, sizeof(drawTrace),
-                "[KisakCOD][VK WORLD DRAW STATE] n=%u frame=%llu decl=%llu declType=%u vs=%llu ps=%llu stride=%u vbOffset=%u indexCount=%u startIndex=%u baseVertex=%d viewport=%u,%u,%u,%u scissorEnable=%u scissor=%d,%d,%d,%d cull=%u depth=%u/%u depthFunc=%u blend=%u srcBlend=%u dstBlend=%u blendOp=%u alphaTest=%u alphaFunc=%u alphaRef=%u separateAlpha=%u srcAlpha=%u dstAlpha=%u colorWrite=0x%x unlit=%u\n",
-                traceIndex,
-                static_cast<unsigned long long>(m_backend->FrameSerial()),
-                static_cast<unsigned long long>(m_decl->serial),
-                static_cast<unsigned>(m_decl->switchVertDeclType),
-                static_cast<unsigned long long>(m_vertexShader->serial),
-                static_cast<unsigned long long>(m_pixelShader->serial),
-                m_streams[0].stride, m_streams[0].offset,
-                indexCount, startIndex, baseVertexIndex,
-                m_viewport.X, m_viewport.Y, m_viewport.Width, m_viewport.Height,
-                m_scissor ? 1u : 0u,
-                scissorLeft, scissorTop, scissorRight, scissorBottom,
-                m_cullMode, m_depthEnable ? 1u : 0u,
-                m_depthWrite ? 1u : 0u, m_depthFunc,
-                m_blendEnable ? 1u : 0u, m_srcBlend, m_dstBlend, m_blendOp,
-                m_alphaTest ? 1u : 0u, m_alphaFunc, m_alphaRef,
-                m_separateAlphaBlend ? 1u : 0u, m_srcBlendAlpha,
-                m_dstBlendAlpha, m_colorWriteMask, m_switchUnlit ? 1u : 0u);
-            Switch_LogWrite(drawTrace);
-
-            char constantsTrace[896];
-            std::snprintf(
-                constantsTrace, sizeof(constantsTrace),
-                "[KisakCOD][VK WORLD VS CONSTANTS] n=%u c0=(%.5g,%.5g,%.5g,%.5g) c1=(%.5g,%.5g,%.5g,%.5g) c2=(%.5g,%.5g,%.5g,%.5g) c3=(%.5g,%.5g,%.5g,%.5g) c4=(%.5g,%.5g,%.5g,%.5g) c5=(%.5g,%.5g,%.5g,%.5g) c6=(%.5g,%.5g,%.5g,%.5g) c7=(%.5g,%.5g,%.5g,%.5g)\n",
-                traceIndex,
-                m_vsFloat[0][0], m_vsFloat[0][1], m_vsFloat[0][2], m_vsFloat[0][3],
-                m_vsFloat[1][0], m_vsFloat[1][1], m_vsFloat[1][2], m_vsFloat[1][3],
-                m_vsFloat[2][0], m_vsFloat[2][1], m_vsFloat[2][2], m_vsFloat[2][3],
-                m_vsFloat[3][0], m_vsFloat[3][1], m_vsFloat[3][2], m_vsFloat[3][3],
-                m_vsFloat[4][0], m_vsFloat[4][1], m_vsFloat[4][2], m_vsFloat[4][3],
-                m_vsFloat[5][0], m_vsFloat[5][1], m_vsFloat[5][2], m_vsFloat[5][3],
-                m_vsFloat[6][0], m_vsFloat[6][1], m_vsFloat[6][2], m_vsFloat[6][3],
-                m_vsFloat[7][0], m_vsFloat[7][1], m_vsFloat[7][2], m_vsFloat[7][3]);
-            Switch_LogWrite(constantsTrace);
-
-            char pixelConstantsTrace[512];
-            std::snprintf(
-                pixelConstantsTrace, sizeof(pixelConstantsTrace),
-                "[KisakCOD][VK WORLD PS CONSTANTS] n=%u c0=(%.5g,%.5g,%.5g,%.5g) c1=(%.5g,%.5g,%.5g,%.5g) c2=(%.5g,%.5g,%.5g,%.5g) c3=(%.5g,%.5g,%.5g,%.5g)\n",
-                traceIndex,
-                m_psFloat[0][0], m_psFloat[0][1], m_psFloat[0][2], m_psFloat[0][3],
-                m_psFloat[1][0], m_psFloat[1][1], m_psFloat[1][2], m_psFloat[1][3],
-                m_psFloat[2][0], m_psFloat[2][1], m_psFloat[2][2], m_psFloat[2][3],
-                m_psFloat[3][0], m_psFloat[3][1], m_psFloat[3][2], m_psFloat[3][3]);
-            Switch_LogWrite(pixelConstantsTrace);
-
-            // This bounded slot-by-slot snapshot connects D3D9 sampler registers
-            // to the actual Vulkan texture/view used by the first gameplay world
-            // draws. A material-name trace alone cannot prove the descriptor's
-            // binding slot is populated with that texture.
-            char textureTrace[1280];
-            size_t textureUsed = static_cast<size_t>(std::snprintf(
-                textureTrace, sizeof(textureTrace),
-                "[KisakCOD][VK WORLD BOUND SAMPLERS] n=%u ps=%llu",
-                traceIndex,
-                static_cast<unsigned long long>(m_pixelShader->serial)));
-            const MOJOSHADER_parseData *worldPixelParse = m_pixelShader->parseData;
-            const int worldSamplerCount =
-                worldPixelParse && worldPixelParse->samplers
-                    ? std::min(worldPixelParse->sampler_count, 8) : 0;
-            for (int samplerNumber = 0;
-                 samplerNumber < worldSamplerCount &&
-                 textureUsed < sizeof(textureTrace) - 160u;
-                 ++samplerNumber)
-            {
-                const MOJOSHADER_sampler &sampler =
-                    worldPixelParse->samplers[samplerNumber];
-                const int slot = sampler.index;
-                const KisakVkTexture *texture =
-                    slot >= 0 && slot < 16 ? m_textures[slot] : nullptr;
-                const int written = std::snprintf(
-                    textureTrace + textureUsed, sizeof(textureTrace) - textureUsed,
-                    " s%d=%s tex=%p view=%p size=%ux%u vk=%u src=%u layout=%u mips=%u",
-                    slot, sampler.name ? sampler.name : "<unnamed>",
-                    static_cast<const void *>(texture),
-                    static_cast<void *>(texture ? texture->view : VK_NULL_HANDLE),
-                    texture ? texture->width : 0u,
-                    texture ? texture->height : 0u,
-                    texture ? static_cast<unsigned>(texture->format) : 0u,
-                    texture ? static_cast<unsigned>(texture->sourceFormat) : 0u,
-                    texture ? static_cast<unsigned>(
-                        texture->GetSubresourceLayout(0u, 0u)) : 0u,
-                    texture ? texture->mipLevels : 0u);
-                if (written < 0)
-                    break;
-                textureUsed += static_cast<size_t>(written);
-            }
-            if (textureUsed < sizeof(textureTrace) - 2u)
-            {
-                textureTrace[textureUsed++] = '\n';
-                textureTrace[textureUsed] = '\0';
-                Switch_LogWrite(textureTrace);
-            }
-        }
+}
     }
 #endif
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";

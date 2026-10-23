@@ -177,21 +177,7 @@ void StabilizeZoneImageName(ZoneLoadState &state, GfxImage *image)
     static uint32_t traceCount = 0;
     if (traceCount < 24u)
     {
-        char trace[448];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][OAT IMAGE NAME STABLE] n=%u zone=%s image=%p source=%p stable=%p name=%s bytes=%zu block=%u delay=%u\n",
-            traceCount++,
-            state.zoneName ? state.zoneName : "<unknown>",
-            static_cast<void *>(image),
-            static_cast<const void *>(sourceName),
-            static_cast<void *>(stableName),
-            image->name,
-            nameSize,
-            sourceBlock,
-            static_cast<unsigned>(image->delayLoadPixels));
-        Switch_LogWrite(trace);
-    }
+}
 #endif
 }
 
@@ -331,22 +317,7 @@ void NormalizeMaterialImageReferences(Material *material)
         static uint32_t switchImageReferenceFixupCount = 0;
         if (switchImageReferenceFixupCount < 48u)
         {
-            char trace[512];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][MATERIAL IMAGE FIXUP] n=%u material=%s slot=%u image=%s source=%p sourceTex=%p canonical=%p canonicalTex=%p sourceDelay=%u canonicalDelay=%u\n",
-                switchImageReferenceFixupCount++,
-                material->info.name ? material->info.name : "<unnamed>",
-                textureIndex,
-                imageName,
-                static_cast<void *>(sourceImage),
-                static_cast<void *>(sourceImage->texture.basemap),
-                static_cast<void *>(canonicalImage),
-                static_cast<void *>(canonicalImage->texture.basemap),
-                static_cast<unsigned>(sourceImage->delayLoadPixels),
-                static_cast<unsigned>(canonicalImage->delayLoadPixels));
-            Switch_LogWrite(trace);
-        }
+}
 #endif
         texture.u.image = canonicalImage;
     }
@@ -409,23 +380,7 @@ GfxImage *NormalizeWorldImageReference(
     static uint32_t switchWorldImageFixupCount = 0;
     if (switchWorldImageFixupCount < 64u)
     {
-        char trace[640];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][WORLD IMAGE FIXUP] n=%u world=%s field=%s index=%u image=%s source=%p sourceTex=%p sourceDelay=%u canonical=%p canonicalTex=%p canonicalDelay=%u\n",
-            switchWorldImageFixupCount++,
-            world && world->name ? world->name : "<unnamed>",
-            field ? field : "<unknown>",
-            index,
-            imageName,
-            static_cast<void *>(sourceImage),
-            static_cast<void *>(sourceImage->texture.basemap),
-            static_cast<unsigned>(sourceImage->delayLoadPixels),
-            static_cast<void *>(canonicalImage),
-            static_cast<void *>(canonicalImage->texture.basemap),
-            static_cast<unsigned>(canonicalImage->delayLoadPixels));
-        Switch_LogWrite(trace);
-    }
+}
 #endif
     return canonicalImage;
 }
@@ -492,19 +447,7 @@ static void NormalizeMaterialReference(
     static uint32_t switchMaterialReferenceFixupCount = 0;
     if (switchMaterialReferenceFixupCount < 48u)
     {
-        char trace[512];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][MATERIAL REF FIXUP] n=%u owner=%s:%s slot=%u material=%s source=%p canonical=%p\n",
-            switchMaterialReferenceFixupCount++,
-            ownerKind ? ownerKind : "<unknown>",
-            ownerName ? ownerName : "<unnamed>",
-            slotIndex,
-            materialName,
-            static_cast<void *>(sourceMaterial),
-            static_cast<void *>(canonicalMaterial));
-        Switch_LogWrite(trace);
-    }
+}
 #endif
 }
 
@@ -916,17 +859,7 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
 
 #ifdef __SWITCH__
     {
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][OAT IMAGE NAME SUMMARY] zone=%s seen=%u stabilized=%u outside=%u invalid=%u\n",
-            zoneName ? zoneName : "<unknown>",
-            state.imageNamesSeen,
-            state.imageNamesStabilized,
-            state.imageNamesOutsideBlocks,
-            state.imageNamesInvalid);
-        Switch_LogWrite(trace);
-    }
+}
 #endif
 
     // Resolve weapon sounds only after KisakZone_Load has registered every asset

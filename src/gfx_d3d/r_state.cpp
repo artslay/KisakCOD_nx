@@ -624,101 +624,21 @@ void __cdecl R_SetLightmap(GfxCmdBufContext context, uint32_t lmapIndex)
     static uint32_t switchLightmapCallTraceCount = 0;
     if (switchLightmapCallTraceCount < 32u)
     {
-        const uint32_t traceIndex = switchLightmapCallTraceCount++;
-        const bool traceMapValid = rgp.world->lightmaps &&
-            lmapIndex < static_cast<uint32_t>(rgp.world->lightmapCount);
-        const GfxImage *tracePrimary = traceMapValid
-            ? rgp.world->lightmaps[lmapIndex].primary : nullptr;
-        const GfxImage *traceSecondary = traceMapValid
-            ? rgp.world->lightmaps[lmapIndex].secondary : nullptr;
-        char trace[704];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][LIGHTMAP CALL] n=%u map=%u mapCount=%u valid=%u flags=0x%x r_lightMap=%d sunChanged=%u primary=%s/%p tex=%p secondary=%s/%p tex=%p sampler2=%p sampler3=%p\n",
-            traceIndex, lmapIndex, static_cast<unsigned>(rgp.world->lightmapCount),
-            traceMapValid ? 1u : 0u,
-            pass ? static_cast<unsigned>(pass->customSamplerFlags) : 0u,
-            r_lightMap ? r_lightMap->current.integer : -999,
-            context.source->input.data->prim.hasSunDirChanged ? 1u : 0u,
-            tracePrimary && tracePrimary->name ? tracePrimary->name : "<null>",
-            static_cast<const void *>(tracePrimary),
-            static_cast<const void *>(tracePrimary ? tracePrimary->texture.basemap : nullptr),
-            traceSecondary && traceSecondary->name ? traceSecondary->name : "<null>",
-            static_cast<const void *>(traceSecondary),
-            static_cast<const void *>(traceSecondary ? traceSecondary->texture.basemap : nullptr),
-            static_cast<const void *>(context.state->samplerTexture[2]),
-            static_cast<const void *>(context.state->samplerTexture[3]));
-        Switch_LogWrite(trace);
-    }
+}
     // Record the actual lightmap binding once, when a BSP surface with a
     // valid lightmap reaches the renderer. patches=0 is dynamic model lighting
     // and does not tell us whether the world's baked lightmaps are active.
     static bool switchLightmapStateLogged = false;
     if (!switchLightmapStateLogged && lmapIndex != 31 && lmapIndex < rgp.world->lightmapCount)
     {
-        const GfxImage *primary = rgp.world->lightmaps[lmapIndex].primary;
-        const GfxImage *secondary = rgp.world->lightmaps[lmapIndex].secondary;
-        char trace[480];
-        std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][LIGHTMAP STATE] index=%u count=%u r_lightMap=%d r_colorMap=%d sunDirChanged=%d primary=%p %ux%u texture=%p secondary=%p %ux%u texture=%p\n",
-            lmapIndex, rgp.world->lightmapCount,
-            r_lightMap ? r_lightMap->current.integer : -999,
-            r_colorMap ? r_colorMap->current.integer : -999,
-            context.source->input.data->prim.hasSunDirChanged ? 1 : 0,
-            static_cast<const void *>(primary),
-            primary ? primary->width : 0, primary ? primary->height : 0,
-            static_cast<const void *>(primary ? primary->texture.basemap : nullptr),
-            static_cast<const void *>(secondary),
-            secondary ? secondary->width : 0, secondary ? secondary->height : 0,
-            static_cast<const void *>(secondary ? secondary->texture.basemap : nullptr));
-        Switch_LogWrite(trace);
-        switchLightmapStateLogged = true;
-    }
+}
 #endif
 #ifdef __SWITCH__
     static uint32_t switchLightmapBindTraceCount = 0;
     if (switchLightmapBindTraceCount < 32u &&
         lmapIndex != 31 && lmapIndex < rgp.world->lightmapCount)
     {
-        const uint32_t traceIndex = switchLightmapBindTraceCount++;
-        const Material *traceMaterial = context.state->material;
-        const MaterialTechniqueSet *traceSet =
-            traceMaterial ? traceMaterial->techniqueSet : nullptr;
-        const GfxImage *tracePrimary = rgp.world->lightmaps[lmapIndex].primary;
-        const GfxImage *traceSecondary = rgp.world->lightmaps[lmapIndex].secondary;
-        const GfxCmdBufPrimState *tracePrim = &context.state->prim;
-        char trace[1024];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][LIGHTMAP BIND] n=%u map=%u mat=%s set=%s tech=%s techFlags=0x%x worldFmt=%u decl=%u passFlags=0x%x vs=%s ps=%s psHandle=%p oldSampler=(%p,%p) wantSampler=(%p,%p) imageTex=(%p,%p) size=(%ux%u,%ux%u) streams=(%p/%u/%u,%p/%u/%u)\n",
-            traceIndex, lmapIndex,
-            traceMaterial && traceMaterial->info.name ? traceMaterial->info.name : "<null>",
-            traceSet && traceSet->name ? traceSet->name : "<null>",
-            context.state->technique && context.state->technique->name
-                ? context.state->technique->name : "<null>",
-            context.state->technique ? static_cast<unsigned>(context.state->technique->flags) : 0u,
-            traceSet ? static_cast<unsigned>(traceSet->worldVertFormat) : 0u,
-            static_cast<unsigned>(tracePrim->vertDeclType),
-            pass ? static_cast<unsigned>(pass->customSamplerFlags) : 0u,
-            pass && pass->vertexShader && pass->vertexShader->name
-                ? pass->vertexShader->name : "<null>",
-            pass && pass->pixelShader && pass->pixelShader->name
-                ? pass->pixelShader->name : "<null>",
-            static_cast<const void *>(pass && pass->pixelShader ? pass->pixelShader->prog.ps : nullptr),
-            static_cast<const void *>(context.state->samplerTexture[2]),
-            static_cast<const void *>(context.state->samplerTexture[3]),
-            static_cast<const void *>(tracePrimary ? &tracePrimary->texture : nullptr),
-            static_cast<const void *>(traceSecondary ? &traceSecondary->texture : nullptr),
-            static_cast<const void *>(tracePrimary ? tracePrimary->texture.basemap : nullptr),
-            static_cast<const void *>(traceSecondary ? traceSecondary->texture.basemap : nullptr),
-            tracePrimary ? tracePrimary->width : 0, tracePrimary ? tracePrimary->height : 0,
-            traceSecondary ? traceSecondary->width : 0, traceSecondary ? traceSecondary->height : 0,
-            static_cast<const void *>(tracePrim->streams[0].vb),
-            tracePrim->streams[0].offset, tracePrim->streams[0].stride,
-            static_cast<const void *>(tracePrim->streams[1].vb),
-            tracePrim->streams[1].offset, tracePrim->streams[1].stride);
-        Switch_LogWrite(trace);
-    }
+}
 #endif
     if (lmapIndex == 31)
     {
@@ -1862,30 +1782,7 @@ void __cdecl R_SetSampler(
         static uint32_t switchNullBaseMapTraceCount[16]{};
         if (switchNullBaseMapTraceCount[samplerIndex] < 4u)
         {
-            const uint32_t traceIndex = switchNullBaseMapTraceCount[samplerIndex]++;
-            const auto *switchMaterial = context.state ? context.state->material : nullptr;
-            const auto *switchTechnique = context.state ? context.state->technique : nullptr;
-            const auto *switchPass = context.state ? context.state->pass : nullptr;
-            char trace[640];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][SAMPLER SOURCE NULL] n=%u slot=%u image=%s size=%ux%u imagePtr=%p textureRef=%p basemap=%p material=%s tech=%s vs=%s ps=%s\n",
-                traceIndex, samplerIndex,
-                image->name ? image->name : "<unnamed>",
-                image->width, image->height,
-                static_cast<const void *>(image),
-                static_cast<const void *>(&image->texture),
-                static_cast<const void *>(image->texture.basemap),
-                switchMaterial && switchMaterial->info.name
-                    ? switchMaterial->info.name : "<none>",
-                switchTechnique && switchTechnique->name
-                    ? switchTechnique->name : "<none>",
-                switchPass && switchPass->vertexShader && switchPass->vertexShader->name
-                    ? switchPass->vertexShader->name : "<none>",
-                switchPass && switchPass->pixelShader && switchPass->pixelShader->name
-                    ? switchPass->pixelShader->name : "<none>");
-            Switch_LogWrite(trace);
-        }
+}
     }
 #endif
     const bool textureReferenceChanged =
@@ -2391,18 +2288,7 @@ void __cdecl R_DisableSampler(GfxCmdBufState *state, uint32_t samplerIndex)
         static uint32_t switchSamplerClearTraceCount[16]{};
         if (switchSamplerClearTraceCount[samplerIndex] < 4u)
         {
-            const uint32_t traceIndex = switchSamplerClearTraceCount[samplerIndex]++;
-            const auto *oldTexture = state->samplerTexture[samplerIndex];
-            const auto *oldBasemap = oldTexture ? oldTexture->basemap : nullptr;
-            char trace[256];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][SAMPLER EXPLICIT CLEAR] n=%u slot=%u oldTexture=%p oldBasemap=%p\n",
-                traceIndex, samplerIndex,
-                static_cast<const void *>(oldTexture),
-                static_cast<const void *>(oldBasemap));
-            Switch_LogWrite(trace);
-        }
+}
     }
 #endif
     state->samplerTexture[samplerIndex] = 0;

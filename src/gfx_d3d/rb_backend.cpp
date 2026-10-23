@@ -1941,56 +1941,7 @@ void __cdecl DrawText2D(
     static uint32_t switchConsoleFontGlyphTraceCount = 0;
     if (switchIsConsoleFont && switchConsoleFontDrawTraceCount < 24u)
     {
-        const MaterialTextureDef *fontTex =
-            material->textureTable && material->textureCount
-                ? &material->textureTable[0] : nullptr;
-        const GfxImage *fontImage =
-            fontTex && fontTex->semantic != TS_WATER_MAP
-                ? fontTex->u.image : nullptr;
-        const uintptr_t imageAddress =
-            reinterpret_cast<uintptr_t>(fontImage);
-        const bool safeFontImage =
-            fontImage && imageAddress > UINT32_MAX &&
-            imageAddress < (1ULL << 39) &&
-            (imageAddress & (alignof(GfxImage) - 1u)) == 0;
-        const auto *fontVkTexture =
-            safeFontImage ? fontImage->texture.basemap : nullptr;
-        const MaterialTechnique *fontUnlit =
-            Material_GetTechnique(const_cast<Material *>(material), TECHNIQUE_UNLIT);
-        const MaterialPass *fontPass =
-            fontUnlit && fontUnlit->passCount ? &fontUnlit->passArray[0] : nullptr;
-        char trace[768];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][FONT DRAW] n=%u font=%s material=%s ptr=%p glyphs=%p glyphCount=%d pixelHeight=%d texCount=%u texTable=%p tex0Semantic=%u image=%p imageSafe=%u imageName=%s imageSize=%ux%u vkTexture=%p vkView=%p vkFormat=%u layout=%u techniqueSet=%p unlit=%p passes=%u vs=%s ps=%s\n",
-            static_cast<unsigned>(switchConsoleFontDrawTraceCount),
-            switchTextFontName,
-            material->info.name ? material->info.name : "<null>",
-            static_cast<const void *>(material),
-            static_cast<const void *>(font->glyphs),
-            font->glyphCount, font->pixelHeight,
-            static_cast<unsigned>(material->textureCount),
-            static_cast<const void *>(material->textureTable),
-            fontTex ? static_cast<unsigned>(fontTex->semantic) : 0u,
-            static_cast<const void *>(fontImage),
-            safeFontImage ? 1u : 0u,
-            safeFontImage && fontImage->name ? fontImage->name : "<unreadable>",
-            safeFontImage ? fontImage->width : 0u,
-            safeFontImage ? fontImage->height : 0u,
-            static_cast<const void *>(fontVkTexture),
-            static_cast<const void *>(fontVkTexture ? fontVkTexture->view : VK_NULL_HANDLE),
-            fontVkTexture ? static_cast<unsigned>(fontVkTexture->format) : 0u,
-            fontVkTexture ? static_cast<unsigned>(fontVkTexture->layout) : 0u,
-            static_cast<const void *>(material->techniqueSet),
-            static_cast<const void *>(fontUnlit),
-            fontUnlit ? static_cast<unsigned>(fontUnlit->passCount) : 0u,
-            fontPass && fontPass->vertexShader && fontPass->vertexShader->name
-                ? fontPass->vertexShader->name : "<null>",
-            fontPass && fontPass->pixelShader && fontPass->pixelShader->name
-                ? fontPass->pixelShader->name : "<null>");
-        Switch_LogWrite(trace);
-        ++switchConsoleFontDrawTraceCount;
-    }
+}
     g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/base_material";
 #endif
     if ((renderFlags & 0x40) != 0 && (!fxMaterial || !fxMaterial->techniqueSet))
@@ -2152,20 +2103,7 @@ void __cdecl DrawText2D(
                         if (switchIsConsoleFont &&
                             switchConsoleFontGlyphTraceCount < 32u)
                         {
-                            char trace[384];
-                            std::snprintf(
-                                trace, sizeof(trace),
-                                "[KisakCOD][FONT GLYPH] n=%u char=0x%02x glyph=%p letter=0x%02x xy=%d,%d size=%ux%u advance=%d uv=%.5f,%.5f-%.5f,%.5f\n",
-                                static_cast<unsigned>(switchConsoleFontGlyphTraceCount),
-                                static_cast<unsigned>(letter),
-                                static_cast<const void *>(glyph),
-                                static_cast<unsigned>(glyph->letter),
-                                glyph->x0, glyph->y0,
-                                glyph->pixelWidth, glyph->pixelHeight,
-                                glyph->dx, glyph->s0, glyph->t0, glyph->s1, glyph->t1);
-                            Switch_LogWrite(trace);
-                            ++switchConsoleFontGlyphTraceCount;
-                        }
+}
 #endif
                         if (letter == origLetter)
                         {
@@ -2875,40 +2813,6 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
 #ifdef __SWITCH__
     if (!cmd->font || !cmd->font->material)
     {
-        static uint32_t switchUnresolvedText2DTraceCount = 0;
-        if (switchUnresolvedText2DTraceCount >= 24)
-        {
-            execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
-            return;
-        }
-
-        const uintptr_t fontPtr = reinterpret_cast<uintptr_t>(cmd->font);
-        const uintptr_t namePtr =
-            cmd->font && fontPtr < (1ULL << 39)
-                ? reinterpret_cast<uintptr_t>(cmd->font->fontName)
-                : 0;
-        const char *fontName =
-            namePtr && namePtr < (1ULL << 39)
-                ? cmd->font->fontName
-                : nullptr;
-        char trace[384];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][TEXT2D] SKIP unresolved font material cmd=%p font=%p fontName=%s material=%p glow=%p text=%s\n",
-            static_cast<const void *>(cmd),
-            static_cast<const void *>(cmd->font),
-            fontName ? fontName : "<null>",
-            cmd->font && fontPtr < (1ULL << 39)
-                ? static_cast<void *>(cmd->font->material)
-                : nullptr,
-            cmd->font && fontPtr < (1ULL << 39)
-                ? static_cast<void *>(cmd->font->glowMaterial)
-                : nullptr,
-            cmd->text[0] ? cmd->text : "<empty>");
-        g_switchFrameStage = "frame/scr/issue_commands/cmd13_text2d/unresolved_material";
-        Switch_LogWrite(trace);
-        ++switchUnresolvedText2DTraceCount;
         execState->cmd = (char *)execState->cmd + cmd->header.byteCount;
         return;
     }
@@ -2920,24 +2824,7 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
         if (!I_stricmp(name, "fonts/consoleFont") &&
             switchConsoleTextCommandTraceCount < 24u)
         {
-            char trace[640];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][TEXT2D CMD] n=%u cmd=%p bytes=%u font=%p name=%s material=%p glyphs=%p glyphCount=%d textLen=%u maxChars=%d x=%.2f y=%.2f scale=%.3f,%.3f flags=0x%x text=%.80s\n",
-                static_cast<unsigned>(switchConsoleTextCommandTraceCount),
-                static_cast<const void *>(cmd),
-                static_cast<unsigned>(cmd->header.byteCount),
-                static_cast<const void *>(cmd->font),
-                name,
-                static_cast<void *>(cmd->font->material),
-                static_cast<void *>(cmd->font->glyphs),
-                cmd->font->glyphCount,
-                static_cast<unsigned>(strlen(cmd->text)),
-                cmd->maxChars, cmd->x, cmd->y, cmd->xScale, cmd->yScale,
-                static_cast<unsigned>(cmd->renderFlags), cmd->text);
-            Switch_LogWrite(trace);
-            ++switchConsoleTextCommandTraceCount;
-        }
+}
     }
 #endif
     v1 = DEG2RAD( cmd->rotation );

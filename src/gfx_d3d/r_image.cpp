@@ -439,28 +439,7 @@ void R_VulkanUploadTexture(
             s_switchTextureUploadProbeCount.fetch_add(1, std::memory_order_relaxed);
         if (probeIndex < 24u)
         {
-            uint64_t hash = 14695981039346656037ull;
-            size_t zeroBytes = 0;
-            for (size_t i = 0; i < bytes; ++i)
-            {
-                hash ^= source[i];
-                hash *= 1099511628211ull;
-                zeroBytes += source[i] == 0 ? 1u : 0u;
-            }
-            uint8_t b[8]{};
-            for (size_t i = 0; i < sizeof(b) && i < bytes; ++i)
-                b[i] = source[i];
-            char trace[448];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK IMAGE UPLOAD PROBE] n=%u name=%.*s track=%d size=%ux%u fmt=%u vk=%u bytes=%zu hash=%016llx zero=%zu/%zu head=%02x%02x%02x%02x%02x%02x%02x%02x\n",
-                probeIndex, 96, image->name ? image->name : "<null>",
-                static_cast<int>(image->track), width, height, static_cast<unsigned>(format),
-                static_cast<unsigned>(info.format), bytes,
-                static_cast<unsigned long long>(hash), zeroBytes, bytes,
-                b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
-            Switch_LogWrite(trace);
-        }
+}
     }
 #endif
 
@@ -525,49 +504,7 @@ void R_VulkanUploadTexture(
                 gpuVerifyCount.fetch_add(1, std::memory_order_relaxed);
             if (verifyIndex < 2u)
             {
-                std::vector<uint8_t> readback(bytes);
-                const bool readbackOk = !readback.empty() &&
-                    backend->DownloadImage2D(
-                        texture->image, info.aspect, width, height, mipLevel,
-                        readback.data(), readback.size(),
-                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, layer);
-                uint64_t sourceHash = 14695981039346656037ull;
-                uint64_t gpuHash = 14695981039346656037ull;
-                uint8_t sourceHead[8]{};
-                uint8_t gpuHead[8]{};
-                for (size_t i = 0; i < bytes; ++i)
-                {
-                    sourceHash ^= source[i];
-                    sourceHash *= 1099511628211ull;
-                    if (readbackOk)
-                    {
-                        gpuHash ^= readback[i];
-                        gpuHash *= 1099511628211ull;
-                    }
-                    if (i < sizeof(sourceHead))
-                    {
-                        sourceHead[i] = source[i];
-                        if (readbackOk)
-                            gpuHead[i] = readback[i];
-                    }
-                }
-                char trace[512];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK IMAGE GPU VERIFY] n=%u name=%.*s size=%ux%u fmt=%u vk=%u bytes=%zu readback=%u sourceHash=%016llx gpuHash=%016llx equal=%u srcHead=%02x%02x%02x%02x%02x%02x%02x%02x gpuHead=%02x%02x%02x%02x%02x%02x%02x%02x\n",
-                    verifyIndex, 96, image->name ? image->name : "<null>",
-                    width, height, static_cast<unsigned>(format),
-                    static_cast<unsigned>(info.format), bytes,
-                    readbackOk ? 1u : 0u,
-                    static_cast<unsigned long long>(sourceHash),
-                    static_cast<unsigned long long>(gpuHash),
-                    readbackOk && sourceHash == gpuHash ? 1u : 0u,
-                    sourceHead[0], sourceHead[1], sourceHead[2], sourceHead[3],
-                    sourceHead[4], sourceHead[5], sourceHead[6], sourceHead[7],
-                    gpuHead[0], gpuHead[1], gpuHead[2], gpuHead[3],
-                    gpuHead[4], gpuHead[5], gpuHead[6], gpuHead[7]);
-                Switch_LogWrite(trace);
-            }
+}
         }
 #endif
     }
@@ -653,18 +590,7 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
         switchDelayImageIndex < 16 || (switchDelayImageIndex % 128u) == 0;
     if (switchTraceDelayImage)
     {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][DELAY IMAGE] #%u image=%p name=%p nameText=%s delay=%u\n",
-            static_cast<unsigned>(switchDelayImageIndex),
-            static_cast<void *>(image),
-            image ? static_cast<const void *>(image->name) : nullptr,
-            (image && image->name) ? image->name : "<null>",
-            image ? static_cast<unsigned>(image->delayLoadPixels) : 0u);
-        Switch_LogWrite(trace);
-    }
+}
 #endif
 
 
@@ -1058,45 +984,19 @@ void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
 
 #ifdef __SWITCH__
                 {
-                    char trace[512];
-                    std::snprintf(
-                        trace,
-                        sizeof(trace),
-                        "[SWITCH IMAGEFAIL] name=%s map=%u semantic=%u category=%u "
-                        "renderer=%d resourceSize=%u white=%p whiteTex=%p\n",
-                        image && image->name ? image->name : "<null>",
-                        image ? static_cast<unsigned>(image->mapType) : 0u,
-                        image ? static_cast<unsigned>(image->semantic) : 0u,
-                        image ? static_cast<unsigned>(image->category) : 0u,
-                        r_loadForRenderer ? r_loadForRenderer->current.enabled : 0,
-                        loadDef ? static_cast<unsigned>(loadDef->resourceSize) : 0u,
-                        static_cast<void *>(rgp.whiteImage),
-                        rgp.whiteImage
-                            ? static_cast<void *>(rgp.whiteImage->texture.basemap)
-                            : nullptr);
-                    Switch_LogWrite(trace);
-                }
+}
 #endif
 
                 if (!Image_LoadFromFile(image))
                 {
 #ifdef __SWITCH__
-                    Switch_LogWrite("[SWITCH IMAGEFAIL] Image_LoadFromFile failed\n");
 #endif
 
                     const bool fallback = Image_AssignDefaultTexture(image);
 
 #ifdef __SWITCH__
                     {
-                        char trace[256];
-                        std::snprintf(
-                            trace,
-                            sizeof(trace),
-                            "[SWITCH IMAGEFAIL] fallback=%d resultTex=%p\n",
-                            fallback ? 1 : 0,
-                            static_cast<void *>(image->texture.basemap));
-                        Switch_LogWrite(trace);
-                    }
+}
 #endif
                 }
 
@@ -1336,11 +1236,9 @@ GfxImage *__cdecl Image_LoadBuiltin(char *name, uint8_t semantic, uint8_t imageT
     image = Image_Alloc(name, IMG_CATEGORY_AUTO_GENERATED, semantic, imageTrack);
     iassert(image);
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH IMGBOOT] $white Image_Alloc done\n");
 #endif
     constructorTable[tableIndex].LoadCallback(image);
 #ifdef __SWITCH__
-    Switch_LogWrite("[SWITCH IMGBOOT] $white builtin callback done\n");
 #endif
     return image;
 }
@@ -1393,8 +1291,6 @@ GfxImage *__cdecl Image_Alloc(
     iassert( name );
     v5 = strlen(name);
 #ifdef __SWITCH__
-    if (name && !I_stricmp(name, "$white"))
-        Switch_LogWrite("[SWITCH IMGBOOT] $white Hunk_Alloc begin\n");
 #endif
     // GfxImage is 48 bytes on Switch (36 bytes on 32-bit PC).
     // v5 + 37 was the serialized 32-bit allocation and under-allocates the
@@ -1422,8 +1318,6 @@ GfxImage *__cdecl Image_Alloc(
     }
 #endif
 #ifdef __SWITCH__
-    if (name && !I_stricmp(name, "$white"))
-        Switch_LogWrite("[SWITCH IMGBOOT] $white Hunk_Alloc done\n");
 #endif
     image->name = (const char *)&image[1];
 #ifdef __SWITCH__
@@ -1441,8 +1335,6 @@ GfxImage *__cdecl Image_Alloc(
 #endif
     Image_Construct(name, v5 + 1, category, semantic, imageTrack, image);
 #ifdef __SWITCH__
-    if (traceWhite)
-        Switch_LogWrite("[SWITCH IMGBOOT] $white Image_Construct done\n");
 #endif
     const int hashLocation = Image_GetAvailableHashLocation(name);
 #ifdef __SWITCH__
@@ -1683,23 +1575,7 @@ void R_InitCodeImages()
     }
 
     {
-        char trace[448];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][CODE IMAGES] loadForRenderer=%u white=%p/%p black=%p/%p normal=%p/%p vulkanAllocs=%u\n",
-            r_loadForRenderer ? r_loadForRenderer->current.enabled : 0u,
-            static_cast<void *>(rgp.whiteImage),
-            rgp.whiteImage ? static_cast<void *>(rgp.whiteImage->texture.basemap) : nullptr,
-            static_cast<void *>(rgp.blackImage),
-            rgp.blackImage ? static_cast<void *>(rgp.blackImage->texture.basemap) : nullptr,
-            static_cast<void *>(rgp.identityNormalMapImage),
-            rgp.identityNormalMapImage
-                ? static_cast<void *>(rgp.identityNormalMapImage->texture.basemap)
-                : nullptr,
-            static_cast<unsigned>(s_switchVulkanAllocTraceCount));
-        Switch_LogWrite(trace);
-    }
+}
 #endif
 }
 
@@ -2016,16 +1892,7 @@ char __cdecl Image_AssignDefaultTexture(GfxImage *image)
     // intentional $white/$black builtins are created explicitly by Image_Load*;
     // this function is only the recovery path for a failed requested image.
     {
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][IMAGE FALLBACK DISABLED] name=%s semantic=%u map=%u renderer=%u\n",
-            image && image->name ? image->name : "<null>",
-            image ? static_cast<unsigned>(image->semantic) : 0u,
-            image ? static_cast<unsigned>(image->mapType) : 0u,
-            r_loadForRenderer ? r_loadForRenderer->current.enabled : 0u);
-        Switch_LogWrite(trace);
-    }
+}
     return 0;
 #endif
     if (image->mapType != MAPTYPE_2D)
