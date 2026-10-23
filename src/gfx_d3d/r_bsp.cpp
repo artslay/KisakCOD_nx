@@ -175,13 +175,13 @@ void __cdecl R_LoadWorld(char *name, int *checksum, int savegame)
                 rgp.world->name ? rgp.world->name : "<unnamed>",
                 lightmapIndex, rgp.world->lightmapCount,
                 primary && primary->name ? primary->name : "<null>",
-                static_cast<void *>(primary), primary ? primary->width : 0,
-                primary ? primary->height : 0, primary ? primary->delayLoadPixels : 0,
+                static_cast<void *>(primary), primary ? primary->width : 0u,
+                primary ? primary->height : 0u, primary ? primary->delayLoadPixels : 0u,
                 static_cast<void *>(primary ? primary->texture.basemap : nullptr),
                 static_cast<void *>(rgp.world->lightmapPrimaryTextures[lightmapIndex].basemap),
                 secondary && secondary->name ? secondary->name : "<null>",
-                static_cast<void *>(secondary), secondary ? secondary->width : 0,
-                secondary ? secondary->height : 0, secondary ? secondary->delayLoadPixels : 0,
+                static_cast<void *>(secondary), secondary ? secondary->width : 0u,
+                secondary ? secondary->height : 0u, secondary ? secondary->delayLoadPixels : 0u,
                 static_cast<void *>(secondary ? secondary->texture.basemap : nullptr),
                 static_cast<void *>(rgp.world->lightmapSecondaryTextures[lightmapIndex].basemap));
             Switch_LogWrite(trace);
