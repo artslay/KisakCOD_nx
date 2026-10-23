@@ -271,7 +271,7 @@ void* KisakZone_Load(const char* zoneName, const KisakZoneBlocks& blocks, const 
 
         char trace[768];
         snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD FAIL] zone=%s asset_index=%zu asset_type=%d phase=%d error=%s\\n",
+            "[KisakCOD][ZONELOAD FAIL] zone=%s asset_index=%zu asset_type=%d phase=%d error=%s\n",
             zoneName ? zoneName : "(unknown)",
             progress.assetIndex,
             progress.assetType,
@@ -294,7 +294,7 @@ void* KisakZone_Load(const char* zoneName, const KisakZoneBlocks& blocks, const 
 
         char trace[768];
         snprintf(trace, sizeof(trace),
-            "[KisakCOD][ZONELOAD FAIL] zone=%s asset_index=%zu asset_type=%d phase=%d error=%s\\n",
+            "[KisakCOD][ZONELOAD FAIL] zone=%s asset_index=%zu asset_type=%d phase=%d error=%s\n",
             zoneName ? zoneName : "(unknown)",
             progress.assetIndex,
             progress.assetType,
