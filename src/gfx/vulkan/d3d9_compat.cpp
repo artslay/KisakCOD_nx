@@ -5445,20 +5445,66 @@ bool IDirect3DDevice9::BindSamplerSet(
         {
             const MOJOSHADER_sampler *sampler =
                 slot < activeSamplers.size() ? activeSamplers[slot] : nullptr;
-            char trace[320];
+            const KisakVkTexture *texture = slot < 16 ? textures[slot] : nullptr;
+            const VkImageLayout baseLayout = texture
+                ? texture->GetSubresourceLayout(0, 0)
+                : VK_IMAGE_LAYOUT_UNDEFINED;
+            char trace[512];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK ACTIVE SAMPLER FAIL] stage=%s shader=%llu slot=%u sampler=%s reason=%s frame=%llu\n",
+                "[KisakCOD][VK ACTIVE SAMPLER FAIL] stage=%s shader=%llu slot=%u sampler=%s reason=%s frame=%llu texture=%p image=%.95s size=%ux%u mips=%u layers=%u format=%u baseLayout=%u\\n",
                 setIndex == 0 ? "vs" : "ps",
                 static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
                 slot,
                 sampler && sampler->name ? sampler->name : "<unnamed>",
                 reason,
-                static_cast<unsigned long long>(m_backend->FrameSerial()));
+                static_cast<unsigned long long>(m_backend->FrameSerial()),
+                static_cast<const void *>(texture),
+                texture ? texture->debugName : "<unbound>",
+                texture ? texture->width : 0,
+                texture ? texture->height : 0,
+                texture ? texture->mipLevels : 0,
+                texture ? texture->arrayLayers : 0,
+                texture ? static_cast<unsigned>(texture->sourceFormat) : 0,
+                static_cast<unsigned>(baseLayout));
             Switch_LogWrite(trace);
             ++emittedFailureCount;
         }
         return false;
+    };
+
+    auto logActiveSamplerFallback = [&](uint32_t slot, const char *reason)
+    {
+        static std::atomic<uint32_t> emittedFallbackCount{0};
+        const uint32_t sequence =
+            emittedFallbackCount.fetch_add(1, std::memory_order_relaxed);
+        if (sequence >= 48)
+            return;
+        const MOJOSHADER_sampler *sampler =
+            slot < activeSamplers.size() ? activeSamplers[slot] : nullptr;
+        const KisakVkTexture *texture = slot < 16 ? textures[slot] : nullptr;
+        const VkImageLayout baseLayout = texture
+            ? texture->GetSubresourceLayout(0, 0)
+            : VK_IMAGE_LAYOUT_UNDEFINED;
+        char trace[512];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK ACTIVE SAMPLER FALLBACK] stage=%s shader=%llu slot=%u sampler=%s reason=%s frame=%llu texture=%p image=%.95s size=%ux%u mips=%u layers=%u format=%u baseLayout=%u\\n",
+            setIndex == 0 ? "vs" : "ps",
+            static_cast<unsigned long long>(activeShader ? activeShader->serial : 0),
+            slot,
+            sampler && sampler->name ? sampler->name : "<unnamed>",
+            reason,
+            static_cast<unsigned long long>(m_backend->FrameSerial()),
+            static_cast<const void *>(texture),
+            texture ? texture->debugName : "<unbound>",
+            texture ? texture->width : 0,
+            texture ? texture->height : 0,
+            texture ? texture->mipLevels : 0,
+            texture ? texture->arrayLayers : 0,
+            texture ? static_cast<unsigned>(texture->sourceFormat) : 0,
+            static_cast<unsigned>(baseLayout));
+        Switch_LogWrite(trace);
     };
 
     
@@ -5505,18 +5551,12 @@ bool IDirect3DDevice9::BindSamplerSet(
                     allSubresourcesInitialized = false;
             }
         }
-        if (!baseMipInitialized)
-        {
-            if (activeSamplers[slot])
-                return failActiveSampler(slot, "base_mip_not_uploaded");
+        // A texture may be bound before its first streaming/upload pass. Skip
+        // layout transitions for its undefined image; the descriptor setup below
+        // binds a dimensionality-correct dummy for this draw and records the asset.
+        if (!baseMipInitialized ||
+            (!allSubresourcesInitialized && !texture->baseMipView))
             continue;
-        }
-        if (!allSubresourcesInitialized && !texture->baseMipView)
-        {
-            if (activeSamplers[slot])
-                return failActiveSampler(slot, "incomplete_mips_without_base_view");
-            continue;
-        }
 
         // For an incomplete mip chain, only level zero is exposed by the
         // baseMipView and therefore only level zero may need a barrier.
@@ -5647,12 +5687,17 @@ bool IDirect3DDevice9::BindSamplerSet(
                 (!allSubresourcesInitialized && !texture->baseMipView))
             {
                 if (activeSamplers[i])
-                    return failActiveSampler(
+                    logActiveSamplerFallback(
                         i, baseMipInitialized
                             ? "incomplete_mips_without_base_view"
                             : "base_mip_not_uploaded");
-                // Keep valid descriptors for shader-inactive slots only.
-                images[i].imageView = m_backend->DummyImageView();
+                // Never issue a descriptor for an image whose sampled mip is
+                // still undefined. Keep the draw/game alive while the log names
+                // the exact asset that missed its upload.
+                images[i].imageView = activeSamplers[i]
+                    ? m_backend->DummyImageViewForSamplerType(
+                        static_cast<uint32_t>(activeSamplers[i]->type))
+                    : m_backend->DummyImageView();
                 images[i].sampler = m_backend->DummySampler();
                 images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             }
