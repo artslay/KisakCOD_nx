@@ -66,7 +66,7 @@ void SwitchSaveStageIndex(const char *phase, int index)
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][SAVE CURSOR] phase=%s segment=%d used=%d start=%d buffer=%d overflow=%u compressed=%u detail=%d\\n",
+            "[KisakCOD][SAVE CURSOR] phase=%s segment=%d used=%d start=%d buffer=%d overflow=%u compressed=%u detail=%d\n",
             phase ? phase : "<none>",
             memFile->segmentIndex,
             memFile->bytesUsed,
@@ -1801,7 +1801,7 @@ void __cdecl G_SaveWeaponCue(SaveGame *save)
                 "c:\\trees\\cod3\\src\\game\\g_public.h",
                 336,
                 0,
-                "%s\\n\\t(number - 1) = %i",
+                "%s\n\t(number - 1) = %i",
                 "(!number || (number <= MAX_GENTITIES && g_entities[number - 1].r.inuse))",
                 number - 1);
         serializedEntity = number ? static_cast<unsigned int>(droppedWeaponCue->entnum() + 1) : 0u;
@@ -1840,7 +1840,7 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
             char trace[256];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][WEAPON CUE LOAD] result=truncated slot=%d segment=%d used=%d start=%d\\n",
+                "[KisakCOD][WEAPON CUE LOAD] result=truncated slot=%d segment=%d used=%d start=%d\n",
                 slot, memFile->segmentIndex, memFile->bytesUsed, memFile->segmentStart);
             Switch_LogWrite(trace);
 #endif
@@ -1855,7 +1855,7 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][WEAPON CUE LOAD] result=invalid_index slot=%d value=%d max=%d segment=%d used=%d start=%d\\n",
+                "[KisakCOD][WEAPON CUE LOAD] result=invalid_index slot=%d value=%d max=%d segment=%d used=%d start=%d\n",
                 slot, savedEntity, MAX_GENTITIES,
                 memFile ? memFile->segmentIndex : -1,
                 memFile ? memFile->bytesUsed : -1,
@@ -1899,7 +1899,7 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
                 "c:\\trees\\cod3\\src\\game\\g_public.h",
                 336,
                 0,
-                "%s\\n\\t(number - 1) = %i",
+                "%s\n\t(number - 1) = %i",
                 "(!number || g_entities[number - 1].r.inuse)",
                 existingNumber - 1);
         if (existingNumber)
@@ -2897,11 +2897,27 @@ void __cdecl G_LoadMainState(SaveGame *save)
     G_ReadStruct(threatGroupFields, (unsigned __int8 *)&g_threatBias, sizeof(threat_bias_t), save);
 
     iassert(Actor_EventListener_GetCount() == 0);
-    int listenerCount;
-    SaveMemory_LoadRead(&listenerCount, 4, save);
+    int listenerCount = 0;
+    SaveMemory_LoadRead(&listenerCount, sizeof(listenerCount), save);
+    if (listenerCount < 0 ||
+        listenerCount > static_cast<int>(ARRAY_COUNT(g_AIEVlisteners)))
+    {
+#ifdef __SWITCH__
+        SwitchSaveCursorTrace("load_invalid_listener_count", save, listenerCount);
+#endif
+        Com_Error(
+            ERR_DROP,
+            "G_LoadMainState: AI event listener count out of range (%d, max %d)",
+            listenerCount,
+            static_cast<int>(ARRAY_COUNT(g_AIEVlisteners)));
+        return;
+    }
     Actor_EventListener_SetCount(listenerCount);
     if (listenerCount)
-        SaveMemory_LoadRead(g_AIEVlisteners, sizeof(AIEventListener) * listenerCount, save);
+        SaveMemory_LoadRead(
+            g_AIEVlisteners,
+            static_cast<int>(sizeof(g_AIEVlisteners[0]) * listenerCount),
+            save);
 
     iassert(level.currentTriggerListSize == 0);
     int pendingTriggerCount = 0;
