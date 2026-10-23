@@ -3669,21 +3669,18 @@ HRESULT KisakVkBuffer::Unlock()
         }
         else
         {
-            // D3DLOCK_DISCARD invalidates the previous contents of the entire
-            // dynamic buffer, not just the caller's locked subrange. Upload the
-            // full zero-initialized shadow on discard so stale bytes cannot
-            // survive in Vulkan memory. Other locks update only their written range.
+            // Upload only the range requested by the engine. Some stock CoD4
+            // paths set D3DLOCK_DISCARD on partial dynamic-buffer updates and
+            // still rely on untouched vertices/indices remaining in the buffer.
+            // Replacing the whole allocation with the zero-filled CPU shadow
+            // erases those ranges, including data needed by frontend UI draws.
             VulkanBackend *backend = GetVulkanBackend();
-            const bool discardWholeBuffer = (lockFlags & D3DLOCK_DISCARD) != 0;
-            const uint32_t uploadOffset = discardWholeBuffer ? 0u : lockOffset;
-            const size_t uploadSize = discardWholeBuffer ? size : lockSize;
-            const uint8_t *uploadData = shadow.data() + uploadOffset;
 
             // Keep earlier draws, the upload, and later draws in one command
             // buffer. QueueBufferUpdate adds the required transfer barriers;
             // use the blocking fallback only for unsupported ranges or pressure.
             const bool queued = backend && backend->QueueBufferUpdate(
-                buffer, uploadOffset, uploadData, uploadSize);
+                buffer, lockOffset, shadow.data() + lockOffset, lockSize);
             if (!queued)
             {
 #ifdef __SWITCH__
