@@ -3179,9 +3179,20 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
     if (!SV_UsingDemoSave())
     {
         SV_GetUsercmd(0, &level.clients->pers.cmd);
+#ifdef __SWITCH__
+        // Rebase the saved player view and the first client command together.
+        // Keeping the old zero/stale command angles makes the local camera
+        // differ from the restored server body until the next input update.
+        for (int i = 0; i < 3; ++i)
+        {
+            level.clients->pers.cmd.angles[i] =
+                static_cast<unsigned __int16>(
+                    static_cast<int>(level.clients->ps.viewangles[i] * 182.04445f));
+        }
+#endif
         InitClientDeltaAngles(level.clients);
 #ifdef __SWITCH__
-        CL_TraceGamepadAfterSavegameLoad(&level.clients->ps, &level.clients->pers.cmd);
+        CL_ResyncInputAfterSavegameLoad(&level.clients->ps, &level.clients->pers.cmd);
 #endif
     }
     G_PruneLoadedCorpses();
