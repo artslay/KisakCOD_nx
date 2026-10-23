@@ -4091,11 +4091,12 @@ void XAnimDisableLeakCheck()
 
 void XAnimFreeAnims(XAnim_s *anims, void(*Free)(void *, int))
 {
-    int v4; // r29
-
-    v4 = 8 * anims->size + 12;
+    // Match XAnimCreateAnims: native pointers widen the header and each
+    // XAnimEntry on 64-bit Switch, so the legacy 12 + 8 * count is too small.
+    const int allocationSize = static_cast<int>(
+        offsetof(XAnim_s, entries) + sizeof(XAnimEntry) * static_cast<size_t>(anims->size));
     XAnimFreeList(anims);
-    Free(anims, v4);
+    Free(anims, allocationSize);
 }
 
 static void XAnimCloneClientAnimInfo(const XAnimInfo *from, XAnimInfo *to)
