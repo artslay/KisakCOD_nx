@@ -544,6 +544,33 @@ unsigned int __cdecl Scr_ConvertThreadFromLoad(unsigned __int16 handle)
     return v3;
 }
 
+// VariableUnion is 64-bit on Switch because several script value types carry native pointers.
+// The savegame stream is still compact, so route deserialized values by type instead of
+// assigning every value through intValue (which truncates VAR_STACK/VAR_VECTOR/code pointers).
+static void Scr_CopyLoadedValueToInternal(VariableValueInternal_u *destination, const VariableValue *source)
+{
+    destination->u.pointerValue = 0;
+    switch (source->type & VAR_MASK)
+    {
+    case VAR_STACK:
+        destination->u.stackValue = source->u.stackValue;
+        break;
+    case VAR_VECTOR:
+        destination->u.vectorValue = source->u.vectorValue;
+        break;
+    case VAR_CODEPOS:
+    case VAR_FUNCTION:
+        destination->u.codePosValue = source->u.codePosValue;
+        break;
+    case VAR_UNDEFINED:
+    case VAR_PRECODEPOS:
+        break;
+    default:
+        destination->u.intValue = source->u.intValue;
+        break;
+    }
+}
+
 void __cdecl Scr_DoLoadObjectInfo(unsigned __int16 parentId, MemoryFile *memFile)
 {
 
@@ -561,7 +588,7 @@ void __cdecl Scr_DoLoadObjectInfo(unsigned __int16 parentId, MemoryFile *memFile
     unsigned int header;       // 1-byte read scratch
     unsigned int header4;      // 4-byte read scratch
     unsigned __int16 header2;  // 2-byte read scratch
-    VariableValue value;
+    VariableValue value{};
 
     v2 = parentId;
     parentValue = &scrVarGlob.variableList[parentId + 1];
@@ -665,7 +692,7 @@ void __cdecl Scr_DoLoadObjectInfo(unsigned __int16 parentId, MemoryFile *memFile
             iassert(!(entryValue->w.type & VAR_MASK));
             --v13;
             v20 = type | entryValue->w.type;
-            entryValue->u.u.intValue = value.u.intValue;
+            Scr_CopyLoadedValueToInternal(&entryValue->u, &value);
             entryValue->w.type = v20;
         } while (v13);
     }
@@ -675,8 +702,7 @@ void __cdecl Scr_ReadGameEntry(MemoryFile *memFile)
 {
     int type; // r28
     unsigned int gameId; // r11
-    VariableUnion v4; // r8
-    VariableValue v5; // [sp+50h] [-30h] BYREF
+    VariableValue v5{}; // [sp+50h] [-30h] BYREF
 
     if (scrVarPub.gameId)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\script\\scr_readwrite.cpp", 910, 0, "%s", "!scrVarPub.gameId");
@@ -691,9 +717,9 @@ void __cdecl Scr_ReadGameEntry(MemoryFile *memFile)
             "%s",
             "!(tempValue.type & ~VAR_MASK)");
     gameId = scrVarPub.gameId;
-    v4.intValue = (int)v5.u.intValue;
-    scrVarGlob.variableList[gameId + VARIABLELIST_CHILD_BEGIN].w.type |= type;
-    scrVarGlob.variableList[gameId + VARIABLELIST_CHILD_BEGIN].u.u = v4;
+    VariableValueInternal *gameEntry = &scrVarGlob.variableList[gameId + VARIABLELIST_CHILD_BEGIN];
+    gameEntry->w.type |= type;
+    Scr_CopyLoadedValueToInternal(&gameEntry->u, &v5);
 }
 
 static void Scr_RemoveElementValue(Scr_WatchElement_s *element)
@@ -1062,12 +1088,13 @@ static void CheckReferenceRange(unsigned int begin, unsigned int end)
             unsigned int count = sb->size;
             while (count)
             {
-                unsigned int entryType = *p;
-                unsigned int entryVal = *(unsigned int *)(p + 1);
-                p += 5;
+                const unsigned int entryType = *p;
+                VariableUnion entryValue{};
+                memcpy(&entryValue, p + 1, sizeof(entryValue));
+                p += SCRIPT_STACK_ENTRY_SIZE;
                 --count;
                 if (entryType == VAR_POINTER)
-                    ++scrVarDebugPub->refCount[entryVal];
+                    ++scrVarDebugPub->refCount[static_cast<unsigned int>(entryValue.intValue)];
             }
             break;
         }
