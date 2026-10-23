@@ -110,7 +110,7 @@ void __cdecl WriteAIEventListeners(SaveGame *save);
 void __cdecl ReadAIEventListeners(SaveGame *save);
 char *__cdecl G_Save_DateStr();
 void __cdecl G_SaveConfigstrings(int iFirst, int iCount, SaveGame *save);
-void __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save);
+bool __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save);
 void __cdecl G_LoadModelPrecacheList(SaveGame *save);
 void __cdecl G_ClearConfigstrings(int iFirst, int iCount);
 void __cdecl G_ClearAllConfigstrings();
