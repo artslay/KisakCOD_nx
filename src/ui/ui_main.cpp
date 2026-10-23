@@ -2733,8 +2733,15 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
     uiMenuCommand_t v4; // r11
     const char *String; // r3
 
-    if (Menu_Count(&uiInfo.uiDC) <= 0)
+    const int switchMenuDefinitionCount = Menu_Count(&uiInfo.uiDC);
+    if (switchMenuDefinitionCount <= 0)
+    {
+#ifdef __SWITCH__
+        if (menu == UIMENU_MAIN)
+            Switch_LogWrite("[KisakCOD][FRONTEND MENU OPEN] result=no_menu_definitions requested=main\n");
+#endif
         return 0;
+    }
     if (menu == UIMENU_BRIEFING)
     {
         if (g_currentMenuType == UIMENU_BRIEFING)
@@ -2762,7 +2769,22 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
 
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open";
 #endif
-        Menus_OpenByName(&uiInfo.uiDC, "main");
+        const int switchMainMenuOpenResult = Menus_OpenByName(&uiInfo.uiDC, "main");
+#ifdef __SWITCH__
+        {
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FRONTEND MENU OPEN] result=%d definitions=%d open=%d fullscreen=%d catcher=%d uiStarted=%d\n",
+                switchMainMenuOpenResult,
+                Menu_Count(&uiInfo.uiDC),
+                uiInfo.uiDC.openMenuCount,
+                UI_IsFullscreen() ? 1 : 0,
+                Key_IsCatcherActive(0, KEYCATCH_UI) ? 1 : 0,
+                cls.uiStarted ? 1 : 0);
+            Switch_LogWrite(trace);
+        }
+#endif
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open_done";
 
