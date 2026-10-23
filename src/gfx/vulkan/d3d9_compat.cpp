@@ -5657,8 +5657,12 @@ bool IDirect3DDevice9::BindSamplerSet(
         if (!activeSamplers[slot] || textures[slot])
             continue;
 
-        static uint32_t unboundSamplerTraceCount = 0;
-        if (unboundSamplerTraceCount < 32u)
+        // A single global cap let vertex-stage misses consume the whole
+        // budget before pixel-stage misses were reported. Keep a small budget
+        // for each stage/slot pair so missing world textures remain diagnosable.
+        static uint32_t unboundSamplerTraceCount[2][16]{};
+        const uint32_t traceStage = setIndex == 0 ? 0u : 1u;
+        if (unboundSamplerTraceCount[traceStage][slot] < 2u)
         {
             const MOJOSHADER_sampler *sampler = activeSamplers[slot];
             char trace[288];
@@ -5672,7 +5676,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                 static_cast<unsigned>(sampler->type),
                 static_cast<unsigned long long>(m_backend->FrameSerial()));
             Switch_LogWrite(trace);
-            ++unboundSamplerTraceCount;
+            ++unboundSamplerTraceCount[traceStage][slot];
 
             char mapTrace[768];
             size_t used = static_cast<size_t>(std::snprintf(
