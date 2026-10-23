@@ -8259,6 +8259,101 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         return E_FAIL;
     }
 
+#ifdef __SWITCH__
+    // Capture the actual indexed draw that consumes the lightmap sampler. This is
+    // deliberately at draw time (not pipeline creation) and has no camera-height
+    // gate, so pipeline-cache hits and scripted camera movement cannot hide it.
+    static uint32_t switchLightmapDrawRouteTraceCount = 0;
+    if (switchLightmapDrawRouteTraceCount < 12u &&
+        m_pixelShader && m_pixelShader->parseData &&
+        m_pixelShader->parseData->samplers)
+    {
+        bool hasLightmapSecondarySampler = false;
+        for (int samplerIndex = 0;
+             samplerIndex < m_pixelShader->parseData->sampler_count;
+             ++samplerIndex)
+        {
+            if (m_pixelShader->parseData->samplers[samplerIndex].index == 3)
+            {
+                hasLightmapSecondarySampler = true;
+                break;
+            }
+        }
+        if (hasLightmapSecondarySampler)
+        {
+            const uint32_t traceIndex = switchLightmapDrawRouteTraceCount++;
+            const auto describeTexture = [](const KisakVkTexture *texture,
+                                            char *dst, size_t dstSize)
+            {
+                std::snprintf(
+                    dst, dstSize,
+                    "%p/%p:%ux%u:f%u/src%u/l%u",
+                    texture ? reinterpret_cast<void *>(texture->image) : nullptr,
+                    texture ? reinterpret_cast<void *>(texture->view) : nullptr,
+                    texture ? texture->width : 0u,
+                    texture ? texture->height : 0u,
+                    texture ? static_cast<unsigned>(texture->format) : 0u,
+                    texture ? static_cast<unsigned>(texture->sourceFormat) : 0u,
+                    texture ? static_cast<unsigned>(texture->layout) : 0u);
+            };
+            char tex0[128], tex1[128], tex2[128], tex3[128];
+            describeTexture(m_textures[0], tex0, sizeof(tex0));
+            describeTexture(m_textures[1], tex1, sizeof(tex1));
+            describeTexture(m_textures[2], tex2, sizeof(tex2));
+            describeTexture(m_textures[3], tex3, sizeof(tex3));
+            const auto *stream0 = &m_streams[0];
+            const auto *stream1 = &m_streams[1];
+            char trace[1408];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK LIGHTMAP DRAW ROUTE] n=%u decl=%p declSerial=%llu route=%u elems=%zu vs=%llu ps=%llu stride0=%u offset0=%llu vb0=%p vb0Bytes=%zu stride1=%u offset1=%llu vb1=%p vb1Bytes=%zu indexCount=%u start=%u base=%d raw=%u-%u effective=%lld-%lld cameraZ=%.4f viewport=%u,%u,%u,%u cull=%u depth=%u/%u blend=%u colorWrite=0x%x textures=(s0:%s s1:%s s2:%s s3:%s)\n",
+                traceIndex,
+                static_cast<const void *>(m_decl),
+                static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
+                static_cast<unsigned>(m_decl ? m_decl->switchVertDeclType : 0xFFu),
+                m_decl ? m_decl->elements.size() : 0u,
+                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
+                stream0->stride, static_cast<unsigned long long>(stream0->offset),
+                static_cast<void *>(stream0->buffer),
+                stream0->buffer ? static_cast<size_t>(stream0->buffer->size) : 0u,
+                stream1->stride, static_cast<unsigned long long>(stream1->offset),
+                static_cast<void *>(stream1->buffer),
+                stream1->buffer ? static_cast<size_t>(stream1->buffer->size) : 0u,
+                indexCount, startIndex, baseVertexIndex,
+                minRawIndex == UINT32_MAX ? 0u : minRawIndex, maxRawIndex,
+                static_cast<long long>(minEffectiveVertex),
+                static_cast<long long>(maxEffectiveVertex),
+                m_vsFloat[6][3],
+                m_viewport.X, m_viewport.Y, m_viewport.Width, m_viewport.Height,
+                m_cullMode, m_depthEnable ? 1u : 0u, m_depthWrite ? 1u : 0u,
+                m_blendEnable ? 1u : 0u, m_colorWriteMask,
+                tex0, tex1, tex2, tex3);
+            Switch_LogWrite(trace);
+            if (m_decl)
+            {
+                const size_t elementLimit = std::min<size_t>(m_decl->elements.size(), 12u);
+                for (size_t elementIndex = 0; elementIndex < elementLimit; ++elementIndex)
+                {
+                    const _D3DVERTEXELEMENT9 &element = m_decl->elements[elementIndex];
+                    char elementTrace[256];
+                    std::snprintf(
+                        elementTrace, sizeof(elementTrace),
+                        "[KisakCOD][VK LIGHTMAP DRAW ELEMENT] n=%u i=%zu stream=%u offset=%u effectiveOffset=%u type=%u effectiveType=%u usage=%u usageIndex=%u\n",
+                        traceIndex, elementIndex,
+                        static_cast<unsigned>(element.Stream),
+                        static_cast<unsigned>(element.Offset),
+                        static_cast<unsigned>(SwitchEffectiveShaderElementOffset(m_decl, element)),
+                        static_cast<unsigned>(element.Type),
+                        static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element)),
+                        static_cast<unsigned>(element.Usage),
+                        static_cast<unsigned>(element.UsageIndex));
+                    Switch_LogWrite(elementTrace);
+                }
+            }
+        }
+    }
+#endif
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/validate";
     const VkCommandBuffer drawCommandBuffer =
         m_backend ? m_backend->CommandBuffer() : VK_NULL_HANDLE;
