@@ -22,7 +22,17 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
         MyAssertHandler(".\\EffectsCore\\fx_archive.cpp", 223, 0, "%s", "systemBuffers");
     FX_RestoreEffectDefTable(memFile, &table);
     MemFile_ReadData(memFile, 2656, (uint8_t *)p);
-    if (!*((_BYTE *)p + 2526) || *((uint32_t *)p + 627))
+#ifdef __SWITCH__
+    // The saved FxSystem byte count is retained from the 32-bit engine, but
+    // native pointer fields move members such as isArchiving and iteratorCount
+    // on AArch64. Check the restored fields by member, not by legacy offsets.
+    static_assert(offsetof(FxSystem, iteratorCount) + sizeof(int32_t) <= 2656,
+        "FxSystem iteratorCount must be present in the archived prefix");
+    static_assert(offsetof(FxSystem, isArchiving) + sizeof(bool) <= 2656,
+        "FxSystem isArchiving must be present in the archived prefix");
+#endif
+    const FxSystem *restoredSystem = static_cast<const FxSystem *>(p);
+    if (!restoredSystem->isArchiving || restoredSystem->iteratorCount)
         Com_Error(ERR_DROP, "Invalid save file");
     FX_LinkSystemBuffers((FxSystem *)p, systemBuffers);
     MemFile_ReadData(memFile, 291968, (uint8_t *)systemBuffers);
