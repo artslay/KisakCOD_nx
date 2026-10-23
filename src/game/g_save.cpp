@@ -69,24 +69,11 @@ void SwitchSaveStageIndex(const char *phase, int index)
 }
     void SwitchSaveCursorTrace(const char *phase, SaveGame *save, int detail)
     {
-        if (!save)
-            return;
-        MemoryFile *memFile = SaveMemory_GetMemoryFile(save);
-        if (!memFile)
-            return;
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][SAVE CURSOR] phase=%s segment=%d used=%d start=%d buffer=%d overflow=%u compressed=%u detail=%d\n",
-            phase ? phase : "<none>",
-            memFile->segmentIndex,
-            memFile->bytesUsed,
-            memFile->segmentStart,
-            memFile->bufferSize,
-            memFile->memoryOverflow ? 1u : 0u,
-            memFile->compress ? 1u : 0u,
-            detail);
-        Switch_LogWrite(trace);
+        // Save/load cursor tracing was useful while fixing the serialization
+        // cursor. Keep call sites intact but silence this now-stale diagnostic.
+        (void)phase;
+        (void)save;
+        (void)detail;
     }
 }
 #endif
