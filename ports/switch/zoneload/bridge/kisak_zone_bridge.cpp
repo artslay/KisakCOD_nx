@@ -7,6 +7,7 @@
 #include "Zone/Stream/ZoneInputStream.h"
 #include "Zone/XBlock.h"
 #include "Zone/Zone.h"
+#include "Loading/Exception/LoadingException.h"
 
 #include <cstdio>
 #include <atomic>
@@ -253,15 +254,66 @@ void* KisakZone_Load(const char* zoneName, const KisakZoneBlocks& blocks, const 
         KisakZone_ResetConvertedScriptStrings();
         return zone.release();
     }
+    catch (LoadingException& e)
+    {
+        const auto progress = KisakZone_GetActiveAssetProgress();
+        const std::string detail = e.DetailedMessage();
+        if (errorOut && errorSize)
+        {
+            snprintf(errorOut, errorSize,
+                "%s (zone=%s asset_index=%zu asset_type=%d phase=%d)",
+                detail.c_str(),
+                zoneName ? zoneName : "(unknown)",
+                progress.assetIndex,
+                progress.assetType,
+                progress.phase);
+        }
+
+        char trace[768];
+        snprintf(trace, sizeof(trace),
+            "[KisakCOD][ZONELOAD FAIL] zone=%s asset_index=%zu asset_type=%d phase=%d error=%s\\n",
+            zoneName ? zoneName : "(unknown)",
+            progress.assetIndex,
+            progress.assetType,
+            progress.phase,
+            detail.c_str());
+        Switch_LogWrite(trace);
+        KisakZone_ClearActiveAsset();
+    }
     catch (const std::exception& e)
     {
+        const auto progress = KisakZone_GetActiveAssetProgress();
         if (errorOut && errorSize)
-            snprintf(errorOut, errorSize, "%s", e.what());
+            snprintf(errorOut, errorSize,
+                "%s (zone=%s asset_index=%zu asset_type=%d phase=%d)",
+                e.what(),
+                zoneName ? zoneName : "(unknown)",
+                progress.assetIndex,
+                progress.assetType,
+                progress.phase);
+
+        char trace[768];
+        snprintf(trace, sizeof(trace),
+            "[KisakCOD][ZONELOAD FAIL] zone=%s asset_index=%zu asset_type=%d phase=%d error=%s\\n",
+            zoneName ? zoneName : "(unknown)",
+            progress.assetIndex,
+            progress.assetType,
+            progress.phase,
+            e.what());
+        Switch_LogWrite(trace);
+        KisakZone_ClearActiveAsset();
     }
     catch (...)
     {
+        const auto progress = KisakZone_GetActiveAssetProgress();
         if (errorOut && errorSize)
-            snprintf(errorOut, errorSize, "unknown zone loading error");
+            snprintf(errorOut, errorSize,
+                "unknown zone loading error (zone=%s asset_index=%zu asset_type=%d phase=%d)",
+                zoneName ? zoneName : "(unknown)",
+                progress.assetIndex,
+                progress.assetType,
+                progress.phase);
+        KisakZone_ClearActiveAsset();
     }
     return nullptr;
 }
