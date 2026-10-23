@@ -3669,28 +3669,21 @@ HRESULT KisakVkBuffer::Unlock()
         }
         else
         {
-            // Preserve draw/update order in one command buffer instead of
-            // submitting and waiting for the entire active frame on each unlock.
-            // QueueBufferUpdate inserts transfer barriers around the copy, so
-            // previously recorded draws finish reading the old range before the
-            // update and later draws see the new bytes.
+            // D3DLOCK_DISCARD invalidates the previous contents of the entire
+            // dynamic buffer, not just the caller's locked subrange. Upload the
+            // full zero-initialized shadow on discard so stale bytes cannot
+            // survive in Vulkan memory. Other locks update only their written range.
             VulkanBackend *backend = GetVulkanBackend();
-#ifdef __SWITCH__
-            // Keep Switch on the synchronized update path until queued copies
-            // are validated against NVK device loss during map rendering.
-            constexpr bool kSwitchDisableQueuedDynamicBufferCopies = true;
-            static std::atomic<bool> loggedSynchronizedFallback{false};
-            if (kSwitchDisableQueuedDynamicBufferCopies &&
-                !loggedSynchronizedFallback.exchange(true, std::memory_order_relaxed))
-                Switch_LogWrite(
-                    "[KisakCOD][VK BUFFER UPDATE] queued_dynamic_copies=disabled synchronized_fallback=1 reason=device_lost_isolation\n");
-            const bool queued = !kSwitchDisableQueuedDynamicBufferCopies &&
-                backend && backend->QueueBufferUpdate(
-                    buffer, lockOffset, shadow.data() + lockOffset, lockSize);
-#else
+            const bool discardWholeBuffer = (lockFlags & D3DLOCK_DISCARD) != 0;
+            const uint32_t uploadOffset = discardWholeBuffer ? 0u : lockOffset;
+            const size_t uploadSize = discardWholeBuffer ? size : lockSize;
+            const uint8_t *uploadData = shadow.data() + uploadOffset;
+
+            // Keep earlier draws, the upload, and later draws in one command
+            // buffer. QueueBufferUpdate adds the required transfer barriers;
+            // use the blocking fallback only for unsupported ranges or pressure.
             const bool queued = backend && backend->QueueBufferUpdate(
-                buffer, lockOffset, shadow.data() + lockOffset, lockSize);
-#endif
+                buffer, uploadOffset, uploadData, uploadSize);
             if (!queued)
             {
 #ifdef __SWITCH__
