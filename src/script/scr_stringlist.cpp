@@ -540,8 +540,26 @@ void SL_ShutdownSystem(uint32_t user)
             uint32_t allocationSize = 0;
             bool hasAllocation = MT_GetIndexAllocationInfo(
                 stringHandle, &allocationType, &allocationSize);
-            uint32_t storedLength = 0;
             RefString* refStr = nullptr;
+
+            // Match the retail ownership filter before checking string payload.
+            // The shared hash table also contains strings owned by other systems;
+            // their payloads may no longer look like strings, but shutdown(user)
+            // must ignore them rather than aborting the bucket on a false reject.
+            const bool canInspectUser =
+                hasAllocation &&
+                allocationSize <= MEMORY_NODE_BITS &&
+                static_cast<uint64_t>(stringHandle) +
+                    (uint64_t{1} << allocationSize) <= MEMORY_NODE_COUNT &&
+                (stringHandle & ((uint32_t{1} << allocationSize) - 1u)) == 0;
+            if (canInspectUser)
+            {
+                refStr = GetRefString(stringHandle);
+                if (((uint8_t)user & refStr->user) == 0)
+                    break;
+            }
+
+            uint32_t storedLength = 0;
             const char *rejectReason = nullptr;
             if (!Switch_GetStringAllocation(
                     stringHandle, &refStr, &allocationType, &allocationSize,
@@ -553,7 +571,7 @@ void SL_ShutdownSystem(uint32_t user)
                 char line[320];
                 std::snprintf(
                     line, sizeof(line),
-                    "[KisakCOD][SCRIPT STRING SHUTDOWN REJECT] user=%u bucket=%u status=0x%08x handle=%u allocated=%u allocation=%u/%u reason=%s\n",
+                    "[KisakCOD][SCRIPT STRING SHUTDOWN REJECT] user=%u bucket=%u status=0x%08x handle=%u allocated=%u allocation=%u/%u reason=%s\\n",
                     user, hash, scrStringGlob.hashTable[hash].status_next,
                     stringHandle, hasAllocation ? 1u : 0u, allocationType, allocationSize,
                     rejectReason ? rejectReason : "unknown");
