@@ -139,7 +139,7 @@ void __cdecl G_SetPendingLoadName(const char *filename);
 void __cdecl G_PreLoadGame(int checksum, int *useLoadedSourceFiles, SaveGame **save);
 int __cdecl G_LoadWeapons(SaveGame *save);
 void __cdecl G_InitLoadGame(SaveGame *save);
-void __cdecl G_LoadMainState(SaveGame *save);
+bool __cdecl G_LoadMainState(SaveGame *save);
 void __cdecl G_LoadGame(int checksum, SaveGame *save);
 int __cdecl G_LoadErrorCleanup();
 
