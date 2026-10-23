@@ -3687,11 +3687,39 @@ void Switch_LogWrite(const char *msg)
         "Trying to load file ",
         "Couldn't play stream '"
     };
-    for (const char *prefix : kSuppressedPrefixes)
+    // The texture investigation uses bounded probes already present in the
+    // image/material/Vulkan code. Let only those explicit records bypass the
+    // broad diagnostic filters above; leave all other high-volume traces hidden.
+    static constexpr const char *const kTextureTracePrefixes[] =
     {
-        const size_t len = std::strlen(prefix);
-        if (std::strncmp(msg, prefix, len) == 0)
-            return;
+        "[KisakCOD][DELAY IMAGE]",
+        "[KisakCOD][MATERIAL IMAGE FIXUP]",
+        "[KisakCOD][WORLD SAMPLER]",
+        "[KisakCOD][VK IMAGE UPLOAD PROBE]",
+        "[KisakCOD][VK IMAGE GPU VERIFY]",
+        "[KisakCOD][VK SAMPLER MAP]",
+        "[KisakCOD][VK LIGHTMAP DESCRIPTORS]",
+        "[KisakCOD][VK PS SAMPLERS]"
+    };
+    bool keepTextureTrace = false;
+    for (const char *prefix : kTextureTracePrefixes)
+    {
+        const size_t prefixLength = std::strlen(prefix);
+        if (std::strncmp(msg, prefix, prefixLength) == 0)
+        {
+            keepTextureTrace = true;
+            break;
+        }
+    }
+
+    if (!keepTextureTrace)
+    {
+        for (const char *prefix : kSuppressedPrefixes)
+        {
+            const size_t len = std::strlen(prefix);
+            if (std::strncmp(msg, prefix, len) == 0)
+                return;
+        }
     }
 
     const bool isSwitchDiag =
