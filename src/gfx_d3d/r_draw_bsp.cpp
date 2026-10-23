@@ -606,7 +606,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 std::snprintf(
                     trace, sizeof(trace),
                     "[KisakCOD][BSP PRETESS SURFACE] n=%u surf=%u map=%u mapCount=%u flags=0x%x material=%s primary=%s/%p tex=%p secondary=%s/%p tex=%p firstVertex=%u vertexCount=%u vertices=%p xyz=(%.3f,%.3f,%.3f) uv=(%.5f,%.5f) lmap=(%.5f,%.5f)\n",
-                    traceIndex, surfIndex, traceMapIndex, rgp.world->lightmapCount,
+                    traceIndex, surfIndex, traceMapIndex, static_cast<unsigned>(rgp.world->lightmapCount),
                     context.state->pass
                         ? static_cast<unsigned>(context.state->pass->customSamplerFlags) : 0u,
                     bspSurf->material && bspSurf->material->info.name
@@ -617,7 +617,7 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                     traceSecondary && traceSecondary->name ? traceSecondary->name : "<null>",
                     static_cast<const void *>(traceSecondary),
                     static_cast<const void *>(traceSecondary ? traceSecondary->texture.basemap : nullptr),
-                    tris->firstVertex, tris->vertexCount,
+                    static_cast<unsigned>(tris->firstVertex), static_cast<unsigned>(tris->vertexCount),
                     static_cast<const void *>(traceVertices),
                     traceVertexValid ? traceVertices[tris->firstVertex].xyz[0] : 0.0f,
                     traceVertexValid ? traceVertices[tris->firstVertex].xyz[1] : 0.0f,
