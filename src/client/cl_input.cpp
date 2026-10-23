@@ -38,6 +38,11 @@ bool s_traceGamepadAfterSavegameLoad = false;
 float s_loadServerViewAngles[3]{};
 float s_loadServerDeltaAngles[3]{};
 int s_loadCmdAngles[3]{};
+float s_loadPlayerEntityAngles[3]{};
+float s_loadPlayerTrajectoryAngles[3]{};
+int s_loadPlayerLegsAnim = 0;
+int s_loadPlayerTorsoAnim = 0;
+int s_loadPlayerMovementDir = 0;
 float s_loadClientViewAngles[3]{};
 float s_loadClientSnapViewAngles[3]{};
 float s_loadClientSnapDeltaAngles[3]{};
@@ -1013,24 +1018,44 @@ int __cdecl CL_AllowInput()
 }
 
 #ifdef __SWITCH__
-void __cdecl CL_TraceGamepadAfterSavegameLoad(
+void __cdecl CL_ResyncInputAfterSavegameLoad(
     const playerState_s *loadedPlayerState,
     const usercmd_s *loadedCmd)
 {
     if (!loadedPlayerState || !loadedCmd)
         return;
 
+    // Preserve the pre-resync state for the one-shot audit line.
     for (int i = 0; i < 3; ++i)
     {
         s_loadServerViewAngles[i] = loadedPlayerState->viewangles[i];
         s_loadServerDeltaAngles[i] = loadedPlayerState->delta_angles[i];
         s_loadCmdAngles[i] = loadedCmd->angles[i];
+        s_loadPlayerEntityAngles[i] = g_entities[0].r.currentAngles[i];
+        s_loadPlayerTrajectoryAngles[i] = g_entities[0].s.lerp.apos.trBase[i];
         s_loadClientViewAngles[i] = clients[0].viewangles[i];
         s_loadClientSnapViewAngles[i] = clients[0].snap.ps.viewangles[i];
         s_loadClientSnapDeltaAngles[i] = clients[0].snap.ps.delta_angles[i];
     }
+    s_loadPlayerLegsAnim = loadedPlayerState->legsAnim;
+    s_loadPlayerTorsoAnim = loadedPlayerState->torsoAnim;
+    s_loadPlayerMovementDir = loadedPlayerState->movementDir;
     s_loadFrameTime = cls.frametime;
     s_loadComFrameTime = com_frameTime;
+
+    // The server command angles and delta_angles have been rebased together
+    // by G_LoadGame/InitClientDeltaAngles. Match the local camera and snapshot
+    // to that restored state; don't alter frame timing or stick-axis signs.
+    for (int i = 0; i < 3; ++i)
+    {
+        clients[0].viewangles[i] = loadedPlayerState->viewangles[i];
+        clients[0].snap.ps.viewangles[i] = loadedPlayerState->viewangles[i];
+        clients[0].snap.ps.delta_angles[i] = loadedPlayerState->delta_angles[i];
+    }
+    clients[0].snap.ps.pm_flags = loadedPlayerState->pm_flags;
+    clients[0].snap.ps.fWeaponPosFrac = loadedPlayerState->fWeaponPosFrac;
+    clients[0].usingAds = loadedPlayerState->fWeaponPosFrac > 0.0f;
+
     s_traceGamepadAfterSavegameLoad = true;
 }
 #endif
@@ -1073,21 +1098,27 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
 
     if (s_traceGamepadAfterSavegameLoad)
     {
-        char trace[768];
+        char trace[1536];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][INPUT AFTER LOAD] serverView=(%.2f,%.2f,%.2f) serverDelta=(%.2f,%.2f,%.2f) cmdAngles=(%d,%d,%d) clientView=(%.2f,%.2f,%.2f) snapView=(%.2f,%.2f,%.2f) snapDelta=(%.2f,%.2f,%.2f) axis=(%.3f,%.3f,%.3f,%.3f) mapped=(forward=%.3f,right=%.3f,pitch=%.3f,yaw=%.3f) moveBefore=(%d,%d) moveAfter=(%d,%d) frame=(%d,%d) comFrame=(%d,%d)\n",
+            "[KisakCOD][INPUT AFTER LOAD] serverView=(%.2f,%.2f,%.2f) serverDelta=(%.2f,%.2f,%.2f) cmdAngles=(%d,%d,%d) entityAngles=(%.2f,%.2f,%.2f) entityTrajAngles=(%.2f,%.2f,%.2f) playerAnim=(legs:%d,torso:%d,moveDir:%d) clientViewBefore=(%.2f,%.2f,%.2f) clientViewNow=(%.2f,%.2f,%.2f) snapViewBefore=(%.2f,%.2f,%.2f) snapViewNow=(%.2f,%.2f,%.2f) snapDeltaBefore=(%.2f,%.2f,%.2f) snapDeltaNow=(%.2f,%.2f,%.2f) axis=(%.3f,%.3f,%.3f,%.3f) mapped=(forward=%.3f,right=%.3f,pitch=%.3f,yaw=%.3f) moveBefore=(forward:%d,right:%d) moveAfter=(forward:%d,right:%d) frame=(load:%d,now:%d) comFrame=(load:%d,now:%d)\\n",
             s_loadServerViewAngles[0], s_loadServerViewAngles[1], s_loadServerViewAngles[2],
             s_loadServerDeltaAngles[0], s_loadServerDeltaAngles[1], s_loadServerDeltaAngles[2],
             s_loadCmdAngles[0], s_loadCmdAngles[1], s_loadCmdAngles[2],
+            s_loadPlayerEntityAngles[0], s_loadPlayerEntityAngles[1], s_loadPlayerEntityAngles[2],
+            s_loadPlayerTrajectoryAngles[0], s_loadPlayerTrajectoryAngles[1], s_loadPlayerTrajectoryAngles[2],
+            s_loadPlayerLegsAnim, s_loadPlayerTorsoAnim, s_loadPlayerMovementDir,
             s_loadClientViewAngles[0], s_loadClientViewAngles[1], s_loadClientViewAngles[2],
+            clients[0].viewangles[0], clients[0].viewangles[1], clients[0].viewangles[2],
             s_loadClientSnapViewAngles[0], s_loadClientSnapViewAngles[1], s_loadClientSnapViewAngles[2],
+            clients[0].snap.ps.viewangles[0], clients[0].snap.ps.viewangles[1], clients[0].snap.ps.viewangles[2],
             s_loadClientSnapDeltaAngles[0], s_loadClientSnapDeltaAngles[1], s_loadClientSnapDeltaAngles[2],
+            clients[0].snap.ps.delta_angles[0], clients[0].snap.ps.delta_angles[1], clients[0].snap.ps.delta_angles[2],
             CL_GamepadAxisValue(0, 0), CL_GamepadAxisValue(0, 1),
             CL_GamepadAxisValue(0, 3), CL_GamepadAxisValue(0, 4),
             forwardAxis, rightAxis, pitchAxis, yawAxis,
             cmdForwardBeforePad, cmdRightBeforePad, cmd->forwardmove, cmd->rightmove,
-            cls.frametime, s_loadFrameTime, com_frameTime, s_loadComFrameTime);
+            s_loadFrameTime, cls.frametime, s_loadComFrameTime, com_frameTime);
         Switch_LogWrite(trace);
         s_traceGamepadAfterSavegameLoad = false;
     }
