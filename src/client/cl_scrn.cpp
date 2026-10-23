@@ -149,6 +149,7 @@ static void SCR_LogSwitchFrameState(int refreshedUI)
     static int previousFullscreen = -1;
     static int previousUiCatcher = -1;
     static int previousOpenMenuCount = -1;
+    static int previousMenuCount = -1;
     static int previousUiStarted = -1;
     static int previousRefreshedUI = -1;
     static int previousCinematicStarted = -1;
@@ -160,6 +161,7 @@ static void SCR_LogSwitchFrameState(int refreshedUI)
     const int fullscreen = UI_IsFullscreen() ? 1 : 0;
     const int uiCatcher = Key_IsCatcherActive(0, KEYCATCH_UI) ? 1 : 0;
     const int openMenuCount = uiInfo.uiDC.openMenuCount;
+    const int menuCount = Menu_Count(&uiInfo.uiDC);
     const int uiStarted = cls.uiStarted ? 1 : 0;
     const int cinematicStarted = R_Cinematic_IsStarted() ? 1 : 0;
     const int cinematicFinished = R_Cinematic_IsFinished() ? 1 : 0;
@@ -170,6 +172,7 @@ static void SCR_LogSwitchFrameState(int refreshedUI)
         fullscreen != previousFullscreen ||
         uiCatcher != previousUiCatcher ||
         openMenuCount != previousOpenMenuCount ||
+        menuCount != previousMenuCount ||
         uiStarted != previousUiStarted ||
         refreshedUI != previousRefreshedUI ||
         cinematicStarted != previousCinematicStarted ||
@@ -180,12 +183,13 @@ static void SCR_LogSwitchFrameState(int refreshedUI)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][FRAME STATE] conn=%d menu=%d fullscreen=%d uiCatch=%d openMenus=%d uiStarted=%d cgameDraw=%d cineStarted=%d cineFinished=%d cinePending=%d\n",
+            "[KisakCOD][FRONTEND UI STATE] conn=%d menu=%d fullscreen=%d uiCatch=%d openMenus=%d menuCount=%d uiStarted=%d cgameDraw=%d cineStarted=%d cineFinished=%d cinePending=%d\n",
             connectionState,
             activeMenu,
             fullscreen,
             uiCatcher,
             openMenuCount,
+            menuCount,
             uiStarted,
             refreshedUI,
             cinematicStarted,
@@ -198,6 +202,7 @@ static void SCR_LogSwitchFrameState(int refreshedUI)
         previousFullscreen = fullscreen;
         previousUiCatcher = uiCatcher;
         previousOpenMenuCount = openMenuCount;
+        previousMenuCount = menuCount;
         previousUiStarted = uiStarted;
         previousRefreshedUI = refreshedUI;
         previousCinematicStarted = cinematicStarted;
@@ -754,4 +759,3 @@ LABEL_20:
             displayWidth - 2);
     }
 }
-
