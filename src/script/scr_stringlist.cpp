@@ -571,7 +571,7 @@ void SL_ShutdownSystem(uint32_t user)
                 char line[320];
                 std::snprintf(
                     line, sizeof(line),
-                    "[KisakCOD][SCRIPT STRING SHUTDOWN REJECT] user=%u bucket=%u status=0x%08x handle=%u allocated=%u allocation=%u/%u reason=%s\\n",
+                    "[KisakCOD][SCRIPT STRING SHUTDOWN REJECT] user=%u bucket=%u status=0x%08x handle=%u allocated=%u allocation=%u/%u reason=%s\n",
                     user, hash, scrStringGlob.hashTable[hash].status_next,
                     stringHandle, hasAllocation ? 1u : 0u, allocationType, allocationSize,
                     rejectReason ? rejectReason : "unknown");
