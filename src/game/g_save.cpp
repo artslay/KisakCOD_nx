@@ -34,7 +34,6 @@
 #include "savedevice.h"
 
 #ifdef __SWITCH__
-#include <client/cl_input.h>
 #include <cstdio>
 extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
@@ -67,14 +66,6 @@ void SwitchSaveStageIndex(const char *phase, int index)
         "frame/save/%s/index=%d", phase, index);
     g_switchFrameStage = g_switchSaveStageBuffer;
 }
-    void SwitchSaveCursorTrace(const char *phase, SaveGame *save, int detail)
-    {
-        // Save/load cursor tracing was useful while fixing the serialization
-        // cursor. Keep call sites intact but silence this now-stale diagnostic.
-        (void)phase;
-        (void)save;
-        (void)detail;
-    }
 }
 #endif
 
@@ -1653,7 +1644,6 @@ bool __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
 
     memFile = SaveMemory_GetMemoryFile(save);
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("load_configstrings_begin", save, iFirst);
 #endif
 
     for (int i = 0; i < iCount; ++i)
@@ -1700,7 +1690,6 @@ bool __cdecl G_LoadConfigstrings(int iFirst, int iCount, SaveGame *save)
     }
 
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("load_configstrings_end", save, iFirst + iCount);
 #endif
     return true;
 }
@@ -1846,7 +1835,6 @@ void __cdecl G_SaveWeaponCue(SaveGame *save)
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1956, 0, "%s", "save");
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("save_weapon_cue_begin", save, 0);
 #endif
     droppedWeaponCue = level.droppedWeaponCue;
     do
@@ -1865,7 +1853,6 @@ void __cdecl G_SaveWeaponCue(SaveGame *save)
         ++droppedWeaponCue;
     } while (droppedWeaponCue < &level.droppedWeaponCue[ARRAY_COUNT(level.droppedWeaponCue)]);
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("save_weapon_cue_end", save, ARRAY_COUNT(level.droppedWeaponCue));
 #endif
 }
 
@@ -1880,7 +1867,6 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
     int firstInvalidValue = 0;
     MemoryFile *memFile = SaveMemory_GetMemoryFile(save);
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("load_weapon_cue_begin", save, kWeaponCueCount);
 #endif
 
     // Read the fixed-size table completely before rejecting corrupt indices.
@@ -1927,7 +1913,6 @@ void __cdecl G_LoadWeaponCue(SaveGame *save)
     }
 
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("load_weapon_cue_end", save, firstInvalidSlot);
 #endif
     if (firstInvalidSlot >= 0)
     {
@@ -2310,11 +2295,9 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
     SwitchSavePhase("frame/save/main_state/dynamic_entities");
 #endif
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("save_dynent_begin", save, 0);
 #endif
     DynEnt_SaveEntities(SaveMemory_GetMemoryFile(save));
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("save_dynent_end", save, 0);
     SwitchSavePhase("frame/save/main_state/threat_group");
 #endif
     memcpy(v63, &g_threatBias, sizeof(threat_bias_t));
@@ -2330,7 +2313,6 @@ void __cdecl G_SaveMainState(bool savegame, SaveGame *save)
 
     iassert(level.currentTriggerListSize == 0);
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("save_before_pending_triggers", save, level.pendingTriggerListSize);
 #endif
     SaveMemory_SaveWrite(&level.pendingTriggerListSize, 4, save);
     SaveMemory_SaveWrite(level.pendingTriggerList, 12 * level.pendingTriggerListSize, save);
@@ -2970,11 +2952,9 @@ bool __cdecl G_LoadMainState(SaveGame *save)
     level.actorCorpseCount = 16;
 
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("load_dynent_begin", save, 0);
 #endif
     DynEnt_LoadEntities(SaveMemory_GetMemoryFile(save));
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("load_dynent_end", save, 0);
 #endif
 
     G_ReadStruct(threatGroupFields, (unsigned __int8 *)&g_threatBias, sizeof(threat_bias_t), save);
@@ -2986,7 +2966,6 @@ bool __cdecl G_LoadMainState(SaveGame *save)
         listenerCount > static_cast<int>(ARRAY_COUNT(g_AIEVlisteners)))
     {
 #ifdef __SWITCH__
-        SwitchSaveCursorTrace("load_invalid_listener_count", save, listenerCount);
 #endif
         Com_Error(
             ERR_DROP,
@@ -3009,7 +2988,6 @@ bool __cdecl G_LoadMainState(SaveGame *save)
         pendingTriggerCount > static_cast<int>(ARRAY_COUNT(level.pendingTriggerList)))
     {
 #ifdef __SWITCH__
-        SwitchSaveCursorTrace("load_invalid_pending_trigger_count", save, pendingTriggerCount);
 #endif
         Com_Error(
             ERR_DROP,
@@ -3020,7 +2998,6 @@ bool __cdecl G_LoadMainState(SaveGame *save)
     }
     level.pendingTriggerListSize = pendingTriggerCount;
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("load_before_pending_triggers", save, pendingTriggerCount);
 #endif
     SaveMemory_LoadRead(
         level.pendingTriggerList,
@@ -3033,17 +3010,13 @@ bool __cdecl G_LoadMainState(SaveGame *save)
         return false;
 
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("load_before_missile_attractors", save, 0);
 #endif
     G_LoadTargets();
     Missile_LoadAttractors(memFile);
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("load_after_missile_attractors", save, 0);
-    SwitchSaveCursorTrace("load_before_command_notifications", save, 0);
 #endif
     Cmd_LoadNotifications(memFile);
 #ifdef __SWITCH__
-    SwitchSaveCursorTrace("load_after_command_notifications", save, 0);
 #endif
     SaveMemory_MoveToSegment(save, 5);
 
@@ -3179,21 +3152,7 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
     if (!SV_UsingDemoSave())
     {
         SV_GetUsercmd(0, &level.clients->pers.cmd);
-#ifdef __SWITCH__
-        // Rebase the saved player view and the first client command together.
-        // Keeping the old zero/stale command angles makes the local camera
-        // differ from the restored server body until the next input update.
-        for (int i = 0; i < 3; ++i)
-        {
-            level.clients->pers.cmd.angles[i] =
-                static_cast<unsigned __int16>(
-                    static_cast<int>(level.clients->ps.viewangles[i] * 182.04445f));
-        }
-#endif
         InitClientDeltaAngles(level.clients);
-#ifdef __SWITCH__
-        CL_ResyncInputAfterSavegameLoad(&level.clients->ps, &level.clients->pers.cmd);
-#endif
     }
     G_PruneLoadedCorpses();
     //Profile_EndInternal(0);
