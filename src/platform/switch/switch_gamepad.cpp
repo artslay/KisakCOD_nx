@@ -272,10 +272,9 @@ void Switch_GamepadFrame()
     SendActionEdge(HidNpadButton_StickL, IN_SprintDown, IN_SprintUp, gameplayActive);
     SendActionEdge(HidNpadButton_StickR, IN_Melee_Down, IN_Melee_Up, gameplayActive);
 
-    // Y is the original CoD4 "next weapon" action. Keep it edge-triggered
-    // because it is a command rather than a held button.
-    if (gameplayActive && Pressed(HidNpadButton_Y))
-        Cbuf_AddText(0, "weapnext\n");
+    // Y is mapped to the normal F key for use/pickup. Send both edges
+    // through the standard key path so the stock +activate binding runs.
+    SendKeyEdge(HidNpadButton_Y, 'f', gameplayActive);
 
     // D-pad up is night vision during gameplay.
     if (gameplayActive)
