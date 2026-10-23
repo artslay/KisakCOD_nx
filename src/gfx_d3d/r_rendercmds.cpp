@@ -880,6 +880,29 @@ void __cdecl R_AddCmdDrawStretchPic(
 
 bool __cdecl Material_HasAnyFogableTechnique(const Material *material)
 {
+#ifdef __SWITCH__
+    // Font atlases are sampled as screen-space glyph quads in DrawText2D.
+    // The Switch technique resolver can expose remapped 3D techniques for these
+    // materials; treating that as "fogable" causes the original text path to
+    // discard every glyph before submitting its quad. They are UI-only atlases,
+    // so do not suppress text drawing based on the remapped 3D technique table.
+    if (material && material->info.name)
+    {
+        const char *name = material->info.name;
+        if (!I_stricmp(name, "fonts/gamefonts_pc") ||
+            !I_stricmp(name, "fonts/gamefonts_pc_glow") ||
+            !I_stricmp(name, "fonts/devfonts") ||
+            !I_stricmp(name, "fonts/devfonts_glow"))
+        {
+            static std::atomic<uint32_t> switchFontFogBypassCount{0};
+            const uint32_t traceId =
+                switchFontFogBypassCount.fetch_add(1, std::memory_order_relaxed);
+            if (traceId == 0)
+                Switch_LogWrite("[KisakCOD][TEXT2D] bypass fogability rejection for font atlas materials\\n");
+            return false;
+        }
+    }
+#endif
     return Material_GetTechnique(material, TECHNIQUE_LIT_BEGIN) || Material_GetTechnique(material, TECHNIQUE_EMISSIVE);
 }
 
