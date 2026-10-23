@@ -108,7 +108,7 @@ void __cdecl CL_KeyMove(usercmd_s *cmd);
 int __cdecl CL_AllowInput();
 void __cdecl CL_GamepadMove(usercmd_s *cmd);
 #ifdef __SWITCH__
-void __cdecl CL_TraceGamepadAfterSavegameLoad(const playerState_s *loadedPlayerState, const usercmd_s *loadedCmd);
+void __cdecl CL_ResyncInputAfterSavegameLoad(const playerState_s *loadedPlayerState, const usercmd_s *loadedCmd);
 #endif
 void __cdecl CL_GetMouseMovement(clientActive_t *cl, float *mx, float *my);
 void __cdecl CL_MouseMove(usercmd_s *cmd);
