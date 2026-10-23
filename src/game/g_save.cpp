@@ -1047,8 +1047,8 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
                 reinterpret_cast<uintptr_t>(base + offsetof(actor_s, AnimScriptSpecific));
         else
             *reinterpret_cast<uintptr_t *>(v7) =
-                reinterpret_cast<uintptr_t>(&g_scr_data.scripted_init) +
-                static_cast<uintptr_t>(v23) * sizeof(scr_animscript_t);
+                reinterpret_cast<uintptr_t>(&g_scr_data.anim) +
+                static_cast<uintptr_t>(v23 - 1) * sizeof(scr_animscript_t);
         break;
     case SF_PATHNODE:
         *(uintptr_t *)v7 = (uintptr_t)Path_LoadNode(*(unsigned int*)v7);
