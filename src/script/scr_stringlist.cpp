@@ -19,6 +19,10 @@ extern thread_local const char * volatile g_switchFrameStage;
 #include <universal/profile.h>
 #include <universal/com_constantconfigstrings.h>
 #include "scr_variable.h"
+#ifdef KISAK_SWITCH
+#include "scr_parser.h"
+#include "scr_compiler.h"
+#endif
 
 #ifdef KISAK_SWITCH
 #include <cstddef>
@@ -28,6 +32,133 @@ static_assert(sizeof(MemoryNode) == 12,
               "script-string memory nodes must retain their 12-byte stride");
 static_assert(offsetof(RefString, str) == 4,
               "script-string handle header must remain four bytes on Switch AArch64");
+#endif
+
+
+#ifdef KISAK_SWITCH
+// Bounded provenance journal for script-string handles, retained when memory
+// nodes are freed/reused so a stale hash entry can be tied to its last string.
+static constexpr uint32_t SWITCH_STRING_ORIGIN_CAPACITY = 8192;
+static constexpr uint32_t SWITCH_STRING_ORIGIN_TEXT_SIZE = 48;
+struct SwitchStringOriginRecord
+{
+    uint32_t handle;
+    uint32_t serial;
+    uintptr_t caller;
+    uint32_t length;
+    uint32_t user;
+    uint32_t allocationType;
+    char filename[48];
+    char text[SWITCH_STRING_ORIGIN_TEXT_SIZE];
+};
+static SwitchStringOriginRecord g_switchStringOrigins[SWITCH_STRING_ORIGIN_CAPACITY] = {};
+static uint16_t g_switchStringOriginByHandle[MEMORY_NODE_COUNT] = {};
+static uint32_t g_switchStringOriginSerial = 0;
+static uint32_t g_switchStringOriginWrite = 0;
+static uint32_t g_switchStringOriginReportCount = 0;
+static uint8_t g_switchStringOriginReported[MEMORY_NODE_COUNT] = {};
+
+static void Switch_CopyStringDiagnostic(char *dst, size_t dstSize, const char *src, size_t sourceLimit)
+{
+    if (!dst || !dstSize)
+        return;
+    size_t out = 0;
+    if (src)
+    {
+        while (out + 1 < dstSize && out < sourceLimit)
+        {
+            const unsigned char c = static_cast<unsigned char>(src[out]);
+            if (!c)
+                break;
+            dst[out] = (c >= 0x20 && c <= 0x7e) ? static_cast<char>(c) : '.';
+            ++out;
+        }
+    }
+    dst[out] = '\0';
+}
+
+static void Switch_RecordStringOrigin(
+    uint32_t handle, uint32_t user, uint32_t length, uint32_t allocationType,
+    uintptr_t caller, const char *text)
+{
+    if (!handle || handle >= MEMORY_NODE_COUNT)
+        return;
+    const uint32_t slot = g_switchStringOriginWrite++ % SWITCH_STRING_ORIGIN_CAPACITY;
+    SwitchStringOriginRecord &record = g_switchStringOrigins[slot];
+    record.handle = handle;
+    record.serial = ++g_switchStringOriginSerial;
+    record.caller = caller;
+    record.length = length;
+    record.user = user;
+    record.allocationType = allocationType;
+
+    const char *filename = nullptr;
+    // Avoid dereferencing a possibly stale parser filename outside compilation.
+    if (scrCompilePub.script_loading)
+        filename = scrParserPub.scriptfilename;
+    Switch_CopyStringDiagnostic(record.filename, sizeof(record.filename), filename, sizeof(record.filename) - 1);
+    Switch_CopyStringDiagnostic(record.text, sizeof(record.text), text,
+        length < sizeof(record.text) - 1 ? length : sizeof(record.text) - 1);
+    g_switchStringOriginByHandle[handle] = static_cast<uint16_t>(slot + 1u);
+}
+
+static void Switch_ReportRejectedStringOrigin(
+    uint32_t handle, uint32_t shutdownUser, uint32_t bucket,
+    uint32_t allocationType, uint32_t allocationSize, const RefString *currentRef)
+{
+    if (!handle || handle >= MEMORY_NODE_COUNT || g_switchStringOriginReported[handle] ||
+        g_switchStringOriginReportCount >= 128u)
+        return;
+    g_switchStringOriginReported[handle] = 1;
+    ++g_switchStringOriginReportCount;
+
+    const uint16_t encoded = g_switchStringOriginByHandle[handle];
+    const SwitchStringOriginRecord *origin = nullptr;
+    if (encoded && encoded <= SWITCH_STRING_ORIGIN_CAPACITY)
+    {
+        const SwitchStringOriginRecord &candidate = g_switchStringOrigins[encoded - 1u];
+        if (candidate.handle == handle)
+            origin = &candidate;
+    }
+    if (origin)
+    {
+        char line[384];
+        const uint32_t age = g_switchStringOriginSerial - origin->serial;
+        std::snprintf(line, sizeof(line),
+            "[KisakCOD][SCRIPT STRING ORIGIN] handle=%u bucket=%u shutdown_user=%u found=1 age=%u origin_user=%u origin_type=%u origin_len=%u caller=0x%llx file=%s text=%s\n",
+            handle, bucket, shutdownUser, age, origin->user, origin->allocationType, origin->length,
+            static_cast<unsigned long long>(origin->caller),
+            origin->filename[0] ? origin->filename : "(not_compiling)",
+            origin->text[0] ? origin->text : "(empty_or_binary)");
+        Switch_LogWrite(line);
+    }
+    else
+    {
+        char line[192];
+        std::snprintf(line, sizeof(line),
+            "[KisakCOD][SCRIPT STRING ORIGIN] handle=%u bucket=%u shutdown_user=%u found=0 allocation=%u/%u\n",
+            handle, bucket, shutdownUser, allocationType, allocationSize);
+        Switch_LogWrite(line);
+    }
+
+    // Only supplied when allocator bounds were validated; dump bytes, not %s.
+    if (currentRef && allocationSize <= MEMORY_NODE_BITS)
+    {
+        const size_t allocationBytes = (static_cast<size_t>(1u) << allocationSize) * sizeof(MemoryNode);
+        const size_t dumpBytes = allocationBytes < 24u ? allocationBytes : 24u;
+        char hex[49];
+        for (size_t i = 0; i < dumpBytes; ++i)
+            std::snprintf(hex + i * 2u, sizeof(hex) - i * 2u, "%02x",
+                static_cast<unsigned int>(reinterpret_cast<const uint8_t *>(currentRef)[i]));
+        hex[dumpBytes * 2u] = '\0';
+        char line[256];
+        std::snprintf(line, sizeof(line),
+            "[KisakCOD][SCRIPT STRING CURRENT] handle=%u allocation=%u/%u alloc_bytes=%llu data=0x%08x byteLen=%u raw24=%s\n",
+            handle, allocationType, allocationSize, static_cast<unsigned long long>(allocationBytes),
+            static_cast<unsigned int>(currentRef->data), static_cast<unsigned int>(currentRef->byteLen), hex);
+        Switch_LogWrite(line);
+    }
+}
 #endif
 
 #ifdef KISAK_SWITCH
@@ -147,6 +278,8 @@ static bool Switch_GetStringAllocation(
 {
     if (failureReason)
         *failureReason = nullptr;
+    if (refString)
+        *refString = nullptr;
 
     uint32_t type = 0;
     uint32_t size = 0;
@@ -177,6 +310,8 @@ static bool Switch_GetStringAllocation(
     }
 
     const size_t available = allocationBytes - stringOffset;
+    if (refString)
+        *refString = ref;
     // byteLen stores the low 8 bits of the total byte count, including
     // the terminating NUL. Script strings can contain embedded NUL bytes, so
     // the terminator must be found at the matching 8-bit length offset, not
@@ -423,6 +558,8 @@ void SL_ShutdownSystem(uint32_t user)
                     stringHandle, hasAllocation ? 1u : 0u, allocationType, allocationSize,
                     rejectReason ? rejectReason : "unknown");
                 Switch_LogWrite(line);
+                Switch_ReportRejectedStringOrigin(
+                    stringHandle, user, hash, allocationType, allocationSize, refStr);
                 break;
             }
 #else
@@ -778,6 +915,9 @@ uint32_t SL_GetStringOfSize(const char* str, uint32_t user, uint32_t len, mtType
 	iassert(refStr->user == user);
 	refStr->data = refStr->data & 0xFFFF0000 | 1;
 	refStr->data = (len << 24) | refStr->data & 0xFFFFFF;
+#ifdef KISAK_SWITCH
+    Switch_RecordStringOrigin(stringValue, user, len, static_cast<uint32_t>(type), caller, str);
+#endif
 
 	if (scrStringDebugGlob)
 	{
