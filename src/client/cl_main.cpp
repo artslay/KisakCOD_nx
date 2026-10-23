@@ -1471,7 +1471,7 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
 #ifdef __SWITCH__
     {
         char trace[256];
-        std::snprintf(
+        snprintf(
             trace,
             sizeof(trace),
             "[KisakCOD][CIN SKIP FLOW] state=%d->%d nextCommand=%d queued=%d frontend=%d\n",
