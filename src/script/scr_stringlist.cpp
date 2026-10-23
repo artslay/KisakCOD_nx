@@ -207,6 +207,84 @@ static void Switch_ReportStringHashChainFault(
         Switch_LogWrite(line);
 }
 
+static uint32_t g_switchStringAllocationFaultReports = 0;
+
+static void Switch_ReportStringAllocationFault(
+    const char *validation,
+    uint32_t handle,
+    uint32_t allocationType,
+    uint32_t allocationSize,
+    const RefString *currentRef,
+    uintptr_t caller)
+{
+    if (g_switchStringAllocationFaultReports >= 16u || !currentRef ||
+        allocationSize > MEMORY_NODE_BITS)
+        return;
+    ++g_switchStringAllocationFaultReports;
+
+    const uint64_t allocationBytes =
+        (uint64_t{1} << allocationSize) * sizeof(MemoryNode);
+    char line[384];
+    std::snprintf(
+        line, sizeof(line),
+        "[KisakCOD][SCRIPT STRING ALLOCATION FAULT] validation=%s handle=%u allocation=%u/%u bytes=%llu data=0x%08x refCount=%u user=%u byteLen=%u caller=0x%llx\n",
+        validation ? validation : "unknown", handle, allocationType, allocationSize,
+        static_cast<unsigned long long>(allocationBytes),
+        static_cast<unsigned int>(currentRef->data),
+        static_cast<unsigned int>(currentRef->refCount),
+        static_cast<unsigned int>(currentRef->user),
+        static_cast<unsigned int>(currentRef->byteLen),
+        static_cast<unsigned long long>(caller));
+    Switch_LogWrite(line);
+
+    const uint16_t encoded = handle < MEMORY_NODE_COUNT
+        ? g_switchStringOriginByHandle[handle] : 0;
+    const SwitchStringOriginRecord *origin = nullptr;
+    if (encoded && encoded <= SWITCH_STRING_ORIGIN_CAPACITY)
+    {
+        const SwitchStringOriginRecord &candidate = g_switchStringOrigins[encoded - 1u];
+        if (candidate.handle == handle)
+            origin = &candidate;
+    }
+    if (origin)
+    {
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][SCRIPT STRING ALLOCATION ORIGIN] handle=%u age=%u origin_user=%u origin_type=%u origin_len=%u creator=0x%llx file=%s text=%s\n",
+            handle, g_switchStringOriginSerial - origin->serial,
+            origin->user, origin->allocationType, origin->length,
+            static_cast<unsigned long long>(origin->caller),
+            origin->filename[0] ? origin->filename : "(not_compiling)",
+            origin->text[0] ? origin->text : "(empty_or_binary)");
+        Switch_LogWrite(line);
+    }
+    else
+    {
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][SCRIPT STRING ALLOCATION ORIGIN] handle=%u found=0\n",
+            handle);
+        Switch_LogWrite(line);
+    }
+
+    const size_t dumpBytes = allocationBytes < 24u
+        ? static_cast<size_t>(allocationBytes) : 24u;
+    char hex[49];
+    for (size_t i = 0; i < dumpBytes; ++i)
+    {
+        std::snprintf(
+            hex + i * 2u, sizeof(hex) - i * 2u, "%02x",
+            static_cast<unsigned int>(
+                reinterpret_cast<const uint8_t *>(currentRef)[i]));
+    }
+    hex[dumpBytes * 2u] = '\0';
+    std::snprintf(
+        line, sizeof(line),
+        "[KisakCOD][SCRIPT STRING ALLOCATION BYTES] handle=%u raw24=%s\n",
+        handle, hex);
+    Switch_LogWrite(line);
+}
+
 static void Switch_ReportStaleStringHandle(
     const char *origin,
     uint32_t handle,
@@ -326,6 +404,8 @@ static bool Switch_GetStringAllocation(
     {
         if (failureReason)
             *failureReason = "unterminated_string_allocation";
+        Switch_ReportStringAllocationFault(
+            origin, handle, type, size, ref, caller);
         Switch_ReportStringHashChainFault(
             "unterminated_string_allocation", 0, handle, 0, ref->data, handle);
         return false;
