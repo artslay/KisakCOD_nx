@@ -197,6 +197,18 @@ void __cdecl BG_ShutdownWeaponDefFiles()
         BG_ClearSurfaceTypeSounds();
         BG_FreeWeaponDefStrings();
     }
+
+    // These tables cache pointers into WeaponDef allocations/assets. A save
+    // reload can replace the backing hunk/fastfile zone while preserving
+    // script state, so reset the pointer registries as part of shutdown,
+    // before BG_SetupWeaponDef repopulates them.
+    memset(bg_weaponDefs, 0, sizeof(bg_weaponDefs));
+    memset(bg_weapAmmoTypes, 0, sizeof(bg_weapAmmoTypes));
+    memset(bg_sharedAmmoCaps, 0, sizeof(bg_sharedAmmoCaps));
+    memset(bg_weapClips, 0, sizeof(bg_weapClips));
+    bg_numAmmoTypes = 0;
+    bg_numSharedAmmoCaps = 0;
+    bg_numWeapClips = 0;
     bg_lastParsedWeaponIndex = 0;
 }
 
@@ -443,63 +455,10 @@ uint32_t __cdecl BG_FindWeaponIndexForName(const char *name)
         Switch_SetProgressPhase("weapon/find_cached/name_scan");
         Switch_SetProgressDetail(weapIndex);
         WeaponDef *candidate = bg_weaponDefs[weapIndex];
-        const uintptr_t candidateAddress = reinterpret_cast<uintptr_t>(candidate);
-        if (!candidate || candidateAddress < 0x100000000ULL)
-        {
-            char line[256];
-            std::snprintf(
-                line, sizeof(line),
-                "[KisakCOD][WEAPON LOOKUP INVALID ENTRY] index=%u last=%u def=%p reason=%s\n",
-                weapIndex, bg_lastParsedWeaponIndex,
-                static_cast<void *>(candidate),
-                candidate ? "low_address" : "null");
-            Switch_LogWrite(line);
-            Switch_SetProgressPhase("weapon/find_cached/error");
-            Com_Error(ERR_DROP, "invalid cached weapon definition at index %u", weapIndex);
-            return 0;
-        }
-
         const char *internalName = candidate->szInternalName;
-        const uintptr_t internalNameAddress = reinterpret_cast<uintptr_t>(internalName);
-        if (!internalName || internalNameAddress < 0x100000000ULL)
-        {
-            char line[256];
-            std::snprintf(
-                line, sizeof(line),
-                "[KisakCOD][WEAPON LOOKUP INVALID ENTRY] index=%u last=%u def=%p internalName=%p reason=%s\n",
-                weapIndex, bg_lastParsedWeaponIndex,
-                static_cast<void *>(candidate), static_cast<const void *>(internalName),
-                internalName ? "low_name_address" : "null_name");
-            Switch_LogWrite(line);
-            Switch_SetProgressPhase("weapon/find_cached/error");
-            Com_Error(ERR_DROP, "invalid cached weapon name at index %u", weapIndex);
-            return 0;
-        }
-
-        const char *internalNameTerminator =
-            static_cast<const char *>(memchr(internalName, '\0', MAX_QPATH));
-        if (!internalNameTerminator)
-        {
-            char line[256];
-            std::snprintf(
-                line, sizeof(line),
-                "[KisakCOD][WEAPON LOOKUP UNTERMINATED INTERNAL NAME] index=%u last=%u def=%p name=%p\n",
-                weapIndex, bg_lastParsedWeaponIndex,
-                static_cast<void *>(candidate),
-                static_cast<const void *>(internalName));
-            Switch_LogWrite(line);
-            Com_Error(ERR_DROP, "unterminated internal name for weapon index %u", weapIndex);
-            Switch_SetProgressPhase("weapon/find_cached/error");
-            return 0;
-        }
-
         Switch_SetProgressPhase("weapon/find_cached/compare");
 #endif
-#ifdef __SWITCH__
         if (!I_stricmp(name, internalName))
-#else
-        if (!I_stricmp(name, bg_weaponDefs[weapIndex]->szInternalName))
-#endif
         {
 #ifdef __SWITCH__
             Switch_SetProgressPhase("weapon/find_cached/done");
