@@ -1101,7 +1101,7 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         char trace[1536];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][INPUT AFTER LOAD] serverView=(%.2f,%.2f,%.2f) serverDelta=(%.2f,%.2f,%.2f) cmdAngles=(%d,%d,%d) entityAngles=(%.2f,%.2f,%.2f) entityTrajAngles=(%.2f,%.2f,%.2f) playerAnim=(legs:%d,torso:%d,moveDir:%d) clientViewBefore=(%.2f,%.2f,%.2f) clientViewNow=(%.2f,%.2f,%.2f) snapViewBefore=(%.2f,%.2f,%.2f) snapViewNow=(%.2f,%.2f,%.2f) snapDeltaBefore=(%.2f,%.2f,%.2f) snapDeltaNow=(%.2f,%.2f,%.2f) axis=(%.3f,%.3f,%.3f,%.3f) mapped=(forward=%.3f,right=%.3f,pitch=%.3f,yaw=%.3f) moveBefore=(forward:%d,right:%d) moveAfter=(forward:%d,right:%d) frame=(load:%d,now:%d) comFrame=(load:%d,now:%d)\\n",
+            "[KisakCOD][INPUT AFTER LOAD] serverView=(%.2f,%.2f,%.2f) serverDelta=(%.2f,%.2f,%.2f) cmdAngles=(%d,%d,%d) entityAngles=(%.2f,%.2f,%.2f) entityTrajAngles=(%.2f,%.2f,%.2f) playerAnim=(legs:%d,torso:%d,moveDir:%d) clientViewBefore=(%.2f,%.2f,%.2f) clientViewNow=(%.2f,%.2f,%.2f) snapViewBefore=(%.2f,%.2f,%.2f) snapViewNow=(%.2f,%.2f,%.2f) snapDeltaBefore=(%.2f,%.2f,%.2f) snapDeltaNow=(%.2f,%.2f,%.2f) axis=(%.3f,%.3f,%.3f,%.3f) mapped=(forward=%.3f,right=%.3f,pitch=%.3f,yaw=%.3f) moveBefore=(forward:%d,right:%d) moveAfter=(forward:%d,right:%d) frame=(load:%d,now:%d) comFrame=(load:%d,now:%d)\n",
             s_loadServerViewAngles[0], s_loadServerViewAngles[1], s_loadServerViewAngles[2],
             s_loadServerDeltaAngles[0], s_loadServerDeltaAngles[1], s_loadServerDeltaAngles[2],
             s_loadCmdAngles[0], s_loadCmdAngles[1], s_loadCmdAngles[2],
