@@ -1962,7 +1962,7 @@ void __cdecl DrawText2D(
         char trace[768];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FONT DRAW] n=%u font=%s material=%s ptr=%p glyphs=%p glyphCount=%d pixelHeight=%d texCount=%u texTable=%p tex0Semantic=%u image=%p imageSafe=%u imageName=%s imageSize=%ux%u vkTexture=%p vkView=%p vkFormat=%u layout=%u techniqueSet=%p unlit=%p passes=%u vs=%s ps=%s\\n",
+            "[KisakCOD][FONT DRAW] n=%u font=%s material=%s ptr=%p glyphs=%p glyphCount=%d pixelHeight=%d texCount=%u texTable=%p tex0Semantic=%u image=%p imageSafe=%u imageName=%s imageSize=%ux%u vkTexture=%p vkView=%p vkFormat=%u layout=%u techniqueSet=%p unlit=%p passes=%u vs=%s ps=%s\n",
             static_cast<unsigned>(switchConsoleFontDrawTraceCount),
             switchTextFontName,
             material->info.name ? material->info.name : "<null>",
@@ -2155,7 +2155,7 @@ void __cdecl DrawText2D(
                             char trace[384];
                             std::snprintf(
                                 trace, sizeof(trace),
-                                "[KisakCOD][FONT GLYPH] n=%u char=0x%02x glyph=%p letter=0x%02x xy=%d,%d size=%ux%u advance=%d uv=%.5f,%.5f-%.5f,%.5f\\n",
+                                "[KisakCOD][FONT GLYPH] n=%u char=0x%02x glyph=%p letter=0x%02x xy=%d,%d size=%ux%u advance=%d uv=%.5f,%.5f-%.5f,%.5f\n",
                                 static_cast<unsigned>(switchConsoleFontGlyphTraceCount),
                                 static_cast<unsigned>(letter),
                                 static_cast<const void *>(glyph),
@@ -2923,7 +2923,7 @@ void __cdecl RB_DrawText2DCmd(GfxRenderCommandExecState *execState)
             char trace[640];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][TEXT2D CMD] n=%u cmd=%p bytes=%u font=%p name=%s material=%p glyphs=%p glyphCount=%d textLen=%u maxChars=%d x=%.2f y=%.2f scale=%.3f,%.3f flags=0x%x text=%.80s\\n",
+                "[KisakCOD][TEXT2D CMD] n=%u cmd=%p bytes=%u font=%p name=%s material=%p glyphs=%p glyphCount=%d textLen=%u maxChars=%d x=%.2f y=%.2f scale=%.3f,%.3f flags=0x%x text=%.80s\n",
                 static_cast<unsigned>(switchConsoleTextCommandTraceCount),
                 static_cast<const void *>(cmd),
                 static_cast<unsigned>(cmd->header.byteCount),
