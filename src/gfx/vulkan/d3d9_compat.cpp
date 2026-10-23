@@ -8366,7 +8366,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     char attrTrace[320];
                     std::snprintf(
                         attrTrace, sizeof(attrTrace),
-                        "[KisakCOD][VK LIGHTMAP DRAW ATTR] n=%u i=%d name=%s usage=%u index=%u location=%u locationValid=%u matched=%u stream=%u declaredOffset=%u effectiveOffset=%u declaredType=%u effectiveType=%u bytes=%u stride=%u\\n",
+                        "[KisakCOD][VK LIGHTMAP DRAW ATTR] n=%u i=%d name=%s usage=%u index=%u location=%u locationValid=%u matched=%u stream=%u declaredOffset=%u effectiveOffset=%u declaredType=%u effectiveType=%u bytes=%u stride=%u\n",
                         traceIndex, attrIndex, attr.name ? attr.name : "<null>",
                         static_cast<unsigned>(attr.usage), static_cast<unsigned>(attr.index),
                         location, locationValid ? 1u : 0u, matched ? 1u : 0u,
