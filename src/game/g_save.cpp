@@ -771,23 +771,33 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
         v13 = *reinterpret_cast<unsigned __int8 * const *>(v3);
         if (v13)
         {
-            if (v13 == original + 504)
+            // This can be the actor's inline AnimScriptSpecific member. The
+            // original 32-bit offset (504) is not the native Switch offset.
+            if (v13 == original + offsetof(actor_s, AnimScriptSpecific))
             {
-
                 *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(-1);
             }
             else
             {
-                v14 = (v13 - (unsigned __int8 *)&g_scr_data.anim) >> 3;
+                const uintptr_t animAddress = reinterpret_cast<uintptr_t>(v13);
+                const uintptr_t animBase = reinterpret_cast<uintptr_t>(&g_scr_data.anim);
+                const uintptr_t animBytes = sizeof(AnimScriptList) * MAX_AI_SPECIES;
+                if (animAddress < animBase || animAddress - animBase >= animBytes ||
+                    ((animAddress - animBase) % sizeof(scr_animscript_t)) != 0)
+                {
+                    Com_Error(ERR_DROP, "WriteField1: animscript pointer out of range (%p)", v13);
+                    *reinterpret_cast<uintptr_t *>(v3) = 0;
+                    break;
+                }
+
+                v14 = static_cast<int>((animAddress - animBase) / sizeof(scr_animscript_t));
                 v15 = v14 + 1;
-                if (v14 + 1 <= 0 || v15 > 298)
-                    MyAssertHandler(
-                        "c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp",
-                        908,
-                        0,
-                        "%s\n\t(index) = %i",
-                        "(index > 0 && index <= (int)( sizeof( AnimScriptList ) * MAX_AI_SPECIES / sizeof( scr_animscript_t ) ))",
-                        v14 + 1);
+                if (v15 <= 0 || v15 > 298)
+                {
+                    Com_Error(ERR_DROP, "WriteField1: animscript index out of range (%i)", v15);
+                    *reinterpret_cast<uintptr_t *>(v3) = 0;
+                    break;
+                }
                 *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v15);
             }
         }
@@ -1023,13 +1033,22 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         v23 = (int)*(int*)v7;
 
         if (v23 > 298 || v23 < -1)
+        {
             Com_Error(ERR_DROP, "ReadField: animscript out of range (%i)", *v7);
+            // Com_Error can return through the Switch error path. Do not turn
+            // corrupt save data into an arbitrary pointer into script memory.
+            *reinterpret_cast<uintptr_t *>(v7) = 0;
+            break;
+        }
         if (!v23)
             goto LABEL_58;
         if (v23 == -1)
-            *(uintptr_t *)v7 = (uintptr_t)(base + 504);
+            *reinterpret_cast<uintptr_t *>(v7) =
+                reinterpret_cast<uintptr_t>(base + offsetof(actor_s, AnimScriptSpecific));
         else
-            *(uintptr_t *)v7 = (uintptr_t)(&g_scr_data.scripted_init + 2 * v23);
+            *reinterpret_cast<uintptr_t *>(v7) =
+                reinterpret_cast<uintptr_t>(&g_scr_data.scripted_init) +
+                static_cast<uintptr_t>(v23) * sizeof(scr_animscript_t);
         break;
     case SF_PATHNODE:
         *(uintptr_t *)v7 = (uintptr_t)Path_LoadNode(*(unsigned int*)v7);
