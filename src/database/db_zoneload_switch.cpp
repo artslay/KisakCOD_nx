@@ -18,6 +18,7 @@
 #include <script/scr_stringlist.h>
 
 #include <xanim/xanim.h>
+#include <qcommon/com_pack.h>
 #include <xanim/xmodel.h>
 #include <DynEntity/DynEntity_client.h>
 
@@ -486,7 +487,7 @@ static uint16_t SwitchFloatToHalf(float value)
 
     const uint32_t sign = (bits >> 16) & 0x8000u;
     const uint32_t floatExponent = (bits >> 23) & 0xffu;
-    uint32_t exponent = floatExponent ? floatExponent - 127u + 15u : 0u;
+    int32_t exponent = static_cast<int32_t>(floatExponent) - 127 + 15;
     uint32_t mantissa = bits & 0x7fffffu;
 
     if (floatExponent == 0xffu)
@@ -497,20 +498,19 @@ static uint16_t SwitchFloatToHalf(float value)
         return static_cast<uint16_t>(sign | 0x7c00u | payload | (payload == 0u));
     }
 
-    if (!floatExponent)
+    if (floatExponent == 0u)
         return static_cast<uint16_t>(sign);
 
-    if (exponent >= 31u)
+    if (exponent >= 31)
         return static_cast<uint16_t>(sign | 0x7c00u);
 
-    if (static_cast<int32_t>(exponent) <= 0)
+    if (exponent <= 0)
     {
-        const int32_t halfExponent = static_cast<int32_t>(floatExponent) - 127 + 15;
-        if (halfExponent < -10)
+        if (exponent < -10)
             return static_cast<uint16_t>(sign);
 
         mantissa |= 0x800000u;
-        const uint32_t shift = static_cast<uint32_t>(14 - halfExponent);
+        const uint32_t shift = static_cast<uint32_t>(14 - exponent);
         const uint32_t rounding = (1u << (shift - 1u)) - 1u +
             ((mantissa >> shift) & 1u);
         return static_cast<uint16_t>(sign | ((mantissa + rounding) >> shift));
@@ -540,7 +540,9 @@ void ConvertPackedModelTexCoordsForVulkan(
     const size_t blockSize = static_cast<size_t>(zoneMem->blocks[7].size);
     const uint8_t *sourceBlock = zoneMem->blocks[7].data;
     uint8_t *gpuBlock = zoneMem->lockedVertexData;
-    std::unordered_set<size_t> convertedVertexOffsets;
+    // De-duplicate whole surfaces, not individual vertices, to keep this
+    // one-time zone conversion bounded in memory even for high-vertex maps.
+    std::unordered_set<uintptr_t> convertedSurfaceStarts;
 
     for (const XModel *model : state.modelsToNormalize)
     {
@@ -566,7 +568,8 @@ void ConvertPackedModelTexCoordsForVulkan(
             const size_t vertexOffset = static_cast<size_t>(offsetAddress);
             const size_t vertexBytes =
                 static_cast<size_t>(surface.vertCount) * sizeof(GfxPackedVertex);
-            if (vertexBytes > blockSize - vertexOffset)
+            if (vertexBytes > blockSize - vertexOffset ||
+                !convertedSurfaceStarts.insert(vertexAddress).second)
                 continue;
 
             for (uint32_t vertexIndex = 0;
@@ -575,9 +578,6 @@ void ConvertPackedModelTexCoordsForVulkan(
             {
                 const size_t offset = vertexOffset +
                     static_cast<size_t>(vertexIndex) * sizeof(GfxPackedVertex);
-                if (!convertedVertexOffsets.insert(offset).second)
-                    continue;
-
                 const auto *sourceVertex =
                     reinterpret_cast<const GfxPackedVertex *>(sourceBlock + offset);
                 float texCoord[2]{};
