@@ -60,8 +60,9 @@ struct ZoneLoadState
     std::vector<uint16_t> scriptStrings;
     std::unordered_set<void *> processed;
     std::unordered_map<MaterialVertexDeclaration *, MaterialVertexDeclaration *> vertexDecls;
-    // Retain zone-local and canonical material objects for a post-link image fixup.
+    // Retain zone-local and canonical material/world objects for post-link image fixups.
     std::vector<Material *> materialsToNormalize;
+    std::vector<GfxWorld *> worldsToNormalize;
 
     // Weapon assets are copied into native 64-bit layout before registration. Their
     // storage must outlive LinkAsset and remain valid for as long as this zone is loaded.
@@ -383,6 +384,83 @@ void FixupTechniqueSet(ZoneLoadState &state, MaterialTechniqueSet *techniqueSet)
     }
 }
 
+GfxImage *NormalizeWorldImageReference(
+    const GfxWorld *world,
+    GfxImage *sourceImage,
+    const char *field,
+    uint32_t index)
+{
+    if (!sourceImage || !sourceImage->name || !sourceImage->name[0])
+        return sourceImage;
+
+    const char *const imageName = sourceImage->name;
+    const XAssetHeader registered = DB_FindXAssetHeader(ASSET_TYPE_IMAGE, imageName);
+    GfxImage *const canonicalImage = registered.image;
+
+    // A failed lookup can return the image type's default asset. Redirect only
+    // when the registered asset is a name match and the pointer differs.
+    if (!canonicalImage || !canonicalImage->name ||
+        I_stricmp(canonicalImage->name, imageName) != 0 ||
+        canonicalImage == sourceImage)
+        return sourceImage;
+
+#ifdef __SWITCH__
+    static uint32_t switchWorldImageFixupCount = 0;
+    if (switchWorldImageFixupCount < 64u)
+    {
+        char trace[640];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][WORLD IMAGE FIXUP] n=%u world=%s field=%s index=%u image=%s source=%p sourceTex=%p sourceDelay=%u canonical=%p canonicalTex=%p canonicalDelay=%u\n",
+            switchWorldImageFixupCount++,
+            world && world->name ? world->name : "<unnamed>",
+            field ? field : "<unknown>",
+            index,
+            imageName,
+            static_cast<void *>(sourceImage),
+            static_cast<void *>(sourceImage->texture.basemap),
+            static_cast<unsigned>(sourceImage->delayLoadPixels),
+            static_cast<void *>(canonicalImage),
+            static_cast<void *>(canonicalImage->texture.basemap),
+            static_cast<unsigned>(canonicalImage->delayLoadPixels));
+        Switch_LogWrite(trace);
+    }
+#endif
+    return canonicalImage;
+}
+
+void NormalizeGfxWorldImageReferences(GfxWorld *world)
+{
+    if (!world)
+        return;
+
+    world->skyImage = NormalizeWorldImageReference(world, world->skyImage, "sky", 0);
+    world->outdoorImage = NormalizeWorldImageReference(world, world->outdoorImage, "outdoor", 0);
+
+    if (world->lightmaps && world->lightmapCount > 0)
+    {
+        for (int lightmapIndex = 0; lightmapIndex < world->lightmapCount; ++lightmapIndex)
+        {
+            world->lightmaps[lightmapIndex].primary = NormalizeWorldImageReference(
+                world, world->lightmaps[lightmapIndex].primary, "lightmap_primary",
+                static_cast<uint32_t>(lightmapIndex));
+            world->lightmaps[lightmapIndex].secondary = NormalizeWorldImageReference(
+                world, world->lightmaps[lightmapIndex].secondary, "lightmap_secondary",
+                static_cast<uint32_t>(lightmapIndex));
+        }
+    }
+
+    if (world->reflectionProbes)
+    {
+        for (uint32_t probeIndex = 0; probeIndex < world->reflectionProbeCount; ++probeIndex)
+        {
+            world->reflectionProbes[probeIndex].reflectionImage = NormalizeWorldImageReference(
+                world, world->reflectionProbes[probeIndex].reflectionImage,
+                "reflection_probe", probeIndex);
+        }
+    }
+}
+
 void FixupGfxWorld(GfxWorld *world)
 {
     Load_VertexBuffer(&world->vd.worldVb, reinterpret_cast<uint8_t *>(world->vd.vertices), 44 * world->vertexCount);
@@ -652,6 +730,19 @@ void *LinkAsset(void *context, int assetType, void *asset)
         if (registered.material && registered.material != asset)
             state.materialsToNormalize.push_back(registered.material);
     }
+    else if (type == ASSET_TYPE_GFXWORLD)
+    {
+        // GfxWorld's image references can have the same OAT zone-local pointer
+        // mismatch as material textures. Keep both objects until all assets
+        // are linked, then redirect their image references to DB's canonical
+        // GfxImage objects before the delayed IWI pass runs.
+        auto *const sourceWorld = static_cast<GfxWorld *>(asset);
+        auto *const registeredWorld = static_cast<GfxWorld *>(registered.data);
+        if (sourceWorld)
+            state.worldsToNormalize.push_back(sourceWorld);
+        if (registeredWorld && registeredWorld != sourceWorld)
+            state.worldsToNormalize.push_back(registeredWorld);
+    }
 
 #ifdef __SWITCH__
     // Keep BSP registration visible with one bounded record per clip-map asset.
@@ -761,6 +852,14 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
         {
             if (material && normalizedMaterials.insert(material).second)
                 NormalizeMaterialImageReferences(material);
+        }
+    }
+    {
+        std::unordered_set<GfxWorld *> normalizedWorlds;
+        for (GfxWorld *world : state.worldsToNormalize)
+        {
+            if (world && normalizedWorlds.insert(world).second)
+                NormalizeGfxWorldImageReferences(world);
         }
     }
 
