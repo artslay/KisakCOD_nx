@@ -69,6 +69,10 @@ struct ZoneLoadState
     // Weapon assets are copied into native 64-bit layout before registration. Their
     // storage must outlive LinkAsset and remain valid for as long as this zone is loaded.
     std::vector<std::unique_ptr<WeaponDef>> nativeWeaponCopies;
+    // DB_AddXAsset clones the incoming WeaponDef into the registry's persistent
+    // pool. Keep those canonical pointers too: fixing only nativeWeaponCopies
+    // leaves the actual gameplay weapon's sound-name references unresolved.
+    std::vector<WeaponDef *> weaponsToNormalize;
 
     // Retained for bounded BSP registration diagnostics.
     const char *zoneName = nullptr;
@@ -85,6 +89,7 @@ struct ZoneHandle
 {
     void *zone = nullptr;
     std::vector<std::unique_ptr<WeaponDef>> nativeWeaponCopies;
+    std::vector<WeaponDef *> weaponsToNormalize;
 };
 
 std::mutex s_zoneHandlesMutex;
@@ -854,6 +859,14 @@ void *LinkAsset(void *context, int assetType, void *asset)
     }
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
 
+    if (type == ASSET_TYPE_WEAPON && registered.weapon)
+    {
+        // Fix the canonical WeaponDef that gameplay actually reads. The incoming
+        // zone copy above is staged separately and is not necessarily the object
+        // retained by DB_AddXAsset after duplicate/override selection.
+        state.weaponsToNormalize.push_back(registered.weapon);
+    }
+
     if (type == ASSET_TYPE_MATERIAL)
     {
         // References in dependent assets may still target the zone-local
@@ -1006,24 +1019,37 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
         }
     }
 
+    // Resolve both kinds of objects: retained zone-side copies keep referenced
+    // data alive, while registered WeaponDefs in DB's native pool are what the
+    // game actually queries. Repeat this after every zone because aliases can be
+    // introduced by a later fastfile.
     std::vector<WeaponDef *> weaponsToFix;
     {
         std::lock_guard<std::mutex> lock(s_zoneHandlesMutex);
         for (auto &zoneEntry : s_zoneHandles)
         {
-            for (auto &weapon : zoneEntry.second.nativeWeaponCopies)
+            for (WeaponDef *weapon : zoneEntry.second.weaponsToNormalize)
             {
                 if (weapon)
-                    weaponsToFix.push_back(weapon.get());
+                    weaponsToFix.push_back(weapon);
             }
         }
     }
-    for (WeaponDef *weapon : weaponsToFix)
-        FixupWeapon(state, weapon);
+    weaponsToFix.insert(
+        weaponsToFix.end(),
+        state.weaponsToNormalize.begin(),
+        state.weaponsToNormalize.end());
     for (auto &weapon : state.nativeWeaponCopies)
     {
         if (weapon)
-            FixupWeapon(state, weapon.get());
+            weaponsToFix.push_back(weapon.get());
+    }
+
+    std::unordered_set<WeaponDef *> fixedWeapons;
+    for (WeaponDef *weapon : weaponsToFix)
+    {
+        if (weapon && fixedWeapons.insert(weapon).second)
+            FixupWeapon(state, weapon);
     }
 
     {
@@ -1031,6 +1057,7 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
         ZoneHandle handle;
         handle.zone = zone;
         handle.nativeWeaponCopies = std::move(state.nativeWeaponCopies);
+        handle.weaponsToNormalize = std::move(state.weaponsToNormalize);
         s_zoneHandles[zoneMem] = std::move(handle);
     }
 
