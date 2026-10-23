@@ -107,6 +107,75 @@ static u64 ButtonMask(GPadButton button)
     }
 }
 
+static constexpr u64 kConsoleShortcutButtons =
+    HidNpadButton_StickL | HidNpadButton_StickR;
+static bool g_consoleShortcutConsumed = false;
+
+static void Switch_ShowConsoleKeyboard()
+{
+    // Use the engine's own console catcher and input path. The Switch keyboard
+    // only supplies text; CL_ConsoleCharEvent and Enter perform normal command
+    // history, echo, autocomplete cleanup, and command-buffer submission.
+    Con_OpenConsole(0);
+
+    SwkbdConfig keyboard{};
+    const Result createResult = swkbdCreate(&keyboard, 0);
+    if (R_FAILED(createResult))
+    {
+        char trace[160];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][CONSOLE KEYBOARD] create_failed result=0x%x\n",
+            static_cast<unsigned>(createResult));
+        Switch_LogWrite(trace);
+        return;
+    }
+
+    swkbdConfigMakePresetDefault(&keyboard);
+    swkbdConfigSetHeaderText(&keyboard, "KisakCOD Console");
+    swkbdConfigSetGuideText(&keyboard, "Enter a console command");
+    swkbdConfigSetStringLenMax(&keyboard, 255);
+
+    char command[256]{};
+    const Result keyboardResult = swkbdShow(&keyboard, command, sizeof(command));
+    swkbdClose(&keyboard);
+
+    if (R_FAILED(keyboardResult))
+    {
+        char trace[160];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][CONSOLE KEYBOARD] show_failed result=0x%x\n",
+            static_cast<unsigned>(keyboardResult));
+        Switch_LogWrite(trace);
+        return;
+    }
+
+    if (!command[0])
+    {
+        Switch_LogWrite("[KisakCOD][CONSOLE KEYBOARD] cancelled_or_empty\n");
+        return;
+    }
+
+    // swkbdShow returns UTF-8; the console field stores the typed command as
+    // UTF-8 bytes, so forwarding each byte preserves both ASCII commands and
+    // any non-ASCII text accepted by the system keyboard.
+    for (const unsigned char *character =
+             reinterpret_cast<const unsigned char *>(command);
+         *character; ++character)
+    {
+        CL_ConsoleCharEvent(0, static_cast<int32_t>(*character));
+    }
+
+    const uint32_t eventTime = Sys_Milliseconds();
+    CL_KeyEvent(0, K_ENTER, 1, eventTime);
+    CL_KeyEvent(0, K_ENTER, 0, eventTime);
+
+    char trace[160];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][CONSOLE KEYBOARD] submitted bytes=%zu\n",
+        std::strlen(command));
+    Switch_LogWrite(trace);
+}
+
 void Switch_GamepadInit()
 {
     if (g_initialized)
@@ -119,6 +188,7 @@ void Switch_GamepadInit()
     g_leftStick = {};
     g_rightStick = {};
     g_connected = false;
+    g_consoleShortcutConsumed = false;
     g_initialized = true;
 }
 
@@ -242,6 +312,24 @@ void Switch_GamepadFrame()
         g_cinematicSkipKeyDown = false;
     }
 
+    // L3+R3 opens the CoD console and the system software keyboard.
+    // Consume the individual stick bindings for this press so the same gesture
+    // does not also trigger sprint or melee.
+    if ((g_buttons & kConsoleShortcutButtons) != kConsoleShortcutButtons)
+        g_consoleShortcutConsumed = false;
+
+    if (!cinematicActive && !activeGameCinematic &&
+        !mapLoadingCinematicActive && Pressed(kConsoleShortcutButtons))
+    {
+        g_consoleShortcutConsumed = true;
+        if (gameplayActive)
+        {
+            IN_SprintUp();
+            IN_Melee_Up();
+        }
+        Switch_ShowConsoleKeyboard();
+    }
+
     // UI navigation is fed through the engine's normal key path. Do not send
     // these keys during gameplay, otherwise A/B/D-pad would also execute any
     // matching keyboard binds from config.
@@ -269,8 +357,10 @@ void Switch_GamepadFrame()
     SendActionEdge(HidNpadButton_ZL, IN_SpeedDown, IN_SpeedUp, gameplayActive);
     SendActionEdge(HidNpadButton_R, IN_Frag_Down, IN_Frag_Up, gameplayActive);
     SendActionEdge(HidNpadButton_L, IN_Smoke_Down, IN_Smoke_Up, gameplayActive);
-    SendActionEdge(HidNpadButton_StickL, IN_SprintDown, IN_SprintUp, gameplayActive);
-    SendActionEdge(HidNpadButton_StickR, IN_Melee_Down, IN_Melee_Up, gameplayActive);
+    SendActionEdge(HidNpadButton_StickL, IN_SprintDown, IN_SprintUp,
+                   gameplayActive && !g_consoleShortcutConsumed);
+    SendActionEdge(HidNpadButton_StickR, IN_Melee_Down, IN_Melee_Up,
+                   gameplayActive && !g_consoleShortcutConsumed);
 
     // Y is mapped to the normal F key for use/pickup. Send both edges
     // through the standard key path so the stock +activate binding runs.
@@ -291,6 +381,7 @@ void Switch_GamepadShutdown()
     g_initialized = false;
     g_connected = false;
     g_cinematicSkipKeyDown = false;
+    g_consoleShortcutConsumed = false;
     g_buttons = 0;
     g_previousButtons = 0;
     g_leftStick = {};
