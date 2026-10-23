@@ -26,6 +26,11 @@
 
 PhysGlob physGlob;
 
+#if defined(KISAK_SWITCH) || defined(__SWITCH__)
+static_assert(sizeof(PhysObjUserData) == 0x78,
+    "Switch PhysObjUserData must include native 64-bit pointer alignment");
+#endif
+
 bool physInited;
 
 const dvar_t *phys_contact_erp;
@@ -122,7 +127,7 @@ void __cdecl Phys_Init()
     if (!physInited)
     {
         memset((uint8_t *)&physGlob, 0, sizeof(physGlob));
-        Pool_Init((char *)physGlob.userData, &physGlob.userDataPool, 0x70u, 0x200u);
+        Pool_Init((char *)physGlob.userData, &physGlob.userDataPool, sizeof(physGlob.userData[0]), ARRAY_COUNT(physGlob.userData));
         ODE_Init();
         for (worldIndex = PHYS_WORLD_DYNENT; worldIndex < PHYS_WORLD_COUNT; ++worldIndex)
         {
