@@ -198,9 +198,7 @@ void ContentLoader::LoadXAssetArray(const bool atStreamStart, const size_t count
         }
         catch (...)
         {
-            // Preserve the failing asset identity for KisakZone_Load's exception
-            // handler. Clearing it here discarded the only useful context for
-            // generated-loader lookup failures.
+            KisakZone_ClearActiveAsset();
             throw;
         }
         KisakZone_ClearActiveAsset();
