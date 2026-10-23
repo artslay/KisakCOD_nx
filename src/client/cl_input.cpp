@@ -31,9 +31,6 @@ const dvar_t *cl_anglespeedkey;
 
 unsigned int frame_msec;
 int old_com_frameTime;
-#ifdef __SWITCH__
-static bool s_skipNextGamepadAimDeltaTime = false;
-#endif
 
 #define KEY_LEFT 0
 #define KEY_RIGHT 1
@@ -1063,10 +1060,7 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     aimInput.pitchMax = clients[0].cgameMaxPitchSpeed;
     aimInput.yaw = clients[0].viewangles[1];
     aimInput.yawMax = clients[0].cgameMaxYawSpeed;
-    aimInput.deltaTime = s_skipNextGamepadAimDeltaTime
-        ? 0.0f
-        : static_cast<float>(cls.frametime) * 0.001f;
-    s_skipNextGamepadAimDeltaTime = false;
+    aimInput.deltaTime = static_cast<float>(cls.frametime) * 0.001f;
     aimInput.ps = CG_GetPredictedPlayerState(0);
 
     AimAssist_UpdateGamePadInput(&aimInput, &aimOutput);
@@ -1080,36 +1074,6 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
 #endif
 }
 
-#ifdef __SWITCH__
-// G_LoadGame restores the server player state but the in-process client keeps
-// its pre-load snapshot and view angles. Rebase both sides to the loaded state
-// so stick movement and aim use the same orientation/ADS state after a reload.
-void __cdecl CL_ResetInputAfterSavegameLoad(const playerState_s *loadedPlayerState)
-{
-    if (!loadedPlayerState)
-        return;
-
-    for (int i = 0; i < 3; ++i)
-    {
-        clients[0].viewangles[i] = loadedPlayerState->viewangles[i];
-        clients[0].snap.ps.viewangles[i] = loadedPlayerState->viewangles[i];
-        clients[0].snap.ps.delta_angles[i] = loadedPlayerState->delta_angles[i];
-    }
-
-    clients[0].snap.ps.pm_flags = loadedPlayerState->pm_flags;
-    clients[0].snap.ps.fWeaponPosFrac = loadedPlayerState->fWeaponPosFrac;
-    clients[0].usingAds = loadedPlayerState->fWeaponPosFrac > 0.0f;
-
-    clients[0].mouseDx[0] = clients[0].mouseDx[1] = 0;
-    clients[0].mouseDy[0] = clients[0].mouseDy[1] = 0;
-    clients[0].mouseIndex = 0;
-    CL_ClearKeys(0);
-
-    frame_msec = 0;
-    old_com_frameTime = com_frameTime;
-    s_skipNextGamepadAimDeltaTime = true;
-}
-#endif
 
 void __cdecl CL_GetMouseMovement(clientActive_t *cl, float *mx, float *my)
 {
