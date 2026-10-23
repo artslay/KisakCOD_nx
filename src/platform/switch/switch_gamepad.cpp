@@ -230,8 +230,9 @@ void Switch_GamepadFrame()
     const bool cinematicActive =
         connectionState == CA_CINEMATIC || connectionState == CA_LOGO;
     const bool uiActive = Key_IsCatcherActive(0, KEYCATCH_UI);
+    const bool consoleActive = Key_IsCatcherActive(0, KEYCATCH_CONSOLE);
     const bool gameplayActive =
-        connectionState == CA_ACTIVE && !uiActive;
+        connectionState == CA_ACTIVE && !uiActive && !consoleActive;
     constexpr u64 cinematicSkipButtons =
         HidNpadButton_B | HidNpadButton_Plus;
 
@@ -339,6 +340,9 @@ void Switch_GamepadFrame()
             IN_Melee_Up();
         }
         Switch_ShowConsoleKeyboard();
+        // Opening/closing the console may block for the software keyboard.
+        // Do not also process this same controller edge as a gameplay action.
+        return;
     }
 
     // UI navigation is fed through the engine's normal key path. Do not send
