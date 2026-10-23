@@ -63,6 +63,7 @@ struct ZoneLoadState
     // Retain zone-local and canonical material/world objects for post-link image fixups.
     std::vector<Material *> materialsToNormalize;
     std::vector<GfxWorld *> worldsToNormalize;
+    std::vector<XModel *> modelsToNormalize;
 
     // Weapon assets are copied into native 64-bit layout before registration. Their
     // storage must outlive LinkAsset and remain valid for as long as this zone is loaded.
@@ -461,6 +462,85 @@ void NormalizeGfxWorldImageReferences(GfxWorld *world)
     }
 }
 
+static void NormalizeMaterialReference(
+    Material **materialSlot,
+    const char *ownerKind,
+    const char *ownerName,
+    uint32_t slotIndex)
+{
+    if (!materialSlot || !*materialSlot)
+        return;
+
+    Material *const sourceMaterial = *materialSlot;
+    if (!sourceMaterial->info.name || !sourceMaterial->info.name[0])
+        return;
+
+    const char *const materialName = sourceMaterial->info.name;
+    const XAssetHeader registered =
+        DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, materialName);
+    Material *const canonicalMaterial = registered.material;
+
+    // A lookup miss can return the material type's default asset. Redirect only
+    // when the registered asset is an exact-name match and is not this pointer.
+    if (!canonicalMaterial || !canonicalMaterial->info.name ||
+        I_stricmp(canonicalMaterial->info.name, materialName) != 0 ||
+        canonicalMaterial == sourceMaterial)
+        return;
+
+    *materialSlot = canonicalMaterial;
+#ifdef __SWITCH__
+    static uint32_t switchMaterialReferenceFixupCount = 0;
+    if (switchMaterialReferenceFixupCount < 48u)
+    {
+        char trace[512];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][MATERIAL REF FIXUP] n=%u owner=%s:%s slot=%u material=%s source=%p canonical=%p\n",
+            switchMaterialReferenceFixupCount++,
+            ownerKind ? ownerKind : "<unknown>",
+            ownerName ? ownerName : "<unnamed>",
+            slotIndex,
+            materialName,
+            static_cast<void *>(sourceMaterial),
+            static_cast<void *>(canonicalMaterial));
+        Switch_LogWrite(trace);
+    }
+#endif
+}
+
+void NormalizeGfxWorldMaterialReferences(GfxWorld *world)
+{
+    if (!world || !world->dpvs.surfaces)
+        return;
+
+    uint32_t surfaceCount = world->dpvs.staticSurfaceCount;
+    if (world->surfaceCount >= 0 &&
+        surfaceCount > static_cast<uint32_t>(world->surfaceCount))
+        surfaceCount = static_cast<uint32_t>(world->surfaceCount);
+
+    for (uint32_t surfaceIndex = 0; surfaceIndex < surfaceCount; ++surfaceIndex)
+    {
+        NormalizeMaterialReference(
+            &world->dpvs.surfaces[surfaceIndex].material,
+            "world", world->name, surfaceIndex);
+    }
+}
+
+void NormalizeXModelMaterialReferences(XModel *model)
+{
+    if (!model || !model->materialHandles)
+        return;
+
+    for (uint32_t surfaceIndex = 0;
+         surfaceIndex < static_cast<uint32_t>(model->numsurfs);
+         ++surfaceIndex)
+    {
+        NormalizeMaterialReference(
+            &model->materialHandles[surfaceIndex],
+            "xmodel", model->name, surfaceIndex);
+    }
+}
+
 void FixupGfxWorld(GfxWorld *world)
 {
     Load_VertexBuffer(&world->vd.worldVb, reinterpret_cast<uint8_t *>(world->vd.vertices), 44 * world->vertexCount);
@@ -743,6 +823,18 @@ void *LinkAsset(void *context, int assetType, void *asset)
         if (registeredWorld && registeredWorld != sourceWorld)
             state.worldsToNormalize.push_back(registeredWorld);
     }
+    else if (type == ASSET_TYPE_XMODEL)
+    {
+        // OAT can leave an XModel's surface material handles pointing at a
+        // zone-local duplicate even when DB_AddXAsset keeps an older canonical
+        // model/material graph. Rebind both variants after the full zone links.
+        auto *const sourceModel = static_cast<XModel *>(asset);
+        auto *const registeredModel = static_cast<XModel *>(registered.data);
+        if (sourceModel)
+            state.modelsToNormalize.push_back(sourceModel);
+        if (registeredModel && registeredModel != sourceModel)
+            state.modelsToNormalize.push_back(registeredModel);
+    }
 
 #ifdef __SWITCH__
     // Keep BSP registration visible with one bounded record per clip-map asset.
@@ -859,7 +951,18 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
         for (GfxWorld *world : state.worldsToNormalize)
         {
             if (world && normalizedWorlds.insert(world).second)
+            {
                 NormalizeGfxWorldImageReferences(world);
+                NormalizeGfxWorldMaterialReferences(world);
+            }
+        }
+    }
+    {
+        std::unordered_set<XModel *> normalizedModels;
+        for (XModel *model : state.modelsToNormalize)
+        {
+            if (model && normalizedModels.insert(model).second)
+                NormalizeXModelMaterialReferences(model);
         }
     }
 
