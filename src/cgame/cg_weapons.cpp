@@ -35,7 +35,20 @@
 #endif
 
 #ifdef __SWITCH__
+#include <cstdio>
 extern thread_local const char * volatile g_switchFrameStage;
+static thread_local char g_switchViewmodelLoadStage[128];
+
+static void Switch_SetViewmodelLoadStage(uint32_t weaponIndex, const char *phase)
+{
+    std::snprintf(
+        g_switchViewmodelLoadStage,
+        sizeof(g_switchViewmodelLoadStage),
+        "frame/load/viewmodel_animtrees/weapon=%u/%s",
+        weaponIndex,
+        phase ? phase : "unknown");
+    g_switchFrameStage = g_switchViewmodelLoadStage;
+}
 #endif
 
 const float MYLERP_START = 0.3f;
@@ -4148,8 +4161,14 @@ void CG_LoadViewModelAnimTrees(SaveGame *save, const playerState_s *ps)
 
     iassert(save);
     iassert(ps);
+#ifdef __SWITCH__
+    Switch_SetViewmodelLoadStage(0, "read_weapon_count");
+#endif
     SaveMemory_LoadRead(&numWeapons, 4, save);
     iassert(numWeapons <= BG_GetNumWeapons());
+#ifdef __SWITCH__
+    Switch_SetViewmodelLoadStage(0, "weapon_count_done");
+#endif
     viewmodelIndex = ps->viewmodelIndex;
     if (viewmodelIndex <= 0)
     {
@@ -4172,10 +4191,17 @@ void CG_LoadViewModelAnimTrees(SaveGame *save, const playerState_s *ps)
         {
             if (v11->hasAnimTree)
             {
+#ifdef __SWITCH__
+                Switch_SetViewmodelLoadStage(v10, "register_weapon");
+#endif
                 CG_RegisterWeapon(0, v10);
                 if (!v11->viewModelDObj)
                 {
                     if (v8)
+                    {
+#ifdef __SWITCH__
+                        Switch_SetViewmodelLoadStage(v10, "create_dobj");
+#endif
                         ChangeViewmodelDobj(
                             0,
                             v10,
@@ -4185,18 +4211,34 @@ void CG_LoadViewModelAnimTrees(SaveGame *save, const playerState_s *ps)
                             v11->rocketModel,
                             v11->knifeModel,
                             1);
+                    }
                     if (!v11->viewModelDObj)
                     {
+#ifdef __SWITCH__
+                        Switch_SetViewmodelLoadStage(v10, "missing_dobj");
+#endif
                         WeaponDef = BG_GetWeaponDef(v10);
                         iassert(WeaponDef);
                         Com_Error(ERR_DROP, "CG_LoadViewModelAnimTrees: viewmodel '%s' has no dobj", WeaponDef->szInternalName);
                     }
                 }
+#ifdef __SWITCH__
+                Switch_SetViewmodelLoadStage(v10, "get_tree");
+#endif
                 Tree = DObjGetTree(v11->viewModelDObj);
                 iassert(Tree); // KISAK_AI: animTree -> Tree
                 // "animTree"
+#ifdef __SWITCH__
+                Switch_SetViewmodelLoadStage(v10, "clear_tree");
+#endif
                 XAnimClearTree(Tree);
+#ifdef __SWITCH__
+                Switch_SetViewmodelLoadStage(v10, "load_tree");
+#endif
                 XAnimLoadAnimTree(v11->viewModelDObj, MemoryFile);
+#ifdef __SWITCH__
+                Switch_SetViewmodelLoadStage(v10, "load_tree_done");
+#endif
             }
             ++v10;
             ++v11;
