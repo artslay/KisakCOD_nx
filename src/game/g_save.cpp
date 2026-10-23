@@ -3077,16 +3077,54 @@ bool __cdecl G_LoadMainState(SaveGame *save)
         }
         j = ++v17;
     } while (v17 < MAX_GENTITIES);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/send_game_state");
+#endif
     SV_SendGameState();
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/cgame_entities");
+#endif
     CG_LoadEntities(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/client_archive");
+#endif
     CL_ArchiveClientState(memFile, 6);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/client_archive_done");
+    SwitchSavePhase("frame/load/main_state/client_server_commands");
+#endif
     CL_LoadServerCommands(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/client_server_commands_done");
+    SwitchSavePhase("frame/load/main_state/server_commands");
+#endif
     SV_LoadServerCommands(save);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/server_commands_done");
+    SwitchSavePhase("frame/load/main_state/viewmodel_animtrees");
+#endif
     CG_LoadViewModelAnimTrees(save, &level.clients->ps);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/viewmodel_animtrees_done");
+    SwitchSavePhase("frame/load/main_state/physics");
+#endif
     Phys_ArchiveState(memFile);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/physics_done");
+#endif
     SaveMemory_MoveToSegment(save, -1);
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/script_shutdown");
+#endif
     Scr_LoadShutdown();
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/script_shutdown_done");
+    SwitchSavePhase("frame/load/main_state/locate_game_data");
+#endif
     SV_LocateGameData(level.gentities, level.num_entities, sizeof(gentity_s), &level.clients->ps, sizeof(gclient_s)); // KISAKTODO: pointer type on ps
+#ifdef __SWITCH__
+    SwitchSavePhase("frame/load/main_state/locate_game_data_done");
+#endif
     level.initializing = 0;
     return true;
 }
