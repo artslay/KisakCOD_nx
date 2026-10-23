@@ -38,6 +38,16 @@
 extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 
+// SF_ANIMSCRIPT serializes indices across the adjacent human and dog tables.
+// These checks prevent another ABI change from silently invalidating that map.
+static_assert(sizeof(scr_animscript_t) == 8);
+static_assert(
+    offsetof(scr_data_t, dogAnim) ==
+    offsetof(scr_data_t, anim) + sizeof(AnimScriptList));
+static_assert(
+    offsetof(scr_data_t, delete_) ==
+    offsetof(scr_data_t, anim) + sizeof(AnimScriptList) * MAX_AI_SPECIES);
+
 namespace
 {
 thread_local char g_switchSaveStageBuffer[192];
