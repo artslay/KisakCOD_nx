@@ -495,7 +495,11 @@ uint32_t __cdecl BG_FindWeaponIndexForName(const char *name)
 
         Switch_SetProgressPhase("weapon/find_cached/compare");
 #endif
+#ifdef __SWITCH__
         if (!I_stricmp(name, internalName))
+#else
+        if (!I_stricmp(name, bg_weaponDefs[weapIndex]->szInternalName))
+#endif
         {
 #ifdef __SWITCH__
             Switch_SetProgressPhase("weapon/find_cached/done");
