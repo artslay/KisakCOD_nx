@@ -2962,7 +2962,7 @@ bool __cdecl G_LoadMainState(SaveGame *save)
             "G_LoadMainState: pending trigger count out of range (%d, max %d)",
             pendingTriggerCount,
             static_cast<int>(ARRAY_COUNT(level.pendingTriggerList)));
-        return;
+        return false;
     }
     level.pendingTriggerListSize = pendingTriggerCount;
 #ifdef __SWITCH__
