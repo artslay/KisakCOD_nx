@@ -5403,6 +5403,44 @@ bool IDirect3DDevice9::BindSamplerSet(
     if (!m_backend)
         return false;
 
+    // Image reloads can replace GfxImage::texture.basemap while a previous
+    // D3D texture reference remains cached in m_textures. Rebind that slot to
+    // the owner's current resource before checking upload state or building
+    // descriptors; otherwise the stale object can appear permanently blank.
+    for (uint32_t slot = 0; slot < 16; ++slot)
+    {
+        auto *boundTexture = static_cast<KisakVkTexture *>(textures[slot]);
+        if (!boundTexture || !boundTexture->sourceImage)
+            continue;
+
+        IDirect3DBaseTexture9 *currentTexture =
+            boundTexture->sourceImage->texture.basemap;
+        if (!currentTexture || currentTexture == textures[slot])
+            continue;
+
+        auto *currentVkTexture = static_cast<KisakVkTexture *>(currentTexture);
+        SetTexture(slot, currentTexture);
+
+        static std::atomic<uint32_t> rebindLogCount{0};
+        const uint32_t sequence =
+            rebindLogCount.fetch_add(1, std::memory_order_relaxed);
+        if (sequence < 16)
+        {
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK TEXTURE REBIND] slot=%u image=%.95s stale=%p staleLayout=%u current=%p currentLayout=%u\\n",
+                slot,
+                boundTexture->sourceImage->name
+                    ? boundTexture->sourceImage->name : boundTexture->debugName,
+                static_cast<void *>(boundTexture),
+                static_cast<unsigned>(boundTexture->GetSubresourceLayout(0, 0)),
+                static_cast<void *>(currentVkTexture),
+                static_cast<unsigned>(currentVkTexture->GetSubresourceLayout(0, 0)));
+            Switch_LogWrite(trace);
+        }
+    }
+
     const KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
     const MOJOSHADER_parseData *activeParse =
         activeShader ? activeShader->parseData : nullptr;
