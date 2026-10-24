@@ -1,7 +1,4 @@
 #include <universal/q_shared.h>
-#ifdef __SWITCH__
-extern void Switch_LogWrite(const char *msg);
-#endif
 #include "rb_tess.h"
 #include "r_dvars.h"
 #include "r_shade.h"
