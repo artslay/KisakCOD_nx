@@ -3748,10 +3748,6 @@ uint32_t KisakVkTexture::Release()
             backend->DeferDestroyImage(resolveImage, resolveMemory, resolveView);
         if (baseMipView)
             backend->DeferDestroyImage(VK_NULL_HANDLE, VK_NULL_HANDLE, baseMipView);
-        if (baseMipSrgbView)
-            backend->DeferDestroyImage(VK_NULL_HANDLE, VK_NULL_HANDLE, baseMipSrgbView);
-        if (srgbView)
-            backend->DeferDestroyImage(VK_NULL_HANDLE, VK_NULL_HANDLE, srgbView);
         if (image || memory || view)
             backend->DeferDestroyImage(image, memory, view);
     }
@@ -3759,9 +3755,6 @@ uint32_t KisakVkTexture::Release()
     resolveView = VK_NULL_HANDLE;
     resolveMemory = VK_NULL_HANDLE;
     baseMipView = VK_NULL_HANDLE;
-    baseMipSrgbView = VK_NULL_HANDLE;
-    srgbView = VK_NULL_HANDLE;
-    srgbFormat = VK_FORMAT_UNDEFINED;
     image = VK_NULL_HANDLE;
     view = VK_NULL_HANDLE;
     memory = VK_NULL_HANDLE;
@@ -5899,20 +5892,8 @@ bool IDirect3DDevice9::BindSamplerSet(
                 // drivers that expose a sampleable compressed/legacy format
                 // without linear filtering, force a valid point-filter sampler
                 // instead of returning undefined texture samples.
-                const bool requestSrgb =
-                    m_samplerState[i][D3DSAMP_SRGBTEXTURE] != 0;
-                const bool useSrgbView = requestSrgb &&
-                    texture->srgbFormat != VK_FORMAT_UNDEFINED &&
-                    texture->srgbView && texture->baseMipSrgbView;
-                const VkFormat sampledFormat = useSrgbView
-                    ? texture->srgbFormat : texture->format;
-                const VkImageView sampledView = useSrgbView
-                    ? (allSubresourcesInitialized
-                        ? texture->srgbView : texture->baseMipSrgbView)
-                    : (allSubresourcesInitialized
-                        ? texture->view : texture->baseMipView);
                 const VkFormatFeatureFlags samplerFormatFeatures =
-                    SwitchGetOptimalFormatFeatures(m_backend, sampledFormat);
+                    SwitchGetOptimalFormatFeatures(m_backend, texture->format);
                 const bool supportsLinearFiltering =
                     (samplerFormatFeatures &
                      VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
@@ -5952,7 +5933,8 @@ bool IDirect3DDevice9::BindSamplerSet(
                     mipLodBias,
                     anisotropicFilter && m_backend->SupportsSamplerAnisotropy(),
                     std::min(maxAnisotropy, m_backend->MaxSamplerAnisotropy()));
-                images[i].imageView = sampledView;
+                images[i].imageView = allSubresourcesInitialized
+                    ? texture->view : texture->baseMipView;
                 if (!sampler && activeSamplers[i])
                     return failActiveSampler(i, "vk_sampler_creation_failed");
                 images[i].sampler = sampler ? sampler : m_backend->DummySampler();

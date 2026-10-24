@@ -175,8 +175,7 @@ constexpr uint32_t D3DRS_BLENDOPALPHA = 209;
 enum : uint32_t {
     D3DSAMP_ADDRESSU=1, D3DSAMP_ADDRESSV=2, D3DSAMP_ADDRESSW=3,
     D3DSAMP_MAGFILTER=5, D3DSAMP_MINFILTER=6, D3DSAMP_MIPFILTER=7,
-    D3DSAMP_MIPMAPLODBIAS=8, D3DSAMP_MAXANISOTROPY=10,
-    D3DSAMP_SRGBTEXTURE=11
+    D3DSAMP_MIPMAPLODBIAS=8, D3DSAMP_MAXANISOTROPY=10
 };
 
 enum : uint8_t {
@@ -258,11 +257,6 @@ struct KisakVkTexture : IDirect3DResource9 {
     VkImage image=VK_NULL_HANDLE;
     VkImageView view=VK_NULL_HANDLE;
     VkImageView baseMipView=VK_NULL_HANDLE;
-    // Optional compatible sRGB views are selected per D3D9 sampler state.
-    // The image itself remains UNORM so data maps and non-sRGB samplers are unchanged.
-    VkImageView srgbView=VK_NULL_HANDLE;
-    VkImageView baseMipSrgbView=VK_NULL_HANDLE;
-    VkFormat srgbFormat=VK_FORMAT_UNDEFINED;
     VkSampler sampler=VK_NULL_HANDLE;
     VkDeviceMemory memory=VK_NULL_HANDLE;
     VkImage resolveImage=VK_NULL_HANDLE;

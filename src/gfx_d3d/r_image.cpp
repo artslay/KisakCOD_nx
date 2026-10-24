@@ -58,10 +58,10 @@ struct VulkanImageFormat
 
 VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format, bool srgb = false)
 {
-    // Keep the base image UNORM so uploads and ordinary D3D9 sampling preserve
-    // stored values. R_VulkanAllocTexture optionally creates a compatible sRGB
-    // view, and BindSamplerSet selects it per D3DSAMP_SRGBTEXTURE. Lightmaps,
-    // normal maps, and data textures therefore stay linear unless explicitly flagged.
+    // Color maps are stored in gamma-encoded RGB space. Decode them through
+    // Vulkan's sRGB formats, while lightmaps, normal maps, and data textures
+    // remain UNORM/linear. The Switch D3D9 layer does not expose per-sampler
+    // sRGB views, so choose the matching view-compatible format at allocation.
     switch (format)
     {
     case D3DFMT_A8R8G8B8:
@@ -217,25 +217,14 @@ uint32_t R_VulkanFullMipCount(uint32_t width, uint32_t height, uint32_t depth)
     return levels;
 }
 
-VkFormat R_VulkanSrgbViewFormat(VkFormat format)
-{
-    switch (format)
-    {
-    case VK_FORMAT_B8G8R8A8_UNORM: return VK_FORMAT_B8G8R8A8_SRGB;
-    case VK_FORMAT_R8G8B8A8_UNORM: return VK_FORMAT_R8G8B8A8_SRGB;
-    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK: return VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
-    case VK_FORMAT_BC2_UNORM_BLOCK: return VK_FORMAT_BC2_SRGB_BLOCK;
-    case VK_FORMAT_BC3_UNORM_BLOCK: return VK_FORMAT_BC3_SRGB_BLOCK;
-    default: return VK_FORMAT_UNDEFINED;
-    }
-}
-
 bool R_VulkanUseSrgbColorFormat(const GfxImage *image)
 {
-    // Keep the backing image in UNORM and select an sRGB-compatible VIEW only
-    // when a D3D9 sampler explicitly requests D3DSAMP_SRGBTEXTURE. This avoids
-    // decoding lightmaps, normal maps, and data textures globally. Swapchain
-    // encoding remains a separate decision made by VulkanBackend::CreateSwapchain.
+    // Keep legacy CoD4 sampling in UNORM until the backend can pair per-sampler
+    // D3DSAMP_SRGBTEXTURE semantics with an sRGB output path. The Switch surface
+    // currently exposes only B8G8R8A8_UNORM (srgbAttachment=0); decoding color
+    // maps to linear values without encoding fragment output back to sRGB makes
+    // the entire lightmapped world visibly too dark. SetSamplerState stores
+    // D3DSAMP_SRGBTEXTURE but BindSamplerSet does not apply it to image views.
     (void)image;
     return false;
 }
@@ -319,7 +308,6 @@ bool R_VulkanAllocTexture(
             ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D);
     texture->sourceFormat = sourceFormat;
     texture->format = info.format;
-    texture->srgbFormat = R_VulkanSrgbViewFormat(info.format);
     texture->layout = VK_IMAGE_LAYOUT_UNDEFINED;
     texture->subresourceLayouts.assign(
         static_cast<size_t>(texture->arrayLayers) * levels,
@@ -405,43 +393,6 @@ bool R_VulkanAllocTexture(
         texture->view = VK_NULL_HANDLE;
         texture->baseMipView = VK_NULL_HANDLE;
         return false;
-    }
-
-    // Build a paired sRGB view only for formats with a defined compatible
-    // variant and sampled-image support. Failures leave the linear view usable.
-    if (texture->srgbFormat != VK_FORMAT_UNDEFINED)
-    {
-        VkFormatProperties srgbProperties{};
-        vkGetPhysicalDeviceFormatProperties(
-            backend->PhysicalDevice(), texture->srgbFormat, &srgbProperties);
-        if (srgbProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)
-        {
-            VkImageViewCreateInfo srgbViewInfo = baseViewInfo;
-            srgbViewInfo.format = texture->srgbFormat;
-            srgbViewInfo.subresourceRange.levelCount = levels;
-            const VkResult srgbViewResult = vkCreateImageView(
-                backend->Device(), &srgbViewInfo, nullptr, &texture->srgbView);
-            if (srgbViewResult == VK_SUCCESS)
-            {
-                srgbViewInfo.subresourceRange.levelCount = 1;
-                const VkResult baseSrgbViewResult = vkCreateImageView(
-                    backend->Device(), &srgbViewInfo, nullptr, &texture->baseMipSrgbView);
-                if (baseSrgbViewResult != VK_SUCCESS)
-                {
-                    vkDestroyImageView(backend->Device(), texture->srgbView, nullptr);
-                    texture->srgbView = VK_NULL_HANDLE;
-                    texture->srgbFormat = VK_FORMAT_UNDEFINED;
-                }
-            }
-            else
-            {
-                texture->srgbFormat = VK_FORMAT_UNDEFINED;
-            }
-        }
-        else
-        {
-            texture->srgbFormat = VK_FORMAT_UNDEFINED;
-        }
     }
 
     return true;

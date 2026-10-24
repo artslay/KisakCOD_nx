@@ -63,21 +63,6 @@ namespace
 {
 VulkanBackend *g_backend = nullptr;
 
-bool HasSrgbCompatibleViewFormat(VkFormat format)
-{
-    switch (format)
-    {
-    case VK_FORMAT_B8G8R8A8_UNORM:
-    case VK_FORMAT_R8G8B8A8_UNORM:
-    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
-    case VK_FORMAT_BC2_UNORM_BLOCK:
-    case VK_FORMAT_BC3_UNORM_BLOCK:
-        return true;
-    default:
-        return false;
-    }
-}
-
 bool HasExtension(const std::vector<VkExtensionProperties> &extensions, const char *name)
 {
     for (const auto &ext : extensions)
@@ -2461,8 +2446,6 @@ bool VulkanBackend::CreateImage2D(
 {
     VkImageCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    if (HasSrgbCompatibleViewFormat(format))
-        info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
     info.imageType = VK_IMAGE_TYPE_2D;
     info.format = format;
     info.extent = {width, height, 1};
@@ -2552,8 +2535,6 @@ bool VulkanBackend::CreateImageCube(
     VkImageCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-    if (HasSrgbCompatibleViewFormat(format))
-        info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
     info.imageType = VK_IMAGE_TYPE_2D;
     info.format = format;
     info.extent = {width, height, 1};
@@ -2643,8 +2624,6 @@ bool VulkanBackend::CreateImage3D(
 
     VkImageCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    if (HasSrgbCompatibleViewFormat(format))
-        info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
     info.imageType = VK_IMAGE_TYPE_3D;
     info.format = format;
     info.extent = {width, height, depth};
