@@ -1897,12 +1897,12 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0UvTestTargetSerial()
 {
-    // Temporary texture-path probe, disabled by default during normal gameplay.
-    // A numeric value selects one PS; "all" opts into every PS with a patchable
-    // s0 sample; "off"/"0" explicitly disables the probe.
+    // Temporary live-UV probe for the four world shaders observed in gameplay.
+    // A numeric value selects one PS; "all" opts into every patchable PS;
+    // "off"/"0" disables the diagnostic for a normal-looking frame.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
     if (!value || !*value)
-        return UINT64_MAX;
+        return 0u; // Internal sentinel: default known-world shader set.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "all") == 0)
@@ -1926,7 +1926,10 @@ bool SwitchPsS0UvTestTargetMatches(
     if (targetSerial != 0u)
         return targetSerial == actualSerial;
 
-    return false;
+    // Default diagnostic remains restricted to the world pixel shaders already
+    // seen on trees, factory walls, plastic walls, and floor/beam materials.
+    return actualSerial == 1539u || actualSerial == 1771u ||
+        actualSerial == 1792u || actualSerial == 1821u;
 }
 
 uint64_t SwitchPsColorDebugTargetSerial()
@@ -2005,6 +2008,7 @@ bool PatchFragmentShaderToOutputS0AtUv(
     static uint64_t loggedSuccessSerials[128]{};
     static size_t loggedSuccessCount = 0u;
     static uint32_t loggedSkipCount = 0u;
+    uint32_t outputStoresPatched = 0u;
     const auto logResult = [&](const char *action, uint32_t sampleId,
                                uint32_t sampleType, uint32_t coordType,
                                uint32_t coordComponents, uint32_t block)
@@ -2028,11 +2032,11 @@ bool PatchFragmentShaderToOutputS0AtUv(
         char trace[352];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK PS S0 UV TEST] target=%llu actual=%llu action=%s descriptor=%u sample=%u sampleType=%u output=%u outputType=%u coordType=%u coordComponents=%u block=%u\n",
+            "[KisakCOD][VK PS S0 UV TEST] target=%llu actual=%llu action=%s descriptor=%u sample=%u sampleType=%u output=%u outputType=%u coordType=%u coordComponents=%u block=%u stores=%u\n",
             static_cast<unsigned long long>(targetSerial),
             static_cast<unsigned long long>(actualSerial),
             action, descriptorId, sampleId, sampleType, outputId, outputType,
-            coordType, coordComponents, block);
+            coordType, coordComponents, block, outputStoresPatched);
         Switch_LogWrite(trace);
     };
 
@@ -2154,13 +2158,13 @@ bool PatchFragmentShaderToOutputS0AtUv(
 
     uint32_t currentFunction = 0u;
     uint32_t currentBlock = 0u;
+    uint32_t entryBlock = 0u;
     uint32_t sampleId = 0u;
     uint32_t sampleType = 0u;
     uint32_t sampleCoordId = 0u;
     uint32_t sampleBlock = 0u;
     size_t sampleOffset = SIZE_MAX;
-    size_t outputStoreOffset = SIZE_MAX;
-    uint32_t outputStoreBlock = 0u;
+    std::vector<size_t> outputStoreOffsets;
 
     for (size_t offset = 5u; offset < words.size();)
     {
@@ -2188,6 +2192,8 @@ bool PatchFragmentShaderToOutputS0AtUv(
                  op == SpvOpLabel && wc >= 2u)
         {
             currentBlock = ins[1];
+            if (!entryBlock)
+                entryBlock = currentBlock;
         }
         else if (currentFunction == entryFunctionId &&
                  op == SpvOpLoad && wc >= 4u &&
@@ -2213,11 +2219,14 @@ bool PatchFragmentShaderToOutputS0AtUv(
         }
         else if (currentFunction == entryFunctionId &&
                  op == SpvOpStore && wc >= 3u && ins[1] == outputId &&
-                 currentBlock && currentBlock == sampleBlock &&
-                 sampleOffset != SIZE_MAX && offset > sampleOffset)
+                 currentBlock && sampleOffset != SIZE_MAX &&
+                 offset > sampleOffset &&
+                 (currentBlock == sampleBlock || sampleBlock == entryBlock))
         {
-            outputStoreOffset = offset;
-            outputStoreBlock = currentBlock;
+            // The sampled value is SSA-defined in sampleBlock. It can be used
+            // by output blocks outside that block only when sampling is in the
+            // function entry block, which dominates all reachable blocks.
+            outputStoreOffsets.push_back(offset);
         }
 
         offset += wc;
@@ -2228,7 +2237,7 @@ bool PatchFragmentShaderToOutputS0AtUv(
         logResult("skip_no_2d_s0_sample", 0u, 0u, 0u, 0u, 0u);
         return false;
     }
-    if (outputStoreOffset == SIZE_MAX || outputStoreBlock != sampleBlock)
+    if (outputStoreOffsets.empty())
     {
         logResult("skip_no_output_store_after_sample", sampleId, sampleType,
                   0u, 0u, sampleBlock);
@@ -2293,11 +2302,14 @@ bool PatchFragmentShaderToOutputS0AtUv(
         return false;
     }
 
-    // Keep the original interpolated texture coordinates. Replacing the
-    // output with this sample bypasses material lighting and post-sample shader
-    // logic while preserving the true UV path, so this distinguishes bad UVs
-    // or texture sampling from later shader math.
-    words[outputStoreOffset + 2u] = sampleId;
+    // Keep the original interpolated texture coordinates. Replace all dominated
+    // color-output stores, not just one store in the sample block: complex
+    // shaders may overwrite Location 0 in a branch or merge block.
+    for (const size_t storeOffset : outputStoreOffsets)
+    {
+        words[storeOffset + 2u] = sampleId;
+        ++outputStoresPatched;
+    }
 
     logResult("patched_s0_uv", sampleId, sampleType,
               sampleCoordType, coordComponents, sampleBlock);
@@ -5998,7 +6010,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=disabled source=default\n");
+                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=known_world_set(1539,1771,1792,1821) source=default\n");
             }
             else if (uvTarget == UINT64_MAX)
             {
