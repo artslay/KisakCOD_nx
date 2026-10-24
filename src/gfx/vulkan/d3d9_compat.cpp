@@ -5976,7 +5976,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             char trace[448];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][LIT SAMPLER DESCRIPTOR] slot=%u ps=%llu samplerType=%u bound=%p owner=%p image=%.80s dims=%ux%u vkFormat=%u sourceFormat=%u mip0Layout=%u mipLevels=%u baseMipView=%u selectedDummy=%u selectedView=%p\\n",
+                "[KisakCOD][LIT SAMPLER DESCRIPTOR] slot=%u ps=%llu samplerType=%u bound=%p owner=%p image=%.80s dims=%ux%u vkFormat=%u sourceFormat=%u mip0Layout=%u mipLevels=%u baseMipView=%u selectedDummy=%u selectedMainView=%u\\n",
                 i,
                 static_cast<unsigned long long>(m_pixelShader
                     ? m_pixelShader->serial : 0u),
@@ -5993,7 +5993,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                 texture ? texture->mipLevels : 0u,
                 texture && texture->baseMipView ? 1u : 0u,
                 selectedDummy ? 1u : 0u,
-                static_cast<void *>(texture));
+                texture && images[i].imageView == texture->view ? 1u : 0u);
             Switch_LogWrite(trace);
         }
         if (!loggedActiveSamplers)
