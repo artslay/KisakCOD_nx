@@ -6493,45 +6493,12 @@ bool IDirect3DDevice9::EnsurePipeline()
 
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
-        // With no explicit serial configured, automatically probe the first
-        // BSP lightmapped fragment shader that declares both diffuse s0 and
-        // lightmap s3. The probe replaces only this shader's final color with
-        // a center sample from s0, distinguishing texture upload/binding from
-        // the normal shader's UV, lighting, and lightmap calculations.
-        static uint64_t autoS0CenterTargetSerial = UINT64_MAX;
-        const char *centerSetting = std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL");
-        const bool autoCenterProbeEnabled = !centerSetting || !*centerSetting;
-        uint64_t debugPsS0CenterSerial = SwitchPsS0CenterTestTargetSerial();
-        if (debugPsS0CenterSerial == UINT64_MAX && autoCenterProbeEnabled &&
-            autoS0CenterTargetSerial == UINT64_MAX &&
-            m_decl && m_decl->switchVertDeclType >= 2 &&
-            m_decl->switchVertDeclType <= 13 &&
-            m_pixelShader && m_pixelShader->parseData &&
-            m_pixelShader->parseData->samplers)
-        {
-            bool hasS0 = false;
-            bool hasS3 = false;
-            const MOJOSHADER_parseData *parse = m_pixelShader->parseData;
-            for (int i = 0; i < parse->sampler_count; ++i)
-            {
-                hasS0 |= parse->samplers[i].index == 0;
-                hasS3 |= parse->samplers[i].index == 3;
-            }
-            if (hasS0 && hasS3)
-            {
-                autoS0CenterTargetSerial = m_pixelShader->serial;
-                char trace[224];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=auto_selected target=%llu decl=%llu sampler0=1 sampler3=1\n",
-                    static_cast<unsigned long long>(autoS0CenterTargetSerial),
-                    static_cast<unsigned long long>(m_decl->serial));
-                Switch_LogWrite(trace);
-            }
-        }
-        if (debugPsS0CenterSerial == UINT64_MAX && autoCenterProbeEnabled)
-            debugPsS0CenterSerial = autoS0CenterTargetSerial;
-        if (debugPsS0CenterSerial != UINT64_MAX &&
+        // The center-sample probe replaces the normal pixel-shader output and
+        // visibly changes any surface using that shader. Keep it opt-in by an
+        // explicit KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL value; never enable it
+        // automatically on a regular gameplay build.
+        const uint64_t debugPsS0CenterSerial = SwitchPsS0CenterTestTargetSerial();
+        if (debugPsS0CenterSerial != UINT64_MAX && m_pixelShader &&
             debugPsS0CenterSerial == m_pixelShader->serial)
         {
             (void)PatchFragmentShaderToOutputS0AtCenter(
