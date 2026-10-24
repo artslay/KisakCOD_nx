@@ -7871,6 +7871,85 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 Switch_LogWrite(attrTrace);
             }
 
+            // CPU-visible UV bytes can be valid even when the shader interface
+            // routes those bytes to the wrong input or loses a required interpolant.
+            // Compare the actual shader attributes with the live D3D declaration for
+            // these first BSP draws; this is diagnostic only and changes no rendering.
+            auto traceWorldShaderAttributes =
+                [&](const char *stage, const MOJOSHADER_parseData *shaderParse,
+                    bool matchDeclaration)
+            {
+                if (!shaderParse || !shaderParse->attributes)
+                    return;
+                const int attributeCount =
+                    std::max(0, shaderParse->attribute_count);
+                for (int shaderAttributeIndex = 0;
+                     shaderAttributeIndex < attributeCount &&
+                         shaderAttributeIndex < 16;
+                     ++shaderAttributeIndex)
+                {
+                    const MOJOSHADER_attribute &shaderAttribute =
+                        shaderParse->attributes[shaderAttributeIndex];
+                    uint32_t location = UINT32_MAX;
+                    if (std::strcmp(stage, "vs") == 0)
+                        (void)ExtractShaderInputRegister(
+                            shaderAttribute.name, &location);
+
+                    const _D3DVERTEXELEMENT9 *matchedElement = nullptr;
+                    if (matchDeclaration && m_decl)
+                    {
+                        for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
+                        {
+                            if (element.Usage ==
+                                    static_cast<uint8_t>(shaderAttribute.usage) &&
+                                element.UsageIndex == shaderAttribute.index)
+                            {
+                                matchedElement = &element;
+                                break;
+                            }
+                        }
+                    }
+
+                    uint32_t effectiveOffset = UINT32_MAX;
+                    uint32_t effectiveType = UINT32_MAX;
+                    uint32_t streamStride = 0;
+                    uint32_t vkFormat = static_cast<uint32_t>(VK_FORMAT_UNDEFINED);
+                    uint32_t stream = UINT32_MAX;
+                    uint32_t declaredOffset = UINT32_MAX;
+                    uint32_t declaredType = UINT32_MAX;
+                    if (matchedElement && matchedElement->Stream < 16u)
+                    {
+                        stream = matchedElement->Stream;
+                        streamStride = m_streams[stream].stride;
+                        declaredOffset = matchedElement->Offset;
+                        declaredType = matchedElement->Type;
+                        effectiveOffset = SwitchEffectiveShaderElementOffset(
+                            m_decl, *matchedElement, streamStride);
+                        effectiveType = SwitchEffectiveShaderElementType(
+                            m_decl, *matchedElement, streamStride);
+                        vkFormat = static_cast<uint32_t>(
+                            VertexFormat(static_cast<uint8_t>(effectiveType)));
+                    }
+
+                    char shaderAttrTrace[384];
+                    std::snprintf(
+                        shaderAttrTrace, sizeof(shaderAttrTrace),
+                        "[KisakCOD][VK WORLD SHADER ATTR] draw=%u stage=%s i=%d name=%.32s usage=%u usageIndex=%u location=%u declMatch=%u stream=%u stride=%u declaredOffset=%u effectiveOffset=%u declaredType=%u effectiveType=%u vkFormat=%u\n",
+                        traceId, stage, shaderAttributeIndex,
+                        shaderAttribute.name ? shaderAttribute.name : "(null)",
+                        static_cast<unsigned>(shaderAttribute.usage),
+                        static_cast<unsigned>(shaderAttribute.index), location,
+                        matchedElement ? 1u : 0u, stream, streamStride,
+                        declaredOffset, effectiveOffset, declaredType,
+                        effectiveType, vkFormat);
+                    Switch_LogWrite(shaderAttrTrace);
+                }
+            };
+            traceWorldShaderAttributes(
+                "vs", m_vertexShader ? m_vertexShader->parseData : nullptr, true);
+            traceWorldShaderAttributes(
+                "ps", m_pixelShader ? m_pixelShader->parseData : nullptr, false);
+
             if (!vertexBytes || !indexData)
             {
                 Switch_LogWrite("[KisakCOD][VK WORLD UV] reason=cpu_shadow_unavailable\n");
