@@ -168,6 +168,13 @@ void __cdecl R_SetShadowLookupMatrix(GfxCmdBufSourceState *source, const GfxMatr
 
 void __cdecl R_Set2D(GfxCmdBufSourceState *source)
 {
+#ifdef __SWITCH__
+    // SetSwitchUnlitMode is device-global, unlike source->viewMode. Do not
+    // gate it on this particular source's cached mode: another command-buffer
+    // source may have changed the global mode since this source last ran.
+    if (gfxCmdBufState.prim.device)
+        gfxCmdBufState.prim.device->SetSwitchUnlitMode(true);
+#endif
     if (source->viewMode != VIEW_MODE_2D)
     {
         source->viewMode = VIEW_MODE_2D;
@@ -176,11 +183,6 @@ void __cdecl R_Set2D(GfxCmdBufSourceState *source)
         source->eyeOffset[1] = 0.0;
         source->eyeOffset[2] = 0.0;
         source->eyeOffset[3] = 1.0;
-
-#ifdef __SWITCH__
-        if (gfxCmdBufState.prim.device)
-            gfxCmdBufState.prim.device->SetSwitchUnlitMode(true);
-#endif
 
         GfxViewport viewport;
         R_GetViewport(source, &viewport);
@@ -269,6 +271,13 @@ void __cdecl R_MatrixIdentity44(float (*out)[4])
 void __cdecl R_Set3D(GfxCmdBufSourceState *source)
 {
     iassert( source->viewParms3D );
+#ifdef __SWITCH__
+    // This device-global overlay override must be cleared on every 3D request,
+    // even if this source already caches VIEW_MODE_3D. Otherwise the UI's 2D
+    // pass can leave depth test/write disabled for world draws on another source.
+    if (gfxCmdBufState.prim.device)
+        gfxCmdBufState.prim.device->SetSwitchUnlitMode(false);
+#endif
     if (source->viewMode != VIEW_MODE_3D)
     {
         source->viewMode = VIEW_MODE_3D;
@@ -286,10 +295,6 @@ void __cdecl R_Set3D(GfxCmdBufSourceState *source)
             source->eyeOffset[2] = source->viewParms.origin[2];
         }
         source->eyeOffset[3] = 1.0;
-#ifdef __SWITCH__
-        if (gfxCmdBufState.prim.device)
-            gfxCmdBufState.prim.device->SetSwitchUnlitMode(false);
-#endif
         R_CmdBufSet3D(source);
     }
 }
