@@ -5889,7 +5889,7 @@ bool IDirect3DDevice9::BindSamplerSet(
         {
             for (const uint32_t slot : {0u, 2u, 3u})
             {
-                const KisakVkTexture *texture = textures[slot];
+                const KisakVkTexture *texture = static_cast<const KisakVkTexture *>(textures[slot]);
                 const MOJOSHADER_sampler *sampler = activeSamplers[slot];
                 const VkImageView dummyView = sampler
                     ? m_backend->DummyImageViewForSamplerType(
@@ -5913,7 +5913,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                 char trace[512];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK WORLD SAMPLER] n=%u shader=%llu decl=%llu route=%u slot=%u active=%u samplerType=%u texture=%p currentBasemap=%p image=%.96s size=%ux%u sourceFormat=%u vkFormat=%u mips=%u baseLayout=%u descriptorView=%p dummy=%u\\n",
+                    "[KisakCOD][VK WORLD SAMPLER] n=%u shader=%llu decl=%llu route=%u slot=%u active=%u samplerType=%u texture=%p currentBasemap=%p image=%.96s size=%ux%u sourceFormat=%u vkFormat=%u mips=%u baseLayout=%u dummy=%u\n",
                     sequence,
                     static_cast<unsigned long long>(activeShader->serial),
                     static_cast<unsigned long long>(m_decl->serial),
@@ -5927,7 +5927,6 @@ bool IDirect3DDevice9::BindSamplerSet(
                     texture ? static_cast<unsigned>(texture->format) : 0u,
                     texture ? texture->mipLevels : 0u,
                     static_cast<unsigned>(baseLayout),
-                    static_cast<void *>(images[slot].imageView),
                     descriptorIsDummy ? 1u : 0u);
                 Switch_LogWrite(trace);
             }
