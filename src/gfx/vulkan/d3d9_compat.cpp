@@ -4933,7 +4933,7 @@ static void SwitchLogShaderTranslationFailure(
     char summary[512];
     std::snprintf(
         summary, sizeof(summary),
-        "[KisakCOD][SHADER TRANSLATE FAIL] stage=%s bytecodeBytes=%u parse=%u errors=%d type=%d profile=%.48s outputBytes=%d attributes=%d samplers=%d uniforms=%d\\n",
+        "[KisakCOD][SHADER TRANSLATE FAIL] stage=%s bytecodeBytes=%u parse=%u errors=%d type=%d profile=%.48s outputBytes=%d attributes=%d samplers=%d uniforms=%d\n",
         stage ? stage : "?", bytecodeSize, parse ? 1u : 0u,
         parse ? parse->error_count : -1,
         parse ? static_cast<int>(parse->shader_type) : -1,
@@ -4954,7 +4954,7 @@ static void SwitchLogShaderTranslationFailure(
         char detail[512];
         std::snprintf(
             detail, sizeof(detail),
-            "[KisakCOD][SHADER TRANSLATE ERROR] stage=%s i=%d position=%d file=%.80s message=%.300s\\n",
+            "[KisakCOD][SHADER TRANSLATE ERROR] stage=%s i=%d position=%d file=%.80s message=%.300s\n",
             stage ? stage : "?", i, error.error_position,
             error.filename ? error.filename : "(unknown)",
             error.error ? error.error : "(no message)");
@@ -4977,7 +4977,7 @@ static void SwitchLogShaderTranslationSuccess(
     char trace[384];
     std::snprintf(
         trace, sizeof(trace),
-        "[KisakCOD][SHADER TRANSLATE OK] stage=%s n=%u bytecodeBytes=%u profile=%.32s spirvBytes=%zu attributes=%d samplers=%d uniforms=%d\\n",
+        "[KisakCOD][SHADER TRANSLATE OK] stage=%s n=%u bytecodeBytes=%u profile=%.32s spirvBytes=%zu attributes=%d samplers=%d uniforms=%d\n",
         stage ? stage : "?", sequence, bytecodeSize,
         parse && parse->profile ? parse->profile : "(null)", spirvBytes,
         parse ? parse->attribute_count : 0,
@@ -5004,7 +5004,7 @@ HRESULT IDirect3DDevice9::CreateVertexShader(
     {
         if (parse)
             MOJOSHADER_freeParseData(parse);
-        Switch_LogWrite("[KisakCOD][SHADER] Vulkan VS MojoShader SPIR-V translation failed\n");
+        SwitchLogShaderTranslationFailure("VS", parse, bytecodeSize);
         return E_FAIL;
     }
 
@@ -5037,7 +5037,7 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
     {
         if (parse)
             MOJOSHADER_freeParseData(parse);
-        Switch_LogWrite("[KisakCOD][SHADER] Vulkan PS MojoShader SPIR-V translation failed\n");
+        SwitchLogShaderTranslationFailure("PS", parse, bytecodeSize);
         return E_FAIL;
     }
 
