@@ -7986,7 +7986,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     char outputTrace[256];
                     std::snprintf(
                         outputTrace, sizeof(outputTrace),
-                        "[KisakCOD][VK WORLD VS OUTPUT] draw=%u i=%d name=%.32s usage=%u usageIndex=%u feedsPixelInput=%u\\n",
+                        "[KisakCOD][VK WORLD VS OUTPUT] draw=%u i=%d name=%.32s usage=%u usageIndex=%u feedsPixelInput=%u\n",
                         traceId, outputIndex,
                         output.name ? output.name : "(null)",
                         static_cast<unsigned>(output.usage),
@@ -8024,7 +8024,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     char inputTrace[256];
                     std::snprintf(
                         inputTrace, sizeof(inputTrace),
-                        "[KisakCOD][VK WORLD PS INPUT] draw=%u i=%d name=%.32s usage=%u usageIndex=%u hasVertexOutput=%u\\n",
+                        "[KisakCOD][VK WORLD PS INPUT] draw=%u i=%d name=%.32s usage=%u usageIndex=%u hasVertexOutput=%u\n",
                         traceId, inputIndex,
                         input.name ? input.name : "(null)",
                         static_cast<unsigned>(input.usage),
