@@ -5002,9 +5002,9 @@ HRESULT IDirect3DDevice9::CreateVertexShader(
     if (!parse || parse->error_count || parse->shader_type != MOJOSHADER_TYPE_VERTEX ||
         parse->output_len <= 0)
     {
+        SwitchLogShaderTranslationFailure("VS", parse, bytecodeSize);
         if (parse)
             MOJOSHADER_freeParseData(parse);
-        SwitchLogShaderTranslationFailure("VS", parse, bytecodeSize);
         return E_FAIL;
     }
 
@@ -5035,9 +5035,9 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
     if (!parse || parse->error_count || parse->shader_type != MOJOSHADER_TYPE_PIXEL ||
         parse->output_len <= 0)
     {
+        SwitchLogShaderTranslationFailure("PS", parse, bytecodeSize);
         if (parse)
             MOJOSHADER_freeParseData(parse);
-        SwitchLogShaderTranslationFailure("PS", parse, bytecodeSize);
         return E_FAIL;
     }
 
