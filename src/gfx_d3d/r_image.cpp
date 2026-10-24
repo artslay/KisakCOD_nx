@@ -219,8 +219,14 @@ uint32_t R_VulkanFullMipCount(uint32_t width, uint32_t height, uint32_t depth)
 
 bool R_VulkanUseSrgbColorFormat(const GfxImage *image)
 {
-    return image && image->semantic == TS_COLOR_MAP &&
-        image->category != IMG_CATEGORY_LIGHTMAP;
+    // Keep legacy CoD4 sampling in UNORM until the backend can pair per-sampler
+    // D3DSAMP_SRGBTEXTURE semantics with an sRGB output path. The Switch surface
+    // currently exposes only B8G8R8A8_UNORM (srgbAttachment=0); decoding color
+    // maps to linear values without encoding fragment output back to sRGB makes
+    // the entire lightmapped world visibly too dark. SetSamplerState stores
+    // D3DSAMP_SRGBTEXTURE but BindSamplerSet does not apply it to image views.
+    (void)image;
+    return false;
 }
 
 bool R_VulkanAllocTexture(
