@@ -1897,23 +1897,40 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0CenterTestTargetSerial()
 {
-    // Temporary, single-shader texture diagnostic. The latest gameplay log
-    // identifies PS serial 1821 on wc/ch_factory_rustybeam2. Sample its s0
-    // texture at UV=(0.5, 0.5) and output that value, bypassing lighting/UV
-    // varyings. Set the env var to another serial to retarget, or "off"/"0"
-    // to restore the normal shader without this diagnostic.
+    // Temporary texture-path probe. The default covers the four pixel shaders
+    // seen on trees, factory walls, plastic walls, and floor/beam materials in
+    // the latest Switch log. A numeric value selects one PS, "all" opts into
+    // every PS with a patchable s0 sample, and "off"/"0" disables the probe.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL");
     if (!value || !*value)
-        return 1821u;
+        return 0u; // Internal sentinel: default set of known world shaders.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
+    if (std::strcmp(value, "all") == 0)
+        return UINT64_MAX - 1u;
 
     char *end = nullptr;
     const unsigned long long serial = std::strtoull(value, &end, 0);
     if (end == value || !end || *end != '\0' || serial == 0u ||
-        serial > UINT64_MAX)
+        serial >= UINT64_MAX - 1u)
         return UINT64_MAX;
     return static_cast<uint64_t>(serial);
+}
+
+bool SwitchPsS0CenterTestTargetMatches(
+    uint64_t targetSerial, uint64_t actualSerial)
+{
+    if (actualSerial == 0u || targetSerial == UINT64_MAX)
+        return false;
+    if (targetSerial == UINT64_MAX - 1u)
+        return true; // Explicit "all" setting.
+    if (targetSerial != 0u)
+        return targetSerial == actualSerial;
+
+    // Keep the default diagnostic limited to shader programs already observed
+    // on real world materials, rather than altering UI, video, or every effect.
+    return actualSerial == 1539u || actualSerial == 1771u ||
+        actualSerial == 1792u || actualSerial == 1821u;
 }
 
 uint64_t SwitchPsColorDebugTargetSerial()
@@ -6024,7 +6041,8 @@ bool IDirect3DDevice9::EnsurePipeline()
 #ifdef __SWITCH__
     {
         static bool psS0CenterTestArmedTraceWritten = false;
-        static bool psS0CenterTargetSeenTraceWritten = false;
+        static uint64_t psS0CenterSeenSerials[32]{};
+        static size_t psS0CenterSeenSerialCount = 0;
         const uint64_t centerTarget = SwitchPsS0CenterTestTargetSerial();
         if (!psS0CenterTestArmedTraceWritten)
         {
@@ -6035,29 +6053,47 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=1821 source=default\n");
+                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=known_world_set(1539,1771,1792,1821) source=default\n");
+            }
+            else if (centerTarget == UINT64_MAX)
+            {
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=disabled source=env\n");
+            }
+            else if (centerTarget == UINT64_MAX - 1u)
+            {
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=all_patchable_ps source=env\n");
             }
             else
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=%s%llu source=env\n",
-                    centerTarget == UINT64_MAX ? "disabled/" : "",
-                    static_cast<unsigned long long>(
-                        centerTarget == UINT64_MAX ? 0u : centerTarget));
+                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=%llu source=env\n",
+                    static_cast<unsigned long long>(centerTarget));
             }
             Switch_LogWrite(trace);
         }
-        if (!psS0CenterTargetSeenTraceWritten && m_pixelShader &&
-            centerTarget != UINT64_MAX && m_pixelShader->serial == centerTarget)
+        if (m_pixelShader && SwitchPsS0CenterTestTargetMatches(
+                centerTarget, m_pixelShader->serial))
         {
-            psS0CenterTargetSeenTraceWritten = true;
-            char trace[192];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK PS S0 CENTER TEST] action=target_seen serial=%llu\n",
-                static_cast<unsigned long long>(m_pixelShader->serial));
-            Switch_LogWrite(trace);
+            bool alreadySeen = false;
+            for (size_t i = 0; i < psS0CenterSeenSerialCount; ++i)
+                alreadySeen |= psS0CenterSeenSerials[i] == m_pixelShader->serial;
+            if (!alreadySeen && psS0CenterSeenSerialCount <
+                    sizeof(psS0CenterSeenSerials) / sizeof(psS0CenterSeenSerials[0]))
+            {
+                psS0CenterSeenSerials[psS0CenterSeenSerialCount++] =
+                    m_pixelShader->serial;
+                char trace[192];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK PS S0 CENTER TEST] action=target_seen serial=%llu\n",
+                    static_cast<unsigned long long>(m_pixelShader->serial));
+                Switch_LogWrite(trace);
+            }
         }
     }
     {
@@ -6630,11 +6666,13 @@ bool IDirect3DDevice9::EnsurePipeline()
         // explicit KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL value; never enable it
         // automatically on a regular gameplay build.
         const uint64_t debugPsS0CenterSerial = SwitchPsS0CenterTestTargetSerial();
-        if (debugPsS0CenterSerial != UINT64_MAX && m_pixelShader &&
-            debugPsS0CenterSerial == m_pixelShader->serial)
+        if (m_pixelShader && SwitchPsS0CenterTestTargetMatches(
+                debugPsS0CenterSerial, m_pixelShader->serial))
         {
+            // Pass the exact serial here even when the selection is a set or
+            // wildcard; the patch helper itself validates a single module.
             (void)PatchFragmentShaderToOutputS0AtCenter(
-                pixelSpirv, debugPsS0CenterSerial, m_pixelShader->serial);
+                pixelSpirv, m_pixelShader->serial, m_pixelShader->serial);
         }
         const uint64_t debugPsColorSerial = SwitchPsColorDebugTargetSerial();
         if (SwitchPsColorDebugTargetMatches(
