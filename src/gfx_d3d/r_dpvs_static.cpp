@@ -17,23 +17,33 @@ static bool R_SwitchAabbAddressLooksValid(const void *address)
     return value >= UINT64_C(0x100000000) && value <= UINT64_C(0x0000100000000000);
 }
 
+static bool R_SwitchAabbTreeIsFlattened(const GfxAabbTree *root)
+{
+    // R_FixupGfxAabbTrees packs the root at element zero and its direct
+    // children at element one, so a flattened tree's root offset is exactly
+    // one native runtime record. Do not infer the whole tree's layout from
+    // whether one arbitrary offset happens to be divisible by 44 or 56.
+    return root && root->childCount != 0 &&
+        root->childrenOffset == static_cast<int>(sizeof(GfxAabbTree));
+}
+
 static int R_SwitchNativeAabbChildOffset(const GfxAabbTree *root, const GfxAabbTree *tree)
 {
-    if (!root || !tree || root->childCount == 0)
+    if (!root || !tree || tree->childCount == 0)
         return tree ? tree->childrenOffset : 0;
 
-    // Legacy GfxAabbTree records in fastfiles use a 44-byte x86 stride.
-    // The loader expands each record to the 56-byte Switch runtime layout,
-    // but these relative offsets can still be in serialized-byte units.
-    constexpr int32_t serializedStride = 44;
-    const int rootOffset = root->childrenOffset;
-    const bool serializedTree =
-        rootOffset > 0 &&
-        rootOffset % static_cast<int>(sizeof(GfxAabbTree)) != 0 &&
-        rootOffset % serializedStride == 0;
-
     const int offset = tree->childrenOffset;
-    if (!serializedTree || offset <= 0 || offset % serializedStride != 0)
+    if (offset <= 0 || R_SwitchAabbTreeIsFlattened(root))
+        return offset;
+
+    // Legacy GfxAabbTree records use a 44-byte x86 stride, while Switch
+    // expands each record to the native 56-byte layout. In a non-flattened
+    // tree, positive 44-byte-relative offsets still need stride conversion.
+    // Negative offsets are different: Hunk_AllocAlign allocates from the high
+    // hunk downward, so separately allocated child arrays can sit below a
+    // parent and use a negative native pointer-relative offset.
+    constexpr int32_t serializedStride = 44;
+    if (offset % serializedStride != 0)
         return offset;
 
     const int64_t nativeOffset =
@@ -113,7 +123,8 @@ static bool R_SwitchValidateDpvsAabbTreeNode(
     const uintptr_t treeAddress = reinterpret_cast<uintptr_t>(tree);
     uintptr_t rootAddress = 0;
     uintptr_t arrayEnd = 0;
-    if (root && nodeCount)
+    const bool flattenedTree = R_SwitchAabbTreeIsFlattened(root);
+    if (root && nodeCount && flattenedTree)
     {
         rootAddress = reinterpret_cast<uintptr_t>(root);
         const uintptr_t treeBytes = static_cast<uintptr_t>(nodeCount) * sizeof(GfxAabbTree);
@@ -127,6 +138,12 @@ static bool R_SwitchValidateDpvsAabbTreeNode(
                 root, nodeCount, tree, parent, childIndex, false);
             return false;
         }
+    }
+    else if (!R_SwitchAabbAddressLooksValid(tree))
+    {
+        R_SwitchLogAabbTreeWalkFault(stage, "invalid_nonflattened_node",
+            root, nodeCount, tree, parent, childIndex, false);
+        return false;
     }
 
     const uint32_t modelCount = rgp.world ? rgp.world->dpvs.smodelCount : 0u;
@@ -149,16 +166,31 @@ static bool R_SwitchValidateDpvsAabbTreeNode(
     if (tree->childCount)
     {
         const int offset = R_SwitchNativeAabbChildOffset(root, tree);
-        if (offset <= 0 ||
-            (nodeCount && offset % static_cast<int>(sizeof(GfxAabbTree)) != 0))
+        const bool badOffset =
+            offset == 0 ||
+            (flattenedTree &&
+                (offset < 0 || offset % static_cast<int>(sizeof(GfxAabbTree)) != 0)) ||
+            (!flattenedTree && offset > 0 &&
+                offset % static_cast<int>(sizeof(GfxAabbTree)) != 0);
+        if (badOffset)
         {
             R_SwitchLogAabbTreeWalkFault(stage, "invalid_child_offset",
                 root, nodeCount, tree, parent, childIndex, true);
             return false;
         }
 
-        const uintptr_t childrenAddress = treeAddress + static_cast<uintptr_t>(offset);
-        if (root && nodeCount)
+        // Use signed arithmetic: an Hunk-allocated child array can be below
+        // its parent, making childrenOffset negative without being invalid.
+        const int64_t childrenAddressSigned =
+            static_cast<int64_t>(treeAddress) + static_cast<int64_t>(offset);
+        if (childrenAddressSigned <= 0)
+        {
+            R_SwitchLogAabbTreeWalkFault(stage, "invalid_children_address",
+                root, nodeCount, tree, parent, childIndex, true);
+            return false;
+        }
+        const uintptr_t childrenAddress = static_cast<uintptr_t>(childrenAddressSigned);
+        if (flattenedTree)
         {
             if (childrenAddress < rootAddress || childrenAddress >= arrayEnd ||
                 static_cast<uintptr_t>(tree->childCount) >
