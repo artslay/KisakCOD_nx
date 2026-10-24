@@ -812,6 +812,16 @@ uint8_t SwitchEffectiveShaderElementType(
     const _D3DVERTEXELEMENT9 &element,
     uint32_t streamStride = 0)
 {
+    // GfxWorldVertex has xyz at byte 0 and binormalSign at byte 12.
+    // A legacy material-routing declaration can describe POSITION as FLOAT4,
+    // but fetching four components here incorrectly uses binormalSign as
+    // homogeneous position.w (often -1), clipping otherwise valid world tris.
+    // The real 44-byte physical layout must override that semantic route.
+    if (element.Stream == 0 && streamStride == 44u &&
+        element.Offset == 0 && element.Usage == 0 &&
+        element.UsageIndex == 0)
+        return D3DDECLTYPE_FLOAT3;
+
     if (element.Stream == 0 && streamStride == 44u &&
         element.Offset == 20 && element.Usage == 5)
     {
@@ -8185,7 +8195,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     std::memcpy(lightmapUv, vertexBytes + vertexStart + 28u, sizeof(lightmapUv));
                     std::snprintf(
                         trace, sizeof(trace),
-                        "[KisakCOD][VK WORLD UV VERTEX] n=%u i=%u rawIndex=%u effectiveIndex=%lld pos=(%.5g,%.5g,%.5g,%.5g) uv0=(%.7g,%.7g) uv1=(%.7g,%.7g)\n",
+                        "[KisakCOD][VK WORLD UV VERTEX] n=%u i=%u rawIndex=%u effectiveIndex=%lld xyz=(%.5g,%.5g,%.5g) binormalSign=%.5g uv0=(%.7g,%.7g) uv1=(%.7g,%.7g)\n",
                         traceId, i, rawIndex,
                         static_cast<long long>(effectiveIndex),
                         position[0], position[1], position[2], position[3],
