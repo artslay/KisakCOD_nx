@@ -18,8 +18,6 @@
 #include "r_sunshadow.h" // SCENE_VIEW_CAMERA
 #include <universal/profile.h>
 #ifdef __SWITCH__
-#include <atomic>
-#include <cstdio>
 extern void Switch_LogWrite(const char *msg);
 #endif
 
@@ -2805,46 +2803,6 @@ void __cdecl R_AddWorldSurfacesDpvs(const GfxViewParms *viewParms, int cameraCel
     iassert( viewParms );
     rg.debugViewParms = viewParms;
     R_AddWorldSurfacesPortalWalk(cameraCellIndex);
-#ifdef __SWITCH__
-    // A short, periodic visibility summary distinguishes BSP/portal PVS pop-in
-    // from surfaces that reach the renderer but fail in the Vulkan shader path.
-    static std::atomic<uint32_t> switchDpvsVisibilityTraceCount{0};
-    const uint32_t switchDpvsVisibilitySequence =
-        switchDpvsVisibilityTraceCount.fetch_add(1, std::memory_order_relaxed);
-    if (switchDpvsVisibilitySequence < 8u ||
-        (switchDpvsVisibilitySequence % 120u == 0u &&
-         switchDpvsVisibilitySequence / 120u < 32u))
-    {
-        uint32_t visibleCells = 0;
-        for (uint32_t cellIndex = 0; cellIndex < rgp.world->dpvsPlanes.cellCount; ++cellIndex)
-        {
-            if (dpvsGlob.cellVisibleBits &&
-                (dpvsGlob.cellVisibleBits[cellIndex >> 5] & (1u << (cellIndex & 31u))))
-                ++visibleCells;
-        }
-        uint32_t visibleSurfaces = 0;
-        const byte *surfaceVis = rgp.world->dpvs.surfaceVisData[0];
-        if (surfaceVis)
-        {
-            for (uint32_t surfaceIndex = 0; surfaceIndex < rgp.world->surfaceCount; ++surfaceIndex)
-                visibleSurfaces += surfaceVis[surfaceIndex] ? 1u : 0u;
-        }
-        const DpvsView *traceView = dpvsGlob.views[scene.dpvs.localClientNum];
-        char trace[384];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][DPVS VISIBILITY] seq=%u cameraCell=%d visibleCells=%u totalCells=%u visibleSurfaces=%u totalSurfaces=%u frustumPlanes=%d skipPvs=%u origin=(%.1f,%.1f,%.1f)\n",
-            switchDpvsVisibilitySequence, cameraCellIndex, visibleCells,
-            rgp.world->dpvsPlanes.cellCount, visibleSurfaces,
-            rgp.world->surfaceCount,
-            traceView ? traceView->frustumPlaneCount : 0,
-            r_skipPvs->current.enabled ? 1u : 0u,
-            viewParms ? viewParms->origin[0] : 0.0f,
-            viewParms ? viewParms->origin[1] : 0.0f,
-            viewParms ? viewParms->origin[2] : 0.0f);
-        Switch_LogWrite(trace);
-    }
-#endif
     dpvsView = dpvsGlob.views[scene.dpvs.localClientNum];
     if (dpvsGlob.farPlane)
     {
