@@ -1783,7 +1783,7 @@ void __cdecl R_SetSampler(
             char trace[480];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][LIT SAMPLER SOURCE] n=%u tech=%u material=%.72s slot=%u semantic=%u image=%.96s imagePtr=%p texture=%p mapType=%u size=%ux%u delayed=%u samplerState=0x%02x\\n",
+                "[KisakCOD][LIT SAMPLER SOURCE] n=%u tech=%u material=%.72s slot=%u semantic=%u image=%.96s imagePtr=%p texture=%p mapType=%u size=%ux%u delayed=%u samplerState=0x%02x\n",
                 sequence,
                 static_cast<unsigned>(context.state->techType),
                 context.state->material->info.name
