@@ -170,48 +170,41 @@ void __cdecl R_DrawTrianglesLit(
             bspSurf = &rgp.world->dpvs.surfaces[surfIndex];
             tris = bspSurf;
 
-            // World lightmap/probe arrays cache only GfxTexture wrappers, not
-            // their owning GfxImage. A streamed or delayed image can acquire or
-            // replace its Vulkan basemap after R_LoadWorld copied that pointer.
-            // Refresh the current wrappers and sampler slots on every BSP
-            // surface; SetTexture itself is a no-op when the resource is stable.
+            // Resolve the current source resources without mutating the cached
+            // wrappers or device bindings yet. A previous BSP batch may still be
+            // pending; its textures must remain bound until that batch is drawn.
             const uint32_t currentProbeIndex = bspSurf->reflectionProbeIndex;
-            if (reflectionProbeFlag &&
-                currentProbeIndex < drawStream->reflectionProbeCount)
-            {
-                GfxImage *probeImage =
-                    rgp.world->reflectionProbes[currentProbeIndex].reflectionImage;
-                reflectionProbeTextures[currentProbeIndex].basemap =
-                    probeImage ? probeImage->texture.basemap : nullptr;
-                R_HW_SetSamplerTexture(
-                    device, 1u, &reflectionProbeTextures[currentProbeIndex]);
-            }
-
             const uint32_t currentLightmapIndex = bspSurf->lightmapIndex;
-            if (currentLightmapIndex != 31u &&
-                currentLightmapIndex < drawStream->lightmapCount)
-            {
-                const GfxLightmapArray &lightmap =
-                    rgp.world->lightmaps[currentLightmapIndex];
-                if (lightmapPrimaryFlag)
-                {
-                    drawStream->lightmapPrimaryTextures[currentLightmapIndex].basemap =
-                        lightmap.primary ? lightmap.primary->texture.basemap : nullptr;
-                    R_HW_SetSamplerTexture(
-                        device, 2u,
-                        &drawStream->lightmapPrimaryTextures[currentLightmapIndex]);
-                }
-                if (lightmapSecondaryFlag)
-                {
-                    drawStream->lightmapSecondaryTextures[currentLightmapIndex].basemap =
-                        lightmap.secondary ? lightmap.secondary->texture.basemap : nullptr;
-                    R_HW_SetSamplerTexture(
-                        device, 3u,
-                        &drawStream->lightmapSecondaryTextures[currentLightmapIndex]);
-                }
-            }
+            const GfxImage *currentProbeImage =
+                currentProbeIndex < drawStream->reflectionProbeCount
+                    ? rgp.world->reflectionProbes[currentProbeIndex].reflectionImage
+                    : nullptr;
+            const GfxLightmapArray *currentLightmap =
+                currentLightmapIndex != 31u &&
+                currentLightmapIndex < drawStream->lightmapCount
+                    ? &rgp.world->lightmaps[currentLightmapIndex]
+                    : nullptr;
+            const bool probeTextureChanged =
+                reflectionProbeFlag &&
+                currentProbeIndex < drawStream->reflectionProbeCount &&
+                reflectionProbeTextures[currentProbeIndex].basemap !=
+                    (currentProbeImage ? currentProbeImage->texture.basemap : nullptr);
+            const bool primaryLightmapTextureChanged =
+                lightmapPrimaryFlag && currentLightmap &&
+                drawStream->lightmapPrimaryTextures[currentLightmapIndex].basemap !=
+                    (currentLightmap->primary
+                        ? currentLightmap->primary->texture.basemap : nullptr);
+            const bool secondaryLightmapTextureChanged =
+                lightmapSecondaryFlag && currentLightmap &&
+                drawStream->lightmapSecondaryTextures[currentLightmapIndex].basemap !=
+                    (currentLightmap->secondary
+                        ? currentLightmap->secondary->texture.basemap : nullptr);
 
-            if (reflectionProbeIndex == bspSurf->reflectionProbeIndex && lightmapIndex == bspSurf->lightmapIndex)
+            if (reflectionProbeIndex == currentProbeIndex &&
+                lightmapIndex == currentLightmapIndex &&
+                !probeTextureChanged &&
+                !primaryLightmapTextureChanged &&
+                !secondaryLightmapTextureChanged)
             {
                 if (baseVertex != bspSurf->tris.firstVertex || baseIndex + 3 * triCount != bspSurf->tris.baseIndex)
                 {
@@ -251,12 +244,12 @@ void __cdecl R_DrawTrianglesLit(
                             "reflectionProbeIndex doesn't index drawStream->reflectionProbeCount\n\t%i not in [0, %i)",
                             reflectionProbeIndex,
                             drawStream->reflectionProbeCount);
+                    reflectionProbeTextures[reflectionProbeIndex].basemap =
+                        currentProbeImage ? currentProbeImage->texture.basemap : nullptr;
                     newReflectionProbeTexture = &reflectionProbeTextures[reflectionProbeIndex];
-                    if (reflectionProbeTexture != newReflectionProbeTexture)
-                    {
-                        reflectionProbeTexture = newReflectionProbeTexture;
-                        R_HW_SetSamplerTexture(device, 1u, newReflectionProbeTexture);
-                    }
+                    reflectionProbeTexture = newReflectionProbeTexture;
+                    // This branch runs only after the prior batch was flushed.
+                    R_HW_SetSamplerTexture(device, 1u, newReflectionProbeTexture);
                 }
                 if (lightmapIndex == 31)
                 {
@@ -289,6 +282,9 @@ void __cdecl R_DrawTrianglesLit(
                             drawStream->lightmapCount);
                     if (lightmapPrimaryFlag)
                     {
+                        drawStream->lightmapPrimaryTextures[lightmapIndex].basemap =
+                            currentLightmap && currentLightmap->primary
+                                ? currentLightmap->primary->texture.basemap : nullptr;
                         if (override)
                         {
                             overrideImage = R_OverrideGrayscaleImage(r_lightMap);
@@ -299,14 +295,15 @@ void __cdecl R_DrawTrianglesLit(
                             v3 = hasSunDirChanged ? drawStream->whiteTexture : &drawStream->lightmapPrimaryTextures[lightmapIndex];
                             newLightmapPrimaryTexture = v3;
                         }
-                        if (lightmapPrimaryTexture != newLightmapPrimaryTexture)
-                        {
-                            lightmapPrimaryTexture = newLightmapPrimaryTexture;
-                            R_HW_SetSamplerTexture(device, 2u, newLightmapPrimaryTexture);
-                        }
+                        lightmapPrimaryTexture = newLightmapPrimaryTexture;
+                        // Bind only after the previous surface batch has drawn.
+                        R_HW_SetSamplerTexture(device, 2u, newLightmapPrimaryTexture);
                     }
                     if (lightmapSecondaryFlag)
                     {
+                        drawStream->lightmapSecondaryTextures[lightmapIndex].basemap =
+                            currentLightmap && currentLightmap->secondary
+                                ? currentLightmap->secondary->texture.basemap : nullptr;
                         if (override)
                         {
                             overrideImage = R_OverrideGrayscaleImage(r_lightMap);
@@ -316,11 +313,8 @@ void __cdecl R_DrawTrianglesLit(
                         {
                             newLightmapSecondaryTexture = &drawStream->lightmapSecondaryTextures[lightmapIndex];
                         }
-                        if (lightmapSecondaryTexture != newLightmapSecondaryTexture)
-                        {
-                            lightmapSecondaryTexture = newLightmapSecondaryTexture;
-                            R_HW_SetSamplerTexture(device, 3u, newLightmapSecondaryTexture);
-                        }
+                        lightmapSecondaryTexture = newLightmapSecondaryTexture;
+                        R_HW_SetSamplerTexture(device, 3u, newLightmapSecondaryTexture);
                     }
                 }
             }
