@@ -1903,6 +1903,7 @@ void __cdecl Image_CreateCubeTexture_PC(GfxImage *image,uint16_t edgeLen,uint32_
         Com_Error(ERR_DROP, "CreateCubeTexture failed: Vulkan allocation failed");
     }
     std::snprintf(x->debugName, sizeof(x->debugName), "%.95s", image->name ? image->name : "<unnamed>");
+    x->sourceImage = image;
     image->texture.cubemap = x;
 #else
     HRESULT hr=dx.device->CreateCubeTexture(edgeLen,mipmapCount,0,imageFormat,D3DPOOL_MANAGED,(IDirect3DCubeTexture9**)&image->texture,0);if(hr<0)Com_Error(ERR_DROP,"CreateCubeTexture failed: %s",R_ErrorDescription(hr));
@@ -1924,6 +1925,7 @@ void __cdecl Image_Create3DTexture_PC(GfxImage *image,uint16_t width,uint16_t he
         Com_Error(ERR_DROP, "Create3DTexture failed: Vulkan allocation failed");
     }
     std::snprintf(x->debugName, sizeof(x->debugName), "%.95s", image->name ? image->name : "<unnamed>");
+    x->sourceImage = image;
     image->texture.volmap = x;
 #else
     uint32_t usage=Image_GetUsage(imageFlags,imageFormat);HRESULT hr=dx.device->CreateVolumeTexture(width,height,depth,mipmapCount,0,imageFormat,(_D3DPOOL)(usage==0),(IDirect3DVolumeTexture9**)&image->texture,0);if(hr<0)Com_Error(ERR_DROP,"Create3DTexture failed: %s",R_ErrorDescription(hr));
@@ -1977,6 +1979,7 @@ void __cdecl Image_Create2DTexture_PC(GfxImage *image,uint16_t width,uint16_t he
         Com_Error(ERR_DROP, "Create2DTexture failed: Vulkan allocation failed");
     }
     std::snprintf(x->debugName, sizeof(x->debugName), "%.95s", image->name ? image->name : "<unnamed>");
+    x->sourceImage = image;
     image->texture.map = x;
 #else
     uint32_t usage=Image_GetUsage(imageFlags,imageFormat);HRESULT hr=dx.device->CreateTexture(width,height,mipmapCount,usage,imageFormat,(_D3DPOOL)(usage==0),(IDirect3DTexture9**)&image->texture,0);if(hr<0)Com_Error(ERR_DROP,"Create2DTexture failed: %s",R_ErrorDescription(hr));
