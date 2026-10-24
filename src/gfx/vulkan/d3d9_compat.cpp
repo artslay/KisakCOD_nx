@@ -6957,7 +6957,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             std::snprintf(msg, sizeof(msg),
                 "[KisakCOD][VK DRAW] pipeline_fail=vertex_range stream=%u offset=%u bytes=%u stride=%u type=%u decl=%llu vs=%llu\n",
                 element.Stream, vertexOffset, attributeBytes, binding->stride,
-                static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element)),
+                static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u)),
                 static_cast<unsigned long long>(m_decl->serial),
                 static_cast<unsigned long long>(m_vertexShader->serial));
             Switch_LogWrite(msg);
@@ -7774,7 +7774,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 
                 const auto &stream = m_streams[element.Stream];
                 const uint32_t elementSize = SwitchShaderElementByteSize(
-                    SwitchEffectiveShaderElementType(m_decl, element));
+                    SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u));
                 if (!elementSize)
                     continue;
 
@@ -7782,7 +7782,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 const uint64_t streamOffset = stream.offset;
                 const uint64_t stride = stream.stride;
                 const uint32_t elementOffset =
-                    SwitchEffectiveShaderElementOffset(m_decl, element);
+                    SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
                 const uint64_t vertexIndex = static_cast<uint64_t>(maxEffectiveVertex);
                 uint64_t vertexStart = 0;
                 uint64_t requiredEnd = 0;
