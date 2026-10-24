@@ -1970,11 +1970,10 @@ bool SwitchPsColorDebugTargetMatches(
     return true;
 }
 
-// Strong diagnostic for the remaining black/missing-texture rendering bug.
-// Replace every store to fragment output Location 0 for one selected pixel
-// shader with a constant opaque magenta. This bypasses texture sampling and
-// shader lighting for the selected PS while leaving rasterization, attachment,
-// and Vulkan blend state unchanged. No texture descriptor is modified.
+// Diagnostic for black/missing-texture rendering: sample the pixel shader's
+// bound s0 image at its original interpolated UV and write that RGBA sample to
+// Location 0. This bypasses lighting/material math but preserves the UV and
+// Vulkan sampler path, so a properly mapped source image should appear textured.
 bool PatchFragmentShaderToOutputS0AtUv(
     std::vector<uint32_t> &words,
     uint64_t targetSerial,
@@ -5990,13 +5989,13 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchFrameStage = "frame/render/vulkan/pipeline/entry";
 #ifdef __SWITCH__
     {
-        static bool psS0CenterTestArmedTraceWritten = false;
-        static uint64_t psS0CenterSeenSerials[32]{};
-        static size_t psS0CenterSeenSerialCount = 0;
-        const uint64_t centerTarget = SwitchPsS0UvTestTargetSerial();
-        if (!psS0CenterTestArmedTraceWritten)
+        static bool psS0UvTestArmedTraceWritten = false;
+        static uint64_t psS0UvSeenSerials[32]{};
+        static size_t psS0UvSeenSerialCount = 0;
+        const uint64_t uvTarget = SwitchPsS0UvTestTargetSerial();
+        if (!psS0UvTestArmedTraceWritten)
         {
-            psS0CenterTestArmedTraceWritten = true;
+            psS0UvTestArmedTraceWritten = true;
             char trace[192];
             const char *setting = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
             if (!setting || !*setting)
@@ -6005,13 +6004,13 @@ bool IDirect3DDevice9::EnsurePipeline()
                     trace, sizeof(trace),
                     "[KisakCOD][VK PS S0 UV TEST] action=armed target=known_world_set(1539,1771,1792,1821) source=default\n");
             }
-            else if (centerTarget == UINT64_MAX)
+            else if (uvTarget == UINT64_MAX)
             {
                 std::snprintf(
                     trace, sizeof(trace),
                     "[KisakCOD][VK PS S0 UV TEST] action=armed target=disabled source=env\n");
             }
-            else if (centerTarget == UINT64_MAX - 1u)
+            else if (uvTarget == UINT64_MAX - 1u)
             {
                 std::snprintf(
                     trace, sizeof(trace),
@@ -6022,20 +6021,20 @@ bool IDirect3DDevice9::EnsurePipeline()
                 std::snprintf(
                     trace, sizeof(trace),
                     "[KisakCOD][VK PS S0 UV TEST] action=armed target=%llu source=env\n",
-                    static_cast<unsigned long long>(centerTarget));
+                    static_cast<unsigned long long>(uvTarget));
             }
             Switch_LogWrite(trace);
         }
         if (m_pixelShader && SwitchPsS0UvTestTargetMatches(
-                centerTarget, m_pixelShader->serial))
+                uvTarget, m_pixelShader->serial))
         {
             bool alreadySeen = false;
-            for (size_t i = 0; i < psS0CenterSeenSerialCount; ++i)
-                alreadySeen |= psS0CenterSeenSerials[i] == m_pixelShader->serial;
-            if (!alreadySeen && psS0CenterSeenSerialCount <
-                    sizeof(psS0CenterSeenSerials) / sizeof(psS0CenterSeenSerials[0]))
+            for (size_t i = 0; i < psS0UvSeenSerialCount; ++i)
+                alreadySeen |= psS0UvSeenSerials[i] == m_pixelShader->serial;
+            if (!alreadySeen && psS0UvSeenSerialCount <
+                    sizeof(psS0UvSeenSerials) / sizeof(psS0UvSeenSerials[0]))
             {
-                psS0CenterSeenSerials[psS0CenterSeenSerialCount++] =
+                psS0UvSeenSerials[psS0UvSeenSerialCount++] =
                     m_pixelShader->serial;
                 char trace[192];
                 std::snprintf(
@@ -6614,9 +6613,9 @@ bool IDirect3DDevice9::EnsurePipeline()
         // The original-UV probe outputs the live s0 sample, bypassing material
         // lighting and later shader math while preserving interpolated UVs.
         // Keep it scoped to observed world shaders by default.
-        const uint64_t debugPsS0CenterSerial = SwitchPsS0UvTestTargetSerial();
+        const uint64_t debugPsS0UvSerial = SwitchPsS0UvTestTargetSerial();
         if (m_pixelShader && SwitchPsS0UvTestTargetMatches(
-                debugPsS0CenterSerial, m_pixelShader->serial))
+                debugPsS0UvSerial, m_pixelShader->serial))
         {
             // Pass the exact serial here even when the selection is a set or
             // wildcard; the patch helper itself validates a single module.
