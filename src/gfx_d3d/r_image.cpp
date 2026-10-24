@@ -56,18 +56,21 @@ struct VulkanImageFormat
     bool depth = false;
 };
 
-VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
+VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format, bool srgb = false)
 {
-    // D3D9 sampling defaults to UNORM. Do not infer sRGB decoding from a
-    // material semantic: D3DSAMP_SRGBTEXTURE is a separate sampler state and
-    // this compatibility device does not currently expose sRGB image views.
+    // Color maps are stored in gamma-encoded RGB space. Decode them through
+    // Vulkan's sRGB formats, while lightmaps, normal maps, and data textures
+    // remain UNORM/linear. The Switch D3D9 layer does not expose per-sampler
+    // sRGB views, so choose the matching view-compatible format at allocation.
     switch (format)
     {
     case D3DFMT_A8R8G8B8:
     case D3DFMT_X8R8G8B8:
-        return {VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+        return {srgb ? VK_FORMAT_B8G8R8A8_SRGB : VK_FORMAT_B8G8R8A8_UNORM,
+                VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_A8B8G8R8:
-        return {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+        return {srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM,
+                VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_A8:
     case D3DFMT_L8:
         return {VK_FORMAT_R8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 1, 0, false, false};
@@ -79,7 +82,8 @@ VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
     case D3DFMT_A1R5G5B5:
         return {VK_FORMAT_A1R5G5B5_UNORM_PACK16, VK_IMAGE_ASPECT_COLOR_BIT, 2, 0, false, false};
     case D3DFMT_X8B8G8R8:
-        return {VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
+        return {srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM,
+                VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_A2B10G10R10:
         return {VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_IMAGE_ASPECT_COLOR_BIT, 4, 0, false, false};
     case D3DFMT_G16R16:
@@ -129,11 +133,14 @@ VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format)
     case D3DFMT_DXN:
         return {VK_FORMAT_BC5_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
     case D3DFMT_DXT1:
-        return {VK_FORMAT_BC1_RGBA_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 8, true, false};
+        return {srgb ? VK_FORMAT_BC1_RGBA_SRGB_BLOCK : VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+                VK_IMAGE_ASPECT_COLOR_BIT, 0, 8, true, false};
     case D3DFMT_DXT3:
-        return {VK_FORMAT_BC2_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
+        return {srgb ? VK_FORMAT_BC2_SRGB_BLOCK : VK_FORMAT_BC2_UNORM_BLOCK,
+                VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
     case D3DFMT_DXT5:
-        return {VK_FORMAT_BC3_UNORM_BLOCK, VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
+        return {srgb ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_BC3_UNORM_BLOCK,
+                VK_IMAGE_ASPECT_COLOR_BIT, 0, 16, true, false};
     default:
         return {};
     }
@@ -210,6 +217,12 @@ uint32_t R_VulkanFullMipCount(uint32_t width, uint32_t height, uint32_t depth)
     return levels;
 }
 
+bool R_VulkanUseSrgbColorFormat(const GfxImage *image)
+{
+    return image && image->semantic == TS_COLOR_MAP &&
+        image->category != IMG_CATEGORY_LIGHTMAP;
+}
+
 bool R_VulkanAllocTexture(
     KisakVkTexture *texture,
     VulkanTextureKind kind,
@@ -218,7 +231,8 @@ bool R_VulkanAllocTexture(
     uint32_t depth,
     uint32_t levels,
     _D3DFORMAT sourceFormat,
-    int imageFlags)
+    int imageFlags,
+    bool srgb)
 {
     if (!texture || !width || !height || !depth || !levels)
         return false;
@@ -227,7 +241,7 @@ bool R_VulkanAllocTexture(
     if (!backend)
         return false;
 
-    const VulkanImageFormat info = R_VulkanImageFormat(sourceFormat);
+    const VulkanImageFormat info = R_VulkanImageFormat(sourceFormat, srgb);
     if (info.format == VK_FORMAT_UNDEFINED)
         return false;
 
@@ -374,7 +388,7 @@ void R_VulkanUploadTexture(
     if (!backend)
         return;
 
-    const VulkanImageFormat info = R_VulkanImageFormat(format);
+    const VulkanImageFormat info = R_VulkanImageFormat(format, R_VulkanUseSrgbColorFormat(image));
     if (info.format == VK_FORMAT_UNDEFINED)
         return;
 
@@ -1913,7 +1927,7 @@ void __cdecl Image_CreateCubeTexture_PC(GfxImage *image,uint16_t edgeLen,uint32_
     auto *x = new KisakVkTexture;
     if (!R_VulkanAllocTexture(
             x, VulkanTextureKind::Cube, edgeLen, edgeLen, 1,
-            mipmapCount, imageFormat, 0))
+            mipmapCount, imageFormat, 0, R_VulkanUseSrgbColorFormat(image)))
     {
         delete x;
         Com_Error(ERR_DROP, "CreateCubeTexture failed: Vulkan allocation failed");
@@ -1935,7 +1949,7 @@ void __cdecl Image_Create3DTexture_PC(GfxImage *image,uint16_t width,uint16_t he
     auto *x = new KisakVkTexture;
     if (!R_VulkanAllocTexture(
             x, VulkanTextureKind::Texture3D, width, height, depth,
-            mipmapCount, imageFormat, imageFlags))
+            mipmapCount, imageFormat, imageFlags, R_VulkanUseSrgbColorFormat(image)))
     {
         delete x;
         Com_Error(ERR_DROP, "Create3DTexture failed: Vulkan allocation failed");
@@ -1989,7 +2003,7 @@ void __cdecl Image_Create2DTexture_PC(GfxImage *image,uint16_t width,uint16_t he
     auto *x = new KisakVkTexture;
     if (!R_VulkanAllocTexture(
             x, VulkanTextureKind::Texture2D, width, height, 1,
-            mipmapCount, imageFormat, imageFlags))
+            mipmapCount, imageFormat, imageFlags, R_VulkanUseSrgbColorFormat(image)))
     {
         delete x;
         Com_Error(ERR_DROP, "Create2DTexture failed: Vulkan allocation failed");
