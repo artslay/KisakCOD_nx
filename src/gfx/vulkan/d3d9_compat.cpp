@@ -1914,23 +1914,20 @@ uint64_t SwitchPsS0CenterTestTargetSerial()
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
-    // Diagnostic isolation mode: force opaque magenta for every pixel shader
-    // by default. This deliberately includes UI/video to verify that rewritten
-    // fragment modules reach the actual displayed frame.
-    // Set KISAK_VK_DEBUG_PS_COLOR_SERIAL=off (or 0) to disable, or provide a
-    // numeric serial to restrict the test to one pixel shader.
+    // Keep the solid-magenta shader rewrite disabled during normal gameplay.
+    // Set KISAK_VK_DEBUG_PS_COLOR_SERIAL=all to opt in to the all-shader test,
+    // or provide a numeric serial to restrict the test to one pixel shader.
+    // "off", "0", and an unset variable all leave the original shader intact.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
-    if (!value || !*value)
-        return 0u;
-    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+    if (!value || !*value ||
+        std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "all") == 0)
         return 0u;
 
     char *end = nullptr;
     const unsigned long long serial = std::strtoull(value, &end, 0);
-    if (end == value || !end || *end != '\\0' || serial == 0u ||
-        serial > UINT64_MAX)
+    if (end == value || !end || *end != '\0' || serial == 0u)
         return UINT64_MAX;
     return static_cast<uint64_t>(serial);
 }
