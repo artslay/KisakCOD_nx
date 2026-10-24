@@ -72,8 +72,16 @@ static void R_SwitchLogAabbTreeWalkFault(
     char message[640];
     if (fieldsReadable && tree)
     {
-        const bool flattened = R_SwitchAabbTreeIsFlattened(root);
-        const int nativeOffset = R_SwitchNativeAabbChildOffset(root, tree);
+        // Root may itself be the invalid pointer that caused this report.
+        // Never dereference it while formatting the diagnostic unless its
+        // address passes the same Switch pointer-range guard as tree nodes.
+        const bool rootLooksValid =
+            root && R_SwitchAabbAddressLooksValid(root);
+        const bool flattened =
+            rootLooksValid && R_SwitchAabbTreeIsFlattened(root);
+        const int nativeOffset = rootLooksValid
+            ? R_SwitchNativeAabbChildOffset(root, tree)
+            : tree->childrenOffset;
         std::snprintf(message, sizeof(message),
             "[KisakCOD][AABB TREE WALK FAULT] stage=%s reason=%s root=%p node=%p parent=%p child=%u nodes=%u childCount=%u childOffset=%d nativeOffset=%d flattened=%u indexCount=%u indices=%p models=%u\n",
             stage, reason,
