@@ -6857,12 +6857,19 @@ bool IDirect3DDevice9::EnsurePipeline()
             element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
             ((element.UsageIndex == 1 && element.Offset == 24) ||
              (element.UsageIndex == 2 && element.Offset == 28));
-        if (effectiveType == D3DDECLTYPE_D3DCOLOR &&
+        // Some CoD4 world declarations encode the packed normal/tangent as
+        // UBYTE4 rather than D3DCOLOR. Both are the same four normalized bytes
+        // in the world vertex buffer; USCALED would expose values in [0,255]
+        // and corrupt lighting vectors, so use UNORM for either declaration.
+        const bool packedWorldByteVector =
+            effectiveType == D3DDECLTYPE_UBYTE4 &&
+            (packedWorldNormal || packedWorldTangent);
+        const bool packedColorUnitVector =
+            effectiveType == D3DDECLTYPE_D3DCOLOR &&
             (packedUnitVectorSemantic || packedWorldNormal ||
-             packedWorldTangent || packedModelUnitVector))
-        {
+             packedWorldTangent || packedModelUnitVector);
+        if (packedWorldByteVector || packedColorUnitVector)
             format = VK_FORMAT_R8G8B8A8_UNORM;
-        }
         const uint32_t vertexOffset =
             SwitchEffectiveShaderElementOffset(m_decl, element);
 
