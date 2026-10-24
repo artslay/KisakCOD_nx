@@ -784,13 +784,28 @@ void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
         if (loadDef->resourceSize)
         {
             image->delayLoadPixels = 0;
+            // levelCount is the mip chain actually stored in this fastfile.
+            // Recomputing it from dimensions can disagree for non-power-of-two
+            // images and make the Vulkan path upload past the allocated mip range.
+            mipCount = loadDef->levelCount;
+            if (mipCount <= 0)
+            {
+                mipCount = Image_CountMipmaps(
+                    loadDef->flags,
+                    loadDef->dimensions[0],
+                    loadDef->dimensions[1],
+                    loadDef->dimensions[2]);
+            }
+            if (mipCount <= 0)
+                Com_Error(ERR_DROP, "Invalid mip count for image '%s'", image->name);
+
             if (image->mapType == MAPTYPE_2D)
             {
                 Image_Create2DTexture_PC(
                     image,
                     loadDef->dimensions[0],
                     loadDef->dimensions[1],
-                    loadDef->levelCount,
+                    static_cast<uint32_t>(mipCount),
                     0,
                     imageFormat);
                 faceCount = 1;
@@ -802,7 +817,7 @@ void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
                     loadDef->dimensions[0],
                     loadDef->dimensions[1],
                     loadDef->dimensions[2],
-                    loadDef->levelCount,
+                    static_cast<uint32_t>(mipCount),
                     0,
                     imageFormat);
                 faceCount = 1;
@@ -810,11 +825,12 @@ void __cdecl Load_Texture(GfxTexture *remoteLoadDef, GfxImage *image)
             else
             {
                 iassert(image->mapType == MAPTYPE_CUBE);
-                Image_CreateCubeTexture_PC(image, loadDef->dimensions[0], loadDef->levelCount, imageFormat);
+                Image_CreateCubeTexture_PC(
+                    image, loadDef->dimensions[0],
+                    static_cast<uint32_t>(mipCount), imageFormat);
                 faceCount = 6;
             }
             data = &loadDef->data[0];
-            mipCount = Image_CountMipmaps(loadDef->flags, image->width, image->height, image->depth);
             for (faceIndex = 0; faceIndex < faceCount; ++faceIndex)
             {
                 if (faceCount == 1)
