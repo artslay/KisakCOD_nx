@@ -1767,6 +1767,38 @@ void __cdecl R_SetSampler(
 
     iassert(image);
 #ifdef __SWITCH__
+    // Trace the actual material->sampler resolution, not just the image assets
+    // allocated while loading the BSP. This bounded record only covers lit
+    // techniques so the front-end UI cannot consume the sample budget.
+    if (context.state && context.state->material &&
+        context.state->techType >= TECHNIQUE_LIT_BEGIN &&
+        context.state->techType < TECHNIQUE_LIT_END)
+    {
+        static uint32_t switchLitSamplerTraceCount = 0;
+        if (switchLitSamplerTraceCount < 48u)
+        {
+            const uint32_t sequence = switchLitSamplerTraceCount++;
+            char trace[480];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][LIT SAMPLER SOURCE] n=%u tech=%u material=%.72s slot=%u semantic=%u image=%.96s imagePtr=%p texture=%p mapType=%u size=%ux%u delayed=%u samplerState=0x%02x\\n",
+                sequence,
+                static_cast<unsigned>(context.state->techType),
+                context.state->material->info.name
+                    ? context.state->material->info.name : "<unnamed>",
+                samplerIndex,
+                static_cast<unsigned>(image->semantic),
+                image->name ? image->name : "<unnamed>",
+                static_cast<const void *>(image),
+                static_cast<void *>(image->texture.basemap),
+                static_cast<unsigned>(image->mapType),
+                static_cast<unsigned>(image->width),
+                static_cast<unsigned>(image->height),
+                image->delayLoadPixels ? 1u : 0u,
+                static_cast<unsigned>(samplerState));
+            Switch_LogWrite(trace);
+        }
+    }
     // A null basemap here means the engine selected an image but never supplied
     // a Vulkan texture for it. Track the source before SetTexture propagates null
     // into the D3D9 compatibility device.
