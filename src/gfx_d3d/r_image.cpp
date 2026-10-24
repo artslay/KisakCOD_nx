@@ -58,10 +58,10 @@ struct VulkanImageFormat
 
 VulkanImageFormat R_VulkanImageFormat(_D3DFORMAT format, bool srgb = false)
 {
-    // Color maps are stored in gamma-encoded RGB space. Decode them through
-    // Vulkan's sRGB formats, while lightmaps, normal maps, and data textures
-    // remain UNORM/linear. The Switch D3D9 layer does not expose per-sampler
-    // sRGB views, so choose the matching view-compatible format at allocation.
+    // Keep the base image UNORM so uploads and ordinary D3D9 sampling preserve
+    // stored values. R_VulkanAllocTexture optionally creates a compatible sRGB
+    // view, and BindSamplerSet selects it per D3DSAMP_SRGBTEXTURE. Lightmaps,
+    // normal maps, and data textures therefore stay linear unless explicitly flagged.
     switch (format)
     {
     case D3DFMT_A8R8G8B8:
