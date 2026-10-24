@@ -2343,7 +2343,10 @@ bool PatchFragmentShaderToSolidMagenta(
     uint64_t targetSerial,
     uint64_t actualSerial)
 {
-    if (!targetSerial || targetSerial != actualSerial)
+    // Serial 0 means wildcard mode ("all"). Do not reject it here: the
+    // caller already distinguishes UINT64_MAX (disabled) from wildcard.
+    if (targetSerial == UINT64_MAX ||
+        (targetSerial != 0u && targetSerial != actualSerial))
         return false;
 
     uint32_t outputId = 0;
