@@ -169,13 +169,48 @@ void __cdecl R_DrawTrianglesLit(
                     rgp.world->surfaceCount);
             bspSurf = &rgp.world->dpvs.surfaces[surfIndex];
             tris = bspSurf;
-#ifdef __SWITCH__
-            // Record a bounded sample of actual BSP lightmap selections. This
-            // tells us whether baked-lightmap data and material sampler flags
-            // reach the Vulkan submission path before changing renderer logic.
-            
-            
-#endif
+
+            // World lightmap/probe arrays cache only GfxTexture wrappers, not
+            // their owning GfxImage. A streamed or delayed image can acquire or
+            // replace its Vulkan basemap after R_LoadWorld copied that pointer.
+            // Refresh the current wrappers and sampler slots on every BSP
+            // surface; SetTexture itself is a no-op when the resource is stable.
+            const uint32_t currentProbeIndex = bspSurf->reflectionProbeIndex;
+            if (reflectionProbeFlag &&
+                currentProbeIndex < drawStream->reflectionProbeCount)
+            {
+                GfxImage *probeImage =
+                    rgp.world->reflectionProbes[currentProbeIndex].reflectionImage;
+                reflectionProbeTextures[currentProbeIndex].basemap =
+                    probeImage ? probeImage->texture.basemap : nullptr;
+                R_HW_SetSamplerTexture(
+                    device, 1u, &reflectionProbeTextures[currentProbeIndex]);
+            }
+
+            const uint32_t currentLightmapIndex = bspSurf->lightmapIndex;
+            if (currentLightmapIndex != 31u &&
+                currentLightmapIndex < drawStream->lightmapCount)
+            {
+                const GfxLightmapArray &lightmap =
+                    rgp.world->lightmaps[currentLightmapIndex];
+                if (lightmapPrimaryFlag)
+                {
+                    drawStream->lightmapPrimaryTextures[currentLightmapIndex].basemap =
+                        lightmap.primary ? lightmap.primary->texture.basemap : nullptr;
+                    R_HW_SetSamplerTexture(
+                        device, 2u,
+                        &drawStream->lightmapPrimaryTextures[currentLightmapIndex]);
+                }
+                if (lightmapSecondaryFlag)
+                {
+                    drawStream->lightmapSecondaryTextures[currentLightmapIndex].basemap =
+                        lightmap.secondary ? lightmap.secondary->texture.basemap : nullptr;
+                    R_HW_SetSamplerTexture(
+                        device, 3u,
+                        &drawStream->lightmapSecondaryTextures[currentLightmapIndex]);
+                }
+            }
+
             if (reflectionProbeIndex == bspSurf->reflectionProbeIndex && lightmapIndex == bspSurf->lightmapIndex)
             {
                 if (baseVertex != bspSurf->tris.firstVertex || baseIndex + 3 * triCount != bspSurf->tris.baseIndex)
