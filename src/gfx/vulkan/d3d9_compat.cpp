@@ -7995,6 +7995,40 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                             m_decl, *matchedElement, streamStride);
                         vkFormat = static_cast<uint32_t>(
                             VertexFormat(static_cast<uint8_t>(effectiveType)));
+
+                        // Match EnsurePipeline's world PackedUnitVec override.
+                        // Reporting VertexFormat(type) alone is misleading for
+                        // UBYTE4 normal/tangent fields, whose actual pipeline
+                        // format is UNORM rather than USCALED.
+                        const bool packedWorldLayout =
+                            stream == 0u && streamStride == 44u;
+                        const bool packedWorldNormal =
+                            packedWorldLayout && matchedElement->Offset == 36u &&
+                            ((matchedElement->Usage == MOJOSHADER_USAGE_TEXCOORD &&
+                              matchedElement->UsageIndex == 1u) ||
+                             (matchedElement->Usage == MOJOSHADER_USAGE_NORMAL &&
+                              matchedElement->UsageIndex == 0u));
+                        const bool packedWorldTangent =
+                            packedWorldLayout && matchedElement->Offset == 40u &&
+                            ((matchedElement->Usage == MOJOSHADER_USAGE_TEXCOORD &&
+                              matchedElement->UsageIndex == 2u) ||
+                             ((matchedElement->Usage == MOJOSHADER_USAGE_TANGENT ||
+                               matchedElement->Usage == MOJOSHADER_USAGE_BINORMAL) &&
+                              matchedElement->UsageIndex == 0u));
+                        const bool packedUnitVectorSemantic =
+                            matchedElement->Usage == MOJOSHADER_USAGE_NORMAL ||
+                            matchedElement->Usage == MOJOSHADER_USAGE_TANGENT ||
+                            matchedElement->Usage == MOJOSHADER_USAGE_BINORMAL;
+                        const bool packedWorldByteVector =
+                            effectiveType == D3DDECLTYPE_UBYTE4 &&
+                            (packedWorldNormal || packedWorldTangent);
+                        const bool packedColorUnitVector =
+                            effectiveType == D3DDECLTYPE_D3DCOLOR &&
+                            (packedUnitVectorSemantic || packedWorldNormal ||
+                             packedWorldTangent);
+                        if (packedWorldByteVector || packedColorUnitVector)
+                            vkFormat = static_cast<uint32_t>(
+                                VK_FORMAT_R8G8B8A8_UNORM);
                     }
 
                     char shaderAttrTrace[384];
