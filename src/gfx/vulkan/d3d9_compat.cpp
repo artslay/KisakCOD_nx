@@ -1895,13 +1895,13 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
     return true;
 }
 
-uint64_t SwitchPsS0CenterTestTargetSerial()
+uint64_t SwitchPsS0UvTestTargetSerial()
 {
     // Temporary texture-path probe. The default covers the four pixel shaders
     // seen on trees, factory walls, plastic walls, and floor/beam materials in
     // the latest Switch log. A numeric value selects one PS, "all" opts into
     // every PS with a patchable s0 sample, and "off"/"0" disables the probe.
-    const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL");
+    const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
     if (!value || !*value)
         return 0u; // Internal sentinel: default set of known world shaders.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
@@ -1917,7 +1917,7 @@ uint64_t SwitchPsS0CenterTestTargetSerial()
     return static_cast<uint64_t>(serial);
 }
 
-bool SwitchPsS0CenterTestTargetMatches(
+bool SwitchPsS0UvTestTargetMatches(
     uint64_t targetSerial, uint64_t actualSerial)
 {
     if (actualSerial == 0u || targetSerial == UINT64_MAX)
@@ -1975,7 +1975,7 @@ bool SwitchPsColorDebugTargetMatches(
 // shader with a constant opaque magenta. This bypasses texture sampling and
 // shader lighting for the selected PS while leaving rasterization, attachment,
 // and Vulkan blend state unchanged. No texture descriptor is modified.
-bool PatchFragmentShaderToOutputS0AtCenter(
+bool PatchFragmentShaderToOutputS0AtUv(
     std::vector<uint32_t> &words,
     uint64_t targetSerial,
     uint64_t actualSerial)
@@ -2014,7 +2014,7 @@ bool PatchFragmentShaderToOutputS0AtCenter(
                                uint32_t sampleType, uint32_t coordType,
                                uint32_t coordComponents, uint32_t block)
     {
-        const bool success = std::strcmp(action, "patched_s0_center") == 0;
+        const bool success = std::strcmp(action, "patched_s0_uv") == 0;
         if (success)
         {
             for (size_t i = 0; i < loggedSuccessCount; ++i)
@@ -2033,7 +2033,7 @@ bool PatchFragmentShaderToOutputS0AtCenter(
         char trace[352];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK PS S0 CENTER TEST] target=%llu actual=%llu action=%s descriptor=%u sample=%u sampleType=%u output=%u outputType=%u coordType=%u coordComponents=%u block=%u\n",
+            "[KisakCOD][VK PS S0 UV TEST] target=%llu actual=%llu action=%s descriptor=%u sample=%u sampleType=%u output=%u outputType=%u coordType=%u coordComponents=%u block=%u\n",
             static_cast<unsigned long long>(targetSerial),
             static_cast<unsigned long long>(actualSerial),
             action, descriptorId, sampleId, sampleType, outputId, outputType,
@@ -2298,63 +2298,13 @@ bool PatchFragmentShaderToOutputS0AtCenter(
         return false;
     }
 
-    // Construct the coordinate using the original vector type: (0.5, 0.5)
-    // for the 2D UV, and zero for any extra components in legacy shader IR.
-    const uint32_t halfId = bound;
-    const uint32_t zeroId = bound + 1u;
-    const uint32_t centerCoordId = bound + 2u;
-    std::vector<uint32_t> declarations;
-    declarations.reserve(static_cast<size_t>(8u + coordComponents));
-    declarations.push_back((4u << 16) | static_cast<uint32_t>(SpvOpConstant));
-    declarations.push_back(floatType);
-    declarations.push_back(halfId);
-    declarations.push_back(0x3f000000u); // 0.5f
-    declarations.push_back((4u << 16) | static_cast<uint32_t>(SpvOpConstant));
-    declarations.push_back(floatType);
-    declarations.push_back(zeroId);
-    declarations.push_back(0x00000000u); // 0.0f
-    declarations.push_back(((3u + coordComponents) << 16) |
-                           static_cast<uint32_t>(SpvOpConstantComposite));
-    declarations.push_back(sampleCoordType);
-    declarations.push_back(centerCoordId);
-    for (uint32_t component = 0; component < coordComponents; ++component)
-        declarations.push_back(component < 2u ? halfId : zeroId);
-
-    // Insert constants into the global constant section before the first global
-    // variable. This keeps SPIR-V logical section ordering valid.
-    size_t insertionOffset = SIZE_MAX;
-    bool insideFunction = false;
-    for (size_t offset = 5u; offset < words.size();)
-    {
-        uint32_t wc = 0u;
-        SpvOp op{};
-        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
-            return false;
-        if (op == SpvOpFunction)
-            insideFunction = true;
-        if (!insideFunction && op == SpvOpVariable)
-        {
-            insertionOffset = offset;
-            break;
-        }
-        offset += wc;
-    }
-    if (insertionOffset == SIZE_MAX)
-    {
-        logResult("skip_no_global_variable_section", sampleId, sampleType,
-                  sampleCoordType, coordComponents, sampleBlock);
-        return false;
-    }
-
-    // Patch before inserting declarations, because insertion shifts offsets.
-    words[sampleOffset + 4u] = centerCoordId;
+    // Keep the original interpolated texture coordinates. Replacing the
+    // output with this sample bypasses material lighting and post-sample shader
+    // logic while preserving the true UV path, so this distinguishes bad UVs
+    // or texture sampling from later shader math.
     words[outputStoreOffset + 2u] = sampleId;
-    words.insert(
-        words.begin() + static_cast<std::ptrdiff_t>(insertionOffset),
-        declarations.begin(), declarations.end());
-    words[3] = bound + 3u;
 
-    logResult("patched_s0_center", sampleId, sampleType,
+    logResult("patched_s0_uv", sampleId, sampleType,
               sampleCoordType, coordComponents, sampleBlock);
     return true;
 }
@@ -6043,40 +5993,40 @@ bool IDirect3DDevice9::EnsurePipeline()
         static bool psS0CenterTestArmedTraceWritten = false;
         static uint64_t psS0CenterSeenSerials[32]{};
         static size_t psS0CenterSeenSerialCount = 0;
-        const uint64_t centerTarget = SwitchPsS0CenterTestTargetSerial();
+        const uint64_t centerTarget = SwitchPsS0UvTestTargetSerial();
         if (!psS0CenterTestArmedTraceWritten)
         {
             psS0CenterTestArmedTraceWritten = true;
             char trace[192];
-            const char *setting = std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL");
+            const char *setting = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
             if (!setting || !*setting)
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=known_world_set(1539,1771,1792,1821) source=default\n");
+                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=known_world_set(1539,1771,1792,1821) source=default\n");
             }
             else if (centerTarget == UINT64_MAX)
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=disabled source=env\n");
+                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=disabled source=env\n");
             }
             else if (centerTarget == UINT64_MAX - 1u)
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=all_patchable_ps source=env\n");
+                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=all_patchable_ps source=env\n");
             }
             else
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=%llu source=env\n",
+                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=%llu source=env\n",
                     static_cast<unsigned long long>(centerTarget));
             }
             Switch_LogWrite(trace);
         }
-        if (m_pixelShader && SwitchPsS0CenterTestTargetMatches(
+        if (m_pixelShader && SwitchPsS0UvTestTargetMatches(
                 centerTarget, m_pixelShader->serial))
         {
             bool alreadySeen = false;
@@ -6090,7 +6040,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 char trace[192];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=target_seen serial=%llu\n",
+                    "[KisakCOD][VK PS S0 UV TEST] action=target_seen serial=%llu\n",
                     static_cast<unsigned long long>(m_pixelShader->serial));
                 Switch_LogWrite(trace);
             }
@@ -6661,17 +6611,16 @@ bool IDirect3DDevice9::EnsurePipeline()
 
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
-        // The center-sample probe replaces the normal pixel-shader output and
-        // visibly changes any surface using that shader. Keep it opt-in by an
-        // explicit KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL value; never enable it
-        // automatically on a regular gameplay build.
-        const uint64_t debugPsS0CenterSerial = SwitchPsS0CenterTestTargetSerial();
-        if (m_pixelShader && SwitchPsS0CenterTestTargetMatches(
+        // The original-UV probe outputs the live s0 sample, bypassing material
+        // lighting and later shader math while preserving interpolated UVs.
+        // Keep it scoped to observed world shaders by default.
+        const uint64_t debugPsS0CenterSerial = SwitchPsS0UvTestTargetSerial();
+        if (m_pixelShader && SwitchPsS0UvTestTargetMatches(
                 debugPsS0CenterSerial, m_pixelShader->serial))
         {
             // Pass the exact serial here even when the selection is a set or
             // wildcard; the patch helper itself validates a single module.
-            (void)PatchFragmentShaderToOutputS0AtCenter(
+            (void)PatchFragmentShaderToOutputS0AtUv(
                 pixelSpirv, m_pixelShader->serial, m_pixelShader->serial);
         }
         const uint64_t debugPsColorSerial = SwitchPsColorDebugTargetSerial();
