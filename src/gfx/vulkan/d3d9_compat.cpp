@@ -1897,11 +1897,15 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0CenterTestTargetSerial()
 {
-    // Opt-in UV/texture diagnostic. Keep this disabled while the stronger
-    // solid-output test is active so two shader rewrites never overlap.
+    // Temporary, single-shader texture diagnostic. The latest gameplay log
+    // identifies PS serial 1821 on wc/ch_factory_rustybeam2. Sample its s0
+    // texture at UV=(0.5, 0.5) and output that value, bypassing lighting/UV
+    // varyings. Set the env var to another serial to retarget, or "off"/"0"
+    // to restore the normal shader without this diagnostic.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL");
-    if (!value || !*value ||
-        std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+    if (!value || !*value)
+        return 1821u;
+    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
 
     char *end = nullptr;
@@ -6031,14 +6035,16 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=disabled source=default\n");
+                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=1821 source=default\n");
             }
             else
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=%llu source=env\n",
-                    static_cast<unsigned long long>(centerTarget));
+                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=%s%llu source=env\n",
+                    centerTarget == UINT64_MAX ? "disabled/" : "",
+                    static_cast<unsigned long long>(
+                        centerTarget == UINT64_MAX ? 0u : centerTarget));
             }
             Switch_LogWrite(trace);
         }
