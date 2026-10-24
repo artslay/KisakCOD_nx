@@ -97,6 +97,11 @@ std::atomic<uint32_t> g_switchLastDrawTextureFormat[4]{};
 std::atomic<uint32_t> g_switchLastDrawTextureSourceFormat[4]{};
 std::atomic<uint32_t> g_switchLastDrawTextureLayout[4]{};
 
+// Set by R_SetSampler while preparing a lit material; consumed by the next
+// pixel-sampler descriptor bind so the trace describes the exact draw that
+// sampled the selected material/lightmap resources.
+volatile uint32_t g_switchLitSamplerTraceActive = 0;
+
 namespace
 {
 bool SpirvIsValidInstruction(
@@ -5949,6 +5954,53 @@ bool IDirect3DDevice9::BindSamplerSet(
         writes[i].pImageInfo = &images[i];
     }
 
+
+#ifdef __SWITCH__
+    if (setIndex == 2u && g_switchLitSamplerTraceActive)
+    {
+        uint32_t loggedActiveSamplers = 0;
+        for (uint32_t i = 0; i < 16u; ++i)
+        {
+            if (!activeSamplers[i])
+                continue;
+            ++loggedActiveSamplers;
+            auto *texture = static_cast<KisakVkTexture *>(textures[i]);
+            const char *imageName = texture
+                ? (texture->sourceImage && texture->sourceImage->name
+                    ? texture->sourceImage->name : texture->debugName)
+                : "<unbound>";
+            const bool selectedDummy =
+                images[i].imageView ==
+                    m_backend->DummyImageViewForSamplerType(
+                        static_cast<uint32_t>(activeSamplers[i]->type));
+            char trace[448];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][LIT SAMPLER DESCRIPTOR] slot=%u ps=%llu samplerType=%u bound=%p owner=%p image=%.80s dims=%ux%u vkFormat=%u sourceFormat=%u mip0Layout=%u mipLevels=%u baseMipView=%u selectedDummy=%u selectedView=%p\\n",
+                i,
+                static_cast<unsigned long long>(m_pixelShader
+                    ? m_pixelShader->serial : 0u),
+                static_cast<unsigned>(activeSamplers[i]->type),
+                static_cast<void *>(texture),
+                texture ? static_cast<void *>(texture->sourceImage) : nullptr,
+                imageName,
+                texture ? texture->width : 0u,
+                texture ? texture->height : 0u,
+                texture ? static_cast<unsigned>(texture->format) : 0u,
+                texture ? static_cast<unsigned>(texture->sourceFormat) : 0u,
+                texture ? static_cast<unsigned>(texture->GetSubresourceLayout(0, 0))
+                        : static_cast<unsigned>(VK_IMAGE_LAYOUT_UNDEFINED),
+                texture ? texture->mipLevels : 0u,
+                texture && texture->baseMipView ? 1u : 0u,
+                selectedDummy ? 1u : 0u,
+                static_cast<void *>(texture));
+            Switch_LogWrite(trace);
+        }
+        if (!loggedActiveSamplers)
+            Switch_LogWrite("[KisakCOD][LIT SAMPLER DESCRIPTOR] pixel shader has no active sampler declarations\\n");
+        g_switchLitSamplerTraceActive = 0u;
+    }
+#endif
 
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_update";
     vkUpdateDescriptorSets(m_backend->Device(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
