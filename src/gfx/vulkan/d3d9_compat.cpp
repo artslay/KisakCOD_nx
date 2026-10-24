@@ -812,11 +812,17 @@ uint8_t SwitchEffectiveShaderElementType(
     const _D3DVERTEXELEMENT9 &element,
     uint32_t streamStride = 0)
 {
-    // The BSP vertex buffer has a fixed 44-byte physical layout:
-    // position[0..15], color[16..19], base UV[20..27], lightmap UV[28..35],
-    // packed normal[36..39], packed tangent[40..43]. The legacy D3D declaration
-    // is a semantic-routing table and may label the 20-byte UV pair as FLOAT1
-    // or FLOAT2. Use the bound buffer's stride as the authoritative layout.
+    // GfxWorldVertex is exactly 44 bytes:
+    // xyz[3] at 0, binormalSign at 12, color at 16, base UV at 20,
+    // lightmap UV at 28, packed normal at 36, packed tangent at 40.
+    // binormalSign is NOT position.w. Fetch only xyz for POSITION so Vulkan
+    // supplies the shader's missing fourth component as 1.0 instead of using
+    // the tangent handedness (+/-1) as the homogeneous position coordinate.
+    // The bound stride is the reliable discriminator for this physical layout.
+    if (element.Stream == 0 && streamStride == 44u &&
+        element.Offset == 0 && element.Usage == 0 && element.UsageIndex == 0)
+        return D3DDECLTYPE_FLOAT3;
+
     if (element.Stream == 0 && streamStride == 44u &&
         element.Offset == 20 && element.Usage == 5)
     {
