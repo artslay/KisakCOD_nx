@@ -1897,13 +1897,12 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0UvTestTargetSerial()
 {
-    // Temporary texture-path probe. The default covers the four pixel shaders
-    // seen on trees, factory walls, plastic walls, and floor/beam materials in
-    // the latest Switch log. A numeric value selects one PS, "all" opts into
-    // every PS with a patchable s0 sample, and "off"/"0" disables the probe.
+    // Temporary texture-path probe, disabled by default during normal gameplay.
+    // A numeric value selects one PS; "all" opts into every PS with a patchable
+    // s0 sample; "off"/"0" explicitly disables the probe.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
     if (!value || !*value)
-        return 0u; // Internal sentinel: default set of known world shaders.
+        return UINT64_MAX;
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "all") == 0)
@@ -1927,10 +1926,7 @@ bool SwitchPsS0UvTestTargetMatches(
     if (targetSerial != 0u)
         return targetSerial == actualSerial;
 
-    // Keep the default diagnostic limited to shader programs already observed
-    // on real world materials, rather than altering UI, video, or every effect.
-    return actualSerial == 1539u || actualSerial == 1771u ||
-        actualSerial == 1792u || actualSerial == 1821u;
+    return false;
 }
 
 uint64_t SwitchPsColorDebugTargetSerial()
@@ -6002,7 +5998,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=known_world_set(1539,1771,1792,1821) source=default\n");
+                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=disabled source=default\n");
             }
             else if (uvTarget == UINT64_MAX)
             {
