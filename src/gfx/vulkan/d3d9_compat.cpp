@@ -809,8 +809,23 @@ uint64_t HashCombine(uint64_t value, uint64_t part)
 
 uint8_t SwitchEffectiveShaderElementType(
     const IDirect3DVertexDeclaration9 *decl,
-    const _D3DVERTEXELEMENT9 &element)
+    const _D3DVERTEXELEMENT9 &element,
+    uint32_t streamStride = 0)
 {
+    // The BSP vertex buffer has a fixed 44-byte physical layout:
+    // position[0..15], color[16..19], base UV[20..27], lightmap UV[28..35],
+    // packed normal[36..39], packed tangent[40..43]. The legacy D3D declaration
+    // is a semantic-routing table and may label the 20-byte UV pair as FLOAT1
+    // or FLOAT2. Use the bound buffer's stride as the authoritative layout.
+    if (element.Stream == 0 && streamStride == 44u &&
+        element.Offset == 20 && element.Usage == 5)
+    {
+        if (element.UsageIndex == 0)
+            return D3DDECLTYPE_FLOAT4;
+        if (element.UsageIndex == 1)
+            return D3DDECLTYPE_FLOAT2;
+    }
+
     uint8_t type = element.Type;
     if (decl && element.Stream == 0)
     {
@@ -889,8 +904,16 @@ uint8_t SwitchEffectiveShaderElementType(
 
 uint32_t SwitchEffectiveShaderElementOffset(
     const IDirect3DVertexDeclaration9 *decl,
-    const _D3DVERTEXELEMENT9 &element)
+    const _D3DVERTEXELEMENT9 &element,
+    uint32_t streamStride = 0)
 {
+    // TEXCOORD1 can be routed from the first UV pair, but in a world vertex
+    // buffer that semantic must read the separate lightmap UVs at byte 28.
+    if (element.Stream == 0 && streamStride == 44u &&
+        element.Offset == 20 && element.Usage == 5 &&
+        element.UsageIndex == 1)
+        return 28;
+
     if (decl &&
         decl->switchVertDeclType >= 2 &&
         decl->switchVertDeclType <= 13 &&
@@ -5999,9 +6022,9 @@ bool IDirect3DDevice9::EnsurePipeline()
         key = HashCombine(key, element.Usage);
         key = HashCombine(key, element.UsageIndex);
         key = HashCombine(
-            key, SwitchEffectiveShaderElementType(m_decl, element));
+            key, SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u));
         key = HashCombine(
-            key, SwitchEffectiveShaderElementOffset(m_decl, element));
+            key, SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u));
     }
 
     key = HashCombine(key, static_cast<uint64_t>(colorFormat));
@@ -6124,7 +6147,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 return false;
             }
 
-            const uint8_t shaderElementType = SwitchEffectiveShaderElementType(m_decl, element);
+            const uint8_t shaderElementType = SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
 
             MOJOSHADER_vertexAttribute attr{};
             switch (shaderElementType)
@@ -6192,9 +6215,9 @@ bool IDirect3DDevice9::EnsurePipeline()
                     traceIndex, elementIndex,
                     static_cast<unsigned>(element.Stream),
                     static_cast<unsigned>(element.Offset),
-                    static_cast<unsigned>(SwitchEffectiveShaderElementOffset(m_decl, element)),
+                    static_cast<unsigned>(SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u)),
                     static_cast<unsigned>(element.Type),
-                    static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element)),
+                    static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u)),
                     static_cast<unsigned>(element.Usage),
                     static_cast<unsigned>(element.UsageIndex));
                 Switch_LogWrite(elementTrace);
@@ -6823,7 +6846,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         // Switch. Resolve both its physical offset and representation against
         // the actual transient/world vertex layout before describing Vulkan input.
         const uint8_t effectiveType =
-            SwitchEffectiveShaderElementType(m_decl, element);
+            SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
         VkFormat format = VertexFormat(effectiveType);
         // PackedUnitVec is stored in memory as X, Y, Z, scale. D3DCOLOR's
         // BGRA interpretation is correct for actual colors, but swaps X/Z
@@ -6871,7 +6894,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (packedWorldByteVector || packedColorUnitVector)
             format = VK_FORMAT_R8G8B8A8_UNORM;
         const uint32_t vertexOffset =
-            SwitchEffectiveShaderElementOffset(m_decl, element);
+            SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
 
         if (format == VK_FORMAT_UNDEFINED)
         {
@@ -6926,7 +6949,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
 
         const uint32_t attributeBytes =
-            SwitchShaderElementByteSize(SwitchEffectiveShaderElementType(m_decl, element));
+            SwitchShaderElementByteSize(SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u));
         if (vertexOffset > binding->stride ||
             attributeBytes > binding->stride - vertexOffset)
         {
@@ -7180,9 +7203,9 @@ bool IDirect3DDevice9::EnsurePipeline()
             if (matchedElement)
             {
                 const uint8_t effectiveType =
-                    SwitchEffectiveShaderElementType(m_decl, *matchedElement);
+                    SwitchEffectiveShaderElementType(m_decl, *matchedElement, matchedElement->Stream < 16u ? m_streams[matchedElement->Stream].stride : 0u);
                 const uint32_t effectiveOffset =
-                    SwitchEffectiveShaderElementOffset(m_decl, *matchedElement);
+                    SwitchEffectiveShaderElementOffset(m_decl, *matchedElement, matchedElement->Stream < 16u ? m_streams[matchedElement->Stream].stride : 0u);
                 std::snprintf(line, sizeof(line),
                     "[KisakCOD][VK PIPELINE ATTRIBUTE] seq=%u location=%u binding=%u format=%u offset=%u usage=%u index=%u elementType=%u effectiveType=%u declaredOffset=%u effectiveOffset=%u route=%u\n",
                     pipelineCreateSequence, attribute.location, attribute.binding,
