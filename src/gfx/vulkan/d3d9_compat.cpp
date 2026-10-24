@@ -6976,15 +6976,17 @@ bool IDirect3DDevice9::EnsurePipeline()
             element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
             ((element.UsageIndex == 1 && element.Offset == 24) ||
              (element.UsageIndex == 2 && element.Offset == 28));
-        // UBYTE4 must remain R8G8B8A8_USCALED: D3D9 exposes its four
-        // bytes as 0..255 and CoD4's shader decodes the packed vector itself.
-        // D3DCOLOR is different: D3D9 normalizes it, so use RGBA UNORM (not
-        // BGRA) when a packed unit vector is routed through that declaration.
+        // Some CoD4 world declarations encode packed normals/tangents as
+        // UBYTE4, although the shader expects normalized unit-vector values.
+        // Normalize those bytes to 0..1 and preserve their X/Y/Z/scale order.
+        const bool packedWorldByteVector =
+            effectiveType == D3DDECLTYPE_UBYTE4 &&
+            (packedWorldNormal || packedWorldTangent);
         const bool packedColorUnitVector =
             effectiveType == D3DDECLTYPE_D3DCOLOR &&
             (packedUnitVectorSemantic || packedWorldNormal ||
              packedWorldTangent || packedModelUnitVector);
-        if (packedColorUnitVector)
+        if (packedWorldByteVector || packedColorUnitVector)
             format = VK_FORMAT_R8G8B8A8_UNORM;
         const uint32_t vertexOffset =
             SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u);
