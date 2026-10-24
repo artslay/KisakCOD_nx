@@ -4924,6 +4924,68 @@ HRESULT IDirect3DDevice9::SetTexture(uint32_t stage, IDirect3DBaseTexture9 *tex)
     return S_OK;
 }
 
+// Bounded diagnostics for shader bytecode that fails MojoShader translation.
+// This is the point where D3D9 shader-model bytecode becomes SPIR-V on Switch;
+// Vulkan pipeline logs alone cannot tell whether a shader failed before that.
+static void SwitchLogShaderTranslationFailure(
+    const char *stage, const MOJOSHADER_parseData *parse, uint32_t bytecodeSize)
+{
+    char summary[512];
+    std::snprintf(
+        summary, sizeof(summary),
+        "[KisakCOD][SHADER TRANSLATE FAIL] stage=%s bytecodeBytes=%u parse=%u errors=%d type=%d profile=%.48s outputBytes=%d attributes=%d samplers=%d uniforms=%d\\n",
+        stage ? stage : "?", bytecodeSize, parse ? 1u : 0u,
+        parse ? parse->error_count : -1,
+        parse ? static_cast<int>(parse->shader_type) : -1,
+        parse && parse->profile ? parse->profile : "(null)",
+        parse ? parse->output_len : 0,
+        parse ? parse->attribute_count : 0,
+        parse ? parse->sampler_count : 0,
+        parse ? parse->uniform_count : 0);
+    Switch_LogWrite(summary);
+
+    if (!parse || !parse->errors)
+        return;
+
+    const int count = std::min(parse->error_count, 4);
+    for (int i = 0; i < count; ++i)
+    {
+        const MOJOSHADER_error &error = parse->errors[i];
+        char detail[512];
+        std::snprintf(
+            detail, sizeof(detail),
+            "[KisakCOD][SHADER TRANSLATE ERROR] stage=%s i=%d position=%d file=%.80s message=%.300s\\n",
+            stage ? stage : "?", i, error.error_position,
+            error.filename ? error.filename : "(unknown)",
+            error.error ? error.error : "(no message)");
+        Switch_LogWrite(detail);
+    }
+}
+
+static void SwitchLogShaderTranslationSuccess(
+    const char *stage, uint32_t bytecodeSize,
+    const MOJOSHADER_parseData *parse, size_t spirvBytes)
+{
+    static std::atomic<uint32_t> vertexSuccessCount{0};
+    static std::atomic<uint32_t> pixelSuccessCount{0};
+    std::atomic<uint32_t> &counter = stage && stage[0] == 'V'
+        ? vertexSuccessCount : pixelSuccessCount;
+    const uint32_t sequence = counter.fetch_add(1, std::memory_order_relaxed);
+    if (sequence >= 20u)
+        return;
+
+    char trace[384];
+    std::snprintf(
+        trace, sizeof(trace),
+        "[KisakCOD][SHADER TRANSLATE OK] stage=%s n=%u bytecodeBytes=%u profile=%.32s spirvBytes=%zu attributes=%d samplers=%d uniforms=%d\\n",
+        stage ? stage : "?", sequence, bytecodeSize,
+        parse && parse->profile ? parse->profile : "(null)", spirvBytes,
+        parse ? parse->attribute_count : 0,
+        parse ? parse->sampler_count : 0,
+        parse ? parse->uniform_count : 0);
+    Switch_LogWrite(trace);
+}
+
 HRESULT IDirect3DDevice9::CreateVertexShader(
     const void *bytecode, uint32_t bytecodeSize, IDirect3DVertexShader9 **out)
 {
@@ -4952,6 +5014,7 @@ HRESULT IDirect3DDevice9::CreateVertexShader(
     shader->parseData = parse;
     shader->spirv.resize(static_cast<size_t>(parse->output_len) / sizeof(uint32_t));
     std::memcpy(shader->spirv.data(), parse->output, parse->output_len);
+    SwitchLogShaderTranslationSuccess("VS", bytecodeSize, parse, shader->spirv.size() * sizeof(uint32_t));
     *out = shader;
     return S_OK;
 }
@@ -4984,6 +5047,7 @@ HRESULT IDirect3DDevice9::CreatePixelShader(
     shader->parseData = parse;
     shader->spirv.resize(static_cast<size_t>(parse->output_len) / sizeof(uint32_t));
     std::memcpy(shader->spirv.data(), parse->output, parse->output_len);
+    SwitchLogShaderTranslationSuccess("PS", bytecodeSize, parse, shader->spirv.size() * sizeof(uint32_t));
     *out = shader;
     return S_OK;
 }
