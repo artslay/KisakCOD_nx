@@ -6856,20 +6856,28 @@ bool IDirect3DDevice9::EnsurePipeline()
             element.Usage == MOJOSHADER_USAGE_NORMAL ||
             element.Usage == MOJOSHADER_USAGE_TANGENT ||
             element.Usage == MOJOSHADER_USAGE_BINORMAL;
+        const bool packedWorldLayout =
+            m_decl->switchVertDeclType >= 2 &&
+            m_decl->switchVertDeclType <= 13 &&
+            element.Stream == 0;
+        // GfxWorldVertex stores packed normal/tangent bytes at fixed physical
+        // offsets 36/40. Material routing can expose these bytes either through
+        // TEXCOORD1/2 or through the native NORMAL/TANGENT semantics. Handle
+        // both routes: leaving a UBYTE4 vector as USCALED feeds 0..255 into
+        // lighting instead of normalized 0..1 components.
         const bool packedWorldNormal =
-            m_decl->switchVertDeclType >= 2 &&
-            m_decl->switchVertDeclType <= 13 &&
-            element.Stream == 0 &&
-            element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
-            element.UsageIndex == 1 &&
-            element.Offset == 36;
+            packedWorldLayout && element.Offset == 36 &&
+            ((element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
+              element.UsageIndex == 1) ||
+             (element.Usage == MOJOSHADER_USAGE_NORMAL &&
+              element.UsageIndex == 0));
         const bool packedWorldTangent =
-            m_decl->switchVertDeclType >= 2 &&
-            m_decl->switchVertDeclType <= 13 &&
-            element.Stream == 0 &&
-            element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
-            element.UsageIndex == 2 &&
-            element.Offset == 40;
+            packedWorldLayout && element.Offset == 40 &&
+            ((element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
+              element.UsageIndex == 2) ||
+             ((element.Usage == MOJOSHADER_USAGE_TANGENT ||
+               element.Usage == MOJOSHADER_USAGE_BINORMAL) &&
+              element.UsageIndex == 0));
         // GfxPackedVertex uses the same four-byte PackedUnitVec encoding at
         // offsets 24 (normal) and 28 (tangent), but its legacy material routing
         // labels those attributes TEXCOORD1/2 instead of NORMAL/TANGENT.
