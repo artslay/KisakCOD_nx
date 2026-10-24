@@ -1897,15 +1897,11 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0CenterTestTargetSerial()
 {
-    // Temporary regression probe: PS 1821 is the lit world/floor shader seen
-    // in the current Switch log. Read s0 at a fixed center coordinate to
-    // separate texture sampling from UV/interpolator and lighting failures.
-    // Set KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL=off (or 0) to disable, or provide
-    // another pixel-shader serial to target a different material.
+    // Opt-in UV/texture diagnostic. Keep this disabled while the stronger
+    // solid-output test is active so two shader rewrites never overlap.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL");
-    if (!value || !*value)
-        return 1821u;
-    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+    if (!value || !*value ||
+        std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
 
     char *end = nullptr;
@@ -1918,11 +1914,16 @@ uint64_t SwitchPsS0CenterTestTargetSerial()
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
-    // Keep normal gameplay unchanged. A specific serial opts in to the solid
-    // magenta diagnostic; "all" explicitly enables the broad s0+s3 experiment.
+    // Strong pipeline-isolation test: PS 1821 is bound by wc/icbm_tunnelfloor
+    // and several visible world materials in the current killhouse log.
+    // Force opaque magenta at every color output store; this must be visibly
+    // obvious if this rewritten fragment shader reaches the displayed frame.
+    // Set KISAK_VK_DEBUG_PS_COLOR_SERIAL=off (or 0) to disable, or "all" to
+    // test all lit pixel shaders that declare both s0 and s3.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
-    if (!value || !*value ||
-        std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+    if (!value || !*value)
+        return 1821u;
+    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "all") == 0)
         return 0u;
