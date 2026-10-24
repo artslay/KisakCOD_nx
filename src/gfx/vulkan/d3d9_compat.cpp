@@ -871,12 +871,13 @@ uint8_t SwitchEffectiveShaderElementType(
         {
             type = D3DDECLTYPE_FLOAT4;
         }
-        // TEXCOORD1 is the separate lightmap-UV route in these world declarations.
-        // TEXCOORD2 at byte 40 is different: it aliases the packed tangent field.
-        // Treating both indices as float2 silently fed lightmap UVs to normal-mapped
-        // shaders in place of the tangent vector.
+        // A TEXCOORD1 declaration sourced from the combined world UV field
+        // at byte 20 means the lightmap UV pair in bytes 28..35. Do not apply
+        // this conversion to other source fields: some material routes reuse
+        // TEXCOORD1 for the packed world normal at byte 36.
         else if (decl->switchVertDeclType >= 2 &&
                  decl->switchVertDeclType <= 13 &&
+                 element.Offset == 20 &&
                  element.Usage == 5 &&
                  element.UsageIndex == 1)
         {
@@ -894,6 +895,7 @@ uint32_t SwitchEffectiveShaderElementOffset(
         decl->switchVertDeclType >= 2 &&
         decl->switchVertDeclType <= 13 &&
         element.Stream == 0 &&
+        element.Offset == 20 &&
         element.Usage == 5 &&
         element.UsageIndex == 1)
     {
@@ -6831,6 +6833,13 @@ bool IDirect3DDevice9::EnsurePipeline()
             element.Usage == MOJOSHADER_USAGE_NORMAL ||
             element.Usage == MOJOSHADER_USAGE_TANGENT ||
             element.Usage == MOJOSHADER_USAGE_BINORMAL;
+        const bool packedWorldNormal =
+            m_decl->switchVertDeclType >= 2 &&
+            m_decl->switchVertDeclType <= 13 &&
+            element.Stream == 0 &&
+            element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
+            element.UsageIndex == 1 &&
+            element.Offset == 36;
         const bool packedWorldTangent =
             m_decl->switchVertDeclType >= 2 &&
             m_decl->switchVertDeclType <= 13 &&
@@ -6849,7 +6858,8 @@ bool IDirect3DDevice9::EnsurePipeline()
             ((element.UsageIndex == 1 && element.Offset == 24) ||
              (element.UsageIndex == 2 && element.Offset == 28));
         if (effectiveType == D3DDECLTYPE_D3DCOLOR &&
-            (packedUnitVectorSemantic || packedWorldTangent || packedModelUnitVector))
+            (packedUnitVectorSemantic || packedWorldNormal ||
+             packedWorldTangent || packedModelUnitVector))
         {
             format = VK_FORMAT_R8G8B8A8_UNORM;
         }
