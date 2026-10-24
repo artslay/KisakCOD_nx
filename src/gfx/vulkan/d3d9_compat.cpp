@@ -5905,7 +5905,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=auto-world-lightmap source=default\n");
+                    "[KisakCOD][VK PS S0 CENTER TEST] action=armed target=disabled source=default\n");
             }
             else
             {
