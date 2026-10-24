@@ -17,9 +17,6 @@
 #include "rb_light.h"
 #include "r_sunshadow.h" // SCENE_VIEW_CAMERA
 #include <universal/profile.h>
-#ifdef __SWITCH__
-extern void Switch_LogWrite(const char *msg);
-#endif
 
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
