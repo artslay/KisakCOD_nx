@@ -7950,6 +7950,90 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             traceWorldShaderAttributes(
                 "ps", m_pixelShader ? m_pixelShader->parseData : nullptr, false);
 
+            // A pixel shader's attributes are its interpolated inputs, not
+            // vertex-buffer attributes. Verify the upstream VS output semantics
+            // that must feed COLOR0/TEXCOORD0/TEXCOORD1 in the lightmapped BSP PS.
+            const MOJOSHADER_parseData *worldVsParse =
+                m_vertexShader ? m_vertexShader->parseData : nullptr;
+            const MOJOSHADER_parseData *worldPsParse =
+                m_pixelShader ? m_pixelShader->parseData : nullptr;
+            if (worldVsParse && worldVsParse->outputs)
+            {
+                for (int outputIndex = 0;
+                     outputIndex < worldVsParse->output_count &&
+                         outputIndex < 16;
+                     ++outputIndex)
+                {
+                    const MOJOSHADER_attribute &output =
+                        worldVsParse->outputs[outputIndex];
+                    bool feedsPixelInput = false;
+                    if (worldPsParse && worldPsParse->attributes)
+                    {
+                        for (int pixelInputIndex = 0;
+                             pixelInputIndex < worldPsParse->attribute_count;
+                             ++pixelInputIndex)
+                        {
+                            const MOJOSHADER_attribute &pixelInput =
+                                worldPsParse->attributes[pixelInputIndex];
+                            if (pixelInput.usage == output.usage &&
+                                pixelInput.index == output.index)
+                            {
+                                feedsPixelInput = true;
+                                break;
+                            }
+                        }
+                    }
+                    char outputTrace[256];
+                    std::snprintf(
+                        outputTrace, sizeof(outputTrace),
+                        "[KisakCOD][VK WORLD VS OUTPUT] draw=%u i=%d name=%.32s usage=%u usageIndex=%u feedsPixelInput=%u\\n",
+                        traceId, outputIndex,
+                        output.name ? output.name : "(null)",
+                        static_cast<unsigned>(output.usage),
+                        static_cast<unsigned>(output.index),
+                        feedsPixelInput ? 1u : 0u);
+                    Switch_LogWrite(outputTrace);
+                }
+            }
+            if (worldPsParse && worldPsParse->attributes)
+            {
+                for (int inputIndex = 0;
+                     inputIndex < worldPsParse->attribute_count &&
+                         inputIndex < 16;
+                     ++inputIndex)
+                {
+                    const MOJOSHADER_attribute &input =
+                        worldPsParse->attributes[inputIndex];
+                    bool hasVertexOutput = false;
+                    if (worldVsParse && worldVsParse->outputs)
+                    {
+                        for (int outputIndex = 0;
+                             outputIndex < worldVsParse->output_count;
+                             ++outputIndex)
+                        {
+                            const MOJOSHADER_attribute &output =
+                                worldVsParse->outputs[outputIndex];
+                            if (output.usage == input.usage &&
+                                output.index == input.index)
+                            {
+                                hasVertexOutput = true;
+                                break;
+                            }
+                        }
+                    }
+                    char inputTrace[256];
+                    std::snprintf(
+                        inputTrace, sizeof(inputTrace),
+                        "[KisakCOD][VK WORLD PS INPUT] draw=%u i=%d name=%.32s usage=%u usageIndex=%u hasVertexOutput=%u\\n",
+                        traceId, inputIndex,
+                        input.name ? input.name : "(null)",
+                        static_cast<unsigned>(input.usage),
+                        static_cast<unsigned>(input.index),
+                        hasVertexOutput ? 1u : 0u);
+                    Switch_LogWrite(inputTrace);
+                }
+            }
+
             if (!vertexBytes || !indexData)
             {
                 Switch_LogWrite("[KisakCOD][VK WORLD UV] reason=cpu_shadow_unavailable\n");
