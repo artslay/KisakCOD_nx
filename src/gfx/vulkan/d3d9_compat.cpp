@@ -6063,7 +6063,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             psColorTestArmedTraceWritten = true;
             char trace[224];
-            const char *targetLabel = targetSerial == 0u ? "all_s0_s3" :
+            const char *targetLabel = targetSerial == 0u ? "all_pixel_shaders" :
                 (targetSerial == UINT64_MAX ? "disabled" : nullptr);
             if (targetLabel)
             {
@@ -6098,7 +6098,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                     trace, sizeof(trace),
                     "[KisakCOD][VK PS COLOR TEST] action=target_seen serial=%llu scope=%s\n",
                     static_cast<unsigned long long>(actualSerial),
-                    targetSerial == 0u ? "all_s0_s3" : "serial");
+                    targetSerial == 0u ? "all_pixel_shaders" : "serial");
                 Switch_LogWrite(trace);
             }
         }
