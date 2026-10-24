@@ -5941,68 +5941,6 @@ bool IDirect3DDevice9::BindSamplerSet(
     }
 
 
-#ifdef __SWITCH__
-    // Bounded, non-visual trace for the actual textures bound to lightmapped BSP
-    // pixel shaders. Image-object load logs alone do not prove that the shader
-    // sees the intended image view; in particular the sampler path can legally
-    // substitute a white dummy when a base mip has not been uploaded yet.
-    if (setIndex == 2u && activeShader && activeSamplers[0] &&
-        activeSamplers[3] && m_decl &&
-        m_decl->switchVertDeclType >= 2 &&
-        m_decl->switchVertDeclType <= 13)
-    {
-        static std::atomic<uint32_t> worldSamplerTraceCount{0};
-        const uint32_t sequence =
-            worldSamplerTraceCount.fetch_add(1, std::memory_order_relaxed);
-        if (sequence < 24u)
-        {
-            for (const uint32_t slot : {0u, 2u, 3u})
-            {
-                const KisakVkTexture *texture = static_cast<const KisakVkTexture *>(textures[slot]);
-                const MOJOSHADER_sampler *sampler = activeSamplers[slot];
-                const VkImageView dummyView = sampler
-                    ? m_backend->DummyImageViewForSamplerType(
-                        static_cast<uint32_t>(sampler->type))
-                    : VK_NULL_HANDLE;
-                const bool descriptorIsDummy =
-                    images[slot].imageView == dummyView;
-                const VkImageLayout baseLayout = texture
-                    ? texture->GetSubresourceLayout(0, 0)
-                    : VK_IMAGE_LAYOUT_UNDEFINED;
-                const char *imageName =
-                    texture && texture->sourceImage && texture->sourceImage->name
-                    ? texture->sourceImage->name
-                    : (texture && texture->debugName
-                        ? texture->debugName : "<unbound>");
-                const void *currentBasemap =
-                    texture && texture->sourceImage
-                    ? static_cast<const void *>(
-                        texture->sourceImage->texture.basemap)
-                    : nullptr;
-                char trace[512];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK WORLD SAMPLER] n=%u shader=%llu decl=%llu route=%u slot=%u active=%u samplerType=%u texture=%p currentBasemap=%p image=%.96s size=%ux%u sourceFormat=%u vkFormat=%u mips=%u baseLayout=%u dummy=%u\n",
-                    sequence,
-                    static_cast<unsigned long long>(activeShader->serial),
-                    static_cast<unsigned long long>(m_decl->serial),
-                    static_cast<unsigned>(m_decl->switchVertDeclType),
-                    slot, sampler ? 1u : 0u,
-                    sampler ? static_cast<unsigned>(sampler->type) : UINT32_MAX,
-                    static_cast<const void *>(texture), currentBasemap, imageName,
-                    texture ? texture->width : 0u,
-                    texture ? texture->height : 0u,
-                    texture ? static_cast<unsigned>(texture->sourceFormat) : 0u,
-                    texture ? static_cast<unsigned>(texture->format) : 0u,
-                    texture ? texture->mipLevels : 0u,
-                    static_cast<unsigned>(baseLayout),
-                    descriptorIsDummy ? 1u : 0u);
-                Switch_LogWrite(trace);
-            }
-        }
-    }
-#endif
-
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_update";
     vkUpdateDescriptorSets(m_backend->Device(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_bind";
@@ -7196,6 +7134,23 @@ bool IDirect3DDevice9::EnsurePipeline()
     // counts in this path are at most 16, so one 32-bit word is sufficient.
     multisample.pSampleMask = &m_multisampleMask;
 
+    bool switchLightmappedBspDepth = false;
+#ifdef __SWITCH__
+    if (m_decl && m_decl->switchVertDeclType >= 2 &&
+        m_decl->switchVertDeclType <= 13 &&
+        m_pixelShader && m_pixelShader->parseData &&
+        m_pixelShader->parseData->samplers)
+    {
+        bool hasDiffuseSampler = false;
+        bool hasLightmapSampler = false;
+        for (int i = 0; i < m_pixelShader->parseData->sampler_count; ++i)
+        {
+            hasDiffuseSampler |= m_pixelShader->parseData->samplers[i].index == 0;
+            hasLightmapSampler |= m_pixelShader->parseData->samplers[i].index == 3;
+        }
+        switchLightmappedBspDepth = hasDiffuseSampler && hasLightmapSampler;
+    }
+#endif
     VkPipelineDepthStencilStateCreateInfo depth{};
     depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     // R_Set2D/R_Set3D toggle this Switch-specific mode around overlay passes.
@@ -7204,7 +7159,12 @@ bool IDirect3DDevice9::EnsurePipeline()
     const bool effectiveDepthWrite = m_depthWrite && !m_switchUnlit;
     depth.depthTestEnable = effectiveDepthTest ? VK_TRUE : VK_FALSE;
     depth.depthWriteEnable = effectiveDepthWrite ? VK_TRUE : VK_FALSE;
-    depth.depthCompareOp = CompareOp(m_depthFunc);
+    // The depth-only BSP prepass and the lightmapped color pass use different
+    // vertex shaders. On Switch, strict LESS/EQUAL states can reject the color
+    // pass when their clip-space depth differs by a few ULPs. Preserve normal
+    // occlusion but use the robust D3D9 LEQUAL behavior for lit world materials.
+    depth.depthCompareOp = switchLightmappedBspDepth
+        ? VK_COMPARE_OP_LESS_OR_EQUAL : CompareOp(m_depthFunc);
     depth.depthBoundsTestEnable = VK_FALSE;
     depth.stencilTestEnable = m_stencilEnable ? VK_TRUE : VK_FALSE;
     depth.front.compareOp = CompareOp(m_stencilFunc);
@@ -7473,25 +7433,6 @@ bool IDirect3DDevice9::EnsurePipeline()
         static_cast<void *>(stages[1].module));
     g_switchPipelineCrashSnapshot.valid = true;
 
-bool switchTraceLitBspPipeline = false;
-#ifdef __SWITCH__
-    if (m_decl && m_decl->switchVertDeclType >= 2 &&
-        m_decl->switchVertDeclType <= 13 &&
-        m_vertexShader && m_vertexShader->parseData &&
-        m_pixelShader && m_pixelShader->parseData &&
-        m_pixelShader->parseData->samplers)
-    {
-        bool hasDiffuseSampler = false;
-        bool hasLightmapSampler = false;
-        for (int i = 0; i < m_pixelShader->parseData->sampler_count; ++i)
-        {
-            hasDiffuseSampler |= m_pixelShader->parseData->samplers[i].index == 0;
-            hasLightmapSampler |= m_pixelShader->parseData->samplers[i].index == 3;
-        }
-        switchTraceLitBspPipeline = hasDiffuseSampler && hasLightmapSampler;
-    }
-#endif
-
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
     RecordSwitchVkPipelineTrace(
@@ -7507,41 +7448,6 @@ bool switchTraceLitBspPipeline = false;
     const auto pipelineCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - pipelineCreateStart).count();
 
-#ifdef __SWITCH__
-    if (switchTraceLitBspPipeline)
-    {
-        static std::atomic<uint32_t> litBspPipelineTraceCount{0};
-        const uint32_t traceIndex =
-            litBspPipelineTraceCount.fetch_add(1, std::memory_order_relaxed);
-        if (traceIndex < 32u)
-        {
-            char trace[640];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK LIT BSP PIPELINE] n=%u result=%d ms=%lld handle=%p key=%016llx decl=%llu route=%u vs=%llu vsBytes=%d vsInputs=%d ps=%llu psBytes=%d psSamplers=%d depthTest=%u depthWrite=%u blend=%u srcBlend=%u dstBlend=%u colorMask=0x%x cull=%u\n",
-                traceIndex, static_cast<int>(pipelineResult),
-                static_cast<long long>(pipelineCreateElapsed),
-                static_cast<void *>(pipeline),
-                static_cast<unsigned long long>(key),
-                static_cast<unsigned long long>(m_decl->serial),
-                static_cast<unsigned>(m_decl->switchVertDeclType),
-                static_cast<unsigned long long>(m_vertexShader->serial),
-                m_vertexShader->parseData ? m_vertexShader->parseData->output_len : 0,
-                m_vertexShader->parseData ? m_vertexShader->parseData->attribute_count : 0,
-                static_cast<unsigned long long>(m_pixelShader->serial),
-                m_pixelShader->parseData ? m_pixelShader->parseData->output_len : 0,
-                m_pixelShader->parseData ? m_pixelShader->parseData->sampler_count : 0,
-                effectiveDepthTest ? 1u : 0u,
-                effectiveDepthWrite ? 1u : 0u,
-                colorBlend.blendEnable ? 1u : 0u,
-                static_cast<unsigned>(colorBlend.srcColorBlendFactor),
-                static_cast<unsigned>(colorBlend.dstColorBlendFactor),
-                static_cast<unsigned>(colorBlend.colorWriteMask),
-                static_cast<unsigned>(raster.cullMode));
-            Switch_LogWrite(trace);
-        }
-    }
-#endif
     if (pipelineCreateSequence <= 2 ||
         pipelineCreateElapsed >= 250 || pipelineResult != VK_SUCCESS)
     {
@@ -7929,338 +7835,6 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         indexData = m_indices->shadow.data();
     else
         indexData = static_cast<const uint8_t *>(m_indices->mapped);
-
-#ifdef __SWITCH__
-    // The latest field log proves real diffuse and lightmap image views are
-    // bound (not dummies). Trace the exact CPU-visible world vertices selected
-    // by the same indices passed to Vulkan, to distinguish bad UV contents or
-    // stream offsets from errors inside translated shader math.
-    if (m_decl && m_decl->switchVertDeclType >= 2 &&
-        m_decl->switchVertDeclType <= 13 &&
-        m_pixelShader && m_pixelShader->parseData &&
-        m_pixelShader->parseData->samplers &&
-        m_streams[0].buffer && m_streams[0].stride == 44u)
-    {
-        bool hasS0 = false;
-        bool hasS3 = false;
-        const MOJOSHADER_parseData *parse = m_pixelShader->parseData;
-        for (int i = 0; i < parse->sampler_count; ++i)
-        {
-            hasS0 |= parse->samplers[i].index == 0;
-            hasS3 |= parse->samplers[i].index == 3;
-        }
-        static std::atomic<uint32_t> worldVertexUvTraceCount{0};
-        const uint32_t traceId = hasS0 && hasS3
-            ? worldVertexUvTraceCount.fetch_add(1, std::memory_order_relaxed)
-            : UINT32_MAX;
-        if (hasS0 && hasS3 && traceId < 8u)
-        {
-            const KisakVkBuffer *vertexBuffer = m_streams[0].buffer;
-            const uint8_t *vertexBytes =
-                vertexBuffer->dynamic && vertexBuffer->shadowInitialized &&
-                vertexBuffer->shadow.size() >= vertexBuffer->size
-                ? vertexBuffer->shadow.data()
-                : static_cast<const uint8_t *>(vertexBuffer->mapped);
-            char trace[512];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK WORLD UV] n=%u shader=%llu decl=%llu route=%u indexData=%p indexBufferBytes=%u startIndex=%u baseVertex=%d streamData=%p bufferBytes=%u streamOffset=%u stride=%u indexCount=%u\n",
-                traceId,
-                static_cast<unsigned long long>(m_pixelShader->serial),
-                static_cast<unsigned long long>(m_decl->serial),
-                static_cast<unsigned>(m_decl->switchVertDeclType),
-                static_cast<const void *>(indexData), m_indices->size,
-                startIndex, baseVertexIndex,
-                static_cast<const void *>(vertexBytes), vertexBuffer->size,
-                m_streams[0].offset, m_streams[0].stride, indexCount);
-            Switch_LogWrite(trace);
-
-            for (uint32_t elementIndex = 0;
-                 elementIndex < m_decl->elements.size() && elementIndex < 16u;
-                 ++elementIndex)
-            {
-                const _D3DVERTEXELEMENT9 &element = m_decl->elements[elementIndex];
-                if (element.Usage != 5u)
-                    continue;
-                char attrTrace[256];
-                std::snprintf(
-                    attrTrace, sizeof(attrTrace),
-                    "[KisakCOD][VK WORLD UV ATTR] n=%u i=%u stream=%u usageIndex=%u declaredOffset=%u effectiveOffset=%u declaredType=%u effectiveType=%u\n",
-                    traceId, elementIndex,
-                    static_cast<unsigned>(element.Stream),
-                    static_cast<unsigned>(element.UsageIndex),
-                    static_cast<unsigned>(element.Offset),
-                    SwitchEffectiveShaderElementOffset(
-                        m_decl, element,
-                        element.Stream < 16u
-                            ? m_streams[element.Stream].stride : 0u),
-                    static_cast<unsigned>(element.Type),
-                    static_cast<unsigned>(SwitchEffectiveShaderElementType(
-                        m_decl, element,
-                        element.Stream < 16u
-                            ? m_streams[element.Stream].stride : 0u)));
-                Switch_LogWrite(attrTrace);
-            }
-
-            // CPU-visible UV bytes can be valid even when the shader interface
-            // routes those bytes to the wrong input or loses a required interpolant.
-            // Compare the actual shader attributes with the live D3D declaration for
-            // these first BSP draws; this is diagnostic only and changes no rendering.
-            auto traceWorldShaderAttributes =
-                [&](const char *stage, const MOJOSHADER_parseData *shaderParse,
-                    bool matchDeclaration)
-            {
-                if (!shaderParse || !shaderParse->attributes)
-                    return;
-                const int attributeCount =
-                    std::max(0, shaderParse->attribute_count);
-                for (int shaderAttributeIndex = 0;
-                     shaderAttributeIndex < attributeCount &&
-                         shaderAttributeIndex < 16;
-                     ++shaderAttributeIndex)
-                {
-                    const MOJOSHADER_attribute &shaderAttribute =
-                        shaderParse->attributes[shaderAttributeIndex];
-                    uint32_t location = UINT32_MAX;
-                    if (std::strcmp(stage, "vs") == 0)
-                        (void)ExtractShaderInputRegister(
-                            shaderAttribute.name, &location);
-
-                    const _D3DVERTEXELEMENT9 *matchedElement = nullptr;
-                    if (matchDeclaration && m_decl)
-                    {
-                        for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
-                        {
-                            if (element.Usage ==
-                                    static_cast<uint8_t>(shaderAttribute.usage) &&
-                                element.UsageIndex == shaderAttribute.index)
-                            {
-                                matchedElement = &element;
-                                break;
-                            }
-                        }
-                    }
-
-                    uint32_t effectiveOffset = UINT32_MAX;
-                    uint32_t effectiveType = UINT32_MAX;
-                    uint32_t streamStride = 0;
-                    uint32_t vkFormat = static_cast<uint32_t>(VK_FORMAT_UNDEFINED);
-                    uint32_t stream = UINT32_MAX;
-                    uint32_t declaredOffset = UINT32_MAX;
-                    uint32_t declaredType = UINT32_MAX;
-                    if (matchedElement && matchedElement->Stream < 16u)
-                    {
-                        stream = matchedElement->Stream;
-                        streamStride = m_streams[stream].stride;
-                        declaredOffset = matchedElement->Offset;
-                        declaredType = matchedElement->Type;
-                        effectiveOffset = SwitchEffectiveShaderElementOffset(
-                            m_decl, *matchedElement, streamStride);
-                        effectiveType = SwitchEffectiveShaderElementType(
-                            m_decl, *matchedElement, streamStride);
-                        vkFormat = static_cast<uint32_t>(
-                            VertexFormat(static_cast<uint8_t>(effectiveType)));
-
-                        // Match EnsurePipeline's world PackedUnitVec override.
-                        // Reporting VertexFormat(type) alone is misleading for
-                        // UBYTE4 normal/tangent fields, whose actual pipeline
-                        // format is UNORM rather than USCALED.
-                        const bool packedWorldLayout =
-                            stream == 0u && streamStride == 44u;
-                        const bool packedWorldNormal =
-                            packedWorldLayout && matchedElement->Offset == 36u &&
-                            ((matchedElement->Usage == MOJOSHADER_USAGE_TEXCOORD &&
-                              matchedElement->UsageIndex == 1u) ||
-                             (matchedElement->Usage == MOJOSHADER_USAGE_NORMAL &&
-                              matchedElement->UsageIndex == 0u));
-                        const bool packedWorldTangent =
-                            packedWorldLayout && matchedElement->Offset == 40u &&
-                            ((matchedElement->Usage == MOJOSHADER_USAGE_TEXCOORD &&
-                              matchedElement->UsageIndex == 2u) ||
-                             ((matchedElement->Usage == MOJOSHADER_USAGE_TANGENT ||
-                               matchedElement->Usage == MOJOSHADER_USAGE_BINORMAL) &&
-                              matchedElement->UsageIndex == 0u));
-                        const bool packedUnitVectorSemantic =
-                            matchedElement->Usage == MOJOSHADER_USAGE_NORMAL ||
-                            matchedElement->Usage == MOJOSHADER_USAGE_TANGENT ||
-                            matchedElement->Usage == MOJOSHADER_USAGE_BINORMAL;
-                        const bool packedWorldByteVector =
-                            effectiveType == D3DDECLTYPE_UBYTE4 &&
-                            (packedWorldNormal || packedWorldTangent);
-                        const bool packedColorUnitVector =
-                            effectiveType == D3DDECLTYPE_D3DCOLOR &&
-                            (packedUnitVectorSemantic || packedWorldNormal ||
-                             packedWorldTangent);
-                        if (packedWorldByteVector || packedColorUnitVector)
-                            vkFormat = static_cast<uint32_t>(
-                                VK_FORMAT_R8G8B8A8_UNORM);
-                    }
-
-                    char shaderAttrTrace[384];
-                    std::snprintf(
-                        shaderAttrTrace, sizeof(shaderAttrTrace),
-                        "[KisakCOD][VK WORLD SHADER ATTR] draw=%u stage=%s i=%d name=%.32s usage=%u usageIndex=%u location=%u declMatch=%u stream=%u stride=%u declaredOffset=%u effectiveOffset=%u declaredType=%u effectiveType=%u vkFormat=%u\n",
-                        traceId, stage, shaderAttributeIndex,
-                        shaderAttribute.name ? shaderAttribute.name : "(null)",
-                        static_cast<unsigned>(shaderAttribute.usage),
-                        static_cast<unsigned>(shaderAttribute.index), location,
-                        matchedElement ? 1u : 0u, stream, streamStride,
-                        declaredOffset, effectiveOffset, declaredType,
-                        effectiveType, vkFormat);
-                    Switch_LogWrite(shaderAttrTrace);
-                }
-            };
-            traceWorldShaderAttributes(
-                "vs", m_vertexShader ? m_vertexShader->parseData : nullptr, true);
-            traceWorldShaderAttributes(
-                "ps", m_pixelShader ? m_pixelShader->parseData : nullptr, false);
-
-            // A pixel shader's attributes are its interpolated inputs, not
-            // vertex-buffer attributes. Verify the upstream VS output semantics
-            // that must feed COLOR0/TEXCOORD0/TEXCOORD1 in the lightmapped BSP PS.
-            const MOJOSHADER_parseData *worldVsParse =
-                m_vertexShader ? m_vertexShader->parseData : nullptr;
-            const MOJOSHADER_parseData *worldPsParse =
-                m_pixelShader ? m_pixelShader->parseData : nullptr;
-            if (worldVsParse && worldVsParse->outputs)
-            {
-                for (int outputIndex = 0;
-                     outputIndex < worldVsParse->output_count &&
-                         outputIndex < 16;
-                     ++outputIndex)
-                {
-                    const MOJOSHADER_attribute &output =
-                        worldVsParse->outputs[outputIndex];
-                    bool feedsPixelInput = false;
-                    if (worldPsParse && worldPsParse->attributes)
-                    {
-                        for (int pixelInputIndex = 0;
-                             pixelInputIndex < worldPsParse->attribute_count;
-                             ++pixelInputIndex)
-                        {
-                            const MOJOSHADER_attribute &pixelInput =
-                                worldPsParse->attributes[pixelInputIndex];
-                            if (pixelInput.usage == output.usage &&
-                                pixelInput.index == output.index)
-                            {
-                                feedsPixelInput = true;
-                                break;
-                            }
-                        }
-                    }
-                    char outputTrace[256];
-                    std::snprintf(
-                        outputTrace, sizeof(outputTrace),
-                        "[KisakCOD][VK WORLD VS OUTPUT] draw=%u i=%d name=%.32s usage=%u usageIndex=%u feedsPixelInput=%u\n",
-                        traceId, outputIndex,
-                        output.name ? output.name : "(null)",
-                        static_cast<unsigned>(output.usage),
-                        static_cast<unsigned>(output.index),
-                        feedsPixelInput ? 1u : 0u);
-                    Switch_LogWrite(outputTrace);
-                }
-            }
-            if (worldPsParse && worldPsParse->attributes)
-            {
-                for (int inputIndex = 0;
-                     inputIndex < worldPsParse->attribute_count &&
-                         inputIndex < 16;
-                     ++inputIndex)
-                {
-                    const MOJOSHADER_attribute &input =
-                        worldPsParse->attributes[inputIndex];
-                    bool hasVertexOutput = false;
-                    if (worldVsParse && worldVsParse->outputs)
-                    {
-                        for (int outputIndex = 0;
-                             outputIndex < worldVsParse->output_count;
-                             ++outputIndex)
-                        {
-                            const MOJOSHADER_attribute &output =
-                                worldVsParse->outputs[outputIndex];
-                            if (output.usage == input.usage &&
-                                output.index == input.index)
-                            {
-                                hasVertexOutput = true;
-                                break;
-                            }
-                        }
-                    }
-                    char inputTrace[256];
-                    std::snprintf(
-                        inputTrace, sizeof(inputTrace),
-                        "[KisakCOD][VK WORLD PS INPUT] draw=%u i=%d name=%.32s usage=%u usageIndex=%u hasVertexOutput=%u\n",
-                        traceId, inputIndex,
-                        input.name ? input.name : "(null)",
-                        static_cast<unsigned>(input.usage),
-                        static_cast<unsigned>(input.index),
-                        hasVertexOutput ? 1u : 0u);
-                    Switch_LogWrite(inputTrace);
-                }
-            }
-
-            if (!vertexBytes || !indexData)
-            {
-                Switch_LogWrite("[KisakCOD][VK WORLD UV] reason=cpu_shadow_unavailable\n");
-            }
-            else
-            {
-                const uint64_t bufferSize = vertexBuffer->size;
-                const uint64_t streamOffset = m_streams[0].offset;
-                const uint64_t stride = m_streams[0].stride;
-                for (uint32_t i = 0; i < std::min(indexCount, 3u); ++i)
-                {
-                    uint16_t rawIndex = 0;
-                    std::memcpy(
-                        &rawIndex,
-                        indexData + static_cast<size_t>(startIndex + i) * sizeof(rawIndex),
-                        sizeof(rawIndex));
-                    const int64_t effectiveIndex =
-                        static_cast<int64_t>(baseVertexIndex) + rawIndex;
-                    if (effectiveIndex < 0 ||
-                        streamOffset > bufferSize ||
-                        static_cast<uint64_t>(effectiveIndex) >
-                            (bufferSize - streamOffset) / stride)
-                    {
-                        std::snprintf(
-                            trace, sizeof(trace),
-                            "[KisakCOD][VK WORLD UV VERTEX] n=%u i=%u rawIndex=%u effectiveIndex=%lld range=invalid\n",
-                            traceId, i, rawIndex,
-                            static_cast<long long>(effectiveIndex));
-                        Switch_LogWrite(trace);
-                        continue;
-                    }
-                    const uint64_t vertexStart =
-                        streamOffset + static_cast<uint64_t>(effectiveIndex) * stride;
-                    if (vertexStart > bufferSize || 44u > bufferSize - vertexStart)
-                    {
-                        std::snprintf(
-                            trace, sizeof(trace),
-                            "[KisakCOD][VK WORLD UV VERTEX] n=%u i=%u rawIndex=%u effectiveIndex=%lld range=invalid\n",
-                            traceId, i, rawIndex,
-                            static_cast<long long>(effectiveIndex));
-                        Switch_LogWrite(trace);
-                        continue;
-                    }
-                    float position[4]{};
-                    float baseUv[2]{};
-                    float lightmapUv[2]{};
-                    std::memcpy(position, vertexBytes + vertexStart, sizeof(position));
-                    std::memcpy(baseUv, vertexBytes + vertexStart + 20u, sizeof(baseUv));
-                    std::memcpy(lightmapUv, vertexBytes + vertexStart + 28u, sizeof(lightmapUv));
-                    std::snprintf(
-                        trace, sizeof(trace),
-                        "[KisakCOD][VK WORLD UV VERTEX] n=%u i=%u rawIndex=%u effectiveIndex=%lld xyz=(%.5g,%.5g,%.5g) binormalSign=%.5g uv0=(%.7g,%.7g) uv1=(%.7g,%.7g)\n",
-                        traceId, i, rawIndex,
-                        static_cast<long long>(effectiveIndex),
-                        position[0], position[1], position[2], position[3],
-                        baseUv[0], baseUv[1], lightmapUv[0], lightmapUv[1]);
-                    Switch_LogWrite(trace);
-                }
-            }
-        }
-    }
-#endif
 
     g_switchLastDrawIndexBufferBytes.store(
         static_cast<uint32_t>(std::min<size_t>(m_indices->size, UINT32_MAX)),
