@@ -13,6 +13,7 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern volatile uint32_t g_switchLitSamplerTraceActive;
 #ifdef CINEMA
 #include "r_cinematic.h"
 #endif
@@ -1777,6 +1778,7 @@ void __cdecl R_SetSampler(
         static uint32_t switchLitSamplerTraceCount = 0;
         if (switchLitSamplerTraceCount < 48u)
         {
+            g_switchLitSamplerTraceActive = 1u;
             const uint32_t sequence = switchLitSamplerTraceCount++;
             char trace[480];
             std::snprintf(
