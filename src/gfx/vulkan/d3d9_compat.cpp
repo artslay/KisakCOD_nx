@@ -6926,10 +6926,17 @@ bool IDirect3DDevice9::EnsurePipeline()
             element.Usage == MOJOSHADER_USAGE_NORMAL ||
             element.Usage == MOJOSHADER_USAGE_TANGENT ||
             element.Usage == MOJOSHADER_USAGE_BINORMAL;
+        // GfxWorldVertex is a physical 44-byte stream: its PackedUnitVec
+        // normal/tangent fields live at offsets 36/40 regardless of the legacy
+        // material-routing code in switchVertDeclType. Detect this ABI from the
+        // bound stream itself, or UBYTE4 reaches the shader as *_USCALED (0..255)
+        // instead of normalized unit-vector components (0..1).
+        const uint32_t packedWorldStreamStride =
+            element.Stream == 0 && m_drawPrimitiveUPActive
+                ? m_drawPrimitiveUPStride
+                : (element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
         const bool packedWorldLayout =
-            m_decl->switchVertDeclType >= 2 &&
-            m_decl->switchVertDeclType <= 13 &&
-            element.Stream == 0;
+            element.Stream == 0 && packedWorldStreamStride == 44u;
         // GfxWorldVertex stores packed normal/tangent bytes at fixed physical
         // offsets 36/40. Material routing can expose these bytes either through
         // TEXCOORD1/2 or through the native NORMAL/TANGENT semantics. Handle
