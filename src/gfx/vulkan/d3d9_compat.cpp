@@ -6022,9 +6022,9 @@ bool IDirect3DDevice9::EnsurePipeline()
         key = HashCombine(key, element.Usage);
         key = HashCombine(key, element.UsageIndex);
         key = HashCombine(
-            key, SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u));
+            key, SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u));
         key = HashCombine(
-            key, SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u));
+            key, SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u));
     }
 
     key = HashCombine(key, static_cast<uint64_t>(colorFormat));
@@ -6147,7 +6147,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 return false;
             }
 
-            const uint8_t shaderElementType = SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
+            const uint8_t shaderElementType = SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u);
 
             MOJOSHADER_vertexAttribute attr{};
             switch (shaderElementType)
@@ -6215,9 +6215,9 @@ bool IDirect3DDevice9::EnsurePipeline()
                     traceIndex, elementIndex,
                     static_cast<unsigned>(element.Stream),
                     static_cast<unsigned>(element.Offset),
-                    static_cast<unsigned>(SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u)),
+                    static_cast<unsigned>(SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u)),
                     static_cast<unsigned>(element.Type),
-                    static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u)),
+                    static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u)),
                     static_cast<unsigned>(element.Usage),
                     static_cast<unsigned>(element.UsageIndex));
                 Switch_LogWrite(elementTrace);
@@ -6846,7 +6846,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         // Switch. Resolve both its physical offset and representation against
         // the actual transient/world vertex layout before describing Vulkan input.
         const uint8_t effectiveType =
-            SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
+            SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u);
         VkFormat format = VertexFormat(effectiveType);
         // PackedUnitVec is stored in memory as X, Y, Z, scale. D3DCOLOR's
         // BGRA interpretation is correct for actual colors, but swaps X/Z
@@ -6894,7 +6894,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (packedWorldByteVector || packedColorUnitVector)
             format = VK_FORMAT_R8G8B8A8_UNORM;
         const uint32_t vertexOffset =
-            SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
+            SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u);
 
         if (format == VK_FORMAT_UNDEFINED)
         {
@@ -6949,7 +6949,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
 
         const uint32_t attributeBytes =
-            SwitchShaderElementByteSize(SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u));
+            SwitchShaderElementByteSize(SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u));
         if (vertexOffset > binding->stride ||
             attributeBytes > binding->stride - vertexOffset)
         {
@@ -6957,7 +6957,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             std::snprintf(msg, sizeof(msg),
                 "[KisakCOD][VK DRAW] pipeline_fail=vertex_range stream=%u offset=%u bytes=%u stride=%u type=%u decl=%llu vs=%llu\n",
                 element.Stream, vertexOffset, attributeBytes, binding->stride,
-                static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u)),
+                static_cast<unsigned>(SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u)),
                 static_cast<unsigned long long>(m_decl->serial),
                 static_cast<unsigned long long>(m_vertexShader->serial));
             Switch_LogWrite(msg);
@@ -7203,9 +7203,9 @@ bool IDirect3DDevice9::EnsurePipeline()
             if (matchedElement)
             {
                 const uint8_t effectiveType =
-                    SwitchEffectiveShaderElementType(m_decl, *matchedElement, matchedElement->Stream < 16u ? m_streams[matchedElement->Stream].stride : 0u);
+                    SwitchEffectiveShaderElementType(m_decl, *matchedElement, matchedElement->Stream < 16u ? ((m_drawPrimitiveUPActive && matchedElement->Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[matchedElement->Stream].stride) : 0u);
                 const uint32_t effectiveOffset =
-                    SwitchEffectiveShaderElementOffset(m_decl, *matchedElement, matchedElement->Stream < 16u ? m_streams[matchedElement->Stream].stride : 0u);
+                    SwitchEffectiveShaderElementOffset(m_decl, *matchedElement, matchedElement->Stream < 16u ? ((m_drawPrimitiveUPActive && matchedElement->Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[matchedElement->Stream].stride) : 0u);
                 std::snprintf(line, sizeof(line),
                     "[KisakCOD][VK PIPELINE ATTRIBUTE] seq=%u location=%u binding=%u format=%u offset=%u usage=%u index=%u elementType=%u effectiveType=%u declaredOffset=%u effectiveOffset=%u route=%u\n",
                     pipelineCreateSequence, attribute.location, attribute.binding,
@@ -7774,7 +7774,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 
                 const auto &stream = m_streams[element.Stream];
                 const uint32_t elementSize = SwitchShaderElementByteSize(
-                    SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u));
+                    SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u));
                 if (!elementSize)
                     continue;
 
@@ -7782,7 +7782,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 const uint64_t streamOffset = stream.offset;
                 const uint64_t stride = stream.stride;
                 const uint32_t elementOffset =
-                    SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
+                    SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u);
                 const uint64_t vertexIndex = static_cast<uint64_t>(maxEffectiveVertex);
                 uint64_t vertexStart = 0;
                 uint64_t requiredEnd = 0;
