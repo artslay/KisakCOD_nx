@@ -1914,15 +1914,14 @@ uint64_t SwitchPsS0CenterTestTargetSerial()
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
-    // Strong pipeline-isolation test: PS 1821 is bound by wc/icbm_tunnelfloor
-    // and several visible world materials in the current killhouse log.
-    // Force opaque magenta at every color output store; this must be visibly
-    // obvious if this rewritten fragment shader reaches the displayed frame.
-    // Set KISAK_VK_DEBUG_PS_COLOR_SERIAL=off (or 0) to disable, or "all" to
-    // test all lit pixel shaders that declare both s0 and s3.
+    // Diagnostic isolation mode: force opaque magenta for every pixel shader
+    // by default. This deliberately includes UI/video to verify that rewritten
+    // fragment modules reach the actual displayed frame.
+    // Set KISAK_VK_DEBUG_PS_COLOR_SERIAL=off (or 0) to disable, or provide a
+    // numeric serial to restrict the test to one pixel shader.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
     if (!value || !*value)
-        return 1821u;
+        return 0u;
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "all") == 0)
@@ -1930,7 +1929,7 @@ uint64_t SwitchPsColorDebugTargetSerial()
 
     char *end = nullptr;
     const unsigned long long serial = std::strtoull(value, &end, 0);
-    if (end == value || !end || *end != '\0' || serial == 0u ||
+    if (end == value || !end || *end != '\\0' || serial == 0u ||
         serial > UINT64_MAX)
         return UINT64_MAX;
     return static_cast<uint64_t>(serial);
@@ -1946,20 +1945,11 @@ bool SwitchPsColorDebugTargetMatches(
     if (targetSerial != 0u)
         return targetSerial == actualSerial;
 
-    // In wildcard mode restrict the noisy solid-color test to shaders that
-    // declare both s0 and s3, the relevant texture/lightmap pair in this scene.
-    // Other shaders (UI, video, particles) remain untouched unless selected by
-    // an explicit numeric serial.
-    if (!parse || parse->sampler_count <= 0 || !parse->samplers)
-        return false;
-    bool hasS0 = false;
-    bool hasS3 = false;
-    for (int i = 0; i < parse->sampler_count; ++i)
-    {
-        hasS0 |= parse->samplers[i].index == 0;
-        hasS3 |= parse->samplers[i].index == 3;
-    }
-    return hasS0 && hasS3;
+    // Wildcard means literally every fragment shader, including UI and video.
+    // If the render path consumes these modules, the displayed screen must
+    // change. Avoid sampler heuristics in this decisive pipeline-isolation test.
+    (void)parse;
+    return true;
 }
 
 // Strong diagnostic for the remaining black/missing-texture rendering bug.
@@ -2389,7 +2379,8 @@ bool PatchFragmentShaderToSolidMagenta(
                 std::strcmp(loggedActions[i], action) == 0)
                 return;
         }
-        if (loggedCount >= sizeof(loggedSerials) / sizeof(loggedSerials[0]))
+        // Bound output while the wildcard affects many shader variants.
+        if (loggedCount >= 12u)
             return;
         loggedSerials[loggedCount] = actualSerial;
         std::memcpy(loggedActions[loggedCount], action, actionLength + 1u);
