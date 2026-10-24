@@ -812,17 +812,6 @@ uint8_t SwitchEffectiveShaderElementType(
     const _D3DVERTEXELEMENT9 &element,
     uint32_t streamStride = 0)
 {
-    // GfxWorldVertex is exactly 44 bytes:
-    // xyz[3] at 0, binormalSign at 12, color at 16, base UV at 20,
-    // lightmap UV at 28, packed normal at 36, packed tangent at 40.
-    // binormalSign is NOT position.w. Fetch only xyz for POSITION so Vulkan
-    // supplies the shader's missing fourth component as 1.0 instead of using
-    // the tangent handedness (+/-1) as the homogeneous position coordinate.
-    // The bound stride is the reliable discriminator for this physical layout.
-    if (element.Stream == 0 && streamStride == 44u &&
-        element.Offset == 0 && element.Usage == 0 && element.UsageIndex == 0)
-        return D3DDECLTYPE_FLOAT3;
-
     if (element.Stream == 0 && streamStride == 44u &&
         element.Offset == 20 && element.Usage == 5)
     {
