@@ -7134,23 +7134,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     // counts in this path are at most 16, so one 32-bit word is sufficient.
     multisample.pSampleMask = &m_multisampleMask;
 
-    bool switchLightmappedBspDepth = false;
-#ifdef __SWITCH__
-    if (m_decl && m_decl->switchVertDeclType >= 2 &&
-        m_decl->switchVertDeclType <= 13 &&
-        m_pixelShader && m_pixelShader->parseData &&
-        m_pixelShader->parseData->samplers)
-    {
-        bool hasDiffuseSampler = false;
-        bool hasLightmapSampler = false;
-        for (int i = 0; i < m_pixelShader->parseData->sampler_count; ++i)
-        {
-            hasDiffuseSampler |= m_pixelShader->parseData->samplers[i].index == 0;
-            hasLightmapSampler |= m_pixelShader->parseData->samplers[i].index == 3;
-        }
-        switchLightmappedBspDepth = hasDiffuseSampler && hasLightmapSampler;
-    }
-#endif
     VkPipelineDepthStencilStateCreateInfo depth{};
     depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     // R_Set2D/R_Set3D toggle this Switch-specific mode around overlay passes.
@@ -7159,12 +7142,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     const bool effectiveDepthWrite = m_depthWrite && !m_switchUnlit;
     depth.depthTestEnable = effectiveDepthTest ? VK_TRUE : VK_FALSE;
     depth.depthWriteEnable = effectiveDepthWrite ? VK_TRUE : VK_FALSE;
-    // The depth-only BSP prepass and the lightmapped color pass use different
-    // vertex shaders. On Switch, strict LESS/EQUAL states can reject the color
-    // pass when their clip-space depth differs by a few ULPs. Preserve normal
-    // occlusion but use the robust D3D9 LEQUAL behavior for lit world materials.
-    depth.depthCompareOp = switchLightmappedBspDepth
-        ? VK_COMPARE_OP_LESS_OR_EQUAL : CompareOp(m_depthFunc);
+    depth.depthCompareOp = CompareOp(m_depthFunc);
     depth.depthBoundsTestEnable = VK_FALSE;
     depth.stencilTestEnable = m_stencilEnable ? VK_TRUE : VK_FALSE;
     depth.front.compareOp = CompareOp(m_stencilFunc);
