@@ -5872,6 +5872,69 @@ bool IDirect3DDevice9::BindSamplerSet(
     }
 
 
+#ifdef __SWITCH__
+    // Bounded, non-visual trace for the actual textures bound to lightmapped BSP
+    // pixel shaders. Image-object load logs alone do not prove that the shader
+    // sees the intended image view; in particular the sampler path can legally
+    // substitute a white dummy when a base mip has not been uploaded yet.
+    if (setIndex == 2u && activeShader && activeSamplers[0] &&
+        activeSamplers[3] && m_decl &&
+        m_decl->switchVertDeclType >= 2 &&
+        m_decl->switchVertDeclType <= 13)
+    {
+        static std::atomic<uint32_t> worldSamplerTraceCount{0};
+        const uint32_t sequence =
+            worldSamplerTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (sequence < 24u)
+        {
+            for (const uint32_t slot : {0u, 2u, 3u})
+            {
+                const KisakVkTexture *texture = textures[slot];
+                const MOJOSHADER_sampler *sampler = activeSamplers[slot];
+                const VkImageView dummyView = sampler
+                    ? m_backend->DummyImageViewForSamplerType(
+                        static_cast<uint32_t>(sampler->type))
+                    : VK_NULL_HANDLE;
+                const bool descriptorIsDummy =
+                    images[slot].imageView == dummyView;
+                const VkImageLayout baseLayout = texture
+                    ? texture->GetSubresourceLayout(0, 0)
+                    : VK_IMAGE_LAYOUT_UNDEFINED;
+                const char *imageName =
+                    texture && texture->sourceImage && texture->sourceImage->name
+                    ? texture->sourceImage->name
+                    : (texture && texture->debugName
+                        ? texture->debugName : "<unbound>");
+                const void *currentBasemap =
+                    texture && texture->sourceImage
+                    ? static_cast<const void *>(
+                        texture->sourceImage->texture.basemap)
+                    : nullptr;
+                char trace[512];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK WORLD SAMPLER] n=%u shader=%llu decl=%llu route=%u slot=%u active=%u samplerType=%u texture=%p currentBasemap=%p image=%.96s size=%ux%u sourceFormat=%u vkFormat=%u mips=%u baseLayout=%u descriptorView=%p dummy=%u\\n",
+                    sequence,
+                    static_cast<unsigned long long>(activeShader->serial),
+                    static_cast<unsigned long long>(m_decl->serial),
+                    static_cast<unsigned>(m_decl->switchVertDeclType),
+                    slot, sampler ? 1u : 0u,
+                    sampler ? static_cast<unsigned>(sampler->type) : UINT32_MAX,
+                    static_cast<const void *>(texture), currentBasemap, imageName,
+                    texture ? texture->width : 0u,
+                    texture ? texture->height : 0u,
+                    texture ? static_cast<unsigned>(texture->sourceFormat) : 0u,
+                    texture ? static_cast<unsigned>(texture->format) : 0u,
+                    texture ? texture->mipLevels : 0u,
+                    static_cast<unsigned>(baseLayout),
+                    static_cast<void *>(images[slot].imageView),
+                    descriptorIsDummy ? 1u : 0u);
+                Switch_LogWrite(trace);
+            }
+        }
+    }
+#endif
+
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_update";
     vkUpdateDescriptorSets(m_backend->Device(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_bind";
