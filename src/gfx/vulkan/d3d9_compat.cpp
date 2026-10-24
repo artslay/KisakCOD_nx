@@ -6940,9 +6940,9 @@ bool IDirect3DDevice9::EnsurePipeline()
             element.Usage == MOJOSHADER_USAGE_BINORMAL;
         // GfxWorldVertex is a physical 44-byte stream: its PackedUnitVec
         // normal/tangent fields live at offsets 36/40 regardless of the legacy
-        // material-routing code in switchVertDeclType. Detect this ABI from the
-        // bound stream itself, or UBYTE4 reaches the shader as *_USCALED (0..255)
-        // instead of normalized unit-vector components (0..1).
+        // material-routing code in switchVertDeclType. The native CoD4 table
+        // declares these fields as UBYTE4, which must stay unnormalized (0..255)
+        // so the original vertex shader can decode the scale-based vector.
         const uint32_t packedWorldStreamStride =
             element.Stream == 0 && m_drawPrimitiveUPActive
                 ? m_drawPrimitiveUPStride
@@ -6951,9 +6951,8 @@ bool IDirect3DDevice9::EnsurePipeline()
             element.Stream == 0 && packedWorldStreamStride == 44u;
         // GfxWorldVertex stores packed normal/tangent bytes at fixed physical
         // offsets 36/40. Material routing can expose these bytes either through
-        // TEXCOORD1/2 or through the native NORMAL/TANGENT semantics. Handle
-        // both routes: leaving a UBYTE4 vector as USCALED feeds 0..255 into
-        // lighting instead of normalized 0..1 components.
+        // TEXCOORD1/2 or through the native NORMAL/TANGENT semantics. Keep the
+        // native UBYTE4 conversion (USCALED); the shader unpacks these raw bytes.
         const bool packedWorldNormal =
             packedWorldLayout && element.Offset == 36 &&
             ((element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
@@ -6977,18 +6976,15 @@ bool IDirect3DDevice9::EnsurePipeline()
             element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
             ((element.UsageIndex == 1 && element.Offset == 24) ||
              (element.UsageIndex == 2 && element.Offset == 28));
-        // Some CoD4 world declarations encode the packed normal/tangent as
-        // UBYTE4 rather than D3DCOLOR. Both are the same four normalized bytes
-        // in the world vertex buffer; USCALED would expose values in [0,255]
-        // and corrupt lighting vectors, so use UNORM for either declaration.
-        const bool packedWorldByteVector =
-            effectiveType == D3DDECLTYPE_UBYTE4 &&
-            (packedWorldNormal || packedWorldTangent);
+        // UBYTE4 must remain R8G8B8A8_USCALED: D3D9 exposes its four
+        // bytes as 0..255 and CoD4's shader decodes the packed vector itself.
+        // D3DCOLOR is different: D3D9 normalizes it, so use RGBA UNORM (not
+        // BGRA) when a packed unit vector is routed through that declaration.
         const bool packedColorUnitVector =
             effectiveType == D3DDECLTYPE_D3DCOLOR &&
             (packedUnitVectorSemantic || packedWorldNormal ||
              packedWorldTangent || packedModelUnitVector);
-        if (packedWorldByteVector || packedColorUnitVector)
+        if (packedColorUnitVector)
             format = VK_FORMAT_R8G8B8A8_UNORM;
         const uint32_t vertexOffset =
             SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u);
