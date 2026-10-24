@@ -5510,8 +5510,17 @@ bool IDirect3DDevice9::BindSamplerSet(
 
         IDirect3DBaseTexture9 *currentTexture =
             boundTexture->sourceImage->texture.basemap;
-        if (!currentTexture || currentTexture == textures[slot])
+        if (currentTexture == textures[slot])
             continue;
+
+        if (!currentTexture)
+        {
+            // The owner no longer has a live GPU resource (for example, during
+            // image reload). Do not keep sampling the previous allocation just
+            // because the D3D sampler still holds a reference to it.
+            SetTexture(slot, nullptr);
+            continue;
+        }
 
         auto *currentVkTexture = static_cast<KisakVkTexture *>(currentTexture);
         SetTexture(slot, currentTexture);
