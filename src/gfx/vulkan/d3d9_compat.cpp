@@ -7799,6 +7799,141 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     else
         indexData = static_cast<const uint8_t *>(m_indices->mapped);
 
+#ifdef __SWITCH__
+    // The latest field log proves real diffuse and lightmap image views are
+    // bound (not dummies). Trace the exact CPU-visible world vertices selected
+    // by the same indices passed to Vulkan, to distinguish bad UV contents or
+    // stream offsets from errors inside translated shader math.
+    if (m_decl && m_decl->switchVertDeclType >= 2 &&
+        m_decl->switchVertDeclType <= 13 &&
+        m_pixelShader && m_pixelShader->parseData &&
+        m_pixelShader->parseData->samplers &&
+        m_streams[0].buffer && m_streams[0].stride == 44u)
+    {
+        bool hasS0 = false;
+        bool hasS3 = false;
+        const MOJOSHADER_parseData *parse = m_pixelShader->parseData;
+        for (int i = 0; i < parse->sampler_count; ++i)
+        {
+            hasS0 |= parse->samplers[i].index == 0;
+            hasS3 |= parse->samplers[i].index == 3;
+        }
+        static std::atomic<uint32_t> worldVertexUvTraceCount{0};
+        const uint32_t traceId = hasS0 && hasS3
+            ? worldVertexUvTraceCount.fetch_add(1, std::memory_order_relaxed)
+            : UINT32_MAX;
+        if (hasS0 && hasS3 && traceId < 8u)
+        {
+            const KisakVkBuffer *vertexBuffer = m_streams[0].buffer;
+            const uint8_t *vertexBytes =
+                vertexBuffer->dynamic && vertexBuffer->shadowInitialized &&
+                vertexBuffer->shadow.size() >= vertexBuffer->size
+                ? vertexBuffer->shadow.data()
+                : static_cast<const uint8_t *>(vertexBuffer->mapped);
+            char trace[512];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK WORLD UV] n=%u shader=%llu decl=%llu route=%u indexData=%p indexBufferBytes=%u startIndex=%u baseVertex=%d streamData=%p bufferBytes=%u streamOffset=%u stride=%u indexCount=%u\n",
+                traceId,
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                static_cast<unsigned long long>(m_decl->serial),
+                static_cast<unsigned>(m_decl->switchVertDeclType),
+                static_cast<const void *>(indexData), m_indices->size,
+                startIndex, baseVertexIndex,
+                static_cast<const void *>(vertexBytes), vertexBuffer->size,
+                m_streams[0].offset, m_streams[0].stride, indexCount);
+            Switch_LogWrite(trace);
+
+            for (uint32_t elementIndex = 0;
+                 elementIndex < m_decl->elements.size() && elementIndex < 16u;
+                 ++elementIndex)
+            {
+                const _D3DVERTEXELEMENT9 &element = m_decl->elements[elementIndex];
+                if (element.Usage != 5u)
+                    continue;
+                char attrTrace[256];
+                std::snprintf(
+                    attrTrace, sizeof(attrTrace),
+                    "[KisakCOD][VK WORLD UV ATTR] n=%u i=%u stream=%u usageIndex=%u declaredOffset=%u effectiveOffset=%u declaredType=%u effectiveType=%u\n",
+                    traceId, elementIndex,
+                    static_cast<unsigned>(element.Stream),
+                    static_cast<unsigned>(element.UsageIndex),
+                    static_cast<unsigned>(element.Offset),
+                    SwitchEffectiveShaderElementOffset(
+                        m_decl, element,
+                        element.Stream < 16u
+                            ? m_streams[element.Stream].stride : 0u),
+                    static_cast<unsigned>(element.Type),
+                    static_cast<unsigned>(SwitchEffectiveShaderElementType(
+                        m_decl, element,
+                        element.Stream < 16u
+                            ? m_streams[element.Stream].stride : 0u)));
+                Switch_LogWrite(attrTrace);
+            }
+
+            if (!vertexBytes || !indexData)
+            {
+                Switch_LogWrite("[KisakCOD][VK WORLD UV] reason=cpu_shadow_unavailable\n");
+            }
+            else
+            {
+                const uint64_t bufferSize = vertexBuffer->size;
+                const uint64_t streamOffset = m_streams[0].offset;
+                const uint64_t stride = m_streams[0].stride;
+                for (uint32_t i = 0; i < std::min(indexCount, 3u); ++i)
+                {
+                    uint16_t rawIndex = 0;
+                    std::memcpy(
+                        &rawIndex,
+                        indexData + static_cast<size_t>(startIndex + i) * sizeof(rawIndex),
+                        sizeof(rawIndex));
+                    const int64_t effectiveIndex =
+                        static_cast<int64_t>(baseVertexIndex) + rawIndex;
+                    if (effectiveIndex < 0 ||
+                        streamOffset > bufferSize ||
+                        static_cast<uint64_t>(effectiveIndex) >
+                            (bufferSize - streamOffset) / stride)
+                    {
+                        std::snprintf(
+                            trace, sizeof(trace),
+                            "[KisakCOD][VK WORLD UV VERTEX] n=%u i=%u rawIndex=%u effectiveIndex=%lld range=invalid\n",
+                            traceId, i, rawIndex,
+                            static_cast<long long>(effectiveIndex));
+                        Switch_LogWrite(trace);
+                        continue;
+                    }
+                    const uint64_t vertexStart =
+                        streamOffset + static_cast<uint64_t>(effectiveIndex) * stride;
+                    if (vertexStart > bufferSize || 44u > bufferSize - vertexStart)
+                    {
+                        std::snprintf(
+                            trace, sizeof(trace),
+                            "[KisakCOD][VK WORLD UV VERTEX] n=%u i=%u rawIndex=%u effectiveIndex=%lld range=invalid\n",
+                            traceId, i, rawIndex,
+                            static_cast<long long>(effectiveIndex));
+                        Switch_LogWrite(trace);
+                        continue;
+                    }
+                    float position[4]{};
+                    float baseUv[2]{};
+                    float lightmapUv[2]{};
+                    std::memcpy(position, vertexBytes + vertexStart, sizeof(position));
+                    std::memcpy(baseUv, vertexBytes + vertexStart + 20u, sizeof(baseUv));
+                    std::memcpy(lightmapUv, vertexBytes + vertexStart + 28u, sizeof(lightmapUv));
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][VK WORLD UV VERTEX] n=%u i=%u rawIndex=%u effectiveIndex=%lld pos=(%.5g,%.5g,%.5g,%.5g) uv0=(%.7g,%.7g) uv1=(%.7g,%.7g)\n",
+                        traceId, i, rawIndex,
+                        static_cast<long long>(effectiveIndex),
+                        position[0], position[1], position[2], position[3],
+                        baseUv[0], baseUv[1], lightmapUv[0], lightmapUv[1]);
+                    Switch_LogWrite(trace);
+                }
+            }
+        }
+    }
+#endif
+
     g_switchLastDrawIndexBufferBytes.store(
         static_cast<uint32_t>(std::min<size_t>(m_indices->size, UINT32_MAX)),
         std::memory_order_relaxed);
