@@ -241,15 +241,13 @@ bool R_VulkanAllocTexture(
     if (!backend)
         return false;
 
-    const VulkanImageFormat info = R_VulkanImageFormat(sourceFormat, srgb);
+    VulkanImageFormat info = R_VulkanImageFormat(sourceFormat, srgb);
     if (info.format == VK_FORMAT_UNDEFINED)
         return false;
 
     // These images are always sampled and copied to/from staging buffers. Render
     // targets additionally require the matching attachment feature; fail cleanly
     // before vkCreateImage instead of creating an image with unsupported usage.
-    VkFormatProperties formatProperties{};
-    vkGetPhysicalDeviceFormatProperties(backend->PhysicalDevice(), info.format, &formatProperties);
     VkFormatFeatureFlags requiredFeatures =
         VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
         VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
@@ -258,6 +256,27 @@ bool R_VulkanAllocTexture(
         requiredFeatures |= info.depth
             ? VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
             : VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+
+    VkFormatProperties formatProperties{};
+    vkGetPhysicalDeviceFormatProperties(backend->PhysicalDevice(), info.format, &formatProperties);
+    if ((formatProperties.optimalTilingFeatures & requiredFeatures) != requiredFeatures && srgb)
+    {
+        // Some Vulkan devices expose the UNORM variant but not the sRGB variant
+        // for a legacy D3D9 format. Keep those devices operational; the Switch
+        // target uses sRGB for color maps when the format advertises support.
+        const VulkanImageFormat linearInfo = R_VulkanImageFormat(sourceFormat, false);
+        VkFormatProperties linearProperties{};
+        if (linearInfo.format != VK_FORMAT_UNDEFINED)
+            vkGetPhysicalDeviceFormatProperties(
+                backend->PhysicalDevice(), linearInfo.format, &linearProperties);
+        if (linearInfo.format != VK_FORMAT_UNDEFINED &&
+            (linearProperties.optimalTilingFeatures & requiredFeatures) == requiredFeatures)
+        {
+            info = linearInfo;
+            formatProperties = linearProperties;
+        }
+    }
+
     if ((formatProperties.optimalTilingFeatures & requiredFeatures) != requiredFeatures)
     {
         char message[256];
