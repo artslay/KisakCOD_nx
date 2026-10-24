@@ -1897,11 +1897,15 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0CenterTestTargetSerial()
 {
-    // Rewriting a fragment shader is diagnostic-only and must be explicitly
-    // requested. An absent setting must leave all production shaders intact.
+    // Temporary regression probe: PS 1821 is the lit world/floor shader seen
+    // in the current Switch log. Read s0 at a fixed center coordinate to
+    // separate texture sampling from UV/interpolator and lighting failures.
+    // Set KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL=off (or 0) to disable, or provide
+    // another pixel-shader serial to target a different material.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_CENTER_SERIAL");
-    if (!value || !*value ||
-        std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+    if (!value || !*value)
+        return 1821u;
+    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
 
     char *end = nullptr;
