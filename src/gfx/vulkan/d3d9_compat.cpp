@@ -7473,7 +7473,26 @@ bool IDirect3DDevice9::EnsurePipeline()
         static_cast<void *>(stages[1].module));
     g_switchPipelineCrashSnapshot.valid = true;
 
-const auto pipelineCreateStart = std::chrono::steady_clock::now();
+bool switchTraceLitBspPipeline = false;
+#ifdef __SWITCH__
+    if (m_decl && m_decl->switchVertDeclType >= 2 &&
+        m_decl->switchVertDeclType <= 13 &&
+        m_vertexShader && m_vertexShader->parseData &&
+        m_pixelShader && m_pixelShader->parseData &&
+        m_pixelShader->parseData->samplers)
+    {
+        bool hasDiffuseSampler = false;
+        bool hasLightmapSampler = false;
+        for (int i = 0; i < m_pixelShader->parseData->sampler_count; ++i)
+        {
+            hasDiffuseSampler |= m_pixelShader->parseData->samplers[i].index == 0;
+            hasLightmapSampler |= m_pixelShader->parseData->samplers[i].index == 3;
+        }
+        switchTraceLitBspPipeline = hasDiffuseSampler && hasLightmapSampler;
+    }
+#endif
+
+    const auto pipelineCreateStart = std::chrono::steady_clock::now();
     VkPipeline pipeline = VK_NULL_HANDLE;
     RecordSwitchVkPipelineTrace(
         6u, this, &m_pipelines, m_pipelines.size(), key,
@@ -7481,12 +7500,48 @@ const auto pipelineCreateStart = std::chrono::steady_clock::now();
     g_switchFrameStage = "frame/render/vulkan/pipeline/main_create_call";
     const VkResult pipelineResult = vkCreateGraphicsPipelines(
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
-RecordSwitchVkPipelineTrace(
+    RecordSwitchVkPipelineTrace(
         7u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
-g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_return";
+    g_switchFrameStage = "frame/render/vulkan/pipeline/driver_create_return";
     const auto pipelineCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - pipelineCreateStart).count();
+
+#ifdef __SWITCH__
+    if (switchTraceLitBspPipeline)
+    {
+        static std::atomic<uint32_t> litBspPipelineTraceCount{0};
+        const uint32_t traceIndex =
+            litBspPipelineTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (traceIndex < 32u)
+        {
+            char trace[640];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK LIT BSP PIPELINE] n=%u result=%d ms=%lld handle=%p key=%016llx decl=%llu route=%u vs=%llu vsBytes=%d vsInputs=%d ps=%llu psBytes=%d psSamplers=%d depthTest=%u depthWrite=%u blend=%u srcBlend=%u dstBlend=%u colorMask=0x%x cull=%u\n",
+                traceIndex, static_cast<int>(pipelineResult),
+                static_cast<long long>(pipelineCreateElapsed),
+                static_cast<void *>(pipeline),
+                static_cast<unsigned long long>(key),
+                static_cast<unsigned long long>(m_decl->serial),
+                static_cast<unsigned>(m_decl->switchVertDeclType),
+                static_cast<unsigned long long>(m_vertexShader->serial),
+                m_vertexShader->parseData ? m_vertexShader->parseData->output_len : 0,
+                m_vertexShader->parseData ? m_vertexShader->parseData->attribute_count : 0,
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                m_pixelShader->parseData ? m_pixelShader->parseData->output_len : 0,
+                m_pixelShader->parseData ? m_pixelShader->parseData->sampler_count : 0,
+                effectiveDepthTest ? 1u : 0u,
+                effectiveDepthWrite ? 1u : 0u,
+                colorBlend.blendEnable ? 1u : 0u,
+                static_cast<unsigned>(colorBlend.srcColorBlendFactor),
+                static_cast<unsigned>(colorBlend.dstColorBlendFactor),
+                static_cast<unsigned>(colorBlend.colorWriteMask),
+                static_cast<unsigned>(raster.cullMode));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     if (pipelineCreateSequence <= 2 ||
         pipelineCreateElapsed >= 250 || pipelineResult != VK_SUCCESS)
     {
