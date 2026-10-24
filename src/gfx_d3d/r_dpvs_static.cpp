@@ -62,16 +62,20 @@ static void R_SwitchLogAabbTreeWalkFault(
     uint32_t childIndex,
     bool fieldsReadable)
 {
+    // This is failure-path telemetry only. Keep it bounded so malformed
+    // cell trees cannot flood the Switch log every frame.
     static unsigned faultCount;
-    if (faultCount >= 64)
+    if (faultCount >= 8)
         return;
     ++faultCount;
 
-    char message[512];
+    char message[640];
     if (fieldsReadable && tree)
     {
+        const bool flattened = R_SwitchAabbTreeIsFlattened(root);
+        const int nativeOffset = R_SwitchNativeAabbChildOffset(root, tree);
         std::snprintf(message, sizeof(message),
-            "[KisakCOD][AABB TREE WALK FAULT] stage=%s reason=%s root=%p node=%p parent=%p child=%u nodes=%u childCount=%u childOffset=%d indexCount=%u indices=%p models=%u\n",
+            "[KisakCOD][AABB TREE WALK FAULT] stage=%s reason=%s root=%p node=%p parent=%p child=%u nodes=%u childCount=%u childOffset=%d nativeOffset=%d flattened=%u indexCount=%u indices=%p models=%u\n",
             stage, reason,
             static_cast<const void *>(root),
             static_cast<const void *>(tree),
@@ -80,6 +84,8 @@ static void R_SwitchLogAabbTreeWalkFault(
             static_cast<unsigned>(nodeCount),
             static_cast<unsigned>(tree->childCount),
             tree->childrenOffset,
+            nativeOffset,
+            flattened ? 1u : 0u,
             static_cast<unsigned>(tree->smodelIndexCount),
             static_cast<const void *>(tree->smodelIndexes),
             rgp.world ? static_cast<unsigned>(rgp.world->dpvs.smodelCount) : 0u);
