@@ -5976,7 +5976,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             char trace[448];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][LIT SAMPLER DESCRIPTOR] slot=%u ps=%llu samplerType=%u bound=%p owner=%p image=%.80s dims=%ux%u vkFormat=%u sourceFormat=%u mip0Layout=%u mipLevels=%u baseMipView=%u selectedDummy=%u selectedMainView=%u\\n",
+                "[KisakCOD][LIT SAMPLER DESCRIPTOR] slot=%u ps=%llu samplerType=%u bound=%p owner=%p image=%.80s dims=%ux%u vkFormat=%u sourceFormat=%u mip0Layout=%u mipLevels=%u baseMipView=%u selectedDummy=%u selectedMainView=%u\n",
                 i,
                 static_cast<unsigned long long>(m_pixelShader
                     ? m_pixelShader->serial : 0u),
@@ -5997,7 +5997,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             Switch_LogWrite(trace);
         }
         if (!loggedActiveSamplers)
-            Switch_LogWrite("[KisakCOD][LIT SAMPLER DESCRIPTOR] pixel shader has no active sampler declarations\\n");
+            Switch_LogWrite("[KisakCOD][LIT SAMPLER DESCRIPTOR] pixel shader has no active sampler declarations\n");
         g_switchLitSamplerTraceActive = 0u;
     }
 #endif
