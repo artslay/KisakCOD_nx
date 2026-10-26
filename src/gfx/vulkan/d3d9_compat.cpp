@@ -4190,29 +4190,33 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
     const std::vector<uint32_t> &original,
     std::vector<uint32_t> &words)
 {
-    // Preserve the real game vertex shader, inputs and uniform calculations,
-    // but override BuiltIn Position immediately before every return. This lets
-    // the white probe tell whether the original shader's clip-space output was
-    // what kept the floor from rasterizing.
+    // Keep the actual game vertex shader and all of its calculations, but
+    // override only BuiltIn Position on exit. Use the real POSITION0 input
+    // instead of adding a second BuiltIn VertexIndex interface: the latter
+    // caused NVK/NAK to reject this modified pipeline on the Switch.
     words = original;
     if (words.size() < 5u || words[0] != SpvMagicNumber ||
-        words[3] <= 1u || words[3] > 65536u)
+        words[3] <= 1u || words[3] > UINT32_MAX - 32u)
         return false;
 
+    struct PointerTypeInfo
+    {
+        uint32_t id;
+        uint32_t storage;
+        uint32_t pointee;
+    };
+
     uint32_t entryFunction = 0u;
-    size_t entryPointOffset = SIZE_MAX;
-    uint32_t entryPointWordCount = 0u;
     uint32_t positionVariable = 0u;
-    uint32_t positionPointerType = 0u;
-    uint32_t boolType = 0u;
-    uint32_t intType = 0u;
+    uint32_t inputPositionVariable = 0u;
+    uint32_t inputPositionPointerType = 0u;
+    uint32_t inputPositionValueType = 0u;
     uint32_t floatType = 0u;
     uint32_t vec4Type = 0u;
-    uint32_t inputIntPointerType = 0u;
-    size_t firstTypeOffset = SIZE_MAX;
-    size_t firstConstantOffset = SIZE_MAX;
     size_t firstGlobalVariableOffset = SIZE_MAX;
     size_t firstFunctionOffset = SIZE_MAX;
+    std::vector<uint32_t> locationZeroTargets;
+    std::vector<PointerTypeInfo> pointerTypes;
 
     for (size_t offset = 5u; offset < words.size();)
     {
@@ -4226,8 +4230,6 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
             ins[1] == SpvExecutionModelVertex && entryFunction == 0u)
         {
             entryFunction = ins[2];
-            entryPointOffset = offset;
-            entryPointWordCount = wc;
         }
         else if (op == SpvOpDecorate && wc >= 4u &&
                  ins[2] == SpvDecorationBuiltIn &&
@@ -4235,45 +4237,25 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
         {
             positionVariable = ins[1];
         }
-
-        if (op == SpvOpTypeBool && wc >= 2u)
-            boolType = ins[1];
-        else if (op == SpvOpTypeInt && wc >= 4u &&
-                 ins[2] == 32u && ins[3] == 1u)
-            intType = ins[1];
-        else if (op == SpvOpTypeFloat && wc >= 3u && ins[2] == 32u)
-            floatType = ins[1];
-        else if (op == SpvOpTypeVector && wc >= 4u &&
-                 ins[3] == 4u && floatType != 0u && ins[2] == floatType)
-            vec4Type = ins[1];
-        if (op == SpvOpTypePointer && wc >= 4u)
+        else if (op == SpvOpDecorate && wc >= 4u &&
+                 ins[2] == SpvDecorationLocation && ins[3] == 0u)
         {
-            if (ins[2] == SpvStorageClassInput && intType != 0u &&
-                ins[3] == intType)
-                inputIntPointerType = ins[1];
-            if (ins[2] == SpvStorageClassOutput && vec4Type != 0u &&
-                ins[3] == vec4Type)
-            {
-                // Keep the pointer type which will be used by gl_Position.
-                if (positionVariable != 0u)
-                    positionPointerType = ins[1];
-            }
+            locationZeroTargets.push_back(ins[1]);
         }
 
-        if (firstTypeOffset == SIZE_MAX &&
-            (op == SpvOpTypeVoid || op == SpvOpTypeBool ||
-             op == SpvOpTypeInt || op == SpvOpTypeFloat ||
-             op == SpvOpTypeVector || op == SpvOpTypeMatrix ||
-             op == SpvOpTypeArray || op == SpvOpTypeRuntimeArray ||
-             op == SpvOpTypeStruct || op == SpvOpTypeOpaque ||
-             op == SpvOpTypePointer || op == SpvOpTypeFunction))
-            firstTypeOffset = offset;
-        if (firstConstantOffset == SIZE_MAX &&
-            (op == SpvOpConstant || op == SpvOpConstantTrue ||
-             op == SpvOpConstantFalse || op == SpvOpConstantNull ||
-             op == SpvOpConstantComposite || op == SpvOpSpecConstant ||
-             op == SpvOpVariable || op == SpvOpFunction))
-            firstConstantOffset = offset;
+        if (op == SpvOpTypeFloat && wc >= 3u && ins[2] == 32u)
+            floatType = ins[1];
+        else if (op == SpvOpTypeVector && wc >= 4u &&
+                 ins[3] == 4u)
+        {
+            if (floatType != 0u && ins[2] == floatType)
+                vec4Type = ins[1];
+        }
+        else if (op == SpvOpTypePointer && wc >= 4u)
+        {
+            pointerTypes.push_back({ins[1], ins[2], ins[3]});
+        }
+
         if (firstGlobalVariableOffset == SIZE_MAX &&
             (op == SpvOpVariable || op == SpvOpFunction))
             firstGlobalVariableOffset = offset;
@@ -4283,14 +4265,13 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
         offset += wc;
     }
 
-    if (!entryFunction || entryPointOffset == SIZE_MAX ||
-        positionVariable == 0u || firstTypeOffset == SIZE_MAX ||
-        firstConstantOffset == SIZE_MAX || firstGlobalVariableOffset == SIZE_MAX ||
-        firstFunctionOffset == SIZE_MAX || floatType == 0u || vec4Type == 0u)
+    if (!entryFunction || !positionVariable || !floatType || !vec4Type ||
+        firstGlobalVariableOffset == SIZE_MAX || firstFunctionOffset == SIZE_MAX)
         return false;
 
-    // Resolve the exact output pointer type and make sure Position is an
-    // ordinary Output vec4 rather than a member of an interface block.
+    // Resolve BuiltIn Position as a plain Output vec4 and POSITION0 as an
+    // existing Input vector. This avoids changing the shader entry-point
+    // interface and avoids introducing any new interface variables.
     for (size_t offset = 5u; offset < words.size();)
     {
         uint32_t wc = 0u;
@@ -4298,131 +4279,118 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
         if (!SpirvIsValidInstruction(words, offset, &wc, &op))
             return false;
         const uint32_t *ins = &words[offset];
-        if (op == SpvOpVariable && wc >= 4u && ins[2] == positionVariable &&
-            ins[3] == SpvStorageClassOutput)
+
+        if (op == SpvOpVariable && wc >= 4u)
         {
-            positionPointerType = ins[1];
+            if (ins[2] == positionVariable &&
+                ins[3] == SpvStorageClassOutput)
+            {
+                const auto ptr = std::find_if(
+                    pointerTypes.begin(), pointerTypes.end(),
+                    [&ins](const PointerTypeInfo &p) {
+                        return p.id == ins[1] &&
+                               p.storage == SpvStorageClassOutput &&
+                               p.pointee == vec4Type;
+                    });
+                if (ptr == pointerTypes.end())
+                    return false;
+            }
+
+            if (ins[3] == SpvStorageClassInput &&
+                std::find(locationZeroTargets.begin(), locationZeroTargets.end(),
+                          ins[2]) != locationZeroTargets.end())
+            {
+                inputPositionVariable = ins[2];
+                inputPositionPointerType = ins[1];
+            }
+        }
+        offset += wc;
+    }
+
+    if (!inputPositionVariable || !inputPositionPointerType)
+        return false;
+
+    const auto inputPointer = std::find_if(
+        pointerTypes.begin(), pointerTypes.end(),
+        [inputPositionPointerType](const PointerTypeInfo &p) {
+            return p.id == inputPositionPointerType &&
+                   p.storage == SpvStorageClassInput;
+        });
+    if (inputPointer == pointerTypes.end())
+        return false;
+
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpTypeVector && wc >= 4u &&
+            ins[1] == inputPointer->pointee && ins[2] == floatType &&
+            ins[3] >= 2u && ins[3] <= 4u)
+        {
+            inputPositionValueType = ins[1];
             break;
         }
         offset += wc;
     }
-    if (!positionPointerType)
+    if (!inputPositionValueType)
         return false;
 
     uint32_t nextId = words[3];
     auto allocId = [&]() { return nextId++; };
 
-    std::vector<uint32_t> typeDeclarations;
-    if (!boolType)
-    {
-        boolType = allocId();
-        typeDeclarations.push_back((2u << 16u) | static_cast<uint32_t>(SpvOpTypeBool));
-        typeDeclarations.push_back(boolType);
-    }
-    if (!intType)
-    {
-        intType = allocId();
-        typeDeclarations.push_back((4u << 16u) | static_cast<uint32_t>(SpvOpTypeInt));
-        typeDeclarations.push_back(intType);
-        typeDeclarations.push_back(32u);
-        typeDeclarations.push_back(1u);
-    }
-    if (!inputIntPointerType)
-    {
-        inputIntPointerType = allocId();
-        typeDeclarations.push_back((4u << 16u) | static_cast<uint32_t>(SpvOpTypePointer));
-        typeDeclarations.push_back(inputIntPointerType);
-        typeDeclarations.push_back(SpvStorageClassInput);
-        typeDeclarations.push_back(intType);
-    }
-
-    const uint32_t vertexIndexVariable = allocId();
-    const uint32_t oneInt = allocId();
-    const uint32_t twoInt = allocId();
-    const uint32_t xLeft = allocId();
-    const uint32_t xRight = allocId();
-    const uint32_t yTop = allocId();
-    const uint32_t yBottom = allocId();
+    const uint32_t offsetX = allocId();
+    const uint32_t scaleX = allocId();
+    const uint32_t biasX = allocId();
+    const uint32_t offsetY = allocId();
+    const uint32_t scaleY = allocId();
+    const uint32_t biasY = allocId();
     const uint32_t zHalf = allocId();
     const uint32_t wOne = allocId();
-    const uint32_t loadedIndex = allocId();
-    const uint32_t indexIsOne = allocId();
-    const uint32_t indexIsTwo = allocId();
-    const uint32_t selectedX = allocId();
-    const uint32_t selectedY = allocId();
-    const uint32_t selectedPosition = allocId();
-
-    std::vector<uint32_t> decorations;
-    SwitchEmitFloorProbeInstruction(
-        decorations, SpvOpDecorate,
-        {vertexIndexVariable, SpvDecorationBuiltIn, SpvBuiltInVertexIndex});
+    const uint32_t loadedPosition = allocId();
+    const uint32_t inputX = allocId();
+    const uint32_t inputY = allocId();
+    const uint32_t deltaX = allocId();
+    const uint32_t scaledX = allocId();
+    const uint32_t clipX = allocId();
+    const uint32_t deltaY = allocId();
+    const uint32_t scaledY = allocId();
+    const uint32_t clipY = allocId();
+    const uint32_t forcedPosition = allocId();
 
     std::vector<uint32_t> constants;
-    auto emit = [&](SpvOp op, std::initializer_list<uint32_t> a) {
-        SwitchEmitFloorProbeInstruction(constants, op, a);
+    auto floatBits = [](float value) -> uint32_t {
+        uint32_t bits = 0u;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return bits;
     };
-    emit(SpvOpConstant, {intType, oneInt, 1u});
-    emit(SpvOpConstant, {intType, twoInt, 2u});
-    emit(SpvOpConstant, {floatType, xLeft, 0xbf7ae148u});   // -0.98
-    emit(SpvOpConstant, {floatType, xRight, 0xbf666666u});  // -0.90
-    emit(SpvOpConstant, {floatType, yTop, 0x3f7ae148u});    // +0.98
-    emit(SpvOpConstant, {floatType, yBottom, 0x3f666666u}); // +0.90
-    emit(SpvOpConstant, {floatType, zHalf, 0x3f000000u});   // 0.5
-    emit(SpvOpConstant, {floatType, wOne, 0x3f800000u});    // 1.0
-
-    std::vector<uint32_t> globalVariable;
-    SwitchEmitFloorProbeInstruction(
-        globalVariable, SpvOpVariable,
-        {inputIntPointerType, vertexIndexVariable, SpvStorageClassInput});
-
-    struct PendingInsert
-    {
-        size_t at;
-        unsigned priority;
-        std::vector<uint32_t> data;
+    auto emitConstant = [&](uint32_t id, float value) {
+        SwitchEmitFloorProbeInstruction(
+            constants, SpvOpConstant, {floatType, id, floatBits(value)});
     };
-    std::vector<PendingInsert> pending;
-    if (!typeDeclarations.empty())
-        pending.push_back({firstConstantOffset, 0u, std::move(typeDeclarations)});
-    pending.push_back({firstGlobalVariableOffset, 1u, std::move(constants)});
-    pending.push_back({firstFunctionOffset, 2u, std::move(globalVariable)});
+    emitConstant(offsetX, 3105.0f);
+    emitConstant(scaleX, 0.005f);
+    emitConstant(biasX, -0.98f);
+    emitConstant(offsetY, -742.0f);
+    emitConstant(scaleY, 0.04f);
+    emitConstant(biasY, 0.98f);
+    emitConstant(zHalf, 0.5f);
+    emitConstant(wOne, 1.0f);
 
-    // Add VertexIndex to the vertex entry point's interface list.
-    words[entryPointOffset] += (1u << 16u);
-    pending.push_back({
-        entryPointOffset + entryPointWordCount, 0u, {vertexIndexVariable}});
+    // The chosen surface vertices span x=3105..3132 and y=-742..-744.
+    // Map that small source triangle into clip space; the game VS still runs,
+    // while the diagnostic writes a visible position from the actual POSITION0.
+    words.insert(words.begin() + static_cast<std::ptrdiff_t>(firstGlobalVariableOffset),
+                 constants.begin(), constants.end());
 
-    // Add the decoration in the annotations section, before type declarations.
-    pending.push_back({firstTypeOffset, 0u, std::move(decorations)});
-
-    std::sort(pending.begin(), pending.end(),
-        [](const PendingInsert &a, const PendingInsert &b) {
-            if (a.at != b.at) return a.at > b.at;
-            return a.priority < b.priority;
-        });
-    for (size_t i = 0; i < pending.size();)
-    {
-        size_t j = i + 1u;
-        std::vector<uint32_t> combined = std::move(pending[i].data);
-        while (j < pending.size() && pending[j].at == pending[i].at)
-        {
-            combined.insert(combined.end(),
-                            pending[j].data.begin(), pending[j].data.end());
-            ++j;
-        }
-        words.insert(words.begin() + static_cast<std::ptrdiff_t>(pending[i].at),
-                     combined.begin(), combined.end());
-        i = j;
-    }
-
-    // Recompute instruction positions after the declaration inserts. The
-    // selected test position is defined in the first block, then stored to
-    // BuiltIn Position immediately before every return in the shader entry point.
     size_t prologueOffset = SIZE_MAX;
     std::vector<size_t> returnOffsets;
     uint32_t currentFunction = 0u;
     bool foundEntryBlock = false;
     bool entryBlockLeading = false;
+
     for (size_t offset = 5u; offset < words.size();)
     {
         uint32_t wc = 0u;
@@ -4430,6 +4398,7 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
         if (!SpirvIsValidInstruction(words, offset, &wc, &op))
             return false;
         const uint32_t *ins = &words[offset];
+
         if (op == SpvOpFunction && wc >= 5u)
             currentFunction = ins[2];
         else if (op == SpvOpFunctionEnd)
@@ -4449,7 +4418,7 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
             if (op == SpvOpVariable && wc >= 4u &&
                 ins[3] == SpvStorageClassFunction)
                 prologueOffset = offset + wc;
-            else if (op == SpvOpLine || static_cast<uint32_t>(op) == 317u)
+            else if (op == SpvOpLine || op == SpvOpNoLine)
                 prologueOffset = offset + wc;
             else
                 entryBlockLeading = false;
@@ -4457,36 +4426,47 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
 
         if (currentFunction == entryFunction && op == SpvOpReturn)
             returnOffsets.push_back(offset);
+
         offset += wc;
     }
+
     if (prologueOffset == SIZE_MAX || returnOffsets.empty())
         return false;
 
     std::vector<uint32_t> prologue;
-    auto emitPrologue = [&](SpvOp op, std::initializer_list<uint32_t> a) {
-        SwitchEmitFloorProbeInstruction(prologue, op, a);
+    auto emit = [&](SpvOp op, std::initializer_list<uint32_t> operands) {
+        SwitchEmitFloorProbeInstruction(prologue, op, operands);
     };
-    emitPrologue(SpvOpLoad, {intType, loadedIndex, vertexIndexVariable});
-    emitPrologue(SpvOpIEqual, {boolType, indexIsOne, loadedIndex, oneInt});
-    emitPrologue(SpvOpIEqual, {boolType, indexIsTwo, loadedIndex, twoInt});
-    // Keep Select scalar-typed for NVK/NAK; construct the vec4 after choosing x/y.
-    emitPrologue(SpvOpSelect, {floatType, selectedX, indexIsOne, xRight, xLeft});
-    emitPrologue(SpvOpSelect, {floatType, selectedY, indexIsTwo, yBottom, yTop});
-    emitPrologue(SpvOpCompositeConstruct,
-        {vec4Type, selectedPosition, selectedX, selectedY, zHalf, wOne});
+    emit(SpvOpLoad, {inputPositionValueType, loadedPosition, inputPositionVariable});
+    emit(SpvOpCompositeExtract, {floatType, inputX, loadedPosition, 0u});
+    emit(SpvOpCompositeExtract, {floatType, inputY, loadedPosition, 1u});
+    emit(SpvOpFSub, {floatType, deltaX, inputX, offsetX});
+    emit(SpvOpFMul, {floatType, scaledX, deltaX, scaleX});
+    emit(SpvOpFAdd, {floatType, clipX, scaledX, biasX});
+    emit(SpvOpFSub, {floatType, deltaY, inputY, offsetY});
+    emit(SpvOpFMul, {floatType, scaledY, deltaY, scaleY});
+    emit(SpvOpFAdd, {floatType, clipY, scaledY, biasY});
+    emit(SpvOpCompositeConstruct,
+         {vec4Type, forcedPosition, clipX, clipY, zHalf, wOne});
 
-    struct CodeInsert { size_t at; std::vector<uint32_t> data; };
+    struct CodeInsert
+    {
+        size_t at;
+        std::vector<uint32_t> data;
+    };
     std::vector<CodeInsert> codeInserts;
     codeInserts.push_back({prologueOffset, std::move(prologue)});
     for (const size_t retOffset : returnOffsets)
     {
         std::vector<uint32_t> store;
         SwitchEmitFloorProbeInstruction(
-            store, SpvOpStore, {positionVariable, selectedPosition});
+            store, SpvOpStore, {positionVariable, forcedPosition});
         codeInserts.push_back({retOffset, std::move(store)});
     }
     std::sort(codeInserts.begin(), codeInserts.end(),
-        [](const CodeInsert &a, const CodeInsert &b) { return a.at > b.at; });
+        [](const CodeInsert &a, const CodeInsert &b) {
+            return a.at > b.at;
+        });
     for (const CodeInsert &insert : codeInserts)
         words.insert(words.begin() + static_cast<std::ptrdiff_t>(insert.at),
                      insert.data.begin(), insert.data.end());
