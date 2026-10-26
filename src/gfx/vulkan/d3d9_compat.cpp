@@ -2284,13 +2284,13 @@ bool SwitchPsS0UvTestTargetMatchesLayout(
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
-    // Keep the solid-magenta shader rewrite disabled during normal gameplay.
-    // Set KISAK_VK_DEBUG_PS_COLOR_SERIAL=all to opt in to the all-shader test,
-    // or provide a numeric serial to restrict the test to one pixel shader.
-    // "off", "0", and an unset variable all leave the original shader intact.
+    // TEMPORARY Switch diagnostic: default to solid magenta for floor PS 1821.
+    // This bypasses texture/light/material math to test whether the draw reaches
+    // the color attachment. "off" or "0" disables; "all" tests every pixel shader.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
-    if (!value || !*value ||
-        std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+    if (!value || !*value)
+        return 1821u;
+    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "all") == 0)
         return 0u;
