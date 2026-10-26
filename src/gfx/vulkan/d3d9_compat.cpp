@@ -6535,8 +6535,9 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=%llu source=env\n",
-                    static_cast<unsigned long long>(uvTarget));
+                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=%llu source=%s\n",
+                    static_cast<unsigned long long>(uvTarget),
+                    setting && *setting ? "env" : "default");
             }
             Switch_LogWrite(trace);
         }
@@ -7137,9 +7138,9 @@ bool IDirect3DDevice9::EnsurePipeline()
 
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
-        // The original-UV probe outputs the live s0 sample, bypassing material
-        // lighting and later shader math while preserving interpolated UVs.
-        // Default mode scopes it to every shader using the native CoD4 BSP vertex layout.
+        // For the selected pixel shader, output the live s0 sample directly,
+        // bypassing material lighting and later shader math while preserving UVs.
+        // The default target is PS 1821 (wc/icbm_tunnelfloor) only.
         const uint64_t debugPsS0UvSerial = SwitchPsS0UvTestTargetSerial();
         if (m_pixelShader && SwitchPsS0UvTestTargetMatchesLayout(
                 debugPsS0UvSerial, m_pixelShader->serial,
