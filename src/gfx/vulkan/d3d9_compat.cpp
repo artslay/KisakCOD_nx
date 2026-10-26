@@ -8458,9 +8458,10 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         if(worldSurface) {
             Switch_FormatWorldVertexUvRange(surface->firstVertex,surface->vertexCount,uv,sizeof(uv));
             Switch_FormatWorldVertexPositionRange(surface->firstVertex,surface->vertexCount,pos,sizeof(pos));
-        } else std::snprintf(pos,sizeof(pos),"not_world_surface");
-        else if(!auditIndexData||!m_decl||!indexCount) std::snprintf(uv,sizeof(uv),"unavailable:index_data_or_decl_missing");
-        else {
+        } else {
+            std::snprintf(pos,sizeof(pos),"not_world_surface");
+            if(!auditIndexData||!m_decl||!indexCount) std::snprintf(uv,sizeof(uv),"unavailable:index_data_or_decl_missing");
+            else {
             const uint32_t uvIndexOffset=surface?batchTriangleOffset*3u:0u;
             const uint32_t remainingIndexCount=uvIndexOffset<indexCount?indexCount-uvIndexOffset:0u;
             const uint32_t uvIndexCount=surface?std::min<uint32_t>(surface->triangleCount*3u,remainingIndexCount):indexCount;
@@ -8497,6 +8498,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 if(n>0) uvUsed=std::min(sizeof(uv)-1u,uvUsed+static_cast<size_t>(n)); ++uvSlots;
             }
             if(!uvSlots) std::snprintf(uv,sizeof(uv),"no_TEXCOORD_inputs_in_decl");
+            }
         }
         const uint32_t surfaceIndex=worldSurface?surface->surfaceIndex:UINT32_MAX;
         const uint32_t firstVertex=surface?surface->firstVertex:0u;
