@@ -266,7 +266,14 @@ static void Switch_FormatWorldVertexUvRange(uint32_t firstVertex,uint32_t vertex
         finite1,bad1,zero1,outside1,finite1?minU1:0.0f,finite1?maxU1:0.0f,finite1?minV1:0.0f,finite1?maxV1:0.0f);
 }
 
-undefined
+void Switch_QueueWorldDrawAuditSurface(const Material *material,const char *techniqueName,
+    const char *vertexShaderName,const char *pixelShaderName,uint32_t passIndex,
+    uint32_t surfaceIndex,uint32_t firstVertex,uint32_t vertexCount,
+    uint32_t triangleCount,uint32_t lightmapIndex,uint32_t baseIndex)
+{
+    if (!Switch_RenderObjectAuditMatchesMaterial(material))
+        return;
+    if(g_switchQueuedWorldAuditCount>=kSwitchQueuedWorldAuditCapacity) {
         if(!g_switchQueuedWorldAuditOverflowReported) { g_switchQueuedWorldAuditOverflowReported=true; Switch_LogWrite("[KisakCOD][RENDER OBJECT] status=BATCH_AUDIT_OVERFLOW capacity=512 remaining_surfaces_not_listed=1\n"); }
         return;
     }
@@ -318,7 +325,14 @@ void Switch_QueueRenderAuditObject(
         e.worldSurface=false;
     }
 }
-undefined(1469598103934665603ull,0x4D41544C4641494Cull);
+void Switch_LogMaterialSetupSkipped(
+    const Material *material, uint32_t surfaceType, uint32_t objectId,
+    uint32_t materialSortedIndex, uint32_t requestedTechnique,
+    uint64_t packedDrawSurf, const char *reason)
+{
+    if (!Switch_RenderObjectAuditMatchesMaterial(material))
+        return;
+    uint64_t sig=Switch_AuditHashMix(1469598103934665603ull,0x4D41544C4641494Cull);
     sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(material));
     sig=Switch_AuditHashMix(sig,surfaceType);
     sig=Switch_AuditHashMix(sig,objectId);
@@ -340,7 +354,13 @@ undefined(1469598103934665603ull,0x4D41544C4641494Cull);
     Switch_LogWrite(line);
 }
 
-undefined(1469598103934665603ull,0x43554C4Cull);
+void Switch_LogWorldSurfaceSkipped(const Material *material,uint32_t surfaceIndex,
+    uint32_t firstVertex,uint32_t vertexCount,uint32_t triangleCount,uint32_t lightmapIndex,
+    uint32_t stage,const char *reason,bool visible,bool castsShadow)
+{
+    if (!Switch_RenderObjectAuditMatchesMaterial(material))
+        return;
+    uint64_t sig=Switch_AuditHashMix(1469598103934665603ull,0x43554C4Cull);
     sig=Switch_AuditHashMix(sig,surfaceIndex); sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(material));
     sig=Switch_AuditHashMix(sig,stage); sig=Switch_AuditHashString(sig,reason);
     if(!Switch_AuditShouldLog(sig)) return;
@@ -8207,7 +8227,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                               const char *reason,uint32_t batchTriangleOffset)
     {
         const bool worldSurface=surface&&surface->worldSurface;
-undefined
+        const Material *material=surface?surface->material:g_switchRenderAuditContext.material;
+        if (!Switch_RenderObjectAuditMatchesMaterial(material))
+            return;
+        if(!surface&&!material) return;
+        const uint32_t objectId=surface?surface->surfaceIndex:g_switchRenderAuditContext.objectId;
         const uint32_t objectType=surface?surface->surfaceType:g_switchRenderAuditContext.surfaceType;
         const uint32_t passIndex=surface?surface->passIndex:g_switchRenderAuditContext.passIndex;
         const char *tech=surface?surface->techniqueName:g_switchRenderAuditContext.techniqueName;
