@@ -46,6 +46,10 @@ extern void Switch_SetRenderAuditContext(
     const Material *material, const char *techniqueName,
     const char *vertexShaderName, const char *pixelShaderName,
     uint32_t passIndex, uint32_t surfaceType, uint32_t objectId);
+extern void Switch_LogMaterialSetupSkipped(
+    const Material *material, uint32_t surfaceType, uint32_t objectId,
+    uint32_t materialSortedIndex, uint32_t requestedTechnique,
+    uint64_t packedDrawSurf, const char *reason);
 static inline uint64_t KisakRendererClock()
 {
     return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -934,7 +938,20 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
     drawSurfList = &listArgs->info->drawSurfs[listArgs->firstDrawSurfIndex];
     drawSurf.packed = drawSurfList->packed;
     if (!R_SetupMaterial(listArgs->context, &prepassContext, listArgs->info, drawSurf))
+    {
+#ifdef __SWITCH__
+        const Material *candidate=listArgs->context.state->material;
+        const Material *failedMaterial=(candidate &&
+            candidate->info.drawSurf.fields.materialSortedIndex==drawSurf.fields.materialSortedIndex)
+            ? candidate : nullptr;
+        Switch_LogMaterialSetupSkipped(
+            failedMaterial,drawSurf.fields.surfType,drawSurf.fields.objectId,
+            drawSurf.fields.materialSortedIndex,
+            static_cast<uint32_t>(listArgs->info->baseTechType),
+            drawSurf.packed,"R_SetupMaterial_returned_false");
+#endif
         return R_SkipDrawSurfListMaterial(drawSurfList, drawSurfCount);
+    }
     isPixelCostEnabled = pixelCostMode != GFX_PIXEL_COST_MODE_OFF;
     if (pixelCostMode)
         R_PixelCost_BeginSurface(listArgs->context);
