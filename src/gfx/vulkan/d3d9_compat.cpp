@@ -2273,8 +2273,13 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0UvTestTargetSerial()
 {
-    // Optional raw-s0 texture probe. Disabled by default while the targeted
-    // solid-white probe isolates whether PS 1821 can write visible fragments.
+    // Shader-rewrite probes must be explicitly enabled; stale per-probe env
+    // variables from an earlier test must never alter normal scene rendering.
+    const char *enable = std::getenv("KISAK_VK_ENABLE_SHADER_PROBES");
+    if (!enable || std::strcmp(enable, "1") != 0)
+        return UINT64_MAX;
+
+    // Optional raw-s0 texture probe. Disabled unless the global diagnostic gate is enabled.
     // "world" selects 44-byte BSP vertices; a number selects one PS serial;
     // "all" selects every PS; "off" or "0" disables the probe.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
@@ -2324,6 +2329,13 @@ bool SwitchPsS0UvTestTargetMatchesLayout(
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
+    // Require an independent opt-in before consulting the probe-specific selector.
+    // This prevents stale KISAK_VK_DEBUG_PS_COLOR_SERIAL values from patching
+    // shaders in ordinary play sessions.
+    const char *enable = std::getenv("KISAK_VK_ENABLE_SHADER_PROBES");
+    if (!enable || std::strcmp(enable, "1") != 0)
+        return UINT64_MAX;
+
     // Keep shader-output diagnostics opt-in. PS 1821 is shared by many
     // lightmapped surfaces, so changing its output by default corrupts the scene.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
