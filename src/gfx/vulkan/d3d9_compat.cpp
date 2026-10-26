@@ -6627,11 +6627,19 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_pixelShader && m_decl && SwitchPsS0UvTestTargetMatchesLayout(
             SwitchPsS0UvTestTargetSerial(), m_pixelShader->serial,
             m_decl->switchVertDeclType, m_streams[0].stride);
+    const uint64_t switchColorProbeTarget = SwitchPsColorDebugTargetSerial();
+    const bool switchSolidWhiteProbeActive =
+        m_pixelShader && SwitchPsColorDebugTargetMatches(
+            switchColorProbeTarget, m_pixelShader->serial, m_pixelShader->parseData);
+    // Both diagnostics must bypass raster/depth/blend/color-mask state. Otherwise
+    // a white fragment output can remain invisible due to culling or stale depth.
+    const bool switchFragmentOutputProbeActive =
+        switchS0UvProbeActive || switchSolidWhiteProbeActive;
 
     // Alpha reference is baked into each fragment-module variant, so avoid
     // specialization maps when creating a pipeline on NVK. The diagnostic probe
     // writes the raw s0 sample and therefore must bypass the normal alpha test.
-    const bool useAlphaTestPatch = m_alphaTest && !switchS0UvProbeActive;
+    const bool useAlphaTestPatch = m_alphaTest && !switchFragmentOutputProbeActive;
 
     // Dynamic-rendering pipelines are compatible only with their attachment
     // formats; resolve them before attempting to reuse a cached pipeline.
@@ -6693,6 +6701,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_depthFunc);
     key = HashCombine(key, m_alphaTest);
     key = HashCombine(key, switchS0UvProbeActive ? 1u : 0u);
+    key = HashCombine(key, switchSolidWhiteProbeActive ? 1u : 0u);
     key = HashCombine(key, m_alphaFunc);
     key = HashCombine(key, m_alphaRef);
     uint32_t depthBiasBits = 0;
@@ -7700,7 +7709,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     //
     // D3DCULL_CW means "cull clockwise" => Vulkan culls FRONT.
     // D3DCULL_CCW means "cull counter-clockwise" => Vulkan culls BACK.
-    raster.cullMode = switchS0UvProbeActive
+    raster.cullMode = switchFragmentOutputProbeActive
         ? VK_CULL_MODE_NONE
         : (m_cullMode == 1
             ? VK_CULL_MODE_NONE
@@ -7716,7 +7725,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     // CoD4's ATOC transparency-AA mode maps to Vulkan alpha-to-coverage.
     // It is meaningful only when the framebuffer actually has multiple samples.
     multisample.alphaToCoverageEnable =
-        (!switchS0UvProbeActive && m_alphaToCoverage &&
+        (!switchFragmentOutputProbeActive && m_alphaToCoverage &&
          colorSamples != VK_SAMPLE_COUNT_1_BIT)
             ? VK_TRUE : VK_FALSE;
     multisample.alphaToOneEnable = VK_FALSE;
@@ -7733,15 +7742,15 @@ bool IDirect3DDevice9::EnsurePipeline()
     // wrong. Otherwise an empty-looking probe is ambiguous: it could be rejected
     // before its replacement fragment output runs. Normal rendering is unchanged.
     const bool effectiveDepthTest =
-        !switchS0UvProbeActive && m_depthEnable && !m_switchUnlit;
+        !switchFragmentOutputProbeActive && m_depthEnable && !m_switchUnlit;
     const bool effectiveDepthWrite =
-        !switchS0UvProbeActive && m_depthWrite && !m_switchUnlit;
+        !switchFragmentOutputProbeActive && m_depthWrite && !m_switchUnlit;
     depth.depthTestEnable = effectiveDepthTest ? VK_TRUE : VK_FALSE;
     depth.depthWriteEnable = effectiveDepthWrite ? VK_TRUE : VK_FALSE;
     depth.depthCompareOp = CompareOp(m_depthFunc);
     depth.depthBoundsTestEnable = VK_FALSE;
     depth.stencilTestEnable =
-        (!switchS0UvProbeActive && m_stencilEnable) ? VK_TRUE : VK_FALSE;
+        (!switchFragmentOutputProbeActive && m_stencilEnable) ? VK_TRUE : VK_FALSE;
     depth.front.compareOp = CompareOp(m_stencilFunc);
     depth.front.failOp = StencilOp(m_stencilFail);
     depth.front.depthFailOp = StencilOp(m_stencilZFail);
@@ -7770,7 +7779,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     // premultiplied, and separate-alpha modes (notably menu highlight caps).
     VkPipelineColorBlendAttachmentState colorBlend{};
     colorBlend.blendEnable =
-        (m_blendEnable && !switchS0UvProbeActive) ? VK_TRUE : VK_FALSE;
+        (m_blendEnable && !switchFragmentOutputProbeActive) ? VK_TRUE : VK_FALSE;
     colorBlend.srcColorBlendFactor = BlendFactor(m_srcBlend);
     colorBlend.dstColorBlendFactor = BlendFactor(m_dstBlend);
     colorBlend.colorBlendOp = BlendOp(m_blendOp);
@@ -7780,7 +7789,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend);
     colorBlend.alphaBlendOp = BlendOp(
         m_separateAlphaBlend ? m_blendOpAlpha : m_blendOp);
-    colorBlend.colorWriteMask = switchS0UvProbeActive
+    colorBlend.colorWriteMask = switchFragmentOutputProbeActive
         ? (VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT)
         : (((m_colorWriteMask & 1) ? VK_COLOR_COMPONENT_R_BIT : 0) |
