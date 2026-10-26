@@ -2749,12 +2749,25 @@ bool PatchFragmentShaderToOutputS0AtUv(
         }
     }
 
-    char controlTrace[192];
-    std::snprintf(controlTrace, sizeof(controlTrace),
-        "[KisakCOD][VK PS S0 UV CONTROL] serial=%llu kill=%u demote=%u\\n",
-        static_cast<unsigned long long>(actualSerial),
-        killOverridesPatched, demoteOverridesPatched);
-    Switch_LogWrite(controlTrace);
+    if (killOverridesPatched || demoteOverridesPatched)
+    {
+        static uint64_t loggedControlSerials[128]{};
+        static size_t loggedControlCount = 0u;
+        bool alreadyLogged = false;
+        for (size_t i = 0; i < loggedControlCount; ++i)
+            alreadyLogged |= loggedControlSerials[i] == actualSerial;
+        if (!alreadyLogged && loggedControlCount <
+                sizeof(loggedControlSerials) / sizeof(loggedControlSerials[0]))
+        {
+            loggedControlSerials[loggedControlCount++] = actualSerial;
+            char controlTrace[192];
+            std::snprintf(controlTrace, sizeof(controlTrace),
+                "[KisakCOD][VK PS S0 UV CONTROL] serial=%llu kill=%u demote=%u\n",
+                static_cast<unsigned long long>(actualSerial),
+                killOverridesPatched, demoteOverridesPatched);
+            Switch_LogWrite(controlTrace);
+        }
+    }
     logResult("patched_s0_uv", sampleId, sampleType,
               sampleCoordType, coordComponents, sampleBlock);
     return true;
