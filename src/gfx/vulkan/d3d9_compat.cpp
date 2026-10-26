@@ -6699,10 +6699,19 @@ bool IDirect3DDevice9::EnsurePipeline()
     const bool switchSolidWhiteProbeActive =
         m_pixelShader && SwitchPsColorDebugTargetMatches(
             switchColorProbeTarget, m_pixelShader->serial, m_pixelShader->parseData);
-    // Both diagnostics must bypass raster/depth/blend/color-mask state. Otherwise
-    // a white fragment output can remain invisible due to culling or stale depth.
+#ifdef __SWITCH__
+    // Diagnose raster visibility only for the currently audited floor material.
+    // A temporary PS module below prevents this shared shader from affecting peers.
+    const bool switchFloorSolidWhiteProbeActive =
+        !switchS0UvProbeActive && m_pixelShader &&
+        m_pixelShader->serial == 1821u &&
+        Switch_IsFloorAuditContextActive();
+#else
+    const bool switchFloorSolidWhiteProbeActive = false;
+#endif
     const bool switchFragmentOutputProbeActive =
-        switchS0UvProbeActive || switchSolidWhiteProbeActive;
+        switchS0UvProbeActive || switchSolidWhiteProbeActive ||
+        switchFloorSolidWhiteProbeActive;
 
     // Alpha reference is baked into each fragment-module variant, so avoid
     // specialization maps when creating a pipeline on NVK. The diagnostic probe
@@ -6770,6 +6779,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_alphaTest);
     key = HashCombine(key, switchS0UvProbeActive ? 1u : 0u);
     key = HashCombine(key, switchSolidWhiteProbeActive ? 1u : 0u);
+    key = HashCombine(key, switchFloorSolidWhiteProbeActive ? 1u : 0u);
     key = HashCombine(key, m_alphaFunc);
     key = HashCombine(key, m_alphaRef);
     uint32_t depthBiasBits = 0;
@@ -7232,10 +7242,12 @@ bool IDirect3DDevice9::EnsurePipeline()
         // The UV/sample probe and solid-colour probe rewrite the same output
         // stores. When both target this shader, the solid-colour test would
         // overwrite the texture sample and make the sampling test meaningless.
-        if (!switchS0UvProbeActive && SwitchPsColorDebugTargetMatches(
+        if (!switchS0UvProbeActive && !switchFloorSolidWhiteProbeActive &&
+            SwitchPsColorDebugTargetMatches(
                 debugPsColorSerial, m_pixelShader->serial, m_pixelShader->parseData))
         {
-            // The matcher has already checked wildcard vs. exact-serial scope.
+            // Global opt-in probe only. The floor-only probe uses a temporary
+            // module later, never storing its rewritten SPIR-V on the shared shader.
             (void)PatchFragmentShaderToSolidWhite(
                 pixelSpirv, m_pixelShader->serial, m_pixelShader->serial);
         }
@@ -7921,26 +7933,22 @@ bool IDirect3DDevice9::EnsurePipeline()
            ((m_colorWriteMask & 8) ? VK_COLOR_COMPONENT_A_BIT : 0));
 
 #ifdef __SWITCH__
-    if (switchSolidWhiteProbeActive)
+    if (switchSolidWhiteProbeActive || switchFloorSolidWhiteProbeActive)
     {
-        static bool switchColorProbeStateLogged = false;
-        if (!switchColorProbeStateLogged)
-        {
-            switchColorProbeStateLogged = true;
-            char trace[256];
-            std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][VK PS COLOR PROBE STATE] serial=%llu key=%016llx cull=%u depth=%u depthWrite=%u stencil=%u blend=%u mask=0x%x colorFormat=%u\n",
-                static_cast<unsigned long long>(m_pixelShader->serial),
-                static_cast<unsigned long long>(key),
-                static_cast<unsigned>(raster.cullMode),
-                static_cast<unsigned>(depth.depthTestEnable),
-                static_cast<unsigned>(depth.depthWriteEnable),
-                static_cast<unsigned>(depth.stencilTestEnable),
-                static_cast<unsigned>(colorBlend.blendEnable),
-                static_cast<unsigned>(colorBlend.colorWriteMask),
-                static_cast<unsigned>(colorFormat));
-            Switch_LogWrite(trace);
-        }
+        char trace[256];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][VK PS COLOR PROBE STATE] scope=%s serial=%llu key=%016llx cull=%u depth=%u depthWrite=%u stencil=%u blend=%u mask=0x%x colorFormat=%u\n",
+            switchFloorSolidWhiteProbeActive ? "floor_only" : "global",
+            static_cast<unsigned long long>(m_pixelShader->serial),
+            static_cast<unsigned long long>(key),
+            static_cast<unsigned>(raster.cullMode),
+            static_cast<unsigned>(depth.depthTestEnable),
+            static_cast<unsigned>(depth.depthWriteEnable),
+            static_cast<unsigned>(depth.stencilTestEnable),
+            static_cast<unsigned>(colorBlend.blendEnable),
+            static_cast<unsigned>(colorBlend.colorWriteMask),
+            static_cast<unsigned>(colorFormat));
+        Switch_LogWrite(trace);
     }
 #endif
 
@@ -8172,6 +8180,47 @@ bool IDirect3DDevice9::EnsurePipeline()
         static_cast<void *>(info.layout),
         static_cast<void *>(stages[0].module),
         static_cast<void *>(stages[1].module));
+#ifdef __SWITCH__
+    VkShaderModule switchFloorSolidProbeModule = VK_NULL_HANDLE;
+    if (switchFloorSolidWhiteProbeActive)
+    {
+        std::vector<uint32_t> floorProbeSpirv = m_pixelShader->spirv;
+        if (floorProbeSpirv.empty() ||
+            !PatchFragmentShaderToSolidWhite(
+                floorProbeSpirv, m_pixelShader->serial, m_pixelShader->serial))
+        {
+            Switch_LogWrite("[KisakCOD][VK FLOOR SOLID PROBE] action=patch_failed\n");
+            return false;
+        }
+
+        VkShaderModuleCreateInfo floorProbeInfo{};
+        floorProbeInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        floorProbeInfo.codeSize = floorProbeSpirv.size() * sizeof(uint32_t);
+        floorProbeInfo.pCode = floorProbeSpirv.data();
+        const VkResult floorProbeResult = vkCreateShaderModule(
+            m_backend->Device(), &floorProbeInfo, nullptr, &switchFloorSolidProbeModule);
+        if (floorProbeResult != VK_SUCCESS)
+        {
+            char trace[160];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VK FLOOR SOLID PROBE] action=module_failed result=%d\n",
+                static_cast<int>(floorProbeResult));
+            Switch_LogWrite(trace);
+            return false;
+        }
+        stages[1].module = switchFloorSolidProbeModule;
+
+        char trace[224];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][VK FLOOR SOLID PROBE] action=enabled material=icbm_tunnelfloor ps=%llu surface=%u key=%016llx module=%p\n",
+            static_cast<unsigned long long>(m_pixelShader->serial),
+            g_switchWorldDrawAudit.surfaceIndex,
+            static_cast<unsigned long long>(key),
+            static_cast<void *>(switchFloorSolidProbeModule));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     g_switchPipelineCrashSnapshot.valid = true;
 
     const auto pipelineCreateStart = std::chrono::steady_clock::now();
@@ -8182,6 +8231,15 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchFrameStage = "frame/render/vulkan/pipeline/main_create_call";
     const VkResult pipelineResult = vkCreateGraphicsPipelines(
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+#ifdef __SWITCH__
+    if (switchFloorSolidProbeModule != VK_NULL_HANDLE)
+    {
+        // A pipeline retains the compiled shader after its module is destroyed.
+        vkDestroyShaderModule(
+            m_backend->Device(), switchFloorSolidProbeModule, nullptr);
+        switchFloorSolidProbeModule = VK_NULL_HANDLE;
+    }
+#endif
     RecordSwitchVkPipelineTrace(
         7u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
