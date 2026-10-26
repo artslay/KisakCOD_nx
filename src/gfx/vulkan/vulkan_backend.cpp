@@ -1106,8 +1106,21 @@ bool VulkanBackend::CreateSwapchain()
         SetError("Surface does not support TRANSFER_DST required by the offscreen present path");
         return false;
     }
-    const VkImageUsageFlags usage =
+    m_swapchainTransferSrc =
+        (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
+    VkImageUsageFlags usage =
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if (m_swapchainTransferSrc)
+        usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+    char usageTrace[192];
+    std::snprintf(
+        usageTrace, sizeof(usageTrace),
+        "[KisakCOD][VK] swapchain_transfer_src=%u supportedUsageFlags=0x%x usage=0x%x\\n",
+        m_swapchainTransferSrc ? 1u : 0u,
+        static_cast<unsigned>(caps.supportedUsageFlags),
+        static_cast<unsigned>(usage));
+    Switch_LogWrite(usageTrace);
 
     // Do not inherit a display rotation into the game framebuffer when the
     // surface supports identity. D3D9/CoD4 renders in the logical 1280x720
