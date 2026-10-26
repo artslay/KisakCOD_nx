@@ -911,6 +911,8 @@ bool VulkanBackend::CreateDevice()
     // has legacy buffer ranges that must not be allowed to fault the GPU.
     features.robustBufferAccess = robustBufferAccess ? VK_TRUE : VK_FALSE;
     features.textureCompressionBC = textureCompressionBC ? VK_TRUE : VK_FALSE;
+    m_occlusionQueryEnabled = features2.features.occlusionQuery == VK_TRUE;
+    features.occlusionQuery = m_occlusionQueryEnabled ? VK_TRUE : VK_FALSE;
     m_samplerAnisotropy = features2.features.samplerAnisotropy == VK_TRUE;
     features.samplerAnisotropy = m_samplerAnisotropy ? VK_TRUE : VK_FALSE;
     VkPhysicalDeviceProperties properties{};
