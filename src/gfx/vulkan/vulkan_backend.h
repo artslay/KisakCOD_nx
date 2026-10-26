@@ -72,6 +72,7 @@ public:
     VkFormat DepthFormat() const { return m_depthFormat; }
     VkImage CurrentSwapchainImage() const;
     VkImageView CurrentSwapchainView() const;
+    bool SupportsSwapchainTransferSrc() const { return m_swapchainTransferSrc; }
     VkImageView DefaultDepthView() const { return m_defaultDepthView; }
     VkImage DefaultDepthImage() const { return m_defaultDepthImage; }
     VkImageLayout DefaultDepthLayout() const { return m_defaultDepthLayout; }
@@ -325,6 +326,7 @@ private:
     std::vector<VkImage> m_swapchainImages;
     std::vector<VkImageView> m_swapchainViews;
     std::vector<VkImageLayout> m_swapchainLayouts;
+    bool m_swapchainTransferSrc = false;
     // A present-wait semaphore belongs to a swapchain image and is reused only
     // after that image is acquired again. This avoids a queue-idle stall per frame.
     std::vector<VkSemaphore> m_renderFinishedSemaphores;
