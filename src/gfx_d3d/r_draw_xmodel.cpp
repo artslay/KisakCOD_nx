@@ -167,9 +167,6 @@ uint32_t __cdecl R_DrawXModelRigidSurfLitInternal(
 #ifdef __SWITCH__
         Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
 #endif
-#ifdef __SWITCH__
-        Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
-#endif
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
         if (++drawSurfIndex == drawSurfCount)
             break;
