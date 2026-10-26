@@ -149,6 +149,28 @@ struct SwitchRenderAuditContext
 };
 static thread_local SwitchRenderAuditContext g_switchRenderAuditContext{};
 
+// Keep the expensive per-object audit focused on the currently investigated
+// asset. The former all-object mode generated thousands of unique log lines
+// and sampled vertex/texture state for unrelated draws, hurting Switch FPS.
+// Set KISAK_VK_RENDER_OBJECT_FILTER=all to opt back into a full audit, a
+// material-name substring to target another asset, or off to disable it.
+static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
+{
+    static const std::string filter = []()
+    {
+        const char *value = std::getenv("KISAK_VK_RENDER_OBJECT_FILTER");
+        return value && *value ? std::string(value) : std::string("icbm_tunnelfloor");
+    }();
+
+    if (filter == "off" || filter == "0" || filter == "none")
+        return false;
+    if (filter == "all")
+        return true;
+    if (!material || !material->info.name)
+        return false;
+    return std::strstr(material->info.name, filter.c_str()) != nullptr;
+}
+
 static uint64_t g_switchRenderAuditSignatures[65536]{};
 static std::mutex g_switchRenderAuditSignatureMutex;
 static bool g_switchRenderAuditSignatureOverflowReported = false;
@@ -244,12 +266,7 @@ static void Switch_FormatWorldVertexUvRange(uint32_t firstVertex,uint32_t vertex
         finite1,bad1,zero1,outside1,finite1?minU1:0.0f,finite1?maxU1:0.0f,finite1?minV1:0.0f,finite1?maxV1:0.0f);
 }
 
-void Switch_QueueWorldDrawAuditSurface(const Material *material,const char *techniqueName,
-    const char *vertexShaderName,const char *pixelShaderName,uint32_t passIndex,
-    uint32_t surfaceIndex,uint32_t firstVertex,uint32_t vertexCount,
-    uint32_t triangleCount,uint32_t lightmapIndex,uint32_t baseIndex)
-{
-    if(g_switchQueuedWorldAuditCount>=kSwitchQueuedWorldAuditCapacity) {
+undefined
         if(!g_switchQueuedWorldAuditOverflowReported) { g_switchQueuedWorldAuditOverflowReported=true; Switch_LogWrite("[KisakCOD][RENDER OBJECT] status=BATCH_AUDIT_OVERFLOW capacity=512 remaining_surfaces_not_listed=1\n"); }
         return;
     }
@@ -296,12 +313,7 @@ void Switch_QueueRenderAuditObject(
         e.worldSurface=false;
     }
 }
-void Switch_LogMaterialSetupSkipped(
-    const Material *material, uint32_t surfaceType, uint32_t objectId,
-    uint32_t materialSortedIndex, uint32_t requestedTechnique,
-    uint64_t packedDrawSurf, const char *reason)
-{
-    uint64_t sig=Switch_AuditHashMix(1469598103934665603ull,0x4D41544C4641494Cull);
+undefined(1469598103934665603ull,0x4D41544C4641494Cull);
     sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(material));
     sig=Switch_AuditHashMix(sig,surfaceType);
     sig=Switch_AuditHashMix(sig,objectId);
@@ -323,11 +335,7 @@ void Switch_LogMaterialSetupSkipped(
     Switch_LogWrite(line);
 }
 
-void Switch_LogWorldSurfaceSkipped(const Material *material,uint32_t surfaceIndex,
-    uint32_t firstVertex,uint32_t vertexCount,uint32_t triangleCount,uint32_t lightmapIndex,
-    uint32_t stage,const char *reason,bool visible,bool castsShadow)
-{
-    uint64_t sig=Switch_AuditHashMix(1469598103934665603ull,0x43554C4Cull);
+undefined(1469598103934665603ull,0x43554C4Cull);
     sig=Switch_AuditHashMix(sig,surfaceIndex); sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(material));
     sig=Switch_AuditHashMix(sig,stage); sig=Switch_AuditHashString(sig,reason);
     if(!Switch_AuditShouldLog(sig)) return;
@@ -8189,9 +8197,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                               const char *reason,uint32_t batchTriangleOffset)
     {
         const bool worldSurface=surface&&surface->worldSurface;
-        const Material *material=surface?surface->material:g_switchRenderAuditContext.material;
-        if(!surface&&!material) return;
-        const uint32_t objectId=surface?surface->surfaceIndex:g_switchRenderAuditContext.objectId;
+undefined
         const uint32_t objectType=surface?surface->surfaceType:g_switchRenderAuditContext.surfaceType;
         const uint32_t passIndex=surface?surface->passIndex:g_switchRenderAuditContext.passIndex;
         const char *tech=surface?surface->techniqueName:g_switchRenderAuditContext.techniqueName;
