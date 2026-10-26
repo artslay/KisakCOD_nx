@@ -4154,16 +4154,17 @@ static void SwitchEmitFloorProbeInstruction(
 
 static bool SwitchBuildFloorRasterProbeVertexSpirv(std::vector<uint32_t> &words)
 {
-    words = {SpvMagicNumber, 0x00010000u, 0u, 28u, 0u};
+    // A small opaque test patch (~51x29 pixels), rather than a fullscreen flash.
+    words = {SpvMagicNumber, 0x00010000u, 0u, 30u, 0u};
     auto emit = [&](SpvOp op, std::initializer_list<uint32_t> a) {
         SwitchEmitFloorProbeInstruction(words, op, a);
     };
     emit(SpvOpCapability, {SpvCapabilityShader});
     emit(SpvOpMemoryModel, {SpvAddressingModelLogical, SpvMemoryModelGLSL450});
     emit(SpvOpEntryPoint, {
-        SpvExecutionModelVertex, 21u, 0x6e69616du, 0u, 19u, 20u});
-    emit(SpvOpDecorate, {19u, SpvDecorationBuiltIn, SpvBuiltInVertexIndex});
-    emit(SpvOpDecorate, {20u, SpvDecorationBuiltIn, SpvBuiltInPosition});
+        SpvExecutionModelVertex, 23u, 0x6e69616du, 0u, 21u, 22u});
+    emit(SpvOpDecorate, {21u, SpvDecorationBuiltIn, SpvBuiltInVertexIndex});
+    emit(SpvOpDecorate, {22u, SpvDecorationBuiltIn, SpvBuiltInPosition});
     emit(SpvOpTypeVoid, {1u});
     emit(SpvOpTypeBool, {2u});
     emit(SpvOpTypeInt, {3u, 32u, 1u});
@@ -4175,23 +4176,25 @@ static bool SwitchBuildFloorRasterProbeVertexSpirv(std::vector<uint32_t> &words)
     emit(SpvOpConstant, {3u, 9u, 0u});
     emit(SpvOpConstant, {3u, 10u, 1u});
     emit(SpvOpConstant, {3u, 11u, 2u});
-    emit(SpvOpConstant, {4u, 12u, 0xbf800000u}); // -1.0
-    emit(SpvOpConstant, {4u, 13u, 0x40400000u}); //  3.0
+    emit(SpvOpConstant, {4u, 12u, 0xbf7ae148u}); // -0.98
+    emit(SpvOpConstant, {4u, 13u, 0xbf666666u}); // -0.90
     emit(SpvOpConstant, {4u, 14u, 0x3f000000u}); //  0.5
     emit(SpvOpConstant, {4u, 15u, 0x3f800000u}); //  1.0
-    emit(SpvOpConstantComposite, {5u, 16u, 12u, 12u, 14u, 15u});
-    emit(SpvOpConstantComposite, {5u, 17u, 13u, 12u, 14u, 15u});
-    emit(SpvOpConstantComposite, {5u, 18u, 12u, 13u, 14u, 15u});
-    emit(SpvOpVariable, {6u, 19u, SpvStorageClassInput});
-    emit(SpvOpVariable, {7u, 20u, SpvStorageClassOutput});
-    emit(SpvOpFunction, {1u, 21u, SpvFunctionControlMaskNone, 8u});
-    emit(SpvOpLabel, {22u});
-    emit(SpvOpLoad, {3u, 23u, 19u});
-    emit(SpvOpIEqual, {2u, 24u, 23u, 10u});
-    emit(SpvOpIEqual, {2u, 25u, 23u, 11u});
-    emit(SpvOpSelect, {5u, 26u, 24u, 17u, 16u});
-    emit(SpvOpSelect, {5u, 27u, 25u, 18u, 26u});
-    emit(SpvOpStore, {20u, 27u});
+    emit(SpvOpConstant, {4u, 16u, 0x3f7ae148u}); //  0.98
+    emit(SpvOpConstant, {4u, 17u, 0x3f666666u}); //  0.90
+    emit(SpvOpConstantComposite, {5u, 18u, 12u, 16u, 14u, 15u});
+    emit(SpvOpConstantComposite, {5u, 19u, 13u, 16u, 14u, 15u});
+    emit(SpvOpConstantComposite, {5u, 20u, 12u, 17u, 14u, 15u});
+    emit(SpvOpVariable, {6u, 21u, SpvStorageClassInput});
+    emit(SpvOpVariable, {7u, 22u, SpvStorageClassOutput});
+    emit(SpvOpFunction, {1u, 23u, SpvFunctionControlMaskNone, 8u});
+    emit(SpvOpLabel, {24u});
+    emit(SpvOpLoad, {3u, 25u, 21u});
+    emit(SpvOpIEqual, {2u, 26u, 25u, 10u});
+    emit(SpvOpIEqual, {2u, 27u, 25u, 11u});
+    emit(SpvOpSelect, {5u, 28u, 26u, 19u, 18u});
+    emit(SpvOpSelect, {5u, 29u, 27u, 20u, 28u});
+    emit(SpvOpStore, {22u, 29u});
     emit(SpvOpReturn, {});
     emit(SpvOpFunctionEnd, {});
     return words.size() > 5u;
@@ -8784,14 +8787,14 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
 
         // Ignore the game's vertex transform, interpolator interface and pixel
-        // shader for this one surface. The first indexed triangle (0,1,2) fills
-        // most of the screen and writes white if rasterization reaches color output.
+        // shader for this one surface. The first indexed triangle (0,1,2) creates a small top-left patch
+        // and writes white if rasterization reaches color output.
         stages[0].module = switchFloorVertexProbeModule;
         stages[1].module = switchFloorSolidProbeModule;
 
         char trace[288];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][VK FLOOR RASTER CONTROL] action=enabled surface=%u key=%016llx gameVS=%llu gamePS=%llu mode=fullscreen_triangle_white vsModule=%p psModule=%p\n",
+            "[KisakCOD][VK FLOOR RASTER CONTROL] action=enabled surface=%u key=%016llx gameVS=%llu gamePS=%llu mode=corner_triangle_white vsModule=%p psModule=%p\n",
             g_switchWorldDrawAudit.surfaceIndex,
             static_cast<unsigned long long>(key),
             static_cast<unsigned long long>(m_vertexShader->serial),
