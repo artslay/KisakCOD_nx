@@ -266,6 +266,45 @@ static void Switch_FormatWorldVertexUvRange(uint32_t firstVertex,uint32_t vertex
         finite1,bad1,zero1,outside1,finite1?minU1:0.0f,finite1?maxU1:0.0f,finite1?minV1:0.0f,finite1?maxV1:0.0f);
 }
 
+
+static void Switch_FormatWorldVertexPositionRange(uint32_t firstVertex,uint32_t vertexCount,char *output,size_t outputSize)
+{
+    if(!output||!outputSize) return;
+    std::snprintf(output,outputSize,"not_mapped");
+    if(!vertexCount||firstVertex==UINT32_MAX||!rgp.world||!rgp.world->vd.worldVb) { std::snprintf(output,outputSize,"unavailable"); return; }
+    const KisakVkBuffer *vb=static_cast<const KisakVkBuffer *>(rgp.world->vd.worldVb);
+    const uint8_t *bytes=nullptr;
+    if(vb->dynamic&&vb->shadowInitialized&&vb->shadow.size()>=vb->size) bytes=vb->shadow.data();
+    else bytes=static_cast<const uint8_t *>(vb->mapped);
+    if(!bytes) { std::snprintf(output,outputSize,"unmapped"); return; }
+    constexpr uint64_t stride=44u;
+    const uint64_t first=firstVertex,count=vertexCount,bufferBytes=vb->size;
+    if(first>UINT64_MAX/stride||count>UINT64_MAX-first||(first+count)>bufferBytes/stride) {
+        std::snprintf(output,outputSize,"out_of_range:first=%u,count=%u,bytes=%llu",firstVertex,vertexCount,(unsigned long long)bufferBytes); return;
+    }
+    uint32_t sampled=0,finite=0,bad=0;
+    float minX=std::numeric_limits<float>::infinity(),minY=minX,minZ=minX;
+    float maxX=-minX,maxY=-minX,maxZ=-minX;
+    float firstXYZ[3]{};
+    bool haveFirst=false;
+    const uint32_t step=std::max(1u,vertexCount/64u);
+    for(uint32_t i=0;i<vertexCount;i+=step) {
+        float xyz[3]{};
+        std::memcpy(xyz,bytes+(first+i)*stride,sizeof(xyz));
+        ++sampled;
+        if(!std::isfinite(xyz[0])||!std::isfinite(xyz[1])||!std::isfinite(xyz[2])) { ++bad; continue; }
+        if(!haveFirst) { firstXYZ[0]=xyz[0]; firstXYZ[1]=xyz[1]; firstXYZ[2]=xyz[2]; haveFirst=true; }
+        ++finite;
+        minX=std::min(minX,xyz[0]); maxX=std::max(maxX,xyz[0]);
+        minY=std::min(minY,xyz[1]); maxY=std::max(maxY,xyz[1]);
+        minZ=std::min(minZ,xyz[2]); maxZ=std::max(maxZ,xyz[2]);
+    }
+    std::snprintf(output,outputSize,
+        "sampled=%u,finite=%u,bad=%u,x=(%.6g,%.6g),y=(%.6g,%.6g),z=(%.6g,%.6g),first=(%.6g,%.6g,%.6g)",
+        sampled,finite,bad,finite?minX:0.0f,finite?maxX:0.0f,finite?minY:0.0f,finite?maxY:0.0f,
+        finite?minZ:0.0f,finite?maxZ:0.0f,haveFirst?firstXYZ[0]:0.0f,haveFirst?firstXYZ[1]:0.0f,haveFirst?firstXYZ[2]:0.0f);
+}
+
 void Switch_QueueWorldDrawAuditSurface(const Material *material,const char *techniqueName,
     const char *vertexShaderName,const char *pixelShaderName,uint32_t passIndex,
     uint32_t surfaceIndex,uint32_t firstVertex,uint32_t vertexCount,
@@ -8256,6 +8295,15 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         sig=Switch_AuditHashMix(sig,surface?surface->lightmapIndex:UINT32_MAX);
         sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(m_indices));
         sig=Switch_AuditHashMix(sig,m_streams[0].stride);
+        sig=Switch_AuditHashMix(sig,m_viewport.X);
+        sig=Switch_AuditHashMix(sig,m_viewport.Y);
+        sig=Switch_AuditHashMix(sig,m_viewport.Width);
+        sig=Switch_AuditHashMix(sig,m_viewport.Height);
+        sig=Switch_AuditHashMix(sig,m_scissor?1u:0u);
+        sig=Switch_AuditHashMix(sig,static_cast<uint32_t>(m_scissorRect.left));
+        sig=Switch_AuditHashMix(sig,static_cast<uint32_t>(m_scissorRect.top));
+        sig=Switch_AuditHashMix(sig,static_cast<uint32_t>(m_scissorRect.right));
+        sig=Switch_AuditHashMix(sig,static_cast<uint32_t>(m_scissorRect.bottom));
         sig=Switch_AuditHashMix(sig,m_decl?m_decl->switchVertDeclType:UINT32_MAX);
         sig=Switch_AuditHashMix(sig,static_cast<uint32_t>(m_depthEnable)|(static_cast<uint32_t>(m_depthWrite)<<1u)|
             (static_cast<uint32_t>(m_blendEnable)<<2u)|(static_cast<uint32_t>(m_alphaTest)<<3u)|
@@ -8288,9 +8336,12 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             if(amount>=sizeof(bindings)-used) { used=sizeof(bindings)-1u; bindings[used]='\0'; break; }
             used+=amount;
         }
-        char sources[860]{},uv[700]{};
+        char sources[860]{},uv[700]{},pos[420]{};
         Switch_FormatMaterialTextureSources(material,sources,sizeof(sources));
-        if(worldSurface) Switch_FormatWorldVertexUvRange(surface->firstVertex,surface->vertexCount,uv,sizeof(uv));
+        if(worldSurface) {
+            Switch_FormatWorldVertexUvRange(surface->firstVertex,surface->vertexCount,uv,sizeof(uv));
+            Switch_FormatWorldVertexPositionRange(surface->firstVertex,surface->vertexCount,pos,sizeof(pos));
+        } else std::snprintf(pos,sizeof(pos),"not_world_surface");
         else if(!auditIndexData||!m_decl||!indexCount) std::snprintf(uv,sizeof(uv),"unavailable:index_data_or_decl_missing");
         else {
             const uint32_t uvIndexOffset=surface?batchTriangleOffset*3u:0u;
@@ -8337,9 +8388,9 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         const uint32_t lightmap=worldSurface?surface->lightmapIndex:UINT32_MAX;
         const uint32_t baseIndex=surface?surface->baseIndex:UINT32_MAX;
         const uint32_t localIndexStart=startIndex+batchTriangleOffset*3u;
-        char line[6144];
+        char line[7168];
         std::snprintf(line,sizeof(line),
-            "[KisakCOD][RENDER OBJECT] status=%s kind=%s object=%u surface=%u material=%.80s type=%u pass=%u tech=%.48s vs=%.48s(vsSerial=%llu) ps=%.48s(psSerial=%llu) pipeline=%016llx batchSurfaces=%u batchTriOffset=%u verts=%u+%u tris=%u lightmap=%u baseIndex=%u draw{prim=%u,tri=%u,indexCount=%u,startIndex=%u,surfaceIndexStart=%u,baseVertex=%d,streamMask=0x%x,stride=%u,decl=%u,vb=%p,ib=%p} uv={%s} bindings={%s} sources={%s} state{depth=%u/%u,cull=%u,blend=%u,alpha=%u/%u,stencil=%u,colorMask=0x%x,rt=%p,depthTarget=%p}\n",
+            "[KisakCOD][RENDER OBJECT] status=%s kind=%s object=%u surface=%u material=%.80s type=%u pass=%u tech=%.48s vs=%.48s(vsSerial=%llu) ps=%.48s(psSerial=%llu) pipeline=%016llx batchSurfaces=%u batchTriOffset=%u verts=%u+%u tris=%u lightmap=%u baseIndex=%u draw{prim=%u,tri=%u,indexCount=%u,startIndex=%u,surfaceIndexStart=%u,baseVertex=%d,streamMask=0x%x,stride=%u,decl=%u,vb=%p,ib=%p} uv={%s} pos={%s} viewport={x=%u,y=%u,w=%u,h=%u,z=(%.4g,%.4g)} scissor={on=%u,rect=(%d,%d,%d,%d)} bindings={%s} sources={%s} state{depth=%u/%u,cull=%u,blend=%u,alpha=%u/%u,stencil=%u,colorMask=0x%x,rt=%p,depthTarget=%p}\n",
             status,worldSurface?"BSP":(surface?"MODEL":"DRAW_SURF"),objectId,surfaceIndex,
             material&&material->info.name?material->info.name:"<unknown>",objectType,passIndex,
             tech?tech:"<none>",vsName?vsName:"<none>",static_cast<unsigned long long>(vsSerial),
@@ -8350,7 +8401,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             g_switchLastDrawStreamMask.load(std::memory_order_relaxed),m_streams[0].stride,
             m_decl?static_cast<unsigned>(m_decl->switchVertDeclType):UINT32_MAX,
             static_cast<void *>(m_streams[0].buffer),static_cast<void *>(m_indices),
-            uv,bindings,sources,m_depthEnable?1u:0u,m_depthWrite?1u:0u,m_cullMode,
+            uv,pos,static_cast<unsigned>(m_viewport.X),static_cast<unsigned>(m_viewport.Y),
+            static_cast<unsigned>(m_viewport.Width),static_cast<unsigned>(m_viewport.Height),
+            m_viewport.MinZ,m_viewport.MaxZ,m_scissor?1u:0u,m_scissorRect.left,m_scissorRect.top,
+            m_scissorRect.right,m_scissorRect.bottom,bindings,sources,
+            m_depthEnable?1u:0u,m_depthWrite?1u:0u,m_cullMode,
             m_blendEnable?1u:0u,m_alphaTest?1u:0u,m_alphaRef,m_stencilEnable?1u:0u,m_colorWriteMask,
             m_color&&m_color->texture?reinterpret_cast<void *>(m_color->texture->view):nullptr,
             m_depth&&m_depth->texture?reinterpret_cast<void *>(m_depth->texture->view):nullptr);
