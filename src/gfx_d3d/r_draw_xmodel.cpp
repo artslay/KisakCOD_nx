@@ -1,5 +1,8 @@
 #include <universal/q_shared.h>
 #include "r_draw_xmodel.h"
+#ifdef __SWITCH__
+extern void Switch_SetRenderAuditObject(uint32_t surfaceType, uint32_t objectId);
+#endif
 #include "rb_stats.h"
 #include <database/database.h>
 #include "r_state.h"
@@ -161,6 +164,9 @@ uint32_t __cdecl R_DrawXModelRigidSurfLitInternal(
 
         R_SetModelLightingCoordsForSource(modelSurf->surf.info.lightingHandle, context.source);
         R_SetReflectionProbe(context, drawSurf.fields.reflectionProbeIndex);
+#ifdef __SWITCH__
+        Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
+#endif
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
         if (++drawSurfIndex == drawSurfCount)
             break;
