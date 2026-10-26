@@ -7795,6 +7795,30 @@ bool IDirect3DDevice9::EnsurePipeline()
            ((m_colorWriteMask & 4) ? VK_COLOR_COMPONENT_B_BIT : 0) |
            ((m_colorWriteMask & 8) ? VK_COLOR_COMPONENT_A_BIT : 0));
 
+#ifdef __SWITCH__
+    if (switchSolidWhiteProbeActive)
+    {
+        static bool switchColorProbeStateLogged = false;
+        if (!switchColorProbeStateLogged)
+        {
+            switchColorProbeStateLogged = true;
+            char trace[256];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VK PS COLOR PROBE STATE] serial=%llu key=%016llx cull=%u depth=%u depthWrite=%u stencil=%u blend=%u mask=0x%x colorFormat=%u\\n",
+                static_cast<unsigned long long>(m_pixelShader->serial),
+                static_cast<unsigned long long>(key),
+                static_cast<unsigned>(raster.cullMode),
+                static_cast<unsigned>(depth.depthTestEnable),
+                static_cast<unsigned>(depth.depthWriteEnable),
+                static_cast<unsigned>(depth.stencilTestEnable),
+                static_cast<unsigned>(colorBlend.blendEnable),
+                static_cast<unsigned>(colorBlend.colorWriteMask),
+                static_cast<unsigned>(colorFormat));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
+
     VkPipelineColorBlendStateCreateInfo blend{};
     blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     blend.attachmentCount = 1;
