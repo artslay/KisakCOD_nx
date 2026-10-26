@@ -2554,6 +2554,11 @@ bool PatchFragmentShaderToOutputS0AtUv(
     uint32_t sampleBlock = 0u;
     size_t sampleOffset = SIZE_MAX;
     std::vector<size_t> outputStoreOffsets;
+    // The texture probe must remain visible even when the original shader
+    // discards fragments. These edits are strictly opt-in with the S0 probe.
+    std::vector<std::pair<size_t, bool>> controlOverrides;
+    uint32_t killOverridesPatched = 0u;
+    uint32_t demoteOverridesPatched = 0u;
 
     for (size_t offset = 5u; offset < words.size();)
     {
@@ -2616,6 +2621,23 @@ bool PatchFragmentShaderToOutputS0AtUv(
             // by output blocks outside that block only when sampling is in the
             // function entry block, which dominates all reachable blocks.
             outputStoreOffsets.push_back(offset);
+        }
+        else if (currentFunction == entryFunctionId && currentBlock &&
+                 sampleOffset != SIZE_MAX && offset > sampleOffset &&
+                 (currentBlock == sampleBlock || sampleBlock == entryBlock) &&
+                 (op == SpvOpKill || static_cast<uint32_t>(op) == 4416u))
+        {
+            // Replace a discard/termination with the already-defined sample
+            // followed by return, so this probe can reveal the texture itself.
+            controlOverrides.emplace_back(offset, true);
+        }
+        else if (currentFunction == entryFunctionId && currentBlock &&
+                 sampleOffset != SIZE_MAX && offset > sampleOffset &&
+                 (currentBlock == sampleBlock || sampleBlock == entryBlock) &&
+                 static_cast<uint32_t>(op) == 5380u)
+        {
+            // A demoted helper invocation cannot write the probe color.
+            controlOverrides.emplace_back(offset, false);
         }
 
         offset += wc;
@@ -2700,6 +2722,39 @@ bool PatchFragmentShaderToOutputS0AtUv(
         ++outputStoresPatched;
     }
 
+    // Apply control-flow edits from the end of the module so inserting the
+    // sample store + return cannot invalidate offsets still to be processed.
+    std::sort(controlOverrides.begin(), controlOverrides.end(),
+        [](const auto &a, const auto &b) { return a.first > b.first; });
+    for (const auto &overrideInfo : controlOverrides)
+    {
+        const size_t offset = overrideInfo.first;
+        if (offset >= words.size())
+        {
+            logResult("skip_control_offset", sampleId, sampleType,
+                      sampleCoordType, coordComponents, sampleBlock);
+            return false;
+        }
+        if (overrideInfo.second)
+        {
+            words[offset] = (3u << 16) | static_cast<uint32_t>(SpvOpStore);
+            words.insert(words.begin() + static_cast<std::ptrdiff_t>(offset + 1u),
+                {outputId, sampleId, (1u << 16) | static_cast<uint32_t>(SpvOpReturn)});
+            ++killOverridesPatched;
+        }
+        else
+        {
+            words[offset] = (1u << 16) | static_cast<uint32_t>(SpvOpNop);
+            ++demoteOverridesPatched;
+        }
+    }
+
+    char controlTrace[192];
+    std::snprintf(controlTrace, sizeof(controlTrace),
+        "[KisakCOD][VK PS S0 UV CONTROL] serial=%llu kill=%u demote=%u\\n",
+        static_cast<unsigned long long>(actualSerial),
+        killOverridesPatched, demoteOverridesPatched);
+    Switch_LogWrite(controlTrace);
     logResult("patched_s0_uv", sampleId, sampleType,
               sampleCoordType, coordComponents, sampleBlock);
     return true;
