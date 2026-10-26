@@ -7921,7 +7921,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         // only for audited floor surface 1583.
         if (switchFloorSolidWhiteProbeActive &&
             g_switchWorldDrawAudit.surfaceIndex == 1583u)
-            Switch_LogWrite("[KisakCOD][VK VS POSITION TEST] action=keep_original_position_for_white_ps_probe\\n");
+            Switch_LogWrite("[KisakCOD][VK VS POSITION TEST] action=keep_original_position_for_white_ps_probe\n");
 #endif
         if (loweredVertexShuffles && loweredVertexShuffleCount)
         {
