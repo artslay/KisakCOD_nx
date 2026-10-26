@@ -1779,7 +1779,7 @@ void __cdecl R_SetSampler(
         context.state->techType < TECHNIQUE_LIT_END)
     {
         static uint32_t switchLitSamplerTraceCount = 0;
-        if (switchLitSamplerTraceCount < 48u)
+        if (switchLitSamplerTraceCount < 3u)
         {
             g_switchLitSamplerTraceActive = 1u;
             const uint32_t sequence = switchLitSamplerTraceCount++;
