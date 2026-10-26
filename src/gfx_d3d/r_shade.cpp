@@ -258,7 +258,7 @@ void __cdecl R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const M
                     "[KisakCOD][VK FLOOR MATRIX REFRESH] src=%u dest=%u firstRow=%u rows=%u version=%u cached=%u "
                     "base0=(%.5g,%.5g,%.5g,%.5g) base3=(%.5g,%.5g,%.5g,%.5g) "
                     "r0=(%.5g,%.5g,%.5g,%.5g) r1=(%.5g,%.5g,%.5g,%.5g) "
-                    "r2=(%.5g,%.5g,%.5g,%.5g) r3=(%.5g,%.5g,%.5g,%.5g)\\n",
+                    "r2=(%.5g,%.5g,%.5g,%.5g) r3=(%.5g,%.5g,%.5g,%.5g)\n",
                     routingData->u.codeConst.index, routingData->dest,
                     routingData->u.codeConst.firstRow, routingData->u.codeConst.rowCount,
                     static_cast<unsigned>(context.source->matrixVersions[
