@@ -1117,7 +1117,7 @@ bool VulkanBackend::CreateSwapchain()
     char usageTrace[192];
     std::snprintf(
         usageTrace, sizeof(usageTrace),
-        "[KisakCOD][VK] swapchain_transfer_src=%u supportedUsageFlags=0x%x usage=0x%x\\n",
+        "[KisakCOD][VK] swapchain_transfer_src=%u supportedUsageFlags=0x%x usage=0x%x\n",
         m_swapchainTransferSrc ? 1u : 0u,
         static_cast<unsigned>(caps.supportedUsageFlags),
         static_cast<unsigned>(usage));
