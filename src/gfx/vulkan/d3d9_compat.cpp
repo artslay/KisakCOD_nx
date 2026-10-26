@@ -3177,6 +3177,42 @@ bool PatchVertexShaderToSmallTriangle(std::vector<uint32_t> &words, uint64_t act
         return false;
     }
 
+    // The original VS body can write BuiltIn Position again after the entry
+    // injection. Re-assert the test position at each return so it wins over all
+    // original position writes and over control-flow paths that return early.
+    std::vector<size_t> returnOffsets;
+    currentFunction = 0u;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+        {
+            report("skip_invalid_return_scan", positionOutputId, vertexIndexId);
+            return false;
+        }
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpFunction && wc >= 3u)
+            currentFunction = ins[2];
+        else if (op == SpvOpFunctionEnd)
+            currentFunction = 0u;
+        else if (currentFunction == entryFunctionId && op == SpvOpReturn)
+            returnOffsets.push_back(offset);
+        offset += wc;
+    }
+    if (returnOffsets.empty())
+    {
+        report("skip_no_entry_return", positionOutputId, vertexIndexId);
+        return false;
+    }
+    std::sort(returnOffsets.begin(), returnOffsets.end(), std::greater<size_t>());
+    for (const size_t offset : returnOffsets)
+    {
+        words.insert(words.begin() + static_cast<std::ptrdiff_t>(offset),
+            {(3u << 16) | static_cast<uint32_t>(SpvOpStore),
+             positionOutputId, positionValueId});
+    }
+
     words[3] = nextId;
     report("patched_small_triangle", positionOutputId, vertexIndexId);
     return true;
