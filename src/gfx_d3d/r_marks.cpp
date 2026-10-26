@@ -241,6 +241,47 @@ static void R_LogAabbTraversalFault(
 #endif
 }
 
+#ifdef __SWITCH__
+static_assert(sizeof(GfxAabbTree) == 56, "Switch marks traversal requires native GfxAabbTree layout");
+
+static bool R_MarksAabbTreeIsFlattened(const GfxAabbTree *root)
+{
+    // The fixed-up representation packs root first and its direct children
+    // immediately after it, so offsets already use the native runtime stride.
+    return root && root->childCount != 0 &&
+        root->childrenOffset == static_cast<int>(sizeof(GfxAabbTree));
+}
+#endif
+
+static int R_MarksNativeAabbChildOffset(
+    const GfxAabbTree *root,
+    const GfxAabbTree *tree)
+{
+    if (!tree || tree->childCount == 0)
+        return tree ? tree->childrenOffset : 0;
+
+    const int offset = tree->childrenOffset;
+#ifdef __SWITCH__
+    if (offset <= 0 || R_MarksAabbTreeIsFlattened(root))
+        return offset;
+
+    // Some loaded CoD4 GfxWorld records retain offsets based on the serialized
+    // 44-byte x86 record, while the Switch runtime records are 56 bytes.
+    // Normalize those offsets before bounds checks and pointer arithmetic.
+    constexpr int32_t serializedStride = 44;
+    if (offset % serializedStride != 0)
+        return offset;
+
+    const int64_t nativeOffset =
+        static_cast<int64_t>(offset / serializedStride) *
+        static_cast<int64_t>(sizeof(GfxAabbTree));
+    return nativeOffset <= INT32_MAX ? static_cast<int>(nativeOffset) : offset;
+#else
+    (void)root;
+    return offset;
+#endif
+}
+
 static void R_AABBTreeSurfacesIterative(
     GfxAabbTree *root,
     uint32_t nodeCount,
@@ -301,7 +342,7 @@ static void R_AABBTreeSurfacesIterative(
 
         if (tree->childCount)
         {
-            const int offset = tree->childrenOffset;
+            const int offset = R_MarksNativeAabbChildOffset(root, tree);
             if (offset <= 0 || offset % static_cast<int>(sizeof(GfxAabbTree)) != 0)
             {
                 R_LogAabbTraversalFault("invalid_child_offset", root, tree, nodeCount, visited);
