@@ -11,6 +11,8 @@
 
 #ifdef __SWITCH__
 #include <cstdio>
+#include <cstring>
+extern uint32_t g_switchFloorRasterProbeSurfaceIndex;
 extern void Switch_LogWrite(const char *msg);
 extern void Switch_BeginWorldDrawAudit(
     const Material *material, const char *techniqueName,
@@ -34,10 +36,34 @@ static void R_SwitchQueueBspAuditSurface(
     const MaterialTechnique *technique, const MaterialPass *pass, uint32_t passIndex)
 {
     if(!surface) return;
+    const Material *material = surface->material;
+    const char *materialName =
+        material && material->info.name ? material->info.name : nullptr;
+    const char *vertexShaderName =
+        pass && pass->vertexShader ? pass->vertexShader->name : nullptr;
+    const char *pixelShaderName =
+        pass && pass->pixelShader ? pass->pixelShader->name : nullptr;
+
+    // Select an actually submitted/visible BSP surface using the floor shader
+    // pair. Surface 1583 was CPU-culled in the previous test, so testing its
+    // unmodified clip position could not diagnose the black floor.
+    if (g_switchFloorRasterProbeSurfaceIndex == UINT32_MAX &&
+        passIndex == 0u &&
+        materialName && std::strstr(materialName, "icbm_tunnelfloor") &&
+        vertexShaderName && std::strstr(vertexShaderName, "lm_tc0n0_sm3") &&
+        pixelShaderName && std::strstr(pixelShaderName, "lm_r0c0n0_sm3"))
+    {
+        g_switchFloorRasterProbeSurfaceIndex = surfaceIndex;
+        char trace[320];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][VK FLOOR VISIBILITY PROBE] action=select_visible_draw surface=%u pass=%u material=%.72s vs=%.56s ps=%.56s originalVisibility=1\\n",
+            surfaceIndex, passIndex, materialName, vertexShaderName, pixelShaderName);
+        Switch_LogWrite(trace);
+    }
+
     Switch_QueueWorldDrawAuditSurface(
-        surface->material, technique&&technique->name?technique->name:nullptr,
-        pass&&pass->vertexShader?pass->vertexShader->name:nullptr,
-        pass&&pass->pixelShader?pass->pixelShader->name:nullptr,
+        material, technique&&technique->name?technique->name:nullptr,
+        vertexShaderName, pixelShaderName,
         passIndex,surfaceIndex,surface->tris.firstVertex,surface->tris.vertexCount,
         triangleCount,surface->lightmapIndex,surface->tris.baseIndex);
 }
