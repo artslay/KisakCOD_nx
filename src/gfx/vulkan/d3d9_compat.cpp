@@ -5954,15 +5954,42 @@ bool IDirect3DDevice9::BindUniformSet(
     // layout (columns gathered from the engine's row-major GfxMatrix memory).
     // This isolates the suspected stale/wrong matrix constants without touching
     // other materials or changing the uploaded vertex/index buffers.
-    const bool switchFloorVpProbeActive =
-        setIndex == 1u && m_vertexShader && m_pixelShader &&
-        m_vertexShader->serial == 1820u && m_pixelShader->serial == 1821u &&
-        SwitchPsColorDebugTargetMatches(
-            SwitchPsColorDebugTargetSerial(), m_pixelShader->serial,
-            m_pixelShader->parseData) &&
-        gfxCmdBufSourceState.viewParms3D;
-    if (switchFloorVpProbeActive)
+    const bool switchFloorVpProbeCandidate =
+        setIndex == 1u && m_vertexShader && m_vertexShader->serial == 1820u;
+    if (switchFloorVpProbeCandidate)
     {
+        const uint32_t switchFloorVpPixelSerial =
+            m_pixelShader ? m_pixelShader->serial : 0u;
+        const uint32_t switchFloorVpTargetSerial =
+            SwitchPsColorDebugTargetSerial();
+        const bool switchFloorVpTargetMatches =
+            m_pixelShader && SwitchPsColorDebugTargetMatches(
+                switchFloorVpTargetSerial, m_pixelShader->serial,
+                m_pixelShader->parseData);
+        const bool switchFloorVpHasView =
+            gfxCmdBufSourceState.viewParms3D != nullptr;
+        static uint32_t switchFloorVpGateLogCount = 0u;
+        if (switchFloorVpGateLogCount < 8u)
+        {
+            ++switchFloorVpGateLogCount;
+            char gateTrace[320];
+            std::snprintf(
+                gateTrace, sizeof(gateTrace),
+                "[KisakCOD][VK FLOOR VP GATE] set=%u vs=%u ps=%u target=%u targetMatches=%u view=%p floatCount=%u\n",
+                setIndex, m_vertexShader->serial, switchFloorVpPixelSerial,
+                switchFloorVpTargetSerial, switchFloorVpTargetMatches ? 1u : 0u,
+                static_cast<const void *>(gfxCmdBufSourceState.viewParms3D),
+                layout.floatCount);
+            Switch_LogWrite(gateTrace);
+        }
+        // Gate on the actual shader serial and debug target. The parseData
+        // matcher is diagnostic only; it must not suppress this one-pair probe.
+        const bool switchFloorVpProbeActive =
+            switchFloorVpPixelSerial == 1821u &&
+            switchFloorVpTargetSerial == 1821u &&
+            switchFloorVpHasView;
+        if (switchFloorVpProbeActive)
+        {
         const float *matrix =
             reinterpret_cast<const float *>(
                 &gfxCmdBufSourceState.viewParms3D->viewProjectionMatrix);
@@ -6007,6 +6034,7 @@ bool IDirect3DDevice9::BindUniformSet(
                 old[12], old[13], old[14], old[15],
                 replacement[3][0], replacement[3][1], replacement[3][2], replacement[3][3]);
             Switch_LogWrite(trace);
+        }
         }
     }
 #endif
