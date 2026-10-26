@@ -2820,6 +2820,7 @@ bool PatchFragmentShaderToSolidWhite(
     // The single-shader visual probe must still show white if the original
     // shader would discard/demote every floor fragment.
     std::vector<std::pair<size_t, bool>> controlOverrides;
+    bool entryStoreInjected = false;
 
     const auto logResult = [&](const char *action, uint32_t stores,
                                uint32_t outputType, uint32_t scalarType,
@@ -2853,10 +2854,11 @@ bool PatchFragmentShaderToSolidWhite(
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK PS COLOR TEST] target=%llu actual=%llu action=%s output=%u outputType=%u floatType=%u stores=%u killOrTerminate=%u demote=%u whiteId=%u\n",
+            "[KisakCOD][VK PS COLOR TEST] target=%llu actual=%llu action=%s output=%u outputType=%u floatType=%u stores=%u entryStore=%u killOrTerminate=%u demote=%u whiteId=%u\n",
             static_cast<unsigned long long>(targetSerial),
             static_cast<unsigned long long>(actualSerial),
-            action, outputId, outputType, scalarType, stores, killCount, demoteCount, whiteId);
+            action, outputId, outputType, scalarType, stores,
+            entryStoreInjected ? 1u : 0u, killCount, demoteCount, whiteId);
         Switch_LogWrite(trace);
     };
 
@@ -3150,6 +3152,69 @@ bool PatchFragmentShaderToSolidWhite(
             // OpDemoteToHelperInvocationEXT has no operands; replace it with OpNop.
             words[offset] = (1u << 16) | static_cast<uint32_t>(SpvOpNop);
         }
+    }
+
+    // Existing-store replacement does not cover a branch that returns before
+    // writing Location 0. Seed the color output in the entry block, after all
+    // Function-scope declarations, so every ordinary return leaves it white.
+    uint32_t scanFunction = 0u;
+    bool inEntryBlock = false;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+        {
+            logResult("skip_entry_store_invalid_instruction", 0u,
+                      outputValueType, floatType, whiteId);
+            return false;
+        }
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpFunction && wc >= 3u)
+        {
+            scanFunction = ins[2];
+            inEntryBlock = false;
+        }
+        else if (op == SpvOpFunctionEnd)
+        {
+            if (scanFunction == entryFunctionId)
+                break;
+            scanFunction = 0u;
+            inEntryBlock = false;
+        }
+        else if (scanFunction == entryFunctionId && op == SpvOpLabel)
+        {
+            if (!inEntryBlock)
+            {
+                inEntryBlock = true;
+                offset += wc;
+                continue;
+            }
+            break;
+        }
+        else if (scanFunction == entryFunctionId && inEntryBlock)
+        {
+            if (op == SpvOpVariable && wc >= 4u &&
+                ins[3] == SpvStorageClassFunction)
+            {
+                offset += wc;
+                continue;
+            }
+
+            words.insert(
+                words.begin() + static_cast<std::ptrdiff_t>(offset),
+                {(3u << 16) | static_cast<uint32_t>(SpvOpStore),
+                 outputId, whiteId});
+            entryStoreInjected = true;
+            break;
+        }
+        offset += wc;
+    }
+    if (!entryStoreInjected)
+    {
+        logResult("skip_entry_store_not_injected", 0u,
+                  outputValueType, floatType, whiteId);
+        return false;
     }
 
     logResult("patched_solid_white", static_cast<uint32_t>(outputStores.size()),
