@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <cmath>
 #include <limits>
 #include <climits>
@@ -3746,6 +3747,94 @@ bool PatchFragmentShaderForAlphaTest(
     *alphaRefSpecId = 0;
     return true;
 }
+
+#ifdef __SWITCH__
+// Build an interface-free control pipeline for the one-shot floor raster test.
+// This deliberately bypasses the game's vertex transform and pixel shader:
+// indices 0,1,2 form a visible clip-space triangle and every covered fragment
+// writes opaque white. It distinguishes a bad game VS from broken raster/target state.
+static void SwitchEmitFloorProbeInstruction(
+    std::vector<uint32_t> &words, SpvOp op,
+    std::initializer_list<uint32_t> operands)
+{
+    words.push_back((static_cast<uint32_t>(operands.size() + 1u) << 16u) |
+                    static_cast<uint32_t>(op));
+    words.insert(words.end(), operands.begin(), operands.end());
+}
+
+static bool SwitchBuildFloorRasterProbeVertexSpirv(std::vector<uint32_t> &words)
+{
+    words = {SpvMagicNumber, 0x00010000u, 0u, 28u, 0u};
+    auto emit = [&](SpvOp op, std::initializer_list<uint32_t> a) {
+        SwitchEmitFloorProbeInstruction(words, op, a);
+    };
+    emit(SpvOpCapability, {SpvCapabilityShader});
+    emit(SpvOpMemoryModel, {SpvAddressingModelLogical, SpvMemoryModelGLSL450});
+    emit(SpvOpEntryPoint, {
+        SpvExecutionModelVertex, 21u, 0x6e69616du, 0u, 19u, 20u});
+    emit(SpvOpDecorate, {19u, SpvDecorationBuiltIn, SpvBuiltInVertexIndex});
+    emit(SpvOpDecorate, {20u, SpvDecorationBuiltIn, SpvBuiltInPosition});
+    emit(SpvOpTypeVoid, {1u});
+    emit(SpvOpTypeBool, {2u});
+    emit(SpvOpTypeInt, {3u, 32u, 1u});
+    emit(SpvOpTypeFloat, {4u, 32u});
+    emit(SpvOpTypeVector, {5u, 4u, 4u});
+    emit(SpvOpTypePointer, {6u, SpvStorageClassInput, 3u});
+    emit(SpvOpTypePointer, {7u, SpvStorageClassOutput, 5u});
+    emit(SpvOpTypeFunction, {8u, 1u});
+    emit(SpvOpConstant, {3u, 9u, 0u});
+    emit(SpvOpConstant, {3u, 10u, 1u});
+    emit(SpvOpConstant, {3u, 11u, 2u});
+    emit(SpvOpConstant, {4u, 12u, 0xbf800000u}); // -1.0
+    emit(SpvOpConstant, {4u, 13u, 0x40400000u}); //  3.0
+    emit(SpvOpConstant, {4u, 14u, 0x3f000000u}); //  0.5
+    emit(SpvOpConstant, {4u, 15u, 0x3f800000u}); //  1.0
+    emit(SpvOpConstantComposite, {5u, 16u, 12u, 12u, 14u, 15u});
+    emit(SpvOpConstantComposite, {5u, 17u, 13u, 12u, 14u, 15u});
+    emit(SpvOpConstantComposite, {5u, 18u, 12u, 13u, 14u, 15u});
+    emit(SpvOpVariable, {6u, 19u, SpvStorageClassInput});
+    emit(SpvOpVariable, {7u, 20u, SpvStorageClassOutput});
+    emit(SpvOpFunction, {1u, 21u, SpvFunctionControlMaskNone, 8u});
+    emit(SpvOpLabel, {22u});
+    emit(SpvOpLoad, {3u, 23u, 19u});
+    emit(SpvOpIEqual, {2u, 24u, 23u, 10u});
+    emit(SpvOpIEqual, {2u, 25u, 23u, 11u});
+    emit(SpvOpSelect, {5u, 26u, 24u, 17u, 16u});
+    emit(SpvOpSelect, {5u, 27u, 25u, 18u, 26u});
+    emit(SpvOpStore, {20u, 27u});
+    emit(SpvOpReturn, {});
+    emit(SpvOpFunctionEnd, {});
+    return words.size() > 5u;
+}
+
+static bool SwitchBuildFloorRasterProbeFragmentSpirv(std::vector<uint32_t> &words)
+{
+    words = {SpvMagicNumber, 0x00010000u, 0u, 11u, 0u};
+    auto emit = [&](SpvOp op, std::initializer_list<uint32_t> a) {
+        SwitchEmitFloorProbeInstruction(words, op, a);
+    };
+    emit(SpvOpCapability, {SpvCapabilityShader});
+    emit(SpvOpMemoryModel, {SpvAddressingModelLogical, SpvMemoryModelGLSL450});
+    emit(SpvOpEntryPoint, {
+        SpvExecutionModelFragment, 8u, 0x6e69616du, 0u, 7u});
+    emit(SpvOpExecutionMode, {8u, SpvExecutionModeOriginUpperLeft});
+    emit(SpvOpDecorate, {7u, SpvDecorationLocation, 0u});
+    emit(SpvOpTypeVoid, {1u});
+    emit(SpvOpTypeFloat, {2u, 32u});
+    emit(SpvOpTypeVector, {3u, 2u, 4u});
+    emit(SpvOpTypePointer, {4u, SpvStorageClassOutput, 3u});
+    emit(SpvOpTypeFunction, {5u, 1u});
+    emit(SpvOpConstant, {2u, 6u, 0x3f800000u});
+    emit(SpvOpConstantComposite, {3u, 10u, 6u, 6u, 6u, 6u});
+    emit(SpvOpVariable, {4u, 7u, SpvStorageClassOutput});
+    emit(SpvOpFunction, {1u, 8u, SpvFunctionControlMaskNone, 5u});
+    emit(SpvOpLabel, {9u});
+    emit(SpvOpStore, {7u, 10u});
+    emit(SpvOpReturn, {});
+    emit(SpvOpFunctionEnd, {});
+    return words.size() > 5u;
+}
+#endif
 
 static void LogInvalidUniformLayout(
     const char *reason,
@@ -8248,40 +8337,64 @@ bool IDirect3DDevice9::EnsurePipeline()
         static_cast<void *>(stages[1].module));
 #ifdef __SWITCH__
     VkShaderModule switchFloorSolidProbeModule = VK_NULL_HANDLE;
+    VkShaderModule switchFloorVertexProbeModule = VK_NULL_HANDLE;
     if (switchFloorSolidWhiteProbeActive)
     {
-        std::vector<uint32_t> floorProbeSpirv = m_pixelShader->spirv;
-        if (floorProbeSpirv.empty() ||
-            !PatchFragmentShaderToSolidWhite(
-                floorProbeSpirv, m_pixelShader->serial, m_pixelShader->serial))
+        std::vector<uint32_t> floorVertexProbeSpirv;
+        std::vector<uint32_t> floorFragmentProbeSpirv;
+        if (!SwitchBuildFloorRasterProbeVertexSpirv(floorVertexProbeSpirv) ||
+            !SwitchBuildFloorRasterProbeFragmentSpirv(floorFragmentProbeSpirv))
         {
-            Switch_LogWrite("[KisakCOD][VK FLOOR SOLID PROBE] action=patch_failed\n");
+            Switch_LogWrite("[KisakCOD][VK FLOOR RASTER CONTROL] result=fail reason=build_spirv\n");
             return false;
         }
 
         VkShaderModuleCreateInfo floorProbeInfo{};
         floorProbeInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        floorProbeInfo.codeSize = floorProbeSpirv.size() * sizeof(uint32_t);
-        floorProbeInfo.pCode = floorProbeSpirv.data();
-        const VkResult floorProbeResult = vkCreateShaderModule(
-            m_backend->Device(), &floorProbeInfo, nullptr, &switchFloorSolidProbeModule);
+        floorProbeInfo.codeSize = floorVertexProbeSpirv.size() * sizeof(uint32_t);
+        floorProbeInfo.pCode = floorVertexProbeSpirv.data();
+        VkResult floorProbeResult = vkCreateShaderModule(
+            m_backend->Device(), &floorProbeInfo, nullptr, &switchFloorVertexProbeModule);
         if (floorProbeResult != VK_SUCCESS)
         {
-            char trace[160];
+            char trace[192];
             std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][VK FLOOR SOLID PROBE] action=module_failed result=%d\n",
+                "[KisakCOD][VK FLOOR RASTER CONTROL] result=fail stage=vertex_module vk=%d\n",
                 static_cast<int>(floorProbeResult));
             Switch_LogWrite(trace);
             return false;
         }
+
+        floorProbeInfo.codeSize = floorFragmentProbeSpirv.size() * sizeof(uint32_t);
+        floorProbeInfo.pCode = floorFragmentProbeSpirv.data();
+        floorProbeResult = vkCreateShaderModule(
+            m_backend->Device(), &floorProbeInfo, nullptr, &switchFloorSolidProbeModule);
+        if (floorProbeResult != VK_SUCCESS)
+        {
+            vkDestroyShaderModule(m_backend->Device(), switchFloorVertexProbeModule, nullptr);
+            switchFloorVertexProbeModule = VK_NULL_HANDLE;
+            char trace[192];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VK FLOOR RASTER CONTROL] result=fail stage=fragment_module vk=%d\n",
+                static_cast<int>(floorProbeResult));
+            Switch_LogWrite(trace);
+            return false;
+        }
+
+        // Ignore the game's vertex transform, interpolator interface and pixel
+        // shader for this one surface. The first indexed triangle (0,1,2) fills
+        // most of the screen and writes white if rasterization reaches color output.
+        stages[0].module = switchFloorVertexProbeModule;
         stages[1].module = switchFloorSolidProbeModule;
 
-        char trace[224];
+        char trace[288];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][VK FLOOR SOLID PROBE] action=enabled material=icbm_tunnelfloor ps=%llu surface=%u key=%016llx module=%p\n",
-            static_cast<unsigned long long>(m_pixelShader->serial),
+            "[KisakCOD][VK FLOOR RASTER CONTROL] action=enabled surface=%u key=%016llx gameVS=%llu gamePS=%llu mode=fullscreen_triangle_white vsModule=%p psModule=%p\n",
             g_switchWorldDrawAudit.surfaceIndex,
             static_cast<unsigned long long>(key),
+            static_cast<unsigned long long>(m_vertexShader->serial),
+            static_cast<unsigned long long>(m_pixelShader->serial),
+            static_cast<void *>(switchFloorVertexProbeModule),
             static_cast<void *>(switchFloorSolidProbeModule));
         Switch_LogWrite(trace);
     }
@@ -8298,9 +8411,14 @@ bool IDirect3DDevice9::EnsurePipeline()
     const VkResult pipelineResult = vkCreateGraphicsPipelines(
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
 #ifdef __SWITCH__
+    if (switchFloorVertexProbeModule != VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(
+            m_backend->Device(), switchFloorVertexProbeModule, nullptr);
+        switchFloorVertexProbeModule = VK_NULL_HANDLE;
+    }
     if (switchFloorSolidProbeModule != VK_NULL_HANDLE)
     {
-        // A pipeline retains the compiled shader after its module is destroyed.
         vkDestroyShaderModule(
             m_backend->Device(), switchFloorSolidProbeModule, nullptr);
         switchFloorSolidProbeModule = VK_NULL_HANDLE;
