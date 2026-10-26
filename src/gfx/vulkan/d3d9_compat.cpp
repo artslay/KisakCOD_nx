@@ -125,6 +125,8 @@ struct SwitchQueuedWorldSurfaceAudit
     uint32_t triangleCount = 0;
     uint32_t lightmapIndex = UINT32_MAX;
     uint32_t baseIndex = UINT32_MAX;
+    uint32_t surfaceType = UINT32_MAX;
+    bool worldSurface = true;
 };
 
 static constexpr uint32_t kSwitchQueuedWorldAuditCapacity = 512u;
@@ -256,6 +258,7 @@ void Switch_QueueWorldDrawAuditSurface(const Material *material,const char *tech
     std::snprintf(e.pixelShaderName,sizeof(e.pixelShaderName),"%.63s",pixelShaderName?pixelShaderName:"<none>");
     e.passIndex=passIndex; e.surfaceIndex=surfaceIndex; e.firstVertex=firstVertex; e.vertexCount=vertexCount;
     e.triangleCount=triangleCount; e.lightmapIndex=lightmapIndex; e.baseIndex=baseIndex;
+    e.surfaceType=0u; e.worldSurface=true;
 }
 void Switch_SetRenderAuditContext(const Material *material,const char *techniqueName,
     const char *vertexShaderName,const char *pixelShaderName,uint32_t passIndex,
@@ -271,6 +274,24 @@ void Switch_SetRenderAuditObject(uint32_t surfaceType,uint32_t objectId)
 {
     g_switchRenderAuditContext.surfaceType=surfaceType;
     g_switchRenderAuditContext.objectId=objectId;
+}
+void Switch_QueueRenderAuditObject(
+    uint32_t surfaceType, uint32_t objectId, uint32_t vertexCount,
+    uint32_t triangleCount, uint32_t baseIndex)
+{
+    const Material *material=g_switchRenderAuditContext.material;
+    if(!material) return;
+    Switch_QueueWorldDrawAuditSurface(
+        material,g_switchRenderAuditContext.techniqueName,
+        g_switchRenderAuditContext.vertexShaderName,
+        g_switchRenderAuditContext.pixelShaderName,
+        g_switchRenderAuditContext.passIndex,objectId,0u,vertexCount,
+        triangleCount,UINT32_MAX,baseIndex);
+    if(g_switchQueuedWorldAuditCount) {
+        SwitchQueuedWorldSurfaceAudit &e=g_switchQueuedWorldAudit[g_switchQueuedWorldAuditCount-1u];
+        e.surfaceType=surfaceType;
+        e.worldSurface=false;
+    }
 }
 void Switch_LogWorldSurfaceSkipped(const Material *material,uint32_t surfaceIndex,
     uint32_t firstVertex,uint32_t vertexCount,uint32_t triangleCount,uint32_t lightmapIndex,
@@ -8102,9 +8123,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     auto auditLogObject = [&](const SwitchQueuedWorldSurfaceAudit *surface,const char *status,
                               const char *reason,uint32_t batchTriangleOffset)
     {
+        const bool worldSurface=surface&&surface->worldSurface;
         const Material *material=surface?surface->material:g_switchRenderAuditContext.material;
         if(!surface&&!material) return;
         const uint32_t objectId=surface?surface->surfaceIndex:g_switchRenderAuditContext.objectId;
+        const uint32_t objectType=surface?surface->surfaceType:g_switchRenderAuditContext.surfaceType;
         const uint32_t passIndex=surface?surface->passIndex:g_switchRenderAuditContext.passIndex;
         const char *tech=surface?surface->techniqueName:g_switchRenderAuditContext.techniqueName;
         const char *vsName=surface?surface->vertexShaderName:g_switchRenderAuditContext.vertexShaderName;
@@ -8117,7 +8140,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         sig=Switch_AuditHashString(sig,status); sig=Switch_AuditHashString(sig,reason);
         sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(material));
         sig=Switch_AuditHashMix(sig,objectId);
-        sig=Switch_AuditHashMix(sig,surface?0u:g_switchRenderAuditContext.surfaceType);
+        sig=Switch_AuditHashMix(sig,objectType);
         sig=Switch_AuditHashMix(sig,passIndex); sig=Switch_AuditHashMix(sig,vsSerial);
         sig=Switch_AuditHashMix(sig,psSerial); sig=Switch_AuditHashMix(sig,pipelineKey);
         sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(m_decl));
@@ -8161,9 +8184,12 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         }
         char sources[860]{},uv[700]{};
         Switch_FormatMaterialTextureSources(material,sources,sizeof(sources));
-        if(surface) Switch_FormatWorldVertexUvRange(surface->firstVertex,surface->vertexCount,uv,sizeof(uv));
+        if(worldSurface) Switch_FormatWorldVertexUvRange(surface->firstVertex,surface->vertexCount,uv,sizeof(uv));
         else if(!auditIndexData||!m_decl||!indexCount) std::snprintf(uv,sizeof(uv),"unavailable:index_data_or_decl_missing");
         else {
+            const uint32_t uvIndexOffset=surface?batchTriangleOffset*3u:0u;
+            const uint32_t remainingIndexCount=uvIndexOffset<indexCount?indexCount-uvIndexOffset:0u;
+            const uint32_t uvIndexCount=surface?std::min<uint32_t>(surface->triangleCount*3u,remainingIndexCount):indexCount;
             size_t uvUsed=0; uint32_t uvSlots=0;
             for(const _D3DVERTEXELEMENT9 &element:m_decl->elements) {
                 if(element.Stream>=16u||element.Usage!=5u||!m_streams[element.Stream].buffer||!m_streams[element.Stream].stride) continue;
@@ -8179,9 +8205,9 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 }
                 float minU=std::numeric_limits<float>::infinity(),maxU=-minU,minV=minU,maxV=-minU;
                 uint32_t good=0,bad=0,outside=0;
-                const uint32_t step=std::max(1u,indexCount/64u);
-                for(uint32_t k=0;k<indexCount;k+=step) {
-                    uint16_t raw=0; std::memcpy(&raw,auditIndexData+static_cast<size_t>(startIndex+k)*sizeof(raw),sizeof(raw));
+                const uint32_t step=std::max(1u,uvIndexCount/64u);
+                for(uint32_t k=0;k<uvIndexCount;k+=step) {
+                    uint16_t raw=0; std::memcpy(&raw,auditIndexData+static_cast<size_t>(startIndex+uvIndexOffset+k)*sizeof(raw),sizeof(raw));
                     const int64_t effective=static_cast<int64_t>(baseVertexIndex)+raw;
                     if(effective<0) { ++bad; continue; }
                     const uint64_t vs=static_cast<uint64_t>(m_streams[element.Stream].offset)+static_cast<uint64_t>(effective)*stride;
@@ -8198,22 +8224,22 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             }
             if(!uvSlots) std::snprintf(uv,sizeof(uv),"no_TEXCOORD_inputs_in_decl");
         }
-        const uint32_t surfaceIndex=surface?surface->surfaceIndex:UINT32_MAX;
+        const uint32_t surfaceIndex=worldSurface?surface->surfaceIndex:UINT32_MAX;
         const uint32_t firstVertex=surface?surface->firstVertex:0u;
         const uint32_t vertices=surface?surface->vertexCount:numVertices;
         const uint32_t triangles=surface?surface->triangleCount:primitiveCount;
-        const uint32_t lightmap=surface?surface->lightmapIndex:UINT32_MAX;
+        const uint32_t lightmap=worldSurface?surface->lightmapIndex:UINT32_MAX;
+        const uint32_t baseIndex=surface?surface->baseIndex:UINT32_MAX;
         const uint32_t localIndexStart=startIndex+batchTriangleOffset*3u;
         char line[6144];
         std::snprintf(line,sizeof(line),
             "[KisakCOD][RENDER OBJECT] status=%s kind=%s object=%u surface=%u material=%.80s type=%u pass=%u tech=%.48s vs=%.48s(vsSerial=%llu) ps=%.48s(psSerial=%llu) pipeline=%016llx batchSurfaces=%u batchTriOffset=%u verts=%u+%u tris=%u lightmap=%u baseIndex=%u draw{prim=%u,tri=%u,indexCount=%u,startIndex=%u,surfaceIndexStart=%u,baseVertex=%d,streamMask=0x%x,stride=%u,decl=%u,vb=%p,ib=%p} uv={%s} bindings={%s} sources={%s} state{depth=%u/%u,cull=%u,blend=%u,alpha=%u/%u,stencil=%u,colorMask=0x%x,rt=%p,depthTarget=%p}\n",
-            status,surface?"BSP":"DRAW_SURF",objectId,surfaceIndex,
-            material&&material->info.name?material->info.name:"<unknown>",
-            surface?0u:g_switchRenderAuditContext.surfaceType,passIndex,
+            status,worldSurface?"BSP":(surface?"MODEL":"DRAW_SURF"),objectId,surfaceIndex,
+            material&&material->info.name?material->info.name:"<unknown>",objectType,passIndex,
             tech?tech:"<none>",vsName?vsName:"<none>",static_cast<unsigned long long>(vsSerial),
             psName?psName:"<none>",static_cast<unsigned long long>(psSerial),
             static_cast<unsigned long long>(pipelineKey),g_switchQueuedWorldAuditCount,batchTriangleOffset,
-            firstVertex,vertices,triangles,lightmap,surface?surface->baseIndex:UINT32_MAX,
+            firstVertex,vertices,triangles,lightmap,baseIndex,
             primitiveType,primitiveCount,indexCount,startIndex,localIndexStart,baseVertexIndex,
             g_switchLastDrawStreamMask.load(std::memory_order_relaxed),m_streams[0].stride,
             m_decl?static_cast<unsigned>(m_decl->switchVertDeclType):UINT32_MAX,
@@ -8233,6 +8259,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 triOffset+=g_switchQueuedWorldAudit[i].triangleCount;
             }
         } else if(g_switchRenderAuditContext.material) auditLogObject(nullptr,status,reason,0u);
+        g_switchQueuedWorldAuditCount=0;
+        g_switchQueuedWorldAuditOverflowReported=false;
     };
     const uint64_t indexCapacity = m_indices
         ? m_indices->size / sizeof(uint16_t) : 0;
