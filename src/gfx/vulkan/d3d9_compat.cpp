@@ -317,7 +317,7 @@ void Switch_LogMaterialSetupSkipped(
     const char *matName=material&&material->info.name?material->info.name:"<unknown>";
     char line[1800];
     std::snprintf(line,sizeof(line),
-        "[KisakCOD][RENDER OBJECT] status=NOT_SUBMITTED kind=DRAW_SURF object=%u type=%u materialIndex=%u material=%.96s reason=%.48s requestedTech=%u techniqueSet=%.64s drawSurf=0x%016llx shader=not-bound bindings=not-bound sources={%s}\n",
+        "[KisakCOD][RENDER OBJECT] status=MATERIAL_SETUP_SKIPPED kind=DRAW_SURF object=%u type=%u materialIndex=%u material=%.96s reason=%.48s requestedTech=%u techniqueSet=%.64s drawSurf=0x%016llx shader=not-bound bindings=not-bound sources={%s}\n",
         objectId,surfaceType,materialSortedIndex,matName,reason?reason:"MATERIAL_SETUP_FAILED",
         requestedTechnique,techSet,static_cast<unsigned long long>(packedDrawSurf),sources);
     Switch_LogWrite(line);
@@ -335,7 +335,7 @@ void Switch_LogWorldSurfaceSkipped(const Material *material,uint32_t surfaceInde
     Switch_FormatMaterialTextureSources(material,sources,sizeof(sources));
     Switch_FormatWorldVertexUvRange(firstVertex,vertexCount,uv,sizeof(uv));
     std::snprintf(line,sizeof(line),
-        "[KisakCOD][RENDER OBJECT] status=NOT_SUBMITTED kind=BSP surface=%u material=%.96s reason=%.40s stage=%u visibility=%u castsShadow=%u vertices=%u+%u triangles=%u lightmap=%u tech=not-run vs=not-run ps=not-run bindings=not-bound uv={%s} sources={%s}\n",
+        "[KisakCOD][RENDER OBJECT] status=PASS_FILTERED kind=BSP surface=%u material=%.96s reason=%.40s scope=per-stage stage=%u visibility=%u castsShadow=%u vertices=%u+%u triangles=%u lightmap=%u tech=not-run vs=not-run ps=not-run bindings=not-bound uv={%s} sources={%s}\n",
         surfaceIndex,material&&material->info.name?material->info.name:"<unknown>",reason?reason:"not_selected",
         stage,visible?1u:0u,castsShadow?1u:0u,firstVertex,vertexCount,triangleCount,lightmapIndex,uv,sources);
     Switch_LogWrite(line);
