@@ -283,6 +283,11 @@ void Switch_SetRenderAuditContext(const Material *material,const char *technique
     const char *vertexShaderName,const char *pixelShaderName,uint32_t passIndex,
     uint32_t surfaceType,uint32_t objectId)
 {
+    if (!Switch_RenderObjectAuditMatchesMaterial(material))
+    {
+        g_switchRenderAuditContext = {};
+        return;
+    }
     g_switchRenderAuditContext.material=material;
     std::snprintf(g_switchRenderAuditContext.techniqueName,sizeof(g_switchRenderAuditContext.techniqueName),"%.63s",techniqueName?techniqueName:"<none>");
     std::snprintf(g_switchRenderAuditContext.vertexShaderName,sizeof(g_switchRenderAuditContext.vertexShaderName),"%.63s",vertexShaderName?vertexShaderName:"<none>");
@@ -355,6 +360,11 @@ void Switch_BeginWorldDrawAudit(const Material *material,const char *techniqueNa
     const char *vertexShaderName,const char *pixelShaderName,uint32_t surfaceIndex,
     uint32_t firstVertex,uint32_t vertexCount,uint32_t triangleCount,uint32_t lightmapIndex)
 {
+    if (!Switch_RenderObjectAuditMatchesMaterial(material))
+    {
+        g_switchWorldDrawAudit = {};
+        return;
+    }
     g_switchWorldDrawAudit.active=material!=nullptr;
     g_switchWorldDrawAudit.material=material;
     std::snprintf(g_switchWorldDrawAudit.techniqueName,sizeof(g_switchWorldDrawAudit.techniqueName),"%.63s",techniqueName?techniqueName:"<none>");
