@@ -2282,7 +2282,7 @@ uint64_t SwitchPsS0UvTestTargetSerial()
     // Keep the diagnostic narrowly scoped to the floor shader seen in the Switch log.
     // Explicit "off" still disables the probe; an explicit serial overrides this default.
     if (!value || !*value)
-        return 1821u; // icbm_tunnelfloor pixel shader: display its actual s0 sample.
+        return UINT64_MAX; // Keep the texture-sampling probe opt-in while testing the output path.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "world") == 0)
@@ -2325,12 +2325,12 @@ bool SwitchPsS0UvTestTargetMatchesLayout(
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
-    // TEMPORARY Switch diagnostic: restrict solid-magenta output to floor PS 1821.
+    // TEMPORARY Switch diagnostic: restrict solid-white output to floor PS 1821.
     // Do not use wildcard mode by default; that paints UI and the whole scene.
     // "off" or "0" disables the test; "all" remains an explicit opt-in.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
     if (!value || !*value)
-        return UINT64_MAX; // Opt-in only; preserve the original fragment shader by default.
+        return 1821u; // Temporarily isolate whether floor PS 1821 can write visible color.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "all") == 0)
@@ -2775,7 +2775,7 @@ bool PatchFragmentShaderToOutputS0AtUv(
     return true;
 }
 
-bool PatchFragmentShaderToSolidMagenta(
+bool PatchFragmentShaderToSolidWhite(
     std::vector<uint32_t> &words,
     uint64_t targetSerial,
     uint64_t actualSerial)
@@ -2797,13 +2797,13 @@ bool PatchFragmentShaderToSolidMagenta(
     std::vector<std::pair<uint32_t, uint32_t>> pointerTypes;
     std::vector<size_t> outputStores;
     std::vector<uint32_t> originalValues;
-    // The single-shader visual probe must still show magenta if the original
+    // The single-shader visual probe must still show white if the original
     // shader would discard/demote every floor fragment.
     std::vector<std::pair<size_t, bool>> controlOverrides;
 
     const auto logResult = [&](const char *action, uint32_t stores,
                                uint32_t outputType, uint32_t scalarType,
-                               uint32_t magentaId)
+                               uint32_t whiteId)
     {
         // The same shader serial can be linked into several pipelines. Report
         // each distinct result once instead of repeating it for every declaration.
@@ -2833,10 +2833,10 @@ bool PatchFragmentShaderToSolidMagenta(
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK PS COLOR TEST] target=%llu actual=%llu action=%s output=%u outputType=%u floatType=%u stores=%u killOrTerminate=%u demote=%u magentaId=%u\n",
+            "[KisakCOD][VK PS COLOR TEST] target=%llu actual=%llu action=%s output=%u outputType=%u floatType=%u stores=%u killOrTerminate=%u demote=%u whiteId=%u\n",
             static_cast<unsigned long long>(targetSerial),
             static_cast<unsigned long long>(actualSerial),
-            action, outputId, outputType, scalarType, stores, killCount, demoteCount, magentaId);
+            action, outputId, outputType, scalarType, stores, killCount, demoteCount, whiteId);
         Switch_LogWrite(trace);
     };
 
@@ -3032,7 +3032,7 @@ bool PatchFragmentShaderToSolidMagenta(
             }
             else if (op == SpvOpKill || static_cast<uint32_t>(op) == 4416u)
             {
-                // bool=true: replace this terminating discard with a magenta store + return.
+                // bool=true: replace this terminating discard with a white store + return.
                 controlOverrides.emplace_back(offset, true);
             }
             else if (static_cast<uint32_t>(op) == 5380u)
@@ -3050,11 +3050,11 @@ bool PatchFragmentShaderToSolidMagenta(
         return false;
     }
 
-    // A magenta vec4 (1, 0, 1, 1), represented as valid SPIR-V constants.
+    // A white vec4 (1, 0, 1, 1), represented as valid SPIR-V constants.
     // New IDs are allocated above the module's existing bound.
     const uint32_t oneId = bound;
     const uint32_t zeroId = bound + 1u;
-    const uint32_t magentaId = bound + 2u;
+    const uint32_t whiteId = bound + 2u;
     std::vector<uint32_t> declarations;
     declarations.reserve(3u + 3u + 7u);
     declarations.push_back((4u << 16) | static_cast<uint32_t>(SpvOpConstant));
@@ -3068,16 +3068,16 @@ bool PatchFragmentShaderToSolidMagenta(
     declarations.push_back((7u << 16) |
                            static_cast<uint32_t>(SpvOpConstantComposite));
     declarations.push_back(outputValueType);
-    declarations.push_back(magentaId);
+    declarations.push_back(whiteId);
     declarations.push_back(oneId);
-    declarations.push_back(zeroId);
+    declarations.push_back(oneId);
     declarations.push_back(oneId);
     declarations.push_back(oneId);
 
     // Replace each output store before inserting declarations, so its word
     // offset still refers to the original instruction stream.
     for (size_t i = 0; i < outputStores.size(); ++i)
-        words[outputStores[i] + 2u] = magentaId;
+        words[outputStores[i] + 2u] = whiteId;
 
     size_t firstFunctionOffset = SIZE_MAX;
     for (size_t offset = 5u; offset < words.size();)
@@ -3115,15 +3115,15 @@ bool PatchFragmentShaderToSolidMagenta(
         if (offset >= words.size())
         {
             logResult("skip_control_offset", 0u,
-                      outputValueType, floatType, magentaId);
+                      outputValueType, floatType, whiteId);
             return false;
         }
         if (overrideInfo.second)
         {
-            // OpStore output, magenta; OpReturn. A discard cannot hide the probe color.
+            // OpStore output, white; OpReturn. A discard cannot hide the probe color.
             words[offset] = (3u << 16) | static_cast<uint32_t>(SpvOpStore);
             words.insert(words.begin() + static_cast<std::ptrdiff_t>(offset + 1u),
-                {outputId, magentaId, (1u << 16) | static_cast<uint32_t>(SpvOpReturn)});
+                {outputId, whiteId, (1u << 16) | static_cast<uint32_t>(SpvOpReturn)});
         }
         else
         {
@@ -3132,8 +3132,8 @@ bool PatchFragmentShaderToSolidMagenta(
         }
     }
 
-    logResult("patched_solid_magenta", static_cast<uint32_t>(outputStores.size()),
-              outputValueType, floatType, magentaId);
+    logResult("patched_solid_white", static_cast<uint32_t>(outputStores.size()),
+              outputValueType, floatType, whiteId);
     return true;
 }
 
@@ -7160,7 +7160,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                 debugPsColorSerial, m_pixelShader->serial, m_pixelShader->parseData))
         {
             // The matcher has already checked wildcard vs. exact-serial scope.
-            (void)PatchFragmentShaderToSolidMagenta(
+            (void)PatchFragmentShaderToSolidWhite(
                 pixelSpirv, m_pixelShader->serial, m_pixelShader->serial);
         }
         m_pixelShader->linkedSpirv = pixelSpirv;
