@@ -295,6 +295,33 @@ void Switch_QueueRenderAuditObject(
         e.worldSurface=false;
     }
 }
+void Switch_LogMaterialSetupSkipped(
+    const Material *material, uint32_t surfaceType, uint32_t objectId,
+    uint32_t materialSortedIndex, uint32_t requestedTechnique,
+    uint64_t packedDrawSurf, const char *reason)
+{
+    uint64_t sig=Switch_AuditHashMix(1469598103934665603ull,0x4D41544C4641494Cull);
+    sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(material));
+    sig=Switch_AuditHashMix(sig,surfaceType);
+    sig=Switch_AuditHashMix(sig,objectId);
+    sig=Switch_AuditHashMix(sig,materialSortedIndex);
+    sig=Switch_AuditHashMix(sig,requestedTechnique);
+    sig=Switch_AuditHashMix(sig,packedDrawSurf);
+    sig=Switch_AuditHashString(sig,reason);
+    if(!Switch_AuditShouldLog(sig)) return;
+    char sources[1050]{};
+    Switch_FormatMaterialTextureSources(material,sources,sizeof(sources));
+    const char *techSet=material&&material->techniqueSet&&material->techniqueSet->name
+        ? material->techniqueSet->name : "<null>";
+    const char *matName=material&&material->info.name?material->info.name:"<unknown>";
+    char line[1800];
+    std::snprintf(line,sizeof(line),
+        "[KisakCOD][RENDER OBJECT] status=NOT_SUBMITTED kind=DRAW_SURF object=%u type=%u materialIndex=%u material=%.96s reason=%.48s requestedTech=%u techniqueSet=%.64s drawSurf=0x%016llx shader=not-bound bindings=not-bound sources={%s}\n",
+        objectId,surfaceType,materialSortedIndex,matName,reason?reason:"MATERIAL_SETUP_FAILED",
+        requestedTechnique,techSet,static_cast<unsigned long long>(packedDrawSurf),sources);
+    Switch_LogWrite(line);
+}
+
 void Switch_LogWorldSurfaceSkipped(const Material *material,uint32_t surfaceIndex,
     uint32_t firstVertex,uint32_t vertexCount,uint32_t triangleCount,uint32_t lightmapIndex,
     uint32_t stage,const char *reason,bool visible,bool castsShadow)
