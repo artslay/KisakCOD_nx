@@ -222,6 +222,9 @@ void __cdecl R_DrawStaticModelDrawSurfNonOptimized(GfxStaticModelDrawStream *dra
     {
         R_DrawStaticModelDrawSurfPlacement(&smodelDrawInsts[list[index]], context.source);
         R_SetupPassPerPrimArgs(context);
+#ifdef __SWITCH__
+        Switch_SetRenderAuditObject(2u, static_cast<uint32_t>(list[index]));
+#endif
         R_DrawIndexedPrimitive(&context.state->prim, &args);
     }
 }
@@ -353,12 +356,6 @@ void __cdecl R_DrawStaticModelsCachedDrawSurfLighting(GfxStaticModelDrawStream *
             Switch_QueueRenderAuditObject(4u,cached?cached->smodelIndex:static_cast<uint32_t>(list[index]),xsurf->vertCount,xsurf->triCount,baseIndex);
         }
 #endif
-#ifdef __SWITCH__
-        {
-            const GfxCachedSModelSurf *cached=R_GetCachedSModelSurf(list[index]);
-            Switch_QueueRenderAuditObject(4u,cached?cached->smodelIndex:static_cast<uint32_t>(list[index]),xsurf->vertCount,xsurf->triCount,baseIndex);
-        }
-#endif
         copyBaseIndex = R_SetIndexData(&context.state->prim, (unsigned char*)&gfxBuf.smodelCache.indices[baseIndex], xsurf->triCount);
         iassert(copyBaseIndex == args.baseIndex + xsurf->triCount * 3 * index);
         ++index;
@@ -392,6 +389,12 @@ void __cdecl R_DrawStaticModelsCachedDrawSurf(GfxStaticModelDrawStream *drawStre
         baseIndex = surfBaseIndex + 4 * R_GetCachedSModelSurf(list[index])->baseVertIndex;
         iassert(baseIndex < SMC_MAX_INDEX_IN_CACHE);
         iassert(baseIndex + xsurf->triCount * 3 <= SMC_MAX_INDEX_IN_CACHE);
+#ifdef __SWITCH__
+        {
+            const GfxCachedSModelSurf *cached=R_GetCachedSModelSurf(list[index]);
+            Switch_QueueRenderAuditObject(4u,cached?cached->smodelIndex:static_cast<uint32_t>(list[index]),xsurf->vertCount,xsurf->triCount,baseIndex);
+        }
+#endif
         copyBaseIndex = R_SetIndexData(&context.state->prim, (unsigned char*)&gfxBuf.smodelCache.indices[baseIndex], xsurf->triCount);
         iassert(copyBaseIndex == args.baseIndex + xsurf->triCount * 3 * index);
         ++index;
@@ -514,6 +517,9 @@ void __cdecl R_DrawStaticModelsPreTessDrawSurf(
     GfxDrawPrimArgs args; // [esp+20h] [ebp-Ch] BYREF
 
     iassert( count );
+#ifdef __SWITCH__
+    const GfxStaticModelDrawInst *auditSmodelDrawInst =
+#endif
     R_SetupCachedSModelSurface(
         context.state,
         pretessSurf.fields.cachedIndex,
@@ -527,6 +533,11 @@ void __cdecl R_DrawStaticModelsPreTessDrawSurf(
     if (context.state->prim.indexBuffer != ib)
         R_ChangeIndices(&context.state->prim, ib);
     args.baseIndex = firstIndex;
+#ifdef __SWITCH__
+    Switch_QueueRenderAuditObject(4u,
+        auditSmodelDrawInst ? static_cast<uint32_t>(auditSmodelDrawInst-rgp.world->dpvs.smodelDrawInsts) : pretessSurf.fields.cachedIndex,
+        args.vertexCount,args.triCount,args.baseIndex);
+#endif
     R_DrawIndexedPrimitive(&context.state->prim, &args);
 }
 
@@ -555,6 +566,11 @@ void __cdecl R_DrawStaticModelsPreTessDrawSurfLighting(
     if (context.state->prim.indexBuffer != ib)
         R_ChangeIndices(&context.state->prim, ib);
     args.baseIndex = firstIndex;
+#ifdef __SWITCH__
+    Switch_QueueRenderAuditObject(4u,
+        static_cast<uint32_t>(smodelDrawInst-rgp.world->dpvs.smodelDrawInsts),
+        args.vertexCount,args.triCount,args.baseIndex);
+#endif
     R_DrawIndexedPrimitive(&context.state->prim, &args);
 }
 
