@@ -4186,52 +4186,312 @@ static void SwitchEmitFloorProbeInstruction(
     words.insert(words.end(), operands.begin(), operands.end());
 }
 
-static bool SwitchBuildFloorRasterProbeVertexSpirv(std::vector<uint32_t> &words)
+static bool SwitchPatchFloorRasterProbeVertexSpirv(
+    const std::vector<uint32_t> &original,
+    std::vector<uint32_t> &words)
 {
-    // A small opaque test patch (~51x29 pixels), rather than a fullscreen flash.
-    words = {SpvMagicNumber, 0x00010000u, 0u, 30u, 0u};
+    // Preserve the real game vertex shader, inputs and uniform calculations,
+    // but override BuiltIn Position immediately before every return. This lets
+    // the white probe tell whether the original shader's clip-space output was
+    // what kept the floor from rasterizing.
+    words = original;
+    if (words.size() < 5u || words[0] != SpvMagicNumber ||
+        words[3] <= 1u || words[3] > 65536u)
+        return false;
+
+    uint32_t entryFunction = 0u;
+    size_t entryPointOffset = SIZE_MAX;
+    uint32_t entryPointWordCount = 0u;
+    uint32_t positionVariable = 0u;
+    uint32_t positionPointerType = 0u;
+    uint32_t boolType = 0u;
+    uint32_t intType = 0u;
+    uint32_t floatType = 0u;
+    uint32_t vec4Type = 0u;
+    uint32_t inputIntPointerType = 0u;
+    size_t firstTypeOffset = SIZE_MAX;
+    size_t firstConstantOffset = SIZE_MAX;
+    size_t firstGlobalVariableOffset = SIZE_MAX;
+    size_t firstFunctionOffset = SIZE_MAX;
+
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[offset];
+
+        if (op == SpvOpEntryPoint && wc >= 4u &&
+            ins[1] == SpvExecutionModelVertex && entryFunction == 0u)
+        {
+            entryFunction = ins[2];
+            entryPointOffset = offset;
+            entryPointWordCount = wc;
+        }
+        else if (op == SpvOpDecorate && wc >= 4u &&
+                 ins[2] == SpvDecorationBuiltIn &&
+                 ins[3] == SpvBuiltInPosition)
+        {
+            positionVariable = ins[1];
+        }
+
+        if (op == SpvOpTypeBool && wc >= 2u)
+            boolType = ins[1];
+        else if (op == SpvOpTypeInt && wc >= 4u &&
+                 ins[2] == 32u && ins[3] == 1u)
+            intType = ins[1];
+        else if (op == SpvOpTypeFloat && wc >= 3u && ins[2] == 32u)
+            floatType = ins[1];
+        else if (op == SpvOpTypeVector && wc >= 4u &&
+                 ins[3] == 4u && floatType != 0u && ins[2] == floatType)
+            vec4Type = ins[1];
+        if (op == SpvOpTypePointer && wc >= 4u)
+        {
+            if (ins[2] == SpvStorageClassInput && intType != 0u &&
+                ins[3] == intType)
+                inputIntPointerType = ins[1];
+            if (ins[2] == SpvStorageClassOutput && vec4Type != 0u &&
+                ins[3] == vec4Type)
+            {
+                // Keep the pointer type which will be used by gl_Position.
+                if (positionVariable != 0u)
+                    positionPointerType = ins[1];
+            }
+        }
+
+        if (firstTypeOffset == SIZE_MAX &&
+            (op == SpvOpTypeVoid || op == SpvOpTypeBool ||
+             op == SpvOpTypeInt || op == SpvOpTypeFloat ||
+             op == SpvOpTypeVector || op == SpvOpTypeMatrix ||
+             op == SpvOpTypeArray || op == SpvOpTypeRuntimeArray ||
+             op == SpvOpTypeStruct || op == SpvOpTypeOpaque ||
+             op == SpvOpTypePointer || op == SpvOpTypeFunction))
+            firstTypeOffset = offset;
+        if (firstConstantOffset == SIZE_MAX &&
+            (op == SpvOpConstant || op == SpvOpVariable || op == SpvOpFunction))
+            firstConstantOffset = offset;
+        if (firstGlobalVariableOffset == SIZE_MAX &&
+            (op == SpvOpVariable || op == SpvOpFunction))
+            firstGlobalVariableOffset = offset;
+        if (firstFunctionOffset == SIZE_MAX && op == SpvOpFunction)
+            firstFunctionOffset = offset;
+
+        offset += wc;
+    }
+
+    if (!entryFunction || entryPointOffset == SIZE_MAX ||
+        positionVariable == 0u || firstTypeOffset == SIZE_MAX ||
+        firstConstantOffset == SIZE_MAX || firstGlobalVariableOffset == SIZE_MAX ||
+        firstFunctionOffset == SIZE_MAX || floatType == 0u || vec4Type == 0u)
+        return false;
+
+    // Resolve the exact output pointer type and make sure Position is an
+    // ordinary Output vec4 rather than a member of an interface block.
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpVariable && wc >= 4u && ins[2] == positionVariable &&
+            ins[3] == SpvStorageClassOutput)
+        {
+            positionPointerType = ins[1];
+            break;
+        }
+        offset += wc;
+    }
+    if (!positionPointerType)
+        return false;
+
+    uint32_t nextId = words[3];
+    auto allocId = [&]() { return nextId++; };
+
+    std::vector<uint32_t> typeDeclarations;
+    if (!boolType)
+    {
+        boolType = allocId();
+        typeDeclarations.push_back((2u << 16u) | static_cast<uint32_t>(SpvOpTypeBool));
+        typeDeclarations.push_back(boolType);
+    }
+    if (!intType)
+    {
+        intType = allocId();
+        typeDeclarations.push_back((4u << 16u) | static_cast<uint32_t>(SpvOpTypeInt));
+        typeDeclarations.push_back(intType);
+        typeDeclarations.push_back(32u);
+        typeDeclarations.push_back(1u);
+    }
+    if (!inputIntPointerType)
+    {
+        inputIntPointerType = allocId();
+        typeDeclarations.push_back((4u << 16u) | static_cast<uint32_t>(SpvOpTypePointer));
+        typeDeclarations.push_back(inputIntPointerType);
+        typeDeclarations.push_back(SpvStorageClassInput);
+        typeDeclarations.push_back(intType);
+    }
+
+    const uint32_t vertexIndexVariable = allocId();
+    const uint32_t oneInt = allocId();
+    const uint32_t twoInt = allocId();
+    const uint32_t xLeft = allocId();
+    const uint32_t xRight = allocId();
+    const uint32_t yTop = allocId();
+    const uint32_t yBottom = allocId();
+    const uint32_t zHalf = allocId();
+    const uint32_t wOne = allocId();
+    const uint32_t p0 = allocId();
+    const uint32_t p1 = allocId();
+    const uint32_t p2 = allocId();
+    const uint32_t loadedIndex = allocId();
+    const uint32_t indexIsOne = allocId();
+    const uint32_t indexIsTwo = allocId();
+    const uint32_t selectOne = allocId();
+    const uint32_t selectedPosition = allocId();
+
+    std::vector<uint32_t> decorations;
+    SwitchEmitFloorProbeInstruction(
+        decorations, SpvOpDecorate,
+        {vertexIndexVariable, SpvDecorationBuiltIn, SpvBuiltInVertexIndex});
+
+    std::vector<uint32_t> constants;
     auto emit = [&](SpvOp op, std::initializer_list<uint32_t> a) {
-        SwitchEmitFloorProbeInstruction(words, op, a);
+        SwitchEmitFloorProbeInstruction(constants, op, a);
     };
-    emit(SpvOpCapability, {SpvCapabilityShader});
-    emit(SpvOpMemoryModel, {SpvAddressingModelLogical, SpvMemoryModelGLSL450});
-    emit(SpvOpEntryPoint, {
-        SpvExecutionModelVertex, 23u, 0x6e69616du, 0u, 21u, 22u});
-    emit(SpvOpDecorate, {21u, SpvDecorationBuiltIn, SpvBuiltInVertexIndex});
-    emit(SpvOpDecorate, {22u, SpvDecorationBuiltIn, SpvBuiltInPosition});
-    emit(SpvOpTypeVoid, {1u});
-    emit(SpvOpTypeBool, {2u});
-    emit(SpvOpTypeInt, {3u, 32u, 1u});
-    emit(SpvOpTypeFloat, {4u, 32u});
-    emit(SpvOpTypeVector, {5u, 4u, 4u});
-    emit(SpvOpTypePointer, {6u, SpvStorageClassInput, 3u});
-    emit(SpvOpTypePointer, {7u, SpvStorageClassOutput, 5u});
-    emit(SpvOpTypeFunction, {8u, 1u});
-    emit(SpvOpConstant, {3u, 9u, 0u});
-    emit(SpvOpConstant, {3u, 10u, 1u});
-    emit(SpvOpConstant, {3u, 11u, 2u});
-    emit(SpvOpConstant, {4u, 12u, 0xbf7ae148u}); // -0.98
-    emit(SpvOpConstant, {4u, 13u, 0xbf666666u}); // -0.90
-    emit(SpvOpConstant, {4u, 14u, 0x3f000000u}); //  0.5
-    emit(SpvOpConstant, {4u, 15u, 0x3f800000u}); //  1.0
-    emit(SpvOpConstant, {4u, 16u, 0x3f7ae148u}); //  0.98
-    emit(SpvOpConstant, {4u, 17u, 0x3f666666u}); //  0.90
-    emit(SpvOpConstantComposite, {5u, 18u, 12u, 16u, 14u, 15u});
-    emit(SpvOpConstantComposite, {5u, 19u, 13u, 16u, 14u, 15u});
-    emit(SpvOpConstantComposite, {5u, 20u, 12u, 17u, 14u, 15u});
-    emit(SpvOpVariable, {6u, 21u, SpvStorageClassInput});
-    emit(SpvOpVariable, {7u, 22u, SpvStorageClassOutput});
-    emit(SpvOpFunction, {1u, 23u, SpvFunctionControlMaskNone, 8u});
-    emit(SpvOpLabel, {24u});
-    emit(SpvOpLoad, {3u, 25u, 21u});
-    emit(SpvOpIEqual, {2u, 26u, 25u, 10u});
-    emit(SpvOpIEqual, {2u, 27u, 25u, 11u});
-    emit(SpvOpSelect, {5u, 28u, 26u, 19u, 18u});
-    emit(SpvOpSelect, {5u, 29u, 27u, 20u, 28u});
-    emit(SpvOpStore, {22u, 29u});
-    emit(SpvOpReturn, {});
-    emit(SpvOpFunctionEnd, {});
-    return words.size() > 5u;
+    emit(SpvOpConstant, {intType, oneInt, 1u});
+    emit(SpvOpConstant, {intType, twoInt, 2u});
+    emit(SpvOpConstant, {floatType, xLeft, 0xbf7ae148u});   // -0.98
+    emit(SpvOpConstant, {floatType, xRight, 0xbf666666u});  // -0.90
+    emit(SpvOpConstant, {floatType, yTop, 0x3f7ae148u});    // +0.98
+    emit(SpvOpConstant, {floatType, yBottom, 0x3f666666u}); // +0.90
+    emit(SpvOpConstant, {floatType, zHalf, 0x3f000000u});   // 0.5
+    emit(SpvOpConstant, {floatType, wOne, 0x3f800000u});    // 1.0
+    emit(SpvOpConstantComposite, {vec4Type, p0, xLeft, yTop, zHalf, wOne});
+    emit(SpvOpConstantComposite, {vec4Type, p1, xRight, yTop, zHalf, wOne});
+    emit(SpvOpConstantComposite, {vec4Type, p2, xLeft, yBottom, zHalf, wOne});
+
+    std::vector<uint32_t> globalVariable;
+    SwitchEmitFloorProbeInstruction(
+        globalVariable, SpvOpVariable,
+        {inputIntPointerType, vertexIndexVariable, SpvStorageClassInput});
+
+    struct PendingInsert
+    {
+        size_t at;
+        unsigned priority;
+        std::vector<uint32_t> data;
+    };
+    std::vector<PendingInsert> pending;
+    if (!typeDeclarations.empty())
+        pending.push_back({firstConstantOffset, 0u, std::move(typeDeclarations)});
+    pending.push_back({firstGlobalVariableOffset, 1u, std::move(constants)});
+    pending.push_back({firstFunctionOffset, 2u, std::move(globalVariable)});
+
+    // Add VertexIndex to the vertex entry point's interface list.
+    words[entryPointOffset] += (1u << 16u);
+    pending.push_back({
+        entryPointOffset + entryPointWordCount, 0u, {vertexIndexVariable}});
+
+    // Add the decoration in the annotations section, before type declarations.
+    pending.push_back({firstTypeOffset, 0u, std::move(decorations)});
+
+    std::sort(pending.begin(), pending.end(),
+        [](const PendingInsert &a, const PendingInsert &b) {
+            if (a.at != b.at) return a.at > b.at;
+            return a.priority < b.priority;
+        });
+    for (size_t i = 0; i < pending.size();)
+    {
+        size_t j = i + 1u;
+        std::vector<uint32_t> combined = std::move(pending[i].data);
+        while (j < pending.size() && pending[j].at == pending[i].at)
+        {
+            combined.insert(combined.end(),
+                            pending[j].data.begin(), pending[j].data.end());
+            ++j;
+        }
+        words.insert(words.begin() + static_cast<std::ptrdiff_t>(pending[i].at),
+                     combined.begin(), combined.end());
+        i = j;
+    }
+
+    // Recompute instruction positions after the declaration inserts. The
+    // selected test position is defined in the first block, then stored to
+    // BuiltIn Position immediately before every return in the shader entry point.
+    size_t prologueOffset = SIZE_MAX;
+    std::vector<size_t> returnOffsets;
+    uint32_t currentFunction = 0u;
+    bool foundEntryBlock = false;
+    bool entryBlockLeading = false;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpFunction && wc >= 5u)
+            currentFunction = ins[2];
+        else if (op == SpvOpFunctionEnd)
+            currentFunction = 0u;
+        else if (currentFunction == entryFunction && op == SpvOpLabel)
+        {
+            if (!foundEntryBlock)
+            {
+                foundEntryBlock = true;
+                entryBlockLeading = true;
+                prologueOffset = offset + wc;
+            }
+        }
+        else if (currentFunction == entryFunction && foundEntryBlock &&
+                 entryBlockLeading)
+        {
+            if (op == SpvOpVariable && wc >= 4u &&
+                ins[3] == SpvStorageClassFunction)
+                prologueOffset = offset + wc;
+            else if (op == SpvOpLine || static_cast<uint32_t>(op) == 317u)
+                prologueOffset = offset + wc;
+            else
+                entryBlockLeading = false;
+        }
+
+        if (currentFunction == entryFunction && op == SpvOpReturn)
+            returnOffsets.push_back(offset);
+        offset += wc;
+    }
+    if (prologueOffset == SIZE_MAX || returnOffsets.empty())
+        return false;
+
+    std::vector<uint32_t> prologue;
+    auto emitPrologue = [&](SpvOp op, std::initializer_list<uint32_t> a) {
+        SwitchEmitFloorProbeInstruction(prologue, op, a);
+    };
+    emitPrologue(SpvOpLoad, {intType, loadedIndex, vertexIndexVariable});
+    emitPrologue(SpvOpIEqual, {boolType, indexIsOne, loadedIndex, oneInt});
+    emitPrologue(SpvOpIEqual, {boolType, indexIsTwo, loadedIndex, twoInt});
+    emitPrologue(SpvOpSelect, {vec4Type, selectOne, indexIsOne, p1, p0});
+    emitPrologue(SpvOpSelect, {vec4Type, selectedPosition, indexIsTwo, p2, selectOne});
+
+    struct CodeInsert { size_t at; std::vector<uint32_t> data; };
+    std::vector<CodeInsert> codeInserts;
+    codeInserts.push_back({prologueOffset, std::move(prologue)});
+    for (const size_t retOffset : returnOffsets)
+    {
+        std::vector<uint32_t> store;
+        SwitchEmitFloorProbeInstruction(
+            store, SpvOpStore, {positionVariable, selectedPosition});
+        codeInserts.push_back({retOffset, std::move(store)});
+    }
+    std::sort(codeInserts.begin(), codeInserts.end(),
+        [](const CodeInsert &a, const CodeInsert &b) { return a.at > b.at; });
+    for (const CodeInsert &insert : codeInserts)
+        words.insert(words.begin() + static_cast<std::ptrdiff_t>(insert.at),
+                     insert.data.begin(), insert.data.end());
+
+    words[3] = nextId;
+    return true;
 }
 
 static bool SwitchBuildFloorRasterProbeFragmentSpirv(std::vector<uint32_t> &words)
@@ -8810,7 +9070,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     {
         std::vector<uint32_t> floorVertexProbeSpirv;
         std::vector<uint32_t> floorFragmentProbeSpirv;
-        if (!SwitchBuildFloorRasterProbeVertexSpirv(floorVertexProbeSpirv) ||
+        if (!SwitchPatchFloorRasterProbeVertexSpirv(m_vertexShader->spirv, floorVertexProbeSpirv) ||
             !SwitchBuildFloorRasterProbeFragmentSpirv(floorFragmentProbeSpirv))
         {
             Switch_LogWrite("[KisakCOD][VK FLOOR RASTER CONTROL] result=fail reason=build_spirv\n");
@@ -8849,15 +9109,15 @@ bool IDirect3DDevice9::EnsurePipeline()
             return false;
         }
 
-        // Ignore the game's vertex transform, interpolator interface and pixel
-        // shader for this one surface. The first indexed triangle (0,1,2) creates a small top-left patch
-        // and writes white if rasterization reaches color output.
+        // Keep the game's vertex shader, input declarations and uniform math.
+        // Only BuiltIn Position is replaced at the end of the VS, so the white
+        // patch appears if the real VS executes but its original clip output did not rasterize.
         stages[0].module = switchFloorVertexProbeModule;
         stages[1].module = switchFloorSolidProbeModule;
 
         char trace[288];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][VK FLOOR RASTER CONTROL] action=enabled surface=%u key=%016llx gameVS=%llu gamePS=%llu mode=corner_triangle_white vsModule=%p psModule=%p\n",
+            "[KisakCOD][VK FLOOR RASTER CONTROL] action=enabled surface=%u key=%016llx gameVS=%llu gamePS=%llu mode=game_vs_forced_position vsModule=%p psModule=%p\n",
             g_switchWorldDrawAudit.surfaceIndex,
             static_cast<unsigned long long>(key),
             static_cast<unsigned long long>(m_vertexShader->serial),
