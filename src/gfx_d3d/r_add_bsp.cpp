@@ -4,6 +4,13 @@
 #include "r_init.h"
 #include "r_scene.h"
 #include "r_pretess.h"
+
+#ifdef __SWITCH__
+extern void Switch_LogWorldSurfaceSkipped(
+    const Material *material, uint32_t surfaceIndex, uint32_t firstVertex,
+    uint32_t vertexCount, uint32_t triangleCount, uint32_t lightmapIndex,
+    uint32_t stage, const char *reason, bool visible, bool castsShadow);
+#endif
 #include "r_buffers.h"
 #include "r_add_staticmodel.h"
 #include <universal/profile.h>
@@ -192,6 +199,17 @@ void __cdecl R_AddAllBspDrawSurfacesRangeCamera(
                 triSurfCount = 0;
             }
         }
+#ifdef __SWITCH__
+        else
+        {
+            const bool visible=surfaceVisData[sortedSurfIndex]!=0;
+            const bool castsShadow=(surfaceCastsSunShadow[sortedSurfIndex>>5]&(1u<<(sortedSurfIndex&0x1Fu)))!=0;
+            const GfxSurface *surface=&rgp.world->dpvs.surfaces[sortedSurfIndex];
+            Switch_LogWorldSurfaceSkipped(surface->material,sortedSurfIndex,surface->tris.firstVertex,
+                surface->tris.vertexCount,surface->tris.triCount,surface->lightmapIndex,stage,
+                !visible?"VISIBILITY_MASKED":"SHADOW_CAST_FILTERED",visible,castsShadow);
+        }
+#endif
     }
     if (triSurfCount)
         R_AddBspDrawSurfs(prevDrawSurf, (uint8_t*)triSurfList, triSurfCount, &surfData);
@@ -245,6 +263,15 @@ void __cdecl R_AddAllBspDrawSurfacesCameraNonlit(
                 triSurfCount = 0;
             }
         }
+#ifdef __SWITCH__
+        else
+        {
+            const GfxSurface *surface=&rgp.world->dpvs.surfaces[sortedSurfIndex];
+            Switch_LogWorldSurfaceSkipped(surface->material,sortedSurfIndex,surface->tris.firstVertex,
+                surface->tris.vertexCount,surface->tris.triCount,surface->lightmapIndex,stage,
+                "VISIBILITY_MASKED",false,false);
+        }
+#endif
     }
     if (triSurfCount)
         R_AddBspDrawSurfs(prevDrawSurf, (uint8_t *)triSurfList, triSurfCount, &surfData);
