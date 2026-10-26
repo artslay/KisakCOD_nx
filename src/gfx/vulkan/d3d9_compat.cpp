@@ -2280,7 +2280,7 @@ uint64_t SwitchPsS0UvTestTargetSerial()
     // "all" selects every PS; "off" or "0" disables the probe.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
     if (!value || !*value)
-        return 1821u; // Temporary default, remove after the diagnostic run.
+        return UINT64_MAX; // Opt-in only; preserve the original fragment shader by default.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "world") == 0)
@@ -2328,7 +2328,7 @@ uint64_t SwitchPsColorDebugTargetSerial()
     // "off" or "0" disables the test; "all" remains an explicit opt-in.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
     if (!value || !*value)
-        return 1821u;
+        return UINT64_MAX; // Opt-in only; preserve the original fragment shader by default.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "all") == 0)
@@ -7082,7 +7082,10 @@ bool IDirect3DDevice9::EnsurePipeline()
                 pixelSpirv, m_pixelShader->serial, m_pixelShader->serial);
         }
         const uint64_t debugPsColorSerial = SwitchPsColorDebugTargetSerial();
-        if (SwitchPsColorDebugTargetMatches(
+        // The UV/sample probe and solid-colour probe rewrite the same output
+        // stores. When both target this shader, the solid-colour test would
+        // overwrite the texture sample and make the sampling test meaningless.
+        if (!switchS0UvProbeActive && SwitchPsColorDebugTargetMatches(
                 debugPsColorSerial, m_pixelShader->serial, m_pixelShader->parseData))
         {
             // The matcher has already checked wildcard vs. exact-serial scope.
