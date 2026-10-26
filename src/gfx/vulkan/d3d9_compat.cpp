@@ -7776,7 +7776,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         {
             char msg[256];
             std::snprintf(msg, sizeof(msg),
-                "[KisakCOD][VK DRAW] pipeline_fail=missing_shader_vertex_input attr=%s usage=%u index=%u location=%u valid=%u decl=%llu vs=%llu\\n",
+                "[KisakCOD][VK DRAW] pipeline_fail=missing_shader_vertex_input attr=%s usage=%u index=%u location=%u valid=%u decl=%llu vs=%llu\n",
                 attribute.name ? attribute.name : "(null)",
                 static_cast<unsigned>(attribute.usage),
                 static_cast<unsigned>(attribute.index), location,
