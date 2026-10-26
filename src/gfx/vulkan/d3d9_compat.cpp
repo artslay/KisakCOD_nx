@@ -5966,19 +5966,40 @@ bool IDirect3DDevice9::BindUniformSet(
             m_pixelShader && SwitchPsColorDebugTargetMatches(
                 switchFloorVpTargetSerial, m_pixelShader->serial,
                 m_pixelShader->parseData);
-        const bool switchFloorVpHasView =
-            gfxCmdBufSourceState.viewParms3D != nullptr;
+        // viewParms3D is null on this Switch draw path even though the
+        // command source owns the current view-parms value inline. Use that
+        // value (the same GfxViewParms type) rather than dereferencing the null
+        // optional pointer.
+        const float *switchFloorVpSourceMatrix =
+            reinterpret_cast<const float *>(
+                &gfxCmdBufSourceState.viewParms.viewProjectionMatrix);
+        bool switchFloorVpHasView = false;
+        bool switchFloorVpMatrixFinite = true;
+        for (uint32_t i = 0; i < 16u; ++i)
+        {
+            const float value = switchFloorVpSourceMatrix[i];
+            if (!(value == value) || value > 1.0e20f || value < -1.0e20f)
+                switchFloorVpMatrixFinite = false;
+            if (value > 1.0e-20f || value < -1.0e-20f)
+                switchFloorVpHasView = true;
+        }
+        switchFloorVpHasView = switchFloorVpHasView && switchFloorVpMatrixFinite;
         static uint32_t switchFloorVpGateLogCount = 0u;
         if (switchFloorVpGateLogCount < 8u)
         {
             ++switchFloorVpGateLogCount;
-            char gateTrace[320];
+            char gateTrace[480];
             std::snprintf(
                 gateTrace, sizeof(gateTrace),
-                "[KisakCOD][VK FLOOR VP GATE] set=%u vs=%u ps=%u target=%u targetMatches=%u view=%p floatCount=%u\n",
+                "[KisakCOD][VK FLOOR VP GATE] set=%u vs=%u ps=%u target=%u targetMatches=%u view3D=%p matrixFinite=%u inlineVP0=(%.5g,%.5g,%.5g,%.5g) inlineVP1=(%.5g,%.5g,%.5g,%.5g) floatCount=%u\n",
                 setIndex, m_vertexShader->serial, switchFloorVpPixelSerial,
                 switchFloorVpTargetSerial, switchFloorVpTargetMatches ? 1u : 0u,
                 static_cast<const void *>(gfxCmdBufSourceState.viewParms3D),
+                switchFloorVpMatrixFinite ? 1u : 0u,
+                switchFloorVpSourceMatrix[0], switchFloorVpSourceMatrix[1],
+                switchFloorVpSourceMatrix[2], switchFloorVpSourceMatrix[3],
+                switchFloorVpSourceMatrix[4], switchFloorVpSourceMatrix[5],
+                switchFloorVpSourceMatrix[6], switchFloorVpSourceMatrix[7],
                 layout.floatCount);
             Switch_LogWrite(gateTrace);
         }
@@ -5990,9 +6011,7 @@ bool IDirect3DDevice9::BindUniformSet(
             switchFloorVpHasView;
         if (switchFloorVpProbeActive)
         {
-        const float *matrix =
-            reinterpret_cast<const float *>(
-                &gfxCmdBufSourceState.viewParms3D->viewProjectionMatrix);
+        const float *matrix = switchFloorVpSourceMatrix;
         uint32_t registerMask = 0u;
         float replacement[4][4]{};
         for (uint32_t reg = 0; reg < 4u; ++reg)
