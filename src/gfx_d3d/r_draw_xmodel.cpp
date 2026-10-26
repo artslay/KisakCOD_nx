@@ -167,6 +167,9 @@ uint32_t __cdecl R_DrawXModelRigidSurfLitInternal(
 #ifdef __SWITCH__
         Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
 #endif
+#ifdef __SWITCH__
+        Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
+#endif
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
         if (++drawSurfIndex == drawSurfCount)
             break;
@@ -244,6 +247,9 @@ uint32_t __cdecl R_DrawXModelRigidSurfCameraInternal(
         R_GetWorldMatrixForModelSurf(modelSurf, eyeOffset, &worldMat);
         matrix = R_GetActiveWorldMatrix(context.source);
         memcpy(&matrix->matrices.matrix[0], &worldMat, sizeof(GfxMatrix));
+#ifdef __SWITCH__
+        Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
+#endif
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
 
         if (++drawSurfIndex == drawSurfCount || (drawSurfMask.packed & drawSurfList[drawSurfIndex].packed) != drawSurfKey)
@@ -313,6 +319,9 @@ uint32_t __cdecl R_DrawXModelRigidSurfInternal(
         R_GetWorldMatrixForModelSurf(modelSurf, eyeOffset, &worldMat);
         matrix = R_GetActiveWorldMatrix(context.source);
         memcpy(&matrix->matrices.matrix[0], &worldMat, sizeof(GfxMatrix));
+#ifdef __SWITCH__
+        Switch_SetRenderAuditObject(7u, static_cast<uint32_t>(drawSurf.fields.objectId));
+#endif
         R_DrawXModelRigidModelSurf(context, modelSurf->surf.xsurf);
         if (++drawSurfIndex == drawSurfCount)
             break;
