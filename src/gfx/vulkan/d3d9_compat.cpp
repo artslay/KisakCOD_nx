@@ -5,7 +5,6 @@
 #include "../../gfx_d3d/r_cinematic.h"
 #include "../../gfx_d3d/r_image.h"
 #include "../../gfx_d3d/r_init.h"
-#include "../../gfx_d3d/rb_state.h"
 #endif
 
 #ifdef __SWITCH__
@@ -5947,117 +5946,6 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 #endif
 
-#ifdef __SWITCH__
-    // The white PS probe already bypasses every fragment-side rejection, but
-    // the floor remains black. For this one shader pair, feed the vertex shader
-    // the renderer's authoritative world-to-clip matrix in D3D dp4 register
-    // layout (columns gathered from the engine's row-major GfxMatrix memory).
-    // This isolates the suspected stale/wrong matrix constants without touching
-    // other materials or changing the uploaded vertex/index buffers.
-    const bool switchFloorVpProbeCandidate =
-        setIndex == 1u && m_vertexShader && m_vertexShader->serial == 1820u;
-    if (switchFloorVpProbeCandidate)
-    {
-        const uint32_t switchFloorVpPixelSerial =
-            m_pixelShader ? m_pixelShader->serial : 0u;
-        const uint32_t switchFloorVpTargetSerial =
-            SwitchPsColorDebugTargetSerial();
-        const bool switchFloorVpTargetMatches =
-            m_pixelShader && SwitchPsColorDebugTargetMatches(
-                switchFloorVpTargetSerial, m_pixelShader->serial,
-                m_pixelShader->parseData);
-        // viewParms3D is null on this Switch draw path even though the
-        // command source owns the current view-parms value inline. Use that
-        // value (the same GfxViewParms type) rather than dereferencing the null
-        // optional pointer.
-        const float *switchFloorVpSourceMatrix =
-            reinterpret_cast<const float *>(
-                &gfxCmdBufSourceState.viewParms.viewProjectionMatrix);
-        bool switchFloorVpHasView = false;
-        bool switchFloorVpMatrixFinite = true;
-        for (uint32_t i = 0; i < 16u; ++i)
-        {
-            const float value = switchFloorVpSourceMatrix[i];
-            if (!(value == value) || value > 1.0e20f || value < -1.0e20f)
-                switchFloorVpMatrixFinite = false;
-            if (value > 1.0e-20f || value < -1.0e-20f)
-                switchFloorVpHasView = true;
-        }
-        switchFloorVpHasView = switchFloorVpHasView && switchFloorVpMatrixFinite;
-        static uint32_t switchFloorVpGateLogCount = 0u;
-        if (switchFloorVpGateLogCount < 8u)
-        {
-            ++switchFloorVpGateLogCount;
-            char gateTrace[480];
-            std::snprintf(
-                gateTrace, sizeof(gateTrace),
-                "[KisakCOD][VK FLOOR VP GATE] set=%u vs=%u ps=%u target=%u targetMatches=%u view3D=%p matrixFinite=%u inlineVP0=(%.5g,%.5g,%.5g,%.5g) inlineVP1=(%.5g,%.5g,%.5g,%.5g) floatCount=%u\n",
-                setIndex, m_vertexShader->serial, switchFloorVpPixelSerial,
-                switchFloorVpTargetSerial, switchFloorVpTargetMatches ? 1u : 0u,
-                static_cast<const void *>(gfxCmdBufSourceState.viewParms3D),
-                switchFloorVpMatrixFinite ? 1u : 0u,
-                switchFloorVpSourceMatrix[0], switchFloorVpSourceMatrix[1],
-                switchFloorVpSourceMatrix[2], switchFloorVpSourceMatrix[3],
-                switchFloorVpSourceMatrix[4], switchFloorVpSourceMatrix[5],
-                switchFloorVpSourceMatrix[6], switchFloorVpSourceMatrix[7],
-                layout.floatCount);
-            Switch_LogWrite(gateTrace);
-        }
-        // Gate on the actual shader serial and debug target. The parseData
-        // matcher is diagnostic only; it must not suppress this one-pair probe.
-        const bool switchFloorVpProbeActive =
-            switchFloorVpPixelSerial == 1821u &&
-            switchFloorVpTargetSerial == 1821u &&
-            switchFloorVpHasView;
-        if (switchFloorVpProbeActive)
-        {
-        const float *matrix = switchFloorVpSourceMatrix;
-        uint32_t registerMask = 0u;
-        float replacement[4][4]{};
-        for (uint32_t reg = 0; reg < 4u; ++reg)
-        {
-            replacement[reg][0] = matrix[reg];
-            replacement[reg][1] = matrix[reg + 4u];
-            replacement[reg][2] = matrix[reg + 8u];
-            replacement[reg][3] = matrix[reg + 12u];
-        }
-        for (uint32_t i = 0; i < layout.floatCount; ++i)
-        {
-            const uint32_t reg = layout.floatRegisters[i];
-            if (reg >= 4u)
-                continue;
-            std::memcpy(
-                bytes + layout.floatOffset + static_cast<size_t>(i) * 16u,
-                replacement[reg], sizeof(replacement[reg]));
-            registerMask |= 1u << reg;
-        }
-
-        static bool switchFloorVpProbeLogged = false;
-        if (!switchFloorVpProbeLogged)
-        {
-            switchFloorVpProbeLogged = true;
-            const float *old = static_cast<const float *>(floatData);
-            char trace[768];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK FLOOR VP OVERRIDE] applied=%u registerMask=0x%x view=%p oldC0=(%.5g,%.5g,%.5g,%.5g) newC0=(%.5g,%.5g,%.5g,%.5g) oldC1=(%.5g,%.5g,%.5g,%.5g) newC1=(%.5g,%.5g,%.5g,%.5g) oldC2=(%.5g,%.5g,%.5g,%.5g) newC2=(%.5g,%.5g,%.5g,%.5g) oldC3=(%.5g,%.5g,%.5g,%.5g) newC3=(%.5g,%.5g,%.5g,%.5g)\n",
-                (registerMask & 0x0fu) == 0x0fu ? 1u : 0u,
-                registerMask,
-                static_cast<const void *>(gfxCmdBufSourceState.viewParms3D),
-                old[0], old[1], old[2], old[3],
-                replacement[0][0], replacement[0][1], replacement[0][2], replacement[0][3],
-                old[4], old[5], old[6], old[7],
-                replacement[1][0], replacement[1][1], replacement[1][2], replacement[1][3],
-                old[8], old[9], old[10], old[11],
-                replacement[2][0], replacement[2][1], replacement[2][2], replacement[2][3],
-                old[12], old[13], old[14], old[15],
-                replacement[3][0], replacement[3][1], replacement[3][2], replacement[3][3]);
-            Switch_LogWrite(trace);
-        }
-        }
-    }
-#endif
-
     g_switchFrameStage = "frame/render/vulkan/uniform/allocate_ring";
     VkDescriptorBufferInfo bufferInfo{};
     if (!m_backend->AllocateUniform(bytes, size, &bufferInfo))
@@ -9129,6 +9017,129 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             ? static_cast<uint32_t>(texture->layout) : 0u;
     }
     RecordSwitchRecentVulkanDraw(recentDraw);
+
+#ifdef __SWITCH__
+    // One bounded audit of the *actual* bound stream and index values for the
+    // floor draw. This avoids inferring GPU fetches from the BSP CPU-side array.
+    if (m_vertexShader && m_pixelShader &&
+        m_vertexShader->serial == 1820u && m_pixelShader->serial == 1821u)
+    {
+        static bool switchFloorBoundInputAuditLogged = false;
+        if (!switchFloorBoundInputAuditLogged)
+        {
+            switchFloorBoundInputAuditLogged = true;
+            IDirect3DVertexBuffer9 *floorVertexBuffer = m_streams[0].buffer;
+            const uint32_t floorStride = m_streams[0].stride;
+            const VkDeviceSize floorStreamOffset = m_streams[0].offset;
+            const size_t floorBufferBytes =
+                floorVertexBuffer ? static_cast<size_t>(floorVertexBuffer->size) : 0u;
+            const uint8_t *floorVertexBytes = nullptr;
+            size_t floorReadableBytes = 0u;
+            if (floorVertexBuffer)
+            {
+                if (floorVertexBuffer->shadow.size() >= floorBufferBytes &&
+                    !floorVertexBuffer->shadow.empty())
+                {
+                    floorVertexBytes = floorVertexBuffer->shadow.data();
+                    floorReadableBytes = floorVertexBuffer->shadow.size();
+                }
+                else if (floorVertexBuffer->mapped)
+                {
+                    floorVertexBytes =
+                        static_cast<const uint8_t *>(floorVertexBuffer->mapped);
+                    floorReadableBytes = floorBufferBytes;
+                }
+            }
+            uint16_t floorRaw[3] = {0u, 0u, 0u};
+            int64_t floorEffective[3] = {-1, -1, -1};
+            uint64_t floorByteOffset[3] = {0u, 0u, 0u};
+            for (uint32_t i = 0; i < 3u && i < indexCount; ++i)
+            {
+                if (indexData)
+                {
+                    std::memcpy(
+                        &floorRaw[i],
+                        indexData + static_cast<size_t>(startIndex + i) * sizeof(uint16_t),
+                        sizeof(uint16_t));
+                    floorEffective[i] =
+                        static_cast<int64_t>(baseVertexIndex) + floorRaw[i];
+                    if (floorEffective[i] >= 0)
+                        floorByteOffset[i] = floorStreamOffset +
+                            static_cast<uint64_t>(floorEffective[i]) * floorStride;
+                }
+            }
+            char trace[512];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK FLOOR BOUND INPUT] pipeline=%016llx decl=%llu vb=%p bytes=%zu shadow=%zu mapped=%u streamOffset=%llu stride=%u ib=%p ibBytes=%zu indexData=%u start=%u count=%u baseVertex=%d idx=(%u,%u,%u) eff=(%lld,%lld,%lld)\n",
+                static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)),
+                static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
+                static_cast<void *>(floorVertexBuffer), floorBufferBytes,
+                floorVertexBuffer ? floorVertexBuffer->shadow.size() : 0u,
+                floorVertexBuffer && floorVertexBuffer->mapped ? 1u : 0u,
+                static_cast<unsigned long long>(floorStreamOffset), floorStride,
+                static_cast<void *>(m_indices), m_indices ? static_cast<size_t>(m_indices->size) : 0u,
+                indexData ? 1u : 0u, startIndex, indexCount, baseVertexIndex,
+                floorRaw[0], floorRaw[1], floorRaw[2],
+                static_cast<long long>(floorEffective[0]),
+                static_cast<long long>(floorEffective[1]),
+                static_cast<long long>(floorEffective[2]));
+            Switch_LogWrite(trace);
+
+            for (uint32_t i = 0; i < 3u && i < indexCount; ++i)
+            {
+                float x = 0.0f, y = 0.0f, z = 0.0f;
+                bool readable = floorVertexBytes && floorEffective[i] >= 0 &&
+                    floorByteOffset[i] <= floorReadableBytes &&
+                    floorReadableBytes - static_cast<size_t>(floorByteOffset[i]) >= sizeof(float) * 3u;
+                if (readable)
+                {
+                    const uint8_t *vertex = floorVertexBytes + floorByteOffset[i];
+                    std::memcpy(&x, vertex, sizeof(float));
+                    std::memcpy(&y, vertex + sizeof(float), sizeof(float));
+                    std::memcpy(&z, vertex + sizeof(float) * 2u, sizeof(float));
+                }
+                char vertexTrace[224];
+                std::snprintf(
+                    vertexTrace, sizeof(vertexTrace),
+                    "[KisakCOD][VK FLOOR FETCH] i=%u raw=%u eff=%lld byte=%llu readable=%u pos=(%.6g,%.6g,%.6g)\n",
+                    i, floorRaw[i], static_cast<long long>(floorEffective[i]),
+                    static_cast<unsigned long long>(floorByteOffset[i]),
+                    readable ? 1u : 0u, x, y, z);
+                Switch_LogWrite(vertexTrace);
+            }
+
+            if (m_decl)
+            {
+                uint32_t elementIndex = 0u;
+                for (const _D3DVERTEXELEMENT9 &element : m_decl->elements)
+                {
+                    if (element.Stream >= 16u || elementIndex >= 8u)
+                        continue;
+                    const uint32_t stride = element.Stream == 0u
+                        ? floorStride : m_streams[element.Stream].stride;
+                    const uint8_t effectiveType =
+                        SwitchEffectiveShaderElementType(m_decl, element, stride);
+                    const uint32_t effectiveOffset =
+                        SwitchEffectiveShaderElementOffset(m_decl, element, stride);
+                    char attrTrace[240];
+                    std::snprintf(
+                        attrTrace, sizeof(attrTrace),
+                        "[KisakCOD][VK FLOOR ATTR] i=%u stream=%u usage=%u usageIndex=%u declaredType=%u effectiveType=%u declaredOffset=%u fetchOffset=%u bytes=%u stride=%u\n",
+                        elementIndex, element.Stream,
+                        static_cast<unsigned>(element.Usage),
+                        static_cast<unsigned>(element.UsageIndex),
+                        static_cast<unsigned>(element.Type),
+                        static_cast<unsigned>(effectiveType),
+                        static_cast<unsigned>(element.Offset), effectiveOffset,
+                        SwitchShaderElementByteSize(effectiveType), stride);
+                    Switch_LogWrite(attrTrace);
+                    ++elementIndex;
+                }
+            }
+        }
+    }
+#endif
 
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
     vkCmdDrawIndexed(
