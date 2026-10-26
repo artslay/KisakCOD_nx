@@ -9289,6 +9289,137 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
     auditLogDraw("GPU_DRAW_RECORDED","vkCmdDrawIndexed_recorded");
+
+#ifdef __SWITCH__
+    // One-shot pixel readback for the isolated solid-white floor shader probe.
+    // Submit only after this known surface draw, then inspect the actual swapchain
+    // bytes. Keep this off the normal path and never trace unrelated scene objects.
+    static bool switchFloorPixelReadbackDone = false;
+    if (!switchFloorPixelReadbackDone &&
+        m_vertexShader && m_pixelShader &&
+        m_vertexShader->serial == 1820u &&
+        m_pixelShader->serial == 1821u &&
+        Switch_IsFloorAuditContextActive() &&
+        g_switchWorldDrawAudit.surfaceIndex == 1583u &&
+        (!m_color || !m_color->texture))
+    {
+        switchFloorPixelReadbackDone = true;
+        const VkFormat readbackFormat = m_backend->SwapchainFormat();
+        uint32_t readbackWidth = 0u;
+        uint32_t readbackHeight = 0u;
+        const bool hasBackbuffer = m_backend->GetBackBufferDesc(
+            &readbackWidth, &readbackHeight, nullptr);
+        const bool isBgra =
+            readbackFormat == VK_FORMAT_B8G8R8A8_UNORM ||
+            readbackFormat == VK_FORMAT_B8G8R8A8_SRGB;
+        const bool isRgba =
+            readbackFormat == VK_FORMAT_R8G8B8A8_UNORM ||
+            readbackFormat == VK_FORMAT_R8G8B8A8_SRGB;
+        const uint64_t byteCount64 =
+            static_cast<uint64_t>(readbackWidth) * readbackHeight * 4u;
+        if (!hasBackbuffer || !readbackWidth || !readbackHeight ||
+            (!isBgra && !isRgba) || byteCount64 > 8u * 1024u * 1024u)
+        {
+            char trace[224];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][VK FLOOR PIXEL READBACK] result=skip reason=unsupported_target format=%u size=%ux%u\n",
+                static_cast<unsigned>(readbackFormat), readbackWidth, readbackHeight);
+            Switch_LogWrite(trace);
+        }
+        else
+        {
+            const VkImageLayout layoutBefore = m_backend->CurrentSwapchainLayout();
+            if (layoutBefore != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+            {
+                char trace[224];
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][VK FLOOR PIXEL READBACK] result=skip reason=unexpected_layout layout=%u format=%u size=%ux%u\n",
+                    static_cast<unsigned>(layoutBefore),
+                    static_cast<unsigned>(readbackFormat), readbackWidth, readbackHeight);
+                Switch_LogWrite(trace);
+            }
+            else if (!m_backend->SynchronizeActiveFrame())
+            {
+                Switch_LogWrite("[KisakCOD][VK FLOOR PIXEL READBACK] result=fail reason=frame_sync\n");
+            }
+            else
+            {
+                std::vector<uint8_t> pixels(static_cast<size_t>(byteCount64));
+                const VkImage swapchainImage = m_backend->CurrentSwapchainImage();
+                const VkImageLayout readbackLayout = m_backend->CurrentSwapchainLayout();
+                const bool readbackOk =
+                    swapchainImage != VK_NULL_HANDLE &&
+                    readbackLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL &&
+                    m_backend->DownloadImage2D(
+                        swapchainImage, VK_IMAGE_ASPECT_COLOR_BIT,
+                        readbackWidth, readbackHeight, 0u,
+                        pixels.data(), pixels.size(), readbackLayout, 0u);
+                if (!readbackOk)
+                {
+                    char trace[224];
+                    std::snprintf(trace, sizeof(trace),
+                        "[KisakCOD][VK FLOOR PIXEL READBACK] result=fail reason=image_download format=%u layout=%u size=%ux%u\n",
+                        static_cast<unsigned>(readbackFormat),
+                        static_cast<unsigned>(readbackLayout), readbackWidth, readbackHeight);
+                    Switch_LogWrite(trace);
+                }
+                else
+                {
+                    uint64_t nearWhitePixels = 0u;
+                    uint64_t nearBlackPixels = 0u;
+                    uint64_t nonBlackPixels = 0u;
+                    uint32_t whiteMinX = readbackWidth;
+                    uint32_t whiteMinY = readbackHeight;
+                    uint32_t whiteMaxX = 0u;
+                    uint32_t whiteMaxY = 0u;
+                    for (uint32_t y = 0u; y < readbackHeight; ++y)
+                    {
+                        for (uint32_t x = 0u; x < readbackWidth; ++x)
+                        {
+                            const size_t pixelOffset =
+                                (static_cast<size_t>(y) * readbackWidth + x) * 4u;
+                            const uint8_t r = pixels[pixelOffset + (isBgra ? 2u : 0u)];
+                            const uint8_t g = pixels[pixelOffset + 1u];
+                            const uint8_t b = pixels[pixelOffset + (isBgra ? 0u : 2u)];
+                            if (r >= 248u && g >= 248u && b >= 248u)
+                            {
+                                ++nearWhitePixels;
+                                whiteMinX = std::min(whiteMinX, x);
+                                whiteMinY = std::min(whiteMinY, y);
+                                whiteMaxX = std::max(whiteMaxX, x);
+                                whiteMaxY = std::max(whiteMaxY, y);
+                            }
+                            if (r <= 8u && g <= 8u && b <= 8u)
+                                ++nearBlackPixels;
+                            if (r > 8u || g > 8u || b > 8u)
+                                ++nonBlackPixels;
+                        }
+                    }
+                    char trace[320];
+                    if (nearWhitePixels)
+                    {
+                        std::snprintf(trace, sizeof(trace),
+                            "[KisakCOD][VK FLOOR PIXEL READBACK] result=ok target=swapchain size=%ux%u format=%u whitePixels=%llu blackPixels=%llu nonBlackPixels=%llu whiteBounds=(%u,%u)-(%u,%u)\n",
+                            readbackWidth, readbackHeight, static_cast<unsigned>(readbackFormat),
+                            static_cast<unsigned long long>(nearWhitePixels),
+                            static_cast<unsigned long long>(nearBlackPixels),
+                            static_cast<unsigned long long>(nonBlackPixels),
+                            whiteMinX, whiteMinY, whiteMaxX, whiteMaxY);
+                    }
+                    else
+                    {
+                        std::snprintf(trace, sizeof(trace),
+                            "[KisakCOD][VK FLOOR PIXEL READBACK] result=ok target=swapchain size=%ux%u format=%u whitePixels=0 blackPixels=%llu nonBlackPixels=%llu whiteBounds=none\n",
+                            readbackWidth, readbackHeight, static_cast<unsigned>(readbackFormat),
+                            static_cast<unsigned long long>(nearBlackPixels),
+                            static_cast<unsigned long long>(nonBlackPixels));
+                    }
+                    Switch_LogWrite(trace);
+                }
+            }
+        }
+    }
+#endif
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/return";
     ++g_switchSceneDrawIndexedCalls;
     (void)minVertexIndex;
