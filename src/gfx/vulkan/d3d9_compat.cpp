@@ -5900,6 +5900,52 @@ bool IDirect3DDevice9::BindUniformSet(
                 &src[layout.boolRegisters[i]], sizeof(int32_t));
     }
 
+#ifdef __SWITCH__
+    // One compact dump for the exact floor VS: the white PS probe proves that
+    // fragment state is isolated, so inspect the constants feeding clip-space.
+    if (setIndex == 1u && m_vertexShader && m_vertexShader->serial == 1820u)
+    {
+        static bool switchFloorVsConstantsLogged = false;
+        if (!switchFloorVsConstantsLogged)
+        {
+            switchFloorVsConstantsLogged = true;
+            char trace[1024];
+            size_t used = 0u;
+            const int header = std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK FLOOR VS CONSTANTS] vs=1820 floats=%u ints=%u bools=%u",
+                layout.floatCount, layout.intCount, layout.boolCount);
+            if (header > 0)
+                used = std::min<size_t>(static_cast<size_t>(header), sizeof(trace) - 1u);
+            const float *srcFloats = static_cast<const float *>(floatData);
+            for (uint32_t i = 0; i < layout.floatCount && i < 16u &&
+                 used < sizeof(trace) - 96u; ++i)
+            {
+                const uint32_t reg = layout.floatRegisters[i];
+                const float *v = srcFloats + static_cast<size_t>(reg) * 4u;
+                const int n = std::snprintf(
+                    trace + used, sizeof(trace) - used,
+                    " c%u=(%.5g,%.5g,%.5g,%.5g)",
+                    reg, v[0], v[1], v[2], v[3]);
+                if (n > 0)
+                    used = std::min<size_t>(
+                        sizeof(trace) - 1u, used + static_cast<size_t>(n));
+            }
+            if (used < sizeof(trace) - 2u)
+            {
+                trace[used++] = '\\n';
+                trace[used] = '\\0';
+            }
+            else
+            {
+                trace[sizeof(trace) - 2u] = '\\n';
+                trace[sizeof(trace) - 1u] = '\\0';
+            }
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
+
     g_switchFrameStage = "frame/render/vulkan/uniform/allocate_ring";
     VkDescriptorBufferInfo bufferInfo{};
     if (!m_backend->AllocateUniform(bytes, size, &bufferInfo))
@@ -7881,8 +7927,14 @@ bool IDirect3DDevice9::EnsurePipeline()
     
     
 
-    if (pipelineCreateSequence >= 30u && pipelineCreateSequence <= 40u)
+    static uint32_t switchFloorInputTraceCount = 0u;
+    const bool traceFloorInput =
+        m_vertexShader && m_pixelShader &&
+        m_vertexShader->serial == 1820u && m_pixelShader->serial == 1821u &&
+        switchFloorInputTraceCount < 2u;
+    if (traceFloorInput)
     {
+        ++switchFloorInputTraceCount;
         char inputTrace[224];
         std::snprintf(inputTrace, sizeof(inputTrace),
             "[KisakCOD][VK PIPELINE INPUT] seq=%u key=%016llx decl=%llu vs=%llu ps=%llu bindings=%zu attrs=%zu\n",
