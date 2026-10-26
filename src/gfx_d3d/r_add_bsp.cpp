@@ -188,7 +188,7 @@ void __cdecl R_AddAllBspDrawSurfacesRangeCamera(
             && !switchFloorProbeVisibilityBypassLogged)
         {
             switchFloorProbeVisibilityBypassLogged = true;
-            Switch_LogWrite("[KisakCOD][VK FLOOR VISIBILITY PROBE] action=force_surface surface=1583 stage=0 originalVisibility=0 reason=isolate_cpu_visibility_from_rasterization\\n");
+            Switch_LogWrite("[KisakCOD][VK FLOOR VISIBILITY PROBE] action=force_surface surface=1583 stage=0 originalVisibility=0 reason=isolate_cpu_visibility_from_rasterization\n");
         }
         if ((surfaceVisData[sortedSurfIndex] || forceFloorRasterProbeSurface)
             && (forceFloorRasterProbeSurface || !debugFastSunShadow
