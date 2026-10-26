@@ -6181,10 +6181,19 @@ bool IDirect3DDevice9::EnsurePipeline()
         return false;
     }
 
-    // Preserve D3D9 alpha-test semantics for materials such as fences and foliage.
+    // The S0 texture probe is meant to isolate the sampled base image. Material
+    // alpha-test/blend/ATOC state must not discard or visually hide that sample.
+    // Keep ordinary depth and rasterization state intact so the same surfaces
+    // remain in place while only the texture-sampling path is under test.
+    const bool switchS0UvProbeActive =
+        m_pixelShader && m_decl && SwitchPsS0UvTestTargetMatchesLayout(
+            SwitchPsS0UvTestTargetSerial(), m_pixelShader->serial,
+            m_decl->switchVertDeclType, m_streams[0].stride);
+
     // Alpha reference is baked into each fragment-module variant, so avoid
-    // specialization maps when creating a pipeline on NVK.
-    const bool useAlphaTestPatch = m_alphaTest;
+    // specialization maps when creating a pipeline on NVK. The diagnostic probe
+    // writes the raw s0 sample and therefore must bypass the normal alpha test.
+    const bool useAlphaTestPatch = m_alphaTest && !switchS0UvProbeActive;
 
     // Dynamic-rendering pipelines are compatible only with their attachment
     // formats; resolve them before attempting to reuse a cached pipeline.
@@ -6245,6 +6254,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_depthWrite && !m_switchUnlit);
     key = HashCombine(key, m_depthFunc);
     key = HashCombine(key, m_alphaTest);
+    key = HashCombine(key, switchS0UvProbeActive ? 1u : 0u);
     key = HashCombine(key, m_alphaFunc);
     key = HashCombine(key, m_alphaRef);
     uint32_t depthBiasBits = 0;
@@ -7260,7 +7270,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     // CoD4's ATOC transparency-AA mode maps to Vulkan alpha-to-coverage.
     // It is meaningful only when the framebuffer actually has multiple samples.
     multisample.alphaToCoverageEnable =
-        (m_alphaToCoverage && colorSamples != VK_SAMPLE_COUNT_1_BIT)
+        (!switchS0UvProbeActive && m_alphaToCoverage &&
+         colorSamples != VK_SAMPLE_COUNT_1_BIT)
             ? VK_TRUE : VK_FALSE;
     multisample.alphaToOneEnable = VK_FALSE;
     // D3D9's sample mask is a bit mask over sample indices. Supported Vulkan
@@ -7305,7 +7316,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     // texture through straight-alpha blending, discarding authored additive,
     // premultiplied, and separate-alpha modes (notably menu highlight caps).
     VkPipelineColorBlendAttachmentState colorBlend{};
-    colorBlend.blendEnable = m_blendEnable ? VK_TRUE : VK_FALSE;
+    colorBlend.blendEnable =
+        (m_blendEnable && !switchS0UvProbeActive) ? VK_TRUE : VK_FALSE;
     colorBlend.srcColorBlendFactor = BlendFactor(m_srcBlend);
     colorBlend.dstColorBlendFactor = BlendFactor(m_dstBlend);
     colorBlend.colorBlendOp = BlendOp(m_blendOp);
@@ -7315,11 +7327,13 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend);
     colorBlend.alphaBlendOp = BlendOp(
         m_separateAlphaBlend ? m_blendOpAlpha : m_blendOp);
-    colorBlend.colorWriteMask =
-        ((m_colorWriteMask & 1) ? VK_COLOR_COMPONENT_R_BIT : 0) |
-        ((m_colorWriteMask & 2) ? VK_COLOR_COMPONENT_G_BIT : 0) |
-        ((m_colorWriteMask & 4) ? VK_COLOR_COMPONENT_B_BIT : 0) |
-        ((m_colorWriteMask & 8) ? VK_COLOR_COMPONENT_A_BIT : 0);
+    colorBlend.colorWriteMask = switchS0UvProbeActive
+        ? (VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT)
+        : (((m_colorWriteMask & 1) ? VK_COLOR_COMPONENT_R_BIT : 0) |
+           ((m_colorWriteMask & 2) ? VK_COLOR_COMPONENT_G_BIT : 0) |
+           ((m_colorWriteMask & 4) ? VK_COLOR_COMPONENT_B_BIT : 0) |
+           ((m_colorWriteMask & 8) ? VK_COLOR_COMPONENT_A_BIT : 0));
 
     VkPipelineColorBlendStateCreateInfo blend{};
     blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
