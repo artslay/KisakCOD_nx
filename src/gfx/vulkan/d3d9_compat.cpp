@@ -9165,7 +9165,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     {
         char probeFailure[224];
         std::snprintf(probeFailure, sizeof(probeFailure),
-            "[KisakCOD][VK FLOOR RASTER CONTROL] result=fail stage=graphics_pipeline vk=%d action=retry_original_game_shaders\\n",
+            "[KisakCOD][VK FLOOR RASTER CONTROL] result=fail stage=graphics_pipeline vk=%d action=retry_original_game_shaders\n",
             static_cast<int>(pipelineResult));
         Switch_LogWrite(probeFailure);
         stages[0] = switchFloorOriginalStages[0];
