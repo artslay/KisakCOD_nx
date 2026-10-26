@@ -8668,6 +8668,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
     const uint8_t *auditIndexData = nullptr;
+#ifdef __SWITCH__
+    VkQueryPool switchFloorOcclusionPool = VK_NULL_HANDLE;
+    bool switchFloorOcclusionQueryIssued = false;
+    bool switchFloorReadbackFrameSynced = false;
+#endif
 
     auto auditLogObject = [&](const SwitchQueuedWorldSurfaceAudit *surface,const char *status,
                               const char *reason,uint32_t batchTriangleOffset)
@@ -9351,9 +9356,69 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     }
 #endif
 
+#ifdef __SWITCH__
+    // Count rasterized samples for the exact floor draw. This separates a
+    // clipped/degenerate vertex-shader result from a fragment-output failure.
+    static bool switchFloorOcclusionQueryAttempted = false;
+    const bool switchFloorOcclusionTarget =
+        m_vertexShader && m_pixelShader &&
+        m_vertexShader->serial == 1820u &&
+        m_pixelShader->serial == 1821u &&
+        Switch_IsFloorAuditContextActive() &&
+        g_switchWorldDrawAudit.surfaceIndex == 1583u &&
+        (!m_color || !m_color->texture);
+    if (!switchFloorOcclusionQueryAttempted && switchFloorOcclusionTarget)
+    {
+        switchFloorOcclusionQueryAttempted = true;
+        if (!m_backend->SupportsOcclusionQuery())
+        {
+            Switch_LogWrite("[KisakCOD][VK FLOOR RASTER QUERY] result=skip reason=occlusion_query_unsupported\\n");
+        }
+        else
+        {
+            VkQueryPoolCreateInfo queryInfo{};
+            queryInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+            queryInfo.queryType = VK_QUERY_TYPE_OCCLUSION;
+            queryInfo.queryCount = 1;
+            const VkResult queryCreateResult = vkCreateQueryPool(
+                m_backend->Device(), &queryInfo, nullptr, &switchFloorOcclusionPool);
+            if (queryCreateResult != VK_SUCCESS)
+            {
+                char trace[192];
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][VK FLOOR RASTER QUERY] result=skip reason=create_failed vk=%d\\n",
+                    static_cast<int>(queryCreateResult));
+                Switch_LogWrite(trace);
+            }
+            else
+            {
+                // Query-pool reset is issued outside dynamic rendering, then
+                // attachments are resumed with LOAD before the selected draw.
+                m_backend->EndScene();
+                vkCmdResetQueryPool(m_backend->CommandBuffer(),
+                    switchFloorOcclusionPool, 0, 1);
+                if (!PrepareDraw())
+                {
+                    Switch_LogWrite("[KisakCOD][VK FLOOR RASTER QUERY] result=fail reason=prepare_draw\\n");
+                    vkDestroyQueryPool(
+                        m_backend->Device(), switchFloorOcclusionPool, nullptr);
+                    switchFloorOcclusionPool = VK_NULL_HANDLE;
+                    return E_FAIL;
+                }
+                vkCmdBeginQuery(
+                    m_backend->CommandBuffer(), switchFloorOcclusionPool, 0, 0);
+                switchFloorOcclusionQueryIssued = true;
+            }
+        }
+    }
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
+#endif
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
+#ifdef __SWITCH__
+    if (switchFloorOcclusionQueryIssued)
+        vkCmdEndQuery(m_backend->CommandBuffer(), switchFloorOcclusionPool, 0);
+#endif
     auditLogDraw("GPU_DRAW_RECORDED","vkCmdDrawIndexed_recorded");
 
 #ifdef __SWITCH__
