@@ -434,11 +434,17 @@ void __cdecl R_DrawBspDrawSurfs(const uint32_t *primDrawSurfPos, GfxCmdBufState 
     GfxTrianglesDrawStream drawStream; // [esp+0h] [ebp-30h] BYREF
 
 #ifdef __SWITCH__
-    
-    
+    // The non-lit BSP route uses R_DrawTriangles rather than R_DrawTrianglesLit.
+    // Keep its material/pass context active until the actual indexed draw is issued.
+    s_switchBspAuditTechnique = state->technique;
+    s_switchBspAuditPass = state->pass;
 #endif
     drawStream.primDrawSurfPos = primDrawSurfPos;
     R_DrawTriangles(&drawStream, &state->prim);
+#ifdef __SWITCH__
+    s_switchBspAuditTechnique = nullptr;
+    s_switchBspAuditPass = nullptr;
+#endif
 }
 
 void __cdecl R_DrawTriangles(GfxTrianglesDrawStream *drawStream, GfxCmdBufPrimState *state)
@@ -449,12 +455,20 @@ void __cdecl R_DrawTriangles(GfxTrianglesDrawStream *drawStream, GfxCmdBufPrimSt
     const uint16_t *list; // [esp+10h] [ebp-18h] BYREF
     int triCount; // [esp+14h] [ebp-14h]
     const GfxSurface *bspSurf; // [esp+18h] [ebp-10h]
+#ifdef __SWITCH__
+    const GfxSurface *prevBspSurf;
+    uint32_t prevBspSurfIndex;
+#endif
     uint32_t index; // [esp+1Ch] [ebp-Ch]
     uint32_t count; // [esp+20h] [ebp-8h] BYREF
     int baseVertex; // [esp+24h] [ebp-4h]
 
     prevTris = 0;
     triCount = 0;
+#ifdef __SWITCH__
+    prevBspSurf = nullptr;
+    prevBspSurfIndex = UINT32_MAX;
+#endif
     baseVertex = -1;
     baseIndex = 0;
     while (R_ReadBspDrawSurfs(&drawStream->primDrawSurfPos, &list, &count))
@@ -466,8 +480,19 @@ void __cdecl R_DrawTriangles(GfxTrianglesDrawStream *drawStream, GfxCmdBufPrimSt
             if (baseVertex != bspSurf->tris.firstVertex || baseIndex + 3 * triCount != bspSurf->tris.baseIndex)
             {
                 if (prevTris)
+                {
+#ifdef __SWITCH__
+                    R_SwitchDrawBspTrisAudited(
+                        state, prevTris, triCount, prevBspSurf, prevBspSurfIndex);
+#else
                     R_DrawBspTris(state, prevTris, triCount);
+#endif
+                }
                 prevTris = &tris->tris;
+#ifdef __SWITCH__
+                prevBspSurf = bspSurf;
+                prevBspSurfIndex = list[index];
+#endif
                 triCount = 0;
                 baseIndex = tris->tris.baseIndex;
                 if (baseVertex != tris->tris.firstVertex)
@@ -480,7 +505,14 @@ void __cdecl R_DrawTriangles(GfxTrianglesDrawStream *drawStream, GfxCmdBufPrimSt
         }
     }
     if (prevTris)
+    {
+#ifdef __SWITCH__
+        R_SwitchDrawBspTrisAudited(
+            state, prevTris, triCount, prevBspSurf, prevBspSurfIndex);
+#else
         R_DrawBspTris(state, prevTris, triCount);
+#endif
+    }
 }
 
 void __cdecl R_DrawPreTessTris(
@@ -501,6 +533,32 @@ void __cdecl R_DrawPreTessTris(
     g_primStats->dynamicIndexCount += 3 * triCount;
 }
 
+#ifdef __SWITCH__
+static void R_SwitchDrawPreTessTrisAudited(
+    GfxCmdBufPrimState *state,
+    const srfTriangles_t *tris,
+    uint32_t baseIndex,
+    uint32_t triangleCount,
+    const GfxSurface *surface,
+    uint32_t surfaceIndex,
+    const MaterialTechnique *technique,
+    const MaterialPass *pass)
+{
+    Switch_BeginWorldDrawAudit(
+        surface ? surface->material : nullptr,
+        technique ? technique->name : nullptr,
+        pass && pass->vertexShader ? pass->vertexShader->name : nullptr,
+        pass && pass->pixelShader ? pass->pixelShader->name : nullptr,
+        surfaceIndex,
+        tris ? tris->firstVertex : 0u,
+        tris ? tris->vertexCount : 0u,
+        triangleCount,
+        surface ? surface->lightmapIndex : UINT32_MAX);
+    R_DrawPreTessTris(state, tris, baseIndex, triangleCount);
+    Switch_EndWorldDrawAudit();
+}
+#endif
+
 void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
 {
     uint32_t baseIndex; // [esp+0h] [ebp-2Ch] BYREF
@@ -511,6 +569,10 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
     const GfxBspPreTessDrawSurf *list; // [esp+14h] [ebp-18h] BYREF
     uint32_t triCount; // [esp+18h] [ebp-14h]
     const GfxSurface *bspSurf; // [esp+1Ch] [ebp-10h]
+#ifdef __SWITCH__
+    const GfxSurface *prevBspSurf;
+    uint32_t prevBspSurfIndex;
+#endif
     uint32_t index; // [esp+20h] [ebp-Ch]
     uint32_t count; // [esp+24h] [ebp-8h] BYREF
     int baseVertex; // [esp+28h] [ebp-4h]
@@ -522,6 +584,10 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
     {
         prevTris = 0;
         triCount = 0;
+#ifdef __SWITCH__
+        prevBspSurf = nullptr;
+        prevBspSurfIndex = UINT32_MAX;
+#endif
         baseVertex = -1;
         for (index = 0; index < count; ++index)
         {
@@ -540,16 +606,34 @@ void __cdecl R_DrawBspDrawSurfsPreTess(const uint32_t *primDrawSurfPos, GfxCmdBu
             {
                 if (triCount)
                 {
+#ifdef __SWITCH__
+                    R_SwitchDrawPreTessTrisAudited(
+                        &context.state->prim, prevTris, baseIndex, triCount,
+                        prevBspSurf, prevBspSurfIndex,
+                        context.state->technique, context.state->pass);
+#else
                     R_DrawPreTessTris(&context.state->prim, prevTris, baseIndex, triCount);
+#endif
                     baseIndex += 3 * triCount;
                     triCount = 0;
                 }
                 prevTris = tris;
+#ifdef __SWITCH__
+                prevBspSurf = bspSurf;
+                prevBspSurfIndex = surfIndex;
+#endif
                 baseVertex = tris->firstVertex;
             }
             triCount += list[index].totalTriCount;
         }
+#ifdef __SWITCH__
+        R_SwitchDrawPreTessTrisAudited(
+            &context.state->prim, prevTris, baseIndex, triCount,
+            prevBspSurf, prevBspSurfIndex,
+            context.state->technique, context.state->pass);
+#else
         R_DrawPreTessTris(&context.state->prim, prevTris, baseIndex, triCount);
+#endif
     }
 }
 
@@ -593,11 +677,8 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
             bspSurf = &rgp.world->dpvs.surfaces[surfIndex];
             tris = &bspSurf->tris;
 #ifdef __SWITCH__
-            // This marker is intentionally adjacent to the real pre-tess surface
-            // read: it distinguishes queued material routes from surfaces that
-            // actually reach BSP lightmap selection on the GPU submission path.
-            
-            
+            // This point is reached only after a pre-tess BSP surface has made it
+            // to the draw loop. The audited draw below captures its actual bindings.
 #endif
             if (reflectionProbeIndex != bspSurf->reflectionProbeIndex || lightmapIndex != bspSurf->lightmapIndex)
             {
@@ -609,7 +690,13 @@ void __cdecl R_DrawBspDrawSurfsLitPreTess(const uint32_t *primDrawSurfPos, GfxCm
                 R_SetupPassPerPrimArgs(context);
             }
 
+#ifdef __SWITCH__
+            R_SwitchDrawPreTessTrisAudited(
+                &context.state->prim, tris, baseIndex, list[index].totalTriCount,
+                bspSurf, surfIndex, context.state->technique, context.state->pass);
+#else
             R_DrawPreTessTris(&context.state->prim, tris, baseIndex, list[index].totalTriCount);
+#endif
             baseIndex += 3 * list[index].totalTriCount;
         }
     }
