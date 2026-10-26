@@ -476,7 +476,87 @@ void R_VulkanUploadTexture(
         texture->dirtyAll = true;
         texture->dirtyBoxes.clear();
 
+        // Round-trip a small set of BSP base-color textures through the real
+        // Vulkan image. This distinguishes a successful descriptor bind from
+        // damaged/empty texels after the upload. These are compressed BC1
+        // assets, so compare the transfer payload byte-for-byte rather than
+        // trying to interpret compressed blocks as RGBA pixels.
+        if (mipLevel == 0u && image->name)
+        {
+            static const char *const probeNames[] = {
+                "ch_factory_rusty_iron",
+                "me_drywall02_col",
+                "icbm_tunnelfloor"
+            };
+            static bool probeDone[3]{};
+            for (size_t probeIndex = 0;
+                 probeIndex < sizeof(probeNames) / sizeof(probeNames[0]);
+                 ++probeIndex)
+            {
+                if (probeDone[probeIndex] ||
+                    std::strcmp(image->name, probeNames[probeIndex]) != 0)
+                    continue;
+                probeDone[probeIndex] = true;
 
+                std::vector<uint8_t> readback(bytes);
+                const bool readbackOk = backend->DownloadImage2D(
+                    texture->image, info.aspect, width, height, mipLevel,
+                    readback.data(), bytes,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, layer);
+                const auto hashBytes = [](const uint8_t *data, size_t size)
+                {
+                    uint64_t hash = 1469598103934665603ull;
+                    for (size_t i = 0; i < size; ++i)
+                    {
+                        hash ^= data[i];
+                        hash *= 1099511628211ull;
+                    }
+                    return hash;
+                };
+                uint32_t differingBytes = 0u;
+                bool sourceValues[256]{};
+                bool gpuValues[256]{};
+                uint32_t sourceUnique = 0u;
+                uint32_t gpuUnique = 0u;
+                for (size_t i = 0; i < bytes; ++i)
+                {
+                    if (!sourceValues[source[i]])
+                    {
+                        sourceValues[source[i]] = true;
+                        ++sourceUnique;
+                    }
+                    if (readbackOk)
+                    {
+                        if (!gpuValues[readback[i]])
+                        {
+                            gpuValues[readback[i]] = true;
+                            ++gpuUnique;
+                        }
+                        if (source[i] != readback[i])
+                            ++differingBytes;
+                    }
+                }
+
+                char trace[512];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK TEXEL ROUNDTRIP] name=%.64s size=%ux%u format=%u vkFormat=%u bytes=%zu readback=%u srcHash=%016llx gpuHash=%016llx diffBytes=%u srcUnique=%u gpuUnique=%u srcHead=%02x%02x%02x%02x gpuHead=%02x%02x%02x%02x\n",
+                    image->name, width, height,
+                    static_cast<unsigned>(format),
+                    static_cast<unsigned>(texture->format), bytes,
+                    readbackOk ? 1u : 0u,
+                    static_cast<unsigned long long>(hashBytes(source, bytes)),
+                    static_cast<unsigned long long>(
+                        readbackOk ? hashBytes(readback.data(), bytes) : 0u),
+                    differingBytes, sourceUnique, gpuUnique,
+                    source[0], source[1], source[2], source[3],
+                    readbackOk ? readback[0] : 0u,
+                    readbackOk ? readback[1] : 0u,
+                    readbackOk ? readback[2] : 0u,
+                    readbackOk ? readback[3] : 0u);
+                Switch_LogWrite(trace);
+            }
+        }
     }
     else
         Switch_LogWrite("[KisakCOD][VK] texture upload failed\n");
