@@ -6,7 +6,6 @@
 #include "r_pretess.h"
 
 #ifdef __SWITCH__
-extern void Switch_LogWrite(const char *msg);
 extern void Switch_LogWorldSurfaceSkipped(
     const Material *material, uint32_t surfaceIndex, uint32_t firstVertex,
     uint32_t vertexCount, uint32_t triangleCount, uint32_t lightmapIndex,
@@ -173,32 +172,10 @@ void __cdecl R_AddAllBspDrawSurfacesRangeCamera(
     triSurfCount = 0;
     debugFastSunShadow = sm_debugFastSunShadow->current.color[0];
     surfaceCastsSunShadow = rgp.world->dpvs.surfaceCastsSunShadow;
-#ifdef __SWITCH__
-    // Temporary isolation for the floor raster probe: keep only BSP surface 1583
-    // in the main camera pass even when CPU visibility says it is hidden. Its
-    // private Vulkan shader overwrites clip position, so this separates CPU/PVS
-    // rejection from rasterization without changing other surfaces or passes.
-    static bool switchFloorProbeVisibilityBypassLogged = false;
-#endif
     for (sortedSurfIndex = beginSurface; sortedSurfIndex < endSurface; ++sortedSurfIndex)
     {
-#ifdef __SWITCH__
-        const bool forceFloorRasterProbeSurface =
-            stage == 0u && sortedSurfIndex == 1583u;
-        if (forceFloorRasterProbeSurface && !surfaceVisData[sortedSurfIndex]
-            && !switchFloorProbeVisibilityBypassLogged)
-        {
-            switchFloorProbeVisibilityBypassLogged = true;
-            Switch_LogWrite("[KisakCOD][VK FLOOR VISIBILITY PROBE] action=force_surface surface=1583 stage=0 originalVisibility=0 reason=isolate_cpu_visibility_from_rasterization\n");
-        }
-        if ((surfaceVisData[sortedSurfIndex] || forceFloorRasterProbeSurface)
-            && (forceFloorRasterProbeSurface || !debugFastSunShadow
-                || (surfaceCastsSunShadow[sortedSurfIndex >> 5]
-                    & (1 << (sortedSurfIndex & 0x1F))) != 0))
-#else
         if (surfaceVisData[sortedSurfIndex]
             && (!debugFastSunShadow || (surfaceCastsSunShadow[sortedSurfIndex >> 5] & (1 << (sortedSurfIndex & 0x1F))) != 0))
-#endif
         {
             //packed_high = HIDWORD(surfaceMaterials[sortedSurfIndex].packed);
             //*(_DWORD*)&drawSurf.fields = surfaceMaterials[sortedSurfIndex].fields;
