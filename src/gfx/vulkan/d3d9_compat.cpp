@@ -112,47 +112,203 @@ struct SwitchWorldDrawAuditState
     uint32_t lightmapIndex = UINT32_MAX;
 };
 
-thread_local SwitchWorldDrawAuditState g_switchWorldDrawAudit{};
-
-struct SwitchWorldDrawAuditSignature
+struct SwitchQueuedWorldSurfaceAudit
 {
     const Material *material = nullptr;
-    uint64_t pixelShaderSerial = 0;
-    uintptr_t texturePtrs[6]{};
+    char techniqueName[64]{};
+    char vertexShaderName[64]{};
+    char pixelShaderName[64]{};
+    uint32_t passIndex = UINT32_MAX;
+    uint32_t surfaceIndex = UINT32_MAX;
+    uint32_t firstVertex = 0;
+    uint32_t vertexCount = 0;
+    uint32_t triangleCount = 0;
+    uint32_t lightmapIndex = UINT32_MAX;
+    uint32_t baseIndex = UINT32_MAX;
 };
-static constexpr uint32_t kSwitchWorldDrawAuditSignatureCount = 192u;
-static SwitchWorldDrawAuditSignature
-    g_switchWorldDrawAuditSignatures[kSwitchWorldDrawAuditSignatureCount]{};
-static uint32_t g_switchWorldDrawAuditCount = 0;
 
-void Switch_BeginWorldDrawAudit(
-    const Material *material, const char *techniqueName,
-    const char *vertexShaderName, const char *pixelShaderName,
-    uint32_t surfaceIndex, uint32_t firstVertex, uint32_t vertexCount,
-    uint32_t triangleCount, uint32_t lightmapIndex)
+static constexpr uint32_t kSwitchQueuedWorldAuditCapacity = 512u;
+static thread_local SwitchQueuedWorldSurfaceAudit
+    g_switchQueuedWorldAudit[kSwitchQueuedWorldAuditCapacity]{};
+static thread_local uint32_t g_switchQueuedWorldAuditCount = 0;
+static thread_local bool g_switchQueuedWorldAuditOverflowReported = false;
+thread_local SwitchWorldDrawAuditState g_switchWorldDrawAudit{};
+
+struct SwitchRenderAuditContext
 {
-    g_switchWorldDrawAudit.active = material != nullptr;
-    g_switchWorldDrawAudit.material = material;
-    std::snprintf(g_switchWorldDrawAudit.techniqueName,
-        sizeof(g_switchWorldDrawAudit.techniqueName), "%.63s",
-        techniqueName ? techniqueName : "<none>");
-    std::snprintf(g_switchWorldDrawAudit.vertexShaderName,
-        sizeof(g_switchWorldDrawAudit.vertexShaderName), "%.63s",
-        vertexShaderName ? vertexShaderName : "<none>");
-    std::snprintf(g_switchWorldDrawAudit.pixelShaderName,
-        sizeof(g_switchWorldDrawAudit.pixelShaderName), "%.63s",
-        pixelShaderName ? pixelShaderName : "<none>");
-    g_switchWorldDrawAudit.surfaceIndex = surfaceIndex;
-    g_switchWorldDrawAudit.firstVertex = firstVertex;
-    g_switchWorldDrawAudit.vertexCount = vertexCount;
-    g_switchWorldDrawAudit.triangleCount = triangleCount;
-    g_switchWorldDrawAudit.lightmapIndex = lightmapIndex;
+    const Material *material = nullptr;
+    char techniqueName[64]{};
+    char vertexShaderName[64]{};
+    char pixelShaderName[64]{};
+    uint32_t passIndex = UINT32_MAX;
+    uint32_t surfaceType = UINT32_MAX;
+    uint32_t objectId = UINT32_MAX;
+};
+static thread_local SwitchRenderAuditContext g_switchRenderAuditContext{};
+
+static uint64_t g_switchRenderAuditSignatures[65536]{};
+static std::mutex g_switchRenderAuditSignatureMutex;
+static bool g_switchRenderAuditSignatureOverflowReported = false;
+
+static uint64_t Switch_AuditHashMix(uint64_t hash, uint64_t value)
+{
+    for (uint32_t i=0;i<8u;++i) { hash ^= static_cast<uint8_t>(value & 0xFFu); hash *= 1099511628211ull; value >>= 8u; }
+    return hash;
+}
+static uint64_t Switch_AuditHashString(uint64_t hash, const char *value)
+{
+    if (!value) return Switch_AuditHashMix(hash,0u);
+    for (const unsigned char *p=reinterpret_cast<const unsigned char *>(value);*p;++p) { hash ^= *p; hash *= 1099511628211ull; }
+    return Switch_AuditHashMix(hash,0xFFu);
+}
+static bool Switch_AuditShouldLog(uint64_t signature)
+{
+    if(!signature) signature=1u;
+    std::lock_guard<std::mutex> lock(g_switchRenderAuditSignatureMutex);
+    constexpr size_t capacity=sizeof(g_switchRenderAuditSignatures)/sizeof(g_switchRenderAuditSignatures[0]);
+    size_t slot=static_cast<size_t>(signature)&(capacity-1u);
+    for(size_t probe=0;probe<capacity;++probe) {
+        uint64_t &stored=g_switchRenderAuditSignatures[slot];
+        if(stored==signature) return false;
+        if(!stored) { stored=signature; return true; }
+        slot=(slot+1u)&(capacity-1u);
+    }
+    if(!g_switchRenderAuditSignatureOverflowReported) {
+        g_switchRenderAuditSignatureOverflowReported=true;
+        Switch_LogWrite("[KisakCOD][RENDER OBJECT] status=AUDIT_TABLE_FULL capacity=65536 further_unique_records_suppressed=1\n");
+    }
+    return false;
+}
+static void Switch_FormatMaterialTextureSources(const Material *material,char *output,size_t outputSize)
+{
+    if(!output||!outputSize) return;
+    output[0]='\0';
+    if(!material||!material->textureTable||!material->textureCount) { std::snprintf(output,outputSize,"<none>"); return; }
+    size_t used=0;
+    const uint32_t count=std::min<uint32_t>(material->textureCount,8u);
+    for(uint32_t i=0;i<count&&used<outputSize;++i) {
+        const MaterialTextureDef &def=material->textureTable[i];
+        const bool imageSemantic=def.semantic==1u||def.semantic==2u||def.semantic==5u||def.semantic==8u;
+        const GfxImage *image=imageSemantic?def.u.image:nullptr;
+        const char *name=image&&image->name?image->name:(imageSemantic?"<null-image>":"<non-image-semantic>");
+        const int written=std::snprintf(output+used,outputSize-used,
+            "%sD%u{sem=%u,name=%.34s,size=%ux%u,base=%p}",i?";":"",i,
+            static_cast<unsigned>(def.semantic),name,image?image->width:0u,image?image->height:0u,
+            image?static_cast<const void *>(image->texture.basemap):nullptr);
+        if(written<0) break;
+        const size_t amount=static_cast<size_t>(written);
+        if(amount>=outputSize-used) { used=outputSize-1u; output[used]='\0'; break; }
+        used+=amount;
+    }
+}
+static void Switch_FormatWorldVertexUvRange(uint32_t firstVertex,uint32_t vertexCount,char *output,size_t outputSize)
+{
+    if(!output||!outputSize) return;
+    std::snprintf(output,outputSize,"not_mapped");
+    if(!vertexCount||firstVertex==UINT32_MAX||!rgp.world||!rgp.world->vd.worldVb) { std::snprintf(output,outputSize,"unavailable"); return; }
+    const KisakVkBuffer *vb=static_cast<const KisakVkBuffer *>(rgp.world->vd.worldVb);
+    const uint8_t *bytes=nullptr;
+    if(vb->dynamic&&vb->shadowInitialized&&vb->shadow.size()>=vb->size) bytes=vb->shadow.data();
+    else bytes=static_cast<const uint8_t *>(vb->mapped);
+    if(!bytes) { std::snprintf(output,outputSize,"unmapped"); return; }
+    constexpr uint64_t stride=44u;
+    const uint64_t first=firstVertex,count=vertexCount,bufferBytes=vb->size;
+    if(first>UINT64_MAX/stride||count>UINT64_MAX-first||(first+count)>bufferBytes/stride) {
+        std::snprintf(output,outputSize,"out_of_range:first=%u,count=%u,bytes=%llu",firstVertex,vertexCount,(unsigned long long)bufferBytes); return;
+    }
+    uint32_t finite0=0,bad0=0,outside0=0,zero0=0,finite1=0,bad1=0,outside1=0,zero1=0,sampled=0;
+    float minU0=std::numeric_limits<float>::infinity(),minV0=minU0,maxU0=-minU0,maxV0=-minU0;
+    float minU1=std::numeric_limits<float>::infinity(),minV1=minU1,maxU1=-minU1,maxV1=-minU1;
+    const uint32_t step=std::max(1u,vertexCount/64u);
+    for(uint32_t i=0;i<vertexCount;i+=step) {
+        float uv[4]{};
+        std::memcpy(uv,bytes+(first+i)*stride+20u,sizeof(uv)); ++sampled;
+        if(std::isfinite(uv[0])&&std::isfinite(uv[1])) {
+            ++finite0; minU0=std::min(minU0,uv[0]); maxU0=std::max(maxU0,uv[0]); minV0=std::min(minV0,uv[1]); maxV0=std::max(maxV0,uv[1]);
+            if(std::fabs(uv[0])<=1.0e-6f&&std::fabs(uv[1])<=1.0e-6f) ++zero0;
+            if(uv[0]<0.0f||uv[0]>1.0f||uv[1]<0.0f||uv[1]>1.0f) ++outside0;
+        } else ++bad0;
+        if(std::isfinite(uv[2])&&std::isfinite(uv[3])) {
+            ++finite1; minU1=std::min(minU1,uv[2]); maxU1=std::max(maxU1,uv[2]); minV1=std::min(minV1,uv[3]); maxV1=std::max(maxV1,uv[3]);
+            if(std::fabs(uv[2])<=1.0e-6f&&std::fabs(uv[3])<=1.0e-6f) ++zero1;
+            if(uv[2]<0.0f||uv[2]>1.0f||uv[3]<0.0f||uv[3]>1.0f) ++outside1;
+        } else ++bad1;
+    }
+    std::snprintf(output,outputSize,
+        "sampled=%u,uv0Finite=%u,bad=%u,zero=%u,outside01=%u,u=(%.5g,%.5g),v=(%.5g,%.5g),lmFinite=%u,bad=%u,zero=%u,outside01=%u,u=(%.5g,%.5g),v=(%.5g,%.5g)",
+        sampled,finite0,bad0,zero0,outside0,finite0?minU0:0.0f,finite0?maxU0:0.0f,finite0?minV0:0.0f,finite0?maxV0:0.0f,
+        finite1,bad1,zero1,outside1,finite1?minU1:0.0f,finite1?maxU1:0.0f,finite1?minV1:0.0f,finite1?maxV1:0.0f);
 }
 
+void Switch_QueueWorldDrawAuditSurface(const Material *material,const char *techniqueName,
+    const char *vertexShaderName,const char *pixelShaderName,uint32_t passIndex,
+    uint32_t surfaceIndex,uint32_t firstVertex,uint32_t vertexCount,
+    uint32_t triangleCount,uint32_t lightmapIndex,uint32_t baseIndex)
+{
+    if(g_switchQueuedWorldAuditCount>=kSwitchQueuedWorldAuditCapacity) {
+        if(!g_switchQueuedWorldAuditOverflowReported) { g_switchQueuedWorldAuditOverflowReported=true; Switch_LogWrite("[KisakCOD][RENDER OBJECT] status=BSP_BATCH_AUDIT_OVERFLOW capacity=512 remaining_surfaces_not_listed=1\n"); }
+        return;
+    }
+    SwitchQueuedWorldSurfaceAudit &e=g_switchQueuedWorldAudit[g_switchQueuedWorldAuditCount++];
+    e.material=material;
+    std::snprintf(e.techniqueName,sizeof(e.techniqueName),"%.63s",techniqueName?techniqueName:"<none>");
+    std::snprintf(e.vertexShaderName,sizeof(e.vertexShaderName),"%.63s",vertexShaderName?vertexShaderName:"<none>");
+    std::snprintf(e.pixelShaderName,sizeof(e.pixelShaderName),"%.63s",pixelShaderName?pixelShaderName:"<none>");
+    e.passIndex=passIndex; e.surfaceIndex=surfaceIndex; e.firstVertex=firstVertex; e.vertexCount=vertexCount;
+    e.triangleCount=triangleCount; e.lightmapIndex=lightmapIndex; e.baseIndex=baseIndex;
+}
+void Switch_SetRenderAuditContext(const Material *material,const char *techniqueName,
+    const char *vertexShaderName,const char *pixelShaderName,uint32_t passIndex,
+    uint32_t surfaceType,uint32_t objectId)
+{
+    g_switchRenderAuditContext.material=material;
+    std::snprintf(g_switchRenderAuditContext.techniqueName,sizeof(g_switchRenderAuditContext.techniqueName),"%.63s",techniqueName?techniqueName:"<none>");
+    std::snprintf(g_switchRenderAuditContext.vertexShaderName,sizeof(g_switchRenderAuditContext.vertexShaderName),"%.63s",vertexShaderName?vertexShaderName:"<none>");
+    std::snprintf(g_switchRenderAuditContext.pixelShaderName,sizeof(g_switchRenderAuditContext.pixelShaderName),"%.63s",pixelShaderName?pixelShaderName:"<none>");
+    g_switchRenderAuditContext.passIndex=passIndex; g_switchRenderAuditContext.surfaceType=surfaceType; g_switchRenderAuditContext.objectId=objectId;
+}
+void Switch_SetRenderAuditObject(uint32_t surfaceType,uint32_t objectId)
+{
+    g_switchRenderAuditContext.surfaceType=surfaceType;
+    g_switchRenderAuditContext.objectId=objectId;
+}
+void Switch_LogWorldSurfaceSkipped(const Material *material,uint32_t surfaceIndex,
+    uint32_t firstVertex,uint32_t vertexCount,uint32_t triangleCount,uint32_t lightmapIndex,
+    uint32_t stage,const char *reason,bool visible,bool castsShadow)
+{
+    uint64_t sig=Switch_AuditHashMix(1469598103934665603ull,0x43554C4Cull);
+    sig=Switch_AuditHashMix(sig,surfaceIndex); sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(material));
+    sig=Switch_AuditHashMix(sig,stage); sig=Switch_AuditHashString(sig,reason);
+    if(!Switch_AuditShouldLog(sig)) return;
+    char sources[900],uv[480],line[1900];
+    Switch_FormatMaterialTextureSources(material,sources,sizeof(sources));
+    Switch_FormatWorldVertexUvRange(firstVertex,vertexCount,uv,sizeof(uv));
+    std::snprintf(line,sizeof(line),
+        "[KisakCOD][RENDER OBJECT] status=NOT_SUBMITTED kind=BSP surface=%u material=%.96s reason=%.40s stage=%u visibility=%u castsShadow=%u vertices=%u+%u triangles=%u lightmap=%u tech=not-run vs=not-run ps=not-run bindings=not-bound uv={%s} sources={%s}\n",
+        surfaceIndex,material&&material->info.name?material->info.name:"<unknown>",reason?reason:"not_selected",
+        stage,visible?1u:0u,castsShadow?1u:0u,firstVertex,vertexCount,triangleCount,lightmapIndex,uv,sources);
+    Switch_LogWrite(line);
+}
+void Switch_BeginWorldDrawAudit(const Material *material,const char *techniqueName,
+    const char *vertexShaderName,const char *pixelShaderName,uint32_t surfaceIndex,
+    uint32_t firstVertex,uint32_t vertexCount,uint32_t triangleCount,uint32_t lightmapIndex)
+{
+    g_switchWorldDrawAudit.active=material!=nullptr;
+    g_switchWorldDrawAudit.material=material;
+    std::snprintf(g_switchWorldDrawAudit.techniqueName,sizeof(g_switchWorldDrawAudit.techniqueName),"%.63s",techniqueName?techniqueName:"<none>");
+    std::snprintf(g_switchWorldDrawAudit.vertexShaderName,sizeof(g_switchWorldDrawAudit.vertexShaderName),"%.63s",vertexShaderName?vertexShaderName:"<none>");
+    std::snprintf(g_switchWorldDrawAudit.pixelShaderName,sizeof(g_switchWorldDrawAudit.pixelShaderName),"%.63s",pixelShaderName?pixelShaderName:"<none>");
+    g_switchWorldDrawAudit.surfaceIndex=surfaceIndex; g_switchWorldDrawAudit.firstVertex=firstVertex;
+    g_switchWorldDrawAudit.vertexCount=vertexCount; g_switchWorldDrawAudit.triangleCount=triangleCount;
+    g_switchWorldDrawAudit.lightmapIndex=lightmapIndex;
+    if(material&&!g_switchQueuedWorldAuditCount&&surfaceIndex!=UINT32_MAX)
+        Switch_QueueWorldDrawAuditSurface(material,techniqueName,vertexShaderName,pixelShaderName,
+            g_switchRenderAuditContext.passIndex,surfaceIndex,firstVertex,vertexCount,triangleCount,lightmapIndex,UINT32_MAX);
+}
 void Switch_EndWorldDrawAudit()
 {
-    g_switchWorldDrawAudit.active = false;
-    g_switchWorldDrawAudit.material = nullptr;
+    g_switchWorldDrawAudit.active=false; g_switchWorldDrawAudit.material=nullptr;
+    g_switchQueuedWorldAuditCount=0; g_switchQueuedWorldAuditOverflowReported=false;
 }
 
 // Set by R_SetSampler while preparing a lit material; consumed by the next
@@ -7941,6 +8097,143 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 {
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
+    const uint8_t *auditIndexData = nullptr;
+
+    auto auditLogObject = [&](const SwitchQueuedWorldSurfaceAudit *surface,const char *status,
+                              const char *reason,uint32_t batchTriangleOffset)
+    {
+        const Material *material=surface?surface->material:g_switchRenderAuditContext.material;
+        if(!surface&&!material) return;
+        const uint32_t objectId=surface?surface->surfaceIndex:g_switchRenderAuditContext.objectId;
+        const uint32_t passIndex=surface?surface->passIndex:g_switchRenderAuditContext.passIndex;
+        const char *tech=surface?surface->techniqueName:g_switchRenderAuditContext.techniqueName;
+        const char *vsName=surface?surface->vertexShaderName:g_switchRenderAuditContext.vertexShaderName;
+        const char *psName=surface?surface->pixelShaderName:g_switchRenderAuditContext.pixelShaderName;
+        const uint64_t vsSerial=m_vertexShader?m_vertexShader->serial:0u;
+        const uint64_t psSerial=m_pixelShader?m_pixelShader->serial:0u;
+        const uint64_t pipelineKey=g_switchLastBoundPipelineKey.load(std::memory_order_relaxed);
+
+        uint64_t sig=Switch_AuditHashMix(1469598103934665603ull,0x52454E444552ull);
+        sig=Switch_AuditHashString(sig,status); sig=Switch_AuditHashString(sig,reason);
+        sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(material));
+        sig=Switch_AuditHashMix(sig,objectId);
+        sig=Switch_AuditHashMix(sig,surface?0u:g_switchRenderAuditContext.surfaceType);
+        sig=Switch_AuditHashMix(sig,passIndex); sig=Switch_AuditHashMix(sig,vsSerial);
+        sig=Switch_AuditHashMix(sig,psSerial); sig=Switch_AuditHashMix(sig,pipelineKey);
+        sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(m_decl));
+        sig=Switch_AuditHashMix(sig,surface?surface->firstVertex:UINT32_MAX);
+        sig=Switch_AuditHashMix(sig,surface?surface->vertexCount:numVertices);
+        sig=Switch_AuditHashMix(sig,surface?surface->triangleCount:primitiveCount);
+        sig=Switch_AuditHashMix(sig,surface?surface->lightmapIndex:UINT32_MAX);
+        sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(m_indices));
+        sig=Switch_AuditHashMix(sig,m_streams[0].stride);
+        sig=Switch_AuditHashMix(sig,m_decl?m_decl->switchVertDeclType:UINT32_MAX);
+        sig=Switch_AuditHashMix(sig,static_cast<uint32_t>(m_depthEnable)|(static_cast<uint32_t>(m_depthWrite)<<1u)|
+            (static_cast<uint32_t>(m_blendEnable)<<2u)|(static_cast<uint32_t>(m_alphaTest)<<3u)|
+            (static_cast<uint32_t>(m_stencilEnable)<<4u)|(static_cast<uint32_t>(m_cullMode)<<8u)|
+            (static_cast<uint32_t>(m_colorWriteMask)<<16u));
+        for(uint32_t slot=0;slot<16u;++slot) {
+            const KisakVkTexture *t=m_textures[slot];
+            sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(t));
+            sig=Switch_AuditHashMix(sig,t?reinterpret_cast<uintptr_t>(t->image):0u);
+            sig=Switch_AuditHashMix(sig,t?reinterpret_cast<uintptr_t>(t->view):0u);
+            sig=Switch_AuditHashMix(sig,t?static_cast<uint32_t>(t->format):0u);
+            sig=Switch_AuditHashMix(sig,t?static_cast<uint32_t>(t->layout):0u);
+        }
+        if(!Switch_AuditShouldLog(sig)) return;
+
+        char bindings[2500]{};
+        size_t used=0;
+        for(uint32_t slot=0;slot<16u&&used<sizeof(bindings);++slot) {
+            const KisakVkTexture *t=m_textures[slot];
+            const char *name=t?(t->sourceImage&&t->sourceImage->name?t->sourceImage->name:t->debugName):"<null>";
+            const int n=std::snprintf(bindings+used,sizeof(bindings)-used,
+                "%ss%u=%.25s[%ux%u,fmt=%u,src=%u,layout=%u,img=%p,view=%p,base=%p,mips=%u]",
+                slot?";":"",slot,name?name:"<unnamed>",t?t->width:0u,t?t->height:0u,
+                t?static_cast<unsigned>(t->format):0u,t?static_cast<unsigned>(t->sourceFormat):0u,
+                t?static_cast<unsigned>(t->GetSubresourceLayout(0u,0u)):static_cast<unsigned>(VK_IMAGE_LAYOUT_UNDEFINED),
+                t?reinterpret_cast<void *>(t->image):nullptr,t?reinterpret_cast<void *>(t->view):nullptr,
+                t?reinterpret_cast<void *>(t->baseMipView):nullptr,t?t->mipLevels:0u);
+            if(n<0) break;
+            const size_t amount=static_cast<size_t>(n);
+            if(amount>=sizeof(bindings)-used) { used=sizeof(bindings)-1u; bindings[used]='\0'; break; }
+            used+=amount;
+        }
+        char sources[860]{},uv[700]{};
+        Switch_FormatMaterialTextureSources(material,sources,sizeof(sources));
+        if(surface) Switch_FormatWorldVertexUvRange(surface->firstVertex,surface->vertexCount,uv,sizeof(uv));
+        else if(!auditIndexData||!m_decl||!indexCount) std::snprintf(uv,sizeof(uv),"unavailable:index_data_or_decl_missing");
+        else {
+            size_t uvUsed=0; uint32_t uvSlots=0;
+            for(const _D3DVERTEXELEMENT9 &element:m_decl->elements) {
+                if(element.Stream>=16u||element.Usage!=5u||!m_streams[element.Stream].buffer||!m_streams[element.Stream].stride) continue;
+                const uint32_t stride=m_streams[element.Stream].stride;
+                const uint32_t type=SwitchEffectiveShaderElementType(m_decl,element,stride);
+                const uint32_t elemOffset=SwitchEffectiveShaderElementOffset(m_decl,element,stride);
+                const uint32_t byteSize=SwitchShaderElementByteSize(type);
+                const KisakVkBuffer *vb=m_streams[element.Stream].buffer;
+                const uint8_t *vbBytes=vb->dynamic&&vb->shadowInitialized&&vb->shadow.size()>=vb->size?vb->shadow.data():static_cast<const uint8_t *>(vb->mapped);
+                if(!vbBytes||type!=D3DDECLTYPE_FLOAT2&&type!=D3DDECLTYPE_FLOAT3&&type!=D3DDECLTYPE_FLOAT4) {
+                    const int n=std::snprintf(uv+uvUsed,sizeof(uv)-uvUsed,"%sst%u@%u:type%u",uvSlots?";":"",static_cast<unsigned>(element.UsageIndex),elemOffset,type);
+                    if(n>0) uvUsed=std::min(sizeof(uv)-1u,uvUsed+static_cast<size_t>(n)); ++uvSlots; continue;
+                }
+                float minU=std::numeric_limits<float>::infinity(),maxU=-minU,minV=minU,maxV=-minU;
+                uint32_t good=0,bad=0,outside=0;
+                const uint32_t step=std::max(1u,indexCount/64u);
+                for(uint32_t k=0;k<indexCount;k+=step) {
+                    uint16_t raw=0; std::memcpy(&raw,auditIndexData+static_cast<size_t>(startIndex+k)*sizeof(raw),sizeof(raw));
+                    const int64_t effective=static_cast<int64_t>(baseVertexIndex)+raw;
+                    if(effective<0) { ++bad; continue; }
+                    const uint64_t vs=static_cast<uint64_t>(m_streams[element.Stream].offset)+static_cast<uint64_t>(effective)*stride;
+                    if(vs>vb->size||elemOffset>vb->size-vs||byteSize>vb->size-vs-elemOffset) { ++bad; continue; }
+                    float coord[4]{}; std::memcpy(coord,vbBytes+vs+elemOffset,std::min<size_t>(byteSize,sizeof(coord)));
+                    if(!std::isfinite(coord[0])||!std::isfinite(coord[1])) { ++bad; continue; }
+                    ++good; minU=std::min(minU,coord[0]); maxU=std::max(maxU,coord[0]); minV=std::min(minV,coord[1]); maxV=std::max(maxV,coord[1]);
+                    if(coord[0]<0.0f||coord[0]>1.0f||coord[1]<0.0f||coord[1]>1.0f) ++outside;
+                }
+                const int n=std::snprintf(uv+uvUsed,sizeof(uv)-uvUsed,"%sst%u@%u:f%u,b%u,out%u,u(%.4g,%.4g),v(%.4g,%.4g)",
+                    uvSlots?";":"",static_cast<unsigned>(element.UsageIndex),elemOffset,good,bad,outside,
+                    good?minU:0.0f,good?maxU:0.0f,good?minV:0.0f,good?maxV:0.0f);
+                if(n>0) uvUsed=std::min(sizeof(uv)-1u,uvUsed+static_cast<size_t>(n)); ++uvSlots;
+            }
+            if(!uvSlots) std::snprintf(uv,sizeof(uv),"no_TEXCOORD_inputs_in_decl");
+        }
+        const uint32_t surfaceIndex=surface?surface->surfaceIndex:UINT32_MAX;
+        const uint32_t firstVertex=surface?surface->firstVertex:0u;
+        const uint32_t vertices=surface?surface->vertexCount:numVertices;
+        const uint32_t triangles=surface?surface->triangleCount:primitiveCount;
+        const uint32_t lightmap=surface?surface->lightmapIndex:UINT32_MAX;
+        const uint32_t localIndexStart=startIndex+batchTriangleOffset*3u;
+        char line[6144];
+        std::snprintf(line,sizeof(line),
+            "[KisakCOD][RENDER OBJECT] status=%s kind=%s object=%u surface=%u material=%.80s type=%u pass=%u tech=%.48s vs=%.48s(vsSerial=%llu) ps=%.48s(psSerial=%llu) pipeline=%016llx batchSurfaces=%u batchTriOffset=%u verts=%u+%u tris=%u lightmap=%u baseIndex=%u draw{prim=%u,tri=%u,indexCount=%u,startIndex=%u,surfaceIndexStart=%u,baseVertex=%d,streamMask=0x%x,stride=%u,decl=%u,vb=%p,ib=%p} uv={%s} bindings={%s} sources={%s} state{depth=%u/%u,cull=%u,blend=%u,alpha=%u/%u,stencil=%u,colorMask=0x%x,rt=%p,depthTarget=%p}\n",
+            status,surface?"BSP":"DRAW_SURF",objectId,surfaceIndex,
+            material&&material->info.name?material->info.name:"<unknown>",
+            surface?0u:g_switchRenderAuditContext.surfaceType,passIndex,
+            tech?tech:"<none>",vsName?vsName:"<none>",static_cast<unsigned long long>(vsSerial),
+            psName?psName:"<none>",static_cast<unsigned long long>(psSerial),
+            static_cast<unsigned long long>(pipelineKey),g_switchQueuedWorldAuditCount,batchTriangleOffset,
+            firstVertex,vertices,triangles,lightmap,surface?surface->baseIndex:UINT32_MAX,
+            primitiveType,primitiveCount,indexCount,startIndex,localIndexStart,baseVertexIndex,
+            g_switchLastDrawStreamMask.load(std::memory_order_relaxed),m_streams[0].stride,
+            m_decl?static_cast<unsigned>(m_decl->switchVertDeclType):UINT32_MAX,
+            static_cast<void *>(m_streams[0].buffer),static_cast<void *>(m_indices),
+            uv,bindings,sources,m_depthEnable?1u:0u,m_depthWrite?1u:0u,m_cullMode,
+            m_blendEnable?1u:0u,m_alphaTest?1u:0u,m_alphaRef,m_stencilEnable?1u:0u,m_colorWriteMask,
+            m_color&&m_color->texture?reinterpret_cast<void *>(m_color->texture->view):nullptr,
+            m_depth&&m_depth->texture?reinterpret_cast<void *>(m_depth->texture->view):nullptr);
+        Switch_LogWrite(line);
+    };
+    auto auditLogDraw = [&](const char *status,const char *reason)
+    {
+        if(g_switchQueuedWorldAuditCount) {
+            uint32_t triOffset=0;
+            for(uint32_t i=0;i<g_switchQueuedWorldAuditCount;++i) {
+                auditLogObject(&g_switchQueuedWorldAudit[i],status,reason,triOffset);
+                triOffset+=g_switchQueuedWorldAudit[i].triangleCount;
+            }
+        } else if(g_switchRenderAuditContext.material) auditLogObject(nullptr,status,reason,0u);
+    };
     const uint64_t indexCapacity = m_indices
         ? m_indices->size / sizeof(uint16_t) : 0;
     const bool validIndexRange =
@@ -7962,7 +8255,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             numVertices, startIndex, baseVertexIndex,
             m_backend ? 1u : 0u,
             m_backend && m_backend->IsFrameActive() ? 1u : 0u);
-        Switch_LogWrite(msg);
+        auditLogDraw("FAILED_TO_SUBMIT","invalid_or_missing_index_buffer");
         return E_FAIL;
     }
     // Validate the actual indexed vertex fetches before recording a draw. The
@@ -7974,6 +8267,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         indexData = m_indices->shadow.data();
     else
         indexData = static_cast<const uint8_t *>(m_indices->mapped);
+    auditIndexData = indexData;
 
     g_switchLastDrawIndexBufferBytes.store(
         static_cast<uint32_t>(std::min<size_t>(m_indices->size, UINT32_MAX)),
@@ -8098,8 +8392,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     badStream, badStride, badElementOffset, badElementSize,
                     static_cast<unsigned long long>(badRequiredEnd), badBufferSize,
                     static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)));
-                Switch_LogWrite(msg);
             }
+            auditLogDraw("FAILED_TO_SUBMIT","vertex_fetch_range_invalid");
             return E_FAIL;
         }
     }
@@ -8118,7 +8412,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             startIndex, baseVertexIndex,
             m_backend ? 1u : 0u,
             m_backend && m_backend->IsFrameActive() ? 1u : 0u);
-        Switch_LogWrite(msg);
+        auditLogDraw("FAILED_TO_SUBMIT","prepare_draw_failed");
         return E_FAIL;
     }
 
@@ -8136,7 +8430,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             reinterpret_cast<void *>(drawCommandBuffer),
             static_cast<void *>(m_decl), static_cast<void *>(m_vertexShader),
             static_cast<void *>(m_pixelShader), static_cast<void *>(m_indices));
-        Switch_LogWrite(msg);
+        auditLogDraw("FAILED_TO_SUBMIT","null_command_buffer");
         return E_FAIL;
     }
     if (!m_indices)
@@ -8148,7 +8442,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             static_cast<void *>(this), reinterpret_cast<void *>(drawCommandBuffer),
             static_cast<void *>(m_decl), static_cast<void *>(m_vertexShader),
             static_cast<void *>(m_pixelShader));
-        Switch_LogWrite(msg);
+        auditLogDraw("FAILED_TO_SUBMIT","null_index_buffer");
         return E_FAIL;
     }
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/index_prepare";
@@ -8164,7 +8458,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
             static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
             static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u));
-        Switch_LogWrite(msg);
+        auditLogDraw("FAILED_TO_SUBMIT","null_vk_index_handle");
         return E_FAIL;
     }
 
@@ -8206,7 +8500,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     "[KisakCOD][VK DRAW BIND FAIL] reason=null_vk_vertex_handle stream=%u vb=%p offset=%llu stride=%u size=%zu\n",
                     stream, static_cast<void *>(vertexBuffer),
                     static_cast<unsigned long long>(o), stride, static_cast<size_t>(vertexBuffer->size));
-                Switch_LogWrite(msg);
+                auditLogDraw("FAILED_TO_SUBMIT","null_vk_vertex_handle");
                 return E_FAIL;
             }
             boundStreamMask |= 1u << stream;
@@ -8331,302 +8625,10 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     }
     RecordSwitchRecentVulkanDraw(recentDraw);
 
-    // Correlate the actual submitted BSP draw with its material declaration and
-    // current Vulkan texture views. These are draw-time bindings, not merely
-    // images that happened to load earlier during the zone load.
-    if (g_switchWorldDrawAudit.active)
-    {
-        const Material *material = g_switchWorldDrawAudit.material;
-        const uint64_t pixelShaderSerial =
-            m_pixelShader ? m_pixelShader->serial : 0u;
-        bool auditSignatureSeen = false;
-        for (uint32_t i = 0; i < g_switchWorldDrawAuditCount; ++i)
-        {
-            const SwitchWorldDrawAuditSignature &signature =
-                g_switchWorldDrawAuditSignatures[i];
-            if (signature.material != material ||
-                signature.pixelShaderSerial != pixelShaderSerial)
-                continue;
-            bool sameTextures = true;
-            for (uint32_t slot = 0; slot < 6u; ++slot)
-            {
-                if (signature.texturePtrs[slot] !=
-                    reinterpret_cast<uintptr_t>(m_textures[slot]))
-                {
-                    sameTextures = false;
-                    break;
-                }
-            }
-            if (sameTextures)
-            {
-                auditSignatureSeen = true;
-                break;
-            }
-        }
-        if (!auditSignatureSeen &&
-            g_switchWorldDrawAuditCount < kSwitchWorldDrawAuditSignatureCount)
-        {
-            const uint32_t auditId = g_switchWorldDrawAuditCount++;
-            SwitchWorldDrawAuditSignature &signature =
-                g_switchWorldDrawAuditSignatures[auditId];
-            signature.material = material;
-            signature.pixelShaderSerial = pixelShaderSerial;
-            for (uint32_t slot = 0; slot < 6u; ++slot)
-                signature.texturePtrs[slot] =
-                    reinterpret_cast<uintptr_t>(m_textures[slot]);
-
-            char header[640];
-        std::snprintf(
-            header, sizeof(header),
-            "[KisakCOD][WORLD DRAW AUDIT] draw=%u material=%.90s surface=%u tech=%.48s vs=%.48s ps=%.48s psSerial=%llu tri=%u firstVertex=%u vertices=%u lightmap=%u stream0Stride=%u declType=%u\n",
-            auditId,
-            material && material->info.name ? material->info.name : "<unknown>",
-            g_switchWorldDrawAudit.surfaceIndex,
-            g_switchWorldDrawAudit.techniqueName,
-            g_switchWorldDrawAudit.vertexShaderName,
-            g_switchWorldDrawAudit.pixelShaderName,
-            static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
-            g_switchWorldDrawAudit.triangleCount,
-            g_switchWorldDrawAudit.firstVertex,
-            g_switchWorldDrawAudit.vertexCount,
-            g_switchWorldDrawAudit.lightmapIndex,
-            stream0Stride,
-            static_cast<unsigned>(m_decl ? m_decl->switchVertDeclType : 0xFFu));
-        Switch_LogWrite(header);
-
-        char bound[1480];
-        size_t used = static_cast<size_t>(std::snprintf(
-            bound, sizeof(bound), "[KisakCOD][WORLD DRAW BIND] draw=%u",
-            auditId));
-        if (used >= sizeof(bound))
-            used = sizeof(bound) - 1u;
-        for (uint32_t slot = 0; slot < 6u; ++slot)
-        {
-            const auto *texture =
-                static_cast<const KisakVkTexture *>(m_textures[slot]);
-            const char *name = texture
-                ? (texture->sourceImage && texture->sourceImage->name
-                    ? texture->sourceImage->name : texture->debugName)
-                : "<null>";
-            const unsigned layout = texture
-                ? static_cast<unsigned>(texture->GetSubresourceLayout(0u, 0u))
-                : static_cast<unsigned>(VK_IMAGE_LAYOUT_UNDEFINED);
-            const int written = std::snprintf(
-                bound + used, sizeof(bound) - used,
-                " s%u=%.48s:%ux%u:fmt%u:src%u:image%u:view%u:baseView%u:mips%u:layout%u",
-                slot, name,
-                texture ? texture->width : 0u,
-                texture ? texture->height : 0u,
-                texture ? static_cast<unsigned>(texture->format) : 0u,
-                texture ? static_cast<unsigned>(texture->sourceFormat) : 0u,
-                texture && texture->image != VK_NULL_HANDLE ? 1u : 0u,
-                texture && texture->view != VK_NULL_HANDLE ? 1u : 0u,
-                texture && texture->baseMipView != VK_NULL_HANDLE ? 1u : 0u,
-                texture ? texture->mipLevels : 0u,
-                layout);
-            if (written < 0)
-                break;
-            const size_t writtenSize = static_cast<size_t>(written);
-            if (writtenSize >= sizeof(bound) - used)
-            {
-                used = sizeof(bound) - 1u;
-                break;
-            }
-            used += writtenSize;
-        }
-        Switch_LogWrite(bound);
-
-        if (material && material->textureTable && material->textureCount)
-        {
-            char declared[1480];
-            used = static_cast<size_t>(std::snprintf(
-                declared, sizeof(declared),
-                "[KisakCOD][WORLD DRAW SOURCES] draw=%u material=%.90s declared=%u",
-                auditId,
-                material->info.name ? material->info.name : "<unknown>",
-                static_cast<unsigned>(material->textureCount)));
-            if (used >= sizeof(declared))
-                used = sizeof(declared) - 1u;
-            const uint32_t defCount = std::min<uint32_t>(
-                material->textureCount, 8u);
-            for (uint32_t i = 0; i < defCount; ++i)
-            {
-                const MaterialTextureDef &def = material->textureTable[i];
-                const bool imageSemantic =
-                    def.semantic == 1u || def.semantic == 2u ||
-                    def.semantic == 5u || def.semantic == 8u;
-                const GfxImage *image =
-                    imageSemantic ? def.u.image : nullptr;
-                const char *imageName = image && image->name
-                    ? image->name : (imageSemantic ? "<null-image>" : "<non-image-semantic>");
-                const int written = std::snprintf(
-                    declared + used, sizeof(declared) - used,
-                    " t%u{sem=%u,name=%.48s,base=%p,size=%ux%u}",
-                    i, static_cast<unsigned>(def.semantic), imageName,
-                    image ? static_cast<void *>(image->texture.basemap) : nullptr,
-                    image ? image->width : 0u,
-                    image ? image->height : 0u);
-                if (written < 0)
-                    break;
-                const size_t writtenSize = static_cast<size_t>(written);
-                if (writtenSize >= sizeof(declared) - used)
-                {
-                    used = sizeof(declared) - 1u;
-                    break;
-                }
-                used += writtenSize;
-            }
-            Switch_LogWrite(declared);
-            }
-        }
-    }
-
-    // Unlike the material/texture audit, UV statistics are keyed to every
-    // actual BSP draw, not only to a unique material-binding signature.
-    static uint32_t switchWorldUvTraceCount = 0u;
-    if (g_switchWorldDrawAudit.active && switchWorldUvTraceCount < 384u)
-    {
-        const uint32_t uvSequence = switchWorldUvTraceCount++;
-        const Material *material = g_switchWorldDrawAudit.material;
-        // Record the UV pairs from the actual vertex-buffer bytes consumed by
-        // this indexed BSP draw. Resource/binding audits cannot tell whether
-        // the vertex stream contains valid texture coordinates.
-        if (stream0Stride == 44u && indexData && m_streams[0].buffer &&
-            m_streams[0].stride == 44u)
-        {
-            const KisakVkBuffer *vertexBuffer = m_streams[0].buffer;
-            const uint8_t *vertexBytes = nullptr;
-            if (vertexBuffer->dynamic && vertexBuffer->shadowInitialized &&
-                vertexBuffer->shadow.size() >= vertexBuffer->size)
-                vertexBytes = vertexBuffer->shadow.data();
-            else
-                vertexBytes = static_cast<const uint8_t *>(vertexBuffer->mapped);
-
-            if (vertexBytes)
-            {
-                uint32_t uv0Finite = 0u, uv0Bad = 0u, uv0Zero = 0u, uv0Outside01 = 0u;
-                uint32_t lmFinite = 0u, lmBad = 0u, lmZero = 0u, lmOutside01 = 0u;
-                float uv0MinU = std::numeric_limits<float>::infinity();
-                float uv0MinV = std::numeric_limits<float>::infinity();
-                float uv0MaxU = -std::numeric_limits<float>::infinity();
-                float uv0MaxV = -std::numeric_limits<float>::infinity();
-                float lmMinU = std::numeric_limits<float>::infinity();
-                float lmMinV = std::numeric_limits<float>::infinity();
-                float lmMaxU = -std::numeric_limits<float>::infinity();
-                float lmMaxV = -std::numeric_limits<float>::infinity();
-                int64_t sampleVertex[4] = {-1, -1, -1, -1};
-                float sampleUv[4][4]{};
-                uint32_t sampleCount = 0u;
-                const uint64_t vertexBufferSize = vertexBuffer->size;
-                const uint64_t streamOffset = m_streams[0].offset;
-
-                for (uint32_t i = 0u; i < indexCount; ++i)
-                {
-                    uint16_t rawIndex = 0u;
-                    std::memcpy(
-                        &rawIndex,
-                        indexData + static_cast<size_t>(startIndex + i) * sizeof(rawIndex),
-                        sizeof(rawIndex));
-                    const int64_t effectiveVertex =
-                        static_cast<int64_t>(baseVertexIndex) + rawIndex;
-                    if (effectiveVertex < 0)
-                        continue;
-
-                    const uint64_t vertexIndex = static_cast<uint64_t>(effectiveVertex);
-                    if (streamOffset > vertexBufferSize ||
-                        vertexIndex > (vertexBufferSize - streamOffset) / 44u)
-                        continue;
-                    const uint64_t vertexStart = streamOffset + vertexIndex * 44u;
-                    if (vertexStart > vertexBufferSize ||
-                        vertexBufferSize - vertexStart < 36u)
-                        continue;
-
-                    float uv[4]{};
-                    std::memcpy(uv, vertexBytes + vertexStart + 20u, sizeof(uv));
-                    const bool uv0Ok = std::isfinite(uv[0]) && std::isfinite(uv[1]);
-                    const bool lmOk = std::isfinite(uv[2]) && std::isfinite(uv[3]);
-                    if (!uv0Ok)
-                    {
-                        ++uv0Bad;
-                    }
-                    else
-                    {
-                        ++uv0Finite;
-                        uv0MinU = std::min(uv0MinU, uv[0]);
-                        uv0MaxU = std::max(uv0MaxU, uv[0]);
-                        uv0MinV = std::min(uv0MinV, uv[1]);
-                        uv0MaxV = std::max(uv0MaxV, uv[1]);
-                        if (std::fabs(uv[0]) <= 1.0e-6f &&
-                            std::fabs(uv[1]) <= 1.0e-6f)
-                            ++uv0Zero;
-                        if (uv[0] < 0.0f || uv[0] > 1.0f ||
-                            uv[1] < 0.0f || uv[1] > 1.0f)
-                            ++uv0Outside01;
-                    }
-                    if (!lmOk)
-                    {
-                        ++lmBad;
-                    }
-                    else
-                    {
-                        ++lmFinite;
-                        lmMinU = std::min(lmMinU, uv[2]);
-                        lmMaxU = std::max(lmMaxU, uv[2]);
-                        lmMinV = std::min(lmMinV, uv[3]);
-                        lmMaxV = std::max(lmMaxV, uv[3]);
-                        if (std::fabs(uv[2]) <= 1.0e-6f &&
-                            std::fabs(uv[3]) <= 1.0e-6f)
-                            ++lmZero;
-                        if (uv[2] < 0.0f || uv[2] > 1.0f ||
-                            uv[3] < 0.0f || uv[3] > 1.0f)
-                            ++lmOutside01;
-                    }
-
-                    if (sampleCount < 4u)
-                    {
-                        sampleVertex[sampleCount] = effectiveVertex;
-                        std::memcpy(sampleUv[sampleCount], uv, sizeof(uv));
-                        ++sampleCount;
-                    }
-                }
-
-                char uvTrace[1600];
-                std::snprintf(
-                    uvTrace, sizeof(uvTrace),
-                    "[KisakCOD][WORLD UV DATA] draw=%u material=%.64s surface=%u stride=44 indexCount=%u samples=%u uv0Finite=%u uv0Bad=%u uv0Zero=%u uv0Outside01=%u uv0U=(%.6g,%.6g) uv0V=(%.6g,%.6g) lmapFinite=%u lmapBad=%u lmapZero=%u lmapOutside01=%u lmapU=(%.6g,%.6g) lmapV=(%.6g,%.6g) v0=%lld:(%.5g,%.5g|%.5g,%.5g) v1=%lld:(%.5g,%.5g|%.5g,%.5g) v2=%lld:(%.5g,%.5g|%.5g,%.5g) v3=%lld:(%.5g,%.5g|%.5g,%.5g)\n",
-                    uvSequence,
-                    material && material->info.name ? material->info.name : "<unknown>",
-                    g_switchWorldDrawAudit.surfaceIndex,
-                    indexCount, sampleCount,
-                    uv0Finite, uv0Bad, uv0Zero, uv0Outside01,
-                    uv0Finite ? uv0MinU : 0.0f, uv0Finite ? uv0MaxU : 0.0f,
-                    uv0Finite ? uv0MinV : 0.0f, uv0Finite ? uv0MaxV : 0.0f,
-                    lmFinite, lmBad, lmZero, lmOutside01,
-                    lmFinite ? lmMinU : 0.0f, lmFinite ? lmMaxU : 0.0f,
-                    lmFinite ? lmMinV : 0.0f, lmFinite ? lmMaxV : 0.0f,
-                    static_cast<long long>(sampleVertex[0]), sampleUv[0][0], sampleUv[0][1], sampleUv[0][2], sampleUv[0][3],
-                    static_cast<long long>(sampleVertex[1]), sampleUv[1][0], sampleUv[1][1], sampleUv[1][2], sampleUv[1][3],
-                    static_cast<long long>(sampleVertex[2]), sampleUv[2][0], sampleUv[2][1], sampleUv[2][2], sampleUv[2][3],
-                    static_cast<long long>(sampleVertex[3]), sampleUv[3][0], sampleUv[3][1], sampleUv[3][2], sampleUv[3][3]);
-                Switch_LogWrite(uvTrace);
-            }
-            else
-            {
-                char uvTrace[256];
-                std::snprintf(
-                    uvTrace, sizeof(uvTrace),
-                    "[KisakCOD][WORLD UV DATA] draw=%u surface=%u action=skip_unmapped_vertex_stream stride=%u bytes=%u\n",
-                    uvSequence, g_switchWorldDrawAudit.surfaceIndex,
-                    stream0Stride, vertexBuffer->size);
-                Switch_LogWrite(uvTrace);
-            }
-        }
-
-    }
-
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
+    auditLogDraw("GPU_DRAW_RECORDED","vkCmdDrawIndexed_recorded");
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/return";
     ++g_switchSceneDrawIndexedCalls;
     (void)minVertexIndex;
