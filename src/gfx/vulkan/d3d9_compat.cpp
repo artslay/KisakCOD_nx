@@ -3194,8 +3194,9 @@ bool PatchFragmentShaderToSolidWhite(
         }
         else if (scanFunction == entryFunctionId && inEntryBlock)
         {
-            if (op == SpvOpVariable && wc >= 4u &&
-                ins[3] == SpvStorageClassFunction)
+            if (op == SpvOpLine || op == SpvOpNoLine ||
+                (op == SpvOpVariable && wc >= 4u &&
+                 ins[3] == SpvStorageClassFunction))
             {
                 offset += wc;
                 continue;
