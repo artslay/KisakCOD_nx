@@ -1768,10 +1768,12 @@ void __cdecl R_SetSampler(
 
     iassert(image);
 #ifdef __SWITCH__
-    // Trace the actual material->sampler resolution, not just the image assets
-    // allocated while loading the BSP. This bounded record only covers lit
-    // techniques so the front-end UI cannot consume the sample budget.
+    // Trace actual sampler resolution only for the floor currently under
+    // investigation. Do not let unrelated lit materials consume the sample
+    // budget or flood the log before icbm_tunnelfloor is reached.
     if (context.state && context.state->material &&
+        context.state->material->info.name &&
+        std::strstr(context.state->material->info.name, "icbm_tunnelfloor") &&
         context.state->techType >= TECHNIQUE_LIT_BEGIN &&
         context.state->techType < TECHNIQUE_LIT_END)
     {
