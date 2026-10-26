@@ -9175,7 +9175,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         g_switchFrameStage = "frame/render/vulkan/pipeline/fallback_original_create_return";
         char fallbackResult[224];
         std::snprintf(fallbackResult, sizeof(fallbackResult),
-            "[KisakCOD][VK FLOOR RASTER CONTROL] stage=original_pipeline_retry result=%d handle=%p\\n",
+            "[KisakCOD][VK FLOOR RASTER CONTROL] stage=original_pipeline_retry result=%d handle=%p\n",
             static_cast<int>(pipelineResult), static_cast<void *>(pipeline));
         Switch_LogWrite(fallbackResult);
     }
