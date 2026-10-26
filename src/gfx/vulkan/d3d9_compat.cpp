@@ -8214,14 +8214,12 @@ bool IDirect3DDevice9::EnsurePipeline()
             &loweredVertexCopyObjects, &loweredVertexExtracts,
             &vertexShuffleGrowthEstimate);
 #ifdef __SWITCH__
+        // The floor raster probe patches a private copy of this linked VS later,
+        // immediately before pipeline creation. Do not mutate the shared game VS
+        // here: doing so injected VertexIndex twice and made the probe pipeline invalid.
         if (switchFloorSolidWhiteProbeActive &&
-            g_switchWorldDrawAudit.surfaceIndex == 1583u &&
-            !PatchVertexShaderToSmallTriangle(
-                m_vertexShader->spirv, m_vertexShader->serial))
-        {
-            Switch_LogWrite("[KisakCOD][VK VS POSITION TEST] action=patch_failed\n");
-            return false;
-        }
+            g_switchWorldDrawAudit.surfaceIndex == 1583u)
+            Switch_LogWrite("[KisakCOD][VK VS POSITION TEST] action=deferred_to_private_probe_copy\n");
 #endif
         if (loweredVertexShuffles && loweredVertexShuffleCount)
         {
@@ -9175,6 +9173,11 @@ bool IDirect3DDevice9::EnsurePipeline()
         pipelineResult = vkCreateGraphicsPipelines(
             m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
         g_switchFrameStage = "frame/render/vulkan/pipeline/fallback_original_create_return";
+        char fallbackResult[224];
+        std::snprintf(fallbackResult, sizeof(fallbackResult),
+            "[KisakCOD][VK FLOOR RASTER CONTROL] stage=original_pipeline_retry result=%d handle=%p\\n",
+            static_cast<int>(pipelineResult), static_cast<void *>(pipeline));
+        Switch_LogWrite(fallbackResult);
     }
 #endif
     RecordSwitchVkPipelineTrace(
