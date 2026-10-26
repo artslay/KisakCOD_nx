@@ -4269,7 +4269,10 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
              op == SpvOpTypePointer || op == SpvOpTypeFunction))
             firstTypeOffset = offset;
         if (firstConstantOffset == SIZE_MAX &&
-            (op == SpvOpConstant || op == SpvOpVariable || op == SpvOpFunction))
+            (op == SpvOpConstant || op == SpvOpConstantTrue ||
+             op == SpvOpConstantFalse || op == SpvOpConstantNull ||
+             op == SpvOpConstantComposite || op == SpvOpSpecConstant ||
+             op == SpvOpVariable || op == SpvOpFunction))
             firstConstantOffset = offset;
         if (firstGlobalVariableOffset == SIZE_MAX &&
             (op == SpvOpVariable || op == SpvOpFunction))
@@ -4342,13 +4345,11 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
     const uint32_t yBottom = allocId();
     const uint32_t zHalf = allocId();
     const uint32_t wOne = allocId();
-    const uint32_t p0 = allocId();
-    const uint32_t p1 = allocId();
-    const uint32_t p2 = allocId();
     const uint32_t loadedIndex = allocId();
     const uint32_t indexIsOne = allocId();
     const uint32_t indexIsTwo = allocId();
-    const uint32_t selectOne = allocId();
+    const uint32_t selectedX = allocId();
+    const uint32_t selectedY = allocId();
     const uint32_t selectedPosition = allocId();
 
     std::vector<uint32_t> decorations;
@@ -4368,9 +4369,6 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
     emit(SpvOpConstant, {floatType, yBottom, 0x3f666666u}); // +0.90
     emit(SpvOpConstant, {floatType, zHalf, 0x3f000000u});   // 0.5
     emit(SpvOpConstant, {floatType, wOne, 0x3f800000u});    // 1.0
-    emit(SpvOpConstantComposite, {vec4Type, p0, xLeft, yTop, zHalf, wOne});
-    emit(SpvOpConstantComposite, {vec4Type, p1, xRight, yTop, zHalf, wOne});
-    emit(SpvOpConstantComposite, {vec4Type, p2, xLeft, yBottom, zHalf, wOne});
 
     std::vector<uint32_t> globalVariable;
     SwitchEmitFloorProbeInstruction(
@@ -4471,8 +4469,11 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
     emitPrologue(SpvOpLoad, {intType, loadedIndex, vertexIndexVariable});
     emitPrologue(SpvOpIEqual, {boolType, indexIsOne, loadedIndex, oneInt});
     emitPrologue(SpvOpIEqual, {boolType, indexIsTwo, loadedIndex, twoInt});
-    emitPrologue(SpvOpSelect, {vec4Type, selectOne, indexIsOne, p1, p0});
-    emitPrologue(SpvOpSelect, {vec4Type, selectedPosition, indexIsTwo, p2, selectOne});
+    // Keep Select scalar-typed for NVK/NAK; construct the vec4 after choosing x/y.
+    emitPrologue(SpvOpSelect, {floatType, selectedX, indexIsOne, xRight, xLeft});
+    emitPrologue(SpvOpSelect, {floatType, selectedY, indexIsTwo, yBottom, yTop});
+    emitPrologue(SpvOpCompositeConstruct,
+        {vec4Type, selectedPosition, selectedX, selectedY, zHalf, wOne});
 
     struct CodeInsert { size_t at; std::vector<uint32_t> data; };
     std::vector<CodeInsert> codeInserts;
