@@ -4211,6 +4211,7 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
     uint32_t inputPositionVariable = 0u;
     uint32_t inputPositionPointerType = 0u;
     uint32_t inputPositionValueType = 0u;
+    bool positionOutputFound = false;
     uint32_t floatType = 0u;
     uint32_t vec4Type = 0u;
     size_t firstGlobalVariableOffset = SIZE_MAX;
@@ -4294,6 +4295,7 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
                     });
                 if (ptr == pointerTypes.end())
                     return false;
+                positionOutputFound = true;
             }
 
             if (ins[3] == SpvStorageClassInput &&
@@ -4307,7 +4309,8 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
         offset += wc;
     }
 
-    if (!inputPositionVariable || !inputPositionPointerType)
+    if (!positionOutputFound || !inputPositionVariable ||
+        !inputPositionPointerType)
         return false;
 
     const auto inputPointer = std::find_if(
@@ -9101,7 +9104,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 
         char trace[288];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][VK FLOOR RASTER CONTROL] action=enabled surface=%u key=%016llx gameVS=%llu gamePS=%llu mode=game_vs_forced_position vsModule=%p psModule=%p\n",
+            "[KisakCOD][VK FLOOR RASTER CONTROL] action=enabled surface=%u key=%016llx gameVS=%llu gamePS=%llu mode=game_vs_position0_forced vsModule=%p psModule=%p\n",
             g_switchWorldDrawAudit.surfaceIndex,
             static_cast<unsigned long long>(key),
             static_cast<unsigned long long>(m_vertexShader->serial),
