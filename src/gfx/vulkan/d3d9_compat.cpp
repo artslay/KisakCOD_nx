@@ -4,6 +4,7 @@
 #include "../../gfx_d3d/r_gfx.h"
 #include "../../gfx_d3d/r_cinematic.h"
 #include "../../gfx_d3d/r_image.h"
+#include "../../gfx_d3d/r_init.h"
 #endif
 
 #ifdef __SWITCH__
