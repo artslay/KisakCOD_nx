@@ -2284,22 +2284,16 @@ bool SwitchPsS0UvTestTargetMatchesLayout(
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
-    // TEMPORARY Switch diagnostic: default to solid magenta for floor PS 1821.
-    // This bypasses texture/light/material math to test whether the draw reaches
-    // the color attachment. "off" or "0" disables; "all" tests every pixel shader.
+    // TEMPORARY pipeline-isolation diagnostic: force solid magenta for every
+    // patchable fragment shader. A numeric environment value is intentionally
+    // ignored here because the PS-1821-only probe patched successfully but the
+    // floor stayed black; we need to separate world geometry from output/present.
+    // "off" or "0" still disables this diagnostic.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
-    if (!value || !*value)
-        return 1821u;
-    if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
+    if (value && (std::strcmp(value, "off") == 0 ||
+                  std::strcmp(value, "0") == 0))
         return UINT64_MAX;
-    if (std::strcmp(value, "all") == 0)
-        return 0u;
-
-    char *end = nullptr;
-    const unsigned long long serial = std::strtoull(value, &end, 0);
-    if (end == value || !end || *end != '\0' || serial == 0u)
-        return UINT64_MAX;
-    return static_cast<uint64_t>(serial);
+    return 0u;
 }
 
 bool SwitchPsColorDebugTargetMatches(
