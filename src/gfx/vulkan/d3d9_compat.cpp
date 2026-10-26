@@ -149,6 +149,16 @@ struct SwitchRenderAuditContext
 };
 static thread_local SwitchRenderAuditContext g_switchRenderAuditContext{};
 
+// The lit vertex/pixel shader pair is shared by several materials. Only call a
+// trace a floor trace while the renderer's per-draw audit context names the
+// investigated floor material; shader serials alone do not identify a surface.
+static bool Switch_IsFloorAuditContextActive()
+{
+    const Material *material = g_switchWorldDrawAudit.material;
+    return g_switchWorldDrawAudit.active && material && material->info.name &&
+        std::strstr(material->info.name, "icbm_tunnelfloor") != nullptr;
+}
+
 // Keep the expensive per-object audit focused on the currently investigated
 // asset. The former all-object mode generated thousands of unique log lines
 // and sampled vertex/texture state for unrelated draws, hurting Switch FPS.
@@ -5914,7 +5924,8 @@ bool IDirect3DDevice9::BindUniformSet(
 #ifdef __SWITCH__
     // One compact dump for the exact floor VS: the white PS probe proves that
     // fragment state is isolated, so inspect the constants feeding clip-space.
-    if (setIndex == 1u && m_vertexShader && m_vertexShader->serial == 1820u)
+    if (setIndex == 1u && m_vertexShader && m_vertexShader->serial == 1820u &&
+        Switch_IsFloorAuditContextActive())
     {
         static bool switchFloorVsConstantsLogged = false;
         if (!switchFloorVsConstantsLogged)
@@ -7999,6 +8010,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     const bool traceFloorInput =
         m_vertexShader && m_pixelShader &&
         m_vertexShader->serial == 1820u && m_pixelShader->serial == 1821u &&
+        Switch_IsFloorAuditContextActive() &&
         switchFloorInputTraceCount < 2u;
     if (traceFloorInput)
     {
@@ -9090,7 +9102,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     // One bounded audit of the *actual* bound stream and index values for the
     // floor draw. This avoids inferring GPU fetches from the BSP CPU-side array.
     if (m_vertexShader && m_pixelShader &&
-        m_vertexShader->serial == 1820u && m_pixelShader->serial == 1821u)
+        m_vertexShader->serial == 1820u && m_pixelShader->serial == 1821u &&
+        Switch_IsFloorAuditContextActive())
     {
         static bool switchFloorBoundInputAuditLogged = false;
         if (!switchFloorBoundInputAuditLogged)
