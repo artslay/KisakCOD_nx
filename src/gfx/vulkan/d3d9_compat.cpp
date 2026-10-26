@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 #include <limits>
 #include <climits>
 #include <mutex>
@@ -8421,6 +8422,140 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             used += writtenSize;
         }
         Switch_LogWrite(bound);
+
+        // Record the UV pairs from the actual vertex-buffer bytes consumed by
+        // this indexed BSP draw. Resource/binding audits cannot tell whether
+        // the vertex stream contains valid texture coordinates.
+        if (stream0Stride == 44u && indexData && m_streams[0].buffer &&
+            m_streams[0].stride == 44u)
+        {
+            const KisakVkBuffer *vertexBuffer = m_streams[0].buffer;
+            const uint8_t *vertexBytes = nullptr;
+            if (vertexBuffer->dynamic && vertexBuffer->shadowInitialized &&
+                vertexBuffer->shadow.size() >= vertexBuffer->size)
+                vertexBytes = vertexBuffer->shadow.data();
+            else
+                vertexBytes = static_cast<const uint8_t *>(vertexBuffer->mapped);
+
+            if (vertexBytes)
+            {
+                uint32_t uv0Finite = 0u, uv0Bad = 0u, uv0Zero = 0u, uv0Outside01 = 0u;
+                uint32_t lmFinite = 0u, lmBad = 0u, lmZero = 0u, lmOutside01 = 0u;
+                float uv0MinU = std::numeric_limits<float>::infinity();
+                float uv0MinV = std::numeric_limits<float>::infinity();
+                float uv0MaxU = -std::numeric_limits<float>::infinity();
+                float uv0MaxV = -std::numeric_limits<float>::infinity();
+                float lmMinU = std::numeric_limits<float>::infinity();
+                float lmMinV = std::numeric_limits<float>::infinity();
+                float lmMaxU = -std::numeric_limits<float>::infinity();
+                float lmMaxV = -std::numeric_limits<float>::infinity();
+                int64_t sampleVertex[4] = {-1, -1, -1, -1};
+                float sampleUv[4][4]{};
+                uint32_t sampleCount = 0u;
+                const uint64_t vertexBufferSize = vertexBuffer->size;
+                const uint64_t streamOffset = m_streams[0].offset;
+
+                for (uint32_t i = 0u; i < indexCount; ++i)
+                {
+                    uint16_t rawIndex = 0u;
+                    std::memcpy(
+                        &rawIndex,
+                        indexData + static_cast<size_t>(startIndex + i) * sizeof(rawIndex),
+                        sizeof(rawIndex));
+                    const int64_t effectiveVertex =
+                        static_cast<int64_t>(baseVertexIndex) + rawIndex;
+                    if (effectiveVertex < 0)
+                        continue;
+
+                    const uint64_t vertexIndex = static_cast<uint64_t>(effectiveVertex);
+                    if (streamOffset > vertexBufferSize ||
+                        vertexIndex > (vertexBufferSize - streamOffset) / 44u)
+                        continue;
+                    const uint64_t vertexStart = streamOffset + vertexIndex * 44u;
+                    if (vertexStart > vertexBufferSize ||
+                        vertexBufferSize - vertexStart < 36u)
+                        continue;
+
+                    float uv[4]{};
+                    std::memcpy(uv, vertexBytes + vertexStart + 20u, sizeof(uv));
+                    const bool uv0Ok = std::isfinite(uv[0]) && std::isfinite(uv[1]);
+                    const bool lmOk = std::isfinite(uv[2]) && std::isfinite(uv[3]);
+                    if (!uv0Ok)
+                    {
+                        ++uv0Bad;
+                    }
+                    else
+                    {
+                        ++uv0Finite;
+                        uv0MinU = std::min(uv0MinU, uv[0]);
+                        uv0MaxU = std::max(uv0MaxU, uv[0]);
+                        uv0MinV = std::min(uv0MinV, uv[1]);
+                        uv0MaxV = std::max(uv0MaxV, uv[1]);
+                        if (std::fabs(uv[0]) <= 1.0e-6f &&
+                            std::fabs(uv[1]) <= 1.0e-6f)
+                            ++uv0Zero;
+                        if (uv[0] < 0.0f || uv[0] > 1.0f ||
+                            uv[1] < 0.0f || uv[1] > 1.0f)
+                            ++uv0Outside01;
+                    }
+                    if (!lmOk)
+                    {
+                        ++lmBad;
+                    }
+                    else
+                    {
+                        ++lmFinite;
+                        lmMinU = std::min(lmMinU, uv[2]);
+                        lmMaxU = std::max(lmMaxU, uv[2]);
+                        lmMinV = std::min(lmMinV, uv[3]);
+                        lmMaxV = std::max(lmMaxV, uv[3]);
+                        if (std::fabs(uv[2]) <= 1.0e-6f &&
+                            std::fabs(uv[3]) <= 1.0e-6f)
+                            ++lmZero;
+                        if (uv[2] < 0.0f || uv[2] > 1.0f ||
+                            uv[3] < 0.0f || uv[3] > 1.0f)
+                            ++lmOutside01;
+                    }
+
+                    if (sampleCount < 4u)
+                    {
+                        sampleVertex[sampleCount] = effectiveVertex;
+                        std::memcpy(sampleUv[sampleCount], uv, sizeof(uv));
+                        ++sampleCount;
+                    }
+                }
+
+                char uvTrace[1600];
+                std::snprintf(
+                    uvTrace, sizeof(uvTrace),
+                    "[KisakCOD][WORLD UV DATA] draw=%u material=%.64s surface=%u stride=44 indexCount=%u samples=%u uv0Finite=%u uv0Bad=%u uv0Zero=%u uv0Outside01=%u uv0U=(%.6g,%.6g) uv0V=(%.6g,%.6g) lmapFinite=%u lmapBad=%u lmapZero=%u lmapOutside01=%u lmapU=(%.6g,%.6g) lmapV=(%.6g,%.6g) v0=%lld:(%.5g,%.5g|%.5g,%.5g) v1=%lld:(%.5g,%.5g|%.5g,%.5g) v2=%lld:(%.5g,%.5g|%.5g,%.5g) v3=%lld:(%.5g,%.5g|%.5g,%.5g)\n",
+                    auditId,
+                    material && material->info.name ? material->info.name : "<unknown>",
+                    g_switchWorldDrawAudit.surfaceIndex,
+                    indexCount, sampleCount,
+                    uv0Finite, uv0Bad, uv0Zero, uv0Outside01,
+                    uv0Finite ? uv0MinU : 0.0f, uv0Finite ? uv0MaxU : 0.0f,
+                    uv0Finite ? uv0MinV : 0.0f, uv0Finite ? uv0MaxV : 0.0f,
+                    lmFinite, lmBad, lmZero, lmOutside01,
+                    lmFinite ? lmMinU : 0.0f, lmFinite ? lmMaxU : 0.0f,
+                    lmFinite ? lmMinV : 0.0f, lmFinite ? lmMaxV : 0.0f,
+                    static_cast<long long>(sampleVertex[0]), sampleUv[0][0], sampleUv[0][1], sampleUv[0][2], sampleUv[0][3],
+                    static_cast<long long>(sampleVertex[1]), sampleUv[1][0], sampleUv[1][1], sampleUv[1][2], sampleUv[1][3],
+                    static_cast<long long>(sampleVertex[2]), sampleUv[2][0], sampleUv[2][1], sampleUv[2][2], sampleUv[2][3],
+                    static_cast<long long>(sampleVertex[3]), sampleUv[3][0], sampleUv[3][1], sampleUv[3][2], sampleUv[3][3]);
+                Switch_LogWrite(uvTrace);
+            }
+            else
+            {
+                char uvTrace[256];
+                std::snprintf(
+                    uvTrace, sizeof(uvTrace),
+                    "[KisakCOD][WORLD UV DATA] draw=%u surface=%u action=skip_unmapped_vertex_stream stride=%u bytes=%u\n",
+                    auditId, g_switchWorldDrawAudit.surfaceIndex,
+                    stream0Stride, vertexBuffer->size);
+                Switch_LogWrite(uvTrace);
+            }
+        }
 
         if (material && material->textureTable && material->textureCount)
         {
