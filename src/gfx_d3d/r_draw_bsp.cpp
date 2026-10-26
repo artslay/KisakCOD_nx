@@ -12,6 +12,35 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern void Switch_BeginWorldDrawAudit(
+    const Material *material, const char *techniqueName,
+    const char *vertexShaderName, const char *pixelShaderName,
+    uint32_t surfaceIndex, uint32_t firstVertex, uint32_t vertexCount,
+    uint32_t triangleCount, uint32_t lightmapIndex);
+extern void Switch_EndWorldDrawAudit();
+
+static const MaterialTechnique *s_switchBspAuditTechnique = nullptr;
+static const MaterialPass *s_switchBspAuditPass = nullptr;
+
+static void R_SwitchDrawBspTrisAudited(
+    GfxCmdBufPrimState *state, const srfTriangles_t *tris,
+    uint32_t triangleCount, const GfxSurface *surface, uint32_t surfaceIndex)
+{
+    const Material *material = surface ? surface->material : nullptr;
+    const MaterialPass *pass = s_switchBspAuditPass;
+    Switch_BeginWorldDrawAudit(
+        material,
+        s_switchBspAuditTechnique ? s_switchBspAuditTechnique->name : nullptr,
+        pass && pass->vertexShader ? pass->vertexShader->name : nullptr,
+        pass && pass->pixelShader ? pass->pixelShader->name : nullptr,
+        surfaceIndex,
+        tris ? tris->firstVertex : 0u,
+        tris ? tris->vertexCount : 0u,
+        triangleCount,
+        surface ? surface->lightmapIndex : UINT32_MAX);
+    R_DrawBspTris(state, tris, triangleCount);
+    Switch_EndWorldDrawAudit();
+}
 #endif
 
 const int g_layerDataStride[16] = { 0, 0, 0, 8, 12, 16, 20, 24, 24, 28, 32, 32, 36, 40, 0, 0 }; // idb
@@ -96,10 +125,18 @@ void __cdecl R_DrawBspDrawSurfsLit(
     drawStream.primDrawSurfPos = primDrawSurfPos;
     drawStream.customSamplerFlags = pass->customSamplerFlags;
     drawStream.hasSunDirChanged = context.source->input.data->prim.hasSunDirChanged;
+#ifdef __SWITCH__
+    s_switchBspAuditTechnique = context.state->technique;
+    s_switchBspAuditPass = context.state->pass;
+#endif
     if (prepassContext.state)
         R_DrawTrianglesLit(&drawStream, &context.state->prim, &prepassContext.state->prim);
     else
         R_DrawTrianglesLit(&drawStream, &context.state->prim, 0);
+#ifdef __SWITCH__
+    s_switchBspAuditTechnique = nullptr;
+    s_switchBspAuditPass = nullptr;
+#endif
     context.state->samplerTexture[1] = drawStream.reflectionProbeTexture;
     context.state->samplerTexture[2] = drawStream.lightmapPrimaryTexture;
     context.state->samplerTexture[3] = drawStream.lightmapSecondaryTexture;
@@ -125,6 +162,10 @@ void __cdecl R_DrawTrianglesLit(
     const GfxTexture *newLightmapPrimaryTexture; // [esp+3Ch] [ebp-3Ch]
     GfxTexture *reflectionProbeTextures; // [esp+40h] [ebp-38h]
     const GfxSurface *bspSurf; // [esp+44h] [ebp-34h]
+#ifdef __SWITCH__
+    const GfxSurface *prevBspSurf;
+    uint32_t prevBspSurfIndex;
+#endif
     uint32_t index; // [esp+48h] [ebp-30h]
     uint32_t lightmapIndex; // [esp+4Ch] [ebp-2Ch]
     const GfxTexture *lightmapSecondaryTexture; // [esp+50h] [ebp-28h]
@@ -142,6 +183,10 @@ void __cdecl R_DrawTrianglesLit(
     lightmapIndex = 31;
     prevTris = 0;
     triCount = 0;
+#ifdef __SWITCH__
+    prevBspSurf = nullptr;
+    prevBspSurfIndex = UINT32_MAX;
+#endif
     baseVertex = -1;
     baseIndex = 0;
     reflectionProbeTexture = drawStream->reflectionProbeTexture;
@@ -209,8 +254,19 @@ void __cdecl R_DrawTrianglesLit(
                 if (baseVertex != bspSurf->tris.firstVertex || baseIndex + 3 * triCount != bspSurf->tris.baseIndex)
                 {
                     if (prevTris)
+                    {
+#ifdef __SWITCH__
+                        R_SwitchDrawBspTrisAudited(
+                            primState, prevTris, triCount, prevBspSurf, prevBspSurfIndex);
+#else
                         R_DrawBspTris(primState, prevTris, triCount);
+#endif
+                    }
                     prevTris = &tris->tris;
+#ifdef __SWITCH__
+                    prevBspSurf = bspSurf;
+                    prevBspSurfIndex = surfIndex;
+#endif
                     triCount = 0;
                     baseIndex = tris->tris.baseIndex;
                     if (baseVertex != tris->tris.firstVertex)
@@ -223,8 +279,19 @@ void __cdecl R_DrawTrianglesLit(
             else
             {
                 if (prevTris)
+                {
+#ifdef __SWITCH__
+                    R_SwitchDrawBspTrisAudited(
+                        primState, prevTris, triCount, prevBspSurf, prevBspSurfIndex);
+#else
                     R_DrawBspTris(primState, prevTris, triCount);
+#endif
+                }
                 prevTris = &tris->tris;
+#ifdef __SWITCH__
+                prevBspSurf = bspSurf;
+                prevBspSurfIndex = surfIndex;
+#endif
                 triCount = 0;
                 baseIndex = tris->tris.baseIndex;
                 if (baseVertex != tris->tris.firstVertex)
@@ -323,7 +390,14 @@ void __cdecl R_DrawTrianglesLit(
         }
     }
     if (prevTris)
+    {
+#ifdef __SWITCH__
+        R_SwitchDrawBspTrisAudited(
+            primState, prevTris, triCount, prevBspSurf, prevBspSurfIndex);
+#else
         R_DrawBspTris(primState, prevTris, triCount);
+#endif
+    }
     drawStream->reflectionProbeTexture = reflectionProbeTexture;
     drawStream->lightmapPrimaryTexture = lightmapPrimaryTexture;
     drawStream->lightmapSecondaryTexture = lightmapSecondaryTexture;
