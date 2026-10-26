@@ -9373,7 +9373,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         switchFloorOcclusionQueryAttempted = true;
         if (!m_backend->SupportsOcclusionQuery())
         {
-            Switch_LogWrite("[KisakCOD][VK FLOOR RASTER QUERY] result=skip reason=occlusion_query_unsupported\\n");
+            Switch_LogWrite("[KisakCOD][VK FLOOR RASTER QUERY] result=skip reason=occlusion_query_unsupported\n");
         }
         else
         {
@@ -9387,7 +9387,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             {
                 char trace[192];
                 std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][VK FLOOR RASTER QUERY] result=skip reason=create_failed vk=%d\\n",
+                    "[KisakCOD][VK FLOOR RASTER QUERY] result=skip reason=create_failed vk=%d\n",
                     static_cast<int>(queryCreateResult));
                 Switch_LogWrite(trace);
             }
@@ -9400,7 +9400,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     switchFloorOcclusionPool, 0, 1);
                 if (!PrepareDraw())
                 {
-                    Switch_LogWrite("[KisakCOD][VK FLOOR RASTER QUERY] result=fail reason=prepare_draw\\n");
+                    Switch_LogWrite("[KisakCOD][VK FLOOR RASTER QUERY] result=fail reason=prepare_draw\n");
                     vkDestroyQueryPool(
                         m_backend->Device(), switchFloorOcclusionPool, nullptr);
                     switchFloorOcclusionPool = VK_NULL_HANDLE;
