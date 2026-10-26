@@ -7922,11 +7922,9 @@ bool IDirect3DDevice9::EnsurePipeline()
             &vertexShuffleGrowthEstimate);
 #ifdef __SWITCH__
         // Keep the original game's clip-space output. The white PS makes raster
-        // coverage independent from texture sampling, while visibility is bypassed
-        // only for audited floor surface 1583.
-        if (switchFloorSolidWhiteProbeActive &&
-            g_switchFloorRasterProbeSurfaceIndex != UINT32_MAX &&
-        g_switchWorldDrawAudit.surfaceIndex == g_switchFloorRasterProbeSurfaceIndex)
+        // coverage independent from texture sampling; the target was selected from
+        // the visibility-accepted BSP draw queue.
+        if (switchFloorSolidWhiteProbeActive)
             Switch_LogWrite("[KisakCOD][VK VS POSITION TEST] action=keep_original_position_for_white_ps_probe\n");
 #endif
         if (loweredVertexShuffles && loweredVertexShuffleCount)
