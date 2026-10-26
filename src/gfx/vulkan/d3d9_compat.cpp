@@ -2324,12 +2324,11 @@ bool SwitchPsS0UvTestTargetMatchesLayout(
 
 uint64_t SwitchPsColorDebugTargetSerial()
 {
-    // TEMPORARY Switch diagnostic: restrict solid-white output to floor PS 1821.
-    // Do not use wildcard mode by default; that paints UI and the whole scene.
-    // "off" or "0" disables the test; "all" remains an explicit opt-in.
+    // Keep shader-output diagnostics opt-in. PS 1821 is shared by many
+    // lightmapped surfaces, so changing its output by default corrupts the scene.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL");
     if (!value || !*value)
-        return 1821u; // Temporarily isolate whether floor PS 1821 can write visible color.
+        return UINT64_MAX; // Preserve the real fragment shader during normal rendering.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "all") == 0)
