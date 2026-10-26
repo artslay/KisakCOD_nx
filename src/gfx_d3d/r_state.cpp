@@ -362,14 +362,14 @@ GfxCmdBufSourceState *__cdecl R_GetCodeMatrix(
     matrixIndex = sourceIndex - CONST_SRC_FIRST_CODE_MATRIX;
 
     if (source->constVersions[sourceIndex] == matrixVersion)
-        return (GfxCmdBufSourceState *)((char *)source + 64 * matrixIndex + 16 * firstRow);
+        return reinterpret_cast<GfxCmdBufSourceState *>(source->matrices.matrix[matrixIndex].m[firstRow]);
 
     baseIndex = matrixIndex & 0xFFFFFFFC;
     if (source->constVersions[(matrixIndex & 0xFFFFFFFC) + CONST_SRC_FIRST_CODE_MATRIX] != matrixVersion)
     {
         R_DeriveCodeMatrix(source, &source->matrices, baseIndex);
         if (matrixIndex == baseIndex)
-            return (GfxCmdBufSourceState *)((char *)source + 64 * matrixIndex + 16 * firstRow);
+            return reinterpret_cast<GfxCmdBufSourceState *>(source->matrices.matrix[matrixIndex].m[firstRow]);
 
         iassert(source->constVersions[sourceIndex] != matrixVersion);
     }
@@ -379,7 +379,7 @@ GfxCmdBufSourceState *__cdecl R_GetCodeMatrix(
     {
         MatrixTranspose44(source->matrices.matrix[transposeIndex].m, source->matrices.matrix[matrixIndex].m);
 
-        return (GfxCmdBufSourceState *)((char *)source + 64 * matrixIndex + 16 * firstRow);
+        return reinterpret_cast<GfxCmdBufSourceState *>(source->matrices.matrix[matrixIndex].m[firstRow]);
     }
     else
     {
@@ -388,7 +388,7 @@ GfxCmdBufSourceState *__cdecl R_GetCodeMatrix(
         {
             MatrixInverse44(source->matrices.matrix[inverseIndex].m, source->matrices.matrix[matrixIndex].m);
 
-            return (GfxCmdBufSourceState *)((char *)source + 64 * matrixIndex + 16 * firstRow);
+            return reinterpret_cast<GfxCmdBufSourceState *>(source->matrices.matrix[matrixIndex].m[firstRow]);
         }
         else
         {
@@ -400,7 +400,7 @@ GfxCmdBufSourceState *__cdecl R_GetCodeMatrix(
             source->constVersions[inverseIndex + 58] = matrixVersion;
             MatrixInverse44(source->matrices.matrix[inverseIndex].m, source->matrices.matrix[matrixIndex].m);
 
-            return (GfxCmdBufSourceState *)((char *)source + 64 * matrixIndex + 16 * firstRow);
+            return reinterpret_cast<GfxCmdBufSourceState *>(source->matrices.matrix[matrixIndex].m[firstRow]);
         }
     }
 }
