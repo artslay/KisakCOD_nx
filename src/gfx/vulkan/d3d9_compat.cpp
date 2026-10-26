@@ -112,6 +112,16 @@ struct SwitchWorldDrawAuditState
 };
 
 thread_local SwitchWorldDrawAuditState g_switchWorldDrawAudit{};
+
+struct SwitchWorldDrawAuditSignature
+{
+    const Material *material = nullptr;
+    uint64_t pixelShaderSerial = 0;
+    uintptr_t texturePtrs[6]{};
+};
+static constexpr uint32_t kSwitchWorldDrawAuditSignatureCount = 192u;
+static SwitchWorldDrawAuditSignature
+    g_switchWorldDrawAuditSignatures[kSwitchWorldDrawAuditSignatureCount]{};
 static uint32_t g_switchWorldDrawAuditCount = 0;
 
 void Switch_BeginWorldDrawAudit(
@@ -6065,7 +6075,14 @@ bool IDirect3DDevice9::EnsurePipeline()
             psS0UvTestArmedTraceWritten = true;
             char trace[192];
             const char *setting = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
-            if (!setting || !*setting)
+            if (uvTarget == UINT64_MAX - 2u)
+            {
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=all_world_vertex_layout_ps source=%s\n",
+                    setting && *setting ? "env" : "default");
+            }
+            else if (!setting || !*setting)
             {
                 std::snprintf(
                     trace, sizeof(trace),
@@ -8302,11 +8319,48 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     // Correlate the actual submitted BSP draw with its material declaration and
     // current Vulkan texture views. These are draw-time bindings, not merely
     // images that happened to load earlier during the zone load.
-    if (g_switchWorldDrawAudit.active && g_switchWorldDrawAuditCount < 160u)
+    if (g_switchWorldDrawAudit.active)
     {
-        const uint32_t auditId = g_switchWorldDrawAuditCount++;
         const Material *material = g_switchWorldDrawAudit.material;
-        char header[640];
+        const uint64_t pixelShaderSerial =
+            m_pixelShader ? m_pixelShader->serial : 0u;
+        bool auditSignatureSeen = false;
+        for (uint32_t i = 0; i < g_switchWorldDrawAuditCount; ++i)
+        {
+            const SwitchWorldDrawAuditSignature &signature =
+                g_switchWorldDrawAuditSignatures[i];
+            if (signature.material != material ||
+                signature.pixelShaderSerial != pixelShaderSerial)
+                continue;
+            bool sameTextures = true;
+            for (uint32_t slot = 0; slot < 6u; ++slot)
+            {
+                if (signature.texturePtrs[slot] !=
+                    reinterpret_cast<uintptr_t>(m_textures[slot]))
+                {
+                    sameTextures = false;
+                    break;
+                }
+            }
+            if (sameTextures)
+            {
+                auditSignatureSeen = true;
+                break;
+            }
+        }
+        if (!auditSignatureSeen &&
+            g_switchWorldDrawAuditCount < kSwitchWorldDrawAuditSignatureCount)
+        {
+            const uint32_t auditId = g_switchWorldDrawAuditCount++;
+            SwitchWorldDrawAuditSignature &signature =
+                g_switchWorldDrawAuditSignatures[auditId];
+            signature.material = material;
+            signature.pixelShaderSerial = pixelShaderSerial;
+            for (uint32_t slot = 0; slot < 6u; ++slot)
+                signature.texturePtrs[slot] =
+                    reinterpret_cast<uintptr_t>(m_textures[slot]);
+
+            char header[640];
         std::snprintf(
             header, sizeof(header),
             "[KisakCOD][WORLD DRAW AUDIT] draw=%u material=%.90s surface=%u tech=%.48s vs=%.48s ps=%.48s psSerial=%llu tri=%u firstVertex=%u vertices=%u lightmap=%u stream0Stride=%u declType=%u\n",
@@ -8406,6 +8460,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 used += writtenSize;
             }
             Switch_LogWrite(declared);
+            }
         }
     }
 
