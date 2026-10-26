@@ -6094,13 +6094,6 @@ bool IDirect3DDevice9::EnsurePipeline()
                     trace, sizeof(trace),
                     "[KisakCOD][VK PS S0 UV TEST] action=armed target=disabled source=env\n");
             }
-            else if (uvTarget == UINT64_MAX - 2u)
-            {
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=all_world_vertex_layout_ps source=%s\n",
-                    setting && *setting ? "env" : "default");
-            }
             else if (uvTarget == UINT64_MAX - 1u)
             {
                 std::snprintf(
@@ -8398,7 +8391,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 : static_cast<unsigned>(VK_IMAGE_LAYOUT_UNDEFINED);
             const int written = std::snprintf(
                 bound + used, sizeof(bound) - used,
-                " s%u=%.48s:%ux%u:fmt%u:src%u:image%u:view%u:layout%u",
+                " s%u=%.48s:%ux%u:fmt%u:src%u:image%u:view%u:baseView%u:mips%u:layout%u",
                 slot, name,
                 texture ? texture->width : 0u,
                 texture ? texture->height : 0u,
@@ -8406,6 +8399,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 texture ? static_cast<unsigned>(texture->sourceFormat) : 0u,
                 texture && texture->image != VK_NULL_HANDLE ? 1u : 0u,
                 texture && texture->view != VK_NULL_HANDLE ? 1u : 0u,
+                texture && texture->baseMipView != VK_NULL_HANDLE ? 1u : 0u,
+                texture ? texture->mipLevels : 0u,
                 layout);
             if (written < 0)
                 break;
