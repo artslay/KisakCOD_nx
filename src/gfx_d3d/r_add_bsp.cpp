@@ -6,6 +6,7 @@
 #include "r_pretess.h"
 
 #ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
 extern void Switch_LogWorldSurfaceSkipped(
     const Material *material, uint32_t surfaceIndex, uint32_t firstVertex,
     uint32_t vertexCount, uint32_t triangleCount, uint32_t lightmapIndex,
