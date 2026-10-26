@@ -5,6 +5,7 @@
 #include "../../gfx_d3d/r_cinematic.h"
 #include "../../gfx_d3d/r_image.h"
 #include "../../gfx_d3d/r_init.h"
+#include "../../gfx_d3d/rb_state.h"
 #endif
 
 #ifdef __SWITCH__
@@ -5941,6 +5942,70 @@ bool IDirect3DDevice9::BindUniformSet(
                 trace[sizeof(trace) - 2u] = '\n';
                 trace[sizeof(trace) - 1u] = '\0';
             }
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
+
+#ifdef __SWITCH__
+    // The white PS probe already bypasses every fragment-side rejection, but
+    // the floor remains black. For this one shader pair, feed the vertex shader
+    // the renderer's authoritative world-to-clip matrix in D3D dp4 register
+    // layout (columns gathered from the engine's row-major GfxMatrix memory).
+    // This isolates the suspected stale/wrong matrix constants without touching
+    // other materials or changing the uploaded vertex/index buffers.
+    const bool switchFloorVpProbeActive =
+        setIndex == 1u && m_vertexShader && m_pixelShader &&
+        m_vertexShader->serial == 1820u && m_pixelShader->serial == 1821u &&
+        SwitchPsColorDebugTargetMatches(
+            SwitchPsColorDebugTargetSerial(), m_pixelShader->serial,
+            m_pixelShader->parseData) &&
+        gfxCmdBufSourceState.viewParms3D;
+    if (switchFloorVpProbeActive)
+    {
+        const float *matrix =
+            reinterpret_cast<const float *>(
+                &gfxCmdBufSourceState.viewParms3D->viewProjectionMatrix);
+        uint32_t registerMask = 0u;
+        float replacement[4][4]{};
+        for (uint32_t reg = 0; reg < 4u; ++reg)
+        {
+            replacement[reg][0] = matrix[reg];
+            replacement[reg][1] = matrix[reg + 4u];
+            replacement[reg][2] = matrix[reg + 8u];
+            replacement[reg][3] = matrix[reg + 12u];
+        }
+        for (uint32_t i = 0; i < layout.floatCount; ++i)
+        {
+            const uint32_t reg = layout.floatRegisters[i];
+            if (reg >= 4u)
+                continue;
+            std::memcpy(
+                bytes + layout.floatOffset + static_cast<size_t>(i) * 16u,
+                replacement[reg], sizeof(replacement[reg]));
+            registerMask |= 1u << reg;
+        }
+
+        static bool switchFloorVpProbeLogged = false;
+        if (!switchFloorVpProbeLogged)
+        {
+            switchFloorVpProbeLogged = true;
+            const float *old = static_cast<const float *>(floatData);
+            char trace[768];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK FLOOR VP OVERRIDE] applied=%u registerMask=0x%x view=%p oldC0=(%.5g,%.5g,%.5g,%.5g) newC0=(%.5g,%.5g,%.5g,%.5g) oldC1=(%.5g,%.5g,%.5g,%.5g) newC1=(%.5g,%.5g,%.5g,%.5g) oldC2=(%.5g,%.5g,%.5g,%.5g) newC2=(%.5g,%.5g,%.5g,%.5g) oldC3=(%.5g,%.5g,%.5g,%.5g) newC3=(%.5g,%.5g,%.5g,%.5g)\n",
+                (registerMask & 0x0fu) == 0x0fu ? 1u : 0u,
+                registerMask,
+                static_cast<const void *>(gfxCmdBufSourceState.viewParms3D),
+                old[0], old[1], old[2], old[3],
+                replacement[0][0], replacement[0][1], replacement[0][2], replacement[0][3],
+                old[4], old[5], old[6], old[7],
+                replacement[1][0], replacement[1][1], replacement[1][2], replacement[1][3],
+                old[8], old[9], old[10], old[11],
+                replacement[2][0], replacement[2][1], replacement[2][2], replacement[2][3],
+                old[12], old[13], old[14], old[15],
+                replacement[3][0], replacement[3][1], replacement[3][2], replacement[3][3]);
             Switch_LogWrite(trace);
         }
     }
