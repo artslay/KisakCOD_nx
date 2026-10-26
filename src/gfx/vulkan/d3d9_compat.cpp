@@ -36,6 +36,10 @@
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 
+// Selected by R_SwitchQueueBspAuditSurface only after a floor surface with the
+// target shader pair is accepted into the visible BSP draw queue.
+uint32_t g_switchFloorRasterProbeSurfaceIndex = UINT32_MAX;
+
 extern "C" {
 thread_local volatile uintptr_t g_switchVkModuleTracePhase = 0;
 thread_local volatile uintptr_t g_switchVkModuleTraceDevice = 0;
@@ -7281,7 +7285,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_vertexShader->serial == 1820u &&
         m_pixelShader->serial == 1821u &&
         Switch_IsFloorAuditContextActive() &&
-        g_switchWorldDrawAudit.surfaceIndex == 1583u;
+        g_switchFloorRasterProbeSurfaceIndex != UINT32_MAX &&\n        g_switchWorldDrawAudit.surfaceIndex == g_switchFloorRasterProbeSurfaceIndex;
 #else
     const bool switchFloorSolidWhiteProbeActive = false;
 #endif
@@ -7920,7 +7924,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         // coverage independent from texture sampling, while visibility is bypassed
         // only for audited floor surface 1583.
         if (switchFloorSolidWhiteProbeActive &&
-            g_switchWorldDrawAudit.surfaceIndex == 1583u)
+            g_switchFloorRasterProbeSurfaceIndex != UINT32_MAX &&\n        g_switchWorldDrawAudit.surfaceIndex == g_switchFloorRasterProbeSurfaceIndex)
             Switch_LogWrite("[KisakCOD][VK VS POSITION TEST] action=keep_original_position_for_white_ps_probe\n");
 #endif
         if (loweredVertexShuffles && loweredVertexShuffleCount)
@@ -9942,7 +9946,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         m_vertexShader->serial == 1820u &&
         m_pixelShader->serial == 1821u &&
         Switch_IsFloorAuditContextActive() &&
-        g_switchWorldDrawAudit.surfaceIndex == 1583u &&
+        g_switchFloorRasterProbeSurfaceIndex != UINT32_MAX &&\n        g_switchWorldDrawAudit.surfaceIndex == g_switchFloorRasterProbeSurfaceIndex &&
         (!m_color || !m_color->texture);
     if (!switchFloorOcclusionQueryAttempted && switchFloorOcclusionTarget)
     {
@@ -10043,7 +10047,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         m_vertexShader->serial == 1820u &&
         m_pixelShader->serial == 1821u &&
         Switch_IsFloorAuditContextActive() &&
-        g_switchWorldDrawAudit.surfaceIndex == 1583u &&
+        g_switchFloorRasterProbeSurfaceIndex != UINT32_MAX &&\n        g_switchWorldDrawAudit.surfaceIndex == g_switchFloorRasterProbeSurfaceIndex &&
         (!m_color || !m_color->texture))
     {
         switchFloorPixelReadbackDone = true;
