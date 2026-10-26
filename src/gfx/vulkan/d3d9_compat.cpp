@@ -97,6 +97,53 @@ std::atomic<uint32_t> g_switchLastDrawTextureFormat[4]{};
 std::atomic<uint32_t> g_switchLastDrawTextureSourceFormat[4]{};
 std::atomic<uint32_t> g_switchLastDrawTextureLayout[4]{};
 
+struct SwitchWorldDrawAuditState
+{
+    bool active = false;
+    const Material *material = nullptr;
+    char techniqueName[64]{};
+    char vertexShaderName[64]{};
+    char pixelShaderName[64]{};
+    uint32_t surfaceIndex = UINT32_MAX;
+    uint32_t firstVertex = 0;
+    uint32_t vertexCount = 0;
+    uint32_t triangleCount = 0;
+    uint32_t lightmapIndex = UINT32_MAX;
+};
+
+thread_local SwitchWorldDrawAuditState g_switchWorldDrawAudit{};
+static uint32_t g_switchWorldDrawAuditCount = 0;
+
+void Switch_BeginWorldDrawAudit(
+    const Material *material, const char *techniqueName,
+    const char *vertexShaderName, const char *pixelShaderName,
+    uint32_t surfaceIndex, uint32_t firstVertex, uint32_t vertexCount,
+    uint32_t triangleCount, uint32_t lightmapIndex)
+{
+    g_switchWorldDrawAudit.active = material != nullptr;
+    g_switchWorldDrawAudit.material = material;
+    std::snprintf(g_switchWorldDrawAudit.techniqueName,
+        sizeof(g_switchWorldDrawAudit.techniqueName), "%.63s",
+        techniqueName ? techniqueName : "<none>");
+    std::snprintf(g_switchWorldDrawAudit.vertexShaderName,
+        sizeof(g_switchWorldDrawAudit.vertexShaderName), "%.63s",
+        vertexShaderName ? vertexShaderName : "<none>");
+    std::snprintf(g_switchWorldDrawAudit.pixelShaderName,
+        sizeof(g_switchWorldDrawAudit.pixelShaderName), "%.63s",
+        pixelShaderName ? pixelShaderName : "<none>");
+    g_switchWorldDrawAudit.surfaceIndex = surfaceIndex;
+    g_switchWorldDrawAudit.firstVertex = firstVertex;
+    g_switchWorldDrawAudit.vertexCount = vertexCount;
+    g_switchWorldDrawAudit.triangleCount = triangleCount;
+    g_switchWorldDrawAudit.lightmapIndex = lightmapIndex;
+}
+
+void Switch_EndWorldDrawAudit()
+{
+    g_switchWorldDrawAudit.active = false;
+    g_switchWorldDrawAudit.material = nullptr;
+}
+
 // Set by R_SetSampler while preparing a lit material; consumed by the next
 // pixel-sampler descriptor bind so the trace describes the exact draw that
 // sampled the selected material/lightmap resources.
@@ -1897,21 +1944,24 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0UvTestTargetSerial()
 {
-    // Temporary live-UV probe for the four world shaders observed in gameplay.
-    // A numeric value selects one PS; "all" opts into every patchable PS;
-    // "off"/"0" disables the diagnostic for a normal-looking frame.
+    // Default to every pixel shader used with the native 44-byte CoD4 world
+    // vertex stream, rather than probing only four previously observed serials.
+    // Numeric values select one PS; "all" includes UI/model/video PSs; "off"
+    // disables this diagnostic.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
     if (!value || !*value)
-        return 0u; // Internal sentinel: default known-world shader set.
+        return UINT64_MAX - 2u; // World-vertex-layout sentinel.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
+    if (std::strcmp(value, "world") == 0)
+        return UINT64_MAX - 2u;
     if (std::strcmp(value, "all") == 0)
         return UINT64_MAX - 1u;
 
     char *end = nullptr;
     const unsigned long long serial = std::strtoull(value, &end, 0);
     if (end == value || !end || *end != '\0' || serial == 0u ||
-        serial >= UINT64_MAX - 1u)
+        serial >= UINT64_MAX - 2u)
         return UINT64_MAX;
     return static_cast<uint64_t>(serial);
 }
@@ -1919,17 +1969,26 @@ uint64_t SwitchPsS0UvTestTargetSerial()
 bool SwitchPsS0UvTestTargetMatches(
     uint64_t targetSerial, uint64_t actualSerial)
 {
-    if (actualSerial == 0u || targetSerial == UINT64_MAX)
+    if (actualSerial == 0u || targetSerial == UINT64_MAX ||
+        targetSerial == UINT64_MAX - 2u)
         return false;
     if (targetSerial == UINT64_MAX - 1u)
         return true; // Explicit "all" setting.
     if (targetSerial != 0u)
         return targetSerial == actualSerial;
+    return false;
+}
 
-    // Default diagnostic remains restricted to the world pixel shaders already
-    // seen on trees, factory walls, plastic walls, and floor/beam materials.
-    return actualSerial == 1539u || actualSerial == 1771u ||
-        actualSerial == 1792u || actualSerial == 1821u;
+bool SwitchPsS0UvTestTargetMatchesLayout(
+    uint64_t targetSerial, uint64_t actualSerial,
+    uint8_t declarationType, uint32_t stream0Stride)
+{
+    if (targetSerial == UINT64_MAX - 2u)
+    {
+        return actualSerial != 0u && stream0Stride == 44u &&
+            declarationType >= 2u && declarationType <= 13u;
+    }
+    return SwitchPsS0UvTestTargetMatches(targetSerial, actualSerial);
 }
 
 uint64_t SwitchPsColorDebugTargetSerial()
@@ -6018,6 +6077,13 @@ bool IDirect3DDevice9::EnsurePipeline()
                     trace, sizeof(trace),
                     "[KisakCOD][VK PS S0 UV TEST] action=armed target=disabled source=env\n");
             }
+            else if (uvTarget == UINT64_MAX - 2u)
+            {
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=all_world_vertex_layout_ps source=%s\n",
+                    setting && *setting ? "env" : "default");
+            }
             else if (uvTarget == UINT64_MAX - 1u)
             {
                 std::snprintf(
@@ -6033,8 +6099,10 @@ bool IDirect3DDevice9::EnsurePipeline()
             }
             Switch_LogWrite(trace);
         }
-        if (m_pixelShader && SwitchPsS0UvTestTargetMatches(
-                uvTarget, m_pixelShader->serial))
+        if (m_pixelShader && SwitchPsS0UvTestTargetMatchesLayout(
+                uvTarget, m_pixelShader->serial,
+                m_decl ? m_decl->switchVertDeclType : 0xFFu,
+                m_streams[0].stride))
         {
             bool alreadySeen = false;
             for (size_t i = 0; i < psS0UvSeenSerialCount; ++i)
@@ -6622,8 +6690,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         // lighting and later shader math while preserving interpolated UVs.
         // Keep it scoped to observed world shaders by default.
         const uint64_t debugPsS0UvSerial = SwitchPsS0UvTestTargetSerial();
-        if (m_pixelShader && SwitchPsS0UvTestTargetMatches(
-                debugPsS0UvSerial, m_pixelShader->serial))
+        if (m_pixelShader && SwitchPsS0UvTestTargetMatchesLayout(
+                debugPsS0UvSerial, m_pixelShader->serial,
+                m_decl ? m_decl->switchVertDeclType : 0xFFu,
+                m_streams[0].stride))
         {
             // Pass the exact serial here even when the selection is a set or
             // wildcard; the patch helper itself validates a single module.
@@ -8229,6 +8299,115 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     }
     RecordSwitchRecentVulkanDraw(recentDraw);
 
+    // Correlate the actual submitted BSP draw with its material declaration and
+    // current Vulkan texture views. These are draw-time bindings, not merely
+    // images that happened to load earlier during the zone load.
+    if (g_switchWorldDrawAudit.active && g_switchWorldDrawAuditCount < 160u)
+    {
+        const uint32_t auditId = g_switchWorldDrawAuditCount++;
+        const Material *material = g_switchWorldDrawAudit.material;
+        char header[640];
+        std::snprintf(
+            header, sizeof(header),
+            "[KisakCOD][WORLD DRAW AUDIT] draw=%u material=%.90s surface=%u tech=%.48s vs=%.48s ps=%.48s psSerial=%llu tri=%u firstVertex=%u vertices=%u lightmap=%u stream0Stride=%u declType=%u\n",
+            auditId,
+            material && material->info.name ? material->info.name : "<unknown>",
+            g_switchWorldDrawAudit.surfaceIndex,
+            g_switchWorldDrawAudit.techniqueName,
+            g_switchWorldDrawAudit.vertexShaderName,
+            g_switchWorldDrawAudit.pixelShaderName,
+            static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
+            g_switchWorldDrawAudit.triangleCount,
+            g_switchWorldDrawAudit.firstVertex,
+            g_switchWorldDrawAudit.vertexCount,
+            g_switchWorldDrawAudit.lightmapIndex,
+            stream0Stride,
+            static_cast<unsigned>(m_decl ? m_decl->switchVertDeclType : 0xFFu));
+        Switch_LogWrite(header);
+
+        char bound[1480];
+        size_t used = static_cast<size_t>(std::snprintf(
+            bound, sizeof(bound), "[KisakCOD][WORLD DRAW BIND] draw=%u",
+            auditId));
+        if (used >= sizeof(bound))
+            used = sizeof(bound) - 1u;
+        for (uint32_t slot = 0; slot < 6u; ++slot)
+        {
+            const auto *texture =
+                static_cast<const KisakVkTexture *>(m_textures[slot]);
+            const char *name = texture
+                ? (texture->sourceImage && texture->sourceImage->name
+                    ? texture->sourceImage->name : texture->debugName)
+                : "<null>";
+            const unsigned layout = texture
+                ? static_cast<unsigned>(texture->GetSubresourceLayout(0u, 0u))
+                : static_cast<unsigned>(VK_IMAGE_LAYOUT_UNDEFINED);
+            const int written = std::snprintf(
+                bound + used, sizeof(bound) - used,
+                " s%u=%.48s:%ux%u:fmt%u:src%u:image%u:view%u:layout%u",
+                slot, name,
+                texture ? texture->width : 0u,
+                texture ? texture->height : 0u,
+                texture ? static_cast<unsigned>(texture->format) : 0u,
+                texture ? static_cast<unsigned>(texture->sourceFormat) : 0u,
+                texture && texture->image != VK_NULL_HANDLE ? 1u : 0u,
+                texture && texture->view != VK_NULL_HANDLE ? 1u : 0u,
+                layout);
+            if (written < 0)
+                break;
+            const size_t writtenSize = static_cast<size_t>(written);
+            if (writtenSize >= sizeof(bound) - used)
+            {
+                used = sizeof(bound) - 1u;
+                break;
+            }
+            used += writtenSize;
+        }
+        Switch_LogWrite(bound);
+
+        if (material && material->textureTable && material->textureCount)
+        {
+            char declared[1480];
+            used = static_cast<size_t>(std::snprintf(
+                declared, sizeof(declared),
+                "[KisakCOD][WORLD DRAW SOURCES] draw=%u material=%.90s declared=%u",
+                auditId,
+                material->info.name ? material->info.name : "<unknown>",
+                static_cast<unsigned>(material->textureCount)));
+            if (used >= sizeof(declared))
+                used = sizeof(declared) - 1u;
+            const uint32_t defCount = std::min<uint32_t>(
+                material->textureCount, 8u);
+            for (uint32_t i = 0; i < defCount; ++i)
+            {
+                const MaterialTextureDef &def = material->textureTable[i];
+                const bool imageSemantic =
+                    def.semantic == 1u || def.semantic == 2u ||
+                    def.semantic == 5u || def.semantic == 8u;
+                const GfxImage *image =
+                    imageSemantic ? def.u.image : nullptr;
+                const char *imageName = image && image->name
+                    ? image->name : (imageSemantic ? "<null-image>" : "<non-image-semantic>");
+                const int written = std::snprintf(
+                    declared + used, sizeof(declared) - used,
+                    " t%u{sem=%u,name=%.48s,base=%p,size=%ux%u}",
+                    i, static_cast<unsigned>(def.semantic), imageName,
+                    image ? static_cast<void *>(image->texture.basemap) : nullptr,
+                    image ? image->width : 0u,
+                    image ? image->height : 0u);
+                if (written < 0)
+                    break;
+                const size_t writtenSize = static_cast<size_t>(written);
+                if (writtenSize >= sizeof(declared) - used)
+                {
+                    used = sizeof(declared) - 1u;
+                    break;
+                }
+                used += writtenSize;
+            }
+            Switch_LogWrite(declared);
+        }
+    }
 
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
     vkCmdDrawIndexed(
