@@ -2834,7 +2834,6 @@ bool PatchVertexShaderToSmallTriangle(std::vector<uint32_t> &words, uint64_t act
     uint32_t vec4Type = 0u;
     uint32_t entryFunctionId = 0u;
     size_t vertexEntryOffset = SIZE_MAX;
-    uint32_t vertexEntryWordCount = 0u;
 
     for (size_t offset = 5u; offset < words.size();)
     {
@@ -2851,7 +2850,6 @@ bool PatchVertexShaderToSmallTriangle(std::vector<uint32_t> &words, uint64_t act
         {
             entryFunctionId = ins[2];
             vertexEntryOffset = offset;
-            vertexEntryWordCount = wc;
         }
         else if (op == SpvOpDecorate && wc >= 4u &&
                  ins[2] == SpvDecorationBuiltIn)
@@ -2874,8 +2872,6 @@ bool PatchVertexShaderToSmallTriangle(std::vector<uint32_t> &words, uint64_t act
         else if (op == SpvOpTypeVector && wc >= 4u &&
                  ins[3] == 4u)
         {
-            pointers.emplace_back(); // reserve capacity without retaining an incomplete pointer
-            pointers.pop_back();
             if (floatType && ins[2] == floatType)
                 vec4Type = ins[1];
         }
@@ -7895,7 +7891,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             !PatchVertexShaderToSmallTriangle(
                 m_vertexShader->spirv, m_vertexShader->serial))
         {
-            Switch_LogWrite("[KisakCOD][VK VS POSITION TEST] action=patch_failed\\n");
+            Switch_LogWrite("[KisakCOD][VK VS POSITION TEST] action=patch_failed\n");
             return false;
         }
 #endif
