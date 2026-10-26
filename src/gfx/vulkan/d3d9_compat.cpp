@@ -7032,17 +7032,21 @@ bool IDirect3DDevice9::EnsurePipeline()
             element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
             ((element.UsageIndex == 1 && element.Offset == 24) ||
              (element.UsageIndex == 2 && element.Offset == 28));
-        // Some CoD4 world declarations encode packed normals/tangents as
-        // UBYTE4, although the shader expects normalized unit-vector values.
-        // Normalize those bytes to 0..1 and preserve their X/Y/Z/scale order.
-        const bool packedWorldByteVector =
-            effectiveType == D3DDECLTYPE_UBYTE4 &&
-            (packedWorldNormal || packedWorldTangent);
+        // The native CoD4 world declaration table uses D3DDECLTYPE_UBYTE4
+        // (not UBYTE4N) for the packed normals/tangents at offsets 36/40.
+        // D3D9 feeds those bytes to the shader as float values in the 0..255
+        // range. VertexFormat(UBYTE4) therefore intentionally maps to
+        // VK_FORMAT_R8G8B8A8_USCALED. Do not normalize the bytes here: doing so
+        // changes the shader input range to 0..1 before the original shader's
+        // packed-unit-vector decode and produces incorrect lighting.
+        //
+        // D3DCOLOR-backed packed vectors are different: BGRA format mapping
+        // would reorder X/Z, so use RGBA UNORM only for those declarations.
         const bool packedColorUnitVector =
             effectiveType == D3DDECLTYPE_D3DCOLOR &&
             (packedUnitVectorSemantic || packedWorldNormal ||
              packedWorldTangent || packedModelUnitVector);
-        if (packedWorldByteVector || packedColorUnitVector)
+        if (packedColorUnitVector)
             format = VK_FORMAT_R8G8B8A8_UNORM;
         const uint32_t vertexOffset =
             SwitchEffectiveShaderElementOffset(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u);
