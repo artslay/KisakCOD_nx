@@ -12,6 +12,7 @@
 
 #ifdef __SWITCH__
 #include <cstdio>
+#include <cstring>
 extern void Switch_LogWrite(const char *msg);
 extern volatile uint32_t g_switchLitSamplerTraceActive;
 #ifdef CINEMA
