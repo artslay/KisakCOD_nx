@@ -2279,8 +2279,10 @@ uint64_t SwitchPsS0UvTestTargetSerial()
     // "world" selects 44-byte BSP vertices; a number selects one PS serial;
     // "all" selects every PS; "off" or "0" disables the probe.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
+    // Keep the diagnostic narrowly scoped to the floor shader seen in the Switch log.
+    // Explicit "off" still disables the probe; an explicit serial overrides this default.
     if (!value || !*value)
-        return UINT64_MAX; // Opt-in only; preserve the original fragment shader by default.
+        return 1821u; // icbm_tunnelfloor pixel shader: display its actual s0 sample.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "world") == 0)
