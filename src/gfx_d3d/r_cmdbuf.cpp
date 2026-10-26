@@ -16,6 +16,6 @@ void __cdecl R_CmdBufSet3D(GfxCmdBufSourceState *source)
 	++source->matrixVersions[2];
 	++source->matrixVersions[4];
 	worldMatrix = R_GetActiveWorldMatrix(source);
-	R_MatrixIdentity44((float (*)[4])worldMatrix);
+	R_MatrixIdentity44(worldMatrix->matrices.matrix[0].m);
 	Vec3Sub(worldMatrix->matrices.matrix[0].m[3], source->eyeOffset, worldMatrix->matrices.matrix[0].m[3]);
 }
