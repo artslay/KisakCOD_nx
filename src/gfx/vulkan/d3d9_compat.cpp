@@ -9507,12 +9507,16 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     static_cast<unsigned>(readbackFormat), readbackWidth, readbackHeight);
                 Switch_LogWrite(trace);
             }
-            else if (!m_backend->SynchronizeActiveFrame())
+            else if ((switchFloorReadbackFrameSyncAttempted &&
+                      !switchFloorReadbackFrameSynced) ||
+                     (!switchFloorReadbackFrameSyncAttempted &&
+                      !m_backend->SynchronizeActiveFrame()))
             {
                 Switch_LogWrite("[KisakCOD][VK FLOOR PIXEL READBACK] result=fail reason=frame_sync\n");
             }
             else
             {
+                switchFloorReadbackFrameSynced = true;
                 std::vector<uint8_t> pixels(static_cast<size_t>(byteCount64));
                 const VkImage swapchainImage = m_backend->CurrentSwapchainImage();
                 const VkImageLayout readbackLayout = m_backend->CurrentSwapchainLayout();
