@@ -41,6 +41,11 @@
 #include <gfx/gfx_backend.h>
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
+
+extern void Switch_SetRenderAuditContext(
+    const Material *material, const char *techniqueName,
+    const char *vertexShaderName, const char *pixelShaderName,
+    uint32_t passIndex, uint32_t surfaceType, uint32_t objectId);
 static inline uint64_t KisakRendererClock()
 {
     return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -889,6 +894,9 @@ void __cdecl R_DrawSurfs(GfxCmdBufContext context, GfxCmdBufState *prepassState,
     }
     g_viewStats->drawSurfCount += info->drawSurfCount;
     R_TessEnd(context, prepassContext);
+#ifdef __SWITCH__
+    Switch_SetRenderAuditContext(nullptr,nullptr,nullptr,nullptr,UINT32_MAX,UINT32_MAX,UINT32_MAX);
+#endif
     context.state->origMaterial = 0;
 }
 
@@ -952,6 +960,17 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
             R_SetupPass(prepassContext, 0);
             passPrepassContext.state = prepassContext.state;
         }
+#ifdef __SWITCH__
+        const GfxCmdBufState *auditState=passPrepassContext.state?passPrepassContext.state:listArgs->context.state;
+        const MaterialPass *auditPass=auditState?auditState->pass:nullptr;
+        Switch_SetRenderAuditContext(
+            auditState?auditState->material:nullptr,
+            auditState&&auditState->technique?auditState->technique->name:nullptr,
+            auditPass&&auditPass->vertexShader?auditPass->vertexShader->name:nullptr,
+            auditPass&&auditPass->pixelShader?auditPass->pixelShader->name:nullptr,
+            auditState?auditState->passIndex:passIndex,
+            drawSurf.fields.surfType,drawSurf.fields.objectId);
+#endif
         iassert(drawSurf.fields.surfType < ARRAY_COUNT(rb_tessTable));
         subListCount = rb_tessTable[drawSurf.fields.surfType](listArgs, passPrepassContext);
     }
