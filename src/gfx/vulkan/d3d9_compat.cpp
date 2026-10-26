@@ -9317,8 +9317,10 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             readbackFormat == VK_FORMAT_R8G8B8A8_SRGB;
         const uint64_t byteCount64 =
             static_cast<uint64_t>(readbackWidth) * readbackHeight * 4u;
+        const bool transferSourceSupported = m_backend->SupportsSwapchainTransferSrc();
         if (!hasBackbuffer || !readbackWidth || !readbackHeight ||
-            (!isBgra && !isRgba) || byteCount64 > 8u * 1024u * 1024u)
+            (!isBgra && !isRgba) || !transferSourceSupported ||
+            byteCount64 > 8u * 1024u * 1024u)
         {
             char trace[224];
             std::snprintf(trace, sizeof(trace),
