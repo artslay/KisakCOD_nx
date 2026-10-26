@@ -9067,6 +9067,8 @@ bool IDirect3DDevice9::EnsurePipeline()
 #ifdef __SWITCH__
     VkShaderModule switchFloorSolidProbeModule = VK_NULL_HANDLE;
     VkShaderModule switchFloorVertexProbeModule = VK_NULL_HANDLE;
+    VkPipelineShaderStageCreateInfo switchFloorOriginalStages[2]{};
+    bool switchFloorProbeApplied = false;
     if (switchFloorSolidWhiteProbeActive)
     {
         std::vector<uint32_t> floorVertexProbeSpirv;
@@ -9113,6 +9115,9 @@ bool IDirect3DDevice9::EnsurePipeline()
         // Keep the game's vertex shader, input declarations and uniform math.
         // Only BuiltIn Position is replaced at the end of the VS, so the white
         // patch appears if the real VS executes but its original clip output did not rasterize.
+        switchFloorOriginalStages[0] = stages[0];
+        switchFloorOriginalStages[1] = stages[1];
+        switchFloorProbeApplied = true;
         stages[0].module = switchFloorVertexProbeModule;
         stages[1].module = switchFloorSolidProbeModule;
 
@@ -9137,7 +9142,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         6u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
     g_switchFrameStage = "frame/render/vulkan/pipeline/main_create_call";
-    const VkResult pipelineResult = vkCreateGraphicsPipelines(
+    VkResult pipelineResult = vkCreateGraphicsPipelines(
         m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
 #ifdef __SWITCH__
     if (switchFloorVertexProbeModule != VK_NULL_HANDLE)
@@ -9151,6 +9156,25 @@ bool IDirect3DDevice9::EnsurePipeline()
         vkDestroyShaderModule(
             m_backend->Device(), switchFloorSolidProbeModule, nullptr);
         switchFloorSolidProbeModule = VK_NULL_HANDLE;
+    }
+#endif
+#ifdef __SWITCH__
+    // A diagnostic shader must never turn a probe compiler failure into a fatal
+    // gameplay draw. Retry this draw once with the original game shader modules.
+    if (pipelineResult != VK_SUCCESS && switchFloorProbeApplied)
+    {
+        char probeFailure[224];
+        std::snprintf(probeFailure, sizeof(probeFailure),
+            "[KisakCOD][VK FLOOR RASTER CONTROL] result=fail stage=graphics_pipeline vk=%d action=retry_original_game_shaders\\n",
+            static_cast<int>(pipelineResult));
+        Switch_LogWrite(probeFailure);
+        stages[0] = switchFloorOriginalStages[0];
+        stages[1] = switchFloorOriginalStages[1];
+        pipeline = VK_NULL_HANDLE;
+        g_switchFrameStage = "frame/render/vulkan/pipeline/fallback_original_create_call";
+        pipelineResult = vkCreateGraphicsPipelines(
+            m_backend->Device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+        g_switchFrameStage = "frame/render/vulkan/pipeline/fallback_original_create_return";
     }
 #endif
     RecordSwitchVkPipelineTrace(
