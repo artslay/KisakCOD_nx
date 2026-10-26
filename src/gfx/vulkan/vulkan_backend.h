@@ -73,7 +73,8 @@ public:
     VkImage CurrentSwapchainImage() const;
     VkImageView CurrentSwapchainView() const;
     bool SupportsSwapchainTransferSrc() const { return m_swapchainTransferSrc; }
-    bool SupportsOcclusionQuery() const { return m_occlusionQueryEnabled; }
+    // Basic Vulkan occlusion queries are core; only the precise mode needs a feature bit.
+    bool SupportsOcclusionQuery() const { return m_device != VK_NULL_HANDLE; }
     VkImageView DefaultDepthView() const { return m_defaultDepthView; }
     VkImage DefaultDepthImage() const { return m_defaultDepthImage; }
     VkImageLayout DefaultDepthLayout() const { return m_defaultDepthLayout; }
@@ -328,7 +329,6 @@ private:
     std::vector<VkImageView> m_swapchainViews;
     std::vector<VkImageLayout> m_swapchainLayouts;
     bool m_swapchainTransferSrc = false;
-    bool m_occlusionQueryEnabled = false;
     // A present-wait semaphore belongs to a swapchain image and is reused only
     // after that image is acquired again. This avoids a queue-idle stall per frame.
     std::vector<VkSemaphore> m_renderFinishedSemaphores;
