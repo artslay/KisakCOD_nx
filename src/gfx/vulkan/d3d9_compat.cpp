@@ -331,13 +331,16 @@ void Switch_LogWorldSurfaceSkipped(const Material *material,uint32_t surfaceInde
     sig=Switch_AuditHashMix(sig,surfaceIndex); sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(material));
     sig=Switch_AuditHashMix(sig,stage); sig=Switch_AuditHashString(sig,reason);
     if(!Switch_AuditShouldLog(sig)) return;
+    const bool noGpuDrawIssued=reason&&std::strcmp(reason,"NO_GPU_DRAW_ISSUED")==0;
+    const char *auditStatus=noGpuDrawIssued?"NO_GPU_DRAW_ISSUED":"PASS_FILTERED";
+    const char *auditScope=noGpuDrawIssued?"queued-draw-batch":"per-stage";
     char sources[900],uv[480],line[1900];
     Switch_FormatMaterialTextureSources(material,sources,sizeof(sources));
     Switch_FormatWorldVertexUvRange(firstVertex,vertexCount,uv,sizeof(uv));
     std::snprintf(line,sizeof(line),
-        "[KisakCOD][RENDER OBJECT] status=PASS_FILTERED kind=BSP surface=%u material=%.96s reason=%.40s scope=per-stage stage=%u visibility=%u castsShadow=%u vertices=%u+%u triangles=%u lightmap=%u tech=not-run vs=not-run ps=not-run bindings=not-bound uv={%s} sources={%s}\n",
-        surfaceIndex,material&&material->info.name?material->info.name:"<unknown>",reason?reason:"not_selected",
-        stage,visible?1u:0u,castsShadow?1u:0u,firstVertex,vertexCount,triangleCount,lightmapIndex,uv,sources);
+        "[KisakCOD][RENDER OBJECT] status=%s kind=BSP surface=%u material=%.96s reason=%.40s scope=%s stage=%u visibility=%u castsShadow=%u vertices=%u+%u triangles=%u lightmap=%u tech=not-run vs=not-run ps=not-run bindings=not-bound uv={%s} sources={%s}\n",
+        auditStatus,surfaceIndex,material&&material->info.name?material->info.name:"<unknown>",reason?reason:"not_selected",
+        auditScope,stage,visible?1u:0u,castsShadow?1u:0u,firstVertex,vertexCount,triangleCount,lightmapIndex,uv,sources);
     Switch_LogWrite(line);
 }
 void Switch_BeginWorldDrawAudit(const Material *material,const char *techniqueName,
