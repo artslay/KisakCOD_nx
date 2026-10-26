@@ -2273,9 +2273,8 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0UvTestTargetSerial()
 {
-    // TEMPORARY Switch diagnostic: the log identifies PS 1821 as the
-    // icbm_tunnelfloor lightmapped shader. Default to its s0 sample so this
-    // test works in an ordinary NRO launch without an injected environment.
+    // Optional raw-s0 texture probe. Disabled by default while the targeted
+    // solid-white probe isolates whether PS 1821 can write visible fragments.
     // "world" selects 44-byte BSP vertices; a number selects one PS serial;
     // "all" selects every PS; "off" or "0" disables the probe.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
@@ -2338,7 +2337,7 @@ uint64_t SwitchPsColorDebugTargetSerial()
 
     char *end = nullptr;
     const unsigned long long serial = std::strtoull(value, &end, 0);
-    if (end == value || !end || *end != '\\0' || serial == 0u)
+    if (end == value || !end || *end != '\0' || serial == 0u)
         return UINT64_MAX;
     return static_cast<uint64_t>(serial);
 }
@@ -3050,7 +3049,7 @@ bool PatchFragmentShaderToSolidWhite(
         return false;
     }
 
-    // A white vec4 (1, 0, 1, 1), represented as valid SPIR-V constants.
+    // A white vec4 (1, 1, 1, 1), represented as valid SPIR-V constants.
     // New IDs are allocated above the module's existing bound.
     const uint32_t oneId = bound;
     const uint32_t zeroId = bound + 1u;
@@ -6586,8 +6585,9 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS COLOR TEST] action=armed target=%llu source=env\n",
-                    static_cast<unsigned long long>(targetSerial));
+                    "[KisakCOD][VK PS COLOR TEST] action=armed target=%llu source=%s\n",
+                    static_cast<unsigned long long>(targetSerial),
+                    std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL") ? "env" : "default");
             }
             Switch_LogWrite(trace);
         }
@@ -7138,9 +7138,8 @@ bool IDirect3DDevice9::EnsurePipeline()
 
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/render/vulkan/pipeline/post_link/store_pixel";
-        // For the selected pixel shader, output the live s0 sample directly,
-        // bypassing material lighting and later shader math while preserving UVs.
-        // The default target is PS 1821 (wc/icbm_tunnelfloor) only.
+        // Optional raw-s0 probe: output the live sample while preserving UVs.
+        // By default it is disabled; the solid-white output probe targets PS 1821.
         const uint64_t debugPsS0UvSerial = SwitchPsS0UvTestTargetSerial();
         if (m_pixelShader && SwitchPsS0UvTestTargetMatchesLayout(
                 debugPsS0UvSerial, m_pixelShader->serial,
