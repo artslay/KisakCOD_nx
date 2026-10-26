@@ -2234,13 +2234,14 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0UvTestTargetSerial()
 {
-    // This diagnostic replaces the normal fragment result with the bound s0
-    // sample. It must never alter normal gameplay unless explicitly requested.
+    // TEMPORARY Switch diagnostic: the log identifies PS 1821 as the
+    // icbm_tunnelfloor lightmapped shader. Default to its s0 sample so this
+    // test works in an ordinary NRO launch without an injected environment.
     // "world" selects 44-byte BSP vertices; a number selects one PS serial;
-    // "all" selects every PS; "off", "0", or an unset variable disables it.
+    // "all" selects every PS; "off" or "0" disables the probe.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
     if (!value || !*value)
-        return UINT64_MAX; // Disabled by default.
+        return 1821u; // Temporary default, remove after the diagnostic run.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "world") == 0)
