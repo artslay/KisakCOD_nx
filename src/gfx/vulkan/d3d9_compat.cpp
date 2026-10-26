@@ -6619,10 +6619,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         return false;
     }
 
-    // The S0 texture probe is meant to isolate the sampled base image. Material
-    // alpha-test/blend/ATOC state must not discard or visually hide that sample.
-    // Keep ordinary depth and rasterization state intact so the same surfaces
-    // remain in place while only the texture-sampling path is under test.
+    // Raw-s0 and solid-white probes replace the fragment output. Disable
+    // state that could hide the diagnostic before it reaches the color target:
+    // culling, depth/stencil rejection, blending, alpha-to-coverage, and color masks.
+    // This override is scoped to the selected diagnostic shader(s) only.
     const bool switchS0UvProbeActive =
         m_pixelShader && m_decl && SwitchPsS0UvTestTargetMatchesLayout(
             SwitchPsS0UvTestTargetSerial(), m_pixelShader->serial,
@@ -7698,8 +7698,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         : (m_fillMode == D3DFILL_POINT
             ? VK_POLYGON_MODE_POINT : VK_POLYGON_MODE_FILL);
     raster.lineWidth = 1.0f;
-    // The S0 sampling probe must survive bad winding/cull-state data so it can
-    // tell whether the fragment path can display the bound base-color image.
+    // A selected fragment-output probe must survive bad winding/cull-state data.
     // This override applies only to the diagnostic probe pipeline.
     // Normal draws retain D3D9 cull semantics below.
     // D3D9 cull values are: NONE=1, CW=2, CCW=3.
@@ -7737,10 +7736,9 @@ bool IDirect3DDevice9::EnsurePipeline()
     depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     // R_Set2D/R_Set3D toggle this Switch-specific mode around overlay passes.
     // Keep overlays independent from world depth when a previous material left it enabled.
-    // The texture probe is diagnostic: let all target BSP surfaces reach the
+    // Fragment-output probes are diagnostic: let target surfaces reach the
     // fragment shader even if depth/stencil contents or earlier geometry are
-    // wrong. Otherwise an empty-looking probe is ambiguous: it could be rejected
-    // before its replacement fragment output runs. Normal rendering is unchanged.
+    // wrong. Otherwise black output remains ambiguous. Normal rendering is unchanged.
     const bool effectiveDepthTest =
         !switchFragmentOutputProbeActive && m_depthEnable && !m_switchUnlit;
     const bool effectiveDepthWrite =
