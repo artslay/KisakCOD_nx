@@ -8423,6 +8423,58 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         }
         Switch_LogWrite(bound);
 
+        if (material && material->textureTable && material->textureCount)
+        {
+            char declared[1480];
+            used = static_cast<size_t>(std::snprintf(
+                declared, sizeof(declared),
+                "[KisakCOD][WORLD DRAW SOURCES] draw=%u material=%.90s declared=%u",
+                auditId,
+                material->info.name ? material->info.name : "<unknown>",
+                static_cast<unsigned>(material->textureCount)));
+            if (used >= sizeof(declared))
+                used = sizeof(declared) - 1u;
+            const uint32_t defCount = std::min<uint32_t>(
+                material->textureCount, 8u);
+            for (uint32_t i = 0; i < defCount; ++i)
+            {
+                const MaterialTextureDef &def = material->textureTable[i];
+                const bool imageSemantic =
+                    def.semantic == 1u || def.semantic == 2u ||
+                    def.semantic == 5u || def.semantic == 8u;
+                const GfxImage *image =
+                    imageSemantic ? def.u.image : nullptr;
+                const char *imageName = image && image->name
+                    ? image->name : (imageSemantic ? "<null-image>" : "<non-image-semantic>");
+                const int written = std::snprintf(
+                    declared + used, sizeof(declared) - used,
+                    " t%u{sem=%u,name=%.48s,base=%p,size=%ux%u}",
+                    i, static_cast<unsigned>(def.semantic), imageName,
+                    image ? static_cast<void *>(image->texture.basemap) : nullptr,
+                    image ? image->width : 0u,
+                    image ? image->height : 0u);
+                if (written < 0)
+                    break;
+                const size_t writtenSize = static_cast<size_t>(written);
+                if (writtenSize >= sizeof(declared) - used)
+                {
+                    used = sizeof(declared) - 1u;
+                    break;
+                }
+                used += writtenSize;
+            }
+            Switch_LogWrite(declared);
+            }
+        }
+    }
+
+    // Unlike the material/texture audit, UV statistics are keyed to every
+    // actual BSP draw, not only to a unique material-binding signature.
+    static uint32_t switchWorldUvTraceCount = 0u;
+    if (g_switchWorldDrawAudit.active && switchWorldUvTraceCount < 384u)
+    {
+        const uint32_t uvSequence = switchWorldUvTraceCount++;
+        const Material *material = g_switchWorldDrawAudit.material;
         // Record the UV pairs from the actual vertex-buffer bytes consumed by
         // this indexed BSP draw. Resource/binding audits cannot tell whether
         // the vertex stream contains valid texture coordinates.
@@ -8529,7 +8581,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 std::snprintf(
                     uvTrace, sizeof(uvTrace),
                     "[KisakCOD][WORLD UV DATA] draw=%u material=%.64s surface=%u stride=44 indexCount=%u samples=%u uv0Finite=%u uv0Bad=%u uv0Zero=%u uv0Outside01=%u uv0U=(%.6g,%.6g) uv0V=(%.6g,%.6g) lmapFinite=%u lmapBad=%u lmapZero=%u lmapOutside01=%u lmapU=(%.6g,%.6g) lmapV=(%.6g,%.6g) v0=%lld:(%.5g,%.5g|%.5g,%.5g) v1=%lld:(%.5g,%.5g|%.5g,%.5g) v2=%lld:(%.5g,%.5g|%.5g,%.5g) v3=%lld:(%.5g,%.5g|%.5g,%.5g)\n",
-                    auditId,
+                    uvSequence,
                     material && material->info.name ? material->info.name : "<unknown>",
                     g_switchWorldDrawAudit.surfaceIndex,
                     indexCount, sampleCount,
@@ -8551,55 +8603,12 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 std::snprintf(
                     uvTrace, sizeof(uvTrace),
                     "[KisakCOD][WORLD UV DATA] draw=%u surface=%u action=skip_unmapped_vertex_stream stride=%u bytes=%u\n",
-                    auditId, g_switchWorldDrawAudit.surfaceIndex,
+                    uvSequence, g_switchWorldDrawAudit.surfaceIndex,
                     stream0Stride, vertexBuffer->size);
                 Switch_LogWrite(uvTrace);
             }
         }
 
-        if (material && material->textureTable && material->textureCount)
-        {
-            char declared[1480];
-            used = static_cast<size_t>(std::snprintf(
-                declared, sizeof(declared),
-                "[KisakCOD][WORLD DRAW SOURCES] draw=%u material=%.90s declared=%u",
-                auditId,
-                material->info.name ? material->info.name : "<unknown>",
-                static_cast<unsigned>(material->textureCount)));
-            if (used >= sizeof(declared))
-                used = sizeof(declared) - 1u;
-            const uint32_t defCount = std::min<uint32_t>(
-                material->textureCount, 8u);
-            for (uint32_t i = 0; i < defCount; ++i)
-            {
-                const MaterialTextureDef &def = material->textureTable[i];
-                const bool imageSemantic =
-                    def.semantic == 1u || def.semantic == 2u ||
-                    def.semantic == 5u || def.semantic == 8u;
-                const GfxImage *image =
-                    imageSemantic ? def.u.image : nullptr;
-                const char *imageName = image && image->name
-                    ? image->name : (imageSemantic ? "<null-image>" : "<non-image-semantic>");
-                const int written = std::snprintf(
-                    declared + used, sizeof(declared) - used,
-                    " t%u{sem=%u,name=%.48s,base=%p,size=%ux%u}",
-                    i, static_cast<unsigned>(def.semantic), imageName,
-                    image ? static_cast<void *>(image->texture.basemap) : nullptr,
-                    image ? image->width : 0u,
-                    image ? image->height : 0u);
-                if (written < 0)
-                    break;
-                const size_t writtenSize = static_cast<size_t>(written);
-                if (writtenSize >= sizeof(declared) - used)
-                {
-                    used = sizeof(declared) - 1u;
-                    break;
-                }
-                used += writtenSize;
-            }
-            Switch_LogWrite(declared);
-            }
-        }
     }
 
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";
