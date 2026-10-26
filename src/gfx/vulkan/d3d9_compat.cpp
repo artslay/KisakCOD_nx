@@ -2796,6 +2796,396 @@ bool PatchFragmentShaderToOutputS0AtUv(
     return true;
 }
 
+// Diagnostic-only vertex replacement for the one audited floor draw. A small
+// triangle driven by VertexIndex bypasses the original VS transform while keeping
+// the same vertex-input layout, pipeline, attachments, and fragment output probe.
+bool PatchVertexShaderToSmallTriangle(std::vector<uint32_t> &words, uint64_t actualSerial)
+{
+    static bool logged = false;
+    const auto report = [&](const char *action, uint32_t positionId, uint32_t inputId)
+    {
+        if (logged)
+            return;
+        logged = true;
+        char trace[224];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][VK VS POSITION TEST] serial=%llu action=%s position=%u vertexIndex=%u\n",
+            static_cast<unsigned long long>(actualSerial), action, positionId, inputId);
+        Switch_LogWrite(trace);
+    };
+
+    if (words.size() < 5u || words[0] != SpvMagicNumber ||
+        words[3] <= 1u || words[3] > UINT32_MAX - 32u)
+    {
+        report("skip_invalid_module", 0u, 0u);
+        return false;
+    }
+
+    struct PointerInfo { uint32_t id; uint32_t storage; uint32_t pointee; };
+    struct VariableInfo { uint32_t id; uint32_t pointerType; uint32_t storage; };
+    struct DecorationInfo { uint32_t id; uint32_t builtin; };
+    std::vector<PointerInfo> pointers;
+    std::vector<VariableInfo> variables;
+    std::vector<DecorationInfo> builtins;
+
+    uint32_t floatType = 0u;
+    uint32_t boolType = 0u;
+    uint32_t intType = 0u;
+    uint32_t vec4Type = 0u;
+    uint32_t entryFunctionId = 0u;
+    size_t vertexEntryOffset = SIZE_MAX;
+    uint32_t vertexEntryWordCount = 0u;
+
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+        {
+            report("skip_invalid_instruction", 0u, 0u);
+            return false;
+        }
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpEntryPoint && wc >= 4u &&
+            ins[1] == SpvExecutionModelVertex)
+        {
+            entryFunctionId = ins[2];
+            vertexEntryOffset = offset;
+            vertexEntryWordCount = wc;
+        }
+        else if (op == SpvOpDecorate && wc >= 4u &&
+                 ins[2] == SpvDecorationBuiltIn)
+        {
+            builtins.push_back({ins[1], ins[3]});
+        }
+        else if (op == SpvOpTypeFloat && wc >= 3u && ins[2] == 32u)
+        {
+            floatType = ins[1];
+        }
+        else if (op == SpvOpTypeBool && wc >= 2u)
+        {
+            boolType = ins[1];
+        }
+        else if (op == SpvOpTypeInt && wc >= 4u &&
+                 ins[2] == 32u && ins[3] == 1u)
+        {
+            intType = ins[1];
+        }
+        else if (op == SpvOpTypeVector && wc >= 4u &&
+                 ins[3] == 4u)
+        {
+            pointers.emplace_back(); // reserve capacity without retaining an incomplete pointer
+            pointers.pop_back();
+            if (floatType && ins[2] == floatType)
+                vec4Type = ins[1];
+        }
+        else if (op == SpvOpTypePointer && wc >= 4u)
+        {
+            pointers.push_back({ins[1], ins[2], ins[3]});
+        }
+        else if (op == SpvOpVariable && wc >= 4u)
+        {
+            variables.push_back({ins[2], ins[1], ins[3]});
+        }
+        offset += wc;
+    }
+
+    if (!entryFunctionId || vertexEntryOffset == SIZE_MAX)
+    {
+        report("skip_no_vertex_entry", 0u, 0u);
+        return false;
+    }
+
+    // Resolve the BuiltIn Position output and ensure its declared type is vec4<float>.
+    uint32_t positionOutputId = 0u;
+    for (const VariableInfo &var : variables)
+    {
+        if (var.storage != SpvStorageClassOutput)
+            continue;
+        const bool isPosition = std::any_of(
+            builtins.begin(), builtins.end(),
+            [&var](const DecorationInfo &d) {
+                return d.id == var.id && d.builtin == SpvBuiltInPosition;
+            });
+        if (!isPosition)
+            continue;
+        const auto ptr = std::find_if(
+            pointers.begin(), pointers.end(),
+            [&var](const PointerInfo &p) {
+                return p.id == var.pointerType &&
+                       p.storage == SpvStorageClassOutput;
+            });
+        if (ptr == pointers.end() || ptr->pointee != vec4Type)
+            continue;
+        positionOutputId = var.id;
+        break;
+    }
+    if (!positionOutputId || !floatType || !vec4Type)
+    {
+        report("skip_position_output_not_float4", positionOutputId, 0u);
+        return false;
+    }
+
+    // Do not duplicate a VertexIndex input if the source module already declares one.
+    for (const VariableInfo &var : variables)
+    {
+        if (var.storage == SpvStorageClassInput &&
+            std::any_of(builtins.begin(), builtins.end(),
+                [&var](const DecorationInfo &d) {
+                    return d.id == var.id && d.builtin == SpvBuiltInVertexIndex;
+                }))
+        {
+            report("skip_existing_vertex_index", positionOutputId, var.id);
+            return false;
+        }
+    }
+
+    uint32_t nextId = words[3];
+    const auto allocId = [&nextId]() { return nextId++; };
+    const bool addIntType = intType == 0u;
+    const bool addBoolType = boolType == 0u;
+    if (addIntType)
+        intType = allocId();
+    if (addBoolType)
+        boolType = allocId();
+    const uint32_t inputPointerType = allocId();
+    const uint32_t vertexIndexId = allocId();
+    const uint32_t intOneId = allocId();
+    const uint32_t intTwoId = allocId();
+    const uint32_t minusPointTwoId = allocId();
+    const uint32_t pointTwoId = allocId();
+    const uint32_t halfId = allocId();
+    const uint32_t oneId = allocId();
+    const uint32_t loadedIndexId = allocId();
+    const uint32_t isIndexOneId = allocId();
+    const uint32_t isIndexTwoId = allocId();
+    const uint32_t xId = allocId();
+    const uint32_t yId = allocId();
+    const uint32_t positionValueId = allocId();
+
+    // Add the BuiltIn decoration in the annotation section, before any type declaration.
+    size_t firstTypeOffset = SIZE_MAX;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (op >= SpvOpTypeVoid && op <= SpvOpTypeForwardPointer)
+        {
+            firstTypeOffset = offset;
+            break;
+        }
+        offset += wc;
+    }
+    if (firstTypeOffset == SIZE_MAX)
+    {
+        report("skip_no_type_section", positionOutputId, vertexIndexId);
+        return false;
+    }
+    words.insert(words.begin() + static_cast<std::ptrdiff_t>(firstTypeOffset),
+        {(4u << 16) | static_cast<uint32_t>(SpvOpDecorate),
+         vertexIndexId, static_cast<uint32_t>(SpvDecorationBuiltIn),
+         static_cast<uint32_t>(SpvBuiltInVertexIndex)});
+
+    // New types belong before the module's constants and global variables.
+    size_t typeInsertOffset = SIZE_MAX;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (op == SpvOpConstant || op == SpvOpConstantTrue ||
+            op == SpvOpConstantFalse || op == SpvOpConstantNull ||
+            op == SpvOpConstantComposite || op == SpvOpSpecConstant ||
+            op == SpvOpVariable || op == SpvOpFunction)
+        {
+            typeInsertOffset = offset;
+            break;
+        }
+        offset += wc;
+    }
+    if (typeInsertOffset == SIZE_MAX)
+    {
+        report("skip_no_type_insertion_point", positionOutputId, vertexIndexId);
+        return false;
+    }
+    std::vector<uint32_t> newTypes;
+    if (addIntType)
+        newTypes.insert(newTypes.end(),
+            {(4u << 16) | static_cast<uint32_t>(SpvOpTypeInt),
+             intType, 32u, 1u});
+    if (addBoolType)
+        newTypes.insert(newTypes.end(),
+            {(2u << 16) | static_cast<uint32_t>(SpvOpTypeBool), boolType});
+    newTypes.insert(newTypes.end(),
+        {(4u << 16) | static_cast<uint32_t>(SpvOpTypePointer),
+         inputPointerType, static_cast<uint32_t>(SpvStorageClassInput), intType});
+    words.insert(words.begin() + static_cast<std::ptrdiff_t>(typeInsertOffset),
+        newTypes.begin(), newTypes.end());
+
+    // Add scalar constants after all types and before module-scope variables.
+    size_t constantInsertOffset = SIZE_MAX;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (op == SpvOpVariable || op == SpvOpFunction)
+        {
+            constantInsertOffset = offset;
+            break;
+        }
+        offset += wc;
+    }
+    if (constantInsertOffset == SIZE_MAX)
+    {
+        report("skip_no_constant_insertion_point", positionOutputId, vertexIndexId);
+        return false;
+    }
+    std::vector<uint32_t> constants = {
+        (4u << 16) | static_cast<uint32_t>(SpvOpConstant), intType, intOneId, 1u,
+        (4u << 16) | static_cast<uint32_t>(SpvOpConstant), intType, intTwoId, 2u,
+        (4u << 16) | static_cast<uint32_t>(SpvOpConstant), floatType, minusPointTwoId, 0xbe4ccccdu,
+        (4u << 16) | static_cast<uint32_t>(SpvOpConstant), floatType, pointTwoId, 0x3e4ccccdu,
+        (4u << 16) | static_cast<uint32_t>(SpvOpConstant), floatType, halfId, 0x3f000000u,
+        (4u << 16) | static_cast<uint32_t>(SpvOpConstant), floatType, oneId, 0x3f800000u
+    };
+    words.insert(words.begin() + static_cast<std::ptrdiff_t>(constantInsertOffset),
+        constants.begin(), constants.end());
+
+    // Add the global VertexIndex input before the first function.
+    size_t functionInsertOffset = SIZE_MAX;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        if (op == SpvOpFunction)
+        {
+            functionInsertOffset = offset;
+            break;
+        }
+        offset += wc;
+    }
+    if (functionInsertOffset == SIZE_MAX)
+    {
+        report("skip_no_function", positionOutputId, vertexIndexId);
+        return false;
+    }
+    words.insert(words.begin() + static_cast<std::ptrdiff_t>(functionInsertOffset),
+        {(4u << 16) | static_cast<uint32_t>(SpvOpVariable),
+         inputPointerType, vertexIndexId, static_cast<uint32_t>(SpvStorageClassInput)});
+
+    // Add VertexIndex to the vertex entry-point interface (required by SPIR-V 1.4+).
+    // Re-find the entry point because earlier module insertions changed its offset.
+    bool interfaceAdded = false;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+            return false;
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpEntryPoint && wc >= 4u &&
+            ins[1] == SpvExecutionModelVertex && ins[2] == entryFunctionId)
+        {
+            words.insert(words.begin() + static_cast<std::ptrdiff_t>(offset + wc),
+                vertexIndexId);
+            words[offset] = ((wc + 1u) << 16) |
+                static_cast<uint32_t>(SpvOpEntryPoint);
+            interfaceAdded = true;
+            break;
+        }
+        offset += wc;
+    }
+    if (!interfaceAdded)
+    {
+        report("skip_entry_interface", positionOutputId, vertexIndexId);
+        return false;
+    }
+
+    // Inject a small, centered diagnostic triangle before the original vertex code.
+    // Indexed vertices 0, 1, 2 become (-.2,-.2), (.2,-.2), (-.2,.2).
+    const std::vector<uint32_t> replacement = {
+        (4u << 16) | static_cast<uint32_t>(SpvOpLoad),
+        intType, loadedIndexId, vertexIndexId,
+        (5u << 16) | static_cast<uint32_t>(SpvOpIEqual),
+        boolType, isIndexOneId, loadedIndexId, intOneId,
+        (5u << 16) | static_cast<uint32_t>(SpvOpIEqual),
+        boolType, isIndexTwoId, loadedIndexId, intTwoId,
+        (6u << 16) | static_cast<uint32_t>(SpvOpSelect),
+        floatType, xId, isIndexOneId, pointTwoId, minusPointTwoId,
+        (6u << 16) | static_cast<uint32_t>(SpvOpSelect),
+        floatType, yId, isIndexTwoId, pointTwoId, minusPointTwoId,
+        (7u << 16) | static_cast<uint32_t>(SpvOpCompositeConstruct),
+        vec4Type, positionValueId, xId, yId, halfId, oneId,
+        (3u << 16) | static_cast<uint32_t>(SpvOpStore),
+        positionOutputId, positionValueId
+    };
+    bool injected = false;
+    uint32_t currentFunction = 0u;
+    bool inEntryBlock = false;
+    for (size_t offset = 5u; offset < words.size();)
+    {
+        uint32_t wc = 0u;
+        SpvOp op{};
+        if (!SpirvIsValidInstruction(words, offset, &wc, &op))
+        {
+            report("skip_invalid_function_instruction", positionOutputId, vertexIndexId);
+            return false;
+        }
+        const uint32_t *ins = &words[offset];
+        if (op == SpvOpFunction && wc >= 3u)
+        {
+            currentFunction = ins[2];
+            inEntryBlock = false;
+        }
+        else if (op == SpvOpFunctionEnd)
+        {
+            currentFunction = 0u;
+            inEntryBlock = false;
+        }
+        else if (currentFunction == entryFunctionId && op == SpvOpLabel)
+        {
+            if (!inEntryBlock)
+            {
+                inEntryBlock = true;
+                offset += wc;
+                continue;
+            }
+            break;
+        }
+        else if (currentFunction == entryFunctionId && inEntryBlock)
+        {
+            if (op == SpvOpLine || op == SpvOpNoLine ||
+                (op == SpvOpVariable && wc >= 4u &&
+                 ins[3] == SpvStorageClassFunction))
+            {
+                offset += wc;
+                continue;
+            }
+            words.insert(words.begin() + static_cast<std::ptrdiff_t>(offset),
+                replacement.begin(), replacement.end());
+            injected = true;
+            break;
+        }
+        offset += wc;
+    }
+    if (!injected)
+    {
+        report("skip_entry_block", positionOutputId, vertexIndexId);
+        return false;
+    }
+
+    words[3] = nextId;
+    report("patched_small_triangle", positionOutputId, vertexIndexId);
+    return true;
+}
+
 bool PatchFragmentShaderToSolidWhite(
     std::vector<uint32_t> &words,
     uint64_t targetSerial,
@@ -6858,9 +7248,11 @@ bool IDirect3DDevice9::EnsurePipeline()
     // Diagnose raster visibility only for the currently audited floor material.
     // A temporary PS module below prevents this shared shader from affecting peers.
     const bool switchFloorSolidWhiteProbeActive =
-        !switchS0UvProbeActive && m_pixelShader &&
+        !switchS0UvProbeActive && m_vertexShader && m_pixelShader &&
+        m_vertexShader->serial == 1820u &&
         m_pixelShader->serial == 1821u &&
-        Switch_IsFloorAuditContextActive();
+        Switch_IsFloorAuditContextActive() &&
+        g_switchWorldDrawAudit.surfaceIndex == 1583u;
 #else
     const bool switchFloorSolidWhiteProbeActive = false;
 #endif
@@ -7494,6 +7886,16 @@ bool IDirect3DDevice9::EnsurePipeline()
             "vs", m_vertexShader->spirv, &loweredVertexShuffleCount,
             &loweredVertexCopyObjects, &loweredVertexExtracts,
             &vertexShuffleGrowthEstimate);
+#ifdef __SWITCH__
+        if (switchFloorSolidWhiteProbeActive &&
+            g_switchWorldDrawAudit.surfaceIndex == 1583u &&
+            !PatchVertexShaderToSmallTriangle(
+                m_vertexShader->spirv, m_vertexShader->serial))
+        {
+            Switch_LogWrite("[KisakCOD][VK VS POSITION TEST] action=patch_failed\\n");
+            return false;
+        }
+#endif
         if (loweredVertexShuffles && loweredVertexShuffleCount)
         {
             char loweringTrace[256];
