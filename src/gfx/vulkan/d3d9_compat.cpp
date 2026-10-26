@@ -190,9 +190,10 @@ static void Switch_FormatMaterialTextureSources(const Material *material,char *o
     const uint32_t count=std::min<uint32_t>(material->textureCount,8u);
     for(uint32_t i=0;i<count&&used<outputSize;++i) {
         const MaterialTextureDef &def=material->textureTable[i];
-        const bool imageSemantic=def.semantic==1u||def.semantic==2u||def.semantic==5u||def.semantic==8u;
+        // The union is discriminated by TS_WATER_MAP; all other semantics are image refs.
+        const bool imageSemantic=def.semantic!=TS_WATER_MAP;
         const GfxImage *image=imageSemantic?def.u.image:nullptr;
-        const char *name=image&&image->name?image->name:(imageSemantic?"<null-image>":"<non-image-semantic>");
+        const char *name=image&&image->name?image->name:(imageSemantic?"<null-image>":"<water-map>");
         const int written=std::snprintf(output+used,outputSize-used,
             "%sD%u{sem=%u,name=%.34s,size=%ux%u,base=%p}",i?";":"",i,
             static_cast<unsigned>(def.semantic),name,image?image->width:0u,image?image->height:0u,
