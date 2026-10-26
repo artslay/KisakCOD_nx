@@ -5,6 +5,8 @@
 #include "../../gfx_d3d/r_cinematic.h"
 #include "../../gfx_d3d/r_image.h"
 #include "../../gfx_d3d/r_init.h"
+#include "../../gfx_d3d/rb_state.h"
+#include "../../gfx_d3d/r_state.h"
 #endif
 
 #ifdef __SWITCH__
@@ -6544,6 +6546,35 @@ bool IDirect3DDevice9::BindUniformSet(
                 trace[sizeof(trace) - 1u] = '\0';
             }
             Switch_LogWrite(trace);
+
+            // Compare the uploaded c0-c3 values against the engine's actual
+            // World-View-Projection code matrix. Do not override uniforms here:
+            // this audit establishes which matrix/register layout reaches NVK.
+            static bool switchFloorWvpSourceLogged = false;
+            if (!switchFloorWvpSourceLogged)
+            {
+                switchFloorWvpSourceLogged = true;
+                const uint32_t wvpConstBefore =
+                    gfxCmdBufSourceState.constVersions[CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX];
+                const uint32_t wvpMatrixVersion = gfxCmdBufSourceState.matrixVersions[5];
+                GfxCmdBufSourceState *wvpSource = R_GetCodeMatrix(
+                    &gfxCmdBufSourceState,
+                    CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX, 0u);
+                const float *wvp = reinterpret_cast<const float *>(wvpSource);
+                char matrixTrace[896];
+                std::snprintf(
+                    matrixTrace, sizeof(matrixTrace),
+                    "[KisakCOD][VK FLOOR WVP SOURCE] beforeConst=%u matrixVersion=%u afterConst=%u "
+                    "r0=(%.6g,%.6g,%.6g,%.6g) r1=(%.6g,%.6g,%.6g,%.6g) "
+                    "r2=(%.6g,%.6g,%.6g,%.6g) r3=(%.6g,%.6g,%.6g,%.6g)\n",
+                    wvpConstBefore, wvpMatrixVersion,
+                    gfxCmdBufSourceState.constVersions[CONST_SRC_CODE_WORLD_VIEW_PROJECTION_MATRIX],
+                    wvp[0], wvp[1], wvp[2], wvp[3],
+                    wvp[4], wvp[5], wvp[6], wvp[7],
+                    wvp[8], wvp[9], wvp[10], wvp[11],
+                    wvp[12], wvp[13], wvp[14], wvp[15]);
+                Switch_LogWrite(matrixTrace);
+            }
         }
     }
 #endif
