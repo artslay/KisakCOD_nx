@@ -2196,13 +2196,13 @@ bool EnsureSpirvDemoteExtension(std::vector<uint32_t> &words)
 
 uint64_t SwitchPsS0UvTestTargetSerial()
 {
-    // Default to every pixel shader used with the native 44-byte CoD4 world
-    // vertex stream, rather than probing only four previously observed serials.
-    // Numeric values select one PS; "all" includes UI/model/video PSs; "off"
-    // disables this diagnostic.
+    // This diagnostic replaces the normal fragment result with the bound s0
+    // sample. It must never alter normal gameplay unless explicitly requested.
+    // "world" selects 44-byte BSP vertices; a number selects one PS serial;
+    // "all" selects every PS; "off", "0", or an unset variable disables it.
     const char *value = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
     if (!value || !*value)
-        return UINT64_MAX - 2u; // World-vertex-layout sentinel.
+        return UINT64_MAX; // Disabled by default.
     if (std::strcmp(value, "off") == 0 || std::strcmp(value, "0") == 0)
         return UINT64_MAX;
     if (std::strcmp(value, "world") == 0)
@@ -6328,7 +6328,8 @@ bool IDirect3DDevice9::EnsurePipeline()
             {
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=disabled source=env\n");
+                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=disabled source=%s\n",
+                    setting && *setting ? "env" : "default");
             }
             else if (uvTarget == UINT64_MAX - 1u)
             {
