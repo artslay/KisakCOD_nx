@@ -2727,6 +2727,9 @@ bool PatchFragmentShaderToSolidMagenta(
     std::vector<std::pair<uint32_t, uint32_t>> pointerTypes;
     std::vector<size_t> outputStores;
     std::vector<uint32_t> originalValues;
+    // The single-shader visual probe must still show magenta if the original
+    // shader would discard/demote every floor fragment.
+    std::vector<std::pair<size_t, bool>> controlOverrides;
 
     const auto logResult = [&](const char *action, uint32_t stores,
                                uint32_t outputType, uint32_t scalarType,
@@ -2737,6 +2740,10 @@ bool PatchFragmentShaderToSolidMagenta(
         static uint64_t loggedSerials[128]{};
         static char loggedActions[128][48]{};
         static size_t loggedCount = 0u;
+        const uint32_t killCount = static_cast<uint32_t>(std::count_if(
+            controlOverrides.begin(), controlOverrides.end(),
+            [](const auto &item) { return item.second; }));
+        const uint32_t demoteCount = static_cast<uint32_t>(controlOverrides.size()) - killCount;
         const size_t actionLength = std::strlen(action);
         if (actionLength >= sizeof(loggedActions[0]))
             return;
@@ -2756,10 +2763,10 @@ bool PatchFragmentShaderToSolidMagenta(
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK PS COLOR TEST] target=%llu actual=%llu action=%s output=%u outputType=%u floatType=%u stores=%u magentaId=%u\n",
+            "[KisakCOD][VK PS COLOR TEST] target=%llu actual=%llu action=%s output=%u outputType=%u floatType=%u stores=%u killOrTerminate=%u demote=%u magentaId=%u\n",
             static_cast<unsigned long long>(targetSerial),
             static_cast<unsigned long long>(actualSerial),
-            action, outputId, outputType, scalarType, stores, magentaId);
+            action, outputId, outputType, scalarType, stores, killCount, demoteCount, magentaId);
         Switch_LogWrite(trace);
     };
 
@@ -2946,11 +2953,23 @@ bool PatchFragmentShaderToSolidMagenta(
             currentFunction = ins[2];
         else if (op == SpvOpFunctionEnd)
             currentFunction = 0u;
-        else if (currentFunction == entryFunctionId &&
-                 op == SpvOpStore && wc >= 3u && ins[1] == outputId)
+        else if (currentFunction == entryFunctionId)
         {
-            outputStores.push_back(offset);
-            originalValues.push_back(ins[2]);
+            if (op == SpvOpStore && wc >= 3u && ins[1] == outputId)
+            {
+                outputStores.push_back(offset);
+                originalValues.push_back(ins[2]);
+            }
+            else if (op == SpvOpKill || static_cast<uint32_t>(op) == 4416u)
+            {
+                // bool=true: replace this terminating discard with a magenta store + return.
+                controlOverrides.emplace_back(offset, true);
+            }
+            else if (static_cast<uint32_t>(op) == 5380u)
+            {
+                // Demoted helper invocations cannot write color; neutralize the demotion in this probe.
+                controlOverrides.emplace_back(offset, false);
+            }
         }
         offset += wc;
     }
@@ -3015,6 +3034,33 @@ bool PatchFragmentShaderToSolidMagenta(
         words.begin() + static_cast<std::ptrdiff_t>(firstFunctionOffset),
         declarations.begin(), declarations.end());
     words[3] = bound + 3u;
+
+    // Apply overrides from the end of the instruction stream so inserted words
+    // do not invalidate offsets for earlier discard/demote instructions.
+    std::sort(controlOverrides.begin(), controlOverrides.end(),
+        [](const auto &a, const auto &b) { return a.first > b.first; });
+    for (const auto &overrideInfo : controlOverrides)
+    {
+        const size_t offset = overrideInfo.first + declarations.size();
+        if (offset >= words.size())
+        {
+            logResult("skip_control_offset", 0u,
+                      outputValueType, floatType, magentaId);
+            return false;
+        }
+        if (overrideInfo.second)
+        {
+            // OpStore output, magenta; OpReturn. A discard cannot hide the probe color.
+            words[offset] = (3u << 16) | static_cast<uint32_t>(SpvOpStore);
+            words.insert(words.begin() + static_cast<std::ptrdiff_t>(offset + 1u),
+                {outputId, magentaId, (1u << 16) | static_cast<uint32_t>(SpvOpReturn)});
+        }
+        else
+        {
+            // OpDemoteToHelperInvocationEXT has no operands; replace it with OpNop.
+            words[offset] = (1u << 16) | static_cast<uint32_t>(SpvOpNop);
+        }
+    }
 
     logResult("patched_solid_magenta", static_cast<uint32_t>(outputStores.size()),
               outputValueType, floatType, magentaId);
