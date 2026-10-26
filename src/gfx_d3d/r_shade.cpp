@@ -14,6 +14,7 @@
 #ifdef __SWITCH__
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
 extern bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass);
@@ -182,6 +183,35 @@ void __cdecl R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const M
             data = R_GetCodeConstant(context, routingData->u.codeConst.index);
         else
             data = (const float *)R_GetCodeMatrix(context.source, routingData->u.codeConst.index, routingData->u.codeConst.firstRow);
+#ifdef __SWITCH__
+        if (context.state && context.state->material &&
+            context.state->material->info.name &&
+            std::strcmp(context.state->material->info.name, "wc/icbm_tunnelfloor") == 0 &&
+            context.state->pass && context.state->pass->vertexShader &&
+            context.state->pass->vertexShader->name &&
+            std::strcmp(context.state->pass->vertexShader->name, "lm_tc0n0_sm3.hlsl") == 0)
+        {
+            static std::atomic<uint32_t> switchFloorVsArgTraceCount{0};
+            const uint32_t traceIndex = switchFloorVsArgTraceCount.fetch_add(1, std::memory_order_relaxed);
+            if (traceIndex < 16u)
+            {
+                const uint32_t rows = routingData->u.codeConst.rowCount > 4u
+                    ? 4u : routingData->u.codeConst.rowCount;
+                float v[16]{};
+                std::memcpy(v, data, static_cast<size_t>(rows) * 4u * sizeof(float));
+                char trace[704];
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][VK FLOOR VS ARG] n=%u dest=%u sourceIndex=%u firstRow=%u rows=%u "
+                    "r0=(%.6g,%.6g,%.6g,%.6g) r1=(%.6g,%.6g,%.6g,%.6g) "
+                    "r2=(%.6g,%.6g,%.6g,%.6g) r3=(%.6g,%.6g,%.6g,%.6g)\n",
+                    traceIndex, routingData->dest, routingData->u.codeConst.index,
+                    routingData->u.codeConst.firstRow, routingData->u.codeConst.rowCount,
+                    v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7],
+                    v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15]);
+                Switch_LogWrite(trace);
+            }
+        }
+#endif
         R_HW_SetVertexShaderConstant(context.state->prim.device, routingData->dest, data, routingData->u.codeConst.rowCount);
     }
 }
