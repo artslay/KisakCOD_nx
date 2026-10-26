@@ -4288,7 +4288,7 @@ static bool SwitchPatchFloorRasterProbeVertexSpirv(
             {
                 const auto ptr = std::find_if(
                     pointerTypes.begin(), pointerTypes.end(),
-                    [&ins](const PointerTypeInfo &p) {
+                    [&ins, vec4Type](const PointerTypeInfo &p) {
                         return p.id == ins[1] &&
                                p.storage == SpvStorageClassOutput &&
                                p.pointee == vec4Type;
