@@ -56,7 +56,7 @@ static void R_SwitchQueueBspAuditSurface(
         g_switchFloorRasterProbeSurfaceIndex = surfaceIndex;
         char trace[320];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][VK FLOOR VISIBILITY PROBE] action=select_visible_draw surface=%u pass=%u material=%.72s vs=%.56s ps=%.56s originalVisibility=1\\n",
+            "[KisakCOD][VK FLOOR VISIBILITY PROBE] action=select_visible_draw surface=%u pass=%u material=%.72s vs=%.56s ps=%.56s originalVisibility=1\n",
             surfaceIndex, passIndex, materialName, vertexShaderName, pixelShaderName);
         Switch_LogWrite(trace);
     }
