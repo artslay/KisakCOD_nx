@@ -7250,6 +7250,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         : (m_fillMode == D3DFILL_POINT
             ? VK_POLYGON_MODE_POINT : VK_POLYGON_MODE_FILL);
     raster.lineWidth = 1.0f;
+    // The S0 sampling probe must survive bad winding/cull-state data so it can
+    // tell whether the fragment path can display the bound base-color image.
+    // This override applies only to the diagnostic probe pipeline.
+    // Normal draws retain D3D9 cull semantics below.
     // D3D9 cull values are: NONE=1, CW=2, CCW=3.
     // The negative Vulkan viewport preserves the D3D9 top-left origin,
     // which flips the winding seen by Vulkan. Therefore clockwise NDC
@@ -7257,9 +7261,11 @@ bool IDirect3DDevice9::EnsurePipeline()
     //
     // D3DCULL_CW means "cull clockwise" => Vulkan culls FRONT.
     // D3DCULL_CCW means "cull counter-clockwise" => Vulkan culls BACK.
-    raster.cullMode = m_cullMode == 1
+    raster.cullMode = switchS0UvProbeActive
         ? VK_CULL_MODE_NONE
-        : (m_cullMode == 2 ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_BACK_BIT);
+        : (m_cullMode == 1
+            ? VK_CULL_MODE_NONE
+            : (m_cullMode == 2 ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_BACK_BIT));
     raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
     raster.depthBiasEnable = (m_depthBias != 0.0f || m_slopeDepthBias != 0.0f) ? VK_TRUE : VK_FALSE;
     raster.depthBiasConstantFactor = m_depthBias;
@@ -7283,13 +7289,20 @@ bool IDirect3DDevice9::EnsurePipeline()
     depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     // R_Set2D/R_Set3D toggle this Switch-specific mode around overlay passes.
     // Keep overlays independent from world depth when a previous material left it enabled.
-    const bool effectiveDepthTest = m_depthEnable && !m_switchUnlit;
-    const bool effectiveDepthWrite = m_depthWrite && !m_switchUnlit;
+    // The texture probe is diagnostic: let all target BSP surfaces reach the
+    // fragment shader even if depth/stencil contents or earlier geometry are
+    // wrong. Otherwise an empty-looking probe is ambiguous: it could be rejected
+    // before its replacement fragment output runs. Normal rendering is unchanged.
+    const bool effectiveDepthTest =
+        !switchS0UvProbeActive && m_depthEnable && !m_switchUnlit;
+    const bool effectiveDepthWrite =
+        !switchS0UvProbeActive && m_depthWrite && !m_switchUnlit;
     depth.depthTestEnable = effectiveDepthTest ? VK_TRUE : VK_FALSE;
     depth.depthWriteEnable = effectiveDepthWrite ? VK_TRUE : VK_FALSE;
     depth.depthCompareOp = CompareOp(m_depthFunc);
     depth.depthBoundsTestEnable = VK_FALSE;
-    depth.stencilTestEnable = m_stencilEnable ? VK_TRUE : VK_FALSE;
+    depth.stencilTestEnable =
+        (!switchS0UvProbeActive && m_stencilEnable) ? VK_TRUE : VK_FALSE;
     depth.front.compareOp = CompareOp(m_stencilFunc);
     depth.front.failOp = StencilOp(m_stencilFail);
     depth.front.depthFailOp = StencilOp(m_stencilZFail);
