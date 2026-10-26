@@ -7804,7 +7804,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             switchColorProbeStateLogged = true;
             char trace[256];
             std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][VK PS COLOR PROBE STATE] serial=%llu key=%016llx cull=%u depth=%u depthWrite=%u stencil=%u blend=%u mask=0x%x colorFormat=%u\\n",
+                "[KisakCOD][VK PS COLOR PROBE STATE] serial=%llu key=%016llx cull=%u depth=%u depthWrite=%u stencil=%u blend=%u mask=0x%x colorFormat=%u\n",
                 static_cast<unsigned long long>(m_pixelShader->serial),
                 static_cast<unsigned long long>(key),
                 static_cast<unsigned>(raster.cullMode),
