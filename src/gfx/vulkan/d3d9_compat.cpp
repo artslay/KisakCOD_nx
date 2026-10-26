@@ -5933,13 +5933,13 @@ bool IDirect3DDevice9::BindUniformSet(
             }
             if (used < sizeof(trace) - 2u)
             {
-                trace[used++] = '\\n';
-                trace[used] = '\\0';
+                trace[used++] = '\n';
+                trace[used] = '\0';
             }
             else
             {
-                trace[sizeof(trace) - 2u] = '\\n';
-                trace[sizeof(trace) - 1u] = '\\0';
+                trace[sizeof(trace) - 2u] = '\n';
+                trace[sizeof(trace) - 1u] = '\0';
             }
             Switch_LogWrite(trace);
         }
