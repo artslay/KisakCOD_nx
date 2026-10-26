@@ -8671,6 +8671,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 #ifdef __SWITCH__
     VkQueryPool switchFloorOcclusionPool = VK_NULL_HANDLE;
     bool switchFloorOcclusionQueryIssued = false;
+    bool switchFloorReadbackFrameSyncAttempted = false;
     bool switchFloorReadbackFrameSynced = false;
 #endif
 
@@ -9422,6 +9423,41 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     auditLogDraw("GPU_DRAW_RECORDED","vkCmdDrawIndexed_recorded");
 
 #ifdef __SWITCH__
+    // Complete the one-shot query before pixel readback.
+    if (switchFloorOcclusionPool != VK_NULL_HANDLE)
+    {
+        switchFloorReadbackFrameSyncAttempted = true;
+        switchFloorReadbackFrameSynced = m_backend->SynchronizeActiveFrame();
+        if (!switchFloorReadbackFrameSynced)
+        {
+            Switch_LogWrite("[KisakCOD][VK FLOOR RASTER QUERY] result=fail reason=frame_sync\n");
+        }
+        else
+        {
+            uint64_t samplesPassed = 0u;
+            const VkResult queryResult = vkGetQueryPoolResults(
+                m_backend->Device(), switchFloorOcclusionPool, 0, 1,
+                sizeof(samplesPassed), &samplesPassed, sizeof(samplesPassed),
+                VK_QUERY_RESULT_64_BIT);
+            char trace[224];
+            if (queryResult == VK_SUCCESS)
+            {
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][VK FLOOR RASTER QUERY] result=ok samplesPassed=%llu\n",
+                    static_cast<unsigned long long>(samplesPassed));
+            }
+            else
+            {
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][VK FLOOR RASTER QUERY] result=fail reason=query_result vk=%d\n",
+                    static_cast<int>(queryResult));
+            }
+            Switch_LogWrite(trace);
+        }
+        vkDestroyQueryPool(m_backend->Device(), switchFloorOcclusionPool, nullptr);
+        switchFloorOcclusionPool = VK_NULL_HANDLE;
+    }
+
     // One-shot pixel readback for the isolated solid-white floor shader probe.
     // Submit only after this known surface draw, then inspect the actual swapchain
     // bytes. Keep this off the normal path and never trace unrelated scene objects.
