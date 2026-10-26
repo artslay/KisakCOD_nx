@@ -248,7 +248,7 @@ void Switch_QueueWorldDrawAuditSurface(const Material *material,const char *tech
     uint32_t triangleCount,uint32_t lightmapIndex,uint32_t baseIndex)
 {
     if(g_switchQueuedWorldAuditCount>=kSwitchQueuedWorldAuditCapacity) {
-        if(!g_switchQueuedWorldAuditOverflowReported) { g_switchQueuedWorldAuditOverflowReported=true; Switch_LogWrite("[KisakCOD][RENDER OBJECT] status=BSP_BATCH_AUDIT_OVERFLOW capacity=512 remaining_surfaces_not_listed=1\n"); }
+        if(!g_switchQueuedWorldAuditOverflowReported) { g_switchQueuedWorldAuditOverflowReported=true; Switch_LogWrite("[KisakCOD][RENDER OBJECT] status=BATCH_AUDIT_OVERFLOW capacity=512 remaining_surfaces_not_listed=1\n"); }
         return;
     }
     SwitchQueuedWorldSurfaceAudit &e=g_switchQueuedWorldAudit[g_switchQueuedWorldAuditCount++];
@@ -281,13 +281,14 @@ void Switch_QueueRenderAuditObject(
 {
     const Material *material=g_switchRenderAuditContext.material;
     if(!material) return;
+    const uint32_t before=g_switchQueuedWorldAuditCount;
     Switch_QueueWorldDrawAuditSurface(
         material,g_switchRenderAuditContext.techniqueName,
         g_switchRenderAuditContext.vertexShaderName,
         g_switchRenderAuditContext.pixelShaderName,
         g_switchRenderAuditContext.passIndex,objectId,0u,vertexCount,
         triangleCount,UINT32_MAX,baseIndex);
-    if(g_switchQueuedWorldAuditCount) {
+    if(g_switchQueuedWorldAuditCount>before) {
         SwitchQueuedWorldSurfaceAudit &e=g_switchQueuedWorldAudit[g_switchQueuedWorldAuditCount-1u];
         e.surfaceType=surfaceType;
         e.worldSurface=false;
@@ -328,8 +329,39 @@ void Switch_BeginWorldDrawAudit(const Material *material,const char *techniqueNa
 }
 void Switch_EndWorldDrawAudit()
 {
-    g_switchWorldDrawAudit.active=false; g_switchWorldDrawAudit.material=nullptr;
-    g_switchQueuedWorldAuditCount=0; g_switchQueuedWorldAuditOverflowReported=false;
+    // A queued surface without a matching DrawIndexedPrimitive was visible to
+    // the BSP traversal but never reached the Vulkan submission path.
+    for(uint32_t i=0;i<g_switchQueuedWorldAuditCount;++i) {
+        const SwitchQueuedWorldSurfaceAudit &e=g_switchQueuedWorldAudit[i];
+        if(e.worldSurface) {
+            Switch_LogWorldSurfaceSkipped(e.material,e.surfaceIndex,e.firstVertex,
+                e.vertexCount,e.triangleCount,e.lightmapIndex,UINT32_MAX,
+                "NO_GPU_DRAW_ISSUED",true,false);
+        } else {
+            uint64_t sig=Switch_AuditHashMix(1469598103934665603ull,0x4E4F44524157ull);
+            sig=Switch_AuditHashMix(sig,e.surfaceIndex);
+            sig=Switch_AuditHashMix(sig,e.surfaceType);
+            sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(e.material));
+            sig=Switch_AuditHashMix(sig,e.passIndex);
+            sig=Switch_AuditHashString(sig,e.techniqueName);
+            sig=Switch_AuditHashString(sig,e.vertexShaderName);
+            sig=Switch_AuditHashString(sig,e.pixelShaderName);
+            if(Switch_AuditShouldLog(sig)) {
+                char sources[860],line[1500];
+                Switch_FormatMaterialTextureSources(e.material,sources,sizeof(sources));
+                std::snprintf(line,sizeof(line),
+                    "[KisakCOD][RENDER OBJECT] status=NOT_SUBMITTED kind=MODEL object=%u type=%u material=%.80s reason=NO_GPU_DRAW_ISSUED pass=%u tech=%.48s vs=%.48s ps=%.48s vertices=%u triangles=%u baseIndex=%u uv=not_sampled bindings=not_bound sources={%s}\n",
+                    e.surfaceIndex,e.surfaceType,e.material&&e.material->info.name?e.material->info.name:"<unknown>",
+                    e.passIndex,e.techniqueName,e.vertexShaderName,e.pixelShaderName,
+                    e.vertexCount,e.triangleCount,e.baseIndex,sources);
+                Switch_LogWrite(line);
+            }
+        }
+    }
+    g_switchWorldDrawAudit.active=false;
+    g_switchWorldDrawAudit.material=nullptr;
+    g_switchQueuedWorldAuditCount=0;
+    g_switchQueuedWorldAuditOverflowReported=false;
 }
 
 // Set by R_SetSampler while preparing a lit material; consumed by the next
