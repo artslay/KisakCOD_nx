@@ -9152,7 +9152,12 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             char trace[512];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK FLOOR BOUND INPUT] pipeline=%016llx decl=%llu vb=%p bytes=%zu shadow=%zu mapped=%u streamOffset=%llu stride=%u ib=%p ibBytes=%zu indexData=%u start=%u count=%u baseVertex=%d idx=(%u,%u,%u) eff=(%lld,%lld,%lld)\n",
+                "[KisakCOD][VK FLOOR BOUND INPUT] surface=%u firstVertex=%u surfaceVerts=%u surfaceTris=%u lightmap=%u pipeline=%016llx decl=%llu vb=%p bytes=%zu shadow=%zu mapped=%u streamOffset=%llu stride=%u ib=%p ibBytes=%zu indexData=%u start=%u count=%u baseVertex=%d idx=(%u,%u,%u) eff=(%lld,%lld,%lld)\n",
+                g_switchWorldDrawAudit.surfaceIndex,
+                g_switchWorldDrawAudit.firstVertex,
+                g_switchWorldDrawAudit.vertexCount,
+                g_switchWorldDrawAudit.triangleCount,
+                g_switchWorldDrawAudit.lightmapIndex,
                 static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)),
                 static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
                 static_cast<void *>(floorVertexBuffer), floorBufferBytes,
