@@ -7571,6 +7571,29 @@ bool IDirect3DDevice9::EnsurePipeline()
         if (element.Stream >= 16)
             continue;
 
+        // D3D9 material declarations can be supersets shared by several shader
+        // passes. An element this vertex shader does not consume is legal and
+        // must not make the entire draw fail. Only describe consumed attributes.
+        bool shaderConsumesElement = false;
+        if (m_vertexShader->parseData)
+        {
+            for (int attributeIndex = 0;
+                 attributeIndex < m_vertexShader->parseData->attribute_count;
+                 ++attributeIndex)
+            {
+                const MOJOSHADER_attribute &attribute =
+                    m_vertexShader->parseData->attributes[attributeIndex];
+                if (attribute.usage == static_cast<MOJOSHADER_usage>(element.Usage) &&
+                    attribute.index == element.UsageIndex)
+                {
+                    shaderConsumesElement = true;
+                    break;
+                }
+            }
+        }
+        if (!shaderConsumesElement)
+            continue;
+
         // The D3D declaration is also a legacy semantic-routing table on
         // Switch. Resolve both its physical offset and representation against
         // the actual transient/world vertex layout before describing Vulkan input.
@@ -7729,6 +7752,40 @@ bool IDirect3DDevice9::EnsurePipeline()
         vertexAttrs.push_back({
             location, element.Stream, format, vertexOffset
         });
+    }
+
+    // Conversely, every input actually declared by the vertex shader must have
+    // a physical attribute. Do not build a pipeline with an unbound shader input:
+    // undefined position/UV values can make world surfaces vanish or mis-sample.
+    for (int attributeIndex = 0;
+         attributeIndex < m_vertexShader->parseData->attribute_count;
+         ++attributeIndex)
+    {
+        const MOJOSHADER_attribute &attribute =
+            m_vertexShader->parseData->attributes[attributeIndex];
+        uint32_t location = UINT32_MAX;
+        const bool hasLocation =
+            ExtractShaderInputRegister(attribute.name, &location);
+        const bool locationBound = hasLocation &&
+            std::any_of(vertexAttrs.begin(), vertexAttrs.end(),
+                [location](const VkVertexInputAttributeDescription &existing)
+                {
+                    return existing.location == location;
+                });
+        if (!locationBound)
+        {
+            char msg[256];
+            std::snprintf(msg, sizeof(msg),
+                "[KisakCOD][VK DRAW] pipeline_fail=missing_shader_vertex_input attr=%s usage=%u index=%u location=%u valid=%u decl=%llu vs=%llu\\n",
+                attribute.name ? attribute.name : "(null)",
+                static_cast<unsigned>(attribute.usage),
+                static_cast<unsigned>(attribute.index), location,
+                hasLocation ? 1u : 0u,
+                static_cast<unsigned long long>(m_decl->serial),
+                static_cast<unsigned long long>(m_vertexShader->serial));
+            Switch_LogWrite(msg);
+            return false;
+        }
     }
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
