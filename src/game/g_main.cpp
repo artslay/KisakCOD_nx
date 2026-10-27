@@ -1135,6 +1135,7 @@ void __cdecl G_InitGame(
     G_InitDvars();
     ProfLoad_Begin("clear config strings");
     G_ClearAllConfigstrings();
+    SV_SetConfigstring(CS_NIGHTVISION, "1");
     ProfLoad_End();
     Dvar_SetInt(g_reloading, 0);
     Path_Init(restart);
