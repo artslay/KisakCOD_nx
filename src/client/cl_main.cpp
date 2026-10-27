@@ -1322,14 +1322,14 @@ void __cdecl CL_PlayLogo_f()
     int v1; // r3
     const char *v2; // r30
     const char *v3; // r3
-    long double v4; // fp2
-    long double v5; // fp2
+    double v4; // fp2
+    double v5; // fp2
     const char *v6; // r3
-    long double v7; // fp2
-    long double v8; // fp2
+    double v7; // fp2
+    double v8; // fp2
     const char *v9; // r3
-    long double v10; // fp2
-    long double v11; // fp2
+    double v10; // fp2
+    double v11; // fp2
     const char *v12; // r3
     const char *v13; // r3
 
@@ -1378,19 +1378,19 @@ void __cdecl CL_PlayLogo_f()
     v2 = Cmd_Argv(1);
     v3 = Cmd_Argv(2);
     v4 = atof(v3);
-    *(double *)&v4 = (float)((float)((float)*(double *)&v4 * (float)1000.0) + (float)0.5);
+    v4 = (float)((float)((float)v4 * (float)1000.0) + (float)0.5);
     v5 = floor(v4);
-    cls.logo.fadein = (int)(float)*(double *)&v5;
+    cls.logo.fadein = (int)(float)v5;
     v6 = Cmd_Argv(3);
     v7 = atof(v6);
-    *(double *)&v7 = (float)((float)((float)*(double *)&v7 * (float)1000.0) + (float)0.5);
+    v7 = (float)((float)((float)v7 * (float)1000.0) + (float)0.5);
     v8 = floor(v7);
-    cls.logo.duration = (int)(float)*(double *)&v8;
+    cls.logo.duration = (int)(float)v8;
     v9 = Cmd_Argv(4);
     v10 = atof(v9);
-    *(double *)&v10 = (float)((float)((float)*(double *)&v10 * (float)1000.0) + (float)0.5);
+    v10 = (float)((float)((float)v10 * (float)1000.0) + (float)0.5);
     v11 = floor(v10);
-    cls.logo.fadeout = (int)(float)*(double *)&v11;
+    cls.logo.fadeout = (int)(float)v11;
     cls.logo.duration += cls.logo.fadeout + cls.logo.fadein;
     v12 = va("%s1", v2);
     cls.logo.material[0] = Material_RegisterHandle(v12, IMAGE_TRACK_UI);
