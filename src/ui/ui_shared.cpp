@@ -2688,7 +2688,13 @@ static bool Switch_UI_DispatchCloseOnlyPauseAction(
     const bool isRestart =
         Switch_UI_ContainsCaseInsensitive(itemName, "restart") ||
         Switch_UI_ContainsCaseInsensitive(rawText, "restart") ||
-        Switch_UI_ContainsCaseInsensitive(translatedText, "restart");
+        Switch_UI_ContainsCaseInsensitive(translatedText, "restart") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "перезапуск") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "Перезапуск") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "перезапуск") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "Перезапуск") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "перезапустить") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "Перезапустить");
 
     const bool isApplicationExit =
         Switch_UI_ContainsCaseInsensitive(itemName, "quitgame") ||
@@ -2717,7 +2723,18 @@ static bool Switch_UI_DispatchCloseOnlyPauseAction(
          Switch_UI_ContainsCaseInsensitive(translatedText, "main menu") ||
          Switch_UI_ContainsCaseInsensitive(itemName, "quit") ||
          Switch_UI_ContainsCaseInsensitive(rawText, "quit") ||
-         Switch_UI_ContainsCaseInsensitive(translatedText, "quit"));
+         Switch_UI_ContainsCaseInsensitive(translatedText, "quit") ||
+         Switch_UI_ContainsCaseInsensitive(itemName, "mainmenu") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "выйти в меню") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "Выйти в меню") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "выйти в меню") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "Выйти в меню") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "выход в меню") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "Выход в меню") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "выход в меню") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "Выход в меню") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "вернуться в меню") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "Вернуться в меню"));
 
     if (isRestart)
     {
