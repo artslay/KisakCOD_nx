@@ -494,16 +494,23 @@ void __cdecl XAnimResetAnimMap_r(XModelNameMap* modelMap, uint32_t infoIndex)
 
 void __cdecl XAnimResetAnimMapLeaf(const XModelNameMap* modelMap, uint32_t infoIndex)
 {
-    const char* animToModel2; // [esp+4h] [ebp-8h]
     uint32_t animToModel; // [esp+8h] [ebp-4h]
 
     iassert((infoIndex && (infoIndex < 4096)));
     iassert(g_xAnimInfo[infoIndex].inuse);
     animToModel = g_xAnimInfo[infoIndex].animToModel;
     iassert(animToModel);
-    animToModel2 = SL_ConvertToString(animToModel);
-    g_xAnimInfo[infoIndex].animToModel = XAnimGetAnimMap(g_xAnimInfo[infoIndex].parts, modelMap);
-    SL_RemoveRefToStringOfSize(animToModel, (unsigned __int8)animToModel2[16] + 17);
+
+    // The map key is binary, not NUL-terminated. Its size is derived from the
+    // same XAnimParts bone count used by XAnimGetAnimMap; don't keep a pointer
+    // into the old script-string allocation across the map rebuild.
+    const XAnimParts *parts = g_xAnimInfo[infoIndex].parts;
+    iassert(parts);
+    const uint32_t oldAnimToModelLength =
+        static_cast<uint32_t>(static_cast<uint8_t>(parts->boneCount[9])) + 17u;
+
+    g_xAnimInfo[infoIndex].animToModel = XAnimGetAnimMap(parts, modelMap);
+    SL_RemoveRefToStringOfSize(animToModel, oldAnimToModelLength);
 }
 
 uint32_t __cdecl XAnimGetAnimMap(const XAnimParts* parts, const XModelNameMap* modelMap)
