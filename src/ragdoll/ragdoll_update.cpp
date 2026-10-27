@@ -6,6 +6,21 @@
 #include <xanim/dobj_utils.h>
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern thread_local const char * volatile g_switchFrameStage;
+static thread_local char g_switchRagdollCrashStage[128];
+static thread_local int g_switchRagdollBodyIndex = -1;
+
+static void Switch_SetRagdollCrashStage(const char *phase, int bodyIndex, int bodyState)
+{
+    std::snprintf(g_switchRagdollCrashStage, sizeof(g_switchRagdollCrashStage),
+        "frame/ragdoll/%s/body=%d/state=%d",
+        phase ? phase : "unknown", bodyIndex, bodyState);
+    g_switchFrameStage = g_switchRagdollCrashStage;
+}
+#endif
+
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
 #elif KISAK_SP
@@ -1866,22 +1881,28 @@ char __cdecl Ragdoll_BodyNewState(RagdollBody *body, BodyState_t state)
 
     iassert( body );
     if ((uint32_t)state >= RAGDOLL_NUM_STATES)
+    {
         MyAssertHandler(
             ".\\ragdoll\\ragdoll_update.cpp",
             1827,
             0,
-            "state doesn't index RAGDOLL_NUM_STATES\n\t%i not in [0, %i)",
+            "state doesn't index RAGDOLL_NUM_STATES\\n\\t%i not in [0, %i)",
             state,
             6);
+        return 0;
+    }
     prevState = body->state;
     if ((uint32_t)prevState >= RAGDOLL_NUM_STATES)
+    {
         MyAssertHandler(
             ".\\ragdoll\\ragdoll_update.cpp",
             1830,
             0,
-            "prevState doesn't index RAGDOLL_NUM_STATES\n\t%i not in [0, %i)",
+            "prevState doesn't index RAGDOLL_NUM_STATES\\n\\t%i not in [0, %i)",
             prevState,
             6);
+        return 0;
+    }
     if (prevState == state)
         return 1;
     if (stateEntries[prevState].exitFunc && !stateEntries[prevState].exitFunc(body, prevState, state))
@@ -1907,17 +1928,26 @@ void __cdecl Ragdoll_BodyUpdate(int msec, RagdollBody *body)
     BodyState_t prevState; // [esp+4h] [ebp-4h]
 
     iassert( body );
-    if (body->state >= (uint32_t)RAGDOLL_NUM_STATES)
+    if ((uint32_t)body->state >= (uint32_t)RAGDOLL_NUM_STATES)
+    {
+#ifdef __SWITCH__
+        Switch_SetRagdollCrashStage("invalid_body_state", g_switchRagdollBodyIndex, body->state);
+#endif
         MyAssertHandler(
             ".\\ragdoll\\ragdoll_update.cpp",
             1871,
             0,
-            "body->state doesn't index RAGDOLL_NUM_STATES\n\t%i not in [0, %i)",
+            "body->state doesn't index RAGDOLL_NUM_STATES\\n\\t%i not in [0, %i)",
             body->state,
             6);
+        return;
+    }
     do
     {
         prevState = body->state;
+#ifdef __SWITCH__
+        Switch_SetRagdollCrashStage("body_update_callback", g_switchRagdollBodyIndex, prevState);
+#endif
         entry = &stateEntries[prevState];
         if (entry->updateFunc)
             entry->updateFunc(body);
@@ -1945,9 +1975,22 @@ void __cdecl Ragdoll_Update(int msec)
                 iassert(body);
 
                 if (body->references > 0)
+                {
+#ifdef __SWITCH__
+                    g_switchRagdollBodyIndex = i;
+                    Switch_SetRagdollCrashStage("body_update", i, body->state);
+#endif
                     Ragdoll_BodyUpdate(msec, body);
+                }
             }
+#ifdef __SWITCH__
+            g_switchRagdollBodyIndex = -1;
+            Switch_SetRagdollCrashStage("collision_callback", -1, -1);
+#endif
             Phys_SetCollisionCallback(PHYS_WORLD_RAGDOLL, Ragdoll_GenerateAllSelfCollisionContacts);
+#ifdef __SWITCH__
+            Switch_SetRagdollCrashStage("physics_step", -1, -1);
+#endif
             Phys_RunToTime(0, PHYS_WORLD_RAGDOLL, ragdollTime);
         }
     }
