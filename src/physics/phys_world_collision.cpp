@@ -288,52 +288,61 @@ void __cdecl CM_TestGeomInLeafBrushNode(cLeaf_t *leaf, const objInfo *input, Res
         &io);
 }
 
-void __cdecl Phys_TestGeomInBrush(const cbrush_t *brush, uint32_t *userData)
+void __cdecl Phys_TestGeomInBrush(const cbrush_t *brush, void *userData)
 {
-    Results *results; // [esp+68h] [ebp-8h]
+    // This callback receives the address of InputOutput from
+    // CM_TestGeomInLeafBrushNode. Do not interpret it as uint32_t[]:
+    // on AArch64 each pointer is 64 bits, and indexing 32-bit words would
+    // read the high half of io.Input as the Results pointer.
+    if (!brush || !userData)
+        return;
 
-    results = (Results *)userData[1];
-    if (results->contactCount < results->maxContacts)
+    const InputOutput *io = static_cast<const InputOutput *>(userData);
+    const objInfo *input = io->Input;
+    Results *results = io->Output;
+    if (!input || !results || results->contactCount < 0 ||
+        results->maxContacts < results->contactCount)
+        return;
+
+    if (results->contactCount >= results->maxContacts)
+        return;
+
+    switch (input->type)
     {
-        switch (*(uint32_t *)(*userData + 52))
-        {
-        case 1:
-        {
-            PROF_SCOPED("Phys_BoxBrushColl");
-            Phys_CollideBoxWithBrush(brush, (const objInfo *)*userData, results);
-            break;
-        }
-        case 2:
-        {
-            PROF_SCOPED("Phys_BrushBrushColl");
-            Phys_CollideOrientedBrushModelWithBrush(brush, (const objInfo *)*userData, results);
-            break;
-        }
-        case 3:
-        {
-            PROF_SCOPED("Phys_BrushBrushColl");
-            Phys_CollideOrientedBrushWithBrush(
-                *(const cbrush_t **)(*userData + 140),
-                brush,
-                (const objInfo *)*userData,
-                results);
-            break;
-        }
-        case 4:
-        {
-            PROF_SCOPED("Phys_CylinderBrushColl");
-            Phys_CollideCylinderWithBrush(brush, (const objInfo *)*userData, results);
-            break;
-        }
-        case 5:
-        {
-            PROF_SCOPED("Phys_CapsuleBrushColl");
-            Phys_CollideCapsuleWithBrush(brush, (const objInfo *)*userData, results);
-            break;
-        }
-        default:
+    case 1:
+    {
+        PROF_SCOPED("Phys_BoxBrushColl");
+        Phys_CollideBoxWithBrush(brush, input, results);
+        break;
+    }
+    case 2:
+    {
+        PROF_SCOPED("Phys_BrushBrushColl");
+        Phys_CollideOrientedBrushModelWithBrush(brush, input, results);
+        break;
+    }
+    case 3:
+    {
+        PROF_SCOPED("Phys_BrushBrushColl");
+        if (!input->u.brush)
             return;
-        }
+        Phys_CollideOrientedBrushWithBrush(input->u.brush, brush, input, results);
+        break;
+    }
+    case 4:
+    {
+        PROF_SCOPED("Phys_CylinderBrushColl");
+        Phys_CollideCylinderWithBrush(brush, input, results);
+        break;
+    }
+    case 5:
+    {
+        PROF_SCOPED("Phys_CapsuleBrushColl");
+        Phys_CollideCapsuleWithBrush(brush, input, results);
+        break;
+    }
+    default:
+        return;
     }
 }
 
