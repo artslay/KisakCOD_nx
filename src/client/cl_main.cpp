@@ -1013,6 +1013,78 @@ void __cdecl CL_InitRenderer()
     Con_InitClientAssets();
 }
 
+#ifdef __SWITCH__
+static bool CL_IsKnownSwitchMissingDevGuiDvar(const char *name)
+{
+    if (!name)
+        return false;
+
+    // Stock DevGui configs reference desktop-only dvars that the Switch SP
+    // port does not register. Suppress only these known entries; unexpected
+    // missing dvars remain visible for diagnosis.
+    static constexpr const char *const kSwitchUnsupportedDevGuiDvars[] =
+    {
+        "debugOverlay",
+        "gpad_button_deadzone",
+        "gpad_stick_deadzone_min",
+        "gpad_stick_deadzone_max",
+        "gpad_stick_pressed",
+        "gpad_button_lstick_deflect_max",
+        "gpad_button_rstick_deflect_max",
+        "gpad_rumble",
+        "player_view_pitch_up",
+        "player_view_pitch_down",
+        "player_breath_hold_time",
+        "player_breath_gasp_time",
+        "player_breath_fire_delay",
+        "player_breath_gasp_scale",
+        "player_breath_hold_lerp",
+        "player_breath_gasp_lerp",
+        "player_breath_snd_lerp",
+        "player_breath_snd_delay",
+        "player_meleeRange",
+        "player_meleeWidth",
+        "player_meleeHeight",
+        "player_meleeChargeScale",
+        "mantle_enable",
+        "mantle_debug",
+        "mantle_check_range",
+        "mantle_check_radius",
+        "mantle_check_angle",
+        "mantle_view_yawcap",
+        "jump_height",
+        "jump_stepSize",
+        "jump_slowdownEnable",
+        "jump_ladderPushVel",
+        "jump_spreadAdd",
+        "cg_drawMaterial",
+        "cg_draw2D",
+        "cg_drawGun",
+        "cg_fov",
+        "g_entinfo",
+        "ai_showPaths",
+        "ai_showNodes",
+        "ai_showNearestNode",
+        "ai_showFriendlyChains",
+        "safeArea_horizontal",
+        "safeArea_vertical",
+        "visionSetsEnabled",
+        "fx_draw",
+        "sm_drawCasters",
+        "r_filmSharpen",
+        "r_lodBias",
+        "r_lodScale"
+    };
+
+    for (const char *candidate : kSwitchUnsupportedDevGuiDvars)
+    {
+        if (I_stricmp(name, candidate) == 0)
+            return true;
+    }
+    return false;
+}
+#endif
+
 void CL_DevGuiDvar_f()
 {
     int nesting; // r7
@@ -1047,9 +1119,7 @@ void CL_DevGuiDvar_f()
         {
             v4 = Cmd_Argv(2);
 #ifdef __SWITCH__
-            // Stock DevGui configs contain platform-specific dvars. Keep
-            // these diagnostics when actively debugging, not during normal play.
-            if (Dvar_GetInt("developer"))
+            if (!CL_IsKnownSwitchMissingDevGuiDvar(v4))
                 Com_Printf(CON_CHANNEL_DEVGUI, "dvar '%s' doesn't exist\n", v4);
 #else
             Com_Printf(CON_CHANNEL_DEVGUI, "dvar '%s' doesn't exist\n", v4);
