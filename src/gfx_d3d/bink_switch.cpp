@@ -1,6 +1,7 @@
 #ifdef __SWITCH__
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <chrono>
@@ -70,10 +71,47 @@ thread_local char g_switchBinkPacketTrace[512] = "no Bink packet reference relea
 }
 
 static char g_switchBinkError[256] = "";
+static std::atomic<HBINK> g_switchBinkUploadedFrame{nullptr};
 
 static SwitchBinkState *Switch_BinkState(HBINK bink)
 {
     return bink ? reinterpret_cast<SwitchBinkState *>(bink->ioptr) : nullptr;
+}
+
+// Renderer uploads are confirmed on the renderer thread, but OpenAL must be
+// started on the Bink thread. Consume the notification on a subsequent Bink call.
+static void Switch_BinkAcceptUploadedFrame(HBINK bink, SwitchBinkState *state)
+{
+    if (!bink || !state || state->firstVideoFrameAccepted)
+        return;
+
+    HBINK expected = bink;
+    if (!g_switchBinkUploadedFrame.compare_exchange_strong(
+            expected, nullptr,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire))
+    {
+        return;
+    }
+
+    state->firstVideoFrameAccepted = true;
+    if (state->audioSourceReady && !state->paused && !state->audioMuted)
+    {
+        ALint queuedAudio = 0;
+        ALint audioState = AL_STOPPED;
+        alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queuedAudio);
+        alGetSourcei(state->audioSource, AL_SOURCE_STATE, &audioState);
+        if (queuedAudio > 0 && audioState != AL_PLAYING)
+            alSourcePlay(state->audioSource);
+    }
+
+    Switch_LogWrite("[KisakCOD][CINEMATIC VIDEO ACCEPTED] first Bink frame uploaded; audio may start\\n");
+}
+
+extern "C" void Switch_BinkNotifyVideoFrameUploaded(HBINK bink)
+{
+    if (bink)
+        g_switchBinkUploadedFrame.store(bink, std::memory_order_release);
 }
 
 static void Switch_BinkRecordPacketRef(
@@ -718,6 +756,7 @@ RADDEFFUNC HBINK RADEXPLINK BinkOpen(
     U32 flags)
 {
     g_switchBinkError[0] = 0;
+    g_switchBinkUploadedFrame.store(nullptr, std::memory_order_release);
 
     const bool fromMemory = (flags & BINKFROMMEMORY) != 0;
     const char *traceName = fromMemory ? "<memory>" : name;
@@ -1083,6 +1122,11 @@ RADDEFFUNC void RADEXPLINK BinkClose(HBINK bink)
     if (!bink)
         return;
 
+    HBINK expectedUploadedBink = bink;
+    g_switchBinkUploadedFrame.compare_exchange_strong(
+        expectedUploadedBink, nullptr,
+        std::memory_order_acq_rel,
+        std::memory_order_acquire);
     SwitchBinkState *state = Switch_BinkState(bink);
     bink->ioptr = nullptr;
     Switch_BinkFreeState(state);
@@ -1144,6 +1188,7 @@ RADDEFFUNC S32 RADEXPLINK BinkDoFrame(HBINK bink)
     SwitchBinkState *state = Switch_BinkState(bink);
     if (!state || !bink || !bink->FrameBuffers)
         return 1;
+    Switch_BinkAcceptUploadedFrame(bink, state);
 
     if (state->frameDecodeFinished || bink->FrameNum > bink->Frames)
         return 1;
@@ -1244,22 +1289,9 @@ RADDEFFUNC void RADEXPLINK BinkNextFrame(HBINK bink)
     if (!bink || !state)
         return;
 
-    // BinkNextFrame is called after BinkDoFrame succeeds and the engine has
-    // selected the decoded buffer for display. Keep queued audio silent until
-    // that hand-off, so cinematic sound cannot run ahead of an unaccepted frame.
-    if (!state->firstVideoFrameAccepted)
-    {
-        state->firstVideoFrameAccepted = true;
-        if (state->audioSourceReady && !state->paused && !state->audioMuted)
-        {
-            ALint queuedAudio = 0;
-            ALint audioState = AL_STOPPED;
-            alGetSourcei(state->audioSource, AL_BUFFERS_QUEUED, &queuedAudio);
-            alGetSourcei(state->audioSource, AL_SOURCE_STATE, &audioState);
-            if (queuedAudio > 0 && audioState != AL_PLAYING)
-                alSourcePlay(state->audioSource);
-        }
-    }
+    // BinkNextFrame also runs after some dropped frames. It must not itself
+    // authorize audio; only a successful renderer upload can do that.
+    Switch_BinkAcceptUploadedFrame(bink, state);
 
     if (bink->FrameNum >= bink->Frames)
         return;
