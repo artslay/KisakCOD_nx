@@ -1,5 +1,6 @@
 #include <universal/q_shared.h>
 #include "com_pack.h"
+#include <cstring>
 #include <qcommon/qcommon.h>
 
 // KISAKTODO: Move more stuff into here. The Bgra/4byte stuff probably belongs in here.
@@ -137,4 +138,68 @@ void __cdecl Vec2UnpackTexCoords(PackedTexCoords in, float *out)
     else
         v2 = 0.0;
     out[1] = v2;
+}
+
+namespace
+{
+uint16_t FloatToIeeeHalf(float value)
+{
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+
+    const uint32_t sign = (bits >> 16) & 0x8000u;
+    const uint32_t floatExponent = (bits >> 23) & 0xffu;
+    int32_t exponent = static_cast<int32_t>(floatExponent) - 127 + 15;
+    uint32_t mantissa = bits & 0x7fffffu;
+
+    if (floatExponent == 0xffu)
+    {
+        if (!mantissa)
+            return static_cast<uint16_t>(sign | 0x7c00u);
+        const uint32_t payload = mantissa >> 13;
+        return static_cast<uint16_t>(sign | 0x7c00u | payload | (payload == 0u));
+    }
+
+    if (floatExponent == 0u)
+        return static_cast<uint16_t>(sign);
+
+    if (exponent >= 31)
+        return static_cast<uint16_t>(sign | 0x7c00u);
+
+    if (exponent <= 0)
+    {
+        if (exponent < -10)
+            return static_cast<uint16_t>(sign);
+
+        mantissa |= 0x800000u;
+        const uint32_t shift = static_cast<uint32_t>(14 - exponent);
+        const uint32_t rounding = (1u << (shift - 1u)) - 1u +
+            ((mantissa >> shift) & 1u);
+        return static_cast<uint16_t>(sign | ((mantissa + rounding) >> shift));
+    }
+
+    uint32_t roundedMantissa = mantissa + 0x0fffu + ((mantissa >> 13) & 1u);
+    if (roundedMantissa & 0x800000u)
+    {
+        roundedMantissa = 0;
+        ++exponent;
+        if (exponent >= 31)
+            return static_cast<uint16_t>(sign | 0x7c00u);
+    }
+
+    return static_cast<uint16_t>(
+        sign | (static_cast<uint32_t>(exponent) << 10) | (roundedMantissa >> 13));
+}
+} // namespace
+
+PackedTexCoords __cdecl Vec2ConvertTexCoordsForVulkan(PackedTexCoords in)
+{
+    float texCoord[2]{};
+    Vec2UnpackTexCoords(in, texCoord);
+
+    // XModel TEXCOORD0 is Vulkan R16G16_SFLOAT: U must occupy the low half-word.
+    PackedTexCoords converted;
+    converted.packed = static_cast<uint32_t>(FloatToIeeeHalf(texCoord[0])) |
+        (static_cast<uint32_t>(FloatToIeeeHalf(texCoord[1])) << 16);
+    return converted;
 }
