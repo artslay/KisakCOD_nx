@@ -210,7 +210,7 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
                 Dvar_SetString((dvar_s *)nextmap, (char*)"");
             }
 #ifdef __SWITCH__
-            else if (hasQueuedNextPlayback)
+            else if (hasQueuedNextPlayback && !continueMapLoadingCinematic)
             {
                 // R_Cinematic_StopPlayback() stops the current target but
                 // deliberately leaves nextCinematicName intact. Start it now
