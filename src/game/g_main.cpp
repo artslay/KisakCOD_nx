@@ -1135,10 +1135,6 @@ void __cdecl G_InitGame(
     G_InitDvars();
     ProfLoad_Begin("clear config strings");
     G_ClearAllConfigstrings();
-    // Night-vision assets are shared client code assets. Set the same
-    // configstring that precachenightvisioncodeassets() sets during map init,
-    // so every SP map can use NVG without depending on an optional map-script call.
-    SV_SetConfigstring(CS_NIGHTVISION, "1");
     ProfLoad_End();
     Dvar_SetInt(g_reloading, 0);
     Path_Init(restart);
