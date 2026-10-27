@@ -28,6 +28,7 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern "C" void Switch_LogPostCinematicRenderTrace(const char *phase, const char *detail);
 #endif
 
 ClientViewParams clientViewParamsArray[1][1] = { { { 0.0, 0.0, 1.0, 1.0 } } };
@@ -1560,6 +1561,18 @@ int __cdecl CG_DrawActiveFrame(
     double FarPlaneDist; // fp1
     FxCmd v32[9]; // [sp+50h] [-70h] BYREF
 
+#ifdef __SWITCH__
+    char postCineActiveFrameEntry[320];
+    std::snprintf(
+        postCineActiveFrameEntry, sizeof(postCineActiveFrameEntry),
+        "localClient=%d serverTime=%d conn=%d pmType=%d cubemap=%d world=%p",
+        localClientNum, serverTime,
+        static_cast<int>(clientUIActives[0].connectionState),
+        static_cast<int>(cgArray[0].predictedPlayerState.pm_type),
+        static_cast<int>(cubemapShot),
+        static_cast<void *>(rgp.world));
+    Switch_LogPostCinematicRenderTrace("cg_draw_active_frame_enter", postCineActiveFrameEntry);
+#endif
 //Profile_Begin(13);
     R_ClearScene(localClientNum);
     FX_BeginUpdate(localClientNum);
@@ -1629,10 +1642,18 @@ int __cdecl CG_DrawActiveFrame(
             "cgameGlob->nextSnap->serverTime == G_GetServerSnapTime()");
     if (CL_SkipRendering())
     {
+#ifdef __SWITCH__
+        Switch_LogPostCinematicRenderTrace(
+            "cg_draw_active_frame_skipped", "reason=CL_SkipRendering returned true");
+#endif
         CG_PredictPlayerState(localClientNum);
         //Profile_EndInternal(0);
         return 0;
     }
+#ifdef __SWITCH__
+    Switch_LogPostCinematicRenderTrace(
+        "cg_draw_active_frame_rendering", "CL_SkipRendering returned false");
+#endif
     CG_VisionSetsUpdate(localClientNum);
     CG_UpdateViewOffset(localClientNum);
     if (!CG_ModelPreviewerNeedsVieworgInterpSkipped(localClientNum))
@@ -1759,8 +1780,22 @@ int __cdecl CG_DrawActiveFrame(
     //PIXBeginNamedEvent_Copy_NoVarArgs(0xFFFFFFFF, "draw 2D");
     R_AddCmdProjectionSet2D();
     DrawShellshockBlend(localClientNum);
+#ifdef __SWITCH__
+    char postCineBeforeHud[256];
+    std::snprintf(
+        postCineBeforeHud, sizeof(postCineBeforeHud),
+        "viewOrg=(%.1f,%.1f,%.1f) refdef=%dx%d viewTime=%d",
+        cgArray[0].refdef.vieworg[0], cgArray[0].refdef.vieworg[1],
+        cgArray[0].refdef.vieworg[2], cgArray[0].refdef.width,
+        cgArray[0].refdef.height, cgArray[0].refdef.time);
+    Switch_LogPostCinematicRenderTrace("cg_draw_active_frame_before_hud", postCineBeforeHud);
+#endif
     //Profile_Begin(350);
     CG_Draw2D(localClientNum);
+#ifdef __SWITCH__
+    Switch_LogPostCinematicRenderTrace(
+        "cg_draw_active_frame_hud_return", "CG_Draw2D returned; HUD commands queued");
+#endif
     //Profile_EndInternal(0);
     //PIXEndNamedEvent();
     if (cgArray[0].nextSnap->serverTime != G_GetServerSnapTime())
@@ -1774,6 +1809,10 @@ int __cdecl CG_DrawActiveFrame(
     R_Cinematic_SetPaused((CinematicEnum)(cg_paused->current.integer != 0));
     //Profile_Begin(25);
     CG_DrawActive(localClientNum);
+#ifdef __SWITCH__
+    Switch_LogPostCinematicRenderTrace(
+        "cg_draw_active_frame_complete", "CG_DrawActive returned; active frame queued");
+#endif
     //Profile_EndInternal(0);
     //Profile_EndInternal(0);
     return 1;
