@@ -361,6 +361,13 @@ void __cdecl Phys_Init()
             minu,
             DVAR_NOFLAG,
             "The minimum momentum required to trigger impact sounds");
+#ifdef __SWITCH__
+        Com_Printf(
+            CON_CHANNEL_PHYS,
+            "[SWITCH PHYS DVAR] registered phys_minImpactMomentum global=%p value=%p\n",
+            (const void *)&phys_minImpactMomentum,
+            (const void *)phys_minImpactMomentum);
+#endif
         minv.value.max = FLT_MAX;
         minv.value.min = 0.1f;
         phys_jitterMaxMass = Dvar_RegisterFloat(
@@ -394,6 +401,14 @@ void __cdecl Phys_Init()
         Phys_InitCapsuleGeomClass();
         Phys_InitWorldCollision();
         Phys_InitJoints();
+#ifdef __SWITCH__
+        Com_Printf(
+            CON_CHANNEL_PHYS,
+            "[SWITCH PHYS DVAR] after physics init global=%p value=%p physInited=%d\n",
+            (const void *)&phys_minImpactMomentum,
+            (const void *)phys_minImpactMomentum,
+            physInited);
+#endif
         physGlob.gravityDirection[0] = 0.0f;
         physGlob.gravityDirection[1] = 0.0f;
         physGlob.gravityDirection[2] = -1.0f;
@@ -1374,6 +1389,14 @@ void __cdecl Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t 
     impactVelocity = impactVelocity / (double)contactList->contactCount;
     scale = 1.0 / (double)contactList->contactCount;
     Vec3Scale(pos, scale, pos);
+#ifdef __SWITCH__
+    if (!phys_minImpactMomentum)
+        Com_PrintError(
+            CON_CHANNEL_PHYS,
+            "[SWITCH PHYS DVAR] phys_minImpactMomentum became null before collision sound global=%p physInited=%d\n",
+            (const void *)&phys_minImpactMomentum,
+            physInited);
+#endif
     if (-phys_minImpactMomentum->current.value > impactVelocity * mass.mass)
     {
         if (sndClass >= 0x32)
