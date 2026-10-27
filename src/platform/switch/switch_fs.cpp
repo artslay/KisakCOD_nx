@@ -1752,7 +1752,7 @@ int __cdecl FS_FOpenTextFileWrite(const char *filename)
 
 int __cdecl FS_FOpenFileAppend(const char *filename)
 {
-    if (Switch_ShouldSuppressScriptDebugWrite(filename))
+    if (Switch_ShouldSuppressScriptDebugWrite(filename) || Switch_ShouldSuppressScriptDebugWrite(fs_gamedir))
         return 0;
 
     char path[256];
