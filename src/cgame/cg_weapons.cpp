@@ -1010,7 +1010,44 @@ double __cdecl GetWeaponAnimRate(WeaponDef *weapDef, XAnim_s *anims, uint32_t an
     offset = g_animRateOffsets[animIndex];
     if (offset < 0)
         return 1.0;
+
+#ifdef __SWITCH__
+    // g_animRateOffsets contains offsets into the original 32-bit PC
+    // WeaponDef. Pointer fields before these durations widen on Switch, so
+    // reading those offsets from the native WeaponDef can select unrelated
+    // data (often zero) and freeze reload/sprint animations.
+    switch (animIndex)
+    {
+    case WEAP_ANIM_HOLD_FIRE:       time = weapDef->iHoldFireTime; break;
+    case WEAP_ANIM_MELEE:           time = weapDef->iMeleeTime; break;
+    case WEAP_ANIM_MELEE_CHARGE:    time = weapDef->meleeChargeTime; break;
+    case WEAP_ANIM_RELOAD:          time = weapDef->iReloadTime; break;
+    case WEAP_ANIM_RELOAD_EMPTY:    time = weapDef->iReloadEmptyTime; break;
+    case WEAP_ANIM_RELOAD_START:    time = weapDef->iReloadStartTime; break;
+    case WEAP_ANIM_RELOAD_END:      time = weapDef->iReloadEndTime; break;
+    case WEAP_ANIM_RAISE:           time = weapDef->iRaiseTime; break;
+    case WEAP_ANIM_FIRST_RAISE:     time = weapDef->iFirstRaiseTime; break;
+    case WEAP_ANIM_DROP:            time = weapDef->iDropTime; break;
+    case WEAP_ANIM_ALT_RAISE:       time = weapDef->iAltRaiseTime; break;
+    case WEAP_ANIM_ALT_DROP:        time = weapDef->iAltDropTime; break;
+    case WEAP_ANIM_QUICK_RAISE:     time = weapDef->quickRaiseTime; break;
+    case WEAP_ANIM_QUICK_DROP:      time = weapDef->quickDropTime; break;
+    case WEAP_ANIM_EMPTY_RAISE:     time = weapDef->iEmptyRaiseTime; break;
+    case WEAP_ANIM_EMPTY_DROP:      time = weapDef->iEmptyDropTime; break;
+    case WEAP_ANIM_SPRINT_IN:       time = weapDef->sprintInTime; break;
+    case WEAP_ANIM_SPRINT_LOOP:     time = weapDef->sprintLoopTime; break;
+    case WEAP_ANIM_SPRINT_OUT:      time = weapDef->sprintOutTime; break;
+    case WEAP_ANIM_NIGHTVISION_WEAR: time = weapDef->nightVisionWearTime; break;
+    case WEAP_ANIM_NIGHTVISION_REMOVE: time = weapDef->nightVisionRemoveTime; break;
+    default:
+        // Keep the authored default-rate behavior for animations whose
+        // duration is not represented in the legacy offset table.
+        return 1.0;
+    }
+#else
     time = *(int32_t *)((char *)&weapDef->szInternalName + offset);
+#endif
+
     iassert(time >= 0);
     if (!time)
         return 0.0;
