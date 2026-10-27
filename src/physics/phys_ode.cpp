@@ -2111,14 +2111,17 @@ void __cdecl Phys_RunFrame(int localClientNum, PhysWorld worldIndex, float secon
     scale = -phys_gravity->current.value;
     Vec3Scale(physGlob.gravityDirection, scale, down);
     dWorldSetGravity(world, down[0], down[1], down[2]);
+
+    // Phys_NearCallback reads both fields from FrameInfo. Passing only
+    // &worldIndex gave it a one-int object and an unrelated adjacent stack word.
+    frameInfo.localClientNum = localClientNum;
+    frameInfo.worldIndex = worldIndex;
     {
         PROF_SCOPED("Phys_Collide");
         if (phys_interBodyCollision->current.enabled)
-            dSpaceCollide(physGlob.space[worldIndex], &worldIndex, Phys_NearCallback);
+            dSpaceCollide(physGlob.space[worldIndex], &frameInfo, Phys_NearCallback);
         if (physGlob.worldData[worldIndex].collisionCallback)
             physGlob.worldData[worldIndex].collisionCallback();
-        frameInfo.localClientNum = localClientNum;
-        frameInfo.worldIndex = worldIndex;
         ODE_CollideSimpleSpaceWithGeomNoAABBTest(physGlob.space[worldIndex], physGlob.worldGeom, &frameInfo);
     }
     {
