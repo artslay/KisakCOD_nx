@@ -37,6 +37,8 @@
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 extern std::atomic<uint64_t> g_switchScreenFrameSequence;
+extern "C" bool Switch_IsPostCinematicRenderTraceActive(void);
+extern "C" void Switch_LogPostCinematicRenderTrace(const char *phase, const char *detail);
 
 // Selected by R_SwitchQueueBspAuditSurface only after a floor surface with the
 // target shader pair is accepted into the visible BSP draw queue.
@@ -78,6 +80,7 @@ thread_local volatile uintptr_t g_switchVkPipelineTracePixelSerial = 0;
 
 
 // Last submitted-frame context is read by VulkanBackend only if queue submission fails.
+std::atomic<uint64_t> g_switchGpuDrawCommandSerial{0};
 std::atomic<uint64_t> g_switchLastBoundPipelineKey{0};
 std::atomic<uint64_t> g_switchLastBoundVertexShaderSerial{0};
 std::atomic<uint64_t> g_switchLastBoundPixelShaderSerial{0};
@@ -5683,6 +5686,25 @@ HRESULT IDirect3DDevice9::EndScene()
         Switch_LogWrite(trace);
     }
 
+    if (Switch_IsPostCinematicRenderTraceActive())
+    {
+        const KisakVkTexture *texture = m_color ? m_color->texture : nullptr;
+        char postCineSceneTrace[320];
+        std::snprintf(
+            postCineSceneTrace, sizeof(postCineSceneTrace),
+            "targetRendered=%u sourceQueued=%u hasDrawCalls=%u primitiveDraws=%u indexedDraws=%u clears=%u texture=%p size=%ux%u",
+            m_targetRendered ? 1u : 0u,
+            queuePresentSource ? 1u : 0u,
+            hasDrawCalls ? 1u : 0u,
+            g_switchSceneDrawPrimitiveCalls,
+            g_switchSceneDrawIndexedCalls,
+            g_switchSceneClearCalls,
+            static_cast<const void *>(texture),
+            texture ? texture->width : 0u,
+            texture ? texture->height : 0u);
+        Switch_LogPostCinematicRenderTrace("d3d9_end_scene", postCineSceneTrace);
+    }
+
     m_sceneOpen = false;
     return S_OK;
 }
@@ -9279,6 +9301,7 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     g_switchLastDrawStream0Stride.store(stride, std::memory_order_relaxed);
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/issue_draw";
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
+    g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
     ++g_switchSceneDrawPrimitiveCalls;
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/return";
     return S_OK;
@@ -10040,6 +10063,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 #endif
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
+    g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
 #ifdef __SWITCH__
     if (switchFloorOcclusionQueryIssued)
         vkCmdEndQuery(m_backend->CommandBuffer(), switchFloorOcclusionPool, 0);
