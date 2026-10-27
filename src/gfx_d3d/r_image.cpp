@@ -26,6 +26,7 @@ extern uint32_t g_switchCurrentAssetRawType;
 #include "r_outdoor.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <vector>
 
@@ -405,17 +406,55 @@ void R_VulkanUploadTexture(
     uint32_t mipLevel,
     const uint8_t *source)
 {
-    if (!image || !source || !image->texture.basemap)
+    if (!image || !source)
         return;
+
+    static std::atomic<uint32_t> skippedUploadTraceCount{0};
+    auto logSkippedUpload = [&](const char *reason, VkFormat vkFormat)
+    {
+        const uint32_t sequence =
+            skippedUploadTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (sequence >= 96u)
+            return;
+        char trace[448];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK TEXTURE UPLOAD SKIP] reason=%s image=%.96s imagePtr=%p basemap=%p size=%ux%u mapType=%u category=%u delayLoad=%u format=%u vkFormat=%u mip=%u face=%u frameStage=%s\n",
+            reason ? reason : "unknown",
+            image->name ? image->name : "<unnamed>",
+            static_cast<const void *>(image),
+            static_cast<void *>(image->texture.basemap),
+            image->width, image->height,
+            static_cast<unsigned>(image->mapType),
+            static_cast<unsigned>(image->category),
+            image->delayLoadPixels ? 1u : 0u,
+            static_cast<unsigned>(format),
+            static_cast<unsigned>(vkFormat),
+            mipLevel, static_cast<unsigned>(face),
+            g_switchFrameStage ? g_switchFrameStage : "(unknown)");
+        Switch_LogWrite(trace);
+    };
+
+    if (!image->texture.basemap)
+    {
+        logSkippedUpload("missing_basemap", VK_FORMAT_UNDEFINED);
+        return;
+    }
 
     auto *texture = image->texture.basemap;
     VulkanBackend *backend = GetVulkanBackend();
     if (!backend)
+    {
+        logSkippedUpload("missing_vulkan_backend", VK_FORMAT_UNDEFINED);
         return;
+    }
 
     const VulkanImageFormat info = R_VulkanImageFormat(format, R_VulkanUseSrgbColorFormat(image));
     if (info.format == VK_FORMAT_UNDEFINED)
+    {
+        logSkippedUpload("unsupported_source_format", info.format);
         return;
+    }
 
     const uint32_t width = std::max(1u, static_cast<uint32_t>(image->width) >> mipLevel);
     const uint32_t height = std::max(1u, static_cast<uint32_t>(image->height) >> mipLevel);
@@ -475,6 +514,31 @@ void R_VulkanUploadTexture(
             mipLevel, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         texture->dirtyAll = true;
         texture->dirtyBoxes.clear();
+
+        if (mipLevel == 0u && image->category == IMG_CATEGORY_WATER)
+        {
+            static std::atomic<uint32_t> waterUploadTraceCount{0};
+            const uint32_t sequence =
+                waterUploadTraceCount.fetch_add(1, std::memory_order_relaxed);
+            if (sequence < 32u)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK WATER UPLOAD] n=%u image=%.96s texture=%p size=%ux%u format=%u vkFormat=%u bytes=%zu oldLayout=%u newLayout=%u data=%02x%02x%02x%02x\n",
+                    sequence, image->name ? image->name : "<unnamed>",
+                    static_cast<void *>(texture),
+                    width, height, static_cast<unsigned>(format),
+                    static_cast<unsigned>(info.format), bytes,
+                    static_cast<unsigned>(oldLayout),
+                    static_cast<unsigned>(texture->GetSubresourceLayout(mipLevel, layer)),
+                    bytes > 0 ? source[0] : 0u,
+                    bytes > 1 ? source[1] : 0u,
+                    bytes > 2 ? source[2] : 0u,
+                    bytes > 3 ? source[3] : 0u);
+                Switch_LogWrite(trace);
+            }
+        }
 
         // Round-trip a small set of BSP base-color textures through the real
         // Vulkan image. This distinguishes a successful descriptor bind from
@@ -559,7 +623,33 @@ void R_VulkanUploadTexture(
         }
     }
     else
+    {
+        static std::atomic<uint32_t> failedUploadTraceCount{0};
+        const uint32_t sequence =
+            failedUploadTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (sequence < 96u)
+        {
+            char trace[448];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK TEXTURE UPLOAD FAIL] n=%u image=%.96s imagePtr=%p texture=%p imageVk=%p view=%p size=%ux%u mip=%u face=%u layer=%u bytes=%zu format=%u vkFormat=%u oldLayout=%u category=%u mapType=%u frameStage=%s\n",
+                sequence,
+                image->name ? image->name : "<unnamed>",
+                static_cast<const void *>(image),
+                static_cast<void *>(texture),
+                static_cast<void *>(texture->image),
+                static_cast<void *>(texture->view),
+                width, height, mipLevel, static_cast<unsigned>(face), layer,
+                bytes, static_cast<unsigned>(format),
+                static_cast<unsigned>(info.format),
+                static_cast<unsigned>(oldLayout),
+                static_cast<unsigned>(image->category),
+                static_cast<unsigned>(image->mapType),
+                g_switchFrameStage ? g_switchFrameStage : "(unknown)");
+            Switch_LogWrite(trace);
+        }
         Switch_LogWrite("[KisakCOD][VK] texture upload failed\n");
+    }
 }
 }
 #endif
