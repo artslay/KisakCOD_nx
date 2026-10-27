@@ -3566,191 +3566,115 @@ thread_local volatile uintptr_t g_switchFrameDrawFieldAddress = 0;
 thread_local volatile uintptr_t g_switchFrameDrawFieldCaller = 0;
 }
 
+static bool Switch_LogContainsInsensitive(const char *text, const char *needle)
+{
+    if (!text || !needle || !*needle)
+        return false;
+
+    for (const char *start = text; *start; ++start)
+    {
+        const char *left = start;
+        const char *right = needle;
+        while (*left && *right &&
+               std::tolower(static_cast<unsigned char>(*left)) ==
+                   std::tolower(static_cast<unsigned char>(*right)))
+        {
+            ++left;
+            ++right;
+        }
+        if (!*right)
+            return true;
+    }
+    return false;
+}
+
+static bool Switch_LogIsImportant(const char *msg)
+{
+    // Keep errors and warnings even when they originate in diagnostic paths.
+    // This applies to both engine messages and prefixed KisakCOD/Switch records.
+    static constexpr const char *const kImportantTerms[] =
+    {
+        "error", "fail", "fatal", "warning", "warn:", "assert",
+        "mismatch", "timeout", "timed out", "crash", "corrupt",
+        "out of memory", "out-of-memory", "not found", "missing",
+        "invalid", "unsupported", "null pointer", "overflow",
+        "underflow", "panic", "stalled", "deadlock", "aborted",
+        "device lost", "vk_error_", "pipeline_fail", "imagefail",
+        "unable to", "could not", "couldn't"
+    };
+
+    for (const char *term : kImportantTerms)
+    {
+        if (Switch_LogContainsInsensitive(msg, term))
+            return true;
+    }
+    return false;
+}
+
+static bool Switch_LogKeepKisakDiagnostic(const char *msg)
+{
+    if (Switch_LogIsImportant(msg))
+        return true;
+
+    // UI/bootstrap probes and register-allocation experiments are noisy and
+    // are not part of a normal runtime log. Errors from these paths still pass
+    // the severity check above.
+    static constexpr const char *const kRoutineBootPrefixes[] =
+    {
+        "[KisakCOD][BOOT] CL_InitUI:",
+        "[KisakCOD][BOOT] CL_CreateDevGui:",
+        "[KisakCOD][NAK PROBE]"
+    };
+    for (const char *prefix : kRoutineBootPrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return false;
+    }
+
+    // Normal log: retain the engine bootstrap/device summary and diagnostic
+    // infrastructure status. Renderer-internal probes are opt-in-by-source,
+    // not emitted on every ordinary run.
+    static constexpr const char *const kKeepPrefixes[] =
+    {
+        "[KisakCOD][BOOT]",
+        "[KisakCOD][RUST TLS]",
+        "[KisakCOD][LOG]",
+        "[KisakCOD][WATCHDOG]",
+        "[KisakCOD][VK]",
+        "[KisakCOD][DB LOAD]",
+        "[KisakCOD][ZONE LOAD]"
+    };
+
+    for (const char *prefix : kKeepPrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+
+    return false;
+}
+
 void Switch_LogWrite(const char *msg)
 {
     if (!msg || !*msg)
         return;
 
-    // Keep the Switch log focused on the current DB/sound investigation.
-    // These are known startup/UI diagnostics with no bearing on the current
-    // asset ABI investigation. Do not hide actual image-loading failures.
-    if (std::strncmp(msg, "[KisakCOD][RENDER]", 18) == 0 ||
-        std::strncmp(msg, "unknown UI script ", 18) == 0 ||
-        (std::strncmp(msg, "dvar '", 6) == 0 && std::strstr(msg, " doesn't exist") != nullptr))
-        return;
-
-    // Keep the runtime log compact. Detailed loader traces remain in source
-    // for targeted debugging, but are disabled by default.
-    static constexpr const char *const kSuppressedPrefixes[] =
-    {
-        // High-volume/obsolete diagnostics; retain zone-load progress and errors.
-        "[KisakCOD][IWI ROOT] archive=",
-        "[KisakCOD][BOOT] CL_InitUI:",
-        "[KisakCOD][BOOT] CL_CreateDevGui:",
-        "[KisakCOD][UI ",
-        "[KisakCOD][UIMAIN]",
-        "[KisakCOD][RTHREAD]",
-        "[KisakCOD][RINIT]",
-        "[KisakCOD][VERTEXSHADER ",
-        "[KisakCOD][SOUND]",
-        // High-volume gameplay/input traces removed from the normal log. Keep
-        // only the bounded PMOVE AIR/WALK/GROUND diagnostics that identify the
-        // active movement path and whether ground contact is being recovered.
-        "[KisakCOD][PAD RAW]",
-        "[KisakCOD][PAD MOVE]",
-        "[KisakCOD][PAD CMD FLOW]",
-        "[KisakCOD][SAVE PHASE]",
-        "[KisakCOD][PMOVE INPUT]",
-        "[KisakCOD][PMOVE SERVER]",
-        "[KisakCOD][SNAPSHOT SERVER]",
-        "[KisakCOD][SNAPSHOT CLIENT]",
-        "[KisakCOD][VIEW ORIGIN]",
-        "[KisakCOD][CAMERA TRACK]",
-        "[KisakCOD][CREDITS SCENE]",
-        "[KisakCOD][CREDITS SURFS]",
-        "[KisakCOD][DPVS ROOT]",
-        "[KisakCOD][DPVS CELL]",
-        "[KisakCOD][XSURFACE RIGID BONE]",
-        "[KisakCOD][MODEL LIGHTING]",
-        // Render-object audit dumps are available in source for focused debugging,
-        // but do not belong in the normal gameplay log.
-        "[KisakCOD][RENDER OBJECT]",
-        // High-volume per-asset traces. Keep failures, zone progress, crash context,
-        // script anomalies, and memory-tree invariants visible.
-        "[KisakCOD][GFXIMAGE HEADER]",
-        "[KisakCOD][GFXIMAGE TRACE]",
-        "[KisakCOD][TECHSET ABI]",
-        "[KisakCOD][TECHSET ABI BYTES]",
-        "[KisakCOD][IWI CANDIDATE]",
-        "[KisakCOD][IWI ROOT]",
-        "[KisakCOD][GFXIMAGE NAME]",
-        "[KisakCOD][GFXIMAGE FORWARD NAME]",
-        "[KisakCOD][GFXIMAGE NAME TARGET]",
-        "[KisakCOD][GFXIMAGE DEFERRED NAME]",
-        "[KisakCOD][GFXIMAGE DEFERRED]",
-        "[KisakCOD][GFXIMAGE LOADDEF COMPACT]",
-        "[KisakCOD][FONT LOAD]",
-        "[KisakCOD][FONT1215]",
-        "[KisakCOD][FONT MATERIAL LOAD]",
-        "[KisakCOD][FONT MATERIAL ALIAS]",
-        "[KisakCOD][TECHSET4026]",
-        "[KisakCOD][DELAY IMAGE]",
-        "[KisakCOD][DELAY IMAGES]",
-        "[KisakCOD][IMAGE3 ADD]",
-        "[KisakCOD][FONT TECH ASSET SLOT]",
-        "[KisakCOD][MATERIAL ",
-        "[KisakCOD][FRAME]",
-        "[KisakCOD][FONT]",
-        "[KisakCOD][FONT FALLBACK]",
-        "[KisakCOD][CODE IMAGES]",
-
-        // Verbose world/material diagnostics were useful during asset binding
-        // investigation, but overwhelm the normal log. Keep actual failures,
-        // crash snapshots, watchdog, concise frame/pipeline summaries, and
-        // explicitly enabled color-test results.
-        "[KisakCOD][SHADER DEF]",
-        "[KisakCOD][STRETCH PIC CMD]",
-        "[KisakCOD][FRAME STATE]",
-        "[KisakCOD][CINEMATIC COMMAND]",
-        "[KisakCOD][BINK CODEC]",
-        "[KisakCOD][BINK FLOW]",
-        "[KisakCOD][CIN SKIP]",
-        "[KisakCOD][PLAYER SPAWN]",
-        "[KisakCOD][PLAYER LINK]",
-        "[KisakCOD][PLAYER LINK SYNC]",
-        "[KisakCOD][OFFMAP ORIGIN WRITE]",
-        "[KisakCOD][OFFMAP SCRIPT ORIGIN]",
-        "[KisakCOD][PMOVE AIR]",
-        "[KisakCOD][CLIPMAP BOX BRUSH]",
-        "[KisakCOD][BSP ASSET]",
-        "[KisakCOD][WORLD SAMPLER]",
-        "[KisakCOD][BSP LIT PRETESS]",
-        "[KisakCOD][BSP LIGHTMAP VERTEX]",
-        "[KisakCOD][LIGHTMAP STATE]",
-        "[KisakCOD][LIGHTMAP BIND]",
-        "[KisakCOD][VK IMAGE UPLOAD PROBE]",
-        "[KisakCOD][VK IMAGE GPU VERIFY]",
-
-        // Renderer internals: preserve real error/failure records and compact
-        // VK FRAME/VK PIPELINE summaries; suppress routine implementation traces.
-        "[KisakCOD][VK SPIRV IFACE]",
-        "[KisakCOD][VK SET TEXTURE]",
-        "[KisakCOD][VK SAMPLER MAP]",
-        "[KisakCOD][VK LIGHTMAP DESCRIPTORS]",
-        "[KisakCOD][VK PS SAMPLERS]",
-        "[KisakCOD][VK SHADER INTERFACE]",
-        "[KisakCOD][VK VERTEX ELEMENT]",
-        "[KisakCOD][VK SHADER ATTR]",
-        "[KisakCOD][VK LINK BEGIN]",
-        "[KisakCOD][VK LINK END]",
-        "[KisakCOD][VK SPIRV IFACE PAIR]",
-        "[KisakCOD][VK SPIRV LOWER]",
-        "[KisakCOD][VK SPIRV REPAIR]",
-        "[KisakCOD][VK SPIRV DEBUG STRIP]",
-        "[KisakCOD][VK ALPHA BEGIN]",
-        "[KisakCOD][VK ALPHA END]",
-        "[KisakCOD][VK MODULE PREP]",
-        "[KisakCOD][VK MODULE VS RETURN]",
-        "[KisakCOD][VK MODULE PS RETURN]",
-        "[KisakCOD][VK WORLD INPUT]",
-        "[KisakCOD][VK WORLD ATTR]",
-        "[KisakCOD][VK PIPELINE INPUT]",
-        "[KisakCOD][VK PIPELINE BINDING]",
-        "[KisakCOD][VK PIPELINE ATTRIBUTE]",
-        "[KisakCOD][VK DRAW STREAM BEGIN]",
-        "[KisakCOD][VK DRAW STREAM END]",
-        "[KisakCOD][VK DRAW INDEX BEGIN]",
-        "[KisakCOD][VK WORLD DRAW STATE]",
-        "[KisakCOD][VK WORLD VS CONSTANTS]",
-        "[KisakCOD][VK WORLD PS CONSTANTS]",
-        "[KisakCOD][VK WORLD BOUND SAMPLERS]",
-        "[KisakCOD][VK RETIRE]",
-        "[KisakCOD][CINEMATIC]",
-        "[SWITCH IMAGEFAIL]",
-        "Switch PMem alloc begin:",
-        "Switch PMem alloc end:",
-        "Trying to load file ",
-        "Couldn't play stream '"
-    };
-    // The texture investigation uses bounded probes already present in the
-    // image/material/Vulkan code. Let only those explicit records bypass the
-    // broad diagnostic filters above; leave all other high-volume traces hidden.
-    static constexpr const char *const kTextureTracePrefixes[] =
-    {
-        "[KisakCOD][DELAY IMAGE]",
-        "[KisakCOD][MATERIAL IMAGE FIXUP]",
-        "[KisakCOD][WORLD SAMPLER]",
-        "[KisakCOD][VK IMAGE UPLOAD PROBE]",
-        "[KisakCOD][VK IMAGE GPU VERIFY]",
-        "[KisakCOD][VK SAMPLER MAP]",
-        "[KisakCOD][VK LIGHTMAP DESCRIPTORS]",
-        "[KisakCOD][VK PS SAMPLERS]"
-    };
-    bool keepTextureTrace = false;
-    for (const char *prefix : kTextureTracePrefixes)
-    {
-        const size_t prefixLength = std::strlen(prefix);
-        if (std::strncmp(msg, prefix, prefixLength) == 0)
-        {
-            keepTextureTrace = true;
-            break;
-        }
-    }
-
-    if (!keepTextureTrace)
-    {
-        for (const char *prefix : kSuppressedPrefixes)
-        {
-            const size_t len = std::strlen(prefix);
-            if (std::strncmp(msg, prefix, len) == 0)
-                return;
-        }
-    }
-
+    const bool isKisakDiag =
+        std::strncmp(msg, "[KisakCOD]", 10) == 0;
     const bool isSwitchDiag =
         std::strncmp(msg, "[SWITCH ", 8) == 0;
 
-    if (isSwitchDiag && !Switch_LogPrefixAllowed(msg))
+    // Preserve ordinary engine output verbatim. Kisak's detailed probes are
+    // filtered centrally so new instrumentation cannot silently flood SD logs.
+    if (isKisakDiag && !Switch_LogKeepKisakDiagnostic(msg))
+        return;
+
+    // Keep Switch-specific diagnostics only when they identify a real anomaly
+    // or a severity-level failure. This also preserves new error prefixes
+    // without requiring every new diagnostic to be added to a static allowlist.
+    if (isSwitchDiag &&
+        !Switch_LogPrefixAllowed(msg) &&
+        !Switch_LogIsImportant(msg))
         return;
 
     const size_t len = std::strlen(msg);
