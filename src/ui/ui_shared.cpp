@@ -9413,7 +9413,10 @@ void __cdecl Menu_PaintAll(UiContext *dc)
         const bool isOptionsMenu =
             std::strncmp(foregroundName, "options_", 8) == 0 ||
             !I_stricmp(foregroundName, "options");
+        const bool isMainMenu =
+            !I_stricmp(foregroundName, "main");
         const bool needsMainMenuBackdrop =
+            isMainMenu ||
             isOptionsMenu ||
             !I_stricmp(foregroundName, "player_profile") ||
             !I_stricmp(foregroundName, "levels") ||
@@ -9467,7 +9470,87 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                 backdropMenu->items &&
                 backdropMenu->itemCount > 0)
             {
-                for (int backgroundIndex = 0;
+                if (isMainMenu &&
+                    backdropMenu->itemCount <= 4096 &&
+                    !Switch_UI_BadPointer(backdropMenu->items))
+                {
+                    // The fullscreen main menu may sit above main_text in the
+                    // menu stack. Menu_PaintAll then skips main_text entirely,
+                    // even though it owns both the animated backdrop and the
+                    // frontend's visible controls. Paint that complete authored
+                    // menu once behind "main", temporarily enabling its normal
+                    // visibility bits and restoring every bit immediately after.
+                    const uint32_t localClient =
+                        static_cast<uint32_t>(dc->localClientNum);
+                    const uint32_t originalWindowFlags =
+                        backdropMenu->window.dynamicFlags[localClient];
+                    const uint32_t originalStaticFlags =
+                        backdropMenu->window.staticFlags;
+                    const uint32_t originalOwnerDrawFlags =
+                        backdropMenu->window.ownerDrawFlags;
+                    const int originalVisibleExpEntries =
+                        backdropMenu->visibleExp.numEntries;
+                    uint8_t originalItemVisible[4096];
+
+                    backdropMenu->window.dynamicFlags[localClient] =
+                        originalWindowFlags | 4u;
+                    backdropMenu->window.staticFlags &=
+                        ~(0x20000000u | 0x10000000u | 0x40000000u);
+                    backdropMenu->window.ownerDrawFlags = 0;
+                    backdropMenu->visibleExp.numEntries = 0;
+
+                    for (int itemIndex = 0;
+                         itemIndex < backdropMenu->itemCount;
+                         ++itemIndex)
+                    {
+                        itemDef_s *item = backdropMenu->items[itemIndex];
+                        originalItemVisible[itemIndex] = 0;
+                        if (!item || Switch_UI_BadPointer(item))
+                            continue;
+                        originalItemVisible[itemIndex] =
+                            (item->window.dynamicFlags[localClient] & 4u)
+                                ? 1u : 0u;
+                        item->window.dynamicFlags[localClient] |= 4u;
+                    }
+
+                    const bool mainTextPainted = Menu_Paint(dc, backdropMenu) != 0;
+
+                    for (int itemIndex = 0;
+                         itemIndex < backdropMenu->itemCount;
+                         ++itemIndex)
+                    {
+                        itemDef_s *item = backdropMenu->items[itemIndex];
+                        if (!item || Switch_UI_BadPointer(item))
+                            continue;
+                        if (originalItemVisible[itemIndex])
+                            item->window.dynamicFlags[localClient] |= 4u;
+                        else
+                            item->window.dynamicFlags[localClient] &= ~4u;
+                    }
+                    backdropMenu->window.dynamicFlags[localClient] =
+                        (backdropMenu->window.dynamicFlags[localClient] & ~4u) |
+                        (originalWindowFlags & 4u);
+                    backdropMenu->window.staticFlags = originalStaticFlags;
+                    backdropMenu->window.ownerDrawFlags = originalOwnerDrawFlags;
+                    backdropMenu->visibleExp.numEntries = originalVisibleExpEntries;
+
+                    static bool loggedMainTextFallback = false;
+                    if (!loggedMainTextFallback)
+                    {
+                        char trace[320];
+                        std::snprintf(
+                            trace,
+                            sizeof(trace),
+                            "[KisakCOD][UI MAIN BACKDROP] stack=%d drawStart=%d items=%d painted=%u action=paint_main_text_before_fullscreen_main\n",
+                            dc->openMenuCount,
+                            drawStart,
+                            backdropMenu->itemCount,
+                            mainTextPainted ? 1u : 0u);
+                        Switch_LogWrite(trace);
+                        loggedMainTextFallback = true;
+                    }
+                }
+                else for (int backgroundIndex = 0;
                      backgroundIndex < backdropMenu->itemCount;
                      ++backgroundIndex)
                 {
