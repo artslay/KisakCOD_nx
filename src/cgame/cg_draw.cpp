@@ -1246,6 +1246,9 @@ void __cdecl CG_Draw2D(int localClientNum)
             //Profile_Begin(349);
             CG_DrawDebugOverlays(localClientNum);
             //Profile_EndInternal(0);
+#ifndef __SWITCH__
+            CG_DrawUpperRightDebugInfo(localClientNum);
+#endif
             if (!cgArray[0].showScores && cg_minicon->current.enabled)
                 Con_DrawMiniConsole(0, 2, 4, 1.0);
             Con_DrawErrors(0, 2, 300, 1.0);
