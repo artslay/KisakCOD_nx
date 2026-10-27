@@ -460,6 +460,20 @@ snd_alias_t *__cdecl Com_PickSoundAlias(const char *aliasname)
 #endif
     aliasList = Com_FindSoundAlias(aliasname);
 #ifdef __SWITCH__
+    // Some Switch fastfile sound references can resolve to an empty registry
+    // entry before their usable alias definition is available. Prefer a real
+    // loaded alias-list definition when the fastfile result is missing/empty;
+    // never substitute another empty list or suppress a genuinely missing alias.
+    if ((!aliasList || aliasList->count <= 0) &&
+        g_sa.hash && g_sa.hashSize &&
+        (g_sa.initialized[0] || g_sa.initialized[1] || g_sa.initialized[2]))
+    {
+        snd_alias_list_t *loadedAliasList =
+            Com_FindSoundAliasNoErrors_LoadObj(aliasname);
+        if (loadedAliasList && loadedAliasList->head &&
+            loadedAliasList->count > 0)
+            aliasList = loadedAliasList;
+    }
     if (aliasList && aliasList->count == 0)
     {
         // Sound-not-loaded warnings are caused by a registered alias list with
