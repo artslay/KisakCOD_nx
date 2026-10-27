@@ -660,28 +660,6 @@ void __cdecl ClientThink_real(gentity_s *ent)
     v9 = (float)(client->ps.aimSpreadScale * (float)0.0039215689);
     client->ps.gravity = static_cast<int>(floor(static_cast<double>(g_gravity->current.value + 0.5f)));
     integer = g_speed->current.integer;
-#ifdef __SWITCH__
-    // A zero g_speed leaves valid controller movement commands inert in
-    // PM_CmdScale. Preserve the engine's configured reset speed, with the
-    // stock SP default as a final fallback, when Switch config leaves it zero.
-    if (integer <= 0)
-    {
-        const int invalidSpeed = integer;
-        const int resetSpeed = g_speed->reset.integer;
-        integer = resetSpeed > 0 ? resetSpeed : 190;
-        Dvar_SetInt(const_cast<dvar_t *>(g_speed), integer);
-
-        static bool switchMoveSpeedRecovered = false;
-        if (!switchMoveSpeedRecovered)
-        {
-            Com_Printf(
-                CON_CHANNEL_SERVER,
-                "[KisakCOD][MOVE SPEED RECOVER] invalid=%d reset=%d applied=%d reason=nonpositive_g_speed\n",
-                invalidSpeed, resetSpeed, integer);
-            switchMoveSpeedRecovered = true;
-        }
-    }
-#endif
     client->currentAimSpreadScale = v9;
     client->ps.speed = integer;
     memset(&v39, 0, sizeof(v39));
