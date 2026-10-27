@@ -390,10 +390,43 @@ static bool Switch_GetStringAllocation(
     const size_t available = allocationBytes - stringOffset;
     if (refString)
         *refString = ref;
-    // byteLen stores the low 8 bits of the total byte count, including
-    // the terminating NUL. Script strings can contain embedded NUL bytes, so
-    // the terminator must be found at the matching 8-bit length offset, not
-    // by stopping at the first NUL in the payload.
+    if (allocationType)
+        *allocationType = type;
+    if (allocationSize)
+        *allocationSize = size;
+
+    // XAnimToXModel bone maps are opaque fixed-size binary keys in the string
+    // hash table. MT_TYPE_MODEL_PART_MAP is not NUL-terminated: byte 16 stores
+    // boneCount, so the key length is boneCount + 17.
+    if (type == MT_TYPE_MODEL_PART_MAP)
+    {
+        if (available < 17u)
+        {
+            if (failureReason)
+                *failureReason = "model_part_map_allocation_too_small";
+            Switch_ReportStaleStringHandle(origin, handle, type, size, caller);
+            return false;
+        }
+
+        const uint32_t binaryLength =
+            static_cast<uint32_t>(static_cast<uint8_t>(ref->str[16])) + 17u;
+        if (binaryLength > available ||
+            static_cast<uint8_t>(binaryLength) != ref->byteLen)
+        {
+            if (failureReason)
+                *failureReason = "invalid_model_part_map_length";
+            Switch_ReportStringAllocationFault(
+                origin, handle, type, size, ref, caller);
+            return false;
+        }
+        if (storedLength)
+            *storedLength = binaryLength;
+        return true;
+    }
+
+    // byteLen stores the low 8 bits of the total byte count, including the
+    // terminating NUL. Script strings can contain embedded NUL bytes, so
+    // locate the terminator at the matching 8-bit length offset.
     int terminatorOffset = static_cast<uint8_t>(ref->byteLen - 1u);
     while (static_cast<size_t>(terminatorOffset) < available &&
            ref->str[terminatorOffset] != '\0')
@@ -412,12 +445,6 @@ static bool Switch_GetStringAllocation(
     }
 
     const uint32_t length = static_cast<uint32_t>(terminatorOffset) + 1u;
-    if (refString)
-        *refString = ref;
-    if (allocationType)
-        *allocationType = type;
-    if (allocationSize)
-        *allocationSize = size;
     if (storedLength)
         *storedLength = length;
     return true;
