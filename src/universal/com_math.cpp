@@ -202,7 +202,17 @@ void __cdecl TRACK_com_math()
 
 float __cdecl random()
 {
+#ifdef __SWITCH__
+    // The original scaling assumes MSVC rand() returns 0..32767.
+    // devkitA64/newlib uses RAND_MAX == 0x7fffffff, so /32768 produces
+    // values up to 65536 and makes weapon yaw/pitch recoil slam sideways.
+    const double value = static_cast<double>(rand()) /
+        (static_cast<double>(RAND_MAX) + 1.0);
+    const float result = static_cast<float>(value);
+    return result < 1.0f ? result : (32767.0f / 32768.0f);
+#else
     return (rand() / 32768.0);
+#endif
 }
 
 float __cdecl crandom()
