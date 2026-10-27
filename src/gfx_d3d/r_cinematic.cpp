@@ -22,7 +22,8 @@ extern void Switch_LogWrite(const char *msg);
 extern void COM_NotifyIntroMovieDrawSubmitted(const char *movieName);
 extern thread_local const char * volatile g_switchFrameStage;
 extern void COM_NotifyIntroMoviePlaybackFinished(const char *movieName);
-extern void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieFrame, uint32_t movieFrames);
+extern bool Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieFrame, uint32_t movieFrames);
+extern "C" void Switch_BinkNotifyVideoFrameUploaded(HBINK bink);
 extern void Switch_ResetPendingBinkUpload();
 #endif
 
@@ -1127,10 +1128,16 @@ void R_Cinematic_UpdateRendererImages()
 #ifdef __SWITCH__
     // Bink decodes CPU planes on its worker, but Vulkan image uploads and
     // layout transitions must be serialized with renderer work.
-    Switch_UploadPendingBinkFrame(
+    const bool switchVideoFrameUploaded = Switch_UploadPendingBinkFrame(
         &cinematicGlob.binkTextureSet,
         cinematicGlob.bink ? static_cast<uint32_t>(cinematicGlob.bink->FrameNum) : 0u,
         cinematicGlob.bink ? static_cast<uint32_t>(cinematicGlob.bink->Frames) : 0u);
+    if (switchVideoFrameUploaded &&
+        cinematicGlob.bink &&
+        cinematicGlob.activeImageFrame != CINEMATIC_INVALID_IMAGE_FRAME)
+    {
+        Switch_BinkNotifyVideoFrameUploaded(cinematicGlob.bink);
+    }
 #endif
     if (cinematicGlob.activeImageFrame == -1)
     {
