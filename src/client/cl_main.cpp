@@ -1474,7 +1474,7 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
         snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CIN SKIP FLOW] state=%d->%d nextCommand=%d queued=%d frontendPending=%d\\n",
+            "[KisakCOD][CIN SKIP FLOW] state=%d->%d nextCommand=%d queued=%d frontendPending=%d\n",
             static_cast<int>(connectionState),
             static_cast<int>(clientUIActives[localClientNum].connectionState),
             hasNextCommand ? 1 : 0,
