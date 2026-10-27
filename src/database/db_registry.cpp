@@ -2281,6 +2281,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
     const char *XAssetName; // eax
     uint32_t assetEntryIndex; // [esp+4h] [ebp-8h]
     XAssetEntryPoolEntry *assetEntry; // [esp+8h] [ebp-4h]
+    XAssetEntryPoolEntry *defaultMatch = nullptr;
 
 #ifdef __SWITCH__
     const bool traceRawFileRegistry = type == ASSET_TYPE_RAWFILE;
@@ -2334,7 +2335,16 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
             if (traceRawFileRegistry)
                 g_switchDbStage = "rawfile/registry/compare_done";
             if (nameCompare == 0)
-                return &g_assetEntryPool[assetEntryIndex];
+            {
+                // A default placeholder can share a hash-chain with a real
+                // asset after late zone registration. Prefer the real zone
+                // entry regardless of chain position, retaining the default
+                // only when no loaded asset with the requested name exists.
+                if (assetEntry->entry.zoneIndex != 0)
+                    return &g_assetEntryPool[assetEntryIndex];
+                if (!defaultMatch)
+                    defaultMatch = &g_assetEntryPool[assetEntryIndex];
+            }
 #else
             if (!I_stricmp(XAssetName, name))
                 return &g_assetEntryPool[assetEntryIndex];
@@ -2401,7 +2411,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         }
     }
 #endif
-    return 0;
+    return defaultMatch;
 }
 
 
