@@ -1340,6 +1340,7 @@ void __cdecl Cmd_Exec_f()
     }
 }
 
+#ifdef __SWITCH__
 static bool Cmd_ShouldLogExec(const char *filename)
 {
     if (!filename)
@@ -1357,6 +1358,8 @@ static bool Cmd_ShouldLogExec(const char *filename)
     return Dvar_GetInt("developer") != 0;
 }
 
+#endif
+
 char __cdecl Cmd_ExecFromDisk(int32_t  localClientNum, int32_t  controllerIndex, const char *filename)
 {
     char *text; // [esp+0h] [ebp-4h] BYREF
@@ -1364,7 +1367,9 @@ char __cdecl Cmd_ExecFromDisk(int32_t  localClientNum, int32_t  controllerIndex,
     FS_ReadFile(filename, (void **)&text);
     if (!text)
         return 0;
+#ifdef __SWITCH__
     if (Cmd_ShouldLogExec(filename))
+#endif
         Com_Printf(CON_CHANNEL_SYSTEM, "execing %s from disk\n", filename);
     Cbuf_ExecuteBuffer(localClientNum, controllerIndex, text);
     FS_FreeFile(text);
@@ -1386,7 +1391,9 @@ char __cdecl Cmd_ExecFromFastFile(int32_t  localClientNum, int32_t  controllerIn
     rawfile = DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, filename).rawfile;
     if (!rawfile)
         return 0;
+#ifdef __SWITCH__
     if (Cmd_ShouldLogExec(filename))
+#endif
         Com_Printf(CON_CHANNEL_SYSTEM, "execing %s from fastfile\n", filename);
     Cbuf_ExecuteBuffer(localClientNum, controllerIndex, (char *)rawfile->buffer);
     return 1;
