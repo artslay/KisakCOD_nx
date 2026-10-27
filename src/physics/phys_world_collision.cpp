@@ -442,7 +442,9 @@ static int dCollideWorldGeom(dxGeom *o1, dxGeom *o2, int flags, dContactGeomExt 
     iassert(dGeomGetClass(o1) == GEOM_CLASS_WORLD);
 
     Body = dGeomGetBody(o2);
-    Position = dBodyGetPosition(Body);
+    // Static geoms may live in a collision space without a dxBody. Use their
+    // own transform as the center reference instead of dereferencing a null body.
+    Position = Body ? dBodyGetPosition(Body) : dGeomGetPosition(o2);
     input.bodyCenter[0] = *Position;
     input.bodyCenter[1] = Position[1];
     input.bodyCenter[2] = Position[2];
