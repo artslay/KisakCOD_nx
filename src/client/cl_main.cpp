@@ -34,6 +34,9 @@
 extern bool cin_skippable;
 
 #ifdef __SWITCH__
+#include <atomic>
+#include <cstdint>
+extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern void CL_BlockCinematicSkipUntilRelease();
 extern void CL_PrepareCinematicSkipInput(int localClientNum);
 extern void SCR_SetMapLoadingCinematicActive(bool active);
@@ -1399,6 +1402,82 @@ void __cdecl CL_PlayLogo_f()
     cls.logo.startTime = cls.realtime + 100;
 }
 
+#ifdef __SWITCH__
+static void CL_LogSwitchCinematicSkipTrace(
+    const char *event,
+    int localClientNum,
+    connstate_t entryState,
+    const char *nextCommand)
+{
+    const uint64_t frame = g_switchScreenFrameSequence.load(std::memory_order_relaxed);
+    const int currentState = static_cast<int>(clientUIActives[localClientNum].connectionState);
+    const int activeMenu = UI_GetActiveMenu(localClientNum);
+    const int fullscreen = UI_IsFullscreen() ? 1 : 0;
+    const int uiCatcher = Key_IsCatcherActive(localClientNum, KEYCATCH_UI) ? 1 : 0;
+    const int menuCount = uiInfo.uiDC.openMenuCount;
+    const int binkFrame = cinematicGlob.bink ? static_cast<int>(cinematicGlob.bink->FrameNum) : -1;
+    const int binkFrames = cinematicGlob.bink ? static_cast<int>(cinematicGlob.bink->Frames) : 0;
+
+    char stack[384]{};
+    size_t used = 0;
+    const int first = menuCount > 3 ? menuCount - 3 : 0;
+    for (int i = first; i < menuCount && used + 1 < sizeof(stack); ++i)
+    {
+        const menuDef_t *menu = uiInfo.uiDC.menuStack[i];
+        if (!menu)
+            continue;
+        const char *name = menu->window.name ? menu->window.name : "(unnamed)";
+        const int written = std::snprintf(
+            stack + used,
+            sizeof(stack) - used,
+            "%s%d:%s{fs=%u,dyn=%08x,items=%d}",
+            used ? " | " : "",
+            i,
+            name,
+            menu->fullScreen ? 1u : 0u,
+            static_cast<unsigned>(menu->window.dynamicFlags[localClientNum]),
+            menu->itemCount);
+        if (written <= 0)
+            break;
+        used += static_cast<size_t>(written) < sizeof(stack) - used
+            ? static_cast<size_t>(written) : sizeof(stack) - used - 1;
+    }
+    if (!stack[0])
+        std::snprintf(stack, sizeof(stack), "(empty)");
+
+    char trace[1280];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][CIN SKIP DETAIL] frame=%llu event=%s entryConn=%d conn=%d nextmap=%.*s cinSkippable=%d cineStarted=%d cineFinished=%d cinePending=%d cineNextReady=%d cineUnderrun=%d current=%s target=%s next=%s image=%d bink=%p binkFrame=%d/%d menu=%d fullscreen=%d uiCatch=%d openMenus=%d stack=[%s]\n",
+        static_cast<unsigned long long>(frame),
+        event ? event : "(unknown)",
+        static_cast<int>(entryState),
+        currentState,
+        96,
+        nextCommand ? nextCommand : "",
+        cin_skippable ? 1 : 0,
+        R_Cinematic_IsStarted() ? 1 : 0,
+        R_Cinematic_IsFinished() ? 1 : 0,
+        R_Cinematic_IsPending() ? 1 : 0,
+        R_Cinematic_IsNextReady() ? 1 : 0,
+        R_Cinematic_IsUnderrun() ? 1 : 0,
+        cinematicGlob.currentCinematicName[0] ? cinematicGlob.currentCinematicName : "(none)",
+        cinematicGlob.targetCinematicName[0] ? cinematicGlob.targetCinematicName : "(none)",
+        cinematicGlob.nextCinematicName[0] ? cinematicGlob.nextCinematicName : "(none)",
+        cinematicGlob.activeImageFrame,
+        static_cast<void *>(cinematicGlob.bink),
+        binkFrame,
+        binkFrames,
+        activeMenu,
+        fullscreen,
+        uiCatcher,
+        menuCount,
+        stack);
+    Switch_LogWrite(trace);
+}
+#endif
+
 void __cdecl CL_StopLogoOrCinematic(int localClientNum)
 {
     connstate_t connectionState; // r30
@@ -1417,6 +1496,7 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
 #ifdef __SWITCH__
     const bool hasQueuedNextPlayback =
         connectionState == CA_CINEMATIC && R_Cinematic_IsNextReady();
+    CL_LogSwitchCinematicSkipTrace("entry", localClientNum, connectionState, nextCommand);
 #endif
 
     // An Escape/controller event must not tear down UI or audio for an
@@ -1426,6 +1506,9 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
         !cin_skippable &&
         !R_Cinematic_IsFinished())
     {
+#ifdef __SWITCH__
+        CL_LogSwitchCinematicSkipTrace("skip_rejected_unskippable", localClientNum, connectionState, nextCommand);
+#endif
         return;
     }
 
@@ -1436,8 +1519,12 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
         // chained command or an internally queued cinematic.
         if (hasNextCommand || hasQueuedNextPlayback)
             CL_BlockCinematicSkipUntilRelease();
+        CL_LogSwitchCinematicSkipTrace("before_scr_stop_cinematic", localClientNum, connectionState, nextCommand);
 #endif
         SCR_StopCinematic(localClientNum);
+#ifdef __SWITCH__
+        CL_LogSwitchCinematicSkipTrace("after_scr_stop_cinematic", localClientNum, connectionState, nextCommand);
+#endif
     }
     else
     {
@@ -1450,7 +1537,13 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
                 "clcState == CA_CINEMATIC || clcState == CA_LOGO");
         CL_StopLogo(localClientNum);
     }
+#ifdef __SWITCH__
+    CL_LogSwitchCinematicSkipTrace("before_stop_all_sounds", localClientNum, connectionState, nextCommand);
+#endif
     SND_StopSounds(SND_STOP_ALL);
+#ifdef __SWITCH__
+    CL_LogSwitchCinematicSkipTrace("after_stop_all_sounds", localClientNum, connectionState, nextCommand);
+#endif
 
     // Match the original engine: choose the immediate UI transition from
     // the connection state on entry. A cinematic skip must close the UI here;
@@ -1460,13 +1553,23 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
 #ifdef __SWITCH__
     // Clear the Switch loading guard before UIMENU_NONE clears UI state.
     CL_SetSkipRendering(false);
+    CL_LogSwitchCinematicSkipTrace("skip_rendering_cleared", localClientNum, connectionState, nextCommand);
+    CL_LogSwitchCinematicSkipTrace(
+        connectionState == CA_DISCONNECTED ? "before_set_active_main" : "before_set_active_none",
+        localClientNum,
+        connectionState,
+        nextCommand);
 #endif
     UI_SetActiveMenu(
         localClientNum,
         connectionState == CA_DISCONNECTED ? UIMENU_MAIN : UIMENU_NONE);
+#ifdef __SWITCH__
+    CL_LogSwitchCinematicSkipTrace("after_ui_set_active_menu", localClientNum, connectionState, nextCommand);
+#endif
 
 #ifdef __SWITCH__
     {
+        CL_LogSwitchCinematicSkipTrace("summary", localClientNum, connectionState, nextCommand);
         const bool frontendPending =
             clientUIActives[localClientNum].connectionState == CA_DISCONNECTED &&
             !hasNextCommand;
