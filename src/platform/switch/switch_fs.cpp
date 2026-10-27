@@ -234,7 +234,8 @@ static void Switch_IndexIwdArchive(const char *archivePath)
         positionReadFailures,
         iwiEntryCount,
         firstIwi[0] ? firstIwi : "<none>");
-    Switch_LogWrite(trace);
+    if (nameReadFailures || positionReadFailures)
+        Switch_LogWrite(trace);
 }
 
 static std::string Switch_GetStartupLanguage(const char *game)
