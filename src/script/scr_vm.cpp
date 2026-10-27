@@ -5020,7 +5020,7 @@ char __cdecl Scr_PrintProfileBuiltinTimes(float minTime)
         return 0;
     }
 
-    int *order = static_cast<int *>(Z_VirtualAlloc(
+    int *order = reinterpret_cast<int *>(Z_VirtualAlloc(
         sizeof(*order) * static_cast<size_t>(functionCount),
         "Scr_PrintProfileBuiltinTimes",
         0));
