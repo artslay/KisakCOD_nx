@@ -12,6 +12,7 @@
 #include <cerrno>
 #include <string>
 #include <cstring>
+#include <cctype>
 #include <cstdarg>
 #include <qcommon/qcommon.h>
 #include <qcommon/threads.h>
