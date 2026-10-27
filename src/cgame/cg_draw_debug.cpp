@@ -165,11 +165,33 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
     fps = SnapFloatToInt(32000.0f / total);
 #ifdef __SWITCH__
     // Keep Switch on the numeric counter even if an archived/devgui config
-    // changes cg_drawFPS to Extra or Verbose. Those modes place the "FPS"
-    // label over the value when the debug-font scale is zero on this port.
+    // changes cg_drawFPS to Extra or Verbose.
     s = va("%i FPS", fps);
-    return (float)(y + (float)CG_DrawDevString(
-        scrPlace, farRight, y, 0.75f, 0.75f, s, colorWhite, 6, cgMedia.smallDevFont) * 0.75f);
+
+    // CG_DrawDevString multiplies its scale by cg_small_dev_string_fontscale
+    // in SP. If that dvar is zero, the forced Switch FPS counter is also
+    // rendered at zero size. Preserve configured scaling when positive, but
+    // use a visible default for this counter when it is zero.
+    const float configuredFontScale = cg_small_dev_string_fontscale->current.value;
+    const float fpsFontScale = configuredFontScale > 0.0f
+        ? configuredFontScale * 0.75f
+        : 0.75f;
+    const float textWidth = static_cast<float>(R_TextWidth(s, 0, cgMedia.smallDevFont));
+    const float textHeight = static_cast<float>(R_TextHeight(cgMedia.smallDevFont));
+    CL_DrawText(
+        scrPlace,
+        s,
+        0x7FFFFFFF,
+        cgMedia.smallDevFont,
+        farRight - textWidth * fpsFontScale,
+        y + textHeight * fpsFontScale,
+        1.0f,
+        1.0f,
+        fpsFontScale,
+        fpsFontScale,
+        colorWhite,
+        0);
+    return y + static_cast<float>(static_cast<int>(textHeight * fpsFontScale)) * 0.75f;
 #else
     if (cg_drawFPS->current.integer == 1)
     {
