@@ -6975,8 +6975,28 @@ bool IDirect3DDevice9::BindSamplerSet(
             !samplerTypeMatchesTexture(texture, activeSamplers[i]))
         {
 #ifdef __SWITCH__
-            
-            
+            static std::atomic<uint32_t> mismatchTraceCount{0};
+            const uint32_t mismatchTrace = mismatchTraceCount.fetch_add(1, std::memory_order_relaxed);
+            if (mismatchTrace < 64u)
+            {
+                char trace[448];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][VK SAMPLER FALLBACK] stage=%s shader=%llu sampler=%s slot=%u reason=type_mismatch expectedType=%u actualViewType=%u image=%.96s texture=%p size=%ux%u format=%u mip0=%u\n",
+                    setIndex == 0 ? "vs" : "ps",
+                    static_cast<unsigned long long>(activeShader ? activeShader->serial : 0u),
+                    activeSamplers[i]->name ? activeSamplers[i]->name : "<unnamed>",
+                    i,
+                    static_cast<unsigned>(activeSamplers[i]->type),
+                    static_cast<unsigned>(texture->viewType),
+                    texture->sourceImage && texture->sourceImage->name
+                        ? texture->sourceImage->name : texture->debugName,
+                    static_cast<void *>(texture),
+                    texture->width, texture->height,
+                    static_cast<unsigned>(texture->sourceFormat),
+                    static_cast<unsigned>(texture->GetSubresourceLayout(0, 0)));
+                Switch_LogWrite(trace);
+            }
 #endif
             images[i].imageView = m_backend->DummyImageViewForSamplerType(
                 static_cast<uint32_t>(activeSamplers[i]->type));
@@ -6985,6 +7005,25 @@ bool IDirect3DDevice9::BindSamplerSet(
         }
         else if (!activeSamplers[i] || !texture)
         {
+#ifdef __SWITCH__
+            if (activeSamplers[i] && !texture)
+            {
+                static std::atomic<uint32_t> unboundTraceCount{0};
+                const uint32_t unboundTrace = unboundTraceCount.fetch_add(1, std::memory_order_relaxed);
+                if (unboundTrace < 64u)
+                {
+                    char trace[320];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][VK SAMPLER FALLBACK] stage=%s shader=%llu sampler=%s slot=%u reason=active_texture_unbound\n",
+                        setIndex == 0 ? "vs" : "ps",
+                        static_cast<unsigned long long>(activeShader ? activeShader->serial : 0u),
+                        activeSamplers[i]->name ? activeSamplers[i]->name : "<unnamed>",
+                        i);
+                    Switch_LogWrite(trace);
+                }
+            }
+#endif
             // Inactive stages can use the ordinary 2D view because they are not
             // referenced by this shader. An active but unbound stage must use a
             // dummy view whose dimensionality matches the SPIR-V sampler type.
@@ -7135,6 +7174,44 @@ bool IDirect3DDevice9::BindSamplerSet(
             }
         }
 
+#ifdef __SWITCH__
+        if (setIndex == 2u && activeSamplers[i] && texture &&
+            (images[i].imageView == texture->view ||
+             (texture->baseMipView && images[i].imageView == texture->baseMipView)))
+        {
+            static std::unordered_set<uint64_t> tracedBoundSamplerKeys;
+            if (tracedBoundSamplerKeys.size() < 320u)
+            {
+                uint64_t traceKey =
+                    (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(texture)) >> 4) ^
+                    (static_cast<uint64_t>(activeShader ? activeShader->serial : 0u) *
+                     0x9e3779b97f4a7c15ull) ^
+                    (static_cast<uint64_t>(i) << 48);
+                traceKey ^= static_cast<uint64_t>(setIndex) << 60;
+                if (tracedBoundSamplerKeys.insert(traceKey).second)
+                {
+                    char trace[512];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][VK SAMPLER BOUND] shader=%llu sampler=%s slot=%u image=%.96s texture=%p view=%p size=%ux%u sourceFormat=%u viewType=%u mip0=%u mipLevels=%u viewRange=%s\n",
+                        static_cast<unsigned long long>(activeShader ? activeShader->serial : 0u),
+                        activeSamplers[i]->name ? activeSamplers[i]->name : "<unnamed>",
+                        i,
+                        texture->sourceImage && texture->sourceImage->name
+                            ? texture->sourceImage->name : texture->debugName,
+                        static_cast<void *>(texture),
+                        static_cast<void *>(images[i].imageView),
+                        texture->width, texture->height,
+                        static_cast<unsigned>(texture->sourceFormat),
+                        static_cast<unsigned>(texture->viewType),
+                        static_cast<unsigned>(texture->GetSubresourceLayout(0, 0)),
+                        texture->mipLevels,
+                        images[i].imageView == texture->view ? "full" : "base_mip");
+                    Switch_LogWrite(trace);
+                }
+            }
+        }
+#endif
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[i].dstSet = set;
         writes[i].dstBinding = i;
