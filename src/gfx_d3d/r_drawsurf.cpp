@@ -1,5 +1,8 @@
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
+#ifdef __SWITCH__
+#include <qcommon/com_pack.h>
+#endif
 
 #include "r_buffers.h"
 
@@ -171,6 +174,21 @@ void R_EndMeshVerts(GfxMeshData* mesh)
 
 void R_EndCodeMeshVerts()
 {
+#ifdef __SWITCH__
+    // FX sprite/tail vertices (including rain) are generated in CoD4's custom
+    // PackedTexCoords format. This code mesh is a directly locked 32-byte GPU
+    // buffer, so it bypasses R_SetVertexData and must convert UVs before unlock.
+    GfxMeshData *mesh = &frontEndDataOut->codeMesh;
+    if (mesh->vb.verts && mesh->vertSize == sizeof(GfxPackedVertex) &&
+        mesh->vb.used % mesh->vertSize == 0)
+    {
+        auto *vertices = reinterpret_cast<GfxPackedVertex *>(mesh->vb.verts);
+        const uint32_t vertexCount = mesh->vb.used / mesh->vertSize;
+        for (uint32_t vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex)
+            vertices[vertexIndex].texCoord =
+                Vec2ConvertTexCoordsForVulkan(vertices[vertexIndex].texCoord);
+    }
+#endif
     g_processCodeMesh = 0;
     R_EndMeshVerts(&frontEndDataOut->codeMesh);
 }
