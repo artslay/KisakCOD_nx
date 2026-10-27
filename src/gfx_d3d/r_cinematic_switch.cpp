@@ -149,10 +149,10 @@ void Unlock_Bink_textures(
     }
 }
 
-void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieFrame, uint32_t movieFrames)
+bool Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieFrame, uint32_t movieFrames)
 {
     if (!set_textures)
-        return;
+        return false;
 
     int frameIndex = -1;
     {
@@ -165,11 +165,11 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
         }
     }
     if (frameIndex < 0)
-        return;
+        return false;
 
     const BINKFRAMEBUFFERS &buffers = set_textures->bink_buffers;
     if (frameIndex >= buffers.TotalFrames)
-        return;
+        return false;
 
     const BINKFRAMETEXTURES &frameTextures = set_textures->textures[frameIndex];
     BINKFRAMETEXTURES &draw = set_textures->tex_draw;
@@ -224,6 +224,7 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
                 buffers.Frames[frameIndex].APlane.Allocate ? 1 : 0);
             Switch_LogWrite(trace);
         }
+        return false;
     }
 
     VulkanBackend *backend = GetVulkanBackend();
@@ -231,7 +232,7 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
     {
         LogBinkUploadFailure("Vulkan backend unavailable", draw.Ytexture,
             buffers.YABufferWidth, buffers.YABufferHeight, VK_IMAGE_LAYOUT_UNDEFINED);
-        return;
+        return false;
     }
 
     VulkanImageUpload2D uploads[4]{};
@@ -273,8 +274,8 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
     queuePlane(draw.cBtexture, srcCb, buffers.cRcBBufferWidth, buffers.cRcBBufferHeight);
     queuePlane(draw.Atexture, srcA, buffers.YABufferWidth, buffers.YABufferHeight);
 
-    if (uploadCount == 0)
-        return;
+    if (uploadCount < 3)
+        return false;
 
     // Stage and submit all available planes as one unit. UploadImage2D performs
     // a fence wait for every call; doing that four times per decoded frame made
@@ -283,7 +284,7 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
     {
         LogBinkUploadFailure("batched UploadImages2D returned false",
             uploadedTextures[0], uploads[0].width, uploads[0].height, uploads[0].oldLayout);
-        return;
+        return false;
     }
 
     for (uint32_t i = 0; i < uploadCount; ++i)
@@ -296,6 +297,8 @@ void Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieF
             0, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         uploadedTextures[i]->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
+
+    return true;
 
 }
 
