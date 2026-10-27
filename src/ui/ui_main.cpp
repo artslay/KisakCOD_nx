@@ -596,7 +596,6 @@ Font_s *__cdecl UI_GetFontHandle(const ScreenPlacement *scrPlace, int fontEnum, 
 
 void UI_UpdateSaveUI()
 {
-    int v0; // r3
     int v1; // r3
     int v2; // [sp+50h] [-20h]
 
