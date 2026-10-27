@@ -54,7 +54,7 @@ static void Switch_LogCinematicState(
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][CIN STATE] frame=%llu event=%s requested=%s requestedFlags=%u current=%s target=%s next=%s currentBink=%p targetChanged=%u finished=%u started=%u playbackStarted=%u playbackFlags=%u activeImage=%d activeTextureSet=%d imageTextureSet=%d binkFrame=%d/%d timeMs=%u paused=%d targetPaused=%d underrun=%u hasFileIO=%u threadState=%d\\n",
+        "[KisakCOD][CIN STATE] frame=%llu event=%s requested=%s requestedFlags=%u current=%s target=%s next=%s currentBink=%p targetChanged=%u finished=%u started=%u playbackStarted=%u playbackFlags=%u activeImage=%d activeTextureSet=%d imageTextureSet=%d binkFrame=%d/%d timeMs=%u paused=%d targetPaused=%d underrun=%u hasFileIO=%u threadState=%d\n",
         static_cast<unsigned long long>(screenFrame),
         event ? event : "(unknown)",
         requestedName && requestedName[0] ? requestedName : "(none)",
