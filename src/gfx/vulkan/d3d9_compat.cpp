@@ -1221,7 +1221,7 @@ uint8_t SwitchEffectiveShaderElementType(
     // is not homogeneous W. Expose XYZ only, so Vulkan supplies W=1 instead of
     // interpreting binormalSign (often -1) as position.w. Apply this narrowly
     // to the known 32-byte packed-model ABI; world vertices use the 44-byte case.
-    if (decl && decl->switchVertDeclType == 1u &&
+    if (decl && decl->switchVertDeclType != 0u &&
         element.Stream == 0 && streamStride == 32u &&
         element.Offset == 0 && element.Usage == 0 &&
         element.UsageIndex == 0 && element.Type == D3DDECLTYPE_FLOAT4)
@@ -1282,7 +1282,8 @@ uint8_t SwitchEffectiveShaderElementType(
         // a pair of packed 16-bit floats, not a D3DCOLOR/byte vector. The D3D
         // declaration is a semantic-routing table on Switch, so restore the
         // physical FLOAT16_2 representation before building Vulkan input.
-        else if (decl->switchVertDeclType == 1 &&
+        else if (streamStride == 32u &&
+                 decl->switchVertDeclType != 0u &&
                  element.Offset == 20 &&
                  element.Usage == 5 &&
                  element.UsageIndex == 0)
@@ -1293,7 +1294,8 @@ uint8_t SwitchEffectiveShaderElementType(
         // and lmapCoord at byte 28. Some material routing entries declare the
         // TEXCOORD0 source as FLOAT3, but shaders can consume both pairs as xy/zw.
         // Expose the full 16-byte range so the lightmap UV pair is not truncated.
-        else if (decl->switchVertDeclType >= 2 &&
+        else if (streamStride == 44u &&
+                 decl->switchVertDeclType >= 2 &&
                  decl->switchVertDeclType <= 13 &&
                  element.Offset == 20 &&
                  element.Usage == 5 &&
@@ -1305,7 +1307,8 @@ uint8_t SwitchEffectiveShaderElementType(
         // at byte 20 means the lightmap UV pair in bytes 28..35. Do not apply
         // this conversion to other source fields: some material routes reuse
         // TEXCOORD1 for the packed world normal at byte 36.
-        else if (decl->switchVertDeclType >= 2 &&
+        else if (streamStride == 44u &&
+                 decl->switchVertDeclType >= 2 &&
                  decl->switchVertDeclType <= 13 &&
                  element.Offset == 20 &&
                  element.Usage == 5 &&
@@ -1329,7 +1332,7 @@ uint32_t SwitchEffectiveShaderElementOffset(
         element.UsageIndex == 1)
         return 28;
 
-    if (decl &&
+    if (decl && streamStride == 44u &&
         decl->switchVertDeclType >= 2 &&
         decl->switchVertDeclType <= 13 &&
         element.Stream == 0 &&
