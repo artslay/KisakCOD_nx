@@ -665,9 +665,36 @@ void __cdecl R_CellStaticModels(
     }
 }
 
-static void R_AABBTreeStaticModels_r_impl(
+static unsigned int s_aabbStaticModelTraversalFaultCount;
+
+static void R_LogAabbStaticModelTraversalFault(
+    const char *reason,
+    const GfxAabbTree *root,
+    const GfxAabbTree *tree,
+    uint32_t nodeCount,
+    uint32_t visited)
+{
+    if (s_aabbStaticModelTraversalFaultCount >= 8)
+        return;
+    ++s_aabbStaticModelTraversalFaultCount;
+#ifdef __SWITCH__
+    char message[384];
+    std::snprintf(message, sizeof(message),
+        "[KisakCOD][AABB STATICMODEL TRAVERSAL FAULT] reason=%s root=%p node=%p nodeCount=%u visited=%u\\n",
+        reason, static_cast<const void *>(root), static_cast<const void *>(tree),
+        static_cast<unsigned>(nodeCount), static_cast<unsigned>(visited));
+    Switch_LogWrite(message);
+#else
+    Com_PrintWarning(CON_CHANNEL_GFX,
+        "Static-model AABB traversal stopped: %s (root=%p node=%p nodes=%u visited=%u)\\n",
+        reason, static_cast<const void *>(root), static_cast<const void *>(tree),
+        static_cast<unsigned>(nodeCount), static_cast<unsigned>(visited));
+#endif
+}
+
+static void R_AABBTreeStaticModelsIterative(
     GfxAabbTree *root,
-    GfxAabbTree *tree,
+    uint32_t nodeCount,
     const float *mins,
     const float *maxs,
     int(__cdecl *allowSModel)(int),
@@ -675,57 +702,134 @@ static void R_AABBTreeStaticModels_r_impl(
     int smodelListSize,
     int *smodelCount)
 {
-    GfxAabbTree *children; // [esp+0h] [ebp-14h]
-    int smodelIndexIter; // [esp+4h] [ebp-10h]
-    int childIndex; // [esp+8h] [ebp-Ch]
-    const GfxStaticModelInst *smodelInst; // [esp+Ch] [ebp-8h]
-    int smodelIndex; // [esp+10h] [ebp-4h]
-
-    if (*mins <= (double)tree->maxs[0]
-        && *maxs >= (double)tree->mins[0]
-        && mins[1] <= (double)tree->maxs[1]
-        && maxs[1] >= (double)tree->mins[1]
-        && mins[2] <= (double)tree->maxs[2]
-        && maxs[2] >= (double)tree->mins[2])
+    if (!root || !nodeCount ||
+        nodeCount > static_cast<uint64_t>(UINTPTR_MAX) / sizeof(GfxAabbTree) ||
+        !mins || !maxs || !allowSModel || !smodelList || !smodelCount ||
+        smodelListSize <= 0 || *smodelCount < 0 || *smodelCount > smodelListSize)
     {
+        R_LogAabbStaticModelTraversalFault(
+            "invalid_root_count_or_arguments", root, root, nodeCount, 0);
+        return;
+    }
+
+    if (!rgp.world ||
+        (rgp.world->dpvs.smodelCount &&
+         (!rgp.world->dpvs.smodelInsts || !rgp.world->dpvs.smodelDrawInsts)))
+    {
+        R_LogAabbStaticModelTraversalFault(
+            "static_model_arrays_unavailable", root, root, nodeCount, 0);
+        return;
+    }
+
+    const uintptr_t rootAddress = reinterpret_cast<uintptr_t>(root);
+    const uintptr_t treeBytes =
+        static_cast<uintptr_t>(nodeCount) * sizeof(GfxAabbTree);
+    if (rootAddress > UINTPTR_MAX - treeBytes)
+    {
+        R_LogAabbStaticModelTraversalFault(
+            "tree_address_overflow", root, root, nodeCount, 0);
+        return;
+    }
+    const uintptr_t arrayEnd = rootAddress + treeBytes;
+
+    std::vector<GfxAabbTree *> pending;
+    pending.reserve(nodeCount < 64u ? nodeCount : 64u);
+    pending.push_back(root);
+    uint32_t visited = 0;
+
+    while (!pending.empty() && *smodelCount < smodelListSize)
+    {
+        GfxAabbTree *tree = pending.back();
+        pending.pop_back();
+
+        const uintptr_t treeAddress = reinterpret_cast<uintptr_t>(tree);
+        if (treeAddress < rootAddress || treeAddress >= arrayEnd ||
+            (treeAddress - rootAddress) % sizeof(GfxAabbTree) != 0)
+        {
+            R_LogAabbStaticModelTraversalFault(
+                "node_outside_tree_array_or_misaligned", root, tree, nodeCount, visited);
+            return;
+        }
+        if (++visited > nodeCount)
+        {
+            R_LogAabbStaticModelTraversalFault(
+                "cycle_or_node_count_mismatch", root, tree, nodeCount, visited);
+            return;
+        }
+
+        if (!(*mins <= static_cast<double>(tree->maxs[0]) &&
+              *maxs >= static_cast<double>(tree->mins[0]) &&
+              mins[1] <= static_cast<double>(tree->maxs[1]) &&
+              maxs[1] >= static_cast<double>(tree->mins[1]) &&
+              mins[2] <= static_cast<double>(tree->maxs[2]) &&
+              maxs[2] >= static_cast<double>(tree->mins[2])))
+            continue;
+
         if (tree->childCount)
         {
-            #ifdef __SWITCH__
-            const int childOffset = R_MarksNativeAabbChildOffset(root, tree);
-#else
-            const int childOffset = tree->childrenOffset;
-#endif
-            children = (GfxAabbTree *)((char *)tree + childOffset);
-            for (childIndex = 0; childIndex < tree->childCount; ++childIndex)
-                R_AABBTreeStaticModels_r_impl(
-                    root,
-                    &children[childIndex],
-                    mins,
-                    maxs,
-                    allowSModel,
-                    smodelList,
-                    smodelListSize,
-                    smodelCount);
-        }
-        else
-        {
-            for (smodelIndexIter = 0;
-                smodelIndexIter < tree->smodelIndexCount && *smodelCount < smodelListSize;
-                ++smodelIndexIter)
+            const int offset = R_MarksNativeAabbChildOffset(root, tree);
+            if (offset <= 0 ||
+                offset % static_cast<int>(sizeof(GfxAabbTree)) != 0 ||
+                treeAddress > UINTPTR_MAX - static_cast<uintptr_t>(offset))
             {
-                smodelIndex = tree->smodelIndexes[smodelIndexIter];
-                if (allowSModel(smodelIndex))
+                R_LogAabbStaticModelTraversalFault(
+                    "invalid_child_offset", root, tree, nodeCount, visited);
+                return;
+            }
+
+            const uintptr_t childrenAddress =
+                treeAddress + static_cast<uintptr_t>(offset);
+            if (childrenAddress < rootAddress || childrenAddress >= arrayEnd ||
+                (childrenAddress - rootAddress) % sizeof(GfxAabbTree) != 0 ||
+                static_cast<uintptr_t>(tree->childCount) >
+                    (arrayEnd - childrenAddress) / sizeof(GfxAabbTree))
+            {
+                R_LogAabbStaticModelTraversalFault(
+                    "children_outside_tree_array", root, tree, nodeCount, visited);
+                return;
+            }
+
+            auto *children = reinterpret_cast<GfxAabbTree *>(childrenAddress);
+            // Reverse push preserves the original recursive child 0..N-1 order
+            // without trusting child pointers or consuming one stack frame per node.
+            for (uint32_t childIndex = tree->childCount; childIndex > 0; --childIndex)
+                pending.push_back(&children[childIndex - 1]);
+            continue;
+        }
+
+        if (tree->smodelIndexCount && !tree->smodelIndexes)
+        {
+            R_LogAabbStaticModelTraversalFault(
+                "leaf_missing_smodel_indexes", root, tree, nodeCount, visited);
+            return;
+        }
+
+        for (uint32_t smodelIndexIter = 0;
+             smodelIndexIter < tree->smodelIndexCount &&
+                 *smodelCount < smodelListSize;
+             ++smodelIndexIter)
+        {
+            const uint32_t smodelIndex = tree->smodelIndexes[smodelIndexIter];
+            if (smodelIndex >= rgp.world->dpvs.smodelCount)
+            {
+                R_LogAabbStaticModelTraversalFault(
+                    "smodel_index_out_of_range", root, tree, nodeCount, visited);
+                return;
+            }
+
+            if (allowSModel(static_cast<int>(smodelIndex)))
+            {
+                const GfxStaticModelInst *smodelInst =
+                    &rgp.world->dpvs.smodelInsts[smodelIndex];
+                if (*mins <= static_cast<double>(smodelInst->maxs[0]) &&
+                    *maxs >= static_cast<double>(smodelInst->mins[0]) &&
+                    mins[1] <= static_cast<double>(smodelInst->maxs[1]) &&
+                    maxs[1] >= static_cast<double>(smodelInst->mins[1]) &&
+                    mins[2] <= static_cast<double>(smodelInst->maxs[2]) &&
+                    maxs[2] >= static_cast<double>(smodelInst->mins[2]))
                 {
-                    smodelInst = &rgp.world->dpvs.smodelInsts[smodelIndex];
-                    if (*mins <= (double)smodelInst->maxs[0]
-                        && *maxs >= (double)smodelInst->mins[0]
-                        && mins[1] <= (double)smodelInst->maxs[1]
-                        && maxs[1] >= (double)smodelInst->mins[1]
-                        && mins[2] <= (double)smodelInst->maxs[2]
-                        && maxs[2] >= (double)smodelInst->mins[2])
-                    {
-                        R_AddStaticModelToList(smodelIndex, smodelList, smodelCount);
-                    }
+                    R_AddStaticModelToList(
+                        static_cast<int>(smodelIndex), smodelList, smodelCount);
                 }
             }
         }
@@ -741,9 +845,45 @@ void __cdecl R_AABBTreeStaticModels_r(
     int smodelListSize,
     int *smodelCount)
 {
-    R_AABBTreeStaticModels_r_impl(
-        tree, tree, mins, maxs, allowSModel,
-        smodelList, smodelListSize, smodelCount);
+    if (!rgp.world || !rgp.world->cells || !tree)
+    {
+        R_LogAabbStaticModelTraversalFault(
+            "world_or_root_unavailable", tree, tree, 0, 0);
+        return;
+    }
+
+    // Static-model traversal is bounded by the owning cell's flat AABB array.
+    // Never dereference child offsets until the offset is validated against that
+    // array; malformed serialized/native offsets otherwise become low addresses.
+    for (int cellIndex = 0;
+         cellIndex < rgp.world->dpvsPlanes.cellCount;
+         ++cellIndex)
+    {
+        GfxCell *cell = &rgp.world->cells[cellIndex];
+        if (cell->aabbTree != tree)
+            continue;
+
+        if (cell->aabbTreeCount <= 0)
+        {
+            R_LogAabbStaticModelTraversalFault(
+                "invalid_cell_tree_count", tree, tree, 0, 0);
+            return;
+        }
+
+        R_AABBTreeStaticModelsIterative(
+            tree,
+            static_cast<uint32_t>(cell->aabbTreeCount),
+            mins,
+            maxs,
+            allowSModel,
+            smodelList,
+            smodelListSize,
+            smodelCount);
+        return;
+    }
+
+    R_LogAabbStaticModelTraversalFault(
+        "root_not_owned_by_world_cell", tree, tree, 0, 0);
 }
 
 void __cdecl R_AddStaticModelToList(int smodelIndex, uint16_t *smodelList, int *smodelCount)
