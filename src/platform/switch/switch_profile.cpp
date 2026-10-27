@@ -1,5 +1,6 @@
 #ifdef __SWITCH__
 #include <universal/profile.h>
+#include <qcommon/qcommon.h>
 
 ProfileScript profileScript = {};
 int g_profileStack[256] = {};
