@@ -450,18 +450,28 @@ void __cdecl CG_DrawUpperRightDebugInfo(int32_t localClientNum)
     meminfo_t v4; // [sp+50h] [-B0h] BYREF
 
     track_getbasicinfo(&v4);
+#ifdef __SWITCH__
+    // Keep diagnostics visible while dead and when cg_draw2D is disabled; the
+    // caller places this after the other 2D passes. The Switch HUD does not
+    // depend on the archived cg_drawFPS mode.
+    R_TrackStatistics(0);
+    y = cg_debugInfoCornerOffset->current.vector[1];
+    y = CG_DrawFPS(&scrPlaceFull, static_cast<float>(y), &v4);
+
+    if (com_statmon->current.enabled)
+        y = CG_DrawStatmon(&scrPlaceFull, static_cast<float>(y), &v4);
+
+    if (replay_time->current.enabled)
+        DrawReplayTime(&scrPlaceFull, static_cast<float>(y));
+#else
     if (CG_GetPredictedPlayerState(localClientNum)->pm_type != PM_DEAD)
     {
         R_TrackStatistics(0);
 
         y = cg_debugInfoCornerOffset->current.vector[1];
 
-#ifdef __SWITCH__
-        y = CG_DrawFPS(&scrPlaceFull, y, &v4);
-#else
         if (cg_drawFPS->current.integer)
             y = CG_DrawFPS(&scrPlaceFull, y, &v4);
-#endif
 
         if (com_statmon->current.enabled)
             y = CG_DrawStatmon(&scrPlaceFull, y, &v4);
@@ -469,6 +479,7 @@ void __cdecl CG_DrawUpperRightDebugInfo(int32_t localClientNum)
         if (replay_time->current.enabled)
             DrawReplayTime(&scrPlaceFull, y);
     }
+#endif
 #endif
 }
 
