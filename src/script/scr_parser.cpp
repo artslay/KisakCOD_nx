@@ -770,9 +770,10 @@ char *__cdecl Scr_ReadFile_FastFile(const char *filename, const char *extFilenam
             {
                 Com_PrintError(
                     CON_CHANNEL_DONT_FILTER,
-                    "[KisakCOD][SCRIPT FIX] mo_fastrope ready-wait anchor not found; script source left unchanged\\n");
+                    "[KisakCOD][SCRIPT FIX] mo_fastrope ready-wait anchor not found; script source left unchanged\n");
             }
         }
+#endif
         Scr_AddSourceBufferInternal(extFilename, codePos, sourceBuf, strlen(sourceBuf), 1, archive);
         return sourceBuf;
     }
