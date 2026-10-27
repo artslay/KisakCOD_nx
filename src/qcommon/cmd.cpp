@@ -1349,13 +1349,10 @@ static bool Cmd_ShouldLogExec(const char *filename)
     const char *baseName = strrchr(filename, '/');
     baseName = baseName ? baseName + 1 : filename;
 
-    // DevGui scripts are optional developer tooling and contain many dvars
-    // unavailable in the Switch build. They still execute; only their routine
-    // successful "execing" messages are omitted in normal play.
-    if (strncmp(baseName, "devgui_", 7) != 0)
-        return true;
-
-    return Dvar_GetInt("developer") != 0;
+    // DevGui scripts are optional developer tooling and reference
+    // platform-specific entries. They still execute, but routine successful
+    // exec notifications are omitted from the Switch runtime log.
+    return strncmp(baseName, "devgui_", 7) != 0;
 }
 
 #endif
