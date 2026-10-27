@@ -11,7 +11,6 @@
 #include "r_water.h"
 #include "r_image.h"
 #ifdef __SWITCH__
-#include <qcommon/com_pack.h>
 #endif
 
 #ifdef __SWITCH__
@@ -1327,16 +1326,6 @@ int __cdecl R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexC
         Com_Memcpy(bufferData, data, totalSize);
     }
 #ifdef __SWITCH__
-    // The two dynamic static-model paths pass raw XSurface::verts0 here.
-    // Their CPU UVs are CoD4 PackedTexCoords, while Vulkan reads R16G16_SFLOAT.
-    // Convert only the GPU-buffer copy, leaving shared fastfile memory intact.
-    if (stride == static_cast<int>(sizeof(GfxPackedVertex)))
-    {
-        auto *vertices = static_cast<GfxPackedVertex *>(bufferData);
-        for (int vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex)
-            vertices[vertexIndex].texCoord =
-                Vec2ConvertTexCoordsForVulkan(vertices[vertexIndex].texCoord);
-    }
 #endif
     //Profile_EndInternal(0);
     //Profile_EndInternal(0);
