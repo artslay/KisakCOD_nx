@@ -1649,7 +1649,13 @@ bool VulkanBackend::SynchronizeActiveFrame()
 
     EndRendering();
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/present/end_command_buffer";
+#endif
     const VkResult endResult = vkEndCommandBuffer(m_commandBuffer);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/present/end_command_buffer_return";
+#endif
     if (endResult != VK_SUCCESS)
     {
         SetError("vkEndCommandBuffer failed while synchronizing a resource lock", endResult);
@@ -1764,6 +1770,7 @@ bool VulkanBackend::EndFrame()
     if (m_deviceLost)
     {
 #ifdef __SWITCH__
+        g_switchFrameStage = "frame/present/device_lost";
         Switch_LogPostCinematicRenderTrace(
             "vk_end_frame_abort", "reason=device_lost");
 #endif
@@ -1774,6 +1781,7 @@ bool VulkanBackend::EndFrame()
     if (!m_frameActive)
     {
 #ifdef __SWITCH__
+        g_switchFrameStage = "frame/present/no_active_frame";
         Switch_LogPostCinematicRenderTrace(
             "vk_end_frame_noop", "reason=frame_not_active; no queue present attempted");
 #endif
@@ -1814,7 +1822,14 @@ bool VulkanBackend::EndFrame()
         Switch_LogWrite(trace);
     }
 
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/present/end_rendering";
+#endif
     EndRendering();
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/present/end_rendering_done";
+    g_switchFrameStage = "frame/present/prepare_swapchain_image";
+#endif
 
     VkImage swapImage = CurrentSwapchainImage();
     if (!swapImage ||
@@ -1907,7 +1922,13 @@ bool VulkanBackend::EndFrame()
 
     // Reset only when the frame is ready to submit. If submit itself fails,
     // RecreateSwapchain replaces this unsignaled fence and image-available semaphore.
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/present/reset_fence";
+#endif
     const VkResult resetFenceResult = vkResetFences(m_device, 1, &m_sync.fence);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/present/reset_fence_return";
+#endif
     if (resetFenceResult != VK_SUCCESS)
     {
 #ifdef __SWITCH__
@@ -2000,8 +2021,14 @@ bool VulkanBackend::EndFrame()
 
     VkResult result;
     {
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/present/queue_present";
+#endif
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
         result = vkQueuePresentKHR(m_graphicsQueue, &present);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/present/queue_present_return";
+#endif
     }
 #ifdef __SWITCH__
     if (Switch_IsPostCinematicRenderTraceActive())
