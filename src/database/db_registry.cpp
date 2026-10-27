@@ -3798,14 +3798,17 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     XAssetType type;
     uint16_t *pOverrideAssetEntryIndex;
 #ifdef __SWITCH__
-    // The override path uses this local as temporary storage for an XAsset.
-    // Native Switch GfxLightDef can be larger than the legacy XAssetSize
-    // union because its pointers are 64-bit. Keep the old storage/alignment,
-    // but guarantee room for the native LightDef copy as well.
-    struct SwitchXAssetCloneScratch
+    // The override path temporarily stores a native XAsset payload at this
+    // address before restoring the asset header. Native Switch structures can
+    // exceed the 32-bit XAssetSize union; SndCurve is the largest of the sound
+    // payloads copied by DB_CloneXAssetInternalSwitch.
+    union SwitchXAssetCloneScratch
     {
         XAssetSize legacy;
         GfxLightDef lightDef;
+        snd_alias_list_t sound;
+        SndCurve soundCurve;
+        LoadedSound loadedSound;
     } assetSize;
 #else
     XAssetSize assetSize;
