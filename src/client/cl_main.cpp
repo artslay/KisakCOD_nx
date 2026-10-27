@@ -1452,34 +1452,34 @@ void __cdecl CL_StopLogoOrCinematic(int localClientNum)
     }
     SND_StopSounds(SND_STOP_ALL);
 
-    // Decide from the state after SCR_StopCinematic/CL_StopLogo. Both
-    // paths may transition CA_CINEMATIC/CA_LOGO to CA_DISCONNECTED. Using
-    // the entry state can leave UIMENU_NONE active after the final intro clip.
-    const bool returnToFrontend =
-        clientUIActives[localClientNum].connectionState == CA_DISCONNECTED &&
-        !hasNextCommand;
-
+    // Match the original engine: choose the immediate UI transition from
+    // the connection state on entry. A cinematic skip must close the UI here;
+    // CL_Frame opens the main menu after the disconnect transition is observed.
+    // Opening UIMENU_MAIN from the post-stop state leaves the old menu stack
+    // alive and can cover the frontend (openMenuCount was 2 on Switch).
 #ifdef __SWITCH__
-    // Loading can set this guard while the game/server state is being changed.
-    // Returning to a menu with it still set yields a cleared swapchain forever.
+    // Clear the Switch loading guard before UIMENU_NONE clears UI state.
     CL_SetSkipRendering(false);
 #endif
     UI_SetActiveMenu(
         localClientNum,
-        returnToFrontend ? UIMENU_MAIN : UIMENU_NONE);
+        connectionState == CA_DISCONNECTED ? UIMENU_MAIN : UIMENU_NONE);
 
 #ifdef __SWITCH__
     {
+        const bool frontendPending =
+            clientUIActives[localClientNum].connectionState == CA_DISCONNECTED &&
+            !hasNextCommand;
         char trace[256];
         snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][CIN SKIP FLOW] state=%d->%d nextCommand=%d queued=%d frontend=%d\n",
+            "[KisakCOD][CIN SKIP FLOW] state=%d->%d nextCommand=%d queued=%d frontendPending=%d\\n",
             static_cast<int>(connectionState),
             static_cast<int>(clientUIActives[localClientNum].connectionState),
             hasNextCommand ? 1 : 0,
             hasQueuedNextPlayback ? 1 : 0,
-            returnToFrontend ? 1 : 0);
+            frontendPending ? 1 : 0);
         Switch_LogWrite(trace);
     }
 #endif
