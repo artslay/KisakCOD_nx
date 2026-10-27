@@ -119,8 +119,7 @@ struct AlLocal
     // the cost of re-uploading PCM to the driver on every replay of the same sound.
     ALuint channelBuffer[53];
 
-    MssEqInfo eq[2];                    // same EQ band data as Miles; DSP application TBD
-    ALuint eqFilter;                    // reserved for a future EFX filter object (unused for now)
+    MssEqInfo eq[2];                    // same EQ band data as Miles; applied by PCM biquad DSP
 #ifndef KISAK_XBOX
     float eqLerp;
 #endif
