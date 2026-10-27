@@ -195,7 +195,6 @@ void __cdecl R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport)
     float v3[16]; // [esp-8h] [ebp-9Ch] BYREF
     GfxMatrix identity_52; // [esp+38h] [ebp-5Ch] BYREF
     GfxViewParms* transform_56; // [esp+7Ch] [ebp-18h]
-    GfxCmdBufSourceState *worldMatrix;
     float transform_60; // [esp+80h] [ebp-14h]
     float v7; // [esp+84h] [ebp-10h]
 
@@ -224,8 +223,7 @@ void __cdecl R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport)
     ++source->matrixVersions[1];
     ++source->matrixVersions[2];
     ++source->matrixVersions[4];
-    worldMatrix = R_GetActiveWorldMatrix(source);
-    memcpy(worldMatrix->matrices.matrix[0].m, v3, sizeof(GfxMatrix));
+    memcpy(R_GetActiveWorldMatrix(source), v3, 0x40u);
 }
 
 void __cdecl R_WorldMatrixChanged(GfxCmdBufSourceState *source)
