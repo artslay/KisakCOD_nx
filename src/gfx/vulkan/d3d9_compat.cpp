@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cstdint>
@@ -35,6 +36,7 @@
 
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
+extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 
 // Selected by R_SwitchQueueBspAuditSurface only after a floor surface with the
 // target shader pair is accepted into the visible BSP draw queue.
@@ -5645,7 +5647,7 @@ HRESULT IDirect3DDevice9::EndScene()
     const bool switchTraceDrawScene =
         hasDrawCalls && endSceneDrawTraceCount < 24;
     const bool switchTraceHeartbeat =
-        endSceneTraceId % 120u == 0u && endSceneHeartbeatTraceCount < 8;
+        endSceneTraceId % 120u == 0u;
     const bool switchTraceEndScene =
         endSceneTraceId < 16 ||
         switchTraceDrawScene ||
@@ -5661,11 +5663,12 @@ HRESULT IDirect3DDevice9::EndScene()
             ++endSceneHeartbeatTraceCount;
         const KisakVkTexture *texture =
             m_color ? m_color->texture : nullptr;
-        char trace[448];
+        char trace[512];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK FRAME] end_scene id=%u rendered=%u source=%u target=%s color=%p texture=%p size=%ux%u draws=%u/%u clears=%u stage=%s\n",
+            "[KisakCOD][VK FRAME] end_scene id=%u screenFrame=%llu rendered=%u source=%u target=%s color=%p texture=%p size=%ux%u draws=%u/%u clears=%u stage=%s\n",
             endSceneTraceId,
+            static_cast<unsigned long long>(g_switchScreenFrameSequence.load(std::memory_order_relaxed)),
             (m_targetRendered || hasDrawCalls) ? 1u : 0u,
             queuePresentSource ? 1u : 0u,
             texture ? "texture" : "swapchain",
