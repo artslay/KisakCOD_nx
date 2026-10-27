@@ -303,55 +303,90 @@ static void SND_ReleaseStreamChannel(int index)
     stream->active = false;
 }
 
-// Apply a SoundAlias speaker map to PCM for OpenAL's stereo output. A map stores one
-// gain per input channel for each output speaker. OpenAL has no direct equivalent of
-// Miles' per-sample channel-level matrix, so bake the 2-channel matrix into each buffer.
+static void AL_DownmixStereoToMono(int16_t *pcm, uint64_t frameCount);
+
+// Return the OpenAL PCM format that matches the selected engine output layout.
+// Multi-channel formats are only selected during device initialization when advertised.
+static ALenum AL_GetPcmFormat(uint32_t channels)
+{
+    switch (channels)
+    {
+    case 1:
+        return AL_FORMAT_MONO16;
+    case 2:
+        return AL_FORMAT_STEREO16;
+    case 4:
+        return alGetEnumValue("AL_FORMAT_QUAD16");
+    case 6:
+        return alGetEnumValue("AL_FORMAT_51CHN16");
+    default:
+        return 0;
+    }
+}
+
+// Apply a SoundAlias speaker map to PCM. Speaker-map entries carry one gain per source
+// channel for each destination speaker. Convert mono/stereo PCM into the selected
+// 1/2/4/6-channel layout in place; expansion is performed backwards to avoid overwriting
+// unread input frames.
 static int AL_ApplySpeakerMapToPcm(
     int16_t *pcm,
     uint64_t frameCount,
     int sourceChannels,
     const snd_alias_t *alias)
 {
-    if (!pcm || !alias || !alias->speakerMap ||
-        (sourceChannels != 1 && sourceChannels != 2) || frameCount == 0)
+    if (!pcm || (sourceChannels != 1 && sourceChannels != 2) || frameCount == 0)
         return 0;
 
-    MSSChannelMap *channelMap = Com_GetSpeakerMap(alias->speakerMap, sourceChannels);
-    if (!channelMap || channelMap->speakerCount < 2)
-        return 0;
+    const uint32_t outputChannels = (g_snd.playback_channels == 1 ||
+        g_snd.playback_channels == 2 || g_snd.playback_channels == 4 ||
+        g_snd.playback_channels == 6) ? static_cast<uint32_t>(g_snd.playback_channels) : 2u;
 
-    const MSSSpeakerLevels &left = channelMap->speakers[0];
-    const MSSSpeakerLevels &right = channelMap->speakers[1];
-    const float leftFromLeft = left.numLevels > 0 ? left.levels[0] : 0.0f;
-    const float leftFromRight = sourceChannels == 2 && left.numLevels > 1 ? left.levels[1] : 0.0f;
-    const float rightFromLeft = right.numLevels > 0 ? right.levels[0] : 0.0f;
-    const float rightFromRight = sourceChannels == 2 && right.numLevels > 1 ? right.levels[1] : 0.0f;
-
-    // Iterate backwards because mono input expands to interleaved stereo in the same
-    // buffer; writing a later output frame must not overwrite an unread mono sample.
-    for (uint64_t frame = frameCount; frame-- > 0;)
+    if (outputChannels == 1)
     {
-        const float inLeft = static_cast<float>(pcm[frame * sourceChannels]);
-        const float inRight = sourceChannels == 2
-            ? static_cast<float>(pcm[frame * 2 + 1])
-            : inLeft;
-        float outLeft = inLeft * leftFromLeft;
-        float outRight = inLeft * rightFromLeft;
         if (sourceChannels == 2)
-        {
-            outLeft += inRight * leftFromRight;
-            outRight += inRight * rightFromRight;
-        }
-
-        if (outLeft > 32767.0f) outLeft = 32767.0f;
-        if (outLeft < -32768.0f) outLeft = -32768.0f;
-        if (outRight > 32767.0f) outRight = 32767.0f;
-        if (outRight < -32768.0f) outRight = -32768.0f;
-        pcm[frame * 2] = static_cast<int16_t>(outLeft);
-        pcm[frame * 2 + 1] = static_cast<int16_t>(outRight);
+            AL_DownmixStereoToMono(pcm, frameCount);
+        return 1;
     }
 
-    return 2;
+    if (!alias || !alias->speakerMap)
+        return 0;
+    MSSChannelMap *channelMap = Com_GetSpeakerMap(alias->speakerMap, sourceChannels);
+    if (!channelMap)
+        return 0;
+
+    int destinationIndices[6] = { 0, 1, 2, 3, 4, 5 };
+    int requiredSpeakers = static_cast<int>(outputChannels);
+    if (outputChannels == 4)
+    {
+        destinationIndices[0] = 0; // front left
+        destinationIndices[1] = 1; // front right
+        destinationIndices[2] = 4; // rear left
+        destinationIndices[3] = 5; // rear right
+        requiredSpeakers = 6;
+    }
+    if (channelMap->speakerCount < requiredSpeakers)
+        return 0;
+
+    for (uint64_t frame = frameCount; frame-- > 0;)
+    {
+        const float inputs[2] = {
+            static_cast<float>(pcm[frame * sourceChannels]),
+            sourceChannels == 2 ? static_cast<float>(pcm[frame * 2 + 1]) : 0.0f
+        };
+
+        for (uint32_t output = 0; output < outputChannels; ++output)
+        {
+            const MSSSpeakerLevels &speaker = channelMap->speakers[destinationIndices[output]];
+            float value = speaker.numLevels > 0 ? inputs[0] * speaker.levels[0] : 0.0f;
+            if (sourceChannels == 2 && speaker.numLevels > 1)
+                value += inputs[1] * speaker.levels[1];
+
+            value = std::clamp(value, -32768.0f, 32767.0f);
+            pcm[frame * outputChannels + output] = static_cast<int16_t>(value);
+        }
+    }
+
+    return static_cast<int>(outputChannels);
 }
 
 // Positional OpenAL sources require mono buffers for normal 3D panning. Downmix stereo
@@ -687,7 +722,7 @@ static bool SND_FillStreamBuffers(int index)
 
     // Reused across calls rather than stack-allocated (32KB) each time; safe because stream
     // channels are always filled one at a time, never interleaved, on a single thread.
-    static int16_t chunk[AL_STREAM_BUFFER_FRAMES * 2]; // *2 for stereo worst case
+    static int16_t chunk[AL_STREAM_BUFFER_FRAMES * 6]; // up to 5.1 speaker-map output
 
     for (int i = queued; i < AL_STREAM_BUFFER_COUNT; ++i)
     {
@@ -741,9 +776,16 @@ static bool SND_FillStreamBuffers(int index)
                 stream->eqHistory);
         }
 
+        const ALenum format = AL_GetPcmFormat(outputChannels);
+        if (format == 0)
+        {
+            Com_PrintError(CON_CHANNEL_SOUND, "OpenAL has no PCM format for %u-channel stream\\n",
+                static_cast<unsigned>(outputChannels));
+            return queued > 0;
+        }
+
         ALuint buffer;
         alGenBuffers(1, &buffer);
-        ALenum format = (outputChannels == 2) ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
         alBufferData(
             buffer,
             format,
