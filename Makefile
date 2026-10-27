@@ -31,6 +31,21 @@ CXXFLAGS    := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-rtti -fno
 CPPFLAGS    += -DGIT_COMMIT=\"$(GIT_COMMIT)\"
 CFLAGS      := $(ARCH) -O2 -g -ffunction-sections -fdata-sections -fno-plt -std=gnu17 -MMD -MP -Wno-old-style-definition
 LDFLAGS     := $(ARCH) -L$(MESA_SDK)/lib -L$(OPENAL_SDK)/lib -L$(DEVKITPRO)/libnx/lib -specs=$(DEVKITPRO)/libnx/switch.specs -Wl,--gc-sections,-Bsymbolic
+
+# Optional CPU performance experiments; graphics/runtime settings are unchanged.
+# Clean before switching profiles so all translation units use the selected flags.
+ifeq ($(KISAK_SWITCH_PERF),1)
+CXXFLAGS += -O3
+CFLAGS   += -O3
+endif
+
+# Keep LTO separate: it can improve optimization across translation units, but
+# increases build/link time and memory use. Enable only for measured comparisons.
+ifeq ($(KISAK_SWITCH_LTO),1)
+CXXFLAGS += -flto
+CFLAGS   += -flto
+LDFLAGS  += -flto
+endif
 # Optional heap-event ring for diagnosing Rust/NVK allocator corruption.
 # Enable only for the diagnostic build: make KISAK_SWITCH_HEAP_TRACE=1
 ifeq ($(KISAK_SWITCH_HEAP_TRACE),1)
