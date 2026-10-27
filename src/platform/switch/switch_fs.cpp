@@ -119,7 +119,16 @@ static void Switch_IndexIwdArchive(const char *archivePath)
 {
     unzFile archiveFile = unzOpen(archivePath);
     if (!archiveFile)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][IWI ROOT] archive open failed path=%s\\n",
+            archivePath ? archivePath : "<null>");
+        Switch_LogWrite(trace);
         return;
+    }
 
     SwitchIwdArchive archive;
     archive.path = archivePath;
@@ -234,7 +243,11 @@ static void Switch_IndexIwdArchive(const char *archivePath)
         positionReadFailures,
         iwiEntryCount,
         firstIwi[0] ? firstIwi : "<none>");
-    if (nameReadFailures || positionReadFailures)
+    if (!gotGlobalInfo ||
+        nameReadFailures ||
+        positionReadFailures ||
+        (globalInfo.number_entry > static_cast<unsigned long>(directoryEntryCount) &&
+         entryCount == 0))
         Switch_LogWrite(trace);
 }
 
