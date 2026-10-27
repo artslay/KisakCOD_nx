@@ -1046,7 +1046,10 @@ void CL_DevGuiDvar_f()
         else
         {
             v4 = Cmd_Argv(2);
-            Com_Printf(CON_CHANNEL_DEVGUI, "dvar '%s' doesn't exist\n", v4);
+            // Stock DevGui configs contain platform-specific dvars. Keep
+            // these diagnostics when actively debugging, not during normal play.
+            if (Dvar_GetInt("developer"))
+                Com_Printf(CON_CHANNEL_DEVGUI, "dvar '%s' doesn't exist\n", v4);
         }
     }
     else
@@ -2217,8 +2220,8 @@ void __cdecl CL_Init(int localClientNum)
     //CL_Xenon_RegisterDvars();
     //CL_Xenon_RegisterCommands();
     Cmd_AddCommandInternal("stopControllerRumble", CL_StopControllerRumbles, &CL_StopControllerRumbles_VAR);
-    Com_Printf(CON_CHANNEL_CLIENT, "----- Initializing Renderer ----\n");
 
+    // CL_InitRef emits the renderer-initialization message itself.
     CL_InitRef();
 
     SCR_Init();
