@@ -1638,8 +1638,10 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
             }
         }
 #endif
+#ifdef __SWITCH__
         const unsigned int switchPostCineDrawSurfsBefore =
             frontEndDataOut ? static_cast<unsigned>(frontEndDataOut->drawSurfCount) : 0u;
+#endif
         R_GenerateSortedDrawSurfs(&sceneParms, dpvs, viewParmsDraw);
 #ifdef __SWITCH__
         if (Switch_IsPostCinematicRenderTraceActive())
