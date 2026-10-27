@@ -3589,14 +3589,98 @@ static bool Switch_LogContainsInsensitive(const char *text, const char *needle)
     return false;
 }
 
+static bool Switch_LogCounterNonZero(const char *msg, const char *key)
+{
+    if (!msg || !key || !*key)
+        return false;
+
+    const char *value = std::strstr(msg, key);
+    if (!value)
+        return false;
+
+    value += std::strlen(key);
+    while (*value == ' ' || *value == '\t')
+        ++value;
+
+    return *value >= '1' && *value <= '9';
+}
+
+static bool Switch_LogIsRoutineNoise(const char *msg)
+{
+    if (!msg || !*msg)
+        return false;
+
+    // Successful allocator block tracing is redundant in normal runtime logs.
+    if (std::strncmp(msg, "Switch PMem alloc begin:", std::strlen("Switch PMem alloc begin:")) == 0 ||
+        std::strncmp(msg, "Switch PMem alloc end:", std::strlen("Switch PMem alloc end:")) == 0)
+        return true;
+
+    // Detailed sampler bindings are useful only during a focused render investigation.
+    if (std::strncmp(msg, "[KisakCOD][MATERIAL SAMPLER]", std::strlen("[KisakCOD][MATERIAL SAMPLER]")) == 0 ||
+        std::strncmp(msg, "[KisakCOD][VK SAMPLER BOUND]", std::strlen("[KisakCOD][VK SAMPLER BOUND]")) == 0)
+        return true;
+
+    // Per-archive success records are redundant with the final index summary.
+    // Keep an archive record if it actually failed to index names or positions.
+    if (std::strncmp(msg, "[KisakCOD][IWI ROOT] archive=", std::strlen("[KisakCOD][IWI ROOT] archive=")) == 0)
+        return !Switch_LogCounterNonZero(msg, "nameFailures=") &&
+               !Switch_LogCounterNonZero(msg, "positionFailures=");
+
+    // The stock load profiler emits a long list of colored timing rows.
+    const char *first = msg;
+    while (*first == '\n' || *first == '\r' || *first == ' ' || *first == '\t')
+        ++first;
+    if (first[0] == '^' && first[1] == '6')
+    {
+        static constexpr const char *const kProfilerTerms[] =
+        {
+            "init game dvars", "server demo dvars", "debug dvars",
+            "clear config strings", "GScr_LoadConsts", "G_SetupWeaponDef",
+            "SV_InitWriteDemo", "Load scripts and anims", "Scr_AddSourceBuffer",
+            "ScriptCompile", "G_SpawnEntitiesFromString", "Parse server info",
+            "Load world", "Init effects system", "Register code assets",
+            "Register items", "Register server models", "Register known effects",
+            "Register shellshocks", "Register rumbles", "Register impact effects",
+            "Register night vision assets", "Load hud menus", "Precache script menus",
+            "Register server materials", "Optimize all xmodels", "Map init",
+            "Load time hot spots", "Hot spot total time", "Total Load Time",
+            "Profiled Time", "Unprofiled Time", "File Open Time",
+            "File Seek Time", "File Read Time"
+        };
+        for (const char *term : kProfilerTerms)
+        {
+            if (Switch_LogContainsInsensitive(first, term))
+                return true;
+        }
+    }
+
+    // Discard a standalone ASCII star graphic, but not ordinary text banners.
+    bool hasStar = false;
+    for (const char *p = msg; *p; ++p)
+    {
+        if (*p == '*')
+            hasStar = true;
+        else if (*p != ' ' && *p != '\t' && *p != '\r' && *p != '\n')
+            return false;
+    }
+    return hasStar;
+}
+
 static bool Switch_LogIsImportant(const char *msg)
 {
+    // Keep archive-indexing failures, but don't mistake "...Failures=0" counters
+    // in success summaries for runtime failures.
+    if (msg && std::strncmp(msg, "[KisakCOD][IWI ROOT] archive=", std::strlen("[KisakCOD][IWI ROOT] archive=")) == 0 &&
+        (Switch_LogCounterNonZero(msg, "nameFailures=") ||
+         Switch_LogCounterNonZero(msg, "positionFailures=")))
+        return true;
+
     // Keep errors and warnings even when they originate in diagnostic paths.
     // This applies to both engine messages and prefixed KisakCOD/Switch records.
     static constexpr const char *const kImportantTerms[] =
     {
         "error:", "error=", "error]", "[error]", "error\n",
-        "failed", "fail=", "fail:", "failure", "fatal", "warning", "warn:",
+        "failed", "fail=", "fail:", "failure:", "failure=", "fatal", "warning:", "[warning]", " warning ", "warn:",
         "assert", "mismatch", "timeout", "timed out", "crash", "corrupt",
         "out of memory", "out-of-memory", "not found", "missing", "invalid",
         "unsupported", "null pointer", "overflow", "underflow", "panic",
@@ -3643,7 +3727,8 @@ static bool Switch_LogKeepKisakDiagnostic(const char *msg)
         "[KisakCOD][WATCHDOG]",
         "[KisakCOD][VK]",
         "[KisakCOD][DB LOAD]",
-        "[KisakCOD][ZONE LOAD]"
+        "[KisakCOD][ZONE LOAD]",
+        "[KisakCOD][IWI ROOT] index ready"
     };
 
     for (const char *prefix : kKeepPrefixes)
@@ -3658,6 +3743,9 @@ static bool Switch_LogKeepKisakDiagnostic(const char *msg)
 void Switch_LogWrite(const char *msg)
 {
     if (!msg || !*msg)
+        return;
+
+    if (!Switch_LogIsImportant(msg) && Switch_LogIsRoutineNoise(msg))
         return;
 
     const bool isKisakDiag =
