@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern void Switch_LogWrite(const char *msg);
 extern bool SCR_IsMapLoadingCinematicActive();
@@ -46,12 +47,27 @@ void Switch_WritePostCinematicRenderTrace(
         g_switchGpuDrawCommandSerial.load(std::memory_order_relaxed);
     const uint64_t startDrawSerial =
         g_switchPostCinematicTraceStartDrawSerial.load(std::memory_order_relaxed);
+    const uint64_t framesSinceSkip = frame >= startFrame ? frame - startFrame : 0;
+    const bool keyFramePhase =
+        phase &&
+        (std::strcmp(phase, "screen_frame_begin") == 0 ||
+         std::strcmp(phase, "issue_commands_return") == 0 ||
+         std::strcmp(phase, "draw_screen_field_return") == 0 ||
+         std::strcmp(phase, "cgame_render_return") == 0 ||
+         std::strcmp(phase, "vk_present_result") == 0 ||
+         std::strcmp(phase, "vk_end_frame_abort") == 0 ||
+         std::strcmp(phase, "vk_end_frame_noop") == 0 ||
+         std::strcmp(phase, "skip_begin") == 0 ||
+         std::strcmp(phase, "skip_again") == 0 ||
+         std::strcmp(phase, "present_accepted_after_gpu_draw_command") == 0);
+    if (requireActive && !keyFramePhase && framesSinceSkip >= 4 && frame % 30u != 0u)
+        return;
     char trace[1024];
     std::snprintf(
         trace, sizeof(trace),
         "[KisakCOD][POST-CINE RENDER TRACE] frame=%llu sinceSkip=%llu phase=%s frameStage=%s drawSerial=%llu drawsSinceSkip=%llu detail=%s\n",
         static_cast<unsigned long long>(frame),
-        static_cast<unsigned long long>(frame >= startFrame ? frame - startFrame : 0),
+        static_cast<unsigned long long>(framesSinceSkip),
         phase ? phase : "(unknown)",
         g_switchFrameStage ? g_switchFrameStage : "(unknown)",
         static_cast<unsigned long long>(drawSerial),
@@ -110,7 +126,7 @@ extern "C" void Switch_PostCinematicRenderTracePresent(
         g_switchPostCinematicRenderTraceActive.exchange(false, std::memory_order_acq_rel))
     {
         Switch_WritePostCinematicRenderTrace(
-            "render_confirmed_present_success_with_gpu_draw", resultDetail, false);
+            "present_accepted_after_gpu_draw_command", resultDetail, false);
     }
 }
 
