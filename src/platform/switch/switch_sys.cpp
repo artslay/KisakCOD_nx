@@ -3640,6 +3640,15 @@ static bool Switch_LogIsRoutineNoise(const char *msg)
 
 static bool Switch_LogIsImportant(const char *msg)
 {
+    // Keep genuine asset lookup misses. Without this exception, the central
+    // Kisak diagnostic filter would drop "found=0" because it is not phrased as
+    // an error, making missing model/texture resources hard to diagnose.
+    if (msg && std::strncmp(msg, "[KisakCOD][IWI ROOT]", std::strlen("[KisakCOD][IWI ROOT]")) == 0 &&
+        (Switch_LogContainsInsensitive(msg, "found=0") ||
+         Switch_LogContainsInsensitive(msg, "opened=iwd=0") ||
+         Switch_LogContainsInsensitive(msg, "iwd=0 loose=0")))
+        return true;
+
     // Keep archive-indexing failures, but don't mistake "...Failures=0" counters
     // in success summaries for runtime failures.
     if (msg && std::strncmp(msg, "[KisakCOD][IWI ROOT] archive=", std::strlen("[KisakCOD][IWI ROOT] archive=")) == 0 &&
