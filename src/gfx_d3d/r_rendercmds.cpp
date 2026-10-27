@@ -329,6 +329,14 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
             if (Sys_IsMainThread())
                 R_WaitFrontendWorkerCmds();
 #ifdef __SWITCH__
+            // The Switch D3D9 shim stages dynamic-buffer writes in a CPU shadow.
+            // Unlock queues/copies the skinned cache into the Vulkan vertex buffer,
+            // so it must happen after worker skinning is complete but before the
+            // backend records draws that consume those vertices.
+            g_switchFrameStage = "frame/scr/issue_commands/unlock_skin_cache_before_draw";
+            R_UnlockSkinnedCache();
+            g_switchFrameStage = "frame/scr/issue_commands/update_skin_cache";
+#else
             g_switchFrameStage = "frame/scr/issue_commands/update_skin_cache";
 #endif
             R_UpdateSkinCacheUsage();
@@ -366,10 +374,9 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
 
             }
 
-#ifdef __SWITCH__
-            g_switchFrameStage = "frame/scr/issue_commands/unlock_skin_cache";
-#endif
+#ifndef __SWITCH__
             R_UnlockSkinnedCache();
+#endif
 
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/scr/issue_commands/toggle_smp_frame";
