@@ -1,6 +1,9 @@
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
 #ifdef __SWITCH__
+#include <atomic>
+#endif
+#ifdef __SWITCH__
 #include <qcommon/com_pack.h>
 #endif
 
@@ -102,7 +105,32 @@ void __cdecl R_AddCodeMeshDrawSurf(
     iassert(g_processCodeMesh);
     iassert(rgp.sortedMaterials[material->info.drawSurf.fields.materialSortedIndex] == material);
 
-    if (Material_GetTechnique(material, gfxDrawMethod.emissiveTechType) && (material->info.gameFlags & 2) == 0)
+    const bool hasEmissiveTechnique =
+        Material_GetTechnique(material, gfxDrawMethod.emissiveTechType) != nullptr;
+    const bool canQueueCodeMesh =
+        hasEmissiveTechnique && (material->info.gameFlags & 2) == 0;
+#ifdef __SWITCH__
+    static std::atomic<uint32_t> fxCodeMeshTraceCount{0};
+    const uint32_t traceIndex =
+        fxCodeMeshTraceCount.fetch_add(1, std::memory_order_relaxed);
+    if (traceIndex < 128u)
+    {
+        char trace[448];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX CODEMESH SUBMIT] n=%u effect=%.96s material=%.96s sortKey=%u indices=%u emissiveTechnique=%u gameFlags=0x%x result=%s\n",
+            traceIndex,
+            fxName ? fxName : "<unknown>",
+            material->info.name ? material->info.name : "<unnamed>",
+            static_cast<unsigned>(material->info.sortKey),
+            indexCount,
+            hasEmissiveTechnique ? 1u : 0u,
+            static_cast<unsigned>(material->info.gameFlags),
+            canQueueCodeMesh ? "queued" : "rejected");
+        Switch_LogWrite(trace);
+    }
+#endif
+    if (canQueueCodeMesh)
     {
         codeMeshIndex = InterlockedExchangeAdd(&frontEndDataOut->codeMeshCount, 1);
         if (codeMeshIndex < 0x800)
