@@ -487,13 +487,22 @@ static void __cdecl DB_CloneXAssetInternal(const XAsset *from, XAsset *to);
 // routine: a bad/legacy size-table entry here can stall the whole DB registry.
 static void __cdecl DB_CloneXAssetInternalSwitch(const XAsset *from, XAsset *to)
 {
-    // snd_alias_list_t is 12 bytes in the 32-bit fastfile, but its Switch
-    // runtime representation contains two 64-bit pointers and is 24 bytes.
-    // The generic legacy-size clone truncates head/count when an alias is
-    // inserted into the native asset registry, leaving every request empty.
+    // The fastfile uses 32-bit serialized sizes for sound assets. On Switch,
+    // these are widened into native runtime structures before registry insertion,
+    // so the generic legacy-size clone truncates pointers and trailing fields.
     if (from->type == ASSET_TYPE_SOUND)
     {
-        std::memcpy(to->header.sound, from->header.sound, sizeof(snd_alias_list_t));
+        std::memcpy(to->header.data, from->header.data, sizeof(snd_alias_list_t));
+        return;
+    }
+    if (from->type == ASSET_TYPE_SOUND_CURVE)
+    {
+        std::memcpy(to->header.data, from->header.data, sizeof(SndCurve));
+        return;
+    }
+    if (from->type == ASSET_TYPE_LOADED_SOUND)
+    {
+        std::memcpy(to->header.data, from->header.data, sizeof(LoadedSound));
         return;
     }
 
