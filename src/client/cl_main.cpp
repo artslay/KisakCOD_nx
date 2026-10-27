@@ -36,6 +36,7 @@ extern bool cin_skippable;
 #ifdef __SWITCH__
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern void CL_BlockCinematicSkipUntilRelease();
 extern void CL_PrepareCinematicSkipInput(int localClientNum);
