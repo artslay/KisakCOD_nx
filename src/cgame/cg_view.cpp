@@ -1565,12 +1565,10 @@ int __cdecl CG_DrawActiveFrame(
     char postCineActiveFrameEntry[320];
     std::snprintf(
         postCineActiveFrameEntry, sizeof(postCineActiveFrameEntry),
-        "localClient=%d serverTime=%d conn=%d pmType=%d cubemap=%d world=%p",
+        "localClient=%d serverTime=%d pmType=%d cubemap=%d",
         localClientNum, serverTime,
-        static_cast<int>(clientUIActives[0].connectionState),
         static_cast<int>(cgArray[0].predictedPlayerState.pm_type),
-        static_cast<int>(cubemapShot),
-        static_cast<void *>(rgp.world));
+        static_cast<int>(cubemapShot));
     Switch_LogPostCinematicRenderTrace("cg_draw_active_frame_enter", postCineActiveFrameEntry);
 #endif
 //Profile_Begin(13);
