@@ -1886,7 +1886,7 @@ char __cdecl Ragdoll_BodyNewState(RagdollBody *body, BodyState_t state)
             ".\\ragdoll\\ragdoll_update.cpp",
             1827,
             0,
-            "state doesn't index RAGDOLL_NUM_STATES\\n\\t%i not in [0, %i)",
+            "state doesn't index RAGDOLL_NUM_STATES\n\t%i not in [0, %i)",
             state,
             6);
         return 0;
@@ -1898,7 +1898,7 @@ char __cdecl Ragdoll_BodyNewState(RagdollBody *body, BodyState_t state)
             ".\\ragdoll\\ragdoll_update.cpp",
             1830,
             0,
-            "prevState doesn't index RAGDOLL_NUM_STATES\\n\\t%i not in [0, %i)",
+            "prevState doesn't index RAGDOLL_NUM_STATES\n\t%i not in [0, %i)",
             prevState,
             6);
         return 0;
@@ -1937,7 +1937,7 @@ void __cdecl Ragdoll_BodyUpdate(int msec, RagdollBody *body)
             ".\\ragdoll\\ragdoll_update.cpp",
             1871,
             0,
-            "body->state doesn't index RAGDOLL_NUM_STATES\\n\\t%i not in [0, %i)",
+            "body->state doesn't index RAGDOLL_NUM_STATES\n\t%i not in [0, %i)",
             body->state,
             6);
         return;
