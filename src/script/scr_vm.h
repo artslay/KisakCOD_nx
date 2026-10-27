@@ -403,6 +403,7 @@ int __cdecl Scr_AddLocalVars(uint32_t localId);
 void __cdecl Scr_ResetTimeout();
 BOOL __cdecl Scr_IsStackClear();
 void __cdecl Scr_StackClear();
+double Scr_ProfileTicksToSeconds(uint64_t ticks);
 void __cdecl Scr_ProfileUpdate();
 void __cdecl Scr_ProfileBuiltinUpdate();
 void __cdecl Scr_DoProfile(float minTime);
