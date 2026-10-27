@@ -89,7 +89,7 @@ static void FX_LogNearEffectCull(
         trace, sizeof(trace),
         "[KisakCOD][FX NEAR CULL] n=%u kind=%s effect=%s elemType=%u flags=0x%x "
         "distanceSq=%.2f radius=%.3f planeCount=%u culprit=%d closestPlane=%.3f "
-        "pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f)\\n",
+        "pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f)\n",
         traceIndex,
         kind ? kind : "(unknown)",
         effectName,
