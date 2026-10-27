@@ -797,10 +797,13 @@ static void R_AABBTreeStaticModelsIterative(
             continue;
         }
 
-        if (tree->smodelIndexCount && !tree->smodelIndexes)
+        const uintptr_t smodelIndexesAddress =
+            reinterpret_cast<uintptr_t>(tree->smodelIndexes);
+        if (tree->smodelIndexCount &&
+            (!tree->smodelIndexes || smodelIndexesAddress < 0x10000u))
         {
             R_LogAabbStaticModelTraversalFault(
-                "leaf_missing_smodel_indexes", root, tree, nodeCount, visited);
+                "leaf_invalid_smodel_indexes", root, tree, nodeCount, visited);
             return;
         }
 
