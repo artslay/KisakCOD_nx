@@ -306,7 +306,7 @@ bool __cdecl Ragdoll_ValidateDef(uint32_t ragdollDef)
             0,
             "ragdollDef doesn't index RAGDOLL_MAX_DEFS\n\t%i not in [0, %i)",
             ragdollDef,
-            ARRAY_COUNT(ragdollDefs));
+            static_cast<int>(ARRAY_COUNT(ragdollDefs)));
         return false;
     }
 
