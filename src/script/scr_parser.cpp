@@ -693,13 +693,19 @@ char *__cdecl Scr_ReadFile(const char *filename, char *extFilename, const char *
     int file; // [esp+24h] [ebp-4h] BYREF
 
 #ifdef __SWITCH__
-    // Dvar strings are native pointers on aarch64. Reading current.integer
-    // as a pointer truncates the high 32 bits and faults while loading the
-    // first script (for example, codescripts/delete).
-    if (fs_gameDirVar->current.string && fs_gameDirVar->current.string[0])
+    // Allow standard loose-source overrides on Switch even when fs_game is
+    // empty. This reads the original GSC through Scr_ReadFile_LoadObj and uses
+    // the fastfile source only when no loose source exists; no source rewriting.
+    if ((FS_FOpenFileRead(extFilename, &file) & 0x80000000) != 0)
+    {
+        if (IsFastFileLoad())
+            return Scr_ReadFile_FastFile(filename, extFilename, codePos, archive);
+        return Scr_ReadFile_LoadObj(filename, extFilename, codePos, archive);
+    }
+    FS_FCloseFile(file);
+    return Scr_ReadFile_LoadObj(filename, extFilename, codePos, archive);
 #else
     if (*(_BYTE *)fs_gameDirVar->current.integer)
-#endif
     {
         if ((FS_FOpenFileRead(extFilename, &file) & 0x80000000) != 0)
         {
@@ -719,6 +725,7 @@ char *__cdecl Scr_ReadFile(const char *filename, char *extFilename, const char *
     {
         return Scr_ReadFile_LoadObj(filename, extFilename, codePos, archive);
     }
+#endif
 }
 
 char *__cdecl Scr_ReadFile_FastFile(const char *filename, const char *extFilename, const char *codePos, bool archive)
