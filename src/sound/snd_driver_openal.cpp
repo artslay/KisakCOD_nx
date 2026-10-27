@@ -1658,6 +1658,7 @@ void __cdecl SND_SetEqParams(
     alGlob.eq[eqIndex].params[band][entchannel].freq = freq;
     alGlob.eq[eqIndex].params[band][entchannel].q = q;
     alGlob.eq[eqIndex].params[band][entchannel].type = type;
+    AL_InvalidateEq();
 
 #ifndef KISAK_XBOX
     SND_UpdateEqs();
@@ -1673,6 +1674,8 @@ void __cdecl SND_SetEqType(uint32_t entchannel, int eqIndex, uint32_t band, SND_
 
     alGlob.eq[eqIndex].params[band][entchannel].enabled = 1;
     alGlob.eq[eqIndex].params[band][entchannel].type = type;
+    AL_InvalidateEq();
+    SND_UpdateEqs();
 }
 
 void __cdecl SND_SetEqFreq(uint32_t entchannel, int eqIndex, uint32_t band, float freq)
@@ -1685,6 +1688,8 @@ void __cdecl SND_SetEqFreq(uint32_t entchannel, int eqIndex, uint32_t band, floa
 
     alGlob.eq[eqIndex].params[band][entchannel].enabled = 1;
     alGlob.eq[eqIndex].params[band][entchannel].freq = freq;
+    AL_InvalidateEq();
+    SND_UpdateEqs();
 }
 
 void __cdecl SND_SetEqGain(uint32_t entchannel, int eqIndex, uint32_t band, float gain)
@@ -1695,6 +1700,8 @@ void __cdecl SND_SetEqGain(uint32_t entchannel, int eqIndex, uint32_t band, floa
     iassert((unsigned)eqIndex < ARRAY_COUNT(alGlob.eq));
     alGlob.eq[eqIndex].params[band][entchannel].enabled = 1;
     alGlob.eq[eqIndex].params[band][entchannel].gain = gain;
+    AL_InvalidateEq();
+    SND_UpdateEqs();
 }
 
 void __cdecl SND_SetEqQ(uint32_t entchannel, int eqIndex, uint32_t band, float q)
@@ -1707,6 +1714,7 @@ void __cdecl SND_SetEqQ(uint32_t entchannel, int eqIndex, uint32_t band, float q
 
     alGlob.eq[eqIndex].params[band][entchannel].enabled = 1;
     alGlob.eq[eqIndex].params[band][entchannel].q = q;
+    AL_InvalidateEq();
 
 #ifndef KISAK_XBOX
     SND_UpdateEqs();
@@ -1721,6 +1729,8 @@ void __cdecl SND_DisableEq(uint32_t entchannel, int eqIndex, uint32_t band)
     iassert((unsigned)eqIndex < ARRAY_COUNT(alGlob.eq));
 
     alGlob.eq[eqIndex].params[band][entchannel].enabled = 0;
+    AL_InvalidateEq();
+    SND_UpdateEqs();
 }
 
 void __cdecl SND_SaveEq(MemoryFile *memFile)
