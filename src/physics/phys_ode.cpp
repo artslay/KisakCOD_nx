@@ -1345,9 +1345,42 @@ void __cdecl Phys_TweakBulletImpact(float *worldPos, float *bulletDir, const flo
     Vec3Add(worldPos, offset, worldPos);
 }
 
+static const dvar_t *Phys_ResolveMinImpactMomentumDvar()
+{
+    // The normal registration happens in Phys_Init. If the cached global
+    // pointer is lost, recover the existing dvar so collision audio keeps its
+    // configured threshold instead of dereferencing null.
+    const dvar_t *dvar = Dvar_FindVar("phys_minImpactMomentum");
+    if (!dvar)
+    {
+        DvarLimits limits = {};
+        limits.value.min = 0.0f;
+        limits.value.max = FLT_MAX;
+        dvar = Dvar_RegisterFloat(
+            "phys_minImpactMomentum",
+            250.0f,
+            limits,
+            DVAR_NOFLAG,
+            "The minimum momentum required to trigger impact sounds");
+        Com_PrintWarning(
+            CON_CHANNEL_PHYS,
+            "Physics: recovered missing phys_minImpactMomentum dvar using its default registration\\n");
+    }
+    else
+    {
+        Com_PrintWarning(
+            CON_CHANNEL_PHYS,
+            "Physics: restored null phys_minImpactMomentum cache from dvar registry\\n");
+    }
+
+    phys_minImpactMomentum = dvar;
+    return dvar;
+}
+
 void __cdecl Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t sndClass, ContactList *contactList)
 {
     double v4; // st7
+    const dvar_t *minImpactMomentum = phys_minImpactMomentum;
     float scale; // [esp+8h] [ebp-74h]
     float velocity[3]; // [esp+Ch] [ebp-70h] BYREF
     float pos[3]; // [esp+18h] [ebp-64h] BYREF
@@ -1374,7 +1407,9 @@ void __cdecl Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t 
     impactVelocity = impactVelocity / (double)contactList->contactCount;
     scale = 1.0 / (double)contactList->contactCount;
     Vec3Scale(pos, scale, pos);
-    if (-phys_minImpactMomentum->current.value > impactVelocity * mass.mass)
+    if (!minImpactMomentum)
+        minImpactMomentum = Phys_ResolveMinImpactMomentumDvar();
+    if (-minImpactMomentum->current.value > impactVelocity * mass.mass)
     {
         if (sndClass >= 0x32)
             MyAssertHandler(
