@@ -730,7 +730,6 @@ char *__cdecl Scr_ReadFile_FastFile(const char *filename, const char *extFilenam
     if (rawfile)
     {
         sourceBuf = (char *)rawfile->buffer;
-#ifdef __SWITCH__
         Scr_AddSourceBufferInternal(extFilename, codePos, sourceBuf, strlen(sourceBuf), 1, archive);
         return sourceBuf;
     }
