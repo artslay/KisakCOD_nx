@@ -719,6 +719,34 @@ static bool SwitchConfigureNakDefaultProbe()
     return ::setenv("NAK_DEBUG", combined, 1) == 0;
 }
 
+// The NRO loader's main-thread stack is only about 1 MiB, which is too small
+// for the original engine's deepest script/asset-load call chains. Keep the
+// same OS thread (applet/Vulkan/TLS ownership stays unchanged), but run the
+// engine on a dedicated heap-backed 8 MiB stack.
+__attribute__((naked, noinline)) static void SwitchRunOnStack(
+    void *stackTop, void (*entry)(void *), void *arg)
+{
+    asm(
+        "mov x9, sp\n"
+        "mov sp, x0\n"
+        "stp x9, x30, [sp, #-16]!\n"
+        "mov x0, x2\n"
+        "blr x1\n"
+        "ldp x9, x30, [sp], #16\n"
+        "mov sp, x9\n"
+        "ret\n");
+}
+
+static void SwitchEngineMainLoop(void *)
+{
+    Com_Init((char*)"");
+    SwitchBootLog("Stage 7/7: engine initialized");
+    SwitchBootLog("Entering applet/frame loop");
+
+    while (appletMainLoop())
+        Com_Frame();
+}
+
 int main()
 {
     // Do not allow an inherited Mesa debug setting to skip NIR optimization
@@ -772,13 +800,23 @@ int main()
     SwitchLogVulkanRuntime();
     SwitchBootLog("Graphics: starting engine renderer");
     SwitchStartProgressWatchdog();
-    Com_Init((char*)"");
 
-    SwitchBootLog("Stage 7/7: engine initialized");
-    SwitchBootLog("Entering applet/frame loop");
+    constexpr size_t SWITCH_ENGINE_STACK_SIZE = 8u * 1024u * 1024u;
+    void *engineStack = std::malloc(SWITCH_ENGINE_STACK_SIZE);
+    if (!engineStack)
+    {
+        SwitchBootLog("FATAL: could not allocate 8 MiB engine stack");
+        SwitchStopProgressWatchdog();
+        Switch_LogShutdown();
+        return 1;
+    }
 
-    while (appletMainLoop())
-        Com_Frame();
+    uintptr_t engineStackTop =
+        (reinterpret_cast<uintptr_t>(engineStack) + SWITCH_ENGINE_STACK_SIZE) &
+        ~static_cast<uintptr_t>(0xF);
+    SwitchBootLog("Engine stack: dedicated 8 MiB stack");
+    SwitchRunOnStack(reinterpret_cast<void *>(engineStackTop), SwitchEngineMainLoop, nullptr);
+    std::free(engineStack);
 
     SwitchStopProgressWatchdog();
     SwitchBootLog("Applet loop stopped, shutting down");
