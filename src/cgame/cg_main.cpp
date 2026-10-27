@@ -944,9 +944,11 @@ void __cdecl CG_LoadWorld(int savegame)
 
 void __cdecl RegisterNightVisionAssets(int localClientNum)
 {
-    // The overlay is selected from playerstate/weapon state during gameplay;
-    // CS_NIGHTVISION is not guaranteed to be "1" when cgame first needs to draw
-    // it. Precache missing resources rather than leaving the overlay null.
+    // Match the stock registration condition. The configstring-change path
+    // calls this function when night vision becomes available later.
+    if (*CL_GetConfigString(localClientNum, CS_NIGHTVISION) != '1')
+        return;
+
     const bool needOverlay = cgMedia.nightVisionOverlay == nullptr;
     const bool needIcon = cgMedia.hudIconNVG == nullptr;
     const bool needModel = cgMedia.nightVisionGoggles == nullptr;
@@ -961,17 +963,6 @@ void __cdecl RegisterNightVisionAssets(int localClientNum)
     if (needModel)
         cgMedia.nightVisionGoggles = R_RegisterModel("viewmodel_NVG");
     ProfLoad_End();
-
-#ifdef __SWITCH__
-    char trace[320];
-    std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][NVG PRECACHE] configstring=%s overlay=%p icon=%p model=%p\n",
-        CL_GetConfigString(localClientNum, CS_NIGHTVISION),
-        static_cast<void *>(cgMedia.nightVisionOverlay),
-        static_cast<void *>(cgMedia.hudIconNVG),
-        static_cast<void *>(cgMedia.nightVisionGoggles));
-    Switch_LogWrite(trace);
-#endif
 }
 
 void __cdecl CG_RegisterGraphics(int localClientNum, const char *mapname)
