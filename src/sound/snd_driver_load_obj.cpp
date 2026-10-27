@@ -77,18 +77,36 @@ LoadedSound *__cdecl SND_LoadFromBuffer(void *buffer, uint32_t bufferSize, const
         return 0;
     }
 
-    // MSS_DigitalFormatType (snd_al.cpp) only ever recognized 1 (PCM) or 17 (IMA-ADPCM)
-    // source formats; dr_wav decodes both of those (and everything else it supports) to
-    // plain PCM for us, so we always end up with 16-bit PCM regardless of the source
-    // format/bit depth - no ADPCM-vs-PCM branching needed on this side at all.
+    // OpenAL's playback paths support mono/stereo PCM only. Reject wider WAVs before
+    // converting them; otherwise the streaming decoder can overrun its fixed stereo buffer.
     uint32_t channels = wav.channels;
     uint32_t sampleRate = wav.sampleRate;
-    uint32_t frameCount = (uint32_t)wav.totalPCMFrameCount;
+    if ((channels != 1 && channels != 2) || sampleRate == 0 ||
+        wav.totalPCMFrameCount > UINT32_MAX / (channels * sizeof(drwav_int16)))
+    {
+        drwav_uninit(&wav);
+        Com_PrintError(
+            CON_CHANNEL_ERROR,
+            "ERROR: Sound file '%s' has unsupported channel count/rate or is too large\\n",
+            soundName);
+        return 0;
+    }
+
+    // dr_wav converts supported source encodings to 16-bit PCM, matching the OpenAL
+    // upload format without retaining an ADPCM-specific playback branch.
+    uint32_t frameCount = static_cast<uint32_t>(wav.totalPCMFrameCount);
     uint32_t dataLen = frameCount * channels * sizeof(drwav_int16);
 
     drwav_int16 *pcm = (drwav_int16 *)Z_Malloc(dataLen, "SND_LoadFromBuffer_temp", 15);
     drwav_uint64 framesRead = drwav_read_pcm_frames_s16(&wav, frameCount, pcm);
     drwav_uninit(&wav);
+
+    if (framesRead != frameCount)
+    {
+        Z_Free(pcm, 15);
+        Com_PrintError(CON_CHANNEL_ERROR, "ERROR: Sound file '%s' could not be fully decoded\\n", soundName);
+        return 0;
+    }
 
     LoadedSound *loadSnd = (LoadedSound *)Hunk_Alloc(sizeof(LoadedSound), "SND_LoadFromBuffer", 15);
     loadSnd->name = soundName;
