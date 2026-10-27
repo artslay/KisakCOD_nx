@@ -5027,11 +5027,7 @@ char __cdecl Scr_PrintProfileBuiltinTimes(float minTime)
     for (int i = 0; i < functionCount; ++i)
         order[i] = i;
 
-    qsort(
-        order,
-        static_cast<size_t>(functionCount),
-        sizeof(*order),
-        reinterpret_cast<int (*)(const void *, const void *)>(Scr_BuiltinCompare));
+    qsort(order, static_cast<size_t>(functionCount), sizeof(*order), Scr_BuiltinCompare);
 
     for (int i = functionCount - 1; i >= 0; --i)
     {
@@ -5054,9 +5050,13 @@ char __cdecl Scr_PrintProfileBuiltinTimes(float minTime)
     return 1;
 }
 
-int __cdecl Scr_BuiltinCompare(_DWORD* a, _DWORD* b)
+int __cdecl Scr_BuiltinCompare(const void *a, const void *b)
 {
-    return scrVmDebugPub.func_table[*a].prof - scrVmDebugPub.func_table[*b].prof;
+    const int indexA = *static_cast<const int *>(a);
+    const int indexB = *static_cast<const int *>(b);
+    const int timeA = scrVmDebugPub.func_table[indexA].prof;
+    const int timeB = scrVmDebugPub.func_table[indexB].prof;
+    return timeA < timeB ? -1 : (timeA > timeB ? 1 : 0);
 }
 
 void Scr_DecTime()
