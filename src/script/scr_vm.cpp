@@ -37,6 +37,7 @@
 #include <setjmp.h>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 
 #ifdef KISAK_SWITCH
 #include <chrono>
@@ -5027,7 +5028,7 @@ char __cdecl Scr_PrintProfileBuiltinTimes(float minTime)
     for (int i = 0; i < functionCount; ++i)
         order[i] = i;
 
-    qsort(order, static_cast<size_t>(functionCount), sizeof(*order), Scr_BuiltinCompare);
+    std::qsort(order, static_cast<size_t>(functionCount), sizeof(*order), Scr_BuiltinCompare);
 
     for (int i = functionCount - 1; i >= 0; --i)
     {
