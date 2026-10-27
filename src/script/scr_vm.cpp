@@ -52,6 +52,17 @@ static inline uint64_t Kisak_ProfileClock()
 }
 #endif
 
+double Scr_ProfileTicksToSeconds(uint64_t ticks)
+{
+#ifdef KISAK_SWITCH
+    using ProfileClock = std::chrono::steady_clock;
+    return std::chrono::duration<double>(
+        ProfileClock::duration(static_cast<ProfileClock::duration::rep>(ticks))).count();
+#else
+    return static_cast<double>(ticks) * *((float *)Sys_GetValue(0) + 20782);
+#endif
+}
+
 
 void Log(char const *format, ...)
 {
@@ -4923,134 +4934,121 @@ void __cdecl Scr_StackClear()
 
 void __cdecl Scr_ProfileUpdate()
 {
-#if 0
-    int total; // [esp+4h] [ebp-Ch] BYREF
-    int totalNonBuiltIn; // [esp+8h] [ebp-8h] BYREF
-    const char* profileString; // [esp+Ch] [ebp-4h]
+    const char *profileString = Dvar_EnumToString(profile);
 
-    profileString = Dvar_EnumToString(profile);
     if (scrVarPub.bScriptProfile)
     {
-        if (I_stricmp(profileString, "ai"))
+        if (!I_stricmp(profileString, "ai"))
         {
-            if (profile_script_by_file->current.enabled)
-            {
-                Scr_CalcScriptFileProfile();
-            }
-            else if (Scr_PrintProfileTimes(scrVarPub.scriptProfileMinTime))
-            {
-                scrVarPub.bScriptProfile = 0;
-            }
-        }
-        else
-        {
+            int total = 0;
+            int totalNonBuiltIn = 0;
             Scr_CalcAnimscriptProfile(&total, &totalNonBuiltIn);
-            Profile_SetTotal(236, total);
-            Profile_SetTotal(237, totalNonBuiltIn);
+            Com_Printf(
+                CON_CHANNEL_PARSERSCRIPT,
+                "animscript profile: total %.6f s, non-builtin %.6f s\n",
+                Scr_ProfileTicksToSeconds(static_cast<uint64_t>(total)),
+                Scr_ProfileTicksToSeconds(static_cast<uint64_t>(totalNonBuiltIn)));
+        }
+        else if (profile_script_by_file->current.enabled)
+        {
+            Scr_CalcScriptFileProfile();
+        }
+        else if (Scr_PrintProfileTimes(scrVarPub.scriptProfileMinTime))
+        {
+            scrVarPub.bScriptProfile = 0;
         }
     }
     else if (!I_stricmp(profileString, "ai") || profile_script_by_file->current.enabled)
     {
         scrVarPub.bScriptProfile = 1;
     }
-#endif
 }
 
 void __cdecl Scr_ProfileBuiltinUpdate()
 {
-#if 0
-    int i; // [esp+4h] [ebp-4h]
-
     if (scrVarPub.bScriptProfileBuiltin)
     {
         if (Scr_PrintProfileBuiltinTimes(scrVarPub.scriptProfileBuiltinMinTime))
             scrVarPub.bScriptProfileBuiltin = 0;
+        return;
     }
-    else
+
+    for (int i = 0; i < scrCompilePub.func_table_size; ++i)
     {
-        for (i = 0; i < scrCompilePub.func_table_size; ++i)
-        {
-            scrVmDebugPub.func_table[i].usage = 0;
-            scrVmDebugPub.func_table[i].prof = 0;
-        }
+        scrVmDebugPub.func_table[i].usage = 0;
+        scrVmDebugPub.func_table[i].prof = 0;
     }
-#endif
 }
 
 void __cdecl Scr_DoProfile(float minTime)
 {
-#if 0
-    scrVarPub.bScriptProfile = 1;
     scrVarPub.scriptProfileMinTime = minTime;
-#endif
+    scrVarPub.bScriptProfile = 1;
 }
 
 void __cdecl Scr_DoProfileBuiltin(float minTime)
 {
-#if 0
-    scrVarPub.bScriptProfileBuiltin = 1;
     scrVarPub.scriptProfileBuiltinMinTime = minTime;
-#endif
+    scrVarPub.bScriptProfileBuiltin = 1;
 }
 
 char __cdecl Scr_PrintProfileBuiltinTimes(float minTime)
 {
-    return 0;
-#if 0
-    float v2; // [esp+10h] [ebp-20h]
-    int j; // [esp+20h] [ebp-10h]
-    int* order; // [esp+24h] [ebp-Ch]
-    int time; // [esp+28h] [ebp-8h]
-    int i; // [esp+2Ch] [ebp-4h]
-    int ia; // [esp+2Ch] [ebp-4h]
-    int ib; // [esp+2Ch] [ebp-4h]
-    int ic; // [esp+2Ch] [ebp-4h]
-
-    if (minTime <= 0.0)
-        goto LABEL_10;
-    time = 0;
-    for (i = 0; i < scrCompilePub.func_table_size; time += scrVmDebugPub.func_table[i++].prof)
-        ;
-    if (minTime <= (double)time * *((float*)Sys_GetValue(0) + 20782))
-    {
-    LABEL_10:
-        order = (int*)Z_VirtualAlloc(4 * scrCompilePub.func_table_size, "Scr_PrintProfileBuiltinTimes", 0);
-        for (ib = 0; ib < scrCompilePub.func_table_size; ++ib)
-            order[ib] = ib;
-        qsort(order, scrCompilePub.func_table_size, 4u, (int(*)(const void*, const void*))Scr_BuiltinCompare);
-        for (ic = 0; ic < scrCompilePub.func_table_size; ++ic)
-        {
-            j = order[ic];
-            if (scrVmDebugPub.func_table[j].usage)
-            {
-                v2 = *((float*)Sys_GetValue(0) + 20782);
-                Com_Printf(
-                    CON_CHANNEL_PARSERSCRIPT,
-                    "time: %f, usage: %d, %s\n",
-                    (double)scrVmDebugPub.func_table[j].prof * v2,
-                    scrVmDebugPub.func_table[j].usage,
-                    scrVmDebugPub.func_table[j].name);
-                scrVmDebugPub.func_table[j].usage = 0;
-                scrVmDebugPub.func_table[j].prof = 0;
-            }
-            else if (scrVmDebugPub.func_table[j].prof)
-            {
-                MyAssertHandler(".\\script\\scr_vm.cpp", 5421, 0, "%s", "!scrVmDebugPub.func_table[j].prof");
-            }
-        }
-        Z_VirtualFree(order);
+    const int functionCount = scrCompilePub.func_table_size;
+    if (functionCount <= 0)
         return 1;
-    }
-    else
+
+    uint64_t totalTicks = 0;
+    for (int i = 0; i < functionCount; ++i)
     {
-        for (ia = 0; ia < scrCompilePub.func_table_size; ++ia)
+        const int ticks = scrVmDebugPub.func_table[i].prof;
+        if (ticks > 0)
+            totalTicks += static_cast<uint64_t>(ticks);
+    }
+
+    if (minTime > 0.0f &&
+        Scr_ProfileTicksToSeconds(totalTicks) < static_cast<double>(minTime))
+    {
+        for (int i = 0; i < functionCount; ++i)
         {
-            scrVmDebugPub.func_table[ia].usage = 0;
-            scrVmDebugPub.func_table[ia].prof = 0;
+            scrVmDebugPub.func_table[i].usage = 0;
+            scrVmDebugPub.func_table[i].prof = 0;
         }
         return 0;
     }
-#endif
+
+    int *order = static_cast<int *>(Z_VirtualAlloc(
+        sizeof(*order) * static_cast<size_t>(functionCount),
+        "Scr_PrintProfileBuiltinTimes",
+        0));
+    for (int i = 0; i < functionCount; ++i)
+        order[i] = i;
+
+    qsort(
+        order,
+        static_cast<size_t>(functionCount),
+        sizeof(*order),
+        reinterpret_cast<int (*)(const void *, const void *)>(Scr_BuiltinCompare));
+
+    for (int i = functionCount - 1; i >= 0; --i)
+    {
+        const int index = order[i];
+        FuncDebugData &entry = scrVmDebugPub.func_table[index];
+        if (entry.usage)
+        {
+            Com_Printf(
+                CON_CHANNEL_PARSERSCRIPT,
+                "time: %f, usage: %d, %s\n",
+                Scr_ProfileTicksToSeconds(static_cast<uint64_t>(entry.prof > 0 ? entry.prof : 0)),
+                entry.usage,
+                entry.name ? entry.name : "<unnamed builtin>");
+        }
+        entry.usage = 0;
+        entry.prof = 0;
+    }
+
+    Z_VirtualFree(order);
+    return 1;
 }
 
 int __cdecl Scr_BuiltinCompare(_DWORD* a, _DWORD* b)
