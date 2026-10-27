@@ -528,6 +528,9 @@ void __cdecl R_Cinematic_UpdateTimeInMsec(const BINKREALTIME *binkRealtime)
 
 void R_Cinematic_StopPlayback_Now()
 {
+#ifdef __SWITCH__
+    Switch_LogCinematicState("stop_now_begin");
+#endif
     cinematicGlob.activeImageFrame = -1;
     if (cinematicGlob.hasFileIO)
         R_Cinematic_RelinquishIO();
@@ -540,6 +543,9 @@ void R_Cinematic_StopPlayback_Now()
     Switch_ResetPendingBinkUpload();
 #endif
     CinematicHunk_Reset(&cinematicGlob.binkHunk);
+#ifdef __SWITCH__
+    Switch_LogCinematicState("stop_now_complete");
+#endif
 }
 
 void __cdecl CinematicHunk_Reset(CinematicHunk *hunk)
