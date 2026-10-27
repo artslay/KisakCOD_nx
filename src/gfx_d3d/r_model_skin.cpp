@@ -3,7 +3,6 @@
 #include "r_init.h"
 #include "r_dvars.h"
 #include <qcommon/com_playerprofile.h>
-#include <qcommon/com_pack.h>
 #include "r_buffers.h"
 #include <universal/profile.h>
 #include "r_dobj_skin.h"
@@ -177,17 +176,6 @@ void R_SkinXModelCmd(_WORD *data)
         {
             R_SkinXSurfaceSkinned(xsurf, &boneSkelMats[boneIndex], skinVerticesOut);
         }
-#ifdef __SWITCH__
-        // Cached skinned vertices go straight to the GPU cache VB and bypass
-        // R_SetVertexData, so convert their copied UVs here before that buffer
-        // is submitted. Uncached output is converted on its later dynamic upload.
-        if (skinnedSurf->skinnedCachedOffset >= 0)
-        {
-            for (uint32_t vertexIndex = 0; vertexIndex < xsurf->vertCount; ++vertexIndex)
-                skinVerticesOut[vertexIndex].texCoord =
-                    Vec2ConvertTexCoordsForVulkan(skinVerticesOut[vertexIndex].texCoord);
-        }
-#endif
     }
 
     if (sseStateUsed)
