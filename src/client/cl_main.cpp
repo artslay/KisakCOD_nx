@@ -1046,10 +1046,14 @@ void CL_DevGuiDvar_f()
         else
         {
             v4 = Cmd_Argv(2);
+#ifdef __SWITCH__
             // Stock DevGui configs contain platform-specific dvars. Keep
             // these diagnostics when actively debugging, not during normal play.
             if (Dvar_GetInt("developer"))
                 Com_Printf(CON_CHANNEL_DEVGUI, "dvar '%s' doesn't exist\n", v4);
+#else
+            Com_Printf(CON_CHANNEL_DEVGUI, "dvar '%s' doesn't exist\n", v4);
+#endif
         }
     }
     else
