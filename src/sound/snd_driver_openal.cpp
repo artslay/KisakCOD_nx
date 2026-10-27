@@ -101,8 +101,9 @@ void __cdecl SND_ShutdownDriver()
 
 int __cdecl SND_GetDriverCPUPercentage()
 {
-    // KISAK_OPENAL TODO: no direct OpenAL equivalent to Miles' per-driver CPU usage stat.
-    return 0;
+    // OpenAL has no portable mixer-thread CPU query. SND_Update records the measured
+    // engine-side sound update percentage in g_snd.cpu; expose that estimate to callers.
+    return g_snd.cpu;
 }
 
 void __cdecl SND_Set3DPosition(int index, const float *org)
