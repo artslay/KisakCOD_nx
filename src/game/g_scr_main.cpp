@@ -49,8 +49,8 @@ extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
 // Keep the intermediate width explicit on Switch, where long double is 16 bytes.
 static int Scr_RoundSecondsToMilliseconds(float seconds)
 {
-    const float milliseconds = seconds * 1000.0f + 0.5f;
-    return static_cast<int>(floor(static_cast<double>(milliseconds)));
+    const double milliseconds = static_cast<double>(seconds) * 1000.0 + 0.5;
+    return static_cast<int>(floor(milliseconds));
 }
 
 const BuiltinMethodDef methods[104] =
