@@ -49,7 +49,7 @@ void Switch_WritePostCinematicRenderTrace(
     char trace[1024];
     std::snprintf(
         trace, sizeof(trace),
-        "[KisakCOD][POST-CINE RENDER TRACE] frame=%llu sinceSkip=%llu phase=%s frameStage=%s drawSerial=%llu drawsSinceSkip=%llu detail=%s\\n",
+        "[KisakCOD][POST-CINE RENDER TRACE] frame=%llu sinceSkip=%llu phase=%s frameStage=%s drawSerial=%llu drawsSinceSkip=%llu detail=%s\n",
         static_cast<unsigned long long>(frame),
         static_cast<unsigned long long>(frame >= startFrame ? frame - startFrame : 0),
         phase ? phase : "(unknown)",
@@ -195,12 +195,33 @@ int __cdecl CL_CGameRendering()
     int animFrametime; // r31
     DemoType DemoType; // r3
 
+#ifdef __SWITCH__
+    char postCineCgameEntry[256];
+    std::snprintf(
+        postCineCgameEntry, sizeof(postCineCgameEntry),
+        "conn=%d fullscreen=%d menu=%d uiStarted=%d",
+        static_cast<int>(clientUIActives[0].connectionState),
+        UI_IsFullscreen() ? 1 : 0,
+        UI_GetActiveMenu(0),
+        cls.uiStarted ? 1 : 0);
+    Switch_LogPostCinematicRenderTrace("cl_cgame_render_enter", postCineCgameEntry);
+#endif
     if (clientUIActives[0].connectionState != CA_ACTIVE)
+    {
+#ifdef __SWITCH__
+        Switch_LogPostCinematicRenderTrace(
+            "cl_cgame_render_suppressed", "reason=connection_state_not_active");
+#endif
         return 0;
+    }
 #ifdef __SWITCH__
     const bool switchCGameFullscreen = UI_IsFullscreen();
     if (switchCGameFullscreen)
+    {
+        Switch_LogPostCinematicRenderTrace(
+            "cl_cgame_render_suppressed", "reason=fullscreen_ui");
         return 0;
+    }
 #else
     if (UI_IsFullscreen())
         return 0;
@@ -208,7 +229,17 @@ int __cdecl CL_CGameRendering()
     R_BeginClientCmdList2D();
     animFrametime = cls.animFrametime;
     DemoType = CL_GetDemoType();
-    if (!CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime))
+    const int switchCGameFrameResult =
+        CG_DrawActiveFrame(0, clients[0].serverTime, DemoType, CUBEMAPSHOT_NONE, 0, animFrametime);
+#ifdef __SWITCH__
+    char postCineActiveFrameTrace[256];
+    std::snprintf(
+        postCineActiveFrameTrace, sizeof(postCineActiveFrameTrace),
+        "CG_DrawActiveFrame=%d serverTime=%d animFrametime=%d",
+        switchCGameFrameResult, clients[0].serverTime, animFrametime);
+    Switch_LogPostCinematicRenderTrace("cl_cgame_active_frame_return", postCineActiveFrameTrace);
+#endif
+    if (!switchCGameFrameResult)
         return 0;
     if ((clientUIActives[0].keyCatchers & KEYCATCH_UI) != 0)
         UI_Refresh();
@@ -428,6 +459,17 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
     g_switchFrameTailReached = 0;
     g_switchFrameAfterDrawReached = 0;
     g_switchFrameStage = "frame/scr/draw_field/begin";
+    char postCineDrawFieldEntry[320];
+    std::snprintf(
+        postCineDrawFieldEntry, sizeof(postCineDrawFieldEntry),
+        "refreshedUI=%d conn=%d fullscreen=%d menu=%d cineStarted=%d mapLoadCine=%d",
+        refreshedUI,
+        static_cast<int>(clientUIActives[0].connectionState),
+        UI_IsFullscreen() ? 1 : 0,
+        UI_GetActiveMenu(0),
+        R_Cinematic_IsStarted() ? 1 : 0,
+        SCR_IsMapLoadingCinematicActive() ? 1 : 0);
+    Switch_LogPostCinematicRenderTrace("draw_screen_field_enter", postCineDrawFieldEntry);
 #endif
     R_BeginSharedCmdList();
 #ifdef __SWITCH__
