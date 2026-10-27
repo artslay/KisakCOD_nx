@@ -96,9 +96,17 @@ void R_SkinXModelCmd(_WORD *data)
         {
             boneIndex = skinnedSurf->info.boneIndex;
             const int totalBones = boneIndex + skinnedSurf->info.boneCount;
-            const DObjAnimMat* baseMats = &skinnedSurf->info.baseMat[-boneIndex];
-            for (uint32_t j = boneIndex; j < totalBones; j++)
+            // baseMat contains this model's local bind-pose array, whereas
+            // boneSkelMats and surfacePartBits are indexed by DObj-global bone.
+            // Do not form baseMat[-boneIndex]: that points before the allocated
+            // array and relies on undefined pointer arithmetic on 64-bit builds.
+            const DObjAnimMat* baseMats = skinnedSurf->info.baseMat;
+            for (uint32_t localBoneIndex = 0;
+                 localBoneIndex < skinnedSurf->info.boneCount;
+                 ++localBoneIndex)
             {
+                const uint32_t j =
+                    static_cast<uint32_t>(boneIndex) + localBoneIndex;
                 if ((skinCmd->surfacePartBits[j >> 5] & (0x80000000 >> (j & 0x1F))) == 0)
                     continue;
 
@@ -116,7 +124,7 @@ void R_SkinXModelCmd(_WORD *data)
 
                 DObjSkelMat mat0, mat1;
 
-                ConvertQuatToInverseSkelMat(&baseMats[j], &mat0);
+                ConvertQuatToInverseSkelMat(&baseMats[localBoneIndex], &mat0);
                 ConvertQuatToSkelMat(&skinCmd->mat[j], &mat1);
                 R_MultiplySkelMat(&mat0, &mat1, &boneSkelMats[j]);
 
