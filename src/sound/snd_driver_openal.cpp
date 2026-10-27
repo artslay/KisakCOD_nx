@@ -579,12 +579,19 @@ void __cdecl SND_ApplyChannelMap(ALuint handle, const snd_alias_t *alias, int sr
     int16_t *mapped = static_cast<int16_t *>(std::malloc(mappedBytes));
     if (!mapped)
     {
-        Com_PrintError(CON_CHANNEL_SOUND, "Could not allocate speaker-map buffer for '%s'\\n",
+        Com_PrintError(CON_CHANNEL_SOUND, "Could not allocate speaker-map buffer for '%s'\n",
             alias->aliasName ? alias->aliasName : "<unnamed>");
         return;
     }
 
-    Com_Memcpy(mapped, sound->data, sound->info.data_len);
+    const size_t sourceBytes =
+        static_cast<size_t>(frameCount) * srcChannelCount * sizeof(int16_t);
+    if (sound->info.data_len < sourceBytes)
+    {
+        std::free(mapped);
+        return;
+    }
+    Com_Memcpy(mapped, sound->data, sourceBytes);
     const int outputChannels = AL_ApplySpeakerMapToPcm(
         mapped, frameCount, srcChannelCount, alias);
     if (outputChannels != 0)
@@ -731,14 +738,15 @@ void __cdecl SND_Apply3DSpatializationTweaks(ALuint handle, const snd_alias_t *a
     // OpenAL's standard positional rendering is defined for mono buffers. Convert stereo
     // loaded assets to mono before attaching them to a 3D source so they are actually panned.
     const uint64_t frameCount = sound->info.samples;
-    if (frameCount > static_cast<uint64_t>(0x7fffffff) / sizeof(int16_t))
+    if (frameCount > static_cast<uint64_t>(0x7fffffff) / sizeof(int16_t) ||
+        frameCount > static_cast<uint64_t>(sound->info.data_len) / (2 * sizeof(int16_t)))
         return;
 
     const size_t monoBytes = static_cast<size_t>(frameCount) * sizeof(int16_t);
     int16_t *mono = static_cast<int16_t *>(std::malloc(monoBytes));
     if (!mono)
     {
-        Com_PrintError(CON_CHANNEL_SOUND, "Could not allocate mono 3D buffer for '%s'\\n",
+        Com_PrintError(CON_CHANNEL_SOUND, "Could not allocate mono 3D buffer for '%s'\n",
             alias->aliasName ? alias->aliasName : "<unnamed>");
         return;
     }
@@ -1033,7 +1041,7 @@ int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int
     {
         Com_PrintError(
             CON_CHANNEL_SOUND,
-            "Couldn't play stream '%s' from alias '%s' - unsupported channel count %u or sample rate %u\\n",
+            "Couldn't play stream '%s' from alias '%s' - unsupported channel count %u or sample rate %u\n",
             realname,
             startAliasInfo->alias0->aliasName,
             static_cast<unsigned>(stream->channels),
