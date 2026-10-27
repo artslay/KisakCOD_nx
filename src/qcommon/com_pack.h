@@ -17,6 +17,8 @@ struct PackedTexCoords // sizeof=0x4
 };
 
 void __cdecl Vec2UnpackTexCoords(PackedTexCoords in, float *out);
+// Convert CoD4's packed XModel UV encoding to Vulkan's IEEE binary16 pair.
+PackedTexCoords __cdecl Vec2ConvertTexCoordsForVulkan(PackedTexCoords in);
 void __cdecl Vec3UnpackUnitVec(PackedUnitVec in, float *out);
 PackedUnitVec __cdecl Vec3PackUnitVec(const float *unitVec);
 PackedTexCoords __cdecl Vec2PackTexCoords(const float *in);
