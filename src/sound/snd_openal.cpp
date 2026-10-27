@@ -78,14 +78,33 @@ char __cdecl MSS_Init()
     };
     alGlob.context = alcCreateContext(
         alGlob.device, hasOutputMode ? outputAttrs : defaultAttrs);
-    if (!alGlob.context || !alcMakeContextCurrent(alGlob.context))
+    if (alGlob.context && !alcMakeContextCurrent(alGlob.context))
+    {
+        alcDestroyContext(alGlob.context);
+        alGlob.context = NULL;
+    }
+
+    // Output mode is only a hint. If a backend rejects the requested mode/context
+    // attributes, retry with the ordinary default context rather than disabling audio.
+    if (!alGlob.context && hasOutputMode)
+    {
+        (void)alcGetError(alGlob.device);
+        Com_PrintError(
+            CON_CHANNEL_SOUND,
+            "OpenAL output mode initialization failed; retrying with system defaults\n");
+        alGlob.context = alcCreateContext(alGlob.device, defaultAttrs);
+        if (alGlob.context && !alcMakeContextCurrent(alGlob.context))
+        {
+            alcDestroyContext(alGlob.context);
+            alGlob.context = NULL;
+        }
+    }
+
+    if (!alGlob.context)
     {
         Com_PrintError(CON_CHANNEL_SOUND, "ERROR: Couldn't create OpenAL context\n");
-        if (alGlob.context)
-            alcDestroyContext(alGlob.context);
         alcCloseDevice(alGlob.device);
         alGlob.device = NULL;
-        alGlob.context = NULL;
         return 0;
     }
 
