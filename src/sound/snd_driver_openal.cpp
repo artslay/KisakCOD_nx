@@ -551,30 +551,48 @@ static void AL_ApplyEqToPcm(
         !snd_enableEq->current.enabled)
         return;
 
+    ALBiquadCoefficients coefficients[2][3] = {};
+    bool active[2][3] = {};
+    bool anyActive = false;
     for (int eqIndex = 0; eqIndex < 2; ++eqIndex)
     {
         for (int band = 0; band < 3; ++band)
         {
             const SndEqParams &params = alGlob.eq[eqIndex].params[band][entchannel];
-            ALBiquadCoefficients coeffs;
-            if (!AL_ComputeEqCoefficients(params, sampleRate, &coeffs))
-                continue;
+            active[eqIndex][band] = AL_ComputeEqCoefficients(
+                params, sampleRate, &coefficients[eqIndex][band]);
+            anyActive = anyActive || active[eqIndex][band];
+        }
+    }
+    if (!anyActive)
+        return;
 
-            for (int channel = 0; channel < channels; ++channel)
+    // Cascade all enabled bands in floating point and clamp only once at the output.
+    // This avoids intermediate int16 clipping when multiple EQ bands boost the same signal.
+    for (uint64_t frame = 0; frame < frameCount; ++frame)
+    {
+        for (int channel = 0; channel < channels; ++channel)
+        {
+            const size_t sampleIndex = static_cast<size_t>(frame) * channels + channel;
+            float value = static_cast<float>(pcm[sampleIndex]);
+            for (int eqIndex = 0; eqIndex < 2; ++eqIndex)
             {
-                ALBiquadHistory &state = history[eqIndex][band][channel];
-                for (uint64_t frame = 0; frame < frameCount; ++frame)
+                for (int band = 0; band < 3; ++band)
                 {
-                    const size_t sampleIndex = static_cast<size_t>(frame) * channels + channel;
-                    const float input = static_cast<float>(pcm[sampleIndex]);
+                    if (!active[eqIndex][band])
+                        continue;
+
+                    const ALBiquadCoefficients &coeffs = coefficients[eqIndex][band];
+                    ALBiquadHistory &state = history[eqIndex][band][channel];
+                    const float input = value;
                     const float filtered = coeffs.b0 * input + state.z1;
                     state.z1 = coeffs.b1 * input - coeffs.a1 * filtered + state.z2;
                     state.z2 = coeffs.b2 * input - coeffs.a2 * filtered;
-                    const float output = filtered * coeffs.outputGain;
-                    const float clipped = std::clamp(output, -32768.0f, 32767.0f);
-                    pcm[sampleIndex] = static_cast<int16_t>(clipped);
+                    value = filtered * coeffs.outputGain;
                 }
             }
+            pcm[sampleIndex] = static_cast<int16_t>(
+                std::clamp(value, -32768.0f, 32767.0f));
         }
     }
 }
