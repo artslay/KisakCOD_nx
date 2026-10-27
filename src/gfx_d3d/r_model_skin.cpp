@@ -95,7 +95,6 @@ void R_SkinXModelCmd(_WORD *data)
         if (boneIndex != skinnedSurf->info.boneIndex)
         {
             boneIndex = skinnedSurf->info.boneIndex;
-            const int totalBones = boneIndex + skinnedSurf->info.boneCount;
             // baseMat contains this model's local bind-pose array, whereas
             // boneSkelMats and surfacePartBits are indexed by DObj-global bone.
             // Do not form baseMat[-boneIndex]: that points before the allocated
