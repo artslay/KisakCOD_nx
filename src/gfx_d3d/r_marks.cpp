@@ -702,13 +702,17 @@ static void R_AABBTreeStaticModelsIterative(
     int smodelListSize,
     int *smodelCount)
 {
-    if (!root || !nodeCount ||
+    const uintptr_t rootAddress = reinterpret_cast<uintptr_t>(root);
+    if (!root || rootAddress < 0x10000u || !nodeCount ||
         nodeCount > static_cast<uint64_t>(UINTPTR_MAX) / sizeof(GfxAabbTree) ||
         !mins || !maxs || !allowSModel || !smodelList || !smodelCount ||
         smodelListSize <= 0 || *smodelCount < 0 || *smodelCount > smodelListSize)
     {
         R_LogAabbStaticModelTraversalFault(
-            "invalid_root_count_or_arguments", root, root, nodeCount, 0);
+            root && rootAddress < 0x10000u
+                ? "root_low_address"
+                : "invalid_root_count_or_arguments",
+            root, root, nodeCount, 0);
         return;
     }
 
@@ -721,7 +725,6 @@ static void R_AABBTreeStaticModelsIterative(
         return;
     }
 
-    const uintptr_t rootAddress = reinterpret_cast<uintptr_t>(root);
     const uintptr_t treeBytes =
         static_cast<uintptr_t>(nodeCount) * sizeof(GfxAabbTree);
     if (rootAddress > UINTPTR_MAX - treeBytes)
@@ -848,10 +851,14 @@ void __cdecl R_AABBTreeStaticModels_r(
     int smodelListSize,
     int *smodelCount)
 {
-    if (!rgp.world || !rgp.world->cells || !tree)
+    const uintptr_t treeAddress = reinterpret_cast<uintptr_t>(tree);
+    if (!rgp.world || !rgp.world->cells || !tree || treeAddress < 0x10000u)
     {
         R_LogAabbStaticModelTraversalFault(
-            "world_or_root_unavailable", tree, tree, 0, 0);
+            tree && treeAddress < 0x10000u
+                ? "root_low_address"
+                : "world_or_root_unavailable",
+            tree, tree, 0, 0);
         return;
     }
 
