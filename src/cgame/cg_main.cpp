@@ -1152,7 +1152,7 @@ static void __cdecl CG_SubtitlePrint(int msec, const snd_alias_t *alias)
     const dvar_s *v5; // r10
     const dvar_s *v6; // r11
     int integer; // r31
-    long double v8; // fp2
+    double v8; // fp2
     int v9; // r5
 
     if (!alias)
@@ -1175,7 +1175,7 @@ static void __cdecl CG_SubtitlePrint(int msec, const snd_alias_t *alias)
             v6 = cg_subtitleWidthWidescreen;
         integer = v6->current.integer;
         v8 = floor((float)((float)(v5->current.value * (float)1000.0) + (float)0.5));
-        v9 = (int)(float)*(double *)&v8;
+        v9 = (int)(float)v8;
         if (v9 < msec)
             v9 = msec;
         CL_SubtitlePrint(0, alias->subtitle, v9, integer);
