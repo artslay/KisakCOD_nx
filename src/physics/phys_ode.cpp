@@ -2153,13 +2153,25 @@ void __cdecl Phys_RunFrame(int localClientNum, PhysWorld worldIndex, float secon
 #endif
         if (phys_interBodyCollision->current.enabled)
             dSpaceCollide(physGlob.space[worldIndex], &frameInfo, Phys_NearCallback);
+#ifdef __SWITCH__
+        Switch_SetPhysicsCrashStage("collision_callback", worldIndex, localClientNum);
+#endif
         if (physGlob.worldData[worldIndex].collisionCallback)
             physGlob.worldData[worldIndex].collisionCallback();
+#ifdef __SWITCH__
+        Switch_SetPhysicsCrashStage("world_geom_collision", worldIndex, localClientNum);
+#endif
         ODE_CollideSimpleSpaceWithGeomNoAABBTest(physGlob.space[worldIndex], physGlob.worldGeom, &frameInfo);
     }
     {
         PROF_SCOPED("Phys_Step");
+#ifdef __SWITCH__
+        Switch_SetPhysicsCrashStage("quick_step", worldIndex, localClientNum);
+#endif
         dWorldQuickStep(world, seconds);
+#ifdef __SWITCH__
+        Switch_SetPhysicsCrashStage("quick_step_returned", worldIndex, localClientNum);
+#endif
     }
     physGlob.dumpContacts = 0;
 }
