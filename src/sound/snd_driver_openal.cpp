@@ -152,7 +152,7 @@ struct AlStreamState
     drmp3 mp3;
     uint32_t channels;
     uint32_t sampleRate;
-    ALBiquadHistory eqHistory[2][3][2];
+    ALBiquadHistory eqHistory[2][3][6];
     uint32_t eqRevision;
     bool eqWasEnabled;
     // Frames decoded/queued since the current loop pass began (reset to the post-seek frame
@@ -537,9 +537,9 @@ static void AL_ApplyEqToPcm(
     int channels,
     int entchannel,
     uint32_t sampleRate,
-    ALBiquadHistory history[2][3][2])
+    ALBiquadHistory history[2][3][6])
 {
-    if (!pcm || (channels != 1 && channels != 2) ||
+    if (!pcm || channels < 1 || channels > 6 ||
         entchannel < 0 || entchannel >= 64 || !snd_enableEq ||
         !snd_enableEq->current.enabled)
         return;
@@ -624,7 +624,7 @@ static bool AL_RebuildLoadedChannelBuffer(int index, int entchannel)
             outputChannels = static_cast<uint32_t>(mappedChannels);
     }
 
-    ALBiquadHistory history[2][3][2] = {};
+    ALBiquadHistory history[2][3][6] = {};
     AL_ApplyEqToPcm(
         pcm, frameCount, static_cast<int>(outputChannels), entchannel,
         sound->info.rate, history);
@@ -665,7 +665,7 @@ static bool AL_RebuildLoadedChannelBuffer(int index, int entchannel)
 
     if (uploadError != AL_NO_ERROR)
     {
-        Com_PrintError(CON_CHANNEL_SOUND, "OpenAL could not upload EQ buffer for '%s' (error %x)\\n",
+        Com_PrintError(CON_CHANNEL_SOUND, "OpenAL could not upload EQ buffer for '%s' (error %x)\n",
             alias->aliasName ? alias->aliasName : "<unnamed>", static_cast<unsigned>(uploadError));
         return false;
     }
@@ -791,7 +791,7 @@ static bool SND_FillStreamBuffers(int index)
         const ALenum format = AL_GetPcmFormat(outputChannels);
         if (format == 0)
         {
-            Com_PrintError(CON_CHANNEL_SOUND, "OpenAL has no PCM format for %u-channel stream\\n",
+            Com_PrintError(CON_CHANNEL_SOUND, "OpenAL has no PCM format for %u-channel stream\n",
                 static_cast<unsigned>(outputChannels));
             return queued > 0;
         }
