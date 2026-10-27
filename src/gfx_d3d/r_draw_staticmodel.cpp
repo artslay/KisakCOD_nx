@@ -614,7 +614,7 @@ void __cdecl R_DrawStaticModelsSkinnedDrawSurfLighting(GfxStaticModelDrawStream 
     xsurf = drawStream->localSurf;
     R_SetStaticModelSkinnedPrimArgs(&context.state->prim, xsurf, &args);
     R_CheckVertexDataOverflow(32 * args.vertexCount);
-    vertexOffset = R_SetVertexData(context.state, xsurf->verts0, args.vertexCount, 32);
+    vertexOffset = R_SetPackedModelVertexData(context.state, xsurf->verts0, args.vertexCount);
     vb = gfxBuf.dynamicVertexBuffer->buffer;
     iassert( vb );
     R_SetStreamSource(&context.state->prim, vb, vertexOffset, 32);
@@ -675,7 +675,7 @@ void __cdecl R_DrawStaticModelsSkinnedDrawSurf(GfxStaticModelDrawStream *drawStr
     xsurf = drawStream->localSurf;
     R_SetStaticModelSkinnedPrimArgs(&context.state->prim, xsurf, &args);
     R_CheckVertexDataOverflow(32 * args.vertexCount);
-    vertexOffset = R_SetVertexData(context.state, xsurf->verts0, args.vertexCount, 32);
+    vertexOffset = R_SetPackedModelVertexData(context.state, xsurf->verts0, args.vertexCount);
     vb = gfxBuf.dynamicVertexBuffer->buffer;
     iassert( vb );
     R_SetStreamSource(&context.state->prim, vb, vertexOffset, 0x20u);
