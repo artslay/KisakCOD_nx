@@ -41,6 +41,69 @@ static void FX_LogInvalidSwitchFrustum(
         camera ? static_cast<unsigned>(ARRAY_COUNT(camera->frustum)) : 0u);
     Switch_LogWrite(trace);
 }
+
+static volatile uint32_t g_switchFxNearCullTraceCount;
+
+static void FX_LogNearEffectCull(
+    const char *kind,
+    const FxDrawState *draw,
+    uint32_t frustumPlaneCount,
+    float radius)
+{
+    if (!draw || !draw->camera || !draw->camera->isValid ||
+        frustumPlaneCount < 5 ||
+        frustumPlaneCount > ARRAY_COUNT(draw->camera->frustum))
+        return;
+
+    float delta[3];
+    Vec3Sub(draw->camera->origin, draw->posWorld, delta);
+    const float distanceSquared = Vec3LengthSq(delta);
+    // Only report effects genuinely near the camera. This distinguishes a
+    // near-plane/culling problem from a Vulkan draw/transform problem.
+    if (distanceSquared > 64.0f * 64.0f)
+        return;
+
+    const uint32_t traceIndex =
+        __sync_fetch_and_add(&g_switchFxNearCullTraceCount, 1u);
+    if (traceIndex >= 32u)
+        return;
+
+    int culpritPlane = -1;
+    float closestPlaneDistance = 3.4e38f;
+    for (uint32_t planeIndex = 0; planeIndex < frustumPlaneCount; ++planeIndex)
+    {
+        const float planeDistance =
+            Vec3Dot(draw->camera->frustum[planeIndex], draw->posWorld) -
+            draw->camera->frustum[planeIndex][3];
+        if (planeDistance < closestPlaneDistance)
+            closestPlaneDistance = planeDistance;
+        if (culpritPlane < 0 && planeDistance <= -radius)
+            culpritPlane = static_cast<int>(planeIndex);
+    }
+
+    const char *effectName =
+        draw->effect && draw->effect->def && draw->effect->def->name
+            ? draw->effect->def->name : "(unknown)";
+    char trace[448];
+    std::snprintf(
+        trace, sizeof(trace),
+        "[KisakCOD][FX NEAR CULL] n=%u kind=%s effect=%s elemType=%u flags=0x%x "
+        "distanceSq=%.2f radius=%.3f planeCount=%u culprit=%d closestPlane=%.3f "
+        "pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f)\\n",
+        traceIndex,
+        kind ? kind : "(unknown)",
+        effectName,
+        static_cast<unsigned>(draw->elemDef ? draw->elemDef->elemType : 0u),
+        static_cast<unsigned>(draw->elemDef ? draw->elemDef->flags : 0u),
+        distanceSquared,
+        radius,
+        static_cast<unsigned>(frustumPlaneCount),
+        culpritPlane,
+        closestPlaneDistance,
+        draw->posWorld[0], draw->posWorld[1], draw->posWorld[2],
+        draw->camera->origin[0], draw->camera->origin[1], draw->camera->origin[2]);
+    Switch_LogWrite(trace);
+}
 #endif
 
 #ifdef KISAK_MP
@@ -598,7 +661,12 @@ bool __cdecl FX_CullElementForDraw_Sprite(const FxDrawState *draw)
         v3 = v4 - v5;
         v2 = v3 < 0.0 ? v5 : v4;
         if (FX_CullSphere(draw->camera, frustumPlaneCount, draw->posWorld, v2))
+        {
+#ifdef __SWITCH__
+            FX_LogNearEffectCull("sprite", draw, frustumPlaneCount, v2);
+#endif
             return 1;
+        }
     }
     return result;
 }
@@ -953,8 +1021,14 @@ bool __cdecl FX_CullElementForDraw_Light(const FxDrawState *draw)
     if (fx_cull_elem_draw->current.enabled)
     {
         frustumPlaneCount = FX_CullElementForDraw_FrustumPlaneCount(draw);
-        if (FX_CullSphere(draw->camera, frustumPlaneCount, draw->posWorld, draw->visState.size[0]))
+        const float lightRadius = draw->visState.size[0];
+        if (FX_CullSphere(draw->camera, frustumPlaneCount, draw->posWorld, lightRadius))
+        {
+#ifdef __SWITCH__
+            FX_LogNearEffectCull("light", draw, frustumPlaneCount, lightRadius);
+#endif
             return 1;
+        }
     }
     return result;
 }
