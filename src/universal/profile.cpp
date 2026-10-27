@@ -573,10 +573,11 @@ void __cdecl Profile_Unguard(int id)
 
 void __cdecl Profile_SetTotal(int index, int total)
 {
-#if 0
-    ProfileStack* prof_stack = (ProfileStack*)Sys_GetValue(0);
-    prof_stack->prof_array[index].write.total.value[0] = total;
-#endif
+    iassert(index >= 0);
+    iassert(index < ARRAY_COUNT(((ProfileStack *)0)->prof_array));
+    ProfileStack *prof_stack = (ProfileStack *)Sys_GetValue(0);
+    iassert(prof_stack);
+    prof_stack->prof_array[index].write.total.value[0] = static_cast<uint32_t>(total);
 }
 
 void Profile_ResetScriptCounters()
