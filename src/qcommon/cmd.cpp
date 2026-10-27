@@ -1340,6 +1340,20 @@ void __cdecl Cmd_Exec_f()
     }
 }
 
+static bool Cmd_ShouldLogExec(const char *filename)
+{
+    if (!filename || Dvar_GetInt("developer"))
+        return true;
+
+    const char *baseName = strrchr(filename, '/');
+    baseName = baseName ? baseName + 1 : filename;
+
+    // DevGui scripts are optional developer tooling and contain many dvars
+    // unavailable in the Switch build. They still execute; only their routine
+    // successful "execing" messages are omitted in normal play.
+    return strncmp(baseName, "devgui_", 7) != 0;
+}
+
 char __cdecl Cmd_ExecFromDisk(int32_t  localClientNum, int32_t  controllerIndex, const char *filename)
 {
     char *text; // [esp+0h] [ebp-4h] BYREF
@@ -1347,7 +1361,8 @@ char __cdecl Cmd_ExecFromDisk(int32_t  localClientNum, int32_t  controllerIndex,
     FS_ReadFile(filename, (void **)&text);
     if (!text)
         return 0;
-    Com_Printf(CON_CHANNEL_SYSTEM, "execing %s from disk\n", filename);
+    if (Cmd_ShouldLogExec(filename))
+        Com_Printf(CON_CHANNEL_SYSTEM, "execing %s from disk\n", filename);
     Cbuf_ExecuteBuffer(localClientNum, controllerIndex, text);
     FS_FreeFile(text);
     return 1;
@@ -1368,7 +1383,8 @@ char __cdecl Cmd_ExecFromFastFile(int32_t  localClientNum, int32_t  controllerIn
     rawfile = DB_FindXAssetHeader(ASSET_TYPE_RAWFILE, filename).rawfile;
     if (!rawfile)
         return 0;
-    Com_Printf(CON_CHANNEL_SYSTEM, "execing %s from fastfile\n", filename);
+    if (Cmd_ShouldLogExec(filename))
+        Com_Printf(CON_CHANNEL_SYSTEM, "execing %s from fastfile\n", filename);
     Cbuf_ExecuteBuffer(localClientNum, controllerIndex, (char *)rawfile->buffer);
     return 1;
 }
