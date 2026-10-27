@@ -1909,6 +1909,7 @@ bool VulkanBackend::EndFrame()
     if (endResult != VK_SUCCESS)
     {
 #ifdef __SWITCH__
+        g_switchFrameStage = "frame/present/end_command_buffer_failed";
         char postCineEndBufferFail[96];
         std::snprintf(postCineEndBufferFail, sizeof(postCineEndBufferFail),
             "reason=vkEndCommandBuffer_failed result=%d", static_cast<int>(endResult));
@@ -1932,6 +1933,7 @@ bool VulkanBackend::EndFrame()
     if (resetFenceResult != VK_SUCCESS)
     {
 #ifdef __SWITCH__
+        g_switchFrameStage = "frame/present/reset_fence_failed";
         char postCineFenceFail[96];
         std::snprintf(postCineFenceFail, sizeof(postCineFenceFail),
             "reason=vkResetFences_failed result=%d", static_cast<int>(resetFenceResult));
@@ -1971,11 +1973,11 @@ bool VulkanBackend::EndFrame()
     if (submitResult != VK_SUCCESS)
     {
 #ifdef __SWITCH__
+        g_switchFrameStage = "frame/present/queue_submit_failed";
         char postCineSubmitFail[128];
         std::snprintf(postCineSubmitFail, sizeof(postCineSubmitFail),
             "reason=vkQueueSubmit_failed result=%d", static_cast<int>(submitResult));
         Switch_LogPostCinematicRenderTrace("vk_end_frame_abort", postCineSubmitFail);
-        g_switchFrameStage = "frame/present/queue_submit_failed";
         const bool validSignalSemaphore =
             m_swapchainIndex < m_renderFinishedSemaphores.size() &&
             m_renderFinishedSemaphores[m_swapchainIndex] != VK_NULL_HANDLE;
