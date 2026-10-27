@@ -3,6 +3,7 @@
 #include "r_init.h"
 #include "r_dvars.h"
 #include <qcommon/com_playerprofile.h>
+#include <qcommon/com_pack.h>
 #include "r_buffers.h"
 #include <universal/profile.h>
 #include "r_dobj_skin.h"
@@ -183,6 +184,15 @@ void R_SkinXModelCmd(_WORD *data)
         {
             R_SkinXSurfaceSkinned(xsurf, &boneSkelMats[boneIndex], skinVerticesOut);
         }
+#ifdef __SWITCH__
+        // Both the skin-cache VB and the temporary skin buffer contain native
+        // GfxPackedVertex records. Unlike the one-time fastfile GPU copy, these
+        // vertices still carry CoD4's custom PackedTexCoords encoding; the
+        // XModel Vulkan declaration reads TEXCOORD0 as IEEE R16G16_SFLOAT.
+        for (uint32_t vertexIndex = 0; vertexIndex < xsurf->vertCount; ++vertexIndex)
+            skinVerticesOut[vertexIndex].texCoord =
+                Vec2ConvertTexCoordsForVulkan(skinVerticesOut[vertexIndex].texCoord);
+#endif
     }
 
     if (sseStateUsed)
