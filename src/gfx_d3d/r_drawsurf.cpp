@@ -18,6 +18,9 @@
 
 static bool g_processCodeMesh;
 static bool g_processMarkMesh;
+#ifdef __SWITCH__
+static uint32_t g_switchCodeMeshStartUsed = 0;
+#endif
 
 char __cdecl R_ReserveCodeMeshIndices(int indexCount, r_double_index_t** indicesOut)
 {
@@ -182,9 +185,10 @@ void R_EndCodeMeshVerts()
     if (mesh->vb.verts && mesh->vertSize == sizeof(GfxPackedVertex) &&
         mesh->vb.used % mesh->vertSize == 0)
     {
-        auto *vertices = reinterpret_cast<GfxPackedVertex *>(mesh->vb.verts);
+        const uint32_t firstVertex = g_switchCodeMeshStartUsed / mesh->vertSize;
         const uint32_t vertexCount = mesh->vb.used / mesh->vertSize;
-        for (uint32_t vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex)
+        auto *vertices = reinterpret_cast<GfxPackedVertex *>(mesh->vb.verts);
+        for (uint32_t vertexIndex = firstVertex; vertexIndex < vertexCount; ++vertexIndex)
             vertices[vertexIndex].texCoord =
                 Vec2ConvertTexCoordsForVulkan(vertices[vertexIndex].texCoord);
     }
@@ -196,6 +200,9 @@ void R_EndCodeMeshVerts()
 void R_BeginCodeMeshVerts()
 {
     iassert( !g_processCodeMesh );
+#ifdef __SWITCH__
+    g_switchCodeMeshStartUsed = frontEndDataOut->codeMesh.vb.used;
+#endif
     g_processCodeMesh = 1;
     R_BeginMeshVerts(&frontEndDataOut->codeMesh);
 }
