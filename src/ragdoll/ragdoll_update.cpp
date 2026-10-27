@@ -817,7 +817,9 @@ void __cdecl Ragdoll_GenerateAllSelfCollisionContacts()
                 continue;
             }
 
-            Ragdoll_GenBoneCapsuleSegments(body, selfPair->bones, s0, s1);
+            if (!Ragdoll_GenBoneCapsuleSegments(body, selfPair->bones, s0, s1))
+                continue;
+
             Ragdoll_ClosestPointsTwoSegs(s0, s1, &t0, &t1, direction);
             Vec3Lerp(s0[0], s0[1], t0, pi0);
             Vec3Lerp(s1[0], s1[1], t1, pi1);
@@ -831,24 +833,32 @@ void __cdecl Ragdoll_GenerateAllSelfCollisionContacts()
     }
 }
 
-void __cdecl Ragdoll_GenBoneCapsuleSegments(RagdollBody *body, uint8_t *bones, float (*s0)[3], float (*s1)[3])
+static bool __cdecl Ragdoll_GenBoneCapsuleSegments(
+    RagdollBody *body,
+    const uint8_t *bones,
+    float (*s0)[3],
+    float (*s1)[3])
 {
     if (!body || !bones || !s0 || !s1 ||
-        (uint32_t)body->numBones > static_cast<uint32_t>(ARRAY_COUNT(body->bones)) ||
         body->numBones <= 0 ||
-        (uint32_t)bones[0] >= static_cast<uint32_t>(body->numBones) ||
-        (uint32_t)bones[1] >= static_cast<uint32_t>(body->numBones))
+        body->numBones > static_cast<int>(ARRAY_COUNT(body->bones)) ||
+        bones[0] >= body->numBones ||
+        bones[1] >= body->numBones)
     {
-        MyAssertHandler(
-            ".\\ragdoll\\ragdoll_update.cpp",
-            957,
-            0,
-            "invalid self-collision bone pair or body");
-        return;
+        return false;
     }
 
-    Ragdoll_GenBoneCapsuleSegment(&body->bones[bones[0]], s0);
-    Ragdoll_GenBoneCapsuleSegment(&body->bones[bones[1]], s1);
+    Bone *bone0 = &body->bones[bones[0]];
+    Bone *bone1 = &body->bones[bones[1]];
+    // A missing physics body must never be passed into Phys_ObjGetPosition:
+    // that routine dereferences the native dxBody and a null body faults at
+    // a small offset (commonly 0x10).
+    if (!bone0->rigidBody || !bone1->rigidBody)
+        return false;
+
+    Ragdoll_GenBoneCapsuleSegment(bone0, s0);
+    Ragdoll_GenBoneCapsuleSegment(bone1, s1);
+    return true;
 }
 
 void __cdecl Ragdoll_GenBoneCapsuleSegment(Bone *bone, float (*seg)[3])
