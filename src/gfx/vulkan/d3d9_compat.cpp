@@ -1325,6 +1325,23 @@ uint32_t SwitchEffectiveShaderElementOffset(
     const _D3DVERTEXELEMENT9 &element,
     uint32_t streamStride = 0)
 {
+    // Material declarations for routes 2..13 describe the expanded world
+    // layout (normal/tangent at 36/40). XModel draw paths can use those same
+    // semantic routes while binding a 32-byte GfxPackedVertex stream, where
+    // the physical packed normal/tangent fields are at 24/28. Resolve by the
+    // bound stream ABI, not the declaration's serialized semantic route.
+    if (decl && decl->switchVertDeclType != 0u &&
+        element.Stream == 0 && streamStride == 32u &&
+        element.Usage == 5 &&
+        element.UsageIndex == 1 && element.Offset == 36)
+        return 24;
+
+    if (decl && decl->switchVertDeclType != 0u &&
+        element.Stream == 0 && streamStride == 32u &&
+        element.Usage == 5 &&
+        element.UsageIndex == 2 && element.Offset == 40)
+        return 28;
+
     // TEXCOORD1 can be routed from the first UV pair, but in a world vertex
     // buffer that semantic must read the separate lightmap UVs at byte 28.
     if (element.Stream == 0 && streamStride == 44u &&
@@ -8433,11 +8450,14 @@ bool IDirect3DDevice9::EnsurePipeline()
         // labels those attributes TEXCOORD1/2 instead of NORMAL/TANGENT.
         // Keep the source byte order for both packed model vectors as well.
         const bool packedModelUnitVector =
-            m_decl->switchVertDeclType == 1 &&
+            packedWorldStreamStride == 32u &&
+            m_decl->switchVertDeclType != 0u &&
             element.Stream == 0 &&
             element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
-            ((element.UsageIndex == 1 && element.Offset == 24) ||
-             (element.UsageIndex == 2 && element.Offset == 28));
+            ((element.UsageIndex == 1 &&
+              (element.Offset == 24 || element.Offset == 36)) ||
+             (element.UsageIndex == 2 &&
+              (element.Offset == 28 || element.Offset == 40)));
         // The native CoD4 world declaration table uses D3DDECLTYPE_UBYTE4
         // (not UBYTE4N) for the packed normals/tangents at offsets 36/40.
         // D3D9 feeds those bytes to the shader as float values in the 0..255
