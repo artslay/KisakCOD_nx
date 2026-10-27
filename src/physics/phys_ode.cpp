@@ -136,6 +136,18 @@ void __cdecl Phys_Init()
     DvarLimits minx; // [esp+4h] [ebp-14h]
     PhysWorld worldIndex; // [esp+14h] [ebp-4h]
 
+    // Bind this dvar on every Phys_Init entry, independently of the
+    // physics-world singleton. The cached dvar pointer is needed by collision
+    // audio even when the ODE world was initialized earlier.
+    minu.value.max = FLT_MAX;
+    minu.value.min = 0.0f;
+    phys_minImpactMomentum = Dvar_RegisterFloat(
+        "phys_minImpactMomentum",
+        250.0f,
+        minu,
+        DVAR_NOFLAG,
+        "The minimum momentum required to trigger impact sounds");
+
     if (!physInited)
     {
         memset((uint8_t *)&physGlob, 0, sizeof(physGlob));
@@ -353,21 +365,6 @@ void __cdecl Phys_Init()
             mint,
             DVAR_NOFLAG,
             "The amount of angular drag, applied globally");
-        minu.value.max = FLT_MAX;
-        minu.value.min = 0.0f;
-        phys_minImpactMomentum = Dvar_RegisterFloat(
-            "phys_minImpactMomentum",
-            250.0f,
-            minu,
-            DVAR_NOFLAG,
-            "The minimum momentum required to trigger impact sounds");
-#ifdef __SWITCH__
-        Com_Printf(
-            CON_CHANNEL_DONT_FILTER,
-            "[SWITCH PHYS DVAR] registered phys_minImpactMomentum global=%p value=%p\n",
-            (const void *)&phys_minImpactMomentum,
-            (const void *)phys_minImpactMomentum);
-#endif
         minv.value.max = FLT_MAX;
         minv.value.min = 0.1f;
         phys_jitterMaxMass = Dvar_RegisterFloat(
@@ -401,14 +398,6 @@ void __cdecl Phys_Init()
         Phys_InitCapsuleGeomClass();
         Phys_InitWorldCollision();
         Phys_InitJoints();
-#ifdef __SWITCH__
-        Com_Printf(
-            CON_CHANNEL_DONT_FILTER,
-            "[SWITCH PHYS DVAR] after physics init global=%p value=%p physInited=%d\n",
-            (const void *)&phys_minImpactMomentum,
-            (const void *)phys_minImpactMomentum,
-            physInited);
-#endif
         physGlob.gravityDirection[0] = 0.0f;
         physGlob.gravityDirection[1] = 0.0f;
         physGlob.gravityDirection[2] = -1.0f;
@@ -1389,25 +1378,6 @@ void __cdecl Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t 
     impactVelocity = impactVelocity / (double)contactList->contactCount;
     scale = 1.0 / (double)contactList->contactCount;
     Vec3Scale(pos, scale, pos);
-#ifdef __SWITCH__
-    if (!phys_minImpactMomentum)
-    {
-        // This is an optional audio threshold; never let a missing dvar take
-        // down the physics collision callback. Log once so the real loss point
-        // can be identified without flooding the frame log.
-        static bool missingImpactDvarReported;
-        if (!missingImpactDvarReported)
-        {
-            Com_PrintError(
-                CON_CHANNEL_DONT_FILTER,
-                "[SWITCH PHYS DVAR] phys_minImpactMomentum is null at collision callback; global=%p physInited=%d; skipping this sound event\n",
-                (const void *)&phys_minImpactMomentum,
-                physInited);
-            missingImpactDvarReported = true;
-        }
-        return;
-    }
-#endif
     if (-phys_minImpactMomentum->current.value > impactVelocity * mass.mass)
     {
         if (sndClass >= 0x32)
