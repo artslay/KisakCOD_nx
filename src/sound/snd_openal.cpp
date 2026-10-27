@@ -123,7 +123,8 @@ char __cdecl MSS_Init()
     if (g_snd.playback_rate >= 0xAC44)
         g_snd.playback_rate = 0x7FFFFFFF;
     const int outputConfiguration = snd_outputConfiguration->current.integer;
-    g_snd.playback_channels = (outputConfiguration == 1) ? 1 : 2;
+    g_snd.playback_channels = 2;
+    alGlob.outputChannels = 2;
     alGlob.isMultiChannel = false;
 
     ALCint actualMode = 0x19AD; // ALC_ANY_SOFT
@@ -183,7 +184,10 @@ char __cdecl MSS_Init()
         }
     }
 
-    g_snd.playback_channels = requestedChannels;
+    // Keep the shared engine field's original mono/stereo meaning; the actual
+    // OpenAL layout is tracked separately because it can be quad or 5.1.
+    g_snd.playback_channels = requestedChannels == 1 ? 1 : 2;
+    alGlob.outputChannels = static_cast<uint32_t>(requestedChannels);
     alGlob.isMultiChannel = requestedChannels > 2;
 
 
