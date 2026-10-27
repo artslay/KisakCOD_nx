@@ -164,7 +164,7 @@ int __cdecl XModelGetLodForDist(const XModel *model, float dist)
         static std::atomic<uint32_t> lodTraceCount{0};
         const uint32_t traceIndex =
             lodTraceCount.fetch_add(1, std::memory_order_relaxed);
-        if (traceIndex < 48u || descendingThreshold)
+        if (traceIndex < 48u || (descendingThreshold && traceIndex < 64u))
         {
             char trace[448];
             std::snprintf(
