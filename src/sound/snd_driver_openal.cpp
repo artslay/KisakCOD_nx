@@ -1,6 +1,7 @@
 #ifdef KISAK_OPENAL
 
 #include <algorithm>
+#include <cmath>
 #include <universal/q_shared.h>
 #include "snd_local.h"
 #include "snd_public.h"
@@ -131,6 +132,12 @@ void SND_ReleaseChannelBuffer(int index)
 // SND_StartAlias2D/3DSample and SND_StartAliasStreamOnChannel call it before that point.
 void SND_ApplyReverbSend(int index, const snd_alias_t *alias);
 
+struct ALBiquadHistory
+{
+    float z1;
+    float z2;
+};
+
 struct AlStreamState
 {
     bool active;
@@ -142,6 +149,9 @@ struct AlStreamState
     drmp3 mp3;
     uint32_t channels;
     uint32_t sampleRate;
+    ALBiquadHistory eqHistory[2][3][2];
+    uint32_t eqRevision;
+    bool eqWasEnabled;
     // Frames decoded/queued since the current loop pass began (reset to the post-seek frame
     // index on start, reset again each time SND_FillStreamBuffers loops back to frame 0).
     // Needed because AL_SEC_OFFSET on a queued streaming source only reports the offset
@@ -353,6 +363,275 @@ static void AL_DownmixStereoToMono(int16_t *pcm, uint64_t frameCount)
     }
 }
 
+struct ALBiquadCoefficients
+{
+    float b0, b1, b2;
+    float a1, a2;
+};
+
+static uint32_t g_openALEqRevision = 1;
+static uint32_t g_openALEqAppliedRevision[53] = {};
+static bool g_openALEqAppliedEnabled[53] = {};
+
+static void AL_InvalidateEq()
+{
+    ++g_openALEqRevision;
+    if (g_openALEqRevision == 0)
+    {
+        g_openALEqRevision = 1;
+        memset(g_openALEqAppliedRevision, 0, sizeof(g_openALEqAppliedRevision));
+    }
+}
+
+static bool AL_ComputeEqCoefficients(
+    const SndEqParams &params,
+    uint32_t sampleRate,
+    ALBiquadCoefficients *out)
+{
+    if (!params.enabled || !out || sampleRate < 1000)
+        return false;
+
+    const float nyquistLimit = static_cast<float>(sampleRate) * 0.49f;
+    const float frequency = std::clamp(params.freq, 10.0f, nyquistLimit);
+    const float q = std::clamp(params.q, 0.05f, 20.0f);
+    const float gainDb = std::clamp(params.gain, -48.0f, 48.0f);
+    const float omega = 6.2831853071795864769f * frequency / static_cast<float>(sampleRate);
+    const float cosine = std::cos(omega);
+    const float sine = std::sin(omega);
+    const float alpha = sine / (2.0f * q);
+    const float A = std::pow(10.0f, gainDb / 40.0f);
+    float b0 = 0.0f, b1 = 0.0f, b2 = 0.0f;
+    float a0 = 1.0f, a1 = 0.0f, a2 = 0.0f;
+
+    switch (params.type)
+    {
+    case SND_EQTYPE_LOWPASS:
+        b0 = (1.0f - cosine) * 0.5f;
+        b1 = 1.0f - cosine;
+        b2 = (1.0f - cosine) * 0.5f;
+        a0 = 1.0f + alpha;
+        a1 = -2.0f * cosine;
+        a2 = 1.0f - alpha;
+        break;
+    case SND_EQTYPE_HIGHPASS:
+        b0 = (1.0f + cosine) * 0.5f;
+        b1 = -(1.0f + cosine);
+        b2 = (1.0f + cosine) * 0.5f;
+        a0 = 1.0f + alpha;
+        a1 = -2.0f * cosine;
+        a2 = 1.0f - alpha;
+        break;
+    case SND_EQTYPE_BELL:
+    {
+        const float alphaA = alpha * A;
+        const float alphaOverA = alpha / A;
+        b0 = 1.0f + alphaA;
+        b1 = -2.0f * cosine;
+        b2 = 1.0f - alphaA;
+        a0 = 1.0f + alphaOverA;
+        a1 = -2.0f * cosine;
+        a2 = 1.0f - alphaOverA;
+        break;
+    }
+    case SND_EQTYPE_LOWSHELF:
+    case SND_EQTYPE_HIGHSHELF:
+    {
+        // RBJ shelf filters. Q controls shelf slope here; clamp it to keep the
+        // coefficient square-root valid for extreme console-variable input.
+        const float shelfSlope = std::clamp(q, 0.1f, 2.0f);
+        const float shelfAlpha = sine * 0.5f *
+            std::sqrt(std::max(0.0f, (A + 1.0f / A) * (1.0f / shelfSlope - 1.0f) + 2.0f));
+        const float twoRootAAlpha = 2.0f * std::sqrt(A) * shelfAlpha;
+        if (params.type == SND_EQTYPE_LOWSHELF)
+        {
+            b0 = A * ((A + 1.0f) - (A - 1.0f) * cosine + twoRootAAlpha);
+            b1 = 2.0f * A * ((A - 1.0f) - (A + 1.0f) * cosine);
+            b2 = A * ((A + 1.0f) - (A - 1.0f) * cosine - twoRootAAlpha);
+            a0 = (A + 1.0f) + (A - 1.0f) * cosine + twoRootAAlpha;
+            a1 = -2.0f * ((A - 1.0f) + (A + 1.0f) * cosine);
+            a2 = (A + 1.0f) + (A - 1.0f) * cosine - twoRootAAlpha;
+        }
+        else
+        {
+            b0 = A * ((A + 1.0f) + (A - 1.0f) * cosine + twoRootAAlpha);
+            b1 = -2.0f * A * ((A - 1.0f) + (A + 1.0f) * cosine);
+            b2 = A * ((A + 1.0f) + (A - 1.0f) * cosine - twoRootAAlpha);
+            a0 = (A + 1.0f) - (A - 1.0f) * cosine + twoRootAAlpha;
+            a1 = 2.0f * ((A - 1.0f) - (A + 1.0f) * cosine);
+            a2 = (A + 1.0f) - (A - 1.0f) * cosine - twoRootAAlpha;
+        }
+        break;
+    }
+    default:
+        return false;
+    }
+
+    if (!std::isfinite(a0) || std::fabs(a0) < 1.0e-12f)
+        return false;
+    out->b0 = b0 / a0;
+    out->b1 = b1 / a0;
+    out->b2 = b2 / a0;
+    out->a1 = a1 / a0;
+    out->a2 = a2 / a0;
+    return std::isfinite(out->b0) && std::isfinite(out->b1) &&
+        std::isfinite(out->b2) && std::isfinite(out->a1) && std::isfinite(out->a2);
+}
+
+static void AL_ApplyEqToPcm(
+    int16_t *pcm,
+    uint64_t frameCount,
+    int channels,
+    int entchannel,
+    uint32_t sampleRate,
+    ALBiquadHistory *history)
+{
+    if (!pcm || !history || (channels != 1 && channels != 2) ||
+        entchannel < 0 || entchannel >= 64 || !snd_enableEq ||
+        !snd_enableEq->current.enabled)
+        return;
+
+    for (int eqIndex = 0; eqIndex < 2; ++eqIndex)
+    {
+        for (int band = 0; band < 3; ++band)
+        {
+            const SndEqParams &params = alGlob.eq[eqIndex].params[band][entchannel];
+            ALBiquadCoefficients coeffs;
+            if (!AL_ComputeEqCoefficients(params, sampleRate, &coeffs))
+                continue;
+
+            for (int channel = 0; channel < channels; ++channel)
+            {
+                ALBiquadHistory &state = history[(eqIndex * 3 + band) * 2 + channel];
+                for (uint64_t frame = 0; frame < frameCount; ++frame)
+                {
+                    const size_t sampleIndex = static_cast<size_t>(frame) * channels + channel;
+                    const float input = static_cast<float>(pcm[sampleIndex]);
+                    const float output = coeffs.b0 * input + state.z1;
+                    state.z1 = coeffs.b1 * input - coeffs.a1 * output + state.z2;
+                    state.z2 = coeffs.b2 * input - coeffs.a2 * output;
+                    const float clipped = std::clamp(output, -32768.0f, 32767.0f);
+                    pcm[sampleIndex] = static_cast<int16_t>(clipped);
+                }
+            }
+        }
+    }
+}
+
+static bool AL_RebuildLoadedChannelBuffer(int index, int entchannel)
+{
+    if (index < 0 || index >= SND_FIRST_STREAM_CHANNEL ||
+        !g_snd.chaninfo[index].alias0 || !alGlob.channelBuffer[index])
+        return false;
+
+    const snd_alias_t *alias = g_snd.chaninfo[index].alias0;
+    if (!alias->soundFile || alias->soundFile->type != SAT_LOADED ||
+        !alias->soundFile->u.loadSnd)
+        return false;
+
+    MssSoundCOD4 *sound = &alias->soundFile->u.loadSnd->sound;
+    const uint32_t sourceChannels = sound->info.channels;
+    const uint64_t frameCount = sound->info.samples;
+    if (!sound->data || (sourceChannels != 1 && sourceChannels != 2) ||
+        sound->info.rate == 0 || frameCount == 0 ||
+        frameCount > static_cast<uint64_t>(0x7fffffff) / (2 * sizeof(int16_t)))
+        return false;
+
+    const uint64_t sourceBytes = frameCount * sourceChannels * sizeof(int16_t);
+    if (sound->info.data_len < sourceBytes)
+        return false;
+
+    const size_t capacity = static_cast<size_t>(frameCount) * 2 * sizeof(int16_t);
+    int16_t *pcm = static_cast<int16_t *>(std::malloc(capacity));
+    if (!pcm)
+        return false;
+    Com_Memcpy(pcm, sound->data, static_cast<size_t>(sourceBytes));
+
+    uint32_t outputChannels = sourceChannels;
+    const bool is3D = SND_IsAliasChannel3D(SNDALIASFLAGS_GET_CHANNEL(alias->flags));
+    if (is3D)
+    {
+        if (sourceChannels == 2)
+        {
+            AL_DownmixStereoToMono(pcm, frameCount);
+            outputChannels = 1;
+        }
+    }
+    else
+    {
+        const int mappedChannels = AL_ApplySpeakerMapToPcm(
+            pcm, frameCount, static_cast<int>(sourceChannels), alias);
+        if (mappedChannels != 0)
+            outputChannels = static_cast<uint32_t>(mappedChannels);
+    }
+
+    ALBiquadHistory history[2][3][2] = {};
+    AL_ApplyEqToPcm(
+        pcm, frameCount, static_cast<int>(outputChannels), entchannel,
+        sound->info.rate, &history[0][0][0]);
+
+    const ALuint buffer = alGlob.channelBuffer[index];
+    const ALuint source = alGlob.source[index];
+    ALint oldState = AL_STOPPED;
+    ALfloat oldOffset = 0.0f;
+    alGetSourcei(source, AL_SOURCE_STATE, &oldState);
+    if (oldState == AL_PLAYING || oldState == AL_PAUSED)
+        alGetSourcef(source, AL_SEC_OFFSET, &oldOffset);
+
+    alSourceStop(source);
+    alSourcei(source, AL_BUFFER, 0);
+    alBufferData(
+        buffer,
+        outputChannels == 2 ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16,
+        pcm,
+        static_cast<ALsizei>(frameCount * outputChannels * sizeof(int16_t)),
+        sound->info.rate);
+    const ALenum uploadError = alGetError();
+    alSourcei(source, AL_BUFFER, buffer);
+    if (oldState == AL_PLAYING || oldState == AL_PAUSED)
+    {
+        alSourcef(source, AL_SEC_OFFSET, oldOffset);
+        alSourcePlay(source);
+        if (oldState == AL_PAUSED)
+            alSourcePause(source);
+    }
+    std::free(pcm);
+
+    if (uploadError != AL_NO_ERROR)
+    {
+        Com_PrintError(CON_CHANNEL_SOUND, "OpenAL could not upload EQ buffer for '%s' (error %x)\\n",
+            alias->aliasName ? alias->aliasName : "<unnamed>", static_cast<unsigned>(uploadError));
+        return false;
+    }
+
+    g_openALEqAppliedRevision[index] = g_openALEqRevision;
+    g_openALEqAppliedEnabled[index] = snd_enableEq && snd_enableEq->current.enabled;
+    return true;
+}
+
+// Called from the shared MSS_ApplyEqFilter interface. Loaded channels are rebuilt only
+// when EQ parameters or the enable toggle changes; this function may be called every frame.
+void SND_ApplyOpenALEq(ALuint source, int entchannel)
+{
+    int index = -1;
+    for (int i = 0; i < SND_FIRST_STREAM_CHANNEL; ++i)
+    {
+        if (alGlob.source[i] == source)
+        {
+            index = i;
+            break;
+        }
+    }
+    if (index < 0 || !g_snd.chaninfo[index].alias0)
+        return;
+
+    const bool enabled = snd_enableEq && snd_enableEq->current.enabled;
+    if (g_openALEqAppliedRevision[index] == g_openALEqRevision &&
+        g_openALEqAppliedEnabled[index] == enabled)
+        return;
+
+    AL_RebuildLoadedChannelBuffer(index, entchannel);
+}
+
 // Decodes and queues fresh PCM chunks to bring the channel's buffer queue back up to
 // AL_STREAM_BUFFER_COUNT, first unqueuing/deleting any buffers that finished playing.
 // Handles looping by seeking back to the start of the audio data when the decoder runs dry.
@@ -365,6 +644,14 @@ static bool SND_FillStreamBuffers(int index)
         return false;
 
     ALuint source = alGlob.source[index];
+
+    const bool eqEnabled = snd_enableEq && snd_enableEq->current.enabled;
+    if (stream->eqRevision != g_openALEqRevision || stream->eqWasEnabled != eqEnabled)
+    {
+        memset(stream->eqHistory, 0, sizeof(stream->eqHistory));
+        stream->eqRevision = g_openALEqRevision;
+        stream->eqWasEnabled = eqEnabled;
+    }
 
     ALint processed = 0;
     alGetSourcei(source, AL_BUFFERS_PROCESSED, &processed);
@@ -402,6 +689,7 @@ static bool SND_FillStreamBuffers(int index)
             if (framesRead == 0)
                 break; // zero-length file - avoid spinning forever
             stream->framesQueued = 0; // starting a fresh loop pass
+            memset(stream->eqHistory, 0, sizeof(stream->eqHistory));
         }
 
         uint32_t outputChannels = stream->channels;
@@ -420,6 +708,17 @@ static bool SND_FillStreamBuffers(int index)
                 chunk, framesRead, static_cast<int>(stream->channels), stream->alias);
             if (mappedChannels != 0)
                 outputChannels = static_cast<uint32_t>(mappedChannels);
+        }
+
+        if (stream->alias)
+        {
+            AL_ApplyEqToPcm(
+                chunk,
+                framesRead,
+                static_cast<int>(outputChannels),
+                SNDALIASFLAGS_GET_CHANNEL(stream->alias->flags),
+                stream->sampleRate,
+                &stream->eqHistory[0][0][0]);
         }
 
         ALuint buffer;
@@ -714,6 +1013,7 @@ int __cdecl SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChan
     if ((startAliasInfo->alias0->flags & 1) != 0)
         total_msec = 0;
     SND_SetChannelStartInfo(index, startAliasInfo);
+    MSS_ApplyEqFilter(alGlob.source[index], SNDALIASFLAGS_GET_CHANNEL(startAliasInfo->alias0->flags));
     SND_SetSoundFileChannelInfo(index, sound->info.channels, sound->info.rate, total_msec, start_msec, SFLS_LOADED);
     int playbackId = SND_AcquirePlaybackId(index, total_msec);
 
