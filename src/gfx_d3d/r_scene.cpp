@@ -52,6 +52,8 @@ void __cdecl CL_UpdateSound();
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern "C" bool Switch_IsPostCinematicRenderTraceActive(void);
+extern "C" void Switch_LogPostCinematicRenderTrace(const char *phase, const char *detail);
 #endif
 
 //struct GfxScene scene      859c8280     gfx_d3d : r_scene.obj
@@ -1479,6 +1481,25 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
     GfxSceneParms sceneParms; // [esp+40h] [ebp-A8h] BYREF
     GfxViewParms *viewParmsDraw; // [esp+E4h] [ebp-4h]
 
+#ifdef __SWITCH__
+    if (Switch_IsPostCinematicRenderTraceActive())
+    {
+        char postCineSceneEntry[384];
+        std::snprintf(
+            postCineSceneEntry, sizeof(postCineSceneEntry),
+            "registered=%d noRefresh=%d world=%p refdef=%dx%d time=%d viewOrg=(%.1f,%.1f,%.1f) priorDrawSurfs=%u",
+            rg.registered ? 1 : 0,
+            r_norefresh && r_norefresh->current.enabled ? 1 : 0,
+            static_cast<void *>(rgp.world),
+            refdef ? refdef->width : 0, refdef ? refdef->height : 0,
+            refdef ? refdef->time : 0,
+            refdef ? refdef->vieworg[0] : 0.0f,
+            refdef ? refdef->vieworg[1] : 0.0f,
+            refdef ? refdef->vieworg[2] : 0.0f,
+            frontEndDataOut ? static_cast<unsigned>(frontEndDataOut->drawSurfCount) : 0u);
+        Switch_LogPostCinematicRenderTrace("r_render_scene_enter", postCineSceneEntry);
+    }
+#endif
     iassert( refdef->tanHalfFovX > 0 );
     iassert( refdef->tanHalfFovY > 0 );
     iassert( refdef->height > 0 );
@@ -1617,8 +1638,22 @@ void __cdecl R_RenderScene(const refdef_s *refdef)
             }
         }
 #endif
+        const unsigned int switchPostCineDrawSurfsBefore =
+            frontEndDataOut ? static_cast<unsigned>(frontEndDataOut->drawSurfCount) : 0u;
         R_GenerateSortedDrawSurfs(&sceneParms, dpvs, viewParmsDraw);
 #ifdef __SWITCH__
+        if (Switch_IsPostCinematicRenderTraceActive())
+        {
+            char postCineSceneSorted[320];
+            std::snprintf(
+                postCineSceneSorted, sizeof(postCineSceneSorted),
+                "drawSurfsBefore=%u drawSurfsAfter=%u added=%u viewInfos=%u",
+                switchPostCineDrawSurfsBefore,
+                static_cast<unsigned>(frontEndDataOut->drawSurfCount),
+                static_cast<unsigned>(frontEndDataOut->drawSurfCount) - switchPostCineDrawSurfsBefore,
+                static_cast<unsigned>(frontEndDataOut->viewInfoCount));
+            Switch_LogPostCinematicRenderTrace("r_render_scene_after_sort", postCineSceneSorted);
+        }
         if (switchCreditsSceneTraceThisCall)
         {
             char trace[256];
