@@ -95,7 +95,10 @@ int __cdecl XModelGetNumLods(const XModel *model)
 
 double __cdecl XModelGetLodOutDist(const XModel *model)
 {
-    return *((float *)&model->parentList + 7 * XModelGetNumLods(model));
+    // The old expression walked a 32-bit XModel layout from parentList. On
+    // AArch64 the pointer fields are 8 bytes, so that byte offset no longer
+    // reaches the last XModelLodInfo::dist. Address the actual runtime array.
+    return model->lodInfo[XModelGetNumLods(model) - 1].dist;
 }
 
 int __cdecl XModelNumBones(const XModel *model)
