@@ -1486,7 +1486,11 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
     {
         name = dvar->name;
         v5 = Dvar_ValueToString(dvar, value);
+#ifdef __SWITCH__
         Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s' (source=%s)\n", v5, name, Switch_DvarSourceName(source));
+#else
+        Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n", v5, name);
+#endif
         Dvar_PrintDomain(dvar->type, dvar->domain);
         if (dvar->type == DVAR_TYPE_ENUM)
         {
@@ -1512,7 +1516,11 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
     {
         v8 = dvar->name;
         v6 = Dvar_ValueToString(dvar, value);
+#ifdef __SWITCH__
         Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s' (source=%s)\n\n", v6, v8, Switch_DvarSourceName(source));
+#else
+        Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n\n", v6, v8);
+#endif
         return;
     }
     if (source == DVAR_SOURCE_EXTERNAL || source == DVAR_SOURCE_SCRIPT)
@@ -2732,7 +2740,11 @@ void __cdecl Dvar_SetFromStringFromSource(dvar_s *dvar, char *string, DvarSetSou
     newValue = v4;
     if (dvar->type == DVAR_TYPE_ENUM && newValue.integer == -1337)
     {
+#ifdef __SWITCH__
         Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s' (source=%s)\n", buf, dvar->name, Switch_DvarSourceName(source));
+#else
+        Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n", buf, dvar->name);
+#endif
         Dvar_PrintDomain(dvar->type, dvar->domain);
         newValue = dvar->reset;
     }
@@ -2865,7 +2877,11 @@ void __cdecl Dvar_SetDomainFunc(dvar_s *dvar, bool(__cdecl *customFunc)(dvar_s *
         {
             name = dvar->name;
             v2 = Dvar_ValueToString(dvar, dvar->current);
+#ifdef __SWITCH__
             Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s' (source=%s)\n\n", v2, name, Switch_DvarSourceName(source));
+#else
+            Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n\n", v2, name);
+#endif
             Dvar_Reset(dvar, DVAR_SOURCE_INTERNAL);
         }
     }
