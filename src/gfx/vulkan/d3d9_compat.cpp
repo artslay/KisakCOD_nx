@@ -7613,6 +7613,42 @@ bool IDirect3DDevice9::EnsurePipeline()
 
             const uint8_t shaderElementType = SwitchEffectiveShaderElementType(m_decl, element, element.Stream < 16u ? ((m_drawPrimitiveUPActive && element.Stream == 0u) ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride) : 0u);
 
+#ifdef __SWITCH__
+            // Model base-color images can be correctly bound while the mesh samples
+            // them with a bad UV input declaration. Trace the actual packed-model
+            // TEXCOORD0 format at pipeline creation; keep this separate from the
+            // world-vertex audit because its vertex stride is different.
+            const uint32_t switchInputStride =
+                element.Stream < 16u
+                    ? ((m_drawPrimitiveUPActive && element.Stream == 0u)
+                        ? m_drawPrimitiveUPStride : m_streams[element.Stream].stride)
+                    : 0u;
+            if (m_decl && m_decl->switchVertDeclType != 0u &&
+                element.Stream == 0u && switchInputStride == 32u &&
+                element.Offset == 20u && element.Usage == 5u &&
+                element.UsageIndex == 0u)
+            {
+                static std::atomic<uint32_t> modelUvInputTraceCount{0};
+                const uint32_t sequence =
+                    modelUvInputTraceCount.fetch_add(1, std::memory_order_relaxed);
+                if (sequence < 64u)
+                {
+                    char trace[320];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][VK MODEL UV INPUT] n=%u declSerial=%llu declType=%u stride=%u offset=%u declaredType=%u effectiveType=%u\\n",
+                        sequence,
+                        static_cast<unsigned long long>(m_decl->serial),
+                        static_cast<unsigned>(m_decl->switchVertDeclType),
+                        switchInputStride,
+                        static_cast<unsigned>(element.Offset),
+                        static_cast<unsigned>(element.Type),
+                        static_cast<unsigned>(shaderElementType));
+                    Switch_LogWrite(trace);
+                }
+            }
+#endif
+
             MOJOSHADER_vertexAttribute attr{};
             switch (shaderElementType)
             {
