@@ -1421,6 +1421,15 @@ void __cdecl R_SetPicmip()
     uint32_t sysMemInMegs; // [esp+4h] [ebp-Ch]
     bool cappedPicmip; // [esp+Bh] [ebp-5h]
     int minPicmip; // [esp+Ch] [ebp-4h]
+    int picmipMode;
+
+    // R_SetPicmip can run at renderer startup and again during map startup.
+    // Avoid repeating the same status lines unless the selected mode/values
+    // actually change.
+    static int lastLoggedMode = -1;
+    static int lastLoggedPicmip = -1;
+    static int lastLoggedPicmipBump = -1;
+    static int lastLoggedPicmipSpec = -1;
 
     iassert( dx.device );
     texMemInMegs = R_AvailableTextureMemory();
@@ -1434,7 +1443,7 @@ void __cdecl R_SetPicmip()
     iassert( r_reflectionProbeGenerate );
     if (r_reflectionProbeGenerate->current.enabled)
     {
-        Com_Printf(CON_CHANNEL_GFX, "Picmip is set to lowest quality for generating reflections.\n");
+        picmipMode = 2;
         imageGlobals.picmip = 2;
         imageGlobals.picmipBump = 2;
         imageGlobals.picmipSpec = 2;
@@ -1443,14 +1452,14 @@ void __cdecl R_SetPicmip()
     {
         if (r_picmip_manual->current.enabled)
         {
-            Com_Printf(CON_CHANNEL_GFX, "Picmip is set manually.\n");
+            picmipMode = 1;
             imageGlobals.picmip = r_picmip->current.integer;
             imageGlobals.picmipBump = r_picmip_bump->current.integer;
             imageGlobals.picmipSpec = r_picmip_spec->current.integer;
         }
         else
         {
-            Com_Printf(CON_CHANNEL_GFX, "Texture detail is set automatically.\n");
+            picmipMode = 0;
             if (texMemInMegs < 0x1C2)
             {
                 if (texMemInMegs < 0x12C)
@@ -1518,12 +1527,34 @@ void __cdecl R_SetPicmip()
         }
         if (!r_specular->current.enabled || !r_rendererInUse->current.integer)
             imageGlobals.picmipSpec = 3;
-        Com_Printf(
-            CON_CHANNEL_GFX,
-            "Using picmip %i on most textures, %i on normal maps, and %i on specular maps\n",
-            imageGlobals.picmip,
-            imageGlobals.picmipBump,
-            imageGlobals.picmipSpec);
+    }
+
+    if (picmipMode != lastLoggedMode ||
+        imageGlobals.picmip != lastLoggedPicmip ||
+        imageGlobals.picmipBump != lastLoggedPicmipBump ||
+        imageGlobals.picmipSpec != lastLoggedPicmipSpec)
+    {
+        if (picmipMode == 2)
+            Com_Printf(CON_CHANNEL_GFX, "Picmip is set to lowest quality for generating reflections.\\n");
+        else if (picmipMode == 1)
+            Com_Printf(CON_CHANNEL_GFX, "Picmip is set manually.\\n");
+        else
+            Com_Printf(CON_CHANNEL_GFX, "Texture detail is set automatically.\\n");
+
+        if (picmipMode != 2)
+        {
+            Com_Printf(
+                CON_CHANNEL_GFX,
+                "Using picmip %i on most textures, %i on normal maps, and %i on specular maps\\n",
+                imageGlobals.picmip,
+                imageGlobals.picmipBump,
+                imageGlobals.picmipSpec);
+        }
+
+        lastLoggedMode = picmipMode;
+        lastLoggedPicmip = imageGlobals.picmip;
+        lastLoggedPicmipBump = imageGlobals.picmipBump;
+        lastLoggedPicmipSpec = imageGlobals.picmipSpec;
     }
 }
 
