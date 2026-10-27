@@ -42,7 +42,72 @@ void *captureData;
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
+extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern bool Switch_ShowSoftwareKeyboard(const char *initialText, unsigned int maxChars, char *outText, unsigned int outSize);
+
+static void Switch_LogMenuPaintDiagnostic(
+    UiContext *dc,
+    int drawStart,
+    bool anyFullscreen,
+    int paintedOpenMenus)
+{
+    if (!dc)
+        return;
+
+    const uint64_t frame = g_switchScreenFrameSequence.load(std::memory_order_relaxed);
+    const int connectionState = static_cast<int>(clientUIActives[0].connectionState);
+    const bool frontendFullscreen =
+        UI_IsFullscreen() && dc->openMenuCount > 0 && connectionState != CA_ACTIVE;
+    if (!frontendFullscreen || frame % 60u != 0u)
+        return;
+
+    char stack[640]{};
+    size_t used = 0;
+    const int first = dc->openMenuCount > 4 ? dc->openMenuCount - 4 : 0;
+    for (int i = first; i < dc->openMenuCount && used + 1 < sizeof(stack); ++i)
+    {
+        const menuDef_t *menu = dc->menuStack[i];
+        if (!menu)
+            continue;
+
+        const char *name = menu->window.name ? menu->window.name : "(unnamed)";
+        const uint32_t flags = menu->window.dynamicFlags[dc->localClientNum];
+        const int written = std::snprintf(
+            stack + used,
+            sizeof(stack) - used,
+            "%s%d:%s{fs=%u,dyn=%08x,static=%08x,items=%d}",
+            used ? " | " : "",
+            i,
+            name,
+            menu->fullScreen ? 1u : 0u,
+            static_cast<unsigned>(flags),
+            static_cast<unsigned>(menu->window.staticFlags),
+            menu->itemCount);
+        if (written <= 0)
+            break;
+        used += static_cast<size_t>(written) < sizeof(stack) - used
+            ? static_cast<size_t>(written) : sizeof(stack) - used - 1;
+    }
+    if (!stack[0])
+        std::snprintf(stack, sizeof(stack), "(empty)");
+
+    char trace[1100];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][UI PAINT TRACE] frame=%llu conn=%d activeMenu=%d fullscreen=%d stackCount=%d drawStart=%d anyFullscreen=%d paintedOpen=%d stage=%s stack=[%s]\\n",
+        static_cast<unsigned long long>(frame),
+        connectionState,
+        UI_GetActiveMenu(0),
+        UI_IsFullscreen() ? 1 : 0,
+        dc->openMenuCount,
+        drawStart,
+        anyFullscreen ? 1 : 0,
+        paintedOpenMenus,
+        g_switchFrameStage ? g_switchFrameStage : "(unknown)",
+        stack);
+    Switch_LogWrite(trace);
+}
 
 static inline void Switch_LogWriteFiltered(const char *msg)
 {
@@ -9519,6 +9584,9 @@ void __cdecl Menu_PaintAll(UiContext *dc)
     bool anyFullscreen; // [esp+3Eh] [ebp-40Ah]
     char visibleList[1024]; // [esp+40h] [ebp-408h] BYREF
     int drawStart; // [esp+444h] [ebp-4h]
+#ifdef __SWITCH__
+    int switchPaintedOpenMenus = 0;
+#endif
 
     showVisibleList = ui_showList->current.enabled;
     KISAK_NULLSUB();
@@ -9957,7 +10025,12 @@ void __cdecl Menu_PaintAll(UiContext *dc)
             menub = dc->menuStack[menuIndexb];
             if (!menub)
                 MyAssertHandler(".\\ui\\ui_shared.cpp", 6153, 0, "%s", "menu");
-            if (Menu_Paint(dc, menub) && showVisibleList)
+            const bool menuPainted = Menu_Paint(dc, menub) != 0;
+#ifdef __SWITCH__
+            if (menuPainted)
+                ++switchPaintedOpenMenus;
+#endif
+            if (menuPainted && showVisibleList)
                 Menu_PaintAll_AppendToVisibleList(visibleList, 0x400u, (char *)menub->window.name);
         }
     }
@@ -9979,7 +10052,10 @@ void __cdecl Menu_PaintAll(UiContext *dc)
         if (showVisibleList)
             Menu_PaintAll_DrawVisibleList(visibleList, dc);
     }
-    
+
+#ifdef __SWITCH__
+    Switch_LogMenuPaintDiagnostic(dc, drawStart, anyFullscreen, switchPaintedOpenMenus);
+#endif
 }
 
 // The Switch loading movie is submitted after UI_Refresh, so repaint the
