@@ -17,6 +17,11 @@
 #include <sound/snd_local.h>
 #include <sound/snd_public.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
 #include <server_mp/server_mp.h>
@@ -197,6 +202,28 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
 
     s = va("%i FPS", fps);
     float textWidth = static_cast<float>(R_TextWidth(s, 0, cgMedia.smallDevFont));
+#ifdef __SWITCH__
+    static uint32_t switchFpsDrawTraceFrame = 0;
+    ++switchFpsDrawTraceFrame;
+    if (switchFpsDrawTraceFrame == 1u || switchFpsDrawTraceFrame % 300u == 0u)
+    {
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FPS HUD TRACE] stage=CG_DrawFPS frame=%u samples=%d fps=%d avgMs=%.2f maxMs=%d x=%.1f y=%.1f textWidth=%.1f scale=%.3f font=%p\\n",
+            switchFpsDrawTraceFrame,
+            fps_index,
+            fps,
+            static_cast<double>(total) / 32.0,
+            maxTime,
+            farRight - textWidth * fpsFontScale,
+            drawY,
+            textWidth,
+            fpsFontScale,
+            static_cast<void *>(cgMedia.smallDevFont));
+        Switch_LogWrite(trace);
+    }
+#endif
     CL_DrawText(
         scrPlace, s, 0x7FFFFFFF, cgMedia.smallDevFont,
         farRight - textWidth * fpsFontScale, drawY,
