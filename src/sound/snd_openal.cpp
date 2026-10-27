@@ -57,8 +57,27 @@ char __cdecl MSS_Init()
         return 0;
     }
 
-    ALCint attrs[] = { ALC_FREQUENCY, hertz, 0 };
-    alGlob.context = alcCreateContext(alGlob.device, attrs);
+    // OpenAL Soft can expose and accept an explicit output mode through
+    // ALC_SOFT_output_mode. If it is unavailable, keep the engine's safe stereo
+    // mix and let the backend route it to the system output.
+    const bool hasOutputMode = alcIsExtensionPresent(
+        alGlob.device, "ALC_SOFT_output_mode") == ALC_TRUE;
+    const ALCint outputModeToken = 0x19AC; // ALC_OUTPUT_MODE_SOFT
+    const ALCint requestedMode =
+        snd_outputConfiguration->current.integer == 1 ? 0x1500 : // mono
+        snd_outputConfiguration->current.integer == 2 ? 0x1501 : // stereo
+        snd_outputConfiguration->current.integer == 3 ? 0x1503 : // quad
+        snd_outputConfiguration->current.integer == 4 ? 0x1504 : // 5.1
+        0x19AD; // ALC_ANY_SOFT / system default
+
+    ALCint defaultAttrs[] = { ALC_FREQUENCY, hertz, 0 };
+    ALCint outputAttrs[] = {
+        ALC_FREQUENCY, hertz,
+        outputModeToken, requestedMode,
+        0
+    };
+    alGlob.context = alcCreateContext(
+        alGlob.device, hasOutputMode ? outputAttrs : defaultAttrs);
     if (!alGlob.context || !alcMakeContextCurrent(alGlob.context))
     {
         Com_PrintError(CON_CHANNEL_SOUND, "ERROR: Couldn't create OpenAL context\n");
@@ -103,9 +122,56 @@ char __cdecl MSS_Init()
     g_snd.playback_rate = hertz + hertz / 2;
     if (g_snd.playback_rate >= 0xAC44)
         g_snd.playback_rate = 0x7FFFFFFF;
-    // KISAK_SOUND TODO (Phase 4): derive from snd_outputConfiguration once speaker-config
-    // mapping is ported; Miles derives this from its opened mss_spec[] channel count.
     g_snd.playback_channels = 2;
+    alGlob.isMultiChannel = false;
+    if (hasOutputMode)
+    {
+        ALCint actualMode = 0x19AD; // ALC_ANY_SOFT
+        alcGetIntegerv(alGlob.device, outputModeToken, 1, &actualMode);
+
+        int requestedChannels = 2;
+        switch (actualMode)
+        {
+        case 0x1500: // mono
+            requestedChannels = 1;
+            break;
+        case 0x1503: // quad
+            requestedChannels = 4;
+            break;
+        case 0x1504: // 5.1
+            requestedChannels = 6;
+            break;
+        case 0x1501: // stereo
+        case 0x19AE: // basic stereo
+        case 0x19AF: // UHJ stereo
+        case 0x19B2: // HRTF stereo
+        default:
+            requestedChannels = 2;
+            break;
+        }
+
+        // Multi-channel source buffers are only valid when this implementation
+        // exposes the matching AL_EXT_MCFORMATS format. Never flag the device as
+        // multi-channel unless the PCM upload format can really be produced.
+        if (requestedChannels == 4 &&
+            (!alIsExtensionPresent("AL_EXT_MCFORMATS") ||
+             alGetEnumValue("AL_FORMAT_QUAD16") == 0))
+            requestedChannels = 2;
+        if (requestedChannels == 6 &&
+            (!alIsExtensionPresent("AL_EXT_MCFORMATS") ||
+             alGetEnumValue("AL_FORMAT_51CHN16") == 0))
+            requestedChannels = 2;
+
+        g_snd.playback_channels = requestedChannels;
+        alGlob.isMultiChannel = requestedChannels > 2;
+    }
+    else if (snd_outputConfiguration->current.integer != 0)
+    {
+        Com_Printf(
+            CON_CHANNEL_SOUND,
+            "OpenAL backend does not expose ALC_SOFT_output_mode; using stereo engine mix\\n");
+    }
+
     g_snd.timescale = 1.0;
     return 1;
 }
