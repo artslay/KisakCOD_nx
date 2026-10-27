@@ -77,8 +77,8 @@ LoadedSound *__cdecl SND_LoadFromBuffer(void *buffer, uint32_t bufferSize, const
         return 0;
     }
 
-    // OpenAL's playback paths support mono/stereo PCM only. Reject wider WAVs before
-    // converting them; otherwise the streaming decoder can overrun its fixed stereo buffer.
+    // OpenAL's loaded-sound path supports mono/stereo PCM only. Reject wider WAVs
+    // before conversion; the separate streaming path validates its channel count as well.
     uint32_t channels = wav.channels;
     uint32_t sampleRate = wav.sampleRate;
     if ((channels != 1 && channels != 2) || sampleRate == 0 ||
