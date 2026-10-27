@@ -43,7 +43,10 @@
 extern void Switch_LogWrite(const char *msg);
 static inline uint64_t Kisak_ProfileClock()
 {
-    return static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+    using ProfileClock = std::chrono::steady_clock;
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            ProfileClock::now().time_since_epoch()).count());
 }
 #else
 static inline uint64_t Kisak_ProfileClock()
@@ -55,9 +58,7 @@ static inline uint64_t Kisak_ProfileClock()
 double Scr_ProfileTicksToSeconds(uint64_t ticks)
 {
 #ifdef KISAK_SWITCH
-    using ProfileClock = std::chrono::steady_clock;
-    return std::chrono::duration<double>(
-        ProfileClock::duration(static_cast<ProfileClock::duration::rep>(ticks))).count();
+    return static_cast<double>(ticks) / 1000000.0;
 #else
     return static_cast<double>(ticks) * *((float *)Sys_GetValue(0) + 20782);
 #endif
@@ -1814,7 +1815,7 @@ uint32_t VM_ExecuteInternal()
     //int gOpcode;
     //int gParamCount;
     int builtInTime;
-    int time;
+    uint64_t time;
     int timeSpent;
     uint32_t parentLocalId;
     uint32_t builtinIndex;
@@ -3519,7 +3520,7 @@ function_call:
 
 uint32_t __cdecl VM_Execute(uint32_t localId, const char *pos, uint32_t paramcount)
 {
-    int time; // [esp+14h] [ebp-24h]
+    uint64_t time; // [esp+14h] [ebp-24h]
     function_stack_t fs_backup; // [esp+18h] [ebp-20h]
     VariableValue *startTop; // [esp+2Ch] [ebp-Ch]
     int type; // [esp+30h] [ebp-8h]
@@ -4674,7 +4675,7 @@ void __cdecl VM_Resume(uint32_t timeId)
     uint32_t v1; // eax
     uint32_t v2; // eax
     const char* pos; // [esp+18h] [ebp-14h]
-    int time; // [esp+1Ch] [ebp-10h]
+    uint64_t time; // [esp+1Ch] [ebp-10h]
     VariableStackBuffer* stackValue; // [esp+20h] [ebp-Ch]
     uint32_t stackId; // [esp+24h] [ebp-8h]
     uint32_t startLocalId; // [esp+28h] [ebp-4h]
@@ -4934,7 +4935,9 @@ void __cdecl Scr_StackClear()
 
 void __cdecl Scr_ProfileUpdate()
 {
-    const char *profileString = Dvar_EnumToString(profile);
+    const dvar_t *profileDvar = Dvar_FindVar("profile");
+    iassert(profileDvar);
+    const char *profileString = Dvar_EnumToString(profileDvar);
 
     if (scrVarPub.bScriptProfile)
     {
