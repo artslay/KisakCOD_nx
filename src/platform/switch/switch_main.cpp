@@ -719,23 +719,9 @@ static bool SwitchConfigureNakDefaultProbe()
     return ::setenv("NAK_DEBUG", combined, 1) == 0;
 }
 
-// The NRO loader's main-thread stack is only about 1 MiB, which is too small
-// for the original engine's deepest script/asset-load call chains. Keep the
-// same OS thread (applet/Vulkan/TLS ownership stays unchanged), but run the
-// engine on a dedicated heap-backed 8 MiB stack.
-__attribute__((naked, noinline)) static void SwitchRunOnStack(
-    void *stackTop, void (*entry)(void *), void *arg)
-{
-    asm(
-        "mov x9, sp\n"
-        "mov sp, x0\n"
-        "stp x9, x30, [sp, #-16]!\n"
-        "mov x0, x2\n"
-        "blr x1\n"
-        "ldp x9, x30, [sp], #16\n"
-        "mov sp, x9\n"
-        "ret\n");
-}
+// The engine runs on a dedicated stack while remaining on the original OS
+// thread, preserving applet, Vulkan and TLS ownership.
+extern "C" void Switch_RunOnStack(void *stackTop, void (*entry)(void *), void *arg);
 
 static void SwitchEngineMainLoop(void *)
 {
@@ -815,7 +801,7 @@ int main()
         (reinterpret_cast<uintptr_t>(engineStack) + SWITCH_ENGINE_STACK_SIZE) &
         ~static_cast<uintptr_t>(0xF);
     SwitchBootLog("Engine stack: dedicated 8 MiB stack");
-    SwitchRunOnStack(reinterpret_cast<void *>(engineStackTop), SwitchEngineMainLoop, nullptr);
+    Switch_RunOnStack(reinterpret_cast<void *>(engineStackTop), SwitchEngineMainLoop, nullptr);
     std::free(engineStack);
 
     SwitchStopProgressWatchdog();
