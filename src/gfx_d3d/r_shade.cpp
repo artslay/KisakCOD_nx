@@ -11,6 +11,7 @@
 #include "r_water.h"
 #include "r_image.h"
 #ifdef __SWITCH__
+#include <qcommon/com_pack.h>
 #endif
 
 #ifdef __SWITCH__
@@ -1282,7 +1283,12 @@ void __cdecl R_ChangeObjectPlacement(GfxCmdBufSourceState *source, const GfxScal
     source->objectPlacement = placement;
 }
 
-int __cdecl R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexCount, int stride)
+static int R_SetVertexDataInternal(
+    GfxCmdBufState *state,
+    const void *data,
+    int vertexCount,
+    int stride,
+    bool convertPackedModelTexCoords)
 {
     IDirect3DVertexBuffer9 *vb; // [esp+6Ch] [ebp-14h]
     volatile int vertexOffset; // [esp+70h] [ebp-10h]
@@ -1326,6 +1332,16 @@ int __cdecl R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexC
         Com_Memcpy(bufferData, data, totalSize);
     }
 #ifdef __SWITCH__
+    if (convertPackedModelTexCoords)
+    {
+        iassert(stride == static_cast<int>(sizeof(GfxPackedVertex)));
+        auto *vertices = static_cast<GfxPackedVertex *>(bufferData);
+        for (int vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex)
+            vertices[vertexIndex].texCoord =
+                Vec2ConvertTexCoordsForVulkan(vertices[vertexIndex].texCoord);
+    }
+#else
+    (void)convertPackedModelTexCoords;
 #endif
     //Profile_EndInternal(0);
     //Profile_EndInternal(0);
@@ -1333,4 +1349,17 @@ int __cdecl R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexC
     vertexOffset = gfxBuf.dynamicVertexBuffer->used;
     gfxBuf.dynamicVertexBuffer->used += totalSize;
     return vertexOffset;
+}
+
+int __cdecl R_SetVertexData(
+    GfxCmdBufState *state, const void *data, int vertexCount, int stride)
+{
+    return R_SetVertexDataInternal(state, data, vertexCount, stride, false);
+}
+
+int __cdecl R_SetPackedModelVertexData(
+    GfxCmdBufState *state, const void *data, int vertexCount)
+{
+    return R_SetVertexDataInternal(
+        state, data, vertexCount, static_cast<int>(sizeof(GfxPackedVertex)), true);
 }
