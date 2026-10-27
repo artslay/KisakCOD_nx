@@ -82,7 +82,8 @@ void __cdecl ProfLoad_Activate()
     mapLoadProfile.isLoading = 1;
     mapLoadProfile.ticksStart = Kisak_RawTimerTicks();
     mapLoadProfile.ticksFinish = mapLoadProfile.ticksStart;
-    Com_Printf(CON_CHANNEL_PROFILE, "^6Activating map load profiler\n");
+    if (Dvar_GetBool("profile_show_loading"))
+        Com_Printf(CON_CHANNEL_PROFILE, "^6Activating map load profiler\n");
 }
 
 void __cdecl ProfLoad_Deactivate()
@@ -95,6 +96,11 @@ void __cdecl ProfLoad_Deactivate()
 
 void ProfLoad_Print()
 {
+    // Profiling collection remains available to the watchdog, but the full
+    // timing tree is opt-in through the existing profile_show_loading dvar.
+    if (!Dvar_GetBool("profile_show_loading"))
+        return;
+
     int fileReadCount; // [esp+6Ch] [ebp-18h]
     int fileOpenCount; // [esp+74h] [ebp-10h]
     int fileSeekCount; // [esp+80h] [ebp-4h]
