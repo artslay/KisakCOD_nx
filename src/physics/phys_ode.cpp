@@ -1364,13 +1364,13 @@ static const dvar_t *Phys_ResolveMinImpactMomentumDvar()
             "The minimum momentum required to trigger impact sounds");
         Com_PrintWarning(
             CON_CHANNEL_PHYS,
-            "Physics: recovered missing phys_minImpactMomentum dvar using its default registration\\n");
+            "Physics: recovered missing phys_minImpactMomentum dvar using its default registration\n");
     }
     else
     {
         Com_PrintWarning(
             CON_CHANNEL_PHYS,
-            "Physics: restored null phys_minImpactMomentum cache from dvar registry\\n");
+            "Physics: restored null phys_minImpactMomentum cache from dvar registry\n");
     }
 
     phys_minImpactMomentum = dvar;
