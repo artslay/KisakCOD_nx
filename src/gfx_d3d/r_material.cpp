@@ -568,92 +568,10 @@ bool __cdecl Material_IsDefault(const Material *material)
     return 0;
 }
 
-#ifdef __SWITCH__
-Material *__cdecl Material_FindLoadedRendererMaterialByName(const char *name)
-{
-    if (!name || !*name)
-        return nullptr;
-
-    // Search the renderer's native registry directly. This avoids a DB hash
-    // alias that may resolve to a default clone with the same requested name.
-    const int registeredCount = std::min<int>(
-        static_cast<int>(rgp.materialCount),
-        static_cast<int>(ARRAY_COUNT(rgp.sortedMaterials)));
-
-    for (int i = 0; i < registeredCount; ++i)
-    {
-        Material *material = rgp.sortedMaterials[i];
-        if (!material || !material->info.name)
-            continue;
-
-        if (!I_stricmp(material->info.name, name) &&
-            material != rgp.defaultMaterial &&
-            (!rgp.defaultMaterial || !Material_IsDefault(material)))
-            return material;
-    }
-
-    return nullptr;
-}
-
-struct SwitchMaterialLookup
-{
-    const char *name;
-    Material *material;
-};
-
-static void __cdecl Switch_FindLoadedMaterialByNameCallback(XAssetHeader header, void *data)
-{
-    auto *lookup = static_cast<SwitchMaterialLookup *>(data);
-    if (!lookup || lookup->material)
-        return;
-
-    Material *material = header.material;
-    if (!material || !material->info.name)
-        return;
-
-    if (!I_stricmp(material->info.name, lookup->name) &&
-        material != rgp.defaultMaterial &&
-        (!rgp.defaultMaterial || !Material_IsDefault(material)))
-        lookup->material = material;
-}
-
-static Material *Switch_FindLoadedMaterialByName(const char *name)
-{
-    Material *registered = Material_FindLoadedRendererMaterialByName(name);
-    if (registered)
-        return registered;
-
-    // Enumerate the database registry instead of copying a fixed number of
-    // entries. Material assets can be beyond an arbitrary prefix of the DB
-    // list; DB_EnumXAssets also visits override entries where the real asset
-    // can exist behind a default clone.
-    SwitchMaterialLookup lookup = {name, nullptr};
-    DB_EnumXAssets(ASSET_TYPE_MATERIAL, Switch_FindLoadedMaterialByNameCallback, &lookup, true);
-    return lookup.material;
-}
-#endif
-
 Material *__cdecl Material_Register_FastFile(const char *name)
 {
-    XAssetHeader header = DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name);
-#ifdef __SWITCH__
-    // DB_FindXAssetHeader may return a default clone if a serialized material
-    // alias was not resolved. Recover only an exact-name Material that already
-    // exists in the renderer/DB registries. This handles dynamic selected-menu
-    // materials like button_highlight_end and prevents the default blue square.
-    if (name &&
-        (header.material == rgp.defaultMaterial ||
-         (rgp.defaultMaterial && header.material &&
-          Material_IsDefault(header.material))))
-    {
-        Material *loaded = Switch_FindLoadedMaterialByName(name);
-        if (loaded)
-            header.material = loaded;
-    }
-#endif
-    return header.material;
+    return DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, name).material;
 }
-
 void __cdecl Material_GetHashIndex(const char *name, uint16_t *hashIndex, bool *exists)
 {
     uint16_t beginHashIndex; // [esp+14h] [ebp-4h]
