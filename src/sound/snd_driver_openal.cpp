@@ -721,6 +721,29 @@ void SND_ApplyOpenALEq(ALuint source, int entchannel)
         g_openALEqAppliedEnabled[index] == enabled)
         return;
 
+    // Newly started sources already have their speaker map / 3D downmix applied.
+    // Do not allocate and upload the same PCM a second time when no EQ processing
+    // is enabled. If EQ was previously applied, the clean buffer still needs rebuilding.
+    bool hasEnabledBand = false;
+    for (int eqIndex = 0; eqIndex < 2 && !hasEnabledBand; ++eqIndex)
+    {
+        for (int band = 0; band < 3; ++band)
+        {
+            if (alGlob.eq[eqIndex].params[band][entchannel].enabled)
+            {
+                hasEnabledBand = true;
+                break;
+            }
+        }
+    }
+
+    if ((!enabled || !hasEnabledBand) && !g_openALEqAppliedEnabled[index])
+    {
+        g_openALEqAppliedRevision[index] = g_openALEqRevision;
+        g_openALEqAppliedEnabled[index] = enabled;
+        return;
+    }
+
     AL_RebuildLoadedChannelBuffer(index, entchannel);
 }
 
