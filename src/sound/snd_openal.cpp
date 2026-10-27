@@ -268,6 +268,7 @@ void __cdecl MSS_ApplyEqFilter(ALuint source, int entchannel)
 */
 void __cdecl MSS_ApplyEqFilter(ALuint source, int entchannel)
 {
+    SND_ApplyOpenALEq(source, entchannel);
 }
 
 // Mirrors MSS_ResumeSample.
