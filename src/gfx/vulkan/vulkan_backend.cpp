@@ -1704,6 +1704,13 @@ bool VulkanBackend::SynchronizeActiveFrame()
         return false;
     }
 
+    // All commands recorded before the resource lock have completed. Their
+    // uniform and buffer-copy staging slices are no longer in flight, so the
+    // per-frame ring can be reused for commands recorded after this split.
+    // Keeping the old offset made a full ring stay exhausted for every later
+    // upload in the same frame, forcing repeated synchronous submits.
+    m_uniformOffset = 0;
+
     const VkResult resetResult = vkResetCommandPool(m_device, m_commandPool, 0);
     if (resetResult != VK_SUCCESS)
     {
