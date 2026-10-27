@@ -35,6 +35,7 @@ extern bool cin_skippable;
 
 #ifdef __SWITCH__
 extern void CL_BlockCinematicSkipUntilRelease();
+extern void CL_PrepareCinematicSkipInput(int localClientNum);
 extern void SCR_SetMapLoadingCinematicActive(bool active);
 extern void Switch_LogShutdown();
 extern void Switch_LogRaw(const char *msg);
