@@ -54,11 +54,11 @@ void __cdecl CG_ParseServerInfo(int localClientNum)
 void __cdecl CG_ParseCullDist(int localClientNum)
 {
     const char *ConfigString; // r3
-    long double v2; // fp2
+    double v2; // fp2
 
     ConfigString = CL_GetConfigString(localClientNum, CS_CULLDIST);
     v2 = atof(ConfigString);
-    R_SetCullDist((float)*(double *)&v2);
+    R_SetCullDist((float)v2);
 }
 
 void __cdecl CG_ParseSunLight(int localClientNum)
@@ -205,7 +205,7 @@ void __cdecl CG_ConfigStringModifiedInternal(int localClientNum, unsigned int st
     const char *ConfigString; // r3
     const char *v5; // r29
     const char *v6; // r3
-    long double v7; // fp2
+    double v7; // fp2
     cgs_t *cgs; // r30
     const FxEffectDef *v9; // r3
     shellshock_parms_t *ShellshockParms; // r3
@@ -239,7 +239,7 @@ void __cdecl CG_ConfigStringModifiedInternal(int localClientNum, unsigned int st
         case 6u:
             v6 = CL_GetConfigString(localClientNum, CS_CULLDIST);
             v7 = atof(v6);
-            R_SetCullDist((float)*(double *)&v7);
+            R_SetCullDist((float)v7);
             break;
         case 7u:
             CG_ParseSunLight(localClientNum);
@@ -645,8 +645,8 @@ void CG_DeactivateReverbCmd()
     const char *v2; // r3
     int v3; // r31
     const char *v4; // r3
-    long double v5; // fp2
-    long double v6; // fp2
+    double v5; // fp2
+    double v6; // fp2
     int v7; // r11
 
     nesting = cmd_args.nesting;
@@ -668,9 +668,9 @@ void CG_DeactivateReverbCmd()
         v3 = atol(v2);
         v4 = Cmd_Argv(2);
         v5 = atof(v4);
-        *(double *)&v5 = (float)((float)((float)*(double *)&v5 * (float)1000.0) + (float)0.5);
+        v5 = (float)((float)((float)v5 * (float)1000.0) + (float)0.5);
         v6 = floor(v5);
-        v7 = (int)(float)*(double *)&v6;
+        v7 = (int)(float)v6;
         if (v7 <= 0)
             v7 = 0;
         SND_DeactivateEnvironmentEffects(v3, v7);
@@ -690,9 +690,9 @@ void __cdecl CG_SetChannelVolCmd(int localClientNum)
     const char *v6; // r3
     int v7; // r28
     const char *v8; // r3
-    long double v9; // fp2
+    double v9; // fp2
     double v10; // fp31
-    long double v11; // fp2
+    double v11; // fp2
     int v12; // r31
     shellshock_parms_t *ShellshockParms; // r3
 
@@ -717,7 +717,7 @@ void __cdecl CG_SetChannelVolCmd(int localClientNum)
         v7 = atol(v6);
         v8 = Cmd_Argv(3);
         v9 = atof(v8);
-        v10 = (float)*(double *)&v9;
+        v10 = (float)v9;
         if (localClientNum)
             MyAssertHandler(
                 "c:\\trees\\cod3\\cod3src\\src\\cgame\\cg_local.h",
@@ -726,9 +726,9 @@ void __cdecl CG_SetChannelVolCmd(int localClientNum)
                 "%s\n\t(localClientNum) = %i",
                 "(localClientNum == 0)",
                 localClientNum);
-        *(double *)&v9 = (float)((float)((float)v10 * (float)1000.0) + (float)0.5);
+        v9 = (float)((float)((float)v10 * (float)1000.0) + (float)0.5);
         v11 = floor(v9);
-        v12 = (int)(float)*(double *)&v11;
+        v12 = (int)(float)v11;
         if (v12 <= 0)
             v12 = 0;
         ShellshockParms = BG_GetShellshockParms(v7);
@@ -747,8 +747,8 @@ void CG_DeactivateChannelVolCmd()
     const char *v2; // r3
     int v3; // r31
     const char *v4; // r3
-    long double v5; // fp2
-    long double v6; // fp2
+    double v5; // fp2
+    double v6; // fp2
     int v7; // r11
 
     nesting = cmd_args.nesting;
@@ -770,9 +770,9 @@ void CG_DeactivateChannelVolCmd()
         v3 = atol(v2);
         v4 = Cmd_Argv(2);
         v5 = atof(v4);
-        *(double *)&v5 = (float)((float)((float)*(double *)&v5 * (float)1000.0) + (float)0.5);
+        v5 = (float)((float)((float)v5 * (float)1000.0) + (float)0.5);
         v6 = floor(v5);
-        v7 = (int)(float)*(double *)&v6;
+        v7 = (int)(float)v6;
         if (v7 <= 0)
             v7 = 0;
         SND_DeactivateChannelVolumes(v3, v7);
@@ -896,7 +896,7 @@ void __cdecl CG_BlurServerCommand(int localClientNum)
     int nesting; // r7
     int v5; // r7
     int time; // r26
-    long double v8; // fp2
+    double v8; // fp2
     int v9; // r7
     double blurEndValue; // fp31
     const char *v11; // r3
@@ -910,7 +910,7 @@ void __cdecl CG_BlurServerCommand(int localClientNum)
     v5 = cmd_args.nesting;
     v8 = atof(Cmd_Argv(2));
     v9 = cmd_args.nesting;
-    blurEndValue = (float)*(double *)&v8;
+    blurEndValue = (float)v8;
     blurTime = (BlurTime)atol(Cmd_Argv(3));
     v13 = cmd_args.nesting;
     blurPrio = (BlurPriority)atol(Cmd_Argv(4));
@@ -929,11 +929,11 @@ void __cdecl CG_SlowServerCommand(int localClientNum)
     int v5; // r7
     int v6; // r27
     const char *v7; // r3
-    long double v8; // fp2
+    double v8; // fp2
     int v9; // r7
     double v10; // fp31
     const char *v11; // r3
-    long double v12; // fp2
+    double v12; // fp2
 
     v3 = Cmd_Argv(1);
     v4 = atol(v3);
@@ -942,10 +942,10 @@ void __cdecl CG_SlowServerCommand(int localClientNum)
     v7 = Cmd_Argv(2);
     v8 = atof(v7);
     v9 = cmd_args.nesting;
-    v10 = (float)*(double *)&v8;
+    v10 = (float)v8;
     v11 = Cmd_Argv(3);
     v12 = atof(v11);
-    CG_AlterTimescale(localClientNum, v6, v10, (float)*(double *)&v12);
+    CG_AlterTimescale(localClientNum, v6, v10, (float)v12);
 }
 
 void __cdecl CG_SetClientDvarFromServer(const char *dvarname, const char *value)
@@ -961,23 +961,23 @@ void CG_ParseAmp()
     int nesting; // r7
     int v1; // r5
     const char *v2; // r3
-    long double v3; // fp2
+    double v3; // fp2
     const char *v4; // r3
-    long double v5; // fp2
+    double v5; // fp2
     const char *v6; // r3
-    long double v7; // fp2
+    double v7; // fp2
     const char *v8; // r3
     int v9; // r31
     const char *v10; // r3
     int v11; // r30
     const char *v12; // r3
-    long double v13; // fp2
+    double v13; // fp2
     double v14; // fp31
     const char *v15; // r3
-    long double v16; // fp2
+    double v16; // fp2
     double v17; // fp30
     const char *v18; // r3
-    long double v19; // fp2
+    double v19; // fp2
     double v20; // fp3
     float v21[6]; // [sp+50h] [-40h] BYREF
 
@@ -998,26 +998,26 @@ void CG_ParseAmp()
     {
         v2 = Cmd_Argv(1);
         v3 = atof(v2);
-        v21[0] = *(double *)&v3;
+        v21[0] = v3;
         v4 = Cmd_Argv(2);
         v5 = atof(v4);
-        v21[1] = *(double *)&v5;
+        v21[1] = v5;
         v6 = Cmd_Argv(3);
         v7 = atof(v6);
-        v21[2] = *(double *)&v7;
+        v21[2] = v7;
         v8 = Cmd_Argv(4);
         v9 = atol(v8);
         v10 = Cmd_Argv(5);
         v11 = atol(v10);
         v12 = Cmd_Argv(6);
         v13 = atof(v12);
-        v14 = (float)*(double *)&v13;
+        v14 = (float)v13;
         v15 = Cmd_Argv(7);
         v16 = atof(v15);
-        v17 = (float)*(double *)&v16;
+        v17 = (float)v16;
         v18 = Cmd_Argv(8);
         v19 = atof(v18);
-        v20 = (float)*(double *)&v19;
+        v20 = (float)v19;
         if (v9 >= 0)
         {
             if (v11 >= v9)
@@ -1122,21 +1122,21 @@ void __cdecl CG_DispatchServerCommand(int localClientNum)
     const char *v36; // r3
     DynEntityCollType v37; // r30
     const char *v38; // r3
-    long double v39; // fp2
+    double v39; // fp2
     double v40; // fp31
     const char *v41; // r3
-    long double v42; // fp2
+    double v42; // fp2
     double v43; // fp30
     const char *v44; // r3
-    long double v45; // fp2
+    double v45; // fp2
     const char *v46; // r3
-    long double v47; // fp2
+    double v47; // fp2
     double v48; // fp31
     const char *v49; // r3
-    long double v50; // fp2
+    double v50; // fp2
     double v51; // fp30
     const char *v52; // r3
-    long double v53; // fp2
+    double v53; // fp2
     const char *v54; // r10
     const char *v55; // r11
     int v56; // r8
@@ -1197,7 +1197,7 @@ void __cdecl CG_DispatchServerCommand(int localClientNum)
     const char *v115; // r3
     int v116; // r30
     const char *v117; // r3
-    long double v118; // fp2
+    double v118; // fp2
     const char *v119; // r10
     const char *v120; // r11
     int v121; // r8
@@ -1994,7 +1994,7 @@ void __cdecl CG_DispatchServerCommand(int localClientNum)
                                                                                                 0,
                                                                                                 0,
                                                                                                 0,
-                                                                                                (int)(float)((float)*(double *)&v118 * (float)255.0),
+                                                                                                (int)(float)((float)v118 * (float)255.0),
                                                                                                 v116,
                                                                                                 v114);
                                                                                         }
@@ -2089,26 +2089,26 @@ void __cdecl CG_DispatchServerCommand(int localClientNum)
                                     v37 = (DynEntityCollType)atol(v36);
                                     v38 = Cmd_Argv(5);
                                     v39 = atof(v38);
-                                    v40 = (float)*(double *)&v39;
+                                    v40 = (float)v39;
                                     v41 = Cmd_Argv(4);
                                     v42 = atof(v41);
-                                    v43 = (float)*(double *)&v42;
+                                    v43 = (float)v42;
                                     v44 = Cmd_Argv(3);
                                     v45 = atof(v44);
                                     v205[1] = v43;
                                     v205[2] = v40;
-                                    v205[0] = *(double *)&v45;
+                                    v205[0] = v45;
                                     v46 = Cmd_Argv(8);
                                     v47 = atof(v46);
-                                    v48 = (float)*(double *)&v47;
+                                    v48 = (float)v47;
                                     v49 = Cmd_Argv(7);
                                     v50 = atof(v49);
-                                    v51 = (float)*(double *)&v50;
+                                    v51 = (float)v50;
                                     v52 = Cmd_Argv(6);
                                     v53 = atof(v52);
                                     v206[1] = v51;
                                     v206[2] = v48;
-                                    v206[0] = *(double *)&v53;
+                                    v206[0] = v53;
                                     DynEntCl_DestroyEvent(localClientNum, v35, v37, v205, v206);
                                 }
                             }
@@ -2203,7 +2203,7 @@ void __cdecl CG_MapInit(int restart)
     signed int i; // r31
     int j; // r31
     const char *ConfigString; // r3
-    long double v5; // fp2
+    double v5; // fp2
 
     memset(cgArray, 0, sizeof(cgArray));
     memset(cg_entitiesArray, 0, sizeof(cg_entitiesArray));
@@ -2221,7 +2221,7 @@ void __cdecl CG_MapInit(int restart)
         CG_TargetsChanged(0, j);
     ConfigString = CL_GetConfigString(0, CS_CULLDIST);
     v5 = atof(ConfigString);
-    R_SetCullDist((float)*(double *)&v5);
+    R_SetCullDist((float)v5);
     CG_NorthDirectionChanged(0);
     SND_MapInit();
     CG_StartAmbient(0);
