@@ -460,19 +460,25 @@ snd_alias_t *__cdecl Com_PickSoundAlias(const char *aliasname)
 #endif
     aliasList = Com_FindSoundAlias(aliasname);
 #ifdef __SWITCH__
+    // Preserve the exact point within alias-list lookup if the returned XAsset
+    // pointer or its name is invalid. The crash report can record this stage
+    // without dereferencing the pointer merely to print diagnostic information.
+    g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/alias_list_returned";
+    g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/alias_count_read";
     if (aliasList && aliasList->count == 0)
     {
-        // Sound-not-loaded warnings are caused by a registered alias list with
-        // no entries, which is different from audio-device initialization
-        // failure or a missing XAsset. Report each alias name once so repeated
-        // gunfire requests do not drown out other missing sounds.
+        // A registered alias list with no entries differs from a missing XAsset
+        // or audio-device initialization failure. Report each name once.
         static char tracedEmptyAliasNames[32][64]{};
         static uint32_t tracedEmptyAliasCount = 0;
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/empty_alias_name_read";
         const char *listName = aliasList->aliasName
             ? aliasList->aliasName : (aliasname ? aliasname : "<null>");
         bool alreadyTraced = false;
+        g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/empty_alias_dedupe";
         for (uint32_t i = 0; i < tracedEmptyAliasCount; ++i)
         {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/empty_alias_compare";
             if (!I_stricmp(tracedEmptyAliasNames[i], listName))
             {
                 alreadyTraced = true;
@@ -481,6 +487,7 @@ snd_alias_t *__cdecl Com_PickSoundAlias(const char *aliasname)
         }
         if (!alreadyTraced && tracedEmptyAliasCount < ARRAY_COUNT(tracedEmptyAliasNames))
         {
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/empty_alias_copy";
             std::snprintf(
                 tracedEmptyAliasNames[tracedEmptyAliasCount],
                 sizeof(tracedEmptyAliasNames[tracedEmptyAliasCount]),
@@ -488,9 +495,10 @@ snd_alias_t *__cdecl Com_PickSoundAlias(const char *aliasname)
             ++tracedEmptyAliasCount;
 
             char trace[512];
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/empty_alias_format";
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][SOUND EMPTY ALIAS] request=%s listName=%s list=%p head=%p count=%d fastFile=%u initialized=%u,%u,%u aliasCounts=%d,%d,%d\n",
+                "[KisakCOD][SOUND EMPTY ALIAS] request=%s listName=%s list=%p head=%p count=%d fastFile=%u initialized=%u,%u,%u aliasCounts=%d,%d,%d\\n",
                 aliasname ? aliasname : "<null>",
                 listName,
                 static_cast<void *>(aliasList),
@@ -503,6 +511,7 @@ snd_alias_t *__cdecl Com_PickSoundAlias(const char *aliasname)
                 g_sa.aliasInfo[0].count,
                 g_sa.aliasInfo[1].count,
                 g_sa.aliasInfo[2].count);
+            g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/empty_alias_log";
             Switch_LogWrite(trace);
         }
     }
