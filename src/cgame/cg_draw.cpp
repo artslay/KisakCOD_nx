@@ -1246,7 +1246,6 @@ void __cdecl CG_Draw2D(int localClientNum)
             //Profile_Begin(349);
             CG_DrawDebugOverlays(localClientNum);
             //Profile_EndInternal(0);
-            CG_DrawUpperRightDebugInfo(localClientNum);
             if (!cgArray[0].showScores && cg_minicon->current.enabled)
                 Con_DrawMiniConsole(0, 2, 4, 1.0);
             Con_DrawErrors(0, 2, 300, 1.0);
@@ -1260,6 +1259,12 @@ void __cdecl CG_Draw2D(int localClientNum)
                 CG_Draw2dHudElems(localClientNum, 0);
             CG_DrawFlashFade(localClientNum);
         }
+
+#ifdef __SWITCH__
+        // Keep the performance HUD independent of cg_draw2D and submit it after
+        // flash fades, console text and timed menus so they cannot cover it.
+        CG_DrawUpperRightDebugInfo(localClientNum);
+#endif
     }
 }
 
