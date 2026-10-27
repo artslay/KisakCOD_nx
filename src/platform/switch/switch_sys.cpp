@@ -3594,13 +3594,13 @@ static bool Switch_LogIsImportant(const char *msg)
     // This applies to both engine messages and prefixed KisakCOD/Switch records.
     static constexpr const char *const kImportantTerms[] =
     {
-        "error", "fail", "fatal", "warning", "warn:", "assert",
-        "mismatch", "timeout", "timed out", "crash", "corrupt",
-        "out of memory", "out-of-memory", "not found", "missing",
-        "invalid", "unsupported", "null pointer", "overflow",
-        "underflow", "panic", "stalled", "deadlock", "aborted",
-        "device lost", "vk_error_", "pipeline_fail", "imagefail",
-        "unable to", "could not", "couldn't"
+        "error:", "error=", "error]", "[error]", "error\n",
+        "failed", "fail=", "fail:", "failure", "fatal", "warning", "warn:",
+        "assert", "mismatch", "timeout", "timed out", "crash", "corrupt",
+        "out of memory", "out-of-memory", "not found", "missing", "invalid",
+        "unsupported", "null pointer", "overflow", "underflow", "panic",
+        "stalled", "deadlock", "aborted", "device lost", "vk_error_",
+        "pipeline_fail", "imagefail", "unable to", "could not", "couldn't"
     };
 
     for (const char *term : kImportantTerms)
