@@ -731,46 +731,87 @@ char *__cdecl Scr_ReadFile_FastFile(const char *filename, const char *extFilenam
     {
         sourceBuf = (char *)rawfile->buffer;
 #ifdef __SWITCH__
-        // fastrope_waiton_helicopter() starts fastrope_attach_helicopter() on a
-        // separate script thread. The helicopter may already be ready, allowing
-        // the caller to proceed before the attach thread has reserved a seat and
-        // assigned pivot.ai.animname. Synchronize on the seat assignment so the
-        // generic grab/loop/land scenes are looked up under the fastrope seat alias.
+        // fastrope_waiton_helicopter() launches fastrope_attach_helicopter() on
+        // another script thread. "heli.ready" is not a guarantee that the attach
+        // thread has selected a seat and assigned the scene alias. Synchronize on
+        // a flag written only after all seat fields, including animname, are set.
         if (strcmp(extFilename, "maps/mo_fastrope.gsc") == 0)
         {
-            static const char readyWait[] = "self.heli waittill (\"ready\");";
-            const char *anchor = strstr(sourceBuf, readyWait);
-            if (anchor)
+            static const char attachNeedle[] = "self thread fastrope_attach_helicopter(pivot);";
+            static const char readyNeedle[] = "self.heli waittill (\"ready\");";
+            static const char seatNeedle[] = "self.heli.seats[index].spin;";
+            static const char attachReplacement[] =
+                "pivot.ai.fastrope_seat_configured = false;\r\n"
+                "\tself thread fastrope_attach_helicopter(pivot);";
+            static const char readyReplacement[] =
+                "self.heli waittill (\"ready\");\r\n"
+                "\twhile (!pivot.ai.fastrope_seat_configured)\r\n"
+                "\t\twait 0.05;";
+            static const char seatReplacement[] =
+                "self.heli.seats[index].spin;\r\n"
+                "\tpivot.ai.fastrope_seat_configured = true;";
+
+            struct FastRopeSourcePatch
+            {
+                const char *anchor;
+                size_t oldLength;
+                const char *replacement;
+                size_t replacementLength;
+            };
+            const char *needles[] = {attachNeedle, readyNeedle, seatNeedle};
+            const char *replacements[] = {attachReplacement, readyReplacement, seatReplacement};
+            FastRopeSourcePatch patches[3] = {};
+            bool sourceMatches = true;
+
+            for (size_t i = 0; i < 3; ++i)
+            {
+                patches[i].anchor = strstr(sourceBuf, needles[i]);
+                patches[i].oldLength = strlen(needles[i]);
+                patches[i].replacement = replacements[i];
+                patches[i].replacementLength = strlen(replacements[i]);
+                if (!patches[i].anchor ||
+                    strstr(patches[i].anchor + patches[i].oldLength, needles[i]))
+                {
+                    sourceMatches = false;
+                    break;
+                }
+            }
+
+            if (sourceMatches &&
+                patches[0].anchor < patches[1].anchor &&
+                patches[1].anchor < patches[2].anchor)
             {
                 const size_t sourceLen = strlen(sourceBuf);
-                const size_t prefixLen = static_cast<size_t>(anchor - sourceBuf);
-                const size_t oldLen = sizeof(readyWait) - 1;
-                static const char replacement[] =
-                    "self.heli waittill (\"ready\");\r\n"
-                    "\twhile (!isdefined(pivot.ai.seat_index))\r\n"
-                    "\t\twait 0.05;";
-                const size_t replacementLen = sizeof(replacement) - 1;
-                const size_t patchedLen = sourceLen - oldLen + replacementLen;
+                size_t patchedLen = sourceLen;
+                for (size_t i = 0; i < 3; ++i)
+                    patchedLen = patchedLen - patches[i].oldLength + patches[i].replacementLength;
+
                 char *patchedSource = (char *)Hunk_AllocateTempMemoryHigh(
                     static_cast<int>(patchedLen + 1), "Scr_ReadFile_FastropeSeatSync");
-
-                memcpy(patchedSource, sourceBuf, prefixLen);
-                memcpy(patchedSource + prefixLen, replacement, replacementLen);
-                memcpy(
-                    patchedSource + prefixLen + replacementLen,
-                    anchor + oldLen,
-                    sourceLen - prefixLen - oldLen);
+                const char *cursor = sourceBuf;
+                char *output = patchedSource;
+                for (size_t i = 0; i < 3; ++i)
+                {
+                    const size_t prefixLen = static_cast<size_t>(patches[i].anchor - cursor);
+                    memcpy(output, cursor, prefixLen);
+                    output += prefixLen;
+                    memcpy(output, patches[i].replacement, patches[i].replacementLength);
+                    output += patches[i].replacementLength;
+                    cursor = patches[i].anchor + patches[i].oldLength;
+                }
+                const size_t tailLen = sourceLen - static_cast<size_t>(cursor - sourceBuf);
+                memcpy(output, cursor, tailLen);
                 patchedSource[patchedLen] = '\0';
                 sourceBuf = patchedSource;
                 Com_Printf(
                     CON_CHANNEL_DONT_FILTER,
-                    "[KisakCOD][SCRIPT FIX] mo_fastrope: waiting for helicopter seat assignment before scene selection\n");
+                    "[KisakCOD][SCRIPT FIX] mo_fastrope: synchronizing seat alias before animation scene lookup\n");
             }
             else
             {
                 Com_PrintError(
                     CON_CHANNEL_DONT_FILTER,
-                    "[KisakCOD][SCRIPT FIX] mo_fastrope ready-wait anchor not found; script source left unchanged\n");
+                    "[KisakCOD][SCRIPT FIX] mo_fastrope synchronization anchors did not match; script source left unchanged\n");
             }
         }
 #endif
