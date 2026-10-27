@@ -11,6 +11,7 @@
 
 #include <client/client.h>
 #include <client/cl_input.h>
+#include <cgame/cg_local.h>
 #include <qcommon/cmd.h>
 #include <ui/keycodes.h>
 #include <ui/ui_shared.h>
@@ -400,11 +401,16 @@ void Switch_GamepadFrame()
     // through the standard key path so the stock +activate binding runs.
     SendKeyEdge(HidNpadButton_Y, 'f', gameplayActive);
 
-    // Weapon cycling uses CoD4's stock mouse-wheel bindings. D-pad left moves
-    // to the previous weapon and D-pad right to the next one; don't send these
-    // key events while the menu owns the D-pad.
-    SendKeyEdge(HidNpadButton_Left, K_MWHEELDOWN, gameplayActive);
-    SendKeyEdge(HidNpadButton_Right, K_MWHEELUP, gameplayActive);
+    // D-pad weapon cycling must not depend on MWHEELUP/MWHEELDOWN being
+    // bound in a user config. Dispatch the game's normal weapon-cycle handlers
+    // directly on the press edge; the handlers still enforce gameplay state.
+    if (gameplayActive)
+    {
+        if (Pressed(HidNpadButton_Left))
+            CG_PrevWeapon_f();
+        if (Pressed(HidNpadButton_Right))
+            CG_NextWeapon_f();
+    }
 
     // D-pad up is night vision during gameplay.
     if (gameplayActive)
