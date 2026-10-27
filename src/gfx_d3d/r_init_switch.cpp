@@ -862,6 +862,14 @@ void R_InitGlobalStructs() {
     gfxMetrics = {};
     gfxMetrics.canMipCubemaps = true;
     g_disableRendering = 0;
+
+    // The Switch-specific init must preserve the engine's identity placement.
+    // BSP tessellation switches to rg.identityPlacement before drawing world
+    // surfaces; a zero scale collapses its world matrix to translation only,
+    // so every floor vertex gets the same clip-space position.
+    rg.identityPlacement = {};
+    rg.identityPlacement.base.quat[3] = 1.0f;
+    rg.identityPlacement.scale = 1.0f;
 }
 void R_EndRegistration()
 {
