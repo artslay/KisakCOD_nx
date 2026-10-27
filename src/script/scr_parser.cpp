@@ -776,13 +776,13 @@ char *__cdecl Scr_ReadFile_FastFile(const char *filename, const char *extFilenam
                 sourceBuf = patchedSource;
                 Com_Printf(
                     CON_CHANNEL_DONT_FILTER,
-                    "[KisakCOD][SCRIPT FIX] mo_fastrope: deriving scene alias from helicopter type and seat position\\n");
+                    "[KisakCOD][SCRIPT FIX] mo_fastrope: deriving scene alias from helicopter type and seat position\n");
             }
             else
             {
                 Com_PrintError(
                     CON_CHANNEL_DONT_FILTER,
-                    "[KisakCOD][SCRIPT FIX] mo_fastrope source did not match the expected seat alias assignment; source left unchanged\\n");
+                    "[KisakCOD][SCRIPT FIX] mo_fastrope source did not match the expected seat alias assignment; source left unchanged\n");
             }
         }
 #endif
