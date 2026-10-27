@@ -313,7 +313,7 @@ const dvar_s *G_RegisterServerDemoDvars()
     player_throwbackInnerRadius = Dvar_RegisterFloat("player_throwbackInnerRadius", 72.0, 0.0, FLT_MAX, 0x1082u, "The radius to a live grenade player must be within initially to do a throwback");
     player_throwbackOuterRadius = Dvar_RegisterFloat("player_throwbackOuterRadius", 192.0, 0.0, FLT_MAX, 0x1082u, "The radius player is allow to throwback a grenade once the player has been in the inner radius");
     g_minGrenadeDamageSpeed = Dvar_RegisterFloat("g_minGrenadeDamageSpeed", 400.0, 0.0, FLT_MAX, DVAR_SAVED | DVAR_CHEAT | DVAR_USERINFO, "Minimum speed at which getting hit be a grenade will do damage (not the grenade explosion damage)");
-    g_speed = Dvar_RegisterInt("g_speed", 190, 0x80000000, 0x7FFFFFFF, DVAR_SAVED | DVAR_USERINFO, "Maximum player speed");
+    g_speed = Dvar_RegisterInt("g_speed", 190, 1, 0x7FFFFFFF, DVAR_SAVED | DVAR_USERINFO, "Maximum player speed");
     g_gravity = Dvar_RegisterFloat("g_gravity", 800.0, 1.0, FLT_MAX, DVAR_USERINFO, "Game gravity in inches per second per second");
     g_knockback = Dvar_RegisterFloat("g_knockback", 1000.0, -FLT_MAX, FLT_MAX, DVAR_USERINFO, "Maximum knockback");
     bullet_penetrationEnabled = Dvar_RegisterBool("bullet_penetrationEnabled", 1, DVAR_CHEAT | DVAR_USERINFO, "Enable/Disable bullet penetration.");
