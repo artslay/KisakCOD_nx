@@ -2,9 +2,9 @@
 #include <qcommon/qcommon.h>
 #ifdef __SWITCH__
 #include <atomic>
-#endif
-#ifdef __SWITCH__
+#include <cstdio>
 #include <qcommon/com_pack.h>
+extern void Switch_LogWrite(const char *msg);
 #endif
 
 #include "r_buffers.h"
