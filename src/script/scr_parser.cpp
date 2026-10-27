@@ -730,6 +730,62 @@ char *__cdecl Scr_ReadFile_FastFile(const char *filename, const char *extFilenam
     if (rawfile)
     {
         sourceBuf = (char *)rawfile->buffer;
+#ifdef __SWITCH__
+        // The stock fastrope script stores a dedicated scene alias per helicopter
+        // seat (fastrope_<type>_<seat>). Re-derive it from the seat's canonical
+        // type/position here, rather than trusting a mutable seat.animname field.
+        // That keeps the shared script working for every actor alias and every map
+        // which uses mo_fastrope; it does not suppress missing-scene assertions.
+        if (strcmp(extFilename, "maps/mo_fastrope.gsc") == 0)
+        {
+            const char *search = sourceBuf;
+            const char *assignment = nullptr;
+            const char *assignmentEnd = nullptr;
+            while ((search = strstr(search, "pivot.ai.animname")) != nullptr)
+            {
+                const char *semicolon = strchr(search, ';');
+                const char *oldValue = strstr(search, "self.heli.seats[index].animname");
+                if (semicolon && oldValue && oldValue < semicolon)
+                {
+                    assignment = search;
+                    assignmentEnd = semicolon;
+                    break;
+                }
+                ++search;
+            }
+
+            if (assignment && assignmentEnd)
+            {
+                static const char replacement[] =
+                    "pivot.ai.animname = fastrope_animname(self.heli.type, self.heli.seats[index].pos);";
+                const size_t sourceLen = strlen(sourceBuf);
+                const size_t prefixLen = static_cast<size_t>(assignment - sourceBuf);
+                const size_t oldLen = static_cast<size_t>(assignmentEnd - assignment) + 1;
+                const size_t replacementLen = sizeof(replacement) - 1;
+                const size_t patchedLen = sourceLen - oldLen + replacementLen;
+                char *patchedSource = (char *)Hunk_AllocateTempMemoryHigh(
+                    static_cast<int>(patchedLen + 1), "Scr_ReadFile_FastropeSeatAnimAlias");
+
+                memcpy(patchedSource, sourceBuf, prefixLen);
+                memcpy(patchedSource + prefixLen, replacement, replacementLen);
+                memcpy(
+                    patchedSource + prefixLen + replacementLen,
+                    assignmentEnd + 1,
+                    sourceLen - prefixLen - oldLen);
+                patchedSource[patchedLen] = '\0';
+                sourceBuf = patchedSource;
+                Com_Printf(
+                    CON_CHANNEL_DONT_FILTER,
+                    "[KisakCOD][SCRIPT FIX] mo_fastrope: deriving scene alias from helicopter type and seat position\\n");
+            }
+            else
+            {
+                Com_PrintError(
+                    CON_CHANNEL_DONT_FILTER,
+                    "[KisakCOD][SCRIPT FIX] mo_fastrope source did not match the expected seat alias assignment; source left unchanged\\n");
+            }
+        }
+#endif
         Scr_AddSourceBufferInternal(extFilename, codePos, sourceBuf, strlen(sourceBuf), 1, archive);
         return sourceBuf;
     }
