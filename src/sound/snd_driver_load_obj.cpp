@@ -87,7 +87,7 @@ LoadedSound *__cdecl SND_LoadFromBuffer(void *buffer, uint32_t bufferSize, const
         drwav_uninit(&wav);
         Com_PrintError(
             CON_CHANNEL_ERROR,
-            "ERROR: Sound file '%s' has unsupported channel count/rate or is too large\\n",
+            "ERROR: Sound file '%s' has unsupported channel count/rate or is too large\n",
             soundName);
         return 0;
     }
@@ -104,7 +104,7 @@ LoadedSound *__cdecl SND_LoadFromBuffer(void *buffer, uint32_t bufferSize, const
     if (framesRead != frameCount)
     {
         Z_Free(pcm, 15);
-        Com_PrintError(CON_CHANNEL_ERROR, "ERROR: Sound file '%s' could not be fully decoded\\n", soundName);
+        Com_PrintError(CON_CHANNEL_ERROR, "ERROR: Sound file '%s' could not be fully decoded\n", soundName);
         return 0;
     }
 
