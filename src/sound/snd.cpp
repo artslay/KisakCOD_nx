@@ -3522,8 +3522,9 @@ void __cdecl SND_PlayLocal_f()
             soundPos[3] = v13;
             v9 = Cmd_Argv(1);
 
-            // KISAKTODO: lmao
-            CL_AddDebugStarWithText(soundPos, (const float *)"333?333?", (const float *)"333?333?", v9, v13, 200, 0);
+            const float starColor[4] = { 1.0f, 0.75f, 0.0f, 1.0f };
+            const float textColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+            CL_AddDebugStarWithText(soundPos, starColor, textColor, v9, v13, 200, 0);
         }
         else
         {
