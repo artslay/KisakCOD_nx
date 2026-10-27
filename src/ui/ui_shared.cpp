@@ -2503,13 +2503,176 @@ static bool Switch_UI_IsCloseInGameOnlyScript(const char *script)
     return foundCloseInGame;
 }
 
+static bool Switch_UI_ScriptHasCommand(const char *script, const char *wantedCommand)
+{
+    if (!script || !script[0] || !wantedCommand || !wantedCommand[0])
+        return false;
+
+    const char *cursor = script;
+    char token[128];
+    bool commandPosition = true;
+    while (String_Parse(&cursor, token, sizeof(token)))
+    {
+        if (token[0] == ';' && token[1] == '\0')
+        {
+            commandPosition = true;
+            continue;
+        }
+
+        if (commandPosition)
+        {
+            if (!I_stricmp(token, wantedCommand))
+                return true;
+            commandPosition = false;
+        }
+    }
+    return false;
+}
+
+static bool Switch_UI_IsConfirmationMenuName(const char *name)
+{
+    return Switch_UI_ContainsCaseInsensitive(name, "popmenu") ||
+        Switch_UI_ContainsCaseInsensitive(name, "popup") ||
+        Switch_UI_ContainsCaseInsensitive(name, "confirm") ||
+        Switch_UI_ContainsCaseInsensitive(name, "question") ||
+        Switch_UI_ContainsCaseInsensitive(name, "yesno") ||
+        Switch_UI_ContainsCaseInsensitive(name, "yes_no") ||
+        Switch_UI_ContainsCaseInsensitive(name, "dialog");
+}
+
+static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restart)
+{
+    if (!dc)
+        return nullptr;
+
+    const char *wantedCommand = restart ? "Restart" : "Leave";
+    menuDef_t *bestMenu = nullptr;
+    int bestScore = 0;
+    const int menuCount = dc->menuCount < 0 ? 0 : (dc->menuCount > 640 ? 640 : dc->menuCount);
+
+    for (int menuIndex = 0; menuIndex < menuCount; ++menuIndex)
+    {
+        menuDef_t *menu = dc->Menus[menuIndex];
+        if (!menu || !menu->window.name ||
+            !I_stricmp(menu->window.name, "pausedmenu") ||
+            !I_stricmp(menu->window.name, "main"))
+            continue;
+
+        bool hasConfirmAction = false;
+        for (int itemIndex = 0; itemIndex < menu->itemCount; ++itemIndex)
+        {
+            itemDef_s *candidate = menu->items ? menu->items[itemIndex] : nullptr;
+            if (!candidate)
+                continue;
+
+            if (Switch_UI_ScriptHasCommand(candidate->action, wantedCommand) ||
+                Switch_UI_ScriptHasCommand(candidate->onAccept, wantedCommand))
+            {
+                hasConfirmAction = true;
+                break;
+            }
+        }
+        if (!hasConfirmAction)
+            continue;
+
+        const char *name = menu->window.name;
+        const bool confirmationName = Switch_UI_IsConfirmationMenuName(name);
+        int score = confirmationName ? 200 : 20;
+
+        if (restart && Switch_UI_ContainsCaseInsensitive(name, "restart"))
+            score += 100;
+        if (!restart &&
+            (Switch_UI_ContainsCaseInsensitive(name, "savequit") ||
+             Switch_UI_ContainsCaseInsensitive(name, "save_quit") ||
+             Switch_UI_ContainsCaseInsensitive(name, "saveandquit") ||
+             Switch_UI_ContainsCaseInsensitive(name, "leave") ||
+             Switch_UI_ContainsCaseInsensitive(name, "returntomenu") ||
+             Switch_UI_ContainsCaseInsensitive(name, "backtomenu") ||
+             Switch_UI_ContainsCaseInsensitive(name, "quit")))
+            score += 100;
+
+        if (score > bestScore)
+        {
+            bestMenu = menu;
+            bestScore = score;
+        }
+    }
+
+    return bestMenu;
+}
+
+static bool Switch_UI_OpenPauseConfirmation(UiContext *dc, bool restart)
+{
+    menuDef_t *menu = Switch_UI_FindPauseConfirmationMenu(dc, restart);
+    if (menu && menu->window.name &&
+        Menus_OpenByName(dc, menu->window.name))
+    {
+        char trace[256];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PAUSE ACTION] opened confirmation menu=%s action=%s\n",
+            menu->window.name,
+            restart ? "restart" : "return_to_menu");
+        Switch_LogWrite(trace);
+        return true;
+    }
+
+    // Some game UI lists use a stock popup whose buttons call the UI aliases
+    // rather than embedding the command in an item action. Try known SP popup
+    // names, but never use the application-exit popup for "return to menu".
+    const char *const restartMenus[] = {
+        "restart_popmenu",
+        "restartlevel_popmenu",
+        "restart_level_popmenu",
+        "restartmission_popmenu",
+        "restart_mission_popmenu"
+    };
+    const char *const leaveMenus[] = {
+        "savequit_popmenu",
+        "save_quit_popmenu",
+        "saveandquit_popmenu",
+        "save_and_quit_popmenu",
+        "quit_to_menu_popmenu",
+        "return_to_menu_popmenu",
+        "leavegame_popmenu",
+        "leave_game_popmenu"
+    };
+    const char *const *names = restart ? restartMenus : leaveMenus;
+    const size_t nameCount = restart
+        ? sizeof(restartMenus) / sizeof(restartMenus[0])
+        : sizeof(leaveMenus) / sizeof(leaveMenus[0]);
+
+    for (size_t i = 0; i < nameCount; ++i)
+    {
+        if (Menus_OpenByName(dc, names[i]))
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][PAUSE ACTION] opened fallback confirmation menu=%s action=%s\n",
+                names[i],
+                restart ? "restart" : "return_to_menu");
+            Switch_LogWrite(trace);
+            return true;
+        }
+    }
+
+    Switch_LogWrite(
+        restart
+            ? "[KisakCOD][PAUSE ACTION] no restart confirmation menu found; keeping pause menu open\n"
+            : "[KisakCOD][PAUSE ACTION] no return-to-menu confirmation menu found; keeping pause menu open\n");
+    return false;
+}
+
 static bool Switch_UI_DispatchCloseOnlyPauseAction(
     UiContext *dc,
     itemDef_s *item,
     const char *script)
 {
-    // Limit this fallback to action/accept scripts. Do not interpret
-    // hover, focus, or escape scripts as Restart or Quit commands.
+    // Only intercept the real button action. Hover/focus and escape scripts
+    // must keep their original behavior.
     if (!dc || !item || (script != item->action && script != item->onAccept) ||
         !item->parent || !item->parent->window.name ||
         I_stricmp(item->parent->window.name, "pausedmenu") ||
@@ -2527,31 +2690,46 @@ static bool Switch_UI_DispatchCloseOnlyPauseAction(
         Switch_UI_ContainsCaseInsensitive(rawText, "restart") ||
         Switch_UI_ContainsCaseInsensitive(translatedText, "restart");
 
-    const bool isQuit =
-        Switch_UI_ContainsCaseInsensitive(itemName, "quit") ||
-        Switch_UI_ContainsCaseInsensitive(rawText, "quit") ||
-        Switch_UI_ContainsCaseInsensitive(translatedText, "quit") ||
+    const bool isApplicationExit =
+        Switch_UI_ContainsCaseInsensitive(itemName, "quitgame") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "quitgame") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "quitgame") ||
         Switch_UI_ContainsCaseInsensitive(itemName, "exitgame") ||
         Switch_UI_ContainsCaseInsensitive(rawText, "exitgame") ||
-        Switch_UI_ContainsCaseInsensitive(translatedText, "exitgame");
+        Switch_UI_ContainsCaseInsensitive(translatedText, "exitgame") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "exit game") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "exit game");
+
+    // In the SP pause menu, "Quit"/"Save and Quit" means leaving the mission
+    // for the main menu; only explicit "Quit Game"/"Exit Game" exits the app.
+    const bool isReturnToMenu = !isApplicationExit &&
+        (Switch_UI_ContainsCaseInsensitive(itemName, "leave") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "leave") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "leave") ||
+         Switch_UI_ContainsCaseInsensitive(itemName, "savequit") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "save") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "save") ||
+         Switch_UI_ContainsCaseInsensitive(itemName, "returntomenu") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "return to menu") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "return to menu") ||
+         Switch_UI_ContainsCaseInsensitive(itemName, "backtomenu") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "main menu") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "main menu") ||
+         Switch_UI_ContainsCaseInsensitive(itemName, "quit") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "quit") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "quit"));
 
     if (isRestart)
     {
-        Dvar_SetIntByName("cl_paused", 0);
-        Key_SetCatcher(dc->localClientNum, 0);
-        Key_ClearStates(dc->localClientNum);
-        Menus_CloseAll(dc);
-        Cbuf_AddText(dc->localClientNum, "map_restart\n");
-        Switch_LogWrite("[KisakCOD][PAUSE ACTION] restart dispatched from closeingame-only pause action\n");
+        // Do not restart yet. The popup's affirmative button invokes Restart.
+        Switch_UI_OpenPauseConfirmation(dc, true);
         return true;
     }
 
-    if (isQuit)
+    if (isReturnToMenu)
     {
-        // Match the original UI_RunMenuScript("Quit") command path.
-        const int controllerIndex = CL_ControllerIndexFromClientNum(dc->localClientNum);
-        Cmd_ExecuteSingleCommand(dc->localClientNum, controllerIndex, (char *)"quit");
-        Switch_LogWrite("[KisakCOD][PAUSE ACTION] quit dispatched from closeingame-only pause action\n");
+        // Do not disconnect/quit yet. The popup's affirmative button invokes Leave.
+        Switch_UI_OpenPauseConfirmation(dc, false);
         return true;
     }
 
