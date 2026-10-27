@@ -43,6 +43,18 @@ bool isDvarSystemActive;
 bool isLoadingAutoExecGlobalFlag;
 
 #ifdef __SWITCH__
+static const char *Switch_DvarSourceName(DvarSetSource source)
+{
+    switch (source)
+    {
+    case DVAR_SOURCE_INTERNAL: return "internal";
+    case DVAR_SOURCE_EXTERNAL: return "external";
+    case DVAR_SOURCE_SCRIPT: return "script";
+    case DVAR_SOURCE_DEVGUI: return "devgui";
+    default: return "unknown";
+    }
+}
+
 static bool Switch_DvarBadStringPointer(const char *ptr)
 {
     if (!ptr)
@@ -1474,7 +1486,7 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
     {
         name = dvar->name;
         v5 = Dvar_ValueToString(dvar, value);
-        Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n", v5, name);
+        Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s' (source=%s)\n", v5, name, Switch_DvarSourceName(source));
         Dvar_PrintDomain(dvar->type, dvar->domain);
         if (dvar->type == DVAR_TYPE_ENUM)
         {
@@ -1500,7 +1512,7 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
     {
         v8 = dvar->name;
         v6 = Dvar_ValueToString(dvar, value);
-        Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n\n", v6, v8);
+        Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s' (source=%s)\n\n", v6, v8, Switch_DvarSourceName(source));
         return;
     }
     if (source == DVAR_SOURCE_EXTERNAL || source == DVAR_SOURCE_SCRIPT)
@@ -2720,7 +2732,7 @@ void __cdecl Dvar_SetFromStringFromSource(dvar_s *dvar, char *string, DvarSetSou
     newValue = v4;
     if (dvar->type == DVAR_TYPE_ENUM && newValue.integer == -1337)
     {
-        Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n", buf, dvar->name);
+        Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s' (source=%s)\n", buf, dvar->name, Switch_DvarSourceName(source));
         Dvar_PrintDomain(dvar->type, dvar->domain);
         newValue = dvar->reset;
     }
@@ -2853,7 +2865,7 @@ void __cdecl Dvar_SetDomainFunc(dvar_s *dvar, bool(__cdecl *customFunc)(dvar_s *
         {
             name = dvar->name;
             v2 = Dvar_ValueToString(dvar, dvar->current);
-            Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n\n", v2, name);
+            Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s' (source=%s)\n\n", v2, name, Switch_DvarSourceName(source));
             Dvar_Reset(dvar, DVAR_SOURCE_INTERNAL);
         }
     }
