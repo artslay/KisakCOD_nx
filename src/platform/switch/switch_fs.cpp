@@ -1653,6 +1653,65 @@ int __cdecl FS_FileExists(char *file)
     return 0;
 }
 
+static bool Switch_PathComponentEquals(const char *component, size_t length, const char *expected)
+{
+    if (std::strlen(expected) != length)
+        return false;
+
+    for (size_t i = 0; i < length; ++i)
+    {
+        if (std::tolower(static_cast<unsigned char>(component[i])) !=
+            std::tolower(static_cast<unsigned char>(expected[i])))
+            return false;
+    }
+    return true;
+}
+
+// These are script-debugger artifacts, not game data. Suppress writes before
+// FS_CreatePath so neither the files nor their parent directories are created.
+static bool Switch_ShouldSuppressScriptDebugWrite(const char *path)
+{
+    if (!path || !*path)
+        return false;
+
+    const char *component = path;
+    const char *baseName = path;
+
+    for (const char *p = path;; ++p)
+    {
+        if (*p != '/' && *p != '\\' && *p != '\0')
+            continue;
+
+        const size_t length = static_cast<size_t>(p - component);
+        if (Switch_PathComponentEquals(component, length, "scriptdata"))
+            return true;
+
+        if (*p == '\0')
+        {
+            baseName = component;
+            break;
+        }
+        component = p + 1;
+    }
+
+    static const char *const suppressedNames[] = {
+        "markHistory.cache",
+        "open_scripts.txt",
+        "script_pos.txt",
+        "timeHistory.cache",
+        "watch_window.txt"
+    };
+
+    const size_t baseNameLength = std::strlen(baseName);
+    for (size_t i = 0; i < sizeof(suppressedNames) / sizeof(suppressedNames[0]); ++i)
+    {
+        if (Switch_PathComponentEquals(baseName, baseNameLength, suppressedNames[i]))
+            return true;
+    }
+
+    return false;
+}
+
 int __cdecl FS_FOpenFileWrite(const char *filename)
 {
     return FS_FOpenFileWriteToDirForThread(filename, fs_gamedir, FS_THREAD_MAIN);
@@ -1660,6 +1719,9 @@ int __cdecl FS_FOpenFileWrite(const char *filename)
 
 int __cdecl FS_FOpenFileWriteToDirForThread(const char *filename, const char *dir, FsThread)
 {
+    if (Switch_ShouldSuppressScriptDebugWrite(filename) || Switch_ShouldSuppressScriptDebugWrite(dir))
+        return 0;
+
     char path[256];
     if (!SwitchBuildPath(
             path,
@@ -1690,6 +1752,9 @@ int __cdecl FS_FOpenTextFileWrite(const char *filename)
 
 int __cdecl FS_FOpenFileAppend(const char *filename)
 {
+    if (Switch_ShouldSuppressScriptDebugWrite(filename))
+        return 0;
+
     char path[256];
     if (!SwitchBuildPath(
             path,
