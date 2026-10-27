@@ -50,10 +50,7 @@ void Switch_WritePostCinematicRenderTrace(
     const uint64_t framesSinceSkip = frame >= startFrame ? frame - startFrame : 0;
     const bool keyFramePhase =
         phase &&
-        (std::strcmp(phase, "screen_frame_begin") == 0 ||
-         std::strcmp(phase, "issue_commands_return") == 0 ||
-         std::strcmp(phase, "draw_screen_field_return") == 0 ||
-         std::strcmp(phase, "cgame_render_return") == 0 ||
+        (std::strcmp(phase, "issue_commands_return") == 0 ||
          std::strcmp(phase, "vk_present_result") == 0 ||
          std::strcmp(phase, "vk_end_frame_abort") == 0 ||
          std::strcmp(phase, "vk_end_frame_noop") == 0 ||
