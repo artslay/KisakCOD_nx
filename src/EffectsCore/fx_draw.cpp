@@ -57,10 +57,10 @@ static void FX_LogNearEffectCull(
 
     float delta[3];
     Vec3Sub(draw->camera->origin, draw->posWorld, delta);
-    const float distanceSquared = Vec3LengthSq(delta);
+    const float distance = Vec3Length(delta);
     // Only report effects genuinely near the camera. This distinguishes a
-    // near-plane/culling problem from a Vulkan draw/transform problem.
-    if (distanceSquared > 64.0f * 64.0f)
+    // frustum-culling problem from a Vulkan draw/transform problem.
+    if (distance > 64.0f)
         return;
 
     const uint32_t traceIndex =
@@ -88,14 +88,14 @@ static void FX_LogNearEffectCull(
     std::snprintf(
         trace, sizeof(trace),
         "[KisakCOD][FX NEAR CULL] n=%u kind=%s effect=%s elemType=%u flags=0x%x "
-        "distanceSq=%.2f radius=%.3f planeCount=%u culprit=%d closestPlane=%.3f "
+        "distance=%.2f radius=%.3f planeCount=%u culprit=%d closestPlane=%.3f "
         "pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f)\n",
         traceIndex,
         kind ? kind : "(unknown)",
         effectName,
         static_cast<unsigned>(draw->elemDef ? draw->elemDef->elemType : 0u),
         static_cast<unsigned>(draw->elemDef ? draw->elemDef->flags : 0u),
-        distanceSquared,
+        distance,
         radius,
         static_cast<unsigned>(frustumPlaneCount),
         culpritPlane,
