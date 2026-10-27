@@ -134,6 +134,35 @@ Material *__cdecl Material_Load(char *assetName, int imageTrack)
     return Material_Register_FastFile(assetName);
 }
 
+
+Material *__cdecl Material_FindLoadedRendererMaterialByName(const char *name)
+{
+    if (!name || !*name)
+        return nullptr;
+
+    // The sorted list is populated from the renderer's loaded fastfile assets
+    // on Switch. Do not use Material_Register_FastFile here: a lookup for an
+    // absent name can manufacture a named copy of $default.
+    const int materialCount = std::clamp(rgp.materialCount, 0, 2048);
+    for (int i = 0; i < materialCount; ++i)
+    {
+        Material *material = rgp.sortedMaterials[i];
+        if (!material || !material->info.name ||
+            I_stricmp(material->info.name, name) != 0)
+            continue;
+
+        // Material_MakeDefault creates named clones that share the default
+        // material's resource tables. They are not real loaded renderer assets
+        // and must not satisfy pending fastfile name aliases.
+        if (rgp.defaultMaterial && Material_IsDefault(material))
+            continue;
+
+        return material;
+    }
+
+    return nullptr;
+}
+
 void __cdecl Material_Sort()
 {
     if (IsFastFileLoad())
