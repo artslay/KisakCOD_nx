@@ -1342,7 +1342,7 @@ void __cdecl Cmd_Exec_f()
 
 static bool Cmd_ShouldLogExec(const char *filename)
 {
-    if (!filename || Dvar_GetInt("developer"))
+    if (!filename)
         return true;
 
     const char *baseName = strrchr(filename, '/');
@@ -1351,7 +1351,10 @@ static bool Cmd_ShouldLogExec(const char *filename)
     // DevGui scripts are optional developer tooling and contain many dvars
     // unavailable in the Switch build. They still execute; only their routine
     // successful "execing" messages are omitted in normal play.
-    return strncmp(baseName, "devgui_", 7) != 0;
+    if (strncmp(baseName, "devgui_", 7) != 0)
+        return true;
+
+    return Dvar_GetInt("developer") != 0;
 }
 
 char __cdecl Cmd_ExecFromDisk(int32_t  localClientNum, int32_t  controllerIndex, const char *filename)
