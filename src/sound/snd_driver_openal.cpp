@@ -2369,8 +2369,8 @@ static void AL_ResamplePcmWindowedSinc(
 
     for (uint32_t outFrame = 0; outFrame < dstFrames; ++outFrame)
     {
-        const double sourcePosition =
-            (static_cast<double>(outFrame) + 0.5) * sourceStep - 0.5;
+        // Preserve the sample timeline origin: output frame n represents time n/dstRate.
+        const double sourcePosition = static_cast<double>(outFrame) * sourceStep;
         const int64_t center = static_cast<int64_t>(std::floor(sourcePosition));
 
         for (uint32_t channel = 0; channel < channels; ++channel)
