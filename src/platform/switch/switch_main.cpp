@@ -72,6 +72,9 @@ extern "C" void SwitchPrepareRustTlsForCurrentThread()
     (void)SwitchInstallRustTlsPointer();
 }
 
+// Shared monotonic id correlates game-side screen decisions with Vulkan frame logs.
+std::atomic<uint64_t> g_switchScreenFrameSequence{0};
+
 static std::atomic<const char *> g_switchProgressStage{"boot"};
 static std::atomic<uint32_t> g_switchProgressDetail{UINT32_MAX};
 static std::atomic<const char *> g_switchProgressPhase{"(none)"};
