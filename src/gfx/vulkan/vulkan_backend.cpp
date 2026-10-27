@@ -27,6 +27,10 @@ extern bool R_RecoverLostVulkanDevice();
 extern void Switch_LogWrite(const char *msg);
 #ifdef __SWITCH__
 extern std::atomic<uint64_t> g_switchScreenFrameSequence;
+extern std::atomic<uint64_t> g_switchGpuDrawCommandSerial;
+extern "C" bool Switch_IsPostCinematicRenderTraceActive(void);
+extern "C" void Switch_LogPostCinematicRenderTrace(const char *phase, const char *detail);
+extern "C" void Switch_PostCinematicRenderTracePresent(int result, const char *detail);
 extern void Switch_LogRecentVulkanDraws();
 extern thread_local const char * volatile g_switchFrameStage;
 extern std::atomic<uint64_t> g_switchLastBoundPipelineKey;
@@ -1741,14 +1745,40 @@ bool VulkanBackend::SynchronizeActiveFrame()
 
 bool VulkanBackend::EndFrame()
 {
+#ifdef __SWITCH__
+    if (Switch_IsPostCinematicRenderTraceActive())
+    {
+        char postCineVkEntry[320];
+        std::snprintf(
+            postCineVkEntry, sizeof(postCineVkEntry),
+            "deviceLost=%u frameActive=%u renderingActive=%u serial=%llu presentSource=%u backbufferCleared=%u",
+            m_deviceLost ? 1u : 0u,
+            m_frameActive ? 1u : 0u,
+            m_renderingActive ? 1u : 0u,
+            static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
+            m_presentSourceImage && m_presentSourceView ? 1u : 0u,
+            m_backbufferClearedThisFrame ? 1u : 0u);
+        Switch_LogPostCinematicRenderTrace("vk_end_frame_enter", postCineVkEntry);
+    }
+#endif
     if (m_deviceLost)
     {
+#ifdef __SWITCH__
+        Switch_LogPostCinematicRenderTrace(
+            "vk_end_frame_abort", "reason=device_lost");
+#endif
         m_frameActive = false;
         m_renderingActive = false;
         return false;
     }
     if (!m_frameActive)
+    {
+#ifdef __SWITCH__
+        Switch_LogPostCinematicRenderTrace(
+            "vk_end_frame_noop", "reason=frame_not_active; no queue present attempted");
+#endif
         return true;
+    }
 
     static uint32_t switchPresentTraceCount = 0;
     static uint32_t switchPresentActivityTraceCount = 0;
@@ -1792,6 +1822,10 @@ bool VulkanBackend::EndFrame()
         m_renderFinishedSemaphores.size() <= m_swapchainIndex ||
         !m_renderFinishedSemaphores[m_swapchainIndex])
     {
+#ifdef __SWITCH__
+        Switch_LogPostCinematicRenderTrace(
+            "vk_end_frame_abort", "reason=invalid_swapchain_image_state");
+#endif
         SetError("Invalid swapchain image state");
         (void)RecreateSwapchain();
         return false;
@@ -1859,6 +1893,12 @@ bool VulkanBackend::EndFrame()
     const VkResult endResult = vkEndCommandBuffer(m_commandBuffer);
     if (endResult != VK_SUCCESS)
     {
+#ifdef __SWITCH__
+        char postCineEndBufferFail[96];
+        std::snprintf(postCineEndBufferFail, sizeof(postCineEndBufferFail),
+            "reason=vkEndCommandBuffer_failed result=%d", static_cast<int>(endResult));
+        Switch_LogPostCinematicRenderTrace("vk_end_frame_abort", postCineEndBufferFail);
+#endif
         SetError("vkEndCommandBuffer failed", endResult);
         if (!m_deviceLost)
             (void)RecreateSwapchain();
@@ -1870,6 +1910,12 @@ bool VulkanBackend::EndFrame()
     const VkResult resetFenceResult = vkResetFences(m_device, 1, &m_sync.fence);
     if (resetFenceResult != VK_SUCCESS)
     {
+#ifdef __SWITCH__
+        char postCineFenceFail[96];
+        std::snprintf(postCineFenceFail, sizeof(postCineFenceFail),
+            "reason=vkResetFences_failed result=%d", static_cast<int>(resetFenceResult));
+        Switch_LogPostCinematicRenderTrace("vk_end_frame_abort", postCineFenceFail);
+#endif
         SetError("vkResetFences failed before frame submission", resetFenceResult);
         if (!m_deviceLost)
             (void)RecreateSwapchain();
@@ -1904,6 +1950,10 @@ bool VulkanBackend::EndFrame()
     if (submitResult != VK_SUCCESS)
     {
 #ifdef __SWITCH__
+        char postCineSubmitFail[128];
+        std::snprintf(postCineSubmitFail, sizeof(postCineSubmitFail),
+            "reason=vkQueueSubmit_failed result=%d", static_cast<int>(submitResult));
+        Switch_LogPostCinematicRenderTrace("vk_end_frame_abort", postCineSubmitFail);
         g_switchFrameStage = "frame/present/queue_submit_failed";
         const bool validSignalSemaphore =
             m_swapchainIndex < m_renderFinishedSemaphores.size() &&
@@ -1935,6 +1985,10 @@ bool VulkanBackend::EndFrame()
         return false;
     }
     m_imageAvailablePending = false;
+#ifdef __SWITCH__
+    Switch_LogPostCinematicRenderTrace(
+        "vk_queue_submit_success", "vkQueueSubmit returned VK_SUCCESS");
+#endif
 
     VkPresentInfoKHR present{};
     present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1949,6 +2003,22 @@ bool VulkanBackend::EndFrame()
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
         result = vkQueuePresentKHR(m_graphicsQueue, &present);
     }
+#ifdef __SWITCH__
+    if (Switch_IsPostCinematicRenderTraceActive())
+    {
+        char postCinePresent[320];
+        std::snprintf(
+            postCinePresent, sizeof(postCinePresent),
+            "serial=%llu swapIndex=%u source=%u size=%ux%u drawSerial=%llu renderingWasActive=%u",
+            static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
+            m_swapchainIndex,
+            switchHasPresentSource ? 1u : 0u,
+            m_width, m_height,
+            static_cast<unsigned long long>(g_switchGpuDrawCommandSerial.load(std::memory_order_relaxed)),
+            switchTraceActivity ? 1u : 0u);
+        Switch_PostCinematicRenderTracePresent(static_cast<int>(result), postCinePresent);
+    }
+#endif
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
