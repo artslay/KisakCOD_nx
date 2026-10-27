@@ -602,8 +602,6 @@ void UI_UpdateSaveUI()
 
     if (!ui_saveTimeGlob.hasfirstFrameShown)
     {
-        v0 = Sys_Milliseconds();
-        Com_Printf(CON_CHANNEL_UI, "Save Message First Frame Shown: %i\n", v0);
         ui_saveTimeGlob.hasfirstFrameShown = 1;
     }
     if (ui_saveTimeGlob.callWrite)
@@ -2723,6 +2721,16 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
         Com_SetRecommended(localClientNum, 1);
         return;
     }
+
+#ifdef __SWITCH__
+    if (!I_stricmp(out, "stopRefresh"))
+    {
+        // The stock single-player frontend includes this shared UI script
+        // token. The Switch SP port has no multiplayer server-browser refresh
+        // worker, so there is no active refresh operation to stop.
+        return;
+    }
+#endif
 
     Com_Printf(CON_CHANNEL_UI, "unknown UI script %s in block:\n%s\n", out, actualScript);
 }
