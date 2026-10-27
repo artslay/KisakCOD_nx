@@ -13,6 +13,18 @@
 #include <gfx_d3d/r_dpvs.h>
 #include "ode/odeext.h"
 #include <universal/profile.h>
+
+#ifdef __SWITCH__
+#include <cstdio>
+extern thread_local const char * volatile g_switchFrameStage;
+static thread_local char g_switchPhysicsCrashStage[128];
+static void Switch_SetPhysicsCrashStage(const char *phase, int worldIndex, int value)
+{
+    std::snprintf(g_switchPhysicsCrashStage, sizeof(g_switchPhysicsCrashStage),
+        "frame/physics/%s/world=%d/value=%d", phase ? phase : "unknown", worldIndex, value);
+    g_switchFrameStage = g_switchPhysicsCrashStage;
+}
+#endif
 #include "ode/collision_transform.h"
 
 #ifdef KISAK_MP
@@ -1779,6 +1791,9 @@ void __cdecl Phys_PerformanceEndFrame()
 
 void __cdecl Phys_RunToTime(int localClientNum, PhysWorld worldIndex, int timeNow)
 {
+#ifdef __SWITCH__
+    Switch_SetPhysicsCrashStage("run_to_time_entry", worldIndex, timeNow);
+#endif
     DWORD v3; // eax
     float seconds; // [esp+20h] [ebp-5Ch]
     uint32_t v5; // [esp+2Ch] [ebp-50h]
@@ -1800,6 +1815,9 @@ void __cdecl Phys_RunToTime(int localClientNum, PhysWorld worldIndex, int timeNo
     if (data->timeLastUpdate < timeNow)
     {
         data->timeLastSnapshot = data->timeLastUpdate;
+#ifdef __SWITCH__
+        Switch_SetPhysicsCrashStage("snapshot_bodies", worldIndex, timeNow);
+#endif
         ODE_ForEachBody(world, Phys_BodyGrabSnapshot);
         maxIter = 2;
         do
@@ -1812,10 +1830,19 @@ void __cdecl Phys_RunToTime(int localClientNum, PhysWorld worldIndex, int timeNo
                 v5 = g_phys_msecStep[worldIndex];
             --maxIter;
             seconds = v5 * EQUAL_EPSILON;
+#ifdef __SWITCH__
+            Switch_SetPhysicsCrashStage("run_frame", worldIndex, timeNow);
+#endif
             Phys_RunFrame(localClientNum, worldIndex, seconds);
             data->timeLastUpdate += v5;
+#ifdef __SWITCH__
+            Switch_SetPhysicsCrashStage("post_process_islands", worldIndex, timeNow);
+#endif
             dxPostProcessIslands(worldIndex);
         } while (data->timeLastUpdate < timeNow);
+#ifdef __SWITCH__
+        Switch_SetPhysicsCrashStage("body_once_per_run", worldIndex, timeNow);
+#endif
         ODE_ForEachBody(world, Phys_DoBodyOncePerRun);
     }
     if (phys_drawAwake->current.enabled || phys_drawCollisionObj->current.enabled)
