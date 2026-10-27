@@ -42,9 +42,16 @@ static void Switch_SetScriptLoadDiagnostic(const char *stage, const char *filena
 
 bool Scr_IsInOpcodeMemory(char const* pos)
 {
-    iassert(scrVarPub.programBuffer);
-    iassert(pos);
-    return pos - scrVarPub.programBuffer < scrCompilePub.programLen;
+    // Script error reporting must be able to reject a corrupt/stale code
+    // pointer. Pointer subtraction outside the program buffer is undefined,
+    // and this one-sided check treated pointers below programBuffer as valid.
+    if (!pos || !scrVarPub.programBuffer || !scrCompilePub.programLen)
+        return false;
+
+    const uintptr_t address = reinterpret_cast<uintptr_t>(pos);
+    const uintptr_t begin = reinterpret_cast<uintptr_t>(scrVarPub.programBuffer);
+    const uintptr_t length = static_cast<uintptr_t>(scrCompilePub.programLen);
+    return address >= begin && address - begin < length;
 }
 
 bool Scr_IsIdentifier(char const* token)
