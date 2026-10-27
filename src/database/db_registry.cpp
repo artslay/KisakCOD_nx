@@ -3802,7 +3802,7 @@ XAssetEntryPoolEntry *__cdecl DB_LinkXAssetEntry(XAssetEntryPoolEntry *newEntry,
     // address before restoring the asset header. Native Switch structures can
     // exceed the 32-bit XAssetSize union; SndCurve is the largest of the sound
     // payloads copied by DB_CloneXAssetInternalSwitch.
-    union SwitchXAssetCloneScratch
+    struct SwitchXAssetCloneScratch
     {
         XAssetSize legacy;
         GfxLightDef lightDef;
