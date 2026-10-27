@@ -968,8 +968,8 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
     }
 
     // Preserve the legacy string form for non-developer/compiler diagnostics.
-    v5 = va("%s\\n\\n", codePos);
-    Com_PrintMessage(channel, v5, 0);
+    char *sourceText = va("%s\\n\\n", codePos);
+    Com_PrintMessage(channel, sourceText, 0);
 }
 
 void __cdecl Scr_PrintSourcePos(int channel, const char *filename, const char *buf, uint32_t sourcePos)
