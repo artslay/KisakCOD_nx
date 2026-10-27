@@ -2964,10 +2964,18 @@ static XAnimDeltaPart *Switch_LoadXAnimDeltaPart()
     std::memset(native, 0, sizeof(*native));
 
     if (serialized.trans)
+    {
+        // Match AllocLoad_FxElemVisStateSample(): the serialized child
+        // starts at a 16-byte boundary, independent of the native pointer size.
+        DB_AllocStreamPos(3);
         native->trans = Switch_LoadXAnimPartTrans();
+    }
 
     if (serialized.quat)
+    {
+        DB_AllocStreamPos(3);
         native->quat = Switch_LoadXAnimDeltaPartQuat();
+    }
 
     return native;
 }
@@ -3145,6 +3153,8 @@ void __cdecl Load_XAnimParts(bool atStreamStart)
 
     if (varXAnimParts->deltaPart)
     {
+        // The original loader aligns XAnimDeltaPart with AllocLoad_FxElemVisStateSample().
+        DB_AllocStreamPos(3);
         varXAnimParts->deltaPart = Switch_LoadXAnimDeltaPart();
         varXAnimDeltaPart = varXAnimParts->deltaPart;
         if (switchXAnimTrace)
