@@ -2068,8 +2068,7 @@ void __cdecl Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2)
             {
                 Phys_ReduceContacts(v9, &contactArray, &out);
                 Phys_CreateJointForEachContact(&out, b1, b2, &surfParms, worldIndex);
-#ifndef __SWITCH__
-                if (v9)
+if (v9)
                 {
                     PhysObjUserData *soundData = (PhysObjUserData *)dBodyGetData(v9);
                     Phys_PlayCollisionSound(
@@ -2083,13 +2082,11 @@ void __cdecl Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2)
                     Phys_PlayCollisionSound(
                         v22->localClientNum, b1, soundData->sndClass, &out);
                 }
-#endif // !__SWITCH__
             }
             else
             {
                 Phys_CreateJointForEachContact(&contactArray, b1, b2, &surfParms, worldIndex);
-#ifndef __SWITCH__
-                if (v9)
+if (v9)
                 {
                     PhysObjUserData *soundData = (PhysObjUserData *)dBodyGetData(v9);
                     Phys_PlayCollisionSound(
@@ -2103,7 +2100,6 @@ void __cdecl Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2)
                     Phys_PlayCollisionSound(
                         v22->localClientNum, b1, soundData->sndClass, &contactArray);
                 }
-#endif // !__SWITCH__
             }
         }
     }
