@@ -92,11 +92,7 @@ void __cdecl CG_DrawNightVisionOverlay(int32_t localClientNum)
 
     if (CG_LookingThroughNightVision(localClientNum))
     {
-        // Material_RegisterHandle can return a named clone of the
-        // renderer's default material when the real overlay asset is absent.
-        // That clone is non-null but renders the full-screen fallback square;
-        // only draw the actual goggles material.
-        if (cgMedia.nightVisionOverlay && !Material_IsDefault(cgMedia.nightVisionOverlay))
+        if (cgMedia.nightVisionOverlay)
             CL_DrawStretchPic(
                 &scrPlaceView[localClientNum],
                 0.0,
@@ -112,19 +108,9 @@ void __cdecl CG_DrawNightVisionOverlay(int32_t localClientNum)
                 colorWhite,
                 cgMedia.nightVisionOverlay);
         else
-        {
-            // Avoid flooding the Switch log if an asset is still missing.
-            // The precache path reports the resource pointers separately.
-            static bool warnedMissingNightVisionAssets = false;
-            if (!warnedMissingNightVisionAssets)
-            {
-                warnedMissingNightVisionAssets = true;
-                Com_PrintWarning(CON_CHANNEL_CLIENT, "CG_DrawNightVisionOverlay(): Nightvision Assets not Precached.\n");
-            }
-        }
+            Com_PrintWarning(CON_CHANNEL_CLIENT, "CG_DrawNightVisionOverlay(): Nightvision Assets not Precached.\n");
     }
 }
-
 void __cdecl CG_DrawCrosshair(int32_t localClientNum)
 {
     WeaponDef *weapDefTurret; // [esp+Ch] [ebp-44h]
