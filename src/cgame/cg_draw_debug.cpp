@@ -210,7 +210,7 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FPS HUD TRACE] stage=CG_DrawFPS frame=%u samples=%d fps=%d avgMs=%.2f maxMs=%d x=%.1f y=%.1f textWidth=%.1f scale=%.3f font=%p\\n",
+            "[KisakCOD][FPS HUD TRACE] stage=CG_DrawFPS frame=%u samples=%d fps=%d avgMs=%.2f maxMs=%d x=%.1f y=%.1f textWidth=%.1f scale=%.3f font=%p\n",
             switchFpsDrawTraceFrame,
             fps_index,
             fps,
