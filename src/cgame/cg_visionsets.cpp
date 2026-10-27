@@ -113,6 +113,20 @@ void __cdecl CG_VisionSetsUpdate(int32_t localClientNum)
     if (!cgameGlob->visionNameNaked[0])
         SetDefaultVision(localClientNum);
 
+    // Night vision is a built-in CoD4 vision mode even on maps that omit
+    // CS_VISIONSET_NIGHT. Leave an authored map setting untouched, but make
+    // the stock night-vision grade available before the player enables NVG.
+    if (!cgameGlob->visionNameNight[0])
+    {
+        I_strncpyz(cgameGlob->visionNameNight, (char *)"default_night", 64);
+        CG_VisionSetStartLerp_To(
+            localClientNum,
+            VISIONSETMODE_NIGHT,
+            VISIONSETLERP_TO_SMOOTH,
+            cgameGlob->visionNameNight,
+            0);
+    }
+
     for (idx = 0; idx < 2; ++idx)
         UpdateVarsLerp(
             cgameGlob->time,
@@ -495,6 +509,20 @@ void __cdecl CG_VisionSetConfigString_Night(int32_t localClientNum)
 
     configString = CL_GetConfigString(localClientNum, CS_VISIONSET_NIGHT);
     token = (const char *)Com_Parse(&configString);
+    if (!token[0])
+    {
+        // An empty night-vision configstring means no map override. Use the
+        // stock goggles grade, not the disabled/undefined channel.
+        I_strncpyz(cgameGlob->visionNameNight, (char *)"default_night", 64);
+        CG_VisionSetStartLerp_To(
+            localClientNum,
+            VISIONSETMODE_NIGHT,
+            VISIONSETLERP_TO_SMOOTH,
+            cgameGlob->visionNameNight,
+            0);
+        return;
+    }
+
     I_strncpyz(cgameGlob->visionNameNight, (char *)token, 64);
     v1 = Com_Parse(&configString);
     duration = atoi(v1->token);
