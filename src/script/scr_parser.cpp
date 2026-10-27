@@ -764,7 +764,7 @@ char *__cdecl Scr_ReadFile_FastFile(const char *filename, const char *extFilenam
                 sourceBuf = patchedSource;
                 Com_Printf(
                     CON_CHANNEL_DONT_FILTER,
-                    "[KisakCOD][SCRIPT FIX] mo_fastrope: waiting for helicopter seat assignment before scene selection\\n");
+                    "[KisakCOD][SCRIPT FIX] mo_fastrope: waiting for helicopter seat assignment before scene selection\n");
             }
             else
             {
