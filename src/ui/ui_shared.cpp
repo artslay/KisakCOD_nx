@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <atomic>
+#include <cstdint>
 #include <unordered_map>
 #include <universal/profile.h>
 
