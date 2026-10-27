@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdio>
 extern MaterialTechnique *Switch_ResolveTechniqueForRender(MaterialTechniqueSet *techSet, uint32_t techType);
+extern bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass);
 extern thread_local const char *g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
 #endif
@@ -118,28 +119,14 @@ uint32_t RB_UploadMaterialPass(
                   static_cast<uint32_t>(pass->perObjArgCount) +
                   static_cast<uint32_t>(pass->perPrimArgCount);
 #ifdef __SWITCH__
-    if (vertMem_140)
+    // Native Switch allocations can legitimately live below 4 GiB. Validate
+    // the full pass and argument array against mapped memory instead of treating
+    // pointer width alone as proof that a pointer is a serialized fastfile token.
+    if (!Switch_ResolveMaterialPassArgsForRender(
+            const_cast<MaterialPass *>(pass)))
     {
-        const uintptr_t argsAddress = reinterpret_cast<uintptr_t>(pass->args);
-        if (argsAddress <= UINT32_MAX ||
-            (argsAddress & (alignof(MaterialShaderArgument) - 1u)) != 0)
-        {
-            static std::atomic<uint32_t> traceCount{0};
-            if (traceCount.fetch_add(1, std::memory_order_relaxed) < 16u)
-            {
-                char trace[320];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][MATERIAL UPLOAD REJECT] reason=invalidArgs pass=%p args=%p argCount=%u\n",
-                    static_cast<const void *>(pass),
-                    reinterpret_cast<const void *>(argsAddress),
-                    static_cast<unsigned>(vertMem_140));
-                Switch_LogWrite(trace);
-            }
-            g_switchFrameStage = "frame/render/material_upload/reject_args";
-            return 0;
-        }
+        g_switchFrameStage = "frame/render/material_upload/reject_args";
+        return 0;
     }
 #endif
     iassert( pass->vertexShader );
