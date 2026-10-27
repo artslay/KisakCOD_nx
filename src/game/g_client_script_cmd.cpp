@@ -145,7 +145,6 @@ void __cdecl PlayerCmd_giveWeapon(scr_entref_t entref)
 
     weaponName = Scr_GetString(0);
     weaponIndex = G_GetWeaponIndexForName(weaponName);
-    Com_Printf(CON_CHANNEL_SERVER, "PlayerCmd_giveWeapon: '%s' index=%d ent=%d\n", weaponName, weaponIndex, entref.entnum);
     Scr_VerifyWeaponIndex(weaponIndex, weaponName);
     ps = &pSelf->client->ps;
     iassert(ps);
@@ -161,7 +160,6 @@ void __cdecl PlayerCmd_giveWeapon(scr_entref_t entref)
 
     G_GivePlayerWeapon(&pSelf->client->ps, weaponIndex, weaponModel);
     InitializeAmmo(pSelf, weaponIndex, weaponModel, hadWeapon);
-    Com_Printf(CON_CHANNEL_SERVER, "PlayerCmd_giveWeapon: gave '%s' to player\n", weaponName);
 }
 
 void __cdecl PlayerCmd_takeWeapon(scr_entref_t entref)
@@ -1474,7 +1472,6 @@ void __cdecl PlayerCmd_SetViewmodel(scr_entref_t entref)
     if (!String || !*String)
         Scr_ParamError(0, "usage: setviewmodel(<model name>)");
     v5 = G_ModelIndex(v4);
-    Com_Printf(CON_CHANNEL_SERVER, "PlayerCmd_SetViewmodel: model='%s' modelIndex=%d ent=%d\n", v4, v5, v6);
     if (v5 != (unsigned __int16)v5)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\g_client_script_cmd.cpp",
@@ -1483,7 +1480,6 @@ void __cdecl PlayerCmd_SetViewmodel(scr_entref_t entref)
             "%s",
             "modelIndex == (modelNameIndex_t) modelIndex");
     v1->client->ps.viewmodelIndex = v5;
-    Com_Printf(CON_CHANNEL_SERVER, "PlayerCmd_SetViewmodel: set ps.viewmodelIndex=%d (player %d)\n", v5, v6);
 }
 
 void __cdecl PlayerCmd_AllowADS(scr_entref_t entref)
