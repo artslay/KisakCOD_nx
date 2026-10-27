@@ -3626,34 +3626,6 @@ static bool Switch_LogIsRoutineNoise(const char *msg)
         return !Switch_LogCounterNonZero(msg, "nameFailures=") &&
                !Switch_LogCounterNonZero(msg, "positionFailures=");
 
-    // The stock load profiler emits a long list of colored timing rows.
-    const char *first = msg;
-    while (*first == '\n' || *first == '\r' || *first == ' ' || *first == '\t')
-        ++first;
-    if (first[0] == '^' && first[1] == '6')
-    {
-        static constexpr const char *const kProfilerTerms[] =
-        {
-            "init game dvars", "server demo dvars", "debug dvars",
-            "clear config strings", "GScr_LoadConsts", "G_SetupWeaponDef",
-            "SV_InitWriteDemo", "Load scripts and anims", "Scr_AddSourceBuffer",
-            "ScriptCompile", "G_SpawnEntitiesFromString", "Parse server info",
-            "Load world", "Init effects system", "Register code assets",
-            "Register items", "Register server models", "Register known effects",
-            "Register shellshocks", "Register rumbles", "Register impact effects",
-            "Register night vision assets", "Load hud menus", "Precache script menus",
-            "Register server materials", "Optimize all xmodels", "Map init",
-            "Load time hot spots", "Hot spot total time", "Total Load Time",
-            "Profiled Time", "Unprofiled Time", "File Open Time",
-            "File Seek Time", "File Read Time"
-        };
-        for (const char *term : kProfilerTerms)
-        {
-            if (Switch_LogContainsInsensitive(first, term))
-                return true;
-        }
-    }
-
     // Discard a standalone ASCII star graphic, but not ordinary text banners.
     bool hasStar = false;
     for (const char *p = msg; *p; ++p)
