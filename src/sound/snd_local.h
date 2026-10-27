@@ -133,6 +133,7 @@ struct AlLocal
     // technique for per-source send level, since AL_AUXILIARY_SEND_FILTER has no gain
     // parameter of its own. See SND_ApplyReverbSend in snd_driver.cpp.
     ALuint sendFilter[53];
+    uint32_t outputChannels;             // actual OpenAL PCM output layout (1/2/4/6)
     bool isMultiChannel;
 };
 #endif
