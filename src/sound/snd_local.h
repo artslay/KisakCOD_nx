@@ -10,6 +10,7 @@
 // defined first. Since we statically link openal-soft ourselves and know EFX is compiled
 // in, direct linkage is simpler than the usual portable-extension-loading dance.
 #define AL_ALEXT_PROTOTYPES
+#include <AL/alext.h>
 #include <AL/efx.h>
 #endif
 #include "snd_public.h"
