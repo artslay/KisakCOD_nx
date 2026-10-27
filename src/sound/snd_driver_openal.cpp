@@ -861,6 +861,25 @@ int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int
 
     stream->channels = stream->isMp3 ? stream->mp3.channels : stream->wav.channels;
     stream->sampleRate = stream->isMp3 ? stream->mp3.sampleRate : stream->wav.sampleRate;
+    if ((stream->channels != 1 && stream->channels != 2) || stream->sampleRate == 0)
+    {
+        Com_PrintError(
+            CON_CHANNEL_SOUND,
+            "Couldn't play stream '%s' from alias '%s' - unsupported channel count %u or sample rate %u\\n",
+            realname,
+            startAliasInfo->alias0->aliasName,
+            static_cast<unsigned>(stream->channels),
+            static_cast<unsigned>(stream->sampleRate));
+        if (stream->isMp3)
+            drmp3_uninit(&stream->mp3);
+        else
+            drwav_uninit(&stream->wav);
+        std::free(stream->memoryData);
+        FS_FCloseFile(stream->fsHandle);
+        memset(stream, 0, sizeof(*stream));
+        return SND_SetPlaybackIdNotPlayed(index);
+    }
+
     stream->looping = (startAliasInfo->alias0->flags & 1) != 0; // matches AIL_set_stream_loop_count's polarity above: flags bit 0 set == looping
     stream->active = true;
 
@@ -1673,6 +1692,16 @@ void __cdecl SND_UpdateStreamChannel(int i, int frametime)
         bool hasMoreToPlay = SND_FillStreamBuffers(i);
         ALint state;
         alGetSourcei(alGlob.source[i], AL_SOURCE_STATE, &state);
+
+        // Refilling an underrun queue does not restart an OpenAL source by itself.
+        // If playback stopped after exhausting its queue, restart it once new data is
+        // queued. Do not override a pause or the channel's scheduled start delay.
+        if (!chaninfo->startDelay && hasMoreToPlay && state == AL_STOPPED)
+        {
+            alSourcePlay(alGlob.source[i]);
+            alGetSourcei(alGlob.source[i], AL_SOURCE_STATE, &state);
+        }
+
         bool stillPlaying = g_snd.chaninfo[i].startDelay || hasMoreToPlay || state != AL_STOPPED;
         if (stillPlaying)
         {
