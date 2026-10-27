@@ -833,9 +833,9 @@ void __cdecl Ragdoll_GenerateAllSelfCollisionContacts()
     }
 }
 
-static bool __cdecl Ragdoll_GenBoneCapsuleSegments(
+bool __cdecl Ragdoll_GenBoneCapsuleSegments(
     RagdollBody *body,
-    const uint8_t *bones,
+    uint8_t *bones,
     float (*s0)[3],
     float (*s1)[3])
 {
