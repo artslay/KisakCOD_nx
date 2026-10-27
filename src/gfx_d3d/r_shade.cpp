@@ -10,7 +10,6 @@
 #include "r_utils.h"
 #include "r_water.h"
 #include "r_image.h"
-#include <qcommon/com_pack.h>
 
 #ifdef __SWITCH__
 #include <atomic>
@@ -1247,18 +1246,6 @@ int __cdecl R_SetVertexData(GfxCmdBufState *state, const void *data, int vertexC
         PROF_SCOPED("RB_memcpy_vb");
         Com_Memcpy(bufferData, data, totalSize);
     }
-#ifdef __SWITCH__
-    // R_SetVertexData is also used by skinned XModels and the static-model
-    // dynamic path. Those CPU sources retain CoD4's packed UV format, unlike
-    // the one-time static vertex-buffer copy prepared during zone loading.
-    if (stride == static_cast<int>(sizeof(GfxPackedVertex)))
-    {
-        auto *vertices = static_cast<GfxPackedVertex *>(bufferData);
-        for (int vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex)
-            vertices[vertexIndex].texCoord =
-                Vec2ConvertTexCoordsForVulkan(vertices[vertexIndex].texCoord);
-    }
-#endif
     //Profile_EndInternal(0);
     //Profile_EndInternal(0);
     R_UnlockVertexBuffer(vb);
