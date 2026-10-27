@@ -13,6 +13,11 @@
 #include "cg_view.h"
 #include <gfx_d3d/r_reflection_probe.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 CenterPrint s_centerPrint[1];
 ScreenBlur s_screenBlur[1];
 ScreenFade s_screenFade[1];
@@ -1177,6 +1182,29 @@ void __cdecl CG_Draw2D(int localClientNum)
     int integer; // r11
 
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
+
+#ifdef __SWITCH__
+    // This heartbeat runs before the 2D/HUD gates. If the FPS text is missing,
+    // the next log shows whether the frame ever reached this function and which
+    // gate (draw2D, viewer camera, cubemap) prevented the regular HUD path.
+    static uint32_t switchHudEntryTraceFrame = 0;
+    ++switchHudEntryTraceFrame;
+    if (switchHudEntryTraceFrame == 1u || switchHudEntryTraceFrame % 300u == 0u)
+    {
+        char trace[288];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u client=%d pmType=%d cubemap=%d draw2D=%d drawHUD=%d nextSnap=%p\\n",
+            switchHudEntryTraceFrame,
+            localClientNum,
+            static_cast<int>(cgArray[0].predictedPlayerState.pm_type),
+            static_cast<int>(cgArray[0].cubemapShot),
+            cg_draw2D->current.enabled ? 1 : 0,
+            cg_drawHUD->current.enabled ? 1 : 0,
+            static_cast<void *>(cgArray[0].nextSnap));
+        Switch_LogWrite(trace);
+    }
+#endif
 
     CG_UpdateTimeScale(localClientNum);
 
