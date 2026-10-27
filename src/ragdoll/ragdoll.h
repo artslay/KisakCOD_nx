@@ -214,7 +214,7 @@ void __cdecl Ragdoll_DestroyPhysObjs(RagdollBody *body);
 void __cdecl Ragdoll_RemoveBodyPhysics(RagdollBody *body);
 bool __cdecl Ragdoll_ValidatePrecalcBoneDef(RagdollDef *def, BoneDef *bone);
 void __cdecl Ragdoll_GenerateAllSelfCollisionContacts();
-void __cdecl Ragdoll_GenBoneCapsuleSegments(RagdollBody *body, uint8_t *bones, float (*s0)[3], float (*s1)[3]);
+bool __cdecl Ragdoll_GenBoneCapsuleSegments(RagdollBody *body, uint8_t *bones, float (*s0)[3], float (*s1)[3]);
 void __cdecl Ragdoll_GenBoneCapsuleSegment(Bone *bone, float (*seg)[3]);
 void __cdecl Ragdoll_AddSelfContact(
     RagdollBody *body,
