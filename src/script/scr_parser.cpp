@@ -381,7 +381,7 @@ uint32_t __cdecl Scr_GetPrevSourcePos(const char *codePos, uint32_t index)
     {
         Com_PrintError(
             CON_CHANNEL_PARSERSCRIPT,
-            "[KisakCOD][SCRIPT TRACE] invalid source lookup codePos=%p sourcePosIndex=%u sourcePosCount=%u lookupLen=%u\\n",
+            "[KisakCOD][SCRIPT TRACE] invalid source lookup codePos=%p sourcePosIndex=%u sourcePosCount=%u lookupLen=%u\n",
             (const void *)codePos,
             lookup->sourcePosIndex,
             lookup->sourcePosCount,
@@ -396,7 +396,7 @@ uint32_t __cdecl Scr_GetPrevSourcePos(const char *codePos, uint32_t index)
     {
         Com_PrintError(
             CON_CHANNEL_PARSERSCRIPT,
-            "[KisakCOD][SCRIPT TRACE] invalid operand source index codePos=%p index=%u sourcePosIndex=%u sourcePosCount=%u lookupLen=%u; using base source position\\n",
+            "[KisakCOD][SCRIPT TRACE] invalid operand source index codePos=%p index=%u sourcePosIndex=%u sourcePosCount=%u lookupLen=%u; using base source position\n",
             (const void *)codePos,
             index,
             lookup->sourcePosIndex,
@@ -880,12 +880,12 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
 
     if (!codePos)
     {
-        Com_PrintMessage(channel, "<frozen thread>\\n", 0);
+        Com_PrintMessage(channel, "<frozen thread>\n", 0);
         return;
     }
     if (codePos == &g_EndPos)
     {
-        Com_PrintMessage(channel, "<removed thread>\\n", 0);
+        Com_PrintMessage(channel, "<removed thread>\n", 0);
         return;
     }
 
@@ -895,7 +895,7 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
         {
             Com_PrintError(
                 channel,
-                "<invalid script code position: %p; source trace omitted>\\n",
+                "<invalid script code position: %p; source trace omitted>\n",
                 (const void *)codePos);
             return;
         }
@@ -905,7 +905,7 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
         {
             Com_PrintError(
                 channel,
-                "<script source lookup unavailable: codePos=%p>\\n",
+                "<script source lookup unavailable: codePos=%p>\n",
                 (const void *)codePos);
             return;
         }
@@ -915,7 +915,7 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
         {
             Com_PrintError(
                 channel,
-                "<invalid script source buffer index: codePos=%p bufferIndex=%u bufferCount=%u>\\n",
+                "<invalid script source buffer index: codePos=%p bufferIndex=%u bufferCount=%u>\n",
                 (const void *)codePos,
                 bufferIndex,
                 scrParserPub.sourceBufferLookupLen);
@@ -927,7 +927,7 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
         {
             Com_PrintError(
                 channel,
-                "<script source buffer unavailable: codePos=%p bufferIndex=%u>\\n",
+                "<script source buffer unavailable: codePos=%p bufferIndex=%u>\n",
                 (const void *)codePos,
                 bufferIndex);
             return;
@@ -938,7 +938,7 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
         {
             Com_PrintError(
                 channel,
-                "<script source position out of range: codePos=%p sourcePos=%u sourceLength=%d>\\n",
+                "<script source position out of range: codePos=%p sourcePos=%u sourceLength=%d>\n",
                 (const void *)codePos,
                 PrevSourcePos,
                 sourceBuffer->len);
@@ -951,7 +951,7 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
 
     if (!scrVarPub.developer && Scr_IsInOpcodeMemory(codePos - 1))
     {
-        char *offsetText = va("@ %d\\n", codePos - scrVarPub.programBuffer);
+        char *offsetText = va("@ %d\n", codePos - scrVarPub.programBuffer);
         Com_PrintMessage(channel, offsetText, 0);
         return;
     }
@@ -962,13 +962,13 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
         // a null-terminated string (especially after script/fastfile teardown).
         Com_PrintError(
             channel,
-            "<script source text unavailable: codePos=%p>\\n",
+            "<script source text unavailable: codePos=%p>\n",
             (const void *)codePos);
         return;
     }
 
     // Preserve the legacy string form for non-developer/compiler diagnostics.
-    char *sourceText = va("%s\\n\\n", codePos);
+    char *sourceText = va("%s\n\n", codePos);
     Com_PrintMessage(channel, sourceText, 0);
 }
 
