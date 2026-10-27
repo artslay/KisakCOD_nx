@@ -498,7 +498,7 @@ snd_alias_t *__cdecl Com_PickSoundAlias(const char *aliasname)
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/main_open/main_text/sound/empty_alias_format";
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][SOUND EMPTY ALIAS] request=%s listName=%s list=%p head=%p count=%d fastFile=%u initialized=%u,%u,%u aliasCounts=%d,%d,%d\\n",
+                "[KisakCOD][SOUND EMPTY ALIAS] request=%s listName=%s list=%p head=%p count=%d fastFile=%u initialized=%u,%u,%u aliasCounts=%d,%d,%d\n",
                 aliasname ? aliasname : "<null>",
                 listName,
                 static_cast<void *>(aliasList),
