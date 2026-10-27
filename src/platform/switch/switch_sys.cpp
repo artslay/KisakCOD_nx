@@ -3612,6 +3612,9 @@ void Switch_LogWrite(const char *msg)
         "[KisakCOD][DPVS CELL]",
         "[KisakCOD][XSURFACE RIGID BONE]",
         "[KisakCOD][MODEL LIGHTING]",
+        // Render-object audit dumps are available in source for focused debugging,
+        // but do not belong in the normal gameplay log.
+        "[KisakCOD][RENDER OBJECT]",
         // High-volume per-asset traces. Keep failures, zone progress, crash context,
         // script anomalies, and memory-tree invariants visible.
         "[KisakCOD][GFXIMAGE HEADER]",
