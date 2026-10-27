@@ -39,6 +39,7 @@ extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
 #include <client/client.h>
 #include <qcommon/qcommon.h>
 #include <server/sv_world.h>
+#include <server/sv_public.h>
 
 const char *g_helicopterYawAltitudeControlsNames[4] =
 {
