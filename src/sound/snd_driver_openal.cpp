@@ -370,6 +370,7 @@ struct ALBiquadCoefficients
 {
     float b0, b1, b2;
     float a1, a2;
+    float outputGain;
 };
 
 static uint32_t g_openALEqRevision = 1;
@@ -399,7 +400,9 @@ static bool AL_ComputeEqCoefficients(
     uint32_t sampleRate,
     ALBiquadCoefficients *out)
 {
-    if (!params.enabled || !out || sampleRate < 1000)
+    if (!params.enabled || !out || sampleRate < 1000 ||
+        !std::isfinite(params.freq) || !std::isfinite(params.q) ||
+        !std::isfinite(params.gain))
         return false;
 
     const float nyquistLimit = static_cast<float>(sampleRate) * 0.49f;
@@ -413,6 +416,7 @@ static bool AL_ComputeEqCoefficients(
     const float A = std::pow(10.0f, gainDb / 40.0f);
     float b0 = 0.0f, b1 = 0.0f, b2 = 0.0f;
     float a0 = 1.0f, a1 = 0.0f, a2 = 0.0f;
+    float outputGain = 1.0f;
 
     switch (params.type)
     {
@@ -423,6 +427,7 @@ static bool AL_ComputeEqCoefficients(
         a0 = 1.0f + alpha;
         a1 = -2.0f * cosine;
         a2 = 1.0f - alpha;
+        outputGain = std::pow(10.0f, gainDb / 20.0f);
         break;
     case SND_EQTYPE_HIGHPASS:
         b0 = (1.0f + cosine) * 0.5f;
@@ -431,6 +436,7 @@ static bool AL_ComputeEqCoefficients(
         a0 = 1.0f + alpha;
         a1 = -2.0f * cosine;
         a2 = 1.0f - alpha;
+        outputGain = std::pow(10.0f, gainDb / 20.0f);
         break;
     case SND_EQTYPE_BELL:
     {
@@ -484,8 +490,10 @@ static bool AL_ComputeEqCoefficients(
     out->b2 = b2 / a0;
     out->a1 = a1 / a0;
     out->a2 = a2 / a0;
+    out->outputGain = outputGain;
     return std::isfinite(out->b0) && std::isfinite(out->b1) &&
-        std::isfinite(out->b2) && std::isfinite(out->a1) && std::isfinite(out->a2);
+        std::isfinite(out->b2) && std::isfinite(out->a1) && std::isfinite(out->a2) &&
+        std::isfinite(out->outputGain);
 }
 
 static void AL_ApplyEqToPcm(
@@ -517,9 +525,10 @@ static void AL_ApplyEqToPcm(
                 {
                     const size_t sampleIndex = static_cast<size_t>(frame) * channels + channel;
                     const float input = static_cast<float>(pcm[sampleIndex]);
-                    const float output = coeffs.b0 * input + state.z1;
-                    state.z1 = coeffs.b1 * input - coeffs.a1 * output + state.z2;
-                    state.z2 = coeffs.b2 * input - coeffs.a2 * output;
+                    const float filtered = coeffs.b0 * input + state.z1;
+                    state.z1 = coeffs.b1 * input - coeffs.a1 * filtered + state.z2;
+                    state.z2 = coeffs.b2 * input - coeffs.a2 * filtered;
+                    const float output = filtered * coeffs.outputGain;
                     const float clipped = std::clamp(output, -32768.0f, 32767.0f);
                     pcm[sampleIndex] = static_cast<int16_t>(clipped);
                 }
@@ -1780,6 +1789,9 @@ void __cdecl SND_RestoreEq(MemoryFile *memFile)
             }
         }
     }
+
+    AL_InvalidateEq();
+    SND_UpdateEqs();
 }
 
 void __cdecl SND_PrintEqParams()
