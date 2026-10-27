@@ -18,6 +18,8 @@
 #ifdef __SWITCH__
 #include <cstdio>
 #include <cstring>
+#include <atomic>
+extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern void Switch_LogWrite(const char *msg);
 extern void COM_NotifyIntroMovieDrawSubmitted(const char *movieName);
 extern thread_local const char * volatile g_switchFrameStage;
@@ -38,6 +40,48 @@ extern void Switch_ResetPendingBinkUpload();
 CinematicGlob cinematicGlob;
 bool g_cinematicThreadInitialized;
 CinematicThreadState g_cinematicThreadState;
+
+#ifdef __SWITCH__
+static void Switch_LogCinematicState(
+    const char *event,
+    const char *requestedName = nullptr,
+    uint32_t requestedFlags = 0)
+{
+    const uint64_t screenFrame = g_switchScreenFrameSequence.load(std::memory_order_relaxed);
+    const int binkFrame = cinematicGlob.bink ? static_cast<int>(cinematicGlob.bink->FrameNum) : -1;
+    const int binkFrames = cinematicGlob.bink ? static_cast<int>(cinematicGlob.bink->Frames) : 0;
+    char trace[1280];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][CIN STATE] frame=%llu event=%s requested=%s requestedFlags=%u current=%s target=%s next=%s currentBink=%p targetChanged=%u finished=%u started=%u playbackStarted=%u playbackFlags=%u activeImage=%d activeTextureSet=%d imageTextureSet=%d binkFrame=%d/%d timeMs=%u paused=%d targetPaused=%d underrun=%u hasFileIO=%u threadState=%d\\n",
+        static_cast<unsigned long long>(screenFrame),
+        event ? event : "(unknown)",
+        requestedName && requestedName[0] ? requestedName : "(none)",
+        static_cast<unsigned>(requestedFlags),
+        cinematicGlob.currentCinematicName[0] ? cinematicGlob.currentCinematicName : "(none)",
+        cinematicGlob.targetCinematicName[0] ? cinematicGlob.targetCinematicName : "(none)",
+        cinematicGlob.nextCinematicName[0] ? cinematicGlob.nextCinematicName : "(none)",
+        static_cast<void *>(cinematicGlob.bink),
+        cinematicGlob.targetCinematicChanged ? 1u : 0u,
+        cinematicGlob.cinematicFinished ? 1u : 0u,
+        cinematicGlob.currentCinematicName[0] ? 1u : 0u,
+        cinematicGlob.playbackStarted ? 1u : 0u,
+        static_cast<unsigned>(cinematicGlob.playbackFlags),
+        cinematicGlob.activeImageFrame,
+        cinematicGlob.activeTextureSet,
+        cinematicGlob.activeImageFrameTextureSet,
+        binkFrame,
+        binkFrames,
+        static_cast<unsigned>(cinematicGlob.timeInMsec),
+        static_cast<int>(cinematicGlob.currentPaused),
+        static_cast<int>(cinematicGlob.targetPaused),
+        cinematicGlob.underrun ? 1u : 0u,
+        cinematicGlob.hasFileIO ? 1u : 0u,
+        static_cast<int>(g_cinematicThreadState));
+    Switch_LogWrite(trace);
+}
+#endif
 
 void* __cdecl CinematicHunk_Alloc(CinematicHunk* hunk, int size)
 {
@@ -1054,6 +1098,9 @@ void __cdecl R_Cinematic_StartPlayback_Internal(char *name, uint32_t playbackFla
     cinematicGlob.targetPaused = CINEMATIC_NOT_PAUSED;
     cinematicGlob.playbackFlags = playbackFlags;
     cinematicGlob.playbackVolume = volume;
+#ifdef __SWITCH__
+    Switch_LogCinematicState("target_set", name, playbackFlags);
+#endif
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
 }
 
@@ -1062,11 +1109,20 @@ void __cdecl R_Cinematic_StartNextPlayback()
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     if (R_Cinematic_IsNextReady_Internal())
     {
+#ifdef __SWITCH__
+        Switch_LogCinematicState(
+            "next_handoff",
+            cinematicGlob.nextCinematicName,
+            cinematicGlob.nextCinematicPlaybackFlags);
+#endif
         R_Cinematic_StartPlayback_Internal(
             cinematicGlob.nextCinematicName,
             cinematicGlob.nextCinematicPlaybackFlags,
             cinematicGlob.playbackVolume);
         cinematicGlob.nextCinematicName[0] = 0;
+#ifdef __SWITCH__
+        Switch_LogCinematicState("next_consumed");
+#endif
     }
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
@@ -1080,6 +1136,9 @@ void __cdecl R_Cinematic_StopPlayback()
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
+#ifdef __SWITCH__
+    Switch_LogCinematicState("stop_requested");
+#endif
     cinematicGlob.targetCinematicName[0] = 0;
     cinematicGlob.targetCinematicChanged = 1;
     cinematicGlob.cinematicFinished = 0;
@@ -1132,6 +1191,17 @@ void R_Cinematic_UpdateRendererImages()
         &cinematicGlob.binkTextureSet,
         cinematicGlob.bink ? static_cast<uint32_t>(cinematicGlob.bink->FrameNum) : 0u,
         cinematicGlob.bink ? static_cast<uint32_t>(cinematicGlob.bink->Frames) : 0u);
+    if (cinematicGlob.currentCinematicName[0] &&
+        cinematicGlob.activeImageFrame == CINEMATIC_INVALID_IMAGE_FRAME)
+    {
+        static uint64_t lastMissingImageTraceFrame = UINT64_MAX;
+        const uint64_t frame = g_switchScreenFrameSequence.load(std::memory_order_relaxed);
+        if (frame % 60u == 0u && frame != lastMissingImageTraceFrame)
+        {
+            Switch_LogCinematicState("renderer_update_missing_image");
+            lastMissingImageTraceFrame = frame;
+        }
+    }
     if (switchVideoFrameUploaded &&
         cinematicGlob.bink &&
         cinematicGlob.activeImageFrame != CINEMATIC_INVALID_IMAGE_FRAME)
@@ -1269,7 +1339,19 @@ void __cdecl R_Cinematic_DrawStretchPic_Letterboxed()
     R_Cinematic_DrawLetterbox_OptionalCinematic(1, 1.0);
 #ifdef __SWITCH__
     if (cinematicGlob.activeImageFrame != CINEMATIC_INVALID_IMAGE_FRAME)
+    {
         COM_NotifyIntroMovieDrawSubmitted(cinematicGlob.currentCinematicName);
+    }
+    else if (cinematicGlob.currentCinematicName[0])
+    {
+        static uint64_t lastMissingDrawTraceFrame = UINT64_MAX;
+        const uint64_t frame = g_switchScreenFrameSequence.load(std::memory_order_relaxed);
+        if (frame % 60u == 0u && frame != lastMissingDrawTraceFrame)
+        {
+            Switch_LogCinematicState("draw_attempt_missing_image");
+            lastMissingDrawTraceFrame = frame;
+        }
+    }
 #endif
 }
 
@@ -1391,6 +1473,9 @@ void R_Cinematic_SetNextPlayback(const char *name, uint32_t playbackFlags)
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     I_strncpyz(cinematicGlob.nextCinematicName, name, 256);
     cinematicGlob.nextCinematicPlaybackFlags = playbackFlags;
+#ifdef __SWITCH__
+    Switch_LogCinematicState("next_queued", name, playbackFlags);
+#endif
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
 
@@ -1398,6 +1483,9 @@ void R_Cinematic_UnsetNextPlayback()
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
+#ifdef __SWITCH__
+    Switch_LogCinematicState("next_unset");
+#endif
     I_strncpyz(cinematicGlob.nextCinematicName, "", 256);
     cinematicGlob.nextCinematicPlaybackFlags = 0;
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
