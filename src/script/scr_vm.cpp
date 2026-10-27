@@ -4947,11 +4947,8 @@ void __cdecl Scr_ProfileUpdate()
             int total = 0;
             int totalNonBuiltIn = 0;
             Scr_CalcAnimscriptProfile(&total, &totalNonBuiltIn);
-            Com_Printf(
-                CON_CHANNEL_PARSERSCRIPT,
-                "animscript profile: total %.6f s, non-builtin %.6f s\n",
-                Scr_ProfileTicksToSeconds(static_cast<uint64_t>(total)),
-                Scr_ProfileTicksToSeconds(static_cast<uint64_t>(totalNonBuiltIn)));
+            Profile_SetTotal(236, total);
+            Profile_SetTotal(237, totalNonBuiltIn);
         }
         else if (profile_script_by_file->current.enabled)
         {
