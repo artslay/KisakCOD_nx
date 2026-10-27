@@ -680,13 +680,13 @@ static void R_LogAabbStaticModelTraversalFault(
 #ifdef __SWITCH__
     char message[384];
     std::snprintf(message, sizeof(message),
-        "[KisakCOD][AABB STATICMODEL TRAVERSAL FAULT] reason=%s root=%p node=%p nodeCount=%u visited=%u\\n",
+        "[KisakCOD][AABB STATICMODEL TRAVERSAL FAULT] reason=%s root=%p node=%p nodeCount=%u visited=%u\n",
         reason, static_cast<const void *>(root), static_cast<const void *>(tree),
         static_cast<unsigned>(nodeCount), static_cast<unsigned>(visited));
     Switch_LogWrite(message);
 #else
     Com_PrintWarning(CON_CHANNEL_GFX,
-        "Static-model AABB traversal stopped: %s (root=%p node=%p nodes=%u visited=%u)\\n",
+        "Static-model AABB traversal stopped: %s (root=%p node=%p nodes=%u visited=%u)\n",
         reason, static_cast<const void *>(root), static_cast<const void *>(tree),
         static_cast<unsigned>(nodeCount), static_cast<unsigned>(visited));
 #endif
