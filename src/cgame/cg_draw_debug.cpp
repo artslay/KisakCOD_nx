@@ -17,6 +17,11 @@
 #include <sound/snd_local.h>
 #include <sound/snd_public.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
 #include <server_mp/server_mp.h>
@@ -164,34 +169,82 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
     fpsMin = SnapFloatToInt(1000.0f / maxTime);
     fps = SnapFloatToInt(32000.0f / total);
 #ifdef __SWITCH__
-    // Keep Switch on the numeric counter even if an archived/devgui config
-    // changes cg_drawFPS to Extra or Verbose.
-    s = va("%i FPS", fps);
-
-    // CG_DrawDevString multiplies its scale by cg_small_dev_string_fontscale
-    // in SP. If that dvar is zero, the forced Switch FPS counter is also
-    // rendered at zero size. Preserve configured scaling when positive, but
-    // use a visible default for this counter when it is zero.
+    // Draw the Switch performance HUD independently of cg_drawFPS and the
+    // dev-string font-scale dvar. Keep all rows on the same top-right anchor
+    // as the stock CG_CornerDebugPrint path.
     const float configuredFontScale = cg_small_dev_string_fontscale->current.value;
-    const float fpsFontScale = configuredFontScale > 0.0f
-        ? configuredFontScale * 0.75f
-        : 0.75f;
-    const float textWidth = static_cast<float>(R_TextWidth(s, 0, cgMedia.smallDevFont));
-    const float textHeight = static_cast<float>(R_TextHeight(cgMedia.smallDevFont));
+    const float fpsFontScale =
+        configuredFontScale > 0.0f && configuredFontScale < 4.0f
+            ? configuredFontScale * 0.75f
+            : 0.75f;
+    const float fontHeight = static_cast<float>(R_TextHeight(cgMedia.smallDevFont));
+    const float lineAdvance = fontHeight > 0.0f
+        ? fontHeight * fpsFontScale + 2.0f
+        : 12.0f;
+    const float drawY = y + lineAdvance;
+
+    // fps_previousTimes is a 32-sample ring. Start at fps_index % 32 (the
+    // oldest entry after warm-up) so the graph scrolls from left to right.
+    static const char frameTimeLevels[] = " .:-=+*#%@";
+    char frameTimeGraph[33];
+    for (int graphIndex = 0; graphIndex < 32; ++graphIndex)
+    {
+        const int sampleIndex = (fps_index + graphIndex) & 31;
+        int sampleMs = fps_previousTimes[sampleIndex];
+        if (sampleMs < 0)
+            sampleMs = 0;
+        int level = sampleMs / 6;
+        if (level > 9)
+            level = 9;
+        frameTimeGraph[graphIndex] = frameTimeLevels[level];
+    }
+    frameTimeGraph[32] = '\0';
+
+    s = va("%i FPS", fps);
+    float textWidth = static_cast<float>(R_TextWidth(s, 0, cgMedia.smallDevFont));
+#ifdef __SWITCH__
+    static uint32_t switchFpsDrawTraceFrame = 0;
+    ++switchFpsDrawTraceFrame;
+    if (switchFpsDrawTraceFrame == 1u || switchFpsDrawTraceFrame % 300u == 0u)
+    {
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FPS HUD TRACE] stage=CG_DrawFPS frame=%u samples=%d fps=%d avgMs=%.2f maxMs=%d x=%.1f y=%.1f textWidth=%.1f scale=%.3f font=%p\n",
+            switchFpsDrawTraceFrame,
+            fps_index,
+            fps,
+            static_cast<double>(total) / 32.0,
+            maxTime,
+            farRight - textWidth * fpsFontScale,
+            drawY,
+            textWidth,
+            fpsFontScale,
+            static_cast<void *>(cgMedia.smallDevFont));
+        Switch_LogWrite(trace);
+    }
+#endif
     CL_DrawText(
-        scrPlace,
-        s,
-        0x7FFFFFFF,
-        cgMedia.smallDevFont,
-        farRight - textWidth * fpsFontScale,
-        y + textHeight * fpsFontScale,
-        1.0f,
-        1.0f,
-        fpsFontScale,
-        fpsFontScale,
-        colorWhite,
-        0);
-    return y + static_cast<float>(static_cast<int>(textHeight * fpsFontScale)) * 0.75f;
+        scrPlace, s, 0x7FFFFFFF, cgMedia.smallDevFont,
+        farRight - textWidth * fpsFontScale, drawY,
+        1, 1, fpsFontScale, fpsFontScale, colorWhite, 0);
+
+    s = va("%1.2f ms/frame  max %d ms", static_cast<double>(total) / 32.0, maxTime);
+    textWidth = static_cast<float>(R_TextWidth(s, 0, cgMedia.smallDevFont));
+    CL_DrawText(
+        scrPlace, s, 0x7FFFFFFF, cgMedia.smallDevFont,
+        farRight - textWidth * fpsFontScale, drawY + lineAdvance,
+        1, 1, fpsFontScale, fpsFontScale, colorWhite, 0);
+
+    s = va("ms %s", frameTimeGraph);
+    const float graphFontScale = fpsFontScale * 0.75f;
+    textWidth = static_cast<float>(R_TextWidth(s, 0, cgMedia.smallDevFont));
+    CL_DrawText(
+        scrPlace, s, 0x7FFFFFFF, cgMedia.smallDevFont,
+        farRight - textWidth * graphFontScale, drawY + 2.0f * lineAdvance,
+        1, 1, graphFontScale, graphFontScale, colorWhite, 0);
+
+    return y + 3.0f * lineAdvance;
 #else
     if (cg_drawFPS->current.integer == 1)
     {
@@ -397,18 +450,28 @@ void __cdecl CG_DrawUpperRightDebugInfo(int32_t localClientNum)
     meminfo_t v4; // [sp+50h] [-B0h] BYREF
 
     track_getbasicinfo(&v4);
+#ifdef __SWITCH__
+    // Keep diagnostics visible while dead and when cg_draw2D is disabled; the
+    // caller places this after the other 2D passes. The Switch HUD does not
+    // depend on the archived cg_drawFPS mode.
+    R_TrackStatistics(0);
+    y = cg_debugInfoCornerOffset->current.vector[1];
+    y = CG_DrawFPS(&scrPlaceFull, static_cast<float>(y), &v4);
+
+    if (com_statmon->current.enabled)
+        y = CG_DrawStatmon(&scrPlaceFull, static_cast<float>(y), &v4);
+
+    if (replay_time->current.enabled)
+        DrawReplayTime(&scrPlaceFull, static_cast<float>(y));
+#else
     if (CG_GetPredictedPlayerState(localClientNum)->pm_type != PM_DEAD)
     {
         R_TrackStatistics(0);
 
         y = cg_debugInfoCornerOffset->current.vector[1];
 
-#ifdef __SWITCH__
-        y = CG_DrawFPS(&scrPlaceFull, y, &v4);
-#else
         if (cg_drawFPS->current.integer)
             y = CG_DrawFPS(&scrPlaceFull, y, &v4);
-#endif
 
         if (com_statmon->current.enabled)
             y = CG_DrawStatmon(&scrPlaceFull, y, &v4);
@@ -416,6 +479,7 @@ void __cdecl CG_DrawUpperRightDebugInfo(int32_t localClientNum)
         if (replay_time->current.enabled)
             DrawReplayTime(&scrPlaceFull, y);
     }
+#endif
 #endif
 }
 
