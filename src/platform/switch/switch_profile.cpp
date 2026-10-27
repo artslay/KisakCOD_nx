@@ -9,7 +9,86 @@ const dvar_t *profile = nullptr;
 const dvar_t *profile_thread = nullptr;
 const dvar_t *profile_rowcount = nullptr;
 
-void Profile_Init() {}
+namespace
+{
+const char *s_switchProfilePageNames[] =
+{
+    "",
+    "self",
+    "total",
+    "avgself",
+    "avgtotal",
+    "max",
+    "maxself",
+    "main",
+    "updateScreen",
+    "thread",
+    "generic",
+    "generic2",
+    "probes",
+    "probe",
+    "gprobe",
+    "frontend",
+    "renderer",
+    "renderer2",
+    "renderer3",
+    "cinematics",
+    "phys",
+    "shadowcookie",
+    "water",
+    "snd",
+    "xanim",
+    "xanim2",
+    "script",
+    "fx",
+    "prediction",
+    "trace",
+    "cgtrace",
+    "server",
+    "trigger",
+    "dynent",
+    "aimassist",
+    nullptr
+};
+
+const char *s_switchProfileThreadNames[] =
+{
+    "main",
+    "backend",
+    "worker0",
+    "worker1",
+    "cinematic",
+    "titleserver",
+    "database",
+    "all",
+    nullptr
+};
+}
+
+void Profile_Init()
+{
+    // Scr_ProfileUpdate() reads the "profile" enum on every full server frame,
+    // even when script profiling is disabled. The Switch profiling backend
+    // must register the same public dvars as the shared profiling backend.
+    profile = Dvar_RegisterEnum(
+        "profile",
+        s_switchProfilePageNames,
+        0,
+        DVAR_NOFLAG,
+        "Type of profiling");
+    profile_thread = Dvar_RegisterEnum(
+        "profile_thread",
+        s_switchProfileThreadNames,
+        7,
+        DVAR_NOFLAG,
+        "Thread being profiled");
+    profile_rowcount = Dvar_RegisterInt(
+        "profile_rowcount",
+        20,
+        (DvarLimits)0x2800000000LL,
+        DVAR_NOFLAG,
+        "Profile row count");
+}
 void __cdecl Profile_Guard(int) {}
 void __cdecl Profile_Unguard(int) {}
 void __cdecl Profile_SetTotal(int, int) {}
