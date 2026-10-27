@@ -2069,17 +2069,37 @@ void __cdecl Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2)
                 Phys_ReduceContacts(v9, &contactArray, &out);
                 Phys_CreateJointForEachContact(&out, b1, b2, &surfParms, worldIndex);
                 if (v9)
-                    Phys_PlayCollisionSound(v22->localClientNum, v9, v12->sndClass, &out);
-                else
-                    Phys_PlayCollisionSound(v22->localClientNum, b1, v12->sndClass, &out);
+                {
+                    PhysObjUserData *soundData = (PhysObjUserData *)dBodyGetData(v9);
+                    Phys_PlayCollisionSound(
+                        v22->localClientNum, v9, soundData->sndClass, &out);
+                }
+                else if (b1)
+                {
+                    // With two dynamic bodies v12 holds b2's data, but this
+                    // branch plays the sound for b1. Use b1's own sound class.
+                    PhysObjUserData *soundData = (PhysObjUserData *)dBodyGetData(b1);
+                    Phys_PlayCollisionSound(
+                        v22->localClientNum, b1, soundData->sndClass, &out);
+                }
             }
             else
             {
                 Phys_CreateJointForEachContact(&contactArray, b1, b2, &surfParms, worldIndex);
                 if (v9)
-                    Phys_PlayCollisionSound(v22->localClientNum, v9, v12->sndClass, &contactArray);
-                else
-                    Phys_PlayCollisionSound(v22->localClientNum, b1, v12->sndClass, &contactArray);
+                {
+                    PhysObjUserData *soundData = (PhysObjUserData *)dBodyGetData(v9);
+                    Phys_PlayCollisionSound(
+                        v22->localClientNum, v9, soundData->sndClass, &contactArray);
+                }
+                else if (b1)
+                {
+                    // With two dynamic bodies v12 holds b2's data, but this
+                    // branch plays the sound for b1. Use b1's own sound class.
+                    PhysObjUserData *soundData = (PhysObjUserData *)dBodyGetData(b1);
+                    Phys_PlayCollisionSound(
+                        v22->localClientNum, b1, soundData->sndClass, &contactArray);
+                }
             }
         }
     }
