@@ -200,21 +200,21 @@ $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	@$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 	@while ! mkdir "$(PROGRESS_LOCK)" 2>/dev/null; do sleep 0.01; done; \
-	count=$(cat "$(PROGRESS_FILE)" 2>/dev/null || printf '0'); \
-	count=$((count + 1)); \
-	printf '%s' "$count" > "$(PROGRESS_FILE)"; \
+	count=$$(cat "$(PROGRESS_FILE)" 2>/dev/null || printf '0'); \
+	count=$$((count + 1)); \
+	printf '%s' "$$count" > "$(PROGRESS_FILE)"; \
 	rmdir "$(PROGRESS_LOCK)"; \
-	printf '  CC  [%s/%s] %s\n' "$count" "$(TOTAL_OBJECTS)" "$(notdir $<)"
+	printf '  CC  [%s/%s] %s\n' "$$count" "$(TOTAL_OBJECTS)" "$(notdir $<)"
 
 $(BUILD)/%.o: %.S
 	@mkdir -p $(dir $@)
 	@$(CC) $(CPPFLAGS) $(ARCH) -MMD -MP -c $< -o $@
 	@while ! mkdir "$(PROGRESS_LOCK)" 2>/dev/null; do sleep 0.01; done; \
-	count=$(cat "$(PROGRESS_FILE)" 2>/dev/null || printf '0'); \
-	count=$((count + 1)); \
-	printf '%s' "$count" > "$(PROGRESS_FILE)"; \
+	count=$$(cat "$(PROGRESS_FILE)" 2>/dev/null || printf '0'); \
+	count=$$((count + 1)); \
+	printf '%s' "$$count" > "$(PROGRESS_FILE)"; \
 	rmdir "$(PROGRESS_LOCK)"; \
-	printf '  AS  [%s/%s] %s\n' "$count" "$(TOTAL_OBJECTS)" "$(notdir $<)"
+	printf '  AS  [%s/%s] %s\n' "$$count" "$(TOTAL_OBJECTS)" "$(notdir $<)"
 
 -include $(OBJECTS:.o=.d)
 
