@@ -227,14 +227,14 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
     CL_DrawText(
         scrPlace, s, 0x7FFFFFFF, cgMedia.smallDevFont,
         farRight - textWidth * fpsFontScale, drawY,
-        1, 1, fpsFontScale, colorWhite, 0);
+        1, 1, fpsFontScale, fpsFontScale, colorWhite, 0);
 
     s = va("%1.2f ms/frame  max %d ms", static_cast<double>(total) / 32.0, maxTime);
     textWidth = static_cast<float>(R_TextWidth(s, 0, cgMedia.smallDevFont));
     CL_DrawText(
         scrPlace, s, 0x7FFFFFFF, cgMedia.smallDevFont,
         farRight - textWidth * fpsFontScale, drawY + lineAdvance,
-        1, 1, fpsFontScale, colorWhite, 0);
+        1, 1, fpsFontScale, fpsFontScale, colorWhite, 0);
 
     s = va("ms %s", frameTimeGraph);
     const float graphFontScale = fpsFontScale * 0.75f;
@@ -242,7 +242,7 @@ double __cdecl CG_DrawFPS(const ScreenPlacement *scrPlace, float y, meminfo_t *m
     CL_DrawText(
         scrPlace, s, 0x7FFFFFFF, cgMedia.smallDevFont,
         farRight - textWidth * graphFontScale, drawY + 2.0f * lineAdvance,
-        1, 1, graphFontScale, colorWhite, 0);
+        1, 1, graphFontScale, graphFontScale, colorWhite, 0);
 
     return y + 3.0f * lineAdvance;
 #else
