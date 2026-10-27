@@ -3605,6 +3605,13 @@ static bool Switch_LogCounterNonZero(const char *msg, const char *key)
     return *value >= '1' && *value <= '9';
 }
 
+static bool Switch_LogDeveloperTraceEnabled()
+{
+    // Do not query an unregistered dvar during the early boot log path.
+    const dvar_s *developer = Dvar_FindVar("developer");
+    return developer && developer->current.integer != 0;
+}
+
 static bool Switch_LogIsRoutineNoise(const char *msg)
 {
     if (!msg || !*msg)
@@ -3615,9 +3622,10 @@ static bool Switch_LogIsRoutineNoise(const char *msg)
         std::strncmp(msg, "Switch PMem alloc end:", std::strlen("Switch PMem alloc end:")) == 0)
         return true;
 
-    // Detailed sampler bindings are useful only during a focused render investigation.
-    if (std::strncmp(msg, "[KisakCOD][MATERIAL SAMPLER]", std::strlen("[KisakCOD][MATERIAL SAMPLER]")) == 0 ||
-        std::strncmp(msg, "[KisakCOD][VK SAMPLER BOUND]", std::strlen("[KisakCOD][VK SAMPLER BOUND]")) == 0)
+    // Detailed sampler bindings are opt-in through the engine's developer dvar.
+    if ((std::strncmp(msg, "[KisakCOD][MATERIAL SAMPLER]", std::strlen("[KisakCOD][MATERIAL SAMPLER]")) == 0 ||
+         std::strncmp(msg, "[KisakCOD][VK SAMPLER BOUND]", std::strlen("[KisakCOD][VK SAMPLER BOUND]")) == 0) &&
+        !Switch_LogDeveloperTraceEnabled())
         return true;
 
     // Per-archive success records are redundant with the final index summary.
@@ -3680,6 +3688,12 @@ static bool Switch_LogIsImportant(const char *msg)
 static bool Switch_LogKeepKisakDiagnostic(const char *msg)
 {
     if (Switch_LogIsImportant(msg))
+        return true;
+
+    // Permit detailed sampler traces only when explicitly using developer mode.
+    if (Switch_LogDeveloperTraceEnabled() &&
+        (std::strncmp(msg, "[KisakCOD][MATERIAL SAMPLER]", std::strlen("[KisakCOD][MATERIAL SAMPLER]")) == 0 ||
+         std::strncmp(msg, "[KisakCOD][VK SAMPLER BOUND]", std::strlen("[KisakCOD][VK SAMPLER BOUND]")) == 0))
         return true;
 
     // UI/bootstrap probes and register-allocation experiments are noisy and
