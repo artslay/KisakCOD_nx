@@ -108,27 +108,9 @@ void __cdecl DB_AllocXZoneMemory(
         if (size)
         {
 #ifdef __SWITCH__
-            g_switchDbStage = "file/zone_alloc/before_log";
-#endif
-            Com_Printf(CON_CHANNEL_SYSTEM,
-                "Switch PMem alloc begin: zone=%s block=%u name=%s size=%u type=%u allocType=%u\n",
-                filename,
-                blockIndex,
-                g_block_mem_name[blockIndex],
-                size,
-                static_cast<unsigned>(g_block_mem_type[blockIndex]),
-                allocType);
-#ifdef __SWITCH__
             g_switchDbStage = "file/zone_alloc/before_memalloc";
 #endif
             buf = DB_MemAlloc(size, g_block_mem_type[blockIndex], allocType);
-#ifdef __SWITCH__
-            Com_Printf(CON_CHANNEL_SYSTEM,
-                "Switch PMem alloc end: block=%u ptr=%p free=%u\n",
-                blockIndex,
-                static_cast<void *>(buf),
-                PMem_GetFreeAmount());
-#endif
             if (!buf)
             {
                 OverAllocatedSize = PMem_GetOverAllocatedSize();
