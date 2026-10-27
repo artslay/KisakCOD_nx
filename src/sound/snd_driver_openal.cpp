@@ -317,9 +317,15 @@ static ALenum AL_GetPcmFormat(uint32_t channels)
     case 2:
         return AL_FORMAT_STEREO16;
     case 4:
-        return alGetEnumValue("AL_FORMAT_QUAD16");
+    {
+        const ALenum format = alGetEnumValue("AL_FORMAT_QUAD16");
+        return format > 0 ? format : 0;
+    }
     case 6:
-        return alGetEnumValue("AL_FORMAT_51CHN16");
+    {
+        const ALenum format = alGetEnumValue("AL_FORMAT_51CHN16");
+        return format > 0 ? format : 0;
+    }
     default:
         return 0;
     }
@@ -1716,7 +1722,8 @@ void SND_SetEqLerp(float lerp)
 
 void __cdecl SND_UpdateEqs()
 {
-    // Mirrors the Miles loop, but MSS_ApplyEqFilter (snd_al.cpp) is a deliberate no-op
+    // Loaded buffers are rebuilt only when EQ settings change; streamed chunks are filtered
+    // as they are decoded. Keep the shared update path so save/restore and console setters apply.
     for (int channelIndex = 0; channelIndex < 53; ++channelIndex)
     {
         MSS_ApplyEqFilter(alGlob.source[channelIndex], g_snd.chaninfo[channelIndex].entchannel);
