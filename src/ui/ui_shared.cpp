@@ -95,7 +95,7 @@ static void Switch_LogMenuPaintDiagnostic(
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][UI PAINT TRACE] frame=%llu conn=%d activeMenu=%d fullscreen=%d stackCount=%d drawStart=%d anyFullscreen=%d paintedOpen=%d stage=%s stack=[%s]\\n",
+        "[KisakCOD][UI PAINT TRACE] frame=%llu conn=%d activeMenu=%d fullscreen=%d stackCount=%d drawStart=%d anyFullscreen=%d paintedOpen=%d stage=%s stack=[%s]\n",
         static_cast<unsigned long long>(frame),
         connectionState,
         UI_GetActiveMenu(0),
