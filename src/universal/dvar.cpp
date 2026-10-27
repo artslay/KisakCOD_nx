@@ -2878,7 +2878,7 @@ void __cdecl Dvar_SetDomainFunc(dvar_s *dvar, bool(__cdecl *customFunc)(dvar_s *
             name = dvar->name;
             v2 = Dvar_ValueToString(dvar, dvar->current);
 #ifdef __SWITCH__
-            Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s' (source=%s)\n\n", v2, name, Switch_DvarSourceName(source));
+            Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n\n", v2, name);
 #else
             Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n\n", v2, name);
 #endif
