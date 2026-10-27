@@ -956,12 +956,20 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
         return;
     }
 
-    // Outside a valid script opcode buffer, codePos is not guaranteed to be a
-    // null-terminated string (especially after script/fastfile teardown).
-    Com_PrintError(
-        channel,
-        "<script source text unavailable: codePos=%p>\\n",
-        (const void *)codePos);
+    if (scrVarPub.developer && scrVarPub.programBuffer)
+    {
+        // Outside a valid script opcode buffer, codePos is not guaranteed to be
+        // a null-terminated string (especially after script/fastfile teardown).
+        Com_PrintError(
+            channel,
+            "<script source text unavailable: codePos=%p>\\n",
+            (const void *)codePos);
+        return;
+    }
+
+    // Preserve the legacy string form for non-developer/compiler diagnostics.
+    char *v5 = va("%s\\n\\n", codePos);
+    Com_PrintMessage(channel, v5, 0);
 }
 
 void __cdecl Scr_PrintSourcePos(int channel, const char *filename, const char *buf, uint32_t sourcePos)
