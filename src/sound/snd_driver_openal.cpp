@@ -137,6 +137,7 @@ struct AlStreamState
     bool isMp3;
     bool looping;
     int fsHandle;
+    const snd_alias_t *alias;
     drwav wav;
     drmp3 mp3;
     uint32_t channels;
@@ -289,6 +290,69 @@ static void SND_ReleaseStreamChannel(int index)
     stream->active = false;
 }
 
+// Apply a SoundAlias speaker map to PCM for OpenAL's stereo output. A map stores one
+// gain per input channel for each output speaker. OpenAL has no direct equivalent of
+// Miles' per-sample channel-level matrix, so bake the 2-channel matrix into each buffer.
+static int AL_ApplySpeakerMapToPcm(
+    int16_t *pcm,
+    uint64_t frameCount,
+    int sourceChannels,
+    const snd_alias_t *alias)
+{
+    if (!pcm || !alias || !alias->speakerMap ||
+        (sourceChannels != 1 && sourceChannels != 2) || frameCount == 0)
+        return 0;
+
+    MSSChannelMap *channelMap = Com_GetSpeakerMap(alias->speakerMap, sourceChannels);
+    if (!channelMap || channelMap->speakerCount < 2)
+        return 0;
+
+    const MSSSpeakerLevels &left = channelMap->speakers[0];
+    const MSSSpeakerLevels &right = channelMap->speakers[1];
+    const float leftFromLeft = left.numLevels > 0 ? left.levels[0] : 0.0f;
+    const float leftFromRight = sourceChannels == 2 && left.numLevels > 1 ? left.levels[1] : 0.0f;
+    const float rightFromLeft = right.numLevels > 0 ? right.levels[0] : 0.0f;
+    const float rightFromRight = sourceChannels == 2 && right.numLevels > 1 ? right.levels[1] : 0.0f;
+
+    // Iterate backwards because mono input expands to interleaved stereo in the same
+    // buffer; writing a later output frame must not overwrite an unread mono sample.
+    for (uint64_t frame = frameCount; frame-- > 0;)
+    {
+        const float inLeft = static_cast<float>(pcm[frame * sourceChannels]);
+        const float inRight = sourceChannels == 2
+            ? static_cast<float>(pcm[frame * 2 + 1])
+            : inLeft;
+        float outLeft = inLeft * leftFromLeft;
+        float outRight = inLeft * rightFromLeft;
+        if (sourceChannels == 2)
+        {
+            outLeft += inRight * leftFromRight;
+            outRight += inRight * rightFromRight;
+        }
+
+        if (outLeft > 32767.0f) outLeft = 32767.0f;
+        if (outLeft < -32768.0f) outLeft = -32768.0f;
+        if (outRight > 32767.0f) outRight = 32767.0f;
+        if (outRight < -32768.0f) outRight = -32768.0f;
+        pcm[frame * 2] = static_cast<int16_t>(outLeft);
+        pcm[frame * 2 + 1] = static_cast<int16_t>(outRight);
+    }
+
+    return 2;
+}
+
+// Positional OpenAL sources require mono buffers for normal 3D panning. Downmix stereo
+// frames in-place before upload/queueing, preserving the original decoder channel count.
+static void AL_DownmixStereoToMono(int16_t *pcm, uint64_t frameCount)
+{
+    for (uint64_t frame = 0; frame < frameCount; ++frame)
+    {
+        const int32_t left = pcm[frame * 2];
+        const int32_t right = pcm[frame * 2 + 1];
+        pcm[frame] = static_cast<int16_t>((left + right) / 2);
+    }
+}
+
 // Decodes and queues fresh PCM chunks to bring the channel's buffer queue back up to
 // AL_STREAM_BUFFER_COUNT, first unqueuing/deleting any buffers that finished playing.
 // Handles looping by seeking back to the start of the audio data when the decoder runs dry.
@@ -340,10 +404,33 @@ static bool SND_FillStreamBuffers(int index)
             stream->framesQueued = 0; // starting a fresh loop pass
         }
 
+        uint32_t outputChannels = stream->channels;
+        if (stream->alias &&
+            SND_IsAliasChannel3D(SNDALIASFLAGS_GET_CHANNEL(stream->alias->flags)))
+        {
+            if (stream->channels == 2)
+            {
+                AL_DownmixStereoToMono(chunk, framesRead);
+                outputChannels = 1;
+            }
+        }
+        else if (stream->alias)
+        {
+            const int mappedChannels = AL_ApplySpeakerMapToPcm(
+                chunk, framesRead, static_cast<int>(stream->channels), stream->alias);
+            if (mappedChannels != 0)
+                outputChannels = static_cast<uint32_t>(mappedChannels);
+        }
+
         ALuint buffer;
         alGenBuffers(1, &buffer);
-        ALenum format = (stream->channels == 2) ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
-        alBufferData(buffer, format, chunk, (ALsizei)(framesRead * stream->channels * sizeof(int16_t)), stream->sampleRate);
+        ALenum format = (outputChannels == 2) ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
+        alBufferData(
+            buffer,
+            format,
+            chunk,
+            static_cast<ALsizei>(framesRead * outputChannels * sizeof(int16_t)),
+            stream->sampleRate);
         alSourceQueueBuffers(source, 1, &buffer);
         stream->framesQueued += framesRead;
         ++queued;
@@ -471,7 +558,49 @@ bool __cdecl SND_IsStreamChannelFree(int index)
 
 void __cdecl SND_ApplyChannelMap(ALuint handle, const snd_alias_t *alias, int srcChannelCount)
 {
-    // KISAK_OPENAL TODO (Phase 4): per-speaker channel-level mapping. 
+    ALint bufferId = 0;
+    alGetSourcei(handle, AL_BUFFER, &bufferId);
+    if (!bufferId || !alias || !alias->soundFile ||
+        alias->soundFile->type != SAT_LOADED || !alias->soundFile->u.loadSnd)
+        return;
+
+    MssSoundCOD4 *sound = &alias->soundFile->u.loadSnd->sound;
+    if (!sound->data || sound->info.channels != srcChannelCount ||
+        (srcChannelCount != 1 && srcChannelCount != 2) || sound->info.samples == 0)
+        return;
+
+    // ALsizei is signed. Leave the original buffer untouched if stereo expansion would
+    // exceed the OpenAL upload-size limit.
+    const uint64_t frameCount = sound->info.samples;
+    if (frameCount > static_cast<uint64_t>(0x7fffffff) / (2 * sizeof(int16_t)))
+        return;
+
+    const size_t mappedBytes = static_cast<size_t>(frameCount) * 2 * sizeof(int16_t);
+    int16_t *mapped = static_cast<int16_t *>(std::malloc(mappedBytes));
+    if (!mapped)
+    {
+        Com_PrintError(CON_CHANNEL_SOUND, "Could not allocate speaker-map buffer for '%s'\\n",
+            alias->aliasName ? alias->aliasName : "<unnamed>");
+        return;
+    }
+
+    Com_Memcpy(mapped, sound->data, sound->info.data_len);
+    const int outputChannels = AL_ApplySpeakerMapToPcm(
+        mapped, frameCount, srcChannelCount, alias);
+    if (outputChannels != 0)
+    {
+        // The buffer is attached but has not started playing yet. Detach it while replacing
+        // the storage, then restore the source binding so channel lifetime logic is unchanged.
+        alSourcei(handle, AL_BUFFER, 0);
+        alBufferData(
+            static_cast<ALuint>(bufferId),
+            outputChannels == 2 ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16,
+            mapped,
+            static_cast<ALsizei>(mappedBytes),
+            sound->info.rate);
+        alSourcei(handle, AL_BUFFER, bufferId);
+    }
+    std::free(mapped);
 }
 
 int __cdecl SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
@@ -589,7 +718,46 @@ int __cdecl SND_StartAlias2DSample(SndStartAliasInfo *startAliasInfo, int *pChan
 
 void __cdecl SND_Apply3DSpatializationTweaks(ALuint handle, const snd_alias_t *alias)
 {
-    // KISAK_OPENAL TODO (Phase 4)
+    ALint bufferId = 0;
+    alGetSourcei(handle, AL_BUFFER, &bufferId);
+    if (!bufferId || !alias || !alias->soundFile ||
+        alias->soundFile->type != SAT_LOADED || !alias->soundFile->u.loadSnd)
+        return;
+
+    MssSoundCOD4 *sound = &alias->soundFile->u.loadSnd->sound;
+    if (!sound->data || sound->info.channels != 2 || sound->info.samples == 0)
+        return;
+
+    // OpenAL's standard positional rendering is defined for mono buffers. Convert stereo
+    // loaded assets to mono before attaching them to a 3D source so they are actually panned.
+    const uint64_t frameCount = sound->info.samples;
+    if (frameCount > static_cast<uint64_t>(0x7fffffff) / sizeof(int16_t))
+        return;
+
+    const size_t monoBytes = static_cast<size_t>(frameCount) * sizeof(int16_t);
+    int16_t *mono = static_cast<int16_t *>(std::malloc(monoBytes));
+    if (!mono)
+    {
+        Com_PrintError(CON_CHANNEL_SOUND, "Could not allocate mono 3D buffer for '%s'\\n",
+            alias->aliasName ? alias->aliasName : "<unnamed>");
+        return;
+    }
+
+    const int16_t *stereo = reinterpret_cast<const int16_t *>(sound->data);
+    for (uint64_t frame = 0; frame < frameCount; ++frame)
+        mono[frame] = static_cast<int16_t>(
+            (static_cast<int32_t>(stereo[frame * 2]) +
+             static_cast<int32_t>(stereo[frame * 2 + 1])) / 2);
+
+    alSourcei(handle, AL_BUFFER, 0);
+    alBufferData(
+        static_cast<ALuint>(bufferId),
+        AL_FORMAT_MONO16,
+        mono,
+        static_cast<ALsizei>(monoBytes),
+        sound->info.rate);
+    alSourcei(handle, AL_BUFFER, bufferId);
+    std::free(mono);
 }
 
 int __cdecl SND_StartAlias3DSample(SndStartAliasInfo *startAliasInfo, int *pChannel)
@@ -880,6 +1048,7 @@ int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int
         return SND_SetPlaybackIdNotPlayed(index);
     }
 
+    stream->alias = startAliasInfo->alias0;
     stream->looping = (startAliasInfo->alias0->flags & 1) != 0; // matches AIL_set_stream_loop_count's polarity above: flags bit 0 set == looping
     stream->active = true;
 
