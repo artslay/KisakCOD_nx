@@ -118,8 +118,11 @@ void __cdecl SND_Set3DPosition(int index, const float *org)
 }
 
 #ifdef KISAK_OPENAL
+static void AL_ResetEqChannelState(int index);
+
 void SND_ReleaseChannelBuffer(int index)
 {
+    AL_ResetEqChannelState(index);
     if (alGlob.channelBuffer[index])
     {
         alSourcei(alGlob.source[index], AL_BUFFER, 0);
@@ -373,6 +376,14 @@ static uint32_t g_openALEqRevision = 1;
 static uint32_t g_openALEqAppliedRevision[53] = {};
 static bool g_openALEqAppliedEnabled[53] = {};
 
+static void AL_ResetEqChannelState(int index)
+{
+    if (index < 0 || index >= 53)
+        return;
+    g_openALEqAppliedRevision[index] = 0;
+    g_openALEqAppliedEnabled[index] = false;
+}
+
 static void AL_InvalidateEq()
 {
     ++g_openALEqRevision;
@@ -483,9 +494,9 @@ static void AL_ApplyEqToPcm(
     int channels,
     int entchannel,
     uint32_t sampleRate,
-    ALBiquadHistory *history)
+    ALBiquadHistory history[2][3][2])
 {
-    if (!pcm || !history || (channels != 1 && channels != 2) ||
+    if (!pcm || (channels != 1 && channels != 2) ||
         entchannel < 0 || entchannel >= 64 || !snd_enableEq ||
         !snd_enableEq->current.enabled)
         return;
@@ -501,7 +512,7 @@ static void AL_ApplyEqToPcm(
 
             for (int channel = 0; channel < channels; ++channel)
             {
-                ALBiquadHistory &state = history[(eqIndex * 3 + band) * 2 + channel];
+                ALBiquadHistory &state = history[eqIndex][band][channel];
                 for (uint64_t frame = 0; frame < frameCount; ++frame)
                 {
                     const size_t sampleIndex = static_cast<size_t>(frame) * channels + channel;
@@ -567,7 +578,7 @@ static bool AL_RebuildLoadedChannelBuffer(int index, int entchannel)
     ALBiquadHistory history[2][3][2] = {};
     AL_ApplyEqToPcm(
         pcm, frameCount, static_cast<int>(outputChannels), entchannel,
-        sound->info.rate, &history[0][0][0]);
+        sound->info.rate, history);
 
     const ALuint buffer = alGlob.channelBuffer[index];
     const ALuint source = alGlob.source[index];
@@ -718,7 +729,7 @@ static bool SND_FillStreamBuffers(int index)
                 static_cast<int>(outputChannels),
                 SNDALIASFLAGS_GET_CHANNEL(stream->alias->flags),
                 stream->sampleRate,
-                &stream->eqHistory[0][0][0]);
+                stream->eqHistory);
         }
 
         ALuint buffer;
@@ -1176,6 +1187,7 @@ int __cdecl SND_StartAlias3DSample(SndStartAliasInfo *startAliasInfo, int *pChan
     if ((startAliasInfo->alias0->flags & 1) != 0)
         totalMsecForChan = 0;
     SND_SetChannelStartInfo(index, startAliasInfo);
+    MSS_ApplyEqFilter(alGlob.source[index], SNDALIASFLAGS_GET_CHANNEL(startAliasInfo->alias0->flags));
     SND_SetSoundFileChannelInfo(index, sound->info.channels, sound->info.rate, totalMsecForChan, start_msec, SFLS_LOADED);
     int playbackId = SND_AcquirePlaybackId(index, totalMsecForChan);
     if (playbackId != -1)
@@ -1512,6 +1524,7 @@ int __cdecl SND_StartAliasStreamOnChannel(SndStartAliasInfo *startAliasInfo, int
     org[1] = startAliasInfo->org[1];
     org[2] = startAliasInfo->org[2];
     SND_SetChannelStartInfo(index, startAliasInfo);
+    MSS_ApplyEqFilter(alGlob.source[index], SNDALIASFLAGS_GET_CHANNEL(startAliasInfo->alias0->flags));
     SND_SetSoundFileChannelInfo(index, srcChannelCount, baserate, totalMsecForChan, start_msec, SFLS_LOADED);
 
     if (SND_IsAliasChannel3D((g_snd.chaninfo[index].alias0->flags & 0x3F00) >> 8))
