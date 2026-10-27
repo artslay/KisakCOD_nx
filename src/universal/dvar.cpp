@@ -43,18 +43,6 @@ bool isDvarSystemActive;
 bool isLoadingAutoExecGlobalFlag;
 
 #ifdef __SWITCH__
-static const char *Switch_DvarSourceName(DvarSetSource source)
-{
-    switch (source)
-    {
-    case DVAR_SOURCE_INTERNAL: return "internal";
-    case DVAR_SOURCE_EXTERNAL: return "external";
-    case DVAR_SOURCE_SCRIPT: return "script";
-    case DVAR_SOURCE_DEVGUI: return "devgui";
-    default: return "unknown";
-    }
-}
-
 static bool Switch_DvarBadStringPointer(const char *ptr)
 {
     if (!ptr)
@@ -2877,11 +2865,7 @@ void __cdecl Dvar_SetDomainFunc(dvar_s *dvar, bool(__cdecl *customFunc)(dvar_s *
         {
             name = dvar->name;
             v2 = Dvar_ValueToString(dvar, dvar->current);
-#ifdef __SWITCH__
-            Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n\n", v2, name);
-#else
-            Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n\n", v2, name);
-#endif
+Com_Printf(CON_CHANNEL_SYSTEM, "'%s' is not a valid value for dvar '%s'\n\n", v2, name);
             Dvar_Reset(dvar, DVAR_SOURCE_INTERNAL);
         }
     }
