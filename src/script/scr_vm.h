@@ -409,7 +409,7 @@ void __cdecl Scr_ProfileBuiltinUpdate();
 void __cdecl Scr_DoProfile(float minTime);
 void __cdecl Scr_DoProfileBuiltin(float minTime);
 char __cdecl Scr_PrintProfileBuiltinTimes(float minTime);
-int __cdecl Scr_BuiltinCompare(_DWORD* a, _DWORD* b);
+int __cdecl Scr_BuiltinCompare(const void *a, const void *b);
 
 void Scr_DecTime();
 
