@@ -1332,14 +1332,16 @@ uint32_t SwitchEffectiveShaderElementOffset(
     // bound stream ABI, not the declaration's serialized semantic route.
     if (decl && decl->switchVertDeclType != 0u &&
         element.Stream == 0 && streamStride == 32u &&
-        element.Usage == 5 &&
-        element.UsageIndex == 1 && element.Offset == 36)
+        element.Offset == 36 &&
+        ((element.Usage == 5 && element.UsageIndex == 1) ||
+         (element.Usage == 3 && element.UsageIndex == 0)))
         return 24;
 
     if (decl && decl->switchVertDeclType != 0u &&
         element.Stream == 0 && streamStride == 32u &&
-        element.Usage == 5 &&
-        element.UsageIndex == 2 && element.Offset == 40)
+        element.Offset == 40 &&
+        ((element.Usage == 5 && element.UsageIndex == 2) ||
+         ((element.Usage == 6 || element.Usage == 7) && element.UsageIndex == 0)))
         return 28;
 
     // TEXCOORD1 can be routed from the first UV pair, but in a world vertex
@@ -8453,11 +8455,17 @@ bool IDirect3DDevice9::EnsurePipeline()
             packedWorldStreamStride == 32u &&
             m_decl->switchVertDeclType != 0u &&
             element.Stream == 0 &&
-            element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
-            ((element.UsageIndex == 1 &&
-              (element.Offset == 24 || element.Offset == 36)) ||
-             (element.UsageIndex == 2 &&
-              (element.Offset == 28 || element.Offset == 40)));
+            (((element.Offset == 24 || element.Offset == 36) &&
+              ((element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
+                element.UsageIndex == 1) ||
+               (element.Usage == MOJOSHADER_USAGE_NORMAL &&
+                element.UsageIndex == 0))) ||
+             ((element.Offset == 28 || element.Offset == 40) &&
+              ((element.Usage == MOJOSHADER_USAGE_TEXCOORD &&
+                element.UsageIndex == 2) ||
+               ((element.Usage == MOJOSHADER_USAGE_TANGENT ||
+                 element.Usage == MOJOSHADER_USAGE_BINORMAL) &&
+                element.UsageIndex == 0))));
         // The native CoD4 world declaration table uses D3DDECLTYPE_UBYTE4
         // (not UBYTE4N) for the packed normals/tangents at offsets 36/40.
         // D3D9 feeds those bytes to the shader as float values in the 0..255
