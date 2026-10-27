@@ -363,7 +363,7 @@ void __cdecl Phys_Init()
             "The minimum momentum required to trigger impact sounds");
 #ifdef __SWITCH__
         Com_Printf(
-            CON_CHANNEL_PHYS,
+            CON_CHANNEL_DONT_FILTER,
             "[SWITCH PHYS DVAR] registered phys_minImpactMomentum global=%p value=%p\n",
             (const void *)&phys_minImpactMomentum,
             (const void *)phys_minImpactMomentum);
@@ -403,7 +403,7 @@ void __cdecl Phys_Init()
         Phys_InitJoints();
 #ifdef __SWITCH__
         Com_Printf(
-            CON_CHANNEL_PHYS,
+            CON_CHANNEL_DONT_FILTER,
             "[SWITCH PHYS DVAR] after physics init global=%p value=%p physInited=%d\n",
             (const void *)&phys_minImpactMomentum,
             (const void *)phys_minImpactMomentum,
@@ -1391,11 +1391,22 @@ void __cdecl Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t 
     Vec3Scale(pos, scale, pos);
 #ifdef __SWITCH__
     if (!phys_minImpactMomentum)
-        Com_PrintError(
-            CON_CHANNEL_PHYS,
-            "[SWITCH PHYS DVAR] phys_minImpactMomentum became null before collision sound global=%p physInited=%d\n",
-            (const void *)&phys_minImpactMomentum,
-            physInited);
+    {
+        // This is an optional audio threshold; never let a missing dvar take
+        // down the physics collision callback. Log once so the real loss point
+        // can be identified without flooding the frame log.
+        static bool missingImpactDvarReported;
+        if (!missingImpactDvarReported)
+        {
+            Com_PrintError(
+                CON_CHANNEL_DONT_FILTER,
+                "[SWITCH PHYS DVAR] phys_minImpactMomentum is null at collision callback; global=%p physInited=%d; skipping this sound event\n",
+                (const void *)&phys_minImpactMomentum,
+                physInited);
+            missingImpactDvarReported = true;
+        }
+        return;
+    }
 #endif
     if (-phys_minImpactMomentum->current.value > impactVelocity * mass.mass)
     {
