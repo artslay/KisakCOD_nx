@@ -105,7 +105,7 @@ void __cdecl CG_FxTest()
 {
     const char *v0; // r3
     const char *v1; // r3
-    long double v2; // fp2
+    double v2; // fp2
 
     if (cmd_args.nesting >= 8u)
         MyAssertHandler(
@@ -129,7 +129,7 @@ void __cdecl CG_FxTest()
             {
                 v1 = Cmd_Argv(2);
                 v2 = atof(v1);
-                s_testEffect[0].respawnTime = (int)(*(double *)&v2 * 1000.0);
+                s_testEffect[0].respawnTime = (int)(v2 * 1000.0);
             }
             else
             {
@@ -332,11 +332,11 @@ float __cdecl CG_GetVerticalBobFactor(
     //    amplitude = maxAmp;
     //
     //v10 = (float)((float)v9 * (float)2.0);
-    //v11 = sin(*(long double *)&speed);
-    //v12 = (float)*(double *)&v11;
-    //*(double *)&v11 = ((cycle * 4.0f) + 1.5707964f);
+    //v11 = sin(speed);
+    //v12 = (float)v11;
+    //v11 = ((cycle * 4.0f) + 1.5707964f);
     //v13 = sin(v11);
-    //v14 = (float)((float)((float)((float)((float)*(double *)&v13 * (float)0.2) + (float)v12) * (float)amplitude) * (float)0.75);
+    //v14 = (float)((float)((float)((float)((float)v13 * (float)0.2) + (float)v12) * (float)amplitude) * (float)0.75);
     //return *((float *)&v14 + 1);
 }
 
@@ -351,7 +351,7 @@ float __cdecl CG_GetHorizontalBobFactor(
     //int viewHeightTarget; // r11
     //const dvar_s *v5; // r11
     //double v6; // fp31
-    //long double v7; // fp2
+    //double v7; // fp2
     //double v8; // fp1
     //
     //viewHeightTarget = predictedPlayerState->viewHeightTarget;
@@ -374,8 +374,8 @@ float __cdecl CG_GetHorizontalBobFactor(
     //v6 = (float)(v5->current.value * (float)speed);
     //if (v6 > maxAmp)
     //    v6 = maxAmp;
-    //v7 = sin(*(long double *)&speed);
-    //v8 = (float)((float)*(double *)&v7 * (float)v6);
+    //v7 = sin(speed);
+    //v8 = (float)((float)v7 * (float)v6);
     //return *((float *)&v8 + 1);
 }
 
@@ -681,10 +681,10 @@ float __cdecl CG_GetViewFov(int localClientNum)
 
 void __cdecl CG_CalcFov(int localClientNum)
 {
-    //long double v2; // fp2
-    //long double v3; // fp2
+    //double v2; // fp2
+    //double v3; // fp2
     //double v4; // fp29
-    //long double v5; // fp2
+    //double v5; // fp2
     //
     //if (localClientNum)
     //{
@@ -703,14 +703,14 @@ void __cdecl CG_CalcFov(int localClientNum)
     //        "(localClientNum == 0)",
     //        localClientNum);
     //}
-    //*(double *)&v2 = (float)((float)(CG_GetViewFov(localClientNum) * (float)0.017453292) * (float)0.5);
+    //v2 = (float)((float)(CG_GetViewFov(localClientNum) * (float)0.017453292) * (float)0.5);
     //v3 = tan(v2);
-    //v4 = (float)*(double *)&v3;
-    //cgArray[0].refdef.tanHalfFovX = cgsArray[0].viewAspect * (float)((float)*(double *)&v3 * (float)0.75);
-    //cgArray[0].refdef.tanHalfFovY = (float)*(double *)&v3 * (float)0.75;
-    //*(double *)&v3 = (float)((float)(cg_fov->current.value * (float)0.017453292) * (float)0.5);
+    //v4 = (float)v3;
+    //cgArray[0].refdef.tanHalfFovX = cgsArray[0].viewAspect * (float)((float)v3 * (float)0.75);
+    //cgArray[0].refdef.tanHalfFovY = (float)v3 * (float)0.75;
+    //v3 = (float)((float)(cg_fov->current.value * (float)0.017453292) * (float)0.5);
     //v5 = tan(v3);
-    //cgArray[0].zoomSensitivity = (float)v4 / (float)*(double *)&v5;
+    //cgArray[0].zoomSensitivity = (float)v4 / (float)v5;
 
     cg_s *cgameGlob; // [esp+Ch] [ebp-10h]
     float dxDzAtDefaultAspectRatio; // [esp+10h] [ebp-Ch]
