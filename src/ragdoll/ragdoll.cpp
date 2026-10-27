@@ -637,13 +637,26 @@ void __cdecl Ragdoll_Bone_f()
             parentBone = atoi(v5);
             if (parentBone == -1)
             {
+                // Only bone zero is the root. A later root has no parent body
+                // for its joints and breaks the ragdoll hierarchy.
+                if (def->numBones != 0)
+                {
+                    Com_Printf(CON_CHANNEL_CLIENT,
+                        "Ragdoll: Only bone 0 may have no parent (bone %d)\n",
+                        def->numBones);
+                    return;
+                }
                 bone->parentBone = -1;
             }
             else
             {
-                if (parentBone >= def->numBones)
+                // Parents must already exist. Reject every negative value other
+                // than -1 rather than letting it become an invalid array index.
+                if (parentBone < 0 || parentBone >= def->numBones)
                 {
-                    Com_Printf(CON_CHANNEL_CLIENT, "Ragdoll: Child bones must come after parent bones: %d\n", parentBone);
+                    Com_Printf(CON_CHANNEL_CLIENT,
+                        "Ragdoll: Invalid parent bone %d for bone %d (existing bones: %d)\n",
+                        parentBone, def->numBones, def->numBones);
                     return;
                 }
                 bone->parentBone = parentBone;
@@ -798,7 +811,13 @@ void __cdecl Ragdoll_Joint_f()
                 {
                     if (joint->bone)
                     {
-                        if (Ragdoll_ReadJointType(3, joint))
+                        if (def->boneDefs[joint->bone].parentBone < 0)
+                        {
+                            Com_Printf(CON_CHANNEL_CLIENT,
+                                "Ragdoll: Joint references root bone %u, which has no parent\n",
+                                static_cast<unsigned>(joint->bone));
+                        }
+                        else if (Ragdoll_ReadJointType(3, joint))
                         {
                             ++def->numJoints;
                             Ragdoll_ResetBodiesUsingDef();
