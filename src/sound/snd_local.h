@@ -233,6 +233,9 @@ void MSS_InitFailed();
 char __cdecl MSS_Init();
 void MSS_InitChannels();
 void MSS_InitEq();
+#ifdef KISAK_OPENAL
+void SND_ApplyOpenALEq(ALuint source, int entchannel);
+#endif
 bool __cdecl MSS_Startup();
 void MSS_ShutdownCleanup();
 float MSS_GetDryLevel();
