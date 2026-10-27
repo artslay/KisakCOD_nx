@@ -595,33 +595,41 @@ Material *__cdecl Material_FindLoadedRendererMaterialByName(const char *name)
     return nullptr;
 }
 
+struct SwitchMaterialLookup
+{
+    const char *name;
+    Material *material;
+};
+
+static void __cdecl Switch_FindLoadedMaterialByNameCallback(XAssetHeader header, void *data)
+{
+    auto *lookup = static_cast<SwitchMaterialLookup *>(data);
+    if (!lookup || lookup->material)
+        return;
+
+    Material *material = header.material;
+    if (!material || !material->info.name)
+        return;
+
+    if (!I_stricmp(material->info.name, lookup->name) &&
+        material != rgp.defaultMaterial &&
+        (!rgp.defaultMaterial || !Material_IsDefault(material)))
+        lookup->material = material;
+}
+
 static Material *Switch_FindLoadedMaterialByName(const char *name)
 {
     Material *registered = Material_FindLoadedRendererMaterialByName(name);
     if (registered)
         return registered;
 
-    // Some native assets can be present in the loaded fastfile registry before
-    // renderer registration. Accept only an exact, real non-default asset.
-    XAssetHeader assets[2048];
-    const int count = DB_GetAllXAssetOfType(
-        ASSET_TYPE_MATERIAL,
-        assets,
-        static_cast<int>(ARRAY_COUNT(assets)));
-
-    for (int i = 0; i < count; ++i)
-    {
-        Material *material = assets[i].material;
-        if (!material || !material->info.name)
-            continue;
-
-        if (!I_stricmp(material->info.name, name) &&
-            material != rgp.defaultMaterial &&
-            (!rgp.defaultMaterial || !Material_IsDefault(material)))
-            return material;
-    }
-
-    return nullptr;
+    // Enumerate the database registry instead of copying a fixed number of
+    // entries. Material assets can be beyond an arbitrary prefix of the DB
+    // list; DB_EnumXAssets also visits override entries where the real asset
+    // can exist behind a default clone.
+    SwitchMaterialLookup lookup = {name, nullptr};
+    DB_EnumXAssets(ASSET_TYPE_MATERIAL, Switch_FindLoadedMaterialByNameCallback, &lookup, true);
+    return lookup.material;
 }
 #endif
 
