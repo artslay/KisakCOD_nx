@@ -12,6 +12,9 @@
 
 #ifdef __SWITCH__
 #include <cstdio>
+#include <atomic>
+#include <cstdint>
+extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern void Switch_LogWrite(const char *msg);
 extern bool SCR_IsMapLoadingCinematicActive();
 extern thread_local const char * volatile g_switchFrameStage;
@@ -142,6 +145,43 @@ static void SCR_ClearScreen()
 }
 
 #ifdef __SWITCH__
+static void SCR_SwitchFormatMenuStack(char *out, size_t outSize)
+{
+    if (!out || !outSize)
+        return;
+
+    out[0] = '\0';
+    const int count = uiInfo.uiDC.openMenuCount;
+    const int first = count > 4 ? count - 4 : 0;
+    size_t used = 0;
+    for (int i = first; i < count && used + 1 < outSize; ++i)
+    {
+        const menuDef_t *menu = uiInfo.uiDC.menuStack[i];
+        if (!menu)
+            continue;
+
+        const char *name = menu->window.name ? menu->window.name : "(unnamed)";
+        const uint32_t dynamicFlags = menu->window.dynamicFlags[0];
+        const int written = std::snprintf(
+            out + used, outSize - used,
+            "%s%d:%s{fs=%u,dyn=%08x,static=%08x,items=%d,exp=%d}",
+            used ? " | " : "",
+            i,
+            name,
+            menu->fullScreen ? 1u : 0u,
+            static_cast<unsigned>(dynamicFlags),
+            static_cast<unsigned>(menu->window.staticFlags),
+            menu->itemCount,
+            menu->visibleExp.numEntries);
+        if (written <= 0)
+            break;
+        used += static_cast<size_t>(written) < outSize - used
+            ? static_cast<size_t>(written) : outSize - used - 1;
+    }
+    if (!out[0])
+        std::snprintf(out, outSize, "(empty)");
+}
+
 static void SCR_LogSwitchFrameState(int refreshedUI)
 {
     static int previousConnectionState = -1;
@@ -155,7 +195,12 @@ static void SCR_LogSwitchFrameState(int refreshedUI)
     static int previousCinematicStarted = -1;
     static int previousCinematicFinished = -1;
     static int previousCinematicPending = -1;
+    static int previousCinematicNext = -1;
+    static int previousCinematicImageFrame = -999;
+    static int previousMapLoadingCinematic = -1;
+    static int previousCinematicUnderrun = -1;
 
+    const uint64_t frame = g_switchScreenFrameSequence.load(std::memory_order_relaxed);
     const int connectionState = static_cast<int>(clientUIActives[0].connectionState);
     const int activeMenu = UI_GetActiveMenu(0);
     const int fullscreen = UI_IsFullscreen() ? 1 : 0;
@@ -166,8 +211,15 @@ static void SCR_LogSwitchFrameState(int refreshedUI)
     const int cinematicStarted = R_Cinematic_IsStarted() ? 1 : 0;
     const int cinematicFinished = R_Cinematic_IsFinished() ? 1 : 0;
     const int cinematicPending = R_Cinematic_IsPending() ? 1 : 0;
+    const int cinematicNext = R_Cinematic_IsNextReady() ? 1 : 0;
+    const int cinematicImageFrame = cinematicGlob.activeImageFrame;
+    const int mapLoadingCinematic = SCR_IsMapLoadingCinematicActive() ? 1 : 0;
+    const int cinematicUnderrun = R_Cinematic_IsUnderrun() ? 1 : 0;
+    const int binkFrame = cinematicGlob.bink ? static_cast<int>(cinematicGlob.bink->FrameNum) : -1;
+    const int binkFrames = cinematicGlob.bink ? static_cast<int>(cinematicGlob.bink->Frames) : 0;
 
-    if (connectionState != previousConnectionState ||
+    const bool stateChanged =
+        connectionState != previousConnectionState ||
         activeMenu != previousActiveMenu ||
         fullscreen != previousFullscreen ||
         uiCatcher != previousUiCatcher ||
@@ -177,13 +229,43 @@ static void SCR_LogSwitchFrameState(int refreshedUI)
         refreshedUI != previousRefreshedUI ||
         cinematicStarted != previousCinematicStarted ||
         cinematicFinished != previousCinematicFinished ||
-        cinematicPending != previousCinematicPending)
+        cinematicPending != previousCinematicPending ||
+        cinematicNext != previousCinematicNext ||
+        cinematicImageFrame != previousCinematicImageFrame ||
+        mapLoadingCinematic != previousMapLoadingCinematic ||
+        cinematicUnderrun != previousCinematicUnderrun;
+
+    // A frontend fullscreen menu without an active cinematic is a known
+    // black-frame risk after skip transitions. Emit a sparse heartbeat even
+    // when the high-level state is stuck and therefore no change is logged.
+    const bool frontendWithoutVideo =
+        fullscreen && openMenuCount > 0 && !cinematicStarted && !mapLoadingCinematic;
+    const bool periodicFrontendTrace = frontendWithoutVideo && frame % 60u == 0u;
+
+    if (stateChanged || periodicFrontendTrace)
     {
-        char trace[512];
+        char menuStack[640];
+        SCR_SwitchFormatMenuStack(menuStack, sizeof(menuStack));
+
+        const char *cgameReason =
+            connectionState != CA_ACTIVE ? "connection_not_active" :
+            fullscreen ? "fullscreen_menu_suppresses_cgame" :
+            refreshedUI ? "cgame_frame_submitted" : "cgame_frame_not_submitted";
+        const char *uiReason =
+            !uiStarted ? "ui_not_started_clear_only" :
+            connectionState == CA_MAP_RESTART ? "map_restart_clear_only" :
+            refreshedUI ? "cgame_render_path_already_refreshed" :
+            fullscreen ? "fullscreen_state_path" :
+            uiCatcher ? "ui_catcher_requests_refresh" :
+            connectionState == CA_DISCONNECTED ? "disconnected_menu_refresh_path" :
+            "ui_refresh_may_be_skipped";
+
+        char trace[1536];
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][FRONTEND UI STATE] conn=%d menu=%d fullscreen=%d uiCatch=%d openMenus=%d menuCount=%d uiStarted=%d cgameDraw=%d cineStarted=%d cineFinished=%d cinePending=%d\n",
+            "[KisakCOD][FRONTEND UI STATE] frame=%llu conn=%d activeMenu=%d fullscreen=%d uiCatch=%d openMenus=%d menuCount=%d uiStarted=%d cgameDraw=%d cgameReason=%s uiReason=%s cineCurrent=%s cineTarget=%s cineNextName=%s cineStarted=%d cineFinished=%d cinePending=%d cineNext=%d cineTargetChanged=%d cineImage=%d bink=%p binkFrame=%d/%d cineUnderrun=%d mapLoadCine=%d stage=%s menus=[%s]\n",
+            static_cast<unsigned long long>(frame),
             connectionState,
             activeMenu,
             fullscreen,
@@ -192,9 +274,24 @@ static void SCR_LogSwitchFrameState(int refreshedUI)
             menuCount,
             uiStarted,
             refreshedUI,
+            cgameReason,
+            uiReason,
+            cinematicGlob.currentCinematicName[0] ? cinematicGlob.currentCinematicName : "(none)",
+            cinematicGlob.targetCinematicName[0] ? cinematicGlob.targetCinematicName : "(none)",
+            cinematicGlob.nextCinematicName[0] ? cinematicGlob.nextCinematicName : "(none)",
             cinematicStarted,
             cinematicFinished,
-            cinematicPending);
+            cinematicPending,
+            cinematicNext,
+            cinematicGlob.targetCinematicChanged ? 1 : 0,
+            cinematicImageFrame,
+            static_cast<void *>(cinematicGlob.bink),
+            binkFrame,
+            binkFrames,
+            cinematicUnderrun,
+            mapLoadingCinematic,
+            g_switchFrameStage ? g_switchFrameStage : "(unknown)",
+            menuStack);
         Switch_LogWrite(trace);
 
         previousConnectionState = connectionState;
@@ -208,6 +305,10 @@ static void SCR_LogSwitchFrameState(int refreshedUI)
         previousCinematicStarted = cinematicStarted;
         previousCinematicFinished = cinematicFinished;
         previousCinematicPending = cinematicPending;
+        previousCinematicNext = cinematicNext;
+        previousCinematicImageFrame = cinematicImageFrame;
+        previousMapLoadingCinematic = mapLoadingCinematic;
+        previousCinematicUnderrun = cinematicUnderrun;
     }
 }
 #endif
@@ -471,6 +572,7 @@ void SCR_UpdateFrame()
 
     iassert(Sys_IsMainThread() || Sys_IsRenderThread());
 #ifdef __SWITCH__
+    g_switchScreenFrameSequence.fetch_add(1, std::memory_order_relaxed);
     g_switchFrameStage = "frame/scr/begin";
 #endif
     //Profile_Begin(18);
