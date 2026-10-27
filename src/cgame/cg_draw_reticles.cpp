@@ -92,7 +92,11 @@ void __cdecl CG_DrawNightVisionOverlay(int32_t localClientNum)
 
     if (CG_LookingThroughNightVision(localClientNum))
     {
-        if (cgMedia.nightVisionOverlay)
+        // Material_RegisterHandle can return a named clone of the
+        // renderer's default material when the real overlay asset is absent.
+        // That clone is non-null but renders the full-screen fallback square;
+        // only draw the actual goggles material.
+        if (cgMedia.nightVisionOverlay && !Material_IsDefault(cgMedia.nightVisionOverlay))
             CL_DrawStretchPic(
                 &scrPlaceView[localClientNum],
                 0.0,
