@@ -542,11 +542,27 @@ void ConvertPackedModelTexCoordsForVulkan(
     // De-duplicate whole surfaces, not individual vertices, to keep this
     // one-time zone conversion bounded in memory even for high-vertex maps.
     std::unordered_set<uintptr_t> convertedSurfaceStarts;
+    uint32_t modelCount = 0;
+    uint32_t surfaceCount = 0;
+    uint32_t surfacesInBlock = 0;
+    uint32_t surfacesConverted = 0;
+    uint32_t duplicateSurfaces = 0;
+    uint32_t surfacesOutsideBlock = 0;
+    uint32_t surfacesRangeRejected = 0;
+    uint32_t verticesConverted = 0;
+    const char *sampleModelName = "<none>";
+    uint32_t sampleSurfaceIndex = 0;
+    uint32_t sampleVertexIndex = 0;
+    uint32_t sampleSourcePacked = 0;
+    uint32_t sampleGpuPacked = 0;
+    float sampleU = 0.0f;
+    float sampleV = 0.0f;
 
     for (const XModel *model : state.modelsToNormalize)
     {
         if (!model || !model->surfs)
             continue;
+        ++modelCount;
 
         for (uint32_t surfaceIndex = 0;
              surfaceIndex < static_cast<uint32_t>(model->numsurfs);
@@ -555,21 +571,37 @@ void ConvertPackedModelTexCoordsForVulkan(
             const XSurface &surface = model->surfs[surfaceIndex];
             if (!surface.verts0 || !surface.vertCount)
                 continue;
+            ++surfaceCount;
 
             const uintptr_t vertexAddress =
                 reinterpret_cast<uintptr_t>(surface.verts0);
             if (vertexAddress < blockStart)
+            {
+                ++surfacesOutsideBlock;
                 continue;
+            }
 
             const uintptr_t offsetAddress = vertexAddress - blockStart;
             if (offsetAddress > blockSize)
+            {
+                ++surfacesOutsideBlock;
                 continue;
+            }
             const size_t vertexOffset = static_cast<size_t>(offsetAddress);
             const size_t vertexBytes =
                 static_cast<size_t>(surface.vertCount) * sizeof(GfxPackedVertex);
-            if (vertexBytes > blockSize - vertexOffset ||
-                !convertedSurfaceStarts.insert(vertexAddress).second)
+            if (vertexBytes > blockSize - vertexOffset)
+            {
+                ++surfacesRangeRejected;
                 continue;
+            }
+            ++surfacesInBlock;
+            if (!convertedSurfaceStarts.insert(vertexAddress).second)
+            {
+                ++duplicateSurfaces;
+                continue;
+            }
+            ++surfacesConverted;
 
             for (uint32_t vertexIndex = 0;
                  vertexIndex < surface.vertCount;
@@ -587,9 +619,36 @@ void ConvertPackedModelTexCoordsForVulkan(
                 std::memcpy(
                     gpuBlock + offset + offsetof(GfxPackedVertex, texCoord),
                     &packedHalfTexCoords, sizeof(packedHalfTexCoords));
+
+                if (!verticesConverted)
+                {
+                    sampleModelName = model->name ? model->name : "<unnamed>";
+                    sampleSurfaceIndex = surfaceIndex;
+                    sampleVertexIndex = vertexIndex;
+                    sampleSourcePacked = sourceVertex->texCoord.packed;
+                    sampleGpuPacked = packedHalfTexCoords;
+                    sampleU = texCoord[0];
+                    sampleV = texCoord[1];
+                }
+                ++verticesConverted;
             }
         }
     }
+
+    char trace[640];
+    std::snprintf(
+        trace, sizeof(trace),
+        "[KisakCOD][XMODEL UV CONVERT] zone=%s models=%u surfaces=%u inBlock=%u converted=%u duplicates=%u outsideBlock=%u rangeReject=%u vertices=%u sampleModel=%.80s sampleSurface=%u sampleVertex=%u source=0x%08x decoded=(%.6g,%.6g) gpu=0x%08x block=%p gpuBlock=%p bytes=%zu\\n",
+        state.zoneName ? state.zoneName : "<unnamed>",
+        modelCount, surfaceCount, surfacesInBlock, surfacesConverted,
+        duplicateSurfaces, surfacesOutsideBlock, surfacesRangeRejected,
+        verticesConverted, sampleModelName,
+        sampleSurfaceIndex, sampleVertexIndex, sampleSourcePacked,
+        static_cast<double>(sampleU), static_cast<double>(sampleV),
+        sampleGpuPacked,
+        static_cast<const void *>(sourceBlock),
+        static_cast<void *>(gpuBlock), blockSize);
+    Switch_LogWrite(trace);
 }
 
 static void FixupGfxWorldAabbTreeOffsets(GfxWorld *world)
