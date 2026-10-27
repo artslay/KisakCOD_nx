@@ -115,13 +115,10 @@ uint32_t RB_UploadMaterialPass(
 #endif
     //argIter = a1;
     //argCount = retaddr;
-    vertMem_140 = static_cast<uint32_t>(pass->stableArgCount) +
-                  static_cast<uint32_t>(pass->perObjArgCount) +
-                  static_cast<uint32_t>(pass->perPrimArgCount);
 #ifdef __SWITCH__
-    // Native Switch allocations can legitimately live below 4 GiB. Validate
-    // the full pass and argument array against mapped memory instead of treating
-    // pointer width alone as proof that a pointer is a serialized fastfile token.
+    // Validate the pass before reading any of its fields. Low numeric addresses
+    // are valid on Switch when the complete native object is mapped and are not
+    // sufficient evidence that this is an unresolved serialized fastfile token.
     if (!Switch_ResolveMaterialPassArgsForRender(
             const_cast<MaterialPass *>(pass)))
     {
@@ -129,6 +126,9 @@ uint32_t RB_UploadMaterialPass(
         return 0;
     }
 #endif
+    vertMem_140 = static_cast<uint32_t>(pass->stableArgCount) +
+                  static_cast<uint32_t>(pass->perObjArgCount) +
+                  static_cast<uint32_t>(pass->perPrimArgCount);
     iassert( pass->vertexShader );
     iassert( pass->vertexShader->prog.vs );
     iassert( pass->pixelShader );
