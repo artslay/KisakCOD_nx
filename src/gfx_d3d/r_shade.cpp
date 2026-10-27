@@ -175,108 +175,44 @@ void __cdecl R_SetVertexShaderConstantFromCode(GfxCmdBufContext context, const M
         return;
     }
 #endif
-    const bool switchCodeConstantUpToDate = R_IsVertexShaderConstantUpToDate(context, routingData);
-#ifdef __SWITCH__
-    // Refresh this material's two transform matrices once for every source/version.
-    // The last probe found translation-only c4-c7 in the actual VS register file;
-    // invalidate the derived transpose before reading it so stale derived rows and
-    // a matching constant-cache key cannot survive into the floor draw.
-    bool switchForceFloorMatrixRefresh = false;
-    int switchFloorMatrixSlot = -1;
-    const Material *switchFloorArgMaterial =
-        context.state ? context.state->material : nullptr;
-    const MaterialVertexShader *switchFloorArgVS =
-        context.state && context.state->pass ? context.state->pass->vertexShader : nullptr;
-    if (context.source && switchFloorArgMaterial &&
-        switchFloorArgMaterial->info.name &&
-        std::strcmp(switchFloorArgMaterial->info.name, "wc/icbm_tunnelfloor") == 0 &&
-        switchFloorArgVS && switchFloorArgVS->name &&
-        std::strcmp(switchFloorArgVS->name, "lm_tc0n0_sm3.hlsl") == 0)
-    {
-        if (routingData->u.codeConst.index == CONST_SRC_CODE_TRANSPOSE_VIEW_PROJECTION_MATRIX &&
-            routingData->dest == 0u)
-            switchFloorMatrixSlot = 0;
-        else if (routingData->u.codeConst.index == CONST_SRC_CODE_TRANSPOSE_WORLD_MATRIX &&
-                 routingData->dest == 4u)
-            switchFloorMatrixSlot = 1;
-    }
-    if (switchFloorMatrixSlot >= 0)
-    {
-        static thread_local const GfxCmdBufSourceState *lastFloorMatrixSource[2] = {};
-        static thread_local uint16_t lastFloorMatrixVersion[2] = {UINT16_MAX, UINT16_MAX};
-        const uint16_t version = context.source->matrixVersions[
-            (routingData->u.codeConst.index - CONST_SRC_FIRST_CODE_MATRIX) >> 2];
-        if (lastFloorMatrixSource[switchFloorMatrixSlot] != context.source ||
-            lastFloorMatrixVersion[switchFloorMatrixSlot] != version)
-        {
-            lastFloorMatrixSource[switchFloorMatrixSlot] = context.source;
-            lastFloorMatrixVersion[switchFloorMatrixSlot] = version;
-            switchForceFloorMatrixRefresh = true;
-        }
-    }
-#else
-    const bool switchForceFloorMatrixRefresh = false;
-#endif
+    const float *data; // [esp+8h] [ebp-4h]
 
-    if (!switchCodeConstantUpToDate || switchForceFloorMatrixRefresh)
+    if (!R_IsVertexShaderConstantUpToDate(context, routingData))
     {
-        const float *data;
-        if (routingData->u.codeConst.index < CONST_SRC_FIRST_CODE_MATRIX)
-        {
+        if (routingData->u.codeConst.index < 58)
             data = R_GetCodeConstant(context, routingData->u.codeConst.index);
-        }
         else
-        {
+            data = (const float *)R_GetCodeMatrix(context.source, routingData->u.codeConst.index, routingData->u.codeConst.firstRow);
 #ifdef __SWITCH__
-            if (switchForceFloorMatrixRefresh)
-            {
-                const uint32_t matrixIndex = routingData->u.codeConst.index;
-                const uint16_t version = context.source->matrixVersions[
-                    (matrixIndex - CONST_SRC_FIRST_CODE_MATRIX) >> 2];
-                context.source->constVersions[matrixIndex] =
-                    static_cast<uint16_t>(version + 1u);
-            }
-#endif
-            data = reinterpret_cast<const float *>(R_GetCodeMatrix(
-                context.source, routingData->u.codeConst.index,
-                routingData->u.codeConst.firstRow));
-        }
-#ifdef __SWITCH__
-        if (switchForceFloorMatrixRefresh)
+        if (context.state && context.state->material &&
+            context.state->material->info.name &&
+            std::strcmp(context.state->material->info.name, "wc/icbm_tunnelfloor") == 0 &&
+            context.state->pass && context.state->pass->vertexShader &&
+            context.state->pass->vertexShader->name &&
+            std::strcmp(context.state->pass->vertexShader->name, "lm_tc0n0_sm3.hlsl") == 0)
         {
-            static uint32_t switchFloorMatrixRefreshTraceCount = 0u;
-            if (switchFloorMatrixRefreshTraceCount < 4u)
+            static std::atomic<uint32_t> switchFloorVsArgTraceCount{0};
+            const uint32_t traceIndex = switchFloorVsArgTraceCount.fetch_add(1, std::memory_order_relaxed);
+            if (traceIndex < 16u)
             {
-                ++switchFloorMatrixRefreshTraceCount;
-                const uint32_t matrixIndex =
-                    routingData->u.codeConst.index - CONST_SRC_FIRST_CODE_MATRIX;
-                const uint32_t baseIndex = matrixIndex & ~3u;
-                const float *base0 = context.source->matrices.matrix[baseIndex].m[0];
-                const float *base3 = context.source->matrices.matrix[baseIndex].m[3];
-                char trace[1024];
+                const uint32_t rows = routingData->u.codeConst.rowCount > 4u
+                    ? 4u : routingData->u.codeConst.rowCount;
+                float v[16]{};
+                std::memcpy(v, data, static_cast<size_t>(rows) * 4u * sizeof(float));
+                char trace[704];
                 std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][VK FLOOR MATRIX REFRESH] src=%u dest=%u firstRow=%u rows=%u version=%u cached=%u "
-                    "base0=(%.5g,%.5g,%.5g,%.5g) base3=(%.5g,%.5g,%.5g,%.5g) "
-                    "r0=(%.5g,%.5g,%.5g,%.5g) r1=(%.5g,%.5g,%.5g,%.5g) "
-                    "r2=(%.5g,%.5g,%.5g,%.5g) r3=(%.5g,%.5g,%.5g,%.5g)\n",
-                    routingData->u.codeConst.index, routingData->dest,
+                    "[KisakCOD][VK FLOOR VS ARG] n=%u dest=%u sourceIndex=%u firstRow=%u rows=%u "
+                    "r0=(%.6g,%.6g,%.6g,%.6g) r1=(%.6g,%.6g,%.6g,%.6g) "
+                    "r2=(%.6g,%.6g,%.6g,%.6g) r3=(%.6g,%.6g,%.6g,%.6g)\n",
+                    traceIndex, routingData->dest, routingData->u.codeConst.index,
                     routingData->u.codeConst.firstRow, routingData->u.codeConst.rowCount,
-                    static_cast<unsigned>(context.source->matrixVersions[
-                        (routingData->u.codeConst.index - CONST_SRC_FIRST_CODE_MATRIX) >> 2]),
-                    switchCodeConstantUpToDate ? 1u : 0u,
-                    base0[0],base0[1],base0[2],base0[3],
-                    base3[0],base3[1],base3[2],base3[3],
-                    data[0],data[1],data[2],data[3],
-                    data[4],data[5],data[6],data[7],
-                    data[8],data[9],data[10],data[11],
-                    data[12],data[13],data[14],data[15]);
+                    v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7],
+                    v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15]);
                 Switch_LogWrite(trace);
             }
         }
 #endif
-        R_HW_SetVertexShaderConstant(
-            context.state->prim.device, routingData->dest, data,
-            routingData->u.codeConst.rowCount);
+        R_HW_SetVertexShaderConstant(context.state->prim.device, routingData->dest, data, routingData->u.codeConst.rowCount);
     }
 }
 
