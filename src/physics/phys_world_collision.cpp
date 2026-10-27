@@ -284,7 +284,7 @@ void __cdecl CM_TestGeomInLeafBrushNode(cLeaf_t *leaf, const objInfo *input, Res
         input->bounds[1],
         1,
         input->clipMask,
-        (void(__cdecl *)(const cbrush_t *, void *))Phys_TestGeomInBrush,
+        Phys_TestGeomInBrush,
         &io);
 }
 
