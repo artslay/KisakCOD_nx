@@ -2089,6 +2089,9 @@ void __cdecl ODE_CollideSimpleSpaceWithGeomNoAABBTest(dxSpace *space, dxGeom *ge
 
 void __cdecl Phys_RunFrame(int localClientNum, PhysWorld worldIndex, float seconds)
 {
+#ifdef __SWITCH__
+    Switch_SetPhysicsCrashStage("run_frame_entry", worldIndex, localClientNum);
+#endif
     float scale; // [esp+4h] [ebp-80h]
     float value; // [esp+Ch] [ebp-78h]
     dxWorld *world; // [esp+6Ch] [ebp-18h]
@@ -2145,6 +2148,9 @@ void __cdecl Phys_RunFrame(int localClientNum, PhysWorld worldIndex, float secon
     frameInfo.worldIndex = worldIndex;
     {
         PROF_SCOPED("Phys_Collide");
+#ifdef __SWITCH__
+        Switch_SetPhysicsCrashStage("space_collide", worldIndex, localClientNum);
+#endif
         if (phys_interBodyCollision->current.enabled)
             dSpaceCollide(physGlob.space[worldIndex], &frameInfo, Phys_NearCallback);
         if (physGlob.worldData[worldIndex].collisionCallback)
