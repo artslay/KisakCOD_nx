@@ -186,12 +186,6 @@ char __cdecl MSS_Init()
     g_snd.playback_channels = requestedChannels;
     alGlob.isMultiChannel = requestedChannels > 2;
 
-    if (!hasOutputMode && outputConfiguration >= 3)
-    {
-        Com_Printf(
-            CON_CHANNEL_SOUND,
-            "OpenAL backend does not expose ALC_SOFT_output_mode; using stereo engine mix\n");
-    }
 
     g_snd.timescale = 1.0;
     return 1;
