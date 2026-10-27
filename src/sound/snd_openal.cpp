@@ -122,50 +122,71 @@ char __cdecl MSS_Init()
     g_snd.playback_rate = hertz + hertz / 2;
     if (g_snd.playback_rate >= 0xAC44)
         g_snd.playback_rate = 0x7FFFFFFF;
-    g_snd.playback_channels = 2;
+    const int outputConfiguration = snd_outputConfiguration->current.integer;
+    g_snd.playback_channels = (outputConfiguration == 1) ? 1 : 2;
     alGlob.isMultiChannel = false;
+
+    ALCint actualMode = 0x19AD; // ALC_ANY_SOFT
     if (hasOutputMode)
-    {
-        ALCint actualMode = 0x19AD; // ALC_ANY_SOFT
         alcGetIntegerv(alGlob.device, outputModeToken, 1, &actualMode);
 
-        int requestedChannels = 2;
+    const bool hasMultiChannelFormats =
+        alIsExtensionPresent("AL_EXT_MCFORMATS") == AL_TRUE;
+    const bool hasQuadFormat = hasMultiChannelFormats &&
+        alGetEnumValue("AL_FORMAT_QUAD16") > 0;
+    const bool has51Format = hasMultiChannelFormats &&
+        alGetEnumValue("AL_FORMAT_51CHN16") > 0;
+
+    int requestedChannels = 2;
+    if (outputConfiguration == 1)
+    {
+        // Mono can also be honored by mixing to a mono buffer if the backend cannot
+        // switch its physical output mode.
+        requestedChannels = 1;
+    }
+    else if (outputConfiguration == 2)
+    {
+        requestedChannels = 2;
+    }
+    else if (outputConfiguration == 3)
+    {
+        requestedChannels = hasOutputMode && actualMode == 0x1503 && hasQuadFormat ? 4 : 2;
+        if (requestedChannels != 4)
+            Com_Printf(CON_CHANNEL_SOUND,
+                "OpenAL could not select quad output; falling back to stereo mix\n");
+    }
+    else if (outputConfiguration == 4)
+    {
+        requestedChannels = hasOutputMode && actualMode == 0x1504 && has51Format ? 6 : 2;
+        if (requestedChannels != 6)
+            Com_Printf(CON_CHANNEL_SOUND,
+                "OpenAL could not select 5.1 output; falling back to stereo mix\n");
+    }
+    else
+    {
+        // "Windows default" follows the device's current output mode where it is
+        // representable. Unknown and 6.1/7.1 modes use a stereo engine mix.
         switch (actualMode)
         {
         case 0x1500: // mono
             requestedChannels = 1;
             break;
         case 0x1503: // quad
-            requestedChannels = 4;
+            requestedChannels = hasQuadFormat ? 4 : 2;
             break;
         case 0x1504: // 5.1
-            requestedChannels = 6;
+            requestedChannels = has51Format ? 6 : 2;
             break;
-        case 0x1501: // stereo
-        case 0x19AE: // basic stereo
-        case 0x19AF: // UHJ stereo
-        case 0x19B2: // HRTF stereo
         default:
             requestedChannels = 2;
             break;
         }
-
-        // Multi-channel source buffers are only valid when this implementation
-        // exposes the matching AL_EXT_MCFORMATS format. Never flag the device as
-        // multi-channel unless the PCM upload format can really be produced.
-        if (requestedChannels == 4 &&
-            (!alIsExtensionPresent("AL_EXT_MCFORMATS") ||
-             alGetEnumValue("AL_FORMAT_QUAD16") == 0))
-            requestedChannels = 2;
-        if (requestedChannels == 6 &&
-            (!alIsExtensionPresent("AL_EXT_MCFORMATS") ||
-             alGetEnumValue("AL_FORMAT_51CHN16") == 0))
-            requestedChannels = 2;
-
-        g_snd.playback_channels = requestedChannels;
-        alGlob.isMultiChannel = requestedChannels > 2;
     }
-    else if (snd_outputConfiguration->current.integer != 0)
+
+    g_snd.playback_channels = requestedChannels;
+    alGlob.isMultiChannel = requestedChannels > 2;
+
+    if (!hasOutputMode && outputConfiguration >= 3)
     {
         Com_Printf(
             CON_CHANNEL_SOUND,
