@@ -43,6 +43,18 @@ bool isDvarSystemActive;
 bool isLoadingAutoExecGlobalFlag;
 
 #ifdef __SWITCH__
+static const char *Switch_DvarSourceName(DvarSetSource source)
+{
+    switch (source)
+    {
+    case DVAR_SOURCE_INTERNAL: return "internal";
+    case DVAR_SOURCE_EXTERNAL: return "external";
+    case DVAR_SOURCE_SCRIPT: return "script";
+    case DVAR_SOURCE_DEVGUI: return "devgui";
+    default: return "unknown";
+    }
+}
+
 static bool Switch_DvarBadStringPointer(const char *ptr)
 {
     if (!ptr)
