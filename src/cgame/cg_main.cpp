@@ -944,27 +944,15 @@ void __cdecl CG_LoadWorld(int savegame)
 
 void __cdecl RegisterNightVisionAssets(int localClientNum)
 {
-    // Match the stock registration condition. The configstring-change path
-    // calls this function when night vision becomes available later.
-    if (*CL_GetConfigString(localClientNum, CS_NIGHTVISION) != '1')
-        return;
-
-    const bool needOverlay = cgMedia.nightVisionOverlay == nullptr;
-    const bool needIcon = cgMedia.hudIconNVG == nullptr;
-    const bool needModel = cgMedia.nightVisionGoggles == nullptr;
-    if (!needOverlay && !needIcon && !needModel)
-        return;
-
-    ProfLoad_Begin("Register night vision assets");
-    if (needOverlay)
+    if (*CL_GetConfigString(localClientNum, CS_NIGHTVISION) == '1')
+    {
+        ProfLoad_Begin("Register night vision assets");
         cgMedia.nightVisionOverlay = Material_RegisterHandle("nightvision_overlay_goggles", IMAGE_TRACK_HUD);
-    if (needIcon)
         cgMedia.hudIconNVG = Material_RegisterHandle("hud_icon_nvg", IMAGE_TRACK_HUD);
-    if (needModel)
         cgMedia.nightVisionGoggles = R_RegisterModel("viewmodel_NVG");
-    ProfLoad_End();
+        ProfLoad_End();
+    }
 }
-
 void __cdecl CG_RegisterGraphics(int localClientNum, const char *mapname)
 {
     int i; // r29
