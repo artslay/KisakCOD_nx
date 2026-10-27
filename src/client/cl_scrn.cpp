@@ -23,6 +23,96 @@ extern "C" thread_local volatile uintptr_t g_switchFrameTailReached;
 extern "C" thread_local volatile uintptr_t g_switchFrameAfterDrawReached;
 extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldAddress;
 extern "C" thread_local volatile uintptr_t g_switchFrameDrawFieldCaller;
+extern std::atomic<uint64_t> g_switchGpuDrawCommandSerial;
+
+namespace
+{
+std::atomic<bool> g_switchPostCinematicRenderTraceActive{false};
+std::atomic<uint64_t> g_switchPostCinematicTraceStartFrame{0};
+std::atomic<uint64_t> g_switchPostCinematicTraceStartDrawSerial{0};
+
+void Switch_WritePostCinematicRenderTrace(
+    const char *phase, const char *detail, bool requireActive)
+{
+    if (requireActive &&
+        !g_switchPostCinematicRenderTraceActive.load(std::memory_order_relaxed))
+        return;
+
+    const uint64_t frame =
+        g_switchScreenFrameSequence.load(std::memory_order_relaxed);
+    const uint64_t startFrame =
+        g_switchPostCinematicTraceStartFrame.load(std::memory_order_relaxed);
+    const uint64_t drawSerial =
+        g_switchGpuDrawCommandSerial.load(std::memory_order_relaxed);
+    const uint64_t startDrawSerial =
+        g_switchPostCinematicTraceStartDrawSerial.load(std::memory_order_relaxed);
+    char trace[1024];
+    std::snprintf(
+        trace, sizeof(trace),
+        "[KisakCOD][POST-CINE RENDER TRACE] frame=%llu sinceSkip=%llu phase=%s frameStage=%s drawSerial=%llu drawsSinceSkip=%llu detail=%s\\n",
+        static_cast<unsigned long long>(frame),
+        static_cast<unsigned long long>(frame >= startFrame ? frame - startFrame : 0),
+        phase ? phase : "(unknown)",
+        g_switchFrameStage ? g_switchFrameStage : "(unknown)",
+        static_cast<unsigned long long>(drawSerial),
+        static_cast<unsigned long long>(drawSerial >= startDrawSerial ? drawSerial - startDrawSerial : 0),
+        detail ? detail : "-");
+    Switch_LogWrite(trace);
+}
+}
+
+extern "C" void Switch_BeginPostCinematicRenderTrace(const char *reason)
+{
+    if (g_switchPostCinematicRenderTraceActive.load(std::memory_order_relaxed))
+    {
+        Switch_WritePostCinematicRenderTrace("skip_again", reason, true);
+        return;
+    }
+
+    g_switchPostCinematicTraceStartFrame.store(
+        g_switchScreenFrameSequence.load(std::memory_order_relaxed),
+        std::memory_order_relaxed);
+    g_switchPostCinematicTraceStartDrawSerial.store(
+        g_switchGpuDrawCommandSerial.load(std::memory_order_relaxed),
+        std::memory_order_relaxed);
+    g_switchPostCinematicRenderTraceActive.store(true, std::memory_order_release);
+    Switch_WritePostCinematicRenderTrace("skip_begin", reason, true);
+}
+
+extern "C" bool Switch_IsPostCinematicRenderTraceActive(void)
+{
+    return g_switchPostCinematicRenderTraceActive.load(std::memory_order_acquire);
+}
+
+extern "C" void Switch_LogPostCinematicRenderTrace(
+    const char *phase, const char *detail)
+{
+    Switch_WritePostCinematicRenderTrace(phase, detail, true);
+}
+
+extern "C" void Switch_PostCinematicRenderTracePresent(
+    int result, const char *detail)
+{
+    if (!g_switchPostCinematicRenderTraceActive.load(std::memory_order_acquire))
+        return;
+
+    char resultDetail[512];
+    std::snprintf(
+        resultDetail, sizeof(resultDetail), "vkResult=%d %s",
+        result, detail ? detail : "-");
+    Switch_WritePostCinematicRenderTrace("vk_present_result", resultDetail, true);
+
+    const uint64_t drawSerial =
+        g_switchGpuDrawCommandSerial.load(std::memory_order_relaxed);
+    const uint64_t startDrawSerial =
+        g_switchPostCinematicTraceStartDrawSerial.load(std::memory_order_relaxed);
+    if (result == 0 && drawSerial > startDrawSerial &&
+        g_switchPostCinematicRenderTraceActive.exchange(false, std::memory_order_acq_rel))
+    {
+        Switch_WritePostCinematicRenderTrace(
+            "render_confirmed_present_success_with_gpu_draw", resultDetail, false);
+    }
+}
 
 #endif
 #include <ui/ui.h>
@@ -574,6 +664,17 @@ void SCR_UpdateFrame()
 #ifdef __SWITCH__
     g_switchScreenFrameSequence.fetch_add(1, std::memory_order_relaxed);
     g_switchFrameStage = "frame/scr/begin";
+    char postCineFrameTrace[320];
+    std::snprintf(
+        postCineFrameTrace, sizeof(postCineFrameTrace),
+        "conn=%d fullscreen=%d menu=%d uiStarted=%d cineStarted=%d cineFinished=%d",
+        static_cast<int>(clientUIActives[0].connectionState),
+        UI_IsFullscreen() ? 1 : 0,
+        UI_GetActiveMenu(0),
+        cls.uiStarted ? 1 : 0,
+        R_Cinematic_IsStarted() ? 1 : 0,
+        R_Cinematic_IsFinished() ? 1 : 0);
+    Switch_LogPostCinematicRenderTrace("screen_frame_begin", postCineFrameTrace);
 #endif
     //Profile_Begin(18);
     //Profile_Begin(19);
@@ -595,6 +696,15 @@ void SCR_UpdateFrame()
     refreshedUI = CL_CGameRendering();
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/scr/cgame_render_done";
+    char postCineCgameTrace[256];
+    std::snprintf(
+        postCineCgameTrace, sizeof(postCineCgameTrace),
+        "refreshedUI=%d conn=%d fullscreen=%d menu=%d",
+        refreshedUI,
+        static_cast<int>(clientUIActives[0].connectionState),
+        UI_IsFullscreen() ? 1 : 0,
+        UI_GetActiveMenu(0));
+    Switch_LogPostCinematicRenderTrace("cgame_render_return", postCineCgameTrace);
 #endif
     if (Sys_IsMainThread() && !refreshedUI)
     {
@@ -616,6 +726,16 @@ void SCR_UpdateFrame()
 #ifdef __SWITCH__
     g_switchFrameAfterDrawReached = 1;
     g_switchFrameStage = "frame/scr/draw_field_done";
+    char postCineDrawFieldTrace[256];
+    std::snprintf(
+        postCineDrawFieldTrace, sizeof(postCineDrawFieldTrace),
+        "tailReached=%lu afterDrawReached=%lu conn=%d fullscreen=%d menu=%d",
+        static_cast<unsigned long>(g_switchFrameTailReached),
+        static_cast<unsigned long>(g_switchFrameAfterDrawReached),
+        static_cast<int>(clientUIActives[0].connectionState),
+        UI_IsFullscreen() ? 1 : 0,
+        UI_GetActiveMenu(0));
+    Switch_LogPostCinematicRenderTrace("draw_screen_field_return", postCineDrawFieldTrace);
 #endif
     if (clientUIActives[0].connectionState == CA_ACTIVE)
     {
@@ -651,6 +771,18 @@ void SCR_UpdateFrame()
     g_switchFrameStage = "frame/scr/issue_commands";
 #endif
     R_IssueRenderCommands(0xFFFFFFFF);
+#ifdef __SWITCH__
+    g_switchFrameStage = "frame/scr/issue_commands_done";
+    char postCineIssueTrace[256];
+    std::snprintf(
+        postCineIssueTrace, sizeof(postCineIssueTrace),
+        "conn=%d fullscreen=%d menu=%d stage=%s",
+        static_cast<int>(clientUIActives[0].connectionState),
+        UI_IsFullscreen() ? 1 : 0,
+        UI_GetActiveMenu(0),
+        g_switchFrameStage ? g_switchFrameStage : "(unknown)");
+    Switch_LogPostCinematicRenderTrace("issue_commands_return", postCineIssueTrace);
+#endif
 
     //Profile_EndInternal(0);
 #ifdef KISAK_XBOX
