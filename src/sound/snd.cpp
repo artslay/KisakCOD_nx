@@ -1,4 +1,7 @@
 #include <universal/q_shared.h>
+#ifdef KISAK_OPENAL
+#include <chrono>
+#endif
 #include "snd_local.h"
 #include "snd_public.h"
 #include <qcommon/mem_track.h>
@@ -2813,7 +2816,13 @@ void __cdecl SND_Update()
     if (g_snd.Initialized2d)
     {
         PROF_SCOPED("SND_Update");
+#ifdef KISAK_OPENAL
+        // OpenAL has no portable mixer-thread CPU query. Measure the engine-side
+        // audio update work instead of reporting a fabricated constant zero.
+        const auto soundUpdateStart = std::chrono::steady_clock::now();
+#else
         g_snd.cpu = SND_GetDriverCPUPercentage();
+#endif
         if (com_statmon->current.enabled && SND_ShouldGiveCpuWarning())
             StatMon_Warning(2, 3000, "code_warning_soundcpu");
         int v0 = Sys_Milliseconds();
@@ -2841,6 +2850,18 @@ void __cdecl SND_Update()
         SND_UpdatePhysics();
         SND_DriverPostUpdate();
         DebugDrawWorldSounds(snd_draw3D->current.integer);
+#ifdef KISAK_OPENAL
+        const auto soundUpdateElapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - soundUpdateStart).count();
+        const int64_t frameDurationUs =
+            static_cast<int64_t>(frametime > 0 ? frametime : 1) * 1000;
+        int64_t cpuPercent = (soundUpdateElapsedUs * 100) / frameDurationUs;
+        if (cpuPercent < 0)
+            cpuPercent = 0;
+        if (cpuPercent > 100)
+            cpuPercent = 100;
+        g_snd.cpu = static_cast<int>(cpuPercent);
+#endif
     }
 }
 
