@@ -9534,7 +9534,12 @@ void __cdecl Menu_PaintAll(UiContext *dc)
         menu = dc->menuStack[menuIndex];
         if (!menu)
             MyAssertHandler(".\\ui\\ui_shared.cpp", 6124, 0, "%s", "menu");
-        if (menu->fullScreen)
+
+        // Closed menus can remain in the Switch menu stack during cinematic
+        // transitions. A hidden fullscreen entry must not occlude the visible
+        // menus beneath it, or Menu_PaintAll can submit a completely black frame.
+        if (menu->fullScreen &&
+            Window_IsVisible(dc->localClientNum, &menu->window))
         {
             drawStart = menuIndex;
             anyFullscreen = 1;
