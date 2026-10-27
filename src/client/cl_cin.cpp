@@ -153,16 +153,28 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
 #endif
 
 #ifdef __SWITCH__
+        bool continueMapLoadingCinematic = false;
         if (switchMapLoadingCinematicActive)
         {
-            // The load screen may transition CA_LOADING -> CA_ACTIVE before
-            // its movie reaches EOF. Retain completion across that transition.
-            switchMapLoadingCinematicFinished = true;
-            switchMapLoadingCinematicActive = false;
-            Switch_LogWrite(
-                cinematicFinished
-                    ? "[KisakCOD][CIN LOAD] loading cinematic reached EOF\n"
-                    : "[KisakCOD][CIN LOAD] loading cinematic skipped by input\n");
+            // A skipped loading clip may have another cinematic queued behind
+            // it. Preserve the loading-cinematic lifecycle and advance the
+            // queue, just as the natural-EOF path does in SCR_DrawCinematic.
+            if (!cinematicFinished && hasQueuedNextPlayback)
+            {
+                continueMapLoadingCinematic = true;
+                Switch_LogWrite("[KisakCOD][CIN LOAD] skipped clip; continuing queued movie\n");
+            }
+            else
+            {
+                // The load screen may transition CA_LOADING -> CA_ACTIVE before
+                // its movie reaches EOF. Retain completion across that transition.
+                switchMapLoadingCinematicFinished = true;
+                switchMapLoadingCinematicActive = false;
+                Switch_LogWrite(
+                    cinematicFinished
+                        ? "[KisakCOD][CIN LOAD] loading cinematic reached EOF\n"
+                        : "[KisakCOD][CIN LOAD] loading cinematic skipped by input\n");
+            }
         }
         else if (cinematicFinished &&
                  CL_GetLocalClientConnectionState(localClientNum) == CA_LOADING)
@@ -172,6 +184,13 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
         }
 #endif
         R_Cinematic_StopPlayback();
+#ifdef __SWITCH__
+        if (continueMapLoadingCinematic)
+        {
+            R_Cinematic_StartNextPlayback();
+            Switch_LogWrite("[KisakCOD][CIN LOAD] advanced to queued movie after skip\n");
+        }
+#endif
 
         if (CL_GetLocalClientConnectionState(localClientNum) == CA_CINEMATIC)
         {
