@@ -636,12 +636,9 @@ void __cdecl CL_MapLoading_StartCinematic(const char *mapname, float volume)
 #endif
     R_Cinematic_StartPlayback(movieName, 5, volume);
 #ifdef __SWITCH__
-    // Map-load cinematics are started directly through the renderer, not the
-    // "cinematic" console command. Give them their own skippable lifecycle so
-    // finishing the map load does not silently cancel a still-playing movie.
-    cin_skippable = 1;
-    if (movieName[0] != '\0')
-        CL_PrepareCinematicSkipInput(0);
+    // Track the loading movie for rendering and load/menu handoff only.
+    // The stock engine does not route skip input from CA_LOADING to cinematic
+    // stop handling, and map loading must not make that movie skippable.
     SCR_SetMapLoadingCinematicActive(movieName[0] != '\0');
 #endif
 }
