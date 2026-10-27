@@ -1210,11 +1210,18 @@ uint8_t SwitchEffectiveShaderElementType(
     const _D3DVERTEXELEMENT9 &element,
     uint32_t streamStride = 0)
 {
-    // GfxWorldVertex has xyz at byte 0 and binormalSign at byte 12.
-    // A legacy material-routing declaration can describe POSITION as FLOAT4,
-    // but fetching four components here incorrectly uses binormalSign as
-    // homogeneous position.w (often -1), clipping otherwise valid world tris.
-    // The real 44-byte physical layout must override that semantic route.
+    // GfxPackedVertex and GfxWorldVertex both begin with xyz at byte 0 and
+    // binormalSign at byte 12. Their D3D declaration is a legacy semantic route;
+    // it may label POSITION as FLOAT4 even though the fourth physical component
+    // is not homogeneous W. Expose XYZ only, so Vulkan supplies W=1 instead of
+    // interpreting binormalSign (often -1) as position.w. Apply this narrowly
+    // to the known 32-byte packed-model ABI; world vertices use the 44-byte case.
+    if (decl && decl->switchVertDeclType == 1u &&
+        element.Stream == 0 && streamStride == 32u &&
+        element.Offset == 0 && element.Usage == 0 &&
+        element.UsageIndex == 0 && element.Type == D3DDECLTYPE_FLOAT4)
+        return D3DDECLTYPE_FLOAT3;
+
     if (element.Stream == 0 && streamStride == 44u &&
         element.Offset == 0 && element.Usage == 0 &&
         element.UsageIndex == 0)
