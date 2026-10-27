@@ -298,15 +298,81 @@ char __cdecl Ragdoll_BindDef(uint32_t ragdollDef)
 
 bool __cdecl Ragdoll_ValidateDef(uint32_t ragdollDef)
 {
-    if (ragdollDef >= 2)
+    if (ragdollDef >= ARRAY_COUNT(ragdollDefs))
+    {
         MyAssertHandler(
             ".\\ragdoll\\ragdoll.cpp",
             257,
             0,
             "ragdollDef doesn't index RAGDOLL_MAX_DEFS\n\t%i not in [0, %i)",
             ragdollDef,
-            2);
-    return ragdollDefs[ragdollDef].numBones != 0;
+            ARRAY_COUNT(ragdollDefs));
+        return false;
+    }
+
+    const RagdollDef *def = &ragdollDefs[ragdollDef];
+    if (def->numBones <= 0 ||
+        def->numBones > static_cast<int>(ARRAY_COUNT(def->boneDefs)) ||
+        def->numBaseLerpBones < 0 ||
+        def->numBaseLerpBones > static_cast<int>(ARRAY_COUNT(def->baseLerpBoneDefs)) ||
+        def->numJoints < 0 ||
+        def->numJoints > static_cast<int>(ARRAY_COUNT(def->jointDefs)) ||
+        def->numSelfPairs < 0 ||
+        def->numSelfPairs > static_cast<int>(ARRAY_COUNT(def->selfPairDefs)))
+    {
+        Com_PrintWarning(CON_CHANNEL_PHYS,
+            "Ragdoll: invalid definition counts (def=%u bones=%d lerp=%d joints=%d selfPairs=%d)\n",
+            ragdollDef, def->numBones, def->numBaseLerpBones,
+            def->numJoints, def->numSelfPairs);
+        return false;
+    }
+
+    // The hierarchy is topologically ordered: bone 0 is the only root,
+    // and every other bone points to an earlier bone.
+    for (int i = 0; i < def->numBones; ++i)
+    {
+        const int parent = def->boneDefs[i].parentBone;
+        if ((i == 0 && parent != -1) ||
+            (i > 0 && (parent < 0 || parent >= i)))
+        {
+            Com_PrintWarning(CON_CHANNEL_PHYS,
+                "Ragdoll: invalid hierarchy (def=%u bone=%d parent=%d)\n",
+                ragdollDef, i, parent);
+            return false;
+        }
+    }
+
+    for (int i = 0; i < def->numJoints; ++i)
+    {
+        const unsigned int bone = def->jointDefs[i].bone;
+        if (bone == 0 || bone >= static_cast<unsigned>(def->numBones) ||
+            def->boneDefs[bone].parentBone < 0 ||
+            static_cast<unsigned>(def->boneDefs[bone].parentBone) >= bone)
+        {
+            Com_PrintWarning(CON_CHANNEL_PHYS,
+                "Ragdoll: invalid joint parent (def=%u joint=%d bone=%u)\n",
+                ragdollDef, i, bone);
+            return false;
+        }
+    }
+
+    for (int i = 0; i < def->numSelfPairs; ++i)
+    {
+        const SelfPairDef *pair = &def->selfPairDefs[i];
+        if (pair->bones[0] >= def->numBones ||
+            pair->bones[1] >= def->numBones)
+        {
+            Com_PrintWarning(CON_CHANNEL_PHYS,
+                "Ragdoll: invalid self-collision pair (def=%u pair=%d bones=%u,%u numBones=%d)\n",
+                ragdollDef, i,
+                static_cast<unsigned>(pair->bones[0]),
+                static_cast<unsigned>(pair->bones[1]),
+                def->numBones);
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void __cdecl Ragdoll_Remove(int ragdoll)
@@ -958,9 +1024,11 @@ void __cdecl Ragdoll_Selfpair_f()
                 {
                     v1 = Cmd_Argv(i + 2);
                     pair->bones[i] = atoi(v1);
-                    if (pair->bones[i] > def->numBones)
+                    if (pair->bones[i] >= def->numBones)
                     {
-                        Com_Printf(CON_CHANNEL_CLIENT, "Ragdoll: Bad self collision pair bone %d\n", pair->bones[i]);
+                        Com_Printf(CON_CHANNEL_CLIENT,
+                            "Ragdoll: Bad self collision pair bone %u (numBones=%d)\n",
+                            static_cast<unsigned>(pair->bones[i]), def->numBones);
                         return;
                     }
                 }
