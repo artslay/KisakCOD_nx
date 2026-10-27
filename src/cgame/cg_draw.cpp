@@ -1194,7 +1194,7 @@ void __cdecl CG_Draw2D(int localClientNum)
         char trace[288];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u client=%d pmType=%d cubemap=%d draw2D=%d drawHUD=%d nextSnap=%p\\n",
+            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u client=%d pmType=%d cubemap=%d draw2D=%d drawHUD=%d nextSnap=%p\n",
             switchHudEntryTraceFrame,
             localClientNum,
             static_cast<int>(cgArray[0].predictedPlayerState.pm_type),
