@@ -27,6 +27,10 @@
 
 
 #ifdef __SWITCH__
+// Map-loading cinematics bypass CA_CINEMATIC, but must still accept skip input.
+extern bool SCR_IsMapLoadingCinematicActive();
+extern void SCR_StopCinematic(int32_t localClientNum);
+
 // If the user skips a cinematic while holding a pad button, the next movie
 // must not treat that still-held button as a second skip after UI reset.
 static bool switchCinematicSkipBlockedUntilRelease = false;
@@ -1628,7 +1632,8 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
         clcState = CL_GetLocalClientConnectionState(localClientNum);
 #ifdef __SWITCH__
         if (switchCinematicSkipBlockedUntilRelease &&
-            clcState == CA_CINEMATIC &&
+            (clcState == CA_CINEMATIC ||
+             (clcState == CA_LOADING && SCR_IsMapLoadingCinematicActive())) &&
             !clUI->keyCatchers &&
             (key == K_MOUSE1 || key < K_ASCII_FIRST))
         {
@@ -1927,7 +1932,8 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
         clcState = CL_GetLocalClientConnectionState(localClientNum);
 #ifdef __SWITCH__
         if (switchCinematicSkipBlockedUntilRelease &&
-            clcState == CA_CINEMATIC &&
+            (clcState == CA_CINEMATIC ||
+             (clcState == CA_LOADING && SCR_IsMapLoadingCinematicActive())) &&
             !clUI->keyCatchers &&
             (key == K_MOUSE1 || key < K_ASCII_FIRST))
         {
@@ -1937,7 +1943,11 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
         if (down)
         {
             if ((key == K_MOUSE1 || key < K_ASCII_FIRST)
-                && (cls.demoplaying || clcState == CA_CINEMATIC || clcState == CA_LOGO)
+                && (cls.demoplaying || clcState == CA_CINEMATIC || clcState == CA_LOGO
+#ifdef __SWITCH__
+                    || (clcState == CA_LOADING && SCR_IsMapLoadingCinematicActive())
+#endif
+                    )
                 && !clUI->keyCatchers)
             {
                 Dvar_SetString(nextdemo, (char *)"");
@@ -1952,6 +1962,22 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
                     Con_ToggleConsole();
                 return;
             }
+
+            // A loading cinematic runs in CA_LOADING rather than CA_CINEMATIC.
+            // Stop just the movie: changing connection state or reopening the
+            // frontend here would interrupt the map load.
+#ifdef __SWITCH__
+            if (clcState == CA_LOADING &&
+                SCR_IsMapLoadingCinematicActive() &&
+                (clUI->keyCatchers & KEYCATCH_MESSAGE) == 0)
+            {
+                if ((clUI->keyCatchers & KEYCATCH_CONSOLE) != 0)
+                    Con_CancelAutoComplete();
+                CL_BlockCinematicSkipUntilRelease();
+                SCR_StopCinematic(localClientNum);
+                return;
+            }
+#endif
 
             // A cinematic switches the UI off, but startup/menu transitions
             // can leave KEYCATCH_UI active for a frame. Handle Escape as a
