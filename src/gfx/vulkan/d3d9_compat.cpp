@@ -4711,8 +4711,24 @@ HRESULT KisakVkBuffer::Lock(
         }
         if (flags & D3DLOCK_DISCARD)
         {
-            std::fill(shadow.begin(), shadow.end(), 0);
-            shadowInitialized = true;
+            if (offset == 0 && lockSize == size)
+            {
+                // A full-buffer discard makes every byte part of this lock
+                // undefined; initialize the complete shadow for deterministic
+                // subsequent partial writes.
+                std::fill(shadow.begin(), shadow.end(), 0);
+                shadowInitialized = true;
+            }
+            else if (!shadowInitialized)
+            {
+                // CoD sometimes uses DISCARD for a partial range and relies on
+                // bytes outside that range remaining unchanged. Preserve the
+                // current backing on the first such lock; later locks retain
+                // the CPU shadow, including queued updates not yet copied to
+                // the mapped allocation.
+                std::memcpy(shadow.data(), mapped, size);
+                shadowInitialized = true;
+            }
         }
         else if (!shadowInitialized)
         {
@@ -4760,11 +4776,28 @@ HRESULT KisakVkBuffer::Unlock()
             // erases those ranges, including data needed by frontend UI draws.
             VulkanBackend *backend = GetVulkanBackend();
 
+            // Vulkan buffer copies require 4-byte aligned ranges. Dynamic
+            // index buffers may be updated in 2-byte increments, so widen the
+            // copy to aligned word boundaries while sourcing the untouched edge
+            // bytes from the authoritative CPU shadow.
+            const VkDeviceSize uploadOffset =
+                static_cast<VkDeviceSize>(lockOffset) & ~VkDeviceSize(3u);
+            const VkDeviceSize requestedEnd =
+                static_cast<VkDeviceSize>(lockOffset) + lockSize;
+            const VkDeviceSize uploadEnd =
+                (requestedEnd + 3u) & ~VkDeviceSize(3u);
+            const bool alignedRangeFits = uploadEnd <= size;
+            const size_t uploadSize = alignedRangeFits
+                ? static_cast<size_t>(uploadEnd - uploadOffset)
+                : 0u;
+
             // Keep earlier draws, the upload, and later draws in one command
             // buffer. QueueBufferUpdate adds the required transfer barriers;
-            // use the blocking fallback only for unsupported ranges or pressure.
-            const bool queued = backend && backend->QueueBufferUpdate(
-                buffer, lockOffset, shadow.data() + lockOffset, lockSize);
+            // use the synchronized fallback only if staging genuinely cannot
+            // accommodate this aligned range.
+            const bool queued = backend && alignedRangeFits &&
+                backend->QueueBufferUpdate(
+                    buffer, uploadOffset, shadow.data() + uploadOffset, uploadSize);
             if (!queued)
             {
 #ifdef __SWITCH__
