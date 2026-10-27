@@ -369,7 +369,44 @@ uint32_t __cdecl Scr_GetClosestSourcePosOfType(uint32_t bufferIndex, uint32_t so
 
 uint32_t __cdecl Scr_GetPrevSourcePos(const char *codePos, uint32_t index)
 {
-    return scrParserGlob.sourcePosLookup[index + Scr_GetPrevSourcePosOpcodeLookup(codePos)->sourcePosIndex].sourcePos;
+    OpcodeLookup *lookup;
+    uint32_t sourcePosIndex;
+
+    lookup = Scr_GetPrevSourcePosOpcodeLookup(codePos);
+    if (!lookup || !scrParserGlob.sourcePosLookup || !scrParserGlob.sourcePosLookupLen)
+        return 0;
+
+    if (lookup->sourcePosIndex >= scrParserGlob.sourcePosLookupLen ||
+        !lookup->sourcePosCount)
+    {
+        Com_PrintError(
+            CON_CHANNEL_PARSERSCRIPT,
+            "[KisakCOD][SCRIPT TRACE] invalid source lookup codePos=%p sourcePosIndex=%u sourcePosCount=%u lookupLen=%u\\n",
+            (const void *)codePos,
+            lookup->sourcePosIndex,
+            lookup->sourcePosCount,
+            scrParserGlob.sourcePosLookupLen);
+        return 0;
+    }
+
+    // RuntimeError supplies an operand index. A stale error_index must not be
+    // allowed to turn script-error reporting into an out-of-bounds table read.
+    if (index >= lookup->sourcePosCount ||
+        index >= scrParserGlob.sourcePosLookupLen - lookup->sourcePosIndex)
+    {
+        Com_PrintError(
+            CON_CHANNEL_PARSERSCRIPT,
+            "[KisakCOD][SCRIPT TRACE] invalid operand source index codePos=%p index=%u sourcePosIndex=%u sourcePosCount=%u lookupLen=%u; using base source position\\n",
+            (const void *)codePos,
+            index,
+            lookup->sourcePosIndex,
+            lookup->sourcePosCount,
+            scrParserGlob.sourcePosLookupLen);
+        index = 0;
+    }
+
+    sourcePosIndex = lookup->sourcePosIndex + index;
+    return scrParserGlob.sourcePosLookup[sourcePosIndex].sourcePos;
 }
 
 OpcodeLookup *__cdecl Scr_GetPrevSourcePosOpcodeLookup(const char *codePos)
@@ -378,30 +415,32 @@ OpcodeLookup *__cdecl Scr_GetPrevSourcePosOpcodeLookup(const char *codePos)
     uint32_t middle; // [esp+4h] [ebp-8h]
     uint32_t high; // [esp+8h] [ebp-4h]
 
-    iassert(Scr_IsInOpcodeMemory(codePos));
-    iassert(scrParserGlob.opcodeLookup);
+    if (!codePos || !Scr_IsInOpcodeMemory(codePos) ||
+        !scrParserGlob.opcodeLookup || !scrParserGlob.opcodeLookupLen)
+        return 0;
 
     low = 0;
     high = scrParserGlob.opcodeLookupLen - 1;
 
     while (low <= high)
     {
-        middle = (high + low) / 2;
+        middle = low + (high - low) / 2;
 
         if (codePos < scrParserGlob.opcodeLookup[middle].codePos)
         {
+            if (!middle)
+                break;
             high = middle - 1;
         }
         else
         {
             low = middle + 1;
 
-            if (middle + 1 == scrParserGlob.opcodeLookupLen || codePos < scrParserGlob.opcodeLookup[low].codePos)
+            if (middle + 1 == scrParserGlob.opcodeLookupLen ||
+                codePos < scrParserGlob.opcodeLookup[low].codePos)
                 return &scrParserGlob.opcodeLookup[middle];
         }
     }
-    if (!alwaysfails)
-        MyAssertHandler(".\\script\\scr_parser.cpp", 450, 0, "unreachable");
     return 0;
 }
 
@@ -835,45 +874,94 @@ uint32_t __cdecl Scr_GetSourceBuffer(const char *codePos)
 
 void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
 {
-    char *v3; // eax
-    uint32_t PrevSourcePos; // eax
-    char *v5; // eax
-    uint32_t bufferIndex; // [esp+0h] [ebp-4h]
+    uint32_t PrevSourcePos; // [esp+4h] [ebp-8h]
+    uint32_t bufferIndex; // [esp+0h] [ebp-Ch]
+    SourceBufferInfo *sourceBuffer;
 
     if (!codePos)
     {
-        Com_PrintMessage(channel, "<frozen thread>\n", 0);
+        Com_PrintMessage(channel, "<frozen thread>\\n", 0);
         return;
     }
     if (codePos == &g_EndPos)
     {
-        Com_PrintMessage(channel, "<removed thread>\n", 0);
+        Com_PrintMessage(channel, "<removed thread>\\n", 0);
+        return;
     }
-    else
+
+    if (scrVarPub.developer && scrVarPub.programBuffer)
     {
-        if (scrVarPub.developer)
+        if (!Scr_IsInOpcodeMemory(codePos) || !Scr_IsInOpcodeMemory(codePos - 1))
         {
-            if (scrVarPub.programBuffer && Scr_IsInOpcodeMemory(codePos))
-            {
-                bufferIndex = Scr_GetSourceBuffer(codePos - 1);
-                PrevSourcePos = Scr_GetPrevSourcePos(codePos - 1, index);
-                Scr_PrintSourcePos(
-                    channel,
-                    scrParserPub.sourceBufferLookup[bufferIndex].buf,
-                    scrParserPub.sourceBufferLookup[bufferIndex].sourceBuf,
-                    PrevSourcePos);
-                return;
-            }
-        }
-        else if (Scr_IsInOpcodeMemory(codePos - 1))
-        {
-            v3 = va("@ %d\n", codePos - scrVarPub.programBuffer);
-            Com_PrintMessage(channel, v3, 0);
+            Com_PrintError(
+                channel,
+                "<invalid script code position: %p; source trace omitted>\\n",
+                (const void *)codePos);
             return;
         }
-        v5 = va("%s\n\n", codePos);
-        Com_PrintMessage(channel, v5, 0);
+        if (!scrParserPub.sourceBufferLookup || !scrParserPub.sourceBufferLookupLen ||
+            !scrParserGlob.sourcePosLookup || !scrParserGlob.sourcePosLookupLen ||
+            !scrParserGlob.opcodeLookup || !scrParserGlob.opcodeLookupLen)
+        {
+            Com_PrintError(
+                channel,
+                "<script source lookup unavailable: codePos=%p>\\n",
+                (const void *)codePos);
+            return;
+        }
+
+        bufferIndex = Scr_GetSourceBuffer(codePos - 1);
+        if (bufferIndex >= scrParserPub.sourceBufferLookupLen)
+        {
+            Com_PrintError(
+                channel,
+                "<invalid script source buffer index: codePos=%p bufferIndex=%u bufferCount=%u>\\n",
+                (const void *)codePos,
+                bufferIndex,
+                scrParserPub.sourceBufferLookupLen);
+            return;
+        }
+
+        sourceBuffer = &scrParserPub.sourceBufferLookup[bufferIndex];
+        if (!sourceBuffer->buf || !sourceBuffer->sourceBuf || sourceBuffer->len < 0)
+        {
+            Com_PrintError(
+                channel,
+                "<script source buffer unavailable: codePos=%p bufferIndex=%u>\\n",
+                (const void *)codePos,
+                bufferIndex);
+            return;
+        }
+
+        PrevSourcePos = Scr_GetPrevSourcePos(codePos - 1, index);
+        if (PrevSourcePos > (uint32_t)sourceBuffer->len)
+        {
+            Com_PrintError(
+                channel,
+                "<script source position out of range: codePos=%p sourcePos=%u sourceLength=%d>\\n",
+                (const void *)codePos,
+                PrevSourcePos,
+                sourceBuffer->len);
+            return;
+        }
+
+        Scr_PrintSourcePos(channel, sourceBuffer->buf, sourceBuffer->sourceBuf, PrevSourcePos);
+        return;
     }
+
+    if (!scrVarPub.developer && Scr_IsInOpcodeMemory(codePos - 1))
+    {
+        char *offsetText = va("@ %d\\n", codePos - scrVarPub.programBuffer);
+        Com_PrintMessage(channel, offsetText, 0);
+        return;
+    }
+
+    // Outside a valid script opcode buffer, codePos is not guaranteed to be a
+    // null-terminated string (especially after script/fastfile teardown).
+    Com_PrintError(
+        channel,
+        "<script source text unavailable: codePos=%p>\\n",
+        (const void *)codePos);
 }
 
 void __cdecl Scr_PrintSourcePos(int channel, const char *filename, const char *buf, uint32_t sourcePos)
