@@ -186,7 +186,29 @@ extern "C" void Switch_DumpVulkanPipelineTraceOnCrash(void (*writeLine)(const ch
 
 static void Switch_LogCrashLine(const char *line)
 {
-    Switch_LogWrite(line);
+    // Crash reporting must not pass through normal diagnostic filtering or
+    // the deferred Switch-diagnostic queue. Write the captured report directly
+    // to stdout and the already-open log descriptor from the exception handler.
+    if (!line || !*line)
+        return;
+
+    const size_t len = std::strlen(line);
+    (void)::write(STDOUT_FILENO, line, len);
+
+    if (g_switchLogFd >= 0)
+    {
+        size_t written = 0;
+        while (written < len)
+        {
+            const ssize_t n = ::write(
+                g_switchLogFd,
+                line + written,
+                len - written);
+            if (n <= 0)
+                break;
+            written += static_cast<size_t>(n);
+        }
+    }
 }
 
 #if defined(KISAK_SWITCH_HEAP_TRACE)
