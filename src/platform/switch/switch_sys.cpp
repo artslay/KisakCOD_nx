@@ -3691,9 +3691,9 @@ static bool Switch_LogKeepKisakDiagnostic(const char *msg)
         return true;
 
     // Permit detailed sampler traces only when explicitly using developer mode.
-    if (Switch_LogDeveloperTraceEnabled() &&
-        (std::strncmp(msg, "[KisakCOD][MATERIAL SAMPLER]", std::strlen("[KisakCOD][MATERIAL SAMPLER]")) == 0 ||
-         std::strncmp(msg, "[KisakCOD][VK SAMPLER BOUND]", std::strlen("[KisakCOD][VK SAMPLER BOUND]")) == 0))
+    if ((std::strncmp(msg, "[KisakCOD][MATERIAL SAMPLER]", std::strlen("[KisakCOD][MATERIAL SAMPLER]")) == 0 ||
+         std::strncmp(msg, "[KisakCOD][VK SAMPLER BOUND]", std::strlen("[KisakCOD][VK SAMPLER BOUND]")) == 0) &&
+        Switch_LogDeveloperTraceEnabled())
         return true;
 
     // UI/bootstrap probes and register-allocation experiments are noisy and
