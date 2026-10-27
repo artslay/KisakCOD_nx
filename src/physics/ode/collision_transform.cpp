@@ -104,15 +104,13 @@ void dxGeomTransform::computeAABB()
 
 void dxGeomTransform::computeFinalTx()
 {
-  //dMULTIPLY0_331 (final_pos,R,obj->pos);
-  //dMULTIPLY0_331 (finalR, R, localR);
-  //dMULTIPLY0_333(final_R, R, obj->R);
-  //dMULTIPLY0_333(finalPos, R, localPos);
+  // Transform geoms in this port are placeable and attached to a body.
+  // Rebind the cached dxGeom pose pointers from that owning body before using
+  // them as matrix inputs; this keeps computeFinalTx tied to the body's current
+  // pose rather than dereferencing a stale/null cached R or pos pointer.
+  this->pos = this->body->info.pos;
+  this->R = this->body->info.R;
 
-  //Vec3Add(finalPos, pos, finalPos);
-  //final_pos[0] += pos[0];
-  //final_pos[1] += pos[1];
-  //final_pos[2] += pos[2];
   dMULTIPLY0_333(this->finalR, this->R, this->localR);
   dMULTIPLY0_331(this->finalPos, this->R, this->localPos);
   Vec3Add(this->finalPos, this->pos, this->finalPos);
