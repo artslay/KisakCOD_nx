@@ -16,6 +16,7 @@ bool cin_skippable;
 #ifdef __SWITCH__
 extern void CL_PrepareCinematicSkipInput(int localClientNum);
 extern void Switch_LogWrite(const char *msg);
+extern "C" void Switch_BeginPostCinematicRenderTrace(const char *reason);
 static bool switchMapLoadingCinematicFinished;
 static bool switchMapLoadingCinematicActive;
 
@@ -150,6 +151,14 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
         const bool hasNextCommand = nextCommand && nextCommand[0] != '\0';
 #ifdef __SWITCH__
         const bool hasQueuedNextPlayback = R_Cinematic_IsNextReady();
+        if (!cinematicFinished)
+        {
+            const char *traceReason =
+                hasNextCommand ? "skip with queued nextmap command" :
+                hasQueuedNextPlayback ? "skip with queued next cinematic" :
+                "skip without queued cinematic";
+            Switch_BeginPostCinematicRenderTrace(traceReason);
+        }
 #endif
 
 #ifdef __SWITCH__
