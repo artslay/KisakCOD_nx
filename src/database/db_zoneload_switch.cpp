@@ -592,8 +592,82 @@ void ConvertPackedModelTexCoordsForVulkan(
     }
 }
 
+static void FixupGfxWorldAabbTreeOffsets(GfxWorld *world)
+{
+    // OAT allocates each cell's serialized 44-byte GfxAabbTree records as a
+    // contiguous array of native Switch records. The generated loader fixes
+    // pointer fields but childrenOffset is a relative byte offset, not a
+    // pointer, so it still addresses the 32-bit serialized stride until here.
+    static_assert(sizeof(GfxAabbTree) == 56, "Switch GfxAabbTree ABI changed");
+    constexpr int32_t serializedStride = 44;
+
+    if (!world || !world->cells)
+        return;
+
+    for (uint32_t cellIndex = 0; cellIndex < world->dpvsPlanes.cellCount; ++cellIndex)
+    {
+        GfxCell &cell = world->cells[cellIndex];
+        if (!cell.aabbTree || cell.aabbTreeCount <= 0)
+            continue;
+
+        GfxAabbTree *const nodes = cell.aabbTree;
+        const uint32_t nodeCount = static_cast<uint32_t>(cell.aabbTreeCount);
+
+        // Validate all child ranges before rewriting offsets. Children remain
+        // in the same preorder array; only the runtime byte stride changes.
+        for (uint32_t nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex)
+        {
+            GfxAabbTree &node = nodes[nodeIndex];
+            if (!node.childCount)
+                continue;
+
+            const int32_t serializedOffset = node.childrenOffset;
+            if (serializedOffset <= 0 || serializedOffset % serializedStride != 0)
+            {
+                Com_Error(ERR_DROP,
+                    "GfxWorld %s cell %u has invalid serialized AABB child offset %d at node %u",
+                    world->name ? world->name : "<unnamed>",
+                    static_cast<unsigned>(cellIndex),
+                    serializedOffset,
+                    static_cast<unsigned>(nodeIndex));
+                return;
+            }
+
+            const uint32_t childDelta =
+                static_cast<uint32_t>(serializedOffset / serializedStride);
+            if (childDelta >= nodeCount - nodeIndex)
+            {
+                Com_Error(ERR_DROP,
+                    "GfxWorld %s cell %u has out-of-range AABB child offset %d at node %u of %u",
+                    world->name ? world->name : "<unnamed>",
+                    static_cast<unsigned>(cellIndex),
+                    serializedOffset,
+                    static_cast<unsigned>(nodeIndex),
+                    static_cast<unsigned>(nodeCount));
+                return;
+            }
+
+            const uint32_t firstChild = nodeIndex + childDelta;
+            if (node.childCount > nodeCount - firstChild)
+            {
+                Com_Error(ERR_DROP,
+                    "GfxWorld %s cell %u has %u children outside AABB array at node %u",
+                    world->name ? world->name : "<unnamed>",
+                    static_cast<unsigned>(cellIndex),
+                    static_cast<unsigned>(node.childCount),
+                    static_cast<unsigned>(nodeIndex));
+                return;
+            }
+
+            node.childrenOffset = static_cast<int32_t>(
+                childDelta * static_cast<uint32_t>(sizeof(GfxAabbTree)));
+        }
+    }
+}
+
 void FixupGfxWorld(GfxWorld *world)
 {
+    FixupGfxWorldAabbTreeOffsets(world);
     Load_VertexBuffer(&world->vd.worldVb, reinterpret_cast<uint8_t *>(world->vd.vertices), 44 * world->vertexCount);
     Load_VertexBuffer(&world->vld.layerVb, world->vld.data, world->vertexLayerDataSize);
 }
