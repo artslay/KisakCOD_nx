@@ -2440,9 +2440,9 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
             (channels != 1 && channels != 2) ||
             static_cast<uint64_t>(srcFrameCount) * channels * sizeof(int16_t) > mssSound->info.data_len)
         {
-            Com_PrintError(
-                CON_CHANNEL_SOUND,
-                "Cannot resample invalid sound data (frames=%u channels=%u rate=%u bytes=%u)\n",
+            Com_Error(
+                ERR_DROP,
+                "Cannot resample invalid sound data (frames=%u channels=%u rate=%u bytes=%u)",
                 static_cast<unsigned>(srcFrameCount),
                 static_cast<unsigned>(channels),
                 static_cast<unsigned>(srcRate),
@@ -2453,7 +2453,11 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         const uint64_t newDataLen64 =
             static_cast<uint64_t>(frameCount) * channels * sizeof(int16_t);
         if (newDataLen64 > UINT32_MAX)
+        {
+            Com_Error(ERR_DROP, "Resampled sound is too large (%llu bytes)",
+                static_cast<unsigned long long>(newDataLen64));
             return;
+        }
         const uint32_t newDataLen = static_cast<uint32_t>(newDataLen64);
 #ifdef __SWITCH__
         if (switchSoundTrace)
