@@ -549,7 +549,7 @@ void __cdecl ClientSpawn(gentity_s *ent)
     int viewmodelIndex; // r25
     int maxHealth; // r11
     int v7; // r11
-    long double v8; // fp2
+    double v8; // fp2
     int v9; // r11
     int time; // r11
     sentient_s *sentient; // r11
