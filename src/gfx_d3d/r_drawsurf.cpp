@@ -182,11 +182,15 @@ void R_EndCodeMeshVerts()
     // PackedTexCoords format. This code mesh is a directly locked 32-byte GPU
     // buffer, so it bypasses R_SetVertexData and must convert UVs before unlock.
     GfxMeshData *mesh = &frontEndDataOut->codeMesh;
+    const uint32_t safeUsed =
+        mesh->vb.used < mesh->vb.total ? mesh->vb.used : mesh->vb.total;
+    const uint32_t startUsed =
+        g_switchCodeMeshStartUsed < safeUsed ? g_switchCodeMeshStartUsed : safeUsed;
     if (mesh->vb.verts && mesh->vertSize == sizeof(GfxPackedVertex) &&
-        mesh->vb.used % mesh->vertSize == 0)
+        mesh->vertSize != 0u && safeUsed % mesh->vertSize == 0u)
     {
-        const uint32_t firstVertex = g_switchCodeMeshStartUsed / mesh->vertSize;
-        const uint32_t vertexCount = mesh->vb.used / mesh->vertSize;
+        const uint32_t firstVertex = startUsed / mesh->vertSize;
+        const uint32_t vertexCount = safeUsed / mesh->vertSize;
         auto *vertices = reinterpret_cast<GfxPackedVertex *>(mesh->vb.verts);
         for (uint32_t vertexIndex = firstVertex; vertexIndex < vertexCount; ++vertexIndex)
             vertices[vertexIndex].texCoord =
