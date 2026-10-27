@@ -148,19 +148,6 @@ void __cdecl Phys_Init()
         DVAR_NOFLAG,
         "The minimum momentum required to trigger impact sounds");
 
-    // The world-geometry collider reads this dvar directly. Bind it on every
-    // Phys_Init entry as well, rather than tying it to the ODE-world singleton:
-    // Phys_Init may be entered after the physics worlds have already been set up.
-    minx.value.max = FLT_MAX;
-    minx.value.min = 0.0f;
-    phys_narrowObjMaxLength = Dvar_RegisterFloat(
-        "phys_narrowObjMaxLength",
-        4.0f,
-        minx,
-        DVAR_NOFLAG,
-        "If a geom has a dimension less than this, then extra work will be done to prevent it fro"
-        "m falling into cracks (like between the wall and the floor)");
-
     if (!physInited)
     {
         memset((uint8_t *)&physGlob, 0, sizeof(physGlob));
@@ -394,6 +381,15 @@ void __cdecl Phys_Init()
             minw,
             DVAR_SAVED,
             "The radius around the player within which objects get awakened when gravity changes");
+        minx.value.max = FLT_MAX;
+        minx.value.min = 0.0f;
+        phys_narrowObjMaxLength = Dvar_RegisterFloat(
+            "phys_narrowObjMaxLength",
+            4.0f,
+            minx,
+            DVAR_NOFLAG,
+            "If a geom has a dimension less than this, then extra work will be done to prevent it fro"
+            "m falling into cracks (like between the wall and the floor)");
         Cmd_AddCommandInternal("phys_stop", Phys_Stop_f, &Phys_Stop_f_VAR);
         Cmd_AddCommandInternal("phys_go", Phys_Go_f, &Phys_Go_f_VAR);
         Phys_InitBrushmodelGeomClass();
@@ -1382,7 +1378,13 @@ void __cdecl Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t 
     impactVelocity = impactVelocity / (double)contactList->contactCount;
     scale = 1.0 / (double)contactList->contactCount;
     Vec3Scale(pos, scale, pos);
-    if (-phys_minImpactMomentum->current.value > impactVelocity * mass.mass)
+    const dvar_t *impactMomentumDvar =
+        (const dvar_t *)Dvar_FindVar("phys_minImpactMomentum");
+    if (!impactMomentumDvar)
+        impactMomentumDvar = phys_minImpactMomentum;
+    phys_minImpactMomentum = impactMomentumDvar;
+
+    if (-impactMomentumDvar->current.value > impactVelocity * mass.mass)
     {
         if (sndClass >= 0x32)
             MyAssertHandler(
