@@ -825,7 +825,15 @@ uint32_t __cdecl R_TessXModelSkinnedDrawSurfList(
     return drawSurfIndex;
 }
 
-void __cdecl R_DrawXModelSkinnedUncached(GfxCmdBufContext context, XSurface *xsurf, GfxPackedVertex *skinnedVert)
+// `skinnedVert` normally comes from R_SkinXModelCmd, which already
+// converts the native CoD4 packed UVs to IEEE binary16. The rigid fallback
+// below passes XSurface::verts0 directly instead, so its UVs still need the
+// packed-model conversion while copying into the dynamic vertex buffer.
+void __cdecl R_DrawXModelSkinnedUncached(
+    GfxCmdBufContext context,
+    XSurface *xsurf,
+    GfxPackedVertex *skinnedVert,
+    bool convertPackedTexCoords)
 {
     const char *v3; // eax
     GfxCmdBufSourceState *ActiveWorldMatrix; // eax
@@ -846,7 +854,9 @@ void __cdecl R_DrawXModelSkinnedUncached(GfxCmdBufContext context, XSurface *xsu
     g_frameStatsCur.geoIndexCount += 3 * args.triCount;
     args.baseIndex = R_SetIndexData(&context.state->prim, (uint8_t *)xsurf->triIndices, args.triCount);
     R_CheckVertexDataOverflow(32 * args.vertexCount);
-    vertexOffset = R_SetVertexData(context.state, skinnedVert, args.vertexCount, 32);
+    vertexOffset = convertPackedTexCoords
+        ? R_SetPackedModelVertexData(context.state, skinnedVert, args.vertexCount)
+        : R_SetVertexData(context.state, skinnedVert, args.vertexCount, 32);
     vb = gfxBuf.dynamicVertexBuffer->buffer;
     iassert( vb );
     R_SetStreamSource(&context.state->prim, vb, vertexOffset, 0x20u);
@@ -866,7 +876,7 @@ void __cdecl R_DrawXModelSkinnedModelSurf(GfxCmdBufContext context, const GfxMod
     iassert(modelSurf);
 
     if (modelSurf->skinnedCachedOffset < 0)
-        R_DrawXModelSkinnedUncached(context, modelSurf->xsurf, modelSurf->skinnedVert);
+        R_DrawXModelSkinnedUncached(context, modelSurf->xsurf, modelSurf->skinnedVert, false);
     else
         R_DrawXModelSkinnedCached(context, modelSurf);
 }
@@ -1337,7 +1347,8 @@ uint32_t __cdecl R_TessXModelRigidSkinnedDrawSurfList(
                 R_ChangeObjectPlacement(commonSource, &modelSurf->placement);
             R_SetupPassPerObjectArgs(context);
             R_SetupPassPerPrimArgs(context);
-            R_DrawXModelSkinnedUncached(context, modelSurf->surf.xsurf, modelSurf->surf.xsurf->verts0);
+            R_DrawXModelSkinnedUncached(
+                context, modelSurf->surf.xsurf, modelSurf->surf.xsurf->verts0, true);
             if (++drawSurfIndex == drawSurfCount)
                 break;
             drawSurf = drawSurfList[drawSurfIndex];
