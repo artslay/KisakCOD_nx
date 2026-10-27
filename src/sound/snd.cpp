@@ -2816,11 +2816,7 @@ void __cdecl SND_Update()
     if (g_snd.Initialized2d)
     {
         PROF_SCOPED("SND_Update");
-#ifdef KISAK_OPENAL
-        // OpenAL has no portable mixer-thread CPU query. Measure the engine-side
-        // audio update work instead of reporting a fabricated constant zero.
-        const auto soundUpdateStart = std::chrono::steady_clock::now();
-#else
+#ifndef KISAK_OPENAL
         g_snd.cpu = SND_GetDriverCPUPercentage();
 #endif
         if (com_statmon->current.enabled && SND_ShouldGiveCpuWarning())
@@ -2846,11 +2842,15 @@ void __cdecl SND_Update()
             SND_UpdateTimeScale();
             SND_UpdateRoomEffects(frametime);
         }
+#ifdef KISAK_OPENAL
+        const auto soundUpdateStart = std::chrono::steady_clock::now();
+#endif
         SND_UpdateAllChannels(frametime);
         SND_UpdatePhysics();
         SND_DriverPostUpdate();
-        DebugDrawWorldSounds(snd_draw3D->current.integer);
 #ifdef KISAK_OPENAL
+        // This is main-thread sound work (channel updates, stream decoding/queueing and
+        // driver post-update), not a claim about OpenAL Soft's separate mixer-thread load.
         const auto soundUpdateElapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - soundUpdateStart).count();
         const int64_t frameDurationUs =
@@ -2862,6 +2862,7 @@ void __cdecl SND_Update()
             cpuPercent = 100;
         g_snd.cpu = static_cast<int>(cpuPercent);
 #endif
+        DebugDrawWorldSounds(snd_draw3D->current.integer);
     }
 }
 
