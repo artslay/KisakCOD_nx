@@ -2328,6 +2328,71 @@ void __cdecl SND_SetHWND(HWND hwnd)
     // OpenAL has no window-handle dependency (no DirectSound backend to bind).
 }
 
+static void AL_ResamplePcmWindowedSinc(
+    const int16_t *src,
+    uint32_t srcFrames,
+    uint32_t srcRate,
+    int16_t *dst,
+    uint32_t dstFrames,
+    uint32_t dstRate,
+    uint32_t channels)
+{
+    if (!src || !dst || srcFrames == 0 || dstFrames == 0 ||
+        srcRate == 0 || dstRate == 0 || (channels != 1 && channels != 2))
+        return;
+
+    // A 16-tap Hann-windowed sinc low-pass suppresses energy above the new Nyquist
+    // frequency before decimation. Normalize each edge kernel to avoid attenuating
+    // the beginning/end of short sound effects.
+    constexpr int kRadius = 8;
+    constexpr double kPi = 3.14159265358979323846;
+    const double cutoff = 0.5 * static_cast<double>(dstRate) / srcRate;
+    const double sourceStep = static_cast<double>(srcRate) / dstRate;
+
+    for (uint32_t outFrame = 0; outFrame < dstFrames; ++outFrame)
+    {
+        const double sourcePosition =
+            (static_cast<double>(outFrame) + 0.5) * sourceStep - 0.5;
+        const int64_t center = static_cast<int64_t>(std::floor(sourcePosition));
+
+        for (uint32_t channel = 0; channel < channels; ++channel)
+        {
+            double weightedSum = 0.0;
+            double weightSum = 0.0;
+
+            for (int tap = -kRadius + 1; tap <= kRadius; ++tap)
+            {
+                const int64_t requestedFrame = center + tap;
+                const double distance = static_cast<double>(requestedFrame) - sourcePosition;
+                if (std::fabs(distance) >= kRadius)
+                    continue;
+
+                const double window = 0.5 + 0.5 * std::cos(kPi * distance / kRadius);
+                const double scaledDistance = 2.0 * cutoff * distance;
+                const double sinc = std::fabs(scaledDistance) < 1.0e-12
+                    ? 1.0
+                    : std::sin(kPi * scaledDistance) / (kPi * scaledDistance);
+                const double weight = 2.0 * cutoff * sinc * window;
+
+                const uint32_t sourceFrame = static_cast<uint32_t>(
+                    std::clamp<int64_t>(requestedFrame, 0, static_cast<int64_t>(srcFrames) - 1));
+                weightedSum += static_cast<double>(
+                    src[static_cast<size_t>(sourceFrame) * channels + channel]) * weight;
+                weightSum += weight;
+            }
+
+            const double value = std::fabs(weightSum) > 1.0e-12
+                ? weightedSum / weightSum
+                : static_cast<double>(src[static_cast<size_t>(
+                    std::clamp<int64_t>(center, 0, static_cast<int64_t>(srcFrames) - 1))
+                    * channels + channel]);
+            const double clipped = std::clamp(value, -32768.0, 32767.0);
+            dst[static_cast<size_t>(outFrame) * channels + channel] =
+                static_cast<int16_t>(clipped);
+        }
+    }
+}
+
 void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
 {
 #ifdef __SWITCH__
@@ -2359,18 +2424,37 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         if (switchSoundTrace)
             Switch_LogWrite("[SWITCH SNDDATA] resample branch\n");
 #endif
-        uint32_t srcFrameCount = mssSound->info.samples;
-        uint32_t channels = mssSound->info.channels;
-        uint32_t rate = mssSound->info.rate;
-        uint32_t frameCount = srcFrameCount;
+        const uint32_t srcFrameCount = mssSound->info.samples;
+        const uint32_t channels = mssSound->info.channels;
+        const uint32_t srcRate = mssSound->info.rate;
+        uint32_t rate = srcRate;
 
-        while (rate > g_snd.playback_rate)
-        {
+        while (rate > g_snd.playback_rate && rate > 1)
             rate /= 2;
-            frameCount /= 2;
-        }
 
-        uint32_t newDataLen = frameCount * channels * sizeof(int16_t);
+        uint64_t frameCount64 =
+            (static_cast<uint64_t>(srcFrameCount) * rate + srcRate / 2) / srcRate;
+        if (srcFrameCount != 0 && frameCount64 == 0)
+            frameCount64 = 1;
+        if (frameCount64 > UINT32_MAX ||
+            (channels != 1 && channels != 2) ||
+            static_cast<uint64_t>(srcFrameCount) * channels * sizeof(int16_t) > mssSound->info.data_len)
+        {
+            Com_PrintError(
+                CON_CHANNEL_SOUND,
+                "Cannot resample invalid sound data (frames=%u channels=%u rate=%u bytes=%u)\\n",
+                static_cast<unsigned>(srcFrameCount),
+                static_cast<unsigned>(channels),
+                static_cast<unsigned>(srcRate),
+                static_cast<unsigned>(mssSound->info.data_len));
+            return;
+        }
+        const uint32_t frameCount = static_cast<uint32_t>(frameCount64);
+        const uint64_t newDataLen64 =
+            static_cast<uint64_t>(frameCount) * channels * sizeof(int16_t);
+        if (newDataLen64 > UINT32_MAX)
+            return;
+        const uint32_t newDataLen = static_cast<uint32_t>(newDataLen64);
 #ifdef __SWITCH__
         if (switchSoundTrace)
             Switch_LogWrite("[SWITCH SNDDATA] alloc begin\n");
@@ -2387,14 +2471,10 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         }
 #endif
 
-        const int16_t *src16 = (const int16_t *)srcData;
-        int16_t *dst16 = (int16_t *)mssSound->data;
-        for (uint32_t i = 0; i < frameCount; ++i)
-        {
-            uint32_t srcFrame = (uint32_t)((uint64_t)i * srcFrameCount / frameCount);
-            for (uint32_t c = 0; c < channels; ++c)
-                dst16[i * channels + c] = src16[srcFrame * channels + c];
-        }
+        const int16_t *src16 = static_cast<const int16_t *>(srcData);
+        int16_t *dst16 = reinterpret_cast<int16_t *>(mssSound->data);
+        AL_ResamplePcmWindowedSinc(
+            src16, srcFrameCount, srcRate, dst16, frameCount, rate, channels);
 #ifdef __SWITCH__
         if (switchSoundTrace)
             Switch_LogWrite("[SWITCH SNDDATA] resample copy done\n");
