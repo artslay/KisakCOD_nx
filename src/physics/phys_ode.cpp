@@ -2068,7 +2068,7 @@ void __cdecl Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2)
             {
                 Phys_ReduceContacts(v9, &contactArray, &out);
                 Phys_CreateJointForEachContact(&out, b1, b2, &surfParms, worldIndex);
-if (v9)
+                if (v9)
                 {
                     PhysObjUserData *soundData = (PhysObjUserData *)dBodyGetData(v9);
                     Phys_PlayCollisionSound(
@@ -2086,7 +2086,7 @@ if (v9)
             else
             {
                 Phys_CreateJointForEachContact(&contactArray, b1, b2, &surfParms, worldIndex);
-if (v9)
+                if (v9)
                 {
                     PhysObjUserData *soundData = (PhysObjUserData *)dBodyGetData(v9);
                     Phys_PlayCollisionSound(
