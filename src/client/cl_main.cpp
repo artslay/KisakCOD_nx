@@ -639,6 +639,8 @@ void __cdecl CL_MapLoading_StartCinematic(const char *mapname, float volume)
     // "cinematic" console command. Give them their own skippable lifecycle so
     // finishing the map load does not silently cancel a still-playing movie.
     cin_skippable = 1;
+    if (movieName[0] != '\0')
+        CL_PrepareCinematicSkipInput(0);
     SCR_SetMapLoadingCinematicActive(movieName[0] != '\0');
 #endif
 }
