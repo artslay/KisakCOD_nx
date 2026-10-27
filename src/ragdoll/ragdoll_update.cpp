@@ -787,46 +787,67 @@ void __cdecl Ragdoll_GenerateAllSelfCollisionContacts()
     for (ragdollIdx = 0; ragdollIdx < 32; ++ragdollIdx)
     {
         body = &ragdollBodies[ragdollIdx];
-        if (Ragdoll_BodyHasPhysics(body))
+        if (!Ragdoll_BodyHasPhysics(body))
+            continue;
+
+        def = Ragdoll_BodyDef(body);
+        if (body->numBones <= 0 ||
+            body->numBones > static_cast<int>(ARRAY_COUNT(body->bones)) ||
+            def->numSelfPairs < 0 ||
+            def->numSelfPairs > static_cast<int>(ARRAY_COUNT(def->selfPairDefs)))
         {
-            def = Ragdoll_BodyDef(body);
-            for (pairIdx = 0; pairIdx < def->numSelfPairs; ++pairIdx)
+            Com_PrintWarning(CON_CHANNEL_PHYS,
+                "Ragdoll: skipping invalid self-collision data (body=%d bones=%d pairs=%d)\n",
+                ragdollIdx, body->numBones, def->numSelfPairs);
+            continue;
+        }
+
+        for (pairIdx = 0; pairIdx < def->numSelfPairs; ++pairIdx)
+        {
+            selfPair = &def->selfPairDefs[pairIdx];
+            if (selfPair->bones[0] >= body->numBones ||
+                selfPair->bones[1] >= body->numBones)
             {
-                selfPair = &def->selfPairDefs[pairIdx];
-                Ragdoll_GenBoneCapsuleSegments(body, selfPair->bones, s0, s1);
-                Ragdoll_ClosestPointsTwoSegs(s0, s1, &t0, &t1, direction);
-                Vec3Lerp(s0[0], s0[1], t0, pi0);
-                Vec3Lerp(s1[0], s1[1], t1, pi1);
-                Vec3Sub(pi1, pi0, diff);
-                segDistance = Vec3Length(diff);
-                radius0 = def->boneDefs[selfPair->bones[0]].radius * ragdoll_self_collision_scale->current.value;
-                radius1 = def->boneDefs[selfPair->bones[1]].radius * ragdoll_self_collision_scale->current.value;
-                if (segDistance <= radius0 + radius1)
-                    Ragdoll_AddSelfContact(body, selfPair->bones, radius0, radius1, pi0, pi1);
+                Com_PrintWarning(CON_CHANNEL_PHYS,
+                    "Ragdoll: skipping out-of-range self-collision pair (body=%d pair=%d bones=%u,%u numBones=%d)\n",
+                    ragdollIdx, pairIdx,
+                    static_cast<unsigned>(selfPair->bones[0]),
+                    static_cast<unsigned>(selfPair->bones[1]),
+                    body->numBones);
+                continue;
             }
+
+            Ragdoll_GenBoneCapsuleSegments(body, selfPair->bones, s0, s1);
+            Ragdoll_ClosestPointsTwoSegs(s0, s1, &t0, &t1, direction);
+            Vec3Lerp(s0[0], s0[1], t0, pi0);
+            Vec3Lerp(s1[0], s1[1], t1, pi1);
+            Vec3Sub(pi1, pi0, diff);
+            segDistance = Vec3Length(diff);
+            radius0 = def->boneDefs[selfPair->bones[0]].radius * ragdoll_self_collision_scale->current.value;
+            radius1 = def->boneDefs[selfPair->bones[1]].radius * ragdoll_self_collision_scale->current.value;
+            if (segDistance <= radius0 + radius1)
+                Ragdoll_AddSelfContact(body, selfPair->bones, radius0, radius1, pi0, pi1);
         }
     }
 }
 
 void __cdecl Ragdoll_GenBoneCapsuleSegments(RagdollBody *body, uint8_t *bones, float (*s0)[3], float (*s1)[3])
 {
-    if ((uint32_t)*bones >= body->numBones)
+    if (!body || !bones || !s0 || !s1 ||
+        (uint32_t)body->numBones > static_cast<uint32_t>(ARRAY_COUNT(body->bones)) ||
+        body->numBones <= 0 ||
+        (uint32_t)bones[0] >= static_cast<uint32_t>(body->numBones) ||
+        (uint32_t)bones[1] >= static_cast<uint32_t>(body->numBones))
+    {
         MyAssertHandler(
             ".\\ragdoll\\ragdoll_update.cpp",
             957,
             0,
-            "bones[0] doesn't index body->numBones\n\t%i not in [0, %i)",
-            *bones,
-            body->numBones);
-    if ((uint32_t)bones[1] >= body->numBones)
-        MyAssertHandler(
-            ".\\ragdoll\\ragdoll_update.cpp",
-            958,
-            0,
-            "bones[1] doesn't index body->numBones\n\t%i not in [0, %i)",
-            bones[1],
-            body->numBones);
-    Ragdoll_GenBoneCapsuleSegment(&body->bones[*bones], s0);
+            "invalid self-collision bone pair or body");
+        return;
+    }
+
+    Ragdoll_GenBoneCapsuleSegment(&body->bones[bones[0]], s0);
     Ragdoll_GenBoneCapsuleSegment(&body->bones[bones[1]], s1);
 }
 
