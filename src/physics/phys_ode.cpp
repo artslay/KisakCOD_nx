@@ -1356,14 +1356,6 @@ void __cdecl Phys_PlayCollisionSound(int localClientNum, dxBody *body, uint32_t 
     dMass mass; // [esp+2Ch] [ebp-50h] BYREF
     int i; // [esp+78h] [ebp-4h]
 
-#ifdef __SWITCH__
-    // Collisions between static geoms can reach the near callback without
-    // a body. The sound path calls dBodyGetMass/dBodyGetPointVel, so reject
-    // invalid inputs here rather than letting ODE dereference a null body.
-    if (!body || !contactList || contactList->contactCount <= 0 ||
-        !phys_minImpactMomentum)
-        return;
-#endif
     dMassSetZero(&mass);
     if (contactList->contactCount <= 0)
         MyAssertHandler(".\\physics\\phys_ode.cpp", 1274, 0, "%s", "contactList->contactCount > 0");
@@ -2007,12 +1999,6 @@ void __cdecl Phys_NearCallback(void *userData, dxGeom *geom1, dxGeom *geom2)
     worldIndex = (PhysWorld)v22->worldIndex;
     b1 = dGeomGetBody(geom1);
     b2 = dGeomGetBody(geom2);
-#ifdef __SWITCH__
-    // Static-vs-static contacts have no dynamic body to respond to the
-    // collision and cannot produce a meaningful body collision sound.
-    if (!b1 && !b2)
-        return;
-#endif
     if (b1 && b2 && dAreConnectedExcluding(b1, b2, 4))
     {
         return;
