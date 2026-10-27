@@ -479,53 +479,6 @@ void NormalizeXModelMaterialReferences(XModel *model)
 // CoD4's PackedTexCoords are not IEEE-754 binary16 values. Decode the game's
 // custom 16-bit coordinate encoding on the CPU, then repack as IEEE half floats
 // in the GPU copy so the existing VK_FORMAT_R16G16_SFLOAT vertex input is valid.
-static uint16_t SwitchFloatToHalf(float value)
-{
-    uint32_t bits = 0;
-    std::memcpy(&bits, &value, sizeof(bits));
-
-    const uint32_t sign = (bits >> 16) & 0x8000u;
-    const uint32_t floatExponent = (bits >> 23) & 0xffu;
-    int32_t exponent = static_cast<int32_t>(floatExponent) - 127 + 15;
-    uint32_t mantissa = bits & 0x7fffffu;
-
-    if (floatExponent == 0xffu)
-    {
-        if (!mantissa)
-            return static_cast<uint16_t>(sign | 0x7c00u);
-        uint32_t payload = mantissa >> 13;
-        return static_cast<uint16_t>(sign | 0x7c00u | payload | (payload == 0u));
-    }
-
-    if (floatExponent == 0u)
-        return static_cast<uint16_t>(sign);
-
-    if (exponent >= 31)
-        return static_cast<uint16_t>(sign | 0x7c00u);
-
-    if (exponent <= 0)
-    {
-        if (exponent < -10)
-            return static_cast<uint16_t>(sign);
-
-        mantissa |= 0x800000u;
-        const uint32_t shift = static_cast<uint32_t>(14 - exponent);
-        const uint32_t rounding = (1u << (shift - 1u)) - 1u +
-            ((mantissa >> shift) & 1u);
-        return static_cast<uint16_t>(sign | ((mantissa + rounding) >> shift));
-    }
-
-    uint32_t roundedMantissa = mantissa + 0x0fffu + ((mantissa >> 13) & 1u);
-    if (roundedMantissa & 0x800000u)
-    {
-        roundedMantissa = 0;
-        ++exponent;
-        if (exponent >= 31u)
-            return static_cast<uint16_t>(sign | 0x7c00u);
-    }
-    return static_cast<uint16_t>(sign | (exponent << 10) | (roundedMantissa >> 13));
-}
-
 void ConvertPackedModelTexCoordsForVulkan(
     const ZoneLoadState &state,
     XZoneMemory *zoneMem)
@@ -579,11 +532,8 @@ void ConvertPackedModelTexCoordsForVulkan(
                     static_cast<size_t>(vertexIndex) * sizeof(GfxPackedVertex);
                 const auto *sourceVertex =
                     reinterpret_cast<const GfxPackedVertex *>(sourceBlock + offset);
-                float texCoord[2]{};
-                Vec2UnpackTexCoords(sourceVertex->texCoord, texCoord);
                 const uint32_t packedHalfTexCoords =
-                    static_cast<uint32_t>(SwitchFloatToHalf(texCoord[0])) |
-                    (static_cast<uint32_t>(SwitchFloatToHalf(texCoord[1])) << 16);
+                    Vec2ConvertTexCoordsForVulkan(sourceVertex->texCoord).packed;
                 std::memcpy(
                     gpuBlock + offset + offsetof(GfxPackedVertex, texCoord),
                     &packedHalfTexCoords, sizeof(packedHalfTexCoords));
