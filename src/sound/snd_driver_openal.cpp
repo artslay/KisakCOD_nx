@@ -2442,7 +2442,7 @@ void __cdecl SND_SetData(MssSoundCOD4 *mssSound, void *srcData)
         {
             Com_PrintError(
                 CON_CHANNEL_SOUND,
-                "Cannot resample invalid sound data (frames=%u channels=%u rate=%u bytes=%u)\\n",
+                "Cannot resample invalid sound data (frames=%u channels=%u rate=%u bytes=%u)\n",
                 static_cast<unsigned>(srcFrameCount),
                 static_cast<unsigned>(channels),
                 static_cast<unsigned>(srcRate),
