@@ -1535,17 +1535,17 @@ void __cdecl R_SetPicmip()
         imageGlobals.picmipSpec != lastLoggedPicmipSpec)
     {
         if (picmipMode == 2)
-            Com_Printf(CON_CHANNEL_GFX, "Picmip is set to lowest quality for generating reflections.\\n");
+            Com_Printf(CON_CHANNEL_GFX, "Picmip is set to lowest quality for generating reflections.\n");
         else if (picmipMode == 1)
-            Com_Printf(CON_CHANNEL_GFX, "Picmip is set manually.\\n");
+            Com_Printf(CON_CHANNEL_GFX, "Picmip is set manually.\n");
         else
-            Com_Printf(CON_CHANNEL_GFX, "Texture detail is set automatically.\\n");
+            Com_Printf(CON_CHANNEL_GFX, "Texture detail is set automatically.\n");
 
         if (picmipMode != 2)
         {
             Com_Printf(
                 CON_CHANNEL_GFX,
-                "Using picmip %i on most textures, %i on normal maps, and %i on specular maps\\n",
+                "Using picmip %i on most textures, %i on normal maps, and %i on specular maps\n",
                 imageGlobals.picmip,
                 imageGlobals.picmipBump,
                 imageGlobals.picmipSpec);
