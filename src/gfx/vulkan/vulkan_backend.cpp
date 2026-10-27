@@ -26,6 +26,7 @@ extern bool R_RecoverLostVulkanDevice();
 
 extern void Switch_LogWrite(const char *msg);
 #ifdef __SWITCH__
+extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern void Switch_LogRecentVulkanDraws();
 extern thread_local const char * volatile g_switchFrameStage;
 extern std::atomic<uint64_t> g_switchLastBoundPipelineKey;
@@ -1757,8 +1758,7 @@ bool VulkanBackend::EndFrame()
     const bool switchTraceActivity =
         switchHasPresentSource || m_renderingActive;
     const bool switchTraceHeartbeat =
-        switchPresentTraceId % 120u == 0u &&
-        switchPresentHeartbeatTraceCount < 8;
+        switchPresentTraceId % 120u == 0u;
     const bool switchTraceThisFrame =
         switchPresentTraceId < 16 ||
         (switchTraceActivity && switchPresentActivityTraceCount < 8) ||
@@ -1769,11 +1769,12 @@ bool VulkanBackend::EndFrame()
     {
         if (switchTraceHeartbeat)
             ++switchPresentHeartbeatTraceCount;
-        char trace[320];
+        char trace[384];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK FRAME] end_frame_begin id=%u serial=%llu source=%u size=%ux%u swapIndex=%u rendering=%u backbufferCleared=%u heartbeat=%u\n",
+            "[KisakCOD][VK FRAME] end_frame_begin id=%u screenFrame=%llu serial=%llu source=%u size=%ux%u swapIndex=%u rendering=%u backbufferCleared=%u heartbeat=%u\n",
             switchPresentTraceId,
+            static_cast<unsigned long long>(g_switchScreenFrameSequence.load(std::memory_order_relaxed)),
             static_cast<unsigned long long>(m_frameSerial.load(std::memory_order_relaxed)),
             switchHasPresentSource ? 1u : 0u,
             m_presentSourceWidth, m_presentSourceHeight, m_swapchainIndex,
@@ -1974,8 +1975,9 @@ bool VulkanBackend::EndFrame()
         char trace[192];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK FRAME] end_frame_done id=%u result=%d source=%u\n",
+            "[KisakCOD][VK FRAME] end_frame_done id=%u screenFrame=%llu result=%d source=%u\n",
             switchPresentTraceId,
+            static_cast<unsigned long long>(g_switchScreenFrameSequence.load(std::memory_order_relaxed)),
             static_cast<int>(result),
             switchHasPresentSource ? 1u : 0u);
         Switch_LogWrite(trace);
