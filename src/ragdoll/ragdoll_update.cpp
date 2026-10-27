@@ -308,7 +308,11 @@ char __cdecl Ragdoll_CreatePhysJoint(RagdollBody *body, JointDef *jointDef, Join
     iassert( body );
     iassert( jointDef );
     iassert( joint );
+    joint->joint = nullptr;
+    joint->joint2 = nullptr;
+
     if ((uint32_t)jointDef->bone >= body->numBones)
+    {
         MyAssertHandler(
             ".\\ragdoll\\ragdoll_update.cpp",
             527,
@@ -316,13 +320,32 @@ char __cdecl Ragdoll_CreatePhysJoint(RagdollBody *body, JointDef *jointDef, Join
             "jointDef->bone doesn't index body->numBones\n\t%i not in [0, %i)",
             jointDef->bone,
             body->numBones);
-    bone = &body->bones[jointDef->bone];
-    if (bone->parentBone == -1)
-        parentBone = 0;
-    else
-        parentBone = &body->bones[bone->parentBone];
-    if (!bone->rigidBody)
         return 0;
+    }
+
+    bone = &body->bones[jointDef->bone];
+
+    // Every joint must connect a non-root bone to a valid earlier parent.
+    // The old code represented a root parent as nullptr, then read
+    // parentBone->rigidBody below (an access through address 0x10).
+    if (bone->parentBone < 0 ||
+        static_cast<uint32_t>(bone->parentBone) >= jointDef->bone ||
+        static_cast<uint32_t>(bone->parentBone) >= body->numBones)
+    {
+        Com_PrintWarning(CON_CHANNEL_PHYS,
+            "Ragdoll: refusing joint for bone %u with invalid parent %d (numBones=%d)\n",
+            static_cast<unsigned>(jointDef->bone), bone->parentBone, body->numBones);
+        return 0;
+    }
+
+    parentBone = &body->bones[bone->parentBone];
+    if (!bone->rigidBody || !parentBone->rigidBody)
+    {
+        Com_PrintWarning(CON_CHANNEL_PHYS,
+            "Ragdoll: refusing joint for bone %u; child/parent physics body is missing\n",
+            static_cast<unsigned>(jointDef->bone));
+        return 0;
+    }
     Phys_ObjGetPosition((dxBody *)bone->rigidBody, anchor, tAxis);
     AxisTranspose(tAxis, axis);
     if (!jointDef->numLimitAxes)
