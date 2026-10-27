@@ -1186,8 +1186,8 @@ void __cdecl Scr_CalcScriptFileProfile()
                 v1->avgTime = (profileTime + 4 * v1->avgTime) / 5;
                 if (profileTime > v1->maxTime)
                     v1->maxTime = profileTime;
-                v1->totalTime = (double)profileTime * *((float *)Sys_GetValue(0) + 20782) + v1->totalTime;
-                v1->totalBuiltIn = (double)profileBuiltInTime * *((float *)Sys_GetValue(0) + 20782) + v1->totalBuiltIn;
+                v1->totalTime += Scr_ProfileTicksToSeconds(static_cast<uint64_t>(profileTime));
+                v1->totalBuiltIn += Scr_ProfileTicksToSeconds(static_cast<uint64_t>(profileBuiltInTime));
                 Script->srcTotal += profileTime;
             }
             else if (scrParserGlob.opcodeLookup[i].profileTime)
@@ -1300,7 +1300,7 @@ char __cdecl Scr_PrintProfileTimes(float minTime)
     time = 0;
     for (i = 0; i < scrParserGlob.opcodeLookupLen; time += scrParserGlob.opcodeLookup[i++].profileTime)
         ;
-    if (minTime <= (double)time * *((float *)Sys_GetValue(0) + 20782))
+    if (minTime <= Scr_ProfileTicksToSeconds(static_cast<uint64_t>(time)))
     {
     LABEL_10:
         profileCount = 0;
@@ -1357,21 +1357,18 @@ char __cdecl Scr_PrintProfileTimes(float minTime)
             if (*name)
             {
                 strlen(name);
-                v8 = *((float *)Sys_GetValue(0) + 20782);
-                Com_Printf(CON_CHANNEL_PARSERSCRIPT, "%-*s %6.2f\n", maxNameLength, name, (double)profile->write[profileIndexb].totalTime * v8);
+                Com_Printf(CON_CHANNEL_PARSERSCRIPT, "%-*s %6.2f\n", maxNameLength, name, Scr_ProfileTicksToSeconds(profile->write[profileIndexb].totalTime));
             }
         }
         Com_Printf(CON_CHANNEL_PARSERSCRIPT, "\n");
         for (profileIndexc = 0; profileIndexc < profileCount; ++profileIndexc)
         {
             opcodeLookup = (OpcodeLookup *)&sortedOpcodeLookup[24 * profileIndexc];
-            v7 = *((float *)Sys_GetValue(0) + 20782);
-            v6 = *((float *)Sys_GetValue(0) + 20782);
             Com_Printf(
                 CON_CHANNEL_PARSERSCRIPT,
                 "time: %f, builtin: %f, usage: %d\n",
-                (double)opcodeLookup->profileTime * v6,
-                (double)opcodeLookup->profileBuiltInTime * v7,
+                Scr_ProfileTicksToSeconds(static_cast<uint64_t>(opcodeLookup->profileTime)),
+                Scr_ProfileTicksToSeconds(static_cast<uint64_t>(opcodeLookup->profileBuiltInTime)),
                 opcodeLookup->profileUsage);
             Scr_PrintPrevCodePos(CON_CHANNEL_PARSERSCRIPT, (char *)opcodeLookup->codePos + 1, 1u);
         }
