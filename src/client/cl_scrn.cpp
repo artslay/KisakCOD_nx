@@ -31,6 +31,8 @@ namespace
 std::atomic<bool> g_switchPostCinematicRenderTraceActive{false};
 std::atomic<uint64_t> g_switchPostCinematicTraceStartFrame{0};
 std::atomic<uint64_t> g_switchPostCinematicTraceStartDrawSerial{0};
+std::atomic<uint64_t> g_switchPostCinematicLastDrawPresentedSerial{0};
+std::atomic<uint32_t> g_switchPostCinematicDrawPresentCount{0};
 
 void Switch_WritePostCinematicRenderTrace(
     const char *phase, const char *detail, bool requireActive)
@@ -56,7 +58,8 @@ void Switch_WritePostCinematicRenderTrace(
          std::strcmp(phase, "vk_end_frame_noop") == 0 ||
          std::strcmp(phase, "skip_begin") == 0 ||
          std::strcmp(phase, "skip_again") == 0 ||
-         std::strcmp(phase, "present_accepted_after_gpu_draw_command") == 0);
+         std::strcmp(phase, "first_draw_present_seen") == 0 ||
+         std::strcmp(phase, "render_confirmed_two_draw_presents") == 0);
     if (requireActive && !keyFramePhase && framesSinceSkip >= 4 && frame % 30u != 0u)
         return;
     char trace[1024];
@@ -85,9 +88,13 @@ extern "C" void Switch_BeginPostCinematicRenderTrace(const char *reason)
     g_switchPostCinematicTraceStartFrame.store(
         g_switchScreenFrameSequence.load(std::memory_order_relaxed),
         std::memory_order_relaxed);
+    const uint64_t drawSerialAtSkip =
+        g_switchGpuDrawCommandSerial.load(std::memory_order_relaxed);
     g_switchPostCinematicTraceStartDrawSerial.store(
-        g_switchGpuDrawCommandSerial.load(std::memory_order_relaxed),
-        std::memory_order_relaxed);
+        drawSerialAtSkip, std::memory_order_relaxed);
+    g_switchPostCinematicLastDrawPresentedSerial.store(
+        drawSerialAtSkip, std::memory_order_relaxed);
+    g_switchPostCinematicDrawPresentCount.store(0, std::memory_order_relaxed);
     g_switchPostCinematicRenderTraceActive.store(true, std::memory_order_release);
     Switch_WritePostCinematicRenderTrace("skip_begin", reason, true);
 }
@@ -119,11 +126,32 @@ extern "C" void Switch_PostCinematicRenderTracePresent(
         g_switchGpuDrawCommandSerial.load(std::memory_order_relaxed);
     const uint64_t startDrawSerial =
         g_switchPostCinematicTraceStartDrawSerial.load(std::memory_order_relaxed);
-    if (result == 0 && drawSerial > startDrawSerial &&
-        g_switchPostCinematicRenderTraceActive.exchange(false, std::memory_order_acq_rel))
+    if (result == 0 && drawSerial > startDrawSerial)
     {
-        Switch_WritePostCinematicRenderTrace(
-            "present_accepted_after_gpu_draw_command", resultDetail, false);
+        const uint64_t previousDrawSerial =
+            g_switchPostCinematicLastDrawPresentedSerial.exchange(
+                drawSerial, std::memory_order_relaxed);
+        if (drawSerial > previousDrawSerial)
+        {
+            const uint32_t drawPresentCount =
+                g_switchPostCinematicDrawPresentCount.fetch_add(
+                    1u, std::memory_order_relaxed) + 1u;
+            if (drawPresentCount == 1u)
+            {
+                Switch_WritePostCinematicRenderTrace(
+                    "first_draw_present_seen", resultDetail, true);
+            }
+            else if (g_switchPostCinematicRenderTraceActive.exchange(
+                         false, std::memory_order_acq_rel))
+            {
+                char confirmedDetail[640];
+                std::snprintf(
+                    confirmedDetail, sizeof(confirmedDetail),
+                    "drawnPresents=%u %s", drawPresentCount, resultDetail);
+                Switch_WritePostCinematicRenderTrace(
+                    "render_confirmed_two_draw_presents", confirmedDetail, false);
+            }
+        }
     }
 }
 
