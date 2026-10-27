@@ -586,16 +586,21 @@ static bool AL_RebuildLoadedChannelBuffer(int index, int entchannel)
     MssSoundCOD4 *sound = &alias->soundFile->u.loadSnd->sound;
     const uint32_t sourceChannels = sound->info.channels;
     const uint64_t frameCount = sound->info.samples;
+    const uint32_t capacityChannels =
+        (g_snd.playback_channels == 4 || g_snd.playback_channels == 6)
+            ? static_cast<uint32_t>(g_snd.playback_channels) : 2u;
     if (!sound->data || (sourceChannels != 1 && sourceChannels != 2) ||
         sound->info.rate == 0 || frameCount == 0 ||
-        frameCount > static_cast<uint64_t>(0x7fffffff) / (2 * sizeof(int16_t)))
+        frameCount > static_cast<uint64_t>(0x7fffffff) /
+            (capacityChannels * sizeof(int16_t)))
         return false;
 
     const uint64_t sourceBytes = frameCount * sourceChannels * sizeof(int16_t);
     if (sound->info.data_len < sourceBytes)
         return false;
 
-    const size_t capacity = static_cast<size_t>(frameCount) * 2 * sizeof(int16_t);
+    const size_t capacity =
+        static_cast<size_t>(frameCount) * capacityChannels * sizeof(int16_t);
     int16_t *pcm = static_cast<int16_t *>(std::malloc(capacity));
     if (!pcm)
         return false;
@@ -624,6 +629,13 @@ static bool AL_RebuildLoadedChannelBuffer(int index, int entchannel)
         pcm, frameCount, static_cast<int>(outputChannels), entchannel,
         sound->info.rate, history);
 
+    const ALenum format = AL_GetPcmFormat(outputChannels);
+    if (format == 0)
+    {
+        std::free(pcm);
+        return false;
+    }
+
     const ALuint buffer = alGlob.channelBuffer[index];
     const ALuint source = alGlob.source[index];
     ALint oldState = AL_STOPPED;
@@ -636,7 +648,7 @@ static bool AL_RebuildLoadedChannelBuffer(int index, int entchannel)
     alSourcei(source, AL_BUFFER, 0);
     alBufferData(
         buffer,
-        outputChannels == 2 ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16,
+        format,
         pcm,
         static_cast<ALsizei>(frameCount * outputChannels * sizeof(int16_t)),
         sound->info.rate);
@@ -930,13 +942,18 @@ void __cdecl SND_ApplyChannelMap(ALuint handle, const snd_alias_t *alias, int sr
         (srcChannelCount != 1 && srcChannelCount != 2) || sound->info.samples == 0)
         return;
 
-    // ALsizei is signed. Leave the original buffer untouched if stereo expansion would
-    // exceed the OpenAL upload-size limit.
+    // ALsizei is signed. Allocate room for the widest supported output layout even when
+    // the input file is mono, so a speaker map can safely expand it to quad/5.1.
     const uint64_t frameCount = sound->info.samples;
-    if (frameCount > static_cast<uint64_t>(0x7fffffff) / (2 * sizeof(int16_t)))
+    const uint32_t capacityChannels =
+        (g_snd.playback_channels == 4 || g_snd.playback_channels == 6)
+            ? static_cast<uint32_t>(g_snd.playback_channels) : 2u;
+    if (frameCount > static_cast<uint64_t>(0x7fffffff) /
+        (capacityChannels * sizeof(int16_t)))
         return;
 
-    const size_t mappedBytes = static_cast<size_t>(frameCount) * 2 * sizeof(int16_t);
+    const size_t mappedBytes =
+        static_cast<size_t>(frameCount) * capacityChannels * sizeof(int16_t);
     int16_t *mapped = static_cast<int16_t *>(std::malloc(mappedBytes));
     if (!mapped)
     {
@@ -955,16 +972,20 @@ void __cdecl SND_ApplyChannelMap(ALuint handle, const snd_alias_t *alias, int sr
     Com_Memcpy(mapped, sound->data, sourceBytes);
     const int outputChannels = AL_ApplySpeakerMapToPcm(
         mapped, frameCount, srcChannelCount, alias);
-    if (outputChannels != 0)
+    const ALenum format = outputChannels > 0
+        ? AL_GetPcmFormat(static_cast<uint32_t>(outputChannels)) : 0;
+    if (format != 0)
     {
+        const ALsizei outputBytes = static_cast<ALsizei>(
+            frameCount * static_cast<uint32_t>(outputChannels) * sizeof(int16_t));
         // The buffer is attached but has not started playing yet. Detach it while replacing
         // the storage, then restore the source binding so channel lifetime logic is unchanged.
         alSourcei(handle, AL_BUFFER, 0);
         alBufferData(
             static_cast<ALuint>(bufferId),
-            outputChannels == 2 ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16,
+            format,
             mapped,
-            static_cast<ALsizei>(mappedBytes),
+            outputBytes,
             sound->info.rate);
         alSourcei(handle, AL_BUFFER, bufferId);
     }
