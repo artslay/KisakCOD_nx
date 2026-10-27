@@ -344,9 +344,9 @@ static int AL_ApplySpeakerMapToPcm(
     if (!pcm || (sourceChannels != 1 && sourceChannels != 2) || frameCount == 0)
         return 0;
 
-    const uint32_t outputChannels = (g_snd.playback_channels == 1 ||
-        g_snd.playback_channels == 2 || g_snd.playback_channels == 4 ||
-        g_snd.playback_channels == 6) ? static_cast<uint32_t>(g_snd.playback_channels) : 2u;
+    const uint32_t outputChannels = (alGlob.outputChannels == 1 || alGlob.outputChannels == 2 ||
+        alGlob.outputChannels == 4 || alGlob.outputChannels == 6)
+        ? alGlob.outputChannels : 2u;
 
     if (outputChannels == 1)
     {
@@ -594,8 +594,8 @@ static bool AL_RebuildLoadedChannelBuffer(int index, int entchannel)
     const uint32_t sourceChannels = sound->info.channels;
     const uint64_t frameCount = sound->info.samples;
     const uint32_t capacityChannels =
-        (g_snd.playback_channels == 4 || g_snd.playback_channels == 6)
-            ? static_cast<uint32_t>(g_snd.playback_channels) : 2u;
+        (alGlob.outputChannels == 4 || alGlob.outputChannels == 6)
+            ? alGlob.outputChannels : 2u;
     if (!sound->data || (sourceChannels != 1 && sourceChannels != 2) ||
         sound->info.rate == 0 || frameCount == 0 ||
         frameCount > static_cast<uint64_t>(0x7fffffff) /
@@ -953,8 +953,8 @@ void __cdecl SND_ApplyChannelMap(ALuint handle, const snd_alias_t *alias, int sr
     // the input file is mono, so a speaker map can safely expand it to quad/5.1.
     const uint64_t frameCount = sound->info.samples;
     const uint32_t capacityChannels =
-        (g_snd.playback_channels == 4 || g_snd.playback_channels == 6)
-            ? static_cast<uint32_t>(g_snd.playback_channels) : 2u;
+        (alGlob.outputChannels == 4 || alGlob.outputChannels == 6)
+            ? alGlob.outputChannels : 2u;
     if (frameCount > static_cast<uint64_t>(0x7fffffff) /
         (capacityChannels * sizeof(int16_t)))
         return;
