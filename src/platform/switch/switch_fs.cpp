@@ -124,7 +124,7 @@ static void Switch_IndexIwdArchive(const char *archivePath)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][IWI ROOT] archive open failed path=%s\\n",
+            "[KisakCOD][IWI ROOT] archive open failed path=%s\n",
             archivePath ? archivePath : "<null>");
         Switch_LogWrite(trace);
         return;
