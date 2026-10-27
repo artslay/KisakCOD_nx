@@ -229,11 +229,15 @@ static void Switch_IndexIwdArchive(const char *archivePath)
         } while (unzGoToNextFile(archiveFile) == UNZ_OK);
     }
 
+    const bool enumerationFailed =
+        gotGlobalInfo &&
+        globalInfo.number_entry > static_cast<unsigned long>(directoryEntryCount) &&
+        entryCount == 0;
     char trace[640];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][IWI ROOT] archive=%s zipEntries=%lu indexed=%d dirs=%d nameFailures=%d positionFailures=%d iwiEntries=%d firstIwi=%s\n",
+        "[KisakCOD][IWI ROOT] archive=%s zipEntries=%lu indexed=%d dirs=%d nameFailures=%d positionFailures=%d globalInfo=%s enumeration=%s iwiEntries=%d firstIwi=%s\n",
         archivePath,
         static_cast<unsigned long>(
             gotGlobalInfo ? globalInfo.number_entry : 0),
@@ -241,13 +245,14 @@ static void Switch_IndexIwdArchive(const char *archivePath)
         directoryEntryCount,
         nameReadFailures,
         positionReadFailures,
+        gotGlobalInfo ? "ok" : "failed",
+        enumerationFailed ? "failed" : "ok",
         iwiEntryCount,
         firstIwi[0] ? firstIwi : "<none>");
     if (!gotGlobalInfo ||
         nameReadFailures ||
         positionReadFailures ||
-        (globalInfo.number_entry > static_cast<unsigned long>(directoryEntryCount) &&
-         entryCount == 0))
+        enumerationFailed)
         Switch_LogWrite(trace);
 }
 
