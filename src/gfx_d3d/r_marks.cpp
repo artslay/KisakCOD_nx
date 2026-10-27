@@ -503,7 +503,8 @@ void __cdecl R_CellSurfacesTwoLists(
     }
 }
 
-void __cdecl R_AABBTreeSurfacesTwoLists_r(
+static void R_AABBTreeSurfacesTwoLists_r_impl(
+    GfxAabbTree *root,
     GfxAabbTree *tree,
     const float *mins,
     const float *maxs,
@@ -529,9 +530,15 @@ void __cdecl R_AABBTreeSurfacesTwoLists_r(
     {
         if (tree->childCount)
         {
-            children = (GfxAabbTree *)((char *)tree + tree->childrenOffset);
+            #ifdef __SWITCH__
+            const int childOffset = R_MarksNativeAabbChildOffset(root, tree);
+#else
+            const int childOffset = tree->childrenOffset;
+#endif
+            children = (GfxAabbTree *)((char *)tree + childOffset);
             for (childIndex = 0; childIndex < tree->childCount; ++childIndex)
-                R_AABBTreeSurfacesTwoLists_r(
+                R_AABBTreeSurfacesTwoLists_r_impl(
+                    root,
                     &children[childIndex],
                     mins,
                     maxs,
@@ -574,6 +581,21 @@ void __cdecl R_AABBTreeSurfacesTwoLists_r(
             }
         }
     }
+}
+
+void __cdecl R_AABBTreeSurfacesTwoLists_r(
+    GfxAabbTree *tree,
+    const float *mins,
+    const float *maxs,
+    int(__cdecl **allowSurf)(int, void *),
+    void *callbackContext,
+    GfxSurface ***surfLists,
+    uint32_t surfListSize,
+    uint32_t *surfCounts)
+{
+    R_AABBTreeSurfacesTwoLists_r_impl(
+        tree, tree, mins, maxs, allowSurf, callbackContext,
+        surfLists, surfListSize, surfCounts);
 }
 
 int  R_BoxStaticModels(
@@ -670,7 +692,8 @@ void __cdecl R_CellStaticModels(
     }
 }
 
-void __cdecl R_AABBTreeStaticModels_r(
+static void R_AABBTreeStaticModels_r_impl(
+    GfxAabbTree *root,
     GfxAabbTree *tree,
     const float *mins,
     const float *maxs,
@@ -694,9 +717,15 @@ void __cdecl R_AABBTreeStaticModels_r(
     {
         if (tree->childCount)
         {
-            children = (GfxAabbTree *)((char *)tree + tree->childrenOffset);
+            #ifdef __SWITCH__
+            const int childOffset = R_MarksNativeAabbChildOffset(root, tree);
+#else
+            const int childOffset = tree->childrenOffset;
+#endif
+            children = (GfxAabbTree *)((char *)tree + childOffset);
             for (childIndex = 0; childIndex < tree->childCount; ++childIndex)
-                R_AABBTreeStaticModels_r(
+                R_AABBTreeStaticModels_r_impl(
+                    root,
                     &children[childIndex],
                     mins,
                     maxs,
@@ -728,6 +757,20 @@ void __cdecl R_AABBTreeStaticModels_r(
             }
         }
     }
+}
+
+void __cdecl R_AABBTreeStaticModels_r(
+    GfxAabbTree *tree,
+    const float *mins,
+    const float *maxs,
+    int(__cdecl *allowSModel)(int),
+    uint16_t *smodelList,
+    int smodelListSize,
+    int *smodelCount)
+{
+    R_AABBTreeStaticModels_r_impl(
+        tree, tree, mins, maxs, allowSModel,
+        smodelList, smodelListSize, smodelCount);
 }
 
 void __cdecl R_AddStaticModelToList(int smodelIndex, uint16_t *smodelList, int *smodelCount)
@@ -1036,7 +1079,8 @@ int __cdecl R_OutsideFrustumPlanes(const DpvsPlane *planes, uint32_t planeCount,
     return 0;
 }
 
-void __cdecl R_AABBTreeCylinderSurfaces_r(
+static void R_AABBTreeCylinderSurfaces_r_impl(
+    GfxAabbTree *root,
     GfxAabbTree *tree,
     const DpvsPlane *planes,
     uint32_t planeCount,
@@ -1058,9 +1102,15 @@ void __cdecl R_AABBTreeCylinderSurfaces_r(
     {
         if (tree->childCount)
         {
-            children = (GfxAabbTree *)((char *)tree + tree->childrenOffset);
+            #ifdef __SWITCH__
+            const int childOffset = R_MarksNativeAabbChildOffset(root, tree);
+#else
+            const int childOffset = tree->childrenOffset;
+#endif
+            children = (GfxAabbTree *)((char *)tree + childOffset);
             for (childIndex = 0; childIndex < tree->childCount; ++childIndex)
-                R_AABBTreeCylinderSurfaces_r(
+                R_AABBTreeCylinderSurfaces_r_impl(
+                    root,
                     &children[childIndex],
                     planes,
                     planeCount,
@@ -1094,6 +1144,21 @@ void __cdecl R_AABBTreeCylinderSurfaces_r(
             }
         }
     }
+}
+
+void __cdecl R_AABBTreeCylinderSurfaces_r(
+    GfxAabbTree *tree,
+    const DpvsPlane *planes,
+    uint32_t planeCount,
+    int(__cdecl *allowSurf)(int, void *),
+    void *callbackContext,
+    GfxSurface **surfList,
+    uint32_t surfListSize,
+    uint32_t *surfCount)
+{
+    R_AABBTreeCylinderSurfaces_r_impl(
+        tree, tree, planes, planeCount, allowSurf, callbackContext,
+        surfList, surfListSize, surfCount);
 }
 
 void __cdecl R_MarkUtil_GetDObjAnimMatAndHideParts(
