@@ -658,7 +658,7 @@ void Loader_XModel::Load_XModel(const bool atStreamStart)
         if (zonePtrType == ZonePointerType::FOLLOWING)
         {
             varXModel->trans = m_stream.Alloc<float>(4);
-            m_stream.Load<float>(varXModel->trans, (varXModel->numBones - varXModel->numRootBones) * 3);
+            m_stream.Load<float>(varXModel->trans, (varXModel->numBones - varXModel->numRootBones) * 4);
         }
         else
         {
