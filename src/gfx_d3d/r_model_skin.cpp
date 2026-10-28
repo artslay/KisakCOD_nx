@@ -33,7 +33,7 @@ static void R_LogModelTransformCpuSkin(
     const GfxPackedVertex *sourceVertices = reinterpret_cast<const GfxPackedVertex *>(xsurf->verts0);
     char trace[1800];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][MODEL XFORM][CPU_SKIN] seq=%u class=%s xsurf=%p gfxEnt=%u boneBase=%d boneCount=%u verts=%u src=%p dst=%p cacheOffset=%d path=%s src0=(%.5g,%.5g,%.5g) srcMid=(%.5g,%.5g,%.5g) srcLast=(%.5g,%.5g,%.5g) out0=(%.5g,%.5g,%.5g) outMid=(%.5g,%.5g,%.5g) outLast=(%.5g,%.5g,%.5g) boneValid=%u boneA0=(%.4g,%.4g,%.4g,%.4g) boneA1=(%.4g,%.4g,%.4g,%.4g) boneA2=(%.4g,%.4g,%.4g,%.4g)\n",
+        "[KisakCOD][MODEL XFORM][CPU_SKIN] seq=%u class=%s xsurf=%p gfxEnt=%u boneBase=%d boneCount=%u verts=%u src=%p dst=%p cacheOffset=%d path=%s src0=(%.5g,%.5g,%.5g) srcMid=(%.5g,%.5g,%.5g) srcLast=(%.5g,%.5g,%.5g) out0=(%.5g,%.5g,%.5g) outMid=(%.5g,%.5g,%.5g) outLast=(%.5g,%.5g,%.5g) boneValid=%u boneA0=(%.4g,%.4g,%.4g) boneA1=(%.4g,%.4g,%.4g) boneA2=(%.4g,%.4g,%.4g) boneOrigin=(%.4g,%.4g,%.4g,%.4g)\n",
         sequence, weaponCandidate ? "weapon_candidate" : "skinned",
         static_cast<const void *>(xsurf), surface->info.gfxEntIndex, boneIndex,
         surface->info.boneCount, xsurf->vertCount, static_cast<const void *>(sourceVertices),
@@ -52,9 +52,11 @@ static void R_LogModelTransformCpuSkin(
         vertices[middle].xyz[0], vertices[middle].xyz[1], vertices[middle].xyz[2],
         vertices[last].xyz[0], vertices[last].xyz[1], vertices[last].xyz[2],
         boneValid ? 1u : 0u,
-        mat ? mat->axis[0][0] : 0.0f, mat ? mat->axis[0][1] : 0.0f, mat ? mat->axis[0][2] : 0.0f, mat ? mat->axis[0][3] : 0.0f,
-        mat ? mat->axis[1][0] : 0.0f, mat ? mat->axis[1][1] : 0.0f, mat ? mat->axis[1][2] : 0.0f, mat ? mat->axis[1][3] : 0.0f,
-        mat ? mat->axis[2][0] : 0.0f, mat ? mat->axis[2][1] : 0.0f, mat ? mat->axis[2][2] : 0.0f, mat ? mat->axis[2][3] : 0.0f);
+        mat ? mat->axis[0][0] : 0.0f, mat ? mat->axis[0][1] : 0.0f, mat ? mat->axis[0][2] : 0.0f,
+        mat ? mat->axis[1][0] : 0.0f, mat ? mat->axis[1][1] : 0.0f, mat ? mat->axis[1][2] : 0.0f,
+        mat ? mat->axis[2][0] : 0.0f, mat ? mat->axis[2][1] : 0.0f, mat ? mat->axis[2][2] : 0.0f,
+        mat ? mat->origin[0] : 0.0f, mat ? mat->origin[1] : 0.0f,
+        mat ? mat->origin[2] : 0.0f, mat ? mat->origin[3] : 0.0f);
     Switch_LogWrite(trace);
 }
 #endif
