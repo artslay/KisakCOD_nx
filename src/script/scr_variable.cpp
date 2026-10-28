@@ -45,30 +45,29 @@ scr_classStruct_t g_classMap[CLASS_NUM_COUNT] =
 #define FACTOR101 1
 #endif
 
-int  VariableInfoFunctionCompare(void *p_info1, void *p_info2)
+int VariableInfoFunctionCompare(const void *p_info1, const void *p_info2)
 {
-	const char *functionName2; // [esp+0h] [ebp-Ch]
-	const char *functionName1; // [esp+4h] [ebp-8h]
-	int fileNameCompare; // [esp+8h] [ebp-4h]
+	const auto *info1 = static_cast<const VariableDebugInfo *>(p_info1);
+	const auto *info2 = static_cast<const VariableDebugInfo *>(p_info2);
 
-	_DWORD *info1 = (_DWORD *)p_info1;
-	_DWORD *info2 = (_DWORD *)p_info2;
-
-	fileNameCompare = VariableInfoFileNameCompare(info1, info2);
+	const int fileNameCompare = VariableInfoFileNameCompare(info1, info2);
 	if (fileNameCompare)
 		return fileNameCompare;
-	functionName1 = (const char *)info1[2];
-	functionName2 = (const char *)info2[2];
-	if (!functionName1)
+
+	if (!info1->functionName)
 		return 1;
-	if (functionName2)
-		return I_stricmp(functionName1, functionName2);
+	if (info2->functionName)
+		return I_stricmp(info1->functionName, info2->functionName);
 	return -1;
 }
 
-int __cdecl CompareThreadIndices(uint32_t *arg1, uint32_t *arg2)
+int VariableDebugInfoPositionCompare(const void *p_info1, const void *p_info2)
 {
-	return *arg1 - *arg2;
+	const auto *info1 = static_cast<const VariableDebugInfo *>(p_info1);
+	const auto *info2 = static_cast<const VariableDebugInfo *>(p_info2);
+	const uintptr_t pos1 = reinterpret_cast<uintptr_t>(info1->pos);
+	const uintptr_t pos2 = reinterpret_cast<uintptr_t>(info2->pos);
+	return pos1 < pos2 ? -1 : (pos1 > pos2 ? 1 : 0);
 }
 
 void __cdecl Scr_Cleanup()
@@ -1217,7 +1216,7 @@ void  Scr_DumpScriptVariables(bool spreadsheet,
 	if (scrVarDebugPub
 		&& (scrVarPub.developer || !spreadsheet && !fileName && !functionName && !lineSort && !functionSummary && !minCount))
 	{
-		infoArray = (VariableDebugInfo*)Z_TryVirtualAllocInternal(1572864);
+		infoArray = (VariableDebugInfo*)Z_TryVirtualAllocInternal(sizeof(VariableDebugInfo) * 0x18000u);
 		if (infoArray)
 		{
 			num = 0;
@@ -1253,17 +1252,17 @@ void  Scr_DumpScriptVariables(bool spreadsheet,
 				if (summary)
 				{
 					VariableInfoCompareCallBack = (int(*)(const void *, const void *))VariableInfoFileNameCompare;
-					qsort(infoArray, num, 0x10u, (int(*)(const void *, const void *))VariableInfoFileNameCompare);
+					qsort(infoArray, num, sizeof(*infoArray), (int(*)(const void *, const void *))VariableInfoFileNameCompare);
 				}
 				else if (functionSummary)
 				{
 					VariableInfoCompareCallBack = (int(*)(const void *, const void *))VariableInfoFunctionCompare;
-					qsort(infoArray, num, 0x10u, (int(*)(const void *, const void *))VariableInfoFunctionCompare);
+					qsort(infoArray, num, sizeof(*infoArray), (int(*)(const void *, const void *))VariableInfoFunctionCompare);
 				}
 				else
 				{
-					VariableInfoCompareCallBack = (int(*)(const void *, const void *))CompareThreadIndices;
-					qsort(infoArray, num, 0x10u, (int(*)(const void *, const void *))CompareThreadIndices);
+					VariableInfoCompareCallBack = (int(*)(const void *, const void *))VariableDebugInfoPositionCompare;
+					qsort(infoArray, num, sizeof(*infoArray), (int(*)(const void *, const void *))VariableDebugInfoPositionCompare);
 				}
 				i = 0;
 				while (i < num)
@@ -1276,9 +1275,9 @@ void  Scr_DumpScriptVariables(bool spreadsheet,
 					} while (i < num && !VariableInfoCompareCallBack(pInfoa, &infoArray[i]));
 				}
 				if (lineSort)
-					qsort(infoArray, num, 0x10u, (int(*)(const void *, const void *))VariableInfoFileLineCompare);
+					qsort(infoArray, num, sizeof(*infoArray), (int(*)(const void *, const void *))VariableInfoFileLineCompare);
 				else
-					qsort(infoArray, num, 0x10u, (int(*)(const void *, const void *))VariableInfoCountCompare);
+					qsort(infoArray, num, sizeof(*infoArray), (int(*)(const void *, const void *))VariableInfoCountCompare);
 				Com_Printf(CON_CHANNEL_PARSERSCRIPT, "********************************\n");
 				if (spreadsheet)
 				{
@@ -3393,34 +3392,31 @@ int  ThreadInfoCompare(_DWORD* info1, _DWORD* info2)
 	return pos1 - pos2;
 }
 
-int VariableInfoFileNameCompare(_DWORD* info1, _DWORD* info2)
+int VariableInfoFileNameCompare(const void *p_info1, const void *p_info2)
 {
-	const char* fileName1; // [esp+0h] [ebp-8h]
-	const char* fileName2; // [esp+4h] [ebp-4h]
+	const auto *info1 = static_cast<const VariableDebugInfo *>(p_info1);
+	const auto *info2 = static_cast<const VariableDebugInfo *>(p_info2);
 
-	fileName1 = (const char*)info1[1];
-	fileName2 = (const char*)info2[1];
-	if (!fileName1)
+	if (!info1->fileName)
 		return 1;
-	if (fileName2)
-		return I_stricmp(fileName1, fileName2);
+	if (info2->fileName)
+		return I_stricmp(info1->fileName, info2->fileName);
 	return -1;
 }
 
-int VariableInfoCountCompare(_DWORD* info1, _DWORD* info2)
+int VariableInfoCountCompare(const void *p_info1, const void *p_info2)
 {
-	return info1[3] - info2[3];
+	const auto *info1 = static_cast<const VariableDebugInfo *>(p_info1);
+	const auto *info2 = static_cast<const VariableDebugInfo *>(p_info2);
+	return info1->varUsage - info2->varUsage;
 }
 
-int __cdecl VariableInfoFileLineCompare(_DWORD* info1, _DWORD* info2)
+int VariableInfoFileLineCompare(const void *p_info1, const void *p_info2)
 {
-	int fileCompare; // [esp+0h] [ebp-4h]
-
-	fileCompare = VariableInfoFileNameCompare(info1, info2);
+	const int fileCompare = VariableInfoFileNameCompare(p_info1, p_info2);
 	if (fileCompare)
 		return fileCompare;
-	else
-		return CompareThreadIndices((uint32_t*)info1, (uint32_t*)info2);
+	return VariableDebugInfoPositionCompare(p_info1, p_info2);
 }
 
 uint32_t  FindVariableIndexInternal2(uint32_t name, uint32_t index)
