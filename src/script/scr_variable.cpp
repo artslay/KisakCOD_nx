@@ -17,6 +17,7 @@
 
 #ifdef KISAK_SWITCH
 extern void Switch_LogWrite(const char *msg);
+extern void Switch_LogScriptBoolCastFailure(uint32_t incomingType);
 #endif
 
 #undef GetObject
@@ -1780,6 +1781,9 @@ void  Scr_CastBool(VariableValue* value)
 		// value->type after setting VAR_UNDEFINED masks the actual script value
 		// and makes unrelated script failures all look like "undefined".
 		const Vartype_t originalType = value->type;
+#ifdef KISAK_SWITCH
+		Switch_LogScriptBoolCastFailure(static_cast<uint32_t>(originalType));
+#endif
 		RemoveRefToValue(originalType, value->u);
 		value->type = VAR_UNDEFINED;
 		Scr_Error(va("cannot cast %s to bool", var_typename[originalType]));
