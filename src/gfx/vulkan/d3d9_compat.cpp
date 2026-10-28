@@ -6890,6 +6890,71 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 
 #ifdef __SWITCH__
+    // Compare the game's D3D vertex registers with the exact float vectors
+    // packed into the Vulkan uniform buffer for this model draw. This is
+    // opt-in and does not alter shader data or the regular render path.
+    if (setIndex == 1u && g_switchModelTransformDraw.active &&
+        Switch_IsModelTransformTraceEnabled())
+    {
+        constexpr uint32_t traceRegsPerLine = 16u;
+        const uint32_t chunkCount =
+            (layout.floatCount + traceRegsPerLine - 1u) / traceRegsPerLine;
+        for (uint32_t chunk = 0; chunk < chunkCount; ++chunk)
+        {
+            char trace[1900];
+            const int header = std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][MODEL XFORM][UBO_DATA] seq=%u class=%s kind=%s model=%.95s material=%.95s xsurf=%p vs=%llu set=%u layoutBytes=%zu floatCount=%u part=%u/%u",
+                g_switchModelTransformDraw.sequence,
+                g_switchModelTransformDraw.weaponCandidate ? "weapon_candidate" :
+                    (std::strcmp(g_switchModelTransformDraw.drawKind, "skinned") == 0 ? "skinned" : "rigid"),
+                g_switchModelTransformDraw.drawKind,
+                g_switchModelTransformDraw.modelName,
+                g_switchModelTransformDraw.materialName,
+                g_switchModelTransformDraw.xsurf,
+                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+                setIndex, layout.size, layout.floatCount, chunk + 1u, chunkCount);
+            if (header < 0)
+                continue;
+            size_t used = std::min<size_t>(static_cast<size_t>(header), sizeof(trace) - 1u);
+            const uint32_t end = std::min<uint32_t>(
+                layout.floatCount, (chunk + 1u) * traceRegsPerLine);
+            for (uint32_t i = chunk * traceRegsPerLine; i < end; ++i)
+            {
+                float v[4]{};
+                const size_t packedOffset =
+                    layout.floatOffset + static_cast<size_t>(i) * 16u;
+                std::memcpy(v, bytes + packedOffset, sizeof(v));
+                const int written = std::snprintf(
+                    trace + used, sizeof(trace) - used,
+                    " c%u@%zu=(%.5g,%.5g,%.5g,%.5g)",
+                    layout.floatRegisters[i], packedOffset,
+                    v[0], v[1], v[2], v[3]);
+                if (written < 0)
+                    break;
+                if (static_cast<size_t>(written) >= sizeof(trace) - used)
+                {
+                    used = sizeof(trace) - 1u;
+                    break;
+                }
+                used += static_cast<size_t>(written);
+            }
+            if (used < sizeof(trace) - 1u)
+            {
+                trace[used++] = '\\n';
+                trace[used] = '\\0';
+            }
+            else
+            {
+                trace[sizeof(trace) - 2u] = '\\n';
+                trace[sizeof(trace) - 1u] = '\\0';
+            }
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
+
+#ifdef __SWITCH__
     // One compact dump for the exact floor VS: the white PS probe proves that
     // fragment state is isolated, so inspect the constants feeding clip-space.
     if (setIndex == 1u && m_vertexShader && m_vertexShader->serial == 1820u &&
@@ -6973,6 +7038,24 @@ bool IDirect3DDevice9::BindUniformSet(
         return false;
     }
     traceUniformBindStage("uniform_ring_written", bytes, size, 1);
+#ifdef __SWITCH__
+    if (setIndex == 1u && g_switchModelTransformDraw.active &&
+        Switch_IsModelTransformTraceEnabled())
+    {
+        char trace[512];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][MODEL XFORM][UBO_ALLOC] seq=%u xsurf=%p vs=%llu vkBuffer=%p offset=%llu range=%llu frame=%llu layoutBytes=%zu floats=%u ints=%u bools=%u\\n",
+            g_switchModelTransformDraw.sequence, g_switchModelTransformDraw.xsurf,
+            static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+            reinterpret_cast<void *>(bufferInfo.buffer),
+            static_cast<unsigned long long>(bufferInfo.offset),
+            static_cast<unsigned long long>(bufferInfo.range),
+            static_cast<unsigned long long>(frameSerial),
+            layout.size, layout.floatCount, layout.intCount, layout.boolCount);
+        Switch_LogWrite(trace);
+    }
+#endif
 
     const size_t cacheIndex = setIndex == 1 ? 0 : 1;
     auto &cachedSets = m_uniformDescriptorSets[cacheIndex];
@@ -7033,6 +7116,22 @@ bool IDirect3DDevice9::BindUniformSet(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
         setIndex, 1, &set, 0, nullptr);
     traceUniformBindStage("descriptor_bound", bytes, size, 1);
+#ifdef __SWITCH__
+    if (setIndex == 1u && g_switchModelTransformDraw.active &&
+        Switch_IsModelTransformTraceEnabled())
+    {
+        char trace[512];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][MODEL XFORM][UBO_BIND] seq=%u xsurf=%p vs=%llu descriptorSet=%p vkBuffer=%p offset=%llu range=%llu setIndex=%u\\n",
+            g_switchModelTransformDraw.sequence, g_switchModelTransformDraw.xsurf,
+            static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+            reinterpret_cast<void *>(set), reinterpret_cast<void *>(bufferInfo.buffer),
+            static_cast<unsigned long long>(bufferInfo.offset),
+            static_cast<unsigned long long>(bufferInfo.range), setIndex);
+        Switch_LogWrite(trace);
+    }
+#endif
     g_switchFrameStage = "frame/render/vulkan/uniform/return";
     return true;
 }
@@ -10628,6 +10727,20 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     if (g_switchModelTransformDraw.active)
     {
         const SwitchModelTransformDrawContext &traceContext = g_switchModelTransformDraw;
+        char vkInputTrace[512];
+        std::snprintf(
+            vkInputTrace, sizeof(vkInputTrace),
+            "[KisakCOD][MODEL XFORM][VK_INPUT] seq=%u class=%s kind=%s xsurf=%p vertexVk=%p vertexOffset=%llu stride=%u vertexBytes=%zu indexVk=%p indexOffset=0 indexType=uint16 startIndex=%u indexCount=%u baseVertex=%d vkCmdDrawIndexed\\n",
+            traceContext.sequence,
+            traceContext.weaponCandidate ? "weapon_candidate" :
+                (std::strcmp(traceContext.drawKind, "skinned") == 0 ? "skinned" : "rigid"),
+            traceContext.drawKind, traceContext.xsurf,
+            reinterpret_cast<void *>(m_streams[0].buffer ? m_streams[0].buffer->buffer : VK_NULL_HANDLE),
+            static_cast<unsigned long long>(m_streams[0].offset), m_streams[0].stride,
+            m_streams[0].buffer ? static_cast<size_t>(m_streams[0].buffer->size) : 0u,
+            reinterpret_cast<void *>(m_indices ? m_indices->buffer : VK_NULL_HANDLE),
+            startIndex, indexCount, baseVertexIndex);
+        Switch_LogWrite(vkInputTrace);
         char trace[1500];
         std::snprintf(trace, sizeof(trace),
             "[KisakCOD][MODEL XFORM][GPU] seq=%u class=%s kind=%s model=%s material=%s xsurf=%p gfxEnt=%u depthHack=%u pipeline=%016llx vsSerial=%llu declSerial=%llu indexCount=%u startIndex=%u baseVertex=%d numVertices=%u stream0=(buffer=%p offset=%llu stride=%u bytes=%u) index=(buffer=%p bytes=%u selectedReadable=%u mappedReadable=%u) sourceMValid=%u sourceM=%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g\n",
