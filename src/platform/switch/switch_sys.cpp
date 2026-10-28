@@ -3723,7 +3723,13 @@ static bool Switch_LogKeepKisakDiagnostic(const char *msg)
         "[KisakCOD][VK]",
         "[KisakCOD][DB LOAD]",
         "[KisakCOD][ZONE LOAD]",
-        "[KisakCOD][IWI ROOT] index ready"
+        "[KisakCOD][IWI ROOT] index ready",
+        "[KisakCOD][AI SPAWN]",
+        "[KisakCOD][AI STATE]",
+        "[KisakCOD][AI DEATH]",
+        "[KisakCOD][AI GROUND]",
+        "[KisakCOD][SCRIPT RETURN]",
+        "[KisakCOD][SCRIPT BOOL CAST]"
     };
 
     for (const char *prefix : kKeepPrefixes)
