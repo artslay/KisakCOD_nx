@@ -2303,6 +2303,8 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         : 0xFFFFFFFFu;
     if (traceRawFileRegistry)
         g_switchDbStage = "rawfile/registry/hash_enter";
+    else if (!traceXModelAliasRegistry)
+        g_switchDbStage = "asset/registry/hash_enter";
     if (traceXModelAliasRegistry)
     {
         g_switchDbStage = "xmodelalias/registry/hash_enter";
@@ -2323,6 +2325,8 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 #ifdef __SWITCH__
     if (traceRawFileRegistry)
         g_switchDbStage = "rawfile/registry/hash_done";
+    else if (!traceXModelAliasRegistry)
+        g_switchDbStage = "asset/registry/hash_done";
     if (traceXModelAliasRegistry)
     {
         g_switchDbStage = "xmodelalias/registry/hash_done";
@@ -2351,6 +2355,8 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 #endif
     const uint32_t bucketHead = db_hashTable[hash];
 #ifdef __SWITCH__
+    if (!traceRawFileRegistry && !traceXModelAliasRegistry)
+        g_switchDbStage = "asset/registry/read_bucket";
     if (traceXModelAliasRegistry)
     {
         g_switchDbStage = "xmodelalias/registry/read_bucket";
@@ -2380,6 +2386,8 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 #ifdef __SWITCH__
             if (traceXModelAliasRegistry)
                 g_switchDbStage = "xmodelalias/registry/chain_guard";
+            else if (!traceRawFileRegistry)
+                g_switchDbStage = "asset/registry/chain_guard";
             if (type == ASSET_TYPE_MATERIAL)
                 Switch_LogWrite("[SWITCH DBLOOKUP] hash chain overflow\n");
 #endif
@@ -2397,6 +2405,8 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                     xmodelAliasTraceId, assetEntryIndex, guard);
                 Switch_LogWrite(trace);
             }
+            else if (!traceRawFileRegistry)
+                g_switchDbStage = "asset/registry/bad_entry_index";
 #endif
             return 0;
         }
@@ -2415,10 +2425,14 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 Switch_LogWrite(trace);
             }
         }
+        else if (!traceRawFileRegistry)
+            g_switchDbStage = "asset/registry/read_entry";
 #endif
 #ifdef __SWITCH__
         if (traceXModelAliasRegistry)
             g_switchDbStage = "xmodelalias/registry/read_entry_fields";
+        else if (!traceRawFileRegistry)
+            g_switchDbStage = "asset/registry/read_entry_fields";
 #endif
         const uint32_t currentAssetType =
             static_cast<uint32_t>(assetEntry->entry.asset.type);
@@ -2442,6 +2456,8 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 Switch_LogWrite(trace);
             }
         }
+        else if (!traceRawFileRegistry)
+            g_switchDbStage = "asset/registry/entry_read";
 #endif
         if (currentAssetType == static_cast<uint32_t>(type))
         {
@@ -2450,6 +2466,8 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 g_switchDbStage = "rawfile/registry/get_entry_name";
             if (traceXModelAliasRegistry)
                 g_switchDbStage = "xmodelalias/registry/get_entry_name";
+            else if (!traceRawFileRegistry)
+                g_switchDbStage = "asset/registry/get_entry_name";
 #endif
             XAssetName = DB_GetXAssetName(&assetEntry->entry.asset);
 #ifdef __SWITCH__
@@ -2457,6 +2475,8 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 g_switchDbStage = "rawfile/registry/compare_name";
             if (traceXModelAliasRegistry)
                 g_switchDbStage = "xmodelalias/registry/compare_name";
+            else if (!traceRawFileRegistry)
+                g_switchDbStage = "asset/registry/compare_name";
             const int nameCompare = Switch_IstricmpAssetName(XAssetName, name);
             if (traceRawFileRegistry)
                 g_switchDbStage = "rawfile/registry/compare_done";
@@ -2474,6 +2494,8 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                     Switch_LogWrite(trace);
                 }
             }
+            else if (!traceRawFileRegistry)
+                g_switchDbStage = "asset/registry/compare_done";
             if (nameCompare == 0)
             {
                 // A default placeholder can share a hash-chain with a real
@@ -2493,6 +2515,8 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 #ifdef __SWITCH__
         if (traceXModelAliasRegistry)
             g_switchDbStage = "xmodelalias/registry/advance_chain";
+        else if (!traceRawFileRegistry)
+            g_switchDbStage = "asset/registry/advance_chain";
         assetEntryIndex = currentNextHash;
 #endif
     }
