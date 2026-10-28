@@ -94,7 +94,7 @@ static void Switch_LogScriptReturn(
     const bool targetCallSite =
         callerFilename &&
         std::strstr(callerFilename, "cover_behavior.gsc") &&
-        callerLine >= 120 && callerLine <= 150;
+        callerLine >= 134 && callerLine <= 140;
     const bool traceAllCoverReturns =
         Switch_IsScriptReturnTraceEnabled() &&
         filename && std::strstr(filename, "cover_behavior.gsc");
