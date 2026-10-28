@@ -2366,9 +2366,14 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
     }
 #endif
     uint32_t guard = 0;
+#ifdef __SWITCH__
+    assetEntryIndex = bucketHead;
+    while (assetEntryIndex)
+#else
     for (assetEntryIndex = bucketHead;
         assetEntryIndex;
         assetEntryIndex = assetEntry->entry.nextHash)
+#endif
     {
         if (++guard > 0x8000)
         {
@@ -2410,6 +2415,10 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 Switch_LogWrite(trace);
             }
         }
+#endif
+#ifdef __SWITCH__
+        if (traceXModelAliasRegistry)
+            g_switchDbStage = "xmodelalias/registry/read_entry_fields";
 #endif
         const uint32_t currentAssetType =
             static_cast<uint32_t>(assetEntry->entry.asset.type);
@@ -2481,6 +2490,11 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 return &g_assetEntryPool[assetEntryIndex];
 #endif
         }
+#ifdef __SWITCH__
+        if (traceXModelAliasRegistry)
+            g_switchDbStage = "xmodelalias/registry/advance_chain";
+        assetEntryIndex = currentNextHash;
+#endif
     }
 #ifdef __SWITCH__
     // The first lookup may occur before the map zone has registered its BSP.
