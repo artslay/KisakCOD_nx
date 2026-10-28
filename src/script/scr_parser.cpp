@@ -24,6 +24,58 @@ scrParserPub_t scrParserPub;
 char g_EndPos;
 bool g_loadedImpureScript;
 
+#ifdef KISAK_SWITCH
+// A corrupt sourceBufferLookupLen must never be used as a loop bound. The
+// original engine's script-file limit is 0x400; the allocated table can be
+// smaller (normally 256, growing up to 1024).
+static bool Switch_SourceBufferTableUsable()
+{
+    return scrParserPub.sourceBufferLookup &&
+        scrParserGlob.sourceBufferLookupMaxLen > 0 &&
+        scrParserGlob.sourceBufferLookupMaxLen <= 0x400u &&
+        scrParserPub.sourceBufferLookupLen > 0 &&
+        scrParserPub.sourceBufferLookupLen < 0x400u &&
+        scrParserPub.sourceBufferLookupLen <= scrParserGlob.sourceBufferLookupMaxLen;
+}
+
+static bool Switch_SourcePositionTablesUsable()
+{
+    return scrParserGlob.opcodeLookup &&
+        scrParserGlob.opcodeLookupMaxLen > 0 &&
+        scrParserGlob.opcodeLookupMaxLen <= 0x40000u &&
+        scrParserGlob.opcodeLookupLen > 0 &&
+        scrParserGlob.opcodeLookupLen <= scrParserGlob.opcodeLookupMaxLen &&
+        scrParserGlob.sourcePosLookup &&
+        scrParserGlob.sourcePosLookupMaxLen > 0 &&
+        scrParserGlob.sourcePosLookupMaxLen <= 0x40000u &&
+        scrParserGlob.sourcePosLookupLen > 0 &&
+        scrParserGlob.sourcePosLookupLen <= scrParserGlob.sourcePosLookupMaxLen;
+}
+
+static void Switch_LogInvalidSourceLookup(const char *where)
+{
+    // Keep error-path diagnostics bounded; this can run while reporting another
+    // script/IWI error and must not create a new failure or unbounded log spam.
+    static uint32_t logCount = 0;
+    if (logCount++ >= 8u)
+        return;
+
+    Com_PrintError(
+        CON_CHANNEL_PARSERSCRIPT,
+        "[KisakCOD][SCRIPT SOURCE LOOKUP INVALID] where=%s buffer=%p len=%u cap=%u opcode=%p opcodeLen=%u opcodeCap=%u sourcePos=%p sourcePosLen=%u sourcePosCap=%u\n",
+        where ? where : "unknown",
+        static_cast<const void *>(scrParserPub.sourceBufferLookup),
+        scrParserPub.sourceBufferLookupLen,
+        scrParserGlob.sourceBufferLookupMaxLen,
+        static_cast<const void *>(scrParserGlob.opcodeLookup),
+        scrParserGlob.opcodeLookupLen,
+        scrParserGlob.opcodeLookupMaxLen,
+        static_cast<const void *>(scrParserGlob.sourcePosLookup),
+        scrParserGlob.sourcePosLookupLen,
+        scrParserGlob.sourcePosLookupMaxLen);
+}
+#endif
+
 void __cdecl TRACK_scr_parser()
 {
     track_static_alloc_internal(&scrParserGlob, 52, "scrParserGlob", 7);
@@ -858,8 +910,17 @@ uint32_t __cdecl Scr_GetSourceBuffer(const char *codePos)
 {
     uint32_t bufferIndex; // [esp+0h] [ebp-4h]
 
+#ifdef KISAK_SWITCH
+    if (!codePos || !Scr_IsInOpcodeMemory(codePos) ||
+        !Switch_SourceBufferTableUsable())
+    {
+        Switch_LogInvalidSourceLookup("Scr_GetSourceBuffer");
+        return 0;
+    }
+#else
     iassert(Scr_IsInOpcodeMemory(codePos));
     iassert(scrParserPub.sourceBufferLookupLen > 0);
+#endif
 
     for (bufferIndex = scrParserPub.sourceBufferLookupLen - 1;
         bufferIndex
@@ -1007,7 +1068,20 @@ const char *__cdecl Scr_PrevCodePosFileName(char *codePos)
     if (codePos == &g_EndPos)
         return "<removed thread>";
     if (scrVarPub.programBuffer && Scr_IsInOpcodeMemory(codePos))
-        return scrParserPub.sourceBufferLookup[Scr_GetSourceBuffer(codePos - 1)].buf;
+    {
+#ifdef KISAK_SWITCH
+        if (!Switch_SourceBufferTableUsable())
+        {
+            Switch_LogInvalidSourceLookup("Scr_PrevCodePosFileName");
+            return "<source lookup unavailable>";
+        }
+#endif
+        const uint32_t bufferIndex = Scr_GetSourceBuffer(codePos - 1);
+        if (bufferIndex >= scrParserPub.sourceBufferLookupLen ||
+            !scrParserPub.sourceBufferLookup[bufferIndex].buf)
+            return "<source lookup unavailable>";
+        return scrParserPub.sourceBufferLookup[bufferIndex].buf;
+    }
     return codePos;
 }
 
@@ -1025,8 +1099,20 @@ const char *__cdecl Scr_PrevCodePosFunctionName(char *codePos)
         return "<removed thread>";
     if (!scrVarPub.programBuffer || !Scr_IsInOpcodeMemory(codePos))
         return "<unknown>";
+#ifdef KISAK_SWITCH
+    if (!Switch_SourceBufferTableUsable() || !Switch_SourcePositionTablesUsable())
+    {
+        Switch_LogInvalidSourceLookup("Scr_PrevCodePosFunctionName");
+        return "<source lookup unavailable>";
+    }
+#endif
     bufferIndex = Scr_GetSourceBuffer(codePos - 1);
+    if (bufferIndex >= scrParserPub.sourceBufferLookupLen ||
+        !scrParserPub.sourceBufferLookup[bufferIndex].sourceBuf)
+        return "<source lookup unavailable>";
     PrevSourcePos = Scr_GetPrevSourcePos(codePos - 1, 0);
+    if (PrevSourcePos > static_cast<uint32_t>(scrParserPub.sourceBufferLookup[bufferIndex].len))
+        return "<source lookup unavailable>";
     Scr_GetFunctionLineNumInternal(scrParserPub.sourceBufferLookup[bufferIndex].sourceBuf, PrevSourcePos, &startLine);
     return startLine;
 }
@@ -1183,20 +1269,57 @@ void __cdecl Scr_GetFileAndLine(const char *codePos, char **filename, int *linen
     OpcodeLookup *opcodeLookup; // [esp+4h] [ebp-8h]
     uint32_t sourcePos; // [esp+8h] [ebp-4h]
 
+#ifdef KISAK_SWITCH
+    if (!filename || !linenum)
+        return;
+    *filename = (char *)"";
+    *linenum = 0;
+
+    if (!codePos || !Scr_IsInOpcodeMemory(codePos) ||
+        !Switch_SourceBufferTableUsable() ||
+        !Switch_SourcePositionTablesUsable())
+    {
+        Switch_LogInvalidSourceLookup("Scr_GetFileAndLine");
+        return;
+    }
+#else
     if (!Scr_IsInOpcodeMemory(codePos))
         MyAssertHandler(".\\script\\scr_parser.cpp", 1216, 0, "%s", "Scr_IsInOpcodeMemory( codePos )");
+#endif
+
     opcodeLookup = Scr_GetPrevSourcePosOpcodeLookup(codePos);
     if (opcodeLookup)
     {
+#ifdef KISAK_SWITCH
+        if (opcodeLookup->sourcePosIndex >= scrParserGlob.sourcePosLookupLen ||
+            !opcodeLookup->sourcePosCount ||
+            opcodeLookup->sourcePosCount >
+                scrParserGlob.sourcePosLookupLen - opcodeLookup->sourcePosIndex)
+        {
+            Switch_LogInvalidSourceLookup("Scr_GetFileAndLine/sourcePosIndex");
+            return;
+        }
+#endif
         sourcePos = scrParserGlob.sourcePosLookup[opcodeLookup->sourcePosIndex].sourcePos;
         bufferIndex = Scr_GetSourceBuffer(codePos);
+#ifdef KISAK_SWITCH
+        if (!Switch_SourceBufferTableUsable() ||
+            bufferIndex >= scrParserPub.sourceBufferLookupLen)
+        {
+            Switch_LogInvalidSourceLookup("Scr_GetFileAndLine/bufferIndex");
+            return;
+        }
+        if (!scrParserPub.sourceBufferLookup[bufferIndex].buf ||
+            !scrParserPub.sourceBufferLookup[bufferIndex].sourceBuf ||
+            scrParserPub.sourceBufferLookup[bufferIndex].len < 0 ||
+            sourcePos > static_cast<uint32_t>(scrParserPub.sourceBufferLookup[bufferIndex].len))
+        {
+            Switch_LogInvalidSourceLookup("Scr_GetFileAndLine/sourceData");
+            return;
+        }
+#endif
         *linenum = Scr_GetLineNum(bufferIndex, sourcePos) + 1;
         *filename = scrParserPub.sourceBufferLookup[bufferIndex].buf;
-    }
-    else
-    {
-        *linenum = 0;
-        *filename = (char *)"";
     }
 }
 
