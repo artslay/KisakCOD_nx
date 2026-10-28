@@ -5807,6 +5807,9 @@ HRESULT IDirect3DDevice9::EndScene()
         m_backend->ClearPresentSource();
     }
 
+    const bool hasDrawCalls =
+        g_switchSceneDrawPrimitiveCalls != 0 ||
+        g_switchSceneDrawIndexedCalls != 0;
     if (Switch_IsVkGpuDrawTraceEnabled())
     {
     static uint32_t endSceneTraceCount = 0;
@@ -5814,9 +5817,6 @@ HRESULT IDirect3DDevice9::EndScene()
     static uint32_t endSceneDrawTraceCount = 0;
     static uint32_t endSceneHeartbeatTraceCount = 0;
     const uint32_t endSceneTraceId = endSceneTraceCount++;
-    const bool hasDrawCalls =
-        g_switchSceneDrawPrimitiveCalls != 0 ||
-        g_switchSceneDrawIndexedCalls != 0;
     const bool switchTraceDrawScene =
         hasDrawCalls && endSceneDrawTraceCount < 24;
     const bool switchTraceHeartbeat =
