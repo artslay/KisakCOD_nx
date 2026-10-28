@@ -2475,7 +2475,7 @@ void Scr_DumpScriptThreads(void)
 	}
 	if (num)
 	{
-		infoArray = (ThreadDebugInfo*)Z_TryVirtualAllocInternal(140 * num);
+		infoArray = (ThreadDebugInfo*)Z_TryVirtualAllocInternal(sizeof(ThreadDebugInfo) * static_cast<size_t>(num));
 		if (infoArray)
 		{
 			num = 0;
@@ -2507,7 +2507,7 @@ void Scr_DumpScriptThreads(void)
 						pInfo->pos[j] = info.pos[info.posSize - j];
 				}
 			}
-			qsort(infoArray, num, 0x8Cu, (int(*)(const void*, const void*))ThreadInfoCompare);
+			qsort(infoArray, num, sizeof(*infoArray), ThreadInfoCompare);
 			Com_Printf(CON_CHANNEL_PARSERSCRIPT, "********************************\n");
 			varUsage = 0.0;
 			endonUsage = 0.0;
@@ -2523,7 +2523,7 @@ void Scr_DumpScriptThreads(void)
 					++count;
 					info.varUsage = info.varUsage + infoArray[i].varUsage;
 					info.endonUsage = info.endonUsage + infoArray[i++].endonUsage;
-				} while (i < num && !ThreadInfoCompare((uint32*)pInfo, (uint32*)&infoArray[i]));
+				} while (i < num && !ThreadInfoCompare(pInfo, &infoArray[i]));
 				varUsage = varUsage + info.varUsage;
 				endonUsage = endonUsage + info.endonUsage;
 				Com_Printf(CON_CHANNEL_PARSERSCRIPT, "count: %d, var usage: %d, endon usage: %d\n", count, (int)info.varUsage, (int)info.endonUsage);
@@ -3374,22 +3374,21 @@ void  Scr_CheckLeaks(void)
 	}
 }
 
-int  ThreadInfoCompare(_DWORD* info1, _DWORD* info2)
+int ThreadInfoCompare(const void *p_info1, const void *p_info2)
 {
-	const char* pos1; // [esp+0h] [ebp-Ch]
-	int i; // [esp+4h] [ebp-8h]
-	const char* pos2; // [esp+8h] [ebp-4h]
+	const auto *info1 = static_cast<const ThreadDebugInfo *>(p_info1);
+	const auto *info2 = static_cast<const ThreadDebugInfo *>(p_info2);
 
-	for (i = 0; ; ++i)
+	for (int i = 0; ; ++i)
 	{
-		if (i >= info1[32] || i >= info2[32])
-			return info1[32] - info2[32];
-		pos1 = (const char*)info1[i];
-		pos2 = (const char*)info2[i];
+		if (i >= info1->posSize || i >= info2->posSize)
+			return info1->posSize - info2->posSize;
+
+		const uintptr_t pos1 = reinterpret_cast<uintptr_t>(info1->pos[i]);
+		const uintptr_t pos2 = reinterpret_cast<uintptr_t>(info2->pos[i]);
 		if (pos1 != pos2)
-			break;
+			return pos1 < pos2 ? -1 : 1;
 	}
-	return pos1 - pos2;
 }
 
 int VariableInfoFileNameCompare(const void *p_info1, const void *p_info2)
