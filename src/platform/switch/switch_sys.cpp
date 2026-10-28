@@ -3730,6 +3730,7 @@ static bool Switch_LogKeepKisakDiagnostic(const char *msg)
         "[KisakCOD][AI GROUND]",
         "[KisakCOD][AI GROUND DEPTH]",
         "[KisakCOD][AI HIGH ORIGIN]",
+        "[KisakCOD][AI TELEPORT]",
         "[KisakCOD][AI SCRIPT DAMAGE]",
         "[KisakCOD][AI SCRIPT CONTEXT]",
         "[KisakCOD][SCRIPT RETURN]",
