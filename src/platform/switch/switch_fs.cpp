@@ -1667,31 +1667,27 @@ static bool Switch_PathComponentEquals(const char *component, size_t length, con
     return true;
 }
 
-// These are script-debugger artifacts, not game data. Suppress writes before
-// FS_CreatePath so neither the files nor their parent directories are created.
+// Suppress only known script-debugger artifacts before FS_CreatePath.
+// Other scriptdata paths can be legitimate script-generated output (for example,
+// map-source export files) and must not be blocked solely by their directory.
 static bool Switch_ShouldSuppressScriptDebugWrite(const char *path)
 {
     if (!path || !*path)
         return false;
 
-    const char *component = path;
     const char *baseName = path;
-
     for (const char *p = path;; ++p)
     {
         if (*p != '/' && *p != '\\' && *p != '\0')
             continue;
 
-        const size_t length = static_cast<size_t>(p - component);
-        if (Switch_PathComponentEquals(component, length, "scriptdata"))
-            return true;
-
         if (*p == '\0')
         {
-            baseName = component;
+            baseName = p;
+            while (baseName > path && baseName[-1] != '/' && baseName[-1] != '\\')
+                --baseName;
             break;
         }
-        component = p + 1;
     }
 
     static const char *const suppressedNames[] = {
