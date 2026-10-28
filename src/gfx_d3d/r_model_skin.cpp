@@ -31,13 +31,24 @@ static void R_LogModelTransformCpuSkin(
     const uint32_t first = 0u, middle = xsurf->vertCount / 2u, last = xsurf->vertCount - 1u;
     const bool boneValid = boneMatrices && boneIndex >= 0 && boneIndex < 128;
     const DObjSkelMat *mat = boneValid ? &boneMatrices[boneIndex] : nullptr;
-    char trace[1500];
+    const GfxPackedVertex *sourceVertices = xsurf->verts0;
+    char trace[1800];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][MODEL XFORM][CPU_SKIN] seq=%u class=%s xsurf=%p gfxEnt=%u boneBase=%d boneCount=%u verts=%u dst=%p cacheOffset=%d path=%s xyz0=(%.5g,%.5g,%.5g) xyzMid=(%.5g,%.5g,%.5g) xyzLast=(%.5g,%.5g,%.5g) boneValid=%u boneA0=(%.4g,%.4g,%.4g,%.4g) boneA1=(%.4g,%.4g,%.4g,%.4g) boneA2=(%.4g,%.4g,%.4g,%.4g)\n",
+        "[KisakCOD][MODEL XFORM][CPU_SKIN] seq=%u class=%s xsurf=%p gfxEnt=%u boneBase=%d boneCount=%u verts=%u src=%p dst=%p cacheOffset=%d path=%s src0=(%.5g,%.5g,%.5g) srcMid=(%.5g,%.5g,%.5g) srcLast=(%.5g,%.5g,%.5g) out0=(%.5g,%.5g,%.5g) outMid=(%.5g,%.5g,%.5g) outLast=(%.5g,%.5g,%.5g) boneValid=%u boneA0=(%.4g,%.4g,%.4g,%.4g) boneA1=(%.4g,%.4g,%.4g,%.4g) boneA2=(%.4g,%.4g,%.4g,%.4g)\\n",
         sequence, weaponCandidate ? "weapon_candidate" : "skinned",
         static_cast<const void *>(xsurf), surface->info.gfxEntIndex, boneIndex,
-        surface->info.boneCount, xsurf->vertCount, static_cast<const void *>(vertices),
-        surface->skinnedCachedOffset, sseEnabled ? "sse" : "scalar",
+        surface->info.boneCount, xsurf->vertCount, static_cast<const void *>(sourceVertices),
+        static_cast<const void *>(vertices), surface->skinnedCachedOffset,
+        sseEnabled ? "sse" : "scalar",
+        sourceVertices ? sourceVertices[first].xyz[0] : 0.0f,
+        sourceVertices ? sourceVertices[first].xyz[1] : 0.0f,
+        sourceVertices ? sourceVertices[first].xyz[2] : 0.0f,
+        sourceVertices ? sourceVertices[middle].xyz[0] : 0.0f,
+        sourceVertices ? sourceVertices[middle].xyz[1] : 0.0f,
+        sourceVertices ? sourceVertices[middle].xyz[2] : 0.0f,
+        sourceVertices ? sourceVertices[last].xyz[0] : 0.0f,
+        sourceVertices ? sourceVertices[last].xyz[1] : 0.0f,
+        sourceVertices ? sourceVertices[last].xyz[2] : 0.0f,
         vertices[first].xyz[0], vertices[first].xyz[1], vertices[first].xyz[2],
         vertices[middle].xyz[0], vertices[middle].xyz[1], vertices[middle].xyz[2],
         vertices[last].xyz[0], vertices[last].xyz[1], vertices[last].xyz[2],

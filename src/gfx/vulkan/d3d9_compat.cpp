@@ -9746,8 +9746,13 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 {
     struct ModelTransformTraceReset
     {
-        ~ModelTransformTraceReset() { g_switchModelTransformDraw.active = false; }
-    } modelTransformTraceReset;
+        bool reset = false;
+        ~ModelTransformTraceReset()
+        {
+            if (reset)
+                g_switchModelTransformDraw.active = false;
+        }
+    } modelTransformTraceReset{g_switchModelTransformDraw.active};
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
     const uint8_t *auditIndexData = nullptr;
@@ -10604,11 +10609,11 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             traceContext.sourceMatrix[12], traceContext.sourceMatrix[13], traceContext.sourceMatrix[14], traceContext.sourceMatrix[15]);
         Switch_LogWrite(trace);
 
-        char registerTrace[2400];
+        char registerTrace[4400];
         size_t registerUsed = static_cast<size_t>(std::snprintf(registerTrace, sizeof(registerTrace),
-            "[KisakCOD][MODEL XFORM][VS] seq=%u xsurf=%p c0-c31=",
+            "[KisakCOD][MODEL XFORM][VS] seq=%u xsurf=%p c0-c63=",
             traceContext.sequence, traceContext.xsurf));
-        for (uint32_t reg = 0; reg < 32u && registerUsed < sizeof(registerTrace) - 1u; ++reg)
+        for (uint32_t reg = 0; reg < 64u && registerUsed < sizeof(registerTrace) - 1u; ++reg)
         {
             const size_t remaining = sizeof(registerTrace) - registerUsed;
             const int written = std::snprintf(registerTrace + registerUsed, remaining,
