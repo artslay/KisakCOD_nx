@@ -1776,9 +1776,13 @@ void  Scr_CastBool(VariableValue* value)
 	}
 	else
 	{
-		RemoveRefToValue(value->type, value->u);
+		// Preserve the incoming type for the error message. Reading
+		// value->type after setting VAR_UNDEFINED masks the actual script value
+		// and makes unrelated script failures all look like "undefined".
+		const Vartype_t originalType = value->type;
+		RemoveRefToValue(originalType, value->u);
 		value->type = VAR_UNDEFINED;
-		Scr_Error(va("cannot cast %s to bool", var_typename[value->type]));
+		Scr_Error(va("cannot cast %s to bool", var_typename[originalType]));
 	}
 }
 
