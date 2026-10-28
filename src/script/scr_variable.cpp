@@ -18,6 +18,7 @@
 #ifdef KISAK_SWITCH
 extern void Switch_LogWrite(const char *msg);
 extern void Switch_LogScriptBoolCastFailure(uint32_t incomingType);
+extern void Switch_LogScriptTypeMismatch(uint32_t leftType, uint32_t rightType);
 #endif
 
 #undef GetObject
@@ -1956,6 +1957,9 @@ void  Scr_UnmatchingTypesError(VariableValue* value1, VariableValue* value2)
 	{
 		type1 = value1->type;
 		type2 = value2->type;
+#ifdef KISAK_SWITCH
+		Switch_LogScriptTypeMismatch(static_cast<uint32_t>(type1), static_cast<uint32_t>(type2));
+#endif
 		Scr_CastDebugString(value1);
 		Scr_CastDebugString(value2);
 		iassert(value1->type == VAR_STRING);
