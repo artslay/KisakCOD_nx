@@ -2309,7 +2309,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
     if (traceRawFileDetailedRegistry)
     {
         g_switchDbStage = "rawfile/registry/hash_enter";
-        if (rawFileTraceId < 512u)
+        if (rawFileTraceId < 32u)
         {
             char trace[256];
             std::snprintf(trace, sizeof(trace),
@@ -2331,7 +2331,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
     if (traceRawFileDetailedRegistry)
     {
         g_switchDbStage = "rawfile/registry/hash_done";
-        if (rawFileTraceId < 512u)
+        if (rawFileTraceId < 32u)
         {
             char trace[384];
             std::snprintf(trace, sizeof(trace),
@@ -2361,7 +2361,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
     if (traceRawFileDetailedRegistry)
     {
         g_switchDbStage = "rawfile/registry/read_bucket";
-        if (rawFileTraceId < 512u)
+        if (rawFileTraceId < 32u)
         {
             char trace[256];
             std::snprintf(trace, sizeof(trace),
@@ -2416,7 +2416,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         if (traceRawFileDetailedRegistry)
         {
             g_switchDbStage = "rawfile/registry/read_entry";
-            if (rawFileTraceId < 128u && guard <= 8u)
+            if (rawFileTraceId < 32u && guard <= 4u)
             {
                 char trace[192];
                 std::snprintf(trace, sizeof(trace),
@@ -2441,7 +2441,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         if (traceRawFileDetailedRegistry)
         {
             g_switchDbStage = "rawfile/registry/entry_read";
-            if (rawFileTraceId < 128u && guard <= 8u)
+            if (rawFileTraceId < 32u && guard <= 4u)
             {
                 char trace[192];
                 std::snprintf(trace, sizeof(trace),
