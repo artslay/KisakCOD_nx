@@ -57,10 +57,10 @@ static inline uint64_t Kisak_ProfileClock()
 #endif
 
 #ifdef KISAK_SWITCH
-// Opt-in trace for script functions that produce no value. This helps locate
-// the function that feeds VAR_UNDEFINED into a boolean condition without
-// changing normal script semantics or adding per-return logging by default.
-static bool Switch_IsScriptUndefinedReturnTraceEnabled()
+// Opt-in trace around the cover AI's boolean-returning helper. The stock
+// function has explicit true/false returns; record the actual VM value so we
+// can distinguish a missing return from corruption while unwinding the call.
+static bool Switch_IsScriptReturnTraceEnabled()
 {
     static const bool enabled = []()
     {
@@ -70,9 +70,16 @@ static bool Switch_IsScriptUndefinedReturnTraceEnabled()
     return enabled;
 }
 
-static void Switch_LogScriptUndefinedReturn(const char *kind, const char *codePos)
+static void Switch_LogScriptReturn(
+    const char *kind, const char *codePos, const VariableValue *value)
 {
-    if (!Switch_IsScriptUndefinedReturnTraceEnabled())
+    if (!Switch_IsScriptReturnTraceEnabled() || !codePos)
+        return;
+
+    char *filename = nullptr;
+    int line = 0;
+    Scr_GetFileAndLine(codePos, &filename, &line);
+    if (!filename || !std::strstr(filename, "cover_behavior.gsc"))
         return;
 
     static uint32_t traceCount = 0;
@@ -80,16 +87,20 @@ static void Switch_LogScriptUndefinedReturn(const char *kind, const char *codePo
         return;
     ++traceCount;
 
-    char *filename = nullptr;
-    int line = 0;
-    if (codePos)
-        Scr_GetFileAndLine(codePos, &filename, &line);
+    const uint32_t type = value ? static_cast<uint32_t>(value->type)
+        : static_cast<uint32_t>(VAR_UNDEFINED);
+    const char *typeName = type < ARRAY_COUNT(var_typename)
+        ? var_typename[type] : "invalid";
+    const int32_t integerValue =
+        value && value->type == VAR_INTEGER ? value->u.intValue : 0;
+    const float floatValue =
+        value && value->type == VAR_FLOAT ? value->u.floatValue : 0.0f;
 
-    char trace[384];
+    char trace[512];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d codePos=%p value=undefined\n",
-        traceCount - 1u, kind ? kind : "unknown",
-        filename ? filename : "(unknown)", line, static_cast<const void *>(codePos));
+        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d type=%u typeName=%s int=%d float=%.6g codePos=%p\n",
+        traceCount - 1u, kind ? kind : "unknown", filename, line,
+        type, typeName, integerValue, floatValue, static_cast<const void *>(codePos));
     Switch_LogWrite(trace);
 }
 #endif
@@ -2202,10 +2213,9 @@ interrupt_return:
         case OP_End:
             parentLocalId = GetSafeParentLocalId(fs.localId);
 #ifdef KISAK_SWITCH
-            // OP_End returns VAR_UNDEFINED to a script caller when the
-            // function falls through without an explicit return value.
+            // A script function that falls through provides no return value.
             if (parentLocalId)
-                Switch_LogScriptUndefinedReturn("implicit_end", fs.pos - 1);
+                Switch_LogScriptReturn("implicit_end", fs.pos - 1, nullptr);
 #endif
             Scr_KillThread(fs.localId);
             scrVmPub.localVars -= fs.localVarCount;
@@ -2232,8 +2242,7 @@ thread_end:
         case OP_Return:
             parentLocalId = GetSafeParentLocalId(fs.localId);
 #ifdef KISAK_SWITCH
-            if (fs.top->type == VAR_UNDEFINED)
-                Switch_LogScriptUndefinedReturn("explicit_return", fs.pos - 1);
+            Switch_LogScriptReturn("explicit_return", fs.pos - 1, fs.top);
 #endif
             Scr_KillThread(fs.localId);
             scrVmPub.localVars -= fs.localVarCount;
