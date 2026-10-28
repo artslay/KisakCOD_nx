@@ -1343,13 +1343,8 @@ uint32_t __cdecl R_TessXModelRigidSkinnedDrawSurfList(
                     R_ChangeDepthRange(context.state, depthHackFlags);
                 setupPixelShader = 0;
             }
-            // SF_XMODEL_RIGID_SKINNED references a GfxModelSkinnedSurface.
-            // Unlike GfxModelRigidSurface, that record has no placement tail;
-            // reading modelSurf->placement reads past the record and corrupts
-            // the world transform for CPU-skinned character/hand/weapon meshes.
-            // The CPU-skinned vertices use the per-view skinned placement.
-            if (commonSource->objectPlacement != &commonSource->skinnedPlacement)
-                R_ChangeObjectPlacement(commonSource, &commonSource->skinnedPlacement);
+            if (commonSource->objectPlacement != &modelSurf->placement)
+                R_ChangeObjectPlacement(commonSource, &modelSurf->placement);
             R_SetupPassPerObjectArgs(context);
             R_SetupPassPerPrimArgs(context);
             R_DrawXModelSkinnedUncached(
