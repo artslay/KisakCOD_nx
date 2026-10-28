@@ -2,6 +2,10 @@
 #include "r_draw_xmodel.h"
 #ifdef __SWITCH__
 extern void Switch_SetRenderAuditObject(uint32_t surfaceType, uint32_t objectId);
+extern bool Switch_IsModelTransformTraceEnabled();
+extern void Switch_SetModelTransformTraceContext(
+    const char *drawKind, const char *materialName, const void *xsurf,
+    uint32_t gfxEntIndex, bool depthHack, const float *sourceMatrix);
 #endif
 #include "rb_stats.h"
 #include <database/database.h>
@@ -25,6 +29,18 @@ void __cdecl R_DrawXModelRigidModelSurf(GfxCmdBufContext context, XSurface *xsur
     GfxDrawPrimArgs args; // [esp+2Ch] [ebp-Ch] BYREF
 
     iassert(xsurf);
+#ifdef __SWITCH__
+    if (Switch_IsModelTransformTraceEnabled())
+    {
+        const GfxCmdBufSourceState *traceMatrix = R_GetActiveWorldMatrix(context.source);
+        const char *traceMaterial = context.state && context.state->material &&
+            context.state->material->info.name ? context.state->material->info.name : "(unknown)";
+        Switch_SetModelTransformTraceContext(
+            "rigid", traceMaterial, xsurf, UINT32_MAX,
+            context.state && context.state->depthRangeType != GFX_DEPTH_RANGE_SCENE,
+            traceMatrix ? reinterpret_cast<const float *>(&traceMatrix->matrices.matrix[0]) : nullptr);
+    }
+#endif
     args.baseIndex = 0; // LWSS: backport fix from blops
     args.vertexCount = xsurf->vertCount;
     args.triCount = xsurf->triCount;

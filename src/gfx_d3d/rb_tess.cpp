@@ -20,6 +20,13 @@
 #include "r_pretess.h"
 #include <EffectsCore/fx_marks.h>
 
+#ifdef __SWITCH__
+extern bool Switch_IsModelTransformTraceEnabled();
+extern void Switch_SetModelTransformTraceContext(
+    const char *drawKind, const char *materialName, const void *xsurf,
+    uint32_t gfxEntIndex, bool depthHack, const float *sourceMatrix);
+#endif
+
 GfxScaledPlacement s_manualObjectPlacement;
 
 void __cdecl RB_ShowTess(GfxCmdBufContext context, const float *center, const char *tessName, const float *color)
@@ -874,6 +881,19 @@ void __cdecl R_DrawXModelSkinnedUncached(
 void __cdecl R_DrawXModelSkinnedModelSurf(GfxCmdBufContext context, const GfxModelSkinnedSurface *modelSurf)
 {
     iassert(modelSurf);
+
+#ifdef __SWITCH__
+    if (Switch_IsModelTransformTraceEnabled())
+    {
+        const GfxCmdBufSourceState *traceMatrix = R_GetActiveWorldMatrix(context.source);
+        const char *traceMaterial = context.state && context.state->material &&
+            context.state->material->info.name ? context.state->material->info.name : "(unknown)";
+        Switch_SetModelTransformTraceContext(
+            "skinned", traceMaterial, modelSurf->xsurf, modelSurf->info.gfxEntIndex,
+            context.state && context.state->depthRangeType != GFX_DEPTH_RANGE_SCENE,
+            traceMatrix ? reinterpret_cast<const float *>(&traceMatrix->matrices.matrix[0]) : nullptr);
+    }
+#endif
 
     if (modelSurf->skinnedCachedOffset < 0)
         R_DrawXModelSkinnedUncached(context, modelSurf->xsurf, modelSurf->skinnedVert, false);

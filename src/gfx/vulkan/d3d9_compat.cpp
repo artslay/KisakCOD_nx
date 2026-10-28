@@ -175,6 +175,148 @@ struct SwitchRenderAuditContext
 };
 static thread_local SwitchRenderAuditContext g_switchRenderAuditContext{};
 
+struct SwitchModelTransformSurfaceInfo
+{
+    char modelName[96]{};
+    char materialName[96]{};
+    uint32_t gfxEntIndex = UINT32_MAX;
+    uint32_t modelIndex = 0;
+    uint32_t surfaceIndex = 0;
+    uint32_t objectId = 0;
+    bool skinned = false;
+    bool depthHack = false;
+    bool weaponCandidate = false;
+};
+struct SwitchModelTransformDrawContext
+{
+    bool active = false;
+    char drawKind[16]{};
+    char modelName[96]{};
+    char materialName[96]{};
+    const void *xsurf = nullptr;
+    uint32_t gfxEntIndex = UINT32_MAX;
+    uint32_t sequence = 0;
+    bool depthHack = false;
+    bool weaponCandidate = false;
+    bool sourceMatrixValid = false;
+    float sourceMatrix[16]{};
+};
+static std::mutex g_switchModelTransformSurfacesMutex;
+static std::unordered_map<const void *, SwitchModelTransformSurfaceInfo> g_switchModelTransformSurfaces;
+static thread_local SwitchModelTransformDrawContext g_switchModelTransformDraw{};
+static std::atomic<uint32_t> g_switchModelTransformSurfaceTraceCounts[3]{};
+static std::atomic<uint32_t> g_switchModelTransformGpuTraceCounts[3]{};
+
+bool Switch_IsModelTransformTraceEnabled()
+{
+    static const bool enabled = []()
+    {
+        const char *value = std::getenv("KISAK_VK_MODEL_TRANSFORM_TRACE");
+        return value && value[0] == '1' && value[1] == '\0';
+    }();
+    return enabled;
+}
+static bool Switch_ModelTransformNameContainsIgnoreCase(const char *text, const char *needle)
+{
+    if (!text || !needle || !needle[0]) return false;
+    for (const char *start = text; *start; ++start)
+    {
+        const char *a = start, *b = needle;
+        while (*a && *b &&
+            std::tolower(static_cast<unsigned char>(*a)) ==
+            std::tolower(static_cast<unsigned char>(*b))) { ++a; ++b; }
+        if (!*b) return true;
+    }
+    return false;
+}
+static bool Switch_ModelTransformLooksLikeWeapon(const char *modelName, const char *materialName)
+{
+    static const char *const hints[] = {
+        "weapon", "weap", "viewmodel", "view_model", "viewhand",
+        "viewhands", "gun", "arms", "hands"
+    };
+    for (const char *hint : hints)
+        if (Switch_ModelTransformNameContainsIgnoreCase(modelName, hint) ||
+            Switch_ModelTransformNameContainsIgnoreCase(materialName, hint))
+            return true;
+    return false;
+}
+void Switch_LogModelTransformTraceSurface(
+    const char *modelName, const char *materialName, const void *xsurf,
+    uint32_t modelIndex, uint32_t surfaceIndex, uint32_t gfxEntIndex,
+    uint32_t objectId, bool skinned, bool depthHack)
+{
+    if (!Switch_IsModelTransformTraceEnabled() || !xsurf) return;
+    SwitchModelTransformSurfaceInfo info{};
+    std::snprintf(info.modelName, sizeof(info.modelName), "%.95s", modelName ? modelName : "(unknown)");
+    std::snprintf(info.materialName, sizeof(info.materialName), "%.95s", materialName ? materialName : "(unknown)");
+    info.gfxEntIndex = gfxEntIndex; info.modelIndex = modelIndex;
+    info.surfaceIndex = surfaceIndex; info.objectId = objectId;
+    info.skinned = skinned; info.depthHack = depthHack;
+    info.weaponCandidate = depthHack || Switch_ModelTransformLooksLikeWeapon(info.modelName, info.materialName);
+    {
+        std::lock_guard<std::mutex> lock(g_switchModelTransformSurfacesMutex);
+        auto found = g_switchModelTransformSurfaces.find(xsurf);
+        if (found != g_switchModelTransformSurfaces.end()) found->second = info;
+        else if (g_switchModelTransformSurfaces.size() < 4096u) g_switchModelTransformSurfaces.emplace(xsurf, info);
+    }
+    const uint32_t category = info.weaponCandidate ? 1u : (skinned ? 0u : 2u);
+    const uint32_t sequence = g_switchModelTransformSurfaceTraceCounts[category].fetch_add(1u, std::memory_order_relaxed);
+    if (sequence >= 24u) return;
+    char trace[480];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][MODEL XFORM][SURFACE] seq=%u class=%s model=%s material=%s xsurf=%p modelIndex=%u surfaceIndex=%u objectId=%u gfxEnt=%u skinned=%u depthHack=%u\n",
+        sequence, info.weaponCandidate ? "weapon_candidate" : (skinned ? "skinned" : "rigid"),
+        info.modelName, info.materialName, xsurf, modelIndex, surfaceIndex, objectId,
+        gfxEntIndex, skinned ? 1u : 0u, depthHack ? 1u : 0u);
+    Switch_LogWrite(trace);
+}
+bool Switch_IsModelTransformWeaponSurface(const void *xsurf)
+{
+    if (!Switch_IsModelTransformTraceEnabled() || !xsurf) return false;
+    std::lock_guard<std::mutex> lock(g_switchModelTransformSurfacesMutex);
+    const auto found = g_switchModelTransformSurfaces.find(xsurf);
+    return found != g_switchModelTransformSurfaces.end() && found->second.weaponCandidate;
+}
+void Switch_SetModelTransformTraceContext(
+    const char *drawKind, const char *materialName, const void *xsurf,
+    uint32_t gfxEntIndex, bool depthHack, const float *sourceMatrix)
+{
+    g_switchModelTransformDraw = {};
+    if (!Switch_IsModelTransformTraceEnabled() || !xsurf) return;
+    SwitchModelTransformSurfaceInfo surfaceInfo{};
+    bool haveSurfaceInfo = false;
+    {
+        std::lock_guard<std::mutex> lock(g_switchModelTransformSurfacesMutex);
+        const auto found = g_switchModelTransformSurfaces.find(xsurf);
+        if (found != g_switchModelTransformSurfaces.end()) { surfaceInfo = found->second; haveSurfaceInfo = true; }
+    }
+    const bool isSkinned = drawKind && std::strcmp(drawKind, "skinned") == 0;
+    const bool weaponCandidate = depthHack ||
+        Switch_ModelTransformLooksLikeWeapon(haveSurfaceInfo ? surfaceInfo.modelName : nullptr, materialName) ||
+        (haveSurfaceInfo && surfaceInfo.weaponCandidate);
+    const uint32_t category = weaponCandidate ? 1u : (isSkinned ? 0u : 2u);
+    const uint32_t sequence = g_switchModelTransformGpuTraceCounts[category].fetch_add(1u, std::memory_order_relaxed);
+    if (sequence >= 20u) return;
+    SwitchModelTransformDrawContext &context = g_switchModelTransformDraw;
+    context.active = true;
+    std::snprintf(context.drawKind, sizeof(context.drawKind), "%.15s", drawKind ? drawKind : "model");
+    std::snprintf(context.modelName, sizeof(context.modelName), "%.95s",
+        haveSurfaceInfo ? surfaceInfo.modelName : "(unmatched-xsurf)");
+    std::snprintf(context.materialName, sizeof(context.materialName), "%.95s",
+        materialName ? materialName : (haveSurfaceInfo ? surfaceInfo.materialName : "(unknown)"));
+    context.xsurf = xsurf;
+    context.gfxEntIndex = gfxEntIndex != UINT32_MAX ? gfxEntIndex :
+        (haveSurfaceInfo ? surfaceInfo.gfxEntIndex : UINT32_MAX);
+    context.sequence = sequence;
+    context.depthHack = depthHack || (haveSurfaceInfo && surfaceInfo.depthHack);
+    context.weaponCandidate = weaponCandidate;
+    if (sourceMatrix) {
+        std::memcpy(context.sourceMatrix, sourceMatrix, sizeof(context.sourceMatrix));
+        context.sourceMatrixValid = true;
+    }
+}
+
 // The lit vertex/pixel shader pair is shared by several materials. Only call a
 // trace a floor trace while the renderer's per-draw audit context names the
 // investigated floor material; shader serials alone do not identify a surface.
@@ -9602,6 +9744,10 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     uint32_t primitiveType, int32_t baseVertexIndex, uint32_t minVertexIndex,
     uint32_t numVertices, uint32_t startIndex, uint32_t primitiveCount)
 {
+    struct ModelTransformTraceReset
+    {
+        ~ModelTransformTraceReset() { g_switchModelTransformDraw.active = false; }
+    } modelTransformTraceReset;
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
     const uint8_t *auditIndexData = nullptr;
@@ -10433,6 +10579,106 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     m_backend->CommandBuffer(), switchFloorOcclusionPool, 0, 0);
                 switchFloorOcclusionQueryIssued = true;
             }
+        }
+    }
+    if (g_switchModelTransformDraw.active)
+    {
+        const SwitchModelTransformDrawContext &traceContext = g_switchModelTransformDraw;
+        char trace[1500];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][MODEL XFORM][GPU] seq=%u class=%s kind=%s model=%s material=%s xsurf=%p gfxEnt=%u depthHack=%u indexCount=%u startIndex=%u baseVertex=%d numVertices=%u stream0=(buffer=%p offset=%llu stride=%u bytes=%u) index=(buffer=%p bytes=%u readable=%u) sourceMValid=%u sourceM=%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g\n",
+            traceContext.sequence,
+            traceContext.weaponCandidate ? "weapon_candidate" :
+                (std::strcmp(traceContext.drawKind, "skinned") == 0 ? "skinned" : "rigid"),
+            traceContext.drawKind, traceContext.modelName, traceContext.materialName,
+            traceContext.xsurf, traceContext.gfxEntIndex, traceContext.depthHack ? 1u : 0u,
+            indexCount, startIndex, baseVertexIndex, numVertices,
+            static_cast<void *>(m_streams[0].buffer),
+            static_cast<unsigned long long>(m_streams[0].offset), m_streams[0].stride,
+            m_streams[0].buffer ? m_streams[0].buffer->size : 0u,
+            static_cast<void *>(m_indices), m_indices ? m_indices->size : 0u,
+            indexData ? 1u : 0u, traceContext.sourceMatrixValid ? 1u : 0u,
+            traceContext.sourceMatrix[0], traceContext.sourceMatrix[1], traceContext.sourceMatrix[2], traceContext.sourceMatrix[3],
+            traceContext.sourceMatrix[4], traceContext.sourceMatrix[5], traceContext.sourceMatrix[6], traceContext.sourceMatrix[7],
+            traceContext.sourceMatrix[8], traceContext.sourceMatrix[9], traceContext.sourceMatrix[10], traceContext.sourceMatrix[11],
+            traceContext.sourceMatrix[12], traceContext.sourceMatrix[13], traceContext.sourceMatrix[14], traceContext.sourceMatrix[15]);
+        Switch_LogWrite(trace);
+
+        char registerTrace[2400];
+        size_t registerUsed = static_cast<size_t>(std::snprintf(registerTrace, sizeof(registerTrace),
+            "[KisakCOD][MODEL XFORM][VS] seq=%u xsurf=%p c0-c31=",
+            traceContext.sequence, traceContext.xsurf));
+        for (uint32_t reg = 0; reg < 32u && registerUsed < sizeof(registerTrace) - 1u; ++reg)
+        {
+            const size_t remaining = sizeof(registerTrace) - registerUsed;
+            const int written = std::snprintf(registerTrace + registerUsed, remaining,
+                "%sc%u=(%.4g,%.4g,%.4g,%.4g)", reg ? " " : "", reg,
+                m_vsFloat[reg][0], m_vsFloat[reg][1], m_vsFloat[reg][2], m_vsFloat[reg][3]);
+            if (written < 0) break;
+            if (static_cast<size_t>(written) >= remaining) { registerUsed = sizeof(registerTrace) - 1u; break; }
+            registerUsed += static_cast<size_t>(written);
+        }
+        if (registerUsed < sizeof(registerTrace) - 1u) {
+            registerTrace[registerUsed++] = '\n';
+            registerTrace[registerUsed] = '\0';
+        }
+        Switch_LogWrite(registerTrace);
+
+        IDirect3DVertexBuffer9 *traceVertexBuffer = m_streams[0].buffer;
+        const uint8_t *traceVertexBytes = nullptr;
+        size_t traceVertexReadableBytes = 0u;
+        if (traceVertexBuffer)
+        {
+            if (traceVertexBuffer->dynamic && traceVertexBuffer->shadowInitialized &&
+                traceVertexBuffer->shadow.size() >= traceVertexBuffer->size) {
+                traceVertexBytes = traceVertexBuffer->shadow.data();
+                traceVertexReadableBytes = traceVertexBuffer->shadow.size();
+            } else if (traceVertexBuffer->mapped) {
+                traceVertexBytes = static_cast<const uint8_t *>(traceVertexBuffer->mapped);
+                traceVertexReadableBytes = traceVertexBuffer->size;
+            } else if (!traceVertexBuffer->shadow.empty()) {
+                traceVertexBytes = traceVertexBuffer->shadow.data();
+                traceVertexReadableBytes = traceVertexBuffer->shadow.size();
+            }
+        }
+        for (uint32_t sample = 0; sample < 3u && sample < indexCount; ++sample)
+        {
+            uint16_t rawIndex = 0u;
+            bool indexReadable = false;
+            int64_t effectiveVertex = -1;
+            uint64_t vertexByteOffset = 0u;
+            float vx = 0.0f, vy = 0.0f, vz = 0.0f;
+            bool vertexReadable = false;
+            const uint64_t indexPosition = static_cast<uint64_t>(startIndex) + sample;
+            if (indexData && m_indices && indexPosition < static_cast<uint64_t>(m_indices->size) / sizeof(uint16_t)) {
+                std::memcpy(&rawIndex, indexData + static_cast<size_t>(indexPosition) * sizeof(uint16_t), sizeof(rawIndex));
+                indexReadable = true;
+                effectiveVertex = static_cast<int64_t>(baseVertexIndex) + rawIndex;
+            }
+            const StreamBinding &traceStream = m_streams[0];
+            if (indexReadable && effectiveVertex >= 0 && traceStream.buffer && traceStream.stride &&
+                static_cast<uint64_t>(effectiveVertex) <=
+                    (UINT64_MAX - static_cast<uint64_t>(traceStream.offset)) / traceStream.stride)
+            {
+                vertexByteOffset = static_cast<uint64_t>(traceStream.offset) +
+                    static_cast<uint64_t>(effectiveVertex) * traceStream.stride;
+                if (traceVertexBytes && vertexByteOffset <= traceVertexReadableBytes &&
+                    traceVertexReadableBytes - static_cast<size_t>(vertexByteOffset) >= sizeof(float) * 3u) {
+                    const uint8_t *vertex = traceVertexBytes + static_cast<size_t>(vertexByteOffset);
+                    std::memcpy(&vx, vertex, sizeof(float));
+                    std::memcpy(&vy, vertex + sizeof(float), sizeof(float));
+                    std::memcpy(&vz, vertex + sizeof(float) * 2u, sizeof(float));
+                    vertexReadable = true;
+                }
+            }
+            char vertexTrace[320];
+            std::snprintf(vertexTrace, sizeof(vertexTrace),
+                "[KisakCOD][MODEL XFORM][VB] seq=%u xsurf=%p sample=%u indexReadable=%u rawIndex=%u effectiveVertex=%lld byteOffset=%llu stride=%u readable=%u xyz=(%.5g,%.5g,%.5g)\n",
+                traceContext.sequence, traceContext.xsurf, sample, indexReadable ? 1u : 0u,
+                rawIndex, static_cast<long long>(effectiveVertex),
+                static_cast<unsigned long long>(vertexByteOffset), traceStream.stride,
+                vertexReadable ? 1u : 0u, vx, vy, vz);
+            Switch_LogWrite(vertexTrace);
         }
     }
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/issue_draw";

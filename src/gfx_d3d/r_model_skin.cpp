@@ -8,6 +8,46 @@
 #include <universal/profile.h>
 #include "r_dobj_skin.h"
 
+#ifdef __SWITCH__
+#include <atomic>
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+extern bool Switch_IsModelTransformTraceEnabled();
+extern bool Switch_IsModelTransformWeaponSurface(const void *xsurf);
+
+static void R_LogModelTransformCpuSkin(
+    const GfxModelSkinnedSurface *surface, const XSurface *xsurf,
+    const GfxPackedVertex *vertices, const DObjSkelMat *boneMatrices,
+    int boneIndex, bool sseEnabled)
+{
+    if (!surface || !xsurf || !vertices || !xsurf->vertCount ||
+        !Switch_IsModelTransformTraceEnabled()) return;
+    const bool weaponCandidate = Switch_IsModelTransformWeaponSurface(xsurf);
+    static std::atomic<uint32_t> skinnedTraceCount{0}, weaponTraceCount{0};
+    const uint32_t sequence = weaponCandidate
+        ? weaponTraceCount.fetch_add(1u, std::memory_order_relaxed)
+        : skinnedTraceCount.fetch_add(1u, std::memory_order_relaxed);
+    if (sequence >= 24u) return;
+    const uint32_t first = 0u, middle = xsurf->vertCount / 2u, last = xsurf->vertCount - 1u;
+    const bool boneValid = boneMatrices && boneIndex >= 0 && boneIndex < 128;
+    const DObjSkelMat *mat = boneValid ? &boneMatrices[boneIndex] : nullptr;
+    char trace[1500];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][MODEL XFORM][CPU_SKIN] seq=%u class=%s xsurf=%p gfxEnt=%u boneBase=%d boneCount=%u verts=%u dst=%p cacheOffset=%d path=%s xyz0=(%.5g,%.5g,%.5g) xyzMid=(%.5g,%.5g,%.5g) xyzLast=(%.5g,%.5g,%.5g) boneValid=%u boneA0=(%.4g,%.4g,%.4g,%.4g) boneA1=(%.4g,%.4g,%.4g,%.4g) boneA2=(%.4g,%.4g,%.4g,%.4g)\n",
+        sequence, weaponCandidate ? "weapon_candidate" : "skinned",
+        static_cast<const void *>(xsurf), surface->info.gfxEntIndex, boneIndex,
+        surface->info.boneCount, xsurf->vertCount, static_cast<const void *>(vertices),
+        surface->skinnedCachedOffset, sseEnabled ? "sse" : "scalar",
+        vertices[first].xyz[0], vertices[first].xyz[1], vertices[first].xyz[2],
+        vertices[middle].xyz[0], vertices[middle].xyz[1], vertices[middle].xyz[2],
+        vertices[last].xyz[0], vertices[last].xyz[1], vertices[last].xyz[2],
+        boneValid ? 1u : 0u,
+        mat ? mat->axis[0][0] : 0.0f, mat ? mat->axis[0][1] : 0.0f, mat ? mat->axis[0][2] : 0.0f, mat ? mat->axis[0][3] : 0.0f,
+        mat ? mat->axis[1][0] : 0.0f, mat ? mat->axis[1][1] : 0.0f, mat ? mat->axis[1][2] : 0.0f, mat ? mat->axis[1][3] : 0.0f,
+        mat ? mat->axis[2][0] : 0.0f, mat ? mat->axis[2][1] : 0.0f, mat ? mat->axis[2][2] : 0.0f, mat ? mat->axis[2][3] : 0.0f);
+    Switch_LogWrite(trace);
+}
+#endif
 
 //uint32_t const *const g_shortBoneWeightPerm__uint4 820f4950     gfx_d3d : r_model_skin.obj
 //struct __vector4 const g_shortBoneWeightPerm 85b981d0     gfx_d3d : r_model_skin.obj
@@ -192,6 +232,8 @@ void R_SkinXModelCmd(_WORD *data)
         for (uint32_t vertexIndex = 0; vertexIndex < xsurf->vertCount; ++vertexIndex)
             skinVerticesOut[vertexIndex].texCoord =
                 Vec2ConvertTexCoordsForVulkan(skinVerticesOut[vertexIndex].texCoord);
+        R_LogModelTransformCpuSkin(
+            skinnedSurf, xsurf, skinVerticesOut, boneSkelMats, boneIndex, sseEnabled);
 #endif
     }
 

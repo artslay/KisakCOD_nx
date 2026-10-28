@@ -33,6 +33,14 @@
 #include <universal/profile.h>
 #include "rb_state.h"
 
+#ifdef __SWITCH__
+extern bool Switch_IsModelTransformTraceEnabled();
+extern void Switch_LogModelTransformTraceSurface(
+    const char *modelName, const char *materialName, const void *xsurf,
+    uint32_t modelIndex, uint32_t surfaceIndex, uint32_t gfxEntIndex,
+    uint32_t objectId, bool skinned, bool depthHack);
+#endif
+
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
 #elif KISAK_SP
@@ -956,6 +964,20 @@ LABEL_15:
                 surfId = surfId >> 2;
                 bcassert(surfId, (1 << MTL_SORT_OBJECT_ID_BITS));
 
+#ifdef __SWITCH__
+                if (Switch_IsModelTransformTraceEnabled())
+                {
+                    const XSurface *traceXsurf = surfType == SF_BEGIN_XMODEL
+                        ? reinterpret_cast<const GfxModelRigidSurface *>(modelSurf)->surf.xsurf
+                        : reinterpret_cast<const GfxModelSkinnedSurface *>(modelSurf)->xsurf;
+                    Switch_LogModelTransformTraceSurface(
+                        model->name ? model->name : "(null)",
+                        (*material)->info.name ? (*material)->info.name : "(null)",
+                        traceXsurf, modelIndex, subMatIndex, gfxEntIndex, surfId,
+                        surfType == SF_XMODEL_SKINNED, depthHack != 0);
+                }
+#endif
+
                 //drawSurf = (*material)->info.drawSurf.packed;
 
                 drawSurfs[region]->packed = (*material)->info.drawSurf.packed;
@@ -1086,6 +1108,20 @@ GfxDrawSurf *__cdecl R_AddDObjSurfaces(
 
                 surfId = surfId / 4;
                 iassert(surfId < (1 << MTL_SORT_OBJECT_ID_BITS));
+
+#ifdef __SWITCH__
+                if (Switch_IsModelTransformTraceEnabled())
+                {
+                    const XSurface *traceXsurf = surfType == SF_XMODEL_RIGID
+                        ? reinterpret_cast<const GfxModelRigidSurface *>(modelSurf)->surf.xsurf
+                        : reinterpret_cast<const GfxModelSkinnedSurface *>(modelSurf)->xsurf;
+                    Switch_LogModelTransformTraceSurface(
+                        model->name ? model->name : "(null)",
+                        (*material)->info.name ? (*material)->info.name : "(null)",
+                        traceXsurf, modelIndex, subMatIndex, sceneEnt->gfxEntIndex, surfId,
+                        surfType == SF_XMODEL_SKINNED, depthHack != 0);
+                }
+#endif
 
                 newDrawSurf = (*material)->info.drawSurf;
 
