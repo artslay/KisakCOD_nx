@@ -7,6 +7,11 @@
 #include "actor_script_cmd.h"
 #include "g_main.h"
 #include <script/scr_vm.h>
+#ifdef __SWITCH__
+#include <script/scr_parser.h>
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 #include <server/sv_game.h>
 #include "actor_state.h"
 #include "actor_orientation.h"
@@ -1099,7 +1104,46 @@ void __cdecl ActorCmd_Teleport(scr_entref_t entref)
         return;
     }
 LABEL_16:
+#ifdef __SWITCH__
+    float switchOldOrigin[3] = {
+        ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2]
+    };
+#endif
     G_SetOrigin(ent, vSpawnPos);
+#ifdef __SWITCH__
+    if ((vSpawnPos[2] >= 600.0f ||
+         std::fabs(vSpawnPos[2] - switchOldOrigin[2]) >= 200.0f) )
+    {
+        static unsigned switchAiTeleportTraceCount = 0;
+        if (switchAiTeleportTraceCount < 64u)
+        {
+            char *scriptFile = (char *)"";
+            int scriptLine = 0;
+            const char *codePos = nullptr;
+            if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
+            {
+                codePos = scrVmPub.function_frame->fs.pos;
+                if (codePos)
+                    Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
+            }
+            const char *className = ent->classname
+                ? SL_ConvertToStringSafe(ent->classname) : "<none>";
+            const char *targetName = ent->targetname
+                ? SL_ConvertToStringSafe(ent->targetname) : "<none>";
+            char trace[512];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][AI TELEPORT] n=%u ent=%d class=%s targetname=%s "
+                "from=(%.1f %.1f %.1f) to=(%.1f %.1f %.1f) distSq=%.1f "
+                "script=%s:%d codePos=%p\\n",
+                switchAiTeleportTraceCount++, ent->s.number, className, targetName,
+                switchOldOrigin[0], switchOldOrigin[1], switchOldOrigin[2],
+                vSpawnPos[0], vSpawnPos[1], vSpawnPos[2], distSquared,
+                scriptFile ? scriptFile : "", scriptLine,
+                static_cast<const void *>(codePos));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     self->Physics.vVelocity[0] = 0.0;
     self->Physics.vVelocity[1] = 0.0;
     self->Physics.vVelocity[2] = 0.0;
