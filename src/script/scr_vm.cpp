@@ -65,7 +65,7 @@ static bool Switch_IsScriptUndefinedReturnTraceEnabled()
     static const bool enabled = []()
     {
         const char *value = std::getenv("KISAK_SCRIPT_RETURN_TRACE");
-        return value && value[0] == '1' && value[1] == '\\0';
+        return value && value[0] == '1' && value[1] == '\0';
     }();
     return enabled;
 }
@@ -87,7 +87,7 @@ static void Switch_LogScriptUndefinedReturn(const char *kind, const char *codePo
 
     char trace[384];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d codePos=%p value=undefined\\n",
+        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d codePos=%p value=undefined\n",
         traceCount - 1u, kind ? kind : "unknown",
         filename ? filename : "(unknown)", line, static_cast<const void *>(codePos));
     Switch_LogWrite(trace);
