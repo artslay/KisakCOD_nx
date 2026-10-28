@@ -40,14 +40,19 @@ static bool Switch_SourceBufferTableUsable()
 
 static bool Switch_SourcePositionTablesUsable()
 {
+    // AddOpcodePos grows these tables by doubling their capacity. The retail
+    // cargo ship scripts legitimately grow sourcePosLookup past 0x40000;
+    // validate against the actual allocated capacity, not the initial size.
+    constexpr uint32_t maxLookupCapacity = 0x100000u;
+
     return scrParserGlob.opcodeLookup &&
         scrParserGlob.opcodeLookupMaxLen > 0 &&
-        scrParserGlob.opcodeLookupMaxLen <= 0x40000u &&
+        scrParserGlob.opcodeLookupMaxLen <= maxLookupCapacity &&
         scrParserGlob.opcodeLookupLen > 0 &&
         scrParserGlob.opcodeLookupLen <= scrParserGlob.opcodeLookupMaxLen &&
         scrParserGlob.sourcePosLookup &&
         scrParserGlob.sourcePosLookupMaxLen > 0 &&
-        scrParserGlob.sourcePosLookupMaxLen <= 0x40000u &&
+        scrParserGlob.sourcePosLookupMaxLen <= maxLookupCapacity &&
         scrParserGlob.sourcePosLookupLen > 0 &&
         scrParserGlob.sourcePosLookupLen <= scrParserGlob.sourcePosLookupMaxLen;
 }
