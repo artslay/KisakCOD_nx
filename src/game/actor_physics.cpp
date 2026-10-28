@@ -39,8 +39,11 @@ actor_physics_t *g_pPhys;
 
 #ifdef __SWITCH__
 static uint32_t g_switchAiGroundTraceCount;
+static uint32_t g_switchAiGroundDepthCount;
+static uint32_t g_switchAiHighOriginCount;
 static uint8_t g_switchAiGroundTraceFirst[MAX_GENTITIES];
 static uint8_t g_switchAiGroundTraceMiss[MAX_GENTITIES];
+static uint8_t g_switchAiHighOriginLogged[MAX_GENTITIES];
 
 static void Switch_LogAiGroundTrace(
     const actor_physics_t *phys, const actor_physics_local_t *local, const trace_t *trace,
@@ -88,6 +91,40 @@ static void Switch_LogAiGroundTrace(
         static_cast<unsigned int>(phys->iHitEntnum),
         static_cast<int>(phys->ePhysicsType));
     Switch_LogWrite(line);
+
+    // A short ground probe cannot distinguish an actor in mid-air from a
+    // missing collision surface. Probe well below the actor once to answer it.
+    if (firstMiss && phys->vOrigin[2] > 500.0f &&
+        g_switchAiGroundDepthCount < 24u)
+    {
+        float probeStart[3] = {
+            phys->vOrigin[0], phys->vOrigin[1], phys->vOrigin[2] + 0.25f
+        };
+        float probeEnd[3] = {
+            phys->vOrigin[0], phys->vOrigin[1], phys->vOrigin[2] - 2048.0f
+        };
+        trace_t depthTrace{};
+        G_TraceCapsule(&depthTrace, probeStart, phys->vMins, phys->vMaxs,
+            probeEnd, phys->iEntNum, phys->iTraceMask);
+        const float hitZ = probeStart[2] +
+            (probeEnd[2] - probeStart[2]) * depthTrace.fraction;
+        const int depthHitEnt = depthTrace.fraction < 1.0f
+            ? Trace_GetEntityHitId(&depthTrace) : ENTITYNUM_NONE;
+        char depthLine[512];
+        std::snprintf(depthLine, sizeof(depthLine),
+            "[KisakCOD][AI GROUND DEPTH] n=%u ent=%d origin=(%.1f %.1f %.1f) "
+            "endZ=%.1f mask=0x%x fraction=%.5f hitZ=%.1f normalZ=%.3f "
+            "walkable=%u contents=0x%x startsolid=%u allsolid=%u hitEnt=%d\\n",
+            g_switchAiGroundDepthCount++, phys->iEntNum,
+            phys->vOrigin[0], phys->vOrigin[1], phys->vOrigin[2],
+            probeEnd[2], static_cast<unsigned int>(phys->iTraceMask),
+            depthTrace.fraction, hitZ, depthTrace.normal[2],
+            depthTrace.walkable ? 1u : 0u,
+            static_cast<unsigned int>(depthTrace.contents),
+            depthTrace.startsolid ? 1u : 0u,
+            depthTrace.allsolid ? 1u : 0u, depthHitEnt);
+        Switch_LogWrite(depthLine);
+    }
 }
 #endif
 
@@ -808,6 +845,36 @@ int __cdecl Actor_Physics(actor_physics_t *pPhys)
 
     groundEntNum = pPhys->groundEntNum;
     v3 = pPhys;
+#ifdef __SWITCH__
+    if (pPhys->iEntNum >= 0 && pPhys->iEntNum < MAX_GENTITIES &&
+        pPhys->vOrigin[2] > 600.0f &&
+        !g_switchAiHighOriginLogged[pPhys->iEntNum] &&
+        g_switchAiHighOriginCount < 32u)
+    {
+        g_switchAiHighOriginLogged[pPhys->iEntNum] = 1;
+        ++g_switchAiHighOriginCount;
+        const gentity_s *ent = &g_entities[pPhys->iEntNum];
+        const char *className = ent->classname
+            ? SL_ConvertToStringSafe(ent->classname) : "<none>";
+        const char *targetName = ent->targetname
+            ? SL_ConvertToStringSafe(ent->targetname) : "<none>";
+        char originLine[512];
+        std::snprintf(originLine, sizeof(originLine),
+            "[KisakCOD][AI HIGH ORIGIN] ent=%d class=%s targetname=%s "
+            "current=(%.1f %.1f %.1f) physics=(%.1f %.1f %.1f) "
+            "wish=(%.1f %.1f %.1f) velocity=(%.1f %.1f %.1f) "
+            "iMsec=%d gravity=%.1f traceMask=0x%x groundEnt=%u physicsType=%d time=%d\\n",
+            pPhys->iEntNum, className, targetName,
+            ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
+            pPhys->vOrigin[0], pPhys->vOrigin[1], pPhys->vOrigin[2],
+            pPhys->vWishDelta[0], pPhys->vWishDelta[1], pPhys->vWishDelta[2],
+            pPhys->vVelocity[0], pPhys->vVelocity[1], pPhys->vVelocity[2],
+            pPhys->iMsec, pPhys->fGravity, static_cast<unsigned int>(pPhys->iTraceMask),
+            static_cast<unsigned int>(pPhys->groundEntNum),
+            static_cast<int>(pPhys->ePhysicsType), level.time);
+        Switch_LogWrite(originLine);
+    }
+#endif
     pPhys->iNumTouch = 0;
     pPhys->bDeflected = 0;
     pPhys->iHitEntnum = ENTITYNUM_NONE;
