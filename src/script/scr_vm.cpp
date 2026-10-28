@@ -117,7 +117,7 @@ static void Switch_LogScriptReturn(
 
     char trace[640];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d type=%u typeName=%s int=%d float=%.6g caller=%s:%d codePos=%p callerPos=%p targetCall=%u\\n",
+        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d type=%u typeName=%s int=%d float=%.6g caller=%s:%d codePos=%p callerPos=%p targetCall=%u\n",
         traceCount - 1u, kind ? kind : "unknown",
         filename && filename[0] ? filename : "(unknown)", line,
         type, typeName, integerValue, floatValue,
