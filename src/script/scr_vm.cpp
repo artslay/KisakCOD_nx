@@ -1091,9 +1091,10 @@ const char* __cdecl Scr_GetRunningThreadPos(uint32_t localId)
     for (function_count = scrVmPub.function_count; function_count; --function_count)
     {
         if (scrVmPub.function_frame_start[function_count].fs.localId == localId)
-            return &g_EndPos != (char*)scrVmPub.stack[3 * function_count - 96].u.intValue
-            ? (const char*)scrVmPub.stack[3 * function_count - 96].u.intValue
-            : 0;
+        {
+            const char *pos = scrVmPub.function_frame_start[function_count].fs.pos;
+            return pos != &g_EndPos ? pos : nullptr;
+        }
     }
     if (!alwaysfails)
         MyAssertHandler(".\\script\\scr_vm.cpp", 3191, 0, "unreachable");
