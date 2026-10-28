@@ -154,6 +154,32 @@ void Switch_LogScriptBoolCastFailure(uint32_t incomingType)
         line, static_cast<const void *>(codePos), scrVmPub.function_count);
     Switch_LogWrite(trace);
 }
+
+void Switch_LogScriptTypeMismatch(uint32_t leftType, uint32_t rightType)
+{
+    static std::atomic<uint32_t> traceCount{0};
+    const uint32_t traceId = traceCount.fetch_add(1u, std::memory_order_relaxed);
+    if (traceId >= 64u)
+        return;
+
+    const char *codePos = fs.pos;
+    char *filename = nullptr;
+    int line = 0;
+    if (codePos && Scr_IsInOpcodeMemory(codePos))
+        Scr_GetFileAndLine(codePos, &filename, &line);
+
+    const char *leftName = leftType < ARRAY_COUNT(var_typename)
+        ? var_typename[leftType] : "invalid";
+    const char *rightName = rightType < ARRAY_COUNT(var_typename)
+        ? var_typename[rightType] : "invalid";
+    char trace[512];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][SCRIPT TYPE MISMATCH] n=%u leftType=%u leftName=%s rightType=%u rightName=%s file=%s line=%d codePos=%p functionCount=%d\\n",
+        traceId, leftType, leftName, rightType, rightName,
+        filename && filename[0] ? filename : "(unknown)",
+        line, static_cast<const void *>(codePos), scrVmPub.function_count);
+    Switch_LogWrite(trace);
+}
 #endif
 
 double Scr_ProfileTicksToSeconds(uint64_t ticks)
