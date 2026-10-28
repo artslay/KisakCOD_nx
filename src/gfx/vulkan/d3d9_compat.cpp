@@ -195,6 +195,12 @@ static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
         const char *value = std::getenv("KISAK_VK_RENDER_OBJECT_FILTER");
         return value && *value ? std::string(value) : std::string("off");
     }();
+    // Keep the disabled default on the shortest path: this function is
+    // queried from material setup and GPU draw handling, so even a diagnostic
+    // one-time atomic exchange here would otherwise run for every draw.
+    if (filter == "off" || filter == "0" || filter == "none")
+        return false;
+
     static std::atomic<bool> filterLogged{false};
     if (!filterLogged.exchange(true, std::memory_order_relaxed))
     {
@@ -203,9 +209,6 @@ static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
             "[KisakCOD][RENDER OBJECT AUDIT] initialized filter=%.96s\n", filter.c_str());
         Switch_LogWrite(trace);
     }
-
-    if (filter == "off" || filter == "0" || filter == "none")
-        return false;
     if (filter == "all")
         return true;
     if (!material || !material->info.name)
