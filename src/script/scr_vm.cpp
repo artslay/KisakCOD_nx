@@ -38,6 +38,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #ifdef KISAK_SWITCH
 #include <chrono>
@@ -79,7 +80,11 @@ static void Switch_LogScriptReturn(
     char *filename = nullptr;
     int line = 0;
     Scr_GetFileAndLine(codePos, &filename, &line);
-    if (!filename || !std::strstr(filename, "cover_behavior.gsc"))
+    // The failing expression is in suppressedBehavior() (source lines 345-434).
+    // Excluding the other helpers in this file prevents unrelated returns from
+    // consuming the diagnostic budget before the bad call is reached.
+    if (!filename || !std::strstr(filename, "cover_behavior.gsc") ||
+        line < 345 || line > 435)
         return;
 
     static uint32_t traceCount = 0;
