@@ -1393,7 +1393,7 @@ void __cdecl Scr_EvalFunction(sval_u func_name, sval_u params, uint32_t localId,
             33);
 
     if (!setjmp(g_script_error[g_script_error_level]))
-        ((void (*)(void))func_name.type)();
+        reinterpret_cast<void (__cdecl *)(void)>(func_name.block)();
     if (g_script_error_level < 0)
         MyAssertHandler(
             ".\\script\\scr_evaluate.cpp",
@@ -1504,7 +1504,7 @@ void __cdecl Scr_EvalMethod(sval_u expr, sval_u func_name, sval_u params, uint32
         }
         entref = Scr_GetEntityIdRef(objectId.stringValue);
         RemoveRefToObject(objectId.stringValue);
-        ((void(__cdecl *)(uint32_t))func_name.type)(entref.entnum); // KISAKTODO: fubar'd union 'entref'
+        reinterpret_cast<void (__cdecl *)(uint32_t)>(func_name.block)(entref.entnum); // KISAKTODO: fubar'd union 'entref'
     }
     if (g_script_error_level < 0)
         MyAssertHandler(
