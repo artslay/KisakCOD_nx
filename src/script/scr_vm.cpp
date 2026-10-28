@@ -56,6 +56,44 @@ static inline uint64_t Kisak_ProfileClock()
 }
 #endif
 
+#ifdef KISAK_SWITCH
+// Opt-in trace for script functions that produce no value. This helps locate
+// the function that feeds VAR_UNDEFINED into a boolean condition without
+// changing normal script semantics or adding per-return logging by default.
+static bool Switch_IsScriptUndefinedReturnTraceEnabled()
+{
+    static const bool enabled = []()
+    {
+        const char *value = std::getenv("KISAK_SCRIPT_RETURN_TRACE");
+        return value && value[0] == '1' && value[1] == '\\0';
+    }();
+    return enabled;
+}
+
+static void Switch_LogScriptUndefinedReturn(const char *kind, const char *codePos)
+{
+    if (!Switch_IsScriptUndefinedReturnTraceEnabled())
+        return;
+
+    static uint32_t traceCount = 0;
+    if (traceCount >= 64u)
+        return;
+    ++traceCount;
+
+    char *filename = nullptr;
+    int line = 0;
+    if (codePos)
+        Scr_GetFileAndLine(codePos, &filename, &line);
+
+    char trace[384];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d codePos=%p value=undefined\\n",
+        traceCount - 1u, kind ? kind : "unknown",
+        filename ? filename : "(unknown)", line, static_cast<const void *>(codePos));
+    Switch_LogWrite(trace);
+}
+#endif
+
 double Scr_ProfileTicksToSeconds(uint64_t ticks)
 {
 #ifdef KISAK_SWITCH
@@ -2163,6 +2201,12 @@ interrupt_return:
         {
         case OP_End:
             parentLocalId = GetSafeParentLocalId(fs.localId);
+#ifdef KISAK_SWITCH
+            // OP_End returns VAR_UNDEFINED to a script caller when the
+            // function falls through without an explicit return value.
+            if (parentLocalId)
+                Switch_LogScriptUndefinedReturn("implicit_end", fs.pos - 1);
+#endif
             Scr_KillThread(fs.localId);
             scrVmPub.localVars -= fs.localVarCount;
             iassert(fs.top->type != VAR_PRECODEPOS);
@@ -2187,6 +2231,10 @@ thread_end:
 
         case OP_Return:
             parentLocalId = GetSafeParentLocalId(fs.localId);
+#ifdef KISAK_SWITCH
+            if (fs.top->type == VAR_UNDEFINED)
+                Switch_LogScriptUndefinedReturn("explicit_return", fs.pos - 1);
+#endif
             Scr_KillThread(fs.localId);
             scrVmPub.localVars -= fs.localVarCount;
             tempValue.u = fs.top->u;
