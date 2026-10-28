@@ -2300,7 +2300,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
     static std::atomic<uint32_t> xmodelAliasLookupTraceCount{0};
     const uint32_t xmodelAliasTraceId = traceXModelAliasRegistry
         ? xmodelAliasLookupTraceCount.fetch_add(1u, std::memory_order_relaxed)
-        : UINT32_MAX;
+        : 0xFFFFFFFFu;
     if (traceRawFileRegistry)
         g_switchDbStage = "rawfile/registry/hash_enter";
     if (traceXModelAliasRegistry)
@@ -2413,13 +2413,13 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 #endif
         const uint32_t currentAssetType =
             static_cast<uint32_t>(assetEntry->entry.asset.type);
+#ifdef __SWITCH__
         const uint32_t currentZoneIndex =
             static_cast<uint32_t>(assetEntry->entry.zoneIndex);
         const uint32_t currentNextHash =
             static_cast<uint32_t>(assetEntry->entry.nextHash);
         const void *currentHeader =
             static_cast<const void *>(assetEntry->entry.asset.header.data);
-#ifdef __SWITCH__
         if (traceXModelAliasRegistry)
         {
             g_switchDbStage = "xmodelalias/registry/entry_read";
