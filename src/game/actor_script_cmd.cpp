@@ -10,6 +10,7 @@
 #ifdef __SWITCH__
 #include <script/scr_parser.h>
 #include <cstdio>
+#include <cmath>
 extern void Switch_LogWrite(const char *msg);
 #endif
 #include <server/sv_game.h>
@@ -1104,6 +1105,7 @@ void __cdecl ActorCmd_Teleport(scr_entref_t entref)
         return;
     }
 LABEL_16:
+    ;
 #ifdef __SWITCH__
     float switchOldOrigin[3] = {
         ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2]
