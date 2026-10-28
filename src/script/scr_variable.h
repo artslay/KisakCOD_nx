@@ -337,7 +337,10 @@ struct VariableDebugInfo // sizeof=0x10
     const char *functionName;
     int varUsage;
 };
-#ifndef __SWITCH__
+#ifdef __SWITCH__
+static_assert(sizeof(VariableDebugInfo) == 0x20,
+    "Switch VariableDebugInfo must preserve all three native pointers");
+#else
 static_assert(sizeof(VariableDebugInfo) == 0x10);
 #endif
 
@@ -525,9 +528,9 @@ void  Scr_CheckLeaks(void);
 
 int  ThreadInfoCompare(_DWORD* info1, _DWORD* info2);
 //int  VariableInfoCompare(void const*, void const*);
-int VariableInfoFileNameCompare(_DWORD* info1, _DWORD* info2);
-int VariableInfoCountCompare(_DWORD* info1, _DWORD* info2);
-int VariableInfoFileLineCompare(_DWORD* info1, _DWORD* info2);
+int VariableInfoFileNameCompare(const void *info1, const void *info2);
+int VariableInfoCountCompare(const void *info1, const void *info2);
+int VariableInfoFileLineCompare(const void *info1, const void *info2);
 uint32_t  FindVariableIndexInternal2(uint32_t name, uint32_t index);
 uint32_t FindVariableIndexInternal(uint32_t parentId, uint32_t name);
 unsigned short  AllocVariable(void);
