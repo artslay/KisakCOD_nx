@@ -66,9 +66,26 @@ const unsigned __int16 *g_AISpeciesNames[2] =
 #ifdef __SWITCH__
 // Bounded startup/death traces to establish whether AI is spawned alive,
 // scheduled for think, and later killed by an actual damage callback.
+static uint32_t g_switchActorSpawnTraceCount;
 static uint32_t g_switchActorInitTraceCount;
 static uint32_t g_switchActorDeathTraceCount;
 static bool g_switchActorThinkLogged[MAX_ACTORS];
+
+static void Switch_LogActorSpawn(const gentity_s *ent)
+{
+    if (!ent || g_switchActorSpawnTraceCount >= 64u)
+        return;
+
+    char trace[256];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][AI SPAWN] n=%u ent=%d spawnflags=%u spawnai=%u ai=%u health=%d "
+        "inuse=%u time=%d\n",
+        g_switchActorSpawnTraceCount++, ent->s.number, ent->spawnflags,
+        g_spawnai && g_spawnai->current.enabled ? 1u : 0u,
+        g_ai && g_ai->current.enabled ? 1u : 0u,
+        ent->health, ent->r.inuse ? 1u : 0u, level.time);
+    Switch_LogWrite(trace);
+}
 
 static void Switch_LogActorState(const char *stage, const actor_s *actor)
 {
@@ -86,12 +103,14 @@ static void Switch_LogActorState(const char *stage, const actor_s *actor)
     std::snprintf(trace, sizeof(trace),
         "[KisakCOD][AI STATE] stage=%s ent=%d type=%d inuse=%u health=%d maxHealth=%d "
         "actorInuse=%u stateLevel=%u state=%d subState=%d alive=%u team=%d "
-        "time=%d nextthink=%d\n",
+        "spawnai=%u ai=%u time=%d nextthink=%d\n",
         stage ? stage : "unknown", ent->s.number, ent->s.eType,
         ent->r.inuse ? 1u : 0u, ent->health, ent->maxHealth,
         actor->inuse ? 1u : 0u, stateLevel, state, subState,
         actor->Physics.bIsAlive ? 1u : 0u,
         actor->sentient ? static_cast<int>(actor->sentient->eTeam) : -1,
+        g_spawnai && g_spawnai->current.enabled ? 1u : 0u,
+        g_ai && g_ai->current.enabled ? 1u : 0u,
         level.time, ent->nextthink);
     Switch_LogWrite(trace);
     ++g_switchActorInitTraceCount;
@@ -4827,6 +4846,9 @@ int __cdecl SP_actor(gentity_s *ent)
     int v14; // ctr
 
     ent->model = 0;
+#ifdef __SWITCH__
+    Switch_LogActorSpawn(ent);
+#endif
     if (!g_spawnai->current.enabled)
         goto LABEL_8;
     if ((ent->spawnflags & 1) != 0)
