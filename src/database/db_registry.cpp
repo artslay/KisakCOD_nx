@@ -5374,7 +5374,42 @@ void __cdecl Mark_GfxImageAsset(GfxImage *image)
 
 void __cdecl Load_snd_alias_list_Asset(XAssetHeader *sound)
 {
+#ifdef __SWITCH__
+    snd_alias_list_t *source = sound ? sound->sound : nullptr;
+    const bool traceM249Alias =
+        source && source->aliasName &&
+        I_stricmp(source->aliasName, "weap_m249saw_turret_fire_npc") == 0;
+    if (traceM249Alias)
+    {
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][SOUND ALIAS REGISTER] phase=before source=%p name=%s head=%p count=%d zone=%u\n",
+            static_cast<void *>(source),
+            source->aliasName,
+            static_cast<void *>(source->head),
+            source->count,
+            static_cast<unsigned>(g_zoneIndex));
+        Switch_LogWrite(trace);
+    }
+#endif
     sound->xmodelPieces = DB_AddXAsset(ASSET_TYPE_SOUND, (XAssetHeader)sound->xmodelPieces).xmodelPieces;
+#ifdef __SWITCH__
+    if (traceM249Alias)
+    {
+        snd_alias_list_t *registered = sound->sound;
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][SOUND ALIAS REGISTER] phase=after result=%p name=%s head=%p count=%d zone=%u\n",
+            static_cast<void *>(registered),
+            registered && registered->aliasName ? registered->aliasName : "<null>",
+            registered ? static_cast<void *>(registered->head) : nullptr,
+            registered ? registered->count : -1,
+            static_cast<unsigned>(g_zoneIndex));
+        Switch_LogWrite(trace);
+    }
+#endif
 }
 
 void __cdecl Mark_snd_alias_list_Asset(snd_alias_list_t *sound)
