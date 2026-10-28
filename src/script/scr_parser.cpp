@@ -1108,7 +1108,8 @@ const char *__cdecl Scr_PrevCodePosFunctionName(char *codePos)
 #endif
     bufferIndex = Scr_GetSourceBuffer(codePos - 1);
     if (bufferIndex >= scrParserPub.sourceBufferLookupLen ||
-        !scrParserPub.sourceBufferLookup[bufferIndex].sourceBuf)
+        !scrParserPub.sourceBufferLookup[bufferIndex].sourceBuf ||
+        scrParserPub.sourceBufferLookup[bufferIndex].len < 0)
         return "<source lookup unavailable>";
     PrevSourcePos = Scr_GetPrevSourcePos(codePos - 1, 0);
     if (PrevSourcePos > static_cast<uint32_t>(scrParserPub.sourceBufferLookup[bufferIndex].len))
@@ -1320,6 +1321,11 @@ void __cdecl Scr_GetFileAndLine(const char *codePos, char **filename, int *linen
 #endif
         *linenum = Scr_GetLineNum(bufferIndex, sourcePos) + 1;
         *filename = scrParserPub.sourceBufferLookup[bufferIndex].buf;
+    }
+    else
+    {
+        *linenum = 0;
+        *filename = (char *)"";
     }
 }
 
