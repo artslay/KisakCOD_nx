@@ -5804,6 +5804,8 @@ HRESULT IDirect3DDevice9::EndScene()
         m_backend->ClearPresentSource();
     }
 
+    if (Switch_IsVkGpuDrawTraceEnabled())
+    {
     static uint32_t endSceneTraceCount = 0;
     static uint32_t endSceneSourceTraceCount = 0;
     static uint32_t endSceneDrawTraceCount = 0;
@@ -5849,6 +5851,7 @@ HRESULT IDirect3DDevice9::EndScene()
             g_switchSceneClearCalls,
             g_switchFrameStage ? g_switchFrameStage : "(unknown)");
         Switch_LogWrite(trace);
+    }
     }
 
     if (Switch_IsPostCinematicRenderTraceActive())
@@ -9556,6 +9559,8 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     const VkDeviceSize offset = vertexInfo.offset;
     vkCmdBindVertexBuffers(
         m_backend->CommandBuffer(), 0, 1, &vertexInfo.buffer, &offset);
+    if (Switch_IsVkGpuDrawTraceEnabled())
+    {
     g_switchLastDrawKind.store(1, std::memory_order_relaxed);
     g_switchLastDrawIndexCount.store(0, std::memory_order_relaxed);
     g_switchLastDrawStartIndex.store(0, std::memory_order_relaxed);
@@ -9573,6 +9578,7 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     g_switchLastDrawStream0BufferBytes.store(static_cast<uint32_t>(std::min<size_t>(bytes, UINT32_MAX)), std::memory_order_relaxed);
     g_switchLastDrawStream0Offset.store(static_cast<uint32_t>(std::min<VkDeviceSize>(offset, UINT32_MAX)), std::memory_order_relaxed);
     g_switchLastDrawStream0Stride.store(stride, std::memory_order_relaxed);
+    }
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/issue_draw";
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
     g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
@@ -10066,7 +10072,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         const VkDeviceSize o = m_streams[stream].offset;
         if (vertexBuffer && stride)
         {
-            if (switchDrawBindTraceCount < 64u)
+            if (Switch_IsVkGpuDrawTraceEnabled() && switchDrawBindTraceCount < 64u)
             {
                 char msg[384];
                 std::snprintf(
@@ -10120,10 +10126,13 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             }
         }
     }
+    if (Switch_IsVkGpuDrawTraceEnabled())
+    {
     g_switchLastDrawStreamMask.store(boundStreamMask, std::memory_order_relaxed);
     g_switchLastDrawStream0BufferBytes.store(stream0BufferBytes, std::memory_order_relaxed);
     g_switchLastDrawStream0Offset.store(stream0Offset, std::memory_order_relaxed);
     g_switchLastDrawStream0Stride.store(stream0Stride, std::memory_order_relaxed);
+    }
 
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/index_call";
     if (switchDrawBindTraceCount < 64u)
@@ -10143,6 +10152,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         drawCommandBuffer, drawIndexBuffer, 0, VK_INDEX_TYPE_UINT16);
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/index_return";
 
+    if (Switch_IsVkGpuDrawTraceEnabled())
+    {
     g_switchLastDrawKind.store(2, std::memory_order_relaxed);
     g_switchLastDrawIndexCount.store(indexCount, std::memory_order_relaxed);
     g_switchLastDrawStartIndex.store(startIndex, std::memory_order_relaxed);
@@ -10215,11 +10226,13 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             ? static_cast<uint32_t>(texture->layout) : 0u;
     }
     RecordSwitchRecentVulkanDraw(recentDraw);
+    }
 
 #ifdef __SWITCH__
     // One bounded audit of the *actual* bound stream and index values for the
     // floor draw. This avoids inferring GPU fetches from the BSP CPU-side array.
-    if (m_vertexShader && m_pixelShader &&
+    if (Switch_IsVkGpuDrawTraceEnabled() &&
+        m_vertexShader && m_pixelShader &&
         m_vertexShader->serial == 1820u && m_pixelShader->serial == 1821u &&
         Switch_IsFloorAuditContextActive())
     {
