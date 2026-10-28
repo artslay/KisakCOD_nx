@@ -498,7 +498,10 @@ struct ThreadDebugInfo // sizeof=0x8C
     float varUsage;                     // ...
     float endonUsage;                   // ...
 };
-#ifndef __SWITCH__
+#ifdef __SWITCH__
+static_assert(sizeof(ThreadDebugInfo) == 0x10C,
+    "Switch ThreadDebugInfo must retain all 32 native-width code positions");
+#else
 static_assert(sizeof(ThreadDebugInfo) == 0x8C);
 #endif
 
@@ -526,7 +529,7 @@ void  Scr_KillThread(uint32_t parentId);
 void  Scr_CheckLeakRange(uint32_t begin, uint32_t end);
 void  Scr_CheckLeaks(void);
 
-int  ThreadInfoCompare(_DWORD* info1, _DWORD* info2);
+int  ThreadInfoCompare(const void *info1, const void *info2);
 //int  VariableInfoCompare(void const*, void const*);
 int VariableInfoFileNameCompare(const void *info1, const void *info2);
 int VariableInfoCountCompare(const void *info1, const void *info2);
