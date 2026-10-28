@@ -41,6 +41,19 @@ extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern "C" bool Switch_IsPostCinematicRenderTraceActive(void);
 extern "C" void Switch_LogPostCinematicRenderTrace(const char *phase, const char *detail);
 
+static bool Switch_IsVkGpuDrawTraceEnabled()
+{
+    // The detailed GPU-draw audit takes locks, walks index data and formats
+    // large records. Keep it out of the normal gameplay path; opt in only when
+    // investigating a specific rendering problem.
+    static const bool enabled = []()
+    {
+        const char *value = std::getenv("KISAK_VK_GPU_DRAW_TRACE");
+        return value && value[0] == '1' && value[1] == '\0';
+    }();
+    return enabled;
+}
+
 // Selected by R_SwitchQueueBspAuditSurface only after a floor surface with the
 // target shader pair is accepted into the visible BSP draw queue.
 uint32_t g_switchFloorRasterProbeSurfaceIndex = UINT32_MAX;
@@ -172,15 +185,15 @@ static bool Switch_IsFloorAuditContextActive()
         std::strstr(material->info.name, "icbm_tunnelfloor") != nullptr;
 }
 
-// Capture actual indexed GPU draw commands by default. A material-name filter is
-// opt-in; the previous narrow default could hide the draw under investigation.
-// Set KISAK_VK_RENDER_OBJECT_FILTER to a material-name substring, or to off to disable.
+// Expensive per-object auditing is disabled by default to keep gameplay fast.
+// Set KISAK_VK_RENDER_OBJECT_FILTER to a material-name substring (or "all")
+// only while collecting a targeted renderer trace.
 static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
 {
     static const std::string filter = []()
     {
         const char *value = std::getenv("KISAK_VK_RENDER_OBJECT_FILTER");
-        return value && *value ? std::string(value) : std::string("all");
+        return value && *value ? std::string(value) : std::string("off");
     }();
     static std::atomic<bool> filterLogged{false};
     if (!filterLogged.exchange(true, std::memory_order_relaxed))
@@ -5394,8 +5407,9 @@ void IDirect3DDevice9::LogGpuDrawCommand(
     uint32_t vertexCount, uint32_t indexCount, uint32_t startIndex,
     int32_t baseVertexIndex)
 {
-    // A short, unconditional trace makes the real Vulkan command path visible
-    // even when the engine-side object audit context was never populated.
+    if (!Switch_IsVkGpuDrawTraceEnabled())
+        return;
+
     static std::atomic<uint32_t> traceCount{0};
     const uint32_t sequence = traceCount.fetch_add(1, std::memory_order_relaxed);
     if (sequence >= 128u)
@@ -6628,6 +6642,8 @@ bool IDirect3DDevice9::BindUniformSet(
     auto traceUniformBindStage =
         [&](const char *stage, const void *buffer, size_t byteCount, int result)
         {
+            if (!Switch_IsVkGpuDrawTraceEnabled())
+                return;
             RecordSwitchUniformFreeTrace(
                 stage, m_backend->FrameSerial(), setIndex, parse, layout,
                 buffer, byteCount, result);
