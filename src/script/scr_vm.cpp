@@ -149,10 +149,8 @@ static void Switch_LogScriptReturn(
     if (callerCodePos && Scr_IsInOpcodeMemory(callerCodePos))
         Scr_GetFileAndLine(callerCodePos, &callerFilename, &callerLine);
 
-    // The runtime error in the user's log is at cover_behavior.gsc:136.
-    // Trace the value returned to that call site automatically, without
-    // requiring an environment variable. The wider opt-in mode remains
-    // available for other returns in cover_behavior.gsc.
+    // When explicitly enabled, trace the value returned to the failing
+    // cover_behavior.gsc call site and other returns in that script.
     const bool targetCallSite =
         callerFilename &&
         std::strstr(callerFilename, "cover_behavior.gsc") &&
