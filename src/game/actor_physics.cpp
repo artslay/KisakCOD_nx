@@ -14,6 +14,13 @@
 #include "sentient.h"
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+#include <cstdint>
+extern void Switch_LogWrite(const char *msg);
+
+#endif
+
 struct actor_physics_local_t
 {
     float fFrameTime;
@@ -29,6 +36,55 @@ struct actor_physics_local_t
 
 actor_physics_local_t g_apl;
 actor_physics_t *g_pPhys;
+
+#ifdef __SWITCH__
+static uint32_t g_switchAiGroundTraceCount;
+static uint8_t g_switchAiGroundTraceFirst[MAX_GENTITIES];
+static uint8_t g_switchAiGroundTraceMiss[MAX_GENTITIES];
+
+static void Switch_LogAiGroundTrace(
+    const actor_physics_t *phys, const actor_physics_local_t *local, const trace_t *trace)
+{
+    if (!phys || !local || !trace || phys->iEntNum < 0 ||
+        phys->iEntNum >= MAX_GENTITIES || g_switchAiGroundTraceCount >= 128u)
+        return;
+
+    const unsigned int entNum = static_cast<unsigned int>(phys->iEntNum);
+    const bool first = g_switchAiGroundTraceFirst[entNum] == 0;
+    const bool miss = trace->startsolid || trace->allsolid ||
+        trace->fraction >= 1.0f || !trace->walkable;
+    const bool firstMiss = miss && g_switchAiGroundTraceMiss[entNum] == 0;
+    if (!first && !firstMiss)
+        return;
+
+    if (first)
+        g_switchAiGroundTraceFirst[entNum] = 1;
+    if (miss)
+        g_switchAiGroundTraceMiss[entNum] = 1;
+
+    const int hitEnt = trace->fraction < 1.0f
+        ? Trace_GetEntityHitId(const_cast<trace_t *>(trace))
+        : ENTITYNUM_NONE;
+    char line[512];
+    std::snprintf(line, sizeof(line),
+        "[KisakCOD][AI GROUND] n=%u stage=%s origin=(%.1f %.1f %.1f) "
+        "endZ=%.1f velocityZ=%.1f mask=0x%x startsolid=%u allsolid=%u "
+        "fraction=%.5f normal=(%.3f %.3f %.3f) walkable=%u contents=0x%x "
+        "hitEnt=%d groundEnt=%u hitEntNum=%u physics=%d\n",
+        g_switchAiGroundTraceCount++,
+        first ? (miss ? "first_miss" : "first_hit") : "miss",
+        phys->vOrigin[0], phys->vOrigin[1], phys->vOrigin[2],
+        phys->vOrigin[2] - local->stepheight, phys->vVelocity[2],
+        static_cast<unsigned int>(local->iTraceMask),
+        trace->startsolid ? 1u : 0u, trace->allsolid ? 1u : 0u,
+        trace->fraction, trace->normal[0], trace->normal[1], trace->normal[2],
+        trace->walkable ? 1u : 0u, static_cast<unsigned int>(trace->contents),
+        hitEnt, static_cast<unsigned int>(phys->groundEntNum),
+        static_cast<unsigned int>(phys->iHitEntnum),
+        static_cast<int>(phys->ePhysicsType));
+    Switch_LogWrite(line);
+}
+#endif
 
 void __cdecl TRACK_actor_physics()
 {
@@ -634,6 +690,9 @@ void AIPhys_GroundTrace()
             }
         }
     }
+#ifdef __SWITCH__
+    Switch_LogAiGroundTrace(g_pPhys, &g_apl, &trace);
+#endif
 }
 
 void AIPhys_Footsteps()
