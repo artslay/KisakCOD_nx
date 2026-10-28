@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
 extern bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass);
@@ -866,81 +867,89 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
         R_OverrideImage(&image, texDef);
 
 #ifdef __SWITCH__
-    // Record the selected source image once per resource-state change. This
-    // separates a bad material/image reference from later Vulkan descriptor
-    // fallback without printing every draw call.
-    struct SwitchSamplerTraceEntry
+    static const bool switchMaterialSamplerTraceEnabled = []()
     {
-        const GfxImage *image;
-        const void *basemap;
-        bool delayLoad;
-    };
-    static SwitchSamplerTraceEntry worldImages[128]{};
-    static SwitchSamplerTraceEntry otherImages[160]{};
-    static SwitchSamplerTraceEntry waterImages[32]{};
-    static uint32_t worldImageCount = 0;
-    static uint32_t otherImageCount = 0;
-    static uint32_t waterImageCount = 0;
-    static uint32_t nullImageTraceCount = 0;
-
-    const char *materialName =
-        material && material->info.name ? material->info.name : "<unnamed>";
-    const bool isWorldMaterial =
-        materialName[0] == 'w' && materialName[1] == 'c' && materialName[2] == '/';
-    SwitchSamplerTraceEntry *entries = isWorldMaterial
-        ? worldImages : (texDef->semantic == TS_WATER_MAP ? waterImages : otherImages);
-    uint32_t *entryCount = isWorldMaterial
-        ? &worldImageCount : (texDef->semantic == TS_WATER_MAP ? &waterImageCount : &otherImageCount);
-    const uint32_t entryLimit = isWorldMaterial ? 128u :
-        (texDef->semantic == TS_WATER_MAP ? 32u : 160u);
-    const void *basemap = image ? static_cast<const void *>(image->texture.basemap) : nullptr;
-    const bool delayLoad = image && image->delayLoadPixels;
-    bool stateAlreadyLogged = false;
-    if (image)
+        const char *value = std::getenv("KISAK_VK_MATERIAL_SAMPLER_TRACE");
+        return value && value[0] == '1' && value[1] == '\0';
+    }();
+    if (switchMaterialSamplerTraceEnabled)
     {
-        for (uint32_t traceIndex = 0; traceIndex < *entryCount; ++traceIndex)
+        // Record the selected source image once per resource-state change. This
+        // separates a bad material/image reference from later Vulkan descriptor
+        // fallback without printing every draw call.
+        struct SwitchSamplerTraceEntry
         {
-            const SwitchSamplerTraceEntry &entry = entries[traceIndex];
-            if (entry.image == image && entry.basemap == basemap &&
-                entry.delayLoad == delayLoad)
+            const GfxImage *image;
+            const void *basemap;
+            bool delayLoad;
+        };
+        static SwitchSamplerTraceEntry worldImages[128]{};
+        static SwitchSamplerTraceEntry otherImages[160]{};
+        static SwitchSamplerTraceEntry waterImages[32]{};
+        static uint32_t worldImageCount = 0;
+        static uint32_t otherImageCount = 0;
+        static uint32_t waterImageCount = 0;
+        static uint32_t nullImageTraceCount = 0;
+    
+        const char *materialName =
+            material && material->info.name ? material->info.name : "<unnamed>";
+        const bool isWorldMaterial =
+            materialName[0] == 'w' && materialName[1] == 'c' && materialName[2] == '/';
+        SwitchSamplerTraceEntry *entries = isWorldMaterial
+            ? worldImages : (texDef->semantic == TS_WATER_MAP ? waterImages : otherImages);
+        uint32_t *entryCount = isWorldMaterial
+            ? &worldImageCount : (texDef->semantic == TS_WATER_MAP ? &waterImageCount : &otherImageCount);
+        const uint32_t entryLimit = isWorldMaterial ? 128u :
+            (texDef->semantic == TS_WATER_MAP ? 32u : 160u);
+        const void *basemap = image ? static_cast<const void *>(image->texture.basemap) : nullptr;
+        const bool delayLoad = image && image->delayLoadPixels;
+        bool stateAlreadyLogged = false;
+        if (image)
+        {
+            for (uint32_t traceIndex = 0; traceIndex < *entryCount; ++traceIndex)
             {
-                stateAlreadyLogged = true;
-                break;
+                const SwitchSamplerTraceEntry &entry = entries[traceIndex];
+                if (entry.image == image && entry.basemap == basemap &&
+                    entry.delayLoad == delayLoad)
+                {
+                    stateAlreadyLogged = true;
+                    break;
+                }
             }
         }
-    }
-
-    if ((!image && nullImageTraceCount < 48u) ||
-        (image && !stateAlreadyLogged && *entryCount < entryLimit))
-    {
-        char trace[640];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][MATERIAL SAMPLER] group=%s mat=%.96s pass=%u ps=%.64s slot=%u semantic=%u image=%.96s imagePtr=%p size=%ux%u category=%u delayLoad=%u basemap=%p mapType=%u samplerState=0x%x\n",
-            isWorldMaterial ? "world" :
-                (texDef->semantic == TS_WATER_MAP ? "water" : "model_fx"),
-            materialName,
-            static_cast<unsigned>(context.state->passIndex),
-            context.state->pass && context.state->pass->pixelShader &&
-                context.state->pass->pixelShader->name
-                ? context.state->pass->pixelShader->name : "<unknown>",
-            static_cast<unsigned>(arg->dest),
-            static_cast<unsigned>(texDef->semantic),
-            image && image->name ? image->name : "<null>",
-            static_cast<const void *>(image),
-            image ? image->width : 0u,
-            image ? image->height : 0u,
-            image ? static_cast<unsigned>(image->category) : 0u,
-            delayLoad ? 1u : 0u,
-            basemap,
-            image ? static_cast<unsigned>(image->mapType) : 0u,
-            static_cast<unsigned>(texDef->samplerState));
-        Switch_LogWrite(trace);
-
-        if (!image)
-            ++nullImageTraceCount;
-        else
-            entries[(*entryCount)++] = {image, basemap, delayLoad};
+    
+        if ((!image && nullImageTraceCount < 48u) ||
+            (image && !stateAlreadyLogged && *entryCount < entryLimit))
+        {
+            char trace[640];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][MATERIAL SAMPLER] group=%s mat=%.96s pass=%u ps=%.64s slot=%u semantic=%u image=%.96s imagePtr=%p size=%ux%u category=%u delayLoad=%u basemap=%p mapType=%u samplerState=0x%x\n",
+                isWorldMaterial ? "world" :
+                    (texDef->semantic == TS_WATER_MAP ? "water" : "model_fx"),
+                materialName,
+                static_cast<unsigned>(context.state->passIndex),
+                context.state->pass && context.state->pass->pixelShader &&
+                    context.state->pass->pixelShader->name
+                    ? context.state->pass->pixelShader->name : "<unknown>",
+                static_cast<unsigned>(arg->dest),
+                static_cast<unsigned>(texDef->semantic),
+                image && image->name ? image->name : "<null>",
+                static_cast<const void *>(image),
+                image ? image->width : 0u,
+                image ? image->height : 0u,
+                image ? static_cast<unsigned>(image->category) : 0u,
+                delayLoad ? 1u : 0u,
+                basemap,
+                image ? static_cast<unsigned>(image->mapType) : 0u,
+                static_cast<unsigned>(texDef->samplerState));
+            Switch_LogWrite(trace);
+    
+            if (!image)
+                ++nullImageTraceCount;
+            else
+                entries[(*entryCount)++] = {image, basemap, delayLoad};
+        }
     }
 #endif
 
