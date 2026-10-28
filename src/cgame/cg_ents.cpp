@@ -2435,6 +2435,16 @@ void __cdecl CG_AddPacketEntity(unsigned int localClientNum, unsigned int entnum
         Switch_SetCgEntityStage("packet_entity/process", UINT32_MAX, entnum, v5->nextState.eType);
 #endif
         CG_ProcessEntity(localClientNum, v5);
+#ifdef __SWITCH__
+        // CG_ProcessEntity intentionally returns early for ET_PLAYER/ET_INVISIBLE.
+        // Mark the return so the crash snapshot does not mistake "player_return"
+        // for the location of a later failure in the same rendered frame.
+        Switch_SetCgEntityStage(
+            "packet_entity/process_return",
+            UINT32_MAX,
+            v5->nextState.number,
+            v5->nextState.eType);
+#endif
     }
 }
 
