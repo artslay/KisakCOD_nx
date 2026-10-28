@@ -148,7 +148,7 @@ void Switch_LogScriptBoolCastFailure(uint32_t incomingType)
         ? var_typename[incomingType] : "invalid";
     char trace[512];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][SCRIPT BOOL CAST] n=%u incomingType=%u typeName=%s file=%s line=%d codePos=%p functionCount=%d\\n",
+        "[KisakCOD][SCRIPT BOOL CAST] n=%u incomingType=%u typeName=%s file=%s line=%d codePos=%p functionCount=%d\n",
         traceId, incomingType, typeName,
         filename && filename[0] ? filename : "(unknown)",
         line, static_cast<const void *>(codePos), scrVmPub.function_count);
