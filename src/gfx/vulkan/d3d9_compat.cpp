@@ -187,7 +187,7 @@ static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
     {
         char trace[192];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][RENDER OBJECT AUDIT] active=1 filter=%.96s\n", filter.c_str());
+            "[KisakCOD][RENDER OBJECT AUDIT] initialized filter=%.96s\n", filter.c_str());
         Switch_LogWrite(trace);
     }
 
