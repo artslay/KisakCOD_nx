@@ -105,7 +105,7 @@ void Scr_InitVariables()
 	scrVarPub.numScriptObjects = 0;
 
 	if (scrVarDebugPub)
-		memset(scrVarDebugPub, 0, 0x60000u);
+		memset(scrVarDebugPub->varUsage, 0, sizeof(scrVarDebugPub->varUsage));
 
 	Scr_InitVariableRange(VARIABLELIST_PARENT_BEGIN, VARIABLELIST_PARENT_SIZE + 1);
 	Scr_InitVariableRange(VARIABLELIST_CHILD_BEGIN, 0x18000u);
