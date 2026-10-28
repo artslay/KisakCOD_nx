@@ -35,6 +35,7 @@
 #include "scr_compiler.h"
 
 #include <setjmp.h>
+#include <atomic>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -124,6 +125,33 @@ static void Switch_LogScriptReturn(
         callerFilename && callerFilename[0] ? callerFilename : "(unknown)",
         callerLine, static_cast<const void *>(codePos),
         static_cast<const void *>(callerCodePos), targetCallSite ? 1u : 0u);
+    Switch_LogWrite(trace);
+}
+
+// Called by Scr_CastBool only on an invalid input type. Keep the trace bounded:
+// this is an error-path diagnostic, not a per-opcode trace.
+extern function_stack_t fs;
+void Switch_LogScriptBoolCastFailure(uint32_t incomingType)
+{
+    static std::atomic<uint32_t> traceCount{0};
+    const uint32_t traceId = traceCount.fetch_add(1u, std::memory_order_relaxed);
+    if (traceId >= 64u)
+        return;
+
+    const char *codePos = fs.pos;
+    char *filename = nullptr;
+    int line = 0;
+    if (codePos && Scr_IsInOpcodeMemory(codePos))
+        Scr_GetFileAndLine(codePos, &filename, &line);
+
+    const char *typeName = incomingType < ARRAY_COUNT(var_typename)
+        ? var_typename[incomingType] : "invalid";
+    char trace[512];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][SCRIPT BOOL CAST] n=%u incomingType=%u typeName=%s file=%s line=%d codePos=%p functionCount=%d\\n",
+        traceId, incomingType, typeName,
+        filename && filename[0] ? filename : "(unknown)",
+        line, static_cast<const void *>(codePos), scrVmPub.function_count);
     Switch_LogWrite(trace);
 }
 #endif
