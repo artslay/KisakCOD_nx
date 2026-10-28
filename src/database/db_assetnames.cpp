@@ -398,6 +398,29 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
     // or dereferences the name. Non-stream/native names are left unchanged.
     if (name)
     {
+        const uintptr_t rawNameAddress = reinterpret_cast<uintptr_t>(name);
+        if ((rawNameAddress >> 32) == 0xFFFFFFFFu)
+        {
+            if (switchTraceRawFileName)
+                g_switchDbStage = "rawfile/name_header_bad_name";
+            else
+                g_switchDbStage = "asset/name_header_bad_name";
+            static std::atomic<uint32_t> badAssetNameTraceCount{0};
+            const uint32_t traceId =
+                badAssetNameTraceCount.fetch_add(1u, std::memory_order_relaxed);
+            if (traceId < 64u)
+            {
+                char trace[320];
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][DB BAD ASSET NAME] n=%u type=%d name=%p header=%p data=%p asset=%d rawType=%u\\n",
+                    traceId, type, static_cast<const void *>(name),
+                    static_cast<const void *>(header),
+                    static_cast<const void *>(header->data),
+                    g_switchCurrentAssetIndex,
+                    static_cast<unsigned>(g_switchCurrentAssetRawType));
+                Switch_LogWrite(trace);
+            }
+        }
         if (switchTraceTechset4026)
             g_switchDbStage = "asset/name_header_resolve_enter";
         else if (switchTraceRawFileName)
