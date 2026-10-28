@@ -43,9 +43,10 @@ static uint8_t g_switchAiGroundTraceFirst[MAX_GENTITIES];
 static uint8_t g_switchAiGroundTraceMiss[MAX_GENTITIES];
 
 static void Switch_LogAiGroundTrace(
-    const actor_physics_t *phys, const actor_physics_local_t *local, const trace_t *trace)
+    const actor_physics_t *phys, const actor_physics_local_t *local, const trace_t *trace,
+    const float *traceStart, const float *traceEnd)
 {
-    if (!phys || !local || !trace || phys->iEntNum < 0 ||
+    if (!phys || !local || !trace || !traceStart || !traceEnd || phys->iEntNum < 0 ||
         phys->iEntNum >= MAX_GENTITIES || g_switchAiGroundTraceCount >= 128u)
         return;
 
@@ -65,16 +66,20 @@ static void Switch_LogAiGroundTrace(
     const int hitEnt = trace->fraction < 1.0f
         ? Trace_GetEntityHitId(const_cast<trace_t *>(trace))
         : ENTITYNUM_NONE;
-    char line[512];
+    char line[640];
     std::snprintf(line, sizeof(line),
-        "[KisakCOD][AI GROUND] n=%u stage=%s origin=(%.1f %.1f %.1f) "
-        "endZ=%.1f velocityZ=%.1f mask=0x%x startsolid=%u allsolid=%u "
-        "fraction=%.5f normal=(%.3f %.3f %.3f) walkable=%u contents=0x%x "
+        "[KisakCOD][AI GROUND] n=%u stage=%s ent=%d "
+        "start=(%.1f %.1f %.1f) end=(%.1f %.1f %.1f) "
+        "origin=(%.1f %.1f %.1f) velocityZ=%.1f mask=0x%x "
+        "startsolid=%u allsolid=%u fraction=%.5f "
+        "normal=(%.3f %.3f %.3f) walkable=%u contents=0x%x "
         "hitEnt=%d groundEnt=%u hitEntNum=%u physics=%d\n",
         g_switchAiGroundTraceCount++,
         first ? (miss ? "first_miss" : "first_hit") : "miss",
-        phys->vOrigin[0], phys->vOrigin[1], phys->vOrigin[2],
-        phys->vOrigin[2] - local->stepheight, phys->vVelocity[2],
+        phys->iEntNum,
+        traceStart[0], traceStart[1], traceStart[2],
+        traceEnd[0], traceEnd[1], traceEnd[2],
+        phys->vOrigin[0], phys->vOrigin[1], phys->vOrigin[2], phys->vVelocity[2],
         static_cast<unsigned int>(local->iTraceMask),
         trace->startsolid ? 1u : 0u, trace->allsolid ? 1u : 0u,
         trace->fraction, trace->normal[0], trace->normal[1], trace->normal[2],
@@ -691,7 +696,7 @@ void AIPhys_GroundTrace()
         }
     }
 #ifdef __SWITCH__
-    Switch_LogAiGroundTrace(g_pPhys, &g_apl, &trace);
+    Switch_LogAiGroundTrace(g_pPhys, &g_apl, &trace, start, end);
 #endif
 }
 
