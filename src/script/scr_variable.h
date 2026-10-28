@@ -95,7 +95,13 @@ struct VariableStackBuffer // sizeof=0xC
     uint8_t time;
     char buf[1];
 };
-#ifndef __SWITCH__
+#ifdef __SWITCH__
+static_assert(sizeof(void *) == 8, "Switch script VM requires 64-bit pointers");
+static_assert(offsetof(VariableStackBuffer, buf) == sizeof(void *) + 7,
+    "VariableStackBuffer header layout changed");
+static_assert(sizeof(VariableStackBuffer) == 16,
+    "VariableStackBuffer must retain the ARM64 header layout");
+#else
 static_assert(sizeof(VariableStackBuffer) == 0xC);
 #endif
 
@@ -130,13 +136,22 @@ union VariableUnion // sizeof=0x4
     VariableStackBuffer *stackValue;
     uint32_t entityOffset;
 };
-#ifndef __SWITCH__
+#ifdef __SWITCH__
+static_assert(sizeof(VariableUnion) == sizeof(void *),
+    "Switch script values must retain native-width payloads");
+#else
 static_assert(sizeof(VariableUnion) == 0x4);
 #endif
 
 // Runtime stack entries store the native union. Savegames keep compact 32-bit payloads.
 #define SCRIPT_STACK_ENTRY_SIZE (sizeof(uint8_t) + sizeof(VariableUnion))
 #define SCRIPT_STACK_BUFFER_SIZE(entryCount) (offsetof(VariableStackBuffer, buf) + SCRIPT_STACK_ENTRY_SIZE * (entryCount))
+#ifdef __SWITCH__
+static_assert(SCRIPT_STACK_ENTRY_SIZE == 9,
+    "ARM64 archived script entries must be one type byte plus an eight-byte value");
+static_assert(SCRIPT_STACK_BUFFER_SIZE(1) == 24,
+    "ARM64 archived script stack size calculation changed");
+#endif
 
 struct VariableValue // sizeof=0x8
 {   
@@ -144,7 +159,10 @@ struct VariableValue // sizeof=0x8
     VariableUnion u;                    // ...
     Vartype_t type;                           // ...
 };
-#ifndef __SWITCH__
+#ifdef __SWITCH__
+static_assert(sizeof(VariableValue) == 2 * sizeof(void *),
+    "Switch script values must retain the native-width value/type layout");
+#else
 static_assert(sizeof(VariableValue) == 0x8);
 #endif
 
