@@ -9855,58 +9855,73 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         auditLogDraw("FAILED_TO_SUBMIT","invalid_or_missing_index_buffer");
         return E_FAIL;
     }
-    // Validate the actual indexed vertex fetches before recording a draw. The
-    // engine's minVertexIndex/numVertices arguments are hints; the CPU index data
-    // and the bound VkBuffer ranges are the authoritative safety boundary.
+    // Full CPU index scans and per-draw crash snapshots are expensive on Switch.
+    // The normal path trusts D3D9's MinVertexIndex/NumVertices contract and
+    // validates the resulting bound vertex range in O(vertex declaration size).
+    // Set KISAK_VK_GPU_DRAW_TRACE=1 to restore exact index scanning for diagnosis.
+    const bool detailedDrawTrace = Switch_IsVkGpuDrawTraceEnabled();
     const uint8_t *indexData = nullptr;
-    if (m_indices->dynamic && m_indices->shadowInitialized &&
-        m_indices->shadow.size() >= m_indices->size)
-        indexData = m_indices->shadow.data();
-    else
-        indexData = static_cast<const uint8_t *>(m_indices->mapped);
-    auditIndexData = indexData;
+    if (detailedDrawTrace)
+    {
+        if (m_indices->dynamic && m_indices->shadowInitialized &&
+            m_indices->shadow.size() >= m_indices->size)
+            indexData = m_indices->shadow.data();
+        else
+            indexData = static_cast<const uint8_t *>(m_indices->mapped);
+        auditIndexData = indexData;
+    }
 
-    g_switchLastDrawIndexBufferBytes.store(
-        static_cast<uint32_t>(std::min<size_t>(m_indices->size, UINT32_MAX)),
-        std::memory_order_relaxed);
-    g_switchLastDrawIndexDataAvailable.store(indexData ? 1u : 0u, std::memory_order_relaxed);
-    g_switchLastDrawRawIndexMin.store(UINT32_MAX, std::memory_order_relaxed);
-    g_switchLastDrawRawIndexMax.store(0, std::memory_order_relaxed);
-    g_switchLastDrawEffectiveVertexMin.store(INT64_MAX, std::memory_order_relaxed);
-    g_switchLastDrawEffectiveVertexMax.store(-1, std::memory_order_relaxed);
     uint32_t minRawIndex = UINT32_MAX;
     uint32_t maxRawIndex = 0;
-    int64_t minEffectiveVertex = INT64_MAX;
-    int64_t maxEffectiveVertex = -1;
+    int64_t minEffectiveVertex =
+        static_cast<int64_t>(baseVertexIndex) + static_cast<int64_t>(minVertexIndex);
+    int64_t maxEffectiveVertex = numVertices
+        ? minEffectiveVertex + static_cast<int64_t>(numVertices) - 1
+        : -1;
+    bool invalidEffectiveIndex = !numVertices ||
+        minEffectiveVertex < 0 || maxEffectiveVertex < minEffectiveVertex;
 
-    if (indexData && m_decl)
+    if (detailedDrawTrace)
     {
-        bool invalidEffectiveIndex = false;
-        for (uint32_t i = 0; i < indexCount; ++i)
+        g_switchLastDrawIndexBufferBytes.store(
+            static_cast<uint32_t>(std::min<size_t>(m_indices->size, UINT32_MAX)),
+            std::memory_order_relaxed);
+        g_switchLastDrawIndexDataAvailable.store(indexData ? 1u : 0u, std::memory_order_relaxed);
+
+        if (indexData && m_decl)
         {
-            uint16_t rawIndex = 0;
-            std::memcpy(
-                &rawIndex,
-                indexData + static_cast<size_t>(startIndex + i) * sizeof(rawIndex),
-                sizeof(rawIndex));
-            minRawIndex = std::min<uint32_t>(minRawIndex, rawIndex);
-            maxRawIndex = std::max<uint32_t>(maxRawIndex, rawIndex);
-            const int64_t effectiveVertex =
-                static_cast<int64_t>(baseVertexIndex) + static_cast<int64_t>(rawIndex);
-            if (effectiveVertex < 0)
+            minEffectiveVertex = INT64_MAX;
+            maxEffectiveVertex = -1;
+            invalidEffectiveIndex = false;
+            for (uint32_t i = 0; i < indexCount; ++i)
             {
-                invalidEffectiveIndex = true;
-                break;
+                uint16_t rawIndex = 0;
+                std::memcpy(
+                    &rawIndex,
+                    indexData + static_cast<size_t>(startIndex + i) * sizeof(rawIndex),
+                    sizeof(rawIndex));
+                minRawIndex = std::min<uint32_t>(minRawIndex, rawIndex);
+                maxRawIndex = std::max<uint32_t>(maxRawIndex, rawIndex);
+                const int64_t effectiveVertex =
+                    static_cast<int64_t>(baseVertexIndex) + static_cast<int64_t>(rawIndex);
+                if (effectiveVertex < 0)
+                {
+                    invalidEffectiveIndex = true;
+                    break;
+                }
+                minEffectiveVertex = std::min(minEffectiveVertex, effectiveVertex);
+                maxEffectiveVertex = std::max(maxEffectiveVertex, effectiveVertex);
             }
-            minEffectiveVertex = std::min(minEffectiveVertex, effectiveVertex);
-            maxEffectiveVertex = std::max(maxEffectiveVertex, effectiveVertex);
         }
 
         g_switchLastDrawRawIndexMin.store(minRawIndex, std::memory_order_relaxed);
         g_switchLastDrawRawIndexMax.store(maxRawIndex, std::memory_order_relaxed);
         g_switchLastDrawEffectiveVertexMin.store(minEffectiveVertex, std::memory_order_relaxed);
         g_switchLastDrawEffectiveVertexMax.store(maxEffectiveVertex, std::memory_order_relaxed);
+    }
 
+    if (m_decl)
+    {
         bool invalidVertexFetch = invalidEffectiveIndex;
         uint32_t badStream = UINT32_MAX;
         uint32_t badElementOffset = 0;
