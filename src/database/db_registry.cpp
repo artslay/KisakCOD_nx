@@ -2438,22 +2438,15 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         const uint32_t currentAssetType =
             static_cast<uint32_t>(assetEntry->entry.asset.type);
 #ifdef __SWITCH__
-        const uint32_t currentZoneIndex =
-            static_cast<uint32_t>(assetEntry->entry.zoneIndex);
-        const uint32_t currentNextHash =
-            static_cast<uint32_t>(assetEntry->entry.nextHash);
-        const void *currentHeader =
-            static_cast<const void *>(assetEntry->entry.asset.header.data);
         if (traceXModelAliasRegistry)
         {
             g_switchDbStage = "xmodelalias/registry/entry_read";
             if (xmodelAliasTraceId < 128u && guard <= 8u)
             {
-                char trace[256];
+                char trace[192];
                 std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][DB XMODELALIAS] id=%u phase=entry_read index=%u type=%u zone=%u nextHash=%u header=%p\n",
-                    xmodelAliasTraceId, assetEntryIndex, currentAssetType,
-                    currentZoneIndex, currentNextHash, currentHeader);
+                    "[KisakCOD][DB XMODELALIAS] id=%u phase=entry_read index=%u type=%u\n",
+                    xmodelAliasTraceId, assetEntryIndex, currentAssetType);
                 Switch_LogWrite(trace);
             }
         }
@@ -2518,7 +2511,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
             g_switchDbStage = "xmodelalias/registry/advance_chain";
         else if (!traceRawFileRegistry && !traceWeaponRegistry)
             g_switchDbStage = "asset/registry/advance_chain";
-        assetEntryIndex = currentNextHash;
+        assetEntryIndex = assetEntry->entry.nextHash;
 #endif
     }
 #ifdef __SWITCH__
