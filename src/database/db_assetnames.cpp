@@ -2,6 +2,8 @@
 #include "database.h"
 
 #ifdef __SWITCH__
+#include <atomic>
+#include <cstdio>
 extern void Switch_LogWrite(const char *msg);
 extern const char * volatile g_switchDbStage;
 extern int32_t g_switchCurrentAssetIndex;
@@ -319,6 +321,32 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
     iassert(header->data);
 
 #ifdef __SWITCH__
+    // A 32-bit serialized pointer that was sign-extended to 64 bits looks like
+    // 0xffffffffXXXXXXXX. Record it before the type-specific name handler
+    // dereferences header->data; this must remain diagnostics-only.
+    const uintptr_t assetDataAddress =
+        reinterpret_cast<uintptr_t>(header->data);
+    if ((assetDataAddress >> 32) == 0xFFFFFFFFu ||
+        (assetDataAddress != 0 && assetDataAddress < 0x100000000ULL))
+    {
+        static std::atomic<uint32_t> badAssetHeaderTraceCount{0};
+        const uint32_t traceId =
+            badAssetHeaderTraceCount.fetch_add(1u, std::memory_order_relaxed);
+        if (traceId < 64u)
+        {
+            char trace[320];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][DB BAD ASSET HEADER] n=%u type=%d nameHeader=%p data=%p asset=%d rawType=%u rawHeader=%08x stage=%s\\n",
+                traceId, type, static_cast<const void *>(header),
+                static_cast<const void *>(header->data),
+                g_switchCurrentAssetIndex,
+                static_cast<unsigned>(g_switchCurrentAssetRawType),
+                static_cast<unsigned>(g_switchCurrentAssetHeader),
+                g_switchDbStage ? g_switchDbStage : "(null)");
+            Switch_LogWrite(trace);
+        }
+    }
+
     if (switchTraceTechset4026)
         g_switchDbStage = "asset/name_header_data_ok";
     else if (switchTraceRawFileName)
