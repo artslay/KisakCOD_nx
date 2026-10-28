@@ -336,7 +336,7 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
         {
             char trace[320];
             std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][DB BAD ASSET HEADER] n=%u type=%d nameHeader=%p data=%p asset=%d rawType=%u rawHeader=%08x stage=%s\\n",
+                "[KisakCOD][DB BAD ASSET HEADER] n=%u type=%d nameHeader=%p data=%p asset=%d rawType=%u rawHeader=%08x stage=%s\n",
                 traceId, type, static_cast<const void *>(header),
                 static_cast<const void *>(header->data),
                 g_switchCurrentAssetIndex,
