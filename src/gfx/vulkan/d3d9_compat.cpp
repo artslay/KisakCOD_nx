@@ -6941,13 +6941,13 @@ bool IDirect3DDevice9::BindUniformSet(
             }
             if (used < sizeof(trace) - 1u)
             {
-                trace[used++] = '\\n';
-                trace[used] = '\\0';
+                trace[used++] = '\n';
+                trace[used] = '\0';
             }
             else
             {
-                trace[sizeof(trace) - 2u] = '\\n';
-                trace[sizeof(trace) - 1u] = '\\0';
+                trace[sizeof(trace) - 2u] = '\n';
+                trace[sizeof(trace) - 1u] = '\0';
             }
             Switch_LogWrite(trace);
         }
@@ -7045,7 +7045,7 @@ bool IDirect3DDevice9::BindUniformSet(
         char trace[512];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][MODEL XFORM][UBO_ALLOC] seq=%u xsurf=%p vs=%llu vkBuffer=%p offset=%llu range=%llu frame=%llu layoutBytes=%zu floats=%u ints=%u bools=%u\\n",
+            "[KisakCOD][MODEL XFORM][UBO_ALLOC] seq=%u xsurf=%p vs=%llu vkBuffer=%p offset=%llu range=%llu frame=%llu layoutBytes=%zu floats=%u ints=%u bools=%u\n",
             g_switchModelTransformDraw.sequence, g_switchModelTransformDraw.xsurf,
             static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
             reinterpret_cast<void *>(bufferInfo.buffer),
@@ -7123,7 +7123,7 @@ bool IDirect3DDevice9::BindUniformSet(
         char trace[512];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][MODEL XFORM][UBO_BIND] seq=%u xsurf=%p vs=%llu descriptorSet=%p vkBuffer=%p offset=%llu range=%llu setIndex=%u\\n",
+            "[KisakCOD][MODEL XFORM][UBO_BIND] seq=%u xsurf=%p vs=%llu descriptorSet=%p vkBuffer=%p offset=%llu range=%llu setIndex=%u\n",
             g_switchModelTransformDraw.sequence, g_switchModelTransformDraw.xsurf,
             static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
             reinterpret_cast<void *>(set), reinterpret_cast<void *>(bufferInfo.buffer),
@@ -10730,7 +10730,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         char vkInputTrace[512];
         std::snprintf(
             vkInputTrace, sizeof(vkInputTrace),
-            "[KisakCOD][MODEL XFORM][VK_INPUT] seq=%u class=%s kind=%s xsurf=%p vertexVk=%p vertexOffset=%llu stride=%u vertexBytes=%zu indexVk=%p indexOffset=0 indexType=uint16 startIndex=%u indexCount=%u baseVertex=%d vkCmdDrawIndexed\\n",
+            "[KisakCOD][MODEL XFORM][VK_INPUT] seq=%u class=%s kind=%s xsurf=%p vertexVk=%p vertexOffset=%llu stride=%u vertexBytes=%zu indexVk=%p indexOffset=0 indexType=uint16 startIndex=%u indexCount=%u baseVertex=%d vkCmdDrawIndexed\n",
             traceContext.sequence,
             traceContext.weaponCandidate ? "weapon_candidate" :
                 (std::strcmp(traceContext.drawKind, "skinned") == 0 ? "skinned" : "rigid"),
