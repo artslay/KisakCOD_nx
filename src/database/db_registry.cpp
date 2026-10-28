@@ -14,6 +14,7 @@ extern const char *(__cdecl *DB_XAssetGetNameHandler[ASSET_TYPE_COUNT])(
 
 #include <qcommon/files.h>
 #ifdef __SWITCH__
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <unistd.h>
@@ -2292,55 +2293,178 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 
 #ifdef __SWITCH__
     const bool traceRawFileRegistry = type == ASSET_TYPE_RAWFILE;
+    // In this SP build runtime asset type 32 is XModelAlias. The crash snapshot
+    // reported type 32 while the DB stage was still "asset/lock_acquired", so
+    // narrow the next run to the hash lookup and potentially unsafe dereferences.
+    const bool traceXModelAliasRegistry = static_cast<uint32_t>(type) == 32u;
+    static std::atomic<uint32_t> xmodelAliasLookupTraceCount{0};
+    const uint32_t xmodelAliasTraceId = traceXModelAliasRegistry
+        ? xmodelAliasLookupTraceCount.fetch_add(1u, std::memory_order_relaxed)
+        : UINT32_MAX;
     if (traceRawFileRegistry)
         g_switchDbStage = "rawfile/registry/hash_enter";
+    if (traceXModelAliasRegistry)
+    {
+        g_switchDbStage = "xmodelalias/registry/hash_enter";
+        if (xmodelAliasTraceId < 512u)
+        {
+            char trace[256];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][DB XMODELALIAS] id=%u phase=hash_enter namePtr=%p type=%u asset=%d raw=%u header=%08x\\n",
+                xmodelAliasTraceId, static_cast<const void *>(name),
+                static_cast<unsigned>(type), g_switchCurrentAssetIndex,
+                static_cast<unsigned>(g_switchCurrentAssetRawType),
+                static_cast<unsigned>(g_switchCurrentAssetHeader));
+            Switch_LogWrite(trace);
+        }
+    }
 #endif
     const uint32_t hash = DB_HashForName(name, type);
 #ifdef __SWITCH__
     if (traceRawFileRegistry)
         g_switchDbStage = "rawfile/registry/hash_done";
+    if (traceXModelAliasRegistry)
+    {
+        g_switchDbStage = "xmodelalias/registry/hash_done";
+        if (xmodelAliasTraceId < 512u)
+        {
+            char trace[384];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][DB XMODELALIAS] id=%u phase=hash_done name=%.*s namePtr=%p hash=%u\\n",
+                xmodelAliasTraceId, 112, name ? name : "<null>",
+                static_cast<const void *>(name), hash);
+            Switch_LogWrite(trace);
+        }
+    }
     const bool traceDefaultMaterial =
         type == ASSET_TYPE_MATERIAL && name && !I_stricmp(name, "$default");
     if (traceDefaultMaterial)
     {
         char trace[192];
         std::snprintf(trace, sizeof(trace),
-            "[SWITCH DBLOOKUP] material $default hash=%u first=%u write=%u\n",
+            "[SWITCH DBLOOKUP] material $default hash=%u first=%u write=%u\\n",
             hash,
             static_cast<unsigned>(db_hashTable[hash]),
             static_cast<unsigned>(db_hashCritSect.writeCount));
         Switch_LogWrite(trace);
     }
 #endif
+    const uint32_t bucketHead = db_hashTable[hash];
+#ifdef __SWITCH__
+    if (traceXModelAliasRegistry)
+    {
+        g_switchDbStage = "xmodelalias/registry/read_bucket";
+        if (xmodelAliasTraceId < 512u)
+        {
+            char trace[256];
+            std::snprintf(trace, sizeof(trace),
+                "[KisakCOD][DB XMODELALIAS] id=%u phase=bucket hash=%u bucketHead=%u table=%p\\n",
+                xmodelAliasTraceId, hash, bucketHead,
+                static_cast<const void *>(db_hashTable));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     uint32_t guard = 0;
-    for (assetEntryIndex = db_hashTable[hash];
+    for (assetEntryIndex = bucketHead;
         assetEntryIndex;
         assetEntryIndex = assetEntry->entry.nextHash)
     {
         if (++guard > 0x8000)
         {
 #ifdef __SWITCH__
+            if (traceXModelAliasRegistry)
+                g_switchDbStage = "xmodelalias/registry/chain_guard";
             if (type == ASSET_TYPE_MATERIAL)
-                Switch_LogWrite("[SWITCH DBLOOKUP] hash chain overflow\n");
+                Switch_LogWrite("[SWITCH DBLOOKUP] hash chain overflow\\n");
 #endif
             return 0;
         }
         if (assetEntryIndex >= 0x8000)
+        {
+#ifdef __SWITCH__
+            if (traceXModelAliasRegistry)
+            {
+                g_switchDbStage = "xmodelalias/registry/bad_entry_index";
+                char trace[192];
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][DB XMODELALIAS] id=%u phase=bad_entry_index index=%u guard=%u\\n",
+                    xmodelAliasTraceId, assetEntryIndex, guard);
+                Switch_LogWrite(trace);
+            }
+#endif
             return 0;
+        }
         assetEntry = &g_assetEntryPool[assetEntryIndex];
-        if (assetEntry->entry.asset.type == type)
+#ifdef __SWITCH__
+        if (traceXModelAliasRegistry)
+        {
+            g_switchDbStage = "xmodelalias/registry/read_entry";
+            if (xmodelAliasTraceId < 128u && guard <= 8u)
+            {
+                char trace[192];
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][DB XMODELALIAS] id=%u phase=read_entry index=%u entry=%p guard=%u\\n",
+                    xmodelAliasTraceId, assetEntryIndex,
+                    static_cast<void *>(assetEntry), guard);
+                Switch_LogWrite(trace);
+            }
+        }
+#endif
+        const uint32_t currentAssetType =
+            static_cast<uint32_t>(assetEntry->entry.asset.type);
+        const uint32_t currentZoneIndex =
+            static_cast<uint32_t>(assetEntry->entry.zoneIndex);
+        const uint32_t currentNextHash =
+            static_cast<uint32_t>(assetEntry->entry.nextHash);
+        const void *currentHeader =
+            static_cast<const void *>(assetEntry->entry.asset.header.data);
+#ifdef __SWITCH__
+        if (traceXModelAliasRegistry)
+        {
+            g_switchDbStage = "xmodelalias/registry/entry_read";
+            if (xmodelAliasTraceId < 128u && guard <= 8u)
+            {
+                char trace[256];
+                std::snprintf(trace, sizeof(trace),
+                    "[KisakCOD][DB XMODELALIAS] id=%u phase=entry_read index=%u type=%u zone=%u nextHash=%u header=%p\\n",
+                    xmodelAliasTraceId, assetEntryIndex, currentAssetType,
+                    currentZoneIndex, currentNextHash, currentHeader);
+                Switch_LogWrite(trace);
+            }
+        }
+#endif
+        if (currentAssetType == static_cast<uint32_t>(type))
         {
 #ifdef __SWITCH__
             if (traceRawFileRegistry)
                 g_switchDbStage = "rawfile/registry/get_entry_name";
+            if (traceXModelAliasRegistry)
+                g_switchDbStage = "xmodelalias/registry/get_entry_name";
 #endif
             XAssetName = DB_GetXAssetName(&assetEntry->entry.asset);
 #ifdef __SWITCH__
             if (traceRawFileRegistry)
                 g_switchDbStage = "rawfile/registry/compare_name";
+            if (traceXModelAliasRegistry)
+                g_switchDbStage = "xmodelalias/registry/compare_name";
             const int nameCompare = Switch_IstricmpAssetName(XAssetName, name);
             if (traceRawFileRegistry)
                 g_switchDbStage = "rawfile/registry/compare_done";
+            if (traceXModelAliasRegistry)
+            {
+                g_switchDbStage = "xmodelalias/registry/compare_done";
+                if (xmodelAliasTraceId < 128u)
+                {
+                    char trace[256];
+                    std::snprintf(trace, sizeof(trace),
+                        "[KisakCOD][DB XMODELALIAS] id=%u phase=compare_done index=%u assetNamePtr=%p queryNamePtr=%p result=%d\\n",
+                        xmodelAliasTraceId, assetEntryIndex,
+                        static_cast<const void *>(XAssetName),
+                        static_cast<const void *>(name), nameCompare);
+                    Switch_LogWrite(trace);
+                }
+            }
             if (nameCompare == 0)
             {
                 // A default placeholder can share a hash-chain with a real
@@ -2356,7 +2480,6 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
             if (!I_stricmp(XAssetName, name))
                 return &g_assetEntryPool[assetEntryIndex];
 #endif
-        }
     }
 #ifdef __SWITCH__
     // The first lookup may occur before the map zone has registered its BSP.
