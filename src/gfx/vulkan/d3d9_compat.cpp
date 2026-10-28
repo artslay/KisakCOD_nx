@@ -10591,12 +10591,15 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         const SwitchModelTransformDrawContext &traceContext = g_switchModelTransformDraw;
         char trace[1500];
         std::snprintf(trace, sizeof(trace),
-            "[KisakCOD][MODEL XFORM][GPU] seq=%u class=%s kind=%s model=%s material=%s xsurf=%p gfxEnt=%u depthHack=%u indexCount=%u startIndex=%u baseVertex=%d numVertices=%u stream0=(buffer=%p offset=%llu stride=%u bytes=%u) index=(buffer=%p bytes=%u readable=%u) sourceMValid=%u sourceM=%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g\n",
+            "[KisakCOD][MODEL XFORM][GPU] seq=%u class=%s kind=%s model=%s material=%s xsurf=%p gfxEnt=%u depthHack=%u pipeline=%016llx vsSerial=%llu declSerial=%llu indexCount=%u startIndex=%u baseVertex=%d numVertices=%u stream0=(buffer=%p offset=%llu stride=%u bytes=%u) index=(buffer=%p bytes=%u selectedReadable=%u mappedReadable=%u) sourceMValid=%u sourceM=%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g;%.4g,%.4g,%.4g,%.4g\n",
             traceContext.sequence,
             traceContext.weaponCandidate ? "weapon_candidate" :
                 (std::strcmp(traceContext.drawKind, "skinned") == 0 ? "skinned" : "rigid"),
             traceContext.drawKind, traceContext.modelName, traceContext.materialName,
             traceContext.xsurf, traceContext.gfxEntIndex, traceContext.depthHack ? 1u : 0u,
+            static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)),
+            static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+            static_cast<unsigned long long>(m_decl ? m_decl->serial : 0u),
             indexCount, startIndex, baseVertexIndex, numVertices,
             static_cast<void *>(m_streams[0].buffer),
             static_cast<unsigned long long>(m_streams[0].offset), m_streams[0].stride,
@@ -10630,59 +10633,95 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         Switch_LogWrite(registerTrace);
 
         IDirect3DVertexBuffer9 *traceVertexBuffer = m_streams[0].buffer;
-        const uint8_t *traceVertexBytes = nullptr;
-        size_t traceVertexReadableBytes = 0u;
-        if (traceVertexBuffer)
+        const uint8_t *traceVertexMapped = traceVertexBuffer && traceVertexBuffer->mapped
+            ? static_cast<const uint8_t *>(traceVertexBuffer->mapped) : nullptr;
+        const size_t traceVertexMappedBytes = traceVertexMapped && traceVertexBuffer
+            ? traceVertexBuffer->size : 0u;
+        const uint8_t *traceVertexShadow =
+            traceVertexBuffer && !traceVertexBuffer->shadow.empty()
+                ? traceVertexBuffer->shadow.data() : nullptr;
+        const size_t traceVertexShadowBytes = traceVertexBuffer
+            ? traceVertexBuffer->shadow.size() : 0u;
+        const uint8_t *traceIndexMapped = m_indices && m_indices->mapped
+            ? static_cast<const uint8_t *>(m_indices->mapped) : nullptr;
+        const size_t traceIndexMappedBytes = traceIndexMapped && m_indices
+            ? m_indices->size : 0u;
+        const uint8_t *traceIndexShadow =
+            m_indices && !m_indices->shadow.empty() ? m_indices->shadow.data() : nullptr;
+        const size_t traceIndexShadowBytes = m_indices ? m_indices->shadow.size() : 0u;
+        auto traceReadIndex = [](const uint8_t *bytes, size_t availableBytes,
+                                 uint64_t position, uint16_t *outIndex) -> bool
         {
-            if (traceVertexBuffer->dynamic && traceVertexBuffer->shadowInitialized &&
-                traceVertexBuffer->shadow.size() >= traceVertexBuffer->size) {
-                traceVertexBytes = traceVertexBuffer->shadow.data();
-                traceVertexReadableBytes = traceVertexBuffer->shadow.size();
-            } else if (traceVertexBuffer->mapped) {
-                traceVertexBytes = static_cast<const uint8_t *>(traceVertexBuffer->mapped);
-                traceVertexReadableBytes = traceVertexBuffer->size;
-            } else if (!traceVertexBuffer->shadow.empty()) {
-                traceVertexBytes = traceVertexBuffer->shadow.data();
-                traceVertexReadableBytes = traceVertexBuffer->shadow.size();
-            }
-        }
+            if (!bytes || !outIndex || position > availableBytes / sizeof(uint16_t) ||
+                availableBytes / sizeof(uint16_t) - position < 1u)
+                return false;
+            std::memcpy(outIndex, bytes + static_cast<size_t>(position) * sizeof(uint16_t),
+                sizeof(*outIndex));
+            return true;
+        };
+        auto traceReadVertex = [](const uint8_t *bytes, size_t availableBytes,
+                                  uint64_t offset, float xyz[3]) -> bool
+        {
+            if (!bytes || !xyz || offset > availableBytes ||
+                availableBytes - static_cast<size_t>(offset) < sizeof(float) * 3u)
+                return false;
+            const uint8_t *vertex = bytes + static_cast<size_t>(offset);
+            std::memcpy(&xyz[0], vertex, sizeof(float));
+            std::memcpy(&xyz[1], vertex + sizeof(float), sizeof(float));
+            std::memcpy(&xyz[2], vertex + sizeof(float) * 2u, sizeof(float));
+            return true;
+        };
         for (uint32_t sample = 0; sample < 3u && sample < indexCount; ++sample)
         {
-            uint16_t rawIndex = 0u;
-            bool indexReadable = false;
-            int64_t effectiveVertex = -1;
-            uint64_t vertexByteOffset = 0u;
-            float vx = 0.0f, vy = 0.0f, vz = 0.0f;
-            bool vertexReadable = false;
             const uint64_t indexPosition = static_cast<uint64_t>(startIndex) + sample;
-            if (indexData && m_indices && indexPosition < static_cast<uint64_t>(m_indices->size) / sizeof(uint16_t)) {
-                std::memcpy(&rawIndex, indexData + static_cast<size_t>(indexPosition) * sizeof(uint16_t), sizeof(rawIndex));
-                indexReadable = true;
-                effectiveVertex = static_cast<int64_t>(baseVertexIndex) + rawIndex;
-            }
+            uint16_t selectedIndex = 0u, mappedIndex = 0u;
+            const bool selectedIndexReadable = traceReadIndex(
+                indexData, m_indices ? m_indices->size : 0u, indexPosition, &selectedIndex);
+            const bool mappedIndexReadable = traceReadIndex(
+                traceIndexMapped, traceIndexMappedBytes, indexPosition, &mappedIndex);
+            const int64_t selectedEffective = selectedIndexReadable
+                ? static_cast<int64_t>(baseVertexIndex) + selectedIndex : -1;
+            const int64_t mappedEffective = mappedIndexReadable
+                ? static_cast<int64_t>(baseVertexIndex) + mappedIndex : -1;
+            uint64_t selectedOffset = 0u, mappedOffset = 0u;
+            float selectedXYZ[3]{}, mappedXYZ[3]{};
+            bool selectedVertexReadable = false, mappedVertexReadable = false;
             const StreamBinding &traceStream = m_streams[0];
-            if (indexReadable && effectiveVertex >= 0 && traceStream.buffer && traceStream.stride &&
-                static_cast<uint64_t>(effectiveVertex) <=
-                    (UINT64_MAX - static_cast<uint64_t>(traceStream.offset)) / traceStream.stride)
+            if (traceStream.buffer && traceStream.stride)
             {
-                vertexByteOffset = static_cast<uint64_t>(traceStream.offset) +
-                    static_cast<uint64_t>(effectiveVertex) * traceStream.stride;
-                if (traceVertexBytes && vertexByteOffset <= traceVertexReadableBytes &&
-                    traceVertexReadableBytes - static_cast<size_t>(vertexByteOffset) >= sizeof(float) * 3u) {
-                    const uint8_t *vertex = traceVertexBytes + static_cast<size_t>(vertexByteOffset);
-                    std::memcpy(&vx, vertex, sizeof(float));
-                    std::memcpy(&vy, vertex + sizeof(float), sizeof(float));
-                    std::memcpy(&vz, vertex + sizeof(float) * 2u, sizeof(float));
-                    vertexReadable = true;
+                const uint64_t streamOffset = static_cast<uint64_t>(traceStream.offset);
+                const uint64_t stride = traceStream.stride;
+                if (selectedEffective >= 0 &&
+                    static_cast<uint64_t>(selectedEffective) <= (UINT64_MAX - streamOffset) / stride)
+                {
+                    selectedOffset = streamOffset + static_cast<uint64_t>(selectedEffective) * stride;
+                    selectedVertexReadable = traceReadVertex(
+                        traceVertexShadow ? traceVertexShadow : traceVertexMapped,
+                        traceVertexShadow ? traceVertexShadowBytes : traceVertexMappedBytes,
+                        selectedOffset, selectedXYZ);
+                }
+                if (mappedEffective >= 0 &&
+                    static_cast<uint64_t>(mappedEffective) <= (UINT64_MAX - streamOffset) / stride)
+                {
+                    mappedOffset = streamOffset + static_cast<uint64_t>(mappedEffective) * stride;
+                    mappedVertexReadable = traceReadVertex(
+                        traceVertexMapped, traceVertexMappedBytes, mappedOffset, mappedXYZ);
                 }
             }
-            char vertexTrace[320];
+            char vertexTrace[520];
             std::snprintf(vertexTrace, sizeof(vertexTrace),
-                "[KisakCOD][MODEL XFORM][VB] seq=%u xsurf=%p sample=%u indexReadable=%u rawIndex=%u effectiveVertex=%lld byteOffset=%llu stride=%u readable=%u xyz=(%.5g,%.5g,%.5g)\n",
-                traceContext.sequence, traceContext.xsurf, sample, indexReadable ? 1u : 0u,
-                rawIndex, static_cast<long long>(effectiveVertex),
-                static_cast<unsigned long long>(vertexByteOffset), traceStream.stride,
-                vertexReadable ? 1u : 0u, vx, vy, vz);
+                "[KisakCOD][MODEL XFORM][VB] seq=%u xsurf=%p sample=%u selectedIndex=(ok:%u raw:%u eff:%lld off:%llu) mappedIndex=(ok:%u raw:%u eff:%lld off:%llu) stride=%u vertexMapped=(ok:%u xyz:%.5g,%.5g,%.5g) vertexShadow=(ok:%u xyz:%.5g,%.5g,%.5g) shadowState=(dynamic:%u initialized:%u bytes:%zu)\n",
+                traceContext.sequence, traceContext.xsurf, sample,
+                selectedIndexReadable ? 1u : 0u, selectedIndex,
+                static_cast<long long>(selectedEffective), static_cast<unsigned long long>(selectedOffset),
+                mappedIndexReadable ? 1u : 0u, mappedIndex,
+                static_cast<long long>(mappedEffective), static_cast<unsigned long long>(mappedOffset),
+                traceStream.stride,
+                mappedVertexReadable ? 1u : 0u, mappedXYZ[0], mappedXYZ[1], mappedXYZ[2],
+                selectedVertexReadable ? 1u : 0u, selectedXYZ[0], selectedXYZ[1], selectedXYZ[2],
+                traceVertexBuffer && traceVertexBuffer->dynamic ? 1u : 0u,
+                traceVertexBuffer && traceVertexBuffer->shadowInitialized ? 1u : 0u,
+                traceVertexShadowBytes);
             Switch_LogWrite(vertexTrace);
         }
     }
