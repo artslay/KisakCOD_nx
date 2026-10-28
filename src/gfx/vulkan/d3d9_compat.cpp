@@ -9590,8 +9590,9 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/issue_draw";
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
     g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
-    LogGpuDrawCommand("nonindexed", primitiveType, primitiveCount,
-        vertexCount, 0u, 0u, 0);
+    if (Switch_IsVkGpuDrawTraceEnabled())
+        LogGpuDrawCommand("nonindexed", primitiveType, primitiveCount,
+            vertexCount, 0u, 0u, 0);
     ++g_switchSceneDrawPrimitiveCalls;
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/return";
     return S_OK;
@@ -10439,8 +10440,9 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
     g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
-    LogGpuDrawCommand("indexed", primitiveType, primitiveCount,
-        numVertices, indexCount, startIndex, baseVertexIndex);
+    if (Switch_IsVkGpuDrawTraceEnabled())
+        LogGpuDrawCommand("indexed", primitiveType, primitiveCount,
+            numVertices, indexCount, startIndex, baseVertexIndex);
 #ifdef __SWITCH__
     if (switchFloorOcclusionQueryIssued)
         vkCmdEndQuery(m_backend->CommandBuffer(), switchFloorOcclusionPool, 0);
