@@ -80,7 +80,7 @@ static void Switch_LogActorSpawn(const gentity_s *ent)
     std::snprintf(trace, sizeof(trace),
         "[KisakCOD][AI SPAWN] n=%u ent=%d spawnflags=%u spawnai=%u ai=%u health=%d "
         "inuse=%u time=%d\n",
-        g_switchActorSpawnTraceCount++, ent->s.number, ent->spawnflags,
+        g_switchActorSpawnTraceCount++, ent->s.number, static_cast<unsigned int>(ent->spawnflags),
         g_spawnai && g_spawnai->current.enabled ? 1u : 0u,
         g_ai && g_ai->current.enabled ? 1u : 0u,
         ent->health, ent->r.inuse ? 1u : 0u, level.time);
