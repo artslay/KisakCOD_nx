@@ -3995,40 +3995,52 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
             char scriptFunction[160] = "<unavailable>";
             if (codePos && Scr_IsInOpcodeMemory(codePos))
             {
-                Scr_SourcePos_t sourceInfo{};
-                if (Scr_GetSourcePosOfType(codePos, 4, &sourceInfo) &&
-                    sourceInfo.bufferIndex < scrParserPub.sourceBufferLookupLen)
+                // Match Scr_GetFileAndLine: its working path uses the nearest
+                // previous opcode lookup, not an exact-position lookup.
+                OpcodeLookup *sourceLookup = Scr_GetPrevSourcePosOpcodeLookup(codePos);
+                if (sourceLookup &&
+                    sourceLookup->sourcePosIndex < scrParserGlob.sourcePosLookupLen &&
+                    sourceLookup->sourcePosCount &&
+                    sourceLookup->sourcePosCount <=
+                        scrParserGlob.sourcePosLookupLen - sourceLookup->sourcePosIndex)
                 {
-                    const SourceBufferInfo *sourceBuffer =
-                        &scrParserPub.sourceBufferLookup[sourceInfo.bufferIndex];
-                    if (sourceBuffer->sourceBuf && sourceBuffer->len >= 0 &&
-                        sourceInfo.sourcePos <= static_cast<uint32_t>(sourceBuffer->len))
+                    const uint32_t sourceBufferIndex = Scr_GetSourceBuffer(codePos);
+                    const uint32_t sourcePosition =
+                        scrParserGlob.sourcePosLookup[sourceLookup->sourcePosIndex].sourcePos;
+                    if (sourceBufferIndex < scrParserPub.sourceBufferLookupLen)
                     {
-                        char rawSourceLine[1028] = {};
-                        int sourceColumn = 0;
-                        Scr_GetLineInfo(sourceBuffer->sourceBuf, sourceInfo.sourcePos,
-                            &sourceColumn, rawSourceLine);
-                        std::snprintf(scriptSourceLine, sizeof(scriptSourceLine), "%s",
-                            rawSourceLine);
-                        char rawFunctionLine[1028] = {};
-                        Scr_GetFunctionInfo(sourceBuffer->sourceBuf, sourceInfo.sourcePos,
-                            rawFunctionLine);
-                        std::snprintf(scriptFunction, sizeof(scriptFunction), "%s",
-                            rawFunctionLine);
-                        for (char *ch = scriptFunction; *ch; ++ch)
+                        const SourceBufferInfo *sourceBuffer =
+                            &scrParserPub.sourceBufferLookup[sourceBufferIndex];
+                        if (sourceBuffer->sourceBuf && sourceBuffer->len >= 0 &&
+                            sourcePosition <= static_cast<uint32_t>(sourceBuffer->len))
                         {
-                            if (*ch == '\r' || *ch == '\n' || *ch == '\t')
-                                *ch = ' ';
-                        }
-                        for (char *ch = scriptSourceLine; *ch; ++ch)
-                        {
-                            if (*ch == '\r' || *ch == '\n' || *ch == '\t')
-                                *ch = ' ';
+                            char rawSourceLine[1028] = {};
+                            int sourceColumn = 0;
+                            Scr_GetLineInfo(sourceBuffer->sourceBuf, sourcePosition,
+                                &sourceColumn, rawSourceLine);
+                            std::snprintf(scriptSourceLine, sizeof(scriptSourceLine), "%s",
+                                rawSourceLine);
+
+                            char rawFunctionLine[1028] = {};
+                            Scr_GetFunctionInfo(sourceBuffer->sourceBuf, sourcePosition,
+                                rawFunctionLine);
+                            std::snprintf(scriptFunction, sizeof(scriptFunction), "%s",
+                                rawFunctionLine);
+
+                            for (char *ch = scriptFunction; *ch; ++ch)
+                            {
+                                if (*ch == '\r' || *ch == '\n' || *ch == '\t')
+                                    *ch = ' ';
+                            }
+                            for (char *ch = scriptSourceLine; *ch; ++ch)
+                            {
+                                if (*ch == '\r' || *ch == '\n' || *ch == '\t')
+                                    *ch = ' ';
+                            }
                         }
                     }
                 }
             }
-
             const char *targetClass = ent->classname
                 ? SL_ConvertToStringSafe(ent->classname) : "<none>";
             const char *targetName = ent->targetname
