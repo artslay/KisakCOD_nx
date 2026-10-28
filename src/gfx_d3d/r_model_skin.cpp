@@ -20,8 +20,7 @@ static void R_LogModelTransformCpuSkin(
     const GfxPackedVertex *vertices, const DObjSkelMat *boneMatrices,
     int boneIndex, bool sseEnabled)
 {
-    if (!surface || !xsurf || !vertices || !xsurf->vertCount ||
-        !Switch_IsModelTransformTraceEnabled()) return;
+    if (!surface || !xsurf || !vertices || !xsurf->vertCount) return;
     const bool weaponCandidate = Switch_IsModelTransformWeaponSurface(xsurf);
     static std::atomic<uint32_t> skinnedTraceCount{0}, weaponTraceCount{0};
     const uint32_t sequence = weaponCandidate
@@ -39,7 +38,7 @@ static void R_LogModelTransformCpuSkin(
         static_cast<const void *>(xsurf), surface->info.gfxEntIndex, boneIndex,
         surface->info.boneCount, xsurf->vertCount, static_cast<const void *>(sourceVertices),
         static_cast<const void *>(vertices), surface->skinnedCachedOffset,
-        sseEnabled ? "sse" : "scalar",
+        sseEnabled ? "sse_entry_scalar" : "scalar",
         sourceVertices ? sourceVertices[first].xyz[0] : 0.0f,
         sourceVertices ? sourceVertices[first].xyz[1] : 0.0f,
         sourceVertices ? sourceVertices[first].xyz[2] : 0.0f,
@@ -120,6 +119,9 @@ void R_SkinXModelCmd(_WORD *data)
     bool sseEnabled = sys_SSE->current.enabled && r_sse_skinning->current.enabled;
 #endif
     bool sseStateUsed = false;
+#ifdef __SWITCH__
+    const bool modelTransformTraceEnabled = Switch_IsModelTransformTraceEnabled();
+#endif
 
     SkinXModelCmd* skinCmd = (SkinXModelCmd*)data;
 
@@ -243,8 +245,9 @@ void R_SkinXModelCmd(_WORD *data)
         for (uint32_t vertexIndex = 0; vertexIndex < xsurf->vertCount; ++vertexIndex)
             skinVerticesOut[vertexIndex].texCoord =
                 Vec2ConvertTexCoordsForVulkan(skinVerticesOut[vertexIndex].texCoord);
-        R_LogModelTransformCpuSkin(
-            skinnedSurf, xsurf, skinVerticesOut, boneSkelMats, boneIndex, sseEnabled);
+        if (modelTransformTraceEnabled)
+            R_LogModelTransformCpuSkin(
+                skinnedSurf, xsurf, skinVerticesOut, boneSkelMats, boneIndex, sseEnabled);
 #endif
     }
 
