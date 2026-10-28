@@ -3991,6 +3991,33 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
                     Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
             }
 
+            char scriptSourceLine[256] = "<unavailable>";
+            if (codePos && Scr_IsInOpcodeMemory(codePos))
+            {
+                Scr_SourcePos_t sourceInfo{};
+                if (Scr_GetSourcePosOfType(codePos, 4, &sourceInfo) &&
+                    sourceInfo.bufferIndex < scrParserPub.sourceBufferLookupLen)
+                {
+                    const SourceBufferInfo *sourceBuffer =
+                        &scrParserPub.sourceBufferLookup[sourceInfo.bufferIndex];
+                    if (sourceBuffer->sourceBuf && sourceBuffer->len >= 0 &&
+                        sourceInfo.sourcePos <= static_cast<uint32_t>(sourceBuffer->len))
+                    {
+                        char rawSourceLine[1028] = {};
+                        int sourceColumn = 0;
+                        Scr_GetLineInfo(sourceBuffer->sourceBuf, sourceInfo.sourcePos,
+                            &sourceColumn, rawSourceLine);
+                        std::snprintf(scriptSourceLine, sizeof(scriptSourceLine), "%s",
+                            rawSourceLine);
+                        for (char *ch = scriptSourceLine; *ch; ++ch)
+                        {
+                            if (*ch == '\r' || *ch == '\n' || *ch == '\t')
+                                *ch = ' ';
+                        }
+                    }
+                }
+            }
+
             const char *targetClass = ent->classname
                 ? SL_ConvertToStringSafe(ent->classname) : "<none>";
             const char *targetName = ent->targetname
@@ -4006,13 +4033,13 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
 
             Com_Printf(
                 CON_CHANNEL_SERVER,
-                "[KisakCOD][AI SCRIPT DAMAGE] n=%u target=%d targetname=%s class=%s healthBefore=%d maxHealth=%d amount=%.2f source=(%.1f %.1f %.1f) attacker=%d attackername=%s attackerclass=%s inflictor=%d inflictorname=%s inflictorclass=%s script=%s:%d codePos=%p\n",
+                "[KisakCOD][AI SCRIPT DAMAGE] n=%u target=%d targetname=%s class=%s healthBefore=%d maxHealth=%d amount=%.2f source=(%.1f %.1f %.1f) attacker=%d attackername=%s attackerclass=%s inflictor=%d inflictorname=%s inflictorclass=%s script=%s:%d sourceLine=\\\"%s\\\" codePos=%p\n",
                 switchAiScriptDamageTraceCount++,
                 ent->s.number, targetName, targetClass, ent->health, ent->maxHealth,
                 damage, source[0], source[1], source[2],
                 attacker ? attacker->s.number : -1, attackerName, attackerClass,
                 inflictor ? inflictor->s.number : -1, inflictorName, inflictorClass,
-                scriptFile ? scriptFile : "", scriptLine,
+                scriptFile ? scriptFile : "", scriptLine, scriptSourceLine,
                 static_cast<const void *>(codePos));
         }
     }
