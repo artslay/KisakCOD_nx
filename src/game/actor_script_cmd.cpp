@@ -1136,7 +1136,7 @@ LABEL_16:
             std::snprintf(trace, sizeof(trace),
                 "[KisakCOD][AI TELEPORT] n=%u ent=%d class=%s targetname=%s "
                 "from=(%.1f %.1f %.1f) to=(%.1f %.1f %.1f) distSq=%.1f "
-                "script=%s:%d codePos=%p\\n",
+                "script=%s:%d codePos=%p\n",
                 switchAiTeleportTraceCount++, ent->s.number, className, targetName,
                 switchOldOrigin[0], switchOldOrigin[1], switchOldOrigin[2],
                 vSpawnPos[0], vSpawnPos[1], vSpawnPos[2], distSquared,
