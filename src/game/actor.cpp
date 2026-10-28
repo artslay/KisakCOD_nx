@@ -39,6 +39,7 @@
 #ifdef __SWITCH__
 #include <cstdio>
 #include <cstdint>
+#include <cstddef>
 extern void Switch_LogWrite(const char *msg);
 #endif
 
@@ -71,7 +72,7 @@ static bool g_switchActorThinkLogged[MAX_ACTORS];
 
 static void Switch_LogActorState(const char *stage, const actor_s *actor)
 {
-    if (!actor || !actor->ent || g_switchActorInitTraceCount >= 64u)
+    if (!actor || !actor->ent || g_switchActorInitTraceCount >= 128u)
         return;
 
     const gentity_s *ent = actor->ent;
@@ -101,7 +102,7 @@ static void Switch_LogActorThinkOnce(const actor_s *actor)
     if (!actor || !actor->ent || !level.actors)
         return;
 
-    const ptrdiff_t index = actor - level.actors;
+    const std::ptrdiff_t index = actor - level.actors;
     if (index < 0 || index >= MAX_ACTORS || g_switchActorThinkLogged[index])
         return;
 
