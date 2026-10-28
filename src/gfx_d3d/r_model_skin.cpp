@@ -31,10 +31,10 @@ static void R_LogModelTransformCpuSkin(
     const uint32_t first = 0u, middle = xsurf->vertCount / 2u, last = xsurf->vertCount - 1u;
     const bool boneValid = boneMatrices && boneIndex >= 0 && boneIndex < 128;
     const DObjSkelMat *mat = boneValid ? &boneMatrices[boneIndex] : nullptr;
-    const GfxPackedVertex *sourceVertices = xsurf->verts0;
+    const GfxPackedVertex *sourceVertices = reinterpret_cast<const GfxPackedVertex *>(xsurf->verts0);
     char trace[1800];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][MODEL XFORM][CPU_SKIN] seq=%u class=%s xsurf=%p gfxEnt=%u boneBase=%d boneCount=%u verts=%u src=%p dst=%p cacheOffset=%d path=%s src0=(%.5g,%.5g,%.5g) srcMid=(%.5g,%.5g,%.5g) srcLast=(%.5g,%.5g,%.5g) out0=(%.5g,%.5g,%.5g) outMid=(%.5g,%.5g,%.5g) outLast=(%.5g,%.5g,%.5g) boneValid=%u boneA0=(%.4g,%.4g,%.4g,%.4g) boneA1=(%.4g,%.4g,%.4g,%.4g) boneA2=(%.4g,%.4g,%.4g,%.4g)\\n",
+        "[KisakCOD][MODEL XFORM][CPU_SKIN] seq=%u class=%s xsurf=%p gfxEnt=%u boneBase=%d boneCount=%u verts=%u src=%p dst=%p cacheOffset=%d path=%s src0=(%.5g,%.5g,%.5g) srcMid=(%.5g,%.5g,%.5g) srcLast=(%.5g,%.5g,%.5g) out0=(%.5g,%.5g,%.5g) outMid=(%.5g,%.5g,%.5g) outLast=(%.5g,%.5g,%.5g) boneValid=%u boneA0=(%.4g,%.4g,%.4g,%.4g) boneA1=(%.4g,%.4g,%.4g,%.4g) boneA2=(%.4g,%.4g,%.4g,%.4g)\n",
         sequence, weaponCandidate ? "weapon_candidate" : "skinned",
         static_cast<const void *>(xsurf), surface->info.gfxEntIndex, boneIndex,
         surface->info.boneCount, xsurf->vertCount, static_cast<const void *>(sourceVertices),
