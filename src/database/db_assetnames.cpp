@@ -8,6 +8,7 @@ extern void Switch_LogWrite(const char *msg);
 extern const char * volatile g_switchDbStage;
 extern int32_t g_switchCurrentAssetIndex;
 extern uint32_t g_switchCurrentAssetRawType;
+extern uint32_t g_switchCurrentAssetHeader;
 #endif
 #include <game/g_bsp.h>
 
