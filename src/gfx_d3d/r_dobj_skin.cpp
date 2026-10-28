@@ -16,6 +16,13 @@
 #include "r_model_pose.h"
 #include "r_dpvs.h"
 
+#ifdef __SWITCH__
+extern bool Switch_IsModelTransformTraceEnabled();
+extern void Switch_RegisterModelTransformTraceSurface(
+    const char *modelName, const void *xsurf, uint32_t modelIndex,
+    uint32_t surfaceIndex, uint32_t gfxEntIndex, bool skinned, bool depthHack);
+#endif
+
 static void __cdecl R_FlagXModelAsSkinned(GfxSceneEntity *sceneEnt, uint32_t surfaceCount)
 {
     iassert(sceneEnt->cull.state == CULL_STATE_SKINNED_PENDING);
@@ -117,6 +124,12 @@ int  R_SkinSceneDObjModels(
     iassert(!IsFastFileLoad() || !DObjBad(obj));
 
     PROF_SCOPED("R_SkinXModel");
+
+#ifdef __SWITCH__
+    const bool modelTransformTraceEnabled = Switch_IsModelTransformTraceEnabled();
+    const bool modelTransformTraceDepthHack = sceneEnt->gfxEntIndex &&
+        ((frontEndDataOut->gfxEnts[sceneEnt->gfxEntIndex].renderFxFlags & 2) != 0);
+#endif
 
     uint32_t NumModels = DObjGetNumModels(obj);
     if (!NumModels)
@@ -413,6 +426,16 @@ int  R_SkinSceneDObjModels(
                 GfxModelSkinnedSurface *skinnedSurface = (GfxModelSkinnedSurface *)surfPos;
                 skinnedSurface->xsurf = surface;
                 skinnedSurface->info = targBoneIndexHigh;
+#ifdef __SWITCH__
+                if (modelTransformTraceEnabled)
+                {
+                    Switch_RegisterModelTransformTraceSurface(
+                        model->name ? model->name : "(null)", surface, lod, i,
+                        sceneEnt->gfxEntIndex,
+                        skinnedSurface->skinnedCachedOffset != -2,
+                        modelTransformTraceDepthHack);
+                }
+#endif
 
                 iassert(surfBufSize);
                 surfPos = (GfxModelSkinnedSurface *)((char *)surfPos + surfBufSize);

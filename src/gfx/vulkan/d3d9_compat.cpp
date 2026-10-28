@@ -241,6 +241,45 @@ static bool Switch_ModelTransformLooksLikeWeapon(const char *modelName, const ch
             return true;
     return false;
 }
+
+// Called while the DObj surface list is being constructed, before the async
+// CPU skin command can run. This early map lets the CPU trace classify weapons
+// even when the front-end draw-surface list has not been emitted yet.
+void Switch_RegisterModelTransformTraceSurface(
+    const char *modelName, const void *xsurf, uint32_t modelIndex,
+    uint32_t surfaceIndex, uint32_t gfxEntIndex, bool skinned, bool depthHack)
+{
+    if (!Switch_IsModelTransformTraceEnabled() || !xsurf) return;
+    SwitchModelTransformSurfaceInfo info{};
+    std::snprintf(info.modelName, sizeof(info.modelName), "%.95s",
+        modelName ? modelName : "(unknown)");
+    std::snprintf(info.materialName, sizeof(info.materialName), "%.95s", "(material-pending)");
+    info.gfxEntIndex = gfxEntIndex;
+    info.modelIndex = modelIndex;
+    info.surfaceIndex = surfaceIndex;
+    info.objectId = UINT32_MAX;
+    info.skinned = skinned;
+    info.depthHack = depthHack;
+    info.weaponCandidate = depthHack || Switch_ModelTransformLooksLikeWeapon(info.modelName, nullptr);
+    {
+        std::lock_guard<std::mutex> lock(g_switchModelTransformSurfacesMutex);
+        auto found = g_switchModelTransformSurfaces.find(xsurf);
+        if (found != g_switchModelTransformSurfaces.end())
+        {
+            if (std::strcmp(found->second.modelName, info.modelName) == 0)
+            {
+                info.weaponCandidate = info.weaponCandidate || found->second.weaponCandidate;
+                info.depthHack = info.depthHack || found->second.depthHack;
+                if (std::strcmp(found->second.materialName, "(material-pending)") != 0)
+                    std::snprintf(info.materialName, sizeof(info.materialName), "%.95s",
+                        found->second.materialName);
+            }
+            found->second = info;
+        }
+        else if (g_switchModelTransformSurfaces.size() < 4096u)
+            g_switchModelTransformSurfaces.emplace(xsurf, info);
+    }
+}
 void Switch_LogModelTransformTraceSurface(
     const char *modelName, const char *materialName, const void *xsurf,
     uint32_t modelIndex, uint32_t surfaceIndex, uint32_t gfxEntIndex,
