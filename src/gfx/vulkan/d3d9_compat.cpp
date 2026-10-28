@@ -172,16 +172,24 @@ static bool Switch_IsFloorAuditContextActive()
         std::strstr(material->info.name, "icbm_tunnelfloor") != nullptr;
 }
 
-// Keep the object audit focused by default to avoid logging every scene draw.
-// Set KISAK_VK_RENDER_OBJECT_FILTER=all for a full audit, a material-name
-// substring for one asset family, or off to disable it.
+// Capture actual indexed GPU draw commands by default. A material-name filter is
+// opt-in; the previous narrow default could hide the draw under investigation.
+// Set KISAK_VK_RENDER_OBJECT_FILTER to a material-name substring, or to off to disable.
 static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
 {
     static const std::string filter = []()
     {
         const char *value = std::getenv("KISAK_VK_RENDER_OBJECT_FILTER");
-        return value && *value ? std::string(value) : std::string("targets");
+        return value && *value ? std::string(value) : std::string("all");
     }();
+    static std::atomic<bool> filterLogged{false};
+    if (!filterLogged.exchange(true, std::memory_order_relaxed))
+    {
+        char trace[192];
+        std::snprintf(trace, sizeof(trace),
+            "[KisakCOD][RENDER OBJECT AUDIT] active=1 filter=%.96s\n", filter.c_str());
+        Switch_LogWrite(trace);
+    }
 
     if (filter == "off" || filter == "0" || filter == "none")
         return false;
@@ -9478,7 +9486,6 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         const Material *material=surface?surface->material:g_switchRenderAuditContext.material;
         if (!Switch_RenderObjectAuditMatchesMaterial(material))
             return;
-        if(!surface&&!material) return;
         const uint32_t objectId=surface?surface->surfaceIndex:g_switchRenderAuditContext.objectId;
         const uint32_t objectType=surface?surface->surfaceType:g_switchRenderAuditContext.surfaceType;
         const uint32_t passIndex=surface?surface->passIndex:g_switchRenderAuditContext.passIndex;
@@ -9696,7 +9703,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 auditLogObject(&g_switchQueuedWorldAudit[i],status,reason,triOffset);
                 triOffset+=g_switchQueuedWorldAudit[i].triangleCount;
             }
-        } else if(g_switchRenderAuditContext.material) auditLogObject(nullptr,status,reason,0u);
+        } else auditLogObject(nullptr,status,reason,0u);
         g_switchQueuedWorldAuditCount=0;
         g_switchQueuedWorldAuditOverflowReported=false;
     };
