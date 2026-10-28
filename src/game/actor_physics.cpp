@@ -41,6 +41,7 @@ actor_physics_t *g_pPhys;
 static uint32_t g_switchAiGroundTraceCount;
 static uint32_t g_switchAiGroundDepthCount;
 static uint32_t g_switchAiHighOriginCount;
+static uint32_t g_switchAiMoveTraceCount;
 static uint8_t g_switchAiGroundTraceFirst[MAX_GENTITIES];
 static uint8_t g_switchAiGroundTraceMiss[MAX_GENTITIES];
 static uint8_t g_switchAiHighOriginLogged[MAX_GENTITIES];
@@ -272,6 +273,32 @@ SlideMoveResult __cdecl AIPhys_SlideMove(int gravity, int zonly)
         Vec3Mad(g_pPhys->vOrigin, fTimeLeft, g_pPhys->vVelocity, vEnd);
 
         G_TraceCapsule(&trace, g_pPhys->vOrigin, g_pPhys->vMins, g_pPhys->vMaxs, vEnd, g_pPhys->iEntNum, g_apl.iTraceMask);
+
+#ifdef __SWITCH__
+        // Record the actual swept movement as the falling actors cross the deck
+        // height. This distinguishes a missing world surface from a missed sweep.
+        if (g_pPhys->vOrigin[2] > 300.0f && vEnd[2] < 400.0f &&
+            g_switchAiMoveTraceCount < 32u)
+        {
+            const int moveHitEnt = trace.fraction < 1.0f
+                ? Trace_GetEntityHitId(&trace) : ENTITYNUM_NONE;
+            char moveLine[512];
+            std::snprintf(moveLine, sizeof(moveLine),
+                "[KisakCOD][AI MOVE TRACE] n=%u ent=%d start=(%.1f %.1f %.1f) "
+                "end=(%.1f %.1f %.1f) frameTime=%.3f gravity=%.1f "
+                "velocityZ=%.1f mask=0x%x fraction=%.5f startsolid=%u allsolid=%u "
+                "normalZ=%.3f walkable=%u contents=0x%x hitEnt=%d physics=%d\\n",
+                g_switchAiMoveTraceCount++, g_pPhys->iEntNum,
+                g_pPhys->vOrigin[0], g_pPhys->vOrigin[1], g_pPhys->vOrigin[2],
+                vEnd[0], vEnd[1], vEnd[2], g_apl.fFrameTime, g_pPhys->fGravity,
+                g_pPhys->vVelocity[2], static_cast<unsigned int>(g_apl.iTraceMask),
+                trace.fraction, trace.startsolid ? 1u : 0u, trace.allsolid ? 1u : 0u,
+                trace.normal[2], trace.walkable ? 1u : 0u,
+                static_cast<unsigned int>(trace.contents), moveHitEnt,
+                static_cast<int>(g_pPhys->ePhysicsType));
+            Switch_LogWrite(moveLine);
+        }
+#endif
 
         if (trace.fraction <= 0.0f)
         {
