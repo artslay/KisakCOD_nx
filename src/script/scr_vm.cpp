@@ -174,7 +174,7 @@ void Switch_LogScriptTypeMismatch(uint32_t leftType, uint32_t rightType)
         ? var_typename[rightType] : "invalid";
     char trace[512];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][SCRIPT TYPE MISMATCH] n=%u leftType=%u leftName=%s rightType=%u rightName=%s file=%s line=%d codePos=%p functionCount=%d\\n",
+        "[KisakCOD][SCRIPT TYPE MISMATCH] n=%u leftType=%u leftName=%s rightType=%u rightName=%s file=%s line=%d codePos=%p functionCount=%d\n",
         traceId, leftType, leftName, rightType, rightName,
         filename && filename[0] ? filename : "(unknown)",
         line, static_cast<const void *>(codePos), scrVmPub.function_count);
