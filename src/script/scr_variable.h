@@ -491,7 +491,7 @@ uint32_t  Scr_GetEntityId(uint32_t entnum, uint32_t classnum);
 void  Scr_FreeGameVariable(int bComplete);
 //bool  Scr_AddStringSet(uint32_t, char const*);
 
-struct ThreadDebugInfo // sizeof=0x8C
+struct ThreadDebugInfo // sizeof=0x8C on 32-bit, 0x110 on Switch
 {                                       // ...
     const char *pos[32];                // ...
     int posSize;                        // ...
@@ -499,7 +499,7 @@ struct ThreadDebugInfo // sizeof=0x8C
     float endonUsage;                   // ...
 };
 #ifdef __SWITCH__
-static_assert(sizeof(ThreadDebugInfo) == 0x10C,
+static_assert(sizeof(ThreadDebugInfo) == 0x110,
     "Switch ThreadDebugInfo must retain all 32 native-width code positions");
 #else
 static_assert(sizeof(ThreadDebugInfo) == 0x8C);
