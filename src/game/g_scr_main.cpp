@@ -3975,6 +3975,48 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
         dir = from;
     }
 
+#ifdef __SWITCH__
+    if (ent->actor)
+    {
+        static unsigned switchAiScriptDamageTraceCount = 0;
+        if (switchAiScriptDamageTraceCount < 256u)
+        {
+            char *scriptFile = (char *)"";
+            int scriptLine = 0;
+            const char *codePos = nullptr;
+            if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
+            {
+                codePos = scrVmPub.function_frame->fs.pos;
+                if (codePos)
+                    Scr_GetFileAndLine(codePos, &scriptFile, &scriptLine);
+            }
+
+            const char *targetClass = ent->classname
+                ? SL_ConvertToStringSafe(ent->classname) : "<none>";
+            const char *targetName = ent->targetname
+                ? SL_ConvertToStringSafe(ent->targetname) : "<none>";
+            const char *attackerClass = attacker && attacker->classname
+                ? SL_ConvertToStringSafe(attacker->classname) : "<none>";
+            const char *attackerName = attacker && attacker->targetname
+                ? SL_ConvertToStringSafe(attacker->targetname) : "<none>";
+            const char *inflictorClass = inflictor && inflictor->classname
+                ? SL_ConvertToStringSafe(inflictor->classname) : "<none>";
+            const char *inflictorName = inflictor && inflictor->targetname
+                ? SL_ConvertToStringSafe(inflictor->targetname) : "<none>";
+
+            Com_Printf(
+                CON_CHANNEL_SERVER,
+                "[KisakCOD][AI SCRIPT DAMAGE] n=%u target=%d targetname=%s class=%s healthBefore=%d maxHealth=%d amount=%.2f source=(%.1f %.1f %.1f) attacker=%d attackername=%s attackerclass=%s inflictor=%d inflictorname=%s inflictorclass=%s script=%s:%d codePos=%p\n",
+                switchAiScriptDamageTraceCount++,
+                ent->s.number, targetName, targetClass, ent->health, ent->maxHealth,
+                damage, source[0], source[1], source[2],
+                attacker ? attacker->s.number : -1, attackerName, attackerClass,
+                inflictor ? inflictor->s.number : -1, inflictorName, inflictorClass,
+                scriptFile ? scriptFile : "", scriptLine,
+                static_cast<const void *>(codePos));
+        }
+    }
+#endif
     G_Damage(
         ent,
         inflictor,
