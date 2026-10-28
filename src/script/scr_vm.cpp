@@ -72,7 +72,8 @@ static bool Switch_IsScriptReturnTraceEnabled()
 }
 
 static void Switch_LogScriptReturn(
-    const char *kind, const char *codePos, const VariableValue *value)
+    const char *kind, const char *codePos, const VariableValue *value,
+    const char *callerCodePos)
 {
     if (!Switch_IsScriptReturnTraceEnabled() || !codePos)
         return;
@@ -86,6 +87,11 @@ static void Switch_LogScriptReturn(
     if (!filename || !std::strstr(filename, "cover_behavior.gsc") ||
         line < 345 || line > 435)
         return;
+
+    char *callerFilename = nullptr;
+    int callerLine = 0;
+    if (callerCodePos && Scr_IsInOpcodeMemory(callerCodePos))
+        Scr_GetFileAndLine(callerCodePos, &callerFilename, &callerLine);
 
     static uint32_t traceCount = 0;
     if (traceCount >= 64u)
@@ -101,11 +107,14 @@ static void Switch_LogScriptReturn(
     const float floatValue =
         value && value->type == VAR_FLOAT ? value->u.floatValue : 0.0f;
 
-    char trace[512];
+    char trace[640];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d type=%u typeName=%s int=%d float=%.6g codePos=%p\n",
+        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d type=%u typeName=%s int=%d float=%.6g caller=%s:%d codePos=%p callerPos=%p\n",
         traceCount - 1u, kind ? kind : "unknown", filename, line,
-        type, typeName, integerValue, floatValue, static_cast<const void *>(codePos));
+        type, typeName, integerValue, floatValue,
+        callerFilename && callerFilename[0] ? callerFilename : "(unknown)",
+        callerLine, static_cast<const void *>(codePos),
+        static_cast<const void *>(callerCodePos));
     Switch_LogWrite(trace);
 }
 #endif
@@ -2220,7 +2229,8 @@ interrupt_return:
 #ifdef KISAK_SWITCH
             // A script function that falls through provides no return value.
             if (parentLocalId)
-                Switch_LogScriptReturn("implicit_end", fs.pos - 1, nullptr);
+                Switch_LogScriptReturn("implicit_end", fs.pos - 1, nullptr,
+                    scrVmPub.function_frame[-1].fs.pos);
 #endif
             Scr_KillThread(fs.localId);
             scrVmPub.localVars -= fs.localVarCount;
@@ -2247,7 +2257,8 @@ thread_end:
         case OP_Return:
             parentLocalId = GetSafeParentLocalId(fs.localId);
 #ifdef KISAK_SWITCH
-            Switch_LogScriptReturn("explicit_return", fs.pos - 1, fs.top);
+            Switch_LogScriptReturn("explicit_return", fs.pos - 1, fs.top,
+                parentLocalId ? scrVmPub.function_frame[-1].fs.pos : nullptr);
 #endif
             Scr_KillThread(fs.localId);
             scrVmPub.localVars -= fs.localVarCount;
