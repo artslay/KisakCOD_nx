@@ -521,6 +521,9 @@ private:
     uint64_t m_descriptorCacheFrameSerial=0;
     bool m_pipelineDirty=true;
     std::unordered_map<uint64_t, VkPipeline> m_pipelines;
+    void LogGpuDrawCommand(const char *kind, uint32_t primitiveType,
+        uint32_t primitiveCount, uint32_t vertexCount, uint32_t indexCount,
+        uint32_t startIndex, int32_t baseVertexIndex);
     bool BindDescriptorSets();
     bool PrepareDraw();
     bool EnsurePipeline();
