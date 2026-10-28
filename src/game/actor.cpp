@@ -62,6 +62,81 @@ const unsigned __int16 *g_AISpeciesNames[2] =
     &scr_const.dog
 };
 
+#ifdef __SWITCH__
+// Bounded startup/death traces to establish whether AI is spawned alive,
+// scheduled for think, and later killed by an actual damage callback.
+static uint32_t g_switchActorInitTraceCount;
+static uint32_t g_switchActorDeathTraceCount;
+static bool g_switchActorThinkLogged[MAX_ACTORS];
+
+static void Switch_LogActorState(const char *stage, const actor_s *actor)
+{
+    if (!actor || !actor->ent || g_switchActorInitTraceCount >= 64u)
+        return;
+
+    const gentity_s *ent = actor->ent;
+    const unsigned stateLevel = actor->stateLevel;
+    const int state = stateLevel < ARRAY_COUNT(actor->eState)
+        ? static_cast<int>(actor->eState[stateLevel]) : -1;
+    const int subState = stateLevel < ARRAY_COUNT(actor->eSubState)
+        ? static_cast<int>(actor->eSubState[stateLevel]) : -1;
+
+    char trace[384];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][AI STATE] stage=%s ent=%d type=%d inuse=%u health=%d maxHealth=%d "
+        "actorInuse=%u stateLevel=%u state=%d subState=%d alive=%u team=%d "
+        "time=%d nextthink=%d\n",
+        stage ? stage : "unknown", ent->s.number, ent->s.eType,
+        ent->r.inuse ? 1u : 0u, ent->health, ent->maxHealth,
+        actor->inuse ? 1u : 0u, stateLevel, state, subState,
+        actor->Physics.bIsAlive ? 1u : 0u,
+        actor->sentient ? static_cast<int>(actor->sentient->eTeam) : -1,
+        level.time, ent->nextthink);
+    Switch_LogWrite(trace);
+    ++g_switchActorInitTraceCount;
+}
+
+static void Switch_LogActorThinkOnce(const actor_s *actor)
+{
+    if (!actor || !actor->ent || !level.actors)
+        return;
+
+    const ptrdiff_t index = actor - level.actors;
+    if (index < 0 || index >= MAX_ACTORS || g_switchActorThinkLogged[index])
+        return;
+
+    g_switchActorThinkLogged[index] = true;
+    Switch_LogActorState("first_think", actor);
+}
+
+static void Switch_LogActorDeath(
+    const gentity_s *ent,
+    const gentity_s *inflictor,
+    const gentity_s *attacker,
+    int damage,
+    int mod,
+    int weapon,
+    hitLocation_t hitLoc,
+    const actor_s *actor)
+{
+    if (g_switchActorDeathTraceCount >= 64u)
+        return;
+
+    char trace[384];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][AI DEATH] n=%u ent=%d health=%d damage=%d mod=%d weapon=%d "
+        "hitLoc=%d inflictor=%d attacker=%d stateLevel=%u state=%d alive=%u time=%d\n",
+        g_switchActorDeathTraceCount++, ent ? ent->s.number : -1,
+        ent ? ent->health : -1, damage, mod, weapon, static_cast<int>(hitLoc),
+        inflictor ? inflictor->s.number : -1, attacker ? attacker->s.number : -1,
+        actor ? actor->stateLevel : 0u,
+        actor && actor->stateLevel < ARRAY_COUNT(actor->eState)
+            ? static_cast<int>(actor->eState[actor->stateLevel]) : -1,
+        actor && actor->Physics.bIsAlive ? 1u : 0u, level.time);
+    Switch_LogWrite(trace);
+}
+#endif
+
 const char *g_entinfoAITextNames[6] = { "all", "brief", "combat", "movement", "state", NULL };
 const char *ai_orient_mode_text[7] =
 {
@@ -370,6 +445,9 @@ void __cdecl Actor_InitAnimScript(actor_s *self)
     iassert(self->sentient->ent == self->ent);
 
     ent = self->ent;
+#ifdef __SWITCH__
+    Switch_LogActorState("before_anim_init", self);
+#endif
     Scr_FreeThread(Scr_ExecEntThread(self->ent, g_animScriptTable[self->species]->init.func, 0));
     stateLevel = self->stateLevel;
     iassert(self->stateLevel == 0);
@@ -379,6 +457,9 @@ void __cdecl Actor_InitAnimScript(actor_s *self)
     time = level.time;
     ent->handler = ENT_HANDLER_ACTOR;
     ent->nextthink = time;
+#ifdef __SWITCH__
+    Switch_LogActorState("after_anim_init", self);
+#endif
 }
 
 actor_s *__cdecl Actor_FirstActor(int iTeamFlags)
@@ -786,6 +867,10 @@ void __cdecl Actor_Die(
                 MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor.cpp", 1682, 0, "%s", "weapDef->szInternalName");
             Scr_SetStringFromCharString(&actor->damageWeapon, WeaponDef->szInternalName);
         }
+#ifdef __SWITCH__
+        Switch_LogActorDeath(self, pInflictor, pAttacker, iDamage, iMod,
+            iWeapon, hitLoc, actor);
+#endif
         Actor_ForceState(actor, AIS_DEATH);
         actor->Physics.bIsAlive = 0;
         self->sentient->lastAttacker = pAttacker;
@@ -4954,6 +5039,9 @@ void __cdecl Actor_Think(gentity_s *self)
 
         iassert(actor);
         iassert(actor->inuse);
+#ifdef __SWITCH__
+        Switch_LogActorThinkOnce(actor);
+#endif
 
         if (Com_GetServerDObj(self->s.number))
         {
