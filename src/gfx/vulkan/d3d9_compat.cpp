@@ -5389,9 +5389,109 @@ uint32_t IDirect3DQuery9::Release()
     return 0;
 }
 
+void IDirect3DDevice9::LogGpuDrawCommand(
+    const char *kind, uint32_t primitiveType, uint32_t primitiveCount,
+    uint32_t vertexCount, uint32_t indexCount, uint32_t startIndex,
+    int32_t baseVertexIndex)
+{
+    // A short, unconditional trace makes the real Vulkan command path visible
+    // even when the engine-side object audit context was never populated.
+    static std::atomic<uint32_t> traceCount{0};
+    const uint32_t sequence = traceCount.fetch_add(1, std::memory_order_relaxed);
+    if (sequence >= 128u)
+        return;
+
+    const uint64_t frameSerial = m_backend ? m_backend->FrameSerial() : 0u;
+    const uint64_t vsSerial = m_vertexShader ? m_vertexShader->serial : 0u;
+    const uint64_t psSerial = m_pixelShader ? m_pixelShader->serial : 0u;
+    const SwitchQueuedWorldSurfaceAudit *queued =
+        g_switchQueuedWorldAuditCount ? &g_switchQueuedWorldAudit[0] : nullptr;
+    const Material *material = queued ? queued->material : g_switchRenderAuditContext.material;
+    const uint32_t objectId = queued ? queued->surfaceIndex : g_switchRenderAuditContext.objectId;
+    const uint32_t objectType = queued ? queued->surfaceType : g_switchRenderAuditContext.surfaceType;
+    const char *materialName = material && material->info.name
+        ? material->info.name : "<no-render-context>";
+
+    auto formatStage = [&](uint32_t stage, char *output, size_t outputSize)
+    {
+        if (!output || !outputSize)
+            return;
+        const uint64_t expectedShader = stage == 0u ? vsSerial : psSerial;
+        if (!m_backend ||
+            m_lastSamplerDescriptorFrameSerials[stage] != frameSerial ||
+            m_lastSamplerDescriptorShaderSerials[stage] != expectedShader)
+        {
+            std::snprintf(output, outputSize, "snapshot_mismatch(frame=%llu/%llu,shader=%llu/%llu)",
+                static_cast<unsigned long long>(m_lastSamplerDescriptorFrameSerials[stage]),
+                static_cast<unsigned long long>(frameSerial),
+                static_cast<unsigned long long>(m_lastSamplerDescriptorShaderSerials[stage]),
+                static_cast<unsigned long long>(expectedShader));
+            return;
+        }
+
+        size_t used = 0u;
+        uint32_t activeCount = 0u;
+        for (uint32_t slot = 0; slot < 16u && used < outputSize; ++slot)
+        {
+            if (!m_lastSamplerDescriptorActive[stage][slot])
+                continue;
+            const KisakVkTexture *texture =
+                static_cast<const KisakVkTexture *>(m_textures[slot]);
+            const char *name = texture
+                ? (texture->sourceImage && texture->sourceImage->name
+                    ? texture->sourceImage->name : texture->debugName)
+                : "<unbound>";
+            const int n = std::snprintf(output + used, outputSize - used,
+                "%ss%u=%.36s@%p(sel=%u)",
+                activeCount ? ";" : "", slot, name ? name : "<unnamed>",
+                reinterpret_cast<void *>(m_lastSamplerDescriptorViews[stage][slot]),
+                static_cast<unsigned>(m_lastSamplerDescriptorStates[stage][slot]));
+            if (n < 0)
+                break;
+            ++activeCount;
+            const size_t amount = static_cast<size_t>(n);
+            if (amount >= outputSize - used)
+            {
+                used = outputSize - 1u;
+                output[used] = '\0';
+                break;
+            }
+            used += amount;
+        }
+        if (!activeCount)
+            std::snprintf(output, outputSize, "no_active_samplers");
+    };
+
+    char gpuVS[1450]{};
+    char gpuPS[1450]{};
+    formatStage(0u, gpuVS, sizeof(gpuVS));
+    formatStage(1u, gpuPS, sizeof(gpuPS));
+    char trace[3584];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][VK GPU DRAW] n=%u kind=%s frame=%llu objectType=%u object=%u "
+        "material=%.72s vs=%llu ps=%llu pipeline=%016llx prim=%u primitiveCount=%u "
+        "vertices=%u indexCount=%u startIndex=%u baseVertex=%d streamMask=0x%x "
+        "stride=%u gpuVS={%s} gpuPS={%s}\n",
+        sequence, kind ? kind : "unknown",
+        static_cast<unsigned long long>(frameSerial),
+        objectType, objectId, materialName,
+        static_cast<unsigned long long>(vsSerial),
+        static_cast<unsigned long long>(psSerial),
+        static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)),
+        primitiveType, primitiveCount, vertexCount, indexCount, startIndex, baseVertexIndex,
+        g_switchLastDrawStreamMask.load(std::memory_order_relaxed), m_streams[0].stride,
+        gpuVS, gpuPS);
+    Switch_LogWrite(trace);
+}
+
 IDirect3DDevice9::IDirect3DDevice9()
 {
     m_backend = GetVulkanBackend();
+    char auditCodeMarker[160];
+    std::snprintf(auditCodeMarker, sizeof(auditCodeMarker),
+        "[KisakCOD][VK GPU AUDIT CODE] event=device_ctor backend=%p\n",
+        static_cast<void *>(m_backend));
+    Switch_LogWrite(auditCodeMarker);
     m_samplerState[0][D3DSAMP_MINFILTER] = D3DTEXF_LINEAR;
     m_samplerState[0][D3DSAMP_MAGFILTER] = D3DTEXF_LINEAR;
     m_samplerState[0][D3DSAMP_MIPFILTER] = D3DTEXF_LINEAR;
@@ -9460,6 +9560,8 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/issue_draw";
     vkCmdDraw(m_backend->CommandBuffer(), vertexCount, 1, 0, 0);
     g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
+    LogGpuDrawCommand("nonindexed", primitiveType, primitiveCount,
+        vertexCount, 0u, 0u, 0);
     ++g_switchSceneDrawPrimitiveCalls;
     g_switchFrameStage = "frame/render/vulkan/draw_primitive_up/return";
     return S_OK;
@@ -10288,6 +10390,8 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
     g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
+    LogGpuDrawCommand("indexed", primitiveType, primitiveCount,
+        numVertices, indexCount, startIndex, baseVertexIndex);
 #ifdef __SWITCH__
     if (switchFloorOcclusionQueryIssued)
         vkCmdEndQuery(m_backend->CommandBuffer(), switchFloorOcclusionPool, 0);
