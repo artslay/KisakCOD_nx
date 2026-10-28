@@ -6,6 +6,7 @@
 #include "../../gfx_d3d/r_image.h"
 #include "../../gfx_d3d/r_init.h"
 #include "../../gfx_d3d/rb_state.h"
+#include "../../xanim/xmodel.h"
 #include "../../gfx_d3d/r_state.h"
 #endif
 
@@ -171,17 +172,15 @@ static bool Switch_IsFloorAuditContextActive()
         std::strstr(material->info.name, "icbm_tunnelfloor") != nullptr;
 }
 
-// Keep the expensive per-object audit focused on the currently investigated
-// asset. The former all-object mode generated thousands of unique log lines
-// and sampled vertex/texture state for unrelated draws, hurting Switch FPS.
-// Set KISAK_VK_RENDER_OBJECT_FILTER=all to opt back into a full audit, a
-// material-name substring to target another asset, or off to disable it.
+// Keep the object audit focused by default to avoid logging every scene draw.
+// Set KISAK_VK_RENDER_OBJECT_FILTER=all for a full audit, a material-name
+// substring for one asset family, or off to disable it.
 static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
 {
     static const std::string filter = []()
     {
         const char *value = std::getenv("KISAK_VK_RENDER_OBJECT_FILTER");
-        return value && *value ? std::string(value) : std::string("icbm_tunnelfloor");
+        return value && *value ? std::string(value) : std::string("targets");
     }();
 
     if (filter == "off" || filter == "0" || filter == "none")
@@ -190,7 +189,29 @@ static bool Switch_RenderObjectAuditMatchesMaterial(const Material *material)
         return true;
     if (!material || !material->info.name)
         return false;
-    return std::strstr(material->info.name, filter.c_str()) != nullptr;
+
+    const char *name = material->info.name;
+    if (filter != "targets")
+        return std::strstr(name, filter.c_str()) != nullptr;
+
+    // Restrict the default trace to object classes under investigation.
+    static const char *const targetTokens[] = {
+        "viewhand", "viewmodel", "firstperson", "glove", "hand_", "hands_",
+        "arm_", "sleeve", "weapon_",
+        "npc", "soldier", "marine", "arab", "russian", "spetsnaz", "sas_",
+        "opfor", "usmc", "character", "body", "head", "face", "skin",
+        "uniform", "helmet", "balaclava",
+        "barrel", "55_gallon", "drum",
+        "80s_econ", "econdestroy", "vehicle", "veh_", "truck", "jeep",
+        "hmmwv", "humvee", "uaz", "gaz_", "pickup", "sedan", "hatchback",
+        "tank_", "bus_", "van_",
+        "tree", "palmtree", "foliage", "bush", "leaf", "leaves", "branch",
+        "vegetation"
+    };
+    for (const char *token : targetTokens)
+        if (std::strstr(name, token))
+            return true;
+    return false;
 }
 
 static uint64_t g_switchRenderAuditSignatures[65536]{};
@@ -6761,7 +6782,18 @@ bool IDirect3DDevice9::BindSamplerSet(
         }
     }
 
+    const size_t traceCacheIndex = setIndex == 0 ? 0u : 1u;
+    for (uint32_t slot=0; slot<16u; ++slot)
+    {
+        m_lastSamplerDescriptorViews[traceCacheIndex][slot] = VK_NULL_HANDLE;
+        m_lastSamplerDescriptorStates[traceCacheIndex][slot] = 0u;
+        m_lastSamplerDescriptorActive[traceCacheIndex][slot] = 0u;
+    }
+
     const KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
+    m_lastSamplerDescriptorShaderSerials[traceCacheIndex] =
+        activeShader ? activeShader->serial : 0u;
+    m_lastSamplerDescriptorFrameSerials[traceCacheIndex] = m_backend->FrameSerial();
     const MOJOSHADER_parseData *activeParse =
         activeShader ? activeShader->parseData : nullptr;
     std::array<const MOJOSHADER_sampler *, 16> activeSamplers{};
@@ -6990,6 +7022,9 @@ bool IDirect3DDevice9::BindSamplerSet(
     g_switchFrameStage = "frame/render/vulkan/sampler/build_descriptors";
     std::array<VkDescriptorImageInfo,16> images{};
     std::array<VkWriteDescriptorSet,16> writes{};
+    // 0=inactive, 1=full view, 2=base mip, 3=type mismatch dummy,
+    // 4=unbound dummy, 5=base mip not uploaded dummy, 6=no usable base-mip view.
+    std::array<uint8_t,16> descriptorSelection{};
     for (uint32_t i = 0; i < 16; ++i)
     {
         KisakVkTexture *texture = textures[i];
@@ -7024,6 +7059,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                 static_cast<uint32_t>(activeSamplers[i]->type));
             images[i].sampler = m_backend->DummySampler();
             images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            descriptorSelection[i] = 3u;
         }
         else if (!activeSamplers[i] || !texture)
         {
@@ -7055,6 +7091,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                 : m_backend->DummyImageView();
             images[i].sampler = m_backend->DummySampler();
             images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            descriptorSelection[i] = activeSamplers[i] ? 4u : 0u;
         }
         else
         {
@@ -7097,6 +7134,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                     : m_backend->DummyImageView();
                 images[i].sampler = m_backend->DummySampler();
                 images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                descriptorSelection[i] = !baseMipInitialized ? 5u : 6u;
             }
             else
             {
@@ -7193,47 +7231,15 @@ bool IDirect3DDevice9::BindSamplerSet(
                     return failActiveSampler(i, "vk_sampler_creation_failed");
                 images[i].sampler = sampler ? sampler : m_backend->DummySampler();
                 images[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                descriptorSelection[i] =
+                    images[i].imageView == texture->view ? 1u : 2u;
             }
         }
 
-#ifdef __SWITCH__
-        if (setIndex == 2u && activeSamplers[i] && texture &&
-            (images[i].imageView == texture->view ||
-             (texture->baseMipView && images[i].imageView == texture->baseMipView)))
-        {
-            static std::unordered_set<uint64_t> tracedBoundSamplerKeys;
-            if (tracedBoundSamplerKeys.size() < 320u)
-            {
-                uint64_t traceKey =
-                    (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(texture)) >> 4) ^
-                    (static_cast<uint64_t>(activeShader ? activeShader->serial : 0u) *
-                     0x9e3779b97f4a7c15ull) ^
-                    (static_cast<uint64_t>(i) << 48);
-                traceKey ^= static_cast<uint64_t>(setIndex) << 60;
-                if (tracedBoundSamplerKeys.insert(traceKey).second)
-                {
-                    char trace[512];
-                    std::snprintf(
-                        trace, sizeof(trace),
-                        "[KisakCOD][VK SAMPLER BOUND] shader=%llu sampler=%s slot=%u image=%.96s texture=%p view=%p size=%ux%u sourceFormat=%u viewType=%u mip0=%u mipLevels=%u viewRange=%s\n",
-                        static_cast<unsigned long long>(activeShader ? activeShader->serial : 0u),
-                        activeSamplers[i]->name ? activeSamplers[i]->name : "<unnamed>",
-                        i,
-                        texture->sourceImage && texture->sourceImage->name
-                            ? texture->sourceImage->name : texture->debugName,
-                        static_cast<void *>(texture),
-                        static_cast<void *>(images[i].imageView),
-                        texture->width, texture->height,
-                        static_cast<unsigned>(texture->sourceFormat),
-                        static_cast<unsigned>(texture->viewType),
-                        static_cast<unsigned>(texture->GetSubresourceLayout(0, 0)),
-                        texture->mipLevels,
-                        images[i].imageView == texture->view ? "full" : "base_mip");
-                    Switch_LogWrite(trace);
-                }
-            }
-        }
-#endif
+        m_lastSamplerDescriptorViews[cacheIndex][i] = images[i].imageView;
+        m_lastSamplerDescriptorStates[cacheIndex][i] = descriptorSelection[i];
+        m_lastSamplerDescriptorActive[cacheIndex][i] = activeSamplers[i] ? 1u : 0u;
+
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[i].dstSet = set;
         writes[i].dstBinding = i;
@@ -9476,6 +9482,20 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         const uint32_t objectId=surface?surface->surfaceIndex:g_switchRenderAuditContext.objectId;
         const uint32_t objectType=surface?surface->surfaceType:g_switchRenderAuditContext.surfaceType;
         const uint32_t passIndex=surface?surface->passIndex:g_switchRenderAuditContext.passIndex;
+        const char *objectName = worldSurface ? "world-surface" : "draw-surface";
+        if (!worldSurface && objectType == 7u)
+            objectName = "xmodel-surface";
+        if (!worldSurface && (objectType == 2u || objectType == 4u || objectType == 5u))
+        {
+            objectName = "static-model-unresolved";
+            if (rgp.world && rgp.world->dpvs.smodelDrawInsts &&
+                objectId < rgp.world->dpvs.smodelCount)
+            {
+                const XModel *model = rgp.world->dpvs.smodelDrawInsts[objectId].model;
+                if (model && model->name)
+                    objectName = model->name;
+            }
+        }
         const char *tech=surface?surface->techniqueName:g_switchRenderAuditContext.techniqueName;
         const char *vsName=surface?surface->vertexShaderName:g_switchRenderAuditContext.vertexShaderName;
         const char *psName=surface?surface->pixelShaderName:g_switchRenderAuditContext.pixelShaderName;
@@ -9518,27 +9538,80 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             sig=Switch_AuditHashMix(sig,t?reinterpret_cast<uintptr_t>(t->view):0u);
             sig=Switch_AuditHashMix(sig,t?static_cast<uint32_t>(t->format):0u);
             sig=Switch_AuditHashMix(sig,t?static_cast<uint32_t>(t->layout):0u);
+            for (uint32_t stage=0;stage<2u;++stage) {
+                sig=Switch_AuditHashMix(sig,m_lastSamplerDescriptorActive[stage][slot]);
+                sig=Switch_AuditHashMix(sig,m_lastSamplerDescriptorStates[stage][slot]);
+                sig=Switch_AuditHashMix(sig,reinterpret_cast<uintptr_t>(
+                    m_lastSamplerDescriptorViews[stage][slot]));
+            }
         }
         if(!Switch_AuditShouldLog(sig)) return;
 
-        char bindings[2500]{};
-        size_t used=0;
-        for(uint32_t slot=0;slot<16u&&used<sizeof(bindings);++slot) {
-            const KisakVkTexture *t=m_textures[slot];
-            const char *name=t?(t->sourceImage&&t->sourceImage->name?t->sourceImage->name:t->debugName):"<null>";
-            const int n=std::snprintf(bindings+used,sizeof(bindings)-used,
-                "%ss%u=%.25s[%ux%u,fmt=%u,src=%u,layout=%u,img=%p,view=%p,base=%p,mips=%u]",
-                slot?";":"",slot,name?name:"<unnamed>",t?t->width:0u,t?t->height:0u,
-                t?static_cast<unsigned>(t->format):0u,t?static_cast<unsigned>(t->sourceFormat):0u,
-                t?static_cast<unsigned>(t->GetSubresourceLayout(0u,0u)):static_cast<unsigned>(VK_IMAGE_LAYOUT_UNDEFINED),
-                t?reinterpret_cast<void *>(t->image):nullptr,t?reinterpret_cast<void *>(t->view):nullptr,
-                t?reinterpret_cast<void *>(t->baseMipView):nullptr,t?t->mipLevels:0u);
-            if(n<0) break;
-            const size_t amount=static_cast<size_t>(n);
-            if(amount>=sizeof(bindings)-used) { used=sizeof(bindings)-1u; bindings[used]='\0'; break; }
-            used+=amount;
-        }
+        auto formatGpuDescriptors = [&](uint32_t cacheIndex, char *output, size_t outputSize)
+        {
+            if (!output || !outputSize)
+                return;
+            const uint64_t expectedShader = cacheIndex == 0u ? vsSerial : psSerial;
+            const uint64_t currentFrame = m_backend ? m_backend->FrameSerial() : 0u;
+            if (!m_backend ||
+                m_lastSamplerDescriptorFrameSerials[cacheIndex] != currentFrame ||
+                m_lastSamplerDescriptorShaderSerials[cacheIndex] != expectedShader)
+            {
+                std::snprintf(output, outputSize,
+                    "snapshot_mismatch(frame=%llu/%llu,shader=%llu/%llu)",
+                    static_cast<unsigned long long>(m_lastSamplerDescriptorFrameSerials[cacheIndex]),
+                    static_cast<unsigned long long>(currentFrame),
+                    static_cast<unsigned long long>(m_lastSamplerDescriptorShaderSerials[cacheIndex]),
+                    static_cast<unsigned long long>(expectedShader));
+                return;
+            }
+            size_t used = 0u;
+            uint32_t activeCount = 0u;
+            for (uint32_t slot=0; slot<16u && used<outputSize; ++slot)
+            {
+                if (!m_lastSamplerDescriptorActive[cacheIndex][slot])
+                    continue;
+                ++activeCount;
+                const uint8_t selection = m_lastSamplerDescriptorStates[cacheIndex][slot];
+                const KisakVkTexture *texture = static_cast<const KisakVkTexture *>(m_textures[slot]);
+                const char *name = texture
+                    ? (texture->sourceImage && texture->sourceImage->name
+                        ? texture->sourceImage->name : texture->debugName)
+                    : "<unbound>";
+                const char *selected = "unknown";
+                switch (selection)
+                {
+                case 1u: selected = "full_view"; break;
+                case 2u: selected = "base_mip_view"; break;
+                case 3u: selected = "dummy_type_mismatch"; break;
+                case 4u: selected = "dummy_unbound"; break;
+                case 5u: selected = "dummy_base_mip_uninitialized"; break;
+                case 6u: selected = "dummy_no_base_view"; break;
+                default: break;
+                }
+                const int n = std::snprintf(output + used, outputSize - used,
+                    "%ss%u=%.48s[%ux%u,view=%p,selected=%s]",
+                    activeCount > 1u ? ";" : "", slot, name ? name : "<unnamed>",
+                    texture ? texture->width : 0u, texture ? texture->height : 0u,
+                    reinterpret_cast<void *>(m_lastSamplerDescriptorViews[cacheIndex][slot]),
+                    selected);
+                if (n < 0)
+                    break;
+                const size_t amount = static_cast<size_t>(n);
+                if (amount >= outputSize - used) {
+                    used = outputSize - 1u;
+                    output[used] = '\0';
+                    break;
+                }
+                used += amount;
+            }
+            if (!activeCount)
+                std::snprintf(output, outputSize, "no_active_samplers");
+        };
+        char gpuVsBindings[2200]{}, gpuPsBindings[2200]{};
         char sources[860]{},uv[700]{},pos[420]{};
+        formatGpuDescriptors(0u, gpuVsBindings, sizeof(gpuVsBindings));
+        formatGpuDescriptors(1u, gpuPsBindings, sizeof(gpuPsBindings));
         Switch_FormatMaterialTextureSources(material,sources,sizeof(sources));
         if(worldSurface) {
             Switch_FormatWorldVertexUvRange(surface->firstVertex,surface->vertexCount,uv,sizeof(uv));
@@ -9592,10 +9665,10 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         const uint32_t lightmap=worldSurface?surface->lightmapIndex:UINT32_MAX;
         const uint32_t baseIndex=surface?surface->baseIndex:UINT32_MAX;
         const uint32_t localIndexStart=startIndex+batchTriangleOffset*3u;
-        char line[7168];
+        char line[12288];
         std::snprintf(line,sizeof(line),
-            "[KisakCOD][RENDER OBJECT] status=%s kind=%s object=%u surface=%u material=%.80s type=%u pass=%u tech=%.48s vs=%.48s(vsSerial=%llu) ps=%.48s(psSerial=%llu) pipeline=%016llx batchSurfaces=%u batchTriOffset=%u verts=%u+%u tris=%u lightmap=%u baseIndex=%u draw{prim=%u,tri=%u,indexCount=%u,startIndex=%u,surfaceIndexStart=%u,baseVertex=%d,streamMask=0x%x,stride=%u,decl=%u,vb=%p,ib=%p} uv={%s} pos={%s} viewport={x=%u,y=%u,w=%u,h=%u,z=(%.4g,%.4g)} scissor={on=%u,rect=(%d,%d,%d,%d)} bindings={%s} sources={%s} state{depth=%u/%u,cull=%u,blend=%u,alpha=%u/%u,stencil=%u,colorMask=0x%x,rt=%p,depthTarget=%p}\n",
-            status,worldSurface?"BSP":(surface?"MODEL":"DRAW_SURF"),objectId,surfaceIndex,
+            "[KisakCOD][RENDER OBJECT] status=%s kind=%s object=%u objectName=%.80s surface=%u material=%.80s type=%u pass=%u tech=%.48s vs=%.48s(vsSerial=%llu) ps=%.48s(psSerial=%llu) pipeline=%016llx batchSurfaces=%u batchTriOffset=%u verts=%u+%u tris=%u lightmap=%u baseIndex=%u draw{prim=%u,tri=%u,indexCount=%u,startIndex=%u,surfaceIndexStart=%u,baseVertex=%d,streamMask=0x%x,stride=%u,decl=%u,vb=%p,ib=%p} uv={%s} pos={%s} viewport={x=%u,y=%u,w=%u,h=%u,z=(%.4g,%.4g)} scissor={on=%u,rect=(%d,%d,%d,%d)} gpuVS={%s} gpuPS={%s} sources={%s} state{depth=%u/%u,cull=%u,blend=%u,alpha=%u/%u,stencil=%u,colorMask=0x%x,rt=%p,depthTarget=%p}\n",
+            status,worldSurface?"BSP":(surface?"MODEL":"DRAW_SURF"),objectId,objectName,surfaceIndex,
             material&&material->info.name?material->info.name:"<unknown>",objectType,passIndex,
             tech?tech:"<none>",vsName?vsName:"<none>",static_cast<unsigned long long>(vsSerial),
             psName?psName:"<none>",static_cast<unsigned long long>(psSerial),
@@ -9608,7 +9681,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             uv,pos,static_cast<unsigned>(m_viewport.X),static_cast<unsigned>(m_viewport.Y),
             static_cast<unsigned>(m_viewport.Width),static_cast<unsigned>(m_viewport.Height),
             m_viewport.MinZ,m_viewport.MaxZ,m_scissor?1u:0u,m_scissorRect.left,m_scissorRect.top,
-            m_scissorRect.right,m_scissorRect.bottom,bindings,sources,
+            m_scissorRect.right,m_scissorRect.bottom,gpuVsBindings,gpuPsBindings,sources,
             m_depthEnable?1u:0u,m_depthWrite?1u:0u,m_cullMode,
             m_blendEnable?1u:0u,m_alphaTest?1u:0u,m_alphaRef,m_stencilEnable?1u:0u,m_colorWriteMask,
             m_color&&m_color->texture?reinterpret_cast<void *>(m_color->texture->view):nullptr,

@@ -478,6 +478,12 @@ private:
     IDirect3DVertexShader9 *m_vertexShader=nullptr;
     IDirect3DPixelShader9 *m_pixelShader=nullptr;
     IDirect3DBaseTexture9 *m_textures[16]{};
+    // Exact per-stage image views written to the most recently built sampler descriptors.
+    VkImageView m_lastSamplerDescriptorViews[2][16]{};
+    uint8_t m_lastSamplerDescriptorStates[2][16]{};
+    uint8_t m_lastSamplerDescriptorActive[2][16]{};
+    uint64_t m_lastSamplerDescriptorShaderSerials[2]{};
+    uint64_t m_lastSamplerDescriptorFrameSerials[2]{};
     std::array<std::array<float,4>,256> m_vsFloat{}, m_psFloat{};
     std::array<std::array<int32_t,4>,256> m_vsInt{}, m_psInt{};
     std::array<int32_t,256> m_vsBool{}, m_psBool{};
