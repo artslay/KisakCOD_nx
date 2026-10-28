@@ -296,8 +296,12 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
         type == ASSET_TYPE_TECHNIQUE_SET &&
         g_switchCurrentAssetIndex == 4026 &&
         g_switchCurrentAssetRawType == 5u;
-
+    const bool switchTraceRawFileName = type == ASSET_TYPE_RAWFILE;
     if (switchTraceTechset4026)
+        g_switchDbStage = "asset/name_header_enter";
+    else if (switchTraceRawFileName)
+        g_switchDbStage = "rawfile/name_header_enter";
+    else
         g_switchDbStage = "asset/name_header_enter";
 #endif
 
@@ -306,6 +310,10 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
 #ifdef __SWITCH__
     if (switchTraceTechset4026)
         g_switchDbStage = "asset/name_header_header_ok";
+    else if (switchTraceRawFileName)
+        g_switchDbStage = "rawfile/name_header_header_ok";
+    else
+        g_switchDbStage = "asset/name_header_header_ok";
 #endif
 
     iassert(header->data);
@@ -313,15 +321,26 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
 #ifdef __SWITCH__
     if (switchTraceTechset4026)
         g_switchDbStage = "asset/name_header_data_ok";
+    else if (switchTraceRawFileName)
+        g_switchDbStage = "rawfile/name_header_data_ok";
+    else
+        g_switchDbStage = "asset/name_header_data_ok";
 
     // LightDef's name handler slot is intentionally empty in SP. Read the
     // native object directly, but keep the same serialized-XString resolution
-    // used for every other asset before the registry hashes the name.
+    // used for every other asset before the registry hashes or dereferences the name.
     if (type == ASSET_TYPE_LIGHT_DEF)
+    {
+        g_switchDbStage = "asset/name_header_lightdef";
         name = DB_LightDefGetName(header);
+    }
     else
     {
         if (switchTraceTechset4026)
+            g_switchDbStage = "asset/name_header_pre_handler";
+        else if (switchTraceRawFileName)
+            g_switchDbStage = "rawfile/name_header_pre_handler";
+        else
             g_switchDbStage = "asset/name_header_pre_handler";
         iassert(DB_XAssetGetNameHandler[type]);
         name = DB_XAssetGetNameHandler[type](header);
@@ -335,33 +354,55 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
 #endif
 
 #ifdef __SWITCH__
+    if (switchTraceTechset4026)
+        g_switchDbStage = "asset/name_header_handler_return";
+    else if (switchTraceRawFileName)
+        g_switchDbStage = "rawfile/name_header_handler_return";
+    else
+        g_switchDbStage = "asset/name_header_handler_return";
+
     // Some fastfiles store an asset name as a positive offset to another
     // serialized XString slot. Resolve that chain before the registry hashes
     // or dereferences the name. Non-stream/native names are left unchanged.
     if (name)
     {
+        if (switchTraceTechset4026)
+            g_switchDbStage = "asset/name_header_resolve_enter";
+        else if (switchTraceRawFileName)
+            g_switchDbStage = "rawfile/name_header_resolve_enter";
+        else
+            g_switchDbStage = "asset/name_header_resolve_enter";
         const uintptr_t resolvedName =
             DB_ResolveSwitchSerializedString(
                 reinterpret_cast<uintptr_t>(name));
         if (resolvedName)
             name = reinterpret_cast<const char *>(resolvedName);
+        if (switchTraceTechset4026)
+            g_switchDbStage = "asset/name_header_resolve_return";
+        else if (switchTraceRawFileName)
+            g_switchDbStage = "rawfile/name_header_resolve_return";
+        else
+            g_switchDbStage = "asset/name_header_resolve_return";
     }
-#endif
-
-#ifdef __SWITCH__
-    if (type == ASSET_TYPE_FONT &&
-        g_switchCurrentAssetIndex >= 1215 &&
-        g_switchCurrentAssetIndex <= 1221 &&
-        g_switchCurrentAssetRawType == 19u)
-        g_switchDbStage = "font/name_handler_return";
-    if (switchTraceTechset4026)
-        g_switchDbStage = "asset/name_header_handler_return";
+    else
+    {
+        if (switchTraceTechset4026)
+            g_switchDbStage = "asset/name_header_null_name";
+        else if (switchTraceRawFileName)
+            g_switchDbStage = "rawfile/name_header_null_name";
+        else
+            g_switchDbStage = "asset/name_header_null_name";
+    }
 #endif
 
     iassert(name);
 
 #ifdef __SWITCH__
     if (switchTraceTechset4026)
+        g_switchDbStage = "asset/name_header_return";
+    else if (switchTraceRawFileName)
+        g_switchDbStage = "rawfile/name_header_return";
+    else
         g_switchDbStage = "asset/name_header_return";
 #endif
 
