@@ -1573,8 +1573,10 @@ void __cdecl Scr_InitDebuggerMain()
             MyAssertHandler(".\\script\\scr_debugger.cpp", 7941, 0, "%s", "!scrDebuggerGlob.debugger_inited_main");
         if (!Sys_IsRemoteDebugClient())
         {
-            scrDebuggerGlob.variableBreakpoints = (Scr_WatchElementDoubleNode_t **)Hunk_AllocDebugMem(393216);// , "scrDebuggerGlob.variableBreakpoints");
-            memset((uint8_t *)scrDebuggerGlob.variableBreakpoints, 0, 0x60000u);
+            constexpr size_t variableBreakpointCount = 98304;
+            const size_t variableBreakpointBytes = sizeof(*scrDebuggerGlob.variableBreakpoints) * variableBreakpointCount;
+            scrDebuggerGlob.variableBreakpoints = (Scr_WatchElementDoubleNode_t **)Hunk_AllocDebugMem(static_cast<int>(variableBreakpointBytes));
+            memset(scrDebuggerGlob.variableBreakpoints, 0, variableBreakpointBytes);
             scrDebuggerGlob.assignHead = 0;
             scrDebuggerGlob.assignHeadCodePos = 0;
             scrDebuggerGlob.disableBreakpoints = 0;
