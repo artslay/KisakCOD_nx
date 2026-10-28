@@ -2310,7 +2310,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         {
             char trace[256];
             std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][DB XMODELALIAS] id=%u phase=hash_enter namePtr=%p type=%u asset=%d raw=%u header=%08x\\n",
+                "[KisakCOD][DB XMODELALIAS] id=%u phase=hash_enter namePtr=%p type=%u asset=%d raw=%u header=%08x\n",
                 xmodelAliasTraceId, static_cast<const void *>(name),
                 static_cast<unsigned>(type), g_switchCurrentAssetIndex,
                 static_cast<unsigned>(g_switchCurrentAssetRawType),
@@ -2330,7 +2330,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         {
             char trace[384];
             std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][DB XMODELALIAS] id=%u phase=hash_done name=%.*s namePtr=%p hash=%u\\n",
+                "[KisakCOD][DB XMODELALIAS] id=%u phase=hash_done name=%.*s namePtr=%p hash=%u\n",
                 xmodelAliasTraceId, 112, name ? name : "<null>",
                 static_cast<const void *>(name), hash);
             Switch_LogWrite(trace);
@@ -2342,7 +2342,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
     {
         char trace[192];
         std::snprintf(trace, sizeof(trace),
-            "[SWITCH DBLOOKUP] material $default hash=%u first=%u write=%u\\n",
+            "[SWITCH DBLOOKUP] material $default hash=%u first=%u write=%u\n",
             hash,
             static_cast<unsigned>(db_hashTable[hash]),
             static_cast<unsigned>(db_hashCritSect.writeCount));
@@ -2358,7 +2358,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         {
             char trace[256];
             std::snprintf(trace, sizeof(trace),
-                "[KisakCOD][DB XMODELALIAS] id=%u phase=bucket hash=%u bucketHead=%u table=%p\\n",
+                "[KisakCOD][DB XMODELALIAS] id=%u phase=bucket hash=%u bucketHead=%u table=%p\n",
                 xmodelAliasTraceId, hash, bucketHead,
                 static_cast<const void *>(db_hashTable));
             Switch_LogWrite(trace);
@@ -2376,7 +2376,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
             if (traceXModelAliasRegistry)
                 g_switchDbStage = "xmodelalias/registry/chain_guard";
             if (type == ASSET_TYPE_MATERIAL)
-                Switch_LogWrite("[SWITCH DBLOOKUP] hash chain overflow\\n");
+                Switch_LogWrite("[SWITCH DBLOOKUP] hash chain overflow\n");
 #endif
             return 0;
         }
@@ -2388,7 +2388,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 g_switchDbStage = "xmodelalias/registry/bad_entry_index";
                 char trace[192];
                 std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][DB XMODELALIAS] id=%u phase=bad_entry_index index=%u guard=%u\\n",
+                    "[KisakCOD][DB XMODELALIAS] id=%u phase=bad_entry_index index=%u guard=%u\n",
                     xmodelAliasTraceId, assetEntryIndex, guard);
                 Switch_LogWrite(trace);
             }
@@ -2404,7 +2404,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
             {
                 char trace[192];
                 std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][DB XMODELALIAS] id=%u phase=read_entry index=%u entry=%p guard=%u\\n",
+                    "[KisakCOD][DB XMODELALIAS] id=%u phase=read_entry index=%u entry=%p guard=%u\n",
                     xmodelAliasTraceId, assetEntryIndex,
                     static_cast<void *>(assetEntry), guard);
                 Switch_LogWrite(trace);
@@ -2427,7 +2427,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
             {
                 char trace[256];
                 std::snprintf(trace, sizeof(trace),
-                    "[KisakCOD][DB XMODELALIAS] id=%u phase=entry_read index=%u type=%u zone=%u nextHash=%u header=%p\\n",
+                    "[KisakCOD][DB XMODELALIAS] id=%u phase=entry_read index=%u type=%u zone=%u nextHash=%u header=%p\n",
                     xmodelAliasTraceId, assetEntryIndex, currentAssetType,
                     currentZoneIndex, currentNextHash, currentHeader);
                 Switch_LogWrite(trace);
@@ -2458,7 +2458,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 {
                     char trace[256];
                     std::snprintf(trace, sizeof(trace),
-                        "[KisakCOD][DB XMODELALIAS] id=%u phase=compare_done index=%u assetNamePtr=%p queryNamePtr=%p result=%d\\n",
+                        "[KisakCOD][DB XMODELALIAS] id=%u phase=compare_done index=%u assetNamePtr=%p queryNamePtr=%p result=%d\n",
                         xmodelAliasTraceId, assetEntryIndex,
                         static_cast<const void *>(XAssetName),
                         static_cast<const void *>(name), nameCompare);
@@ -2480,6 +2480,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
             if (!I_stricmp(XAssetName, name))
                 return &g_assetEntryPool[assetEntryIndex];
 #endif
+        }
     }
 #ifdef __SWITCH__
     // The first lookup may occur before the map zone has registered its BSP.
