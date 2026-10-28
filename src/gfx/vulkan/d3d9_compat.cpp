@@ -6910,17 +6910,19 @@ bool IDirect3DDevice9::BindSamplerSet(
     }
 
     const size_t traceCacheIndex = setIndex == 0 ? 0u : 1u;
-    for (uint32_t slot=0; slot<16u; ++slot)
-    {
-        m_lastSamplerDescriptorViews[traceCacheIndex][slot] = VK_NULL_HANDLE;
-        m_lastSamplerDescriptorStates[traceCacheIndex][slot] = 0u;
-        m_lastSamplerDescriptorActive[traceCacheIndex][slot] = 0u;
-    }
-
     const KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
-    m_lastSamplerDescriptorShaderSerials[traceCacheIndex] =
-        activeShader ? activeShader->serial : 0u;
-    m_lastSamplerDescriptorFrameSerials[traceCacheIndex] = m_backend->FrameSerial();
+    if (Switch_IsVkGpuDrawTraceEnabled())
+    {
+        for (uint32_t slot=0; slot<16u; ++slot)
+        {
+            m_lastSamplerDescriptorViews[traceCacheIndex][slot] = VK_NULL_HANDLE;
+            m_lastSamplerDescriptorStates[traceCacheIndex][slot] = 0u;
+            m_lastSamplerDescriptorActive[traceCacheIndex][slot] = 0u;
+        }
+        m_lastSamplerDescriptorShaderSerials[traceCacheIndex] =
+            activeShader ? activeShader->serial : 0u;
+        m_lastSamplerDescriptorFrameSerials[traceCacheIndex] = m_backend->FrameSerial();
+    }
     const MOJOSHADER_parseData *activeParse =
         activeShader ? activeShader->parseData : nullptr;
     std::array<const MOJOSHADER_sampler *, 16> activeSamplers{};
@@ -7363,9 +7365,12 @@ bool IDirect3DDevice9::BindSamplerSet(
             }
         }
 
-        m_lastSamplerDescriptorViews[cacheIndex][i] = images[i].imageView;
-        m_lastSamplerDescriptorStates[cacheIndex][i] = descriptorSelection[i];
-        m_lastSamplerDescriptorActive[cacheIndex][i] = activeSamplers[i] ? 1u : 0u;
+        if (Switch_IsVkGpuDrawTraceEnabled())
+        {
+            m_lastSamplerDescriptorViews[cacheIndex][i] = images[i].imageView;
+            m_lastSamplerDescriptorStates[cacheIndex][i] = descriptorSelection[i];
+            m_lastSamplerDescriptorActive[cacheIndex][i] = activeSamplers[i] ? 1u : 0u;
+        }
 
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[i].dstSet = set;
@@ -10127,7 +10132,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/vertex_buffer_call";
             vkCmdBindVertexBuffers(drawCommandBuffer, stream, 1, &b, &o);
             g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/vertex_buffer_return";
-            if (switchDrawBindTraceCount < 64u)
+            if (Switch_IsVkGpuDrawTraceEnabled() && switchDrawBindTraceCount < 64u)
             {
                 char msg[224];
                 std::snprintf(
@@ -10150,7 +10155,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     }
 
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/bind_streams/index_call";
-    if (switchDrawBindTraceCount < 64u)
+    if (Switch_IsVkGpuDrawTraceEnabled() && switchDrawBindTraceCount < 64u)
     {
         char msg[320];
         std::snprintf(
