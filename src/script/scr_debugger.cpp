@@ -1192,17 +1192,22 @@ void __cdecl Scr_SortElementChildren(Scr_WatchElement_s *parentElement)
 
 int __cdecl CompareThreadElements(uintptr_t *arg1, uintptr_t *arg2)
 {
-    uintptr_t elements; // [esp+8h] [ebp-8h]
-    uintptr_t elements_4; // [esp+Ch] [ebp-4h]
+    const Scr_WatchElement_s *elementA = reinterpret_cast<const Scr_WatchElement_s *>(*arg1);
+    const Scr_WatchElement_s *elementB = reinterpret_cast<const Scr_WatchElement_s *>(*arg2);
 
-    elements = *arg1;
-    elements_4 = *arg2;
-    if (scrParserPub.sourceBufferLookup[*(uint32_t *)(*arg1 + 72)].sortedIndex != scrParserPub.sourceBufferLookup[*(uint32_t *)(*arg2 + 72)].sortedIndex)
-        return scrParserPub.sourceBufferLookup[*(uint32_t *)(*arg1 + 72)].sortedIndex
-        - scrParserPub.sourceBufferLookup[*(uint32_t *)(*arg2 + 72)].sortedIndex;
-    if (*(uint32_t *)(elements + 76) == *(uint32_t *)(elements_4 + 76))
-        return *(uint32_t *)(elements + 48) - *(uint32_t *)(elements_4 + 48);
-    return *(uint32_t *)(elements + 76) - *(uint32_t *)(elements_4 + 76);
+    const uint32_t fileOrderA = scrParserPub.sourceBufferLookup[elementA->bufferIndex].sortedIndex;
+    const uint32_t fileOrderB = scrParserPub.sourceBufferLookup[elementB->bufferIndex].sortedIndex;
+    if (fileOrderA != fileOrderB)
+        return fileOrderA < fileOrderB ? -1 : 1;
+
+    if (elementA->sourcePos == elementB->sourcePos)
+    {
+        if (elementA->fieldName == elementB->fieldName)
+            return 0;
+        return elementA->fieldName < elementB->fieldName ? -1 : 1;
+    }
+
+    return elementA->sourcePos < elementB->sourcePos ? -1 : 1;
 }
 
 Scr_WatchElement_s *__cdecl Scr_CreateWatchElement(char *text, Scr_WatchElement_s **prevElem, const char *name)
