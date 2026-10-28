@@ -72,11 +72,72 @@ static bool Switch_IsScriptReturnTraceEnabled()
     return enabled;
 }
 
+static bool Switch_ScriptSourceLookupIsSane()
+{
+    constexpr uint32_t maxSourceBufferEntries = 0x10000u;
+    constexpr uint32_t maxLookupEntries = 0x40000u;
+
+    return scrParserPub.sourceBufferLookup &&
+        scrParserPub.sourceBufferLookupLen > 0 &&
+        scrParserPub.sourceBufferLookupLen <= scrParserGlob.sourceBufferLookupMaxLen &&
+        scrParserPub.sourceBufferLookupLen <= maxSourceBufferEntries &&
+        scrParserGlob.opcodeLookup &&
+        scrParserGlob.opcodeLookupLen > 0 &&
+        scrParserGlob.opcodeLookupLen <= scrParserGlob.opcodeLookupMaxLen &&
+        scrParserGlob.opcodeLookupLen <= maxLookupEntries &&
+        scrParserGlob.sourcePosLookup &&
+        scrParserGlob.sourcePosLookupLen > 0 &&
+        scrParserGlob.sourcePosLookupLen <= scrParserGlob.sourcePosLookupMaxLen &&
+        scrParserGlob.sourcePosLookupLen <= maxLookupEntries;
+}
+
+static void Switch_LogInvalidScriptSourceLookup(
+    const char *kind, const char *codePos, const char *callerCodePos)
+{
+    // No source lookup tables is normal when developer metadata is disabled.
+    if (!scrParserPub.sourceBufferLookup && !scrParserPub.sourceBufferLookupLen &&
+        !scrParserGlob.opcodeLookup && !scrParserGlob.opcodeLookupLen &&
+        !scrParserGlob.sourcePosLookup && !scrParserGlob.sourcePosLookupLen)
+        return;
+
+    static std::atomic<uint32_t> traceCount{0};
+    const uint32_t traceId = traceCount.fetch_add(1u, std::memory_order_relaxed);
+    if (traceId >= 8u)
+        return;
+
+    char trace[640];
+    std::snprintf(trace, sizeof(trace),
+        "[KisakCOD][SCRIPT RETURN TRACE SKIPPED] n=%u kind=%s codePos=%p callerPos=%p sourceBuffer=%p sourceLen=%u sourceCap=%u opcodeLookup=%p opcodeLen=%u opcodeCap=%u sourcePosLookup=%p sourcePosLen=%u sourcePosCap=%u\n",
+        traceId, kind ? kind : "unknown",
+        static_cast<const void *>(codePos),
+        static_cast<const void *>(callerCodePos),
+        static_cast<const void *>(scrParserPub.sourceBufferLookup),
+        scrParserPub.sourceBufferLookupLen,
+        scrParserGlob.sourceBufferLookupMaxLen,
+        static_cast<const void *>(scrParserGlob.opcodeLookup),
+        scrParserGlob.opcodeLookupLen,
+        scrParserGlob.opcodeLookupMaxLen,
+        static_cast<const void *>(scrParserGlob.sourcePosLookup),
+        scrParserGlob.sourcePosLookupLen,
+        scrParserGlob.sourcePosLookupMaxLen);
+    Switch_LogWrite(trace);
+}
+
 static void Switch_LogScriptReturn(
     const char *kind, const char *codePos, const VariableValue *value,
     const char *callerCodePos)
 {
     if (!codePos)
+        return;
+
+    // Avoid resolving file/line on every VM return. This diagnostic is opt-in,
+    // and must never walk a source-buffer table whose count exceeds its capacity.
+    if (!Switch_ScriptSourceLookupIsSane())
+    {
+        Switch_LogInvalidScriptSourceLookup(kind, codePos, callerCodePos);
+        return;
+    }
+    if (!Switch_IsScriptReturnTraceEnabled())
         return;
 
     char *filename = nullptr;
