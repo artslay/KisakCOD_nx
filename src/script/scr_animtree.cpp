@@ -487,11 +487,11 @@ void __cdecl Scr_CheckAnimsDefined(uint32_t names, uint32_t filename)
         iassert(name < SL_MAX_STRING_INDEX);
 
         value = GetVariableValueAddress(animId);
-        if (value->u.intValue)
+        if (value->u.codePosValue)
         {
             msg = va("animation '%s' not defined in anim tree '%s'", SL_ConvertToString(name), SL_ConvertToString(filename));
             if (Scr_IsInOpcodeMemory(value->u.codePosValue))
-                CompileError2((char *)value->u.intValue, "%s", msg);
+                CompileError2(const_cast<char *>(value->u.codePosValue), "%s", msg);
             else
                 Com_Error(ERR_DROP, "%s", msg);
         }
