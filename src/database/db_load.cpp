@@ -4636,6 +4636,28 @@ void __cdecl Load_snd_alias_list_t(bool atStreamStart)
 
     const uint32_t headValue = static_cast<uint32_t>(
         reinterpret_cast<uintptr_t>(varsnd_alias_list_t->head));
+#ifdef __SWITCH__
+    const bool switchTraceM249AliasList =
+        varsnd_alias_list_t->aliasName &&
+        I_stricmp(varsnd_alias_list_t->aliasName,
+            "weap_m249saw_turret_fire_npc") == 0;
+    if (switchTraceM249AliasList)
+    {
+        char trace[384];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][SOUND ALIAS SOURCE] phase=header asset=%d rawType=%u list=%p name=%s headToken=%08x count=%d stream=%u pos=%p\n",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<void *>(varsnd_alias_list_t),
+            varsnd_alias_list_t->aliasName,
+            headValue,
+            varsnd_alias_list_t->count,
+            static_cast<unsigned>(g_streamPosIndex),
+            static_cast<void *>(DB_GetStreamPos()));
+        Switch_LogWrite(trace);
+    }
+#endif
 
     if (headValue)
     {
@@ -4669,6 +4691,22 @@ void __cdecl Load_snd_alias_list_t(bool atStreamStart)
         }
     }
 #ifdef __SWITCH__
+    if (switchTraceM249AliasList)
+    {
+        char trace[384];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][SOUND ALIAS SOURCE] phase=decoded asset=%d rawType=%u list=%p name=%s head=%p count=%d stream=%u pos=%p\n",
+            g_switchCurrentAssetIndex,
+            static_cast<unsigned>(g_switchCurrentAssetRawType),
+            static_cast<void *>(varsnd_alias_list_t),
+            varsnd_alias_list_t->aliasName,
+            static_cast<void *>(varsnd_alias_list_t->head),
+            varsnd_alias_list_t->count,
+            static_cast<unsigned>(g_streamPosIndex),
+            static_cast<void *>(DB_GetStreamPos()));
+        Switch_LogWrite(trace);
+    }
     if (false &&
         g_switchCurrentAssetRawType == 7u &&
         g_switchCurrentAssetIndex >= 1202 &&
