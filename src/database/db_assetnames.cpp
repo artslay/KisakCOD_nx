@@ -329,6 +329,10 @@ const char *__cdecl DB_GetXAssetHeaderName(int32_t type, const XAssetHeader *hea
     if ((assetDataAddress >> 32) == 0xFFFFFFFFu ||
         (assetDataAddress != 0 && assetDataAddress < 0x100000000ULL))
     {
+        if (switchTraceRawFileName)
+            g_switchDbStage = "rawfile/name_header_bad_data";
+        else
+            g_switchDbStage = "asset/name_header_bad_data";
         static std::atomic<uint32_t> badAssetHeaderTraceCount{0};
         const uint32_t traceId =
             badAssetHeaderTraceCount.fetch_add(1u, std::memory_order_relaxed);
