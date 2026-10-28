@@ -9869,15 +9869,12 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     // Set KISAK_VK_GPU_DRAW_TRACE=1 to restore exact index scanning for diagnosis.
     const bool detailedDrawTrace = Switch_IsVkGpuDrawTraceEnabled();
     const uint8_t *indexData = nullptr;
-    if (detailedDrawTrace)
-    {
-        if (m_indices->dynamic && m_indices->shadowInitialized &&
-            m_indices->shadow.size() >= m_indices->size)
-            indexData = m_indices->shadow.data();
-        else
-            indexData = static_cast<const uint8_t *>(m_indices->mapped);
-        auditIndexData = indexData;
-    }
+    if (m_indices->dynamic && m_indices->shadowInitialized &&
+        m_indices->shadow.size() >= m_indices->size)
+        indexData = m_indices->shadow.data();
+    else
+        indexData = static_cast<const uint8_t *>(m_indices->mapped);
+    auditIndexData = indexData;
 
     uint32_t minRawIndex = UINT32_MAX;
     uint32_t maxRawIndex = 0;
@@ -9928,7 +9925,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         g_switchLastDrawEffectiveVertexMax.store(maxEffectiveVertex, std::memory_order_relaxed);
     }
 
-    if (m_decl)
+    if (detailedDrawTrace && indexData && m_decl)
     {
         bool invalidVertexFetch = invalidEffectiveIndex;
         uint32_t badStream = UINT32_MAX;
