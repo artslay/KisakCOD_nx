@@ -601,7 +601,7 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
                 if (top->type != VAR_FUNCTION || scrVmPub.function_count >= 32)
                     goto LABEL_19;
                 *localId = 0;
-                result = (char*)top->u.intValue;
+                result = const_cast<char *>(top->u.codePosValue);
                 break;
             default:
                 goto LABEL_19;
@@ -768,7 +768,7 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
             case 94:
             case 96:
                 type = top->type;
-                value.u.intValue = top->u.intValue;
+                value.u = top->u;
                 value.type = (Vartype_t)type;
                 AddRefToValue(type, value.u);
                 Scr_CastBool(&value);
@@ -785,7 +785,7 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
             case 95:
             case 97:
                 v7 = top->type;
-                value.u.intValue = top->u.intValue;
+                value.u = top->u;
                 value.type = (Vartype_t)v7;
                 AddRefToValue(v7, value.u);
                 Scr_CastBool(&value);
