@@ -31,7 +31,7 @@ void __cdecl CG_ShutdownEntity(int localClientNum, centity_s *cent)
     FxEffect *effect; // r4
     trajectory_t *p_pos; // r29
     int ragdollHandle; // r3
-    int physObjId; // r4
+    dxBody *physObjId; // r4
 
     oldEType = cent->oldEType;
     if (oldEType == 8 || oldEType == 7)
@@ -55,16 +55,16 @@ void __cdecl CG_ShutdownEntity(int localClientNum, centity_s *cent)
         cent->currentState.pos.trType = TR_STATIONARY;
         cent->currentState.apos.trType = TR_STATIONARY;
     }
-    physObjId = cent->pose.physObjId;
-    if (physObjId && physObjId != -1)
+    physObjId = (dxBody *)cent->pose.physObjId;
+    if (physObjId && physObjId != (dxBody *)-1)
         goto LABEL_14;
     if (p_pos->trType != TR_PHYSICS)
         return;
-    if (physObjId != -1)
+    if (physObjId != (dxBody *)-1)
     {
     LABEL_14:
         if (physObjId)
-            Phys_ObjDestroy(PHYS_WORLD_FX, (dxBody*)physObjId);
+            Phys_ObjDestroy(PHYS_WORLD_FX, physObjId);
     }
     p_pos->trType = TR_STATIONARY;
     cent->currentState.apos.trType = TR_STATIONARY;
