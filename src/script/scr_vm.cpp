@@ -75,23 +75,31 @@ static void Switch_LogScriptReturn(
     const char *kind, const char *codePos, const VariableValue *value,
     const char *callerCodePos)
 {
-    if (!Switch_IsScriptReturnTraceEnabled() || !codePos)
+    if (!codePos)
         return;
 
     char *filename = nullptr;
     int line = 0;
     Scr_GetFileAndLine(codePos, &filename, &line);
-    // The failing expression is in suppressedBehavior() (source lines 345-434).
-    // Excluding the other helpers in this file prevents unrelated returns from
-    // consuming the diagnostic budget before the bad call is reached.
-    if (!filename || !std::strstr(filename, "cover_behavior.gsc") ||
-        line < 345 || line > 435)
-        return;
 
     char *callerFilename = nullptr;
     int callerLine = 0;
     if (callerCodePos && Scr_IsInOpcodeMemory(callerCodePos))
         Scr_GetFileAndLine(callerCodePos, &callerFilename, &callerLine);
+
+    // The runtime error in the user's log is at cover_behavior.gsc:136.
+    // Trace the value returned to that call site automatically, without
+    // requiring an environment variable. The wider opt-in mode remains
+    // available for other returns in cover_behavior.gsc.
+    const bool targetCallSite =
+        callerFilename &&
+        std::strstr(callerFilename, "cover_behavior.gsc") &&
+        callerLine >= 120 && callerLine <= 150;
+    const bool traceAllCoverReturns =
+        Switch_IsScriptReturnTraceEnabled() &&
+        filename && std::strstr(filename, "cover_behavior.gsc");
+    if (!targetCallSite && !traceAllCoverReturns)
+        return;
 
     static uint32_t traceCount = 0;
     if (traceCount >= 64u)
@@ -109,12 +117,13 @@ static void Switch_LogScriptReturn(
 
     char trace[640];
     std::snprintf(trace, sizeof(trace),
-        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d type=%u typeName=%s int=%d float=%.6g caller=%s:%d codePos=%p callerPos=%p\n",
-        traceCount - 1u, kind ? kind : "unknown", filename, line,
+        "[KisakCOD][SCRIPT RETURN] n=%u kind=%s file=%s line=%d type=%u typeName=%s int=%d float=%.6g caller=%s:%d codePos=%p callerPos=%p targetCall=%u\\n",
+        traceCount - 1u, kind ? kind : "unknown",
+        filename && filename[0] ? filename : "(unknown)", line,
         type, typeName, integerValue, floatValue,
         callerFilename && callerFilename[0] ? callerFilename : "(unknown)",
         callerLine, static_cast<const void *>(codePos),
-        static_cast<const void *>(callerCodePos));
+        static_cast<const void *>(callerCodePos), targetCallSite ? 1u : 0u);
     Switch_LogWrite(trace);
 }
 #endif
