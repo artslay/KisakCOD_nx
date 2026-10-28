@@ -4037,6 +4037,48 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
                                 if (*ch == '\r' || *ch == '\n' || *ch == '\t')
                                     *ch = ' ';
                             }
+
+                            // Dump bounded source context once so the reason this
+                            // intentionally lethal script line is reached is visible.
+                            static bool switchAiScriptContextLogged = false;
+                            if (!switchAiScriptContextLogged)
+                            {
+                                switchAiScriptContextLogged = true;
+                                const uint32_t currentLine =
+                                    Scr_GetLineNum(sourceBufferIndex, sourcePosition);
+                                const uint32_t firstLine =
+                                    currentLine > 55u ? currentLine - 55u : 0u;
+                                const uint32_t lastLine = currentLine + 6u;
+                                uint32_t lineNumber = 0;
+                                const char *lineStart = sourceBuffer->sourceBuf;
+                                const char *sourceEnd = sourceBuffer->sourceBuf + sourceBuffer->len;
+
+                                for (const char *p = sourceBuffer->sourceBuf;
+                                     p <= sourceEnd && lineNumber <= lastLine; ++p)
+                                {
+                                    if (p == sourceEnd || *p == '\\0')
+                                    {
+                                        if (lineNumber >= firstLine && lineNumber <= lastLine)
+                                        {
+                                            char contextLine[256] = {};
+                                            size_t lineLength = static_cast<size_t>(p - lineStart);
+                                            if (lineLength >= sizeof(contextLine))
+                                                lineLength = sizeof(contextLine) - 1;
+                                            std::memcpy(contextLine, lineStart, lineLength);
+                                            for (char *ch = contextLine; *ch; ++ch)
+                                            {
+                                                if (*ch == '\\r' || *ch == '\\n' || *ch == '\\t')
+                                                    *ch = ' ';
+                                            }
+                                            Com_Printf(CON_CHANNEL_SERVER,
+                                                "[KisakCOD][AI SCRIPT CONTEXT] line=%u text=[%s]\\n",
+                                                lineNumber + 1u, contextLine);
+                                        }
+                                        ++lineNumber;
+                                        lineStart = p + 1;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
