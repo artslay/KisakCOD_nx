@@ -1553,8 +1553,15 @@ bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
             if (assetName && !I_stricmp(assetName, name))
 #endif
             {
-                InterlockedDecrement(&db_hashCritSect.readCount);
-                return assetEntry->entry.zoneIndex == 0;
+                // DB_FindXAssetEntry deliberately prefers a loaded-zone asset
+                // over a same-name default placeholder anywhere in the chain.
+                // Keep the default test consistent: a later real entry must
+                // prevent an earlier default entry from masking it.
+                if (assetEntry->entry.zoneIndex != 0)
+                {
+                    InterlockedDecrement(&db_hashCritSect.readCount);
+                    return false;
+                }
             }
         }
     }
