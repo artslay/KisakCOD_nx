@@ -115,7 +115,7 @@ static void Switch_LogAiGroundTrace(
         std::snprintf(depthLine, sizeof(depthLine),
             "[KisakCOD][AI GROUND DEPTH] n=%u ent=%d origin=(%.1f %.1f %.1f) "
             "endZ=%.1f mask=0x%x fraction=%.5f hitZ=%.1f normalZ=%.3f "
-            "walkable=%u contents=0x%x startsolid=%u allsolid=%u hitEnt=%d\\n",
+            "walkable=%u contents=0x%x startsolid=%u allsolid=%u hitEnt=%d\n",
             g_switchAiGroundDepthCount++, phys->iEntNum,
             phys->vOrigin[0], phys->vOrigin[1], phys->vOrigin[2],
             probeEnd[2], static_cast<unsigned int>(phys->iTraceMask),
@@ -287,7 +287,7 @@ SlideMoveResult __cdecl AIPhys_SlideMove(int gravity, int zonly)
                 "[KisakCOD][AI MOVE TRACE] n=%u ent=%d start=(%.1f %.1f %.1f) "
                 "end=(%.1f %.1f %.1f) frameTime=%.3f gravity=%.1f "
                 "velocityZ=%.1f mask=0x%x fraction=%.5f startsolid=%u allsolid=%u "
-                "normalZ=%.3f walkable=%u contents=0x%x hitEnt=%d physics=%d\\n",
+                "normalZ=%.3f walkable=%u contents=0x%x hitEnt=%d physics=%d\n",
                 g_switchAiMoveTraceCount++, g_pPhys->iEntNum,
                 g_pPhys->vOrigin[0], g_pPhys->vOrigin[1], g_pPhys->vOrigin[2],
                 vEnd[0], vEnd[1], vEnd[2], g_apl.fFrameTime, g_pPhys->fGravity,
@@ -890,7 +890,7 @@ int __cdecl Actor_Physics(actor_physics_t *pPhys)
             "[KisakCOD][AI HIGH ORIGIN] ent=%d class=%s targetname=%s "
             "current=(%.1f %.1f %.1f) physics=(%.1f %.1f %.1f) "
             "wish=(%.1f %.1f %.1f) velocity=(%.1f %.1f %.1f) "
-            "iMsec=%d gravity=%.1f traceMask=0x%x groundEnt=%u physicsType=%d time=%d\\n",
+            "iMsec=%d gravity=%.1f traceMask=0x%x groundEnt=%u physicsType=%d time=%d\n",
             pPhys->iEntNum, className, targetName,
             ent->r.currentOrigin[0], ent->r.currentOrigin[1], ent->r.currentOrigin[2],
             pPhys->vOrigin[0], pPhys->vOrigin[1], pPhys->vOrigin[2],
