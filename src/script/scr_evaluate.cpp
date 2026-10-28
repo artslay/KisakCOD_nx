@@ -321,7 +321,7 @@ void __cdecl Scr_GetValueString(uint32_t localId, VariableValue *value, int len,
         Com_sprintf(s, len, "%i", value->u.intValue);
         break;
     case VAR_FUNCTION:
-        Scr_GetCodePos((const char *)(value->u.intValue - 1), 1u, s, len);
+        Scr_GetCodePos(value->u.codePosValue - 1, 1u, s, len);
         break;
     case VAR_ANIMATION:
         intValue = (uint16_t)value->u.intValue;
