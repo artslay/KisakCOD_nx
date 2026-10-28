@@ -10637,15 +10637,21 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             ? static_cast<const uint8_t *>(traceVertexBuffer->mapped) : nullptr;
         const size_t traceVertexMappedBytes = traceVertexMapped && traceVertexBuffer
             ? traceVertexBuffer->size : 0u;
-        const uint8_t *traceVertexShadow = traceVertexBuffer && !traceVertexBuffer->shadow.empty()
-            ? traceVertexBuffer->shadow.data() : nullptr;
-        const size_t traceVertexShadowBytes = traceVertexBuffer ? traceVertexBuffer->shadow.size() : 0u;
+        const uint8_t *traceVertexShadow =
+            traceVertexBuffer && traceVertexBuffer->dynamic && traceVertexBuffer->shadowInitialized &&
+            traceVertexBuffer->shadow.size() >= traceVertexBuffer->size
+                ? traceVertexBuffer->shadow.data() : nullptr;
+        const size_t traceVertexShadowBytes = traceVertexShadow && traceVertexBuffer
+            ? traceVertexBuffer->shadow.size() : 0u;
         const uint8_t *traceIndexMapped = m_indices && m_indices->mapped
             ? static_cast<const uint8_t *>(m_indices->mapped) : nullptr;
         const size_t traceIndexMappedBytes = traceIndexMapped && m_indices ? m_indices->size : 0u;
-        const uint8_t *traceIndexShadow = m_indices && !m_indices->shadow.empty()
-            ? m_indices->shadow.data() : nullptr;
-        const size_t traceIndexShadowBytes = m_indices ? m_indices->shadow.size() : 0u;
+        const uint8_t *traceIndexShadow =
+            m_indices && m_indices->dynamic && m_indices->shadowInitialized &&
+            m_indices->shadow.size() >= m_indices->size
+                ? m_indices->shadow.data() : nullptr;
+        const size_t traceIndexShadowBytes = traceIndexShadow && m_indices
+            ? m_indices->shadow.size() : 0u;
         auto traceReadIndex = [](const uint8_t *bytes, size_t availableBytes,
                                  uint64_t position, uint16_t *outIndex) -> bool
         {
