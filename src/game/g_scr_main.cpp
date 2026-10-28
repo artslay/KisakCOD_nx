@@ -9817,6 +9817,7 @@ void GScr_SetDebugAngles()
 
 void GScr_OpenFile()
 {
+    const char *failureReason = "unknown";
     const char *String; // r25
     const char *v1; // r3
     int v2; // r26
@@ -9846,6 +9847,7 @@ void GScr_OpenFile()
     {
         String = Scr_GetString(0);
         v1 = Scr_GetString(1);
+        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "[GSC I/O] OpenFile request name='%s' mode='%s'\n", String, v1);
         v2 = 0;
         openScriptIOFileHandles = level.openScriptIOFileHandles;
         while (*openScriptIOFileHandles)
@@ -9861,7 +9863,13 @@ void GScr_OpenFile()
         if (!v5)
         {
         LABEL_7:
-            Com_Printf(CON_CHANNEL_PARSERSCRIPT, "OpenFile failed.  %i files already open\n", 1);
+            Com_Printf(
+                CON_CHANNEL_PARSERSCRIPT,
+                "[GSC I/O] OpenFile failed name='%s' mode='%s': no free slot (open=%i capacity=%i)\n",
+                String,
+                v1,
+                v2,
+                static_cast<int>(sizeof(level.openScriptIOFileHandles) / sizeof(level.openScriptIOFileHandles[0])));
             Scr_AddInt(-1);
             return;
         }
@@ -9891,9 +9899,22 @@ void GScr_OpenFile()
                 Com_BeginParseSession(String);
                 Com_SetCSV(1);
                 level.currentScriptIOLineMark[v2].lines = 0;
+                Com_Printf(
+                    CON_CHANNEL_PARSERSCRIPT,
+                    "[GSC I/O] OpenFile success name='%s' mode='read' slot=%i bytes=%i\n",
+                    String,
+                    v2,
+                    v11);
                 Scr_AddInt(v2);
                 return;
             }
+            failureReason = "read_open_failed";
+            Com_Printf(
+                CON_CHANNEL_PARSERSCRIPT,
+                "[GSC I/O] OpenFile read failed name='%s' path='%s' result=%i\n",
+                String,
+                v9,
+                Remote);
             goto LABEL_30;
         }
         v14 = "write";
@@ -9920,13 +9941,26 @@ void GScr_OpenFile()
             } while (!v21);
             if (v21)
             {
-                Com_Printf(CON_CHANNEL_PARSERSCRIPT, "Valid openfile modes are 'write', 'read', and 'append'\n");
+                failureReason = "invalid_mode";
+                Com_Printf(
+                    CON_CHANNEL_PARSERSCRIPT,
+                    "[GSC I/O] OpenFile invalid mode name='%s' mode='%s' (valid: read/write/append)\n",
+                    String,
+                    v1);
             }
             else
             {
                 v22 = va("%s/%s", "scriptdata", String);
-                if (FS_FOpenFileByMode((char*)v22, &level.openScriptIOFileHandles[v2], FS_APPEND) >= 0)
+                v18 = FS_FOpenFileByMode((char*)v22, &level.openScriptIOFileHandles[v2], FS_APPEND);
+                if (v18 >= 0)
                     goto LABEL_22;
+                failureReason = "append_open_failed";
+                Com_Printf(
+                    CON_CHANNEL_PARSERSCRIPT,
+                    "[GSC I/O] OpenFile append failed name='%s' path='%s' result=%i\n",
+                    String,
+                    v22,
+                    v18);
             }
         }
         else
@@ -9937,11 +9971,32 @@ void GScr_OpenFile()
             if (v18)
             {
             LABEL_22:
+                Com_Printf(
+                    CON_CHANNEL_PARSERSCRIPT,
+                    "[GSC I/O] OpenFile success name='%s' mode='%s' slot=%i handle=%i\n",
+                    String,
+                    v1,
+                    v2,
+                    level.openScriptIOFileHandles[v2]);
                 Scr_AddInt(v2);
                 return;
             }
+            failureReason = "write_open_failed";
+            Com_Printf(
+                CON_CHANNEL_PARSERSCRIPT,
+                "[GSC I/O] OpenFile write failed name='%s' path='%s' result=%i\n",
+                String,
+                v17,
+                v18);
         }
     LABEL_30:
+        Com_Printf(
+            CON_CHANNEL_PARSERSCRIPT,
+            "[GSC I/O] OpenFile failed name='%s' mode='%s' slot=%i reason=%s\n",
+            String,
+            v1,
+            v2,
+            failureReason);
         Scr_AddInt(-1);
     }
 }
@@ -9957,9 +10012,9 @@ void GScr_CloseFile()
     {
         Int = Scr_GetInt(0);
         v1 = Int;
-        if (Int > 1)
+        if (Int >= sizeof(level.openScriptIOFileHandles) / sizeof(level.openScriptIOFileHandles[0]))
         {
-            Com_Printf(CON_CHANNEL_PARSERSCRIPT, "CloseFile failed, invalid file number %i\n", Int);
+            Com_Printf(CON_CHANNEL_PARSERSCRIPT, "CloseFile failed, invalid file number %i\n", static_cast<int>(Int));
         }
         else
         {
@@ -10012,15 +10067,15 @@ void __cdecl Scr_FPrint_internal(bool commaBetweenFields)
         return;
     }
     Int = Scr_GetInt(0);
-    if (Int > 1)
+    if (Int >= sizeof(level.openScriptIOFileHandles) / sizeof(level.openScriptIOFileHandles[0]))
     {
-        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "FPrintln failed, invalid file number %i\n");
+        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "FPrintln failed, invalid file number %i\n", static_cast<int>(Int));
         goto LABEL_14;
     }
     v3 = Int;
     if (!level.openScriptIOFileHandles[Int])
     {
-        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "FPrintln failed, file number %i was not open for writing\n");
+        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "FPrintln failed, file number %i was not open for writing\n", static_cast<int>(Int));
     LABEL_14:
         Scr_AddInt(-1);
         return;
@@ -10068,14 +10123,14 @@ void GScr_FReadLn()
         goto LABEL_12;
     }
     Int = Scr_GetInt(0);
-    if (Int > 1)
+    if (Int >= sizeof(level.openScriptIOFileHandles) / sizeof(level.openScriptIOFileHandles[0]))
     {
-        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "freadln failed, invalid file number %i\n");
+        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "freadln failed, invalid file number %i\n", static_cast<int>(Int));
         goto LABEL_11;
     }
     if (!level.openScriptIOFileBuffers[Int])
     {
-        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "freadln failed, file number %i was not open for reading\n");
+        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "freadln failed, file number %i was not open for reading\n", static_cast<int>(Int));
         goto LABEL_11;
     }
     v6[0] = (const char*)level.openScriptIOFileBuffers[Int];
@@ -10120,9 +10175,9 @@ void GScr_FGetArg()
     Int = Scr_GetInt(0);
     v1 = Scr_GetInt(1);
     v2 = v1;
-    if (Int > 1)
+    if (Int >= sizeof(level.openScriptIOFileHandles) / sizeof(level.openScriptIOFileHandles[0]))
     {
-        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "freadline failed, invalid file number %i\n", Int);
+        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "freadline failed, invalid file number %i\n", static_cast<int>(Int));
         goto LABEL_14;
     }
     if (v1 < 0)
@@ -10134,7 +10189,7 @@ void GScr_FGetArg()
     }
     if (!level.openScriptIOFileBuffers[Int])
     {
-        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "freadline failed, file number %i was not open for reading\n", Int);
+        Com_Printf(CON_CHANNEL_PARSERSCRIPT, "freadline failed, file number %i was not open for reading\n", static_cast<int>(Int));
         goto LABEL_14;
     }
     v5[0] = (const char*)level.openScriptIOFileBuffers[Int];
