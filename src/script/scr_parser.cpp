@@ -467,9 +467,19 @@ OpcodeLookup *__cdecl Scr_GetPrevSourcePosOpcodeLookup(const char *codePos)
     uint32_t middle; // [esp+4h] [ebp-8h]
     uint32_t high; // [esp+8h] [ebp-4h]
 
+#ifdef KISAK_SWITCH
+    if (!codePos || !Scr_IsInOpcodeMemory(codePos) ||
+        !Switch_SourcePositionTablesUsable())
+    {
+        if (codePos)
+            Switch_LogInvalidSourceLookup("Scr_GetPrevSourcePosOpcodeLookup");
+        return 0;
+    }
+#else
     if (!codePos || !Scr_IsInOpcodeMemory(codePos) ||
         !scrParserGlob.opcodeLookup || !scrParserGlob.opcodeLookupLen)
         return 0;
+#endif
 
     low = 0;
     high = scrParserGlob.opcodeLookupLen - 1;
@@ -501,6 +511,17 @@ uint32_t __cdecl Scr_GetLineNum(uint32_t bufferIndex, uint32_t sourcePos)
     const char *startLine; // [esp+0h] [ebp-8h] BYREF
     int col; // [esp+4h] [ebp-4h] BYREF
 
+#ifdef KISAK_SWITCH
+    if (!Switch_SourceBufferTableUsable() ||
+        bufferIndex >= scrParserPub.sourceBufferLookupLen ||
+        !scrParserPub.sourceBufferLookup[bufferIndex].sourceBuf ||
+        scrParserPub.sourceBufferLookup[bufferIndex].len < 0 ||
+        sourcePos > static_cast<uint32_t>(scrParserPub.sourceBufferLookup[bufferIndex].len))
+    {
+        Switch_LogInvalidSourceLookup("Scr_GetLineNum");
+        return 0;
+    }
+#endif
     iassert(scrVarPub.developer);
 
     return Scr_GetLineNumInternal(scrParserPub.sourceBufferLookup[bufferIndex].sourceBuf, sourcePos, &startLine, &col);
@@ -564,6 +585,20 @@ int __cdecl Scr_GetSourcePosOfType(const char *codePos, int type, Scr_SourcePos_
     OpcodeLookup *SourcePosOpcodeLookup; // [esp+0h] [ebp-Ch]
     uint32_t index; // [esp+8h] [ebp-4h]
 
+#ifdef KISAK_SWITCH
+    if (!pos || !codePos || !Switch_SourceBufferTableUsable() ||
+        !Switch_SourcePositionTablesUsable() || !Scr_IsInOpcodeMemory(codePos))
+    {
+        Switch_LogInvalidSourceLookup("Scr_GetSourcePosOfType");
+        if (pos)
+        {
+            pos->sourcePos = 0;
+            pos->bufferIndex = 0;
+            pos->lineNum = 0;
+        }
+        return 0;
+    }
+#endif
     if (type)
         SourcePosOpcodeLookup = Scr_GetSourcePosOpcodeLookup(codePos);
     else
@@ -952,6 +987,13 @@ void __cdecl Scr_PrintPrevCodePos(int channel, char *codePos, uint32_t index)
 
     if (scrVarPub.developer && scrVarPub.programBuffer)
     {
+#ifdef KISAK_SWITCH
+        if (!Switch_SourceBufferTableUsable() || !Switch_SourcePositionTablesUsable())
+        {
+            Switch_LogInvalidSourceLookup("Scr_PrintPrevCodePos");
+            return;
+        }
+#endif
         if (!Scr_IsInOpcodeMemory(codePos) || !Scr_IsInOpcodeMemory(codePos - 1))
         {
             Com_PrintError(
