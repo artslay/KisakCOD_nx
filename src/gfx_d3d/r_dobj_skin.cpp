@@ -127,7 +127,7 @@ int  R_SkinSceneDObjModels(
 
 #ifdef __SWITCH__
     const bool modelTransformTraceEnabled = Switch_IsModelTransformTraceEnabled();
-    const bool modelTransformTraceDepthHack = sceneEnt->gfxEntIndex &&
+    const bool modelTransformTraceDepthHack = modelTransformTraceEnabled && sceneEnt->gfxEntIndex &&
         ((frontEndDataOut->gfxEnts[sceneEnt->gfxEntIndex].renderFxFlags & 2) != 0);
 #endif
 
