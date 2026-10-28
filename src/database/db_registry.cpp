@@ -2293,6 +2293,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 
 #ifdef __SWITCH__
     const bool traceRawFileRegistry = type == ASSET_TYPE_RAWFILE;
+    const bool traceWeaponRegistry = type == ASSET_TYPE_WEAPON;
     // In this SP build runtime asset type 32 is XModelAlias. The crash snapshot
     // reported type 32 while the DB stage was still "asset/lock_acquired", so
     // narrow the next run to the hash lookup and potentially unsafe dereferences.
@@ -2303,7 +2304,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
         : 0xFFFFFFFFu;
     if (traceRawFileRegistry)
         g_switchDbStage = "rawfile/registry/hash_enter";
-    else if (!traceXModelAliasRegistry)
+    else if (!traceXModelAliasRegistry && !traceWeaponRegistry)
         g_switchDbStage = "asset/registry/hash_enter";
     if (traceXModelAliasRegistry)
     {
@@ -2325,7 +2326,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 #ifdef __SWITCH__
     if (traceRawFileRegistry)
         g_switchDbStage = "rawfile/registry/hash_done";
-    else if (!traceXModelAliasRegistry)
+    else if (!traceXModelAliasRegistry && !traceWeaponRegistry)
         g_switchDbStage = "asset/registry/hash_done";
     if (traceXModelAliasRegistry)
     {
@@ -2355,7 +2356,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 #endif
     const uint32_t bucketHead = db_hashTable[hash];
 #ifdef __SWITCH__
-    if (!traceRawFileRegistry && !traceXModelAliasRegistry)
+    if (!traceRawFileRegistry && !traceXModelAliasRegistry && !traceWeaponRegistry)
         g_switchDbStage = "asset/registry/read_bucket";
     if (traceXModelAliasRegistry)
     {
@@ -2386,7 +2387,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 #ifdef __SWITCH__
             if (traceXModelAliasRegistry)
                 g_switchDbStage = "xmodelalias/registry/chain_guard";
-            else if (!traceRawFileRegistry)
+            else if (!traceRawFileRegistry && !traceWeaponRegistry)
                 g_switchDbStage = "asset/registry/chain_guard";
             if (type == ASSET_TYPE_MATERIAL)
                 Switch_LogWrite("[SWITCH DBLOOKUP] hash chain overflow\n");
@@ -2405,7 +2406,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                     xmodelAliasTraceId, assetEntryIndex, guard);
                 Switch_LogWrite(trace);
             }
-            else if (!traceRawFileRegistry)
+            else if (!traceRawFileRegistry && !traceWeaponRegistry)
                 g_switchDbStage = "asset/registry/bad_entry_index";
 #endif
             return 0;
@@ -2425,13 +2426,13 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 Switch_LogWrite(trace);
             }
         }
-        else if (!traceRawFileRegistry)
+        else if (!traceRawFileRegistry && !traceWeaponRegistry)
             g_switchDbStage = "asset/registry/read_entry";
 #endif
 #ifdef __SWITCH__
         if (traceXModelAliasRegistry)
             g_switchDbStage = "xmodelalias/registry/read_entry_fields";
-        else if (!traceRawFileRegistry)
+        else if (!traceRawFileRegistry && !traceWeaponRegistry)
             g_switchDbStage = "asset/registry/read_entry_fields";
 #endif
         const uint32_t currentAssetType =
@@ -2456,7 +2457,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 Switch_LogWrite(trace);
             }
         }
-        else if (!traceRawFileRegistry)
+        else if (!traceRawFileRegistry && !traceWeaponRegistry)
             g_switchDbStage = "asset/registry/entry_read";
 #endif
         if (currentAssetType == static_cast<uint32_t>(type))
@@ -2466,7 +2467,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 g_switchDbStage = "rawfile/registry/get_entry_name";
             if (traceXModelAliasRegistry)
                 g_switchDbStage = "xmodelalias/registry/get_entry_name";
-            else if (!traceRawFileRegistry)
+            else if (!traceRawFileRegistry && !traceWeaponRegistry)
                 g_switchDbStage = "asset/registry/get_entry_name";
 #endif
             XAssetName = DB_GetXAssetName(&assetEntry->entry.asset);
@@ -2475,7 +2476,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 g_switchDbStage = "rawfile/registry/compare_name";
             if (traceXModelAliasRegistry)
                 g_switchDbStage = "xmodelalias/registry/compare_name";
-            else if (!traceRawFileRegistry)
+            else if (!traceRawFileRegistry && !traceWeaponRegistry)
                 g_switchDbStage = "asset/registry/compare_name";
             const int nameCompare = Switch_IstricmpAssetName(XAssetName, name);
             if (traceRawFileRegistry)
@@ -2494,7 +2495,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                     Switch_LogWrite(trace);
                 }
             }
-            else if (!traceRawFileRegistry)
+            else if (!traceRawFileRegistry && !traceWeaponRegistry)
                 g_switchDbStage = "asset/registry/compare_done";
             if (nameCompare == 0)
             {
@@ -2515,7 +2516,7 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
 #ifdef __SWITCH__
         if (traceXModelAliasRegistry)
             g_switchDbStage = "xmodelalias/registry/advance_chain";
-        else if (!traceRawFileRegistry)
+        else if (!traceRawFileRegistry && !traceWeaponRegistry)
             g_switchDbStage = "asset/registry/advance_chain";
         assetEntryIndex = currentNextHash;
 #endif
