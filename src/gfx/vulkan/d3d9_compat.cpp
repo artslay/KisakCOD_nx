@@ -10637,23 +10637,20 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             ? static_cast<const uint8_t *>(traceVertexBuffer->mapped) : nullptr;
         const size_t traceVertexMappedBytes = traceVertexMapped && traceVertexBuffer
             ? traceVertexBuffer->size : 0u;
-        const uint8_t *traceVertexShadow =
-            traceVertexBuffer && !traceVertexBuffer->shadow.empty()
-                ? traceVertexBuffer->shadow.data() : nullptr;
-        const size_t traceVertexShadowBytes = traceVertexBuffer
-            ? traceVertexBuffer->shadow.size() : 0u;
+        const uint8_t *traceVertexShadow = traceVertexBuffer && !traceVertexBuffer->shadow.empty()
+            ? traceVertexBuffer->shadow.data() : nullptr;
+        const size_t traceVertexShadowBytes = traceVertexBuffer ? traceVertexBuffer->shadow.size() : 0u;
         const uint8_t *traceIndexMapped = m_indices && m_indices->mapped
             ? static_cast<const uint8_t *>(m_indices->mapped) : nullptr;
-        const size_t traceIndexMappedBytes = traceIndexMapped && m_indices
-            ? m_indices->size : 0u;
-        const uint8_t *traceIndexShadow =
-            m_indices && !m_indices->shadow.empty() ? m_indices->shadow.data() : nullptr;
+        const size_t traceIndexMappedBytes = traceIndexMapped && m_indices ? m_indices->size : 0u;
+        const uint8_t *traceIndexShadow = m_indices && !m_indices->shadow.empty()
+            ? m_indices->shadow.data() : nullptr;
         const size_t traceIndexShadowBytes = m_indices ? m_indices->shadow.size() : 0u;
         auto traceReadIndex = [](const uint8_t *bytes, size_t availableBytes,
                                  uint64_t position, uint16_t *outIndex) -> bool
         {
-            if (!bytes || !outIndex || position > availableBytes / sizeof(uint16_t) ||
-                availableBytes / sizeof(uint16_t) - position < 1u)
+            const uint64_t capacity = availableBytes / sizeof(uint16_t);
+            if (!bytes || !outIndex || position >= capacity)
                 return false;
             std::memcpy(outIndex, bytes + static_cast<size_t>(position) * sizeof(uint16_t),
                 sizeof(*outIndex));
@@ -10671,21 +10668,29 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             std::memcpy(&xyz[2], vertex + sizeof(float) * 2u, sizeof(float));
             return true;
         };
+        const uint8_t *traceSelectedVertexBytes = traceVertexShadow
+            ? traceVertexShadow : traceVertexMapped;
+        const size_t traceSelectedVertexBytesCount = traceVertexShadow
+            ? traceVertexShadowBytes : traceVertexMappedBytes;
         for (uint32_t sample = 0; sample < 3u && sample < indexCount; ++sample)
         {
             const uint64_t indexPosition = static_cast<uint64_t>(startIndex) + sample;
-            uint16_t selectedIndex = 0u, mappedIndex = 0u;
+            uint16_t selectedIndex = 0u, mappedIndex = 0u, shadowIndex = 0u;
             const bool selectedIndexReadable = traceReadIndex(
                 indexData, m_indices ? m_indices->size : 0u, indexPosition, &selectedIndex);
             const bool mappedIndexReadable = traceReadIndex(
                 traceIndexMapped, traceIndexMappedBytes, indexPosition, &mappedIndex);
+            const bool shadowIndexReadable = traceReadIndex(
+                traceIndexShadow, traceIndexShadowBytes, indexPosition, &shadowIndex);
             const int64_t selectedEffective = selectedIndexReadable
                 ? static_cast<int64_t>(baseVertexIndex) + selectedIndex : -1;
             const int64_t mappedEffective = mappedIndexReadable
                 ? static_cast<int64_t>(baseVertexIndex) + mappedIndex : -1;
-            uint64_t selectedOffset = 0u, mappedOffset = 0u;
-            float selectedXYZ[3]{}, mappedXYZ[3]{};
-            bool selectedVertexReadable = false, mappedVertexReadable = false;
+            const int64_t shadowEffective = shadowIndexReadable
+                ? static_cast<int64_t>(baseVertexIndex) + shadowIndex : -1;
+            uint64_t selectedOffset = 0u, mappedOffset = 0u, shadowOffset = 0u;
+            float selectedXYZ[3]{}, mappedXYZ[3]{}, shadowXYZ[3]{};
+            bool selectedVertexReadable = false, mappedVertexReadable = false, shadowVertexReadable = false;
             const StreamBinding &traceStream = m_streams[0];
             if (traceStream.buffer && traceStream.stride)
             {
@@ -10696,9 +10701,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                 {
                     selectedOffset = streamOffset + static_cast<uint64_t>(selectedEffective) * stride;
                     selectedVertexReadable = traceReadVertex(
-                        traceVertexShadow ? traceVertexShadow : traceVertexMapped,
-                        traceVertexShadow ? traceVertexShadowBytes : traceVertexMappedBytes,
-                        selectedOffset, selectedXYZ);
+                        traceSelectedVertexBytes, traceSelectedVertexBytesCount, selectedOffset, selectedXYZ);
                 }
                 if (mappedEffective >= 0 &&
                     static_cast<uint64_t>(mappedEffective) <= (UINT64_MAX - streamOffset) / stride)
@@ -10707,18 +10710,25 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
                     mappedVertexReadable = traceReadVertex(
                         traceVertexMapped, traceVertexMappedBytes, mappedOffset, mappedXYZ);
                 }
+                if (shadowEffective >= 0 &&
+                    static_cast<uint64_t>(shadowEffective) <= (UINT64_MAX - streamOffset) / stride)
+                {
+                    shadowOffset = streamOffset + static_cast<uint64_t>(shadowEffective) * stride;
+                    shadowVertexReadable = traceReadVertex(
+                        traceVertexShadow, traceVertexShadowBytes, shadowOffset, shadowXYZ);
+                }
             }
-            char vertexTrace[520];
+            char vertexTrace[720];
             std::snprintf(vertexTrace, sizeof(vertexTrace),
-                "[KisakCOD][MODEL XFORM][VB] seq=%u xsurf=%p sample=%u selectedIndex=(ok:%u raw:%u eff:%lld off:%llu) mappedIndex=(ok:%u raw:%u eff:%lld off:%llu) stride=%u vertexMapped=(ok:%u xyz:%.5g,%.5g,%.5g) vertexShadow=(ok:%u xyz:%.5g,%.5g,%.5g) shadowState=(dynamic:%u initialized:%u bytes:%zu)\n",
+                "[KisakCOD][MODEL XFORM][VB] seq=%u xsurf=%p sample=%u selectedIndex=(ok:%u raw:%u eff:%lld off:%llu) mappedIndex=(ok:%u raw:%u eff:%lld off:%llu) shadowIndex=(ok:%u raw:%u eff:%lld off:%llu) stride=%u vertexMapped=(ok:%u xyz:%.5g,%.5g,%.5g) vertexSelected=(ok:%u xyz:%.5g,%.5g,%.5g) vertexShadow=(ok:%u xyz:%.5g,%.5g,%.5g) shadowState=(dynamic:%u initialized:%u bytes:%zu)\n",
                 traceContext.sequence, traceContext.xsurf, sample,
-                selectedIndexReadable ? 1u : 0u, selectedIndex,
-                static_cast<long long>(selectedEffective), static_cast<unsigned long long>(selectedOffset),
-                mappedIndexReadable ? 1u : 0u, mappedIndex,
-                static_cast<long long>(mappedEffective), static_cast<unsigned long long>(mappedOffset),
+                selectedIndexReadable ? 1u : 0u, selectedIndex, static_cast<long long>(selectedEffective), static_cast<unsigned long long>(selectedOffset),
+                mappedIndexReadable ? 1u : 0u, mappedIndex, static_cast<long long>(mappedEffective), static_cast<unsigned long long>(mappedOffset),
+                shadowIndexReadable ? 1u : 0u, shadowIndex, static_cast<long long>(shadowEffective), static_cast<unsigned long long>(shadowOffset),
                 traceStream.stride,
                 mappedVertexReadable ? 1u : 0u, mappedXYZ[0], mappedXYZ[1], mappedXYZ[2],
                 selectedVertexReadable ? 1u : 0u, selectedXYZ[0], selectedXYZ[1], selectedXYZ[2],
+                shadowVertexReadable ? 1u : 0u, shadowXYZ[0], shadowXYZ[1], shadowXYZ[2],
                 traceVertexBuffer && traceVertexBuffer->dynamic ? 1u : 0u,
                 traceVertexBuffer && traceVertexBuffer->shadowInitialized ? 1u : 0u,
                 traceVertexShadowBytes);
