@@ -716,13 +716,16 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
                 goto LABEL_67;
             case 8:
             case 19:
-            case 21:
-            case 79:
-            case 80:
-            case 82:
-            case 85:
-            case 87:
+                // Integer and animation operands remain 32-bit on Switch.
                 pos += 4;
+                goto LABEL_67;
+            case 21: // OP_GetFunction stores a native code-position pointer.
+            case 79: // OP_ScriptFunctionCall2
+            case 80: // OP_ScriptFunctionCall
+            case 82: // OP_ScriptMethodCall
+            case 85: // OP_ScriptThreadCallPointer stores a native-width argument count.
+            case 87: // OP_ScriptMethodThreadCallPointer
+                pos += sizeof(const char *);
                 goto LABEL_67;
             case 9:
                 pos += 4;
@@ -755,10 +758,12 @@ char* __cdecl Scr_GetNextCodepos(VariableValue* top, const char* pos, int opcode
             case 75:
                 pos += 3;
                 goto LABEL_67;
-            case 84:
-            case 86:
-            case 129:
-                pos += 8;
+            case 84: // OP_ScriptThreadCall: code position + native-width argument count.
+            case 86: // OP_ScriptMethodThreadCall
+                pos += sizeof(uintptr_t) * 2;
+                goto LABEL_67;
+            case 129: // OP_object: native-width class number and entity number operands.
+                pos += sizeof(uintptr_t) * 2;
                 goto LABEL_67;
             case 94:
             case 96:
