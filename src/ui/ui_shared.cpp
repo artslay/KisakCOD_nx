@@ -9608,8 +9608,10 @@ void __cdecl Menu_PaintAll(UiContext *dc)
         // Closed menus can remain in the Switch menu stack during cinematic
         // transitions. A hidden fullscreen entry must not occlude the visible
         // menus beneath it, or Menu_PaintAll can submit a completely black frame.
-        if (menu->fullScreen &&
-            Window_IsVisible(dc->localClientNum, &menu->window))
+        // Use the complete menu visibility test here. Window_IsVisible only
+        // checks the window flags; a fullscreen menu whose visibleWhen/owner-draw
+        // gate is false must not hide every menu below it and leave a blank frame.
+        if (menu->fullScreen && Menu_IsVisible(dc, menu))
         {
             drawStart = menuIndex;
             anyFullscreen = 1;
