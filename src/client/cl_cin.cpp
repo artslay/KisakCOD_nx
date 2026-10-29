@@ -339,8 +339,8 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
 }
 
 // Scripted cinematics displayed while the connection remains CA_ACTIVE use the
-// same queue/loading cleanup as a regular cinematic skip, but may be skipped
-// independent of stale cin_skippable state. Authored *_fade clips remain locked.
+// same queue/loading cleanup as a regular cinematic skip. The current film's
+// fade suffix and explicit unskippablecinematic policy are still enforced.
 bool SCR_SkipActiveGameCinematic(int32_t localClientNum)
 {
     // The render path normally promotes a queued movie from CG_DrawFadeInCinematic.
