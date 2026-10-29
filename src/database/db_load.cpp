@@ -14032,7 +14032,6 @@ void __cdecl Load_clipMap_t(bool atStreamStart)
                 Com_Error(ERR_DROP,
                     "Switch clipMap static model array is too large (%u models)",
                     static_cast<unsigned>(varclipMap_t->numStaticModels));
-                varclipMap_t->staticModelList = nullptr;
             }
             else
             {
