@@ -224,7 +224,7 @@ void __cdecl R_DrawStaticModelDrawSurfLightingNonOptimized(
 
     xsurf = drawStream->localSurf;
     R_SetupStaticModelPrim(xsurf, &args, &context.state->prim);
-    R_SetStaticModelVertexBuffer(&context.state->prim, xsurf);
+    R_SetStaticModelVertexBuffer(context.state, xsurf);
     smodelCount = drawStream->smodelCount;
     smodelDrawInsts = rgp.world->dpvs.smodelDrawInsts;
     list = drawStream->smodelList;
@@ -338,7 +338,7 @@ void __cdecl R_DrawStaticModelDrawSurfNonOptimized(GfxStaticModelDrawStream *dra
     }
 #endif
     R_SetupStaticModelPrim(xsurf, &args, &context.state->prim);
-    R_SetStaticModelVertexBuffer(&context.state->prim, xsurf);
+    R_SetStaticModelVertexBuffer(context.state, xsurf);
     smodelCount = drawStream->smodelCount;
     smodelDrawInsts = rgp.world->dpvs.smodelDrawInsts;
     list = drawStream->smodelList;
@@ -365,17 +365,30 @@ void __cdecl R_DrawStaticModelDrawSurfNonOptimized(GfxStaticModelDrawStream *dra
     }
 }
 
-void __cdecl R_SetStaticModelVertexBuffer(GfxCmdBufPrimState *primState, XSurface *xsurf)
+void __cdecl R_SetStaticModelVertexBuffer(GfxCmdBufState *state, XSurface *xsurf)
 {
     IDirect3DVertexBuffer9 *vb; // [esp+18h] [ebp-8h] BYREF
     int vertexOffset; // [esp+1Ch] [ebp-4h] BYREF
 
-    iassert(xsurf);
+    iassert(state && xsurf);
+#ifdef __SWITCH__
+    // The non-optimized static-model path binds raw fastfile vertices. Their
+    // CoD4 PackedTexCoords values are not IEEE half-floats, while the Switch
+    // Vulkan vertex declaration reads R16G16_SFLOAT. Convert a dynamic copy,
+    // matching the optimized static-model cache path, instead of sampling
+    // incorrect UVs (including leaf alpha masks and normal-map coordinates).
+    R_CheckVertexDataOverflow(static_cast<int>(sizeof(GfxPackedVertex) * xsurf->vertCount));
+    vertexOffset = R_SetPackedModelVertexData(state, xsurf->verts0, xsurf->vertCount);
+    vb = gfxBuf.dynamicVertexBuffer->buffer;
+    iassert(vb);
+    R_SetStreamSource(&state->prim, vb, vertexOffset, sizeof(GfxPackedVertex));
+#else
     //if (xsurf->deformed || !IsFastFileLoad())
     //    MyAssertHandler(".\\r_draw_staticmodel.cpp", 246, 0, "%s", "XSurfaceHasOptimizedVertices( xsurf )");
     DB_GetVertexBufferAndOffset(xsurf->zoneHandle, (uint8*)xsurf->verts0, (void **)&vb, &vertexOffset);
     iassert(vb);
-    R_SetStreamSource(primState, vb, vertexOffset, 0x20u);
+    R_SetStreamSource(&state->prim, vb, vertexOffset, sizeof(GfxPackedVertex));
+#endif
 }
 
 void __cdecl R_DrawStaticModelDrawSurfPlacement(
