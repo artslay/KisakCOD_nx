@@ -166,6 +166,9 @@ gentity_s *__cdecl SelectSpawnPoint(const float *avoidPoint, float *origin, floa
 gentity_s *__cdecl SelectInitialSpawnPoint(float *origin, float *angles);
 void __cdecl SetClientOrigin(gentity_s *ent, float *origin);
 void __cdecl InitClientDeltaAngles(gclient_s *client);
+#ifdef __SWITCH__
+extern int g_switchPlayerAngleTraceFrames;
+#endif
 void __cdecl SetClientViewAngle(gentity_s *ent, const float *angle);
 void __cdecl G_GetPlayerViewOrigin(const playerState_s *ps, float *origin);
 void __cdecl G_GetPlayerViewDirection(const gentity_s *ent, float *forward, float *right, float *up);
