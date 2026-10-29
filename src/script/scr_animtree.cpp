@@ -81,11 +81,21 @@ static const char *Scr_DecodeAnimCodePos(uint32_t encoded)
         return nullptr;
 
     const uintptr_t base = reinterpret_cast<uintptr_t>(scrVarPub.programBuffer);
-    const uintptr_t offset = static_cast<uintptr_t>(encoded - 1);
-    const uintptr_t end = reinterpret_cast<uintptr_t>(scrVarPub.endScriptBuffer);
-    if (!base || (end && (end < base || offset >= end - base)))
+    const uintptr_t offset = static_cast<uintptr_t>(encoded - 1u);
+    const uintptr_t programSize =
+        static_cast<uintptr_t>(scrCompilePub.programLen);
+    if (!base ||
+        programSize > UINTPTR_MAX - base ||
+        offset > programSize ||
+        programSize - offset < sizeof(uint32_t))
     {
-        Com_Error(ERR_DROP, "Animation script reference offset is outside the compiled program buffer");
+        Com_Error(
+            ERR_DROP,
+            "Animation script reference offset is outside compiled script data (encoded=0x%08x offset=%llu programSize=%llu base=%p)",
+            encoded,
+            static_cast<unsigned long long>(offset),
+            static_cast<unsigned long long>(programSize),
+            reinterpret_cast<const void *>(base));
         return nullptr;
     }
 
