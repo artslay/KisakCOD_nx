@@ -9685,13 +9685,20 @@ void __cdecl Menu_PaintAll(UiContext *dc)
             !I_stricmp(foregroundName, "options");
         const bool isMainMenu =
             !I_stricmp(foregroundName, "main");
+        // The shared quit popup is also used from the in-game pause menu.
+        // Its frontend backdrop must never replace the live game/pause layer:
+        // frontend confirmations use main_text, while UIMENU_INGAME keeps its
+        // own background and lets the popup's authored blur apply to that frame.
+        const bool inGameMenu =
+            UI_GetActiveMenu(dc->localClientNum) == UIMENU_INGAME;
         const bool needsMainMenuBackdrop =
-            isMainMenu ||
-            isOptionsMenu ||
-            !I_stricmp(foregroundName, "player_profile") ||
-            !I_stricmp(foregroundName, "levels") ||
-            !I_stricmp(foregroundName, "multi_popmenu") ||
-            !I_stricmp(foregroundName, "quit_popmenu");
+            !inGameMenu &&
+            (isMainMenu ||
+             isOptionsMenu ||
+             !I_stricmp(foregroundName, "player_profile") ||
+             !I_stricmp(foregroundName, "levels") ||
+             !I_stricmp(foregroundName, "multi_popmenu") ||
+             !I_stricmp(foregroundName, "quit_popmenu"));
 
         if (needsMainMenuBackdrop)
         {
