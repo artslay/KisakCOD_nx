@@ -1290,54 +1290,6 @@ cmd_function_s Com_WriteConfig_f_VAR;
 cmd_function_s Com_WriteDefaults_f_VAR;
 
 static const char* comInitAllocName = "$init";
-#ifdef __SWITCH__
-static const dvar_t *com_introPlaybackVerified; // legacy marker; retained for existing configs
-static const dvar_t *com_introPlaybackDrawSubmitted; // legacy diagnostic marker
-static const dvar_t *com_introPlaybackCompleted;
-static std::atomic<bool> com_introPlaybackDrawPending{false};
-static std::atomic<bool> com_introCodIntroFrameSubmitted{false};
-static std::atomic<bool> com_introPlaybackCompletedPending{false};
-
-// Count a frame only for the final movie in the intro sequence. A submitted
-// IW_logo/atvi frame alone must not archive "intro played": the rest of the
-// sequence may still fail to open, decode or draw.
-void COM_NotifyIntroMovieDrawSubmitted(const char *movieName)
-{
-    if (!movieName || std::strcmp(movieName, "cod_intro") != 0)
-        return;
-
-    if (com_introPlaybackDrawPending.load(std::memory_order_acquire))
-        com_introCodIntroFrameSubmitted.store(true, std::memory_order_release);
-}
-
-// Called from the cinematic renderer when Bink reaches the end of cod_intro.
-// Dvar writes happen in Com_Frame; the render/cinematic thread only raises an
-// atomic completion event.
-void COM_NotifyIntroMoviePlaybackFinished(const char *movieName)
-{
-    if (!movieName || std::strcmp(movieName, "cod_intro") != 0)
-        return;
-
-    if (com_introPlaybackDrawPending.load(std::memory_order_acquire) &&
-        com_introCodIntroFrameSubmitted.exchange(false, std::memory_order_acq_rel))
-    {
-        com_introPlaybackCompletedPending.store(true, std::memory_order_release);
-    }
-}
-
-static void COM_ProcessIntroMovieDrawConfirmation()
-{
-    if (!com_introPlaybackCompletedPending.exchange(false, std::memory_order_acq_rel))
-        return;
-
-    com_introPlaybackDrawPending.store(false, std::memory_order_release);
-    Dvar_SetBool((dvar_s *)com_introPlayed, 1);
-    Dvar_SetBool((dvar_s *)com_introPlaybackDrawSubmitted, 1);
-    Dvar_SetBool((dvar_s *)com_introPlaybackCompleted, 1);
-    Switch_LogWrite(
-        "[KisakCOD][INTRO] cod_intro finished after a frame was submitted; intro completion archived\n");
-}
-#endif
 void __cdecl Com_Init_Try_Block_Function(char* commandLine)
 {
     int v1; // eax
@@ -1606,76 +1558,12 @@ void COM_PlayIntroMovies()
     if (!com_dedicated->current.integer)
 #endif
     {
-#ifdef __SWITCH__
-        bool introPlayed = com_introPlayed && com_introPlayed->current.enabled;
-        bool introPlaybackDrawSubmitted =
-            com_introPlaybackDrawSubmitted &&
-            com_introPlaybackDrawSubmitted->current.enabled;
-        bool introPlaybackCompleted =
-            com_introPlaybackCompleted &&
-            com_introPlaybackCompleted->current.enabled;
-
-        // Previous Switch builds persisted com_introPlayed after the first
-        // draw submission, which did not prove the intro sequence had played.
-        // The new completion marker is written only after cod_intro reaches EOF
-        // after at least one of its frames was submitted for drawing.
-        if (!(introPlayed && introPlaybackCompleted))
-        {
-            if (introPlayed || introPlaybackCompleted || introPlaybackDrawSubmitted)
-            {
-                Dvar_SetBool((dvar_s *)com_introPlayed, 0);
-                Dvar_SetBool((dvar_s *)com_introPlaybackDrawSubmitted, 0);
-                Dvar_SetBool((dvar_s *)com_introPlaybackCompleted, 0);
-                introPlayed = false;
-                introPlaybackDrawSubmitted = false;
-                introPlaybackCompleted = false;
-                Switch_LogWrite(
-                    "[KisakCOD][INTRO] clearing old archive marker; prior draw submission did not confirm completion\n");
-            }
-
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][INTRO] com_introPlayed=%u drawSubmitted=%u completed=%u action=queue IW_logo\n",
-                introPlayed ? 1u : 0u,
-                introPlaybackDrawSubmitted ? 1u : 0u,
-                introPlaybackCompleted ? 1u : 0u);
-            Switch_LogWrite(trace);
-
-            com_introCodIntroFrameSubmitted.store(false, std::memory_order_release);
-            com_introPlaybackCompletedPending.store(false, std::memory_order_release);
-            com_introPlaybackDrawPending.store(true, std::memory_order_release);
-
-            // Preserve the original CoD4 startup path: enqueue the first
-            // cinematic and let the normal command buffer run it once the
-            // engine has reached its regular command-processing phase.
-            Cbuf_AddText(0, "cinematic IW_logo\n");
-            Dvar_SetString(
-                (dvar_s *)nextmap,
-                (char *)"cinematic atvi; set nextmap cinematic cod_intro");
-            Switch_LogWrite("[KisakCOD][INTRO] queued IW_logo -> atvi -> cod_intro\n");
-        }
-        else
-        {
-            char trace[224];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][INTRO] com_introPlayed=%u drawSubmitted=%u completed=%u action=skip\n",
-                introPlayed ? 1u : 0u,
-                introPlaybackDrawSubmitted ? 1u : 0u,
-                introPlaybackCompleted ? 1u : 0u);
-            Switch_LogWrite(trace);
-        }
-#else
         if (!com_introPlayed->current.enabled)
         {
             Cbuf_AddText(0, "cinematic IW_logo\n");
             Dvar_SetString((dvar_s *)nextmap, (char *)"cinematic atvi; set nextmap cinematic cod_intro");
             Dvar_SetBool((dvar_s *)com_introPlayed, 1);
         }
-#endif
     }
 }
 const char *s_lockThreadNames[4] = { "none", "minimal", "all" };
@@ -1767,23 +1655,6 @@ void Com_InitDvars()
     com_sv_running = Dvar_RegisterBool("sv_running", 0, DVAR_ROM, "Server is running");
     com_filter_output = Dvar_RegisterBool("com_filter_output", 0, DVAR_NOFLAG, "Use console filters for filtering output.");
     com_introPlayed = Dvar_RegisterBool("com_introPlayed", 0, DVAR_ARCHIVE, "Intro movie has been played");
-#ifdef __SWITCH__
-    com_introPlaybackVerified = Dvar_RegisterBool(
-        "com_introPlaybackVerified",
-        0,
-        DVAR_ARCHIVE,
-        "Intro playback was confirmed by a successfully decoded video frame");
-    com_introPlaybackDrawSubmitted = Dvar_RegisterBool(
-        "com_introPlaybackDrawSubmitted",
-        0,
-        DVAR_ARCHIVE,
-        "Legacy marker: an intro frame was submitted to the renderer");
-    com_introPlaybackCompleted = Dvar_RegisterBool(
-        "com_introPlaybackCompleted",
-        0,
-        DVAR_ARCHIVE,
-        "The complete intro sequence reached the end of cod_intro after a frame was drawn");
-#endif
     com_animCheck = Dvar_RegisterBool("com_animCheck", 0, DVAR_NOFLAG, "Check anim tree");
     com_hiDef = Dvar_RegisterBool("hiDef", 1, DVAR_ROM, "True if the game video is running in high-def.");
     com_wideScreen = Dvar_RegisterBool(
@@ -2092,9 +1963,6 @@ static void Com_AttractMode(int localClientNum)
 
 void __cdecl Com_Frame_Try_Block_Function()
 {
-#ifdef __SWITCH__
-    COM_ProcessIntroMovieDrawConfirmation();
-#endif
     float deltaTime; // [esp+4h] [ebp-78h]
     int lastFrameIndex; // [esp+68h] [ebp-14h]
     int msec; // [esp+6Ch] [ebp-10h]
