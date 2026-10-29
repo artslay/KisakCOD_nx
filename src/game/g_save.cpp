@@ -3134,7 +3134,7 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
         const playerState_s *ps = &player->client->ps;
         Com_Printf(
             CON_CHANNEL_SERVER,
-            "[KisakCOD][PLAYER ANGLES LOAD] demoSave=%d health=%d pm=%d pmFlags=0x%x eFlags=0x%x view=(%.1f,%.1f,%.1f) delta=(%.1f,%.1f,%.1f) cmd=(%d,%d,%d) entityYaw=%.1f tagInfo=%p lockedEnt=%d linkAnglesLocked=%d frozen=%d\\n",
+            "[KisakCOD][PLAYER ANGLES LOAD] demoSave=%d health=%d pm=%d pmFlags=0x%x eFlags=0x%x view=(%.1f,%.1f,%.1f) delta=(%.1f,%.1f,%.1f) cmd=(%d,%d,%d) entityYaw=%.1f tagInfo=%p lockedEnt=%d linkAnglesLocked=%d frozen=%d\n",
             usingDemoSave ? 1 : 0,
             ps->stats[STAT_HEALTH], ps->pm_type, ps->pm_flags, ps->eFlags,
             ps->viewangles[0], ps->viewangles[1], ps->viewangles[2],
