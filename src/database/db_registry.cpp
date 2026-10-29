@@ -1540,7 +1540,16 @@ bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
 #ifdef __SWITCH__
         if (++guard > 0x8000u || assetEntryIndex >= 0x8000u)
         {
+            const uint32_t badIndex = assetEntryIndex;
+            const uint32_t steps = guard;
             InterlockedDecrement(&db_hashCritSect.readCount);
+            Com_Error(
+                ERR_DROP,
+                "Switch DB_IsXAssetDefault: corrupt hash chain (type=%u hash=%u index=%u steps=%u)",
+                static_cast<unsigned>(type),
+                hash,
+                badIndex,
+                steps);
             return false;
         }
 #endif
@@ -2389,10 +2398,15 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
                 g_switchDbStage = "rawfile/registry/chain_guard";
             else if (!traceRawFileRegistry && !traceWeaponRegistry)
                 g_switchDbStage = "asset/registry/chain_guard";
-            if (type == ASSET_TYPE_MATERIAL)
-                Switch_LogWrite("[SWITCH DBLOOKUP] hash chain overflow\n");
 #endif
-            return 0;
+            Com_Error(
+                ERR_DROP,
+                "DB_FindXAssetEntry: corrupt hash chain (type=%u hash=%u index=%u steps=%u)",
+                static_cast<unsigned>(type),
+                hash,
+                static_cast<unsigned>(assetEntryIndex),
+                guard);
+            return nullptr;
         }
         if (assetEntryIndex >= 0x8000)
         {
@@ -2409,7 +2423,13 @@ XAssetEntryPoolEntry *__cdecl DB_FindXAssetEntry(XAssetType type, const char *na
             else if (!traceRawFileRegistry && !traceWeaponRegistry)
                 g_switchDbStage = "asset/registry/bad_entry_index";
 #endif
-            return 0;
+            Com_Error(
+                ERR_DROP,
+                "DB_FindXAssetEntry: hash chain index out of range (type=%u hash=%u index=%u)",
+                static_cast<unsigned>(type),
+                hash,
+                static_cast<unsigned>(assetEntryIndex));
+            return nullptr;
         }
         assetEntry = &g_assetEntryPool[assetEntryIndex];
 #ifdef __SWITCH__
