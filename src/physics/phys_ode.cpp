@@ -928,8 +928,11 @@ void __cdecl Phys_ObjAddGeomBrushModel(
     body = id;
     geomState.type = PHYS_GEOM_BRUSHMODEL;
     geomState.u.brushState.u.brushModel = brushModel;
-    geomState.u.cylinderState.radius = physMass->momentsOfInertia[0];
-    geomState.u.cylinderState.halfHeight = physMass->momentsOfInertia[1];
+    // CylinderState fields are at 32-bit offsets and overlap the native
+    // 64-bit BrushState union header on AArch64. Write brush inertia through
+    // its actual fields rather than the unrelated cylinder view.
+    geomState.u.brushState.momentsOfInertia[0] = physMass->momentsOfInertia[0];
+    geomState.u.brushState.momentsOfInertia[1] = physMass->momentsOfInertia[1];
     geomState.u.brushState.momentsOfInertia[2] = physMass->momentsOfInertia[2];
     geomState.u.brushState.productsOfInertia[0] = physMass->productsOfInertia[0];
     geomState.u.brushState.productsOfInertia[1] = physMass->productsOfInertia[1];
@@ -951,8 +954,10 @@ void __cdecl Phys_ObjAddGeomBrush(PhysWorld worldIndex, dxBody *id, const cbrush
     body = id;
     geomState.type = PHYS_GEOM_BRUSH;
     geomState.u.brushState.u.brush = brush;
-    geomState.u.cylinderState.radius = physMass->momentsOfInertia[0];
-    geomState.u.cylinderState.halfHeight = physMass->momentsOfInertia[1];
+    // Do not write through CylinderState here: on AArch64 its radius field
+    // occupies the high 32 bits of the 64-bit BrushState::u.brush pointer.
+    geomState.u.brushState.momentsOfInertia[0] = physMass->momentsOfInertia[0];
+    geomState.u.brushState.momentsOfInertia[1] = physMass->momentsOfInertia[1];
     geomState.u.brushState.momentsOfInertia[2] = physMass->momentsOfInertia[2];
     geomState.u.brushState.productsOfInertia[0] = physMass->productsOfInertia[0];
     geomState.u.brushState.productsOfInertia[1] = physMass->productsOfInertia[1];
