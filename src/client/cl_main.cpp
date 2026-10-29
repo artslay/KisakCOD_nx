@@ -32,6 +32,7 @@
 
 // Set by CL_PlayCinematic_f / CL_PlayUnskippableCinematic_f in cl_cin.cpp.
 extern bool cin_skippable;
+extern void CL_EnforceFadeCinematicSkipRule(void);
 
 #ifdef __SWITCH__
 #include <atomic>
@@ -1559,6 +1560,7 @@ static void CL_LogSwitchCinematicSkipTrace(
 void __cdecl CL_StopLogoOrCinematic(int localClientNum)
 {
     connstate_t connectionState; // r30
+    CL_EnforceFadeCinematicSkipRule();
 
     if (localClientNum)
         MyAssertHandler(
