@@ -21,6 +21,7 @@
 extern void Switch_LogWrite(const char *msg);
 extern const dvar_t *input_invertPitch;
 extern const dvar_t *input_viewSensitivity;
+extern const dvar_t *cl_sensitivity;
 #endif
 
 const dvar_t *cl_stanceHoldTime;
@@ -1086,8 +1087,18 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     const float viewSensitivity = input_viewSensitivity
         ? std::clamp(input_viewSensitivity->current.value, 0.0001f, 5.0f)
         : 1.0f;
-    const float effectivePitchAxis = pitchAxis * viewSensitivity;
-    const float effectiveYawAxis = yawAxis * viewSensitivity;
+    // Switch currently has no mouse-event backend, so keep the familiar
+    // "sensitivity" menu slider useful for the active gamepad look input too.
+    // Normalize it against its registered default so 5.0 retains 1:1 behavior.
+    const float mouseSensitivity = cl_sensitivity && cl_sensitivity->reset.value > 0.0f
+        ? std::clamp(
+            cl_sensitivity->current.value / cl_sensitivity->reset.value,
+            0.01f, 20.0f)
+        : 1.0f;
+    const float effectiveSensitivity =
+        std::clamp(viewSensitivity * mouseSensitivity, 0.0001f, 20.0f);
+    const float effectivePitchAxis = pitchAxis * effectiveSensitivity;
+    const float effectiveYawAxis = yawAxis * effectiveSensitivity;
 
     if (!padActive &&
         std::fabs(pitchAxis) < 0.003f &&
