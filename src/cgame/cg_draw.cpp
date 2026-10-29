@@ -1194,9 +1194,11 @@ void __cdecl CG_Draw2D(int localClientNum)
         !R_Cinematic_IsNextReady())
     {
         Dvar_SetFromStringByName("hud_drawHUD", (char *)"1");
-        // Keep the startup compass visible; player input will start the normal fade timer.
-        // CG_CheckHudCompassDisplay treats any nonzero compassFadeTime as an active timer.
-        cgArray[0].compassFadeTime = 0;
+        // CG_FadeHudMenu treats a zero displayStartTime as "not displayed".
+        // cgArray time can still be zero on the first live gameplay frame, so
+        // use a positive timestamp to start the normal compass fade interval.
+        const int compassStartTime = cgArray[0].time;
+        cgArray[0].compassFadeTime = compassStartTime > 0 ? compassStartTime : 1;
         Menus_ShowByName(&cgDC, "Compass");
     }
 
