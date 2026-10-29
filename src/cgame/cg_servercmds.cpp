@@ -442,14 +442,7 @@ void __cdecl CG_MenuShowNotify(int localClientNum, int menuToShow)
         }
         break;
     case 2:
-#ifdef __SWITCH__
-        // Keep the deferred startup sentinel intact while loading/camera scripts run.
-        // Compass notifications can be emitted before CG_Draw2D reaches live gameplay;
-        // consuming the sentinel here starts the 8-second timer too early.
-        if (cgArray[0].compassFadeTime < 0)
-            break;
-#endif
-        if (cgArray[0].compassFadeTime < cgArray[0].time)
+if (cgArray[0].compassFadeTime < cgArray[0].time)
         {
             cgArray[0].compassFadeTime = cgArray[0].time;
             Menus_ShowByName(&cgDC, "Compass");
@@ -507,13 +500,7 @@ void __cdecl CG_HudMenuShowAllTimed(int localClientNum)
         Menus_ShowByName(&cgDC, "weaponinfo_lowdef");
         time = cgArray[0].time;
     }
-#ifdef __SWITCH__
-    // The negative value is the deferred-startup sentinel; do not consume it
-    // while restoring all timed HUD menus in the pause path.
-    if (cgArray[0].compassFadeTime >= 0 && cgArray[0].compassFadeTime < time)
-#else
-    if (cgArray[0].compassFadeTime < time)
-#endif
+if (cgArray[0].compassFadeTime < time)
     {
         cgArray[0].compassFadeTime = time;
         Menus_ShowByName(&cgDC, "Compass");
@@ -2251,10 +2238,6 @@ void __cdecl CG_MapInit(int restart)
     cg_waitingScriptMenu.name[0] = 0;
     CG_Respawn(0);
 
-#ifdef __SWITCH__
-    // Defer the initial Compass show until the first live gameplay frame.
-    // Starting its fade timer during map loading can hide it before play begins.
-    cgArray[0].compassFadeTime = -1;
-#endif
+
 }
 
