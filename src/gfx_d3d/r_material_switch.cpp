@@ -95,14 +95,11 @@ Material *__cdecl R_GetBspMaterial(uint32_t materialIndex)
 {
     if (materialIndex >= 0x4C8)
     {
-        MyAssertHandler(
-            "r_bsp_load_obj.cpp",
-            226,
-            0,
-            "materialIndex doesn't index MAX_MAP_MATERIALS\n\t%i not in [0, %i)",
-            materialIndex,
-            1224);
-        return rgp.defaultMaterial;
+        Com_Error(
+            ERR_DROP,
+            "R_GetBspMaterial: material index %u is outside MAX_MAP_MATERIALS [0, 1224)",
+            materialIndex);
+        return nullptr;
     }
 
     const dmaterial_t *diskMaterial = &rgl.load.diskMaterials[materialIndex];
