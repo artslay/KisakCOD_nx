@@ -9879,16 +9879,16 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                         continue;
                     }
 
+                    const bool isProfileBackdrop =
+                        !I_stricmp(foregroundName, "player_profile");
                     const bool isBlurredOverlayBackdrop = !isMainMenu;
                     const char *materialName = backgroundMaterial->info.name;
                     Material *originalBackdropMaterial = backgroundMaterial;
 
                     if (isBlurredOverlayBackdrop)
                     {
-                        // This is copied from the stock ui/player_profile.menu:
-                        // its backdrop is exactly these three blurred materials.
-                        // The remaining main_text layers (thin fog, second front,
-                        // and logo) are not part of the original profile screen.
+                        // Frontend overlays use blurred variants of these three
+                        // animated layers; unrelated main_text layers are omitted.
                         const char *profileBlurMaterialName = nullptr;
                         if (!I_stricmp(materialName, "animbg_back"))
                             profileBlurMaterialName = "animbg_blur_back";
@@ -9972,9 +9972,11 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                     // the blurred fog layer animates at the same rate as stock.
                     Item_Paint(dc, backgroundItem);
 
+                    if (isBlurredOverlayBackdrop)
+                        backgroundItem->window.background = originalBackdropMaterial;
+
                     if (isProfileBackdrop)
                     {
-                        backgroundItem->window.background = originalBackdropMaterial;
                         std::memcpy(
                             backgroundItem->window.foreColor,
                             originalForeColor,
