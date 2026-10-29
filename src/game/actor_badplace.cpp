@@ -93,7 +93,7 @@ badplace_t *__cdecl Path_AllocBadPlace(unsigned int name, int duration)
         if (duration < 250)
         {
             Com_PrintWarning(CON_CHANNEL_AI,
-                "WARNING: A badplace was created with duration [%.2f second], which is less than the ping time [%.2f second]\\n",
+                "WARNING: A badplace was created with duration [%.2f second], which is less than the ping time [%.2f second]\n",
                 duration * 0.001f, 0.25);
         }
     }
@@ -171,7 +171,7 @@ void __cdecl Path_MakeBadPlace(unsigned int name, int duration, int teamflags, i
 void __cdecl Path_MakeArcBadPlace(unsigned int name, int duration, int teamflags, badplace_arc_t *arc)
 {
     if (!arc)
-        MyAssertHandler("c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp", 199, 0, "%s", "arc");
+        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 199, 0, "%s", "arc");
 
     badplace_parms_t parms = {};
     parms.arc = *arc;
@@ -181,7 +181,7 @@ void __cdecl Path_MakeArcBadPlace(unsigned int name, int duration, int teamflags
 void __cdecl Path_MakeBrushBadPlace(unsigned int name, int duration, int teamflags, gentity_s *volume)
 {
     if (!volume)
-        MyAssertHandler("c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp", 215, 0, "%s", "volume");
+        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 215, 0, "%s", "volume");
 
     badplace_parms_t parms = {};
     parms.brush.volume = volume;
@@ -193,7 +193,7 @@ void __cdecl Path_MakeBrushBadPlace(unsigned int name, int duration, int teamfla
 void __cdecl Path_RemoveBadPlaceEntity(gentity_s *entity)
 {
     if (!entity)
-        MyAssertHandler("c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp", 231, 0, "%s", "entity");
+        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 231, 0, "%s", "entity");
 
     for (int i = 0; i < 32; ++i)
     {
@@ -341,7 +341,7 @@ int __cdecl Actor_IsInAnyBadPlace(actor_s *self)
         else if (!alwaysfails)
         {
             MyAssertHandler(
-                "c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp",
+                "c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp",
                 439, 0, va("unhandled bad place type %i", place->type));
         }
 
@@ -389,7 +389,7 @@ float __cdecl Actor_BadPlace_GetMaximumFleeRadius()
         {
             if (!alwaysfails)
                 MyAssertHandler(
-                    "c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp",
+                    "c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp",
                     500, 0, va("unhandled bad place type %i", place->type));
             continue;
         }
@@ -427,7 +427,7 @@ int __cdecl Actor_BadPlace_HasPotentialNodeDuplicates(
 int __cdecl Actor_BadPlace_IsNodeInAnyBadPlace(pathnode_t *node)
 {
     if (!node)
-        MyAssertHandler("c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp", 542, 0, "%s", "node");
+        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 542, 0, "%s", "node");
 
     for (int i = 0; i < 32; ++i)
     {
@@ -456,7 +456,7 @@ int __cdecl Actor_BadPlace_IsNodeInAnyBadPlace(pathnode_t *node)
         else if (!alwaysfails)
         {
             MyAssertHandler(
-                "c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp",
+                "c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp",
                 563, 0, va("unhandled bad place type %i", place->type));
         }
 
@@ -547,7 +547,7 @@ void __cdecl Path_RunBadPlaces()
                 else if (!alwaysfails)
                 {
                     MyAssertHandler(
-                        "c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp",
+                        "c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp",
                         374, 0, va("unhandled bad place type %i", place->type));
                 }
 
