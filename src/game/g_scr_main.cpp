@@ -4056,7 +4056,7 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
                                 for (const char *p = sourceBuffer->sourceBuf;
                                      p <= sourceEnd && lineNumber <= lastLine; ++p)
                                 {
-                                    if (p == sourceEnd || *p == '\\0')
+                                    if (p == sourceEnd || *p == '\n')
                                     {
                                         if (lineNumber >= firstLine && lineNumber <= lastLine)
                                         {
@@ -4067,11 +4067,11 @@ void __cdecl ScrCmd_DoDamage(scr_entref_t entref)
                                             std::memcpy(contextLine, lineStart, lineLength);
                                             for (char *ch = contextLine; *ch; ++ch)
                                             {
-                                                if (*ch == '\\r' || *ch == '\\n' || *ch == '\\t')
+                                                if (*ch == '\r' || *ch == '\n' || *ch == '\t')
                                                     *ch = ' ';
                                             }
                                             Com_Printf(CON_CHANNEL_SERVER,
-                                                "[KisakCOD][AI SCRIPT CONTEXT] line=%u text=[%s]\\n",
+                                                "[KisakCOD][AI SCRIPT CONTEXT] line=%u text=[%s]\n",
                                                 lineNumber + 1u, contextLine);
                                         }
                                         ++lineNumber;
