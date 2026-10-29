@@ -100,7 +100,21 @@ void __cdecl R_InitStaticModelCache()
 
 static_model_leaf_t *SMC_GetLeaf(uint32_t cacheIndex)
 {
+#ifdef __SWITCH__
+    const size_t maxCacheIndex =
+        ARRAY_COUNT(s_cache.trees) * ARRAY_COUNT(s_cache.leafs[0]);
+    if (!cacheIndex || cacheIndex > maxCacheIndex)
+    {
+        Com_Error(
+            ERR_DROP,
+            "SMC_GetLeaf: cache index %u outside valid range [1, %llu]",
+            cacheIndex,
+            static_cast<unsigned long long>(maxCacheIndex));
+        return nullptr;
+    }
+#else
     iassert(cacheIndex);
+#endif
     static_model_leaf_t *retval = &s_cache.leafs[0][cacheIndex - 1];
     iassert((char *)retval == ((char *)&s_cache.leafs + (sizeof(static_model_leaf_t) * (cacheIndex - 1))));
     return retval;
@@ -625,9 +639,42 @@ GfxCachedSModelSurf *__cdecl R_GetCachedSModelSurf(uint32_t cacheIndex)
 {
     static_model_leaf_t *leaf;
 
+#ifdef __SWITCH__
+    if (!rgp.world || !rgp.world->dpvs.smodelDrawInsts)
+    {
+        Com_Error(
+            ERR_DROP,
+            "R_GetCachedSModelSurf: world/static-model draw instances are unavailable (cacheIndex=%u world=%p draws=%p)",
+            cacheIndex,
+            static_cast<void *>(rgp.world),
+            rgp.world ? static_cast<void *>(rgp.world->dpvs.smodelDrawInsts) : nullptr);
+        return nullptr;
+    }
+#endif
     iassert(cacheIndex);
     leaf = SMC_GetLeaf(cacheIndex);
+#ifdef __SWITCH__
+    if (!leaf)
+    {
+        Com_Error(ERR_DROP, "R_GetCachedSModelSurf: cache leaf %u could not be resolved", cacheIndex);
+        return nullptr;
+    }
+    if (leaf->cachedSurf.smodelIndex >= rgp.world->dpvs.smodelCount ||
+        leaf->cachedSurf.lodIndex >= MAX_LODS)
+    {
+        Com_Error(
+            ERR_DROP,
+            "R_GetCachedSModelSurf: corrupt cache metadata (cacheIndex=%u smodel=%u/%u lod=%u maxLods=%u)",
+            cacheIndex,
+            static_cast<unsigned>(leaf->cachedSurf.smodelIndex),
+            rgp.world->dpvs.smodelCount,
+            static_cast<unsigned>(leaf->cachedSurf.lodIndex),
+            static_cast<unsigned>(MAX_LODS));
+        return nullptr;
+    }
+#else
     iassert(leaf->cachedSurf.smodelIndex < rgp.world->dpvs.smodelCount);
+#endif
     return &leaf->cachedSurf;
 }
 
