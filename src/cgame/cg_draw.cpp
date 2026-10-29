@@ -500,7 +500,9 @@ void __cdecl CG_CheckHudCompassDisplay(int localClientNum)
                 localClientNum);
             v1 = hud_fade_compass;
         }
-        if (cgArray[0].compassFadeTime)
+        // On Switch, a negative value marks the deferred startup compass.
+        // It is not an active fade timer and must survive loading cinematics.
+        if (cgArray[0].compassFadeTime > 0)
         {
             int elapsed = cgArray[0].time - cgArray[0].compassFadeTime;
             if ((float)elapsed > v1->current.value * 1000.0f)
