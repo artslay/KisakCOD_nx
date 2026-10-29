@@ -1993,7 +1993,7 @@ static bool Switch_NormalizeFileListPath(
          ++p)
     {
         char c = static_cast<char>(*p);
-        if (c == '\\\\')
+        if (c == '\\')
             c = '/';
 
         if (c == '/')
@@ -2319,7 +2319,6 @@ const char **__cdecl FS_ListFilesInLocation(
 
     const std::vector<std::string> locationDirectories =
         Switch_GetFileLocationDirectories(lookInFlags);
-    const std::vector<std::string> roots = Switch_GetFileLocationRoots();
 
     std::vector<std::string> names;
     std::unordered_map<std::string, bool> seenNames;
