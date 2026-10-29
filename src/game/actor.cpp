@@ -4190,6 +4190,11 @@ bool __cdecl Actor_FindPath(
 
     iassert(self);
 #ifdef __SWITCH__
+    if (!self)
+    {
+        Com_Error(ERR_DROP, "Actor_FindPath: actor pointer is null");
+        return false;
+    }
     const uintptr_t goalAddress = reinterpret_cast<uintptr_t>(vGoalPos);
     if (!vGoalPos || (goalAddress & (alignof(float) - 1u)) != 0u)
     {
@@ -4214,7 +4219,12 @@ bool __cdecl Actor_FindPath(
                 sizeof(pathnode_t));
             Switch_LogWrite(trace);
         }
-        Actor_ClearPath(self);
+        Com_Error(
+            ERR_DROP,
+            "Actor_FindPath: invalid goal position %p for actor %p (entity=%d)",
+            static_cast<const void *>(vGoalPos),
+            static_cast<void *>(self),
+            self->ent ? self->ent->s.number : -1);
         return false;
     }
 #endif
