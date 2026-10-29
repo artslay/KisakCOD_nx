@@ -9879,12 +9879,11 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                         continue;
                     }
 
-                    const bool isProfileBackdrop =
-                        !I_stricmp(foregroundName, "player_profile");
+                    const bool isBlurredOverlayBackdrop = !isMainMenu;
                     const char *materialName = backgroundMaterial->info.name;
                     Material *originalBackdropMaterial = backgroundMaterial;
 
-                    if (isProfileBackdrop)
+                    if (isBlurredOverlayBackdrop)
                     {
                         // This is copied from the stock ui/player_profile.menu:
                         // its backdrop is exactly these three blurred materials.
