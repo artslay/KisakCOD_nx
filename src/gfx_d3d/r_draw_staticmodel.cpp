@@ -328,6 +328,15 @@ void __cdecl R_DrawStaticModelDrawSurfNonOptimized(GfxStaticModelDrawStream *dra
     GfxDrawPrimArgs args; // [esp+18h] [ebp-Ch] BYREF
 
     xsurf = drawStream->localSurf;
+#ifdef __SWITCH__
+    if (!rgp.world || !rgp.world->dpvs.smodelDrawInsts)
+    {
+        Com_Error(
+            ERR_DROP,
+            "R_DrawStaticModelDrawSurfNonOptimized: world/static-model draw instances are unavailable");
+        return;
+    }
+#endif
     R_SetupStaticModelPrim(xsurf, &args, &context.state->prim);
     R_SetStaticModelVertexBuffer(&context.state->prim, xsurf);
     smodelCount = drawStream->smodelCount;
@@ -335,6 +344,18 @@ void __cdecl R_DrawStaticModelDrawSurfNonOptimized(GfxStaticModelDrawStream *dra
     list = drawStream->smodelList;
     for (index = 0; index < smodelCount; ++index)
     {
+#ifdef __SWITCH__
+        if (list[index] >= rgp.world->dpvs.smodelCount)
+        {
+            Com_Error(
+                ERR_DROP,
+                "R_DrawStaticModelDrawSurfNonOptimized: model index %u at list slot %u exceeds smodelCount %u",
+                static_cast<unsigned>(list[index]),
+                index,
+                rgp.world->dpvs.smodelCount);
+            return;
+        }
+#endif
         R_DrawStaticModelDrawSurfPlacement(&smodelDrawInsts[list[index]], context.source);
         R_SetupPassPerPrimArgs(context);
 #ifdef __SWITCH__
@@ -801,6 +822,15 @@ void __cdecl R_DrawStaticModelsSkinnedDrawSurf(GfxStaticModelDrawStream *drawStr
     XSurface *xsurf; // [esp+2Ch] [ebp-10h]
     GfxDrawPrimArgs args; // [esp+30h] [ebp-Ch] BYREF
 
+#ifdef __SWITCH__
+    if (!rgp.world || !rgp.world->dpvs.smodelDrawInsts)
+    {
+        Com_Error(
+            ERR_DROP,
+            "R_DrawStaticModelsSkinnedDrawSurf: world/static-model draw instances are unavailable");
+        return;
+    }
+#endif
     xsurf = drawStream->localSurf;
     R_SetStaticModelSkinnedPrimArgs(&context.state->prim, xsurf, &args);
     R_CheckVertexDataOverflow(32 * args.vertexCount);
@@ -812,7 +842,21 @@ void __cdecl R_DrawStaticModelsSkinnedDrawSurf(GfxStaticModelDrawStream *drawStr
     smodelDrawInsts = rgp.world->dpvs.smodelDrawInsts;
     list = drawStream->smodelList;
     for (index = 0; index < smodelCount; ++index)
+    {
+#ifdef __SWITCH__
+        if (list[index] >= rgp.world->dpvs.smodelCount)
+        {
+            Com_Error(
+                ERR_DROP,
+                "R_DrawStaticModelsSkinnedDrawSurf: model index %u at list slot %u exceeds smodelCount %u",
+                static_cast<unsigned>(list[index]),
+                index,
+                rgp.world->dpvs.smodelCount);
+            return;
+        }
+#endif
         R_DrawStaticModelSkinnedDrawSurf(&smodelDrawInsts[list[index]], &args, context);
+    }
 }
 
 void __cdecl R_DrawStaticModelSkinnedSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context)
