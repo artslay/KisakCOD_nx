@@ -6,6 +6,7 @@
 
 #include "scr_main.h"
 #include "scr_parser.h"
+#include "scr_compiler.h"
 #include "scr_variable.h"
 #include "scr_vm.h"
 #ifdef __SWITCH__
