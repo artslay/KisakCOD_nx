@@ -37,7 +37,6 @@ static HidAnalogStickState g_rightStick = {};
 static bool g_initialized = false;
 static bool g_connected = false;
 static bool g_cinematicSkipKeyDown = false;
-static bool g_startGameAfterCinematicQueue = false;
 
 static float NormalizeStick(int32_t value)
 {
@@ -203,7 +202,6 @@ void Switch_GamepadInit()
     g_connected = false;
     g_consoleShortcutConsumed = false;
     g_cinematicSkipKeyDown = false;
-    g_startGameAfterCinematicQueue = false;
     g_initialized = true;
 }
 
@@ -250,30 +248,9 @@ void Switch_GamepadFrame()
          R_Cinematic_IsPending() ||
          R_Cinematic_IsNextReady());
 
-    // If a pregame sequence contained several scripted movies, return control
-    // only after the final queued movie has completed or been skipped.
-    if (g_startGameAfterCinematicQueue &&
-        connectionState == CA_ACTIVE &&
-        !R_Cinematic_IsStarted() &&
-        !R_Cinematic_IsPending() &&
-        !R_Cinematic_IsNextReady() &&
-        !R_Cinematic_IsFinished())
-    {
-        g_startGameAfterCinematicQueue = false;
-        const uiMenuCommand_t activeMenu = UI_GetActiveMenu(0);
-        if (activeMenu == UIMENU_PREGAME || activeMenu == UIMENU_MAIN)
-        {
-            UI_PlayerStart();
-            Switch_LogWrite("[KisakCOD][CIN SKIP] queued movie chain finished; returned to gameplay\n");
-            return;
-        }
-    }
-
     if (activeGameCinematic && Pressed(cinematicSkipButtons))
     {
         const uiMenuCommand_t activeMenu = UI_GetActiveMenu(0);
-        const bool hadCurrentMovie = R_Cinematic_IsStarted() || R_Cinematic_IsPending();
-        const bool hadQueuedNextPlayback = R_Cinematic_IsNextReady();
         if (!SCR_SkipActiveGameCinematic(0))
         {
             g_cinematicSkipKeyDown = false;
@@ -284,13 +261,11 @@ void Switch_GamepadFrame()
 
         if (activeMenu == UIMENU_PREGAME || activeMenu == UIMENU_MAIN)
         {
-            // StopPlayback is asynchronous. Defer the frontend-to-game handoff
-            // until the renderer has drained the current/queued cinematic chain.
-            g_startGameAfterCinematicQueue = true;
-            if (hadQueuedNextPlayback && hadCurrentMovie)
-                Switch_LogWrite("[KisakCOD][CIN SKIP] skipped current movie; preserving queued chain\n");
-            else
-                Switch_LogWrite("[KisakCOD][CIN SKIP] movie skip accepted; waiting for renderer stop\n");
+            // Match the stock handoff: UI_PlayerStart clears skip-rendering and
+            // starts the queued next film, so a _fade movie runs over gameplay
+            // instead of holding gameplay until the fade itself reaches EOF.
+            UI_PlayerStart();
+            Switch_LogWrite("[KisakCOD][CIN SKIP] frontend handed off to gameplay; queued fade may continue over game\n");
         }
         else
         {
