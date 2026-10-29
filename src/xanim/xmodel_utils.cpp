@@ -201,6 +201,20 @@ XModelLodRampType __cdecl XModelGetLodRampType(const XModel *model)
 
 int __cdecl XModelGetNumLods(const XModel *model)
 {
+#ifdef KISAK_SWITCH
+    if (!model || model->numLods < 0 || model->numLods > MAX_LODS ||
+        (model->numLods > 0 && !model->lodInfo))
+    {
+        Com_Error(
+            ERR_DROP,
+            "XModelGetNumLods: invalid model/LOD table (model=%p numLods=%d maxLods=%u lodInfo=%p)",
+            static_cast<const void *>(model),
+            model ? static_cast<int>(model->numLods) : -1,
+            static_cast<unsigned>(MAX_LODS),
+            model ? static_cast<const void *>(model->lodInfo) : nullptr);
+        return 0;
+    }
+#endif
     return model->numLods;
 }
 
@@ -209,7 +223,19 @@ double __cdecl XModelGetLodOutDist(const XModel *model)
     // The old expression walked a 32-bit XModel layout from parentList. On
     // AArch64 the pointer fields are 8 bytes, so that byte offset no longer
     // reaches the last XModelLodInfo::dist. Address the actual runtime array.
-    return model->lodInfo[XModelGetNumLods(model) - 1].dist;
+    const int lodCount = XModelGetNumLods(model);
+#ifdef KISAK_SWITCH
+    if (lodCount <= 0)
+    {
+        Com_Error(
+            ERR_DROP,
+            "XModelGetLodOutDist: model has no usable LOD entries (model=%p numLods=%d)",
+            static_cast<const void *>(model),
+            lodCount);
+        return 0.0;
+    }
+#endif
+    return model->lodInfo[lodCount - 1].dist;
 }
 
 int __cdecl XModelNumBones(const XModel *model)
@@ -297,7 +323,19 @@ int __cdecl XModelGetLodForDist(const XModel *model, float dist)
 
 void __cdecl XModelSetTestLods(uint32_t lodLevel, float dist)
 {
+#ifdef KISAK_SWITCH
+    if (lodLevel >= MAX_LODS)
+    {
+        Com_Error(
+            ERR_DROP,
+            "XModelSetTestLods: LOD override index %u exceeds MAX_LODS %u",
+            lodLevel,
+            static_cast<unsigned>(MAX_LODS));
+        return;
+    }
+#else
     iassert((unsigned)lodLevel < MAX_LODS);
+#endif
 
     g_testLods[lodLevel].dist = dist;
     g_testLods[lodLevel].enabled = dist >= 0.0;
@@ -305,10 +343,27 @@ void __cdecl XModelSetTestLods(uint32_t lodLevel, float dist)
 
 double __cdecl XModelGetLodDist(const XModel *model, uint32_t lod)
 {
+#ifdef KISAK_SWITCH
+    const int lodCount = XModelGetNumLods(model);
+    if (lod >= MAX_LODS || lod >= static_cast<uint32_t>(lodCount))
+    {
+        Com_Error(
+            ERR_DROP,
+            "XModelGetLodDist: LOD index %u outside model LOD range (numLods=%d maxLods=%u model=%p)",
+            lod,
+            lodCount,
+            static_cast<unsigned>(MAX_LODS),
+            static_cast<const void *>(model));
+        return 0.0;
+    }
+    const XModelLodInfo *lodInfo = XModel_CheckedLodInfo(
+        model, static_cast<int>(lod), "XModelGetLodDist");
+    return lodInfo ? lodInfo->dist : 0.0;
+#else
     iassert(model);
     bcassert(lod, model->numLods);
-
     return model->lodInfo[lod].dist;
+#endif
 }
 
 int __cdecl XModelGetContents(const XModel *model)
@@ -320,9 +375,41 @@ int __cdecl XModelGetContents(const XModel *model)
 
 int __cdecl XModelGetStaticModelCacheVertCount(XModel *model, uint32_t lod)
 {
+#ifdef KISAK_SWITCH
+    const int lodCount = XModelGetNumLods(model);
+    if (lod >= MAX_LODS || lod >= static_cast<uint32_t>(lodCount))
+    {
+        Com_Error(
+            ERR_DROP,
+            "XModelGetStaticModelCacheVertCount: LOD index %u outside model LOD range (numLods=%d maxLods=%u model=%p)",
+            lod,
+            lodCount,
+            static_cast<unsigned>(MAX_LODS),
+            static_cast<void *>(model));
+        return 0;
+    }
+    const XModelLodInfo *lodInfo = XModel_CheckedLodInfo(
+        model, static_cast<int>(lod), "XModelGetStaticModelCacheVertCount");
+    if (!lodInfo)
+        return 0;
+    if (!lodInfo->smcIndexPlusOne ||
+        lodInfo->smcAllocBits < 4 ||
+        lodInfo->smcAllocBits > 9)
+    {
+        Com_Error(
+            ERR_DROP,
+            "XModelGetStaticModelCacheVertCount: invalid cache metadata (model=%s lod=%u cacheIndexPlusOne=%u allocBits=%u)",
+            model->name ? model->name : "<unnamed>",
+            lod,
+            static_cast<unsigned>(lodInfo->smcIndexPlusOne),
+            static_cast<unsigned>(lodInfo->smcAllocBits));
+        return 0;
+    }
+    return 1 << lodInfo->smcAllocBits;
+#else
     iassert(model);
     bcassert(lod, MAX_LODS);
     iassert(model->lodInfo[lod].smcIndexPlusOne != 0);
-
     return 1 << model->lodInfo[lod].smcAllocBits;
+#endif
 }
