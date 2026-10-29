@@ -115,15 +115,14 @@ bool __cdecl R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT 
 int __cdecl R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat)
 {
 #ifdef __SWITCH__
-    // Prefer packed depth/stencil, but fall back only after verifying that the
-    // active Vulkan device supports attachment, sampling and copy operations.
+    // The shared renderer can enable stencil during normal rendering. A
+    // depth-only fallback would make those state combinations impossible to
+    // represent in Vulkan, so only choose formats with a stencil aspect.
+    // Verify that each candidate supports attachment, sampling and copy use.
     const _D3DFORMAT candidates[] = {
         D3DFMT_D24S8,
         D3DFMT_D24FS8,
-        D3DFMT_D15S1,
-        D3DFMT_D32,
-        D3DFMT_D16,
-        D3DFMT_D24X8
+        D3DFMT_D15S1
     };
     for (const _D3DFORMAT candidate : candidates)
     {
@@ -141,7 +140,7 @@ int __cdecl R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat)
     }
 
     Switch_LogWrite(
-        "[KisakCOD][VK FORMAT] no depth target supports attachment, sampling and transfer usage\n");
+        "[KisakCOD][VK FORMAT] no stencil-capable depth target supports attachment, sampling and transfer usage\n");
     return D3DFMT_UNKNOWN;
 #else
     if (R_IsDepthStencilFormatOk(renderTargetFormat, D3DFMT_D24FS8))
