@@ -68,6 +68,11 @@ static bool CL_IsCurrentCinematicFadeTransition()
     return CL_CinematicHasFadeSuffix(CL_GetEffectiveCinematicName());
 }
 
+bool SCR_IsCurrentCinematicFadeTransition()
+{
+    return CL_IsCurrentCinematicFadeTransition();
+}
+
 // Recompute the skip policy for the effective movie instead of leaving a
 // fade movie's false flag attached to every later item in the cinematic queue.
 void CL_EnforceFadeCinematicSkipRule(void)
@@ -201,8 +206,23 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
     if (R_Cinematic_IsNextReady() &&
         (!SCR_IsMapLoadingCinematicActive() || R_Cinematic_IsFinished()))
     {
-        if (SCR_IsMapLoadingCinematicActive())
+        const bool handingOffToFadeOverlay =
+            SCR_IsMapLoadingCinematicActive() &&
+            R_Cinematic_IsFinished() &&
+            CL_CinematicHasFadeSuffix(cinematicGlob.nextCinematicName);
+        if (handingOffToFadeOverlay)
+        {
+            // _fade is the transition into the mission, not another loading
+            // movie. Release the loading latch now so UI_PlayerStart can make
+            // gameplay visible beneath the fade while the clip keeps playing.
+            switchMapLoadingCinematicFinished = true;
+            switchMapLoadingCinematicActive = false;
+            Switch_LogWrite("[KisakCOD][CIN LOAD] handing off to queued fade overlay\n");
+        }
+        else if (SCR_IsMapLoadingCinematicActive())
+        {
             Switch_LogWrite("[KisakCOD][CIN LOAD] starting queued movie after loading movie EOF\n");
+        }
         R_Cinematic_StartNextPlayback();
         CL_EnforceFadeCinematicSkipRule();
     }
