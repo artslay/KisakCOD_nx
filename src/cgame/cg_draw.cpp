@@ -1193,7 +1193,7 @@ void __cdecl CG_Draw2D(int localClientNum)
     static int lastDraw2D = -1;
     static int lastCgDrawHUD = -1;
     static int lastScriptHUD = -1;
-    static int lastCompassFadeTime = 0x7fffffff;
+    static int lastCompassFadeMode = 99;
 
     ++switchHudEntryTraceFrame;
     const int state = static_cast<int>(CL_GetLocalClientConnectionState(localClientNum));
@@ -1203,6 +1203,7 @@ void __cdecl CG_Draw2D(int localClientNum)
     const int drawHUD = cg_drawHUD->current.enabled ? 1 : 0;
     const int scriptHUD = hud_drawHUD->current.enabled ? 1 : 0;
     const int compassFadeTime = cgArray[0].compassFadeTime;
+    const int compassFadeMode = compassFadeTime < 0 ? -1 : (compassFadeTime == 0 ? 0 : 1);
     const bool hudStateChanged =
         state != lastState ||
         pmType != lastPmType ||
@@ -1210,7 +1211,7 @@ void __cdecl CG_Draw2D(int localClientNum)
         draw2D != lastDraw2D ||
         drawHUD != lastCgDrawHUD ||
         scriptHUD != lastScriptHUD ||
-        compassFadeTime != lastCompassFadeTime;
+        compassFadeMode != lastCompassFadeMode;
 
     if (switchHudEntryTraceFrame == 1u ||
         switchHudEntryTraceFrame % 300u == 0u ||
@@ -1241,7 +1242,7 @@ void __cdecl CG_Draw2D(int localClientNum)
     lastDraw2D = draw2D;
     lastCgDrawHUD = drawHUD;
     lastScriptHUD = scriptHUD;
-    lastCompassFadeTime = compassFadeTime;
+    lastCompassFadeMode = compassFadeMode;
 #endif
 
     CG_UpdateTimeScale(localClientNum);
