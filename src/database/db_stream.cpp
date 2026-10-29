@@ -1266,7 +1266,7 @@ void __cdecl DB_FixupSwitchPointerAliases()
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\n",
+                    "[SWITCH ALIAS INVALID DEST] serialized=%p dest=%p resolved=%p asset=%d rawType=%u stage=%s\\n",
                     reinterpret_cast<const void *>(fixup.serializedSlot),
                     reinterpret_cast<const void *>(destination),
                     reinterpret_cast<const void *>(resolvedPointer),
@@ -1274,23 +1274,20 @@ void __cdecl DB_FixupSwitchPointerAliases()
                     static_cast<unsigned>(g_switchCurrentAssetRawType),
                     g_switchDbStage ? g_switchDbStage : "");
                 Switch_LogWrite(trace);
-            }
-            else
-            {
-                *fixup.destination = resolvedPointer;
+                Com_Error(
+                    ERR_DROP,
+                    "DB_FixupSwitchPointerAliases: resolved asset pointer has an invalid destination slot (serialized=%p destination=%p resolved=%p asset=%d rawType=%u stage=%s)",
+                    reinterpret_cast<const void *>(fixup.serializedSlot),
+                    reinterpret_cast<const void *>(destination),
+                    reinterpret_cast<const void *>(resolvedPointer),
+                    g_switchCurrentAssetIndex,
+                    static_cast<unsigned>(g_switchCurrentAssetRawType),
+                    g_switchDbStage ? g_switchDbStage : "");
+                return;
             }
 
+            *fixup.destination = resolvedPointer;
             g_switchPointerAliasFixupKeys.erase({
                 fixup.serializedSlot,
                 destination});
             continue;
-        }
-
-        if (writeIndex != readIndex)
-            g_switchPointerAliasFixups[writeIndex] = fixup;
-        ++writeIndex;
-    }
-
-    g_switchPointerAliasFixups.resize(writeIndex);
-}
-#endif
