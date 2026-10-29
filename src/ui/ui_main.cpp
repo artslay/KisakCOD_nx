@@ -1871,8 +1871,18 @@ void __cdecl UI_Refresh()
                     mayConsumeLoadingLatch
                         ? SCR_ConsumeMapLoadingCinematicFinished()
                         : false;
+                // R_Cinematic_StopPlayback intentionally clears the
+                // finished flag before its asynchronous target change is
+                // processed. A map with no loading movie therefore must not
+                // wait on cinematicFinished forever. It is safe to complete
+                // pregame when there is no loading cinematic configured and
+                // no current/pending/queued cinematic at all.
+                const bool noLoadingCinematic =
+                    !SCR_IsMapLoadingCinematicActive();
                 const bool pregameFinished =
-                    pregameVisible && cinematicFinished && !cinematicStillActive;
+                    pregameVisible &&
+                    !cinematicStillActive &&
+                    (cinematicFinished || noLoadingCinematic);
 
                 if (pregameFinished ||
                     completedLoadingCinematic ||
