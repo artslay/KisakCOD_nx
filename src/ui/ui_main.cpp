@@ -28,6 +28,7 @@
 extern void CL_EnforceFadeCinematicSkipRule(void);
 
 #ifdef __SWITCH__
+extern bool SCR_IsCurrentCinematicFadeTransition(void);
 extern void Switch_LogWrite(const char *msg);
 extern void SCR_SetMapLoadingCinematicActive(bool active);
 extern bool SCR_IsMapLoadingCinematicActive();
@@ -1761,6 +1762,17 @@ void UI_PlayerStart()
         R_Cinematic_StartNextPlayback();
         CL_EnforceFadeCinematicSkipRule();
     }
+#ifdef __SWITCH__
+    else if (SCR_IsCurrentCinematicFadeTransition() &&
+             (R_Cinematic_IsStarted() || R_Cinematic_IsPending()))
+    {
+        // UI_PlayerStart may be called after the loading movie has already
+        // promoted its queued _fade clip. Preserve that target while gameplay
+        // becomes visible underneath it.
+        CL_EnforceFadeCinematicSkipRule();
+        Switch_LogWrite("[KisakCOD][CIN LOAD] preserving active fade over gameplay\n");
+    }
+#endif
     else
         R_Cinematic_StopPlayback();
 }
