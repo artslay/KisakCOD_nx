@@ -9,9 +9,6 @@
 #include "cg_ents.h"
 #include <aim_assist/aim_assist.h>
 #include "cg_main.h"
-#ifdef __SWITCH__
-#include <client/client.h>
-#endif
 #include "cg_actors.h"
 #include <gfx_d3d/r_dpvs.h>
 #include "cg_view.h"
@@ -192,10 +189,6 @@ void __cdecl CG_SetInitialSnapshot(int localClientNum)
     centity_s *Entity; // r3
     float v8[4]; // [sp+50h] [-70h] BYREF
     float v9[8][3]; // [sp+60h] [-60h] BYREF
-#ifdef __SWITCH__
-    float inputViewAngles[3];
-#endif
-
     memset(g_centInPrevSnapshot, 0, sizeof(g_centInPrevSnapshot));
     R_InitSceneData(localClientNum);
     if (localClientNum)
@@ -217,16 +210,6 @@ void __cdecl CG_SetInitialSnapshot(int localClientNum)
     cgArray[0].loaded = 1;
     cgArray[0].snap = nextSnap;
     cgArray[0].clientNum = nextSnap->ps.clientNum;
-#ifdef __SWITCH__
-    // The Switch gamepad path updates clientActive viewangles directly. After
-    // a savegame reload, the server recomputes delta_angles against its last
-    // usercmd; seed client input from that same baseline to keep movement yaw
-    // aligned with the restored player state.
-    inputViewAngles[0] = nextSnap->ps.viewangles[0] - nextSnap->ps.delta_angles[0];
-    inputViewAngles[1] = nextSnap->ps.viewangles[1] - nextSnap->ps.delta_angles[1];
-    inputViewAngles[2] = nextSnap->ps.viewangles[2] - nextSnap->ps.delta_angles[2];
-    CL_SetViewAngles(localClientNum, inputViewAngles);
-#endif
     cgArray[0].time = nextSnap->serverTime;
     cgArray[0].oldTime = cgArray[0].time;
     v8[0] = nextSnap->ps.origin[0];
