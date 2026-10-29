@@ -46,11 +46,20 @@ static bool CL_CinematicHasFadeSuffix(const char *name)
 // remain unskippable for ordinary names as well.
 void CL_EnforceFadeCinematicSkipRule(void)
 {
-    if (CL_CinematicHasFadeSuffix(cinematicGlob.currentCinematicName) ||
-        CL_CinematicHasFadeSuffix(cinematicGlob.targetCinematicName))
+    // During an async handoff currentCinematicName can still refer to the
+    // previous clip. Prefer the requested target until it matches the active
+    // name; otherwise a completed *_fade clip could make the next movie
+    // unskippable by mistake.
+    const char *effectiveName = cinematicGlob.currentCinematicName;
+    if (cinematicGlob.targetCinematicName[0] &&
+        (!effectiveName[0] ||
+         I_stricmp(cinematicGlob.targetCinematicName, effectiveName) != 0))
     {
-        cin_skippable = false;
+        effectiveName = cinematicGlob.targetCinematicName;
     }
+
+    if (CL_CinematicHasFadeSuffix(effectiveName))
+        cin_skippable = false;
 }
 
 #ifdef __SWITCH__
