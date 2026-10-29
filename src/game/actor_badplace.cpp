@@ -25,7 +25,7 @@ badplace_t g_badplaces[32];
 
 void __cdecl TRACK_actor_badplace()
 {
-    track_static_alloc_internal(g_badplaces, 1280, "g_badplaces", 5);
+    track_static_alloc_internal(g_badplaces, sizeof(g_badplaces), "g_badplaces", 5);
 }
 
 void __cdecl Path_UpdateBadPlaceCount(badplace_t *place, int delta)
@@ -74,59 +74,26 @@ void __cdecl Path_FreeBadPlace(int index)
 
 int __cdecl Path_FindBadPlace(unsigned int name)
 {
-    int v1; // r10
-    unsigned __int16 *p_name; // r11
-
-    v1 = 0;
-    p_name = &g_badplaces[0].name;
-    while (*p_name != name)
+    for (int i = 0; i < 32; ++i)
     {
-        p_name += 20;
-        ++v1;
-        // KISAKFIX: IDA SP used `&playerEyePos[1]` as end-of-array sentinel — a magic-
-        // address artifact that only worked because g_badplaces+sizeof was at that VA on
-        // PPC. On x86 playerEyePos and g_badplaces are at unrelated addresses. Use count.
-        if (v1 >= 32)
-            return -1;
+        if (g_badplaces[i].name == name)
+            return i;
     }
-    return v1;
+    return -1;
 }
 
 badplace_t *__cdecl Path_AllocBadPlace(unsigned int name, int duration)
 {
-    int v5; // r10
-    unsigned __int16 *p_name; // r11
-    int v7; // r29
-    badplace_t *result; // r3
-    int v10; // r11
-    unsigned __int8 *p_type; // r10
-    const char *v12; // r3
-    int v13; // r31
-
     if (name)
-    {
-        v5 = 0;
-        p_name = &g_badplaces[0].name;
-        while (*p_name != name)
-        {
-            p_name += 20;
-            ++v5;
-            // KISAKFIX: magic-address sentinel — see Path_FindBadPlace.
-            if (v5 >= 32)
-            {
-                v5 = -1;
-                break;
-            }
-        }
-        Path_FreeBadPlace(v5);
-    }
-    v7 = level.time + duration;
+        Path_FreeBadPlace(Path_FindBadPlace(name));
+
+    int endtime = level.time + duration;
     if (duration > 0)
     {
         if (duration < 250)
         {
             Com_PrintWarning(CON_CHANNEL_AI,
-                "WARNING: A badplace was created with duration [%.2f second], which is less than the ping time [%.2f second]\n",
+                "WARNING: A badplace was created with duration [%.2f second], which is less than the ping time [%.2f second]\\n",
                 duration * 0.001f, 0.25);
         }
     }
@@ -137,35 +104,27 @@ badplace_t *__cdecl Path_AllocBadPlace(unsigned int name, int duration)
             Scr_Error("anonymous bad places must have a duration");
             return 0;
         }
-        v7 = 0x7FFFFFFF;
+        endtime = 0x7FFFFFFF;
     }
-    v10 = 0;
-    p_type = &g_badplaces[0].type;
-    while (*p_type)
+
+    int index = 0;
+    while (index < 32 && g_badplaces[index].type)
+        ++index;
+
+    if (index >= 32)
     {
-        p_type += 40;
-        ++v10;
-        // KISAKFIX: magic-address sentinel — see Path_FindBadPlace.
-        if (v10 >= 32)
-        {
-            v12 = va("too many bad places (more than %i)", 32);
-            Scr_Error(v12);
-            return 0;
-        }
+        Scr_Error(va("too many bad places (more than %i)", 32));
+        return 0;
     }
-    v13 = v10;
-    Scr_SetString(&g_badplaces[v10].name, name);
-    result = &g_badplaces[v13];
-    g_badplaces[v13].endtime = v7;
-    return result;
+
+    Scr_SetString(&g_badplaces[index].name, name);
+    g_badplaces[index].endtime = endtime;
+    return &g_badplaces[index];
 }
 
 void __cdecl Path_MakeBadPlace(unsigned int name, int duration, int teamflags, int type, badplace_parms_t *parms)
 {
-    badplace_t *v10; // r3
-    badplace_brush_t *p_parms; // r10
-    badplace_parms_t *v12; // r11
-    int v13; // ctr
+    badplace_t *v10;
 
     if (!parms)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 171, 0, "%s", "parms");
@@ -198,18 +157,11 @@ void __cdecl Path_MakeBadPlace(unsigned int name, int duration, int teamflags, i
     v10 = Path_AllocBadPlace(name, duration);
     if (v10)
     {
-        p_parms = (badplace_brush_t *)&v10->parms;
         v10->teamflags = teamflags;
-        v12 = parms;
         v10->type = type;
-        v13 = 7;
-        do
-        {
-            p_parms->volume = v12->brush.volume;
-            v12 = (badplace_parms_t *)((char *)v12 + 4);
-            p_parms = (badplace_brush_t *)((char *)p_parms + 4);
-            --v13;
-        } while (v13);
+        // The original 32-bit byte-copy loop used 4-byte pointer steps.
+        // On AArch64, volume is an 8-byte pointer; copy the union natively.
+        v10->parms = *parms;
         v10->pingTime = level.time;
         Path_UpdateBadPlaceCount(v10, 1);
         Actor_BadPlacesChanged();
@@ -218,64 +170,41 @@ void __cdecl Path_MakeBadPlace(unsigned int name, int duration, int teamflags, i
 
 void __cdecl Path_MakeArcBadPlace(unsigned int name, int duration, int teamflags, badplace_arc_t *arc)
 {
-    badplace_parms_t *v8; // r10
-    badplace_arc_t *v9; // r11
-    int v10; // ctr
-    badplace_parms_t v11[2]; // [sp+50h] [-50h] BYREF
-
     if (!arc)
-        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 199, 0, "%s", "arc");
-    v8 = v11;
-    v9 = arc;
-    v10 = 7;
-    do
-    {
-        v8->brush.volume = (gentity_s *)LODWORD(v9->origin[0]);
-        v9 = (badplace_arc_t *)((char *)v9 + 4);
-        v8 = (badplace_parms_t *)((char *)v8 + 4);
-        --v10;
-    } while (v10);
-    Path_MakeBadPlace(name, duration, teamflags, 1, v11);
+        MyAssertHandler("c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp", 199, 0, "%s", "arc");
+
+    badplace_parms_t parms = {};
+    parms.arc = *arc;
+    Path_MakeBadPlace(name, duration, teamflags, 1, &parms);
 }
 
 void __cdecl Path_MakeBrushBadPlace(unsigned int name, int duration, int teamflags, gentity_s *volume)
 {
-    badplace_parms_t v9; // [sp+50h] [-50h] BYREF
-
     if (!volume)
-        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 215, 0, "%s", "volume");
-    v9.brush.volume = volume;
+        MyAssertHandler("c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp", 215, 0, "%s", "volume");
+
+    badplace_parms_t parms = {};
+    parms.brush.volume = volume;
     volume->flags |= FL_BADPLACE_VOLUME;
-    v9.arc.origin[1] = RadiusFromBounds2D(volume->r.mins, volume->r.maxs);
-    Path_MakeBadPlace(name, duration, teamflags, 2, &v9);
+    parms.brush.radius = RadiusFromBounds2D(volume->r.mins, volume->r.maxs);
+    Path_MakeBadPlace(name, duration, teamflags, 2, &parms);
 }
 
 void __cdecl Path_RemoveBadPlaceEntity(gentity_s *entity)
 {
-    unsigned int v2; // r9
-    int v3; // r11
-    badplace_parms_t *i; // r10
-    int v5; // r31
-
     if (!entity)
-        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 231, 0, "%s", "entity");
-    v2 = 0;
-    v3 = 0;
-    for (i = &g_badplaces[0].parms;
-        *((_BYTE *)&i[-1].brush + 26) != 2 || i->brush.volume != entity;
-        i = (badplace_parms_t *)((char *)i + 40))
+        MyAssertHandler("c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp", 231, 0, "%s", "entity");
+
+    for (int i = 0; i < 32; ++i)
     {
-        v2 += 40;
-        ++v3;
-        if (v2 >= 0x500)
-            return;
-    }
-    if (v3 >= 0)
-    {
-        v5 = v3;
-        Path_UpdateBadPlaceCount(&g_badplaces[v3], -1);
-        g_badplaces[v5].type = 0;
-        Scr_SetString(&g_badplaces[v5].name, 0);
+        badplace_t *place = &g_badplaces[i];
+        if (place->type != 2 || place->parms.brush.volume != entity)
+            continue;
+
+        Path_UpdateBadPlaceCount(place, -1);
+        place->type = 0;
+        Scr_SetString(&place->name, 0);
+        return;
     }
 }
 
@@ -365,17 +294,9 @@ void __cdecl Path_InitBadPlaces()
 
 void __cdecl Path_ShutdownBadPlaces()
 {
-    int v0; // r31
-    unsigned __int16 *p_name; // r30
+    for (int i = 0; i < 32; ++i)
+        Scr_SetString(&g_badplaces[i].name, 0);
 
-    v0 = 32;
-    p_name = &g_badplaces[0].name;
-    do
-    {
-        Scr_SetString(p_name, 0);
-        --v0;
-        p_name += 20;
-    } while (v0);
     memset(g_badplaces, 0, sizeof(g_badplaces));
 }
 
@@ -393,44 +314,41 @@ void __cdecl Actor_Badplace_Ping(actor_s *self)
 
 int __cdecl Actor_IsInAnyBadPlace(actor_s *self)
 {
-    unsigned int v2; // r27
-    float *i; // r31
-    int v4; // r4
-    const char *v5; // r3
-    bool v6; // cr58
-
-    v2 = 0;
-    for (i = &g_badplaces[0].parms.arc.angle1; ; i += 10)
+    for (int i = 0; i < 32; ++i)
     {
-        v4 = *((unsigned __int8 *)i - 26);
-        if (*((_BYTE *)i - 26))
+        const badplace_t *place = &g_badplaces[i];
+        if (!place->type)
+            continue;
+
+        bool inside = false;
+        if (place->type == 1)
         {
-            if (v4 == 1)
-            {
-                v6 = !Actor_IsInsideArc(self, i - 6, *(i - 3), *(i - 1), *i, *(i - 2));
-            }
-            else
-            {
-                if (v4 != 2)
-                {
-                    if (!alwaysfails)
-                    {
-                        v5 = va("unhandled bad place type %i", v4);
-                        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 439, 0, v5);
-                    }
-                    goto LABEL_10;
-                }
-                v6 = SV_EntityContact(self->ent->r.mins, self->ent->r.maxs, *((const gentity_s **)i - 6)) == 0;
-            }
-            if (!v6)
-                break;
+            inside = Actor_IsInsideArc(
+                self,
+                place->parms.arc.origin,
+                place->parms.arc.radius,
+                place->parms.arc.angle0,
+                place->parms.arc.angle1,
+                place->parms.arc.halfheight);
         }
-    LABEL_10:
-        v2 += 40;
-        if (v2 >= 0x500)
-            return 0;
+        else if (place->type == 2)
+        {
+            inside = SV_EntityContact(
+                self->ent->r.mins,
+                self->ent->r.maxs,
+                place->parms.brush.volume) != 0;
+        }
+        else if (!alwaysfails)
+        {
+            MyAssertHandler(
+                "c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp",
+                439, 0, va("unhandled bad place type %i", place->type));
+        }
+
+        if (inside)
+            return 1;
     }
-    return 1;
+    return 0;
 }
 
 actor_s *Actor_BadPlace_UpdateFleeingActors()
@@ -450,47 +368,37 @@ actor_s *Actor_BadPlace_UpdateFleeingActors()
 
 float __cdecl Actor_BadPlace_GetMaximumFleeRadius()
 {
-    int v0; // r28
-    unsigned __int8 *p_type; // r31
-    double v2; // fp31
-    int v3; // r4
-    const char *v4; // r3
-    double v5; // fp0
-    double v6; // fp1
+    float maxRadius = -1.0f;
 
-    v0 = 32;
-    p_type = &g_badplaces[0].type;
-    v2 = -1.0;
-    do
+    for (int i = 0; i < 32; ++i)
     {
-        v3 = *p_type;
-        if (!*p_type)
-            goto LABEL_11;
-        if (v3 == 1)
+        const badplace_t *place = &g_badplaces[i];
+        if (!place->type)
+            continue;
+
+        float radius;
+        if (place->type == 1)
         {
-            v5 = *(float *)(p_type + 14);
+            radius = place->parms.arc.radius;
+        }
+        else if (place->type == 2)
+        {
+            radius = place->parms.brush.radius;
         }
         else
         {
-            if (v3 != 2)
-            {
-                if (!alwaysfails)
-                {
-                    v4 = va("unhandled bad place type %i", v3);
-                    MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 500, 0, v4);
-                }
-                goto LABEL_11;
-            }
-            v5 = *(float *)(p_type + 6);
+            if (!alwaysfails)
+                MyAssertHandler(
+                    "c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp",
+                    500, 0, va("unhandled bad place type %i", place->type));
+            continue;
         }
-        if (v5 > v2)
-            v2 = v5;
-    LABEL_11:
-        --v0;
-        p_type += 40;
-    } while (v0);
-    v6 = v2;
-    return (float)v6;
+
+        if (radius > maxRadius)
+            maxRadius = radius;
+    }
+
+    return maxRadius;
 }
 
 int __cdecl Actor_BadPlace_HasPotentialNodeDuplicates(
@@ -518,46 +426,44 @@ int __cdecl Actor_BadPlace_HasPotentialNodeDuplicates(
 
 int __cdecl Actor_BadPlace_IsNodeInAnyBadPlace(pathnode_t *node)
 {
-    unsigned int v2; // r30
-    float *i; // r31
-    int v4; // r4
-    const char *v5; // r3
-    int IsNodeInArc; // r3
-
     if (!node)
-        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 542, 0, "%s", "node");
-    v2 = 0;
-    for (i = &g_badplaces[0].parms.arc.angle1; ; i += 10)
+        MyAssertHandler("c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp", 542, 0, "%s", "node");
+
+    for (int i = 0; i < 32; ++i)
     {
-        v4 = *((unsigned __int8 *)i - 26);
-        if (*((_BYTE *)i - 26))
+        const badplace_t *place = &g_badplaces[i];
+        if (!place->type)
+            continue;
+
+        int inside = 0;
+        if (place->type == 1)
         {
-            if (v4 == 1)
-            {
-                IsNodeInArc = Path_IsNodeInArc(node, i - 6, *(i - 3), *(i - 1), *i, *(i - 2));
-            }
-            else
-            {
-                if (v4 != 2)
-                {
-                    if (!alwaysfails)
-                    {
-                        v5 = va("unhandled bad place type %i", v4);
-                        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 563, 0, v5);
-                    }
-                    goto LABEL_12;
-                }
-                IsNodeInArc = SV_EntityContact(node->constant.vOrigin, node->constant.vOrigin, *((const gentity_s **)i - 6));
-            }
-            if (IsNodeInArc)
-                break;
+            inside = Path_IsNodeInArc(
+                node,
+                place->parms.arc.origin,
+                place->parms.arc.radius,
+                place->parms.arc.angle0,
+                place->parms.arc.angle1,
+                place->parms.arc.halfheight);
         }
-    LABEL_12:
-        v2 += 40;
-        if (v2 >= 0x500)
-            return 0;
+        else if (place->type == 2)
+        {
+            inside = SV_EntityContact(
+                node->constant.vOrigin,
+                node->constant.vOrigin,
+                place->parms.brush.volume);
+        }
+        else if (!alwaysfails)
+        {
+            MyAssertHandler(
+                "c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp",
+                563, 0, va("unhandled bad place type %i", place->type));
+        }
+
+        if (inside)
+            return 1;
     }
-    return 1;
+    return 0;
 }
 
 pathnode_t *__cdecl Actor_BadPlace_FindSafeNodeAlongPath(actor_s *self)
@@ -599,95 +505,68 @@ void __cdecl Actor_BadPlace_Flee_Finish(actor_s *self, ai_state_t eNextState)
 
 void __cdecl Path_RemoveBadPlace(unsigned int name)
 {
-    int v1; // r10
-    unsigned __int16 *p_name; // r11
-
-    v1 = 0;
-    p_name = &g_badplaces[0].name;
-    while (*p_name != name)
-    {
-        p_name += 20;
-        ++v1;
-        // KISAKFIX: magic-address sentinel — see Path_FindBadPlace.
-        if (v1 >= 32)
-        {
-            v1 = -1;
-            break;
-        }
-    }
-    Path_FreeBadPlace(v1);
+    Path_FreeBadPlace(Path_FindBadPlace(name));
     Actor_BadPlace_UpdateFleeingActors();
 }
 
 void __cdecl Path_RunBadPlaces()
 {
-    char v0; // r24
-    float *p_angle1; // r31
-    int v2; // r25
-    int v3; // r28
-    int v4; // r4
-    const char *v5; // r3
+    bool removedAny = false;
 
-    v0 = 0;
-    p_angle1 = &g_badplaces[0].parms.arc.angle1;
-    v2 = 0;
-    v3 = 32;
-    do
+    for (int i = 0; i < 32; ++i)
     {
-        v4 = *((unsigned __int8 *)p_angle1 - 26);
-        if (*((_BYTE *)p_angle1 - 26))
+        badplace_t *place = &g_badplaces[i];
+        if (!place->type)
+            continue;
+
+        if (level.time < place->endtime)
         {
-            if (level.time < *((unsigned int *)p_angle1 - 9))
+            if (level.time - place->pingTime >= 250)
             {
-                if (level.time - *((unsigned int *)p_angle1 - 8) >= 250)
+                if (place->type == 1)
                 {
-                    if (v4 == 1)
-                    {
-                        Actor_BroadcastArcEvent(
-                            0,
-                            AI_EV_BADPLACE_ARC,
-                            *((unsigned __int8 *)p_angle1 - 25),
-                            p_angle1 - 6,
-                            *(p_angle1 - 3),
-                            *(p_angle1 - 1),
-                            *p_angle1,
-                            *(p_angle1 - 2));
-                    }
-                    else if (v4 == 2)
-                    {
-                        Actor_BroadcastVolumeEvent(
-                            0,
-                            AI_EV_BADPLACE_VOLUME,
-                            *((unsigned __int8 *)p_angle1 - 25),
-                            *((gentity_s **)p_angle1 - 6),
-                            *(p_angle1 - 5));
-                    }
-                    else if (!alwaysfails)
-                    {
-                        v5 = va("unhandled bad place type %i", v4);
-                        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_badplace.cpp", 374, 0, v5);
-                    }
-                    *(p_angle1 - 8) = *(float *)&level.time;
+                    Actor_BroadcastArcEvent(
+                        0,
+                        AI_EV_BADPLACE_ARC,
+                        place->teamflags,
+                        place->parms.arc.origin,
+                        place->parms.arc.radius,
+                        place->parms.arc.angle0,
+                        place->parms.arc.angle1,
+                        place->parms.arc.halfheight);
                 }
-                if (ai_showBadPlaces->current.enabled)
-                    Path_DrawBadPlace((badplace_t *)(p_angle1 - 9));
-            }
-            else
-            {
-                if (v2 >= 0)
+                else if (place->type == 2)
                 {
-                    Path_UpdateBadPlaceCount((badplace_t *)(p_angle1 - 9), -1);
-                    *((_BYTE *)p_angle1 - 26) = 0;
-                    Scr_SetString((unsigned __int16 *)p_angle1 - 14, 0);
+                    Actor_BroadcastVolumeEvent(
+                        0,
+                        AI_EV_BADPLACE_VOLUME,
+                        place->teamflags,
+                        place->parms.brush.volume,
+                        place->parms.brush.radius);
                 }
-                v0 = 1;
+                else if (!alwaysfails)
+                {
+                    MyAssertHandler(
+                        "c:\\\\trees\\\\cod3\\\\cod3src\\\\src\\\\game\\\\actor_badplace.cpp",
+                        374, 0, va("unhandled bad place type %i", place->type));
+                }
+
+                place->pingTime = level.time;
             }
+
+            if (ai_showBadPlaces->current.enabled)
+                Path_DrawBadPlace(place);
         }
-        --v3;
-        ++v2;
-        p_angle1 += 10;
-    } while (v3);
-    if (v0)
+        else
+        {
+            Path_UpdateBadPlaceCount(place, -1);
+            place->type = 0;
+            Scr_SetString(&place->name, 0);
+            removedAny = true;
+        }
+    }
+
+    if (removedAny)
         Actor_BadPlace_UpdateFleeingActors();
 }
 
