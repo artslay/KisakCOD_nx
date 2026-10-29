@@ -67,15 +67,9 @@ static inline uint64_t KisakRendererClock()
 // its authored set; using the remapped set here silently drops every glyph.
 static bool RB_MaterialHasAnyFogableTechnique(const Material *material)
 {
-#ifdef __SWITCH__
-    const MaterialTechniqueSet *authoredTechniqueSet =
-        material ? material->techniqueSet : nullptr;
-    return !authoredTechniqueSet ||
-        authoredTechniqueSet->techniques[TECHNIQUE_LIT_BEGIN] ||
-        authoredTechniqueSet->techniques[TECHNIQUE_EMISSIVE];
-#else
-    return Material_HasAnyFogableTechnique(const_cast<Material *>(material));
-#endif
+    // Use the shared check: on Switch it explicitly exempts the font atlases,
+    // whose remapped 3D techniques must not suppress 2D glyph quads.
+    return Material_HasAnyFogableTechnique(material);
 }
 
 #include <setjmp.h>
