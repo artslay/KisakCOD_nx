@@ -278,7 +278,11 @@ int __cdecl R_GetNextStaticModelSurf(GfxStaticModelDrawStream *drawStream, XSurf
         drawStream, drawStream->primDrawSurfPos, listWords + 1u, "surface/token+list");
 #endif
     primDrawSurfPos = drawStream->primDrawSurfPos;
+#ifdef __SWITCH__
+    drawStream->primDrawSurfPos += listWords + 1u;
+#else
     drawStream->primDrawSurfPos += ((drawStream->smodelCount + 1) >> 1) + 1;
+#endif
     xsurf = R_GetStaticModelSurfPointer(drawStream, primDrawSurfPos);
     if (!xsurf)
     {
@@ -410,7 +414,11 @@ int __cdecl R_GetNextStaticModelCachedSurf(GfxStaticModelDrawStream *drawStream)
     if (!xsurf)
         return 0;
     drawStream->smodelList = (const unsigned short*)drawStream->primDrawSurfPos;
+#ifdef __SWITCH__
+    drawStream->primDrawSurfPos += listWords;
+#else
     drawStream->primDrawSurfPos += (drawStream->smodelCount + 1) >> 1;
+#endif
     smodelDrawInst = &rgp.world->dpvs.smodelDrawInsts[R_GetCachedSModelSurf(*drawStream->smodelList)->smodelIndex];
     drawStream->localSurf = xsurf;
     drawStream->reflectionProbeIndex = smodelDrawInst->reflectionProbeIndex;
