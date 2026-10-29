@@ -375,7 +375,7 @@ uint16_t __cdecl R_CacheStaticModelSurface(
     if (!lodInfo ||
         !rgp.world ||
         !rgp.world->dpvs.smodelDrawInsts ||
-        smodelIndex >= rgp.world->dpvs.smodelCount ||
+        smodelIndex >= (rgp.world ? rgp.world->dpvs.smodelCount : 0u) ||
         smcIndex >= ARRAY_COUNT(s_cache.freelist) ||
         lodInfo->lod >= MAX_LODS ||
         lodInfo->smcAllocBits < 4 ||
@@ -388,6 +388,16 @@ uint16_t __cdecl R_CacheStaticModelSurface(
             nullptr,
             nullptr,
             "invalid-cache-parameters");
+        Com_Error(
+            ERR_DROP,
+            "R_CacheStaticModelSurface: invalid cache parameters (smodel=%u smodelCount=%u cache=%u lod=%u allocBits=%u world=%p drawInsts=%p)",
+            smodelIndex,
+            rgp.world ? rgp.world->dpvs.smodelCount : 0u,
+            smcIndex,
+            lodInfo ? static_cast<unsigned>(lodInfo->lod) : UINT32_MAX,
+            lodInfo ? static_cast<unsigned>(lodInfo->smcAllocBits) : UINT32_MAX,
+            static_cast<void *>(rgp.world),
+            rgp.world ? static_cast<void *>(rgp.world->dpvs.smodelDrawInsts) : nullptr);
         return 0;
     }
 #else
