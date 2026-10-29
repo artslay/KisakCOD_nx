@@ -3119,6 +3119,18 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
     G_srand(RandomSeed);
     if (!SV_UsingDemoSave())
     {
+        // A restored live player must not remain attached to a scripted/tag
+        // parent. ClientThink_real treats that as PM_NORMAL_LINKED and limits
+        // yaw against the parent, leaving the camera/head turning while the
+        // body stays fixed. Apply the same stale-link cleanup used by respawn.
+        gentity_s *player = &g_entities[0];
+        if (player->client &&
+            player->client->ps.stats[STAT_HEALTH] > 0 &&
+            player->tagInfo)
+        {
+            G_EntUnlink(player);
+        }
+
         SV_GetUsercmd(0, &level.clients->pers.cmd);
         InitClientDeltaAngles(level.clients);
     }
