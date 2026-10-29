@@ -2103,25 +2103,6 @@ static std::vector<std::string> Switch_GetFileLocationDirectories(
             gameName,
             g_switchSelectedLanguage);
 
-    // The Switch loose-file search also needs to expose these conventional
-    // locations when present, even if no IWD was found there during startup.
-    for (const std::string &root : roots)
-    {
-        static const char *const extraGameDirs[] =
-        {
-            "dev", "dev_shared", "temp", "temp_shared"
-        };
-        for (const char *gameDir : extraGameDirs)
-        {
-            const std::string path = root + "/" + gameDir;
-            Switch_AddUniqueLocationPath(candidates, path);
-            if (!g_switchSelectedLanguage.empty())
-                Switch_AddUniqueLocationPath(
-                    candidates,
-                    path + "/" + g_switchSelectedLanguage);
-        }
-    }
-
     std::vector<std::string> selected;
     for (const std::string &directory : candidates)
     {
