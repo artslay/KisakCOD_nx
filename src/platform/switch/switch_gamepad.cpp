@@ -18,6 +18,7 @@
 #include <gfx_d3d/r_cinematic.h>
 
 extern void SCR_StopCinematic(int32_t localClientNum);
+extern bool SCR_SkipActiveGameCinematic(int32_t localClientNum);
 extern void SCR_SetMapLoadingCinematicActive(bool active);
 extern bool SCR_IsMapLoadingCinematicActive();
 extern void UI_PlayerStart();
@@ -36,6 +37,7 @@ static HidAnalogStickState g_rightStick = {};
 static bool g_initialized = false;
 static bool g_connected = false;
 static bool g_cinematicSkipKeyDown = false;
+static bool g_startGameAfterCinematicQueue = false;
 
 static float NormalizeStick(int32_t value)
 {
@@ -200,6 +202,8 @@ void Switch_GamepadInit()
     g_rightStick = {};
     g_connected = false;
     g_consoleShortcutConsumed = false;
+    g_cinematicSkipKeyDown = false;
+    g_startGameAfterCinematicQueue = false;
     g_initialized = true;
 }
 
@@ -245,24 +249,56 @@ void Switch_GamepadFrame()
         (R_Cinematic_IsStarted() ||
          R_Cinematic_IsPending() ||
          R_Cinematic_IsNextReady());
+
+    // If a pregame sequence contained several scripted movies, return control
+    // only after the final queued movie has completed or been skipped.
+    if (g_startGameAfterCinematicQueue &&
+        connectionState == CA_ACTIVE &&
+        !R_Cinematic_IsStarted() &&
+        !R_Cinematic_IsPending() &&
+        !R_Cinematic_IsNextReady() &&
+        !R_Cinematic_IsFinished())
+    {
+        g_startGameAfterCinematicQueue = false;
+        const uiMenuCommand_t activeMenu = UI_GetActiveMenu(0);
+        if (activeMenu == UIMENU_PREGAME || activeMenu == UIMENU_MAIN)
+        {
+            UI_PlayerStart();
+            Switch_LogWrite("[KisakCOD][CIN SKIP] queued movie chain finished; returned to gameplay\n");
+            return;
+        }
+    }
+
     if (activeGameCinematic && Pressed(cinematicSkipButtons))
     {
         const uiMenuCommand_t activeMenu = UI_GetActiveMenu(0);
-        R_Cinematic_UnsetNextPlayback();
-        R_Cinematic_StopPlayback();
-        SCR_SetMapLoadingCinematicActive(false);
+        const bool hadQueuedNextPlayback = R_Cinematic_IsNextReady();
+        if (!SCR_SkipActiveGameCinematic(0))
+        {
+            g_cinematicSkipKeyDown = false;
+            Switch_LogWrite("[KisakCOD][CIN SKIP] active-game fade transition is unskippable\n");
+            return;
+        }
         g_cinematicSkipKeyDown = false;
 
         if (activeMenu == UIMENU_PREGAME || activeMenu == UIMENU_MAIN)
         {
-            // UI_PlayerStart is the engine's normal auto-continue path: it
-            // drops the fullscreen pregame menu and hands control to the game.
-            UI_PlayerStart();
-            Switch_LogWrite("[KisakCOD][CIN SKIP] active-game movie skipped; returned to gameplay\n");
+            if (hadQueuedNextPlayback)
+            {
+                g_startGameAfterCinematicQueue = true;
+                Switch_LogWrite("[KisakCOD][CIN SKIP] skipped current movie; preserving queued chain\n");
+            }
+            else
+            {
+                // Use the normal frontend-to-game transition after the active
+                // movie has been stopped through the cinematic lifecycle.
+                UI_PlayerStart();
+                Switch_LogWrite("[KisakCOD][CIN SKIP] active-game movie skipped; returned to gameplay\n");
+            }
         }
         else
         {
-            Switch_LogWrite("[KisakCOD][CIN SKIP] active-game movie skipped\n");
+            Switch_LogWrite("[KisakCOD][CIN SKIP] active-game movie skipped through shared lifecycle\n");
         }
         return;
     }
