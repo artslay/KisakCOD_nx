@@ -509,7 +509,7 @@ void __cdecl CG_CheckHudCompassDisplay(int localClientNum)
                 char compassHideTrace[192];
                 std::snprintf(
                     compassHideTrace, sizeof(compassHideTrace),
-                    "[KisakCOD][HUD COMPASS] hide_reason=fade_timeout gameTime=%d startTime=%d elapsed=%d fadeSeconds=%.2f\\n",
+                    "[KisakCOD][HUD COMPASS] hide_reason=fade_timeout gameTime=%d startTime=%d elapsed=%d fadeSeconds=%.2f\n",
                     cgArray[0].time,
                     cgArray[0].compassFadeTime,
                     elapsed,
