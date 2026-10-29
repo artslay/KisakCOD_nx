@@ -50,6 +50,13 @@ static XSurface *R_GetStaticModelSurfPointer(
         !drawStream->primDrawSurfXSurfaceBuf)
     {
         R_LogStaticModelSurfPointerReject("missingSidecar", pointerWord, UINT32_MAX);
+        Com_Error(
+            ERR_DROP,
+            "R_GetStaticModelSurfPointer: missing draw-stream sidecar (stream=%p word=%p base=%p surfaces=%p)",
+            static_cast<const void *>(drawStream),
+            static_cast<const void *>(pointerWord),
+            drawStream ? static_cast<const void *>(drawStream->primDrawSurfsBase) : nullptr,
+            drawStream ? static_cast<const void *>(drawStream->primDrawSurfXSurfaceBuf) : nullptr);
         return nullptr;
     }
 
@@ -58,6 +65,11 @@ static XSurface *R_GetStaticModelSurfPointer(
     if (wordAddress < baseAddress)
     {
         R_LogStaticModelSurfPointerReject("wordBeforeBuffer", pointerWord, UINT32_MAX);
+        Com_Error(
+            ERR_DROP,
+            "R_GetStaticModelSurfPointer: draw token %p precedes command buffer base %p",
+            static_cast<const void *>(pointerWord),
+            static_cast<const void *>(drawStream->primDrawSurfsBase));
         return nullptr;
     }
 
@@ -66,6 +78,12 @@ static XSurface *R_GetStaticModelSurfPointer(
     if (byteOffset >= bufferBytes || (byteOffset % sizeof(uint32_t)) != 0)
     {
         R_LogStaticModelSurfPointerReject("wordOutsideBuffer", pointerWord, UINT32_MAX);
+        Com_Error(
+            ERR_DROP,
+            "R_GetStaticModelSurfPointer: draw token %p outside command buffer [base=%p bytes=%llu)",
+            static_cast<const void *>(pointerWord),
+            static_cast<const void *>(drawStream->primDrawSurfsBase),
+            static_cast<unsigned long long>(bufferBytes));
         return nullptr;
     }
 
@@ -73,6 +91,12 @@ static XSurface *R_GetStaticModelSurfPointer(
     if (*pointerWord != slot)
     {
         R_LogStaticModelSurfPointerReject("invalidSlotToken", pointerWord, *pointerWord);
+        Com_Error(
+            ERR_DROP,
+            "R_GetStaticModelSurfPointer: invalid sidecar slot token=%u expected=%u word=%p",
+            static_cast<unsigned>(*pointerWord),
+            static_cast<unsigned>(slot),
+            static_cast<const void *>(pointerWord));
         return nullptr;
     }
 
@@ -82,6 +106,12 @@ static XSurface *R_GetStaticModelSurfPointer(
         (surfaceAddress & (alignof(XSurface) - 1u)) != 0)
     {
         R_LogStaticModelSurfPointerReject("invalidNativeSurface", pointerWord, slot);
+        Com_Error(
+            ERR_DROP,
+            "R_GetStaticModelSurfPointer: invalid native XSurface in sidecar (slot=%u surface=%p token=%p)",
+            static_cast<unsigned>(slot),
+            static_cast<void *>(surface),
+            static_cast<const void *>(pointerWord));
         return nullptr;
     }
     return surface;
@@ -90,7 +120,6 @@ static XSurface *R_GetStaticModelSurfPointer(
     return reinterpret_cast<XSurface *>(static_cast<uintptr_t>(*pointerWord));
 #endif
 }
-
 
 
 void __cdecl R_SetupStaticModelPrim(XSurface *xsurf, GfxDrawPrimArgs *args, GfxCmdBufPrimState *primState)
