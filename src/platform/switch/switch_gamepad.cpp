@@ -37,10 +37,6 @@ static HidAnalogStickState g_rightStick = {};
 static bool g_initialized = false;
 static bool g_connected = false;
 static bool g_cinematicSkipKeyDown = false;
-// Input is armed only after B/Plus has been observed released following a
-// cinematic/logo start, preventing a held menu button from skipping it.
-static bool g_cinematicSkipInputArmed = false;
-
 static float NormalizeStick(int32_t value)
 {
     constexpr float kStickMax = 32767.0f;
@@ -208,11 +204,6 @@ void Switch_GamepadInit()
     g_initialized = true;
 }
 
-void Switch_GamepadPrepareCinematicSkipInput()
-{
-    g_cinematicSkipInputArmed = false;
-}
-
 void Switch_GamepadFrame()
 {
     if (!g_initialized)
@@ -246,12 +237,6 @@ void Switch_GamepadFrame()
     constexpr u64 cinematicSkipButtons =
         HidNpadButton_B | HidNpadButton_Plus;
 
-    // Do not convert a button held across startup/menu transitions into a
-    // fresh cinematic skip. A real press is accepted only after release has
-    // been observed while this input loop is running.
-    if (!IsDown(g_buttons, cinematicSkipButtons))
-        g_cinematicSkipInputArmed = true;
-
     // Scripted intro/fade movies may still be displayed while the pregame
     // fullscreen UI owns KEYCATCH_UI. Handle an active-game movie before the
     // generic UI/gameplay mapping, regardless of that catcher or the load
@@ -264,12 +249,6 @@ void Switch_GamepadFrame()
 
     if (activeGameCinematic && Pressed(cinematicSkipButtons))
     {
-        if (!g_cinematicSkipInputArmed)
-        {
-            Switch_LogWrite("[KisakCOD][CIN SKIP] ignored held startup button; waiting for release\n");
-            return;
-        }
-        g_cinematicSkipInputArmed = false;
         const uiMenuCommand_t activeMenu = UI_GetActiveMenu(0);
         if (!SCR_SkipActiveGameCinematic(0))
         {
@@ -300,12 +279,6 @@ void Switch_GamepadFrame()
         connectionState == CA_LOADING &&
         Pressed(cinematicSkipButtons))
     {
-        if (!g_cinematicSkipInputArmed)
-        {
-            Switch_LogWrite("[KisakCOD][CIN SKIP] ignored held startup button during loading movie\n");
-            return;
-        }
-        g_cinematicSkipInputArmed = false;
         SCR_StopCinematic(0);
         g_cinematicSkipKeyDown = false;
         Switch_LogWrite("[KisakCOD][CIN SKIP] map-loading cinematic skipped\n");
@@ -337,12 +310,6 @@ void Switch_GamepadFrame()
 
         if (Pressed(cinematicSkipButtons))
         {
-            if (!g_cinematicSkipInputArmed)
-            {
-                Switch_LogWrite("[KisakCOD][CIN SKIP] ignored held startup button for logo/cinematic\n");
-                return;
-            }
-            g_cinematicSkipInputArmed = false;
             CL_KeyEvent(0, K_ESCAPE, 1, Sys_Milliseconds());
             g_cinematicSkipKeyDown = true;
             Switch_LogWrite("[KisakCOD][CIN SKIP] controller button pressed\n");
