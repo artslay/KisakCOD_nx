@@ -41,7 +41,6 @@ extern void CL_EnforceFadeCinematicSkipRule(void);
 extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern void CL_BlockCinematicSkipUntilRelease();
 extern void CL_PrepareCinematicSkipInput(int localClientNum);
-extern void Switch_GamepadPrepareCinematicSkipInput();
 extern void SCR_SetMapLoadingCinematicActive(bool active);
 extern void Switch_LogShutdown();
 extern void Switch_LogRaw(const char *msg);
@@ -642,7 +641,6 @@ void __cdecl CL_MapLoading_StartCinematic(const char *mapname, float volume)
 #endif
     R_Cinematic_StartPlayback(movieName, 5, volume);
 #ifdef __SWITCH__
-    Switch_GamepadPrepareCinematicSkipInput();
     // Track the loading movie for rendering and load/menu handoff only.
     // The stock engine does not route skip input from CA_LOADING to cinematic
     // stop handling, and map loading must not make that movie skippable.
@@ -1458,7 +1456,6 @@ void __cdecl CL_PlayLogo_f()
 #ifdef __SWITCH__
     // Do not let the input used to enter the logo command also dismiss the
     // newly-started logo on the next poll.
-    Switch_GamepadPrepareCinematicSkipInput();
 #endif
     if (cls.uiStarted)
         UI_SetActiveMenu(0, UIMENU_NONE);
