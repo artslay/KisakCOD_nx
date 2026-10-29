@@ -513,7 +513,7 @@ unsigned int __cdecl Path_ConvertNodeToIndex(const pathnode_t *node)
             "c:\\trees\\cod3\\cod3src\\src\\game\\pathnode.cpp",
             1178,
             0,
-            "nodeIndex doesn't index g_path.actualNodeCount\\n\\t%i not in [0, %i)",
+            "nodeIndex doesn't index g_path.actualNodeCount\n\t%i not in [0, %i)",
             v2,
             g_path.actualNodeCount);
     return v2;
@@ -540,7 +540,7 @@ pathnode_t *__cdecl Path_ConvertIndexToNode(unsigned int index)
             "c:\\trees\\cod3\\cod3src\\src\\game\\pathnode.cpp",
             1185,
             0,
-            "index doesn't index g_path.actualNodeCount\\n\\t%i not in [0, %i)",
+            "index doesn't index g_path.actualNodeCount\n\t%i not in [0, %i)",
             index,
             g_path.actualNodeCount);
     return &gameWorldSp.path.nodes[index];
