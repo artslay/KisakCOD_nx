@@ -1184,30 +1184,64 @@ void __cdecl CG_Draw2D(int localClientNum)
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
 #ifdef __SWITCH__
-    // This heartbeat runs before the 2D/HUD gates. If the FPS text is missing,
-    // the next log shows whether the frame ever reached this function and which
-    // gate (draw2D, viewer camera, cubemap) prevented the regular HUD path.
+    // Record not only a periodic heartbeat, but also every transition that can
+    // suppress the gameplay HUD after a cinematic skip.
     static uint32_t switchHudEntryTraceFrame = 0;
+    static int lastState = -1;
+    static int lastPmType = -1;
+    static int lastCubemap = -1;
+    static int lastDraw2D = -1;
+    static int lastCgDrawHUD = -1;
+    static int lastScriptHUD = -1;
+    static int lastCompassFadeTime = 0x7fffffff;
+
     ++switchHudEntryTraceFrame;
-    if (switchHudEntryTraceFrame == 1u || switchHudEntryTraceFrame % 300u == 0u)
+    const int state = static_cast<int>(CL_GetLocalClientConnectionState(localClientNum));
+    const int pmType = static_cast<int>(cgArray[0].predictedPlayerState.pm_type);
+    const int cubemap = static_cast<int>(cgArray[0].cubemapShot);
+    const int draw2D = cg_draw2D->current.enabled ? 1 : 0;
+    const int drawHUD = cg_drawHUD->current.enabled ? 1 : 0;
+    const int scriptHUD = hud_drawHUD->current.enabled ? 1 : 0;
+    const int compassFadeTime = cgArray[0].compassFadeTime;
+    const bool hudStateChanged =
+        state != lastState ||
+        pmType != lastPmType ||
+        cubemap != lastCubemap ||
+        draw2D != lastDraw2D ||
+        drawHUD != lastCgDrawHUD ||
+        scriptHUD != lastScriptHUD ||
+        compassFadeTime != lastCompassFadeTime;
+
+    if (switchHudEntryTraceFrame == 1u ||
+        switchHudEntryTraceFrame % 300u == 0u ||
+        hudStateChanged)
     {
-        char trace[288];
+        char trace[448];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u client=%d state=%d pmType=%d cubemap=%d draw2D=%d cgDrawHUD=%d scriptHUD=%d gameTime=%d compassFadeTime=%d nextSnap=%p\n",
+            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u reason=%s client=%d state=%d pmType=%d cubemap=%d draw2D=%d cgDrawHUD=%d scriptHUD=%d gameTime=%d compassFadeTime=%d nextSnap=%p\n",
             switchHudEntryTraceFrame,
+            hudStateChanged ? "state-change" : "heartbeat",
             localClientNum,
-            static_cast<int>(CL_GetLocalClientConnectionState(localClientNum)),
-            static_cast<int>(cgArray[0].predictedPlayerState.pm_type),
-            static_cast<int>(cgArray[0].cubemapShot),
-            cg_draw2D->current.enabled ? 1 : 0,
-            cg_drawHUD->current.enabled ? 1 : 0,
-            hud_drawHUD->current.enabled ? 1 : 0,
+            state,
+            pmType,
+            cubemap,
+            draw2D,
+            drawHUD,
+            scriptHUD,
             cgArray[0].time,
-            cgArray[0].compassFadeTime,
+            compassFadeTime,
             static_cast<void *>(cgArray[0].nextSnap));
         Switch_LogWrite(trace);
     }
+
+    lastState = state;
+    lastPmType = pmType;
+    lastCubemap = cubemap;
+    lastDraw2D = draw2D;
+    lastCgDrawHUD = drawHUD;
+    lastScriptHUD = scriptHUD;
+    lastCompassFadeTime = compassFadeTime;
 #endif
 
     CG_UpdateTimeScale(localClientNum);
