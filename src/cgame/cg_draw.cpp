@@ -500,9 +500,7 @@ void __cdecl CG_CheckHudCompassDisplay(int localClientNum)
                 localClientNum);
             v1 = hud_fade_compass;
         }
-        // On Switch, a negative value marks the deferred startup compass.
-        // It is not an active fade timer and must survive loading cinematics.
-        if (cgArray[0].compassFadeTime > 0)
+        if (cgArray[0].compassFadeTime)
         {
             int elapsed = cgArray[0].time - cgArray[0].compassFadeTime;
             if ((float)elapsed > v1->current.value * 1000.0f)
@@ -1186,24 +1184,6 @@ void __cdecl CG_Draw2D(int localClientNum)
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
 #ifdef __SWITCH__
-    // CG_MapInit runs during level setup, while loading cinematics may still
-    // advance cgame time. Defer the first Compass show until live gameplay so
-    // the normal 8-second HUD fade does not expire before the player takes control.
-    if (cgArray[0].compassFadeTime < 0 &&
-        CL_GetLocalClientConnectionState(localClientNum) == CA_ACTIVE &&
-        !R_Cinematic_IsStarted() &&
-        !R_Cinematic_IsPending() &&
-        !R_Cinematic_IsNextReady())
-    {
-        Dvar_SetFromStringByName("hud_drawHUD", (char *)"1");
-        // CG_FadeHudMenu treats a zero displayStartTime as "not displayed".
-        // cgArray time can still be zero on the first live gameplay frame, so
-        // use a positive timestamp to start the normal compass fade interval.
-        const int compassStartTime = cgArray[0].time;
-        cgArray[0].compassFadeTime = compassStartTime > 0 ? compassStartTime : 1;
-        Menus_ShowByName(&cgDC, "Compass");
-    }
-
     // This heartbeat runs before the 2D/HUD gates. If the FPS text is missing,
     // the next log shows whether the frame ever reached this function and which
     // gate (draw2D, viewer camera, cubemap) prevented the regular HUD path.
@@ -1214,13 +1194,17 @@ void __cdecl CG_Draw2D(int localClientNum)
         char trace[288];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u client=%d pmType=%d cubemap=%d draw2D=%d drawHUD=%d nextSnap=%p\n",
+            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u client=%d state=%d pmType=%d cubemap=%d draw2D=%d cgDrawHUD=%d scriptHUD=%d gameTime=%d compassFadeTime=%d nextSnap=%p\n",
             switchHudEntryTraceFrame,
             localClientNum,
+            static_cast<int>(CL_GetLocalClientConnectionState(localClientNum)),
             static_cast<int>(cgArray[0].predictedPlayerState.pm_type),
             static_cast<int>(cgArray[0].cubemapShot),
             cg_draw2D->current.enabled ? 1 : 0,
             cg_drawHUD->current.enabled ? 1 : 0,
+            hud_drawHUD->current.enabled ? 1 : 0,
+            cgArray[0].time,
+            cgArray[0].compassFadeTime,
             static_cast<void *>(cgArray[0].nextSnap));
         Switch_LogWrite(trace);
     }
