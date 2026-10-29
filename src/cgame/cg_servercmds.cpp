@@ -442,6 +442,13 @@ void __cdecl CG_MenuShowNotify(int localClientNum, int menuToShow)
         }
         break;
     case 2:
+#ifdef __SWITCH__
+        // Keep the deferred startup sentinel intact while loading/camera scripts run.
+        // Compass notifications can be emitted before CG_Draw2D reaches live gameplay;
+        // consuming the sentinel here starts the 8-second timer too early.
+        if (cgArray[0].compassFadeTime < 0)
+            break;
+#endif
         if (cgArray[0].compassFadeTime < cgArray[0].time)
         {
             cgArray[0].compassFadeTime = cgArray[0].time;
