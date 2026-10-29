@@ -19,6 +19,8 @@
 #include <cmath>
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern const dvar_t *input_invertPitch;
+extern const dvar_t *input_viewSensitivity;
 #endif
 
 const dvar_t *cl_stanceHoldTime;
@@ -1056,7 +1058,9 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     }
 
     const int controller = CL_ControllerIndexFromClientNum(0);
-    const float rawPitchAxis = CL_GamepadAxisValue(0, 4);
+    float rawPitchAxis = CL_GamepadAxisValue(0, 4);
+    if (input_invertPitch && input_invertPitch->current.enabled)
+        rawPitchAxis = -rawPitchAxis;
     const float rawYawAxis = -CL_GamepadAxisValue(0, 3);
     const float forwardAxis = CL_GamepadAxisValue(0, 1);
     const float rightAxis = CL_GamepadAxisValue(0, 0);
@@ -1079,6 +1083,11 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         Switch_SmoothRightStickAxis(rawPitchAxis, s_switchRightStickPitch, deltaTime);
     const float yawAxis =
         Switch_SmoothRightStickAxis(rawYawAxis, s_switchRightStickYaw, deltaTime);
+    const float viewSensitivity = input_viewSensitivity
+        ? std::clamp(input_viewSensitivity->current.value, 0.0001f, 5.0f)
+        : 1.0f;
+    const float effectivePitchAxis = pitchAxis * viewSensitivity;
+    const float effectiveYawAxis = yawAxis * viewSensitivity;
 
     if (!padActive &&
         std::fabs(pitchAxis) < 0.003f &&
@@ -1105,9 +1114,9 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
 
 
     cmd->pitchmove = ClampChar(
-        static_cast<int>(pitchAxis * 127.0f) + cmd->pitchmove);
+        static_cast<int>(effectivePitchAxis * 127.0f) + cmd->pitchmove);
     cmd->yawmove = ClampChar(
-        static_cast<int>(yawAxis * 127.0f) + cmd->yawmove);
+        static_cast<int>(effectiveYawAxis * 127.0f) + cmd->yawmove);
 
     if (GPad_GetButton(controller, GPAD_R_TRIG) >= cl_analog_attack_threshold->current.value ||
         rightTrigger >= cl_analog_attack_threshold->current.value)
@@ -1122,8 +1131,8 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     AimInput aimInput{};
     AimOutput aimOutput{};
 
-    aimInput.pitchAxis = pitchAxis;
-    aimInput.yawAxis = yawAxis;
+    aimInput.pitchAxis = effectivePitchAxis;
+    aimInput.yawAxis = effectiveYawAxis;
     aimInput.forwardAxis = forwardAxis;
     aimInput.rightAxis = rightAxis;
     aimInput.buttons = cmd->buttons;
