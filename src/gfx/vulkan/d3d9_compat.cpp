@@ -974,10 +974,15 @@ uint32_t g_switchPipelineCreateSequence = 0;
 void LogUnsupportedRenderState(uint32_t state, uint32_t value)
 {
     static std::mutex lock;
-    static std::unordered_set<uint32_t> seenStates;
+    static std::unordered_set<uint64_t> seenStateValues;
     {
         std::lock_guard<std::mutex> guard(lock);
-        if (!seenStates.insert(state).second)
+        // A state may receive more than one unsupported value during a level.
+        // Deduplicate the (state, value) pair, not just the state ID, so the
+        // runtime log preserves every distinct combination needed for an audit.
+        const uint64_t key =
+            (static_cast<uint64_t>(state) << 32) | static_cast<uint64_t>(value);
+        if (!seenStateValues.insert(key).second)
             return;
     }
 
