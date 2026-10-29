@@ -507,7 +507,13 @@ void __cdecl CG_HudMenuShowAllTimed(int localClientNum)
         Menus_ShowByName(&cgDC, "weaponinfo_lowdef");
         time = cgArray[0].time;
     }
+#ifdef __SWITCH__
+    // The negative value is the deferred-startup sentinel; do not consume it
+    // while restoring all timed HUD menus in the pause path.
+    if (cgArray[0].compassFadeTime >= 0 && cgArray[0].compassFadeTime < time)
+#else
     if (cgArray[0].compassFadeTime < time)
+#endif
     {
         cgArray[0].compassFadeTime = time;
         Menus_ShowByName(&cgDC, "Compass");
