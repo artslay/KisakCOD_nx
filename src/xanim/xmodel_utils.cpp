@@ -21,14 +21,18 @@ TestLod g_testLods[4];
 static const XModelLodInfo *XModel_CheckedLodInfo(
     const XModel *model, int lod, const char *caller)
 {
-    if (!model || !model->lodInfo || lod < 0 || lod >= MAX_LODS)
+    const int modelLodCount = model ? static_cast<int>(model->numLods) : 0;
+    if (!model || !model->lodInfo ||
+        modelLodCount <= 0 || modelLodCount > MAX_LODS ||
+        lod < 0 || lod >= modelLodCount)
     {
         Com_Error(
             ERR_DROP,
-            "%s: invalid model/LOD (model=%p lod=%d maxLods=%u lodInfo=%p)",
+            "%s: invalid model/LOD (model=%p lod=%d modelLods=%d maxLods=%u lodInfo=%p)",
             caller ? caller : "XModel",
             static_cast<const void *>(model),
             lod,
+            modelLodCount,
             static_cast<unsigned>(MAX_LODS),
             model ? static_cast<const void *>(model->lodInfo) : nullptr);
         return nullptr;
