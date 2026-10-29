@@ -17,6 +17,27 @@ struct TestLod // sizeof=0x8
 };
 TestLod g_testLods[4];
 
+#ifdef KISAK_SWITCH
+static const XModelLodInfo *XModel_CheckedLodInfo(
+    const XModel *model, int lod, const char *caller)
+{
+    if (!model || !model->lodInfo || lod < 0 || lod >= MAX_LODS)
+    {
+        Com_Error(
+            ERR_DROP,
+            "%s: invalid model/LOD (model=%p lod=%d maxLods=%u lodInfo=%p)",
+            caller ? caller : "XModel",
+            static_cast<const void *>(model),
+            lod,
+            static_cast<unsigned>(MAX_LODS),
+            model ? static_cast<const void *>(model->lodInfo) : nullptr);
+        return nullptr;
+    }
+
+    return &model->lodInfo[lod];
+}
+#endif
+
 const char *__cdecl XModelGetName(const XModel *model)
 {
     iassert(model);
@@ -25,6 +46,20 @@ const char *__cdecl XModelGetName(const XModel *model)
 
 int __cdecl XModelGetSurfaces(const XModel *model, XSurface **surfaces, int lod)
 {
+#ifdef KISAK_SWITCH
+    if (!surfaces)
+    {
+        Com_Error(ERR_DROP, "XModelGetSurfaces: output pointer is null (model=%p lod=%d)",
+            static_cast<const void *>(model), lod);
+        return 0;
+    }
+    const XModelLodInfo *lodInfo = XModel_CheckedLodInfo(model, lod, "XModelGetSurfaces");
+    if (!lodInfo)
+    {
+        *surfaces = nullptr;
+        return 0;
+    }
+#else
     iassert(model);
     iassert(surfaces);
     iassert(lod >= 0);
@@ -34,8 +69,8 @@ int __cdecl XModelGetSurfaces(const XModel *model, XSurface **surfaces, int lod)
             *surfaces = nullptr;
         return 0;
     }
-
     const XModelLodInfo *lodInfo = model->lodInfo;
+#endif
     const uint32_t surfIndex = lodInfo[lod].surfIndex;
     const uint32_t surfCount = lodInfo[lod].numsurfs;
 #ifdef KISAK_SWITCH
@@ -69,34 +104,94 @@ XSurface *__cdecl XModelGetSurface(const XModel *model, int lod, int surfIndex)
 {
     uint32_t modelSurfIndex; // [esp+0h] [ebp-4h]
 
+#ifdef KISAK_SWITCH
+    const XModelLodInfo *lodInfo = XModel_CheckedLodInfo(model, lod, "XModelGetSurface");
+    if (!lodInfo)
+        return nullptr;
+
+    const uint32_t surfaceBase = lodInfo->surfIndex;
+    if (surfIndex < 0 ||
+        static_cast<uint32_t>(surfIndex) >= lodInfo->numsurfs ||
+        surfaceBase > model->numsurfs ||
+        static_cast<uint32_t>(surfIndex) >= model->numsurfs - surfaceBase ||
+        !model->surfs)
+    {
+        Com_Error(
+            ERR_DROP,
+            "XModelGetSurface: surface index out of range (model=%s lod=%d surface=%d lodBase=%u lodCount=%u modelSurfs=%u surfaces=%p)",
+            model->name ? model->name : "<unnamed>",
+            lod,
+            surfIndex,
+            surfaceBase,
+            static_cast<unsigned>(lodInfo->numsurfs),
+            static_cast<unsigned>(model->numsurfs),
+            static_cast<const void *>(model->surfs));
+        return nullptr;
+    }
+    modelSurfIndex = surfaceBase + static_cast<uint32_t>(surfIndex);
+    return &model->surfs[modelSurfIndex];
+#else
     iassert(lod >= 0);
     modelSurfIndex = surfIndex + model->lodInfo[lod].surfIndex;
     bcassert(modelSurfIndex, model->numsurfs);
     return &model->surfs[modelSurfIndex];
+#endif
 }
 
 const XModelLodInfo *__cdecl XModelGetLodInfo(const XModel *model, int lod)
 {
+#ifdef KISAK_SWITCH
+    return XModel_CheckedLodInfo(model, lod, "XModelGetLodInfo");
+#else
     iassert(model);
     iassert(lod >= 0);
-
     return &model->lodInfo[lod];
+#endif
 }
 
 uint32_t __cdecl XModelGetSurfCount(const XModel *model, int lod)
 {
+#ifdef KISAK_SWITCH
+    const XModelLodInfo *lodInfo = XModel_CheckedLodInfo(model, lod, "XModelGetSurfCount");
+    if (!lodInfo)
+        return 0;
+    return lodInfo->numsurfs;
+#else
     iassert(model);
     iassert(lod >= 0);
-
     return model->lodInfo[lod].numsurfs;
+#endif
 }
 
 Material **__cdecl XModelGetSkins(const XModel *model, int lod)
 {
+#ifdef KISAK_SWITCH
+    const XModelLodInfo *lodInfo = XModel_CheckedLodInfo(model, lod, "XModelGetSkins");
+    if (!lodInfo)
+        return nullptr;
+    const uint32_t surfaceBase = lodInfo->surfIndex;
+    const uint32_t surfaceCount = lodInfo->numsurfs;
+    if (surfaceBase > model->numsurfs ||
+        surfaceCount > static_cast<uint32_t>(model->numsurfs - surfaceBase) ||
+        (surfaceCount != 0 && !model->materialHandles))
+    {
+        Com_Error(
+            ERR_DROP,
+            "XModelGetSkins: invalid material range for model %s (lod=%d base=%u count=%u modelSurfs=%u materialHandles=%p)",
+            model->name ? model->name : "<unnamed>",
+            lod,
+            surfaceBase,
+            surfaceCount,
+            static_cast<unsigned>(model->numsurfs),
+            static_cast<const void *>(model->materialHandles));
+        return nullptr;
+    }
+    return model->materialHandles ? &model->materialHandles[surfaceBase] : nullptr;
+#else
     iassert(model);
     iassert(lod >= 0);
-
     return &model->materialHandles[model->lodInfo[lod].surfIndex];
+#endif
 }
 
 XModelLodRampType __cdecl XModelGetLodRampType(const XModel *model)
