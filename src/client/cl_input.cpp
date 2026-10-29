@@ -16,6 +16,7 @@
 #include <gfx_d3d/r_dvars.h>
 #ifdef __SWITCH__
 #include <platform/switch/switch_gamepad.h>
+#include <cmath>
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
 #endif
@@ -31,6 +32,52 @@ const dvar_t *cl_anglespeedkey;
 
 unsigned int frame_msec;
 int old_com_frameTime;
+
+#ifdef __SWITCH__
+namespace
+{
+float s_switchRightStickYaw = 0.0f;
+float s_switchRightStickPitch = 0.0f;
+
+// Give the stick a small deadzone and a gentle response curve so tiny physical
+// fluctuations do not shake the view and small intentional movements are easier
+// to control. The time-based filter smooths starts/stops without frame-rate
+// dependent tuning.
+float Switch_ConditionRightStickAxis(float axis)
+{
+    constexpr float kDeadzone = 0.08f;
+    const float magnitude = std::fabs(axis);
+    if (magnitude <= kDeadzone)
+        return 0.0f;
+
+    const float remapped = (magnitude - kDeadzone) / (1.0f - kDeadzone);
+    const float curved = std::pow(remapped, 1.35f);
+    return axis < 0.0f ? -curved : curved;
+}
+
+float Switch_SmoothRightStickAxis(float axis, float &filtered, float deltaTime)
+{
+    const float target = Switch_ConditionRightStickAxis(axis);
+    if (deltaTime <= 0.0f)
+        return filtered;
+
+    constexpr float kSmoothingSeconds = 0.045f;
+    const float blend = 1.0f - std::exp(-deltaTime / kSmoothingSeconds);
+    filtered += (target - filtered) * blend;
+
+    if (target == 0.0f && std::fabs(filtered) < 0.003f)
+        filtered = 0.0f;
+
+    return filtered;
+}
+
+void Switch_ResetRightStickSmoothing()
+{
+    s_switchRightStickYaw = 0.0f;
+    s_switchRightStickPitch = 0.0f;
+}
+}
+#endif
 
 #define KEY_LEFT 0
 #define KEY_RIGHT 1
@@ -1003,22 +1050,39 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
 {
 #ifdef __SWITCH__
     if (cl_paused->current.integer == 1)
+    {
+        Switch_ResetRightStickSmoothing();
         return;
+    }
 
     const int controller = CL_ControllerIndexFromClientNum(0);
-    const float pitchAxis = CL_GamepadAxisValue(0, 4);
-    const float yawAxis = -CL_GamepadAxisValue(0, 3);
+    const float rawPitchAxis = CL_GamepadAxisValue(0, 4);
+    const float rawYawAxis = -CL_GamepadAxisValue(0, 3);
     const float forwardAxis = CL_GamepadAxisValue(0, 1);
     const float rightAxis = CL_GamepadAxisValue(0, 0);
     const float rightTrigger = GPad_GetButton(controller, GPAD_R_TRIG);
     const bool padActive = GPad_IsActive(controller);
 
     if (!padActive)
+    {
+        Switch_ResetRightStickSmoothing();
         return;
+    }
 
     if ((clients[0].snap.ps.pm_flags & 0x800) &&
         cl_freemove->current.integer != 2)
+    {
+        Switch_ResetRightStickSmoothing();
         return;
+    }
+
+    // Cap unusually long frames so a hitch cannot cause one large view jump.
+    const float deltaTime = std::clamp(
+        static_cast<float>(cls.frametime) * 0.001f, 0.0f, 0.05f);
+    const float pitchAxis =
+        Switch_SmoothRightStickAxis(rawPitchAxis, s_switchRightStickPitch, deltaTime);
+    const float yawAxis =
+        Switch_SmoothRightStickAxis(rawYawAxis, s_switchRightStickYaw, deltaTime);
 
     const float magnitude = std::sqrt(
         forwardAxis * forwardAxis +
@@ -1064,7 +1128,7 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     aimInput.pitchMax = clients[0].cgameMaxPitchSpeed;
     aimInput.yaw = clients[0].viewangles[1];
     aimInput.yawMax = clients[0].cgameMaxYawSpeed;
-    aimInput.deltaTime = static_cast<float>(cls.frametime) * 0.001f;
+    aimInput.deltaTime = deltaTime;
     aimInput.ps = CG_GetPredictedPlayerState(0);
 
     AimAssist_UpdateGamePadInput(&aimInput, &aimOutput);
