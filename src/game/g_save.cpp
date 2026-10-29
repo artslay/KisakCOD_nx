@@ -3119,20 +3119,30 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
     G_srand(RandomSeed);
     if (!SV_UsingDemoSave())
     {
-        // A restored live player must not remain attached to a scripted/tag
-        // parent. ClientThink_real treats that as PM_NORMAL_LINKED and limits
-        // yaw against the parent, leaving the camera/head turning while the
-        // body stays fixed. Apply the same stale-link cleanup used by respawn.
-        gentity_s *player = &g_entities[0];
-        if (player->client &&
-            player->client->ps.stats[STAT_HEALTH] > 0 &&
-            player->tagInfo)
-        {
-            G_EntUnlink(player);
-        }
-
         SV_GetUsercmd(0, &level.clients->pers.cmd);
         InitClientDeltaAngles(level.clients);
+#ifdef __SWITCH__
+        // Trace only the first few server thinks after a savegame load. This
+        // distinguishes stale usercmd/playerstate angles from entity rotation.
+        g_switchPlayerAngleTraceFrames = 8;
+        gentity_s *player = &g_entities[0];
+        if (player->client)
+        {
+            const playerState_s *ps = &player->client->ps;
+            Com_Printf(
+                CON_CHANNEL_SERVER,
+                "[KisakCOD][PLAYER ANGLES LOAD] health=%d pm=%d pmFlags=0x%x eFlags=0x%x view=(%.1f,%.1f,%.1f) delta=(%.1f,%.1f,%.1f) cmd=(%d,%d,%d) entityYaw=%.1f tagInfo=%p lockedEnt=%d linkAnglesLocked=%d frozen=%d\n",
+                ps->stats[STAT_HEALTH], ps->pm_type, ps->pm_flags, ps->eFlags,
+                ps->viewangles[0], ps->viewangles[1], ps->viewangles[2],
+                ps->delta_angles[0], ps->delta_angles[1], ps->delta_angles[2],
+                (int)player->client->pers.cmd.angles[0],
+                (int)player->client->pers.cmd.angles[1],
+                (int)player->client->pers.cmd.angles[2],
+                player->r.currentAngles[1], static_cast<void *>(player->tagInfo),
+                ps->viewlocked_entNum, player->client->linkAnglesLocked,
+                player->client->bFrozen);
+        }
+#endif
     }
     G_PruneLoadedCorpses();
     //Profile_EndInternal(0);
