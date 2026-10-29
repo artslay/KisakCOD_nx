@@ -369,11 +369,7 @@ void __cdecl CG_CheckForPlayerInput(int localClientNum)
         memcpy(&v2, &newCmd, sizeof(v2));
         memcpy(&v1, &oldCmd, sizeof(v1));
         newInput = CG_CheckPlayerMovement(v1, v2);
-        // A held movement command can be identical to the previous usercmd
-        // for many frames. Treat ongoing movement as input too, so timed HUD
-        // elements (notably Compass) stay visible while the player is moving.
-        if (newCmd.forwardmove || newCmd.rightmove)
-            newInput = 1;
+
         if (CG_CheckPlayerWeaponUsage(localClientNum, newCmd.buttons))
             newInput = 1;
         if (CG_CheckPlayerOffHandUsage(localClientNum, newCmd.buttons))
