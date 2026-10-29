@@ -288,7 +288,10 @@ static inline bool Switch_UI_ValidateStatement(
             return false;
         }
 
-        if (entry->type &&
+        // Only type 1 entries are operands. Operator entries reuse the same
+        // union for an operation code, so interpreting their bytes as an
+        // Operand can reject a perfectly valid HUD/menu expression.
+        if (entry->type == 1 &&
             entry->data.operand.dataType == VAL_STRING &&
             Switch_UI_BadPointer(entry->data.operand.internals.string))
         {
