@@ -41,6 +41,18 @@ static bool CL_CinematicHasFadeSuffix(const char *name)
     return end - baseName >= 4 && I_strnicmp(end - 4, "fade", 4) == 0;
 }
 
+// Re-evaluate the name after a queued cinematic is promoted to the active
+// target. Do not set skippable=true here: explicit unskippablecinematic must
+// remain unskippable for ordinary names as well.
+void CL_EnforceFadeCinematicSkipRule(void)
+{
+    if (CL_CinematicHasFadeSuffix(cinematicGlob.currentCinematicName) ||
+        CL_CinematicHasFadeSuffix(cinematicGlob.targetCinematicName))
+    {
+        cin_skippable = false;
+    }
+}
+
 #ifdef __SWITCH__
 extern void CL_PrepareCinematicSkipInput(int localClientNum);
 extern void Switch_LogWrite(const char *msg);
@@ -154,10 +166,14 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
         if (SCR_IsMapLoadingCinematicActive())
             Switch_LogWrite("[KisakCOD][CIN LOAD] starting queued movie after loading movie EOF\n");
         R_Cinematic_StartNextPlayback();
+        CL_EnforceFadeCinematicSkipRule();
     }
 #else
     if (R_Cinematic_IsNextReady())
+    {
         R_Cinematic_StartNextPlayback();
+        CL_EnforceFadeCinematicSkipRule();
+    }
 #endif
     if (R_Cinematic_IsFinished())
         SCR_StopCinematic(localClientNum);
@@ -167,6 +183,7 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
 
 void __cdecl SCR_StopCinematic(int32_t localClientNum)
 {
+    CL_EnforceFadeCinematicSkipRule();
     const bool cinematicFinished = R_Cinematic_IsFinished();
     if (cin_skippable || cinematicFinished)
     {
@@ -224,6 +241,7 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
         if (continueMapLoadingCinematic)
         {
             R_Cinematic_StartNextPlayback();
+            CL_EnforceFadeCinematicSkipRule();
             Switch_LogWrite("[KisakCOD][CIN LOAD] advanced to queued movie after skip\n");
         }
 #endif
@@ -253,6 +271,7 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
                 // and keep CA_CINEMATIC so the normal cinematic draw path
                 // continues to own the screen.
                 R_Cinematic_StartNextPlayback();
+                CL_EnforceFadeCinematicSkipRule();
                 Switch_LogWrite("[KisakCOD][CIN SKIP FLOW] advanced to queued cinematic\n");
             }
 #endif
