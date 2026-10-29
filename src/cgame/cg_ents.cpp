@@ -278,17 +278,24 @@ void __cdecl CG_AddEntityLoopSound(int localClientNum, const centity_s *cent)
         static uint32_t invalidLoopSoundLogCount = 0;
         if (invalidLoopSoundLogCount++ < 8u)
         {
-        std::snprintf(
-            switchLogLine,
-            sizeof(switchLogLine),
-            "[KisakCOD][CG LOOP SOUND] stage=invalid_alias_index ent=%u type=%u loopSound=%u max=%u\n",
-            static_cast<unsigned>(cent->nextState.number),
-            static_cast<unsigned>(cent->nextState.eType),
-            loopSound,
-            static_cast<unsigned>(CS_SOUNDALIASES_LAST - CS_SOUNDALIASES));
-        Switch_LogWrite(switchLogLine);
+            std::snprintf(
+                switchLogLine,
+                sizeof(switchLogLine),
+                "[KisakCOD][CG LOOP SOUND] stage=invalid_alias_index ent=%u type=%u loopSound=%u max=%u\n",
+                static_cast<unsigned>(cent->nextState.number),
+                static_cast<unsigned>(cent->nextState.eType),
+                loopSound,
+                static_cast<unsigned>(CS_SOUNDALIASES_LAST - CS_SOUNDALIASES));
+            Switch_LogWrite(switchLogLine);
         }
 #endif
+        Com_Error(
+            ERR_DROP,
+            "CG_AddEntityLoopSound: alias index %u out of range (max %u, entity %u, type %u)",
+            loopSound,
+            static_cast<unsigned>(CS_SOUNDALIASES_LAST - CS_SOUNDALIASES),
+            static_cast<unsigned>(cent->nextState.number),
+            static_cast<unsigned>(cent->nextState.eType));
         return;
     }
 
