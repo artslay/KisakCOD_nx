@@ -1839,15 +1839,30 @@ void __cdecl UI_Refresh()
             // client is active, then finish the normal auto-continue transition.
             if (CL_GetLocalClientConnectionState(0) == CA_ACTIVE)
             {
-                const bool completedLoadingCinematic = SCR_ConsumeMapLoadingCinematicFinished();
                 const bool pregameVisible = Menu_IsMenuOpenAndVisible(0, "pregame");
                 const bool cinematicFinished = R_Cinematic_IsFinished();
                 const bool cinematicStillActive =
                     R_Cinematic_IsStarted() ||
                     R_Cinematic_IsPending() ||
                     R_Cinematic_IsNextReady();
+                const bool activeFadeOverlay =
+                    cinematicStillActive && SCR_IsCurrentCinematicFadeTransition();
 
-                if ((pregameVisible && cinematicFinished) ||
+                // The load-completion latch must not trigger UI_PlayerStart in
+                // the middle of an ordinary queued intro movie: UI_PlayerStart
+                // stops a non-fade movie when there is no next item to promote.
+                // Keep the latch pending until either the movie chain drains or
+                // the designated _fade overlay starts, then hand gameplay over.
+                const bool mayConsumeLoadingLatch =
+                    !cinematicStillActive || activeFadeOverlay;
+                const bool completedLoadingCinematic =
+                    mayConsumeLoadingLatch
+                        ? SCR_ConsumeMapLoadingCinematicFinished()
+                        : false;
+                const bool pregameFinished =
+                    pregameVisible && cinematicFinished && !cinematicStillActive;
+
+                if (pregameFinished ||
                     completedLoadingCinematic ||
                     (!pregameVisible && !cinematicStillActive))
                 {
