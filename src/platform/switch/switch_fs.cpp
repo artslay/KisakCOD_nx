@@ -2476,8 +2476,8 @@ const char **__cdecl FS_ListFilesInLocation(
     auto ownedList = std::make_unique<SwitchLocationFileList>();
     ownedList->names = std::move(names);
     ownedList->pointers.reserve(ownedList->names.size() + 1);
-    for (const std::string &name : ownedList->names)
-        ownedList->pointers.push_back(name.c_str());
+    for (std::string &name : ownedList->names)
+        ownedList->pointers.push_back(name.data());
     ownedList->pointers.push_back(nullptr);
 
     const char **result = ownedList->pointers.data();
