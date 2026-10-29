@@ -94,6 +94,7 @@ void CL_EnforceFadeCinematicSkipRule(void)
 
 #ifdef __SWITCH__
 extern void CL_PrepareCinematicSkipInput(int localClientNum);
+extern void Switch_GamepadPrepareCinematicSkipInput();
 extern void Switch_LogWrite(const char *msg);
 extern "C" void Switch_BeginPostCinematicRenderTrace(const char *reason);
 static bool switchMapLoadingCinematicFinished;
@@ -145,6 +146,7 @@ int32_t __cdecl CIN_PlayCinematic(int32_t localClientNum, char *arg)
     volume = SND_GetVolumeNormalized() * snd_cinematicVolumeScale->current.value;
     R_Cinematic_StartPlayback(arg, 5u, volume);
 #ifdef __SWITCH__
+    Switch_GamepadPrepareCinematicSkipInput();
     CL_PrepareCinematicSkipInput(localClientNum);
 #endif
     if (cls.uiStarted)
