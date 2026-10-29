@@ -74,7 +74,7 @@ static bool RB_MaterialHasAnyFogableTechnique(const Material *material)
         authoredTechniqueSet->techniques[TECHNIQUE_LIT_BEGIN] ||
         authoredTechniqueSet->techniques[TECHNIQUE_EMISSIVE];
 #else
-    return Material_HasAnyFogableTechnique(material);
+    return Material_HasAnyFogableTechnique(const_cast<Material *>(material));
 #endif
 }
 
