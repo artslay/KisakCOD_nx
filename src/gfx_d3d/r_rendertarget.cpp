@@ -7,7 +7,67 @@
 #include "rb_logfile.h"
 
 #ifdef __SWITCH__
+#include <cstdio>
+#include "../gfx/vulkan/vulkan_backend.h"
 extern void Switch_LogWrite(const char *msg);
+
+namespace
+{
+VkFormat SwitchDepthVkFormat(_D3DFORMAT format)
+{
+    switch (format)
+    {
+    case D3DFMT_D16:
+    case D3DFMT_D16_LOCKABLE:
+        return VK_FORMAT_D16_UNORM;
+    case D3DFMT_D32:
+        return VK_FORMAT_D32_SFLOAT;
+    case D3DFMT_D15S1:
+        return VK_FORMAT_D16_UNORM_S8_UINT;
+    case D3DFMT_D24FS8:
+        return VK_FORMAT_D32_SFLOAT_S8_UINT;
+    case D3DFMT_D24X8:
+        return VK_FORMAT_X8_D24_UNORM_PACK32;
+    case D3DFMT_D24S8:
+        return VK_FORMAT_D24_UNORM_S8_UINT;
+    default:
+        return VK_FORMAT_UNDEFINED;
+    }
+}
+
+bool SwitchDepthFormatSupportsRenderTarget(_D3DFORMAT format)
+{
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!backend || !backend->PhysicalDevice())
+        return false;
+
+    const VkFormat vkFormat = SwitchDepthVkFormat(format);
+    if (vkFormat == VK_FORMAT_UNDEFINED)
+        return false;
+
+    // These depth images also back sampled shadow-map render targets. Validate
+    // the format features for the same use flags requested by R_VulkanAllocTexture
+    // before committing to a format during renderer initialization.
+    const VkFormatFeatureFlags requiredFeatures =
+        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+        VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+        VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    VkFormatProperties properties{};
+    vkGetPhysicalDeviceFormatProperties(
+        backend->PhysicalDevice(), vkFormat, &properties);
+    if ((properties.optimalTilingFeatures & requiredFeatures) != requiredFeatures)
+        return false;
+
+    const VkImageUsageFlags requiredUsage =
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_SAMPLED_BIT |
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    return backend->SupportsImageSampleCount(
+        vkFormat, requiredUsage, VK_SAMPLE_COUNT_1_BIT);
+}
+}
 #endif
 
 
@@ -24,11 +84,12 @@ void __cdecl AssertUninitializedRenderTarget(const GfxRenderTarget *renderTarget
 }
 
 #ifdef __SWITCH__
-bool __cdecl R_IsDepthStencilFormatOk(_D3DFORMAT, _D3DFORMAT depthStencilFormat)
+bool __cdecl R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT depthStencilFormat)
 {
-    return depthStencilFormat == D3DFMT_D16 ||
-           depthStencilFormat == D3DFMT_D24X8 ||
-           depthStencilFormat == D3DFMT_D24S8;
+    // D3D9 queried a device-format pair. Vulkan validates the corresponding
+    // image format and all usages required by this renderer's target textures.
+    (void)renderTargetFormat;
+    return SwitchDepthFormatSupportsRenderTarget(depthStencilFormat);
 }
 #else
 bool __cdecl R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT depthStencilFormat)
@@ -54,8 +115,34 @@ bool __cdecl R_IsDepthStencilFormatOk(_D3DFORMAT renderTargetFormat, _D3DFORMAT 
 int __cdecl R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat)
 {
 #ifdef __SWITCH__
-    (void)renderTargetFormat;
-    return D3DFMT_D24S8;
+    // Prefer packed depth/stencil, but fall back only after verifying that the
+    // active Vulkan device supports attachment, sampling and copy operations.
+    const _D3DFORMAT candidates[] = {
+        D3DFMT_D24S8,
+        D3DFMT_D24FS8,
+        D3DFMT_D15S1,
+        D3DFMT_D32,
+        D3DFMT_D16,
+        D3DFMT_D24X8
+    };
+    for (const _D3DFORMAT candidate : candidates)
+    {
+        if (R_IsDepthStencilFormatOk(renderTargetFormat, candidate))
+        {
+            char message[192];
+            std::snprintf(
+                message, sizeof(message),
+                "[KisakCOD][VK FORMAT] selected depth target d3d=%u vk=%u\n",
+                static_cast<unsigned>(candidate),
+                static_cast<unsigned>(SwitchDepthVkFormat(candidate)));
+            Switch_LogWrite(message);
+            return candidate;
+        }
+    }
+
+    Switch_LogWrite(
+        "[KisakCOD][VK FORMAT] no depth target supports attachment, sampling and transfer usage\n");
+    return D3DFMT_UNKNOWN;
 #else
     if (R_IsDepthStencilFormatOk(renderTargetFormat, D3DFMT_D24FS8))
         return 83;
