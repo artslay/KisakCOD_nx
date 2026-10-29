@@ -65,7 +65,7 @@ static inline uint64_t KisakRendererClock()
 // 2D picture path. Material_OverrideTechniqueSets may give a UI/font material
 // a remapped feature set with LIT/EMISSIVE techniques that were not present in
 // its authored set; using the remapped set here silently drops every glyph.
-static bool RB_MaterialHasAnyFogableTechnique(Material *material)
+static bool RB_MaterialHasAnyFogableTechnique(const Material *material)
 {
 #ifdef __SWITCH__
     const MaterialTechniqueSet *authoredTechniqueSet =
