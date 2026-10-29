@@ -121,6 +121,78 @@ static XSurface *R_GetStaticModelSurfPointer(
 #endif
 }
 
+#ifdef __SWITCH__
+static size_t R_ValidateStaticModelDrawStreamRange(
+    const GfxStaticModelDrawStream *drawStream,
+    const uint32_t *position,
+    size_t requestedWords,
+    const char *stage)
+{
+    if (!drawStream || !position || !drawStream->primDrawSurfsBase)
+    {
+        Com_Error(
+            ERR_DROP,
+            "R_GetNextStaticModelSurf: missing draw stream/buffer at %s (stream=%p position=%p base=%p)",
+            stage ? stage : "<unknown>",
+            static_cast<const void *>(drawStream),
+            static_cast<const void *>(position),
+            drawStream ? static_cast<const void *>(drawStream->primDrawSurfsBase) : nullptr);
+        return 0;
+    }
+
+    constexpr uintptr_t bufferBytes = sizeof(uint32_t) * 65536u;
+    const uintptr_t baseAddress =
+        reinterpret_cast<uintptr_t>(drawStream->primDrawSurfsBase);
+    const uintptr_t wordAddress = reinterpret_cast<uintptr_t>(position);
+    if (baseAddress > UINTPTR_MAX - bufferBytes ||
+        wordAddress < baseAddress)
+    {
+        Com_Error(
+            ERR_DROP,
+            "R_GetNextStaticModelSurf: invalid draw-stream address at %s (position=%p base=%p bytes=%llu)",
+            stage ? stage : "<unknown>",
+            static_cast<const void *>(position),
+            static_cast<const void *>(drawStream->primDrawSurfsBase),
+            static_cast<unsigned long long>(bufferBytes));
+        return 0;
+    }
+
+    const uintptr_t byteOffset = wordAddress - baseAddress;
+    if (byteOffset >= bufferBytes ||
+        (byteOffset % sizeof(uint32_t)) != 0)
+    {
+        Com_Error(
+            ERR_DROP,
+            "R_GetNextStaticModelSurf: draw-stream cursor outside buffer at %s (position=%p base=%p offset=%llu bytes=%llu)",
+            stage ? stage : "<unknown>",
+            static_cast<const void *>(position),
+            static_cast<const void *>(drawStream->primDrawSurfsBase),
+            static_cast<unsigned long long>(byteOffset),
+            static_cast<unsigned long long>(bufferBytes));
+        return 0;
+    }
+
+    const size_t currentWord =
+        static_cast<size_t>(byteOffset / sizeof(uint32_t));
+    const size_t remainingWords = 65536u - currentWord;
+    if (requestedWords > remainingWords)
+    {
+        Com_Error(
+            ERR_DROP,
+            "R_GetNextStaticModelSurf: truncated draw-stream record at %s (position=%p word=%llu requested=%llu remaining=%llu)",
+            stage ? stage : "<unknown>",
+            static_cast<const void *>(position),
+            static_cast<unsigned long long>(currentWord),
+            static_cast<unsigned long long>(requestedWords),
+            static_cast<unsigned long long>(remainingWords));
+        return 0;
+    }
+
+    return remainingWords;
+}
+#endif
+
+
 
 void __cdecl R_SetupStaticModelPrim(XSurface *xsurf, GfxDrawPrimArgs *args, GfxCmdBufPrimState *primState)
 {
@@ -192,9 +264,19 @@ int __cdecl R_GetNextStaticModelSurf(GfxStaticModelDrawStream *drawStream, XSurf
     XSurface *xsurf; // [esp+0h] [ebp-Ch]
     const uint32_t *primDrawSurfPos; // [esp+4h] [ebp-8h]
 
+#ifdef __SWITCH__
+    R_ValidateStaticModelDrawStreamRange(
+        drawStream, drawStream ? drawStream->primDrawSurfPos : nullptr, 1u, "surface/count");
+#endif
     drawStream->smodelCount = *drawStream->primDrawSurfPos++;
     if (!drawStream->smodelCount)
         return 0;
+#ifdef __SWITCH__
+    const size_t listWords =
+        (static_cast<size_t>(drawStream->smodelCount) + 1u) >> 1u;
+    R_ValidateStaticModelDrawStreamRange(
+        drawStream, drawStream->primDrawSurfPos, listWords + 1u, "surface/token+list");
+#endif
     primDrawSurfPos = drawStream->primDrawSurfPos;
     drawStream->primDrawSurfPos += ((drawStream->smodelCount + 1) >> 1) + 1;
     xsurf = R_GetStaticModelSurfPointer(drawStream, primDrawSurfPos);
@@ -310,9 +392,19 @@ int __cdecl R_GetNextStaticModelCachedSurf(GfxStaticModelDrawStream *drawStream)
     const GfxStaticModelDrawInst *smodelDrawInst; // [esp+0h] [ebp-Ch]
     XSurface *xsurf; // [esp+8h] [ebp-4h]
 
+#ifdef __SWITCH__
+    R_ValidateStaticModelDrawStreamRange(
+        drawStream, drawStream ? drawStream->primDrawSurfPos : nullptr, 1u, "cached/count");
+#endif
     drawStream->smodelCount = *drawStream->primDrawSurfPos++;
     if (!drawStream->smodelCount)
         return 0;
+#ifdef __SWITCH__
+    const size_t listWords =
+        (static_cast<size_t>(drawStream->smodelCount) + 1u) >> 1u;
+    R_ValidateStaticModelDrawStreamRange(
+        drawStream, drawStream->primDrawSurfPos, listWords + 1u, "cached/token+list");
+#endif
     const uint32_t *surfaceWord = drawStream->primDrawSurfPos++;
     xsurf = R_GetStaticModelSurfPointer(drawStream, surfaceWord);
     if (!xsurf)
