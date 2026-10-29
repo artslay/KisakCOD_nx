@@ -51,8 +51,21 @@ void __cdecl R_DrawXModelRigidModelSurf(GfxCmdBufContext context, XSurface *xsur
     if (context.state->prim.indexBuffer != ib)
         R_ChangeIndices(&context.state->prim, ib);
 
+#ifdef __SWITCH__
+    // XModel UVs in fastfile vertices use CoD4's custom PackedTexCoords
+    // encoding, not IEEE half floats. The rigid path used to bind the zone
+    // vertex buffer directly, bypassing the conversion already performed by
+    // R_SetPackedModelVertexData for other packed-model draw paths. Copy this
+    // surface into the dynamic vertex buffer so base, normal, and alpha-mask
+    // textures all sample the same correctly decoded UVs.
+    R_CheckVertexDataOverflow(static_cast<int>(sizeof(GfxPackedVertex) * args.vertexCount));
+    vertexOffset0 = R_SetPackedModelVertexData(context.state, xsurf->verts0, args.vertexCount);
+    vb0 = gfxBuf.dynamicVertexBuffer->buffer;
+    iassert(vb0);
+#else
     DB_GetVertexBufferAndOffset(xsurf->zoneHandle, (uint8*)xsurf->verts0, (void **)&vb0, &vertexOffset0);
-    R_SetStreamSource(&context.state->prim, vb0, vertexOffset0, 0x20u);
+#endif
+    R_SetStreamSource(&context.state->prim, vb0, vertexOffset0, sizeof(GfxPackedVertex));
     R_SetupPassPerPrimArgs(context);
     R_DrawIndexedPrimitive(&context.state->prim, &args);
 
