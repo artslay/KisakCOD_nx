@@ -367,23 +367,6 @@ void __cdecl ClientEvents(gentity_s *ent, int oldEventSequence)
     float v21[4]; // [sp+88h] [-98h] BYREF
     
     client = ent->client;
-#ifdef __SWITCH__
-    if (switchTracePlayerAngles)
-    {
-        const playerState_s *ps = &client->ps;
-        Com_Printf(
-            CON_CHANNEL_SERVER,
-            "[KisakCOD][PLAYER ANGLES PRE] remain=%d pm=%d pmFlags=0x%x eFlags=0x%x health=%d viewYaw=%.1f deltaYaw=%.1f cmdYaw=%d cmdYawDeg=%.1f entityYaw=%.1f lockedEnt=%d linkAnglesLocked=%d frozen=%d tagInfo=%p clampBaseYaw=%.1f clampRangeYaw=%.1f\n",
-            g_switchPlayerAngleTraceFrames, ps->pm_type, ps->pm_flags, ps->eFlags,
-            ps->stats[STAT_HEALTH], ps->viewangles[1], ps->delta_angles[1],
-            (int)p_cmd->angles[1], (float)p_cmd->angles[1] * 0.0054931641f,
-            ent->r.currentAngles[1], ps->viewlocked_entNum,
-            client->linkAnglesLocked, client->bFrozen,
-            static_cast<void *>(ent->tagInfo),
-            ps->viewAngleClampBase[1], ps->viewAngleClampRange[1]);
-    }
-#endif
-
     eventSequence = client->ps.eventSequence;
     if (oldEventSequence < eventSequence - 4)
         oldEventSequence = eventSequence - 4;
@@ -680,6 +663,23 @@ void __cdecl ClientThink_real(gentity_s *ent)
 	{
 		client->ps.pm_type = ent->tagInfo ? PM_NORMAL_LINKED : PM_NORMAL;
 	}
+
+#ifdef __SWITCH__
+    if (switchTracePlayerAngles)
+    {
+        const playerState_s *ps = &client->ps;
+        Com_Printf(
+            CON_CHANNEL_SERVER,
+            "[KisakCOD][PLAYER ANGLES PRE] remain=%d pm=%d pmFlags=0x%x eFlags=0x%x health=%d viewYaw=%.1f deltaYaw=%.1f cmdYaw=%d cmdYawDeg=%.1f entityYaw=%.1f lockedEnt=%d linkAnglesLocked=%d frozen=%d tagInfo=%p clampBaseYaw=%.1f clampRangeYaw=%.1f\n",
+            g_switchPlayerAngleTraceFrames, ps->pm_type, ps->pm_flags, ps->eFlags,
+            ps->stats[STAT_HEALTH], ps->viewangles[1], ps->delta_angles[1],
+            (int)p_cmd->angles[1], (float)p_cmd->angles[1] * 0.0054931641f,
+            ent->r.currentAngles[1], ps->viewlocked_entNum,
+            client->linkAnglesLocked, client->bFrozen,
+            static_cast<void *>(ent->tagInfo),
+            ps->viewAngleClampBase[1], ps->viewAngleClampRange[1]);
+    }
+#endif
 
     eventSequence = client->ps.eventSequence;
     v9 = (float)(client->ps.aimSpreadScale * (float)0.0039215689);
