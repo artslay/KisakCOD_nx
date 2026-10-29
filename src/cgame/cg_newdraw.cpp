@@ -3175,10 +3175,26 @@ void __cdecl CG_OwnerDraw(
     //a18 = *(__int64 *)((char *)&vertAlign + 4);
     //a19 = vertAlign;
 
+#ifdef __SWITCH__
+    // The script-controlled HUD flag can be left off by a mission transition.
+    // Still render the map, mission objectives and target markers in the pause
+    // menu: these are pause-screen navigation UI, not the live gameplay HUD.
+    const bool switchPauseMissionMap =
+        cg_paused->current.integer &&
+        UI_GetActiveMenu(localClientNum) == UIMENU_INGAME &&
+        (ownerDraw == 99 || ownerDraw == 100 || ownerDraw == 101 ||
+         (ownerDraw >= 180 && ownerDraw <= 187));
+    if ((!cg_drawHUD->current.enabled || !hud_drawHUD->current.enabled) &&
+        !switchPauseMissionMap)
+    {
+        return;
+    }
+#else
     if (!cg_drawHUD->current.enabled || !hud_drawHUD->current.enabled)
     {
         return;
     }
+#endif
 
     LocalClientGlobals = CG_GetLocalClientGlobals(localClientNum);
     ps = CG_GetPredictedPlayerState(localClientNum);
