@@ -1550,14 +1550,6 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
             playerKeys[localClientNum].anyKeyDown = 0;
     }
 
-#ifdef __SWITCH__
-    // Do not dispatch a synthetic/physical Escape that belongs to the input
-    // which opened the cinematic. CL_PrepareCinematicSkipInput keeps this
-    // guard active until all previously-held keys/buttons have been released.
-    if (switchCinematicSkipBlockedUntilRelease && down && key == K_ESCAPE)
-        return;
-#endif
-
     clientUIActive_t *clUI = CL_GetLocalClientUIGlobals(localClientNum);
 
     if (CL_IsConsoleKey(key) || (clUI->keyCatchers & (KEYCATCH_CONSOLE | KEYCATCH_SCRIPT)) != 0)
@@ -1856,14 +1848,6 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
         if (--playerKeys[localClientNum].anyKeyDown < 0)
             playerKeys[localClientNum].anyKeyDown = 0;
     }
-
-#ifdef __SWITCH__
-    // Do not dispatch a synthetic/physical Escape that belongs to the input
-    // which opened the cinematic. CL_PrepareCinematicSkipInput keeps this
-    // guard active until all previously-held keys/buttons have been released.
-    if (switchCinematicSkipBlockedUntilRelease && down && key == K_ESCAPE)
-        return;
-#endif
 
     clientUIActive_t *clUI = CL_GetLocalClientUIGlobals(localClientNum);
 
