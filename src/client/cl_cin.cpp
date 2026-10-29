@@ -203,7 +203,7 @@ static bool SCR_StopCinematicInternal(int32_t localClientNum, bool forceSkip)
 #ifdef __SWITCH__
     if (forceSkip && CL_IsCurrentCinematicFadeTransition() && !cinematicFinished)
     {
-        Switch_LogWrite("[KisakCOD][CIN SKIP] rejected active-game fade transition\\n");
+        Switch_LogWrite("[KisakCOD][CIN SKIP] rejected active-game fade transition\n");
         return false;
     }
 #endif
@@ -319,6 +319,16 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
 // independent of stale cin_skippable state. Authored *_fade clips remain locked.
 bool SCR_SkipActiveGameCinematic(int32_t localClientNum)
 {
+    // The render path normally promotes a queued movie from CG_DrawFadeInCinematic.
+    // If input arrives before the first draw of that queue, promote it here so
+    // the same fade-name check and stop lifecycle applies to the actual movie.
+    if (!R_Cinematic_IsStarted() &&
+        !R_Cinematic_IsPending() &&
+        R_Cinematic_IsNextReady())
+    {
+        R_Cinematic_StartNextPlayback();
+        CL_EnforceFadeCinematicSkipRule();
+    }
     return SCR_StopCinematicInternal(localClientNum, true);
 }
 
