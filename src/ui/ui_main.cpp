@@ -25,6 +25,8 @@
 #include <database/database.h>
 #include <qcommon/com_playerprofile.h>
 
+extern void CL_EnforceFadeCinematicSkipRule(void);
+
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern void SCR_SetMapLoadingCinematicActive(bool active);
@@ -1755,7 +1757,10 @@ void UI_PlayerStart()
     CL_SetSkipRendering(0);
     UI_SetActiveMenu(0, UIMENU_NONE);
     if (R_Cinematic_IsNextReady())
+    {
         R_Cinematic_StartNextPlayback();
+        CL_EnforceFadeCinematicSkipRule();
+    }
     else
         R_Cinematic_StopPlayback();
 }
