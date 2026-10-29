@@ -442,7 +442,7 @@ void __cdecl CG_MenuShowNotify(int localClientNum, int menuToShow)
         }
         break;
     case 2:
-if (cgArray[0].compassFadeTime < cgArray[0].time)
+        if (cgArray[0].compassFadeTime < cgArray[0].time)
         {
             cgArray[0].compassFadeTime = cgArray[0].time;
             Menus_ShowByName(&cgDC, "Compass");
@@ -500,7 +500,7 @@ void __cdecl CG_HudMenuShowAllTimed(int localClientNum)
         Menus_ShowByName(&cgDC, "weaponinfo_lowdef");
         time = cgArray[0].time;
     }
-if (cgArray[0].compassFadeTime < time)
+    if (cgArray[0].compassFadeTime < time)
     {
         cgArray[0].compassFadeTime = time;
         Menus_ShowByName(&cgDC, "Compass");
