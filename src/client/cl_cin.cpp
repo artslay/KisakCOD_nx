@@ -13,6 +13,34 @@
 
 bool cin_skippable;
 
+// A movie whose asset name ends in "fade" is an authored transition. These
+// clips must complete naturally instead of being treated as ordinary movies.
+static bool CL_CinematicHasFadeSuffix(const char *name)
+{
+    if (!name || !*name)
+        return false;
+
+    const char *baseName = name;
+    for (const char *p = name; *p; ++p)
+    {
+        if (*p == 47 || *p == 92)
+            baseName = p + 1;
+    }
+
+    const char *end = name + strlen(name);
+    const char *extension = strrchr(baseName, '.');
+    if (extension &&
+        (!I_stricmp(extension, ".bik") ||
+         !I_stricmp(extension, ".roq") ||
+         !I_stricmp(extension, ".avi") ||
+         !I_stricmp(extension, ".wmv")))
+    {
+        end = extension;
+    }
+
+    return end - baseName >= 4 && I_strnicmp(end - 4, "fade", 4) == 0;
+}
+
 #ifdef __SWITCH__
 extern void CL_PrepareCinematicSkipInput(int localClientNum);
 extern void Switch_LogWrite(const char *msg);
@@ -87,11 +115,10 @@ void __cdecl CL_PlayCinematic_f()
 {
     char *arg1; // [esp+0h] [ebp-Ch]
 
-    // Match the original engine: cinematic is skippable by default.
-    // The explicit unskippablecinematic command overrides this in
-    // CL_PlayUnskippableCinematic_f().
-    cin_skippable = 1;
     arg1 = (char *)Cmd_Argv(1);
+    // Ordinary cinematics are skippable. Authored *_fade transition clips
+    // must finish; the explicit unskippablecinematic command remains an override.
+    cin_skippable = !CL_CinematicHasFadeSuffix(arg1);
 #ifdef __SWITCH__
     char trace[256];
     std::snprintf(
