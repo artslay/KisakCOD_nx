@@ -505,6 +505,17 @@ void __cdecl CG_CheckHudCompassDisplay(int localClientNum)
             int elapsed = cgArray[0].time - cgArray[0].compassFadeTime;
             if ((float)elapsed > v1->current.value * 1000.0f)
             {
+#ifdef __SWITCH__
+                char compassHideTrace[192];
+                std::snprintf(
+                    compassHideTrace, sizeof(compassHideTrace),
+                    "[KisakCOD][HUD COMPASS] hide_reason=fade_timeout gameTime=%d startTime=%d elapsed=%d fadeSeconds=%.2f\\n",
+                    cgArray[0].time,
+                    cgArray[0].compassFadeTime,
+                    elapsed,
+                    v1->current.value);
+                Switch_LogWrite(compassHideTrace);
+#endif
                 cgArray[0].compassFadeTime = 0;
                 Menus_HideByName(&cgDC, "Compass");
             }
