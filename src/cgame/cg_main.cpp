@@ -1451,6 +1451,10 @@ void __cdecl CG_Init(int localClientNum, int savegame)
     cgameGlob->refdef.dof.farBlur = 0.0;
     
     CG_RegisterDvars();
+    // hud_drawHUD is script-controlled, but its value can survive a level
+    // transition. Start each newly initialized level with HUD drawing enabled;
+    // mission scripts remain free to hide it later for authored sequences.
+    Dvar_SetFromStringByName("hud_drawHUD", (char *)"1");
     // Always enable the engine's built-in FPS counter on Switch, even when
     // an archived user config previously saved cg_drawFPS as Off.
     Dvar_SetFromStringByName("cg_drawFPS", (char *)"1");
@@ -1514,6 +1518,11 @@ void __cdecl CG_Init(int localClientNum, int savegame)
 
     iassert(!I_strnicmp(cgs->mapname, "maps/", 5 ));
     Com_StripExtension(&cgsArray[0].mapname[5], mapname);
+
+    // The compass map is a per-level material. Rebind it for the current map
+    // rather than retaining an unset/stale pointer across cgame initialization.
+    cgameGlob->compassMapMaterial =
+        Material_RegisterHandle(va("compass_map_%s", mapname), IMAGE_TRACK_HUD);
 
     ProfLoad_Begin("Init effects system");
     FX_InitSystem(localClientNum);
