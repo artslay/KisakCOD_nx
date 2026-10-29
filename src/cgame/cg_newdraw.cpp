@@ -3183,6 +3183,7 @@ void __cdecl CG_OwnerDraw(
         cg_paused->current.integer &&
         UI_GetActiveMenu(localClientNum) == UIMENU_INGAME &&
         (ownerDraw == 99 || ownerDraw == 100 || ownerDraw == 101 ||
+         (ownerDraw >= 145 && ownerDraw <= 164) ||
          (ownerDraw >= 180 && ownerDraw <= 187));
     if ((!cg_drawHUD->current.enabled || !hud_drawHUD->current.enabled) &&
         !switchPauseMissionMap)
