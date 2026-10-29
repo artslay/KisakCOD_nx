@@ -272,6 +272,7 @@ void Switch_GamepadFrame()
     if (activeGameCinematic && Pressed(cinematicSkipButtons))
     {
         const uiMenuCommand_t activeMenu = UI_GetActiveMenu(0);
+        const bool hadCurrentMovie = R_Cinematic_IsStarted() || R_Cinematic_IsPending();
         const bool hadQueuedNextPlayback = R_Cinematic_IsNextReady();
         if (!SCR_SkipActiveGameCinematic(0))
         {
@@ -286,10 +287,10 @@ void Switch_GamepadFrame()
             // StopPlayback is asynchronous. Defer the frontend-to-game handoff
             // until the renderer has drained the current/queued cinematic chain.
             g_startGameAfterCinematicQueue = true;
-            Switch_LogWrite(
-                hadQueuedNextPlayback
-                    ? "[KisakCOD][CIN SKIP] skipped current movie; preserving queued chain\n"
-                    : "[KisakCOD][CIN SKIP] movie skip accepted; waiting for renderer stop\n");
+            if (hadQueuedNextPlayback && hadCurrentMovie)
+                Switch_LogWrite("[KisakCOD][CIN SKIP] skipped current movie; preserving queued chain\n");
+            else
+                Switch_LogWrite("[KisakCOD][CIN SKIP] movie skip accepted; waiting for renderer stop\n");
         }
         else
         {
