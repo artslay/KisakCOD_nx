@@ -15,6 +15,10 @@
 #include <client/cl_input.h>
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+int g_switchPlayerAngleTraceFrames = 0;
+#endif
+
 void __cdecl P_DamageFeedback(gentity_s *player)
 {
     gclient_s *client; // r31
@@ -363,6 +367,23 @@ void __cdecl ClientEvents(gentity_s *ent, int oldEventSequence)
     float v21[4]; // [sp+88h] [-98h] BYREF
     
     client = ent->client;
+#ifdef __SWITCH__
+    if (switchTracePlayerAngles)
+    {
+        const playerState_s *ps = &client->ps;
+        Com_Printf(
+            CON_CHANNEL_SERVER,
+            "[KisakCOD][PLAYER ANGLES PRE] remain=%d pm=%d pmFlags=0x%x eFlags=0x%x health=%d viewYaw=%.1f deltaYaw=%.1f cmdYaw=%d cmdYawDeg=%.1f entityYaw=%.1f lockedEnt=%d linkAnglesLocked=%d frozen=%d tagInfo=%p clampBaseYaw=%.1f clampRangeYaw=%.1f\\n",
+            g_switchPlayerAngleTraceFrames, ps->pm_type, ps->pm_flags, ps->eFlags,
+            ps->stats[STAT_HEALTH], ps->viewangles[1], ps->delta_angles[1],
+            (int)p_cmd->angles[1], (float)p_cmd->angles[1] * 0.0054931641f,
+            ent->r.currentAngles[1], ps->viewlocked_entNum,
+            client->linkAnglesLocked, client->bFrozen,
+            static_cast<void *>(ent->tagInfo),
+            ps->viewAngleClampBase[1], ps->viewAngleClampRange[1]);
+    }
+#endif
+
     eventSequence = client->ps.eventSequence;
     if (oldEventSequence < eventSequence - 4)
         oldEventSequence = eventSequence - 4;
@@ -620,6 +641,10 @@ void __cdecl ClientThink_real(gentity_s *ent)
     __int64 v37; // [sp+60h] [-190h]
     __int64 v38; // [sp+68h] [-188h]
     pmove_t v39; // [sp+70h] [-180h] BYREF
+#ifdef __SWITCH__
+    const bool switchTracePlayerAngles =
+        ent == &g_entities[0] && g_switchPlayerAngleTraceFrames > 0;
+#endif
 
     client = ent->client;
     if (client->pers.connected != CON_CONNECTED)
@@ -679,6 +704,19 @@ void __cdecl ClientThink_real(gentity_s *ent)
     if (v12->ps.eventSequence != eventSequence)
         ent->r.eventTime = level.time;
     G_PlayerStateToEntityStateExtrapolate(&v12->ps, &ent->s, v12->ps.commandTime, 1);
+#ifdef __SWITCH__
+    if (switchTracePlayerAngles)
+    {
+        Com_Printf(
+            CON_CHANNEL_SERVER,
+            "[KisakCOD][PLAYER ANGLES POST] remain=%d pm=%d pmFlags=0x%x eFlags=0x%x viewYaw=%.1f deltaYaw=%.1f entityStateYaw=%.1f currentYaw=%.1f origin=(%.1f,%.1f,%.1f)\\n",
+            g_switchPlayerAngleTraceFrames, v12->ps.pm_type, v12->ps.pm_flags,
+            v12->ps.eFlags, v12->ps.viewangles[1], v12->ps.delta_angles[1],
+            ent->s.lerp.apos.trBase[1], ent->r.currentAngles[1],
+            v12->ps.origin[0], v12->ps.origin[1], v12->ps.origin[2]);
+        --g_switchPlayerAngleTraceFrames;
+    }
+#endif
     ent->r.currentOrigin[0] = ent->s.lerp.pos.trBase[0];
     ent->r.currentOrigin[1] = ent->s.lerp.pos.trBase[1];
     ent->r.currentOrigin[2] = ent->s.lerp.pos.trBase[2];
