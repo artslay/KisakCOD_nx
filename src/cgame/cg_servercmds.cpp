@@ -2238,6 +2238,13 @@ void __cdecl CG_MapInit(int restart)
     cg_waitingScriptMenu.name[0] = 0;
     CG_Respawn(0);
 
+    // Show the compass as soon as the player enters a map. It is normally
+    // revealed by CG_CheckForPlayerInput, but that event may not have changed
+    // between usercmds yet on the first rendered frames after startup/respawn.
+    // Keep the normal fade timer so it can still hide after idle and reappear
+    // while movement continues.
+    cgArray[0].compassFadeTime = cgArray[0].time + 1;
+    Menus_ShowByName(&cgDC, "Compass");
 
 }
 
