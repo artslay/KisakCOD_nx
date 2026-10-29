@@ -1481,78 +1481,88 @@ const saveField_t *__cdecl BadPlaceParmSaveFields(const badplace_t *badplace)
 
 void __cdecl WriteBadPlaces(SaveGame *save)
 {
-    int v2; // r27
-    unsigned __int8 *v3; // r31
-    unsigned __int8 *v4; // r10
-    unsigned __int8 *v5; // r11
-    int v6; // ctr
-    unsigned __int8 *v7; // r10
-    unsigned int *v8; // r11
-    int v9; // ctr
-    const saveField_t *v10; // r3
-    unsigned __int8 v11[32]; // [sp+50h] [-90h] BYREF
-    unsigned __int8 v12[112]; // [sp+70h] [-70h] BYREF
+    // Keep the original save-game wire layout (12-byte header followed by
+    // 28 bytes of parameters), but never derive field offsets or array stride
+    // from the old 32-bit badplace_t layout.
+    static_assert(sizeof(badplace_arc_t) == 28, "badplace arc save format changed");
 
-    if (!save)
-        MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1641, 0, "%s", "save");
-    v2 = 32;
-    v3 = (unsigned __int8 *)g_badplaces;
-    do
+    iassert(save);
+    for (int i = 0; i < ARRAY_COUNT(g_badplaces); ++i)
     {
-        v4 = v12;
-        v5 = v3;
-        v6 = 10;
-        do
+#ifdef __SWITCH__
+        SwitchSaveStageIndex("write_bad_places", i);
+#endif
+        const badplace_t *badplace = &g_badplaces[i];
+        unsigned char header[12];
+        std::memcpy(header, badplace, sizeof(header));
+        G_WriteStruct(badplaceFields, (unsigned char *)badplace, header, sizeof(header), save);
+
+        unsigned char parameters[28] = {};
+        if (badplace->type == 1)
         {
-            *(unsigned int *)v4 = *(unsigned int *)v5;
-            v5 += 4;
-            v4 += 4;
-            --v6;
-        } while (v6);
-        G_WriteStruct(badplaceFields, v3, v12, 12, save);
-        v7 = v11;
-        v8 = (unsigned int*)(v3 + 12);
-        v9 = 7;
-        do
+            std::memcpy(parameters, &badplace->parms.arc, sizeof(badplace_arc_t));
+        }
+        else if (badplace->type == 2)
         {
-            *(unsigned int *)v7 = *v8++;
-            v7 += 4;
-            --v9;
-        } while (v9);
-        if (!v3)
-            MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1618, 0, "%s", "badplace");
-        v10 = badplaceDefaultParmsFields;
-        if (v3[10] == 2)
-            v10 = badplaceBrushParmsFields;
-        G_WriteStruct(v10, v3 + 12, v11, 28, save);
-        --v2;
-        v3 += 40;
-    } while (v2);
+            // The on-disk brush parameter is a 32-bit entity index followed
+            // by a float radius, not a native pointer followed by a float.
+            unsigned int entityIndex = 0;
+            if (badplace->parms.brush.volume)
+            {
+                entityIndex = static_cast<unsigned int>(
+                    badplace->parms.brush.volume - g_entities + 1);
+                if (entityIndex > 0x880)
+                    Com_Error(ERR_DROP, "WriteField1: entity out of range (%i)", entityIndex);
+            }
+            std::memcpy(parameters, &entityIndex, sizeof(entityIndex));
+            std::memcpy(parameters + sizeof(entityIndex),
+                &badplace->parms.brush.radius, sizeof(badplace->parms.brush.radius));
+        }
+
+        SaveMemory_SaveWrite(parameters, sizeof(parameters), save);
+    }
 }
 
 void __cdecl ReadBadPlaces(SaveGame *save)
 {
-    int loops; // r27
-    badplace_t *badplace; // r31
-    const saveField_t *v4; // r3
+    // The stream stays 32-bit-format-compatible; convert its entity index
+    // into a native pointer only after reading the packed parameter record.
+    static_assert(sizeof(badplace_arc_t) == 28, "badplace arc save format changed");
 
     iassert(save);
-    loops = ARRAY_COUNT(g_badplaces);
-    badplace = g_badplaces;
-    do
+    for (int i = 0; i < ARRAY_COUNT(g_badplaces); ++i)
     {
-        G_ReadStruct(badplaceFields, (unsigned __int8 *)badplace, 12, save);
-        if (!badplace)
-            MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1618, 0, "%s", "badplace");
-        v4 = badplaceDefaultParmsFields;
-        if (badplace->type == 2)
-            v4 = badplaceBrushParmsFields;
-        G_ReadStruct(v4, (unsigned __int8 *)&badplace->parms, 28, save);
+#ifdef __SWITCH__
+        SwitchSaveStageIndex("read_bad_places", i);
+#endif
+        badplace_t *badplace = &g_badplaces[i];
+        G_ReadStruct(badplaceFields, (unsigned char *)badplace, 12, save);
+
+        unsigned char parameters[28] = {};
+        SaveMemory_LoadRead(parameters, sizeof(parameters), save);
+        std::memset(&badplace->parms, 0, sizeof(badplace->parms));
+
+        if (badplace->type == 1)
+        {
+            std::memcpy(&badplace->parms.arc, parameters, sizeof(badplace_arc_t));
+        }
+        else if (badplace->type == 2)
+        {
+            unsigned int entityIndex = 0;
+            float radius = 0.0f;
+            std::memcpy(&entityIndex, parameters, sizeof(entityIndex));
+            std::memcpy(&radius, parameters + sizeof(entityIndex), sizeof(radius));
+
+            if (entityIndex > MAX_GENTITIES)
+                Com_Error(ERR_DROP, "ReadField: entity out of range (%i)", entityIndex);
+            badplace->parms.brush.volume =
+                entityIndex ? &g_entities[entityIndex - 1] : nullptr;
+            badplace->parms.brush.radius = radius;
+        }
+
         if (badplace->type)
             Path_UpdateBadPlaceCount(badplace, 1);
-        --loops;
-        ++badplace;
-    } while (loops);
+    }
 }
 
 void __cdecl WriteThreatBiasGroups(SaveGame *save)
