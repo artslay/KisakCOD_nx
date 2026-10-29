@@ -41,15 +41,10 @@ static bool CL_CinematicHasFadeSuffix(const char *name)
     return end - baseName >= 4 && I_strnicmp(end - 4, "fade", 4) == 0;
 }
 
-// Re-evaluate the name after a queued cinematic is promoted to the active
-// target. Do not set skippable=true here: explicit unskippablecinematic must
-// remain unskippable for ordinary names as well.
-void CL_EnforceFadeCinematicSkipRule(void)
+// During an async handoff currentCinematicName can still refer to the
+// previous clip. Prefer the requested target until it matches the active name.
+static const char *CL_GetEffectiveCinematicName()
 {
-    // During an async handoff currentCinematicName can still refer to the
-    // previous clip. Prefer the requested target until it matches the active
-    // name; otherwise a completed *_fade clip could make the next movie
-    // unskippable by mistake.
     const char *effectiveName = cinematicGlob.currentCinematicName;
     if (cinematicGlob.targetCinematicName[0] &&
         (!effectiveName[0] ||
@@ -57,8 +52,19 @@ void CL_EnforceFadeCinematicSkipRule(void)
     {
         effectiveName = cinematicGlob.targetCinematicName;
     }
+    return effectiveName;
+}
 
-    if (CL_CinematicHasFadeSuffix(effectiveName))
+static bool CL_IsCurrentCinematicFadeTransition()
+{
+    return CL_CinematicHasFadeSuffix(CL_GetEffectiveCinematicName());
+}
+
+// Do not set skippable=true here: explicit unskippablecinematic must remain
+// unskippable for ordinary names as well.
+void CL_EnforceFadeCinematicSkipRule(void)
+{
+    if (CL_IsCurrentCinematicFadeTransition())
         cin_skippable = false;
 }
 
@@ -190,11 +196,18 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum)
         R_Cinematic_DrawStretchPic_Letterboxed();
 }
 
-void __cdecl SCR_StopCinematic(int32_t localClientNum)
+static bool SCR_StopCinematicInternal(int32_t localClientNum, bool forceSkip)
 {
-    CL_EnforceFadeCinematicSkipRule();
     const bool cinematicFinished = R_Cinematic_IsFinished();
-    if (cin_skippable || cinematicFinished)
+    CL_EnforceFadeCinematicSkipRule();
+#ifdef __SWITCH__
+    if (forceSkip && CL_IsCurrentCinematicFadeTransition() && !cinematicFinished)
+    {
+        Switch_LogWrite("[KisakCOD][CIN SKIP] rejected active-game fade transition\\n");
+        return false;
+    }
+#endif
+    if (forceSkip || cin_skippable || cinematicFinished)
     {
         // A cinematic can be followed either by a queued console command
         // (nextmap) or by an internal R_Cinematic_SetNextPlayback request.
@@ -291,6 +304,21 @@ void __cdecl SCR_StopCinematic(int32_t localClientNum)
                     UI_SetActiveMenu(localClientNum, UIMENU_MAIN);
             }
         }
+        return true;
     }
+    return false;
+}
+
+void __cdecl SCR_StopCinematic(int32_t localClientNum)
+{
+    (void)SCR_StopCinematicInternal(localClientNum, false);
+}
+
+// Scripted cinematics displayed while the connection remains CA_ACTIVE use the
+// same queue/loading cleanup as a regular cinematic skip, but may be skipped
+// independent of stale cin_skippable state. Authored *_fade clips remain locked.
+bool SCR_SkipActiveGameCinematic(int32_t localClientNum)
+{
+    return SCR_StopCinematicInternal(localClientNum, true);
 }
 
