@@ -220,6 +220,10 @@ uint8_t *__cdecl DB_AllocSwitchAssetMemory(uint32_t size, const char *name, int3
 
 // db_memory
 void __cdecl DB_RecoverGeometryBuffers(XZoneMemory *zoneMem);
+#ifdef __SWITCH__
+void __cdecl DB_ConvertZoneVertexBufferTexCoordsForVulkan(
+    uint8_t *vertexData, uint32_t vertexBufferOffset, uint32_t byteCount);
+#endif
 void __cdecl DB_ReleaseGeometryBuffers(XZoneMemory *zoneMem);
 void __cdecl DB_AllocXZoneMemory(
     uint32_t *blockSize,
