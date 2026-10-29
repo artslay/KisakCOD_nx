@@ -1291,3 +1291,14 @@ void __cdecl DB_FixupSwitchPointerAliases()
                 fixup.serializedSlot,
                 destination});
             continue;
+
+        }
+        
+        if (writeIndex != readIndex)
+            g_switchPointerAliasFixups[writeIndex] = fixup;
+        ++writeIndex;
+    }
+
+    g_switchPointerAliasFixups.resize(writeIndex);
+}
+#endif
