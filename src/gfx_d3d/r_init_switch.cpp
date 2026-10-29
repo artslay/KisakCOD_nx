@@ -406,7 +406,12 @@ void R_InitGraphicsApi() {
     vidConfig.maxTextureSize = 4096;
     vidConfig.maxTextureMaps = 16;
     vidConfig.deviceSupportsGamma = false;
-    dx.depthStencilFormat = D3DFMT_D24S8;
+    dx.depthStencilFormat = R_GetDepthStencilFormat(D3DFMT_A8R8G8B8);
+    if (dx.depthStencilFormat == D3DFMT_UNKNOWN)
+    {
+        R_FatalInitError("No Vulkan depth format supports renderer target usage");
+        return;
+    }
     R_SetupAntiAliasing(nullptr);
 
     // The shared render-target bootstrap expects these metrics to be populated by
@@ -532,7 +537,7 @@ void R_SetShadowmapFormats_DX(uint32_t) {
     // probing because the Switch renderer uses the Vulkan compatibility device.
     // The depth image is backed by the Vulkan depth-stencil format and the companion color
     // surface uses a Vulkan RGBA-compatible format through D3DFMT_A8R8G8B8.
-    gfxMetrics.shadowmapFormatPrimary = D3DFMT_D24S8;
+    gfxMetrics.shadowmapFormatPrimary = dx.depthStencilFormat;
     gfxMetrics.shadowmapFormatSecondary = D3DFMT_A8R8G8B8;
     gfxMetrics.shadowmapBuildTechType = TECHNIQUE_BUILD_SHADOWMAP_DEPTH;
     gfxMetrics.hasHardwareShadowmap = 1;
@@ -744,6 +749,29 @@ char R_CreateDevice(const GfxWindowParms *) {
     return dx.device != nullptr;
 }
 void R_SetD3DPresentParameters(_D3DPRESENT_PARAMETERS_ *, const GfxWindowParms *) {}
+
+static VkFormat R_SwitchVkDepthFormat(_D3DFORMAT format)
+{
+    switch (format)
+    {
+    case D3DFMT_D16:
+    case D3DFMT_D16_LOCKABLE:
+        return VK_FORMAT_D16_UNORM;
+    case D3DFMT_D32:
+        return VK_FORMAT_D32_SFLOAT;
+    case D3DFMT_D15S1:
+        return VK_FORMAT_D16_UNORM_S8_UINT;
+    case D3DFMT_D24FS8:
+        return VK_FORMAT_D32_SFLOAT_S8_UINT;
+    case D3DFMT_D24X8:
+        return VK_FORMAT_X8_D24_UNORM_PACK32;
+    case D3DFMT_D24S8:
+        return VK_FORMAT_D24_UNORM_S8_UINT;
+    default:
+        return VK_FORMAT_UNDEFINED;
+    }
+}
+
 void R_SetupAntiAliasing(const GfxWindowParms *)
 {
     dx.multiSampleType = D3DMULTISAMPLE_NONE;
@@ -751,7 +779,9 @@ void R_SetupAntiAliasing(const GfxWindowParms *)
 
     const int requested = r_aaSamples ? r_aaSamples->current.integer : 1;
     VulkanBackend *backend = GetVulkanBackend();
-    if (!backend || requested <= 1 || g_allocateMinimalResources)
+    const VkFormat depthFormat = R_SwitchVkDepthFormat(dx.depthStencilFormat);
+    if (!backend || requested <= 1 || g_allocateMinimalResources ||
+        depthFormat == VK_FORMAT_UNDEFINED)
     {
         if (requested > 1 && g_allocateMinimalResources)
             Switch_LogWrite("[KisakCOD][VK AA] disabled during minimal-resource initialization\n");
@@ -782,7 +812,7 @@ void R_SetupAntiAliasing(const GfxWindowParms *)
                 option.vk))
             continue;
         if (!backend->SupportsImageSampleCount(
-                VK_FORMAT_D24_UNORM_S8_UINT,
+                depthFormat,
                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                 option.vk))
             continue;
