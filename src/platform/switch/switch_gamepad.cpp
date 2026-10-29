@@ -277,7 +277,7 @@ void Switch_GamepadFrame()
         if (!SCR_SkipActiveGameCinematic(0))
         {
             g_cinematicSkipKeyDown = false;
-            Switch_LogWrite("[KisakCOD][CIN SKIP] active-game fade transition is unskippable\n");
+            Switch_LogWrite("[KisakCOD][CIN SKIP] active-game cinematic is unskippable\n");
             return;
         }
         g_cinematicSkipKeyDown = false;
