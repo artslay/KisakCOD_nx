@@ -75,8 +75,13 @@ int __cdecl XModelGetSurfaces(const XModel *model, XSurface **surfaces, int lod)
     }
     const XModelLodInfo *lodInfo = model->lodInfo;
 #endif
+#ifdef KISAK_SWITCH
+    const uint32_t surfIndex = lodInfo->surfIndex;
+    const uint32_t surfCount = lodInfo->numsurfs;
+#else
     const uint32_t surfIndex = lodInfo[lod].surfIndex;
     const uint32_t surfCount = lodInfo[lod].numsurfs;
+#endif
 #ifdef KISAK_SWITCH
     // XModel::numsurfs is the allocation size for the native surface array.
     // An empty LOD may legitimately have no surface array; a non-empty LOD
