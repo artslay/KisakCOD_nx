@@ -85,13 +85,32 @@ VkFormat FindDepthFormat(VkPhysicalDevice device)
         VK_FORMAT_D32_SFLOAT,
         VK_FORMAT_D16_UNORM
     };
+    const VkFormatFeatureFlags requiredFeatures =
+        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+    const VkImageUsageFlags requiredUsage =
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+        VK_IMAGE_USAGE_SAMPLED_BIT;
 
     for (VkFormat format : candidates)
     {
         VkFormatProperties props{};
         vkGetPhysicalDeviceFormatProperties(device, format, &props);
-        if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
-            return format;
+        if ((props.optimalTilingFeatures & requiredFeatures) != requiredFeatures)
+            continue;
+
+        // CreateDefaultDepth uses the image as both a depth attachment and a
+        // sampled image. Checking only the attachment feature can select a
+        // format that vkCreateImage rejects for the combined usage flags.
+        VkImageFormatProperties imageProps{};
+        const VkResult usageResult = vkGetPhysicalDeviceImageFormatProperties(
+            device, format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+            requiredUsage, 0, &imageProps);
+        if (usageResult != VK_SUCCESS ||
+            (imageProps.sampleCounts & VK_SAMPLE_COUNT_1_BIT) == 0)
+            continue;
+
+        return format;
     }
     return VK_FORMAT_UNDEFINED;
 }
