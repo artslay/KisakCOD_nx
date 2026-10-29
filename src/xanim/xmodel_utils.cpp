@@ -40,10 +40,21 @@ int __cdecl XModelGetSurfaces(const XModel *model, XSurface **surfaces, int lod)
     const uint32_t surfCount = lodInfo[lod].numsurfs;
 #ifdef KISAK_SWITCH
     // XModel::numsurfs is the allocation size for the native surface array.
-    // Never let a corrupt LOD table read surfaces beyond that allocation.
-    if (!model->surfs || surfIndex > model->numsurfs ||
-        surfCount > static_cast<uint32_t>(model->numsurfs - surfIndex))
+    // An empty LOD may legitimately have no surface array; a non-empty LOD
+    // with a missing array or a range outside the allocation is corrupt data.
+    if (surfIndex > model->numsurfs ||
+        surfCount > static_cast<uint32_t>(model->numsurfs - surfIndex) ||
+        (surfCount != 0 && !model->surfs))
     {
+        Com_Error(
+            ERR_DROP,
+            "XModelGetSurfaces: invalid surface range for model %s (lod=%d surfIndex=%u surfCount=%u modelSurfs=%u surfaces=%p)",
+            model->name ? model->name : "<unnamed>",
+            lod,
+            surfIndex,
+            surfCount,
+            static_cast<unsigned>(model->numsurfs),
+            static_cast<const void *>(model->surfs));
         *surfaces = nullptr;
         return 0;
     }
