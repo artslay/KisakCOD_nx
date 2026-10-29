@@ -775,8 +775,6 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
                     ((animAddress - animBase) % sizeof(scr_animscript_t)) != 0)
                 {
                     Com_Error(ERR_DROP, "WriteField1: animscript pointer out of range (%p)", v13);
-                    *reinterpret_cast<uintptr_t *>(v3) = 0;
-                    break;
                 }
 
                 v14 = static_cast<int>((animAddress - animBase) / sizeof(scr_animscript_t));
@@ -784,8 +782,6 @@ void __cdecl WriteField1(const saveField_t *field, const unsigned __int8 *base, 
                 if (v15 <= 0 || v15 > 298)
                 {
                     Com_Error(ERR_DROP, "WriteField1: animscript index out of range (%i)", v15);
-                    *reinterpret_cast<uintptr_t *>(v3) = 0;
-                    break;
                 }
                 *reinterpret_cast<uintptr_t *>(v3) = static_cast<uintptr_t>(v15);
             }
@@ -1024,10 +1020,6 @@ void __cdecl ReadField(const saveField_t *field, unsigned __int8 *base, SaveGame
         if (v23 > 298 || v23 < -1)
         {
             Com_Error(ERR_DROP, "ReadField: animscript out of range (%i)", *v7);
-            // Com_Error can return through the Switch error path. Do not turn
-            // corrupt save data into an arbitrary pointer into script memory.
-            *reinterpret_cast<uintptr_t *>(v7) = 0;
-            break;
         }
         if (!v23)
             goto LABEL_58;
@@ -1506,14 +1498,23 @@ void __cdecl WriteBadPlaces(SaveGame *save)
         {
             // The on-disk brush parameter is a 32-bit entity index followed
             // by a float radius, not a native pointer followed by a float.
-            unsigned int entityIndex = 0;
-            if (badplace->parms.brush.volume)
+            const uintptr_t entitiesAddress =
+                reinterpret_cast<uintptr_t>(g_entities);
+            const uintptr_t volumeAddress =
+                reinterpret_cast<uintptr_t>(badplace->parms.brush.volume);
+            const uintptr_t entitiesBytes = sizeof(g_entities);
+            if (!volumeAddress || volumeAddress < entitiesAddress ||
+                volumeAddress - entitiesAddress >= entitiesBytes ||
+                (volumeAddress - entitiesAddress) % sizeof(gentity_s) != 0)
             {
-                entityIndex = static_cast<unsigned int>(
-                    badplace->parms.brush.volume - g_entities + 1);
-                if (entityIndex > 0x880)
-                    Com_Error(ERR_DROP, "WriteField1: entity out of range (%i)", entityIndex);
+                Com_Error(
+                    ERR_DROP,
+                    "WriteBadPlaces: invalid brush entity in slot %d (volume=%p)",
+                    i,
+                    static_cast<const void *>(badplace->parms.brush.volume));
             }
+            const unsigned int entityIndex = static_cast<unsigned int>(
+                (volumeAddress - entitiesAddress) / sizeof(gentity_s) + 1);
             std::memcpy(parameters, &entityIndex, sizeof(entityIndex));
             std::memcpy(parameters + sizeof(entityIndex),
                 &badplace->parms.brush.radius, sizeof(badplace->parms.brush.radius));
@@ -1553,10 +1554,12 @@ void __cdecl ReadBadPlaces(SaveGame *save)
             std::memcpy(&entityIndex, parameters, sizeof(entityIndex));
             std::memcpy(&radius, parameters + sizeof(entityIndex), sizeof(radius));
 
-            if (entityIndex > MAX_GENTITIES)
-                Com_Error(ERR_DROP, "ReadField: entity out of range (%i)", entityIndex);
-            badplace->parms.brush.volume =
-                entityIndex ? &g_entities[entityIndex - 1] : nullptr;
+            if (entityIndex == 0 || entityIndex > MAX_GENTITIES)
+                Com_Error(
+                    ERR_DROP,
+                    "ReadBadPlaces: active brush bad-place has invalid entity index %u",
+                    entityIndex);
+            badplace->parms.brush.volume = &g_entities[entityIndex - 1];
             badplace->parms.brush.radius = radius;
         }
 
