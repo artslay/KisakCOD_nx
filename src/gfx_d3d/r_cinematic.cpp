@@ -261,9 +261,21 @@ void __cdecl R_Cinematic_UpdateFrame_Core(
         if (cinematicGlob.currentCinematicName[0])
             R_Cinematic_StopPlayback_Now();
         if (*localTargetCinematic && R_Cinematic_StartPlayback_Now(localTargetCinematic, localPlaybackFlags))
+        {
             I_strncpyz(cinematicGlob.currentCinematicName, localTargetCinematic, 256);
+        }
         else
+        {
             cinematicGlob.currentCinematicName[0] = 0;
+
+            // An empty target means there is no cinematic to play (for example,
+            // a map with no loading movie). The stock frontend waits for
+            // R_Cinematic_IsFinished() before UI_PlayerStart releases the
+            // loading render/pause state, so this empty-target path must report
+            // completion instead of leaving cinematicFinished false forever.
+            if (!*localTargetCinematic)
+                cinematicGlob.cinematicFinished = 1;
+        }
     }
     isCinematicBeingPlayed = cinematicGlob.currentCinematicName[0] != 0;
     if (cinematicGlob.currentCinematicName[0])
