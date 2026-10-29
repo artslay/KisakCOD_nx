@@ -388,7 +388,10 @@ void Switch_GamepadFrame()
     SendActionEdge(HidNpadButton_A, IN_UpDown, IN_UpUp, gameplayActive);
     SendActionEdge(HidNpadButton_B, IN_Stance_Down, IN_Stance_Up, gameplayActive);
     SendKeyEdge(HidNpadButton_X, 'r', gameplayActive);
-    SendActionEdge(HidNpadButton_ZR, IN_Attack_Down, IN_Attack_Up, gameplayActive);
+    // The trigger must act like the real left mouse button, not only call
+    // the attack helper. A K_MOUSE1 event runs the normal key binding and lets
+    // scripts/UI code observe the same press and release as a physical click.
+    SendKeyEdge(HidNpadButton_ZR, K_MOUSE1, gameplayActive);
     SendActionEdge(HidNpadButton_ZL, IN_SpeedDown, IN_SpeedUp, gameplayActive);
     SendActionEdge(HidNpadButton_R, IN_Frag_Down, IN_Frag_Up, gameplayActive);
     SendActionEdge(HidNpadButton_L, IN_Smoke_Down, IN_Smoke_Up, gameplayActive);
