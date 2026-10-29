@@ -373,7 +373,7 @@ void __cdecl ClientEvents(gentity_s *ent, int oldEventSequence)
         const playerState_s *ps = &client->ps;
         Com_Printf(
             CON_CHANNEL_SERVER,
-            "[KisakCOD][PLAYER ANGLES PRE] remain=%d pm=%d pmFlags=0x%x eFlags=0x%x health=%d viewYaw=%.1f deltaYaw=%.1f cmdYaw=%d cmdYawDeg=%.1f entityYaw=%.1f lockedEnt=%d linkAnglesLocked=%d frozen=%d tagInfo=%p clampBaseYaw=%.1f clampRangeYaw=%.1f\\n",
+            "[KisakCOD][PLAYER ANGLES PRE] remain=%d pm=%d pmFlags=0x%x eFlags=0x%x health=%d viewYaw=%.1f deltaYaw=%.1f cmdYaw=%d cmdYawDeg=%.1f entityYaw=%.1f lockedEnt=%d linkAnglesLocked=%d frozen=%d tagInfo=%p clampBaseYaw=%.1f clampRangeYaw=%.1f\n",
             g_switchPlayerAngleTraceFrames, ps->pm_type, ps->pm_flags, ps->eFlags,
             ps->stats[STAT_HEALTH], ps->viewangles[1], ps->delta_angles[1],
             (int)p_cmd->angles[1], (float)p_cmd->angles[1] * 0.0054931641f,
@@ -709,7 +709,7 @@ void __cdecl ClientThink_real(gentity_s *ent)
     {
         Com_Printf(
             CON_CHANNEL_SERVER,
-            "[KisakCOD][PLAYER ANGLES POST] remain=%d pm=%d pmFlags=0x%x eFlags=0x%x viewYaw=%.1f deltaYaw=%.1f entityStateYaw=%.1f currentYaw=%.1f origin=(%.1f,%.1f,%.1f)\\n",
+            "[KisakCOD][PLAYER ANGLES POST] remain=%d pm=%d pmFlags=0x%x eFlags=0x%x viewYaw=%.1f deltaYaw=%.1f entityStateYaw=%.1f currentYaw=%.1f origin=(%.1f,%.1f,%.1f)\n",
             g_switchPlayerAngleTraceFrames, v12->ps.pm_type, v12->ps.pm_flags,
             v12->ps.eFlags, v12->ps.viewangles[1], v12->ps.delta_angles[1],
             ent->s.lerp.apos.trBase[1], ent->r.currentAngles[1],
