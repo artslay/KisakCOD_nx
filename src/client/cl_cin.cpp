@@ -12,6 +12,9 @@
 #endif
 
 bool cin_skippable;
+// Keep the explicit unskippable command scoped to the movie it started; a
+// queued ordinary movie must not inherit a stale global false from that clip.
+static char g_explicitUnskippableCinematic[256] = {};
 
 // A movie whose asset name ends in "fade" is an authored transition. These
 // clips must complete naturally instead of being treated as ordinary movies.
@@ -60,12 +63,23 @@ static bool CL_IsCurrentCinematicFadeTransition()
     return CL_CinematicHasFadeSuffix(CL_GetEffectiveCinematicName());
 }
 
-// Do not set skippable=true here: explicit unskippablecinematic must remain
-// unskippable for ordinary names as well.
+// Recompute the skip policy for the effective movie instead of leaving a
+// fade movie's false flag attached to every later item in the cinematic queue.
 void CL_EnforceFadeCinematicSkipRule(void)
 {
-    if (CL_IsCurrentCinematicFadeTransition())
-        cin_skippable = false;
+    const char *effectiveName = CL_GetEffectiveCinematicName();
+    if (!effectiveName[0])
+        return;
+
+    const bool fadeTransition = CL_CinematicHasFadeSuffix(effectiveName);
+    const bool explicitlyUnskippable =
+        g_explicitUnskippableCinematic[0] &&
+        I_stricmp(effectiveName, g_explicitUnskippableCinematic) == 0;
+
+    if (g_explicitUnskippableCinematic[0] && !explicitlyUnskippable)
+        g_explicitUnskippableCinematic[0] = 0;
+
+    cin_skippable = !fadeTransition && !explicitlyUnskippable;
 }
 
 #ifdef __SWITCH__
@@ -143,8 +157,9 @@ void __cdecl CL_PlayCinematic_f()
     char *arg1; // [esp+0h] [ebp-Ch]
 
     arg1 = (char *)Cmd_Argv(1);
-    // Ordinary cinematics are skippable. Authored *_fade transition clips
-    // must finish; the explicit unskippablecinematic command remains an override.
+    // A new cinematic command starts a new policy. The unskippable wrapper
+    // below restores its explicit lock after this shared handler returns.
+    g_explicitUnskippableCinematic[0] = 0;
     cin_skippable = !CL_CinematicHasFadeSuffix(arg1);
 #ifdef __SWITCH__
     char trace[256];
@@ -165,8 +180,11 @@ void __cdecl CL_PlayCinematic_f()
 
 void __cdecl CL_PlayUnskippableCinematic_f()
 {
+    char explicitName[256];
+    I_strncpyz(explicitName, Cmd_Argv(1), sizeof(explicitName));
     CL_PlayCinematic_f();
     cin_skippable = 0;
+    I_strncpyz(g_explicitUnskippableCinematic, explicitName, sizeof(g_explicitUnskippableCinematic));
 }
 
 void __cdecl SCR_DrawCinematic(int32_t localClientNum)
