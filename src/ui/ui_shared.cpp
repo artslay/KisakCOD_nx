@@ -9910,8 +9910,10 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                                 profileBlurMaterial->info.name,
                                 profileBlurMaterialName) != 0)
                         {
-                            // Do not silently replace the missing stock blurred
-                            // material with the sharp original layer.
+                            // Keep the confirmation dialog's background visible even
+                            // if a fastfile lacks the optional blurred variant. When the
+                            // variant exists, use it; otherwise retain the authored layer
+                            // rather than dropping the background completely.
                             static uint32_t missingProfileBlurTraceCount = 0;
                             if (missingProfileBlurTraceCount < 8u)
                             {
@@ -9919,16 +9921,18 @@ void __cdecl Menu_PaintAll(UiContext *dc)
                                 std::snprintf(
                                     trace,
                                     sizeof(trace),
-                                    "[KisakCOD][UI PROFILE BLUR MATERIAL] requested=%s action=unavailable\n",
+                                    "[KisakCOD][UI PROFILE BLUR MATERIAL] requested=%s action=fallback_to_source\n",
                                     profileBlurMaterialName);
                                 Switch_LogWrite(trace);
                                 ++missingProfileBlurTraceCount;
                             }
-                            continue;
                         }
-                        backgroundItem->window.background = profileBlurMaterial;
-                        backgroundMaterial = profileBlurMaterial;
-                        materialName = backgroundMaterial->info.name;
+                        else
+                        {
+                            backgroundItem->window.background = profileBlurMaterial;
+                            backgroundMaterial = profileBlurMaterial;
+                            materialName = backgroundMaterial->info.name;
+                        }
                     }
                     else
                     {
