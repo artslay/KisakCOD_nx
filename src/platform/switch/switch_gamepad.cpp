@@ -283,18 +283,13 @@ void Switch_GamepadFrame()
 
         if (activeMenu == UIMENU_PREGAME || activeMenu == UIMENU_MAIN)
         {
-            if (hadQueuedNextPlayback)
-            {
-                g_startGameAfterCinematicQueue = true;
-                Switch_LogWrite("[KisakCOD][CIN SKIP] skipped current movie; preserving queued chain\n");
-            }
-            else
-            {
-                // Use the normal frontend-to-game transition after the active
-                // movie has been stopped through the cinematic lifecycle.
-                UI_PlayerStart();
-                Switch_LogWrite("[KisakCOD][CIN SKIP] active-game movie skipped; returned to gameplay\n");
-            }
+            // StopPlayback is asynchronous. Defer the frontend-to-game handoff
+            // until the renderer has drained the current/queued cinematic chain.
+            g_startGameAfterCinematicQueue = true;
+            Switch_LogWrite(
+                hadQueuedNextPlayback
+                    ? "[KisakCOD][CIN SKIP] skipped current movie; preserving queued chain\n"
+                    : "[KisakCOD][CIN SKIP] movie skip accepted; waiting for renderer stop\n");
         }
         else
         {
