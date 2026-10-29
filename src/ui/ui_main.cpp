@@ -1773,6 +1773,18 @@ void UI_PlayerStart()
         Switch_LogWrite("[KisakCOD][CIN LOAD] preserving active fade over gameplay\n");
     }
 #endif
+#ifdef __SWITCH__
+    else if (R_Cinematic_IsStarted() || R_Cinematic_IsPending())
+    {
+        // Like the loading/fade cases above, a script-started intro can still
+        // be current when asynchronous frontend auto-continue reaches this
+        // function. The original path expects UI_PlayerStart only after the
+        // previous movie has finished; on Switch preserve this active movie
+        // rather than issuing StopPlayback and silently cutting the intro.
+        CL_EnforceFadeCinematicSkipRule();
+        Switch_LogWrite("[KisakCOD][CIN LOAD] preserving active intro movie over gameplay\n");
+    }
+#endif
     else
         R_Cinematic_StopPlayback();
 }
