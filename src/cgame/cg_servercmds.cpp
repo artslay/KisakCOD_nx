@@ -2237,5 +2237,13 @@ void __cdecl CG_MapInit(int restart)
     UI_ClosePopupScriptMenu(0, 0);
     cg_waitingScriptMenu.name[0] = 0;
     CG_Respawn(0);
+
+    // Start each map with the normal partial compass visible. Some authored
+    // levels do not send the initial menu-show notification, leaving the
+    // Compass menu hidden until a later gameplay event.
+    cgArray[0].compassFadeTime = -1;
+    CG_MenuShowNotify(0, 2);
+    if (cgArray[0].compassFadeTime == 0)
+        cgArray[0].compassFadeTime = 1;
 }
 
