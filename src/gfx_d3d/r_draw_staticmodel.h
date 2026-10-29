@@ -21,7 +21,7 @@ void __cdecl R_DrawStaticModelSurfLit(const uint32_t *primDrawSurfPos, GfxCmdBuf
 int __cdecl R_GetNextStaticModelSurf(GfxStaticModelDrawStream *drawStream, XSurface **outSurf);
 void __cdecl R_DrawStaticModelSurf(const uint32_t *primDrawSurfPos, GfxCmdBufContext context);
 void __cdecl R_DrawStaticModelDrawSurfNonOptimized(GfxStaticModelDrawStream *drawStream, GfxCmdBufContext context);
-void __cdecl R_SetStaticModelVertexBuffer(GfxCmdBufPrimState *primState, XSurface *xsurf);
+void __cdecl R_SetStaticModelVertexBuffer(GfxCmdBufState *state, XSurface *xsurf);
 void __cdecl R_DrawStaticModelDrawSurfPlacement(
     const GfxStaticModelDrawInst *smodelDrawInst,
     GfxCmdBufSourceState *source);
