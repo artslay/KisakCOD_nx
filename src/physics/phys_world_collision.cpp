@@ -295,14 +295,27 @@ void __cdecl Phys_TestGeomInBrush(const cbrush_t *brush, void *userData)
     // on AArch64 each pointer is 64 bits, and indexing 32-bit words would
     // read the high half of io.Input as the Results pointer.
     if (!brush || !userData)
-        return;
+        Com_Error(
+            ERR_DROP,
+            "Phys_TestGeomInBrush: invalid callback arguments (brush=%p userData=%p)",
+            static_cast<const void *>(brush),
+            userData);
 
     const InputOutput *io = static_cast<const InputOutput *>(userData);
     const objInfo *input = io->Input;
     Results *results = io->Output;
-    if (!input || !results || results->contactCount < 0 ||
-        results->maxContacts < results->contactCount)
-        return;
+    if (!input || !results)
+        Com_Error(
+            ERR_DROP,
+            "Phys_TestGeomInBrush: invalid collision context (input=%p results=%p)",
+            static_cast<const void *>(input),
+            static_cast<void *>(results));
+    if (results->contactCount < 0 || results->maxContacts < results->contactCount)
+        Com_Error(
+            ERR_DROP,
+            "Phys_TestGeomInBrush: invalid result counts (contacts=%d capacity=%d)",
+            results->contactCount,
+            results->maxContacts);
 
     if (results->contactCount >= results->maxContacts)
         return;
@@ -325,7 +338,7 @@ void __cdecl Phys_TestGeomInBrush(const cbrush_t *brush, void *userData)
     {
         PROF_SCOPED("Phys_BrushBrushColl");
         if (!input->u.brush)
-            return;
+            Com_Error(ERR_DROP, "Phys_TestGeomInBrush: brush geometry has no brush pointer");
         Phys_CollideOrientedBrushWithBrush(input->u.brush, brush, input, results);
         break;
     }
