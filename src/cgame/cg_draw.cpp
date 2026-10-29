@@ -1184,6 +1184,20 @@ void __cdecl CG_Draw2D(int localClientNum)
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
 #ifdef __SWITCH__
+    // CG_MapInit runs during level setup, while loading cinematics may still
+    // advance cgame time. Defer the first Compass show until live gameplay so
+    // the normal 8-second HUD fade does not expire before the player takes control.
+    if (cgArray[0].compassFadeTime < 0 &&
+        CL_GetLocalClientConnectionState(localClientNum) == CA_ACTIVE &&
+        !R_Cinematic_IsStarted() &&
+        !R_Cinematic_IsPending() &&
+        !R_Cinematic_IsNextReady())
+    {
+        Dvar_SetFromStringByName("hud_drawHUD", (char *)"1");
+        cgArray[0].compassFadeTime = cgArray[0].time;
+        Menus_ShowByName(&cgDC, "Compass");
+    }
+
     // This heartbeat runs before the 2D/HUD gates. If the FPS text is missing,
     // the next log shows whether the frame ever reached this function and which
     // gate (draw2D, viewer camera, cubemap) prevented the regular HUD path.
