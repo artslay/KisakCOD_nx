@@ -466,6 +466,43 @@ bool __cdecl Path_CompareNodesIncreasing(const pathsort_t &ps1, const pathsort_t
 
 unsigned int __cdecl Path_ConvertNodeToIndex(const pathnode_t *node)
 {
+#ifdef KISAK_SWITCH
+    const uintptr_t nodesAddress =
+        reinterpret_cast<uintptr_t>(gameWorldSp.path.nodes);
+    const uintptr_t nodeAddress = reinterpret_cast<uintptr_t>(node);
+    const uint32_t nodeCount = g_path.actualNodeCount;
+    if (!node || !nodesAddress ||
+        nodeCount > UINTPTR_MAX / sizeof(pathnode_t))
+    {
+        Com_Error(
+            ERR_DROP,
+            "Path_ConvertNodeToIndex: invalid node array/pointer (node=%p nodes=%p count=%u)",
+            static_cast<const void *>(node),
+            static_cast<const void *>(gameWorldSp.path.nodes),
+            nodeCount);
+        return UINT32_MAX;
+    }
+
+    const uintptr_t nodeBytes =
+        static_cast<uintptr_t>(nodeCount) * sizeof(pathnode_t);
+    if (nodesAddress > UINTPTR_MAX - nodeBytes ||
+        nodeAddress < nodesAddress ||
+        nodeAddress - nodesAddress >= nodeBytes ||
+        (nodeAddress - nodesAddress) % sizeof(pathnode_t) != 0)
+    {
+        Com_Error(
+            ERR_DROP,
+            "Path_ConvertNodeToIndex: node pointer outside active path array (node=%p nodes=%p count=%u stride=%zu)",
+            static_cast<const void *>(node),
+            static_cast<const void *>(gameWorldSp.path.nodes),
+            nodeCount,
+            sizeof(pathnode_t));
+        return UINT32_MAX;
+    }
+
+    return static_cast<unsigned int>(
+        (nodeAddress - nodesAddress) / sizeof(pathnode_t));
+#else
     unsigned int v2; // r31
 
     if (!node)
@@ -476,23 +513,38 @@ unsigned int __cdecl Path_ConvertNodeToIndex(const pathnode_t *node)
             "c:\\trees\\cod3\\cod3src\\src\\game\\pathnode.cpp",
             1178,
             0,
-            "nodeIndex doesn't index g_path.actualNodeCount\n\t%i not in [0, %i)",
+            "nodeIndex doesn't index g_path.actualNodeCount\\n\\t%i not in [0, %i)",
             v2,
             g_path.actualNodeCount);
     return v2;
+#endif
 }
 
 pathnode_t *__cdecl Path_ConvertIndexToNode(unsigned int index)
 {
+#ifdef KISAK_SWITCH
+    if (!gameWorldSp.path.nodes || index >= g_path.actualNodeCount)
+    {
+        Com_Error(
+            ERR_DROP,
+            "Path_ConvertIndexToNode: index %u outside active path array [0,%u) (nodes=%p)",
+            index,
+            g_path.actualNodeCount,
+            static_cast<const void *>(gameWorldSp.path.nodes));
+        return nullptr;
+    }
+    return &gameWorldSp.path.nodes[index];
+#else
     if (index >= g_path.actualNodeCount)
         MyAssertHandler(
             "c:\\trees\\cod3\\cod3src\\src\\game\\pathnode.cpp",
             1185,
             0,
-            "index doesn't index g_path.actualNodeCount\n\t%i not in [0, %i)",
+            "index doesn't index g_path.actualNodeCount\\n\\t%i not in [0, %i)",
             index,
             g_path.actualNodeCount);
     return &gameWorldSp.path.nodes[index];
+#endif
 }
 
 unsigned int __cdecl Path_NodeCount()
