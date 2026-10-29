@@ -21,9 +21,7 @@
 #include <atomic>
 extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern void Switch_LogWrite(const char *msg);
-extern void COM_NotifyIntroMovieDrawSubmitted(const char *movieName);
 extern thread_local const char * volatile g_switchFrameStage;
-extern void COM_NotifyIntroMoviePlaybackFinished(const char *movieName);
 extern bool Switch_UploadPendingBinkFrame(BINKTEXTURESET *set_textures, uint32_t movieFrame, uint32_t movieFrames);
 extern "C" void Switch_BinkNotifyVideoFrameUploaded(HBINK bink);
 extern void Switch_ResetPendingBinkUpload();
@@ -288,10 +286,6 @@ void __cdecl R_Cinematic_UpdateFrame_Core(
         if (!switchCinematicCanAdvance)
         {
             cinematicGlob.cinematicFinished = 1;
-#ifdef __SWITCH__
-            COM_NotifyIntroMoviePlaybackFinished(
-                cinematicGlob.currentCinematicName);
-#endif
         }
     }
 }
@@ -1344,11 +1338,8 @@ void __cdecl R_Cinematic_DrawStretchPic_Letterboxed()
 {
     R_Cinematic_DrawLetterbox_OptionalCinematic(1, 1.0);
 #ifdef __SWITCH__
-    if (cinematicGlob.activeImageFrame != CINEMATIC_INVALID_IMAGE_FRAME)
-    {
-        COM_NotifyIntroMovieDrawSubmitted(cinematicGlob.currentCinematicName);
-    }
-    else if (cinematicGlob.currentCinematicName[0])
+    if (cinematicGlob.activeImageFrame == CINEMATIC_INVALID_IMAGE_FRAME &&
+        cinematicGlob.currentCinematicName[0])
     {
         static uint64_t lastMissingDrawTraceFrame = UINT64_MAX;
         const uint64_t frame = g_switchScreenFrameSequence.load(std::memory_order_relaxed);
