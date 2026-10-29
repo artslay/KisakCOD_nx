@@ -1063,12 +1063,6 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     const float rightTrigger = GPad_GetButton(controller, GPAD_R_TRIG);
     const bool padActive = GPad_IsActive(controller);
 
-    if (!padActive)
-    {
-        Switch_ResetRightStickSmoothing();
-        return;
-    }
-
     if ((clients[0].snap.ps.pm_flags & 0x800) &&
         cl_freemove->current.integer != 2)
     {
@@ -1076,13 +1070,23 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         return;
     }
 
-    // Cap unusually long frames so a hitch cannot cause one large view jump.
+    // Keep processing a short filtered tail after the stick returns to center.
+    // Otherwise GPad_IsActive() becomes false on the first neutral sample and
+    // the camera stops abruptly instead of decelerating smoothly.
     const float deltaTime = std::clamp(
         static_cast<float>(cls.frametime) * 0.001f, 0.0f, 0.05f);
     const float pitchAxis =
         Switch_SmoothRightStickAxis(rawPitchAxis, s_switchRightStickPitch, deltaTime);
     const float yawAxis =
         Switch_SmoothRightStickAxis(rawYawAxis, s_switchRightStickYaw, deltaTime);
+
+    if (!padActive &&
+        std::fabs(pitchAxis) < 0.003f &&
+        std::fabs(yawAxis) < 0.003f)
+    {
+        Switch_ResetRightStickSmoothing();
+        return;
+    }
 
     const float magnitude = std::sqrt(
         forwardAxis * forwardAxis +
