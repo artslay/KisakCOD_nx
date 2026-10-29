@@ -224,9 +224,10 @@ static bool SCR_StopCinematicInternal(int32_t localClientNum, bool forceSkip)
     const bool cinematicFinished = R_Cinematic_IsFinished();
     CL_EnforceFadeCinematicSkipRule();
 #ifdef __SWITCH__
-    if (forceSkip && CL_IsCurrentCinematicFadeTransition() && !cinematicFinished)
+    if (forceSkip && !cinematicFinished &&
+        (!cin_skippable || CL_IsCurrentCinematicFadeTransition()))
     {
-        Switch_LogWrite("[KisakCOD][CIN SKIP] rejected active-game fade transition\n");
+        Switch_LogWrite("[KisakCOD][CIN SKIP] rejected active-game unskippable cinematic\n");
         return false;
     }
 #endif
