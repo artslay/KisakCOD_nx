@@ -55,6 +55,11 @@ static const char *CL_GetEffectiveCinematicName()
     {
         effectiveName = cinematicGlob.targetCinematicName;
     }
+    // Between clips, the next item may already be queued before it has been
+    // promoted to targetCinematicName. Use it only when no current/target
+    // movie name exists, so a queued fade gets its policy before input arrives.
+    if (!effectiveName[0] && cinematicGlob.nextCinematicName[0])
+        effectiveName = cinematicGlob.nextCinematicName;
     return effectiveName;
 }
 
