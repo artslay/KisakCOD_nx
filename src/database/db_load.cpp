@@ -201,30 +201,92 @@ static uintptr_t Switch_TranslatePathNodePointer(
     uint32_t serializedCount,
     pathnode_t *nativeBase)
 {
+    // These values are serialized null/terminator markers in the original
+    // path-node links. Preserve them; all other non-zero tokens must resolve.
     if (!token || token == UINT32_MAX || token == UINT32_MAX - 1u)
         return 0;
+
+    if (!serializedStreamBase || !serializedStride || !serializedCount || !nativeBase)
+    {
+        Com_Error(
+            ERR_DROP,
+            "Switch path-node link has invalid translation context: token=0x%08x base=%p stride=%u count=%u nativeBase=%p",
+            token,
+            reinterpret_cast<void *>(serializedStreamBase),
+            serializedStride,
+            serializedCount,
+            nativeBase);
+        return 0;
+    }
 
     const uintptr_t serializedAddress =
         DB_ConvertOffsetToPointerValue(token);
     if (!serializedAddress)
+    {
+        Com_Error(
+            ERR_DROP,
+            "Switch path-node link token 0x%08x could not be resolved",
+            token);
         return 0;
+    }
 
     const uintptr_t base = serializedStreamBase;
+    if (static_cast<uintptr_t>(serializedCount) >
+        (UINTPTR_MAX - base) / static_cast<uintptr_t>(serializedStride))
+    {
+        Com_Error(
+            ERR_DROP,
+            "Switch path-node link range overflow: base=%p stride=%u count=%u token=0x%08x",
+            reinterpret_cast<void *>(base),
+            serializedStride,
+            serializedCount,
+            token);
+        return 0;
+    }
+
     const uintptr_t end =
         base + static_cast<uintptr_t>(serializedStride) *
             static_cast<uintptr_t>(serializedCount);
 
     if (serializedAddress < base || serializedAddress >= end)
+    {
+        Com_Error(
+            ERR_DROP,
+            "Switch path-node link points outside serialized node array: token=0x%08x address=%p range=[%p,%p) count=%u stride=%u",
+            token,
+            reinterpret_cast<void *>(serializedAddress),
+            reinterpret_cast<void *>(base),
+            reinterpret_cast<void *>(end),
+            serializedCount,
+            serializedStride);
         return 0;
+    }
 
     const uintptr_t delta = serializedAddress - base;
     if ((delta % serializedStride) != 0)
+    {
+        Com_Error(
+            ERR_DROP,
+            "Switch path-node link is misaligned: token=0x%08x address=%p delta=%llu stride=%u",
+            token,
+            reinterpret_cast<void *>(serializedAddress),
+            static_cast<unsigned long long>(delta),
+            serializedStride);
         return 0;
+    }
 
     const uint32_t index =
         static_cast<uint32_t>(delta / serializedStride);
     if (index >= serializedCount)
+    {
+        Com_Error(
+            ERR_DROP,
+            "Switch path-node link index is out of range: token=0x%08x index=%u count=%u",
+            token,
+            index,
+            serializedCount);
         return 0;
+    }
 
     return reinterpret_cast<uintptr_t>(&nativeBase[index]);
 }
