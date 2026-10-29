@@ -2195,8 +2195,8 @@ void __cdecl CL_Init(int localClientNum)
     cl_yawspeed = Dvar_RegisterFloat("cl_yawspeed", 140.0, -FLT_MAX, FLT_MAX, 0, "Max yaw speed in degrees for game pad and keyboard");
     cl_pitchspeed = Dvar_RegisterFloat("cl_pitchspeed", 140.0, -FLT_MAX, FLT_MAX, 0, "Max pitch speed in degrees for game pad and keyboard");
     cl_anglespeedkey = Dvar_RegisterFloat("cl_anglespeedkey", 1.5, 0.0, FLT_MAX, 0, "Multiplier for max angle speed for gamepad and keyboard");
-    cl_sensitivity = Dvar_RegisterFloat("sensitivity", 5.0, 0.01f, 100.0, 0, "Mouse sensitivity");
-    cl_mouseAccel = Dvar_RegisterFloat("cl_mouseAccel", 0.0, 0.0, 100.0, 0, "Mouse acceleration");
+    cl_sensitivity = Dvar_RegisterFloat("sensitivity", 5.0, 0.01f, 100.0, DVAR_ARCHIVE, "Mouse sensitivity");
+    cl_mouseAccel = Dvar_RegisterFloat("cl_mouseAccel", 0.0, 0.0, 100.0, DVAR_ARCHIVE, "Mouse acceleration");
     cl_freelook = Dvar_RegisterBool("cl_freelook", 1, DVAR_ARCHIVE, "Enable looking with mouse");
     cl_showMouseRate = Dvar_RegisterBool(
         "cl_showmouserate",
@@ -2250,9 +2250,9 @@ void __cdecl CL_Init(int localClientNum)
         ++v21;
     } while (v22 < &arcadeScore[19]);
 
-    input_invertPitch = Dvar_RegisterBool("input_invertPitch", 0, 0x400u, "Invert gamepad pitch");
-    input_viewSensitivity = Dvar_RegisterFloat("input_viewSensitivity", 1.0, 0.000099999997, 5.0, 0, 0);
-    input_autoAim = Dvar_RegisterBool("input_autoAim", 1, 0x400u, "Turn on auto aim for consoles");
+    input_invertPitch = Dvar_RegisterBool("input_invertPitch", 0, DVAR_ARCHIVE | 0x400u, "Invert gamepad pitch");
+    input_viewSensitivity = Dvar_RegisterFloat("input_viewSensitivity", 1.0, 0.000099999997, 5.0, DVAR_ARCHIVE, "Gamepad view sensitivity");
+    input_autoAim = Dvar_RegisterBool("input_autoAim", 1, DVAR_ARCHIVE | 0x400u, "Turn on auto aim for consoles");
 #ifdef KISAK_MP
     motd = Dvar_RegisterString("motd", SEH_SafeTranslateString((char*)"PLATFORM_NOMOTD"), 0, "Message of the day");
 #endif
