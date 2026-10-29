@@ -13,6 +13,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <memory>
 
 #include <qcommon/unzip.h>
 
@@ -1930,6 +1931,206 @@ void __cdecl FS_Shutdown()
 static std::vector<const char *> g_switchProfileFileListPointers;
 static std::vector<std::string> g_switchProfileFileListNames;
 
+struct SwitchLocationFileList
+{
+    std::vector<std::string> names;
+    std::vector<const char *> pointers;
+};
+
+// Location lists can be retained by the caller while it builds several UI
+// entries. Keep a separate allocation for every returned list until
+// FS_FreeFileList releases it.
+static std::unordered_map<const char **, std::unique_ptr<SwitchLocationFileList>>
+    g_switchLocationFileLists;
+
+static void Switch_AddUniqueLocationPath(
+    std::vector<std::string> &paths,
+    const std::string &path)
+{
+    for (const std::string &existing : paths)
+    {
+        if (!I_stricmp(existing.c_str(), path.c_str()))
+            return;
+    }
+    paths.push_back(path);
+}
+
+static bool Switch_MatchesFileLocation(const char *gameDir, int lookInFlags)
+{
+    if (!gameDir || !*gameDir)
+        return false;
+
+    // Keep the original engine's location-bit/prefix semantics.
+    if (lookInFlags == 63)
+        return true;
+    if ((lookInFlags & 1) && !I_strnicmp(gameDir, "main", 4))
+        return true;
+    if ((lookInFlags & 2) && !I_strnicmp(gameDir, "dev", 3))
+        return true;
+    if ((lookInFlags & 4) && !I_strnicmp(gameDir, "temp", 4))
+        return true;
+    if ((lookInFlags & 8) && !I_strnicmp(gameDir, "raw", 3))
+        return true;
+    if ((lookInFlags & 0x10) && !I_strnicmp(gameDir, "raw_shared", 10))
+        return true;
+    return (lookInFlags & 0x20) && !I_strnicmp(gameDir, "devraw", 6);
+}
+
+static bool Switch_NormalizeFileListPath(
+    const char *path,
+    std::string *normalized)
+{
+    if (!path || !normalized)
+        return false;
+
+    normalized->clear();
+    normalized->reserve(std::strlen(path));
+    bool previousSeparator = false;
+
+    for (const unsigned char *p =
+             reinterpret_cast<const unsigned char *>(path);
+         *p;
+         ++p)
+    {
+        char c = static_cast<char>(*p);
+        if (c == '\\\\')
+            c = '/';
+
+        if (c == '/')
+        {
+            // File-list paths are relative qpaths, never OS absolute paths.
+            if (normalized->empty())
+                return false;
+            if (previousSeparator)
+                continue;
+            previousSeparator = true;
+        }
+        else
+        {
+            previousSeparator = false;
+        }
+
+        normalized->push_back(c);
+    }
+
+    while (!normalized->empty() && normalized->back() == '/')
+        normalized->pop_back();
+
+    size_t start = 0;
+    while (start < normalized->size())
+    {
+        size_t end = normalized->find('/', start);
+        if (end == std::string::npos)
+            end = normalized->size();
+
+        const std::string component = normalized->substr(start, end - start);
+        if (component.empty() ||
+            component == "." ||
+            component == ".." ||
+            component.find(':') != std::string::npos)
+        {
+            return false;
+        }
+
+        start = end + 1;
+    }
+
+    return true;
+}
+
+static std::vector<std::string> Switch_GetFileLocationRoots()
+{
+    std::vector<std::string> roots;
+    auto addRoot = [&](const char *root)
+    {
+        if (!root || !*root)
+            return;
+
+        std::string normalized(root);
+        while (normalized.size() > 1 && normalized.back() == '/')
+            normalized.pop_back();
+        Switch_AddUniqueLocationPath(roots, normalized);
+    };
+
+    addRoot(fs_basepath && fs_basepath->current.string[0]
+        ? fs_basepath->current.string : kSwitchRoot);
+    if (fs_homepath && fs_homepath->current.string[0])
+        addRoot(fs_homepath->current.string);
+    if (fs_cdpath && fs_cdpath->current.string[0])
+        addRoot(fs_cdpath->current.string);
+
+    return roots;
+}
+
+static bool Switch_IsFileLocationDirectory(
+    const std::string &directory,
+    const std::vector<std::string> &roots,
+    int lookInFlags)
+{
+    for (const std::string &root : roots)
+    {
+        if (directory.size() <= root.size() ||
+            I_strnicmp(directory.c_str(), root.c_str(), root.size()) ||
+            directory[root.size()] != '/')
+        {
+            continue;
+        }
+
+        const std::string relative = directory.substr(root.size() + 1);
+        const size_t separator = relative.find('/');
+        const std::string gameDir = relative.substr(0, separator);
+        if (Switch_MatchesFileLocation(gameDir.c_str(), lookInFlags))
+            return true;
+    }
+
+    return false;
+}
+
+static std::vector<std::string> Switch_GetFileLocationDirectories(
+    int lookInFlags)
+{
+    const char *base = fs_basepath && fs_basepath->current.string[0]
+        ? fs_basepath->current.string
+        : kSwitchRoot;
+    const char *gameName = g_switchPrimaryGame.empty()
+        ? "main"
+        : g_switchPrimaryGame.c_str();
+    const std::vector<std::string> roots = Switch_GetFileLocationRoots();
+
+    std::vector<std::string> candidates =
+        Switch_GetGameSearchDirectories(
+            base,
+            gameName,
+            g_switchSelectedLanguage);
+
+    // The Switch loose-file search also needs to expose these conventional
+    // locations when present, even if no IWD was found there during startup.
+    for (const std::string &root : roots)
+    {
+        static const char *const extraGameDirs[] =
+        {
+            "dev", "dev_shared", "temp", "temp_shared"
+        };
+        for (const char *gameDir : extraGameDirs)
+        {
+            const std::string path = root + "/" + gameDir;
+            Switch_AddUniqueLocationPath(candidates, path);
+            if (!g_switchSelectedLanguage.empty())
+                Switch_AddUniqueLocationPath(
+                    candidates,
+                    path + "/" + g_switchSelectedLanguage);
+        }
+    }
+
+    std::vector<std::string> selected;
+    for (const std::string &directory : candidates)
+    {
+        if (Switch_IsFileLocationDirectory(directory, roots, lookInFlags))
+            Switch_AddUniqueLocationPath(selected, directory);
+    }
+    return selected;
+}
+
 static bool Switch_ListExtensionMatches(const char *name, const char *extension)
 {
     if (!name)
@@ -1953,6 +2154,16 @@ static bool Switch_ListExtensionMatches(const char *name, const char *extension)
 
 void __cdecl FS_FreeFileList(const char **list)
 {
+    if (!list)
+        return;
+
+    const auto locationList = g_switchLocationFileLists.find(list);
+    if (locationList != g_switchLocationFileLists.end())
+    {
+        g_switchLocationFileLists.erase(locationList);
+        return;
+    }
+
     if (list == g_switchProfileFileListPointers.data())
     {
         g_switchProfileFileListPointers.clear();
@@ -2085,7 +2296,198 @@ const char **__cdecl FS_ListFiles(
 
     return g_switchProfileFileListPointers.data();
 }
-const char **__cdecl FS_ListFilesInLocation(const char *, const char *, FsListBehavior_e, int *num, int) { if(num)*num=0; return nullptr; }
+const char **__cdecl FS_ListFilesInLocation(
+    const char *path,
+    const char *extension,
+    FsListBehavior_e behavior,
+    int *num,
+    int lookInFlags)
+{
+    if (num)
+        *num = 0;
+
+    std::string relativePath;
+    if (!Switch_NormalizeFileListPath(path, &relativePath))
+        return nullptr;
+
+    const bool isDirSearch =
+        extension && !I_stricmp(extension, "/");
+    const std::string normalizedPath =
+        SwitchNormalizePath(relativePath.c_str());
+    const std::string pathPrefix =
+        normalizedPath.empty() ? std::string() : normalizedPath + "/";
+
+    const std::vector<std::string> locationDirectories =
+        Switch_GetFileLocationDirectories(lookInFlags);
+    const std::vector<std::string> roots = Switch_GetFileLocationRoots();
+
+    std::vector<std::string> names;
+    std::unordered_map<std::string, bool> seenNames;
+    auto addName = [&](const std::string &name)
+    {
+        if (name.empty())
+            return;
+        const std::string key = SwitchNormalizePath(name.c_str());
+        if (seenNames.emplace(key, true).second)
+            names.push_back(name);
+    };
+
+    // As in the stock filesystem, loose files are hidden from a pure-only
+    // listing while filesystem restrictions or a server-IWD list is active.
+    const bool listLooseFiles =
+        ((!fs_restrict || !fs_restrict->current.enabled) &&
+         !fs_numServerIwds) ||
+        behavior == FS_LIST_ALL;
+
+    if (listLooseFiles)
+    {
+        for (const std::string &locationDirectory : locationDirectories)
+        {
+            std::string searchDirectory = locationDirectory;
+            if (!relativePath.empty())
+                searchDirectory += "/" + relativePath;
+
+            DIR *directory = ::opendir(searchDirectory.c_str());
+            if (!directory)
+                continue;
+
+            while (dirent *entry = ::readdir(directory))
+            {
+                if (!entry || !entry->d_name[0] ||
+                    !std::strcmp(entry->d_name, ".") ||
+                    !std::strcmp(entry->d_name, ".."))
+                {
+                    continue;
+                }
+
+                const std::string childPath =
+                    searchDirectory + "/" + entry->d_name;
+                struct stat st {};
+                if (::stat(childPath.c_str(), &st) != 0)
+                    continue;
+
+                if (isDirSearch)
+                {
+                    if (S_ISDIR(st.st_mode))
+                        addName(entry->d_name);
+                }
+                else
+                {
+                    if (!S_ISREG(st.st_mode) ||
+                        !Switch_ListExtensionMatches(entry->d_name, extension))
+                    {
+                        continue;
+                    }
+                    addName(entry->d_name);
+                }
+            }
+
+            ::closedir(directory);
+        }
+    }
+
+    auto archiveInSelectedLocation = [&](const std::string &archivePath)
+    {
+        for (const std::string &directory : locationDirectories)
+        {
+            if (archivePath.size() > directory.size() &&
+                !I_strnicmp(
+                    archivePath.c_str(),
+                    directory.c_str(),
+                    directory.size()) &&
+                archivePath[directory.size()] == '/')
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // IWD entries are indexed by qpath and retain duplicate records for every
+    // archive. Walk the duplicate chain so a requested location still finds
+    // a file even when a higher-priority copy lives in another location.
+    for (const auto &indexedFile : g_iwdEntries)
+    {
+        const std::string &assetName = indexedFile.first;
+        uint32_t recordIndex = indexedFile.second;
+        bool foundInLocation = false;
+
+        while (recordIndex != UINT32_MAX &&
+               recordIndex < g_iwdEntryRecords.size())
+        {
+            const SwitchIwdEntry &record = g_iwdEntryRecords[recordIndex];
+            if (record.archiveIndex < g_iwdArchives.size() &&
+                archiveInSelectedLocation(
+                    g_iwdArchives[record.archiveIndex].path))
+            {
+                foundInLocation = true;
+                break;
+            }
+            recordIndex = record.nextDuplicate;
+        }
+
+        if (!foundInLocation)
+            continue;
+
+        std::string listedName;
+        if (!pathPrefix.empty())
+        {
+            if (assetName.size() <= pathPrefix.size() ||
+                assetName.compare(0, pathPrefix.size(), pathPrefix) != 0)
+            {
+                continue;
+            }
+            listedName = assetName.substr(pathPrefix.size());
+        }
+        else
+        {
+            listedName = assetName;
+        }
+
+        if (isDirSearch)
+        {
+            const size_t separator = listedName.find('/');
+            if (separator == std::string::npos || separator == 0)
+                continue;
+            addName(listedName.substr(0, separator));
+        }
+        else
+        {
+            if (listedName.find('/') != std::string::npos ||
+                !Switch_ListExtensionMatches(listedName.c_str(), extension))
+            {
+                continue;
+            }
+            addName(listedName);
+        }
+    }
+
+    if (names.empty())
+        return nullptr;
+
+    std::sort(
+        names.begin(),
+        names.end(),
+        [](const std::string &a, const std::string &b)
+        {
+            const int comparison = I_stricmp(a.c_str(), b.c_str());
+            return comparison ? comparison < 0 : a < b;
+        });
+
+    auto ownedList = std::make_unique<SwitchLocationFileList>();
+    ownedList->names = std::move(names);
+    ownedList->pointers.reserve(ownedList->names.size() + 1);
+    for (const std::string &name : ownedList->names)
+        ownedList->pointers.push_back(name.c_str());
+    ownedList->pointers.push_back(nullptr);
+
+    const char **result = ownedList->pointers.data();
+    if (num)
+        *num = static_cast<int>(ownedList->names.size());
+
+    g_switchLocationFileLists.emplace(result, std::move(ownedList));
+    return result;
+}
 char *__cdecl FS_ReferencedIwdPureChecksums() { static char s[4] = ""; return s; }
 char *__cdecl FS_ReferencedIwdNames() { static char s[4] = ""; return s; }
 char *__cdecl FS_ReferencedIwdChecksums() { static char s[4] = ""; return s; }
