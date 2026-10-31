@@ -167,6 +167,9 @@ void Loader_MaterialTechniqueSet::FillStruct_GfxPixelShaderLoadDef(const ZoneStr
 
 void Loader_MaterialTechniqueSet::FillStruct_MaterialShaderArgument(const ZoneStreamFillReadAccessor& fillAccessor)
 {
+    // A later pass may point directly at an earlier serialized argument array.
+    // Redirect each 8-byte disk record to its widened native ARM64 record.
+    m_stream.AddPointerLookup(varMaterialShaderArgument, fillAccessor.BlockBuffer(0));
     fillAccessor.Fill(varMaterialShaderArgument->type, 0);
     fillAccessor.Fill(varMaterialShaderArgument->dest, 2);
     varMaterialArgumentDef = &varMaterialShaderArgument->u;
