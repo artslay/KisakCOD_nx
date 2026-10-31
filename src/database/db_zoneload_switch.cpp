@@ -41,6 +41,8 @@
 extern XAssetHeader __cdecl DB_AddXAsset(XAssetType type, XAssetHeader header);
 extern void Switch_LogWrite(const char *msg);
 
+#include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <map>
