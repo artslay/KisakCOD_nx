@@ -31,7 +31,7 @@ void Actions_GfxImage::OnImageLoaded(GfxImage* image) const
             char trace[416];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][GFXIMAGE ONLOADED] n=%u hooks=%u image=%p namePtr=%p track=%u category=%u semantic=%u mapType=%u loadDef=%p delay=%u card=%d dims=%ux%ux%u\\n",
+                "[KisakCOD][GFXIMAGE ONLOADED] n=%u hooks=%u image=%p namePtr=%p track=%u category=%u semantic=%u mapType=%u loadDef=%p delay=%u card=%d dims=%ux%ux%u\n",
                 imageOnLoadedTraceCount++,
                 hooks ? 1u : 0u,
                 static_cast<void *>(image),
@@ -105,7 +105,7 @@ void Actions_GfxImage::LoadImageData(GfxImageLoadDef* loadDef, GfxImage* image) 
         char trace[384];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][GFXIMAGE ACTION LOAD DATA] n=%u hooks=%u image=%p namePtr=%p loadDef=%p resourceSize=%u track=%u category=%u\\n",
+            "[KisakCOD][GFXIMAGE ACTION LOAD DATA] n=%u hooks=%u image=%p namePtr=%p loadDef=%p resourceSize=%u track=%u category=%u\n",
             imageLoadDataActionTraceCount++,
             hooks ? 1u : 0u,
             static_cast<void *>(image),
