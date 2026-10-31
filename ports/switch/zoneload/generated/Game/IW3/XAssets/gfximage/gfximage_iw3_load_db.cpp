@@ -151,6 +151,11 @@ void Loader_GfxImage::Load_GfxTexture(const bool atStreamStart)
                 Switch_LogWrite(trace);
             }
 #endif
+            // The loadDef payload may be shared by multiple GfxImage objects.
+            // Resolving its alias only gives this image the CPU data pointer;
+            // every image still needs its own renderer texture/basemap. The
+            // normal load path performs that work through LoadImageData.
+            m_actions.LoadImageData(varGfxTexture->loadDef, varGfxImage);
         }
     }
     m_stream.PopBlock();
