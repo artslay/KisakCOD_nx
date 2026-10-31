@@ -33,7 +33,7 @@ void Actions_GfxImage::OnImageLoaded(GfxImage* image) const
                 char trace[384];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][GFXIMAGE ONLOADED] n=%u image=%p namePtr=%p track=%u category=%u semantic=%u mapType=%u loadDef=%p basemap=%p delay=%u card=%d dims=%ux%ux%u\n",
+                    "[KisakCOD][GFXIMAGE ONLOADED] n=%u image=%p namePtr=%p track=%u category=%u semantic=%u mapType=%u loadDef=%p delay=%u card=%d dims=%ux%ux%u\n",
                     imageOnLoadedTraceCount++,
                     static_cast<void *>(image),
                     static_cast<const void *>(image->name),
@@ -42,7 +42,6 @@ void Actions_GfxImage::OnImageLoaded(GfxImage* image) const
                     static_cast<unsigned>(image->semantic),
                     static_cast<unsigned>(image->mapType),
                     static_cast<void *>(image->texture.loadDef),
-                    static_cast<void *>(image->texture.basemap),
                     image->delayLoadPixels ? 1u : 0u,
                     image->cardMemory.platform[0],
                     static_cast<unsigned>(image->width),
@@ -57,7 +56,7 @@ void Actions_GfxImage::OnImageLoaded(GfxImage* image) const
         // delayLoadPixels=false state, have no GPU resource, and never reach
         // DB_LoadDelayedImages(). Route only that exact case through the normal
         // late IWI path. Images with inline/aliased data already have a basemap
-        // pointer in this union and are left untouched.
+        // non-null pointer in the texture union and are left untouched.
         if (image &&
             image->category == IMG_CATEGORY_LOAD_FROM_FILE &&
             !image->texture.loadDef &&
