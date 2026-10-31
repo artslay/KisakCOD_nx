@@ -730,6 +730,27 @@ void __cdecl R_DelayLoadImage(XAssetHeader header)
 
     if (image->delayLoadPixels)
     {
+#ifdef __SWITCH__
+        static uint32_t delayedImageTraceCount = 0;
+        if (delayedImageTraceCount < 48u)
+        {
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IWI DELAY ENTER] n=%u image=%p name=%s category=%u size=%ux%ux%u card=%d stage=%s\n",
+                delayedImageTraceCount++,
+                static_cast<void *>(image),
+                image->name ? image->name : "<null>",
+                static_cast<unsigned>(image->category),
+                static_cast<unsigned>(image->width),
+                static_cast<unsigned>(image->height),
+                static_cast<unsigned>(image->depth),
+                image->cardMemory.platform[0],
+                g_switchDbStage ? g_switchDbStage : "");
+            Switch_LogWrite(trace);
+        }
+#endif
         image->delayLoadPixels = false;
         int externalDataSize = image->cardMemory.platform[0];
         image->cardMemory.platform[0] = 0;
