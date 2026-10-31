@@ -41,7 +41,7 @@ void Actions_GfxImage::OnImageLoaded(GfxImage* image) const
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][IWI NULL LOADDEF] n=%u image=%p namePtr=%p category=%u mapType=%u card=%d delaySet=1\\n",
+                    "[KisakCOD][IWI NULL LOADDEF] n=%u image=%p namePtr=%p category=%u mapType=%u card=%d delaySet=1\n",
                     nullLoadDefTraceCount++,
                     static_cast<void *>(image),
                     static_cast<const void *>(image->name),
