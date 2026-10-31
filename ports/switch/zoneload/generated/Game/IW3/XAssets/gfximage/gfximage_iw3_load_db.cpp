@@ -13,6 +13,10 @@
 #include <cassert>
 #include <cstring>
 #include <type_traits>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 
 using namespace IW3;
 
@@ -86,33 +90,67 @@ size_t Loader_GfxImage::LoadDynamicFill_GfxImageLoadDef(const ZoneStreamFillRead
 void Loader_GfxImage::Load_GfxTexture(const bool atStreamStart)
 {
     assert(varGfxTexture != nullptr);
-    
+
     if (atStreamStart)
         FillStruct_GfxTexture(m_stream.LoadWithFill(4));
-    
+
     m_stream.PushBlock(XFILE_BLOCK_TEMP);
     if (varGfxTexture->loadDef)
     {
-        const auto zonePtrType = GetZonePointerType(varGfxTexture->loadDef);
+        const auto rawLoadDef = varGfxTexture->loadDef;
+        const auto zonePtrType = GetZonePointerType(rawLoadDef);
         if (zonePtrType == ZonePointerType::FOLLOWING || zonePtrType == ZonePointerType::INSERT)
         {
             varGfxTexture->loadDef = m_stream.Alloc<GfxImageLoadDef>(4);
-            
+
             uintptr_t toInsertLookupEntry = 0;
             if (zonePtrType == ZonePointerType::INSERT)
                 toInsertLookupEntry = m_stream.InsertPointerAliasLookup();
-            
+
             varGfxImageLoadDef = varGfxTexture->loadDef;
             Load_GfxImageLoadDef(true);
-            
+
             m_actions.LoadImageData(varGfxImageLoadDef, varGfxImage);
-            
+
+#ifdef __SWITCH__
+            static unsigned int texturePointerTraceCount = 0;
+            if (texturePointerTraceCount < 192u)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][GFXIMAGE TEX PTR] n=%u path=load type=%u image=%p loadDef=%p resourceSize=%u\\n",
+                    texturePointerTraceCount++,
+                    static_cast<unsigned>(zonePtrType),
+                    static_cast<void *>(varGfxImage),
+                    static_cast<void *>(varGfxTexture->loadDef),
+                    static_cast<unsigned>(varGfxImageLoadDef->resourceSize));
+                Switch_LogWrite(trace);
+            }
+#endif
+
             if (zonePtrType == ZonePointerType::INSERT)
                 m_stream.SetInsertedPointerAliasLookup(toInsertLookupEntry, varGfxTexture->loadDef);
         }
         else
         {
-            varGfxTexture->loadDef = m_stream.ConvertOffsetToAliasLookup(varGfxTexture->loadDef);
+            varGfxTexture->loadDef = m_stream.ConvertOffsetToAliasLookup(rawLoadDef);
+#ifdef __SWITCH__
+            static unsigned int textureAliasTraceCount = 0;
+            if (textureAliasTraceCount < 192u)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][GFXIMAGE TEX PTR] n=%u path=alias type=%u image=%p raw=%p resolved=%p\\n",
+                    textureAliasTraceCount++,
+                    static_cast<unsigned>(zonePtrType),
+                    static_cast<void *>(varGfxImage),
+                    static_cast<void *>(rawLoadDef),
+                    static_cast<void *>(varGfxTexture->loadDef));
+                Switch_LogWrite(trace);
+            }
+#endif
         }
     }
     m_stream.PopBlock();
@@ -150,38 +188,77 @@ void Loader_GfxImage::Load_GfxImage(const bool atStreamStart)
 void Loader_GfxImage::LoadPtr_GfxImage(const bool atStreamStart)
 {
     assert(varGfxImagePtr != nullptr);
-    
+
     assert(!atStreamStart);
-    
+
     m_stream.PushBlock(XFILE_BLOCK_TEMP);
-    
+
     if (*varGfxImagePtr != nullptr)
     {
-        const auto zonePtrType = GetZonePointerType(*varGfxImagePtr);
+        const auto rawImagePtr = *varGfxImagePtr;
+        const auto zonePtrType = GetZonePointerType(rawImagePtr);
         if (zonePtrType == ZonePointerType::FOLLOWING || zonePtrType == ZonePointerType::INSERT)
         {
             *varGfxImagePtr = m_stream.AllocOutOfBlock<GfxImage>(4);
-            
+
             uintptr_t toInsertLookupEntry = 0;
             if (zonePtrType == ZonePointerType::INSERT)
                 toInsertLookupEntry = m_stream.InsertPointerAliasLookup();
-            
+
             varGfxImage = *varGfxImagePtr;
             Load_GfxImage(true);
-            
+
             m_actions.OnImageLoaded(varGfxImage);
-            
+
             LoadAsset_GfxImage(varGfxImagePtr);
-            
+
+#ifdef __SWITCH__
+            static unsigned int imagePointerLoadTraceCount = 0;
+            if (imagePointerLoadTraceCount < 256u)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][GFXIMAGE PTR] n=%u path=load type=%u raw=%p image=%p name=%.80s track=%u category=%u loadDef=%p delay=%u\\n",
+                    imagePointerLoadTraceCount++,
+                    static_cast<unsigned>(zonePtrType),
+                    static_cast<void *>(rawImagePtr),
+                    static_cast<void *>(*varGfxImagePtr),
+                    varGfxImage->name ? varGfxImage->name : "<null>",
+                    static_cast<unsigned>(varGfxImage->track),
+                    static_cast<unsigned>(varGfxImage->category),
+                    static_cast<void *>(varGfxImage->texture.loadDef),
+                    varGfxImage->delayLoadPixels ? 1u : 0u);
+                Switch_LogWrite(trace);
+            }
+#endif
+
             if (zonePtrType == ZonePointerType::INSERT)
                 m_stream.SetInsertedPointerAliasLookup(toInsertLookupEntry, *varGfxImagePtr);
         }
         else
         {
-            *varGfxImagePtr = m_stream.ConvertOffsetToAliasLookup(*varGfxImagePtr);
+            *varGfxImagePtr = m_stream.ConvertOffsetToAliasLookup(rawImagePtr);
+#ifdef __SWITCH__
+            static unsigned int imagePointerAliasTraceCount = 0;
+            if (imagePointerAliasTraceCount < 256u)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][GFXIMAGE PTR] n=%u path=alias type=%u raw=%p resolved=%p name=%.80s\\n",
+                    imagePointerAliasTraceCount++,
+                    static_cast<unsigned>(zonePtrType),
+                    static_cast<void *>(rawImagePtr),
+                    static_cast<void *>(*varGfxImagePtr),
+                    (*varGfxImagePtr && (*varGfxImagePtr)->name)
+                        ? (*varGfxImagePtr)->name : "<null>");
+                Switch_LogWrite(trace);
+            }
+#endif
         }
     }
-    
+
     m_stream.PopBlock();
 }
 
