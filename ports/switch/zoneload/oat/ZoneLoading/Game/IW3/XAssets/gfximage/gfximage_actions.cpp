@@ -55,8 +55,8 @@ void Actions_GfxImage::OnImageLoaded(GfxImage* image) const
         // File-backed images in that form would otherwise retain their serialized
         // delayLoadPixels=false state, have no GPU resource, and never reach
         // DB_LoadDelayedImages(). Route only that exact case through the normal
-        // late IWI path. Images with inline/aliased data already have a basemap
-        // non-null pointer in the texture union and are left untouched.
+        // late IWI path. Images with inline/aliased data already have a non-null
+        // pointer in the texture union and are left untouched.
         if (image &&
             image->category == IMG_CATEGORY_LOAD_FROM_FILE &&
             !image->texture.loadDef &&
