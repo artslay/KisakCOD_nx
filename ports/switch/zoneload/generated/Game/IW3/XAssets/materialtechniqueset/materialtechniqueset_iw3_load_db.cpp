@@ -102,6 +102,7 @@ void Loader_MaterialTechniqueSet::FillStruct_MaterialPass(const ZoneStreamFillRe
     fillAccessor.Fill(varMaterialPass->stableArgCount, 14);
     fillAccessor.Fill(varMaterialPass->customSamplerFlags, 15);
     fillAccessor.FillPtr(varMaterialPass->args, 16);
+    m_stream.AddPointerLookup(&varMaterialPass->args, fillAccessor.BlockBuffer(16));
 }
 
 void Loader_MaterialTechniqueSet::FillStruct_MaterialVertexDeclaration(const ZoneStreamFillReadAccessor& fillAccessor)
@@ -319,60 +320,117 @@ void Loader_MaterialTechniqueSet::Load_MaterialTechnique(const bool atStreamStar
 void Loader_MaterialTechniqueSet::Load_MaterialPass(const bool atStreamStart)
 {
     assert(varMaterialPass != nullptr);
-    
+
     if (atStreamStart)
         FillStruct_MaterialPass(m_stream.LoadWithFill(20));
-    
+
     if (varMaterialPass->vertexDecl)
     {
         const auto zonePtrType = GetZonePointerType(varMaterialPass->vertexDecl);
-        if (zonePtrType == ZonePointerType::FOLLOWING)
+        if (zonePtrType == ZonePointerType::FOLLOWING ||
+            zonePtrType == ZonePointerType::INSERT)
         {
             varMaterialPass->vertexDecl = m_stream.AllocOutOfBlock<MaterialVertexDeclaration>(4);
+            uintptr_t toInsertLookupEntry = 0;
+            if (zonePtrType == ZonePointerType::INSERT)
+                toInsertLookupEntry = m_stream.InsertPointerAliasLookup();
+
             varMaterialVertexDeclaration = varMaterialPass->vertexDecl;
             FillStruct_MaterialVertexDeclaration(m_stream.LoadWithFill(100));
+
+            if (zonePtrType == ZonePointerType::INSERT)
+                m_stream.SetInsertedPointerAliasLookup(
+                    toInsertLookupEntry, varMaterialPass->vertexDecl);
         }
         else
         {
             varMaterialPass->vertexDecl = m_stream.ConvertOffsetToPointerLookup(varMaterialPass->vertexDecl).Expect();
         }
     }
-    
+
     if (varMaterialPass->vertexShader)
     {
         const auto zonePtrType = GetZonePointerType(varMaterialPass->vertexShader);
-        if (zonePtrType == ZonePointerType::FOLLOWING)
+        if (zonePtrType == ZonePointerType::FOLLOWING ||
+            zonePtrType == ZonePointerType::INSERT)
         {
             varMaterialPass->vertexShader = m_stream.AllocOutOfBlock<MaterialVertexShader>(4);
+            uintptr_t toInsertLookupEntry = 0;
+            if (zonePtrType == ZonePointerType::INSERT)
+                toInsertLookupEntry = m_stream.InsertPointerAliasLookup();
+
             varMaterialVertexShader = varMaterialPass->vertexShader;
             Load_MaterialVertexShader(true);
+
+            if (zonePtrType == ZonePointerType::INSERT)
+                m_stream.SetInsertedPointerAliasLookup(
+                    toInsertLookupEntry, varMaterialPass->vertexShader);
         }
         else
         {
             varMaterialPass->vertexShader = m_stream.ConvertOffsetToPointerLookup(varMaterialPass->vertexShader).Expect();
         }
     }
-    
+
     if (varMaterialPass->pixelShader)
     {
         const auto zonePtrType = GetZonePointerType(varMaterialPass->pixelShader);
-        if (zonePtrType == ZonePointerType::FOLLOWING)
+        if (zonePtrType == ZonePointerType::FOLLOWING ||
+            zonePtrType == ZonePointerType::INSERT)
         {
             varMaterialPass->pixelShader = m_stream.AllocOutOfBlock<MaterialPixelShader>(4);
+            uintptr_t toInsertLookupEntry = 0;
+            if (zonePtrType == ZonePointerType::INSERT)
+                toInsertLookupEntry = m_stream.InsertPointerAliasLookup();
+
             varMaterialPixelShader = varMaterialPass->pixelShader;
             Load_MaterialPixelShader(true);
+
+            if (zonePtrType == ZonePointerType::INSERT)
+                m_stream.SetInsertedPointerAliasLookup(
+                    toInsertLookupEntry, varMaterialPass->pixelShader);
         }
         else
         {
             varMaterialPass->pixelShader = m_stream.ConvertOffsetToPointerLookup(varMaterialPass->pixelShader).Expect();
         }
     }
-    
-    if (varMaterialPass->args)
+
+    const size_t argCount =
+        static_cast<size_t>(varMaterialPass->perPrimArgCount) +
+        static_cast<size_t>(varMaterialPass->perObjArgCount) +
+        static_cast<size_t>(varMaterialPass->stableArgCount);
+    if (!argCount)
     {
-        varMaterialPass->args = m_stream.AllocOutOfBlock<MaterialShaderArgument>(4, varMaterialPass->perPrimArgCount + varMaterialPass->perObjArgCount + varMaterialPass->stableArgCount);
-        varMaterialShaderArgument = varMaterialPass->args;
-        LoadArray_MaterialShaderArgument(true, varMaterialPass->perPrimArgCount + varMaterialPass->perObjArgCount + varMaterialPass->stableArgCount);
+        varMaterialPass->args = nullptr;
+    }
+    else if (varMaterialPass->args)
+    {
+        const auto zonePtrType = GetZonePointerType(varMaterialPass->args);
+        if (zonePtrType == ZonePointerType::FOLLOWING ||
+            zonePtrType == ZonePointerType::INSERT)
+        {
+            varMaterialPass->args =
+                m_stream.AllocOutOfBlock<MaterialShaderArgument>(4, argCount);
+            uintptr_t toInsertLookupEntry = 0;
+            if (zonePtrType == ZonePointerType::INSERT)
+                toInsertLookupEntry = m_stream.InsertPointerAliasLookup();
+
+            varMaterialShaderArgument = varMaterialPass->args;
+            LoadArray_MaterialShaderArgument(true, argCount);
+
+            if (zonePtrType == ZonePointerType::INSERT)
+                m_stream.SetInsertedPointerAliasLookup(
+                    toInsertLookupEntry, varMaterialPass->args);
+        }
+        else
+        {
+            // Other passes may share an already-expanded argument array.
+            // Resolve it through the pointer-slot lookup instead of consuming
+            // the following stream bytes as a second, unrelated argument list.
+            varMaterialPass->args =
+                m_stream.ConvertOffsetToPointerLookup(varMaterialPass->args).Expect();
+        }
     }
 }
 
