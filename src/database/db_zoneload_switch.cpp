@@ -410,6 +410,13 @@ void NormalizeMaterialImageReferences(Material *material)
 
         GfxImage *const sourceImage = texture.u.image;
         const char *const imageName = sourceImage->name;
+        // DB_FindXAssetHeader creates a same-name default entry on a miss.
+        // That entry clones the builtin white image, so a name-only check
+        // would mistake it for the zone image and replace the real pointer.
+        // Do not look up (or create) a default when no loaded image exists.
+        if (DB_IsXAssetDefault(ASSET_TYPE_IMAGE, imageName))
+            continue;
+
         const XAssetHeader registered =
             DB_FindXAssetHeader(ASSET_TYPE_IMAGE, imageName);
         GfxImage *const canonicalImage = registered.image;
@@ -472,6 +479,11 @@ GfxImage *NormalizeWorldImageReference(
         return sourceImage;
 
     const char *const imageName = sourceImage->name;
+    // A miss creates a same-name default entry (normally a clone of $white).
+    // Check for a real zone asset before asking the registry for a canonical one.
+    if (DB_IsXAssetDefault(ASSET_TYPE_IMAGE, imageName))
+        return sourceImage;
+
     const XAssetHeader registered = DB_FindXAssetHeader(ASSET_TYPE_IMAGE, imageName);
     GfxImage *const canonicalImage = registered.image;
 
@@ -535,6 +547,11 @@ static void NormalizeMaterialReference(
         return;
 
     const char *const materialName = sourceMaterial->info.name;
+    // DB_FindXAssetHeader creates a same-name default material on a miss.
+    // Never redirect a zone-local material to that builtin placeholder.
+    if (DB_IsXAssetDefault(ASSET_TYPE_MATERIAL, materialName))
+        return;
+
     const XAssetHeader registered =
         DB_FindXAssetHeader(ASSET_TYPE_MATERIAL, materialName);
     Material *const canonicalMaterial = registered.material;
