@@ -220,7 +220,7 @@ const char *ResolveAssetName(void *context, const char *name)
 
 void LoadImageData(void *context, void *loadDef, void *imagePointer)
 {
-    (void)context;
+    auto *const state = static_cast<ZoneLoadState *>(context);
     auto *image = static_cast<GfxImage *>(imagePointer);
 
     // OAT calls this hook while the zone is still being parsed, before
@@ -240,39 +240,95 @@ void LoadImageData(void *context, void *loadDef, void *imagePointer)
     static_assert(sizeof(SwitchGfxImageLoadDefHeader) == 16);
     static_assert(offsetof(SwitchGfxImageLoadDefHeader, resourceSize) == 12);
 
-    if (image && loadDef && image->category == IMG_CATEGORY_LOAD_FROM_FILE)
-    {
-        const auto *const loadDefHeader =
-            static_cast<const SwitchGfxImageLoadDefHeader *>(loadDef);
-        if (loadDefHeader->resourceSize == 0)
-        {
-            const bool wasDelayed = image->delayLoadPixels;
-            image->delayLoadPixels = true;
+    const auto *const loadDefHeader =
+        loadDef ? static_cast<const SwitchGfxImageLoadDefHeader *>(loadDef) : nullptr;
 
-            static uint32_t deferredIwiTraceCount = 0;
-            if (deferredIwiTraceCount < 48u)
-            {
-                char trace[320];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][IWI DEFER OAT] n=%u image=%p namePtr=%p category=%u delayBefore=%u size=%u dims=%ux%ux%u format=%d\n",
-                    deferredIwiTraceCount++,
-                    static_cast<void *>(image),
-                    static_cast<const void *>(image->name),
-                    static_cast<unsigned>(image->category),
-                    wasDelayed ? 1u : 0u,
-                    loadDefHeader->resourceSize,
-                    static_cast<unsigned>(loadDefHeader->dimensions[0]),
-                    static_cast<unsigned>(loadDefHeader->dimensions[1]),
-                    static_cast<unsigned>(loadDefHeader->dimensions[2]),
-                    loadDefHeader->format);
-                Switch_LogWrite(trace);
-            }
+    if (image && loadDefHeader && image->category == IMG_CATEGORY_LOAD_FROM_FILE &&
+        loadDefHeader->resourceSize == 0)
+    {
+        const bool wasDelayed = image->delayLoadPixels;
+        image->delayLoadPixels = true;
+
+        static uint32_t deferredIwiTraceCount = 0;
+        if (deferredIwiTraceCount < 48u)
+        {
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][IWI DEFER OAT] n=%u image=%p namePtr=%p category=%u delayBefore=%u size=%u dims=%ux%ux%u format=%d\n",
+                deferredIwiTraceCount++,
+                static_cast<void *>(image),
+                static_cast<const void *>(image->name),
+                static_cast<unsigned>(image->category),
+                wasDelayed ? 1u : 0u,
+                loadDefHeader->resourceSize,
+                static_cast<unsigned>(loadDefHeader->dimensions[0]),
+                static_cast<unsigned>(loadDefHeader->dimensions[1]),
+                static_cast<unsigned>(loadDefHeader->dimensions[2]),
+                loadDefHeader->format);
+            Switch_LogWrite(trace);
         }
     }
 
+#ifdef __SWITCH__
+    // Model/world images are the resources missing in the Switch scene. Trace
+    // their loadDef and Load_Texture result only while parsing killhouse, so
+    // startup/UI images cannot consume the diagnostic budget.
+    const bool traceModelImage =
+        state && state->zoneName && std::strcmp(state->zoneName, "killhouse") == 0 &&
+        image && (image->track == 8u || image->track == 9u);
+    static uint32_t modelImageLoadTraceCount = 0;
+    const uint32_t traceIndex =
+        traceModelImage && modelImageLoadTraceCount < 160u
+            ? modelImageLoadTraceCount++ : UINT32_MAX;
+    if (traceIndex != UINT32_MAX)
+    {
+        char trace[512];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][MODEL IMAGE LOAD] zone=%s n=%u image=%p name=%.96s track=%u category=%u mapType=%u dims=%ux%ux%u delayBefore=%u cardBefore=%d loadDef=%p resourceSize=%u levels=%u loadDims=%ux%ux%u format=%d\n",
+            state->zoneName, traceIndex, static_cast<void *>(image),
+            image->name ? image->name : "<null>",
+            static_cast<unsigned>(image->track),
+            static_cast<unsigned>(image->category),
+            static_cast<unsigned>(image->mapType),
+            static_cast<unsigned>(image->width),
+            static_cast<unsigned>(image->height),
+            static_cast<unsigned>(image->depth),
+            image->delayLoadPixels ? 1u : 0u,
+            image->cardMemory.platform[0],
+            loadDef,
+            loadDefHeader ? loadDefHeader->resourceSize : 0u,
+            loadDefHeader ? static_cast<unsigned>(loadDefHeader->levelCount) : 0u,
+            loadDefHeader ? static_cast<unsigned>(loadDefHeader->dimensions[0]) : 0u,
+            loadDefHeader ? static_cast<unsigned>(loadDefHeader->dimensions[1]) : 0u,
+            loadDefHeader ? static_cast<unsigned>(loadDefHeader->dimensions[2]) : 0u,
+            loadDefHeader ? loadDefHeader->format : -1);
+        Switch_LogWrite(trace);
+    }
+#endif
+
     Load_Texture(&image->texture, image);
+
+#ifdef __SWITCH__
+    if (traceIndex != UINT32_MAX)
+    {
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][MODEL IMAGE RESULT] zone=%s n=%u image=%p name=%.96s basemap=%p delayAfter=%u cardAfter=%d dims=%ux%ux%u\n",
+            state->zoneName, traceIndex, static_cast<void *>(image),
+            image->name ? image->name : "<null>",
+            static_cast<void *>(image->texture.basemap),
+            image->delayLoadPixels ? 1u : 0u,
+            image->cardMemory.platform[0],
+            static_cast<unsigned>(image->width),
+            static_cast<unsigned>(image->height),
+            static_cast<unsigned>(image->depth));
+        Switch_LogWrite(trace);
+    }
+#endif
 }
 
 void SetSoundData(void *context, void *soundPointer)
@@ -1044,6 +1100,46 @@ void *LinkAsset(void *context, int assetType, void *asset)
         header.weapon = nativeWeapon;
     }
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
+
+#ifdef __SWITCH__
+    if (type == ASSET_TYPE_IMAGE && state.zoneName &&
+        std::strcmp(state.zoneName, "killhouse") == 0)
+    {
+        const auto *const sourceImage = static_cast<const GfxImage *>(asset);
+        const auto *const registeredImage = registered.image;
+        if (sourceImage &&
+            (sourceImage->track == 8u || sourceImage->track == 9u))
+        {
+            static uint32_t modelImageRegistryTraceCount = 0;
+            if (modelImageRegistryTraceCount < 160u)
+            {
+                char trace[512];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][MODEL IMAGE REGISTRY] zone=%s n=%u source=%p sourceName=%.80s sourceTrack=%u sourceCategory=%u sourceBase=%p sourceDelay=%u sourceCard=%d registered=%p registeredName=%.80s registeredTrack=%u registeredCategory=%u registeredBase=%p registeredDelay=%u registeredCard=%d same=%u\n",
+                    state.zoneName, modelImageRegistryTraceCount++,
+                    static_cast<const void *>(sourceImage),
+                    sourceImage->name ? sourceImage->name : "<null>",
+                    static_cast<unsigned>(sourceImage->track),
+                    static_cast<unsigned>(sourceImage->category),
+                    static_cast<void *>(sourceImage->texture.basemap),
+                    sourceImage->delayLoadPixels ? 1u : 0u,
+                    sourceImage->cardMemory.platform[0],
+                    static_cast<const void *>(registeredImage),
+                    registeredImage && registeredImage->name
+                        ? registeredImage->name : "<null>",
+                    registeredImage ? static_cast<unsigned>(registeredImage->track) : 0u,
+                    registeredImage ? static_cast<unsigned>(registeredImage->category) : 0u,
+                    registeredImage
+                        ? static_cast<void *>(registeredImage->texture.basemap) : nullptr,
+                    registeredImage && registeredImage->delayLoadPixels ? 1u : 0u,
+                    registeredImage ? registeredImage->cardMemory.platform[0] : 0,
+                    registeredImage == sourceImage ? 1u : 0u);
+                Switch_LogWrite(trace);
+            }
+        }
+    }
+#endif
 
     if (type == ASSET_TYPE_MATERIAL)
     {
