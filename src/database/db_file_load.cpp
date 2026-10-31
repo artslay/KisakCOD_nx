@@ -458,6 +458,15 @@ void __cdecl DB_LoadDelayedImages()
 {
     uint32_t copyIter; // [esp+0h] [ebp-4h]
 
+#ifdef __SWITCH__
+    // Forward-referenced image names can point into stream-4 bytes that are
+    // materialized by Load_DelayStream(). Retry registration before the
+    // delayed-image enumeration so those assets reach R_DelayLoadImage.
+    g_switchDbStage = "delayed_images/fixup";
+    DB_FlushSwitchDeferredImageAssets();
+    g_switchDbStage = "delayed_images/enum";
+#endif
+
     DB_EnumXAssets(ASSET_TYPE_IMAGE, (void(__cdecl *)(XAssetHeader, void *))R_DelayLoadImage, 0, 0);
     for (copyIter = 0; copyIter < g_copyInfoCount; ++copyIter)
     {
