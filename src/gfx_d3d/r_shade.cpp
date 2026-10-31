@@ -867,11 +867,10 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
         R_OverrideImage(&image, texDef);
 
 #ifdef __SWITCH__
-    static const bool switchMaterialSamplerTraceEnabled = []()
-    {
-        const char *value = std::getenv("KISAK_VK_MATERIAL_SAMPLER_TRACE");
-        return value && value[0] == '1' && value[1] == '\0';
-    }();
+    // Keep the Switch material sampler trace enabled during the texture
+    // investigation. It is bounded by per-category image caches below and
+    // must not require an environment variable on retail Switch builds.
+    static constexpr bool switchMaterialSamplerTraceEnabled = true;
     if (switchMaterialSamplerTraceEnabled)
     {
         // Record the selected source image once per resource-state change. This
