@@ -256,10 +256,8 @@ void LoadImageData(void *context, void *loadDef, void *imagePointer)
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][IWI DEFER OAT] n=%u asset=%d rawType=%u image=%p namePtr=%p category=%u delayBefore=%u size=%u dims=%ux%ux%u format=%d\n",
+                    "[KisakCOD][IWI DEFER OAT] n=%u image=%p namePtr=%p category=%u delayBefore=%u size=%u dims=%ux%ux%u format=%d\n",
                     deferredIwiTraceCount++,
-                    g_switchCurrentAssetIndex,
-                    static_cast<unsigned>(g_switchCurrentAssetRawType),
                     static_cast<void *>(image),
                     static_cast<const void *>(image->name),
                     static_cast<unsigned>(image->category),
