@@ -18,39 +18,41 @@ Actions_GfxImage::Actions_GfxImage(Zone& zone)
 
 void Actions_GfxImage::OnImageLoaded(GfxImage* image) const
 {
-    // KisakCOD: Load_Texture already filled in the card memory; keep it.
-    if (KisakZone_CurrentHooks())
-    {
+    const auto* hooks = KisakZone_CurrentHooks();
 #ifdef __SWITCH__
-        // This callback also sees images whose loadDef is null. The earlier
-        // trace only printed the file-backed/no-loadDef subset; log the full
-        // serialized image state so missing alias/inline paths are visible.
-        if (image)
+    // Trace callback entry independently from the optional zone-hook context.
+    // This distinguishes "OAT never called OnImageLoaded" from "hook context
+    // was missing, so the previous trace and texture handoff were skipped".
+    if (image)
+    {
+        static unsigned int imageOnLoadedTraceCount = 0;
+        if (imageOnLoadedTraceCount < 192u)
         {
-            static unsigned int imageOnLoadedTraceCount = 0;
-            if (imageOnLoadedTraceCount < 192u)
-            {
-                char trace[384];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][GFXIMAGE ONLOADED] n=%u image=%p namePtr=%p track=%u category=%u semantic=%u mapType=%u loadDef=%p delay=%u card=%d dims=%ux%ux%u\n",
-                    imageOnLoadedTraceCount++,
-                    static_cast<void *>(image),
-                    static_cast<const void *>(image->name),
-                    static_cast<unsigned>(image->track),
-                    static_cast<unsigned>(image->category),
-                    static_cast<unsigned>(image->semantic),
-                    static_cast<unsigned>(image->mapType),
-                    static_cast<void *>(image->texture.loadDef),
-                    image->delayLoadPixels ? 1u : 0u,
-                    image->cardMemory.platform[0],
-                    static_cast<unsigned>(image->width),
-                    static_cast<unsigned>(image->height),
-                    static_cast<unsigned>(image->depth));
-                Switch_LogWrite(trace);
-            }
+            char trace[416];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][GFXIMAGE ONLOADED] n=%u hooks=%u image=%p namePtr=%p track=%u category=%u semantic=%u mapType=%u loadDef=%p delay=%u card=%d dims=%ux%ux%u\\n",
+                imageOnLoadedTraceCount++,
+                hooks ? 1u : 0u,
+                static_cast<void *>(image),
+                static_cast<const void *>(image->name),
+                static_cast<unsigned>(image->track),
+                static_cast<unsigned>(image->category),
+                static_cast<unsigned>(image->semantic),
+                static_cast<unsigned>(image->mapType),
+                static_cast<void *>(image->texture.loadDef),
+                image->delayLoadPixels ? 1u : 0u,
+                image->cardMemory.platform[0],
+                static_cast<unsigned>(image->width),
+                static_cast<unsigned>(image->height),
+                static_cast<unsigned>(image->depth));
+            Switch_LogWrite(trace);
         }
+    }
 #endif
+    // KisakCOD: Load_Texture already filled in the card memory; keep it.
+    if (hooks)
+    {
         // OAT does not call LoadImageData when GfxTexture::loadDef is null.
         // File-backed images in that form would otherwise retain their serialized
         // delayLoadPixels=false state, have no GPU resource, and never reach
@@ -95,6 +97,26 @@ void Actions_GfxImage::LoadImageData(GfxImageLoadDef* loadDef, GfxImage* image) 
     memcpy(image->texture.loadDef, loadDef, loadDefSize);
 
     // KisakCOD: create the texture from the persistent copy (Load_Texture).
-    if (const auto* hooks = KisakZone_CurrentHooks())
+    const auto* hooks = KisakZone_CurrentHooks();
+#ifdef __SWITCH__
+    static unsigned int imageLoadDataActionTraceCount = 0;
+    if (imageLoadDataActionTraceCount < 192u)
+    {
+        char trace[384];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][GFXIMAGE ACTION LOAD DATA] n=%u hooks=%u image=%p namePtr=%p loadDef=%p resourceSize=%u track=%u category=%u\\n",
+            imageLoadDataActionTraceCount++,
+            hooks ? 1u : 0u,
+            static_cast<void *>(image),
+            image ? static_cast<const void *>(image->name) : nullptr,
+            static_cast<void *>(image->texture.loadDef),
+            static_cast<unsigned>(loadDef->resourceSize),
+            image ? static_cast<unsigned>(image->track) : 0u,
+            image ? static_cast<unsigned>(image->category) : 0u);
+        Switch_LogWrite(trace);
+    }
+#endif
+    if (hooks)
         hooks->loadImageData(hooks->context, image->texture.loadDef, image);
 }
