@@ -219,8 +219,33 @@ const char *ResolveAssetName(void *context, const char *name)
 void LoadImageData(void *context, void *loadDef, void *imagePointer)
 {
     (void)context;
-    (void)loadDef;
     auto *image = static_cast<GfxImage *>(imagePointer);
+
+    // OAT calls this hook while the zone is still being parsed, before
+    // LinkAsset() has stabilized stream-backed GfxImage::name strings.
+    // Images without inline pixels are backed by an external IWI. Defer those
+    // reads until DB_LoadDelayedImages(), after Load_DelayStream() and the
+    // deferred-name registration pass, instead of opening an IWI through a
+    // potentially transient name pointer here.
+    struct SwitchGfxImageLoadDefHeader
+    {
+        uint8_t levelCount;
+        uint8_t flags;
+        uint16_t dimensions[3];
+        int32_t format;
+        uint32_t resourceSize;
+    };
+    static_assert(sizeof(SwitchGfxImageLoadDefHeader) == 16);
+    static_assert(offsetof(SwitchGfxImageLoadDefHeader, resourceSize) == 12);
+
+    if (image && loadDef && image->category == IMG_CATEGORY_LOAD_FROM_FILE)
+    {
+        const auto *const loadDefHeader =
+            static_cast<const SwitchGfxImageLoadDefHeader *>(loadDef);
+        if (loadDefHeader->resourceSize == 0)
+            image->delayLoadPixels = true;
+    }
+
     Load_Texture(&image->texture, image);
 }
 
