@@ -80,6 +80,10 @@ struct ZoneLoadState
     uint32_t imageNamesStabilized = 0;
     uint32_t imageNamesOutsideBlocks = 0;
     uint32_t imageNamesInvalid = 0;
+    // Per-zone load/registration coverage; these counts avoid global startup
+    // assets consuming the diagnostic budget for later fastfiles.
+    uint32_t imageLoadTraceCount = 0;
+    uint32_t imageRegistryTraceCount = 0;
 };
 
 struct ZoneHandle
@@ -272,32 +276,30 @@ void LoadImageData(void *context, void *loadDef, void *imagePointer)
     }
 
 #ifdef __SWITCH__
-    // Model/world images are the resources missing in the Switch scene. Trace
-    // their loadDef and Load_Texture result only while parsing killhouse, so
-    // startup/UI images cannot consume the diagnostic budget.
-    const bool traceModelImage =
-        state && state->zoneName && std::strcmp(state->zoneName, "killhouse") == 0 &&
-        image && (image->track == 8u || image->track == 9u);
-    static uint32_t modelImageLoadTraceCount = 0;
+    // The earlier trace filtered by killhouse/track 8-9 and could miss images
+    // loaded in common or assets whose track differs at upload time. Record all
+    // inline load-hook calls, independently per fastfile.
     const uint32_t traceIndex =
-        traceModelImage && modelImageLoadTraceCount < 160u
-            ? modelImageLoadTraceCount++ : UINT32_MAX;
+        state && state->imageLoadTraceCount < 160u
+            ? state->imageLoadTraceCount++ : UINT32_MAX;
     if (traceIndex != UINT32_MAX)
     {
-        char trace[512];
+        char trace[448];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][MODEL IMAGE LOAD] zone=%s n=%u image=%p name=%.96s track=%u category=%u mapType=%u dims=%ux%ux%u delayBefore=%u cardBefore=%d loadDef=%p resourceSize=%u levels=%u loadDims=%ux%ux%u format=%d\n",
-            state->zoneName, traceIndex, static_cast<void *>(image),
-            image->name ? image->name : "<null>",
-            static_cast<unsigned>(image->track),
-            static_cast<unsigned>(image->category),
-            static_cast<unsigned>(image->mapType),
-            static_cast<unsigned>(image->width),
-            static_cast<unsigned>(image->height),
-            static_cast<unsigned>(image->depth),
-            image->delayLoadPixels ? 1u : 0u,
-            image->cardMemory.platform[0],
+            "[KisakCOD][GFXIMAGE LOAD DATA] zone=%s n=%u image=%p namePtr=%p track=%u category=%u semantic=%u mapType=%u dims=%ux%ux%u delayBefore=%u cardBefore=%d loadDef=%p resourceSize=%u levels=%u loadDims=%ux%ux%u format=%d\n",
+            state->zoneName ? state->zoneName : "<null>",
+            traceIndex, static_cast<void *>(image),
+            image ? static_cast<const void *>(image->name) : nullptr,
+            image ? static_cast<unsigned>(image->track) : 0u,
+            image ? static_cast<unsigned>(image->category) : 0u,
+            image ? static_cast<unsigned>(image->semantic) : 0u,
+            image ? static_cast<unsigned>(image->mapType) : 0u,
+            image ? static_cast<unsigned>(image->width) : 0u,
+            image ? static_cast<unsigned>(image->height) : 0u,
+            image ? static_cast<unsigned>(image->depth) : 0u,
+            image && image->delayLoadPixels ? 1u : 0u,
+            image ? image->cardMemory.platform[0] : 0,
             loadDef,
             loadDefHeader ? loadDefHeader->resourceSize : 0u,
             loadDefHeader ? static_cast<unsigned>(loadDefHeader->levelCount) : 0u,
@@ -317,9 +319,11 @@ void LoadImageData(void *context, void *loadDef, void *imagePointer)
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][MODEL IMAGE RESULT] zone=%s n=%u image=%p name=%.96s basemap=%p delayAfter=%u cardAfter=%d dims=%ux%ux%u\n",
-            state->zoneName, traceIndex, static_cast<void *>(image),
-            image->name ? image->name : "<null>",
+            "[KisakCOD][GFXIMAGE LOAD RESULT] zone=%s n=%u image=%p track=%u category=%u basemap=%p delayAfter=%u cardAfter=%d dims=%ux%ux%u\n",
+            state->zoneName ? state->zoneName : "<null>",
+            traceIndex, static_cast<void *>(image),
+            static_cast<unsigned>(image->track),
+            static_cast<unsigned>(image->category),
             static_cast<void *>(image->texture.basemap),
             image->delayLoadPixels ? 1u : 0u,
             image->cardMemory.platform[0],
@@ -330,7 +334,6 @@ void LoadImageData(void *context, void *loadDef, void *imagePointer)
     }
 #endif
 }
-
 void SetSoundData(void *context, void *soundPointer)
 {
     (void)context;
@@ -1102,41 +1105,37 @@ void *LinkAsset(void *context, int assetType, void *asset)
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
 
 #ifdef __SWITCH__
-    if (type == ASSET_TYPE_IMAGE && state.zoneName &&
-        std::strcmp(state.zoneName, "killhouse") == 0)
+    if (type == ASSET_TYPE_IMAGE)
     {
         const auto *const sourceImage = static_cast<const GfxImage *>(asset);
         const auto *const registeredImage = registered.image;
-        if (sourceImage &&
-            (sourceImage->track == 8u || sourceImage->track == 9u))
+        if (sourceImage && state.imageRegistryTraceCount < 160u)
         {
-            static uint32_t modelImageRegistryTraceCount = 0;
-            if (modelImageRegistryTraceCount < 160u)
-            {
-                char trace[512];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][MODEL IMAGE REGISTRY] zone=%s n=%u source=%p sourceName=%.80s sourceTrack=%u sourceCategory=%u sourceBase=%p sourceDelay=%u sourceCard=%d registered=%p registeredName=%.80s registeredTrack=%u registeredCategory=%u registeredBase=%p registeredDelay=%u registeredCard=%d same=%u\n",
-                    state.zoneName, modelImageRegistryTraceCount++,
-                    static_cast<const void *>(sourceImage),
-                    sourceImage->name ? sourceImage->name : "<null>",
-                    static_cast<unsigned>(sourceImage->track),
-                    static_cast<unsigned>(sourceImage->category),
-                    static_cast<void *>(sourceImage->texture.basemap),
-                    sourceImage->delayLoadPixels ? 1u : 0u,
-                    sourceImage->cardMemory.platform[0],
-                    static_cast<const void *>(registeredImage),
-                    registeredImage && registeredImage->name
-                        ? registeredImage->name : "<null>",
-                    registeredImage ? static_cast<unsigned>(registeredImage->track) : 0u,
-                    registeredImage ? static_cast<unsigned>(registeredImage->category) : 0u,
-                    registeredImage
-                        ? static_cast<void *>(registeredImage->texture.basemap) : nullptr,
-                    registeredImage && registeredImage->delayLoadPixels ? 1u : 0u,
-                    registeredImage ? registeredImage->cardMemory.platform[0] : 0,
-                    registeredImage == sourceImage ? 1u : 0u);
-                Switch_LogWrite(trace);
-            }
+            char trace[512];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][GFXIMAGE REGISTRY] zone=%s n=%u source=%p sourceName=%.72s sourceTrack=%u sourceCategory=%u sourceSemantic=%u sourceBase=%p sourceDelay=%u sourceCard=%d registered=%p registeredName=%.72s registeredTrack=%u registeredCategory=%u registeredBase=%p registeredDelay=%u registeredCard=%d same=%u\n",
+                state.zoneName ? state.zoneName : "<null>",
+                state.imageRegistryTraceCount++,
+                static_cast<const void *>(sourceImage),
+                sourceImage->name ? sourceImage->name : "<null>",
+                static_cast<unsigned>(sourceImage->track),
+                static_cast<unsigned>(sourceImage->category),
+                static_cast<unsigned>(sourceImage->semantic),
+                static_cast<void *>(sourceImage->texture.basemap),
+                sourceImage->delayLoadPixels ? 1u : 0u,
+                sourceImage->cardMemory.platform[0],
+                static_cast<const void *>(registeredImage),
+                registeredImage && registeredImage->name
+                    ? registeredImage->name : "<null>",
+                registeredImage ? static_cast<unsigned>(registeredImage->track) : 0u,
+                registeredImage ? static_cast<unsigned>(registeredImage->category) : 0u,
+                registeredImage
+                    ? static_cast<void *>(registeredImage->texture.basemap) : nullptr,
+                registeredImage && registeredImage->delayLoadPixels ? 1u : 0u,
+                registeredImage ? registeredImage->cardMemory.platform[0] : 0,
+                registeredImage == sourceImage ? 1u : 0u);
+            Switch_LogWrite(trace);
         }
     }
 #endif
