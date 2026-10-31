@@ -119,7 +119,7 @@ void Loader_GfxImage::Load_GfxTexture(const bool atStreamStart)
                 char trace[320];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][GFXIMAGE TEX PTR] n=%u path=load type=%u image=%p loadDef=%p resourceSize=%u\\n",
+                    "[KisakCOD][GFXIMAGE TEX PTR] n=%u path=load type=%u image=%p loadDef=%p resourceSize=%u\n",
                     texturePointerTraceCount++,
                     static_cast<unsigned>(zonePtrType),
                     static_cast<void *>(varGfxImage),
@@ -142,7 +142,7 @@ void Loader_GfxImage::Load_GfxTexture(const bool atStreamStart)
                 char trace[320];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][GFXIMAGE TEX PTR] n=%u path=alias type=%u image=%p raw=%p resolved=%p\\n",
+                    "[KisakCOD][GFXIMAGE TEX PTR] n=%u path=alias type=%u image=%p raw=%p resolved=%p\n",
                     textureAliasTraceCount++,
                     static_cast<unsigned>(zonePtrType),
                     static_cast<void *>(varGfxImage),
@@ -219,7 +219,7 @@ void Loader_GfxImage::LoadPtr_GfxImage(const bool atStreamStart)
                 char trace[384];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][GFXIMAGE PTR] n=%u path=load type=%u raw=%p image=%p name=%.80s track=%u category=%u loadDef=%p delay=%u\\n",
+                    "[KisakCOD][GFXIMAGE PTR] n=%u path=load type=%u raw=%p image=%p name=%.80s track=%u category=%u loadDef=%p delay=%u\n",
                     imagePointerLoadTraceCount++,
                     static_cast<unsigned>(zonePtrType),
                     static_cast<void *>(rawImagePtr),
@@ -246,7 +246,7 @@ void Loader_GfxImage::LoadPtr_GfxImage(const bool atStreamStart)
                 char trace[320];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][GFXIMAGE PTR] n=%u path=alias type=%u raw=%p resolved=%p name=%.80s\\n",
+                    "[KisakCOD][GFXIMAGE PTR] n=%u path=alias type=%u raw=%p resolved=%p name=%.80s\n",
                     imagePointerAliasTraceCount++,
                     static_cast<unsigned>(zonePtrType),
                     static_cast<void *>(rawImagePtr),
