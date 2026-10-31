@@ -21,6 +21,37 @@ void Actions_GfxImage::OnImageLoaded(GfxImage* image) const
     // KisakCOD: Load_Texture already filled in the card memory; keep it.
     if (KisakZone_CurrentHooks())
     {
+#ifdef __SWITCH__
+        // This callback also sees images whose loadDef is null. The earlier
+        // trace only printed the file-backed/no-loadDef subset; log the full
+        // serialized image state so missing alias/inline paths are visible.
+        if (image)
+        {
+            static unsigned int imageOnLoadedTraceCount = 0;
+            if (imageOnLoadedTraceCount < 192u)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][GFXIMAGE ONLOADED] n=%u image=%p namePtr=%p track=%u category=%u semantic=%u mapType=%u loadDef=%p basemap=%p delay=%u card=%d dims=%ux%ux%u\n",
+                    imageOnLoadedTraceCount++,
+                    static_cast<void *>(image),
+                    static_cast<const void *>(image->name),
+                    static_cast<unsigned>(image->track),
+                    static_cast<unsigned>(image->category),
+                    static_cast<unsigned>(image->semantic),
+                    static_cast<unsigned>(image->mapType),
+                    static_cast<void *>(image->texture.loadDef),
+                    static_cast<void *>(image->texture.basemap),
+                    image->delayLoadPixels ? 1u : 0u,
+                    image->cardMemory.platform[0],
+                    static_cast<unsigned>(image->width),
+                    static_cast<unsigned>(image->height),
+                    static_cast<unsigned>(image->depth));
+                Switch_LogWrite(trace);
+            }
+        }
+#endif
         // OAT does not call LoadImageData when GfxTexture::loadDef is null.
         // File-backed images in that form would otherwise retain their serialized
         // delayLoadPixels=false state, have no GPU resource, and never reach
