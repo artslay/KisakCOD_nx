@@ -515,6 +515,42 @@ void R_VulkanUploadTexture(
         texture->dirtyAll = true;
         texture->dirtyBoxes.clear();
 
+#ifdef __SWITCH__
+        // Emit positive evidence for model/world assets. SKIP/FAIL diagnostics
+        // alone cannot tell whether these images ever reached the upload path.
+        if (mipLevel == 0u && image->track >= 8u && image->track <= 9u)
+        {
+            static std::atomic<uint32_t> modelUploadTraceCount{0};
+            const uint32_t sequence =
+                modelUploadTraceCount.fetch_add(1, std::memory_order_relaxed);
+            if (sequence < 160u)
+            {
+                char trace[448];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][MODEL VK UPLOAD OK] n=%u image=%.96s imagePtr=%p track=%u category=%u texture=%p vkImage=%p view=%p baseMipView=%p size=%ux%ux%u format=%u vkFormat=%u bytes=%zu layout=%u data=%02x%02x%02x%02x\n",
+                    sequence,
+                    image->name ? image->name : "<unnamed>",
+                    static_cast<const void *>(image),
+                    static_cast<unsigned>(image->track),
+                    static_cast<unsigned>(image->category),
+                    static_cast<void *>(texture),
+                    static_cast<void *>(texture->image),
+                    static_cast<void *>(texture->view),
+                    static_cast<void *>(texture->baseMipView),
+                    width, height, depth,
+                    static_cast<unsigned>(format),
+                    static_cast<unsigned>(info.format), bytes,
+                    static_cast<unsigned>(texture->GetSubresourceLayout(mipLevel, layer)),
+                    bytes > 0 ? source[0] : 0u,
+                    bytes > 1 ? source[1] : 0u,
+                    bytes > 2 ? source[2] : 0u,
+                    bytes > 3 ? source[3] : 0u);
+                Switch_LogWrite(trace);
+            }
+        }
+#endif
+
         if (mipLevel == 0u && image->category == IMG_CATEGORY_WATER)
         {
             static std::atomic<uint32_t> waterUploadTraceCount{0};
