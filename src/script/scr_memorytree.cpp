@@ -683,7 +683,7 @@ void MT_RemoveHeadMemoryNode(int size)
         tempNodeValue = oldNodeValue;
         oldNodeValue = scrMemTreeGlob.nodes[oldNode];
         scrMemTreeGlob.nodes[oldNode] = tempNodeValue;
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
         currentNode = static_cast<uint32_t>(oldNode);
 #endif
     }
