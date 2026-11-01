@@ -38,6 +38,7 @@
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 extern thread_local bool g_switchFxCodeMeshDrawActive;
+extern thread_local const char *g_switchFxCodeMeshMaterialName;
 extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern "C" bool Switch_IsPostCinematicRenderTraceActive(void);
 extern "C" void Switch_LogPostCinematicRenderTrace(const char *phase, const char *detail);
@@ -10226,6 +10227,40 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
 #ifdef __SWITCH__
+    uint32_t switchFxDrawTraceSequence = UINT32_MAX;
+    uint32_t switchFxBoundTextureMask = 0u;
+    if (g_switchFxCodeMeshDrawActive)
+    {
+        static std::atomic<uint32_t> fxGpuDrawTraceCount{0};
+        switchFxDrawTraceSequence =
+            fxGpuDrawTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (switchFxDrawTraceSequence < 48u)
+        {
+            for (uint32_t slot = 0; slot < 16u; ++slot)
+                if (m_textures[slot])
+                    switchFxBoundTextureMask |= 1u << slot;
+
+            char trace[1024];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FX GPU DRAW BEGIN] n=%u material=%.80s prim=%u primitives=%u indices=%u baseVertex=%d minVertex=%u vertices=%u start=%u stride=%u declType=%u vs=%llu ps=%llu texMask=0x%04x depth=%u/%u/%u blend=%u/%u/%u cull=%u alpha=%u/%u/%u colorMask=0x%x scissor=%u viewport=%u,%u %ux%u\n",
+                switchFxDrawTraceSequence,
+                g_switchFxCodeMeshMaterialName ? g_switchFxCodeMeshMaterialName : "<unknown>",
+                primitiveType, primitiveCount, indexCount, baseVertexIndex,
+                minVertexIndex, numVertices, startIndex, m_streams[0].stride,
+                m_decl ? static_cast<unsigned>(m_decl->switchVertDeclType) : UINT32_MAX,
+                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
+                switchFxBoundTextureMask,
+                m_depthEnable ? 1u : 0u, m_depthWrite ? 1u : 0u, m_depthFunc,
+                m_blendEnable ? 1u : 0u, m_srcBlend, m_dstBlend,
+                m_cullMode,
+                m_alphaTest ? 1u : 0u, m_alphaFunc, m_alphaRef,
+                m_colorWriteMask, m_scissor ? 1u : 0u,
+                m_viewport.X, m_viewport.Y, m_viewport.Width, m_viewport.Height);
+            Switch_LogWrite(trace);
+        }
+    }
     {
         static std::atomic<uint32_t> indexedDrawEntryTraceCount{0};
         const uint32_t sequence =
@@ -11258,6 +11293,23 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 #endif
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
+#ifdef __SWITCH__
+    if (switchFxDrawTraceSequence < 48u)
+    {
+        char trace[512];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX GPU DRAW RECORDED] n=%u material=%.80s pipeline=%016llx texMask=0x%04x indexBuffer=%p vertexBuffer=%p indexCount=%u start=%u baseVertex=%d\n",
+            switchFxDrawTraceSequence,
+            g_switchFxCodeMeshMaterialName ? g_switchFxCodeMeshMaterialName : "<unknown>",
+            static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)),
+            switchFxBoundTextureMask,
+            reinterpret_cast<void *>(m_indices ? m_indices->buffer : VK_NULL_HANDLE),
+            reinterpret_cast<void *>(m_streams[0].buffer ? m_streams[0].buffer->buffer : VK_NULL_HANDLE),
+            indexCount, startIndex, baseVertexIndex);
+        Switch_LogWrite(trace);
+    }
+#endif
     g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
     if (Switch_IsVkGpuDrawTraceEnabled())
         LogGpuDrawCommand("indexed", primitiveType, primitiveCount,
