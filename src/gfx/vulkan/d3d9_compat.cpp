@@ -1482,18 +1482,6 @@ uint8_t SwitchEffectiveShaderElementType(
         decl && decl->switchVertDeclType == 1u &&
         element.Stream == 0u && streamStride == 44u;
 
-    // FX code meshes share the 32-byte GfxPackedVertex storage with XModels,
-    // but their TEXCOORD0 bytes were converted to IEEE half2 by
-    // R_EndCodeMeshVerts. Use the matching Vulkan format only while the FX
-    // code-mesh draw scope is active; normal XModel UVs remain UBYTE4.
-    if (g_switchFxCodeMeshDrawActive &&
-        element.Stream == 0 &&
-        streamStride == sizeof(GfxPackedVertex) &&
-        element.Offset == 20u &&
-        element.Usage == 5u &&
-        element.UsageIndex == 0u)
-        return D3DDECLTYPE_FLOAT16_2;
-
     // Model marks use packed fixed-point TEXCOORD0 at byte 20, even though
     // their records occupy a 44-byte shared mark-mesh stride.
     if (packedModelMarkLayout &&
@@ -1502,20 +1490,12 @@ uint8_t SwitchEffectiveShaderElementType(
         element.UsageIndex == 0u)
         return D3DDECLTYPE_UBYTE4;
 
-    // FX code meshes use the original packed CoD4 POSITION0 FLOAT4 route.
-    // Their fourth component is binormalSign (set by FX_GenSpriteVerts and
-    // FX trail generation), which the packed vertex shader may use when
-    // constructing its tangent basis. Do not narrow this input to FLOAT3:
-    // Vulkan would synthesize W=1 and lose the authored -1 handedness.
-    if (g_switchFxCodeMeshDrawActive &&
-        decl && decl->switchVertDeclType != 0u &&
-        element.Stream == 0u && streamStride == sizeof(GfxPackedVertex) &&
-        element.Offset == 0u && element.Usage == 0u &&
-        element.UsageIndex == 0u && element.Type == D3DDECLTYPE_FLOAT4)
-        return D3DDECLTYPE_FLOAT4;
-
-    // For non-FX packed model draws, expose XYZ only so Vulkan supplies W=1
-    // instead of interpreting binormalSign as homogeneous position.w.
+    // GfxPackedVertex and GfxWorldVertex both begin with xyz at byte 0 and
+    // binormalSign at byte 12. Their D3D declaration is a legacy semantic route;
+    // it may label POSITION as FLOAT4 even though the fourth physical component
+    // is not homogeneous W. Expose XYZ only, so Vulkan supplies W=1 instead of
+    // interpreting binormalSign (often -1) as position.w. Apply this narrowly
+    // to the known 32-byte packed-model ABI; world vertices use the 44-byte case.
     if (decl && decl->switchVertDeclType != 0u &&
         element.Stream == 0 && streamStride == 32u &&
         element.Offset == 0 && element.Usage == 0 &&
@@ -8207,10 +8187,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, static_cast<uint32_t>(m_topology));
     key = HashCombine(key, m_fillMode);
     key = HashCombine(key, m_cullMode);
-    // FX code meshes share the packed declaration and 32-byte stride with
-    // XModels, but their UV and POSITION input formats are different. Keep
-    // their Vulkan vertex-input pipelines separate from ordinary model draws.
-    key = HashCombine(key, g_switchFxCodeMeshDrawActive ? 1u : 0u);
     key = HashCombine(key, m_scissor);
     key = HashCombine(key, m_colorWriteMask);
     key = HashCombine(key, m_stencilEnable);
