@@ -7147,6 +7147,33 @@ bool IDirect3DDevice9::BindSamplerSet(
     IDirect3DBaseTexture9 *const (&textures)[16])
 {
     g_switchFrameStage = "frame/render/vulkan/sampler/entry";
+#ifdef __SWITCH__
+    {
+        static std::atomic<uint32_t> samplerBindEntryTraceCount{0};
+        const uint32_t sequence =
+            samplerBindEntryTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (sequence < 48u)
+        {
+            uint32_t boundTextureCount = 0;
+            for (IDirect3DBaseTexture9 *texture : textures)
+            {
+                if (texture)
+                    ++boundTextureCount;
+            }
+            char trace[384];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK SAMPLER BIND ENTRY] seq=%u set=%u stage=%s bindPoint=%u backend=%u frame=%llu vs=%llu ps=%llu boundSlots=%u\\n",
+                sequence, setIndex, setIndex == 0u ? "vs" : "ps",
+                static_cast<unsigned>(bindPoint), m_backend ? 1u : 0u,
+                static_cast<unsigned long long>(m_backend ? m_backend->FrameSerial() : 0u),
+                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
+                boundTextureCount);
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     if (!m_backend)
         return false;
 
@@ -9797,6 +9824,27 @@ bool IDirect3DDevice9::BindDescriptorSets()
 bool IDirect3DDevice9::PrepareDraw()
 {
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/entry";
+#ifdef __SWITCH__
+    {
+        static std::atomic<uint32_t> prepareDrawEntryTraceCount{0};
+        const uint32_t sequence =
+            prepareDrawEntryTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (sequence < 24u)
+        {
+            char trace[352];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK PREPARE DRAW ENTRY] seq=%u backend=%u frameActive=%u frame=%llu vs=%llu ps=%llu pipelineDirty=%u\\n",
+                sequence, m_backend ? 1u : 0u,
+                m_backend && m_backend->IsFrameActive() ? 1u : 0u,
+                static_cast<unsigned long long>(m_backend ? m_backend->FrameSerial() : 0u),
+                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
+                m_pipelineDirty ? 1u : 0u);
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     if (!m_backend || !m_backend->IsFrameActive())
     {
         Switch_LogWrite("[KisakCOD][VK DRAW] fail=frame_inactive\n");
@@ -10037,6 +10085,35 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     } modelTransformTraceReset{g_switchModelTransformDraw.active};
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
+#ifdef __SWITCH__
+    {
+        static std::atomic<uint32_t> indexedDrawEntryTraceCount{0};
+        const uint32_t sequence =
+            indexedDrawEntryTraceCount.fetch_add(1, std::memory_order_relaxed);
+        if (sequence < 24u)
+        {
+            uint32_t boundTextureCount = 0;
+            for (IDirect3DBaseTexture9 *texture : m_textures)
+            {
+                if (texture)
+                    ++boundTextureCount;
+            }
+            char trace[448];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][VK DRAW INDEXED ENTRY] seq=%u self=%p prim=%u primitives=%u indices=%u minVertex=%u vertices=%u startIndex=%u indexBuffer=%p indexBytes=%u backend=%u frameActive=%u vs=%llu ps=%llu boundSlots=%u\\n",
+                sequence, static_cast<void *>(this), primitiveType, primitiveCount,
+                indexCount, minVertexIndex, numVertices, startIndex,
+                static_cast<void *>(m_indices), m_indices ? m_indices->size : 0u,
+                m_backend ? 1u : 0u,
+                m_backend && m_backend->IsFrameActive() ? 1u : 0u,
+                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
+                boundTextureCount);
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     const uint8_t *auditIndexData = nullptr;
 #ifdef __SWITCH__
     VkQueryPool switchFloorOcclusionPool = VK_NULL_HANDLE;
