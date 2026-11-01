@@ -978,7 +978,7 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
                 char trace[320];
                 std::snprintf(
                     trace, sizeof(trace),
-                    "[KisakCOD][FX CODEMESH SKIP] unique=%u material=%.96s materialIndex=%u baseTech=%u object=%u sortKey=%u reason=setup_material_false\\n",
+                    "[KisakCOD][FX CODEMESH SKIP] unique=%u material=%.96s materialIndex=%u baseTech=%u object=%u sortKey=%u reason=setup_material_false\n",
                     traceIndex,
                     materialName,
                     static_cast<unsigned>(drawSurf.fields.materialSortedIndex),
