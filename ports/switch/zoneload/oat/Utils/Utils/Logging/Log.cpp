@@ -47,14 +47,14 @@ namespace
 
 namespace con
 {
-    LogLevel _globalLogLevel = LogLevel::INFO;
+    LogLevel _globalLogLevel = LogLevel::ERROR;
     std::atomic_size_t _warningCount(0);
     std::atomic_size_t _errorCount(0);
 
     void init()
     {
         if (!logLevelSet)
-            set_log_level(LogLevel::INFO);
+            set_log_level(LogLevel::ERROR);
 
         if (!colorSet)
             set_use_color(true);
