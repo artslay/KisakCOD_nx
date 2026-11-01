@@ -3996,9 +3996,9 @@ bool VulkanBackend::EnsureRendering(
     {
         rendering.pDepthAttachment = &depth;
         // Dynamic rendering requires a separate stencil attachment declaration
-        // when the depth image view exposes a stencil aspect. Reuse the same
-        // attachment state so depth/stencil load, store, and clear operations
-        // stay synchronized for packed depth-stencil formats.
+        // whenever the underlying depth format has a stencil aspect. Sampled
+        // depth/stencil images intentionally use depth-only views, but the
+        // attachment slots infer DEPTH and STENCIL independently from the image.
         if (depthAspect & VK_IMAGE_ASPECT_STENCIL_BIT)
             rendering.pStencilAttachment = &depth;
     }
