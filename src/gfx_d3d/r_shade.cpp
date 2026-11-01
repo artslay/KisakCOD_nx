@@ -880,11 +880,19 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
         {
             const GfxImage *image;
             const void *basemap;
+            const void *material;
+            const void *pixelShader;
+            uint32_t passIndex;
+            uint32_t samplerIndex;
+            uint32_t semantic;
             bool delayLoad;
         };
-        static SwitchSamplerTraceEntry worldImages[128]{};
-        static SwitchSamplerTraceEntry otherImages[160]{};
-        static SwitchSamplerTraceEntry waterImages[32]{};
+        // The same image is often used by a depth/alpha-test pass and a later
+        // lit/color pass. Deduplicate by the complete material-pass binding,
+        // not just by GfxImage, or the first pass hides all later observations.
+        static SwitchSamplerTraceEntry worldImages[512]{};
+        static SwitchSamplerTraceEntry otherImages[1024]{};
+        static SwitchSamplerTraceEntry waterImages[64]{};
         static uint32_t worldImageCount = 0;
         static uint32_t otherImageCount = 0;
         static uint32_t waterImageCount = 0;
@@ -894,12 +902,19 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
             material && material->info.name ? material->info.name : "<unnamed>";
         const bool isWorldMaterial =
             materialName[0] == 'w' && materialName[1] == 'c' && materialName[2] == '/';
+        const uint32_t passIndex = static_cast<uint32_t>(context.state->passIndex);
+        const uint32_t samplerIndex = static_cast<uint32_t>(arg->dest);
+        const uint32_t semantic = static_cast<uint32_t>(texDef->semantic);
+        const void *materialKey = static_cast<const void *>(material);
+        const void *pixelShaderKey =
+            context.state->pass && context.state->pass->pixelShader
+                ? static_cast<const void *>(context.state->pass->pixelShader) : nullptr;
         SwitchSamplerTraceEntry *entries = isWorldMaterial
             ? worldImages : (texDef->semantic == TS_WATER_MAP ? waterImages : otherImages);
         uint32_t *entryCount = isWorldMaterial
             ? &worldImageCount : (texDef->semantic == TS_WATER_MAP ? &waterImageCount : &otherImageCount);
-        const uint32_t entryLimit = isWorldMaterial ? 128u :
-            (texDef->semantic == TS_WATER_MAP ? 32u : 160u);
+        const uint32_t entryLimit = isWorldMaterial ? 512u :
+            (texDef->semantic == TS_WATER_MAP ? 64u : 1024u);
         const void *basemap = image ? static_cast<const void *>(image->texture.basemap) : nullptr;
         const bool delayLoad = image && image->delayLoadPixels;
         bool stateAlreadyLogged = false;
@@ -909,6 +924,11 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
             {
                 const SwitchSamplerTraceEntry &entry = entries[traceIndex];
                 if (entry.image == image && entry.basemap == basemap &&
+                    entry.material == materialKey &&
+                    entry.pixelShader == pixelShaderKey &&
+                    entry.passIndex == passIndex &&
+                    entry.samplerIndex == samplerIndex &&
+                    entry.semantic == semantic &&
                     entry.delayLoad == delayLoad)
                 {
                     stateAlreadyLogged = true;
@@ -923,16 +943,16 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
             char trace[640];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][MATERIAL SAMPLER] group=%s mat=%.96s pass=%u ps=%.64s slot=%u semantic=%u image=%.96s imagePtr=%p size=%ux%u category=%u delayLoad=%u basemap=%p mapType=%u samplerState=0x%x\n",
+                "[KisakCOD][MATERIAL SAMPLER] group=%s mat=%.96s pass=%u ps=%.64s slot=%u semantic=%u image=%.96s imagePtr=%p size=%ux%u category=%u delayLoad=%u basemap=%p mapType=%u samplerState=0x%x\\n",
                 isWorldMaterial ? "world" :
                     (texDef->semantic == TS_WATER_MAP ? "water" : "model_fx"),
                 materialName,
-                static_cast<unsigned>(context.state->passIndex),
+                passIndex,
                 context.state->pass && context.state->pass->pixelShader &&
                     context.state->pass->pixelShader->name
                     ? context.state->pass->pixelShader->name : "<unknown>",
-                static_cast<unsigned>(arg->dest),
-                static_cast<unsigned>(texDef->semantic),
+                samplerIndex,
+                semantic,
                 image && image->name ? image->name : "<null>",
                 static_cast<const void *>(image),
                 image ? image->width : 0u,
@@ -947,7 +967,10 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
             if (!image)
                 ++nullImageTraceCount;
             else
-                entries[(*entryCount)++] = {image, basemap, delayLoad};
+                entries[(*entryCount)++] = {
+                    image, basemap, materialKey, pixelShaderKey,
+                    passIndex, samplerIndex, semantic, delayLoad
+                };
         }
     }
 #endif
