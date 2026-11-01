@@ -226,7 +226,7 @@ uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX CODEMESH DRAW] unique=%u listSurfs=%u firstObject=%u firstTris=%u material=%.96s vbUsed=%u vbTotal=%u\\n",
+                "[KisakCOD][FX CODEMESH DRAW] unique=%u listSurfs=%u firstObject=%u firstTris=%u material=%.96s vbUsed=%u vbTotal=%u\n",
                 traceIndex,
                 static_cast<unsigned>(drawSurfCount),
                 static_cast<unsigned>(firstDrawSurf.fields.objectId),
