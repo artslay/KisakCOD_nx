@@ -87,6 +87,15 @@ static void SendKeyEdge(u64 mask, int key, bool allowDown = true)
     }
 }
 
+static void ReleaseForwardedKey(int key)
+{
+    if (key < 0 || key >= 256 || g_forwardedKeyButtons[key] == 0)
+        return;
+
+    g_forwardedKeyButtons[key] = 0;
+    CL_KeyEvent(0, key, 0, Sys_Milliseconds());
+}
+
 static u64 ButtonMask(GPadButton button)
 {
     switch (button)
@@ -350,8 +359,10 @@ void Switch_GamepadFrame()
         g_consoleShortcutConsumed = true;
         if (gameplayActive)
         {
-            IN_SprintUp();
-            IN_Melee_Up();
+            // L3/R3 become a console shortcut when pressed together. Release
+            // their synthetic gameplay keys through the same key-event path.
+            ReleaseForwardedKey(K_AUX6);
+            ReleaseForwardedKey(K_AUX7);
         }
         Switch_ShowConsoleKeyboard();
         // Opening/closing the console may block for the software keyboard.
