@@ -70,11 +70,14 @@ static void FX_LogNearEffectCull(
 
     int culpritPlane = -1;
     float closestPlaneDistance = 3.4e38f;
+    float planeDistances[5] = {};
     for (uint32_t planeIndex = 0; planeIndex < frustumPlaneCount; ++planeIndex)
     {
         const float planeDistance =
             Vec3Dot(draw->camera->frustum[planeIndex], draw->posWorld) -
             draw->camera->frustum[planeIndex][3];
+        if (planeIndex < ARRAY_COUNT(planeDistances))
+            planeDistances[planeIndex] = planeDistance;
         if (planeDistance < closestPlaneDistance)
             closestPlaneDistance = planeDistance;
         if (culpritPlane < 0 && planeDistance <= -radius)
@@ -84,12 +87,17 @@ static void FX_LogNearEffectCull(
     const char *effectName =
         draw->effect && draw->effect->def && draw->effect->def->name
             ? draw->effect->def->name : "(unknown)";
-    char trace[448];
+    const float *axis0 = draw->camera->axis[0];
+    const float *axis1 = draw->camera->axis[1];
+    const float *axis2 = draw->camera->axis[2];
+    char trace[768];
     std::snprintf(
         trace, sizeof(trace),
         "[KisakCOD][FX NEAR CULL] n=%u kind=%s effect=%s elemType=%u flags=0x%x "
         "distance=%.2f radius=%.3f planeCount=%u culprit=%d closestPlane=%.3f "
-        "pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f)\n",
+        "planes=(%.2f,%.2f,%.2f,%.2f,%.2f) "
+        "pos=(%.2f,%.2f,%.2f) camera=(%.2f,%.2f,%.2f) "
+        "axis0=(%.3f,%.3f,%.3f) axis1=(%.3f,%.3f,%.3f) axis2=(%.3f,%.3f,%.3f)\n",
         traceIndex,
         kind ? kind : "(unknown)",
         effectName,
@@ -100,8 +108,13 @@ static void FX_LogNearEffectCull(
         static_cast<unsigned>(frustumPlaneCount),
         culpritPlane,
         closestPlaneDistance,
+        planeDistances[0], planeDistances[1], planeDistances[2],
+        planeDistances[3], planeDistances[4],
         draw->posWorld[0], draw->posWorld[1], draw->posWorld[2],
-        draw->camera->origin[0], draw->camera->origin[1], draw->camera->origin[2]);
+        draw->camera->origin[0], draw->camera->origin[1], draw->camera->origin[2],
+        axis0[0], axis0[1], axis0[2],
+        axis1[0], axis1[1], axis1[2],
+        axis2[0], axis2[1], axis2[2]);
     Switch_LogWrite(trace);
 }
 #endif
