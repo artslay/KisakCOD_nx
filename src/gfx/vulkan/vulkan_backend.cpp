@@ -2710,7 +2710,18 @@ bool VulkanBackend::CreateImage2D(
     viewInfo.image = *image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = aspect;
+    // A depth/stencil image view used by a sampled-image descriptor must
+    // select exactly one aspect. The engine samples depth maps as floats;
+    // keeping DEPTH|STENCIL here makes D24S8 shadow-map descriptors invalid
+    // (VUID-VkDescriptorImageInfo-imageView-01976). Dynamic-rendering depth
+    // and stencil attachments infer their respective aspects from the
+    // attachment slot, so the same view can still back both attachments.
+    const bool sampledDepthStencil =
+        (usage & VK_IMAGE_USAGE_SAMPLED_BIT) != 0 &&
+        (aspect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0 &&
+        (aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
+    viewInfo.subresourceRange.aspectMask = sampledDepthStencil
+        ? VK_IMAGE_ASPECT_DEPTH_BIT : aspect;
     viewInfo.components = components;
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 1;
