@@ -8,6 +8,7 @@
 #include <universal/profile.h>
 
 #ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
 extern void Switch_SetProgressPhase(const char *phase);
 extern void Switch_BeginMemoryTreeWalk(
     uint32_t requestBytes,
@@ -30,14 +31,9 @@ extern void Switch_UpdateMemoryTreeWalk(
     uint32_t rawPrev,
     uint32_t rawNext);
 extern void Switch_RecordMemoryTreeOperation(
-    uint32_t op,
-    uint32_t arg0,
-    uint32_t arg1,
-    uint32_t node,
-    uint32_t prev,
-    uint32_t next,
-    uint32_t usage,
-    uint32_t usageSize);
+    uint32_t op, uint32_t arg0, uint32_t arg1, uint32_t node,
+    uint32_t prev, uint32_t next, uint32_t usage, uint32_t usageSize);
+#endif
 extern void Switch_ReportFirstMemoryTreeInvariant(
     const char *phase,
     uint32_t node,
@@ -63,6 +59,7 @@ struct scrMemTreeDebugGlob_t // sizeof=0x20000
 scrMemTreeDebugGlob_t scrMemTreeDebugGlob = { 0 };
 
 #ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
 static void MT_RecordTreeOperation(uint32_t op, uint32_t arg0, uint32_t arg1, uint32_t node)
 {
     uint32_t prev = UINT32_MAX;
@@ -78,8 +75,9 @@ static void MT_RecordTreeOperation(uint32_t op, uint32_t arg0, uint32_t arg1, ui
     }
     Switch_RecordMemoryTreeOperation(op, arg0, arg1, node, prev, next, usage, usageSize);
 }
+#endif
 
-static uint32_t mtInvariantReportCount;
+static uint32_t mtInvariantReportCount
 static uint32_t mtFreeRejectTraceCount;
 
 static void MT_ReportInvariantViolation(
@@ -167,6 +165,7 @@ static bool MT_CheckSentinelAtPhase(const char *phase, uint32_t extra)
     return false;
 }
 
+#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
 // Validate the free trees at sampled allocator validation points on Switch.
 // A full walk visits every currently free node; running it after every
 // allocation/free check turns startup into an O(validation_points * nodes)
@@ -315,7 +314,7 @@ static void MT_ValidateFreeTrees(
     }
 }
 #endif
-
+#endif
 
 
 static void MT_InitBits(void)
@@ -377,7 +376,9 @@ void* MT_Alloc(int numBytes, mtType_t type)
 unsigned short MT_AllocIndex(int numBytes, mtType_t type)
 {
 #ifdef KISAK_SWITCH
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     Switch_SetProgressPhase("memtree/alloc_size");
+    #endif
 #endif
     uint32_t nodeNum; // [esp+4Ch] [ebp-Ch]
     uint32_t size; // [esp+50h] [ebp-8h]
@@ -389,11 +390,15 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
 
 #ifdef KISAK_SWITCH
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     Switch_SetProgressPhase("memtree/alloc_wait_lock");
+    #endif
 #endif
     Sys_EnterCriticalSection(CRITSECT_MEMORY_TREE);
 #ifdef KISAK_SWITCH
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     Switch_SetProgressPhase("memtree/alloc_locked");
+    #endif
     MT_CheckSentinelAtPhase("alloc_entry_sentinel", static_cast<uint32_t>(numBytes));
 #endif
     for (newSize = size; ; ++newSize)
@@ -426,18 +431,24 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
                 size);
         }
     }
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     Switch_BeginMemoryTreeWalk(
         static_cast<uint32_t>(numBytes),
         static_cast<uint32_t>(type),
         size,
         static_cast<uint32_t>(newSize),
         nodeNum);
+    #endif
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     Switch_SetProgressPhase("memtree/remove_head");
+    #endif
 #endif
     MT_RemoveHeadMemoryNode(newSize);
 #ifdef KISAK_SWITCH
     MT_CheckSentinelAtPhase("alloc_after_remove_head", nodeNum);
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     Switch_SetProgressPhase("memtree/split_and_add");
+    #endif
 #endif
     while (newSize != size)
     {
@@ -475,12 +486,16 @@ unsigned short MT_AllocIndex(int numBytes, mtType_t type)
     scrMemTreeDebugGlob.mt_usage[nodeNum] = type;
     scrMemTreeDebugGlob.mt_usage_size[nodeNum] = size;
 #ifdef KISAK_SWITCH
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     MT_RecordTreeOperation(5, static_cast<uint32_t>(numBytes), static_cast<uint32_t>(type), nodeNum);
+    #endif
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     MT_ValidateFreeTrees(
         "post_alloc_reachable",
         "post_alloc_misaligned",
         "post_alloc_duplicate",
         nodeNum);
+    #endif
 #endif
     Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
     return nodeNum;
@@ -491,7 +506,7 @@ bool MT_Realloc(int oldNumBytes, int newNumbytes)
     return MT_GetSize(oldNumBytes) >= MT_GetSize(newNumbytes);
 }
 
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
 // parentKind: 0 = head[] root, 1 = MemoryNode.prev, 2 = MemoryNode.next,
 // 3 = unexpected member offset, 4 = pointer outside the memory-tree storage.
 static void MT_GetWalkParentSlot(const uint16_t *slot, uint32_t *parentKind, uint32_t *parentIndex)
@@ -530,7 +545,9 @@ static void MT_GetWalkParentSlot(const uint16_t *slot, uint32_t *parentKind, uin
 void MT_RemoveHeadMemoryNode(int size)
 {
 #ifdef KISAK_SWITCH
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     Switch_SetProgressPhase("memtree/remove_head_walk");
+    #endif
 #endif
     MemoryNode tempNodeValue;
     int oldNode;
@@ -539,7 +556,6 @@ void MT_RemoveHeadMemoryNode(int size)
     int prevScore;
     int nextScore;
 #ifdef KISAK_SWITCH
-    uint32_t walkRoot;
     uint32_t alignmentMask;
     bool reportedInvalidNode = false;
 #endif
@@ -550,18 +566,20 @@ void MT_RemoveHeadMemoryNode(int size)
 #endif
 
     parentNode = &scrMemTreeGlob.head[size];
-#ifdef KISAK_SWITCH
-    walkRoot = *parentNode;
+#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
+    const uint32_t walkRoot = *parentNode;
 #endif
     oldNodeValue = scrMemTreeGlob.nodes[*parentNode];
 #ifdef KISAK_SWITCH
     uint32_t currentNode = *parentNode;
+#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     uint32_t walkSteps = 0;
+#endif
 #endif
 
     while (1)
     {
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
         uint32_t parentKind;
         uint32_t parentIndex;
         MT_GetWalkParentSlot(parentNode, &parentKind, &parentIndex);
@@ -575,6 +593,7 @@ void MT_RemoveHeadMemoryNode(int size)
             if (!oldNode)
             {
 #ifdef KISAK_SWITCH
+                #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
                 Switch_UpdateMemoryTreeWalk(
                     ++walkSteps,
                     currentNode,
@@ -589,6 +608,7 @@ void MT_RemoveHeadMemoryNode(int size)
                     scrMemTreeDebugGlob.mt_usage_size[currentNode],
                     scrMemTreeGlob.nodes[currentNode].prev,
                     scrMemTreeGlob.nodes[currentNode].next);
+                #endif
 #endif
                 break;
             }
@@ -646,6 +666,7 @@ void MT_RemoveHeadMemoryNode(int size)
                 reportedInvalidNode = true;
             }
         }
+        #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
         Switch_UpdateMemoryTreeWalk(
             ++walkSteps,
             currentNode,
@@ -660,6 +681,7 @@ void MT_RemoveHeadMemoryNode(int size)
             scrMemTreeDebugGlob.mt_usage_size[currentNode],
             scrMemTreeGlob.nodes[currentNode].prev,
             scrMemTreeGlob.nodes[currentNode].next);
+        #endif
 #endif
 
         tempNodeValue = oldNodeValue;
@@ -670,7 +692,9 @@ void MT_RemoveHeadMemoryNode(int size)
 #endif
     }
 #ifdef KISAK_SWITCH
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     MT_RecordTreeOperation(4, static_cast<uint32_t>(size), walkRoot, walkRoot);
+    #endif
 #endif
 }
 
@@ -784,21 +808,27 @@ iassert((scrMemTreeDebugGlob.mt_usage_size[nodeNum] == size));
     // Check after buddy removal/merge but before the freed node is inserted.
     // This separates corruption in MT_RemoveMemoryNode from corruption in MT_AddMemoryNode.
     MT_CheckSentinelAtPhase("free_after_buddy_merge", freedNode);
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     MT_ValidateFreeTrees(
         "pre_free_add_reachable",
         "pre_free_add_misaligned",
         "pre_free_add_duplicate",
         freedNode);
+    #endif
 #endif
     MT_AddMemoryNode(nodeNum, size);
 #ifdef KISAK_SWITCH
     MT_CheckSentinelAtPhase("free_after_add_node", freedNode);
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     MT_RecordTreeOperation(6, freedNode, static_cast<uint32_t>(numBytes), nodeNum);
+    #endif
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     MT_ValidateFreeTrees(
         "post_free_add_reachable",
         "post_free_add_misaligned",
         "post_free_add_duplicate",
         freedNode);
+    #endif
 #endif
     Sys_LeaveCriticalSection(CRITSECT_MEMORY_TREE);
 }
@@ -806,7 +836,9 @@ iassert((scrMemTreeDebugGlob.mt_usage_size[nodeNum] == size));
 bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
 {
 #ifdef KISAK_SWITCH
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     Switch_SetProgressPhase("memtree/remove_node");
+    #endif
 #endif
     MemoryNode tempNodeValue;
     int node;
@@ -890,7 +922,9 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
                     if (!oldNodeValue.next)
                     {
 #ifdef KISAK_SWITCH
+                        #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
                         MT_RecordTreeOperation(2, targetNode, targetSize, targetNode);
+                        #endif
 #endif
                         return true;
                     }
@@ -909,7 +943,9 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
         if (oldNode == nodeNum)
         {
 #ifdef KISAK_SWITCH
+            #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
             MT_RecordTreeOperation(3, targetNode, targetSize, targetNode);
+            #endif
 #endif
             return false;
         }
@@ -929,7 +965,9 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
     }
 
 #ifdef KISAK_SWITCH
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     MT_RecordTreeOperation(3, targetNode, targetSize, targetNode);
+    #endif
 #endif
     return false;
 }
@@ -1007,7 +1045,9 @@ int MT_GetSubTreeSize(int nodeNum)
 void MT_AddMemoryNode(int newNode, int size)
 {
 #ifdef KISAK_SWITCH
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     Switch_SetProgressPhase("memtree/add_node");
+    #endif
 #endif
     int node;
     int nodeNum;
@@ -1126,7 +1166,9 @@ void MT_AddMemoryNode(int newNode, int size)
                     node = *parentNode;
                 }
 #ifdef KISAK_SWITCH
+                #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
                 MT_RecordTreeOperation(1, insertedNode, insertedSize, insertedNode);
+                #endif
 #endif
                 return;
             }
@@ -1154,7 +1196,9 @@ void MT_AddMemoryNode(int newNode, int size)
     scrMemTreeGlob.nodes[newNode].prev = 0;
     scrMemTreeGlob.nodes[newNode].next = 0;
 #ifdef KISAK_SWITCH
+    #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     MT_RecordTreeOperation(1, insertedNode, insertedSize, insertedNode);
+    #endif
 #endif
 }
 
