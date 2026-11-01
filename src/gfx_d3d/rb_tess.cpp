@@ -27,6 +27,34 @@ extern void Switch_SetModelTransformTraceContext(
     uint32_t gfxEntIndex, bool depthHack, const float *sourceMatrix);
 #endif
 
+#ifdef __SWITCH__
+// R_TessCodeMeshList submits FX sprites/tails through the packed code-mesh
+// buffer. Its UV words are converted to IEEE half2 before unlock; distinguish
+// this draw from XModel draws that share the same 32-byte vertex stride.
+thread_local bool g_switchFxCodeMeshDrawActive = false;
+
+namespace
+{
+class SwitchFxCodeMeshDrawScope
+{
+public:
+    SwitchFxCodeMeshDrawScope()
+        : m_previous(g_switchFxCodeMeshDrawActive)
+    {
+        g_switchFxCodeMeshDrawActive = true;
+    }
+
+    ~SwitchFxCodeMeshDrawScope()
+    {
+        g_switchFxCodeMeshDrawActive = m_previous;
+    }
+
+private:
+    bool m_previous;
+};
+}
+#endif
+
 GfxScaledPlacement s_manualObjectPlacement;
 
 void __cdecl RB_ShowTess(GfxCmdBufContext context, const float *center, const char *tessName, const float *color)
@@ -108,6 +136,10 @@ void __cdecl RB_ShowTess(GfxCmdBufContext context, const float *center, const ch
 
 uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdBufContext prepassContext)
 {
+#ifdef __SWITCH__
+    SwitchFxCodeMeshDrawScope switchFxCodeMeshDrawScope;
+#endif
+
     const char *v2; // eax
     GfxDepthRangeType depthRangeType; // [esp+24h] [ebp-6Ch]
     GfxCmdBufContext context; // [esp+3Ch] [ebp-54h]
