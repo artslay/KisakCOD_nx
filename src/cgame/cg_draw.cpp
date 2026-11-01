@@ -1348,8 +1348,9 @@ void __cdecl CG_DrawActive(int localClientNum)
         cgArray[0].gunZOfs);
     CL_SetExtraButtons(localClientNum, cgArray[0].extraButtons);
     cgArray[0].extraButtons = 0;
-    // Submit active local-entity tracers before the scene is handed to the renderer.
-    CG_AddSceneTracerBeams(localClientNum);
+    // FX_UpdateRemaining already appends local-entity tracers on the FX
+    // worker before FX_GenerateVerts consumes the shared beam list.
+    // Do not append them again here: that races the worker's g_beamInfo writes.
     CL_RenderScene(&cgArray[0].refdef);
 }
 
