@@ -3642,7 +3642,6 @@ static bool Switch_LogIsVerboseTrace(const char *msg)
     {
         "[KisakCOD][MATERIAL SAMPLER]",
         "[KisakCOD][VK SAMPLER BOUND]",
-        "[KisakCOD][VK SAMPLER DESCRIPTOR]",
         "[KisakCOD][VK SAMPLER BIND ENTRY]",
         "[KisakCOD][LIT SAMPLER SOURCE]",
         "[KisakCOD][LIT SAMPLER DESCRIPTOR]"
@@ -3674,7 +3673,11 @@ static bool Switch_LogIsFxDiagnostic(const char *msg)
         "[KisakCOD][FX MODEL LIGHT]",
         "[KisakCOD][MODEL LIGHTING]",
         "[KisakCOD][FX NEAR CULL]",
-        "[KisakCOD][FX FRUSTUM]"
+        "[KisakCOD][FX FRUSTUM]",
+        "[KisakCOD][VK SAMPLER DESCRIPTOR]",
+        "[KisakCOD][VK SAMPLER STAGE EMPTY]",
+        "[KisakCOD][VK SAMPLER FALLBACK]",
+        "[KisakCOD][VK ACTIVE SAMPLER FALLBACK]"
     };
     for (const char *prefix : kFxDiagnosticPrefixes)
     {
