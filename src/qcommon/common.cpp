@@ -46,9 +46,6 @@
 #endif
 
 #include <setjmp.h>
-#ifdef __SWITCH__
-#include <atomic>
-#endif
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
