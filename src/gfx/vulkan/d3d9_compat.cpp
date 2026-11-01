@@ -9077,6 +9077,9 @@ bool IDirect3DDevice9::EnsurePipeline()
             element.Stream == 0 && m_drawPrimitiveUPActive
                 ? m_drawPrimitiveUPStride
                 : (element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
+        const bool packedModelMarkLayout =
+            m_decl->switchVertDeclType == 1u &&
+            element.Stream == 0u && packedWorldStreamStride == 44u;
         const bool packedWorldLayout =
             element.Stream == 0 && packedWorldStreamStride == 44u &&
             !packedModelMarkLayout;
