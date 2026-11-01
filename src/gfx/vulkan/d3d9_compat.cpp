@@ -8207,6 +8207,10 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, static_cast<uint32_t>(m_topology));
     key = HashCombine(key, m_fillMode);
     key = HashCombine(key, m_cullMode);
+    // FX code meshes share the packed declaration and 32-byte stride with
+    // XModels, but their UV and POSITION input formats are different. Keep
+    // their Vulkan vertex-input pipelines separate from ordinary model draws.
+    key = HashCombine(key, g_switchFxCodeMeshDrawActive ? 1u : 0u);
     key = HashCombine(key, m_scissor);
     key = HashCombine(key, m_colorWriteMask);
     key = HashCombine(key, m_stencilEnable);
