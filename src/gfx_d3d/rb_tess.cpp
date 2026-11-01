@@ -178,6 +178,36 @@ uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
     if (depthRangeType != context.state->depthRangeType)
         R_ChangeDepthRange(context.state, depthRangeType);
     data = context.source->input.data;
+#ifdef __SWITCH__
+    if (drawSurfCount)
+    {
+        static volatile uint32_t switchFxCodeMeshDrawTraceCount = 0;
+        const uint32_t traceIndex =
+            __sync_fetch_and_add(&switchFxCodeMeshDrawTraceCount, 1u);
+        if (traceIndex < 24u)
+        {
+            const GfxDrawSurf firstDrawSurf = drawSurfList[0];
+            const FxCodeMeshData *firstCodeMesh =
+                &data->codeMeshes[firstDrawSurf.fields.objectId];
+            const char *materialName =
+                context.state && context.state->material &&
+                context.state->material->info.name
+                    ? context.state->material->info.name : "<unset>";
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FX CODEMESH DRAW] n=%u listSurfs=%u firstObject=%u firstTris=%u material=%.96s vbUsed=%u vbTotal=%u\\n",
+                traceIndex,
+                static_cast<unsigned>(drawSurfCount),
+                static_cast<unsigned>(firstDrawSurf.fields.objectId),
+                static_cast<unsigned>(firstCodeMesh->triCount),
+                materialName,
+                static_cast<unsigned>(data->codeMesh.vb.used),
+                static_cast<unsigned>(data->codeMesh.vb.total));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     R_SetMeshStream(context.state, (GfxMeshData*)&data->codeMesh);
     indices = 0;
     args.baseIndex = 0;
