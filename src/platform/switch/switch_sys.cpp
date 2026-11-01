@@ -79,32 +79,6 @@ static void Switch_LogFlushDeferred()
 
 void Switch_LogWrite(const char *msg);
 
-static bool Switch_LogPrefixAllowed(const char *msg)
-{
-    if (!msg)
-        return false;
-
-    // Keep only diagnostics that are still relevant to the current asset/sound investigation.
-    static constexpr const char *const kPrefixes[] =
-    {
-        "[SWITCH STREAM MISMATCH]",
-        "[SWITCH STREAM ARRAY MISMATCH]",
-        "[SWITCH STREAM REGRESS]",
-        "[SWITCH IMAGE ANOMALY]",
-        "[SWITCH IMAGE ANOMALY DETAIL]",
-        "[SWITCH TECH CURSOR]"
-    };
-
-    for (const char *prefix : kPrefixes)
-    {
-        const size_t len = std::strlen(prefix);
-        if (std::strncmp(msg, prefix, len) == 0)
-            return true;
-    }
-
-    return false;
-}
-
 /*
  * libnx enters this handler on its dedicated exception stack after capturing
  * the faulting CPU context. Keep the stack deliberately larger than libnx's
@@ -3605,47 +3579,6 @@ static bool Switch_LogCounterNonZero(const char *msg, const char *key)
     return *value >= '1' && *value <= '9';
 }
 
-static bool Switch_LogDeveloperTraceEnabled()
-{
-    // Do not query an unregistered dvar during the early boot log path.
-    const dvar_s *developer = Dvar_FindVar("developer");
-    return developer && developer->current.integer != 0;
-}
-
-static bool Switch_LogIsRoutineNoise(const char *msg)
-{
-    if (!msg || !*msg)
-        return false;
-
-    // Successful allocator block tracing is redundant in normal runtime logs.
-    if (std::strncmp(msg, "Switch PMem alloc begin:", std::strlen("Switch PMem alloc begin:")) == 0 ||
-        std::strncmp(msg, "Switch PMem alloc end:", std::strlen("Switch PMem alloc end:")) == 0)
-        return true;
-
-    // Detailed sampler bindings are opt-in through the engine's developer dvar.
-    if ((std::strncmp(msg, "[KisakCOD][MATERIAL SAMPLER]", std::strlen("[KisakCOD][MATERIAL SAMPLER]")) == 0 ||
-         std::strncmp(msg, "[KisakCOD][VK SAMPLER BOUND]", std::strlen("[KisakCOD][VK SAMPLER BOUND]")) == 0) &&
-        !Switch_LogDeveloperTraceEnabled())
-        return true;
-
-    // Per-archive success records are redundant with the final index summary.
-    // Keep an archive record if it actually failed to index names or positions.
-    if (std::strncmp(msg, "[KisakCOD][IWI ROOT] archive=", std::strlen("[KisakCOD][IWI ROOT] archive=")) == 0)
-        return !Switch_LogCounterNonZero(msg, "nameFailures=") &&
-               !Switch_LogCounterNonZero(msg, "positionFailures=");
-
-    // Discard a standalone ASCII star graphic, but not ordinary text banners.
-    bool hasStar = false;
-    for (const char *p = msg; *p; ++p)
-    {
-        if (*p == '*')
-            hasStar = true;
-        else if (*p != ' ' && *p != '\t' && *p != '\r' && *p != '\n')
-            return false;
-    }
-    return hasStar;
-}
-
 static bool Switch_LogIsImportant(const char *msg)
 {
     if (!msg || !*msg)
@@ -3686,79 +3619,6 @@ static bool Switch_LogIsImportant(const char *msg)
         if (Switch_LogContainsInsensitive(msg, term))
             return true;
     }
-    return false;
-}
-
-static bool Switch_LogKeepKisakDiagnostic(const char *msg)
-{
-    if (Switch_LogIsImportant(msg))
-        return true;
-
-    // Permit detailed sampler traces only when explicitly using developer mode.
-    if ((std::strncmp(msg, "[KisakCOD][MATERIAL SAMPLER]", std::strlen("[KisakCOD][MATERIAL SAMPLER]")) == 0 ||
-         std::strncmp(msg, "[KisakCOD][VK SAMPLER BOUND]", std::strlen("[KisakCOD][VK SAMPLER BOUND]")) == 0) &&
-        Switch_LogDeveloperTraceEnabled())
-        return true;
-
-    // UI/bootstrap probes and register-allocation experiments are noisy and
-    // are not part of a normal runtime log. Errors from these paths still pass
-    // the severity check above.
-    static constexpr const char *const kRoutineBootPrefixes[] =
-    {
-        "[KisakCOD][BOOT] CL_InitUI:",
-        "[KisakCOD][BOOT] CL_CreateDevGui:",
-        "[KisakCOD][NAK PROBE]"
-    };
-    for (const char *prefix : kRoutineBootPrefixes)
-    {
-        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
-            return false;
-    }
-
-    // Normal log: retain the engine bootstrap/device summary and diagnostic
-    // infrastructure status. Renderer-internal probes are opt-in-by-source,
-    // not emitted on every ordinary run.
-    static constexpr const char *const kKeepPrefixes[] =
-    {
-        "[KisakCOD][BOOT]",
-        "[KisakCOD][RUST TLS]",
-        "[KisakCOD][LOG]",
-        "[KisakCOD][WATCHDOG]",
-        "[KisakCOD][VK]",
-        "[KisakCOD][DB LOAD]",
-        "[KisakCOD][ZONE LOAD]",
-        "[KisakCOD][IWI ROOT] index ready",
-        // Keep the bounded renderer probes needed to diagnose missing model
-        // lighting and Vulkan sampler fallbacks. Per-call caps remain in the
-        // emitting sites, so these do not turn the normal log into a draw dump.
-        "[KisakCOD][MODEL LIGHTING]",
-        "[KisakCOD][VK SAMPLER BIND ENTRY]",
-        "[KisakCOD][VK ACTIVE SAMPLER FAIL]",
-        "[KisakCOD][VK ACTIVE SAMPLER FALLBACK]",
-        "[KisakCOD][VK SAMPLER FALLBACK]",
-        "[KisakCOD][VK SAMPLER DESCRIPTOR]",
-        "[KisakCOD][LIT SAMPLER SOURCE]",
-        "[KisakCOD][LIT SAMPLER DESCRIPTOR]",
-        "[KisakCOD][AI SPAWN]",
-        "[KisakCOD][AI STATE]",
-        "[KisakCOD][AI DEATH]",
-        "[KisakCOD][AI GROUND]",
-        "[KisakCOD][AI GROUND DEPTH]",
-        "[KisakCOD][AI MOVE TRACE]",
-        "[KisakCOD][AI HIGH ORIGIN]",
-        "[KisakCOD][AI TELEPORT]",
-        "[KisakCOD][AI SCRIPT DAMAGE]",
-        "[KisakCOD][AI SCRIPT CONTEXT]",
-        "[KisakCOD][SCRIPT RETURN]",
-        "[KisakCOD][SCRIPT BOOL CAST]"
-    };
-
-    for (const char *prefix : kKeepPrefixes)
-    {
-        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
-            return true;
-    }
-
     return false;
 }
 
