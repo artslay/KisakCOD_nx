@@ -3589,7 +3589,6 @@ static bool Switch_LogIsStartupMessage(const char *msg)
         "[KisakCOD][BOOT]",
         "[KisakCOD][RUST TLS]",
         "[KisakCOD][LOG]",
-        "[KisakCOD][WATCHDOG]",
         "[KisakCOD][VK]",
         "[KisakCOD][DB LOAD]",
         "[KisakCOD][ZONE LOAD]",
