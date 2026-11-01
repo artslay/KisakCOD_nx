@@ -3,6 +3,7 @@
 #ifdef __SWITCH__
 #include <atomic>
 #include <cstdio>
+#include <cstring>
 #include <qcommon/com_pack.h>
 extern void Switch_LogWrite(const char *msg);
 #endif
@@ -23,6 +24,75 @@ static bool g_processCodeMesh;
 static bool g_processMarkMesh;
 #ifdef __SWITCH__
 static uint32_t g_switchCodeMeshStartUsed = 0;
+
+namespace
+{
+// FX generators store texcoords in CoD4's PackedTexCoords fixed-point format.
+// FX code-mesh declarations consume R16G16_SFLOAT, unlike XModel TEXCOORD0,
+// which must remain four original bytes for setup_uv_dtex().
+uint16_t R_FloatToIeeeHalfForFx(float value)
+{
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+
+    const uint32_t sign = (bits >> 16) & 0x8000u;
+    const uint32_t floatExponent = (bits >> 23) & 0xffu;
+    int32_t exponent = static_cast<int32_t>(floatExponent) - 127 + 15;
+    uint32_t mantissa = bits & 0x7fffffu;
+
+    if (floatExponent == 0xffu)
+    {
+        if (!mantissa)
+            return static_cast<uint16_t>(sign | 0x7c00u);
+        const uint32_t payload = mantissa >> 13;
+        return static_cast<uint16_t>(sign | 0x7c00u | payload | (payload == 0u));
+    }
+
+    if (floatExponent == 0u)
+        return static_cast<uint16_t>(sign);
+
+    if (exponent >= 31)
+        return static_cast<uint16_t>(sign | 0x7c00u);
+
+    if (exponent <= 0)
+    {
+        if (exponent < -10)
+            return static_cast<uint16_t>(sign);
+
+        mantissa |= 0x800000u;
+        const uint32_t shift = static_cast<uint32_t>(14 - exponent);
+        const uint32_t rounding = (1u << (shift - 1u)) - 1u +
+            ((mantissa >> shift) & 1u);
+        return static_cast<uint16_t>(sign | ((mantissa + rounding) >> shift));
+    }
+
+    uint32_t roundedMantissa = mantissa + 0x0fffu + ((mantissa >> 13) & 1u);
+    if (roundedMantissa & 0x800000u)
+    {
+        roundedMantissa = 0;
+        ++exponent;
+        if (exponent >= 31)
+            return static_cast<uint16_t>(sign | 0x7c00u);
+    }
+
+    return static_cast<uint16_t>(
+        sign | (static_cast<uint32_t>(exponent) << 10) | (roundedMantissa >> 13));
+}
+
+PackedTexCoords R_ConvertFxPackedTexCoordsForVulkan(PackedTexCoords packed)
+{
+    float texCoord[2]{};
+    Vec2UnpackTexCoords(packed, texCoord);
+
+    // CoD4 stores U in the high word and V in the low word. Vulkan's
+    // R16G16_SFLOAT input expects U in the low half-word and V in the high.
+    PackedTexCoords converted;
+    converted.packed =
+        static_cast<uint32_t>(R_FloatToIeeeHalfForFx(texCoord[0])) |
+        (static_cast<uint32_t>(R_FloatToIeeeHalfForFx(texCoord[1])) << 16);
+    return converted;
+}
+} // namespace
 #endif
 
 char __cdecl R_ReserveCodeMeshIndices(int indexCount, r_double_index_t** indicesOut)
@@ -222,7 +292,7 @@ void R_EndCodeMeshVerts()
         auto *vertices = reinterpret_cast<GfxPackedVertex *>(mesh->vb.verts);
         for (uint32_t vertexIndex = firstVertex; vertexIndex < vertexCount; ++vertexIndex)
             vertices[vertexIndex].texCoord =
-                Vec2ConvertTexCoordsForVulkan(vertices[vertexIndex].texCoord);
+                R_ConvertFxPackedTexCoordsForVulkan(vertices[vertexIndex].texCoord);
     }
 #endif
     g_processCodeMesh = 0;
