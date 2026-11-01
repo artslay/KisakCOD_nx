@@ -7126,33 +7126,7 @@ bool IDirect3DDevice9::BindSamplerSet(
     IDirect3DBaseTexture9 *const (&textures)[16])
 {
     g_switchFrameStage = "frame/render/vulkan/sampler/entry";
-#ifdef __SWITCH__
-    {
-        static std::atomic<uint32_t> samplerBindEntryTraceCount{0};
-        const uint32_t sequence =
-            samplerBindEntryTraceCount.fetch_add(1, std::memory_order_relaxed);
-        if (sequence < 48u)
-        {
-            uint32_t boundTextureCount = 0;
-            for (IDirect3DBaseTexture9 *texture : textures)
-            {
-                if (texture)
-                    ++boundTextureCount;
-            }
-            char trace[384];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK SAMPLER BIND ENTRY] seq=%u set=%u stage=%s bindPoint=%u backend=%u frame=%llu vs=%llu ps=%llu boundSlots=%u\n",
-                sequence, setIndex, setIndex == 0u ? "vs" : "ps",
-                static_cast<unsigned>(bindPoint), m_backend ? 1u : 0u,
-                static_cast<unsigned long long>(m_backend ? m_backend->FrameSerial() : 0u),
-                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
-                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
-                boundTextureCount);
-            Switch_LogWrite(trace);
-        }
-    }
-#endif
+
     if (!m_backend)
         return false;
 
