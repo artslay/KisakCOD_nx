@@ -3,8 +3,6 @@
 #ifdef __SWITCH__
 #include <atomic>
 #include <cstdio>
-#include <cstring>
-#include <qcommon/com_pack.h>
 extern void Switch_LogWrite(const char *msg);
 #endif
 
