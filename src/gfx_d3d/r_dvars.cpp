@@ -1251,7 +1251,14 @@
 #endif
      minbv.value.min = 0.25f;
      sm_sunShadowScale = Dvar_RegisterFloat("sm_sunShadowScale", 1.0f, minbv, DVAR_SAVED | DVAR_CHEAT, "Sun shadow scale optimization");
+     #ifdef __SWITCH__
+     // Keep sun-shadow cell selection conservative on Switch. The precomputed
+     // portal-reachability mask can reject whole caster cells before the
+     // per-cascade frustum test, leaving gaps in the shadow map.
+     sm_strictCull = Dvar_RegisterBool("sm_strictCull", 0, DVAR_CHEAT, "Strict shadow map cull");
+#else
      sm_strictCull = Dvar_RegisterBool("sm_strictCull", 1, DVAR_CHEAT, "Strict shadow map cull");
+#endif
      sm_fastSunShadow = Dvar_RegisterBool("sm_fastSunShadow", 1, DVAR_CHEAT, "Fast sun shadow");
      sm_qualitySpotShadow = Dvar_RegisterBool("sm_qualitySpotShadow", 1, DVAR_CHEAT, "Fast spot shadow");
      sm_debugFastSunShadow = Dvar_RegisterBool("sm_debugFastSunShadow", 0, DVAR_CHEAT, "Debug fast sun shadow");
