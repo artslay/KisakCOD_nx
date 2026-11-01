@@ -18,7 +18,6 @@
 #include <script/scr_stringlist.h>
 
 #include <xanim/xanim.h>
-#include <qcommon/com_pack.h>
 #include <xanim/xmodel.h>
 #include <DynEntity/DynEntity_client.h>
 
