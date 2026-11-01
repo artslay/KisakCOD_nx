@@ -3579,6 +3579,52 @@ static bool Switch_LogCounterNonZero(const char *msg, const char *key)
     return *value >= '1' && *value <= '9';
 }
 
+static bool Switch_LogIsStartupMessage(const char *msg)
+{
+    if (!msg || !*msg)
+        return false;
+
+    static constexpr const char *const kStartupPrefixes[] =
+    {
+        "[KisakCOD][RUST TLS]",
+        "[KisakCOD][BOOT]"
+    };
+    for (const char *prefix : kStartupPrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+
+    // Keep the standard log header even though it is intentionally not an
+    // engine error or a Kisak diagnostic.
+    return std::strncmp(
+        msg,
+        "========================================\\nKisakCOD Switch engine log",
+        sizeof("========================================\\nKisakCOD Switch engine log") - 1u) == 0;
+}
+
+static bool Switch_LogIsVerboseTrace(const char *msg)
+{
+    if (!msg)
+        return false;
+
+    static constexpr const char *const kVerbosePrefixes[] =
+    {
+        "[KisakCOD][MATERIAL SAMPLER]",
+        "[KisakCOD][VK SAMPLER BOUND]",
+        "[KisakCOD][VK SAMPLER DESCRIPTOR]",
+        "[KisakCOD][VK SAMPLER BIND ENTRY]",
+        "[KisakCOD][LIT SAMPLER SOURCE]",
+        "[KisakCOD][LIT SAMPLER DESCRIPTOR]"
+    };
+    for (const char *prefix : kVerbosePrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool Switch_LogIsImportant(const char *msg)
 {
     if (!msg || !*msg)
@@ -3626,7 +3672,10 @@ void Switch_LogWrite(const char *msg)
 {
     // The normal Switch log is intentionally error-only. Routine engine output
     // and per-frame/per-draw diagnostics are discarded before any I/O.
-    if (!msg || !*msg || !Switch_LogIsImportant(msg))
+    if (!msg || !*msg ||
+        (!Switch_LogIsImportant(msg) && !Switch_LogIsStartupMessage(msg)))
+        return;
+    if (!Switch_LogIsImportant(msg) && Switch_LogIsVerboseTrace(msg))
         return;
 
     const bool isSwitchDiag = std::strncmp(msg, "[SWITCH ", 8) == 0;
@@ -3705,6 +3754,32 @@ void Switch_LogWrite(const char *msg)
         return;
     }
 
+    (void)::write(STDOUT_FILENO, msg, len);
+    if (g_switchLogFd >= 0)
+    {
+        size_t written = 0;
+        while (written < len)
+        {
+            const ssize_t n = ::write(
+                g_switchLogFd,
+                msg + written,
+                len - written);
+            if (n <= 0)
+                break;
+            written += static_cast<size_t>(n);
+        }
+    }
+}
+
+void Switch_LogWriteInit(const char *msg)
+{
+    if (!msg || !*msg || Switch_LogIsVerboseTrace(msg))
+        return;
+
+    // Called only while Com_Init is running. Unlike the runtime error-only
+    // writer, this preserves the original engine/FS/fastfile/audio startup
+    // messages, without re-enabling console or renderer tracing afterwards.
+    const size_t len = std::strlen(msg);
     (void)::write(STDOUT_FILENO, msg, len);
     if (g_switchLogFd >= 0)
     {
