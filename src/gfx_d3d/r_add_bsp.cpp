@@ -326,7 +326,14 @@ void __cdecl R_AddAllBspDrawSurfacesRangeSunShadow(
     skipMaterial = 0;
     triSurfCount = 0;
     surfaceCastsSunShadow = rgp.world->dpvs.surfaceCastsSunShadow;
+#ifdef __SWITCH__
+    // The cached surfaceCastsSunShadow bitset is an optimization only. Use
+    // the original material-based caster test on Switch so a stale/incomplete
+    // cached bit cannot remove a BSP surface from either sun-shadow cascade.
+    fastSunShadow = 0;
+#else
     fastSunShadow = sm_fastSunShadow->current.enabled;
+#endif
     hasApproxSunDirChanged = frontEndDataOut->hasApproxSunDirChanged;
     if (!hasApproxSunDirChanged && fastSunShadow)
     {
