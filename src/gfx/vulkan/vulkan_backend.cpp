@@ -936,12 +936,17 @@ bool VulkanBackend::CreateDevice()
     const bool textureCompressionBC =
         features2.features.textureCompressionBC == VK_TRUE;
 #ifdef VK_EXT_depth_bias_control
-    m_depthBiasFloatRepresentation =
+    const bool depthBiasControlEnabled =
         depthBiasControlExtensionAvailable &&
-        depthBiasControlFeatures.depthBiasControl == VK_TRUE &&
+        depthBiasControlFeatures.depthBiasControl == VK_TRUE;
+    m_depthBiasFloatRepresentation =
+        depthBiasControlEnabled &&
         depthBiasControlFeatures.floatRepresentation == VK_TRUE;
+    m_depthBiasForceUnormRepresentation =
+        depthBiasControlEnabled &&
+        depthBiasControlFeatures.leastRepresentableValueForceUnormRepresentation == VK_TRUE;
     m_depthBiasExact =
-        m_depthBiasFloatRepresentation &&
+        depthBiasControlEnabled &&
         depthBiasControlFeatures.depthBiasExact == VK_TRUE;
 #endif
     // Do not accidentally enable every Vulkan 1.3 feature reported by the query.
@@ -969,13 +974,15 @@ bool VulkanBackend::CreateDevice()
     }
 #endif
 #ifdef VK_EXT_depth_bias_control
-    if (m_depthBiasFloatRepresentation)
+    if (m_depthBiasFloatRepresentation || m_depthBiasForceUnormRepresentation)
     {
         extensions.push_back(VK_EXT_DEPTH_BIAS_CONTROL_EXTENSION_NAME);
         depthBiasControlFeatures.pNext = vulkan13Features.pNext;
         depthBiasControlFeatures.depthBiasControl = VK_TRUE;
-        depthBiasControlFeatures.leastRepresentableValueForceUnormRepresentation = VK_FALSE;
-        depthBiasControlFeatures.floatRepresentation = VK_TRUE;
+        depthBiasControlFeatures.leastRepresentableValueForceUnormRepresentation =
+            m_depthBiasForceUnormRepresentation ? VK_TRUE : VK_FALSE;
+        depthBiasControlFeatures.floatRepresentation =
+            m_depthBiasFloatRepresentation ? VK_TRUE : VK_FALSE;
         depthBiasControlFeatures.depthBiasExact = m_depthBiasExact ? VK_TRUE : VK_FALSE;
         vulkan13Features.pNext = &depthBiasControlFeatures;
     }

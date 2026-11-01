@@ -9234,10 +9234,18 @@ bool IDirect3DDevice9::EnsurePipeline()
     raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
 #ifdef VK_EXT_depth_bias_control
     VkDepthBiasRepresentationInfoEXT depthBiasRepresentation{};
-    if (m_backend->SupportsDepthBiasFloatRepresentation())
+    const bool useFloatDepthBiasRepresentation =
+        m_backend->SupportsDepthBiasFloatRepresentation();
+    const bool useForceUnormDepthBiasRepresentation =
+        !useFloatDepthBiasRepresentation &&
+        m_backend->SupportsDepthBiasForceUnormRepresentation();
+    if (useFloatDepthBiasRepresentation || useForceUnormDepthBiasRepresentation)
     {
         depthBiasRepresentation.sType = VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT;
-        depthBiasRepresentation.depthBiasRepresentation = VK_DEPTH_BIAS_REPRESENTATION_FLOAT_EXT;
+        depthBiasRepresentation.depthBiasRepresentation =
+            useFloatDepthBiasRepresentation
+                ? VK_DEPTH_BIAS_REPRESENTATION_FLOAT_EXT
+                : VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORCE_UNORM_EXT;
         depthBiasRepresentation.depthBiasExact =
             m_backend->SupportsDepthBiasExact() ? VK_TRUE : VK_FALSE;
         raster.pNext = &depthBiasRepresentation;
@@ -9245,25 +9253,23 @@ bool IDirect3DDevice9::EnsurePipeline()
 #endif
     raster.depthBiasEnable = (m_depthBias != 0.0f || m_slopeDepthBias != 0.0f) ? VK_TRUE : VK_FALSE;
     // D3D9 expresses constant depth bias as a direct floating-point depth offset.
-    // Vulkan's default representation multiplies the factor by one ULP of the
-    // depth attachment. Convert common fixed-point targets when the extension is
-    // unavailable; the extension path preserves the D3D9 representation for all
-    // depth formats, including D32_SFLOAT.
+    // Prefer Vulkan's FLOAT representation (r=1). The FORCE_UNORM extension mode
+    // uses r=2^-n and also works for D32_SFLOAT attachments translated from D24FS8.
+    // Without the extension, fixed-point formats can only be approximated because
+    // Vulkan permits an implementation-dependent r up to twice the exact value.
     float vkDepthBiasConstantFactor = m_depthBias;
-#ifdef VK_EXT_depth_bias_control
-    const bool hasD3D9DepthBiasRepresentation =
-        m_backend->SupportsDepthBiasFloatRepresentation();
-#else
-    const bool hasD3D9DepthBiasRepresentation = false;
-#endif
-    if (!hasD3D9DepthBiasRepresentation)
+    if (!useFloatDepthBiasRepresentation)
     {
         if (depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
             depthFormat == VK_FORMAT_X8_D24_UNORM_PACK32)
-            vkDepthBiasConstantFactor *= 16777215.0f;
+            vkDepthBiasConstantFactor *= 16777216.0f;
         else if (depthFormat == VK_FORMAT_D16_UNORM ||
                  depthFormat == VK_FORMAT_D16_UNORM_S8_UINT)
-            vkDepthBiasConstantFactor *= 65535.0f;
+            vkDepthBiasConstantFactor *= 65536.0f;
+        else if (useForceUnormDepthBiasRepresentation &&
+                 (depthFormat == VK_FORMAT_D32_SFLOAT ||
+                  depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT))
+            vkDepthBiasConstantFactor *= 16777216.0f;
     }
     raster.depthBiasConstantFactor = vkDepthBiasConstantFactor;
     raster.depthBiasSlopeFactor = m_slopeDepthBias;
