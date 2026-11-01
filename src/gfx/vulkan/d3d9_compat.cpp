@@ -8199,6 +8199,10 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, static_cast<uint32_t>(m_topology));
     key = HashCombine(key, m_fillMode);
     key = HashCombine(key, m_cullMode);
+    // FX code meshes contain camera-facing sprites/tails whose generated
+    // index winding can face either side. Keep their two-sided raster state
+    // separate from ordinary model/world pipelines in the pipeline cache.
+    key = HashCombine(key, g_switchFxCodeMeshDrawActive ? 1u : 0u);
     key = HashCombine(key, m_scissor);
     key = HashCombine(key, m_colorWriteMask);
     key = HashCombine(key, m_stencilEnable);
@@ -9293,17 +9297,13 @@ bool IDirect3DDevice9::EnsurePipeline()
         : (m_fillMode == D3DFILL_POINT
             ? VK_POLYGON_MODE_POINT : VK_POLYGON_MODE_FILL);
     raster.lineWidth = 1.0f;
-    // A selected fragment-output probe must survive bad winding/cull-state data.
-    // This override applies only to the diagnostic probe pipeline.
-    // Normal draws retain D3D9 cull semantics below.
-    // D3D9 cull values are: NONE=1, CW=2, CCW=3.
-    // The negative Vulkan viewport preserves the D3D9 top-left origin,
-    // which flips the winding seen by Vulkan. Therefore clockwise NDC
-    // triangles are the Vulkan front faces.
-    //
-    // D3DCULL_CW means "cull clockwise" => Vulkan culls FRONT.
-    // D3DCULL_CCW means "cull counter-clockwise" => Vulkan culls BACK.
-    raster.cullMode = switchFragmentOutputProbeActive
+    // FX code meshes are built from camera-facing sprite/tail vertices.
+    // Their generated index winding is opposite the supplied FX normal, so
+    // applying the material's ordinary D3D9 back-face culling can discard the
+    // entire card even though the indexed draw is valid. Make only this
+    // transient FX pass two-sided; regular world and model draws keep the
+    // exact D3D9 cull mapping below.
+    raster.cullMode = (switchFragmentOutputProbeActive || g_switchFxCodeMeshDrawActive)
         ? VK_CULL_MODE_NONE
         : (m_cullMode == 1
             ? VK_CULL_MODE_NONE
