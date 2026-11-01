@@ -9232,11 +9232,13 @@ bool IDirect3DDevice9::EnsurePipeline()
             ? VK_CULL_MODE_NONE
             : (m_cullMode == 2 ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_BACK_BIT));
     raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    bool useFloatDepthBiasRepresentation = false;
+    bool useForceUnormDepthBiasRepresentation = false;
 #ifdef VK_EXT_depth_bias_control
     VkDepthBiasRepresentationInfoEXT depthBiasRepresentation{};
-    const bool useFloatDepthBiasRepresentation =
+    useFloatDepthBiasRepresentation =
         m_backend->SupportsDepthBiasFloatRepresentation();
-    const bool useForceUnormDepthBiasRepresentation =
+    useForceUnormDepthBiasRepresentation =
         !useFloatDepthBiasRepresentation &&
         m_backend->SupportsDepthBiasForceUnormRepresentation();
     if (useFloatDepthBiasRepresentation || useForceUnormDepthBiasRepresentation)
