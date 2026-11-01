@@ -10228,13 +10228,57 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
 #ifdef __SWITCH__
     uint32_t switchFxDrawTraceSequence = UINT32_MAX;
+    uint32_t switchFxDrawTraceSample = UINT32_MAX;
     uint32_t switchFxBoundTextureMask = 0u;
     if (g_switchFxCodeMeshDrawActive)
     {
-        static std::atomic<uint32_t> fxGpuDrawTraceCount{0};
-        switchFxDrawTraceSequence =
-            fxGpuDrawTraceCount.fetch_add(1, std::memory_order_relaxed);
-        if (switchFxDrawTraceSequence < 48u)
+        // FX materials are repeatedly submitted every frame. A global first-N
+        // limit is consumed by persistent fog long before transient muzzle
+        // flashes and impacts are drawn. Keep a small per-material sample
+        // budget so each distinct FX material gets into the diagnostic log.
+        static std::atomic<uint32_t> fxGpuDrawTraceMaterialHashes[64]{};
+        static std::atomic<uint32_t> fxGpuDrawTraceMaterialCounts[64]{};
+        const char *materialName =
+            g_switchFxCodeMeshMaterialName ? g_switchFxCodeMeshMaterialName : "<unknown>";
+        uint32_t materialHash = 2166136261u;
+        for (const unsigned char *ch =
+                 reinterpret_cast<const unsigned char *>(materialName);
+             *ch; ++ch)
+        {
+            materialHash = (materialHash ^ *ch) * 16777619u;
+        }
+        if (!materialHash)
+            materialHash = 1u;
+
+        for (uint32_t slot = 0; slot < 64u; ++slot)
+        {
+            uint32_t seenHash =
+                fxGpuDrawTraceMaterialHashes[slot].load(std::memory_order_relaxed);
+            if (!seenHash)
+            {
+                uint32_t expectedHash = 0u;
+                if (fxGpuDrawTraceMaterialHashes[slot].compare_exchange_strong(
+                        expectedHash, materialHash,
+                        std::memory_order_relaxed, std::memory_order_relaxed))
+                    seenHash = materialHash;
+                else
+                    seenHash = expectedHash;
+            }
+            if (seenHash == materialHash)
+            {
+                const uint32_t sample =
+                    fxGpuDrawTraceMaterialCounts[slot].fetch_add(
+                        1u, std::memory_order_relaxed);
+                if (sample < 2u)
+                {
+                    switchFxDrawTraceSequence = slot;
+                    switchFxDrawTraceSample = sample;
+                }
+                break;
+            }
+        }
+
+        if (switchFxDrawTraceSequence < 64u)
         {
             for (uint32_t slot = 0; slot < 16u; ++slot)
                 if (m_textures[slot])
@@ -10243,9 +10287,9 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             char trace[1024];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX GPU DRAW BEGIN] n=%u material=%.80s prim=%u primitives=%u indices=%u baseVertex=%d minVertex=%u vertices=%u start=%u stride=%u declType=%u vs=%llu ps=%llu texMask=0x%04x depth=%u/%u/%u blend=%u/%u/%u cull=%u alpha=%u/%u/%u colorMask=0x%x scissor=%u viewport=%u,%u %ux%u\n",
-                switchFxDrawTraceSequence,
-                g_switchFxCodeMeshMaterialName ? g_switchFxCodeMeshMaterialName : "<unknown>",
+                "[KisakCOD][FX GPU DRAW BEGIN] n=%u sample=%u material=%.80s prim=%u primitives=%u indices=%u baseVertex=%d minVertex=%u vertices=%u start=%u stride=%u declType=%u vs=%llu ps=%llu texMask=0x%04x depth=%u/%u/%u blend=%u/%u/%u cull=%u alpha=%u/%u/%u colorMask=0x%x scissor=%u viewport=%u,%u %ux%u\\n",
+                switchFxDrawTraceSequence, switchFxDrawTraceSample,
+                materialName,
                 primitiveType, primitiveCount, indexCount, baseVertexIndex,
                 minVertexIndex, numVertices, startIndex, m_streams[0].stride,
                 m_decl ? static_cast<unsigned>(m_decl->switchVertDeclType) : UINT32_MAX,
@@ -11294,13 +11338,13 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
 #ifdef __SWITCH__
-    if (switchFxDrawTraceSequence < 48u)
+    if (switchFxDrawTraceSequence < 64u)
     {
         char trace[512];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FX GPU DRAW RECORDED] n=%u material=%.80s pipeline=%016llx texMask=0x%04x indexBuffer=%p vertexBuffer=%p indexCount=%u start=%u baseVertex=%d\n",
-            switchFxDrawTraceSequence,
+            "[KisakCOD][FX GPU DRAW RECORDED] n=%u sample=%u material=%.80s pipeline=%016llx texMask=0x%04x indexBuffer=%p vertexBuffer=%p indexCount=%u start=%u baseVertex=%d\\n",
+            switchFxDrawTraceSequence, switchFxDrawTraceSample,
             g_switchFxCodeMeshMaterialName ? g_switchFxCodeMeshMaterialName : "<unknown>",
             static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)),
             switchFxBoundTextureMask,
@@ -11309,7 +11353,6 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             indexCount, startIndex, baseVertexIndex);
         Switch_LogWrite(trace);
     }
-#endif
     g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
     if (Switch_IsVkGpuDrawTraceEnabled())
         LogGpuDrawCommand("indexed", primitiveType, primitiveCount,
