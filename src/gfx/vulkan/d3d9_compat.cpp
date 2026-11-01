@@ -2734,40 +2734,9 @@ bool PatchFragmentShaderToOutputS0AtUv(
     std::vector<Decoration> decorations;
     std::vector<Variable> variables;
 
-    static uint64_t loggedSuccessSerials[128]{};
-    static size_t loggedSuccessCount = 0u;
-    static uint32_t loggedSkipCount = 0u;
-    uint32_t outputStoresPatched = 0u;
-    const auto logResult = [&](const char *action, uint32_t sampleId,
-                               uint32_t sampleType, uint32_t coordType,
-                               uint32_t coordComponents, uint32_t block)
-    {
-        const bool success = std::strcmp(action, "patched_s0_uv") == 0;
-        if (success)
-        {
-            for (size_t i = 0; i < loggedSuccessCount; ++i)
-                if (loggedSuccessSerials[i] == actualSerial)
-                    return;
-            if (loggedSuccessCount >=
-                sizeof(loggedSuccessSerials) / sizeof(loggedSuccessSerials[0]))
-                return;
-            loggedSuccessSerials[loggedSuccessCount++] = actualSerial;
-        }
-        else if (loggedSkipCount++ >= 8u)
-        {
-            return;
-        }
+    const auto logResult = [](const char *, uint32_t, uint32_t, uint32_t,
+                               uint32_t, uint32_t) {};
 
-        char trace[352];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][VK PS S0 UV TEST] target=%llu actual=%llu action=%s descriptor=%u sample=%u sampleType=%u output=%u outputType=%u coordType=%u coordComponents=%u block=%u stores=%u\n",
-            static_cast<unsigned long long>(targetSerial),
-            static_cast<unsigned long long>(actualSerial),
-            action, descriptorId, sampleId, sampleType, outputId, outputType,
-            coordType, coordComponents, block, outputStoresPatched);
-        Switch_LogWrite(trace);
-    };
 
     if (words.size() < 5u || words[0] != SpvMagicNumber ||
         words[3] <= 1u || words[3] > 65536u ||
@@ -3562,45 +3531,9 @@ bool PatchFragmentShaderToSolidWhite(
     std::vector<std::pair<size_t, bool>> controlOverrides;
     bool entryStoreInjected = false;
 
-    const auto logResult = [&](const char *action, uint32_t stores,
-                               uint32_t outputType, uint32_t scalarType,
-                               uint32_t whiteId)
-    {
-        // The same shader serial can be linked into several pipelines. Report
-        // each distinct result once instead of repeating it for every declaration.
-        static uint64_t loggedSerials[128]{};
-        static char loggedActions[128][48]{};
-        static size_t loggedCount = 0u;
-        const uint32_t killCount = static_cast<uint32_t>(std::count_if(
-            controlOverrides.begin(), controlOverrides.end(),
-            [](const auto &item) { return item.second; }));
-        const uint32_t demoteCount = static_cast<uint32_t>(controlOverrides.size()) - killCount;
-        const size_t actionLength = std::strlen(action);
-        if (actionLength >= sizeof(loggedActions[0]))
-            return;
-        for (size_t i = 0; i < loggedCount; ++i)
-        {
-            if (loggedSerials[i] == actualSerial &&
-                std::strcmp(loggedActions[i], action) == 0)
-                return;
-        }
-        // Bound output while the wildcard affects many shader variants.
-        if (loggedCount >= 12u)
-            return;
-        loggedSerials[loggedCount] = actualSerial;
-        std::memcpy(loggedActions[loggedCount], action, actionLength + 1u);
-        ++loggedCount;
+    const auto logResult = [](const char *, uint32_t, uint32_t, uint32_t,
+                               uint32_t) {};
 
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][VK PS COLOR TEST] target=%llu actual=%llu action=%s output=%u outputType=%u floatType=%u stores=%u entryStore=%u killOrTerminate=%u demote=%u whiteId=%u\n",
-            static_cast<unsigned long long>(targetSerial),
-            static_cast<unsigned long long>(actualSerial),
-            action, outputId, outputType, scalarType, stores,
-            entryStoreInjected ? 1u : 0u, killCount, demoteCount, whiteId);
-        Switch_LogWrite(trace);
-    };
 
     if (words.size() < 5u || words[0] != SpvMagicNumber ||
         words[3] <= 1u || words[3] > 65536u)
@@ -7810,119 +7743,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_backend ? m_backend->Device() : VK_NULL_HANDLE,
         m_decl, m_vertexShader, m_pixelShader, VK_NULL_HANDLE);
     g_switchFrameStage = "frame/render/vulkan/pipeline/entry";
-#ifdef __SWITCH__
-    {
-        static bool psS0UvTestArmedTraceWritten = false;
-        static uint64_t psS0UvSeenSerials[32]{};
-        static size_t psS0UvSeenSerialCount = 0;
-        const uint64_t uvTarget = SwitchPsS0UvTestTargetSerial();
-        if (!psS0UvTestArmedTraceWritten)
-        {
-            psS0UvTestArmedTraceWritten = true;
-            char trace[192];
-            const char *setting = std::getenv("KISAK_VK_DEBUG_PS_S0_UV_SERIAL");
-            if (uvTarget == UINT64_MAX - 2u)
-            {
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=all_world_vertex_layout_ps source=%s\n",
-                    setting && *setting ? "env" : "default");
-            }
-            else if (uvTarget == UINT64_MAX)
-            {
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=disabled source=%s\n",
-                    setting && *setting ? "env" : "default");
-            }
-            else if (uvTarget == UINT64_MAX - 1u)
-            {
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=all_patchable_ps source=env\n");
-            }
-            else
-            {
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 UV TEST] action=armed target=%llu source=%s\n",
-                    static_cast<unsigned long long>(uvTarget),
-                    setting && *setting ? "env" : "default");
-            }
-            Switch_LogWrite(trace);
-        }
-        if (m_pixelShader && SwitchPsS0UvTestTargetMatchesLayout(
-                uvTarget, m_pixelShader->serial,
-                m_decl ? m_decl->switchVertDeclType : 0xFFu,
-                m_streams[0].stride))
-        {
-            bool alreadySeen = false;
-            for (size_t i = 0; i < psS0UvSeenSerialCount; ++i)
-                alreadySeen |= psS0UvSeenSerials[i] == m_pixelShader->serial;
-            if (!alreadySeen && psS0UvSeenSerialCount <
-                    sizeof(psS0UvSeenSerials) / sizeof(psS0UvSeenSerials[0]))
-            {
-                psS0UvSeenSerials[psS0UvSeenSerialCount++] =
-                    m_pixelShader->serial;
-                char trace[192];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK PS S0 UV TEST] action=target_seen serial=%llu\n",
-                    static_cast<unsigned long long>(m_pixelShader->serial));
-                Switch_LogWrite(trace);
-            }
-        }
-    }
-    {
-        static bool psColorTestArmedTraceWritten = false;
-        static uint64_t psColorTestSeenSerials[32]{};
-        static uint32_t psColorTestSeenSerialCount = 0u;
-        const uint64_t targetSerial = SwitchPsColorDebugTargetSerial();
-        if (!psColorTestArmedTraceWritten)
-        {
-            psColorTestArmedTraceWritten = true;
-            char trace[224];
-            const char *targetLabel = targetSerial == 0u ? "all_pixel_shaders" :
-                (targetSerial == UINT64_MAX ? "disabled" : nullptr);
-            if (targetLabel)
-            {
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK PS COLOR TEST] action=armed target=%s source=%s\n",
-                    targetLabel,
-                    std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL") ? "env" : "default");
-            }
-            else
-            {
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK PS COLOR TEST] action=armed target=%llu source=%s\n",
-                    static_cast<unsigned long long>(targetSerial),
-                    std::getenv("KISAK_VK_DEBUG_PS_COLOR_SERIAL") ? "env" : "default");
-            }
-            Switch_LogWrite(trace);
-        }
-        const uint64_t actualSerial = m_pixelShader ? m_pixelShader->serial : 0u;
-        if (SwitchPsColorDebugTargetMatches(
-                targetSerial, actualSerial,
-                m_pixelShader ? m_pixelShader->parseData : nullptr))
-        {
-            bool alreadySeen = false;
-            for (uint32_t i = 0; i < psColorTestSeenSerialCount; ++i)
-                alreadySeen |= psColorTestSeenSerials[i] == actualSerial;
-            if (!alreadySeen && psColorTestSeenSerialCount < 32u)
-            {
-                psColorTestSeenSerials[psColorTestSeenSerialCount++] = actualSerial;
-                char trace[224];
-                std::snprintf(
-                    trace, sizeof(trace),
-                    "[KisakCOD][VK PS COLOR TEST] action=target_seen serial=%llu scope=%s\n",
-                    static_cast<unsigned long long>(actualSerial),
-                    targetSerial == 0u ? "all_pixel_shaders" : "serial");
-                Switch_LogWrite(trace);
-            }
-        }
-    }
+
 #endif
     if (!m_backend || !m_vertexShader || !m_pixelShader || !m_decl)
     {
@@ -10070,113 +9891,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     } modelTransformTraceReset{g_switchModelTransformDraw.active};
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/entry";
     const uint32_t indexCount = PrimitiveIndexCount(primitiveType, primitiveCount);
-#ifdef __SWITCH__
-    uint32_t switchFxDrawTraceSequence = UINT32_MAX;
-    uint32_t switchFxDrawTraceSample = UINT32_MAX;
-    uint32_t switchFxBoundTextureMask = 0u;
-    if (g_switchFxCodeMeshDrawActive)
-    {
-        // FX materials are repeatedly submitted every frame. A global first-N
-        // limit is consumed by persistent fog long before transient muzzle
-        // flashes and impacts are drawn. Keep a small per-material sample
-        // budget so each distinct FX material gets into the diagnostic log.
-        static std::atomic<uint32_t> fxGpuDrawTraceMaterialHashes[64]{};
-        static std::atomic<uint32_t> fxGpuDrawTraceMaterialCounts[64]{};
-        const char *materialName =
-            g_switchFxCodeMeshMaterialName ? g_switchFxCodeMeshMaterialName : "<unknown>";
-        uint32_t materialHash = 2166136261u;
-        for (const unsigned char *ch =
-                 reinterpret_cast<const unsigned char *>(materialName);
-             *ch; ++ch)
-        {
-            materialHash = (materialHash ^ *ch) * 16777619u;
-        }
-        if (!materialHash)
-            materialHash = 1u;
 
-        for (uint32_t slot = 0; slot < 64u; ++slot)
-        {
-            uint32_t seenHash =
-                fxGpuDrawTraceMaterialHashes[slot].load(std::memory_order_relaxed);
-            if (!seenHash)
-            {
-                uint32_t expectedHash = 0u;
-                if (fxGpuDrawTraceMaterialHashes[slot].compare_exchange_strong(
-                        expectedHash, materialHash,
-                        std::memory_order_relaxed, std::memory_order_relaxed))
-                    seenHash = materialHash;
-                else
-                    seenHash = expectedHash;
-            }
-            if (seenHash == materialHash)
-            {
-                const uint32_t sample =
-                    fxGpuDrawTraceMaterialCounts[slot].fetch_add(
-                        1u, std::memory_order_relaxed);
-                if (sample < 2u)
-                {
-                    switchFxDrawTraceSequence = slot;
-                    switchFxDrawTraceSample = sample;
-                }
-                break;
-            }
-        }
-
-        if (switchFxDrawTraceSequence < 64u)
-        {
-            for (uint32_t slot = 0; slot < 16u; ++slot)
-                if (m_textures[slot])
-                    switchFxBoundTextureMask |= 1u << slot;
-
-            char trace[1024];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][FX GPU DRAW BEGIN] n=%u sample=%u material=%.80s prim=%u primitives=%u indices=%u baseVertex=%d minVertex=%u vertices=%u start=%u stride=%u declType=%u vs=%llu ps=%llu texMask=0x%04x depth=%u/%u/%u blend=%u/%u/%u cull=%u alpha=%u/%u/%u colorMask=0x%x scissor=%u viewport=%u,%u %ux%u\n",
-                switchFxDrawTraceSequence, switchFxDrawTraceSample,
-                materialName,
-                primitiveType, primitiveCount, indexCount, baseVertexIndex,
-                minVertexIndex, numVertices, startIndex, m_streams[0].stride,
-                m_decl ? static_cast<unsigned>(m_decl->switchVertDeclType) : UINT32_MAX,
-                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
-                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
-                switchFxBoundTextureMask,
-                m_depthEnable ? 1u : 0u, m_depthWrite ? 1u : 0u, m_depthFunc,
-                m_blendEnable ? 1u : 0u, m_srcBlend, m_dstBlend,
-                m_cullMode,
-                m_alphaTest ? 1u : 0u, m_alphaFunc, m_alphaRef,
-                m_colorWriteMask, m_scissor ? 1u : 0u,
-                m_viewport.X, m_viewport.Y, m_viewport.Width, m_viewport.Height);
-            Switch_LogWrite(trace);
-        }
-    }
-    {
-        static std::atomic<uint32_t> indexedDrawEntryTraceCount{0};
-        const uint32_t sequence =
-            indexedDrawEntryTraceCount.fetch_add(1, std::memory_order_relaxed);
-        if (sequence < 24u)
-        {
-            uint32_t boundTextureCount = 0;
-            for (IDirect3DBaseTexture9 *texture : m_textures)
-            {
-                if (texture)
-                    ++boundTextureCount;
-            }
-            char trace[448];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][VK DRAW INDEXED ENTRY] seq=%u self=%p prim=%u primitives=%u indices=%u minVertex=%u vertices=%u startIndex=%u indexBuffer=%p indexBytes=%u backend=%u frameActive=%u vs=%llu ps=%llu boundSlots=%u\n",
-                sequence, static_cast<void *>(this), primitiveType, primitiveCount,
-                indexCount, minVertexIndex, numVertices, startIndex,
-                static_cast<void *>(m_indices), m_indices ? m_indices->size : 0u,
-                m_backend ? 1u : 0u,
-                m_backend && m_backend->IsFrameActive() ? 1u : 0u,
-                static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
-                static_cast<unsigned long long>(m_pixelShader ? m_pixelShader->serial : 0u),
-                boundTextureCount);
-            Switch_LogWrite(trace);
-        }
-    }
-#endif
     const uint8_t *auditIndexData = nullptr;
 #ifdef __SWITCH__
     VkQueryPool switchFloorOcclusionPool = VK_NULL_HANDLE;
@@ -11181,23 +10896,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
 #endif
     vkCmdDrawIndexed(
         m_backend->CommandBuffer(), indexCount, 1, startIndex, baseVertexIndex, 0);
-#ifdef __SWITCH__
-    if (switchFxDrawTraceSequence < 64u)
-    {
-        char trace[512];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][FX GPU DRAW RECORDED] n=%u sample=%u material=%.80s pipeline=%016llx texMask=0x%04x indexBuffer=%p vertexBuffer=%p indexCount=%u start=%u baseVertex=%d\n",
-            switchFxDrawTraceSequence, switchFxDrawTraceSample,
-            g_switchFxCodeMeshMaterialName ? g_switchFxCodeMeshMaterialName : "<unknown>",
-            static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)),
-            switchFxBoundTextureMask,
-            reinterpret_cast<void *>(m_indices ? m_indices->buffer : VK_NULL_HANDLE),
-            reinterpret_cast<void *>(m_streams[0].buffer ? m_streams[0].buffer->buffer : VK_NULL_HANDLE),
-            indexCount, startIndex, baseVertexIndex);
-        Switch_LogWrite(trace);
-    }
-#endif
+
     g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
     if (Switch_IsVkGpuDrawTraceEnabled())
         LogGpuDrawCommand("indexed", primitiveType, primitiveCount,
