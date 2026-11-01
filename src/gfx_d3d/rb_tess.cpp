@@ -185,22 +185,48 @@ uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
 #ifdef __SWITCH__
     if (drawSurfCount)
     {
-        static volatile uint32_t switchFxCodeMeshDrawTraceCount = 0;
-        const uint32_t traceIndex =
-            __sync_fetch_and_add(&switchFxCodeMeshDrawTraceCount, 1u);
-        if (traceIndex < 24u)
+        // Report one draw for each distinct material. Persistent fog must not
+        // consume the diagnostic budget before transient impact dust or flashes.
+        static uint32_t switchFxCodeMeshMaterialHashes[64]{};
+        const char *materialName =
+            context.state && context.state->material &&
+            context.state->material->info.name
+                ? context.state->material->info.name : "<unset>";
+        uint32_t materialHash = 2166136261u;
+        for (const unsigned char *ch =
+                 reinterpret_cast<const unsigned char *>(materialName);
+             *ch; ++ch)
+        {
+            materialHash = (materialHash ^ *ch) * 16777619u;
+        }
+        if (!materialHash)
+            materialHash = 1u;
+
+        bool firstMaterialDraw = false;
+        uint32_t traceIndex = 64u;
+        for (uint32_t slot = 0; slot < 64u; ++slot)
+        {
+            const uint32_t seenHash = __sync_val_compare_and_swap(
+                &switchFxCodeMeshMaterialHashes[slot], 0u, materialHash);
+            if (seenHash == 0u)
+            {
+                traceIndex = slot;
+                firstMaterialDraw = true;
+                break;
+            }
+            if (seenHash == materialHash)
+                break;
+        }
+
+        if (firstMaterialDraw)
         {
             const GfxDrawSurf firstDrawSurf = drawSurfList[0];
             const FxCodeMeshData *firstCodeMesh =
                 &data->codeMeshes[firstDrawSurf.fields.objectId];
-            const char *materialName =
-                context.state && context.state->material &&
-                context.state->material->info.name
-                    ? context.state->material->info.name : "<unset>";
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX CODEMESH DRAW] n=%u listSurfs=%u firstObject=%u firstTris=%u material=%.96s vbUsed=%u vbTotal=%u\n",
+                "[KisakCOD][FX CODEMESH DRAW] unique=%u listSurfs=%u firstObject=%u firstTris=%u material=%.96s vbUsed=%u vbTotal=%u\\n",
                 traceIndex,
                 static_cast<unsigned>(drawSurfCount),
                 static_cast<unsigned>(firstDrawSurf.fields.objectId),
