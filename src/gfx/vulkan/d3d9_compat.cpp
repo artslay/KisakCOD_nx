@@ -1502,12 +1502,20 @@ uint8_t SwitchEffectiveShaderElementType(
         element.UsageIndex == 0u)
         return D3DDECLTYPE_UBYTE4;
 
-    // GfxPackedVertex and GfxWorldVertex both begin with xyz at byte 0 and
-    // binormalSign at byte 12. Their D3D declaration is a legacy semantic route;
-    // it may label POSITION as FLOAT4 even though the fourth physical component
-    // is not homogeneous W. Expose XYZ only, so Vulkan supplies W=1 instead of
-    // interpreting binormalSign (often -1) as position.w. Apply this narrowly
-    // to the known 32-byte packed-model ABI; world vertices use the 44-byte case.
+    // FX code meshes use the original packed CoD4 POSITION0 FLOAT4 route.
+    // Their fourth component is binormalSign (set by FX_GenSpriteVerts and
+    // FX trail generation), which the packed vertex shader may use when
+    // constructing its tangent basis. Do not narrow this input to FLOAT3:
+    // Vulkan would synthesize W=1 and lose the authored -1 handedness.
+    if (g_switchFxCodeMeshDrawActive &&
+        decl && decl->switchVertDeclType != 0u &&
+        element.Stream == 0u && streamStride == sizeof(GfxPackedVertex) &&
+        element.Offset == 0u && element.Usage == 0u &&
+        element.UsageIndex == 0u && element.Type == D3DDECLTYPE_FLOAT4)
+        return D3DDECLTYPE_FLOAT4;
+
+    // For non-FX packed model draws, expose XYZ only so Vulkan supplies W=1
+    // instead of interpreting binormalSign as homogeneous position.w.
     if (decl && decl->switchVertDeclType != 0u &&
         element.Stream == 0 && streamStride == 32u &&
         element.Offset == 0 && element.Usage == 0 &&
@@ -8199,10 +8207,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, static_cast<uint32_t>(m_topology));
     key = HashCombine(key, m_fillMode);
     key = HashCombine(key, m_cullMode);
-    // FX code meshes contain camera-facing sprites/tails whose generated
-    // index winding can face either side. Keep their two-sided raster state
-    // separate from ordinary model/world pipelines in the pipeline cache.
-    key = HashCombine(key, g_switchFxCodeMeshDrawActive ? 1u : 0u);
     key = HashCombine(key, m_scissor);
     key = HashCombine(key, m_colorWriteMask);
     key = HashCombine(key, m_stencilEnable);
@@ -9297,13 +9301,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         : (m_fillMode == D3DFILL_POINT
             ? VK_POLYGON_MODE_POINT : VK_POLYGON_MODE_FILL);
     raster.lineWidth = 1.0f;
-    // FX code meshes are built from camera-facing sprite/tail vertices.
-    // Their generated index winding is opposite the supplied FX normal, so
-    // applying the material's ordinary D3D9 back-face culling can discard the
-    // entire card even though the indexed draw is valid. Make only this
-    // transient FX pass two-sided; regular world and model draws keep the
-    // exact D3D9 cull mapping below.
-    raster.cullMode = (switchFragmentOutputProbeActive || g_switchFxCodeMeshDrawActive)
+    // D3D9 cull values are NONE=1, CW=2, CCW=3. The negative Vulkan
+    // viewport preserves D3D9's top-left origin, so clockwise NDC triangles
+    // are Vulkan front faces. Keep the ordinary material cull state.
+    raster.cullMode = switchFragmentOutputProbeActive
         ? VK_CULL_MODE_NONE
         : (m_cullMode == 1
             ? VK_CULL_MODE_NONE
