@@ -41,6 +41,13 @@ LDFLAGS += -Wl,--wrap=malloc,--wrap=free,--wrap=calloc,--wrap=realloc
 # heap tracing is requested; this avoids stale objects with unresolved __wrap_*.
 $(BUILD)/src/platform/switch/switch_sys.o: ALWAYS
 endif
+# Optional high-overhead script allocator tracing and full free-tree validation.
+# Enable only when investigating allocator corruption: make KISAK_SWITCH_MEMORY_TREE_TRACE=1
+ifeq ($(KISAK_SWITCH_MEMORY_TREE_TRACE),1)
+CPPFLAGS += -DKISAK_SWITCH_MEMORY_TREE_TRACE
+# Rebuild the instrumented object when the diagnostic flag changes.
+$(BUILD)/src/script/scr_memorytree.o: ALWAYS
+endif
 # OpenAL Soft in devkitPro uses its SDL2 playback backend. The Switch build
 # supplies the minimal SDL2 audio ABI locally through switch_sdl2_audio.cpp,
 # so libSDL2/libEGL are not linked into the game and Vulkan remains the only
