@@ -6412,12 +6412,9 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
             if (inserted)
                 *inserted = *varGfxImagePtr;
 
-#ifdef __SWITCH__
-#endif
             g_switchDbStage = "image/pop";
             DB_PopStreamPos();
-#ifdef __SWITCH__
-#endif
+            g_switchDbStage = "image/return";
             return;
         }
         else
