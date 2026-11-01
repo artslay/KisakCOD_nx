@@ -9232,8 +9232,40 @@ bool IDirect3DDevice9::EnsurePipeline()
             ? VK_CULL_MODE_NONE
             : (m_cullMode == 2 ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_BACK_BIT));
     raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
+#ifdef VK_EXT_depth_bias_control
+    VkDepthBiasRepresentationInfoEXT depthBiasRepresentation{};
+    if (m_backend->SupportsDepthBiasFloatRepresentation())
+    {
+        depthBiasRepresentation.sType = VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT;
+        depthBiasRepresentation.depthBiasRepresentation = VK_DEPTH_BIAS_REPRESENTATION_FLOAT_EXT;
+        depthBiasRepresentation.depthBiasExact =
+            m_backend->SupportsDepthBiasExact() ? VK_TRUE : VK_FALSE;
+        raster.pNext = &depthBiasRepresentation;
+    }
+#endif
     raster.depthBiasEnable = (m_depthBias != 0.0f || m_slopeDepthBias != 0.0f) ? VK_TRUE : VK_FALSE;
-    raster.depthBiasConstantFactor = m_depthBias;
+    // D3D9 expresses constant depth bias as a direct floating-point depth offset.
+    // Vulkan's default representation multiplies the factor by one ULP of the
+    // depth attachment. Convert common fixed-point targets when the extension is
+    // unavailable; the extension path preserves the D3D9 representation for all
+    // depth formats, including D32_SFLOAT.
+    float vkDepthBiasConstantFactor = m_depthBias;
+#ifdef VK_EXT_depth_bias_control
+    const bool hasD3D9DepthBiasRepresentation =
+        m_backend->SupportsDepthBiasFloatRepresentation();
+#else
+    const bool hasD3D9DepthBiasRepresentation = false;
+#endif
+    if (!hasD3D9DepthBiasRepresentation)
+    {
+        if (depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+            depthFormat == VK_FORMAT_X8_D24_UNORM_PACK32)
+            vkDepthBiasConstantFactor *= 16777215.0f;
+        else if (depthFormat == VK_FORMAT_D16_UNORM ||
+                 depthFormat == VK_FORMAT_D16_UNORM_S8_UINT)
+            vkDepthBiasConstantFactor *= 65535.0f;
+    }
+    raster.depthBiasConstantFactor = vkDepthBiasConstantFactor;
     raster.depthBiasSlopeFactor = m_slopeDepthBias;
 
     VkPipelineMultisampleStateCreateInfo multisample{};

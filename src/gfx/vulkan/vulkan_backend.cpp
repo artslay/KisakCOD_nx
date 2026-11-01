@@ -846,6 +846,29 @@ bool VulkanBackend::CreateDevice()
     queue.pQueuePriorities = &priority;
 
     std::vector<const char *> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+#ifdef VK_EXT_depth_bias_control
+    bool depthBiasControlExtensionAvailable = false;
+    uint32_t depthBiasExtensionCount = 0;
+    VkResult depthBiasExtensionResult = vkEnumerateDeviceExtensionProperties(
+        m_physicalDevice, nullptr, &depthBiasExtensionCount, nullptr);
+    if (depthBiasExtensionResult == VK_SUCCESS && depthBiasExtensionCount)
+    {
+        std::vector<VkExtensionProperties> depthBiasExtensions(depthBiasExtensionCount);
+        depthBiasExtensionResult = vkEnumerateDeviceExtensionProperties(
+            m_physicalDevice, nullptr, &depthBiasExtensionCount, depthBiasExtensions.data());
+        if (depthBiasExtensionResult == VK_SUCCESS)
+        {
+            for (const VkExtensionProperties &extension : depthBiasExtensions)
+            {
+                if (std::strcmp(extension.extensionName, VK_EXT_DEPTH_BIAS_CONTROL_EXTENSION_NAME) == 0)
+                {
+                    depthBiasControlExtensionAvailable = true;
+                    break;
+                }
+            }
+        }
+    }
+#endif
 #ifdef VK_EXT_device_fault
     bool deviceFaultExtensionAvailable = false;
     // Device-fault support is optional; without the extension the renderer path is unchanged.
@@ -883,6 +906,15 @@ bool VulkanBackend::CreateDevice()
         vulkan13Features.pNext = &faultFeatures;
     }
 #endif
+#ifdef VK_EXT_depth_bias_control
+    VkPhysicalDeviceDepthBiasControlFeaturesEXT depthBiasControlFeatures{};
+    if (depthBiasControlExtensionAvailable)
+    {
+        depthBiasControlFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT;
+        depthBiasControlFeatures.pNext = vulkan13Features.pNext;
+        vulkan13Features.pNext = &depthBiasControlFeatures;
+    }
+#endif
 
     VkPhysicalDeviceFeatures2 features2{};
     features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -903,6 +935,15 @@ bool VulkanBackend::CreateDevice()
     // texture images can be sampled by shaders.
     const bool textureCompressionBC =
         features2.features.textureCompressionBC == VK_TRUE;
+#ifdef VK_EXT_depth_bias_control
+    m_depthBiasFloatRepresentation =
+        depthBiasControlExtensionAvailable &&
+        depthBiasControlFeatures.depthBiasControl == VK_TRUE &&
+        depthBiasControlFeatures.floatRepresentation == VK_TRUE;
+    m_depthBiasExact =
+        m_depthBiasFloatRepresentation &&
+        depthBiasControlFeatures.depthBiasExact == VK_TRUE;
+#endif
     // Do not accidentally enable every Vulkan 1.3 feature reported by the query.
     vulkan13Features = {};
     vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -925,6 +966,18 @@ bool VulkanBackend::CreateDevice()
     else
     {
         vulkan13Features.pNext = nullptr;
+    }
+#endif
+#ifdef VK_EXT_depth_bias_control
+    if (m_depthBiasFloatRepresentation)
+    {
+        extensions.push_back(VK_EXT_DEPTH_BIAS_CONTROL_EXTENSION_NAME);
+        depthBiasControlFeatures.pNext = vulkan13Features.pNext;
+        depthBiasControlFeatures.depthBiasControl = VK_TRUE;
+        depthBiasControlFeatures.leastRepresentableValueForceUnormRepresentation = VK_FALSE;
+        depthBiasControlFeatures.floatRepresentation = VK_TRUE;
+        depthBiasControlFeatures.depthBiasExact = m_depthBiasExact ? VK_TRUE : VK_FALSE;
+        vulkan13Features.pNext = &depthBiasControlFeatures;
     }
 #endif
 

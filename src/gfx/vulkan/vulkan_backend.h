@@ -65,6 +65,10 @@ public:
     bool SupportsNonSolidFill() const { return m_fillModeNonSolid; }
     bool SupportsSamplerAnisotropy() const { return m_samplerAnisotropy; }
     bool SupportsShaderDemoteToHelperInvocation() const { return m_shaderDemoteToHelperInvocation; }
+#ifdef VK_EXT_depth_bias_control
+    bool SupportsDepthBiasFloatRepresentation() const { return m_depthBiasFloatRepresentation; }
+    bool SupportsDepthBiasExact() const { return m_depthBiasExact; }
+#endif
     float MaxSamplerAnisotropy() const { return m_maxSamplerAnisotropy; }
     VkCommandBuffer CommandBuffer() const { return m_commandBuffer; }
     VkQueue GraphicsQueue() const { return m_graphicsQueue; }
@@ -378,6 +382,10 @@ private:
     bool m_fillModeNonSolid = false;
     bool m_samplerAnisotropy = false;
     bool m_shaderDemoteToHelperInvocation = false;
+#ifdef VK_EXT_depth_bias_control
+    bool m_depthBiasFloatRepresentation = false;
+    bool m_depthBiasExact = false;
+#endif
     float m_maxSamplerAnisotropy = 1.0f;
     float m_maxSamplerLodBias = 0.0f;
     bool m_frameActive = false;
