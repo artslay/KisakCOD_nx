@@ -23,76 +23,8 @@ extern void Switch_LogWrite(const char *msg);
 static bool g_processCodeMesh;
 static bool g_processMarkMesh;
 #ifdef __SWITCH__
-static uint32_t g_switchCodeMeshStartUsed = 0;
-
-namespace
-{
-// FX generators store texcoords in CoD4's PackedTexCoords fixed-point format.
-// FX code-mesh declarations consume R16G16_SFLOAT, unlike XModel TEXCOORD0,
-// which must remain four original bytes for setup_uv_dtex().
-uint16_t R_FloatToIeeeHalfForFx(float value)
-{
-    uint32_t bits = 0;
-    std::memcpy(&bits, &value, sizeof(bits));
-
-    const uint32_t sign = (bits >> 16) & 0x8000u;
-    const uint32_t floatExponent = (bits >> 23) & 0xffu;
-    int32_t exponent = static_cast<int32_t>(floatExponent) - 127 + 15;
-    uint32_t mantissa = bits & 0x7fffffu;
-
-    if (floatExponent == 0xffu)
-    {
-        if (!mantissa)
-            return static_cast<uint16_t>(sign | 0x7c00u);
-        const uint32_t payload = mantissa >> 13;
-        return static_cast<uint16_t>(sign | 0x7c00u | payload | (payload == 0u));
-    }
-
-    if (floatExponent == 0u)
-        return static_cast<uint16_t>(sign);
-
-    if (exponent >= 31)
-        return static_cast<uint16_t>(sign | 0x7c00u);
-
-    if (exponent <= 0)
-    {
-        if (exponent < -10)
-            return static_cast<uint16_t>(sign);
-
-        mantissa |= 0x800000u;
-        const uint32_t shift = static_cast<uint32_t>(14 - exponent);
-        const uint32_t rounding = (1u << (shift - 1u)) - 1u +
-            ((mantissa >> shift) & 1u);
-        return static_cast<uint16_t>(sign | ((mantissa + rounding) >> shift));
-    }
-
-    uint32_t roundedMantissa = mantissa + 0x0fffu + ((mantissa >> 13) & 1u);
-    if (roundedMantissa & 0x800000u)
-    {
-        roundedMantissa = 0;
-        ++exponent;
-        if (exponent >= 31)
-            return static_cast<uint16_t>(sign | 0x7c00u);
-    }
-
-    return static_cast<uint16_t>(
-        sign | (static_cast<uint32_t>(exponent) << 10) | (roundedMantissa >> 13));
-}
-
-PackedTexCoords R_ConvertFxPackedTexCoordsForVulkan(PackedTexCoords packed)
-{
-    float texCoord[2]{};
-    Vec2UnpackTexCoords(packed, texCoord);
-
-    // CoD4 stores U in the high word and V in the low word. Vulkan's
-    // R16G16_SFLOAT input expects U in the low half-word and V in the high.
-    PackedTexCoords converted;
-    converted.packed =
-        static_cast<uint32_t>(R_FloatToIeeeHalfForFx(texCoord[0])) |
-        (static_cast<uint32_t>(R_FloatToIeeeHalfForFx(texCoord[1])) << 16);
-    return converted;
-}
-} // namespace
+// Code-mesh vertex data keeps the native D3D9 UBYTE4 representation. The
+// packed FX TEXCOORD0 bytes are decoded by the original vertex shader path.
 #endif
 
 char __cdecl R_ReserveCodeMeshIndices(int indexCount, r_double_index_t** indicesOut)
@@ -310,26 +242,6 @@ void R_EndMeshVerts(GfxMeshData* mesh)
 
 void R_EndCodeMeshVerts()
 {
-#ifdef __SWITCH__
-    // FX sprite/tail vertices (including rain) are generated in CoD4's custom
-    // PackedTexCoords format. This code mesh is a directly locked 32-byte GPU
-    // buffer, so it bypasses R_SetVertexData and must convert UVs before unlock.
-    GfxMeshData *mesh = &frontEndDataOut->codeMesh;
-    const uint32_t safeUsed =
-        mesh->vb.used < mesh->vb.total ? mesh->vb.used : mesh->vb.total;
-    const uint32_t startUsed =
-        g_switchCodeMeshStartUsed < safeUsed ? g_switchCodeMeshStartUsed : safeUsed;
-    if (mesh->vb.verts && mesh->vertSize == sizeof(GfxPackedVertex) &&
-        mesh->vertSize != 0u && safeUsed % mesh->vertSize == 0u)
-    {
-        const uint32_t firstVertex = startUsed / mesh->vertSize;
-        const uint32_t vertexCount = safeUsed / mesh->vertSize;
-        auto *vertices = reinterpret_cast<GfxPackedVertex *>(mesh->vb.verts);
-        for (uint32_t vertexIndex = firstVertex; vertexIndex < vertexCount; ++vertexIndex)
-            vertices[vertexIndex].texCoord =
-                R_ConvertFxPackedTexCoordsForVulkan(vertices[vertexIndex].texCoord);
-    }
-#endif
     g_processCodeMesh = 0;
     R_EndMeshVerts(&frontEndDataOut->codeMesh);
 }
@@ -337,9 +249,6 @@ void R_EndCodeMeshVerts()
 void R_BeginCodeMeshVerts()
 {
     iassert( !g_processCodeMesh );
-#ifdef __SWITCH__
-    g_switchCodeMeshStartUsed = frontEndDataOut->codeMesh.vb.used;
-#endif
     g_processCodeMesh = 1;
     R_BeginMeshVerts(&frontEndDataOut->codeMesh);
 }
