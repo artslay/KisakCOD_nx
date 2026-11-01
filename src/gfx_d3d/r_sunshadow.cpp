@@ -135,7 +135,10 @@ static uint32_t __cdecl R_SunShadowMapClipSpaceClipPlanes(
             (*boundingPolyClipSpacePlanes)[planeCount][1] = (g_shadowFrustumBound[i][0] - g_shadowFrustumBound[i + 1][0]) * rg.sunShadowmapScale;;
             (*boundingPolyClipSpacePlanes)[planeCount][2] = 0.0; // Z not used
             v5 = (*boundingPolyClipSpacePlanes)[planeCount][1] * g_shadowFrustumBound[i][1] + (*boundingPolyClipSpacePlanes)[planeCount][0] * g_shadowFrustumBound[i][0];
-            (*boundingPolyClipSpacePlanes)[planeCount][3] = -v5 * rg.sunShadowmapScale;
+            // A/B and the constant term must share one scale factor.
+            // v5 already uses the scaled A/B coefficients; scaling it again
+            // shrinks the far-cascade clip square when sunShadowmapScale != 1.
+            (*boundingPolyClipSpacePlanes)[planeCount][3] = -v5;
             planeCount++;
         }
     }
