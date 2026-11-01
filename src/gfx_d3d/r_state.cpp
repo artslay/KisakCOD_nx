@@ -880,9 +880,7 @@ void __cdecl R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0)
             R_HW_SetCullFace(device, stateBits0);
         if (changedBits < 0)
             R_HW_SetPolygonMode(device, stateBits0);
-        // refStateBits is the immutable default state; activeStateBits tracks
-        // the last state actually applied to the device.
-        blendOpRgbWasEnabled = (state->activeStateBits[0] & 0x700) != 0;
+        blendOpRgbWasEnabled = (state->refStateBits[0] & 0x700) != 0;
         if ((stateBits0 & 0x700) != 0)
         {
             if ((stateBits0 & 0x7000000) == 0)
