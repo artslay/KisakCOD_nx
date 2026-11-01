@@ -144,28 +144,10 @@ void __cdecl CL_CreateDevGui()
     if (clGuiGlob.inited)
         MyAssertHandler(".\\client\\cl_devgui.cpp", 179, 0, "%s", "!clGuiGlob.inited");
     clGuiGlob.inited = 1;
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before CL_RegisterDevGuiDvars\n");
-#endif
     CL_RegisterDevGuiDvars();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after CL_RegisterDevGuiDvars\n");
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before CL_CreateMapMenuEntries\n");
-#endif
     CL_CreateMapMenuEntries();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after CL_CreateMapMenuEntries\n");
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before R_CreateDevGui\n");
-#endif
     R_CreateDevGui();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after R_CreateDevGui\n");
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: before devgui_main insert\n");
-#endif
     Cbuf_InsertText(0, "exec devgui_main");
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_CreateDevGui: after devgui_main insert\n");
-#endif
 #ifndef KISAK_NO_FASTFILES
 #ifndef __SWITCH__
     Com_InitSoundDevGuiGraphs();
