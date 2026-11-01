@@ -1,4 +1,7 @@
 #include <universal/q_shared.h>
+#ifdef __SWITCH__
+#include <cstdio>
+#endif
 #include "rb_tess.h"
 #include "r_dvars.h"
 #include "r_shade.h"
@@ -21,6 +24,7 @@
 #include <EffectsCore/fx_marks.h>
 
 #ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
 extern bool Switch_IsModelTransformTraceEnabled();
 extern void Switch_SetModelTransformTraceContext(
     const char *drawKind, const char *materialName, const void *xsurf,
@@ -196,7 +200,7 @@ uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX CODEMESH DRAW] n=%u listSurfs=%u firstObject=%u firstTris=%u material=%.96s vbUsed=%u vbTotal=%u\\n",
+                "[KisakCOD][FX CODEMESH DRAW] n=%u listSurfs=%u firstObject=%u firstTris=%u material=%.96s vbUsed=%u vbTotal=%u\n",
                 traceIndex,
                 static_cast<unsigned>(drawSurfCount),
                 static_cast<unsigned>(firstDrawSurf.fields.objectId),
