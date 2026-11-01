@@ -555,13 +555,13 @@ void MT_RemoveHeadMemoryNode(int size)
     uint16_t *parentNode;
     int prevScore;
     int nextScore;
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     uint32_t alignmentMask;
     bool reportedInvalidNode = false;
 #endif
 
     iassert(size >= 0 && size <= MEMORY_NODE_BITS);
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     alignmentMask = (1u << size) - 1u;
 #endif
 
@@ -570,11 +570,9 @@ void MT_RemoveHeadMemoryNode(int size)
     const uint32_t walkRoot = *parentNode;
 #endif
     oldNodeValue = scrMemTreeGlob.nodes[*parentNode];
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     uint32_t currentNode = *parentNode;
-#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     uint32_t walkSteps = 0;
-#endif
 #endif
 
     while (1)
@@ -642,7 +640,7 @@ void MT_RemoveHeadMemoryNode(int size)
         }
 
         iassert(oldNode != 0);
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
         if (!reportedInvalidNode)
         {
             const bool currentInvalid =
@@ -666,7 +664,6 @@ void MT_RemoveHeadMemoryNode(int size)
                 reportedInvalidNode = true;
             }
         }
-        #if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
         Switch_UpdateMemoryTreeWalk(
             ++walkSteps,
             currentNode,
@@ -681,7 +678,6 @@ void MT_RemoveHeadMemoryNode(int size)
             scrMemTreeDebugGlob.mt_usage_size[currentNode],
             scrMemTreeGlob.nodes[currentNode].prev,
             scrMemTreeGlob.nodes[currentNode].next);
-        #endif
 #endif
 
         tempNodeValue = oldNodeValue;
@@ -848,7 +844,7 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
     int prevScore;
     int nextScore;
     int level;
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     const uint32_t targetNode = static_cast<uint32_t>(oldNode);
     const uint32_t targetSize = size;
     bool reportedAllocatedNode = false;
@@ -862,7 +858,7 @@ bool __cdecl MT_RemoveMemoryNode(int oldNode, uint32_t size)
 
     for (node = *parentNode; node; node = *parentNode)
     {
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
         if (!reportedAllocatedNode && node < MEMORY_NODE_COUNT &&
             (scrMemTreeDebugGlob.mt_usage[node] != 0 ||
              (static_cast<uint32_t>(node) & ((1u << targetSize) - 1u)) != 0))
@@ -1055,7 +1051,7 @@ void MT_AddMemoryNode(int newNode, int size)
     uint16_t *parentNode;
     int level;
     int score;
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     const uint32_t insertedNode = static_cast<uint32_t>(newNode);
     const uint32_t insertedSize = static_cast<uint32_t>(size);
     bool reportedInvalidPath = false;
@@ -1098,7 +1094,7 @@ void MT_AddMemoryNode(int newNode, int size)
         level = MEMORY_NODE_COUNT;
         do
         {
-#ifdef KISAK_SWITCH
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
             if (!reportedInvalidPath &&
                 (scrMemTreeDebugGlob.mt_usage[node] != 0 ||
                  (static_cast<uint32_t>(node) & ((1u << insertedSize) - 1u)) != 0))
