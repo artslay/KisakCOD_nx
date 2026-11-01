@@ -6070,60 +6070,7 @@ void __cdecl Load_GfxImageLoadDef(bool atStreamStart)
     // every following stream-0 object.
     Load_Stream(1, (unsigned char *)varGfxImageLoadDef, 16);
 
-#ifdef __SWITCH__
-    // Record the serialized external-vs-inline decision for the images that
-    // currently fail their IWI lookup. This distinguishes a genuine
-    // resourceSize==0 request from a misread/misaligned fastfile header.
-    if (g_switchCurrentAssetRawType == 4u &&
-        (g_switchCurrentAssetIndex == 4007 ||
-         g_switchCurrentAssetIndex == 4022 ||
-         g_switchCurrentAssetIndex == 4034 ||
-         g_switchCurrentAssetIndex == 4049 ||
-         g_switchCurrentAssetIndex == 4064 ||
-         g_switchCurrentAssetIndex == 4069 ||
-         g_switchCurrentAssetIndex == 4072))
-    {
-        const uint8_t *bytes =
-            reinterpret_cast<const uint8_t *>(varGfxImageLoadDef);
-        char trace[512];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][GFXIMAGE TRACE] LOADDEF asset=%d image=%p name=%p category=%u delay=%u stream=%u b0=%08x b4=%08x level=%u flags=%u dims=%d,%d,%d format=%d resourceSize=%d raw=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
-            g_switchCurrentAssetIndex,
-            static_cast<void *>(varGfxImage),
-            varGfxImage ? static_cast<const void *>(varGfxImage->name) : nullptr,
-            varGfxImage ? static_cast<unsigned>(varGfxImage->category) : 255u,
-            varGfxImage ? static_cast<unsigned>(varGfxImage->delayLoadPixels) : 255u,
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4),
-            static_cast<unsigned>(varGfxImageLoadDef->levelCount),
-            static_cast<unsigned>(varGfxImageLoadDef->flags),
-            static_cast<int>(varGfxImageLoadDef->dimensions[0]),
-            static_cast<int>(varGfxImageLoadDef->dimensions[1]),
-            static_cast<int>(varGfxImageLoadDef->dimensions[2]),
-            static_cast<int>(varGfxImageLoadDef->format),
-            varGfxImageLoadDef->resourceSize,
-            static_cast<unsigned>(bytes[0]),
-            static_cast<unsigned>(bytes[1]),
-            static_cast<unsigned>(bytes[2]),
-            static_cast<unsigned>(bytes[3]),
-            static_cast<unsigned>(bytes[4]),
-            static_cast<unsigned>(bytes[5]),
-            static_cast<unsigned>(bytes[6]),
-            static_cast<unsigned>(bytes[7]),
-            static_cast<unsigned>(bytes[8]),
-            static_cast<unsigned>(bytes[9]),
-            static_cast<unsigned>(bytes[10]),
-            static_cast<unsigned>(bytes[11]),
-            static_cast<unsigned>(bytes[12]),
-            static_cast<unsigned>(bytes[13]),
-            static_cast<unsigned>(bytes[14]),
-            static_cast<unsigned>(bytes[15]));
-        Switch_LogWrite(trace);
-    }
-#endif
+
 
     if (DB_GetStreamPos() != varGfxImageLoadDef->data)
         MyAssertHandler(
@@ -6165,48 +6112,6 @@ void __cdecl Load_GfxImage(bool atStreamStart)
         SerializedGfxImage serialized{};
         DB_LoadSwitchSerialized(&serialized, sizeof(serialized));
         g_switchLastGfxImageNameToken = serialized.name;
-
-        const bool traceKillhouseImage =
-            g_switchCurrentAssetRawType == 4u &&
-            g_switchCurrentAssetIndex == 1530;
-        if (traceKillhouseImage)
-        {
-            uint32_t words[9] = {};
-            std::memcpy(words, &serialized, sizeof(serialized));
-            char trace[512];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][GFXIMAGE HEADER] asset=%d image=%p stream=%u b0=%08x b4=%08x words=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",
-                g_switchCurrentAssetIndex,
-                static_cast<void *>(varGfxImage),
-                static_cast<unsigned>(g_streamPosIndex),
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4),
-                words[0], words[1], words[2], words[3], words[4],
-                words[5], words[6], words[7], words[8]);
-            Switch_LogWrite(trace);
-        }
-
-        const bool traceUiImage =
-            g_switchCurrentAssetRawType == 4u &&
-            g_switchCurrentAssetIndex >= 0 &&
-            g_switchCurrentAssetIndex <= 3;
-        if (traceUiImage)
-        {
-            char trace[320];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][UI IMAGE] header asset=%d texture=%08x name=%08x stream=%u b0=%08x b4=%08x\n",
-                g_switchCurrentAssetIndex,
-                serialized.texture,
-                serialized.name,
-                static_cast<unsigned>(g_streamPosIndex),
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4));
-            Switch_LogWrite(trace);
-        }
 
         varGfxImage->mapType = static_cast<MapType>(serialized.mapType);
         varGfxImage->texture.basemap =
@@ -6412,232 +6317,17 @@ void __cdecl Load_GfxImage(bool atStreamStart)
                     {
                         varGfxImage->delayLoadPixels = true;
 
-                        char trace[384];
-                        std::snprintf(
-                            trace,
-                            sizeof(trace),
-                            "[KisakCOD][GFXIMAGE FORWARD NAME] asset=%d token=%08x target=%08x cursor=%08x first=%08x image=%p deferred=1\n",
-                            g_switchCurrentAssetIndex,
-                            serialized.name,
-                            static_cast<unsigned>(
-                                nameAddress - block4Base),
-                            static_cast<unsigned>(
-                                cursorAddress - block4Base),
-                            firstWord,
-                            static_cast<void *>(varGfxImage));
-                        Switch_LogWrite(trace);
+
                     }
                 }
             }
 #endif
         }
-
-#ifdef __SWITCH__
-        {
-            const char *resolvedName = varGfxImage->name;
-            const uintptr_t resolvedAddress =
-                reinterpret_cast<uintptr_t>(resolvedName);
-            uint32_t pointerBlock = UINT32_MAX;
-            uint32_t pointerOffset = UINT32_MAX;
-            if (resolvedAddress && g_streamBlocks)
-            {
-                for (uint32_t block = 0;
-                     block < ARRAY_COUNT(g_streamPosArray);
-                     ++block)
-                {
-                    if (!g_streamBlocks[block].data)
-                        continue;
-
-                    const uintptr_t base =
-                        reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
-                    if (resolvedAddress >= base &&
-                        resolvedAddress - base < g_streamBlocks[block].size)
-                    {
-                        pointerBlock = block;
-                        pointerOffset =
-                            static_cast<uint32_t>(resolvedAddress - base);
-                        break;
-                    }
-                }
-            }
-
-            uint32_t nameBlock = UINT32_MAX;
-            uint32_t nameOffset = 0;
-            const bool nameIsStreamAscii =
-                resolvedName &&
-                Switch_IsStreamAsciiImageName(
-                    resolvedAddress,
-                    &nameBlock,
-                    &nameOffset);
-            const bool safeToReadName =
-                resolvedName &&
-                (pointerBlock != UINT32_MAX ||
-                 serialized.name == UINT32_MAX);
-            const unsigned firstByte =
-                safeToReadName
-                    ? static_cast<unsigned>(
-                          static_cast<unsigned char>(resolvedName[0]))
-                    : 0u;
-            const bool emptyName = safeToReadName && firstByte == 0u;
-
-            static constexpr const char *const kMissingIwiImageNames[] =
-            {
-                "3",
-                "codeMeshArg",
-                "hud_burningcaricon",
-                "hud_checkbox_active",
-                "hud_objective_tank",
-                "sm2/effect",
-                "decode_characters_glow"
-            };
-            const bool traceNameReadable =
-                nameIsStreamAscii ||
-                (serialized.name == UINT32_MAX && resolvedName);
-            bool traceMissingIwiImage = false;
-            if (traceNameReadable)
-            {
-                for (const char *candidate : kMissingIwiImageNames)
-                {
-                    if (I_stricmp(resolvedName, candidate) == 0)
-                    {
-                        traceMissingIwiImage = true;
-                        break;
-                    }
-                }
-            }
-
-            char trace[768];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][GFXIMAGE TRACE] asset=%d rawType=%u token=%08x text=%.*s image=%p name=%p first=%02x safe=%u streamAscii=%u pointerBlock=%u pointerOffset=%08x nameBlock=%u nameOffset=%08x category=%u semantic=%u delay=%u size=%ux%u stream=%u b0=%08x b4=%08x empty=%u\n",
-                g_switchCurrentAssetIndex,
-                static_cast<unsigned>(g_switchCurrentAssetRawType),
-                serialized.name,
-                traceNameReadable ? 96 : 11,
-                traceNameReadable ? resolvedName : "<unreadable>",
-                static_cast<void *>(varGfxImage),
-                static_cast<const void *>(resolvedName),
-                firstByte,
-                safeToReadName ? 1u : 0u,
-                nameIsStreamAscii ? 1u : 0u,
-                pointerBlock,
-                pointerOffset,
-                nameBlock,
-                nameOffset,
-                static_cast<unsigned>(varGfxImage->category),
-                static_cast<unsigned>(varGfxImage->semantic),
-                static_cast<unsigned>(varGfxImage->delayLoadPixels),
-                static_cast<unsigned>(varGfxImage->width),
-                static_cast<unsigned>(varGfxImage->height),
-                static_cast<unsigned>(g_streamPosIndex),
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4),
-                emptyName ? 1u : 0u);
-            if (traceKillhouseImage || traceMissingIwiImage)
-                Switch_LogWrite(trace);
-
-            if (resolvedName && std::strcmp(resolvedName, "3") == 0)
-            {
-                const uintptr_t nameAddress =
-                    reinterpret_cast<uintptr_t>(resolvedName);
-                uint32_t nameBlock = UINT32_MAX;
-                uint32_t nameOffset = UINT32_MAX;
-                uint8_t bytes[32] = {};
-                size_t byteCount = 0;
-
-                if (g_streamBlocks)
-                {
-                    for (uint32_t block = 0;
-                         block < ARRAY_COUNT(g_streamPosArray);
-                         ++block)
-                    {
-                        if (!g_streamBlocks[block].data)
-                            continue;
-
-                        const uintptr_t base =
-                            reinterpret_cast<uintptr_t>(g_streamBlocks[block].data);
-                        const uintptr_t blockEnd =
-                            base + g_streamBlocks[block].size;
-                        if (nameAddress < base || nameAddress >= blockEnd)
-                            continue;
-
-                        nameBlock = block;
-                        nameOffset =
-                            static_cast<uint32_t>(nameAddress - base);
-                        byteCount =
-                            g_streamBlocks[block].size - nameOffset;
-                        if (byteCount > sizeof(bytes))
-                            byteCount = sizeof(bytes);
-                        if (byteCount)
-                            std::memcpy(
-                                bytes,
-                                reinterpret_cast<const void *>(nameAddress),
-                                byteCount);
-                        break;
-                    }
-                }
-
-                char detail[640];
-                int written = std::snprintf(
-                    detail,
-                    sizeof(detail),
-                    "[KisakCOD][IMAGE ROOT] asset=%d rawType=%u nameToken=%08x name=%p block=%u offset=%08x bytes:",
-                    g_switchCurrentAssetIndex,
-                    g_switchCurrentAssetRawType,
-                    serialized.name,
-                    reinterpret_cast<const void *>(nameAddress),
-                    nameBlock,
-                    nameOffset);
-
-                for (size_t i = 0;
-                     i < byteCount && written > 0 &&
-                     static_cast<size_t>(written) + 4 < sizeof(detail);
-                     ++i)
-                {
-                    written += std::snprintf(
-                        detail + written,
-                        sizeof(detail) - static_cast<size_t>(written),
-                        " %02x",
-                        static_cast<unsigned>(bytes[i]));
-                }
-
-                if (written > 0 &&
-                    static_cast<size_t>(written) < sizeof(detail))
-                {
-                    std::snprintf(
-                        detail + written,
-                        sizeof(detail) - static_cast<size_t>(written),
-                        " text=%s\n",
-                        resolvedName);
-                }
-                Switch_LogWrite(detail);
-            }
-        }
-#endif
-
-
 
         varGfxTextureLoad = &varGfxImage->texture;
         Load_GfxTextureLoad(0);
 
-        if (traceUiImage)
-        {
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][UI IMAGE] nested done asset=%d stream=%u b0=%08x b4=%08x\n",
-                g_switchCurrentAssetIndex,
-                static_cast<unsigned>(g_streamPosIndex),
-                Switch_GetStreamCursorOffset(0),
-                Switch_GetStreamCursorOffset(4));
-            Switch_LogWrite(trace);
-        }
-
-        
-
-        g_switchDbStage = "font/pop";
+g_switchDbStage = "font/pop";
         DB_PopStreamPos();
         g_switchDbStage = "font/done";
         return;
@@ -6666,25 +6356,6 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
         &value,
         reinterpret_cast<const uint8_t *>(varGfxImagePtr),
         sizeof(value));
-
-    const bool traceUiImagePointer =
-        g_switchCurrentAssetRawType == 4u &&
-        g_switchCurrentAssetIndex >= 0 &&
-        g_switchCurrentAssetIndex <= 3;
-    if (traceUiImagePointer)
-    {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][UI IMAGE] pointer asset=%d token=%08x stream=%u b0=%08x b4=%08x\n",
-            g_switchCurrentAssetIndex,
-            value,
-            static_cast<unsigned>(g_streamPosIndex),
-            Switch_GetStreamCursorOffset(0),
-            Switch_GetStreamCursorOffset(4));
-        Switch_LogWrite(trace);
-    }
 
     DB_PushStreamPos(0);
 
@@ -6735,92 +6406,17 @@ void __cdecl Load_GfxImagePtr(bool atStreamStart)
 
             Load_GfxImageAsset(reinterpret_cast<XAssetHeader *>(varGfxImagePtr));
 
-            if (traceUiImagePointer)
-            {
-                char trace[320];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][UI IMAGE] inline done asset=%d b0=%08x b4=%08x "
-                    "image=%p name=%p dstPtr=%p\n",
-                    g_switchCurrentAssetIndex,
-                    Switch_GetStreamCursorOffset(0),
-                    Switch_GetStreamCursorOffset(4),
-                    static_cast<void *>(nativeImage),
-                    static_cast<const void *>(nativeImage->name),
-                    static_cast<void *>(varGfxImagePtr));
-                Switch_LogWrite(trace);
-
-                g_switchDbStage = "image/ptr_store";
-            }
-
-            // The stable runtime slot already contains the widened native
+// The stable runtime slot already contains the widened native
             // pointer. If this was an INSERT reference, publish that pointer
             // through the normal DB_InsertPointer destination as well.
             if (inserted)
                 *inserted = *varGfxImagePtr;
 
 #ifdef __SWITCH__
-            if (traceUiImagePointer)
-            {
-                const uint32_t stackIndex = g_streamPosStackIndex;
-                const uint32_t stackTopIndex =
-                    stackIndex ? g_streamPosStack[stackIndex - 1].index : UINT32_MAX;
-                const uint8_t *stackSavedPos =
-                    stackIndex ? g_streamPosStack[stackIndex - 1].pos : nullptr;
-                const uintptr_t currentPos =
-                    reinterpret_cast<uintptr_t>(g_streamPos);
-                const uintptr_t savedPos =
-                    reinterpret_cast<uintptr_t>(stackSavedPos);
-                const uintptr_t currentBlockBase =
-                    g_streamBlocks && g_streamPosIndex < ARRAY_COUNT(g_streamPosArray) &&
-                    g_streamBlocks[g_streamPosIndex].data
-                        ? reinterpret_cast<uintptr_t>(
-                              g_streamBlocks[g_streamPosIndex].data)
-                        : 0;
-                // StreamPosInfo::pos is the cursor of the stream selected
-                // by DB_PushStreamPos(), not the saved parent stream index.
-                // This push targets stream 0, so savedPos belongs to block 0.
-                const uintptr_t savedBlockBase =
-                    g_streamBlocks && g_streamBlocks[0].data
-                        ? reinterpret_cast<uintptr_t>(
-                              g_streamBlocks[0].data)
-                        : 0;
-                const uint32_t currentOffset =
-                    currentBlockBase && currentPos >= currentBlockBase
-                        ? static_cast<uint32_t>(currentPos - currentBlockBase)
-                        : UINT32_MAX;
-                const uint32_t savedOffset =
-                    savedBlockBase && savedPos >= savedBlockBase
-                        ? static_cast<uint32_t>(savedPos - savedBlockBase)
-                        : UINT32_MAX;
-                char trace[480];
-                std::snprintf(
-                    trace,
-                    sizeof(trace),
-                    "[KisakCOD][UI IMAGE] before pop current=%u stack=%u topIndex=%u "
-                    "curPos=%p off=%08x savedPos=%p off=%08x "
-                    "b0=%08x b4=%08x\n",
-                    static_cast<unsigned>(g_streamPosIndex),
-                    static_cast<unsigned>(stackIndex),
-                    static_cast<unsigned>(stackTopIndex),
-                    static_cast<void *>(g_streamPos),
-                    currentOffset,
-                    static_cast<const void *>(stackSavedPos),
-                    savedOffset,
-                    Switch_GetStreamCursorOffset(0),
-                    Switch_GetStreamCursorOffset(4));
-                Switch_LogWrite(trace);
-                g_switchDbStage = "image/pop";
-            }
 #endif
+            g_switchDbStage = "image/pop";
             DB_PopStreamPos();
 #ifdef __SWITCH__
-            if (traceUiImagePointer)
-            {
-                g_switchDbStage = "image/return";
-                Switch_LogWrite("[KisakCOD][UI IMAGE] after pop\n");
-            }
 #endif
             return;
         }
@@ -8351,7 +7947,6 @@ void __cdecl Load_MaterialTextureDefInfo(bool atStreamStart)
             g_switchCurrentAssetIndex >= 0 &&
             g_switchCurrentAssetIndex <= 3)
         {
-            Switch_LogWrite("[KisakCOD][UI IMAGE] info caller returned\n");
             g_switchDbStage = "image/info_return";
         }
 #endif
