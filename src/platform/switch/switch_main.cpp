@@ -550,30 +550,8 @@ static void SwitchProgressWatchdogMain()
         if (stableTicks < 2u || reportedStall)
             continue;
 
-        char context[80];
-        SwitchFormatScriptContext(
-            context,
-            sizeof(context),
-            g_switchProgressScriptSource.load(std::memory_order_acquire),
-            progressDetail);
-        char line[640];
-        std::snprintf(
-            line,
-            sizeof(line),
-            "[KisakCOD][WATCHDOG] t=%us unchanged=%us asset=%d rawType=%u header=%08x dbStage=%s serverStage=%s progressStage=%s activity=%s detail=%u script=%s context=\"%s\"\n",
-            tick * 5u,
-            stableTicks * 5u,
-            asset,
-            rawType,
-            header,
-            dbStage ? dbStage : "(null)",
-            serverStage ? serverStage : "(null)",
-            progressStage ? progressStage : "(null)",
-            progressPhase ? progressPhase : "(null)",
-            progressDetail,
-            progressScriptName[0] ? progressScriptName : "(none)",
-            context);
-        Switch_LogWrite(line);
+        // Stall tracking remains available internally for diagnostics, but
+        // periodic WATCHDOG reports are intentionally omitted from the log.
         reportedStall = true;
     }
 }
