@@ -982,6 +982,28 @@ void __cdecl FX_DrawElem_Model(FxDrawState *draw)
         visuals.anonymous = FX_GetElemVisuals(draw->elemDef, draw->randomSeed).anonymous;
         if (!visuals.anonymous)
             MyAssertHandler(".\\EffectsCore\\fx_draw.cpp", 851, 0, "%s", "visuals.model");
+#ifdef __SWITCH__
+        static volatile uint32_t switchFxModelTraceCount = 0;
+        const uint32_t traceIndex =
+            __sync_fetch_and_add(&switchFxModelTraceCount, 1u);
+        if (traceIndex < 24u)
+        {
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FX MODEL SUBMIT] n=%u effect=%.88s model=%.88s scale=%.3f handle=%u origin=(%.2f,%.2f,%.2f)\\n",
+                traceIndex,
+                draw->effect && draw->effect->def && draw->effect->def->name
+                    ? draw->effect->def->name : "<unknown>",
+                visuals.model->name ? visuals.model->name : "<unnamed>",
+                placement.scale,
+                static_cast<unsigned>(*reinterpret_cast<const uint16_t *>(&draw->elem->u)),
+                placement.base.origin[0],
+                placement.base.origin[1],
+                placement.base.origin[2]);
+            Switch_LogWrite(trace);
+        }
+#endif
         R_FilterXModelIntoScene(visuals.model, &placement, 0, (uint16_t *)&draw->elem->u);
     }
 }
