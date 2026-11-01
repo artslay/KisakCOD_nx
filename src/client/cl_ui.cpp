@@ -9,10 +9,6 @@
 #include <ui/ui.h>
 #include <universal/com_sndalias.h>
 
-#ifdef __SWITCH__
-extern void Switch_LogWrite(const char *text);
-#endif
-
 void __cdecl Key_KeynumToStringBuf(int keynum, char *buf, int buflen)
 {
     const char *v5; // r3
@@ -41,31 +37,13 @@ void __cdecl CL_InitUI()
 {
     int remoteScreenUpdateNesting; // r3
 
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: before UI_Init\n");
-#endif
     UI_Init();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: after UI_Init\n");
-#endif
     // LWSS ADD from MP ( UI_Component::InitAssets() needs to run so that UI_Component::g members are set. 
     // Otherwise some UI panels in the script debugger will be size 0.0, which means they won't render (KISAKTODO: could probably run this at the start of Scr_InitDebugger()?)
     UI_Component_Init(); 
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: after UI_Component_Init\n");
-#endif
     // LWSS END
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: before R_PopRemoteScreenUpdate\n");
-#endif
     remoteScreenUpdateNesting = R_PopRemoteScreenUpdate();
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: after R_PopRemoteScreenUpdate\n");
-#endif
     cls.uiStarted = 1;
     R_PushRemoteScreenUpdate(remoteScreenUpdateNesting);
-#ifdef __SWITCH__
-    Switch_LogWrite("[KisakCOD][BOOT] CL_InitUI: after R_PushRemoteScreenUpdate\n");
-#endif
 }
 
