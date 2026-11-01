@@ -7943,6 +7943,14 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 	*outText = 0;
 	timeRemaining = 1024;
 
+	// UI_Init can run before the game fastfile containing video/subtitles.csv is loaded.
+	// Retry the lookup when the first cinematic subtitle is actually requested.
+	if (!table && IsFastFileLoad())
+	{
+		table = DB_FindXAssetHeader(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv").stringTable;
+		if (table)
+			uiInfo.videoSubtitles = table;
+	}
 	if (!table)
 		return;
 
