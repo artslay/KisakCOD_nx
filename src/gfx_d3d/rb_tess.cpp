@@ -192,7 +192,6 @@ uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
     if (depthRangeType != context.state->depthRangeType)
         R_ChangeDepthRange(context.state, depthRangeType);
     data = context.source->input.data;
-#ifdef __SWITCH__
 
     R_SetMeshStream(context.state, (GfxMeshData*)&data->codeMesh);
     indices = 0;
