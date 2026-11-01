@@ -241,10 +241,6 @@ uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
         args.baseIndex = R_SetIndexData(&context.state->prim, indices, args.triCount);
         R_DrawIndexedPrimitive(&context.state->prim, &args);
     }
-#ifdef __SWITCH__
-    if (context.state->prim.device)
-        context.state->prim.device->SetMarkMeshPassActive(false);
-#endif
     g_primStats = 0;
     return drawSurfIndex;
 }
@@ -483,6 +479,10 @@ uint32_t __cdecl R_TessMarkMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
         args.baseIndex = R_SetIndexData(&context.state->prim, indices, args.triCount);
         R_DrawIndexedPrimitive(&context.state->prim, &args);
     }
+#ifdef __SWITCH__
+    if (context.state->prim.device)
+        context.state->prim.device->SetMarkMeshPassActive(false);
+#endif
     g_primStats = 0;
     return drawSurfIndex;
 }
