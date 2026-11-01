@@ -866,14 +866,9 @@ void __cdecl R_SkinXSurfaceStaticVerts(
         v8.packed = LocalTransformUnitVec(srcVert->normal, normAxis).packed;
         verts[vertIndex].normal = v8;
         verts[vertIndex].color.packed = srcVert->color.packed;
-#ifdef __SWITCH__
-        // Static-model cache vertices are uploaded with the packed-model Vulkan
-        // declaration (R16G16_SFLOAT UVs). The source XSurface still contains
-        // CoD4's custom PackedTexCoords encoding, so convert the cache copy here.
-        verts[vertIndex].texCoord = Vec2ConvertTexCoordsForVulkan(srcVert->texCoord);
-#else
+        // Keep the source CoD4 packed dtex UV bytes. The original shader
+        // unpacks these through its float4 TEXCOORD input.
         verts[vertIndex].texCoord.packed = srcVert->texCoord.packed;
-#endif
         v7.packed = LocalTransformUnitVec(srcVert->tangent, normAxis).packed;
         verts[vertIndex].tangent = v7;
         packedBaseLighting.array[3] = ((SLODWORD(srcVert->binormalSign) >> 30) & 0xFE) + 2;
