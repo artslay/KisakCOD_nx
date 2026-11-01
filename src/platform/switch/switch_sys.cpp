@@ -3667,8 +3667,8 @@ static bool Switch_LogIsImportant(const char *msg)
          Switch_LogCounterNonZero(msg, "positionFailures=")))
         return true;
 
-    // Keep errors and warnings even when they originate in diagnostic paths.
-    // This applies to both engine messages and prefixed KisakCOD/Switch records.
+    // Keep errors and confirmed runtime anomalies from diagnostic paths.
+    // Warning-level and routine instrumentation output is filtered out.
     static constexpr const char *const kImportantTerms[] =
     {
         "error:", "error=", "error]", "[error]", "error\n",
