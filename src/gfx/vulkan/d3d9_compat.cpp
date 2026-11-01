@@ -7163,7 +7163,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             char trace[384];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK SAMPLER BIND ENTRY] seq=%u set=%u stage=%s bindPoint=%u backend=%u frame=%llu vs=%llu ps=%llu boundSlots=%u\\n",
+                "[KisakCOD][VK SAMPLER BIND ENTRY] seq=%u set=%u stage=%s bindPoint=%u backend=%u frame=%llu vs=%llu ps=%llu boundSlots=%u\n",
                 sequence, setIndex, setIndex == 0u ? "vs" : "ps",
                 static_cast<unsigned>(bindPoint), m_backend ? 1u : 0u,
                 static_cast<unsigned long long>(m_backend ? m_backend->FrameSerial() : 0u),
@@ -9834,7 +9834,7 @@ bool IDirect3DDevice9::PrepareDraw()
             char trace[352];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK PREPARE DRAW ENTRY] seq=%u backend=%u frameActive=%u frame=%llu vs=%llu ps=%llu pipelineDirty=%u\\n",
+                "[KisakCOD][VK PREPARE DRAW ENTRY] seq=%u backend=%u frameActive=%u frame=%llu vs=%llu ps=%llu pipelineDirty=%u\n",
                 sequence, m_backend ? 1u : 0u,
                 m_backend && m_backend->IsFrameActive() ? 1u : 0u,
                 static_cast<unsigned long long>(m_backend ? m_backend->FrameSerial() : 0u),
@@ -10101,7 +10101,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             char trace[448];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK DRAW INDEXED ENTRY] seq=%u self=%p prim=%u primitives=%u indices=%u minVertex=%u vertices=%u startIndex=%u indexBuffer=%p indexBytes=%u backend=%u frameActive=%u vs=%llu ps=%llu boundSlots=%u\\n",
+                "[KisakCOD][VK DRAW INDEXED ENTRY] seq=%u self=%p prim=%u primitives=%u indices=%u minVertex=%u vertices=%u startIndex=%u indexBuffer=%p indexBytes=%u backend=%u frameActive=%u vs=%llu ps=%llu boundSlots=%u\n",
                 sequence, static_cast<void *>(this), primitiveType, primitiveCount,
                 indexCount, minVertexIndex, numVertices, startIndex,
                 static_cast<void *>(m_indices), m_indices ? m_indices->size : 0u,
