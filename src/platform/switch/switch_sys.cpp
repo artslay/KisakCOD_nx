@@ -3668,6 +3668,8 @@ static bool Switch_LogIsFxDiagnostic(const char *msg)
         "[KisakCOD][FX CODEMESH SUBMIT]",
         "[KisakCOD][FX CODEMESH DRAW]",
         "[KisakCOD][FX CODEMESH SKIP]",
+        "[KisakCOD][FX GPU DRAW BEGIN]",
+        "[KisakCOD][FX GPU DRAW RECORDED]",
         "[KisakCOD][FX MODEL SUBMIT]",
         "[KisakCOD][FX MODEL LIGHT]",
         "[KisakCOD][MODEL LIGHTING]",
