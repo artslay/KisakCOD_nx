@@ -455,6 +455,14 @@ public:
     HRESULT SetPixelShaderConstantB(uint32_t,const int32_t*,uint32_t);
     HRESULT SetViewport(const D3DVIEWPORT9*);
     HRESULT SetSwitchUnlitMode(bool);
+    void SetMarkMeshPassActive(bool active)
+    {
+        if (m_markMeshPassActive != active)
+        {
+            m_markMeshPassActive = active;
+            m_pipelineDirty = true;
+        }
+    }
     HRESULT SetSamplerState(uint32_t,uint32_t,uint32_t);
     HRESULT SetScissorRect(const tagRECT*);
     HRESULT SetRenderState(uint32_t,uint32_t);
@@ -490,6 +498,7 @@ private:
     uint32_t m_samplerState[16][16]{};
     D3DVIEWPORT9 m_viewport{0,0,1280,720,0.0f,1.0f};
     bool m_switchUnlit=false;
+    bool m_markMeshPassActive=false;
     bool m_alphaToCoverage=false;
     bool m_depthEnable=true, m_depthWrite=true, m_blendEnable=false;
     uint32_t m_multisampleMask=0xffffffffu;
