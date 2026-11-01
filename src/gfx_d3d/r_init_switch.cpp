@@ -891,6 +891,10 @@ void R_InitGlobalStructs() {
     vidConfig = {};
     gfxMetrics = {};
     gfxMetrics.canMipCubemaps = true;
+    // Vulkan exposes slope-scaled depth bias in core rasterization state.
+    // Enable the renderer's normal slope+bias path instead of the D3D fallback
+    // that doubles only the constant bias when the capability is left unset.
+    gfxMetrics.slopeScaleDepthBias = true;
     g_disableRendering = 0;
 
     // The Switch-specific init must preserve the engine's identity placement.
