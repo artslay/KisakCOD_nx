@@ -11,7 +11,6 @@
 #include "r_water.h"
 #include "r_image.h"
 #ifdef __SWITCH__
-#include <qcommon/com_pack.h>
 #endif
 
 #ifdef __SWITCH__
