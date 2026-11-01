@@ -385,7 +385,7 @@ uint32_t __cdecl R_AllocModelLighting_Sphere(
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FX MODEL LIGHT] n=%u pos=(%.2f,%.2f,%.2f) radius=%.2f cache=%u handle=%u->%u patches=%u->%u result=%u primary=%u probe=%u\\n",
+            "[KisakCOD][FX MODEL LIGHT] n=%u pos=(%.2f,%.2f,%.2f) radius=%.2f cache=%u handle=%u->%u patches=%u->%u result=%u primary=%u probe=%u\n",
             traceIndex,
             lightingOrigin[0], lightingOrigin[1], lightingOrigin[2],
             radius,
