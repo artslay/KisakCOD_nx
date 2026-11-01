@@ -104,62 +104,7 @@ void __cdecl R_AddCodeMeshDrawSurf(
         Material_GetTechnique(material, gfxDrawMethod.emissiveTechType) != nullptr;
     const bool canQueueCodeMesh =
         hasEmissiveTechnique && (material->info.gameFlags & 2) == 0;
-#ifdef __SWITCH__
-    // Sample each FX definition once. A per-submission counter is exhausted by
-    // persistent ambient dust/fog long before transient weapon effects appear.
-    static std::atomic<uint32_t> fxCodeMeshTraceHashes[64]{};
-    bool traceNewFxDefinition = false;
-    uint32_t traceIndex = 64u;
-    if (fxName && *fxName)
-    {
-        uint32_t traceHash = 2166136261u;
-        for (const unsigned char *ch =
-                 reinterpret_cast<const unsigned char *>(fxName);
-             *ch; ++ch)
-        {
-            traceHash = (traceHash ^ *ch) * 16777619u;
-        }
-        if (!traceHash)
-            traceHash = 1u;
 
-        for (uint32_t slot = 0; slot < 64u; ++slot)
-        {
-            uint32_t seenHash =
-                fxCodeMeshTraceHashes[slot].load(std::memory_order_relaxed);
-            if (seenHash == traceHash)
-                break;
-            if (!seenHash)
-            {
-                uint32_t expectedHash = 0;
-                if (fxCodeMeshTraceHashes[slot].compare_exchange_strong(
-                        expectedHash, traceHash, std::memory_order_relaxed))
-                {
-                    traceIndex = slot;
-                    traceNewFxDefinition = true;
-                    break;
-                }
-                if (expectedHash == traceHash)
-                    break;
-            }
-        }
-    }
-    if (traceNewFxDefinition)
-    {
-        char trace[448];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][FX CODEMESH SUBMIT] unique=%u effect=%.96s material=%.96s sortKey=%u indices=%u emissiveTechnique=%u gameFlags=0x%x result=%s\n",
-            traceIndex,
-            fxName,
-            material->info.name ? material->info.name : "<unnamed>",
-            static_cast<unsigned>(material->info.sortKey),
-            indexCount,
-            hasEmissiveTechnique ? 1u : 0u,
-            static_cast<unsigned>(material->info.gameFlags),
-            canQueueCodeMesh ? "queued" : "rejected");
-        Switch_LogWrite(trace);
-    }
-#endif
     if (canQueueCodeMesh)
     {
         codeMeshIndex = InterlockedExchangeAdd(&frontEndDataOut->codeMeshCount, 1);
