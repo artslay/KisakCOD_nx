@@ -662,6 +662,7 @@ void __cdecl SCR_DrawScreenField(int refreshedUI)
         // UI key catcher was cleared by a transition.
         if (!uiCatcherActive &&
             !UI_IsFullscreen() &&
+            clientUIActives[0].connectionState != CA_CINEMATIC &&
             !(clientUIActives[0].connectionState == CA_DISCONNECTED &&
               uiInfo.uiDC.openMenuCount > 0))
         {
