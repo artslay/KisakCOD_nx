@@ -77,7 +77,7 @@ static void MT_RecordTreeOperation(uint32_t op, uint32_t arg0, uint32_t arg1, ui
 }
 #endif
 
-static uint32_t mtInvariantReportCount
+static uint32_t mtInvariantReportCount;
 static uint32_t mtFreeRejectTraceCount;
 
 static void MT_ReportInvariantViolation(
@@ -506,7 +506,7 @@ bool MT_Realloc(int oldNumBytes, int newNumbytes)
     return MT_GetSize(oldNumBytes) >= MT_GetSize(newNumbytes);
 }
 
-#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
 // parentKind: 0 = head[] root, 1 = MemoryNode.prev, 2 = MemoryNode.next,
 // 3 = unexpected member offset, 4 = pointer outside the memory-tree storage.
 static void MT_GetWalkParentSlot(const uint16_t *slot, uint32_t *parentKind, uint32_t *parentIndex)
@@ -566,7 +566,7 @@ void MT_RemoveHeadMemoryNode(int size)
 #endif
 
     parentNode = &scrMemTreeGlob.head[size];
-#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
     const uint32_t walkRoot = *parentNode;
 #endif
     oldNodeValue = scrMemTreeGlob.nodes[*parentNode];
@@ -579,7 +579,7 @@ void MT_RemoveHeadMemoryNode(int size)
 
     while (1)
     {
-#if defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
+#if defined(KISAK_SWITCH) && defined(KISAK_SWITCH_MEMORY_TREE_TRACE)
         uint32_t parentKind;
         uint32_t parentIndex;
         MT_GetWalkParentSlot(parentNode, &parentKind, &parentIndex);
