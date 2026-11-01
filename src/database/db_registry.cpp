@@ -1521,7 +1521,13 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
 
 bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
 {
+#ifdef __SWITCH__
+    g_switchDbStage = "asset/is_default/hash";
+#endif
     const uint32_t hash = DB_HashForName(name, type);
+#ifdef __SWITCH__
+    g_switchDbStage = "asset/is_default/lock";
+#endif
     InterlockedIncrement(&db_hashCritSect.readCount);
     while (db_hashCritSect.writeCount)
         std::this_thread::yield();
@@ -1532,6 +1538,9 @@ bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
     // On a corrupt chain, prefer using the already-resolved asset rather than
     // classifying it as a default asset and silently skipping registration.
     uint32_t guard = 0;
+#endif
+#ifdef __SWITCH__
+    g_switchDbStage = "asset/is_default/read_bucket";
 #endif
     for (uint32_t assetEntryIndex = db_hashTable[hash];
          assetEntryIndex;
@@ -1556,8 +1565,12 @@ bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
         XAssetEntryPoolEntry *assetEntry = &g_assetEntryPool[assetEntryIndex];
         if (assetEntry->entry.asset.type == type)
         {
+#ifdef __SWITCH__
+            g_switchDbStage = "asset/is_default/get_name";
+#endif
             const char *assetName = DB_GetXAssetName(&assetEntry->entry.asset);
 #ifdef __SWITCH__
+            g_switchDbStage = "asset/is_default/compare_name";
             if (assetName && Switch_IstricmpAssetName(assetName, name) == 0)
 #else
             if (assetName && !I_stricmp(assetName, name))
@@ -1574,9 +1587,15 @@ bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
                 }
             }
         }
+#ifdef __SWITCH__
+        g_switchDbStage = "asset/is_default/advance";
+#endif
     }
 
     InterlockedDecrement(&db_hashCritSect.readCount);
+#ifdef __SWITCH__
+    g_switchDbStage = "asset/is_default/return_default";
+#endif
     return true;
 }
 
