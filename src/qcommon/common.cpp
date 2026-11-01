@@ -46,12 +46,15 @@
 #endif
 
 #include <setjmp.h>
+#ifdef __SWITCH__
+#include <atomic>
+#endif
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern void Switch_LogWriteError(const char *msg);
 extern void Switch_LogWriteInit(const char *msg);
-static bool g_switchInitializationLogActive = false;
+static std::atomic<bool> g_switchInitializationLogActive{false};
 thread_local const char * volatile g_switchFrameStage = "frame/idle";
 #endif
 
@@ -195,7 +198,7 @@ void QDECL Com_PrintMessage(int channel, const char* msg, int error)
         Switch_LogWriteError(msg);
     else if (error != 2)
     {
-        if (g_switchInitializationLogActive)
+        if (g_switchInitializationLogActive.load(std::memory_order_relaxed))
             Switch_LogWriteInit(msg);
         else
             Switch_LogWrite(msg);
@@ -1104,7 +1107,7 @@ void __cdecl Com_Init(char* commandLine)
 #ifdef __SWITCH__
     // Keep engine, renderer, filesystem, fastfile and sound initialization
     // visible until the complete Com_Init sequence has finished.
-    g_switchInitializationLogActive = true;
+    g_switchInitializationLogActive.store(true, std::memory_order_relaxed);
 #endif
     jmp_buf* Value; // eax
     jmp_buf * v3; // eax
@@ -1142,7 +1145,7 @@ void __cdecl Com_Init(char* commandLine)
         }
     }
 #ifdef __SWITCH__
-    g_switchInitializationLogActive = false;
+    g_switchInitializationLogActive.store(false, std::memory_order_relaxed);
 #endif
 }
 
