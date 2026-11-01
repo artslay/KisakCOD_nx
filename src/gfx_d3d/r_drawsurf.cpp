@@ -20,11 +20,6 @@ extern void Switch_LogWrite(const char *msg);
 
 static bool g_processCodeMesh;
 static bool g_processMarkMesh;
-#ifdef __SWITCH__
-// Code-mesh vertex data keeps the native D3D9 UBYTE4 representation. The
-// packed FX TEXCOORD0 bytes are decoded by the original vertex shader path.
-#endif
-
 char __cdecl R_ReserveCodeMeshIndices(int indexCount, r_double_index_t** indicesOut)
 {
     iassert( g_processCodeMesh );
