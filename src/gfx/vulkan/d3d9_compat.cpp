@@ -11353,6 +11353,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             indexCount, startIndex, baseVertexIndex);
         Switch_LogWrite(trace);
     }
+#endif
     g_switchGpuDrawCommandSerial.fetch_add(1, std::memory_order_relaxed);
     if (Switch_IsVkGpuDrawTraceEnabled())
         LogGpuDrawCommand("indexed", primitiveType, primitiveCount,
