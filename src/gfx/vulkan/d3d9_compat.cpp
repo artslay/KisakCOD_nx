@@ -7694,11 +7694,15 @@ bool IDirect3DDevice9::BindSamplerSet(
         uint32_t activeSamplerCount = 0;
         for (uint32_t i = 0; i < 16u; ++i)
         {
+            if (activeSamplers[i])
+                ++activeSamplerCount;
+        }
+        for (uint32_t i = 0; i < 16u; ++i)
+        {
             const MOJOSHADER_sampler *sampler = activeSamplers[i];
             if (!sampler)
                 continue;
 
-            ++activeSamplerCount;
             const KisakVkTexture *texture = textures[i];
             bool alreadyLogged = false;
             for (uint32_t entryIndex = 0; entryIndex < loggedEntryCount; ++entryIndex)
