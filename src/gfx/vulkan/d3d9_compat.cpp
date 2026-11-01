@@ -8309,7 +8309,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                     char trace[320];
                     std::snprintf(
                         trace, sizeof(trace),
-                        "[KisakCOD][VK MODEL UV INPUT] n=%u declSerial=%llu declType=%u stride=%u offset=%u declaredType=%u effectiveType=%u\\n",
+                        "[KisakCOD][VK MODEL UV INPUT] n=%u declSerial=%llu declType=%u stride=%u offset=%u declaredType=%u effectiveType=%u\n",
                         sequence,
                         static_cast<unsigned long long>(m_decl->serial),
                         static_cast<unsigned>(m_decl->switchVertDeclType),
@@ -10287,7 +10287,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
             char trace[1024];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX GPU DRAW BEGIN] n=%u sample=%u material=%.80s prim=%u primitives=%u indices=%u baseVertex=%d minVertex=%u vertices=%u start=%u stride=%u declType=%u vs=%llu ps=%llu texMask=0x%04x depth=%u/%u/%u blend=%u/%u/%u cull=%u alpha=%u/%u/%u colorMask=0x%x scissor=%u viewport=%u,%u %ux%u\\n",
+                "[KisakCOD][FX GPU DRAW BEGIN] n=%u sample=%u material=%.80s prim=%u primitives=%u indices=%u baseVertex=%d minVertex=%u vertices=%u start=%u stride=%u declType=%u vs=%llu ps=%llu texMask=0x%04x depth=%u/%u/%u blend=%u/%u/%u cull=%u alpha=%u/%u/%u colorMask=0x%x scissor=%u viewport=%u,%u %ux%u\n",
                 switchFxDrawTraceSequence, switchFxDrawTraceSample,
                 materialName,
                 primitiveType, primitiveCount, indexCount, baseVertexIndex,
@@ -11343,7 +11343,7 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
         char trace[512];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FX GPU DRAW RECORDED] n=%u sample=%u material=%.80s pipeline=%016llx texMask=0x%04x indexBuffer=%p vertexBuffer=%p indexCount=%u start=%u baseVertex=%d\\n",
+            "[KisakCOD][FX GPU DRAW RECORDED] n=%u sample=%u material=%.80s pipeline=%016llx texMask=0x%04x indexBuffer=%p vertexBuffer=%p indexCount=%u start=%u baseVertex=%d\n",
             switchFxDrawTraceSequence, switchFxDrawTraceSample,
             g_switchFxCodeMeshMaterialName ? g_switchFxCodeMeshMaterialName : "<unknown>",
             static_cast<unsigned long long>(g_switchLastBoundPipelineKey.load(std::memory_order_relaxed)),
