@@ -3587,7 +3587,14 @@ static bool Switch_LogIsStartupMessage(const char *msg)
     static constexpr const char *const kStartupPrefixes[] =
     {
         "[KisakCOD][RUST TLS]",
-        "[KisakCOD][BOOT]"
+        "[KisakCOD][BOOT]",
+        "[KisakCOD][RUST TLS]",
+        "[KisakCOD][LOG]",
+        "[KisakCOD][WATCHDOG]",
+        "[KisakCOD][VK]",
+        "[KisakCOD][DB LOAD]",
+        "[KisakCOD][ZONE LOAD]",
+        "[KisakCOD][IWI ROOT] index ready"
     };
     for (const char *prefix : kStartupPrefixes)
     {
@@ -3599,8 +3606,8 @@ static bool Switch_LogIsStartupMessage(const char *msg)
     // engine error or a Kisak diagnostic.
     return std::strncmp(
         msg,
-        "========================================\\nKisakCOD Switch engine log",
-        sizeof("========================================\\nKisakCOD Switch engine log") - 1u) == 0;
+        "========================================\nKisakCOD Switch engine log",
+        sizeof("========================================\nKisakCOD Switch engine log") - 1u) == 0;
 }
 
 static bool Switch_LogIsVerboseTrace(const char *msg)
