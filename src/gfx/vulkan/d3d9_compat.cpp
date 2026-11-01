@@ -37,6 +37,7 @@
 
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
+extern thread_local bool g_switchFxCodeMeshDrawActive;
 extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern "C" bool Switch_IsPostCinematicRenderTraceActive(void);
 extern "C" void Switch_LogPostCinematicRenderTrace(const char *phase, const char *detail);
@@ -1446,6 +1447,18 @@ uint8_t SwitchEffectiveShaderElementType(
     const _D3DVERTEXELEMENT9 &element,
     uint32_t streamStride = 0)
 {
+    // FX code meshes share the 32-byte GfxPackedVertex storage with XModels,
+    // but their TEXCOORD0 bytes were converted to IEEE half2 by
+    // R_EndCodeMeshVerts. Use the matching Vulkan format only while the FX
+    // code-mesh draw scope is active; normal XModel UVs remain UBYTE4.
+    if (g_switchFxCodeMeshDrawActive &&
+        element.Stream == 0 &&
+        streamStride == sizeof(GfxPackedVertex) &&
+        element.Offset == 20u &&
+        element.Usage == 5u &&
+        element.UsageIndex == 0u)
+        return D3DDECLTYPE_FLOAT16_2;
+
     // GfxPackedVertex and GfxWorldVertex both begin with xyz at byte 0 and
     // binormalSign at byte 12. Their D3D declaration is a legacy semantic route;
     // it may label POSITION as FLOAT4 even though the fourth physical component
