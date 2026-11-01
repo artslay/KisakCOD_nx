@@ -362,12 +362,44 @@ uint32_t __cdecl R_AllocModelLighting_Sphere(
     sphereWork.origin[2] = origin[2];
     sphereWork.radius = radius;
 
-    return R_AllocModelLighting(
+#ifdef __SWITCH__
+    static volatile uint32_t switchFxSphereLightingTraceCount = 0;
+    const uint32_t traceIndex =
+        __sync_fetch_and_add(&switchFxSphereLightingTraceCount, 1u);
+    const uint32_t patchesBefore =
+        frontEndDataOut ? frontEndDataOut->modelLightingPatchCount : 0u;
+    const uint16_t cachedHandleBefore =
+        cachedLightingHandle ? *cachedLightingHandle : 0u;
+#endif
+    const uint32_t result = R_AllocModelLighting(
         lightingOrigin,
         cachedLightingHandle,
         R_GetPrimaryLightForSphereCallback,
         &sphereWork,
         lightingInfoOut);
+#ifdef __SWITCH__
+    if (traceIndex < 32u)
+    {
+        const uint32_t patchesAfter =
+            frontEndDataOut ? frontEndDataOut->modelLightingPatchCount : 0u;
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX MODEL LIGHT] n=%u pos=(%.2f,%.2f,%.2f) radius=%.2f cache=%u handle=%u->%u patches=%u->%u result=%u primary=%u probe=%u\\n",
+            traceIndex,
+            lightingOrigin[0], lightingOrigin[1], lightingOrigin[2],
+            radius,
+            r_cacheModelLighting && r_cacheModelLighting->current.enabled ? 1u : 0u,
+            static_cast<unsigned>(cachedHandleBefore),
+            static_cast<unsigned>(cachedLightingHandle ? *cachedLightingHandle : 0u),
+            patchesBefore, patchesAfter,
+            result,
+            result ? static_cast<unsigned>(lightingInfoOut->primaryLightIndex) : 0u,
+            result ? static_cast<unsigned>(lightingInfoOut->reflectionProbeIndex) : 0u);
+        Switch_LogWrite(trace);
+    }
+#endif
+    return result;
 }
 
 uint32_t __cdecl R_GetPrimaryLightForSphereCallback(const void *userData)
