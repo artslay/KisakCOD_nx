@@ -1269,6 +1269,32 @@ VkBlendFactor BlendFactor(uint32_t value)
     }
 }
 
+// D3D9's legacy BOTH* source blend modes describe a source/destination
+// pair, not independent Vulkan factors. BOTH_SRC_ALPHA is equivalent to
+// SRC_ALPHA + INV_SRC_ALPHA; BOTH_INV_SRC_ALPHA also overrides DESTBLEND.
+void ResolveBlendFactors(
+    uint32_t sourceValue,
+    uint32_t destinationValue,
+    VkBlendFactor &sourceFactor,
+    VkBlendFactor &destinationFactor)
+{
+    switch (sourceValue)
+    {
+    case 12: // D3DBLEND_BOTHSRCALPHA
+        sourceFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        destinationFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        return;
+    case 13: // D3DBLEND_BOTHINVSRCALPHA
+        sourceFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        destinationFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        return;
+    default:
+        sourceFactor = BlendFactor(sourceValue);
+        destinationFactor = BlendFactor(destinationValue);
+        return;
+    }
+}
+
 VkBlendOp BlendOp(uint32_t value)
 {
     switch (value)
@@ -9349,13 +9375,18 @@ bool IDirect3DDevice9::EnsurePipeline()
     VkPipelineColorBlendAttachmentState colorBlend{};
     colorBlend.blendEnable =
         (m_blendEnable && !switchFragmentOutputProbeActive) ? VK_TRUE : VK_FALSE;
-    colorBlend.srcColorBlendFactor = BlendFactor(m_srcBlend);
-    colorBlend.dstColorBlendFactor = BlendFactor(m_dstBlend);
+    ResolveBlendFactors(
+        m_srcBlend, m_dstBlend,
+        colorBlend.srcColorBlendFactor, colorBlend.dstColorBlendFactor);
     colorBlend.colorBlendOp = BlendOp(m_blendOp);
-    colorBlend.srcAlphaBlendFactor = BlendFactor(
-        m_separateAlphaBlend ? m_srcBlendAlpha : m_srcBlend);
-    colorBlend.dstAlphaBlendFactor = BlendFactor(
-        m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend);
+
+    const uint32_t srcAlphaBlend =
+        m_separateAlphaBlend ? m_srcBlendAlpha : m_srcBlend;
+    const uint32_t dstAlphaBlend =
+        m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend;
+    ResolveBlendFactors(
+        srcAlphaBlend, dstAlphaBlend,
+        colorBlend.srcAlphaBlendFactor, colorBlend.dstAlphaBlendFactor);
     colorBlend.alphaBlendOp = BlendOp(
         m_separateAlphaBlend ? m_blendOpAlpha : m_blendOp);
     colorBlend.colorWriteMask = switchFragmentOutputProbeActive
