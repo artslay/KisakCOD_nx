@@ -9279,6 +9279,8 @@ bool IDirect3DDevice9::EnsurePipeline()
     viewport.viewportCount = 1;
     viewport.scissorCount = 1;
 
+    const bool markMeshPassActive =
+        m_markMeshPassActive && !switchFragmentOutputProbeActive;
     VkPipelineRasterizationStateCreateInfo raster{};
     raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     raster.polygonMode = m_fillMode == D3DFILL_WIREFRAME
@@ -9375,8 +9377,6 @@ bool IDirect3DDevice9::EnsurePipeline()
     // Fragment-output probes are diagnostic: let target surfaces reach the
     // fragment shader even if depth/stencil contents or earlier geometry are
     // wrong. Otherwise black output remains ambiguous. Normal rendering is unchanged.
-    const bool markMeshPassActive =
-        m_markMeshPassActive && !switchFragmentOutputProbeActive;
     const bool effectiveDepthTest =
         !switchFragmentOutputProbeActive && m_depthEnable && !m_switchUnlit;
     // Impact marks are decals on existing geometry: they must test against the
