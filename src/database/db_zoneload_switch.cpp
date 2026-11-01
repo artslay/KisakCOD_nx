@@ -81,7 +81,7 @@ struct ZoneLoadState
     uint32_t imageNamesInvalid = 0;
     // Per-zone load/registration coverage; these counts avoid global startup
     // assets consuming the diagnostic budget for later fastfiles.
-    uint32_t imageLoadTraceCount = 0;
+
 };
 
 struct ZoneHandle
@@ -251,86 +251,12 @@ void LoadImageData(void *context, void *loadDef, void *imagePointer)
         const bool wasDelayed = image->delayLoadPixels;
         image->delayLoadPixels = true;
 
-        static uint32_t deferredIwiTraceCount = 0;
-        if (deferredIwiTraceCount < 48u)
-        {
-            char trace[320];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][IWI DEFER OAT] n=%u image=%p namePtr=%p category=%u delayBefore=%u size=%u dims=%ux%ux%u format=%d\n",
-                deferredIwiTraceCount++,
-                static_cast<void *>(image),
-                static_cast<const void *>(image->name),
-                static_cast<unsigned>(image->category),
-                wasDelayed ? 1u : 0u,
-                loadDefHeader->resourceSize,
-                static_cast<unsigned>(loadDefHeader->dimensions[0]),
-                static_cast<unsigned>(loadDefHeader->dimensions[1]),
-                static_cast<unsigned>(loadDefHeader->dimensions[2]),
-                loadDefHeader->format);
-            Switch_LogWrite(trace);
-        }
-    }
 
-#ifdef __SWITCH__
-    // The earlier trace filtered by killhouse/track 8-9 and could miss images
-    // loaded in common or assets whose track differs at upload time. Record all
-    // inline load-hook calls, independently per fastfile.
-    const uint32_t traceIndex =
-        state && state->imageLoadTraceCount < 160u
-            ? state->imageLoadTraceCount++ : UINT32_MAX;
-    if (traceIndex != UINT32_MAX)
-    {
-        char trace[448];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][GFXIMAGE LOAD DATA] zone=%s n=%u image=%p namePtr=%p track=%u category=%u semantic=%u mapType=%u dims=%ux%ux%u delayBefore=%u cardBefore=%d loadDef=%p resourceSize=%u levels=%u loadDims=%ux%ux%u format=%d\n",
-            state->zoneName ? state->zoneName : "<null>",
-            traceIndex, static_cast<void *>(image),
-            image ? static_cast<const void *>(image->name) : nullptr,
-            image ? static_cast<unsigned>(image->track) : 0u,
-            image ? static_cast<unsigned>(image->category) : 0u,
-            image ? static_cast<unsigned>(image->semantic) : 0u,
-            image ? static_cast<unsigned>(image->mapType) : 0u,
-            image ? static_cast<unsigned>(image->width) : 0u,
-            image ? static_cast<unsigned>(image->height) : 0u,
-            image ? static_cast<unsigned>(image->depth) : 0u,
-            image && image->delayLoadPixels ? 1u : 0u,
-            image ? image->cardMemory.platform[0] : 0,
-            loadDef,
-            loadDefHeader ? loadDefHeader->resourceSize : 0u,
-            loadDefHeader ? static_cast<unsigned>(loadDefHeader->levelCount) : 0u,
-            loadDefHeader ? static_cast<unsigned>(loadDefHeader->dimensions[0]) : 0u,
-            loadDefHeader ? static_cast<unsigned>(loadDefHeader->dimensions[1]) : 0u,
-            loadDefHeader ? static_cast<unsigned>(loadDefHeader->dimensions[2]) : 0u,
-            loadDefHeader ? loadDefHeader->format : -1);
-        Switch_LogWrite(trace);
     }
-#endif
 
     Load_Texture(&image->texture, image);
 
-#ifdef __SWITCH__
-    if (traceIndex != UINT32_MAX)
-    {
-        char trace[320];
-        std::snprintf(
-            trace, sizeof(trace),
-            "[KisakCOD][GFXIMAGE LOAD RESULT] zone=%s n=%u image=%p track=%u category=%u basemap=%p delayAfter=%u cardAfter=%d dims=%ux%ux%u\n",
-            state->zoneName ? state->zoneName : "<null>",
-            traceIndex, static_cast<void *>(image),
-            static_cast<unsigned>(image->track),
-            static_cast<unsigned>(image->category),
-            static_cast<void *>(image->texture.basemap),
-            image->delayLoadPixels ? 1u : 0u,
-            image->cardMemory.platform[0],
-            static_cast<unsigned>(image->width),
-            static_cast<unsigned>(image->height),
-            static_cast<unsigned>(image->depth));
-        Switch_LogWrite(trace);
-    }
-#endif
+
 }
 void SetSoundData(void *context, void *soundPointer)
 {
