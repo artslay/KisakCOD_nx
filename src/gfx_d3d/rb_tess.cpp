@@ -36,6 +36,7 @@ extern void Switch_SetModelTransformTraceContext(
 // buffer. Its UV words are converted to IEEE half2 before unlock; distinguish
 // this draw from XModel draws that share the same 32-byte vertex stride.
 thread_local bool g_switchFxCodeMeshDrawActive = false;
+thread_local const char *g_switchFxCodeMeshMaterialName = nullptr;
 
 namespace
 {
@@ -43,18 +44,22 @@ class SwitchFxCodeMeshDrawScope
 {
 public:
     SwitchFxCodeMeshDrawScope()
-        : m_previous(g_switchFxCodeMeshDrawActive)
+        : m_previous(g_switchFxCodeMeshDrawActive),
+          m_previousMaterialName(g_switchFxCodeMeshMaterialName)
     {
         g_switchFxCodeMeshDrawActive = true;
+        g_switchFxCodeMeshMaterialName = nullptr;
     }
 
     ~SwitchFxCodeMeshDrawScope()
     {
         g_switchFxCodeMeshDrawActive = m_previous;
+        g_switchFxCodeMeshMaterialName = m_previousMaterialName;
     }
 
 private:
     bool m_previous;
+    const char *m_previousMaterialName;
 };
 }
 #endif
@@ -162,6 +167,11 @@ uint32_t __cdecl R_TessCodeMeshList(const GfxDrawSurfListArgs *listArgs, GfxCmdB
     PROF_SCOPED("TessCodeMesh");
 
     context = listArgs->context;
+#ifdef __SWITCH__
+    g_switchFxCodeMeshMaterialName =
+        context.state && context.state->material
+            ? context.state->material->info.name : nullptr;
+#endif
     info = listArgs->info;
     drawSurfCount = info->drawSurfCount - listArgs->firstDrawSurfIndex;
     drawSurfList = &info->drawSurfs[listArgs->firstDrawSurfIndex];
