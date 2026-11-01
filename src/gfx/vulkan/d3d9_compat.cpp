@@ -3028,7 +3028,6 @@ bool PatchFragmentShaderToOutputS0AtUv(
     for (const size_t storeOffset : outputStoreOffsets)
     {
         words[storeOffset + 2u] = sampleId;
-        ++outputStoresPatched;
     }
 
     // Apply control-flow edits from the end of the module so inserting the
@@ -11436,5 +11435,4 @@ HRESULT IDirect3DDevice9::Clear(
     ++g_switchSceneClearCalls;
     return S_OK;
 }
-#endif
 #endif
