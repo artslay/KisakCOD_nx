@@ -49,6 +49,9 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
+#ifdef __SWITCH__
+extern void Switch_LogWriteError(const char *msg);
+#endif
 thread_local const char * volatile g_switchFrameStage = "frame/idle";
 #endif
 
@@ -186,11 +189,15 @@ void QDECL Com_PrintMessage(int channel, const char* msg, int error)
     // original message before channel filtering, color-code stripping, or
     // platform console handling so diagnostics are not silently discarded.
 #ifdef __SWITCH__
-    Switch_LogWrite(msg);
-#endif
-
-    // always print to stdout console
+    // Com_PrintError supplies severity 3. Preserve all script and engine errors
+    // even when the message text itself does not contain an error keyword.
+    if (error >= 3)
+        Switch_LogWriteError(msg);
+    else
+        Switch_LogWrite(msg);
+#else
     fprintf(stderr, "%s", msg);
+#endif
 
 	if (rd_buffer)
 	{
