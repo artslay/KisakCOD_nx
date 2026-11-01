@@ -193,7 +193,7 @@ void QDECL Com_PrintMessage(int channel, const char* msg, int error)
     // even when the message text itself does not contain an error keyword.
     if (error >= 3)
         Switch_LogWriteError(msg);
-    else
+    else if (error != 2)
         Switch_LogWrite(msg);
 #else
     fprintf(stderr, "%s", msg);
