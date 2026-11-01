@@ -59,33 +59,31 @@ static bool Released(u64 mask)
     return !IsDown(g_buttons, mask) && IsDown(g_previousButtons, mask);
 }
 
+// Track which physical controller buttons are currently holding each
+// synthetic engine key. This preserves proper down/up pairing when gameplay
+// becomes blocked while a button is held, and when two sources share a key.
+static u64 g_forwardedKeyButtons[256] = {};
+
 static void SendKeyEdge(u64 mask, int key, bool allowDown = true)
 {
-    if (Pressed(mask))
-    {
-        if (allowDown)
-            CL_KeyEvent(0, key, 1, Sys_Milliseconds());
-    }
-    else if (Released(mask))
-    {
-        CL_KeyEvent(0, key, 0, Sys_Milliseconds());
-    }
-}
+    if (key < 0 || key >= 256)
+        return;
 
-static void SendActionEdge(
-    u64 mask,
-    void (*down)(),
-    void (*up)(),
-    bool allowDown)
-{
+    u64 &forwardedButtons = g_forwardedKeyButtons[key];
     if (Pressed(mask))
     {
-        if (allowDown)
-            down();
+        if (allowDown && (forwardedButtons & mask) == 0)
+        {
+            if (forwardedButtons == 0)
+                CL_KeyEvent(0, key, 1, Sys_Milliseconds());
+            forwardedButtons |= mask;
+        }
     }
-    else if (Released(mask))
+    else if (Released(mask) && (forwardedButtons & mask) != 0)
     {
-        up();
+        forwardedButtons &= ~mask;
+        if (forwardedButtons == 0)
+            CL_KeyEvent(0, key, 0, Sys_Milliseconds());
     }
 }
 
@@ -196,6 +194,7 @@ void Switch_GamepadInit()
     padInitializeDefault(&g_pad);
     g_buttons = 0;
     g_previousButtons = 0;
+    std::fill_n(g_forwardedKeyButtons, 256, 0);
     g_leftStick = {};
     g_rightStick = {};
     g_connected = false;
@@ -391,48 +390,42 @@ void Switch_GamepadFrame()
     // The XBox/PS3 SP control model already exists in cl_input.cpp.
     // X sends the normal R key event so the stock +reload binding and any
     // level-script checks for the R key see the same press/release as a keyboard.
-    SendActionEdge(HidNpadButton_A, IN_UpDown, IN_UpUp, gameplayActive);
-    SendActionEdge(HidNpadButton_B, IN_Stance_Down, IN_Stance_Up, gameplayActive);
+    // Gameplay actions are synthetic AUX key events, not direct calls to
+    // IN_* handlers. CL_KeyEvent resolves the configured binding and executes
+    // the ordinary +command/-command pair with the correct key number.
+    SendKeyEdge(HidNpadButton_A, K_AUX1, gameplayActive);
+    SendKeyEdge(HidNpadButton_B, K_AUX2, gameplayActive);
     SendKeyEdge(HidNpadButton_X, 'r', gameplayActive);
-    // The trigger must act like the real left mouse button, not only call
-    // the attack helper. A K_MOUSE1 event runs the normal key binding and lets
-    // scripts/UI code observe the same press and release as a physical click.
+    // The trigger must act like the real left mouse button. A K_MOUSE1 event
+    // runs the normal attack binding and lets scripts observe the click.
     SendKeyEdge(HidNpadButton_ZR, K_MOUSE1, gameplayActive);
-    SendActionEdge(HidNpadButton_ZL, IN_SpeedDown, IN_SpeedUp, gameplayActive);
-    SendActionEdge(HidNpadButton_R, IN_Frag_Down, IN_Frag_Up, gameplayActive);
-    SendActionEdge(HidNpadButton_L, IN_Smoke_Down, IN_Smoke_Up, gameplayActive);
-    SendActionEdge(HidNpadButton_StickL, IN_SprintDown, IN_SprintUp,
-                   gameplayActive && !g_consoleShortcutConsumed);
-    SendActionEdge(HidNpadButton_StickR, IN_Melee_Down, IN_Melee_Up,
-                   gameplayActive && !g_consoleShortcutConsumed);
+    SendKeyEdge(HidNpadButton_ZL, K_AUX3, gameplayActive);
+    SendKeyEdge(HidNpadButton_R, K_AUX4, gameplayActive);
+    SendKeyEdge(HidNpadButton_L, K_AUX5, gameplayActive);
+    SendKeyEdge(HidNpadButton_StickL, K_AUX6,
+                gameplayActive && !g_consoleShortcutConsumed);
+    SendKeyEdge(HidNpadButton_StickR, K_AUX7,
+                gameplayActive && !g_consoleShortcutConsumed);
 
     // Y is mapped to the normal F key for use/pickup. Send both edges
     // through the standard key path so the stock +activate binding runs.
     SendKeyEdge(HidNpadButton_Y, 'f', gameplayActive);
 
-    // D-pad weapon cycling must not depend on MWHEELUP/MWHEELDOWN being
-    // bound in a user config. Dispatch the game's normal weapon-cycle handlers
-    // directly on the press edge; the handlers still enforce gameplay state.
-    if (gameplayActive)
-    {
-        if (Pressed(HidNpadButton_Left))
-            CG_PrevWeapon_f();
-        if (Pressed(HidNpadButton_Right))
-            CG_NextWeapon_f();
-    }
-
-    // D-pad up is night vision during gameplay.
-    if (gameplayActive)
-    {
-        if (Pressed(HidNpadButton_Up))
-            IN_NightVisionDown();
-        else if (Released(HidNpadButton_Up))
-            IN_NightVisionUp();
-    }
+    // Weapon cycling and night vision also use normal engine key bindings.
+    SendKeyEdge(HidNpadButton_Left, K_AUX9, gameplayActive);
+    SendKeyEdge(HidNpadButton_Right, K_AUX10, gameplayActive);
+    SendKeyEdge(HidNpadButton_Up, K_AUX8, gameplayActive);
 }
 
 void Switch_GamepadShutdown()
 {
+    for (int key = 0; key < 256; ++key)
+    {
+        if (g_forwardedKeyButtons[key] != 0)
+            CL_KeyEvent(0, key, 0, Sys_Milliseconds());
+        g_forwardedKeyButtons[key] = 0;
+    }
+
     g_initialized = false;
     g_connected = false;
     g_cinematicSkipKeyDown = false;
