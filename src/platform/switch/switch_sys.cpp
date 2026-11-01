@@ -3724,17 +3724,6 @@ static bool Switch_LogKeepKisakDiagnostic(const char *msg)
         "[KisakCOD][DB LOAD]",
         "[KisakCOD][ZONE LOAD]",
         "[KisakCOD][IWI ROOT] index ready",
-        // Keep the bounded renderer probes needed to diagnose missing model
-        // lighting and Vulkan sampler fallbacks. Per-call caps remain in the
-        // emitting sites, so these do not turn the normal log into a draw dump.
-        "[KisakCOD][MODEL LIGHTING]",
-        "[KisakCOD][VK SAMPLER BIND ENTRY]",
-        "[KisakCOD][VK ACTIVE SAMPLER FAIL]",
-        "[KisakCOD][VK ACTIVE SAMPLER FALLBACK]",
-        "[KisakCOD][VK SAMPLER FALLBACK]",
-        "[KisakCOD][VK SAMPLER DESCRIPTOR]",
-        "[KisakCOD][LIT SAMPLER SOURCE]",
-        "[KisakCOD][LIT SAMPLER DESCRIPTOR]",
         "[KisakCOD][AI SPAWN]",
         "[KisakCOD][AI STATE]",
         "[KisakCOD][AI DEATH]",
