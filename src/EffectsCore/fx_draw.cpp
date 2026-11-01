@@ -991,7 +991,7 @@ void __cdecl FX_DrawElem_Model(FxDrawState *draw)
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX MODEL SUBMIT] n=%u effect=%.88s model=%.88s scale=%.3f handle=%u origin=(%.2f,%.2f,%.2f)\\n",
+                "[KisakCOD][FX MODEL SUBMIT] n=%u effect=%.88s model=%.88s scale=%.3f handle=%u origin=(%.2f,%.2f,%.2f)\n",
                 traceIndex,
                 draw->effect && draw->effect->def && draw->effect->def->name
                     ? draw->effect->def->name : "<unknown>",
