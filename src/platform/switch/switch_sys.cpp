@@ -3655,6 +3655,29 @@ static bool Switch_LogIsVerboseTrace(const char *msg)
     return false;
 }
 
+// Keep the bounded FX diagnostics needed to distinguish missing FX generation,
+// model-lighting failures, and incorrect near-camera frustum culling. These call
+// sites already cap their own output; do not enable general per-frame tracing.
+static bool Switch_LogIsFxDiagnostic(const char *msg)
+{
+    if (!msg || !*msg)
+        return false;
+
+    static constexpr const char *const kFxDiagnosticPrefixes[] =
+    {
+        "[KisakCOD][FX CODEMESH SUBMIT]",
+        "[KisakCOD][MODEL LIGHTING]",
+        "[KisakCOD][FX NEAR CULL]",
+        "[KisakCOD][FX FRUSTUM]"
+    };
+    for (const char *prefix : kFxDiagnosticPrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool Switch_LogIsImportant(const char *msg)
 {
     if (!msg || !*msg)
@@ -3704,6 +3727,7 @@ void Switch_LogWrite(const char *msg)
     // and per-frame/per-draw diagnostics are discarded before any I/O.
     if (!msg || !*msg ||
         (!Switch_LogIsImportant(msg) &&
+         !Switch_LogIsFxDiagnostic(msg) &&
          !Switch_LogIsStartupMessage(msg) &&
          !Switch_LogIsLevelLoadMessage(msg)))
         return;
