@@ -242,7 +242,7 @@ void __cdecl R_GetSceneExtentsAlongDir(const float *origin, const float *forward
     nearPlane.coeffs[1] = forward[1];
     nearPlane.coeffs[2] = forward[2];
 
-    nearPlane.coeffs[3] = -Vec3Dot(origin, forward);
+    nearPlane.coeffs[3] = -origin[2];
 
     R_SetDpvsPlaneSides(&nearPlane);
 
