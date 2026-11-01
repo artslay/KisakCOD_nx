@@ -3648,6 +3648,9 @@ static bool Switch_LogIsRoutineNoise(const char *msg)
 
 static bool Switch_LogIsImportant(const char *msg)
 {
+    if (!msg || !*msg)
+        return false;
+
     // Keep genuine asset lookup misses. Without this exception, the central
     // Kisak diagnostic filter would drop "found=0" because it is not phrased as
     // an error, making missing model/texture resources hard to diagnose.
@@ -3669,11 +3672,12 @@ static bool Switch_LogIsImportant(const char *msg)
     static constexpr const char *const kImportantTerms[] =
     {
         "error:", "error=", "error]", "[error]", "error\n",
-        "failed", "fail=", "fail:", "failure:", "failure=", "fatal", "warning:", "[warning]", " warning ", "warn:",
+        "failed", "fail=", "fail:", "failure:", "failure=", "fatal",
         "assert", "mismatch", "timeout", "timed out", "crash", "corrupt",
+        "fault", "invariant", "anomaly", "rejected", "free reject",
         "out of memory", "out-of-memory", "not found", "missing", "invalid",
         "unsupported", "null pointer", "overflow", "underflow", "panic",
-        "stalled", "deadlock", "aborted", "device lost", "vk_error_",
+        "stalled", "no-progress", "deadlock", "aborted", "device lost", "vk_error_",
         "pipeline_fail", "imagefail", "unable to", "could not", "couldn't"
     };
 
@@ -3760,41 +3764,17 @@ static bool Switch_LogKeepKisakDiagnostic(const char *msg)
 
 void Switch_LogWrite(const char *msg)
 {
-    if (!msg || !*msg)
+    // The normal Switch log is intentionally error-only. Routine engine output
+    // and per-frame/per-draw diagnostics are discarded before any I/O.
+    if (!msg || !*msg || !Switch_LogIsImportant(msg))
         return;
 
-    if (!Switch_LogIsImportant(msg) && Switch_LogIsRoutineNoise(msg))
-        return;
-
-    const bool isKisakDiag =
-        std::strncmp(msg, "[KisakCOD]", 10) == 0;
-    const bool isSwitchDiag =
-        std::strncmp(msg, "[SWITCH ", 8) == 0;
-
-    // Preserve ordinary engine output verbatim. Kisak's detailed probes are
-    // filtered centrally so new instrumentation cannot silently flood SD logs.
-    if (isKisakDiag && !Switch_LogKeepKisakDiagnostic(msg))
-        return;
-
-    // Keep Switch-specific diagnostics only when they identify a real anomaly
-    // or a severity-level failure. This also preserves new error prefixes
-    // without requiring every new diagnostic to be added to a static allowlist.
-    if (isSwitchDiag &&
-        !Switch_LogPrefixAllowed(msg) &&
-        !Switch_LogIsImportant(msg))
-        return;
-
+    const bool isSwitchDiag = std::strncmp(msg, "[SWITCH ", 8) == 0;
     const size_t len = std::strlen(msg);
 
-    // DB/render bootstrap diagnostics stay in RAM while the loader is active.
-    // Writing each line directly to SD can stall the single DB thread and alter
-    // the stream-loading timing. The deferred buffer is flushed in one batch
-    // at safe points and from the exception handler.
+    // Preserve actual Switch anomalies in the bounded crash-context buffer.
     if (isSwitchDiag)
     {
-        // Keep the newest diagnostics when the bounded crash-context buffer fills.
-        // The previous append-only code silently discarded every later message
-        // after 1 MiB, often losing the trace immediately before the crash.
         const size_t capacity = sizeof(g_switchDeferredDiag);
         const char *deferredMsg = msg;
         size_t deferredLen = len;
@@ -3804,7 +3784,6 @@ void Switch_LogWrite(const char *msg)
             deferredMsg += deferredLen - capacity;
             deferredLen = capacity;
 
-            // Avoid starting the crash dump in the middle of a diagnostic line.
             const char *newline = static_cast<const char *>(
                 std::memchr(deferredMsg, '\n', deferredLen));
             if (newline)
@@ -3831,8 +3810,6 @@ void Switch_LogWrite(const char *msg)
         {
             size_t drop =
                 g_switchDeferredDiagUsed + deferredLen - capacity;
-
-            // Drop whole old lines where possible so the retained trace stays readable.
             if (drop < g_switchDeferredDiagUsed)
             {
                 const char *newline = static_cast<const char *>(
@@ -3869,7 +3846,6 @@ void Switch_LogWrite(const char *msg)
     }
 
     (void)::write(STDOUT_FILENO, msg, len);
-
     if (g_switchLogFd >= 0)
     {
         size_t written = 0;
@@ -3885,6 +3861,34 @@ void Switch_LogWrite(const char *msg)
         }
     }
 }
+
+void Switch_LogWriteError(const char *msg)
+{
+    if (!msg || !*msg)
+        return;
+
+    // Flush buffered Switch fault context before the engine error so that
+    // the diagnostic immediately follows the events that caused it.
+    Switch_LogFlushDeferred();
+
+    const size_t len = std::strlen(msg);
+    (void)::write(STDOUT_FILENO, msg, len);
+    if (g_switchLogFd >= 0)
+    {
+        size_t written = 0;
+        while (written < len)
+        {
+            const ssize_t n = ::write(
+                g_switchLogFd,
+                msg + written,
+                len - written);
+            if (n <= 0)
+                break;
+            written += static_cast<size_t>(n);
+        }
+    }
+}
+
 void Switch_LogInit()
 {
     g_switchScreenLog = false;
