@@ -1348,6 +1348,8 @@ void __cdecl CG_DrawActive(int localClientNum)
         cgArray[0].gunZOfs);
     CL_SetExtraButtons(localClientNum, cgArray[0].extraButtons);
     cgArray[0].extraButtons = 0;
+    // Submit active local-entity tracers before the scene is handed to the renderer.
+    CG_AddSceneTracerBeams(localClientNum);
     CL_RenderScene(&cgArray[0].refdef);
 }
 
