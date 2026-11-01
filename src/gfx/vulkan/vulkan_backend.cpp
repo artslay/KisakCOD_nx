@@ -1860,8 +1860,7 @@ bool VulkanBackend::EndFrame()
         m_renderFinishedSemaphores.size() <= m_swapchainIndex ||
         !m_renderFinishedSemaphores[m_swapchainIndex])
     {
-#ifdef __SWITCH__
-#endif
+
         SetError("Invalid swapchain image state");
         (void)RecreateSwapchain();
         return false;
@@ -2017,8 +2016,7 @@ bool VulkanBackend::EndFrame()
         return false;
     }
     m_imageAvailablePending = false;
-#ifdef __SWITCH__
-#endif
+
 
     VkPresentInfoKHR present{};
     present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
