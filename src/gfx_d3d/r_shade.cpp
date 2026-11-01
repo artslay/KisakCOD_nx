@@ -1318,8 +1318,7 @@ static int R_SetVertexDataInternal(
     GfxCmdBufState *state,
     const void *data,
     int vertexCount,
-    int stride,
-    bool convertPackedModelTexCoords)
+    int stride)
 {
     IDirect3DVertexBuffer9 *vb; // [esp+6Ch] [ebp-14h]
     volatile int vertexOffset; // [esp+70h] [ebp-10h]
@@ -1362,18 +1361,6 @@ static int R_SetVertexDataInternal(
         PROF_SCOPED("RB_memcpy_vb");
         Com_Memcpy(bufferData, data, totalSize);
     }
-#ifdef __SWITCH__
-    if (convertPackedModelTexCoords)
-    {
-        iassert(stride == static_cast<int>(sizeof(GfxPackedVertex)));
-        auto *vertices = static_cast<GfxPackedVertex *>(bufferData);
-        for (int vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex)
-            vertices[vertexIndex].texCoord =
-                Vec2ConvertTexCoordsForVulkan(vertices[vertexIndex].texCoord);
-    }
-#else
-    (void)convertPackedModelTexCoords;
-#endif
     //Profile_EndInternal(0);
     //Profile_EndInternal(0);
     R_UnlockVertexBuffer(vb);
@@ -1385,12 +1372,12 @@ static int R_SetVertexDataInternal(
 int __cdecl R_SetVertexData(
     GfxCmdBufState *state, const void *data, int vertexCount, int stride)
 {
-    return R_SetVertexDataInternal(state, data, vertexCount, stride, false);
+    return R_SetVertexDataInternal(state, data, vertexCount, stride);
 }
 
 int __cdecl R_SetPackedModelVertexData(
     GfxCmdBufState *state, const void *data, int vertexCount)
 {
     return R_SetVertexDataInternal(
-        state, data, vertexCount, static_cast<int>(sizeof(GfxPackedVertex)), true);
+        state, data, vertexCount, static_cast<int>(sizeof(GfxPackedVertex)));
 }
