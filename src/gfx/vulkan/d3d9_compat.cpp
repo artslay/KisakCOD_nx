@@ -8167,6 +8167,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_viewport.Width);
     key = HashCombine(key, m_viewport.Height);
     key = HashCombine(key, m_switchUnlit);
+    key = HashCombine(key, m_markMeshPassActive);
     key = HashCombine(key, m_depthEnable && !m_switchUnlit);
     key = HashCombine(key, m_depthWrite && !m_switchUnlit);
     key = HashCombine(key, m_depthFunc);
@@ -9322,13 +9323,21 @@ bool IDirect3DDevice9::EnsurePipeline()
         raster.pNext = &depthBiasRepresentation;
     }
 #endif
-    raster.depthBiasEnable = (m_depthBias != 0.0f || m_slopeDepthBias != 0.0f) ? VK_TRUE : VK_FALSE;
+    const bool addMarkDepthBias = markMeshPassActive &&
+        m_depthBias == 0.0f && m_slopeDepthBias == 0.0f;
+    const float effectiveDepthBias = addMarkDepthBias
+        ? -0.0000152587890625f : m_depthBias;
+    const float effectiveSlopeDepthBias = addMarkDepthBias
+        ? -1.0f : m_slopeDepthBias;
+    raster.depthBiasEnable =
+        (markMeshPassActive || effectiveDepthBias != 0.0f ||
+         effectiveSlopeDepthBias != 0.0f) ? VK_TRUE : VK_FALSE;
     // D3D9 expresses constant depth bias as a direct floating-point depth offset.
     // Prefer Vulkan's FLOAT representation (r=1). The FORCE_UNORM extension mode
     // uses r=2^-n and also works for D32_SFLOAT attachments translated from D24FS8.
     // Without the extension, fixed-point formats can only be approximated because
     // Vulkan permits an implementation-dependent r up to twice the exact value.
-    float vkDepthBiasConstantFactor = m_depthBias;
+    float vkDepthBiasConstantFactor = effectiveDepthBias;
     if (!useFloatDepthBiasRepresentation)
     {
         if (depthFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
@@ -9343,7 +9352,7 @@ bool IDirect3DDevice9::EnsurePipeline()
             vkDepthBiasConstantFactor *= 16777216.0f;
     }
     raster.depthBiasConstantFactor = vkDepthBiasConstantFactor;
-    raster.depthBiasSlopeFactor = m_slopeDepthBias;
+    raster.depthBiasSlopeFactor = effectiveSlopeDepthBias;
 
     VkPipelineMultisampleStateCreateInfo multisample{};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -9366,10 +9375,15 @@ bool IDirect3DDevice9::EnsurePipeline()
     // Fragment-output probes are diagnostic: let target surfaces reach the
     // fragment shader even if depth/stencil contents or earlier geometry are
     // wrong. Otherwise black output remains ambiguous. Normal rendering is unchanged.
+    const bool markMeshPassActive =
+        m_markMeshPassActive && !switchFragmentOutputProbeActive;
     const bool effectiveDepthTest =
         !switchFragmentOutputProbeActive && m_depthEnable && !m_switchUnlit;
+    // Impact marks are decals on existing geometry: they must test against the
+    // surface but must never replace its depth with the decal's depth.
     const bool effectiveDepthWrite =
-        !switchFragmentOutputProbeActive && m_depthWrite && !m_switchUnlit;
+        !switchFragmentOutputProbeActive && !markMeshPassActive &&
+        m_depthWrite && !m_switchUnlit;
     depth.depthTestEnable = effectiveDepthTest ? VK_TRUE : VK_FALSE;
     depth.depthWriteEnable = effectiveDepthWrite ? VK_TRUE : VK_FALSE;
     depth.depthCompareOp = CompareOp(m_depthFunc);
@@ -9403,22 +9417,42 @@ bool IDirect3DDevice9::EnsurePipeline()
     // texture through straight-alpha blending, discarding authored additive,
     // premultiplied, and separate-alpha modes (notably menu highlight caps).
     VkPipelineColorBlendAttachmentState colorBlend{};
+    // Some legacy impact-mark materials arrive with blending disabled or
+    // with the opaque ONE/ZERO pair. Their textures carry a transparency mask,
+    // so treating the mark as an opaque polygon exposes the whole clipped
+    // fragment and produces the black rectangular border around bullet holes.
+    const bool markNeedsAlphaBlend = markMeshPassActive &&
+        (!m_blendEnable || m_srcBlend == 0u || m_dstBlend == 0u ||
+         (m_srcBlend == 2u && m_dstBlend == 1u));
     colorBlend.blendEnable =
-        (m_blendEnable && !switchFragmentOutputProbeActive) ? VK_TRUE : VK_FALSE;
-    ResolveBlendFactors(
-        m_srcBlend, m_dstBlend,
-        colorBlend.srcColorBlendFactor, colorBlend.dstColorBlendFactor);
-    colorBlend.colorBlendOp = BlendOp(m_blendOp);
+        ((m_blendEnable || markNeedsAlphaBlend) &&
+         !switchFragmentOutputProbeActive) ? VK_TRUE : VK_FALSE;
+    if (markNeedsAlphaBlend)
+    {
+        colorBlend.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlend.colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlend.alphaBlendOp = VK_BLEND_OP_ADD;
+    }
+    else
+    {
+        ResolveBlendFactors(
+            m_srcBlend, m_dstBlend,
+            colorBlend.srcColorBlendFactor, colorBlend.dstColorBlendFactor);
+        colorBlend.colorBlendOp = BlendOp(m_blendOp);
 
-    const uint32_t srcAlphaBlend =
-        m_separateAlphaBlend ? m_srcBlendAlpha : m_srcBlend;
-    const uint32_t dstAlphaBlend =
-        m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend;
-    ResolveBlendFactors(
-        srcAlphaBlend, dstAlphaBlend,
-        colorBlend.srcAlphaBlendFactor, colorBlend.dstAlphaBlendFactor);
-    colorBlend.alphaBlendOp = BlendOp(
-        m_separateAlphaBlend ? m_blendOpAlpha : m_blendOp);
+        const uint32_t srcAlphaBlend =
+            m_separateAlphaBlend ? m_srcBlendAlpha : m_srcBlend;
+        const uint32_t dstAlphaBlend =
+            m_separateAlphaBlend ? m_dstBlendAlpha : m_dstBlend;
+        ResolveBlendFactors(
+            srcAlphaBlend, dstAlphaBlend,
+            colorBlend.srcAlphaBlendFactor, colorBlend.dstAlphaBlendFactor);
+        colorBlend.alphaBlendOp = BlendOp(
+            m_separateAlphaBlend ? m_blendOpAlpha : m_blendOp);
+    }
     colorBlend.colorWriteMask = switchFragmentOutputProbeActive
         ? (VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT)
