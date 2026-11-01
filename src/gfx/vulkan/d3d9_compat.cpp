@@ -1473,6 +1473,14 @@ uint8_t SwitchEffectiveShaderElementType(
     const _D3DVERTEXELEMENT9 &element,
     uint32_t streamStride = 0)
 {
+    // Mark meshes share a 44-byte GfxWorldVertex buffer, but model marks are
+    // written as 32-byte GfxPackedVertex records at each 44-byte vertex stride.
+    // Route 1 identifies that packed-model layout; do not decode its packed UVs
+    // as the float UV pairs used by ordinary world vertices.
+    const bool packedModelMarkLayout =
+        decl && decl->switchVertDeclType == 1u &&
+        element.Stream == 0u && streamStride == 44u;
+
     // FX code meshes share the 32-byte GfxPackedVertex storage with XModels,
     // but their TEXCOORD0 bytes were converted to IEEE half2 by
     // R_EndCodeMeshVerts. Use the matching Vulkan format only while the FX
@@ -1484,6 +1492,14 @@ uint8_t SwitchEffectiveShaderElementType(
         element.Usage == 5u &&
         element.UsageIndex == 0u)
         return D3DDECLTYPE_FLOAT16_2;
+
+    // Model marks use packed fixed-point TEXCOORD0 at byte 20, even though
+    // their records occupy a 44-byte shared mark-mesh stride.
+    if (packedModelMarkLayout &&
+        element.Offset == 20u &&
+        element.Usage == 5u &&
+        element.UsageIndex == 0u)
+        return D3DDECLTYPE_UBYTE4;
 
     // GfxPackedVertex and GfxWorldVertex both begin with xyz at byte 0 and
     // binormalSign at byte 12. Their D3D declaration is a legacy semantic route;
@@ -1503,6 +1519,7 @@ uint8_t SwitchEffectiveShaderElementType(
         return D3DDECLTYPE_FLOAT3;
 
     if (element.Stream == 0 && streamStride == 44u &&
+        !packedModelMarkLayout &&
         element.Offset == 20 && element.Usage == 5)
     {
         if (element.UsageIndex == 0)
@@ -1587,20 +1604,28 @@ uint32_t SwitchEffectiveShaderElementOffset(
     const _D3DVERTEXELEMENT9 &element,
     uint32_t streamStride = 0)
 {
+    // Mark mesh model records are 32-byte GfxPackedVertex values padded to
+    // the shared 44-byte GfxWorldVertex stride. They keep packed-model offsets.
+    const bool packedModelMarkLayout =
+        decl && decl->switchVertDeclType == 1u &&
+        element.Stream == 0u && streamStride == 44u;
+    const bool packedModelLayout =
+        decl && decl->switchVertDeclType != 0u &&
+        element.Stream == 0u &&
+        (streamStride == 32u || packedModelMarkLayout);
+
     // Material declarations for routes 2..13 describe the expanded world
     // layout (normal/tangent at 36/40). XModel draw paths can use those same
     // semantic routes while binding a 32-byte GfxPackedVertex stream, where
     // the physical packed normal/tangent fields are at 24/28. Resolve by the
     // bound stream ABI, not the declaration's serialized semantic route.
-    if (decl && decl->switchVertDeclType != 0u &&
-        element.Stream == 0 && streamStride == 32u &&
+    if (packedModelLayout &&
         element.Offset == 36 &&
         ((element.Usage == 5 && element.UsageIndex == 1) ||
          (element.Usage == 3 && element.UsageIndex == 0)))
         return 24;
 
-    if (decl && decl->switchVertDeclType != 0u &&
-        element.Stream == 0 && streamStride == 32u &&
+    if (packedModelLayout &&
         element.Offset == 40 &&
         ((element.Usage == 5 && element.UsageIndex == 2) ||
          ((element.Usage == 6 || element.Usage == 7) && element.UsageIndex == 0)))
@@ -1609,6 +1634,7 @@ uint32_t SwitchEffectiveShaderElementOffset(
     // TEXCOORD1 can be routed from the first UV pair, but in a world vertex
     // buffer that semantic must read the separate lightmap UVs at byte 28.
     if (element.Stream == 0 && streamStride == 44u &&
+        !packedModelMarkLayout &&
         element.Offset == 20 && element.Usage == 5 &&
         element.UsageIndex == 1)
         return 28;
@@ -9052,7 +9078,8 @@ bool IDirect3DDevice9::EnsurePipeline()
                 ? m_drawPrimitiveUPStride
                 : (element.Stream < 16u ? m_streams[element.Stream].stride : 0u);
         const bool packedWorldLayout =
-            element.Stream == 0 && packedWorldStreamStride == 44u;
+            element.Stream == 0 && packedWorldStreamStride == 44u &&
+            !packedModelMarkLayout;
         // GfxWorldVertex stores packed normal/tangent bytes at fixed physical
         // offsets 36/40. Material routing can expose these bytes either through
         // TEXCOORD1/2 or through the native NORMAL/TANGENT semantics. Handle
@@ -9075,7 +9102,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         // labels those attributes TEXCOORD1/2 instead of NORMAL/TANGENT.
         // Keep the source byte order for both packed model vectors as well.
         const bool packedModelUnitVector =
-            packedWorldStreamStride == 32u &&
+            (packedWorldStreamStride == 32u || packedModelMarkLayout) &&
             m_decl->switchVertDeclType != 0u &&
             element.Stream == 0 &&
             (((element.Offset == 24 || element.Offset == 36) &&
