@@ -15,7 +15,6 @@
 #include "r_xsurface.h"
 #include "r_model_lighting.h"
 #ifdef __SWITCH__
-#include <qcommon/com_pack.h>
 #include <cstdio>
 #endif
 
