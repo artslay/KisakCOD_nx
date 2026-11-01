@@ -186,12 +186,19 @@ void __cdecl Player_UpdateActivate(gentity_s *ent)
     ent->client->useButtonDone = 1;
 }
 
-int __cdecl compare_use(float *pe1, float *pe2)
+int __cdecl compare_use(const void *pe1, const void *pe2)
 {
-    return (int)(float)(pe1[1] - pe2[1]);
+    const useList_t *a = static_cast<const useList_t *>(pe1);
+    const useList_t *b = static_cast<const useList_t *>(pe2);
+
+    if (a->score < b->score)
+        return -1;
+    if (a->score > b->score)
+        return 1;
+    return 0;
 }
 
-int __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEntIndex)
+int __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEntIndex, unsigned int useListCapacity)
 {
     int v6; // r22
     gclient_s *client; // r29
@@ -297,6 +304,9 @@ int __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEn
         v13 = v56;
         for (i = numEnts; i; --i)
         {
+            if (v11 >= useListCapacity)
+                break;
+
             gEnt = &g_entities[*v13];
             if (ent == gEnt)
                 goto LABEL_41;
@@ -421,7 +431,7 @@ int __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEn
             ++v13;
         }
     }
-    qsort(useList, v11, 8u, (int(__cdecl *)(const void *, const void *))compare_use);
+    qsort(useList, v11, sizeof(*useList), compare_use);
     v31 = v11 - v6;
     v33 = (int)(v11 - v6) <= 0;
     v32 = 0;
@@ -456,7 +466,7 @@ int __cdecl Player_GetUseList(gentity_s *ent, useList_t *useList, int prevHintEn
                 p_score = &use->score;
         } while (v35);
     }
-    qsort(useList, v31, 8u, (int(__cdecl *)(const void *, const void *))compare_use);
+    qsort(useList, v31, sizeof(*useList), compare_use);
     return v31 - v32;
 }
 
@@ -661,7 +671,7 @@ void __cdecl Player_UpdateCursorHints(gentity_s *ent)
                     weaponstate = client->ps.weaponstate;
                     if ((weaponstate < WEAPON_OFFHAND_INIT || weaponstate > WEAPON_OFFHAND) && !v6->bFrozen)
                     {
-                        UseList = Player_GetUseList(ent, v20, cursorHintEntIndex);
+                        UseList = Player_GetUseList(ent, v20, cursorHintEntIndex, static_cast<unsigned int>(sizeof(v20) / sizeof(v20[0])));
                         v10 = UseList;
                         if (UseList)
                         {
