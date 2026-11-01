@@ -944,6 +944,50 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
         const Material *failedMaterial=(candidate &&
             candidate->info.drawSurf.fields.materialSortedIndex==drawSurf.fields.materialSortedIndex)
             ? candidate : nullptr;
+        if (drawSurf.fields.surfType == SF_CODE_MESH)
+        {
+            static uint32_t switchFxCodeMeshSkippedMaterialHashes[64]{};
+            const char *materialName =
+                failedMaterial && failedMaterial->info.name
+                    ? failedMaterial->info.name : "<unresolved>";
+            uint32_t traceHash = 2166136261u;
+            for (const unsigned char *ch =
+                     reinterpret_cast<const unsigned char *>(materialName);
+                 *ch; ++ch)
+                traceHash = (traceHash ^ *ch) * 16777619u;
+            if (!traceHash)
+                traceHash = drawSurf.fields.materialSortedIndex + 1u;
+
+            bool firstSkippedMaterial = false;
+            uint32_t traceIndex = 64u;
+            for (uint32_t slot = 0; slot < 64u; ++slot)
+            {
+                const uint32_t seenHash = __sync_val_compare_and_swap(
+                    &switchFxCodeMeshSkippedMaterialHashes[slot], 0u, traceHash);
+                if (seenHash == 0u)
+                {
+                    traceIndex = slot;
+                    firstSkippedMaterial = true;
+                    break;
+                }
+                if (seenHash == traceHash)
+                    break;
+            }
+            if (firstSkippedMaterial)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][FX CODEMESH SKIP] unique=%u material=%.96s materialIndex=%u baseTech=%u object=%u sortKey=%u reason=setup_material_false\\n",
+                    traceIndex,
+                    materialName,
+                    static_cast<unsigned>(drawSurf.fields.materialSortedIndex),
+                    static_cast<unsigned>(listArgs->info->baseTechType),
+                    static_cast<unsigned>(drawSurf.fields.objectId),
+                    static_cast<unsigned>(drawSurf.fields.primarySortKey));
+                Switch_LogWrite(trace);
+            }
+        }
         Switch_LogMaterialSetupSkipped(
             failedMaterial,drawSurf.fields.surfType,drawSurf.fields.objectId,
             drawSurf.fields.materialSortedIndex,
