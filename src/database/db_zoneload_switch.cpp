@@ -82,7 +82,6 @@ struct ZoneLoadState
     // Per-zone load/registration coverage; these counts avoid global startup
     // assets consuming the diagnostic budget for later fastfiles.
     uint32_t imageLoadTraceCount = 0;
-    uint32_t imageRegistryTraceCount = 0;
 };
 
 struct ZoneHandle
@@ -945,41 +944,6 @@ void *LinkAsset(void *context, int assetType, void *asset)
     }
     const XAssetHeader registered = DB_AddXAsset(registerType, header);
 
-#ifdef __SWITCH__
-    if (type == ASSET_TYPE_IMAGE)
-    {
-        const auto *const sourceImage = static_cast<const GfxImage *>(asset);
-        const auto *const registeredImage = registered.image;
-        if (sourceImage && state.imageRegistryTraceCount < 160u)
-        {
-            char trace[512];
-            std::snprintf(
-                trace, sizeof(trace),
-                "[KisakCOD][GFXIMAGE REGISTRY] zone=%s n=%u source=%p sourceName=%.72s sourceTrack=%u sourceCategory=%u sourceSemantic=%u sourceBase=%p sourceDelay=%u sourceCard=%d registered=%p registeredName=%.72s registeredTrack=%u registeredCategory=%u registeredBase=%p registeredDelay=%u registeredCard=%d same=%u\n",
-                state.zoneName ? state.zoneName : "<null>",
-                state.imageRegistryTraceCount++,
-                static_cast<const void *>(sourceImage),
-                sourceImage->name ? sourceImage->name : "<null>",
-                static_cast<unsigned>(sourceImage->track),
-                static_cast<unsigned>(sourceImage->category),
-                static_cast<unsigned>(sourceImage->semantic),
-                static_cast<void *>(sourceImage->texture.basemap),
-                sourceImage->delayLoadPixels ? 1u : 0u,
-                sourceImage->cardMemory.platform[0],
-                static_cast<const void *>(registeredImage),
-                registeredImage && registeredImage->name
-                    ? registeredImage->name : "<null>",
-                registeredImage ? static_cast<unsigned>(registeredImage->track) : 0u,
-                registeredImage ? static_cast<unsigned>(registeredImage->category) : 0u,
-                registeredImage
-                    ? static_cast<void *>(registeredImage->texture.basemap) : nullptr,
-                registeredImage && registeredImage->delayLoadPixels ? 1u : 0u,
-                registeredImage ? registeredImage->cardMemory.platform[0] : 0,
-                registeredImage == sourceImage ? 1u : 0u);
-            Switch_LogWrite(trace);
-        }
-    }
-#endif
 
     if (type == ASSET_TYPE_MATERIAL)
     {
