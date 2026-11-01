@@ -7755,6 +7755,8 @@ bool IDirect3DDevice9::BindSamplerSet(
 
 
 #ifdef __SWITCH__
+    if (g_switchFxCodeMeshDrawActive)
+    {
     // Trace the actual descriptors selected for active shader samplers. The
     // material-level trace only proves which GfxImage was requested; this
     // records whether Vulkan receives that image or a dimensionality-matched
@@ -7827,7 +7829,8 @@ bool IDirect3DDevice9::BindSamplerSet(
             char trace[768];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][VK SAMPLER DESCRIPTOR] stage=%s set=%u shader=%llu profile=%.24s sampler=%.48s slot=%u samplerType=%u activeCount=%u selection=%u texture=%p owner=%p image=%.88s imageSize=%ux%u category=%u semantic=%u delayLoad=%u vkImage=%u vkView=%u baseMipView=%u viewType=%u vkFormat=%u sourceFormat=%u mip0Layout=%u mips=%u layers=%u selectedFullView=%u selectedBaseMipView=%u samplerReady=%u\n",
+                "[KisakCOD][VK SAMPLER DESCRIPTOR] material=%.48s stage=%s set=%u shader=%llu profile=%.24s sampler=%.48s slot=%u samplerType=%u activeCount=%u selection=%u texture=%p owner=%p image=%.88s imageSize=%ux%u category=%u semantic=%u delayLoad=%u vkImage=%u vkView=%u baseMipView=%u viewType=%u vkFormat=%u sourceFormat=%u mip0Layout=%u mips=%u layers=%u selectedFullView=%u selectedBaseMipView=%u samplerReady=%u\n",
+                g_switchFxCodeMeshMaterialName ? g_switchFxCodeMeshMaterialName : "<unknown>",
                 setIndex == 0u ? "vs" : "ps",
                 setIndex,
                 static_cast<unsigned long long>(shaderSerial),
@@ -7890,6 +7893,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                 Switch_LogWrite(trace);
             }
         }
+    }
     }
 #endif
 
