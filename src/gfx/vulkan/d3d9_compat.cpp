@@ -8309,7 +8309,7 @@ bool IDirect3DDevice9::EnsurePipeline()
                     char trace[320];
                     std::snprintf(
                         trace, sizeof(trace),
-                        "[KisakCOD][VK MODEL UV INPUT] n=%u declSerial=%llu declType=%u stride=%u offset=%u declaredType=%u effectiveType=%u\n",
+                        "[KisakCOD][VK MODEL UV INPUT] n=%u declSerial=%llu declType=%u stride=%u offset=%u declaredType=%u effectiveType=%u\\n",
                         sequence,
                         static_cast<unsigned long long>(m_decl->serial),
                         static_cast<unsigned>(m_decl->switchVertDeclType),
