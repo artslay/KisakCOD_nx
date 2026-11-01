@@ -3586,7 +3586,6 @@ static bool Switch_LogIsStartupMessage(const char *msg)
 
     static constexpr const char *const kStartupPrefixes[] =
     {
-        "[KisakCOD][RUST TLS]",
         "[KisakCOD][BOOT]",
         "[KisakCOD][RUST TLS]",
         "[KisakCOD][LOG]",
