@@ -1135,6 +1135,13 @@ void __cdecl R_Cmd_ReloadMaterialTextures()
         material = Material_Find(name);
         if (material)
         {
+#ifdef __SWITCH__
+            // RB_BindDefaultImages changes the shared D3D9/Vulkan device sampler
+            // bindings through R_SetSampler. The backend may still be recording
+            // a draw for the previous frame, so take renderer ownership before
+            // changing any of those bindings or reloading their images.
+            R_SyncRenderThread();
+#endif
             RB_BindDefaultImages();
             Material_ReloadTextures(material);
         }
