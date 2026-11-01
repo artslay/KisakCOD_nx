@@ -1509,18 +1509,10 @@ uint8_t SwitchEffectiveShaderElementType(
         {
             type = D3DDECLTYPE_FLOAT2;
         }
-        // GfxPackedVertex stores TEXCOORD0 as PackedTexCoords at byte 20:
-        // a pair of packed 16-bit floats, not a D3DCOLOR/byte vector. The D3D
-        // declaration is a semantic-routing table on Switch, so restore the
-        // physical FLOAT16_2 representation before building Vulkan input.
-        else if (streamStride == 32u &&
-                 decl->switchVertDeclType != 0u &&
-                 element.Offset == 20 &&
-                 element.Usage == 5 &&
-                 element.UsageIndex == 0)
-        {
-            type = D3DDECLTYPE_FLOAT16_2;
-        }
+        // Packed XModel TEXCOORD0 is not a half-float pair. CoD4 stores
+        // four custom fixed-point bytes here and its vertex shader consumes
+        // them as float4 (D3DDECLTYPE_UBYTE4) before setup_uv_dtex decodes them.
+        // Keep the original declaration type so Vulkan uses R8G8B8A8_USCALED.
         // World vertex UVs are two adjacent float2 fields: texCoord at byte 20
         // and lmapCoord at byte 28. Some material routing entries declare the
         // TEXCOORD0 source as FLOAT3, but shaders can consume both pairs as xy/zw.
