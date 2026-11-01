@@ -943,7 +943,7 @@ const MaterialTextureDef *__cdecl R_SetPixelSamplerFromMaterial(
             char trace[640];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][MATERIAL SAMPLER] group=%s mat=%.96s pass=%u ps=%.64s slot=%u semantic=%u image=%.96s imagePtr=%p size=%ux%u category=%u delayLoad=%u basemap=%p mapType=%u samplerState=0x%x\\n",
+                "[KisakCOD][MATERIAL SAMPLER] group=%s mat=%.96s pass=%u ps=%.64s slot=%u semantic=%u image=%.96s imagePtr=%p size=%ux%u category=%u delayLoad=%u basemap=%p mapType=%u samplerState=0x%x\n",
                 isWorldMaterial ? "world" :
                     (texDef->semantic == TS_WATER_MAP ? "water" : "model_fx"),
                 materialName,
