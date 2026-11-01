@@ -51,16 +51,7 @@ void __cdecl R_DrawXModelRigidModelSurf(GfxCmdBufContext context, XSurface *xsur
     if (context.state->prim.indexBuffer != ib)
         R_ChangeIndices(&context.state->prim, ib);
 
-#ifdef __SWITCH__
-    // Fastfile GfxPackedVertex keeps CoD4 PackedTexCoords encoding. Vulkan
-    // consumes TEXCOORD0 as IEEE R16G16_SFLOAT, so upload a converted copy.
-    R_CheckVertexDataOverflow(static_cast<int>(sizeof(GfxPackedVertex) * xsurf->vertCount));
-    vertexOffset0 = R_SetPackedModelVertexData(context.state, xsurf->verts0, xsurf->vertCount);
-    vb0 = gfxBuf.dynamicVertexBuffer->buffer;
-    iassert(vb0);
-#else
     DB_GetVertexBufferAndOffset(xsurf->zoneHandle, (uint8*)xsurf->verts0, (void **)&vb0, &vertexOffset0);
-#endif
     R_SetStreamSource(&context.state->prim, vb0, vertexOffset0, 0x20u);
     R_SetupPassPerPrimArgs(context);
     R_DrawIndexedPrimitive(&context.state->prim, &args);
