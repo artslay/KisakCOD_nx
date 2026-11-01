@@ -36,8 +36,11 @@ const _D3DTEXTUREFILTERTYPE s_mipFilterTable[4][3] =
 }; // idb
 
 const uint32_t s_cullTable_30[4] = { 0u, 1u, 3u, 2u }; // idb
-const uint32_t s_blendTable_30[11] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
-const uint32_t s_blendOpTable_30[6] = { 0, 1, 2, 3, 4, 5 };
+// State bits reserve four bits for each blend factor. Keep the lookup table
+// sized for the full field so uncommon D3D9 blend modes cannot read past it.
+const uint32_t s_blendTable_30[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+// Blend operations are selected from a three-bit state field.
+const uint32_t s_blendOpTable_30[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 const uint32_t s_depthTestTable_30[4] = { 8, 2, 3, 4 };
 const uint32_t s_stencilOpTable_30[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
 const uint32_t s_stencilFuncTable_30[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
