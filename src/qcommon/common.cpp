@@ -49,9 +49,9 @@
 
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
-#ifdef __SWITCH__
 extern void Switch_LogWriteError(const char *msg);
-#endif
+extern void Switch_LogWriteInit(const char *msg);
+static bool g_switchInitializationLogActive = false;
 thread_local const char * volatile g_switchFrameStage = "frame/idle";
 #endif
 
@@ -194,7 +194,12 @@ void QDECL Com_PrintMessage(int channel, const char* msg, int error)
     if (error >= 3)
         Switch_LogWriteError(msg);
     else if (error != 2)
-        Switch_LogWrite(msg);
+    {
+        if (g_switchInitializationLogActive)
+            Switch_LogWriteInit(msg);
+        else
+            Switch_LogWrite(msg);
+    }
 #else
     fprintf(stderr, "%s", msg);
 #endif
@@ -1096,6 +1101,11 @@ void __cdecl Com_ExecStartupConfigs(int localClientNum, const char* configFile)
 
 void __cdecl Com_Init(char* commandLine)
 {
+#ifdef __SWITCH__
+    // Keep engine, renderer, filesystem, fastfile and sound initialization
+    // visible until the complete Com_Init sequence has finished.
+    g_switchInitializationLogActive = true;
+#endif
     jmp_buf* Value; // eax
     jmp_buf * v3; // eax
     jmp_buf * v4; // eax
@@ -1132,6 +1142,7 @@ void __cdecl Com_Init(char* commandLine)
         }
     }
 #ifdef __SWITCH__
+    g_switchInitializationLogActive = false;
 #endif
 }
 
