@@ -3609,6 +3609,31 @@ static bool Switch_LogIsStartupMessage(const char *msg)
         sizeof("========================================\nKisakCOD Switch engine log") - 1u) == 0;
 }
 
+static bool Switch_LogIsLevelLoadMessage(const char *msg)
+{
+    if (!msg || !*msg)
+        return false;
+
+    // Keep concise fastfile/zone summaries outside initial Com_Init, without
+    // reopening ordinary runtime Com_Printf output or renderer tracing.
+    static constexpr const char *const kLevelLoadPrefixes[] =
+    {
+        "Loading fastfile ",
+        "Trying to load file ",
+        "Loaded fastfile ",
+        "Loaded zone '",
+        "----- Server Initialization -----",
+        "----- Game Initialization -----",
+        "----- Client Initialization -----"
+    };
+    for (const char *prefix : kLevelLoadPrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool Switch_LogIsVerboseTrace(const char *msg)
 {
     if (!msg)
@@ -3679,7 +3704,9 @@ void Switch_LogWrite(const char *msg)
     // The normal Switch log is intentionally error-only. Routine engine output
     // and per-frame/per-draw diagnostics are discarded before any I/O.
     if (!msg || !*msg ||
-        (!Switch_LogIsImportant(msg) && !Switch_LogIsStartupMessage(msg)))
+        (!Switch_LogIsImportant(msg) &&
+         !Switch_LogIsStartupMessage(msg) &&
+         !Switch_LogIsLevelLoadMessage(msg)))
         return;
     if (!Switch_LogIsImportant(msg) && Switch_LogIsVerboseTrace(msg))
         return;
