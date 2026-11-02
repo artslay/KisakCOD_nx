@@ -320,6 +320,25 @@ static inline bool Switch_UI_ValidateStatement(
     return true;
 }
 
+// Optional UI expressions must never suppress the whole menu or item. If an
+// expression tree is malformed, discard only that expression and let the
+// stock static text, background, border and remaining expressions paint.
+static inline void Switch_UI_ValidateOptionalStatement(
+    const char *where,
+    const char *field,
+    const void *owner,
+    statement_s *statement)
+{
+    if (!statement)
+        return;
+
+    if (!Switch_UI_ValidateStatement(where, field, owner, statement))
+    {
+        statement->numEntries = 0;
+        statement->entries = nullptr;
+    }
+}
+
 void Switch_UI_ResetStatementValidationCache()
 {
     g_switchUIValidatedStatements.clear();
@@ -6341,12 +6360,12 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     // not prerequisites for drawing this menu. Validate them at their use
     // sites instead of dropping every visual element because one optional
     // non-rendering field is unavailable.
-    if (!Switch_UI_ValidateStatement("Menu_Paint", "visibleExp", menu, &menu->visibleExp) ||
-        !Switch_UI_ValidateStatement("Menu_Paint", "rectXExp", menu, &menu->rectXExp) ||
-        !Switch_UI_ValidateStatement("Menu_Paint", "rectYExp", menu, &menu->rectYExp))
-    {
-        return 0;
-    }
+    Switch_UI_ValidateOptionalStatement(
+        "Menu_Paint", "visibleExp", menu, &menu->visibleExp);
+    Switch_UI_ValidateOptionalStatement(
+        "Menu_Paint", "rectXExp", menu, &menu->rectXExp);
+    Switch_UI_ValidateOptionalStatement(
+        "Menu_Paint", "rectYExp", menu, &menu->rectYExp);
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/menu/zonetext";
 #endif
 #ifdef __SWITCH__
@@ -7092,7 +7111,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
     if (Switch_UI_BadPointer(item->window.name))
     {
         Switch_UI_LogBadPointer("Item_Paint", "window.name", item, item->window.name);
-        return;
+        item->window.name = nullptr;
     }
     if (Switch_UI_BadPointer(item->window.background))
     {
@@ -7111,39 +7130,46 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
     if (Switch_UI_BadPointer(item->dvar))
     {
         Switch_UI_LogBadPointer("Item_Paint", "dvar", item, item->dvar);
-        return;
+        item->dvar = nullptr;
     }
-    if (Switch_UI_BadPointer(item->dvarTest) ||
-        Switch_UI_BadPointer(item->enableDvar))
+    if (Switch_UI_BadPointer(item->dvarTest))
     {
-        const void *badValue = Switch_UI_BadPointer(item->dvarTest)
-            ? static_cast<const void *>(item->dvarTest)
-            : static_cast<const void *>(item->enableDvar);
-        Switch_UI_LogBadPointer(
-            "Item_Paint",
-            Switch_UI_BadPointer(item->dvarTest) ? "dvarTest" : "enableDvar",
-            item,
-            badValue);
-        return;
+        Switch_UI_LogBadPointer("Item_Paint", "dvarTest", item, item->dvarTest);
+        item->dvarTest = nullptr;
     }
-    if (!Switch_UI_ValidateStatement("Item_Paint", "visibleExp", item, &item->visibleExp) ||
-        !Switch_UI_ValidateStatement("Item_Paint", "textExp", item, &item->textExp) ||
-        !Switch_UI_ValidateStatement("Item_Paint", "materialExp", item, &item->materialExp) ||
-        !Switch_UI_ValidateStatement("Item_Paint", "rectXExp", item, &item->rectXExp) ||
-        !Switch_UI_ValidateStatement("Item_Paint", "rectYExp", item, &item->rectYExp) ||
-        !Switch_UI_ValidateStatement("Item_Paint", "rectWExp", item, &item->rectWExp) ||
-        !Switch_UI_ValidateStatement("Item_Paint", "rectHExp", item, &item->rectHExp) ||
-        !Switch_UI_ValidateStatement("Item_Paint", "forecolorAExp", item, &item->forecolorAExp))
+    if (Switch_UI_BadPointer(item->enableDvar))
     {
-        return;
+        Switch_UI_LogBadPointer("Item_Paint", "enableDvar", item, item->enableDvar);
+        item->enableDvar = nullptr;
     }
+
+    Switch_UI_ValidateOptionalStatement(
+        "Item_Paint", "visibleExp", item, &item->visibleExp);
+    Switch_UI_ValidateOptionalStatement(
+        "Item_Paint", "textExp", item, &item->textExp);
+    Switch_UI_ValidateOptionalStatement(
+        "Item_Paint", "materialExp", item, &item->materialExp);
+    Switch_UI_ValidateOptionalStatement(
+        "Item_Paint", "rectXExp", item, &item->rectXExp);
+    Switch_UI_ValidateOptionalStatement(
+        "Item_Paint", "rectYExp", item, &item->rectYExp);
+    Switch_UI_ValidateOptionalStatement(
+        "Item_Paint", "rectWExp", item, &item->rectWExp);
+    Switch_UI_ValidateOptionalStatement(
+        "Item_Paint", "rectHExp", item, &item->rectHExp);
+    Switch_UI_ValidateOptionalStatement(
+        "Item_Paint", "forecolorAExp", item, &item->forecolorAExp);
+    // Type-specific payloads are optional for basic text/button painting.
+    // Validate the union member selected by the serialized item type, but do
+    // not return before Window_Paint/Item_Text_Paint: a missing edit/list
+    // payload must not erase the item's caption, panel or border.
     switch (item->type)
     {
     case 6:
         if (Switch_UI_BadPointer(item->typeData.listBox))
         {
             Switch_UI_LogBadPointer("Item_Paint", "typeData.listBox", item, item->typeData.listBox);
-            return;
+            item->typeData.listBox = nullptr;
         }
         break;
     case 4:
@@ -7158,21 +7184,21 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
         if (Switch_UI_BadPointer(item->typeData.editField))
         {
             Switch_UI_LogBadPointer("Item_Paint", "typeData.editField", item, item->typeData.editField);
-            return;
+            item->typeData.editField = nullptr;
         }
         break;
     case 0xC:
         if (Switch_UI_BadPointer(item->typeData.multi))
         {
             Switch_UI_LogBadPointer("Item_Paint", "typeData.multi", item, item->typeData.multi);
-            return;
+            item->typeData.multi = nullptr;
         }
         break;
     case 0xD:
         if (Switch_UI_BadPointer(item->typeData.enumDvarName))
         {
             Switch_UI_LogBadPointer("Item_Paint", "typeData.enumDvarName", item, item->typeData.enumDvarName);
-            return;
+            item->typeData.enumDvarName = nullptr;
         }
         break;
     default:
