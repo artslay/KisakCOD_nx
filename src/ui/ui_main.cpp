@@ -2671,14 +2671,11 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
 
     if (!I_stricmp(out, "closeingame"))
     {
-#ifdef __SWITCH__
-        // On Switch the pad router gates gameplay actions while KEYCATCH_UI
-        // is set. Closing the in-game menu must release that catcher too,
-        // otherwise the menu disappears but gameplay input remains captured.
-        Key_SetCatcher(localClientNum, 0);
-#else
+        // Match the stock engine: remove only the UI catcher and preserve
+        // any other active catcher state. The Switch input router checks this
+        // same KEYCATCH_UI bit, so a full catcher reset is neither necessary
+        // nor correct when closing the pause menu.
         Key_RemoveCatcher(localClientNum, ~KEYCATCH_UI);
-#endif
         Key_ClearStates(localClientNum);
         Dvar_SetIntByName("cl_paused", 0);
         Menus_CloseAll(&uiInfo.uiDC);
