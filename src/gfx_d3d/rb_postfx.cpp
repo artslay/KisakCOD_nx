@@ -80,7 +80,12 @@ void __cdecl RB_GetDepthOfFieldInputImages(float radius)
     R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_POST_EFFECT_1);
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_POST_EFFECT_1);
     RB_FullScreenFilter(rgp.dofDownsampleMaterial);
-    v1 = radius * 0.25;
+    // Scale the Gaussian radius to the actual DOF intermediate resolution.
+    // PC still uses 1/4 resolution; Switch uses 1/8 to reduce post-effect cost
+    // without changing the blur radius in final scene pixels.
+    v1 = radius *
+        static_cast<float>(gfxRenderTargets[R_RENDERTARGET_POST_EFFECT_1].width) /
+        static_cast<float>(gfxRenderTargets[R_RENDERTARGET_RESOLVED_SCENE].width);
     RB_GaussianFilterImage(v1, R_RENDERTARGET_POST_EFFECT_1, R_RENDERTARGET_POST_EFFECT_0);
     R_SetRenderTargetSize(&gfxCmdBufSourceState, R_RENDERTARGET_PINGPONG_0);
     R_SetRenderTarget(gfxCmdBufContext, R_RENDERTARGET_PINGPONG_0);
