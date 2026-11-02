@@ -7270,7 +7270,8 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                 // This also handles the case where both siblings are null or are painted in
                 // the opposite order. Unpaired separators, panels, and control backgrounds
                 // are deliberately left alone.
-                if (item->window.style == 3 &&
+                if (UI_GetActiveMenu(dc->localClientNum) != UIMENU_INGAME &&
+                    item->window.style == 3 &&
                     (!item->window.background || Material_IsDefault(item->window.background)) &&
                     item->parent &&
                     item->parent->items &&
@@ -7357,7 +7358,8 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
                     }
                 }
 
-                if (item->window.style == 3 &&
+                if (UI_GetActiveMenu(dc->localClientNum) != UIMENU_INGAME &&
+                    item->window.style == 3 &&
                     (!item->window.background || Material_IsDefault(item->window.background)) &&
                     item->parent &&
                     item->parent->items &&
