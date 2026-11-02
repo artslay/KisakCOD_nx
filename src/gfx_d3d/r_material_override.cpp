@@ -417,7 +417,7 @@ bool Switch_IsSafeMaterialShaderArgumentRange(
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][SHADER ARG REJECT] path=%s arg=%p count=%u bytes=%zu\\n",
+            "[KisakCOD][SHADER ARG REJECT] path=%s arg=%p count=%u bytes=%zu\n",
             path ? path : "<unknown>",
             reinterpret_cast<const void *>(address),
             static_cast<unsigned>(argCount),
