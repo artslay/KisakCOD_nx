@@ -1059,6 +1059,13 @@ menuDef_t *__cdecl Menu_GetFocused(UiContext *dc);
 void __cdecl Menu_SetFeederSelection(UiContext *dc, menuDef_t *menu, int feeder, int index, const char *name);
 int __cdecl Menus_AnyFullScreenVisible(UiContext *dc);
 char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu);
+#ifdef __SWITCH__
+void Switch_UI_ValidateOptionalStatement(
+    const char *where,
+    const char *field,
+    const void *owner,
+    statement_s *statement);
+#endif
 char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu);
 void __cdecl Window_Paint(
     UiContext *dc,
