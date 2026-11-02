@@ -3182,8 +3182,8 @@ void __cdecl CG_OwnerDraw(
     const bool switchPauseMissionMap =
         cg_paused->current.integer &&
         UI_GetActiveMenu(localClientNum) == UIMENU_INGAME &&
-        (ownerDraw >= 99 && ownerDraw <= 102) ||
-        (ownerDraw >= 145 && ownerDraw <= 164) ||
+        ((ownerDraw >= 99 && ownerDraw <= 102) ||
+         (ownerDraw >= 145 && ownerDraw <= 164) ||
          (ownerDraw >= 180 && ownerDraw <= 187));
     if ((!cg_drawHUD->current.enabled || !hud_drawHUD->current.enabled) &&
         !switchPauseMissionMap)
