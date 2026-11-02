@@ -7693,6 +7693,10 @@ bool IDirect3DDevice9::BindSamplerSet(
         }
     }
 
+    const uint32_t sunShadowCompareMask = setIndex == 2u
+        ? SwitchGetSunShadowCompareSamplerMask(activeParse, textures)
+        : 0u;
+
     auto samplerTypeMatchesTexture = [](
         const KisakVkTexture *texture,
         const MOJOSHADER_sampler *sampler) -> bool
@@ -8107,7 +8111,9 @@ bool IDirect3DDevice9::BindSamplerSet(
                     AddressMode(m_samplerState[i][D3DSAMP_ADDRESSW]),
                     mipLodBias,
                     anisotropicFilter && m_backend->SupportsSamplerAnisotropy(),
-                    std::min(maxAnisotropy, m_backend->MaxSamplerAnisotropy()));
+                    std::min(maxAnisotropy, m_backend->MaxSamplerAnisotropy()),
+                    (sunShadowCompareMask & (1u << i)) != 0u,
+                    VK_COMPARE_OP_LESS_OR_EQUAL);
                 images[i].imageView = allSubresourcesInitialized
                     ? texture->view : texture->baseMipView;
                 if (!sampler && activeSamplers[i])
@@ -8211,6 +8217,9 @@ bool IDirect3DDevice9::EnsurePipeline()
         return false;
     }
 
+    const uint32_t sunShadowCompareMask =
+        SwitchGetSunShadowCompareSamplerMask(m_pixelShader->parseData, m_textures);
+
     // Raw-s0 and solid-white probes replace the fragment output. Disable
     // state that could hide the diagnostic before it reaches the color target:
     // culling, depth/stencil rejection, blending, alpha-to-coverage, and color masks.
@@ -8262,6 +8271,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_vertexShader->serial);
     key = HashCombine(key, m_pixelShader->serial);
     key = HashCombine(key, m_decl->serial);
+    key = HashCombine(key, sunShadowCompareMask);
 
     // Vulkan bakes vertex input binding strides, attribute formats, and byte
     // offsets into VkPipeline. A D3D9 declaration can be rebound to streams with
@@ -8380,6 +8390,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_vertexShader->linkedPixelShaderSerial != m_pixelShader->serial ||
         m_pixelShader->linkedDeclarationSerial != m_decl->serial ||
         m_pixelShader->linkedVertexShaderSerial != m_vertexShader->serial ||
+        m_pixelShader->linkedSunShadowCompareMask != sunShadowCompareMask ||
         !m_vertexShader->module || !m_pixelShader->module)
     {
         if (m_vertexShader->module)
@@ -8815,6 +8826,20 @@ bool IDirect3DDevice9::EnsurePipeline()
             (void)PatchFragmentShaderToSolidWhite(
                 pixelSpirv, m_pixelShader->serial, m_pixelShader->serial);
         }
+        if (sunShadowCompareMask &&
+            !PatchFragmentShaderForSunShadowCompare(
+                pixelSpirv, sunShadowCompareMask, 2u))
+        {
+            static std::atomic<uint32_t> sunShadowPatchFailureCount{0};
+            if (sunShadowPatchFailureCount.fetch_add(
+                    1u, std::memory_order_relaxed) == 0u)
+            {
+                Switch_LogWrite(
+                    "[KisakCOD][VK SUN SHADOW] failed to convert active HSM sampler to Dref\n");
+            }
+            return false;
+        }
+
         m_pixelShader->linkedSpirv = pixelSpirv;
 
         // Do not rewrite every fragment shader with discard logic when D3D9
@@ -9057,6 +9082,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_pixelShader->linkedDeclarationSerial = m_decl->serial;
         m_pixelShader->linkedPixelShaderSerial = m_pixelShader->serial;
         m_pixelShader->linkedVertexShaderSerial = m_vertexShader->serial;
+        m_pixelShader->linkedSunShadowCompareMask = sunShadowCompareMask;
         m_pixelShader->linkedAlphaTestPatch = useAlphaTestPatch;
         m_pixelShader->linkedAlphaFunc = useAlphaTestPatch ? m_alphaFunc : UINT32_MAX;
         m_pixelShader->linkedAlphaRef = useAlphaTestPatch ? m_alphaRef : UINT32_MAX;
