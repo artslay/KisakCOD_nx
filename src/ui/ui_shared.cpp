@@ -7253,7 +7253,7 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
     // Validate the union member selected by the serialized item type, but do
     // not return before Window_Paint/Item_Text_Paint: a missing edit/list
     // payload must not erase the item's caption, panel or border.
-    switch (item->type)
+    switch (item->dataType)
     {
     case 6:
         if (Switch_UI_BadPointer(item->typeData.listBox))
@@ -7262,15 +7262,15 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
             item->typeData.listBox = nullptr;
         }
         break;
+    case 0:
     case 4:
     case 9:
+    case 0xA:
+    case 0xB:
+    case 0xE:
     case 0x10:
     case 0x11:
     case 0x12:
-    case 0xB:
-    case 0xE:
-    case 0xA:
-    case 0:
         if (Switch_UI_BadPointer(item->typeData.editField))
         {
             Switch_UI_LogBadPointer("Item_Paint", "typeData.editField", item, item->typeData.editField);
