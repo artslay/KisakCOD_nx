@@ -4134,7 +4134,12 @@ bool __cdecl CG_PlayerUsingScopedTurret(int32_t localClientNum)
     int32_t weapIdxTurret; // [esp+4h] [ebp-4h]
 
     weapIdxTurret = CG_PlayerTurretWeaponIdx(localClientNum);
-    return weapIdxTurret && BG_GetWeaponDef(weapIdxTurret)->overlayMaterial != 0;
+    if (!weapIdxTurret)
+        return false;
+
+    const WeaponDef *weapon = BG_GetWeaponDef(weapIdxTurret);
+    return weapon->overlayMaterial != nullptr ||
+        weapon->overlayMaterialLowRes != nullptr;
 }
 
 void CG_DisplayViewmodelAnim(int localClientNum)
