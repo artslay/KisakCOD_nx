@@ -2768,29 +2768,66 @@ static bool Switch_UI_DispatchCloseOnlyPauseAction(
 
     const bool isApplicationExit =
         Switch_UI_ContainsCaseInsensitive(itemName, "quitgame") ||
+        Switch_UI_ContainsCaseInsensitive(itemName, "quit_game") ||
         Switch_UI_ContainsCaseInsensitive(rawText, "quitgame") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "quit_game") ||
         Switch_UI_ContainsCaseInsensitive(translatedText, "quitgame") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "quit_game") ||
         Switch_UI_ContainsCaseInsensitive(itemName, "exitgame") ||
+        Switch_UI_ContainsCaseInsensitive(itemName, "exit_game") ||
         Switch_UI_ContainsCaseInsensitive(rawText, "exitgame") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "exit_game") ||
         Switch_UI_ContainsCaseInsensitive(translatedText, "exitgame") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "exit_game") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "quit game") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "quit game") ||
         Switch_UI_ContainsCaseInsensitive(rawText, "exit game") ||
-        Switch_UI_ContainsCaseInsensitive(translatedText, "exit game");
+        Switch_UI_ContainsCaseInsensitive(translatedText, "exit game") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "выйти из игры") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "Выйти из игры") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "выйти из игры") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "Выйти из игры") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "выход из игры") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "Выход из игры");
+
+    // "Save" by itself is not a request to leave the mission: only intercept
+    // explicit Save-and-Quit labels. This keeps a normal Save Game action intact.
+    const bool isSaveAndQuit =
+        Switch_UI_ContainsCaseInsensitive(itemName, "savequit") ||
+        Switch_UI_ContainsCaseInsensitive(itemName, "saveandquit") ||
+        Switch_UI_ContainsCaseInsensitive(itemName, "save_and_quit") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "save and quit") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "save & quit") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "save_and_quit") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "save and quit") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "save & quit") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "save_and_quit") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "сохранить и выйти") ||
+        Switch_UI_ContainsCaseInsensitive(rawText, "Сохранить и выйти") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "сохранить и выйти") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "Сохранить и выйти") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "сохранить и вернуться в меню") ||
+        Switch_UI_ContainsCaseInsensitive(translatedText, "Сохранить и вернуться в меню");
 
     // In the SP pause menu, "Quit"/"Save and Quit" means leaving the mission
-    // for the main menu; only explicit "Quit Game"/"Exit Game" exits the app.
+    // for the main menu; explicit "Quit Game"/"Exit Game" labels are separate.
     const bool isReturnToMenu = !isApplicationExit &&
         (Switch_UI_ContainsCaseInsensitive(itemName, "leave") ||
          Switch_UI_ContainsCaseInsensitive(rawText, "leave") ||
          Switch_UI_ContainsCaseInsensitive(translatedText, "leave") ||
-         Switch_UI_ContainsCaseInsensitive(itemName, "savequit") ||
-         Switch_UI_ContainsCaseInsensitive(rawText, "save") ||
-         Switch_UI_ContainsCaseInsensitive(translatedText, "save") ||
+         isSaveAndQuit ||
          Switch_UI_ContainsCaseInsensitive(itemName, "returntomenu") ||
+         Switch_UI_ContainsCaseInsensitive(itemName, "return_to_menu") ||
          Switch_UI_ContainsCaseInsensitive(rawText, "return to menu") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "return_to_menu") ||
          Switch_UI_ContainsCaseInsensitive(translatedText, "return to menu") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "return_to_menu") ||
          Switch_UI_ContainsCaseInsensitive(itemName, "backtomenu") ||
+         Switch_UI_ContainsCaseInsensitive(itemName, "back_to_menu") ||
          Switch_UI_ContainsCaseInsensitive(rawText, "main menu") ||
+         Switch_UI_ContainsCaseInsensitive(rawText, "main_menu") ||
          Switch_UI_ContainsCaseInsensitive(translatedText, "main menu") ||
+         Switch_UI_ContainsCaseInsensitive(translatedText, "main_menu") ||
          Switch_UI_ContainsCaseInsensitive(itemName, "quit") ||
          Switch_UI_ContainsCaseInsensitive(rawText, "quit") ||
          Switch_UI_ContainsCaseInsensitive(translatedText, "quit") ||
