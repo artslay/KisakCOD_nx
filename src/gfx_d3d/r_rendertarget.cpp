@@ -195,6 +195,13 @@ void __cdecl R_InitRenderTargets()
 void R_InitRenderTargets_PC()
 {
     _D3DFORMAT backBufferFormat; // [esp+0h] [ebp-4h]
+#ifdef __SWITCH__
+    // DOF and other post effects need only a low-resolution intermediate;
+    // keep the final composite at the full scene resolution.
+    constexpr int postEffectPicmip = 3;
+#else
+    constexpr int postEffectPicmip = 2;
+#endif
 
     backBufferFormat = R_InitFrameBufferRenderTarget();
     if (!g_allocateMinimalResources)
@@ -223,28 +230,28 @@ void R_InitRenderTargets_PC()
         R_InitFullscreenRenderTargetImage(
             5,
             FULLSCREEN_SCENE,
-            2,
+            postEffectPicmip,
             backBufferFormat,
             RENDERTARGET_USAGE_RENDER,
             &gfxRenderTargets[R_RENDERTARGET_POST_EFFECT_0]);
         R_InitFullscreenRenderTargetImage(
             6,
             FULLSCREEN_SCENE,
-            2,
+            postEffectPicmip,
             backBufferFormat,
             RENDERTARGET_USAGE_RENDER,
             &gfxRenderTargets[R_RENDERTARGET_POST_EFFECT_1]);
         R_InitFullscreenRenderTargetImage(
             7,
             FULLSCREEN_SCENE,
-            2,
+            postEffectPicmip,
             backBufferFormat,
             RENDERTARGET_USAGE_RENDER,
             &gfxRenderTargets[R_RENDERTARGET_PINGPONG_0]);
         R_InitFullscreenRenderTargetImage(
             8,
             FULLSCREEN_SCENE,
-            2,
+            postEffectPicmip,
             backBufferFormat,
             RENDERTARGET_USAGE_RENDER,
             &gfxRenderTargets[R_RENDERTARGET_PINGPONG_1]);
