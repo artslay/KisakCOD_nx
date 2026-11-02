@@ -9785,7 +9785,10 @@ bool IDirect3DDevice9::EnsurePipeline()
     // D3D9 cull values are NONE=1, CW=2, CCW=3. The negative Vulkan
     // viewport preserves D3D9's top-left origin, so clockwise NDC triangles
     // are Vulkan front faces. Keep the ordinary material cull state.
-    raster.cullMode = switchFragmentOutputProbeActive
+    // FX code meshes contain camera-facing sprite/tail cards whose generated
+    // winding can face either side. Match the original two-sided FX draw path
+    // without changing culling for world geometry or XModels.
+    raster.cullMode = (switchFragmentOutputProbeActive || g_switchFxCodeMeshDrawActive)
         ? VK_CULL_MODE_NONE
         : (m_cullMode == 1
             ? VK_CULL_MODE_NONE
