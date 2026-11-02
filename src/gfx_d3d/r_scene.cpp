@@ -1771,7 +1771,7 @@ void __cdecl R_GenerateSortedDrawSurfs(
     frontEndDataOut->viewInfoIndex = viewInfoIndex;
     viewInfo = &frontEndDataOut->viewInfo[viewInfoIndex];
     dynamicShadowType = R_DynamicShadowType();
-rg.sunShadowFull = r_rendererInUse->current.integer == 1;
+    rg.sunShadowFull = r_rendererInUse->current.integer == 1;
     if (rg.sunShadowFull)
     {
         rg.sunShadowmapScale = sm_sunShadowScale->current.value;
