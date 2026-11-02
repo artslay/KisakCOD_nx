@@ -713,9 +713,18 @@ bool __cdecl Material_HasAnyFogableTechnique(const Material *material)
     // material variant follows the original D3D9 2D behavior, not a name list.
     const MaterialTechniqueSet *authoredTechniqueSet =
         material ? material->techniqueSet : nullptr;
-    return authoredTechniqueSet &&
+    const bool hasUnlitTechnique =
+        authoredTechniqueSet &&
+        authoredTechniqueSet->techniques[TECHNIQUE_UNLIT] != nullptr;
+    const bool hasFogableTechnique =
+        authoredTechniqueSet &&
         (authoredTechniqueSet->techniques[TECHNIQUE_LIT_BEGIN] ||
          authoredTechniqueSet->techniques[TECHNIQUE_EMISSIVE]);
+
+    // These 2D callers draw with TECHNIQUE_UNLIT. A material may also carry
+    // LIT/EMISSIVE techniques for other view types; those variants must not
+    // suppress its valid unlit glyph or picture path.
+    return hasFogableTechnique && !hasUnlitTechnique;
 #else
     return Material_GetTechnique(material, TECHNIQUE_LIT_BEGIN) ||
         Material_GetTechnique(material, TECHNIQUE_EMISSIVE);

@@ -61,21 +61,28 @@ static inline uint64_t KisakRendererClock()
 }
 #endif
 
-// Keep the font glyph renderer's fogability test consistent with the Switch
-// 2D picture path. Material_OverrideTechniqueSets may give a UI/font material
-// a remapped feature set with LIT/EMISSIVE techniques that were not present in
-// its authored set; using the remapped set here silently drops every glyph.
+// Keep the font glyph renderer's 2D technique test consistent with the
+// Switch picture path. Glyph quads always request UNLIT; LIT/EMISSIVE variants
+// for other view types do not make a font material invalid for 2D drawing.
 static bool RB_MaterialHasAnyFogableTechnique(const Material *material)
 {
 #ifdef __SWITCH__
-    // Test the authored feature set, not the dynamically remapped render set.
-    // The latter can expose 3D LIT/EMISSIVE techniques for a screen-space font
-    // atlas and cause DrawText2D to discard the glyph quad.
+    // Test the authored set because the remapped set can contain unrelated 3D
+    // variants. A usable authored UNLIT technique takes precedence for glyphs.
     const MaterialTechniqueSet *authoredTechniqueSet =
         material ? material->techniqueSet : nullptr;
-    return authoredTechniqueSet &&
+    const bool hasUnlitTechnique =
+        authoredTechniqueSet &&
+        authoredTechniqueSet->techniques[TECHNIQUE_UNLIT] != nullptr;
+    const bool hasFogableTechnique =
+        authoredTechniqueSet &&
         (authoredTechniqueSet->techniques[TECHNIQUE_LIT_BEGIN] ||
          authoredTechniqueSet->techniques[TECHNIQUE_EMISSIVE]);
+
+    // These 2D callers draw with TECHNIQUE_UNLIT. A material may also carry
+    // LIT/EMISSIVE techniques for other view types; those variants must not
+    // suppress its valid unlit glyph or picture path.
+    return hasFogableTechnique && !hasUnlitTechnique;
 #else
     return Material_HasAnyFogableTechnique(const_cast<Material *>(material));
 #endif
