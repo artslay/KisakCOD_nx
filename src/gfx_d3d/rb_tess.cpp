@@ -650,7 +650,7 @@ void __cdecl RB_CreateParticleCloud2dAxis(const GfxParticleCloud *cloud, const f
 {
     iassert(cloud);
 
-    if (viewUp[0] >= 0.001f || viewUp[1] >= 0.001f )
+    if (I_fabs(viewUp[0]) >= 0.001f || I_fabs(viewUp[1]) >= 0.001f)
     {
         (*viewAxis)[0][0] = viewUp[1];
         (*viewAxis)[0][1] = -viewUp[0];
