@@ -3949,7 +3949,8 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
                     (focusCandidate->action &&
                      !Switch_UI_BadPointer(focusCandidate->action) &&
                      focusCandidate->action[0]) ||
-                    (focusCandidate->onAccept &&
+                    (focusCandidate->type != 0 &&
+                     focusCandidate->onAccept &&
                      !Switch_UI_BadPointer(focusCandidate->onAccept) &&
                      focusCandidate->onAccept[0]);
                 const bool hasKeyboardControl =
