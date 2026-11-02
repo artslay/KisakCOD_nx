@@ -3266,6 +3266,12 @@ static bool PatchFragmentShaderForSunShadowCompare(
         offset += wordCount;
     }
 
+    std::unordered_set<uint32_t> vec4TypeIds;
+    std::unordered_map<uint32_t, uint32_t> resultTypeById;
+    if (!SwitchBuildSpirvResultTypeMap(
+            working.data(), working.size(), vec4TypeIds, resultTypeById))
+        return false;
+
     std::vector<uint32_t> transformed;
     transformed.reserve(working.size() + typeDeclarations.size() + 128u);
     size_t typeInsertOffset = working.size();
