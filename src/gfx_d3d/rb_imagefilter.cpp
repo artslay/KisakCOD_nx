@@ -446,7 +446,7 @@ GfxRenderTargetId __cdecl RB_ApplyGlowFilter(
             ".\\rb_imagefilter.cpp",
             433,
             0,
-            "post-effect width does not match the configured downsample scale\\n\\t%i, expected %i",
+            "post-effect width does not match the configured downsample scale\n\t%i, expected %i",
             gfxRenderTargets[dstRenderTarget].width,
             expectedDstWidth);
     if (gfxRenderTargets[dstRenderTarget].height != expectedDstHeight)
@@ -454,7 +454,7 @@ GfxRenderTargetId __cdecl RB_ApplyGlowFilter(
             ".\\rb_imagefilter.cpp",
             434,
             0,
-            "post-effect height does not match the configured downsample scale\\n\\t%i, expected %i",
+            "post-effect height does not match the configured downsample scale\n\t%i, expected %i",
             gfxRenderTargets[dstRenderTarget].height,
             expectedDstHeight);
     v5 = radius * 0.25;
