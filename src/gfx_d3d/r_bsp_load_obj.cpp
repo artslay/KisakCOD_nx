@@ -901,7 +901,7 @@ static void R_StoreLightDefAttenuationPixel(uint8_t *destination, const GfxRawPi
         (static_cast<uint32_t>(pixel.r) << 16) |
         (static_cast<uint32_t>(pixel.g) << 8) |
         static_cast<uint32_t>(pixel.b);
-    std::memcpy(destination, &packed, sizeof(packed));
+    memcpy(destination, &packed, sizeof(packed));
 }
 
 void __cdecl R_CopyLightDefAttenuationImage(GfxLightDef *def, LightDefCopyConfig *anonymousConfig)
