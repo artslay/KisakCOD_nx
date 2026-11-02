@@ -1771,14 +1771,7 @@ void __cdecl R_GenerateSortedDrawSurfs(
     frontEndDataOut->viewInfoIndex = viewInfoIndex;
     viewInfo = &frontEndDataOut->viewInfo[viewInfoIndex];
     dynamicShadowType = R_DynamicShadowType();
-#ifdef __SWITCH__
-    // The Switch Vulkan backend translates the SM3 shadow techniques, but the
-    // D3D capability probe that selects r_rendererInUse is intentionally absent.
-    // Do not let its default renderer value clip the far sun-shadow cascade.
-    rg.sunShadowFull = true;
-#else
-    rg.sunShadowFull = r_rendererInUse->current.integer == 1;
-#endif
+rg.sunShadowFull = r_rendererInUse->current.integer == 1;
     if (rg.sunShadowFull)
     {
         rg.sunShadowmapScale = sm_sunShadowScale->current.value;
