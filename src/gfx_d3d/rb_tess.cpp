@@ -33,8 +33,8 @@ extern void Switch_SetModelTransformTraceContext(
 
 #ifdef __SWITCH__
 // R_TessCodeMeshList submits FX sprites/tails through the packed code-mesh
-// buffer. Its UV words are converted to IEEE half2 before unlock; distinguish
-// this draw from XModel draws that share the same 32-byte vertex stride.
+// buffer. They share the 32-byte GfxPackedVertex stride with XModels, but
+// POSITION0.w contains authored binormalSign and must be preserved for FX only.
 thread_local bool g_switchFxCodeMeshDrawActive = false;
 thread_local const char *g_switchFxCodeMeshMaterialName = nullptr;
 

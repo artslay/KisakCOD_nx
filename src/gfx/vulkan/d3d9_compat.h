@@ -360,6 +360,9 @@ struct KisakVkShader : IDirect3DResource9 {
     uint64_t linkedDeclarationSerial=0;
     uint64_t linkedPixelShaderSerial=0;
     uint64_t linkedVertexShaderSerial=0;
+    // The shared VERTDECL_PACKED route has a different POSITION0 format for
+    // FX code meshes because their authored binormalSign lives in position.w.
+    bool linkedFxCodeMesh=false;
     // Cache which pixel-shader sampler slots implement CoD4 HSM depth taps.
     uint32_t sunShadowCompareShaderMask=UINT32_MAX;
     bool sunShadowCompareBindingTraceLogged=false;

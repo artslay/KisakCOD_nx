@@ -1491,16 +1491,25 @@ uint8_t SwitchEffectiveShaderElementType(
         element.UsageIndex == 0u)
         return D3DDECLTYPE_UBYTE4;
 
+    // FX code meshes also use 32-byte GfxPackedVertex records. Unlike XModels,
+    // FX_GenSpriteVerts writes binormalSign=-1 into POSITION0.w, and the original
+    // CoD4 FX vertex shaders use that handedness when rebuilding their tangent
+    // basis. Preserve the full FLOAT4 input only while the FX code-mesh scope is
+    // active; ordinary packed-model draws still expose XYZ and receive W=1.
+    if (g_switchFxCodeMeshDrawActive &&
+        decl && decl->switchVertDeclType == 1u &&
+        element.Stream == 0u && streamStride == sizeof(GfxPackedVertex) &&
+        element.Offset == 0u && element.Usage == 0u &&
+        element.UsageIndex == 0u && element.Type == D3DDECLTYPE_FLOAT4)
+        return D3DDECLTYPE_FLOAT4;
+
     // GfxPackedVertex and GfxWorldVertex both begin with xyz at byte 0 and
-    // binormalSign at byte 12. Their D3D declaration is a legacy semantic route;
-    // it may label POSITION as FLOAT4 even though the fourth physical component
-    // is not homogeneous W. Expose XYZ only, so Vulkan supplies W=1 instead of
-    // interpreting binormalSign (often -1) as position.w. Apply this narrowly
-    // to the known 32-byte packed-model ABI; world vertices use the 44-byte case.
+    // binormalSign at byte 12. For ordinary packed-model draws the fourth
+    // component is not homogeneous W, so expose XYZ and let Vulkan supply W=1.
     if (decl && decl->switchVertDeclType != 0u &&
-        element.Stream == 0 && streamStride == 32u &&
-        element.Offset == 0 && element.Usage == 0 &&
-        element.UsageIndex == 0 && element.Type == D3DDECLTYPE_FLOAT4)
+        element.Stream == 0u && streamStride == 32u &&
+        element.Offset == 0u && element.Usage == 0u &&
+        element.UsageIndex == 0u && element.Type == D3DDECLTYPE_FLOAT4)
         return D3DDECLTYPE_FLOAT3;
 
     if (element.Stream == 0 && streamStride == 44u &&
@@ -8657,6 +8666,10 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, static_cast<uint32_t>(m_topology));
     key = HashCombine(key, m_fillMode);
     key = HashCombine(key, m_cullMode);
+    // FX and XModel code meshes share their declaration and 32-byte stride,
+    // but POSITION0 has a different effective format. Do not reuse pipelines
+    // across the two vertex-input layouts.
+    key = HashCombine(key, g_switchFxCodeMeshDrawActive ? 1u : 0u);
     key = HashCombine(key, m_scissor);
     key = HashCombine(key, m_colorWriteMask);
     key = HashCombine(key, m_stencilEnable);
@@ -8708,6 +8721,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     if (m_vertexShader->linkedDeclarationSerial != m_decl->serial ||
         m_vertexShader->linkedPixelShaderSerial != m_pixelShader->serial ||
+        m_vertexShader->linkedFxCodeMesh != g_switchFxCodeMeshDrawActive ||
         m_pixelShader->linkedDeclarationSerial != m_decl->serial ||
         m_pixelShader->linkedVertexShaderSerial != m_vertexShader->serial ||
         m_pixelShader->linkedSunShadowCompareMask != sunShadowCompareMask ||
@@ -9399,6 +9413,7 @@ bool IDirect3DDevice9::EnsurePipeline()
 
         m_vertexShader->linkedDeclarationSerial = m_decl->serial;
         m_vertexShader->linkedPixelShaderSerial = m_pixelShader->serial;
+        m_vertexShader->linkedFxCodeMesh = g_switchFxCodeMeshDrawActive;
         m_pixelShader->linkedDeclarationSerial = m_decl->serial;
         m_pixelShader->linkedPixelShaderSerial = m_pixelShader->serial;
         m_pixelShader->linkedVertexShaderSerial = m_vertexShader->serial;
