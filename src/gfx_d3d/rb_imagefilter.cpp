@@ -432,22 +432,31 @@ GfxRenderTargetId __cdecl RB_ApplyGlowFilter(
     iassert( (radius >= 0) );
     if (radius == 0.0)
         return srcRenderTarget;
-    if (gfxRenderTargets[dstRenderTarget].width != gfxRenderTargets[srcRenderTarget].width >> 2)
+#ifdef __SWITCH__
+    constexpr uint32_t postEffectScaleShift = 3;
+#else
+    constexpr uint32_t postEffectScaleShift = 2;
+#endif
+    const uint32_t expectedDstWidth =
+        gfxRenderTargets[srcRenderTarget].width >> postEffectScaleShift;
+    const uint32_t expectedDstHeight =
+        gfxRenderTargets[srcRenderTarget].height >> postEffectScaleShift;
+    if (gfxRenderTargets[dstRenderTarget].width != expectedDstWidth)
         MyAssertHandler(
             ".\\rb_imagefilter.cpp",
             433,
             0,
-            "gfxRenderTargets[dstRenderTarget].width == gfxRenderTargets[srcRenderTarget].width / 4\n\t%i, %i",
+            "post-effect width does not match the configured downsample scale\\n\\t%i, expected %i",
             gfxRenderTargets[dstRenderTarget].width,
-            gfxRenderTargets[srcRenderTarget].width >> 2);
-    if (gfxRenderTargets[dstRenderTarget].height != gfxRenderTargets[srcRenderTarget].height >> 2)
+            expectedDstWidth);
+    if (gfxRenderTargets[dstRenderTarget].height != expectedDstHeight)
         MyAssertHandler(
             ".\\rb_imagefilter.cpp",
             434,
             0,
-            "gfxRenderTargets[dstRenderTarget].height == gfxRenderTargets[srcRenderTarget].height / 4\n\t%i, %i",
+            "post-effect height does not match the configured downsample scale\\n\\t%i, expected %i",
             gfxRenderTargets[dstRenderTarget].height,
-            gfxRenderTargets[srcRenderTarget].height >> 2);
+            expectedDstHeight);
     v5 = radius * 0.25;
     RB_VirtualToSceneRadius(v5, &radiusX, &radiusY);
     srcWidth = gfxRenderTargets[dstRenderTarget].width;
