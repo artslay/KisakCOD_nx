@@ -981,7 +981,7 @@ void __cdecl R_CopyLightDefAttenuationImage(GfxLightDef *def, LightDefCopyConfig
                 anonymousConfig->zoom * (def->lmapLookupStart + rawImage.width + 1) - endCount);
         for (iter = 0; iter < endCount; ++iter)
         {
-            *dstPixel = (srcPixel->a << 24) | srcPixel->b | (srcPixel->g << 8) | (srcPixel->r << 16);
+            R_StoreLightDefAttenuationPixel(dstPixel, *srcPixel);
             dstPixel += 4;
         }
     }
