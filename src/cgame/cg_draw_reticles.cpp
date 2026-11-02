@@ -154,7 +154,9 @@ void __cdecl CG_DrawCrosshair(int32_t localClientNum)
         if ((ps->eFlags & 0x300) != 0)
         {
             weapIndex = CG_PlayerTurretWeaponIdx(localClientNum);
-            if (weapIndex && (weapDefTurret = BG_GetWeaponDef(weapIndex), weapDefTurret->overlayMaterial))
+            if (weapIndex &&
+                (weapDefTurret = BG_GetWeaponDef(weapIndex),
+                    weapDefTurret->overlayMaterial || weapDefTurret->overlayMaterialLowRes))
             {
                 CG_DrawAdsOverlay(localClientNum, weapDefTurret, colorWhite, vec2_origin);
             }
