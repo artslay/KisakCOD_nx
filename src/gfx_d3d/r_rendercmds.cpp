@@ -764,6 +764,26 @@ const MaterialTechnique *__cdecl Material_GetTechnique(const Material *material,
     if (!techSet)
         return nullptr;
 
+    // RB_DrawStretchPic/RB_DrawStretchPicRotate are the original D3D9 2D UI
+    // path: glyphs, menu captions, and screen-space icons all request UNLIT.
+    // A Switch feature remap may omit UNLIT from the remapped set even though
+    // the authored material supplies it. Using that remapped set makes
+    // RB_BeginSurface receive a null technique and silently loses UI quads.
+    // Preserve the normal remap for every other pass, but resolve 2D UNLIT
+    // from the material's authored set whenever that implementation exists.
+    if (techType == TECHNIQUE_UNLIT &&
+        gfxCmdBufSourceState.viewMode == VIEW_MODE_2D)
+    {
+        MaterialTechniqueSet *authoredTechniqueSet = material->techniqueSet;
+        if (authoredTechniqueSet &&
+            authoredTechniqueSet->techniques[TECHNIQUE_UNLIT])
+        {
+            techSet = authoredTechniqueSet;
+            g_switchFrameStage =
+                "frame/render/material_get_technique/authored_2d_unlit";
+        }
+    }
+
     g_switchFrameStage = "frame/render/material_get_technique/set_ready";
     technique = Switch_ResolveTechniqueForRender(
         const_cast<MaterialTechniqueSet *>(techSet),
