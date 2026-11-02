@@ -63,6 +63,27 @@ char __cdecl CG_GetWeapReticleZoom(const cg_s *cgameGlob, float *zoom)
 
     iassert(weapDef);
 
+#ifdef __SWITCH__
+    // The scope draw routine is never reached when both overlay assets are
+    // absent. Report that asset-side failure once per weapon so it cannot be
+    // mistaken for a Vulkan scissor or post-processing failure.
+    static const WeaponDef *lastMissingAdsOverlayWeapon = nullptr;
+    if (!weapDef->overlayMaterial && !weapDef->overlayMaterialLowRes &&
+        fPosLerp > 0.01f && lastMissingAdsOverlayWeapon != weapDef)
+    {
+        lastMissingAdsOverlayWeapon = weapDef;
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][ADS OVERLAY MISSING] weapon=%s reticle=%u size=%.1fx%.1f zoomIn=%.3f zoomOut=%.3f weaponPos=%.3f\\n",
+            weapDef->szInternalName ? weapDef->szInternalName : "(unnamed)",
+            static_cast<unsigned int>(weapDef->overlayReticle),
+            weapDef->overlayWidth, weapDef->overlayHeight,
+            weapDef->fAdsZoomInFrac, weapDef->fAdsZoomOutFrac, fPosLerp);
+        Switch_LogWrite(trace);
+    }
+#endif
+
     if (!weapDef->overlayMaterial &&
         !weapDef->overlayMaterialLowRes &&
         weapDef->overlayReticle == WEAPOVERLAYRETICLE_NONE)
