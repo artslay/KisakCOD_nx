@@ -2873,12 +2873,16 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
         {
 #ifdef __SWITCH__
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/error_menu";
-
-#endif
-            Menus_OpenByName(&uiInfo.uiDC, "error_popmenu");
-#ifdef __SWITCH__
+            menuDef_t *errorMenu =
+                Menus_FindByName(&uiInfo.uiDC, "error_popmenu");
+            const bool errorAlreadyActive =
+                errorMenu &&
+                Menus_MenuIsInStack(&uiInfo.uiDC, errorMenu);
+            if (!errorAlreadyActive)
+                Menus_OpenByName(&uiInfo.uiDC, "error_popmenu");
             g_switchFrameStage = "frame/cl_frame/disconnected_set_menu/error_menu_done";
-
+#else
+            Menus_OpenByName(&uiInfo.uiDC, "error_popmenu");
 #endif
             CL_StopControllerRumbles();
         }
