@@ -84,9 +84,7 @@ char __cdecl CG_GetWeapReticleZoom(const cg_s *cgameGlob, float *zoom)
     }
 #endif
 
-    if (!weapDef->overlayMaterial &&
-        !weapDef->overlayMaterialLowRes &&
-        weapDef->overlayReticle == WEAPOVERLAYRETICLE_NONE)
+    if (!weapDef->overlayMaterial && weapDef->overlayReticle == WEAPOVERLAYRETICLE_NONE)
         return 0;
 
     if (fPosLerp == 0.0)
@@ -252,10 +250,8 @@ void __cdecl CG_DrawAdsOverlay(
 
     if (CG_UsingLowResViewPort(localClientNum) && weapDef->overlayMaterialLowRes)
         material = weapDef->overlayMaterialLowRes;
-    else if (weapDef->overlayMaterial)
-        material = weapDef->overlayMaterial;
     else
-        material = weapDef->overlayMaterialLowRes;
+        material = weapDef->overlayMaterial;
 
 #ifdef __SWITCH__
     // One bounded record per WeaponDef: distinguish a missing fastfile overlay
