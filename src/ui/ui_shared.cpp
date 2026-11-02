@@ -9623,11 +9623,12 @@ void __cdecl Menu_PaintAll(UiContext *dc)
         if (!menu)
             MyAssertHandler(".\\ui\\ui_shared.cpp", 6124, 0, "%s", "menu");
 
-        // Closed menus can remain in the Switch menu stack during cinematic
-        // transitions. A hidden fullscreen entry must not occlude the visible
-        // menus beneath it, or Menu_PaintAll can submit a completely black frame.
-        if (menu->fullScreen &&
-            Window_IsVisible(dc->localClientNum, &menu->window))
+        // Closed/condition-hidden menus can remain in the Switch menu stack.
+        // Test the full menu visibility predicate, not just the window's
+        // dynamic flags: visibleWhen, owner-draw, scope/flashbang and UI-catcher
+        // gates must not let a hidden fullscreen popup suppress the pause menu
+        // or the confirmation dialog underneath it.
+        if (menu->fullScreen && Menu_IsVisible(dc, menu))
         {
             drawStart = menuIndex;
             anyFullscreen = 1;
