@@ -232,35 +232,112 @@ void __cdecl R_SetupSunShadowMaps(const GfxViewParms *viewParms, GfxSunShadow *s
         &sunShadow->lookupMatrix);
 }
 
-void __cdecl R_GetSceneExtentsAlongDir(const float *origin, const float *forward, float *nearCap, float *farCap)
+static void __cdecl R_CalcBoxVsCylinderRayMinBox(
+    const float *box,
+    const float *origin,
+    const float *forward,
+    float radius,
+    float *outBox)
+{
+    int points = 0;
+    outBox[0] = FLT_MAX;
+    outBox[1] = FLT_MAX;
+    outBox[2] = FLT_MAX;
+    outBox[3] = -FLT_MAX;
+    outBox[4] = -FLT_MAX;
+    outBox[5] = -FLT_MAX;
+
+    // Intersect the sun-direction line through the camera with all six AABB
+    // faces. Two valid intersections define the AABB section within the
+    // camera-centred cylinder used by CoD4's shadow draw distance.
+    for (int side = 0; side < 6; side += 3)
+    {
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            if (forward[axis] == 0.0f)
+                continue;
+
+            const float distance =
+                (box[axis + side] - origin[axis]) / forward[axis];
+            float intersection[3] = {
+                distance * forward[0] + origin[0],
+                distance * forward[1] + origin[1],
+                distance * forward[2] + origin[2]
+            };
+
+            const int otherAxis0 = (axis & 1) == 0 ? 1 : 0;
+            const int otherAxis1 = (~axis) & 2;
+            if (box[otherAxis0] <= intersection[otherAxis0] &&
+                box[otherAxis1] <= intersection[otherAxis1] &&
+                intersection[otherAxis0] <= box[otherAxis0 + 3] &&
+                intersection[otherAxis1] <= box[otherAxis1 + 3])
+            {
+                ++points;
+                Vec3Min(outBox, intersection, outBox);
+                Vec3Max(outBox + 3, intersection, outBox + 3);
+            }
+        }
+    }
+
+    // If the ray misses or only touches the box, keep the original bounds.
+    if (points < 2)
+    {
+        std::memcpy(outBox, box, sizeof(float) * 6);
+        return;
+    }
+
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        outBox[axis] -= radius;
+        outBox[axis + 3] += radius;
+    }
+    Vec3Max(outBox, box, outBox);
+    Vec3Min(outBox + 3, box + 3, outBox + 3);
+}
+
+void __cdecl R_GetSceneExtentsAlongDir(
+    const float *origin,
+    const float *forward,
+    float *nearCap,
+    float *farCap)
 {
     DpvsPlane nearPlane;
+    float bounds[2][3];
     float distMin;
     float distMax;
+
+    // CoD4 uses the far cascade's sample extent as the maximum sun-shadow draw
+    // distance. This Switch renderer's sun map is fixed at 1024 texels per tile.
+    const float sampleSizeFar =
+        sm_sunSampleSizeNear->current.value * rg.sunShadowPartitionRatio;
+    const float sunShadowDrawDist = 1024.0f * sampleSizeFar;
+
+    R_CalcBoxVsCylinderRayMinBox(
+        rgp.world->mins,
+        dpvsGlob.viewOrg,
+        forward,
+        sunShadowDrawDist,
+        &bounds[0][0]);
 
     nearPlane.coeffs[0] = forward[0];
     nearPlane.coeffs[1] = forward[1];
     nearPlane.coeffs[2] = forward[2];
-
     nearPlane.coeffs[3] = -origin[2];
-
     R_SetDpvsPlaneSides(&nearPlane);
-
-    // LWSS: (Semi Adapted from BLOPS - same exact results)
-    float bounds[2][3];
-    bounds[0][0] = rgp.world->mins[0];
-    bounds[0][1] = rgp.world->mins[1];
-    bounds[0][2] = rgp.world->mins[2];
-
-    bounds[1][0] = rgp.world->maxs[0];
-    bounds[1][1] = rgp.world->maxs[1];
-    bounds[1][2] = rgp.world->maxs[2];
 
     distMin = R_DpvsPlaneMinSignedDistToBox(&nearPlane, bounds[0]);
     distMax = R_DpvsPlaneMaxSignedDistToBox(&nearPlane, bounds[0]);
 
+    const float farthest =
+        nearPlane.coeffs[0] * dpvsGlob.viewOrg[0] +
+        nearPlane.coeffs[1] * dpvsGlob.viewOrg[1] +
+        nearPlane.coeffs[2] * dpvsGlob.viewOrg[2] +
+        nearPlane.coeffs[3] + sunShadowDrawDist;
+
+    if (farthest > distMin)
+        distMax = std::min(distMax, farthest);
+
     iassert(distMin < distMax);
-    
     *nearCap = distMin;
     *farCap = distMax;
 }
