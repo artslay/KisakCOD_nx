@@ -2748,6 +2748,14 @@ static bool Switch_UI_PauseConfirmationHasVisibleAction(
         {
             continue;
         }
+        // Item_Paint applies owner-draw visibility before Item_IsVisible.
+        // Mirror that gate here so we do not accept a popup whose only
+        // confirmation button will be hidden when the menu is actually painted.
+        if (candidate->window.ownerDrawFlags &&
+            !UI_OwnerDrawVisible(candidate->window.ownerDrawFlags))
+        {
+            continue;
+        }
         if ((Switch_UI_ScriptHasCommand(candidate->action, wantedCommand) ||
              Switch_UI_ScriptHasCommand(candidate->onAccept, wantedCommand)) &&
             Item_IsVisible(dc->localClientNum, candidate))
