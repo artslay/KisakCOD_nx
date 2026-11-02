@@ -224,7 +224,7 @@ void __cdecl R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport)
     // 2D quads retain their original vertical alignment, but remove the X
     // correction so full-screen images start at the first texel.
     identity_52.m[3][0] = -1.0;
-    identity_52.m[3][1] = transform_60 + 1.0;
+    identity_52.m[3][1] = 1.0;
 #else
     identity_52.m[3][0] = -1.0 - v7;
     identity_52.m[3][1] = transform_60 + 1.0;
