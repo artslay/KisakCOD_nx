@@ -3599,7 +3599,8 @@ VkSampler VulkanBackend::GetSampler(
     VkFilter minFilter, VkFilter magFilter, VkSamplerMipmapMode mipMode,
     bool mipmapped,
     VkSamplerAddressMode addressU, VkSamplerAddressMode addressV, VkSamplerAddressMode addressW,
-    float mipLodBias, bool anisotropyEnable, float maxAnisotropy)
+    float mipLodBias, bool anisotropyEnable, float maxAnisotropy,
+    bool compareEnable, VkCompareOp compareOp)
 {
     const bool useAnisotropy = anisotropyEnable && m_samplerAnisotropy;
     const float clampedAnisotropy = useAnisotropy
@@ -3620,6 +3621,8 @@ VkSampler VulkanBackend::GetSampler(
     info.maxAnisotropy = clampedAnisotropy;
     info.minLod = 0.0f;
     info.maxLod = mipmapped ? VK_LOD_CLAMP_NONE : 0.0f;
+    info.compareEnable = compareEnable ? VK_TRUE : VK_FALSE;
+    info.compareOp = compareOp;
 
     uint32_t biasBits = 0;
     uint32_t anisotropyBits = 0;
@@ -3636,6 +3639,8 @@ VkSampler VulkanBackend::GetSampler(
     key ^= static_cast<uint64_t>(biasBits) + 0x9e3779b97f4a7c15ull + (key << 6) + (key >> 2);
     key ^= static_cast<uint64_t>(useAnisotropy ? 1u : 0u) + 0x9e3779b97f4a7c15ull + (key << 6) + (key >> 2);
     key ^= static_cast<uint64_t>(anisotropyBits) + 0x9e3779b97f4a7c15ull + (key << 6) + (key >> 2);
+    key ^= static_cast<uint64_t>(compareEnable ? 1u : 0u) + 0x9e3779b97f4a7c15ull + (key << 6) + (key >> 2);
+    key ^= static_cast<uint64_t>(compareOp) + 0x9e3779b97f4a7c15ull + (key << 6) + (key >> 2);
 
     const auto found = m_samplerCache.find(key);
     if (found != m_samplerCache.end())
