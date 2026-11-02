@@ -2662,10 +2662,16 @@ void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char 
 
     if (!I_stricmp(out, "Leave"))
     {
-        Cbuf_AddText(0, "disconnect\n");
+        Cbuf_AddText(localClientNum, "disconnect\n");
         CL_SetActive();
         Menus_CloseAll(&uiInfo.uiDC);
-        Menus_OpenByName(&uiInfo.uiDC, "main");
+
+        // Opening the "main" menu directly leaves g_currentMenuType at
+        // UIMENU_INGAME. Menu_PaintAll then mistakes the frontend for the
+        // still-active pause menu and suppresses the main_text backdrop.
+        // Switch through the engine's normal menu transition so the active
+        // type, UI catcher, focus and main-menu onOpen script stay in sync.
+        UI_SetActiveMenu(localClientNum, UIMENU_MAIN);
         return;
     }
 
