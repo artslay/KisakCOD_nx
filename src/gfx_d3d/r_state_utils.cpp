@@ -219,10 +219,9 @@ void __cdecl R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport)
     identity_52.m[0][0] = v7 * 2.0;
     identity_52.m[1][1] = transform_60 * -2.0;
 #ifdef __SWITCH__
-    // Vulkan's inverted (negative-height) viewport reverses the vertical
-    // direction of the half-pixel correction. Keep the D3D9 Y correction so
-    // 2D quads retain their original vertical alignment, but remove the X
-    // correction so full-screen images start at the first texel.
+    // Vulkan pixel centers are at half-integer framebuffer coordinates,
+    // so remove D3D9's half-pixel offset on both axes. The negative-height
+    // viewport preserves the engine's top-down Y orientation.
     identity_52.m[3][0] = -1.0;
     identity_52.m[3][1] = 1.0;
 #else
