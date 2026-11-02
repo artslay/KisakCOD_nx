@@ -9,6 +9,7 @@
 
 #ifdef __SWITCH__
 #include <switch.h>
+#include <atomic>
 #include <mutex>
 extern void Switch_LogWrite(const char *msg);
 extern int32_t g_switchCurrentAssetIndex;
@@ -385,6 +386,45 @@ static bool Switch_IsMappedNativeRange(
         slot.perm = info.perm;
     }
     return true;
+}
+
+
+bool Switch_IsSafeMaterialShaderArgumentRange(
+    const MaterialShaderArgument *arg,
+    uint32_t argCount,
+    const char *path)
+{
+    if (!argCount)
+        return true;
+
+    const uintptr_t address = reinterpret_cast<uintptr_t>(arg);
+    const size_t byteCount =
+        static_cast<size_t>(argCount) * sizeof(MaterialShaderArgument);
+    const size_t alignment = alignof(MaterialShaderArgument);
+    const bool valid =
+        arg &&
+        (address > UINT32_MAX ||
+         Switch_IsMappedNativeRange(address, byteCount, alignment)) &&
+        (address & (alignment - 1u)) == 0 &&
+        !Switch_IsSerializedAddress(address);
+    if (valid)
+        return true;
+
+    static std::atomic<uint32_t> traceCount{0};
+    if (traceCount.fetch_add(1, std::memory_order_relaxed) < 32u)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][SHADER ARG REJECT] path=%s arg=%p count=%u bytes=%zu\\n",
+            path ? path : "<unknown>",
+            reinterpret_cast<const void *>(address),
+            static_cast<unsigned>(argCount),
+            byteCount);
+        Switch_LogWrite(trace);
+    }
+    return false;
 }
 
 // Literal shader constants may point directly into mapped fastfile data.
