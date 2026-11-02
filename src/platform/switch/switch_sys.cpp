@@ -3590,6 +3590,7 @@ static bool Switch_LogIsStartupMessage(const char *msg)
         "[KisakCOD][RUST TLS]",
         "[KisakCOD][LOG]",
         "[KisakCOD][VK]",
+        "[KisakCOD][VK FORMAT]",
         "[KisakCOD][DB LOAD]",
         "[KisakCOD][ZONE LOAD]",
         "[KisakCOD][IWI ROOT] index ready"
