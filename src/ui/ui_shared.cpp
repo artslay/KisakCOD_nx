@@ -2642,10 +2642,15 @@ static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restar
     for (int menuIndex = 0; menuIndex < menuCount; ++menuIndex)
     {
         menuDef_t *menu = dc->Menus[menuIndex];
-        if (!menu || !menu->window.name ||
+        if (!menu || Switch_UI_BadPointer(menu) ||
+            !menu->window.name || Switch_UI_BadPointer(menu->window.name) ||
             !I_stricmp(menu->window.name, "pausedmenu") ||
-            !I_stricmp(menu->window.name, "main"))
+            !I_stricmp(menu->window.name, "main") ||
+            !menu->items || Switch_UI_BadPointer(menu->items) ||
+            menu->itemCount <= 0 || menu->itemCount > 4096)
+        {
             continue;
+        }
 
         // Menus marked hidden while KEYCATCH_UI is active cannot serve as
         // pause confirmations even if one of their items happens to carry
@@ -2673,9 +2678,14 @@ static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restar
         bool hasConfirmAction = false;
         for (int itemIndex = 0; itemIndex < menu->itemCount; ++itemIndex)
         {
-            itemDef_s *candidate = menu->items ? menu->items[itemIndex] : nullptr;
-            if (!candidate)
+            itemDef_s *candidate = menu->items[itemIndex];
+            if (!candidate || Switch_UI_BadPointer(candidate))
                 continue;
+            if ((candidate->action && Switch_UI_BadPointer(candidate->action)) ||
+                (candidate->onAccept && Switch_UI_BadPointer(candidate->onAccept)))
+            {
+                continue;
+            }
 
             if (Switch_UI_ScriptHasCommand(candidate->action, wantedCommand) ||
                 Switch_UI_ScriptHasCommand(candidate->onAccept, wantedCommand))
@@ -2719,8 +2729,10 @@ static bool Switch_UI_PauseConfirmationHasVisibleAction(
     menuDef_t *menu,
     bool restart)
 {
-    if (!dc || !menu || !Menu_IsVisible(dc, menu) ||
-        !menu->items || menu->itemCount <= 0)
+    if (!dc || !menu || Switch_UI_BadPointer(menu) ||
+        !Menu_IsVisible(dc, menu) ||
+        !menu->items || Switch_UI_BadPointer(menu->items) ||
+        menu->itemCount <= 0 || menu->itemCount > 4096)
     {
         return false;
     }
@@ -2731,6 +2743,11 @@ static bool Switch_UI_PauseConfirmationHasVisibleAction(
         itemDef_s *candidate = menu->items[itemIndex];
         if (!candidate || Switch_UI_BadPointer(candidate))
             continue;
+        if ((candidate->action && Switch_UI_BadPointer(candidate->action)) ||
+            (candidate->onAccept && Switch_UI_BadPointer(candidate->onAccept)))
+        {
+            continue;
+        }
         if ((Switch_UI_ScriptHasCommand(candidate->action, wantedCommand) ||
              Switch_UI_ScriptHasCommand(candidate->onAccept, wantedCommand)) &&
             Item_IsVisible(dc->localClientNum, candidate))
@@ -2755,15 +2772,15 @@ static bool Switch_UI_OpenPauseConfirmation(UiContext *dc, bool restart)
         }
         else
         {
-        char trace[256];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][PAUSE ACTION] opened confirmation menu=%s action=%s\n",
-            menu->window.name,
-            restart ? "restart" : "return_to_menu");
-        Switch_LogWrite(trace);
-        return true;
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][PAUSE ACTION] opened confirmation menu=%s action=%s\n",
+                menu->window.name,
+                restart ? "restart" : "return_to_menu");
+            Switch_LogWrite(trace);
+            return true;
         }
     }
 
@@ -9101,7 +9118,7 @@ void __cdecl Item_ListBox_Paint(UiContext *dc, itemDef_s *item)
                     yd = yd + listPtr->elementHeight;
                 }
             }
-            }
+        }
     }
     else
     {
