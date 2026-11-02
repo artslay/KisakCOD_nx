@@ -6881,29 +6881,10 @@ void __cdecl Window_Paint(
                     "localClientNum doesn't index MAX_POSSIBLE_LOCAL_CLIENTS\n\t%i not in [0, %i)",
                     v11,
                     1);
-#ifdef __SWITCH__
-            // Some fastfile UI decoration windows carry their authored tint in
-            // foreColor but never receive the transient 0x10000 dynamic bit on
-            // this port. Passing nullptr for those windows turns the intended
-            // alpha/color into opaque white. Preserve the engine's null-color
-            // behavior for untinted image layers, but always honor a meaningful
-            // authored tint (including alpha) on style-3 shader windows.
-            const bool hasAuthoredTint =
-                w->foreColor[3] > 0.0f &&
-                (w->foreColor[3] < 0.999f ||
-                 w->foreColor[0] < 0.999f ||
-                 w->foreColor[1] < 0.999f ||
-                 w->foreColor[2] < 0.999f);
-            if ((w->dynamicFlags[v11] & 0x10000) != 0 || hasAuthoredTint)
-                v8 = w->foreColor;
-            else
-                v8 = 0;
-#else
             if ((w->dynamicFlags[v11] & 0x10000) != 0)
                 v8 = w->foreColor;
             else
                 v8 = 0;
-#endif
             foreColor = v8;
             if (w->background)
             {
@@ -6925,9 +6906,9 @@ void __cdecl Window_Paint(
                 // negative widths/heights and flips the UVs; UI_FillRect passes the
                 // signed sizes straight to CL_DrawStretchPic and drops mirrored
                 // edge pieces in compound panels (including the corner strips).
-                // The white material is the engine's real UI fill material, tinted
-                // by the authored foreColor; this is not a generated replacement
-                // texture and does not affect windows with an assigned background.
+                // Use the engine's white UI fill material for the missing shader
+                // background. Keep the stock dynamic-flag color selection above:
+                // an unflagged window remains untinted, exactly like the original.
                 UI_DrawHandlePic(
                     scrPlace,
                     fillRect,
