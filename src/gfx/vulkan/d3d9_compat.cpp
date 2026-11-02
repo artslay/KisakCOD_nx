@@ -2954,9 +2954,6 @@ static uint32_t SwitchGetSunShadowCompareSamplerMask(
     }
 
     const uint32_t shaderMask = shader->sunShadowCompareShaderMask;
-    if (!shaderMask)
-        return 0u;
-
     const GfxImage *const sunShadowImage =
         gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
     uint32_t boundMask = 0u;
@@ -2968,15 +2965,25 @@ static uint32_t SwitchGetSunShadowCompareSamplerMask(
             sampler.index < 0 || sampler.index >= 16)
             continue;
 
-        const uint32_t bit = 1u << static_cast<uint32_t>(sampler.index);
-        if ((shaderMask & bit) == 0u)
-            continue;
-
         const auto *texture =
             static_cast<const KisakVkTexture *>(textures[sampler.index]);
         if (texture && texture->sourceImage == sunShadowImage)
-            boundMask |= bit;
+            boundMask |= 1u << static_cast<uint32_t>(sampler.index);
     }
+
+#ifdef __SWITCH__
+    if (boundMask && !shader->sunShadowCompareBindingTraceLogged)
+    {
+        char trace[256];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][VK SUN SHADOW MASK] ps=%llu declared=0x%04x bound=0x%04x active=0x%04x samplers=%d\\n",
+            static_cast<unsigned long long>(shader->serial),
+            shaderMask, boundMask, shaderMask & boundMask, samplerCount);
+        Switch_LogWrite(trace);
+        shader->sunShadowCompareBindingTraceLogged = true;
+    }
+#endif
     return shaderMask & boundMask;
 }
 
@@ -2986,7 +2993,8 @@ static uint32_t SwitchGetSunShadowCompareSamplerMask(
 static bool PatchFragmentShaderForSunShadowCompare(
     std::vector<uint32_t> &words,
     uint32_t samplerMask,
-    uint32_t descriptorSet)
+    uint32_t descriptorSet,
+    uint64_t shaderSerial)
 {
     if (!samplerMask)
         return true;
@@ -3437,6 +3445,15 @@ static bool PatchFragmentShaderForSunShadowCompare(
 
     transformed[3] = nextId;
     words.swap(transformed);
+#ifdef __SWITCH__
+    char trace[224];
+    std::snprintf(
+        trace, sizeof(trace),
+        "[KisakCOD][VK SUN SHADOW DREF] ps=%llu mask=0x%04x samples=%u\\n",
+        static_cast<unsigned long long>(shaderSerial),
+        samplerMask, transformedSampleCount);
+    Switch_LogWrite(trace);
+#endif
     return true;
 }
 
@@ -8356,6 +8373,8 @@ bool IDirect3DDevice9::BindSamplerSet(
                     minFilter == D3DTEXF_ANISOTROPIC || magFilter == D3DTEXF_ANISOTROPIC;
                 const float maxAnisotropy = static_cast<float>(
                     std::max(1u, m_samplerState[i][D3DSAMP_MAXANISOTROPY]));
+                const bool compareEnable =
+                    (sunShadowCompareMask & (1u << i)) != 0u;
                 const VkSampler sampler = m_backend->GetSampler(
                     minFilter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR,
                     magFilter == D3DTEXF_POINT ? VK_FILTER_NEAREST : VK_FILTER_LINEAR,
@@ -8367,8 +8386,21 @@ bool IDirect3DDevice9::BindSamplerSet(
                     mipLodBias,
                     anisotropicFilter && m_backend->SupportsSamplerAnisotropy(),
                     std::min(maxAnisotropy, m_backend->MaxSamplerAnisotropy()),
-                    (sunShadowCompareMask & (1u << i)) != 0u,
+                    compareEnable,
                     VK_COMPARE_OP_LESS_OR_EQUAL);
+                if (compareEnable && activeShader &&
+                    !activeShader->sunShadowCompareSamplerTraceLogged)
+                {
+                    char trace[224];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][VK SUN SHADOW SAMPLER] ps=%llu slot=%u compare=%u op=LESS_OR_EQUAL sampler=%p\\n",
+                        static_cast<unsigned long long>(activeShader->serial),
+                        i, compareEnable ? 1u : 0u,
+                        static_cast<const void *>(sampler));
+                    Switch_LogWrite(trace);
+                    activeShader->sunShadowCompareSamplerTraceLogged = true;
+                }
                 images[i].imageView = allSubresourcesInitialized
                     ? texture->view : texture->baseMipView;
                 if (!sampler && activeSamplers[i])
@@ -9083,7 +9115,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         }
         if (sunShadowCompareMask &&
             !PatchFragmentShaderForSunShadowCompare(
-                pixelSpirv, sunShadowCompareMask, 2u))
+                pixelSpirv, sunShadowCompareMask, 2u, m_pixelShader->serial))
         {
             static std::atomic<uint32_t> sunShadowPatchFailureCount{0};
             if (sunShadowPatchFailureCount.fetch_add(
