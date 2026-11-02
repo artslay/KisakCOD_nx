@@ -256,9 +256,6 @@ struct KisakVkTexture : IDirect3DResource9 {
     GfxImage *sourceImage = nullptr;
     VkImage image=VK_NULL_HANDLE;
     VkImageView view=VK_NULL_HANDLE;
-    // Keep the sampled depth-only view separate from the view used by
-    // dynamic-rendering depth/stencil attachment slots.
-    VkImageView attachmentView=VK_NULL_HANDLE;
     VkImageView baseMipView=VK_NULL_HANDLE;
     VkSampler sampler=VK_NULL_HANDLE;
     VkDeviceMemory memory=VK_NULL_HANDLE;
