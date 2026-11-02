@@ -2647,6 +2647,29 @@ static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restar
             !I_stricmp(menu->window.name, "main"))
             continue;
 
+        // Menus marked hidden while KEYCATCH_UI is active cannot serve as
+        // pause confirmations even if one of their items happens to carry
+        // a matching Leave/Restart script.
+        if ((menu->window.staticFlags & 0x40000000u) != 0)
+        {
+            clientUIActive_t *clUI = CL_GetLocalClientUIGlobals(dc->localClientNum);
+            if (clUI && (clUI->keyCatchers & KEYCATCH_UI) != 0)
+                continue;
+        }
+
+        const char *name = menu->window.name;
+        if (!restart)
+        {
+            const bool applicationExitMenu =
+                !I_stricmp(name, "quit_popmenu") ||
+                !I_stricmp(name, "exit_popmenu") ||
+                Switch_UI_ContainsCaseInsensitive(name, "quitgame") ||
+                Switch_UI_ContainsCaseInsensitive(name, "exitgame") ||
+                Switch_UI_ContainsCaseInsensitive(name, "application_quit");
+            if (applicationExitMenu)
+                continue;
+        }
+
         bool hasConfirmAction = false;
         for (int itemIndex = 0; itemIndex < menu->itemCount; ++itemIndex)
         {
@@ -2664,21 +2687,22 @@ static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restar
         if (!hasConfirmAction)
             continue;
 
-        const char *name = menu->window.name;
         const bool confirmationName = Switch_UI_IsConfirmationMenuName(name);
         int score = confirmationName ? 200 : 20;
 
         if (restart && Switch_UI_ContainsCaseInsensitive(name, "restart"))
-            score += 100;
+            score += 200;
         if (!restart &&
             (Switch_UI_ContainsCaseInsensitive(name, "savequit") ||
              Switch_UI_ContainsCaseInsensitive(name, "save_quit") ||
              Switch_UI_ContainsCaseInsensitive(name, "saveandquit") ||
+             Switch_UI_ContainsCaseInsensitive(name, "save_and_quit") ||
              Switch_UI_ContainsCaseInsensitive(name, "leave") ||
              Switch_UI_ContainsCaseInsensitive(name, "returntomenu") ||
+             Switch_UI_ContainsCaseInsensitive(name, "return_to_menu") ||
              Switch_UI_ContainsCaseInsensitive(name, "backtomenu") ||
-             Switch_UI_ContainsCaseInsensitive(name, "quit")))
-            score += 100;
+             Switch_UI_ContainsCaseInsensitive(name, "quit_to_menu")))
+            score += 300;
 
         if (score > bestScore)
         {
@@ -2690,12 +2714,47 @@ static menuDef_t *Switch_UI_FindPauseConfirmationMenu(UiContext *dc, bool restar
     return bestMenu;
 }
 
+static bool Switch_UI_PauseConfirmationHasVisibleAction(
+    UiContext *dc,
+    menuDef_t *menu,
+    bool restart)
+{
+    if (!dc || !menu || !Menu_IsVisible(dc, menu) ||
+        !menu->items || menu->itemCount <= 0)
+    {
+        return false;
+    }
+
+    const char *wantedCommand = restart ? "Restart" : "Leave";
+    for (int itemIndex = 0; itemIndex < menu->itemCount; ++itemIndex)
+    {
+        itemDef_s *candidate = menu->items[itemIndex];
+        if (!candidate || Switch_UI_BadPointer(candidate))
+            continue;
+        if ((Switch_UI_ScriptHasCommand(candidate->action, wantedCommand) ||
+             Switch_UI_ScriptHasCommand(candidate->onAccept, wantedCommand)) &&
+            Item_IsVisible(dc->localClientNum, candidate))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool Switch_UI_OpenPauseConfirmation(UiContext *dc, bool restart)
 {
     menuDef_t *menu = Switch_UI_FindPauseConfirmationMenu(dc, restart);
     if (menu && menu->window.name &&
         Menus_OpenByName(dc, menu->window.name))
     {
+        if (!Switch_UI_PauseConfirmationHasVisibleAction(dc, menu, restart))
+        {
+            Switch_LogWrite(
+                "[KisakCOD][PAUSE ACTION] rejected confirmation menu without visible action\n");
+            Menus_Close(dc, menu);
+        }
+        else
+        {
         char trace[256];
         std::snprintf(
             trace,
@@ -2705,6 +2764,7 @@ static bool Switch_UI_OpenPauseConfirmation(UiContext *dc, bool restart)
             restart ? "restart" : "return_to_menu");
         Switch_LogWrite(trace);
         return true;
+        }
     }
 
     // Some game UI lists use a stock popup whose buttons call the UI aliases
@@ -2736,6 +2796,14 @@ static bool Switch_UI_OpenPauseConfirmation(UiContext *dc, bool restart)
     {
         if (Menus_OpenByName(dc, names[i]))
         {
+            menuDef_t *fallbackMenu = Menus_FindByName(dc, names[i]);
+            if (!Switch_UI_PauseConfirmationHasVisibleAction(dc, fallbackMenu, restart))
+            {
+                if (fallbackMenu && Menus_MenuIsInStack(dc, fallbackMenu))
+                    Menus_Close(dc, fallbackMenu);
+                continue;
+            }
+
             char trace[256];
             std::snprintf(
                 trace,
@@ -9033,7 +9101,7 @@ void __cdecl Item_ListBox_Paint(UiContext *dc, itemDef_s *item)
                     yd = yd + listPtr->elementHeight;
                 }
             }
-               }
+            }
     }
     else
     {
