@@ -7019,7 +7019,7 @@ HRESULT IDirect3DDevice9::SetRenderTarget(uint32_t index, IDirect3DSurface9 *sur
     // D3D9 SetRenderTarget resets the viewport to the full dimensions of the
     // new color target. The renderer relies on that behavior: R_HW_SetRenderTarget
     // updates its cached viewport but deliberately does not call SetViewport.
-    // Keep Vulkan's device-side viewport in sync, including quarter-resolution
+    // Keep Vulkan's device-side viewport in sync, including reduced-resolution
     // post-effect targets used by the depth-of-field downsample and blur passes.
     m_viewport = {
         0u, 0u, targetWidth, targetHeight, 0.0f, 1.0f
