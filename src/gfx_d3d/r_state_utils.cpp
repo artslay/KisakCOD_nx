@@ -218,8 +218,18 @@ void __cdecl R_CmdBufSet2D(GfxCmdBufSourceState* source, GfxViewport* viewport)
     memset((uint8_t*)&identity_52, 0, sizeof(identity_52));
     identity_52.m[0][0] = v7 * 2.0;
     identity_52.m[1][1] = transform_60 * -2.0;
+#ifdef __SWITCH__
+    // D3D9's screen-space origin is the center of the first pixel, so its
+    // orthographic 2D matrix shifts the quad by half a pixel (-1/width,
+    // +1/height in clip space). Vulkan's pixel centers are at half-integer
+    // framebuffer coordinates; retaining the D3D9 correction shifts sampled
+    // full-screen images left/up. Use edge-aligned Vulkan coordinates here.
+    identity_52.m[3][0] = -1.0;
+    identity_52.m[3][1] = transform_60;
+#else
     identity_52.m[3][0] = -1.0 - v7;
     identity_52.m[3][1] = transform_60 + 1.0;
+#endif
     identity_52.m[3][2] = 1.0;
     identity_52.m[3][3] = 1.0;
     R_MatrixIdentity44((float (*)[4])v3);
