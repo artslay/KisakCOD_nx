@@ -238,7 +238,9 @@ public:
         VkSamplerAddressMode addressW,
         float mipLodBias = 0.0f,
         bool anisotropyEnable = false,
-        float maxAnisotropy = 1.0f);
+        float maxAnisotropy = 1.0f,
+        bool compareEnable = false,
+        VkCompareOp compareOp = VK_COMPARE_OP_LESS_OR_EQUAL);
 
     bool AllocateUniform(const void *data, size_t size, VkDescriptorBufferInfo *info);
 
