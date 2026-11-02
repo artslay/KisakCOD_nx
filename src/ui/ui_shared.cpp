@@ -7281,10 +7281,16 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
 #endif
                 if (item->window.style == 5)
                 {
-                    String = (char *)Dvar_GetString(item->dvar);
-                    I_strncpyz(lowerCaseName, String, 64);
-                    I_strlwr(lowerCaseName);
-                    item->window.background = Material_RegisterHandle(lowerCaseName, item->imageTrack);
+                    // A bad optional dvar was cleared by the Switch ABI guard.
+                    // Keep the item's text and existing background drawable
+                    // rather than dereferencing a missing material-name source.
+                    if (item->dvar)
+                    {
+                        String = (char *)Dvar_GetString(item->dvar);
+                        I_strncpyz(lowerCaseName, String, 64);
+                        I_strlwr(lowerCaseName);
+                        item->window.background = Material_RegisterHandle(lowerCaseName, item->imageTrack);
+                    }
                 }
                 else if (item->materialExp.numEntries)
                 {
@@ -8452,6 +8458,12 @@ void __cdecl Item_TextField_Paint(UiContext *dc, itemDef_s *item)
                 item->textStyle);
         }
     }
+    else
+    {
+        // The edit-field payload may be unavailable on a partially recovered
+        // fastfile item, but the authored caption remains independent of it.
+        Item_Text_Paint(dc, item);
+    }
 }
 
 void __cdecl Item_YesNo_Paint(UiContext *dc, itemDef_s *item)
@@ -9021,7 +9033,13 @@ void __cdecl Item_ListBox_Paint(UiContext *dc, itemDef_s *item)
                     yd = yd + listPtr->elementHeight;
                 }
             }
-        }
+               }
+    }
+    else
+    {
+        // Preserve a list item's authored caption when its optional feeder
+        // payload is unavailable. The list rows themselves cannot be drawn.
+        Item_Text_Paint(dc, item);
     }
 }
 
