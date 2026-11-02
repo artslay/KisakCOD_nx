@@ -2977,7 +2977,7 @@ static uint32_t SwitchGetSunShadowCompareSamplerMask(
         char trace[256];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][VK SUN SHADOW MASK] ps=%llu declared=0x%04x bound=0x%04x active=0x%04x samplers=%d\\n",
+            "[KisakCOD][VK SUN SHADOW MASK] ps=%llu declared=0x%04x bound=0x%04x active=0x%04x samplers=%d\n",
             static_cast<unsigned long long>(shader->serial),
             shaderMask, boundMask, shaderMask & boundMask, samplerCount);
         Switch_LogWrite(trace);
@@ -3449,7 +3449,7 @@ static bool PatchFragmentShaderForSunShadowCompare(
     char trace[224];
     std::snprintf(
         trace, sizeof(trace),
-        "[KisakCOD][VK SUN SHADOW DREF] ps=%llu mask=0x%04x samples=%u\\n",
+        "[KisakCOD][VK SUN SHADOW DREF] ps=%llu mask=0x%04x samples=%u\n",
         static_cast<unsigned long long>(shaderSerial),
         samplerMask, transformedSampleCount);
     Switch_LogWrite(trace);
@@ -8394,7 +8394,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                     char trace[224];
                     std::snprintf(
                         trace, sizeof(trace),
-                        "[KisakCOD][VK SUN SHADOW SAMPLER] ps=%llu slot=%u compare=%u op=LESS_OR_EQUAL sampler=%p\\n",
+                        "[KisakCOD][VK SUN SHADOW SAMPLER] ps=%llu slot=%u compare=%u op=LESS_OR_EQUAL sampler=%p\n",
                         static_cast<unsigned long long>(activeShader->serial),
                         i, compareEnable ? 1u : 0u,
                         static_cast<const void *>(sampler));
