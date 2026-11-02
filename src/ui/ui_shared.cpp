@@ -7258,7 +7258,8 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
     Switch_UI_ValidateOptionalStatement(
         "Item_Paint", "forecolorAExp", item, &item->forecolorAExp);
     // Type-specific payloads are optional for basic text/button painting.
-    // Validate the union member selected by the serialized item type, but do
+    // Validate the union member selected by the serialized dataType (the same
+    // discriminator used by Item_GetEditFieldDef/Item_GetListBoxDef), but do
     // not return before Window_Paint/Item_Text_Paint: a missing edit/list
     // payload must not erase the item's caption, panel or border.
     switch (item->dataType)
