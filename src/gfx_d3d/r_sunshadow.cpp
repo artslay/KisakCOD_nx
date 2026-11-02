@@ -273,8 +273,11 @@ static void __cdecl R_CalcBoxVsCylinderRayMinBox(
                 intersection[otherAxis1] <= box[otherAxis1 + 3])
             {
                 ++points;
-                Vec3Min(outBox, intersection, outBox);
-                Vec3Max(outBox + 3, intersection, outBox + 3);
+                for (int component = 0; component < 3; ++component)
+                {
+                    outBox[component] = std::min(outBox[component], intersection[component]);
+                    outBox[component + 3] = std::max(outBox[component + 3], intersection[component]);
+                }
             }
         }
     }
@@ -292,11 +295,9 @@ static void __cdecl R_CalcBoxVsCylinderRayMinBox(
 
     for (int axis = 0; axis < 3; ++axis)
     {
-        outBox[axis] -= radius;
-        outBox[axis + 3] += radius;
+        outBox[axis] = std::max(outBox[axis] - radius, box[axis]);
+        outBox[axis + 3] = std::min(outBox[axis + 3] + radius, box[axis + 3]);
     }
-    Vec3Max(outBox, box, outBox);
-    Vec3Min(outBox + 3, box + 3, outBox + 3);
 }
 
 void __cdecl R_GetSceneExtentsAlongDir(
