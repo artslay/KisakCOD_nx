@@ -892,6 +892,18 @@ void __cdecl R_CopyLightmap(
     }
 }
 
+static void R_StoreLightDefAttenuationPixel(uint8_t *destination, const GfxRawPixel &pixel)
+{
+    // The attenuation atlas is A8R8G8B8. Pack the complete 32-bit texel in
+    // little-endian memory order (B, G, R, A), not just the first byte.
+    const uint32_t packed =
+        (static_cast<uint32_t>(pixel.a) << 24) |
+        (static_cast<uint32_t>(pixel.r) << 16) |
+        (static_cast<uint32_t>(pixel.g) << 8) |
+        static_cast<uint32_t>(pixel.b);
+    std::memcpy(destination, &packed, sizeof(packed));
+}
+
 void __cdecl R_CopyLightDefAttenuationImage(GfxLightDef *def, LightDefCopyConfig *anonymousConfig)
 {
     int endCount; // [esp+30h] [ebp-7Ch]
@@ -909,25 +921,22 @@ void __cdecl R_CopyLightDefAttenuationImage(GfxLightDef *def, LightDefCopyConfig
     srcPixel = rawImage.pixels;
     if (anonymousConfig->zoom == 1)
     {
-        *dstPixel = (rawImage.pixels->a << 24) | rawImage.pixels->b | (rawImage.pixels->g << 8) | (rawImage.pixels->r << 16);
+        R_StoreLightDefAttenuationPixel(dstPixel, rawImage.pixels[0]);
         dstPixela = dstPixel + 4;
         for (iter = 0; iter < rawImage.width; ++iter)
         {
-            *dstPixela = (srcPixel->a << 24) | srcPixel->b | (srcPixel->g << 8) | (srcPixel->r << 16);
+            R_StoreLightDefAttenuationPixel(dstPixela, *srcPixel);
             dstPixela += 4;
             ++srcPixel;
         }
-        *dstPixela = (rawImage.pixels[rawImage.width - 1].a << 24)
-            | rawImage.pixels[rawImage.width - 1].b
-            | (rawImage.pixels[rawImage.width - 1].g << 8)
-            | (rawImage.pixels[rawImage.width - 1].r << 16);
+        R_StoreLightDefAttenuationPixel(dstPixela, rawImage.pixels[rawImage.width - 1]);
     }
     else
     {
         endCount = anonymousConfig->zoom + (anonymousConfig->zoom >> 1);
         for (iter = 0; iter < endCount; ++iter)
         {
-            *dstPixel = (srcPixel->a << 24) | srcPixel->b | (srcPixel->g << 8) | (srcPixel->r << 16);
+            R_StoreLightDefAttenuationPixel(dstPixel, *srcPixel);
             dstPixel += 4;
         }
         if ((anonymousConfig->zoom & (anonymousConfig->zoom - 1)) != 0)
@@ -955,7 +964,7 @@ void __cdecl R_CopyLightDefAttenuationImage(GfxLightDef *def, LightDefCopyConfig
                 lerpedPixel.a = (anonymousConfig->zoom + lerp * srcPixel[1].a + (2 * anonymousConfig->zoom - lerp) * srcPixel->a)
                     / (2
                         * anonymousConfig->zoom);
-                *dstPixel = (lerpedPixel.a << 24) | lerpedPixel.b | (lerpedPixel.g << 8) | (lerpedPixel.r << 16);
+                R_StoreLightDefAttenuationPixel(dstPixel, lerpedPixel);
                 dstPixel += 4;
                 lerp += 2;
             } while (lerp <= 2 * anonymousConfig->zoom);
