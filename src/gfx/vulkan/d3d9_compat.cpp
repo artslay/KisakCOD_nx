@@ -8511,14 +8511,17 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     // Dynamic-rendering pipelines are compatible only with their attachment
     // formats; resolve them before attempting to reuse a cached pipeline.
-    const VkFormat colorFormat = m_color && m_color->texture
-        ? m_color->texture->format : m_backend->SwapchainFormat();
+    const bool hasColorAttachment = m_color != nullptr;
+    const VkFormat colorFormat = !hasColorAttachment
+        ? VK_FORMAT_UNDEFINED
+        : (m_color->texture ? m_color->texture->format : m_backend->SwapchainFormat());
     const VkFormat depthFormat = m_depth && m_depth->texture
         ? m_depth->texture->format : m_backend->DepthFormat();
-    const VkSampleCountFlagBits colorSamples = m_color && m_color->texture
-        ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT;
     const VkSampleCountFlagBits depthSamples = m_depth && m_depth->texture
         ? m_depth->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    const VkSampleCountFlagBits colorSamples = hasColorAttachment
+        ? (m_color->texture ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT)
+        : depthSamples;
     if (colorSamples != depthSamples)
         return false;
 
@@ -9890,8 +9893,8 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     VkPipelineColorBlendStateCreateInfo blend{};
     blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    blend.attachmentCount = 1;
-    blend.pAttachments = &colorBlend;
+    blend.attachmentCount = hasColorAttachment ? 1u : 0u;
+    blend.pAttachments = hasColorAttachment ? &colorBlend : nullptr;
 
     const VkDynamicState dynamicStates[] = {
         VK_DYNAMIC_STATE_VIEWPORT,
@@ -9906,8 +9909,8 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     VkPipelineRenderingCreateInfo rendering{};
     rendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    rendering.colorAttachmentCount = 1;
-    rendering.pColorAttachmentFormats = &colorFormat;
+    rendering.colorAttachmentCount = hasColorAttachment ? 1u : 0u;
+    rendering.pColorAttachmentFormats = hasColorAttachment ? &colorFormat : nullptr;
     rendering.depthAttachmentFormat = depthFormat;
     // Vulkan dynamic-rendering pipelines must declare the stencil format
     // whenever the render pass supplies a stencil attachment. Packed D3D9
@@ -10398,12 +10401,16 @@ bool IDirect3DDevice9::PrepareDraw()
         return false;
     }
 
-    VkImage colorImage = m_color && m_color->texture
-        ? m_color->texture->image : m_backend->CurrentSwapchainImage();
-    VkImageView colorView = m_color && m_color->texture
-        ? m_color->texture->view : m_backend->CurrentSwapchainView();
-    VkFormat colorFormat = m_color && m_color->texture
-        ? m_color->texture->format : m_backend->SwapchainFormat();
+    const bool hasColorAttachment = m_color != nullptr;
+    VkImage colorImage = !hasColorAttachment
+        ? VK_NULL_HANDLE
+        : (m_color->texture ? m_color->texture->image : m_backend->CurrentSwapchainImage());
+    VkImageView colorView = !hasColorAttachment
+        ? VK_NULL_HANDLE
+        : (m_color->texture ? m_color->texture->view : m_backend->CurrentSwapchainView());
+    VkFormat colorFormat = !hasColorAttachment
+        ? VK_FORMAT_UNDEFINED
+        : (m_color->texture ? m_color->texture->format : m_backend->SwapchainFormat());
 
     VkImage depthImage = m_depth && m_depth->texture
         ? m_depth->texture->image : m_backend->DefaultDepthImage();
@@ -10418,10 +10425,11 @@ bool IDirect3DDevice9::PrepareDraw()
             depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
             ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
             : VK_IMAGE_ASPECT_DEPTH_BIT);
-    const VkSampleCountFlagBits colorSamples = m_color && m_color->texture
-        ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT;
     const VkSampleCountFlagBits depthSamples = m_depth && m_depth->texture
         ? m_depth->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    const VkSampleCountFlagBits colorSamples = hasColorAttachment
+        ? (m_color->texture ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT)
+        : depthSamples;
     if (colorSamples != depthSamples)
     {
         Switch_LogWrite("[KisakCOD][VK DRAW] fail=attachment_sample_count_mismatch\n");
@@ -10437,9 +10445,13 @@ bool IDirect3DDevice9::PrepareDraw()
     (void)m_backend->GetBackBufferDesc(
         &backBufferWidth, &backBufferHeight, &backBufferFormat);
     const uint32_t targetWidth = m_color && m_color->texture
-        ? m_color->texture->width : backBufferWidth;
+        ? m_color->texture->width
+        : (hasColorAttachment ? backBufferWidth
+            : (m_depth && m_depth->texture ? m_depth->texture->width : backBufferWidth));
     const uint32_t targetHeight = m_color && m_color->texture
-        ? m_color->texture->height : backBufferHeight;
+        ? m_color->texture->height
+        : (hasColorAttachment ? backBufferHeight
+            : (m_depth && m_depth->texture ? m_depth->texture->height : backBufferHeight));
 
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_pipeline";
     if (!EnsurePipeline())
@@ -10518,10 +10530,11 @@ bool IDirect3DDevice9::PrepareDraw()
     const VkImageLayout resolveOldLayout =
         colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
             ? m_color->texture->resolveLayout : VK_IMAGE_LAYOUT_UNDEFINED;
-    const VkImageLayout colorOldLayout =
-        m_color && m_color->texture
+    const VkImageLayout colorOldLayout = !hasColorAttachment
+        ? VK_IMAGE_LAYOUT_UNDEFINED
+        : (m_color->texture
             ? m_color->texture->GetSubresourceLayout(m_color->level)
-            : m_backend->CurrentSwapchainLayout();
+            : m_backend->CurrentSwapchainLayout());
     const VkImageLayout depthOldLayout =
         m_depth && m_depth->texture
             ? m_depth->texture->GetSubresourceLayout(m_depth->level)
@@ -12074,10 +12087,15 @@ HRESULT IDirect3DDevice9::Clear(
     uint32_t backBufferFormat = 0;
     (void)m_backend->GetBackBufferDesc(
         &backBufferWidth, &backBufferHeight, &backBufferFormat);
+    const bool hasColorAttachment = m_color != nullptr;
     const uint32_t targetWidth = m_color && m_color->texture
-        ? m_color->texture->width : backBufferWidth;
+        ? m_color->texture->width
+        : (hasColorAttachment ? backBufferWidth
+            : (m_depth && m_depth->texture ? m_depth->texture->width : backBufferWidth));
     const uint32_t targetHeight = m_color && m_color->texture
-        ? m_color->texture->height : backBufferHeight;
+        ? m_color->texture->height
+        : (hasColorAttachment ? backBufferHeight
+            : (m_depth && m_depth->texture ? m_depth->texture->height : backBufferHeight));
     const VkFormat depthFormat = m_depth && m_depth->texture
         ? m_depth->texture->format : m_backend->DepthFormat();
     const VkImageAspectFlags depthAspect = m_depth && m_depth->texture
@@ -12087,10 +12105,11 @@ HRESULT IDirect3DDevice9::Clear(
             depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
             ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
             : VK_IMAGE_ASPECT_DEPTH_BIT);
-    const VkSampleCountFlagBits colorSamples = m_color && m_color->texture
-        ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT;
     const VkSampleCountFlagBits depthSamples = m_depth && m_depth->texture
         ? m_depth->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    const VkSampleCountFlagBits colorSamples = hasColorAttachment
+        ? (m_color->texture ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT)
+        : depthSamples;
     if (colorSamples != depthSamples)
         return E_FAIL;
     const VkImage resolveImage = colorSamples != VK_SAMPLE_COUNT_1_BIT && m_color
@@ -12101,14 +12120,18 @@ HRESULT IDirect3DDevice9::Clear(
         ? m_color->texture->resolveLayout : VK_IMAGE_LAYOUT_UNDEFINED;
 
     if (m_backend->EnsureRendering(
-            m_color && m_color->texture ? m_color->texture->image : m_backend->CurrentSwapchainImage(),
-            m_color && m_color->texture ? m_color->texture->view : m_backend->CurrentSwapchainView(),
-            m_color && m_color->texture ? m_color->texture->format : m_backend->SwapchainFormat(),
+            !hasColorAttachment ? VK_NULL_HANDLE
+                : (m_color->texture ? m_color->texture->image : m_backend->CurrentSwapchainImage()),
+            !hasColorAttachment ? VK_NULL_HANDLE
+                : (m_color->texture ? m_color->texture->view : m_backend->CurrentSwapchainView()),
+            !hasColorAttachment ? VK_FORMAT_UNDEFINED
+                : (m_color->texture ? m_color->texture->format : m_backend->SwapchainFormat()),
             m_depth && m_depth->texture ? m_depth->texture->image : m_backend->DefaultDepthImage(),
             m_depth && m_depth->texture ? m_depth->texture->view : m_backend->DefaultDepthView(),
             depthFormat, depthAspect,
             resolveImage, resolveView, resolveOldLayout,
-            m_color && m_color->texture ? m_color->texture->layout : m_backend->CurrentSwapchainLayout(),
+            !hasColorAttachment ? VK_IMAGE_LAYOUT_UNDEFINED
+                : (m_color->texture ? m_color->texture->layout : m_backend->CurrentSwapchainLayout()),
             m_depth && m_depth->texture ? m_depth->texture->layout : m_backend->DefaultDepthLayout(),
             targetWidth, targetHeight))
     {
@@ -12135,7 +12158,7 @@ HRESULT IDirect3DDevice9::Clear(
     std::array<VkClearAttachment,3> attachments{};
     uint32_t count = 0;
 
-    if (flags & D3DCLEAR_TARGET)
+    if ((flags & D3DCLEAR_TARGET) && hasColorAttachment)
     {
         auto &a = attachments[count++];
         a.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
