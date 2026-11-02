@@ -360,6 +360,9 @@ struct KisakVkShader : IDirect3DResource9 {
     uint64_t linkedDeclarationSerial=0;
     uint64_t linkedPixelShaderSerial=0;
     uint64_t linkedVertexShaderSerial=0;
+    // The fragment SPIR-V sampler type and Dref operations are specialized for
+    // the stages currently bound to the sun depth target.
+    uint32_t linkedSunShadowCompareMask=UINT32_MAX;
     uint32_t AddRef() override
     {
         return refs.fetch_add(1, std::memory_order_relaxed) + 1;
