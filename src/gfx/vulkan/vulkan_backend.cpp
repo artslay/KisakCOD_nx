@@ -842,8 +842,10 @@ bool VulkanBackend::CreateDevice()
     queue.pQueuePriorities = &priority;
 
     std::vector<const char *> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-#ifdef VK_EXT_depth_bias_control
     bool depthBiasControlExtensionAvailable = false;
+    bool depthBiasExtensionCompiled = false;
+#ifdef VK_EXT_depth_bias_control
+    depthBiasExtensionCompiled = true;
     uint32_t depthBiasExtensionCount = 0;
     VkResult depthBiasExtensionResult = vkEnumerateDeviceExtensionProperties(
         m_physicalDevice, nullptr, &depthBiasExtensionCount, nullptr);
@@ -931,19 +933,26 @@ bool VulkanBackend::CreateDevice()
     // texture images can be sampled by shaders.
     const bool textureCompressionBC =
         features2.features.textureCompressionBC == VK_TRUE;
+    bool depthBiasControlEnabled = false;
+    bool depthBiasForceUnormSupported = false;
+    bool depthBiasFloatSupported = false;
+    bool depthBiasExactSupported = false;
 #ifdef VK_EXT_depth_bias_control
-    const bool depthBiasControlEnabled =
+    depthBiasControlEnabled =
         depthBiasControlExtensionAvailable &&
         depthBiasControlFeatures.depthBiasControl == VK_TRUE;
-    m_depthBiasFloatRepresentation =
+    depthBiasFloatSupported =
         depthBiasControlEnabled &&
         depthBiasControlFeatures.floatRepresentation == VK_TRUE;
-    m_depthBiasForceUnormRepresentation =
+    depthBiasForceUnormSupported =
         depthBiasControlEnabled &&
         depthBiasControlFeatures.leastRepresentableValueForceUnormRepresentation == VK_TRUE;
-    m_depthBiasExact =
+    depthBiasExactSupported =
         depthBiasControlEnabled &&
         depthBiasControlFeatures.depthBiasExact == VK_TRUE;
+    m_depthBiasFloatRepresentation = depthBiasFloatSupported;
+    m_depthBiasForceUnormRepresentation = depthBiasForceUnormSupported;
+    m_depthBiasExact = depthBiasExactSupported;
 #endif
     // Do not accidentally enable every Vulkan 1.3 feature reported by the query.
     vulkan13Features = {};
@@ -999,13 +1008,20 @@ bool VulkanBackend::CreateDevice()
     vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
     m_maxSamplerAnisotropy = m_samplerAnisotropy ? std::max(1.0f, properties.limits.maxSamplerAnisotropy) : 1.0f;
     m_maxSamplerLodBias = std::max(0.0f, properties.limits.maxSamplerLodBias);
-    char featureMsg[224];
+    char featureMsg[384];
     std::snprintf(featureMsg, sizeof(featureMsg),
-        "[KisakCOD][VK] fill_mode_non_solid=%u shader_demote_helper=%u robust_buffer_access=%u texture_compression_bc=%u\n",
+        "[KisakCOD][VK] fill_mode_non_solid=%u shader_demote_helper=%u robust_buffer_access=%u texture_compression_bc=%u depth_bias_header=%u depth_bias_ext=%u depth_bias_control=%u depth_bias_enabled=%u force_unorm=%u float=%u exact=%u\n",
         m_fillModeNonSolid ? 1u : 0u,
         m_shaderDemoteToHelperInvocation ? 1u : 0u,
         robustBufferAccess ? 1u : 0u,
-        textureCompressionBC ? 1u : 0u);
+        textureCompressionBC ? 1u : 0u,
+        depthBiasExtensionCompiled ? 1u : 0u,
+        depthBiasControlExtensionAvailable ? 1u : 0u,
+        depthBiasControlEnabled ? 1u : 0u,
+        (depthBiasForceUnormSupported || depthBiasFloatSupported) ? 1u : 0u,
+        depthBiasForceUnormSupported ? 1u : 0u,
+        depthBiasFloatSupported ? 1u : 0u,
+        depthBiasExactSupported ? 1u : 0u);
     Switch_LogWrite(featureMsg);
 
     VkDeviceCreateInfo info{};
