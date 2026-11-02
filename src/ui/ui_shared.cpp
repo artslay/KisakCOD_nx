@@ -6309,13 +6309,11 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
     }
     if (Switch_UI_BadPointer(menu->window.background))
     {
+        // A missing/bad menu background must not suppress otherwise valid
+        // child controls. Treat it as absent; Window_Paint has the matching
+        // null-background path and the menu's items can still be painted.
         Switch_UI_LogBadPointer("Menu_Paint", "window.background", menu, menu->window.background);
-        return 0;
-    }
-    if (Switch_UI_BadPointer(menu->soundName))
-    {
-        Switch_UI_LogBadPointer("Menu_Paint", "soundName", menu, menu->soundName);
-        return 0;
+        menu->window.background = nullptr;
     }
     if (Switch_UI_BadPointer(menu->items))
     {
@@ -6339,36 +6337,10 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
         Switch_LogWrite("[KisakCOD][UI ABI] Menu_Paint has items but null item array\n");
         return 0;
     }
-    if (Switch_UI_BadPointer(menu->font))
-    {
-        Switch_UI_LogBadPointer("Menu_Paint", "font", menu, menu->font);
-        return 0;
-    }
-    if (Switch_UI_BadPointer(menu->onOpen))
-    {
-        Switch_UI_LogBadPointer("Menu_Paint", "onOpen", menu, menu->onOpen);
-        return 0;
-    }
-    if (Switch_UI_BadPointer(menu->onClose))
-    {
-        Switch_UI_LogBadPointer("Menu_Paint", "onClose", menu, menu->onClose);
-        return 0;
-    }
-    if (Switch_UI_BadPointer(menu->onESC))
-    {
-        Switch_UI_LogBadPointer("Menu_Paint", "onESC", menu, menu->onESC);
-        return 0;
-    }
-    if (Switch_UI_BadPointer(menu->onKey))
-    {
-        Switch_UI_LogBadPointer("Menu_Paint", "onKey", menu, menu->onKey);
-        return 0;
-    }
-    if (Switch_UI_BadPointer(menu->allowedBinding))
-    {
-        Switch_UI_LogBadPointer("Menu_Paint", "allowedBinding", menu, menu->allowedBinding);
-        return 0;
-    }
+    // Input scripts, open/close callbacks, sound aliases and the menu font are
+    // not prerequisites for drawing this menu. Validate them at their use
+    // sites instead of dropping every visual element because one optional
+    // non-rendering field is unavailable.
     if (!Switch_UI_ValidateStatement("Menu_Paint", "visibleExp", menu, &menu->visibleExp) ||
         !Switch_UI_ValidateStatement("Menu_Paint", "rectXExp", menu, &menu->rectXExp) ||
         !Switch_UI_ValidateStatement("Menu_Paint", "rectYExp", menu, &menu->rectYExp))
@@ -6745,8 +6717,11 @@ void __cdecl Window_Paint(
     }
     if (Switch_UI_BadPointer(w->background))
     {
+        // The window can still have a border or other drawable content when
+        // its material handle is absent. Treat the background as null rather
+        // than aborting the entire window paint.
         Switch_UI_LogBadPointer("Window_Paint", "background", w, w->background);
-        return;
+        w->background = nullptr;
     }
 #endif
     PROF_SCOPED("Window_Paint");
@@ -7121,50 +7096,34 @@ void __cdecl Item_Paint(UiContext *dc, itemDef_s *item)
     }
     if (Switch_UI_BadPointer(item->window.background))
     {
+        // A broken optional material must not discard the whole item. Null it
+        // so materialExp can re-register it below and text/borders can survive.
         Switch_UI_LogBadPointer("Item_Paint", "window.background", item, item->window.background);
-        return;
+        item->window.background = nullptr;
     }
     if (Switch_UI_BadPointer(item->text))
     {
+        // Text is optional; continue painting the item's background and other
+        // visual parts when its literal text pointer is unavailable.
         Switch_UI_LogBadPointer("Item_Paint", "text", item, item->text);
-        return;
+        item->text = nullptr;
     }
     if (Switch_UI_BadPointer(item->dvar))
     {
         Switch_UI_LogBadPointer("Item_Paint", "dvar", item, item->dvar);
         return;
     }
-    if (Switch_UI_BadPointer(item->onKey))
+    if (Switch_UI_BadPointer(item->dvarTest) ||
+        Switch_UI_BadPointer(item->enableDvar))
     {
-        Switch_UI_LogBadPointer("Item_Paint", "onKey", item, item->onKey);
-        return;
-    }
-    if (Switch_UI_BadPointer(item->mouseEnterText) ||
-        Switch_UI_BadPointer(item->mouseExitText) ||
-        Switch_UI_BadPointer(item->mouseEnter) ||
-        Switch_UI_BadPointer(item->mouseExit) ||
-        Switch_UI_BadPointer(item->action) ||
-        Switch_UI_BadPointer(item->onAccept) ||
-        Switch_UI_BadPointer(item->onFocus) ||
-        Switch_UI_BadPointer(item->leaveFocus) ||
-        Switch_UI_BadPointer(item->dvarTest) ||
-        Switch_UI_BadPointer(item->enableDvar) ||
-        Switch_UI_BadPointer(item->focusSound))
-    {
-        const void *badValue = nullptr;
-        const char *badField = "unknown";
-        if (Switch_UI_BadPointer(item->mouseEnterText)) { badField = "mouseEnterText"; badValue = item->mouseEnterText; }
-        else if (Switch_UI_BadPointer(item->mouseExitText)) { badField = "mouseExitText"; badValue = item->mouseExitText; }
-        else if (Switch_UI_BadPointer(item->mouseEnter)) { badField = "mouseEnter"; badValue = item->mouseEnter; }
-        else if (Switch_UI_BadPointer(item->mouseExit)) { badField = "mouseExit"; badValue = item->mouseExit; }
-        else if (Switch_UI_BadPointer(item->action)) { badField = "action"; badValue = item->action; }
-        else if (Switch_UI_BadPointer(item->onAccept)) { badField = "onAccept"; badValue = item->onAccept; }
-        else if (Switch_UI_BadPointer(item->onFocus)) { badField = "onFocus"; badValue = item->onFocus; }
-        else if (Switch_UI_BadPointer(item->leaveFocus)) { badField = "leaveFocus"; badValue = item->leaveFocus; }
-        else if (Switch_UI_BadPointer(item->dvarTest)) { badField = "dvarTest"; badValue = item->dvarTest; }
-        else if (Switch_UI_BadPointer(item->enableDvar)) { badField = "enableDvar"; badValue = item->enableDvar; }
-        else if (Switch_UI_BadPointer(item->focusSound)) { badField = "focusSound"; badValue = item->focusSound; }
-        Switch_UI_LogBadPointer("Item_Paint", badField, item, badValue);
+        const void *badValue = Switch_UI_BadPointer(item->dvarTest)
+            ? static_cast<const void *>(item->dvarTest)
+            : static_cast<const void *>(item->enableDvar);
+        Switch_UI_LogBadPointer(
+            "Item_Paint",
+            Switch_UI_BadPointer(item->dvarTest) ? "dvarTest" : "enableDvar",
+            item,
+            badValue);
         return;
     }
     if (!Switch_UI_ValidateStatement("Item_Paint", "visibleExp", item, &item->visibleExp) ||
