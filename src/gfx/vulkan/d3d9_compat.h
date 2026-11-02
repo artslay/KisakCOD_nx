@@ -360,8 +360,9 @@ struct KisakVkShader : IDirect3DResource9 {
     uint64_t linkedDeclarationSerial=0;
     uint64_t linkedPixelShaderSerial=0;
     uint64_t linkedVertexShaderSerial=0;
-    // The fragment SPIR-V sampler type and Dref operations are specialized for
-    // the stages currently bound to the sun depth target.
+    // Cache which pixel-shader sampler slots implement CoD4 HSM depth taps.
+    uint32_t sunShadowCompareShaderMask=UINT32_MAX;
+    // The fragment SPIR-V module variant linked for the currently bound sun map.
     uint32_t linkedSunShadowCompareMask=UINT32_MAX;
     uint32_t AddRef() override
     {
