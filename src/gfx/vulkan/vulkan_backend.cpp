@@ -3810,40 +3810,21 @@ bool VulkanBackend::EnsureRendering(
     VkImageLayout colorOldLayout, VkImageLayout depthOldLayout,
     uint32_t width, uint32_t height)
 {
-    const bool hasColorAttachment =
-        colorImage && colorView && colorFormat != VK_FORMAT_UNDEFINED;
-    const bool hasDepthAttachment =
-        depthImage && depthView && depthFormat != VK_FORMAT_UNDEFINED;
-    const bool hasPartialColorAttachment =
-        (colorImage || colorView || colorFormat != VK_FORMAT_UNDEFINED) &&
-        !hasColorAttachment;
-    const bool hasPartialDepthAttachment =
-        (depthImage || depthView) && !hasDepthAttachment;
-
-    // D3D9 permits a depth-only render target (used by CoD4 sun/spot shadow
-    // maps). Do not silently replace its missing color attachment with the
-    // swapchain: that changes the render area to the screen dimensions and
-    // clips shadow-map tiles whose extent is larger than the backbuffer.
-    if (!m_frameActive || !width || !height ||
-        (!hasColorAttachment && !hasDepthAttachment) ||
-        hasPartialColorAttachment || hasPartialDepthAttachment)
+    if (!m_frameActive || !colorImage || !colorView || colorFormat == VK_FORMAT_UNDEFINED)
         return false;
 
     if (m_renderingActive)
         return true;
 
-    if (hasColorAttachment)
-    {
-        TransitionImage(
-            colorImage,
-            colorOldLayout,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            VK_IMAGE_ASPECT_COLOR_BIT);
-        if (colorImage == CurrentSwapchainImage())
-            m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    }
+    TransitionImage(
+        colorImage,
+        colorOldLayout,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_ASPECT_COLOR_BIT);
+    if (colorImage == CurrentSwapchainImage())
+        m_swapchainLayouts[m_swapchainIndex] = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    if (hasDepthAttachment)
+    if (depthImage && depthView)
     {
         TransitionImage(
             depthImage,
@@ -3851,8 +3832,7 @@ bool VulkanBackend::EnsureRendering(
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             DepthAspect(depthFormat));
     }
-
-    if (hasColorAttachment && resolveImage && resolveView &&
+    if (resolveImage && resolveView &&
         resolveOldLayout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
     {
         TransitionImage(
@@ -3862,43 +3842,37 @@ bool VulkanBackend::EnsureRendering(
             VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
-    const bool clearUninitializedColor =
-        hasColorAttachment && colorOldLayout == VK_IMAGE_LAYOUT_UNDEFINED;
-    const bool clearBackbuffer =
-        hasColorAttachment && colorImage == CurrentSwapchainImage() &&
-        !m_backbufferClearedThisFrame;
+    const bool clearUninitializedColor = colorOldLayout == VK_IMAGE_LAYOUT_UNDEFINED;
+    const bool clearBackbuffer = colorImage == CurrentSwapchainImage() && !m_backbufferClearedThisFrame;
 
     VkRenderingAttachmentInfo color{};
     color.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    if (hasColorAttachment)
+    color.imageView = colorView;
+    color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color.loadOp = (clearUninitializedColor || clearBackbuffer)
+        ? VK_ATTACHMENT_LOAD_OP_CLEAR
+        : VK_ATTACHMENT_LOAD_OP_LOAD;
+    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    if (resolveImage && resolveView)
     {
-        color.imageView = colorView;
-        color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        color.loadOp = (clearUninitializedColor || clearBackbuffer)
-            ? VK_ATTACHMENT_LOAD_OP_CLEAR
-            : VK_ATTACHMENT_LOAD_OP_LOAD;
-        color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        if (resolveImage && resolveView)
-        {
-            color.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
-            color.resolveImageView = resolveView;
-            color.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        }
-        if (color.loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
-        {
-            // D3D9 render targets do not guarantee meaningful contents before the
-            // first write. Make first-use Vulkan targets deterministic and ensure
-            // the first backbuffer rendering cannot inherit the previous frame.
-            color.clearValue.color.float32[0] = 0.0f;
-            color.clearValue.color.float32[1] = 0.0f;
-            color.clearValue.color.float32[2] = 0.0f;
-            color.clearValue.color.float32[3] = 1.0f;
-        }
+        color.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+        color.resolveImageView = resolveView;
+        color.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+    if (color.loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR)
+    {
+        // D3D9 render targets do not guarantee meaningful contents before the
+        // first write. Make first-use Vulkan targets deterministic and ensure
+        // the first backbuffer rendering cannot inherit the previous frame.
+        color.clearValue.color.float32[0] = 0.0f;
+        color.clearValue.color.float32[1] = 0.0f;
+        color.clearValue.color.float32[2] = 0.0f;
+        color.clearValue.color.float32[3] = 1.0f;
     }
 
     VkRenderingAttachmentInfo depth{};
     depth.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    if (hasDepthAttachment)
+    if (depthView)
     {
         depth.imageView = depthView;
         depth.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -3917,9 +3891,9 @@ bool VulkanBackend::EnsureRendering(
     rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
     rendering.renderArea.extent = {width, height};
     rendering.layerCount = 1;
-    rendering.colorAttachmentCount = hasColorAttachment ? 1u : 0u;
-    rendering.pColorAttachments = hasColorAttachment ? &color : nullptr;
-    if (hasDepthAttachment)
+    rendering.colorAttachmentCount = 1;
+    rendering.pColorAttachments = &color;
+    if (depthView)
     {
         rendering.pDepthAttachment = &depth;
         // Dynamic rendering requires a separate stencil attachment declaration
