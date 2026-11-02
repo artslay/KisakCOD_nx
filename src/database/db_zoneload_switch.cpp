@@ -527,30 +527,6 @@ void NormalizeXModelMaterialReferences(XModel *model)
     }
 }
 
-void NormalizeWeaponMaterialReferences(WeaponDef *weapon)
-{
-    if (!weapon)
-        return;
-
-    // OAT can leave WeaponDef material fields pointing at zone-local assets
-    // when DB_AddXAsset selects an already registered canonical material.
-    // Normalize every material reference used by the HUD, reticle, and ADS.
-    uint32_t materialIndex = 0;
-    for (Material **materialSlot : {
-             &weapon->reticleCenter,
-             &weapon->reticleSide,
-             &weapon->hudIcon,
-             &weapon->ammoCounterIcon,
-             &weapon->overlayMaterial,
-             &weapon->overlayMaterialLowRes,
-             &weapon->killIcon,
-             &weapon->dpadIcon})
-    {
-        NormalizeMaterialReference(
-            materialSlot, "weapon", weapon->szInternalName, materialIndex++);
-    }
-}
-
 static void FixupGfxWorldAabbTreeOffsets(GfxWorld *world)
 {
     // OAT allocates each cell's serialized 44-byte GfxAabbTree records as a
@@ -1064,10 +1040,7 @@ void DB_LoadXFileContent_Switch(XZoneMemory *zoneMem, const char *zoneName)
     for (WeaponDef *weapon : weaponsToFix)
     {
         if (weapon && fixedWeapons.insert(weapon).second)
-        {
-            NormalizeWeaponMaterialReferences(weapon);
             FixupWeapon(state, weapon);
-        }
     }
 
     {
