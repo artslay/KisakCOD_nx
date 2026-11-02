@@ -323,7 +323,7 @@ static inline bool Switch_UI_ValidateStatement(
 // Optional UI expressions must never suppress the whole menu or item. If an
 // expression tree is malformed, discard only that expression and let the
 // stock static text, background, border and remaining expressions paint.
-static inline void Switch_UI_ValidateOptionalStatement(
+void Switch_UI_ValidateOptionalStatement(
     const char *where,
     const char *field,
     const void *owner,
@@ -6187,6 +6187,11 @@ int __cdecl Menus_AnyFullScreenVisible(UiContext *dc)
 char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
 {
 #ifdef __SWITCH__
+    // Menu_IsVisible runs in Menu_PaintAll's fullscreen-layer selection before
+    // Menu_Paint. Validate here, not only in Menu_Paint, so malformed optional
+    // visibleWhen data cannot suppress an otherwise drawable pause/confirmation.
+    Switch_UI_ValidateOptionalStatement(
+        "Menu_IsVisible", "visibleExp", menu, &menu->visibleExp);
     g_switchFrameStage = "frame/ui/menu_visible/entry";
 #endif
 #ifdef __SWITCH__
