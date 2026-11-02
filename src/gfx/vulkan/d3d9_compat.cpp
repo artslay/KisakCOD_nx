@@ -6980,7 +6980,32 @@ HRESULT IDirect3DDevice9::CreateRenderTarget(
 
 HRESULT IDirect3DDevice9::SetRenderTarget(uint32_t index, IDirect3DSurface9 *surface)
 {
-    if (index != 0)
+    if (index != 0 || !surface)
+        return E_FAIL;
+
+    uint32_t targetWidth = 0;
+    uint32_t targetHeight = 0;
+    if (surface->texture)
+    {
+        if (surface->level >= surface->texture->mipLevels)
+            return E_FAIL;
+        targetWidth = std::max(1u, surface->texture->width >> surface->level);
+        targetHeight = std::max(1u, surface->texture->height >> surface->level);
+    }
+    else if (surface->defaultFramebuffer)
+    {
+        uint32_t backBufferFormat = 0;
+        if (!m_backend ||
+            !m_backend->GetBackBufferDesc(
+                &targetWidth, &targetHeight, &backBufferFormat))
+            return E_FAIL;
+    }
+    else
+    {
+        return E_FAIL;
+    }
+
+    if (!targetWidth || !targetHeight)
         return E_FAIL;
 
     if (m_backend)
@@ -6989,8 +7014,16 @@ HRESULT IDirect3DDevice9::SetRenderTarget(uint32_t index, IDirect3DSurface9 *sur
     if (m_color)
         m_color->Release();
     m_color = surface;
-    if (m_color)
-        m_color->AddRef();
+    m_color->AddRef();
+
+    // D3D9 SetRenderTarget resets the viewport to the full dimensions of the
+    // new color target. The renderer relies on that behavior: R_HW_SetRenderTarget
+    // updates its cached viewport but deliberately does not call SetViewport.
+    // Keep Vulkan's device-side viewport in sync, including quarter-resolution
+    // post-effect targets used by the depth-of-field downsample and blur passes.
+    m_viewport = {
+        0u, 0u, targetWidth, targetHeight, 0.0f, 1.0f
+    };
 
     m_targetRendered = false;
     return S_OK;
