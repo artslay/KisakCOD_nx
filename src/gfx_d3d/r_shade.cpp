@@ -21,35 +21,10 @@
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
 extern bool Switch_ResolveMaterialPassArgsForRender(MaterialPass *pass);
+extern bool Switch_IsSafeMaterialShaderArgumentRange(
+    const MaterialShaderArgument *arg, uint32_t argCount, const char *path);
 
-static bool Switch_IsSafeMaterialShaderArgumentRange(
-    const MaterialShaderArgument *arg,
-    uint32_t argCount,
-    const char *path)
-{
-    if (!argCount)
-        return true;
 
-    const uintptr_t address = reinterpret_cast<uintptr_t>(arg);
-    if (address > UINT32_MAX &&
-        (address & (alignof(MaterialShaderArgument) - 1u)) == 0)
-        return true;
-
-    static std::atomic<uint32_t> traceCount{0};
-    if (traceCount.fetch_add(1, std::memory_order_relaxed) < 32u)
-    {
-        char trace[320];
-        std::snprintf(
-            trace,
-            sizeof(trace),
-            "[KisakCOD][SHADER ARG REJECT] path=%s arg=%p count=%u\n",
-            path ? path : "<unknown>",
-            reinterpret_cast<const void *>(address),
-            static_cast<unsigned>(argCount));
-        Switch_LogWrite(trace);
-    }
-    return false;
-}
 #endif
 
 
