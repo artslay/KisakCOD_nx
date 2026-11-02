@@ -282,7 +282,11 @@ static void __cdecl R_CalcBoxVsCylinderRayMinBox(
     // If the ray misses or only touches the box, keep the original bounds.
     if (points < 2)
     {
-        std::memcpy(outBox, box, sizeof(float) * 6);
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            outBox[axis] = box[axis];
+            outBox[axis + 3] = box[axis + 3];
+        }
         return;
     }
 
