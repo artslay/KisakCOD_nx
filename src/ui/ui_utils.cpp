@@ -106,6 +106,12 @@ int __cdecl Item_IsVisible(int localClientNum, itemDef_s *item)
     PROF_SCOPED("Item_IsVisible");
 
 #ifdef __SWITCH__
+    // Item_IsVisible is also called during Menus_Open's controller-focus
+    // setup, before Item_Paint can validate the expression. Sanitize an
+    // invalid optional visibleWhen tree here so it cannot hide or abort a
+    // pause/confirmation control before its first paint.
+    Switch_UI_ValidateOptionalStatement(
+        "Item_IsVisible", "visibleExp", item, &item->visibleExp);
     g_switchFrameStage = "frame/scr/draw_field/loading_ui/item/visible/window";
 #endif
     if (!Window_IsVisible(localClientNum, &item->window))
