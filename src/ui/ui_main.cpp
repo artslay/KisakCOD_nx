@@ -2835,12 +2835,19 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
 #endif
 #ifdef __SWITCH__
         {
-            const int switchMainMenuOpenResult = Menus_OpenByName(&uiInfo.uiDC, "main");
+            menuDef_t *mainMenu = Menus_FindByName(&uiInfo.uiDC, "main");
+            const bool mainAlreadyActive =
+                v4 == UIMENU_MAIN &&
+                mainMenu &&
+                Menus_MenuIsInStack(&uiInfo.uiDC, mainMenu);
+            const int switchMainMenuOpenResult =
+                mainAlreadyActive ? 1 : Menus_OpenByName(&uiInfo.uiDC, "main");
             char trace[320];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FRONTEND MENU OPEN] result=%d definitions=%d open=%d fullscreen=%d catcher=%d uiStarted=%d\n",
+                "[KisakCOD][FRONTEND MENU OPEN] result=%d alreadyActive=%d definitions=%d open=%d fullscreen=%d catcher=%d uiStarted=%d\n",
                 switchMainMenuOpenResult,
+                mainAlreadyActive ? 1 : 0,
                 Menu_Count(&uiInfo.uiDC),
                 uiInfo.uiDC.openMenuCount,
                 UI_IsFullscreen() ? 1 : 0,
@@ -2895,7 +2902,14 @@ int __cdecl UI_SetActiveMenu(int localClientNum, uiMenuCommand_t menu)
         {
             Dvar_SetIntByName("cl_paused", 1);
             Key_SetCatcher(0, KEYCATCH_UI);
-            Menus_OpenByName(&uiInfo.uiDC, "pausedmenu");
+            menuDef_t *pauseMenu =
+                Menus_FindByName(&uiInfo.uiDC, "pausedmenu");
+            const bool pauseAlreadyActive =
+                v4 == UIMENU_INGAME &&
+                pauseMenu &&
+                Menus_MenuIsInStack(&uiInfo.uiDC, pauseMenu);
+            if (!pauseAlreadyActive)
+                Menus_OpenByName(&uiInfo.uiDC, "pausedmenu");
             result = 1;
         }
         break;
