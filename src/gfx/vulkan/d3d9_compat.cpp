@@ -2729,10 +2729,14 @@ static bool SwitchBuildSpirvResultTypeMap(
         // the HSM tex2Dlod coordinate is either loaded, copied or constructed.
         switch (opcode)
         {
+        case SpvOpExtInst:
         case SpvOpLoad:
         case SpvOpCopyObject:
         case SpvOpCompositeConstruct:
+        case SpvOpCompositeExtract:
+        case SpvOpCompositeInsert:
         case SpvOpVectorShuffle:
+        case SpvOpFNegate:
         case SpvOpFAdd:
         case SpvOpFSub:
         case SpvOpFMul:
