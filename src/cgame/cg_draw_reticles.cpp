@@ -246,7 +246,7 @@ void __cdecl CG_DrawAdsOverlay(
         char trace[384];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][ADS OVERLAY] weapon=%s high=%p low=%p selected=%p lowResViewport=%u size=%.1fx%.1f reticle=%u alpha=%.3f\\n",
+            "[KisakCOD][ADS OVERLAY] weapon=%s high=%p low=%p selected=%p lowResViewport=%u size=%.1fx%.1f reticle=%u alpha=%.3f\n",
             weapDef->szInternalName ? weapDef->szInternalName : "(unnamed)",
             static_cast<const void *>(weapDef->overlayMaterial),
             static_cast<const void *>(weapDef->overlayMaterialLowRes),
