@@ -75,7 +75,7 @@ char __cdecl CG_GetWeapReticleZoom(const cg_s *cgameGlob, float *zoom)
         char trace[320];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][ADS OVERLAY MISSING] weapon=%s reticle=%u size=%.1fx%.1f zoomIn=%.3f zoomOut=%.3f weaponPos=%.3f\\n",
+            "[KisakCOD][ADS OVERLAY MISSING] weapon=%s reticle=%u size=%.1fx%.1f zoomIn=%.3f zoomOut=%.3f weaponPos=%.3f\n",
             weapDef->szInternalName ? weapDef->szInternalName : "(unnamed)",
             static_cast<unsigned int>(weapDef->overlayReticle),
             weapDef->overlayWidth, weapDef->overlayHeight,
