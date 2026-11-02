@@ -8388,7 +8388,7 @@ bool IDirect3DDevice9::BindSamplerSet(
                     std::min(maxAnisotropy, m_backend->MaxSamplerAnisotropy()),
                     compareEnable,
                     VK_COMPARE_OP_LESS_OR_EQUAL);
-                if (compareEnable && activeShader &&
+                if (compareEnable && sampler && activeShader &&
                     !activeShader->sunShadowCompareSamplerTraceLogged)
                 {
                     char trace[224];
