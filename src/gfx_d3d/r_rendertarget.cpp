@@ -13,6 +13,31 @@ extern void Switch_LogWrite(const char *msg);
 
 namespace
 {
+const char *SwitchDepthD3DFormatName(_D3DFORMAT format)
+{
+    switch (format)
+    {
+    case D3DFMT_D24S8: return "D24S8";
+    case D3DFMT_D24FS8: return "D24FS8";
+    case D3DFMT_D15S1: return "D15S1";
+    default: return "UNKNOWN";
+    }
+}
+
+const char *SwitchDepthVkFormatName(VkFormat format)
+{
+    switch (format)
+    {
+    case VK_FORMAT_D24_UNORM_S8_UINT: return "VK_FORMAT_D24_UNORM_S8_UINT";
+    case VK_FORMAT_D32_SFLOAT_S8_UINT: return "VK_FORMAT_D32_SFLOAT_S8_UINT";
+    case VK_FORMAT_D16_UNORM_S8_UINT: return "VK_FORMAT_D16_UNORM_S8_UINT";
+    case VK_FORMAT_D32_SFLOAT: return "VK_FORMAT_D32_SFLOAT";
+    case VK_FORMAT_D16_UNORM: return "VK_FORMAT_D16_UNORM";
+    case VK_FORMAT_X8_D24_UNORM_PACK32: return "VK_FORMAT_X8_D24_UNORM_PACK32";
+    default: return "VK_FORMAT_UNKNOWN";
+    }
+}
+
 VkFormat SwitchDepthVkFormat(_D3DFORMAT format)
 {
     switch (format)
@@ -128,12 +153,15 @@ int __cdecl R_GetDepthStencilFormat(_D3DFORMAT renderTargetFormat)
     {
         if (R_IsDepthStencilFormatOk(renderTargetFormat, candidate))
         {
-            char message[192];
+            const VkFormat selectedVkFormat = SwitchDepthVkFormat(candidate);
+            char message[320];
             std::snprintf(
                 message, sizeof(message),
-                "[KisakCOD][VK FORMAT] selected depth target d3d=%u vk=%u\n",
+                "[KisakCOD][VK FORMAT] selected depth target d3d=%s(%u) vk=%s(%u) aspect=DEPTH|STENCIL usage=ATTACHMENT|SAMPLED|TRANSFER_SRC|TRANSFER_DST\n",
+                SwitchDepthD3DFormatName(candidate),
                 static_cast<unsigned>(candidate),
-                static_cast<unsigned>(SwitchDepthVkFormat(candidate)));
+                SwitchDepthVkFormatName(selectedVkFormat),
+                static_cast<unsigned>(selectedVkFormat));
             Switch_LogWrite(message);
             return candidate;
         }
