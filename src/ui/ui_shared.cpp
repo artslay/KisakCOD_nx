@@ -3979,24 +3979,43 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
                 {
                     continue;
                 }
-
-                float focusX = focusCandidate->window.rect.x +
-                    focusCandidate->window.rect.w * 0.5f;
-                float focusY = focusCandidate->window.rect.y +
-                    focusCandidate->window.rect.h * 0.5f;
-                if (focusCandidate->type == 0)
+                if ((focusCandidate->dvarFlags & 3u) != 0 &&
+                    !Item_EnableShowViaDvar(focusCandidate, 1))
                 {
-                    const rectDef_s *textRect =
-                        Item_GetTextRect(dc->localClientNum, focusCandidate);
-                    if (!textRect || textRect->w <= 0.0f || textRect->h <= 0.0f)
-                        continue;
-                    // Item_SetFocus expects the text item's corrected text
-                    // rectangle (its y origin is textRect->y - textRect->h).
-                    focusX = textRect->x + textRect->w * 0.5f;
-                    focusY = textRect->y - textRect->h * 0.5f;
+                    continue;
                 }
 
-                if (Item_SetFocus(dc, focusCandidate, focusX, focusY) &&
+                bool candidateFocused = false;
+                if (focusCandidate->type == 0)
+                {
+                    // Text buttons (type 0 with an action) are normally focused
+                    // by the mouse hit-test in Item_SetFocus. A controller has
+                    // no cursor position, and their textRect may not be built
+                    // until the first paint. Focus the actionable text item
+                    // directly, preserving the same leaveFocus/onFocus scripts.
+                    Menu_ClearFocus(dc, menu);
+                    if (!Menus_MenuIsInStack(dc, menu) || Menu_GetFocused(dc) != menu)
+                        break;
+                    Window_AddDynamicFlags(
+                        dc->localClientNum, &focusCandidate->window, 2);
+                    if (focusCandidate->onFocus)
+                        Item_RunScript(dc, focusCandidate, (char *)focusCandidate->onFocus);
+                    candidateFocused =
+                        Window_HasFocus(dc->localClientNum, &focusCandidate->window) &&
+                        Menus_MenuIsInStack(dc, menu) &&
+                        Menu_GetFocused(dc) == menu;
+                }
+                else
+                {
+                    const float focusX = focusCandidate->window.rect.x +
+                        focusCandidate->window.rect.w * 0.5f;
+                    const float focusY = focusCandidate->window.rect.y +
+                        focusCandidate->window.rect.h * 0.5f;
+                    candidateFocused = Item_SetFocus(
+                        dc, focusCandidate, focusX, focusY);
+                }
+
+                if (candidateFocused &&
                     Window_HasFocus(dc->localClientNum, &focusCandidate->window))
                 {
                     Menu_SetCursorItem(dc->localClientNum, menu, candidateIndex);
