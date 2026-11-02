@@ -35,7 +35,7 @@ bool R_ValidateLightPropertiesInput(
     {
         char msg[320];
         std::snprintf(msg, sizeof(msg),
-            "[KisakCOD][LIGHT DEF INVALID] id=%u where=%s light=%p type=%u def=%p attenuation=%p shadowableIndex=%u shadowableCount=%u action=skip_light_draw_list\n",
+            "[KisakCOD][LIGHT DEF INVALID] id=%u where=%s light=%p type=%u def=%p attenuation=%p shadowableIndex=%u shadowableCount=%u action=clear_light_constants\n",
             logId, where ? where : "(null)", static_cast<const void *>(light),
             light ? static_cast<unsigned int>(light->type) : 0xffffffffu,
             static_cast<const void *>(def),
@@ -46,6 +46,34 @@ bool R_ValidateLightPropertiesInput(
 #endif
     return false;
 }
+}
+
+
+static void R_ClearLightProperties(GfxCmdBufSourceState *source)
+{
+    if (!source)
+        return;
+
+    // Invalid light definitions must not leave constants from the previous
+    // draw-surface list active. Zero every light input consumed by the lighting
+    // shaders so this list contributes no stale diffuse/specular illumination.
+    Vec4Set(source->input.consts[CONST_SRC_CODE_LIGHT_POSITION], 0.0f, 0.0f, 0.0f, 0.0f);
+    R_DirtyCodeConstant(source, CONST_SRC_CODE_LIGHT_POSITION);
+
+    Vec4Set(source->input.consts[CONST_SRC_CODE_LIGHT_DIFFUSE], 0.0f, 0.0f, 0.0f, 0.0f);
+    R_DirtyCodeConstant(source, CONST_SRC_CODE_LIGHT_DIFFUSE);
+
+    Vec4Set(source->input.consts[CONST_SRC_CODE_LIGHT_SPECULAR], 0.0f, 0.0f, 0.0f, 0.0f);
+    R_DirtyCodeConstant(source, CONST_SRC_CODE_LIGHT_SPECULAR);
+
+    Vec4Set(source->input.consts[CONST_SRC_CODE_LIGHT_SPOTDIR], 0.0f, 0.0f, 0.0f, 0.0f);
+    R_DirtyCodeConstant(source, CONST_SRC_CODE_LIGHT_SPOTDIR);
+
+    Vec4Set(source->input.consts[CONST_SRC_CODE_LIGHT_SPOTFACTORS], 0.0f, 0.0f, 0.0f, 0.0f);
+    R_DirtyCodeConstant(source, CONST_SRC_CODE_LIGHT_SPOTFACTORS);
+
+    R_UpdateCodeConstant(
+        source, CONST_SRC_CODE_LIGHT_FALLOFF_PLACEMENT, 0.0f, 0.0f, 0.0f, 0.0f);
 }
 
 
@@ -65,7 +93,10 @@ void __cdecl R_SetLightProperties(
 
     if (!R_ValidateLightPropertiesInput(
             "set_light_properties", light, def, UINT32_MAX, 0u))
+    {
+        R_ClearLightProperties(source);
         return;
+    }
 
     iassert(source->viewMode == VIEW_MODE_3D);
     iassert( light );
@@ -173,7 +204,10 @@ void __cdecl R_SetShadowableLight(
                         "shadowable_light",
                         &viewInfo->shadowableLights[shadowableLightIndex], def,
                         shadowableLightIndex, viewInfo->shadowableLightCount))
+                {
+                    R_ClearLightProperties(source);
                     return;
+                }
                 falloffShift = (double)def->lmapLookupStart * 0.001953125;
                 falloffScale = (double)def->attenuation.image->width * 0.001953125;
                 R_UpdateCodeConstant(source, CONST_SRC_CODE_LIGHT_FALLOFF_PLACEMENT, falloffScale, 0.0, falloffShift, 0.0);
@@ -231,7 +265,10 @@ void __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const G
             !R_ValidateLightPropertiesInput(
                 "shadowable_list", shadowableLight, shadowableLight->def,
                 shadowableLightIndex, info->viewInfo->shadowableLightCount))
+        {
+            R_ClearLightProperties(source);
             return;
+        }
         R_SetShadowableLight(source, shadowableLightIndex, info->viewInfo);
     }
     else
