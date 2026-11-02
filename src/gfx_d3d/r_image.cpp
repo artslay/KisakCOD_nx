@@ -396,12 +396,6 @@ bool R_VulkanAllocTexture(
         return false;
     }
 
-    // The ordinary sampled view above is depth-only for sampleable D24S8.
-    // baseMipView retains info.aspect (DEPTH|STENCIL), and render-target
-    // depth images have one mip, so it is the correct attachment view.
-    texture->attachmentView = info.depth
-        ? texture->baseMipView
-        : texture->view;
     return true;
 }
 
