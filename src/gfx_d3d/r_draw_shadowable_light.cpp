@@ -35,7 +35,7 @@ bool R_ValidateLightPropertiesInput(
     {
         char msg[320];
         std::snprintf(msg, sizeof(msg),
-            "[KisakCOD][LIGHT DEF INVALID] id=%u where=%s light=%p type=%u def=%p attenuation=%p shadowableIndex=%u shadowableCount=%u action=clear_light_constants\n",
+            "[KisakCOD][LIGHT DEF INVALID] id=%u where=%s light=%p type=%u def=%p attenuation=%p shadowableIndex=%u shadowableCount=%u action=clear_light_state\n",
             logId, where ? where : "(null)", static_cast<const void *>(light),
             light ? static_cast<unsigned int>(light->type) : 0xffffffffu,
             static_cast<const void *>(def),
@@ -54,9 +54,9 @@ static void R_ClearLightProperties(GfxCmdBufSourceState *source)
     if (!source)
         return;
 
-    // Invalid light definitions must not leave constants from the previous
-    // draw-surface list active. Zero every light input consumed by the lighting
-    // shaders so this list contributes no stale diffuse/specular illumination.
+    // Invalid light definitions must not leave constants or cached light
+    // indices from the previous draw-surface list active. Clear both caches so
+    // the next valid list rebinds its light constants and shadow lookup matrix.
     Vec4Set(source->input.consts[CONST_SRC_CODE_LIGHT_POSITION], 0.0f, 0.0f, 0.0f, 0.0f);
     R_DirtyCodeConstant(source, CONST_SRC_CODE_LIGHT_POSITION);
 
@@ -74,6 +74,12 @@ static void R_ClearLightProperties(GfxCmdBufSourceState *source)
 
     R_UpdateCodeConstant(
         source, CONST_SRC_CODE_LIGHT_FALLOFF_PLACEMENT, 0.0f, 0.0f, 0.0f, 0.0f);
+
+    // R_SetShadowableLight skips redundant updates based on these indices.
+    // After clearing the constants, invalidate both caches to force a complete
+    // rebind even when the next draw list uses the same light index.
+    source->shadowableLightIndex = 0;
+    source->shadowableLightForShadowLookupMatrix = 0;
 }
 
 
