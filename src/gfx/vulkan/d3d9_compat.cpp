@@ -5816,6 +5816,11 @@ uint32_t KisakVkTexture::Release()
     {
         if (resolveImage || resolveMemory || resolveView)
             backend->DeferDestroyImage(resolveImage, resolveMemory, resolveView);
+        if (attachmentView &&
+            attachmentView != view &&
+            attachmentView != baseMipView)
+            backend->DeferDestroyImage(
+                VK_NULL_HANDLE, VK_NULL_HANDLE, attachmentView);
         if (baseMipView)
             backend->DeferDestroyImage(VK_NULL_HANDLE, VK_NULL_HANDLE, baseMipView);
         if (image || memory || view)
@@ -5824,6 +5829,7 @@ uint32_t KisakVkTexture::Release()
     resolveImage = VK_NULL_HANDLE;
     resolveView = VK_NULL_HANDLE;
     resolveMemory = VK_NULL_HANDLE;
+    attachmentView = VK_NULL_HANDLE;
     baseMipView = VK_NULL_HANDLE;
     image = VK_NULL_HANDLE;
     view = VK_NULL_HANDLE;
@@ -6885,6 +6891,36 @@ HRESULT IDirect3DDevice9::CreateDepthStencilSurface(
     {
         delete texture;
         return E_FAIL;
+    }
+
+    texture->attachmentView = texture->view;
+    if ((selectedAspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0 &&
+        samples == VK_SAMPLE_COUNT_1_BIT)
+    {
+        // CreateImage2D intentionally makes the sampled descriptor view
+        // DEPTH-only. Rendering needs a second view that includes STENCIL.
+        VkImageViewCreateInfo attachmentViewInfo{};
+        attachmentViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        attachmentViewInfo.image = texture->image;
+        attachmentViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        attachmentViewInfo.format = selectedFormat;
+        attachmentViewInfo.subresourceRange.aspectMask = selectedAspect;
+        attachmentViewInfo.subresourceRange.levelCount = 1;
+        attachmentViewInfo.subresourceRange.layerCount = 1;
+
+        const VkResult attachmentViewResult = vkCreateImageView(
+            m_backend->Device(), &attachmentViewInfo, nullptr,
+            &texture->attachmentView);
+        if (attachmentViewResult != VK_SUCCESS)
+        {
+            m_backend->DestroyImage(
+                texture->image, texture->memory, texture->view);
+            texture->image = VK_NULL_HANDLE;
+            texture->memory = VK_NULL_HANDLE;
+            texture->view = VK_NULL_HANDLE;
+            delete texture;
+            return E_FAIL;
+        }
     }
 
     auto *surface = new IDirect3DSurface9;
@@ -10408,7 +10444,9 @@ bool IDirect3DDevice9::PrepareDraw()
     VkImage depthImage = m_depth && m_depth->texture
         ? m_depth->texture->image : m_backend->DefaultDepthImage();
     VkImageView depthView = m_depth && m_depth->texture
-        ? m_depth->texture->view : m_backend->DefaultDepthView();
+        ? (m_depth->texture->attachmentView
+            ? m_depth->texture->attachmentView : m_depth->texture->view)
+        : m_backend->DefaultDepthView();
     VkFormat depthFormat = m_depth && m_depth->texture
         ? m_depth->texture->format : m_backend->DepthFormat();
     const VkImageAspectFlags depthAspect = m_depth && m_depth->texture
@@ -12105,7 +12143,10 @@ HRESULT IDirect3DDevice9::Clear(
             m_color && m_color->texture ? m_color->texture->view : m_backend->CurrentSwapchainView(),
             m_color && m_color->texture ? m_color->texture->format : m_backend->SwapchainFormat(),
             m_depth && m_depth->texture ? m_depth->texture->image : m_backend->DefaultDepthImage(),
-            m_depth && m_depth->texture ? m_depth->texture->view : m_backend->DefaultDepthView(),
+            m_depth && m_depth->texture
+                ? (m_depth->texture->attachmentView
+                    ? m_depth->texture->attachmentView : m_depth->texture->view)
+                : m_backend->DefaultDepthView(),
             depthFormat, depthAspect,
             resolveImage, resolveView, resolveOldLayout,
             m_color && m_color->texture ? m_color->texture->layout : m_backend->CurrentSwapchainLayout(),
