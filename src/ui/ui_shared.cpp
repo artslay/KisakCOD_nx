@@ -3942,13 +3942,35 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
                 itemDef_s *focusCandidate = menu->items[candidateIndex];
                 if (!focusCandidate || Switch_UI_BadPointer(focusCandidate))
                     continue;
-                if (focusCandidate->type == 0 ||
-                    (focusCandidate->window.staticFlags & 0x100000) != 0)
+                if ((focusCandidate->window.staticFlags & 0x100000) != 0)
+                    continue;
+
+                const bool hasScriptAction =
+                    (focusCandidate->action &&
+                     !Switch_UI_BadPointer(focusCandidate->action) &&
+                     focusCandidate->action[0]) ||
+                    (focusCandidate->onAccept &&
+                     !Switch_UI_BadPointer(focusCandidate->onAccept) &&
+                     focusCandidate->onAccept[0]);
+                const bool hasKeyboardControl =
+                    Item_IsTextField(focusCandidate) ||
+                    focusCandidate->type == 6 ||
+                    (focusCandidate->type >= 0xA && focusCandidate->type <= 0xE);
+                // Do not give the initial controller focus to decorative
+                // owner-draw/image items. They can carry a nonzero item type
+                // but have no action; Enter then appears to be ignored until
+                // the user navigates to a real button. Keep stock keyboard
+                // controls (edit fields, list boxes, sliders, etc.) eligible.
+                if (!hasScriptAction && !hasKeyboardControl)
+                    continue;
+
+                if (!Window_IsVisible(dc->localClientNum, &focusCandidate->window) ||
+                    !Item_IsVisible(dc->localClientNum, focusCandidate))
                 {
                     continue;
                 }
-                if (!Window_IsVisible(dc->localClientNum, &focusCandidate->window) ||
-                    !Item_IsVisible(dc->localClientNum, focusCandidate))
+                if (focusCandidate->window.ownerDrawFlags &&
+                    !UI_OwnerDrawVisible(focusCandidate->window.ownerDrawFlags))
                 {
                     continue;
                 }
@@ -3958,11 +3980,23 @@ void __cdecl Menus_Open(UiContext *dc, menuDef_t *menu)
                     continue;
                 }
 
-                if (Item_SetFocus(
-                        dc,
-                        focusCandidate,
-                        focusCandidate->window.rect.x,
-                        focusCandidate->window.rect.y) &&
+                float focusX = focusCandidate->window.rect.x +
+                    focusCandidate->window.rect.w * 0.5f;
+                float focusY = focusCandidate->window.rect.y +
+                    focusCandidate->window.rect.h * 0.5f;
+                if (focusCandidate->type == 0)
+                {
+                    const rectDef_s *textRect =
+                        Item_GetTextRect(dc->localClientNum, focusCandidate);
+                    if (!textRect || textRect->w <= 0.0f || textRect->h <= 0.0f)
+                        continue;
+                    // Item_SetFocus expects the text item's corrected text
+                    // rectangle (its y origin is textRect->y - textRect->h).
+                    focusX = textRect->x + textRect->w * 0.5f;
+                    focusY = textRect->y - textRect->h * 0.5f;
+                }
+
+                if (Item_SetFocus(dc, focusCandidate, focusX, focusY) &&
                     Window_HasFocus(dc->localClientNum, &focusCandidate->window))
                 {
                     Menu_SetCursorItem(dc->localClientNum, menu, candidateIndex);
