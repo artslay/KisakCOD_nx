@@ -2751,30 +2751,21 @@ static bool SwitchBuildSpirvResultTypeMap(
     return true;
 }
 
-static uint32_t SwitchGetSunShadowCompareSamplerMask(
-    const MOJOSHADER_parseData *parse,
-    IDirect3DBaseTexture9 *const (&textures)[16])
+static uint32_t SwitchDetectSunShadowCompareShaderMask(
+    const MOJOSHADER_parseData *parse)
 {
     if (!parse || !parse->samplers || parse->sampler_count <= 0 ||
         !parse->output || parse->output_len < 20 ||
-        (parse->output_len % static_cast<int>(sizeof(uint32_t))) != 0 ||
-        !gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image)
+        (parse->output_len % static_cast<int>(sizeof(uint32_t))) != 0)
         return 0u;
 
-    const GfxImage *const sunShadowImage =
-        gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
     uint32_t candidateMask = 0u;
     const int samplerCount = std::min(parse->sampler_count, 16);
     for (int i = 0; i < samplerCount; ++i)
     {
         const MOJOSHADER_sampler &sampler = parse->samplers[i];
-        if (sampler.type != MOJOSHADER_SAMPLER_2D ||
-            sampler.index < 0 || sampler.index >= 16)
-            continue;
-
-        const auto *texture =
-            static_cast<const KisakVkTexture *>(textures[sampler.index]);
-        if (texture && texture->sourceImage == sunShadowImage)
+        if (sampler.type == MOJOSHADER_SAMPLER_2D &&
+            sampler.index >= 0 && sampler.index < 16)
             candidateMask |= 1u << static_cast<uint32_t>(sampler.index);
     }
     if (!candidateMask)
@@ -2942,6 +2933,47 @@ static uint32_t SwitchGetSunShadowCompareSamplerMask(
         }
     }
     return compareMask;
+}
+
+static uint32_t SwitchGetSunShadowCompareSamplerMask(
+    KisakVkShader *shader,
+    IDirect3DBaseTexture9 *const (&textures)[16])
+{
+    if (!shader || !shader->parseData ||
+        !gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image)
+        return 0u;
+
+    if (shader->sunShadowCompareShaderMask == UINT32_MAX)
+    {
+        shader->sunShadowCompareShaderMask =
+            SwitchDetectSunShadowCompareShaderMask(shader->parseData);
+    }
+
+    const uint32_t shaderMask = shader->sunShadowCompareShaderMask;
+    if (!shaderMask)
+        return 0u;
+
+    const GfxImage *const sunShadowImage =
+        gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
+    uint32_t boundMask = 0u;
+    const int samplerCount = std::min(shader->parseData->sampler_count, 16);
+    for (int i = 0; i < samplerCount; ++i)
+    {
+        const MOJOSHADER_sampler &sampler = shader->parseData->samplers[i];
+        if (sampler.type != MOJOSHADER_SAMPLER_2D ||
+            sampler.index < 0 || sampler.index >= 16)
+            continue;
+
+        const uint32_t bit = 1u << static_cast<uint32_t>(sampler.index);
+        if ((shaderMask & bit) == 0u)
+            continue;
+
+        const auto *texture =
+            static_cast<const KisakVkTexture *>(textures[sampler.index]);
+        if (texture && texture->sourceImage == sunShadowImage)
+            boundMask |= bit;
+    }
+    return shaderMask & boundMask;
 }
 
 // Convert the regular 2D sample instructions for bound sun-shadow slots into
@@ -7883,7 +7915,7 @@ bool IDirect3DDevice9::BindSamplerSet(
     }
 
     const size_t traceCacheIndex = setIndex == 0 ? 0u : 1u;
-    const KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
+    KisakVkShader *activeShader = setIndex == 0 ? m_vertexShader : m_pixelShader;
     if (Switch_IsVkGpuDrawTraceEnabled())
     {
         for (uint32_t slot=0; slot<16u; ++slot)
@@ -7913,7 +7945,7 @@ bool IDirect3DDevice9::BindSamplerSet(
     }
 
     const uint32_t sunShadowCompareMask = setIndex == 2u
-        ? SwitchGetSunShadowCompareSamplerMask(activeParse, textures)
+        ? SwitchGetSunShadowCompareSamplerMask(activeShader, textures)
         : 0u;
 
     auto samplerTypeMatchesTexture = [](
@@ -8437,7 +8469,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     }
 
     const uint32_t sunShadowCompareMask =
-        SwitchGetSunShadowCompareSamplerMask(m_pixelShader->parseData, m_textures);
+        SwitchGetSunShadowCompareSamplerMask(m_pixelShader, m_textures);
 
     // Raw-s0 and solid-white probes replace the fragment output. Disable
     // state that could hide the diagnostic before it reaches the color target:
