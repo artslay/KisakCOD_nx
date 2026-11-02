@@ -2700,17 +2700,70 @@ bool SwitchPsColorDebugTargetMatches(
 }
 
 
+static bool SwitchBuildSpirvResultTypeMap(
+    const uint32_t *words,
+    size_t wordCount,
+    std::unordered_set<uint32_t> &vec4TypeIds,
+    std::unordered_map<uint32_t, uint32_t> &resultTypeById)
+{
+    if (!words || wordCount < 5u || words[0] != 0x07230203u)
+        return false;
+
+    size_t offset = 5u;
+    while (offset < wordCount)
+    {
+        const uint32_t firstWord = words[offset];
+        const uint32_t instructionWordCount = firstWord >> 16;
+        const SpvOp opcode = static_cast<SpvOp>(firstWord & 0xFFFFu);
+        if (!instructionWordCount || offset + instructionWordCount > wordCount)
+            return false;
+
+        if (opcode == SpvOpTypeVector && instructionWordCount >= 4u &&
+            words[offset + 3u] == 4u)
+        {
+            vec4TypeIds.insert(words[offset + 1u]);
+        }
+
+        // These SPIR-V instructions use the common ResultType, ResultId
+        // operand prefix. Track only likely vector-producing instructions;
+        // the HSM tex2Dlod coordinate is either loaded, copied or constructed.
+        switch (opcode)
+        {
+        case SpvOpLoad:
+        case SpvOpCopyObject:
+        case SpvOpCompositeConstruct:
+        case SpvOpVectorShuffle:
+        case SpvOpFAdd:
+        case SpvOpFSub:
+        case SpvOpFMul:
+        case SpvOpFDiv:
+        case SpvOpSelect:
+        case SpvOpPhi:
+            if (instructionWordCount >= 3u)
+                resultTypeById[words[offset + 2u]] = words[offset + 1u];
+            break;
+        default:
+            break;
+        }
+
+        offset += instructionWordCount;
+    }
+    return true;
+}
+
 static uint32_t SwitchGetSunShadowCompareSamplerMask(
     const MOJOSHADER_parseData *parse,
     IDirect3DBaseTexture9 *const (&textures)[16])
 {
     if (!parse || !parse->samplers || parse->sampler_count <= 0 ||
+        !parse->output || parse->output_len < 20 ||
+        (parse->output_len % static_cast<int>(sizeof(uint32_t))) != 0 ||
         !gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image)
         return 0u;
 
     const GfxImage *const sunShadowImage =
         gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
-    uint32_t mask = 0u;
+    uint32_t candidateMask = 0u;
     const int samplerCount = std::min(parse->sampler_count, 16);
     for (int i = 0; i < samplerCount; ++i)
     {
@@ -2722,9 +2775,173 @@ static uint32_t SwitchGetSunShadowCompareSamplerMask(
         const auto *texture =
             static_cast<const KisakVkTexture *>(textures[sampler.index]);
         if (texture && texture->sourceImage == sunShadowImage)
-            mask |= 1u << static_cast<uint32_t>(sampler.index);
+            candidateMask |= 1u << static_cast<uint32_t>(sampler.index);
     }
-    return mask;
+    if (!candidateMask)
+        return 0u;
+
+    const auto *words =
+        reinterpret_cast<const uint32_t *>(parse->output);
+    const size_t wordCount =
+        static_cast<size_t>(parse->output_len) / sizeof(uint32_t);
+    if (words[0] != 0x07230203u)
+        return 0u;
+
+    std::unordered_set<uint32_t> vec4TypeIds;
+    std::unordered_map<uint32_t, uint32_t> resultTypeById;
+    if (!SwitchBuildSpirvResultTypeMap(
+            words, wordCount, vec4TypeIds, resultTypeById))
+        return 0u;
+
+    std::unordered_map<uint32_t, uint32_t> descriptorSets;
+    std::unordered_map<uint32_t, uint32_t> bindings;
+    size_t offset = 5u;
+    while (offset < wordCount)
+    {
+        const uint32_t firstWord = words[offset];
+        const uint32_t instructionWordCount = firstWord >> 16;
+        const SpvOp opcode = static_cast<SpvOp>(firstWord & 0xFFFFu);
+        if (!instructionWordCount || offset + instructionWordCount > wordCount)
+            return 0u;
+
+        if (opcode == SpvOpDecorate && instructionWordCount >= 4u)
+        {
+            const uint32_t targetId = words[offset + 1u];
+            const uint32_t decoration = words[offset + 2u];
+            const uint32_t value = words[offset + 3u];
+            if (decoration == SpvDecorationDescriptorSet)
+                descriptorSets[targetId] = value;
+            else if (decoration == SpvDecorationBinding)
+                bindings[targetId] = value;
+        }
+        offset += instructionWordCount;
+    }
+
+    std::unordered_map<uint32_t, uint32_t> variableStage;
+    for (uint32_t stage = 0; stage < 16u; ++stage)
+    {
+        if ((candidateMask & (1u << stage)) == 0u)
+            continue;
+
+        offset = 5u;
+        while (offset < wordCount)
+        {
+            const uint32_t firstWord = words[offset];
+            const uint32_t instructionWordCount = firstWord >> 16;
+            const SpvOp opcode = static_cast<SpvOp>(firstWord & 0xFFFFu);
+            if (!instructionWordCount || offset + instructionWordCount > wordCount)
+                return 0u;
+
+            if (opcode == SpvOpVariable && instructionWordCount >= 4u &&
+                words[offset + 3u] == SpvStorageClassUniformConstant)
+            {
+                const uint32_t variableId = words[offset + 2u];
+                const auto setIt = descriptorSets.find(variableId);
+                const auto bindingIt = bindings.find(variableId);
+                if (setIt != descriptorSets.end() &&
+                    bindingIt != bindings.end() &&
+                    setIt->second == 2u &&
+                    bindingIt->second == stage)
+                {
+                    variableStage[variableId] = stage;
+                    break;
+                }
+            }
+            offset += instructionWordCount;
+        }
+    }
+    if (variableStage.empty())
+        return 0u;
+
+    std::unordered_map<uint32_t, uint32_t> loadedSamplerStage;
+    offset = 5u;
+    while (offset < wordCount)
+    {
+        const uint32_t firstWord = words[offset];
+        const uint32_t instructionWordCount = firstWord >> 16;
+        const SpvOp opcode = static_cast<SpvOp>(firstWord & 0xFFFFu);
+        if (!instructionWordCount || offset + instructionWordCount > wordCount)
+            return 0u;
+
+        if (opcode == SpvOpLoad && instructionWordCount >= 4u)
+        {
+            const uint32_t resultId = words[offset + 2u];
+            const uint32_t pointerId = words[offset + 3u];
+            const auto stageIt = variableStage.find(pointerId);
+            if (stageIt != variableStage.end())
+                loadedSamplerStage[resultId] = stageIt->second;
+        }
+        else if (opcode == SpvOpCopyObject && instructionWordCount >= 4u)
+        {
+            const uint32_t resultId = words[offset + 2u];
+            const uint32_t sourceId = words[offset + 3u];
+            const auto stageIt = loadedSamplerStage.find(sourceId);
+            if (stageIt != loadedSamplerStage.end())
+                loadedSamplerStage[resultId] = stageIt->second;
+        }
+        offset += instructionWordCount;
+    }
+
+    std::array<uint32_t, 16> explicitVec4SampleCount{};
+    std::array<uint32_t, 16> otherSampleCount{};
+    offset = 5u;
+    while (offset < wordCount)
+    {
+        const uint32_t firstWord = words[offset];
+        const uint32_t instructionWordCount = firstWord >> 16;
+        const SpvOp opcode = static_cast<SpvOp>(firstWord & 0xFFFFu);
+        if (!instructionWordCount || offset + instructionWordCount > wordCount)
+            return 0u;
+
+        const bool isImageSample =
+            opcode >= SpvOpImageSampleImplicitLod &&
+            opcode <= SpvOpImageSampleProjDrefExplicitLod;
+        if (isImageSample && instructionWordCount >= 5u)
+        {
+            const uint32_t sampledImageId = words[offset + 3u];
+            const auto stageIt = loadedSamplerStage.find(sampledImageId);
+            if (stageIt != loadedSamplerStage.end())
+            {
+                const uint32_t stage = stageIt->second;
+                if (opcode == SpvOpImageSampleExplicitLod &&
+                    instructionWordCount >= 7u)
+                {
+                    const uint32_t coordinateId = words[offset + 4u];
+                    const auto typeIt = resultTypeById.find(coordinateId);
+                    if (typeIt != resultTypeById.end() &&
+                        vec4TypeIds.find(typeIt->second) != vec4TypeIds.end())
+                    {
+                        ++explicitVec4SampleCount[stage];
+                    }
+                    else
+                    {
+                        ++otherSampleCount[stage];
+                    }
+                }
+                else
+                {
+                    ++otherSampleCount[stage];
+                }
+            }
+        }
+        offset += instructionWordCount;
+    }
+
+    uint32_t compareMask = 0u;
+    for (uint32_t stage = 0; stage < 16u; ++stage)
+    {
+        const uint32_t bit = 1u << stage;
+        if ((candidateMask & bit) != 0u &&
+            explicitVec4SampleCount[stage] >= 4u &&
+            otherSampleCount[stage] == 0u)
+        {
+            // CoD4's HSM sun shader uses multiple explicit-LOD float4 samples:
+            // uv.xy, comparison reference .z, and lod .w. The raw-depth overlay
+            // uses ordinary texture reads and therefore does not qualify.
+            compareMask |= bit;
+        }
+    }
+    return compareMask;
 }
 
 // Convert the regular 2D sample instructions for bound sun-shadow slots into
@@ -2911,7 +3128,6 @@ static bool PatchFragmentShaderForSunShadowCompare(
     }
 
     std::unordered_map<uint32_t, uint32_t> newPointerTypeByVariable;
-    std::unordered_map<uint32_t, uint32_t> newSampledImageTypeByVariable;
     for (uint32_t stage = 0; stage < 16u; ++stage)
     {
         SamplerTypeInfo &info = samplerTypes[stage];
@@ -2983,8 +3199,6 @@ static bool PatchFragmentShaderForSunShadowCompare(
             typeDeclarations.end(), depthPointerType.begin(), depthPointerType.end());
 
         newPointerTypeByVariable[info.variableId] = info.newPointerTypeId;
-        newSampledImageTypeByVariable[info.variableId] =
-            info.newSampledImageTypeId;
     }
 
     std::vector<uint32_t> working = words;
@@ -3091,9 +3305,7 @@ static bool PatchFragmentShaderForSunShadowCompare(
         if (!wordCount || offset + wordCount > working.size())
             return false;
 
-        if ((opcode == SpvOpImageSampleImplicitLod ||
-             opcode == SpvOpImageSampleExplicitLod) &&
-            wordCount >= 5u)
+        if (opcode == SpvOpImageSampleExplicitLod && wordCount >= 7u)
         {
             const uint32_t sampledImageId = working[offset + 3u];
             const auto stageIt = loadedSamplerStage.find(sampledImageId);
@@ -3105,15 +3317,16 @@ static bool PatchFragmentShaderForSunShadowCompare(
                     const uint32_t originalResultType = working[offset + 1u];
                     const uint32_t originalResultId = working[offset + 2u];
                     const uint32_t coordinateId = working[offset + 4u];
+                    const auto coordinateTypeIt = resultTypeById.find(coordinateId);
+                    if (coordinateTypeIt == resultTypeById.end() ||
+                        vec4TypeIds.find(coordinateTypeIt->second) == vec4TypeIds.end())
+                        return false;
+
                     const uint32_t sampleResultId = nextId++;
                     const uint32_t coordinateXId = nextId++;
                     const uint32_t coordinateYId = nextId++;
                     const uint32_t referenceDepthId = nextId++;
                     const uint32_t coordinate2DId = nextId++;
-                    const uint32_t drefOpcode =
-                        opcode == SpvOpImageSampleExplicitLod
-                            ? SpvOpImageSampleDrefExplicitLod
-                            : SpvOpImageSampleDrefImplicitLod;
 
                     // The original D3D9 TEXLDL coordinate is float4(u, v, refZ, lod).
                     transformed.push_back((5u << 16) | SpvOpCompositeExtract);
@@ -3141,7 +3354,7 @@ static bool PatchFragmentShaderForSunShadowCompare(
                     transformed.push_back(coordinateYId);
 
                     transformed.push_back(((wordCount + 1u) << 16) |
-                        static_cast<uint32_t>(drefOpcode));
+                        static_cast<uint32_t>(SpvOpImageSampleDrefExplicitLod));
                     transformed.push_back(floatTypeId);
                     transformed.push_back(sampleResultId);
                     transformed.push_back(sampledImageId);
