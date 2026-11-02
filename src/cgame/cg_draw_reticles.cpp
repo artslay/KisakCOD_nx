@@ -7,6 +7,11 @@
 #include <client/client.h>
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
 #include <client_mp/client_mp.h>
@@ -230,6 +235,28 @@ void __cdecl CG_DrawAdsOverlay(
         material = weapDef->overlayMaterial;
     else
         material = weapDef->overlayMaterialLowRes;
+
+#ifdef __SWITCH__
+    // One bounded record per WeaponDef: distinguish a missing fastfile overlay
+    // from a Vulkan/UI draw problem without tracing every ADS frame.
+    static const WeaponDef *lastTracedAdsWeapon = nullptr;
+    if (lastTracedAdsWeapon != weapDef)
+    {
+        lastTracedAdsWeapon = weapDef;
+        char trace[384];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][ADS OVERLAY] weapon=%s high=%p low=%p selected=%p lowResViewport=%u size=%.1fx%.1f reticle=%u alpha=%.3f\\n",
+            weapDef->szInternalName ? weapDef->szInternalName : "(unnamed)",
+            static_cast<const void *>(weapDef->overlayMaterial),
+            static_cast<const void *>(weapDef->overlayMaterialLowRes),
+            static_cast<const void *>(material),
+            CG_UsingLowResViewPort(localClientNum) ? 1u : 0u,
+            weapDef->overlayWidth, weapDef->overlayHeight,
+            static_cast<unsigned int>(weapDef->overlayReticle), color[3]);
+        Switch_LogWrite(trace);
+    }
+#endif
 
     if (material)
     {
