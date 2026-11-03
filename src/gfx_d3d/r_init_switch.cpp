@@ -1098,9 +1098,11 @@ void R_Shutdown(int destroyWindow)
         {
             R_ShutdownLoadWater();
             R_ShutdownFonts();
-            Material_Shutdown();
-            g_switchFrameStage = "frame/r_shutdown/images";
-            R_ShutdownImages();
+            if (s_registered)
+            {
+                g_switchFrameStage = "frame/r_shutdown/images";
+                R_ShutdownImages();
+            }
         }
 
         R_ResetModelLighting();
