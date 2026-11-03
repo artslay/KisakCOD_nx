@@ -241,12 +241,14 @@ struct KisakVkBuffer : IDirect3DResource9 {
     uint32_t size=0;
     bool lockActive=false;
     uint32_t lockOffset=0, lockSize=0, lockFlags=0;
+    bool meshWriteTrackingPending=false, lockMeshWriteTracking=false;
     // Exact byte span reserved through R_ReserveMeshVerts during this lock.
     uint32_t lockWriteBegin=UINT32_MAX, lockWriteEnd=0;
     VkDevice device=VK_NULL_HANDLE;
     uint32_t Release() override;
     HRESULT Lock(uint32_t offset, uint32_t sizeBytes, void **out, uint32_t flags);
     HRESULT Unlock();
+    void BeginMeshWriteTracking();
     void MarkWrittenRange(uint32_t offset, uint32_t bytes);
 };
 
