@@ -7704,7 +7704,7 @@ bool IDirect3DDevice9::BindUniformSet(
     // slot's fence has completed before its cursor is rewound or its sets updated.
     std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
     const uint32_t frameSlot = m_backend->CurrentFrameSlot();
-    if (frameSlot >= 2u)
+    if (frameSlot >= VulkanBackend::FramesInFlight)
         return false;
     const uint64_t frameSerial = m_backend->FrameSerial();
     if (m_descriptorCacheFrameSerial[frameSlot] != frameSerial)
@@ -8282,7 +8282,7 @@ bool IDirect3DDevice9::BindSamplerSet(
     // slot's fence has completed before its cursor is rewound or its sets updated.
     std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
     const uint32_t frameSlot = m_backend->CurrentFrameSlot();
-    if (frameSlot >= 2u)
+    if (frameSlot >= VulkanBackend::FramesInFlight)
         return false;
     const uint64_t frameSerial = m_backend->FrameSerial();
     if (m_descriptorCacheFrameSerial[frameSlot] != frameSerial)
