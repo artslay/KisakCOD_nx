@@ -20,14 +20,15 @@ extern "C"
 }
 
 extern void Sys_Print(const char *text);
+extern void __cdecl Sys_Error(const char *error, ...);
 extern "C" void SwitchPrepareRustTlsForCurrentThread();
 
 static thread_local void *g_switchThreadValues[4] = {};
 void *g_threadValues[THREAD_CONTEXT_COUNT][4] = {};
 DWORD threadId[THREAD_CONTEXT_COUNT] = {};
 HANDLE threadHandle[THREAD_CONTEXT_COUNT] = {};
-uint32_t s_affinityMaskForProcess = 0xffffffffu;
-uint32_t s_cpuCount = 1;
+uint32_t s_affinityMaskForProcess = 0u;
+uint32_t s_cpuCount = 0u;
 uint32_t s_affinityMaskForCpu[4] = {};
 
 struct SwitchEvent {
@@ -164,9 +165,35 @@ static uint32_t ThreadId()
     return (uint32_t)hasher(std::this_thread::get_id());
 }
 
+// Query the process' allowed core mask before Com_InitDvars() samples
+// Sys_GetCpuCount() to register sys_smp_allowed and the renderer worker dvars.
+static void Switch_InitCpuTopology()
+{
+    u64 coreMask = 0;
+    const Result result = svcGetInfo(
+        &coreMask,
+        InfoType_CoreMask,
+        CUR_PROCESS_HANDLE,
+        0);
+    if (R_FAILED(result))
+    {
+        Sys_Error(
+            "Switch failed to query process CPU core mask: result=0x%08x",
+            static_cast<uint32_t>(result));
+    }
+
+    s_affinityMaskForProcess = static_cast<uint32_t>(coreMask);
+    s_cpuCount = static_cast<uint32_t>(__builtin_popcountll(coreMask));
+    if (!s_cpuCount)
+    {
+        Sys_Error(
+            "Switch process CPU core mask is empty: coreMask=0x%llx",
+            static_cast<unsigned long long>(coreMask));
+    }
+}
+
 uint32_t __cdecl Sys_GetCpuCount()
 {
-    if (!s_cpuCount) s_cpuCount = 1;
     return s_cpuCount;
 }
 
@@ -175,6 +202,7 @@ uint32_t __cdecl Sys_GetCurrentThreadId() { return ThreadId(); }
 void __cdecl Sys_InitMainThread()
 {
     g_switchThreadStage = "main/init";
+    Switch_InitCpuTopology();
     g_threadContext = THREAD_CONTEXT_MAIN;
     g_nativeThreads[THREAD_CONTEXT_MAIN].store(threadGetSelf(), std::memory_order_release);
     threadId[THREAD_CONTEXT_MAIN] = Sys_GetCurrentThreadId();
