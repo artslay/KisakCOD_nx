@@ -166,7 +166,17 @@ VkDescriptorSetLayout CreateUniformSetLayout(VkDevice device, VkShaderStageFlags
 }
 }
 
-VulkanBackend::VulkanBackend() = default;
+VulkanBackend::VulkanBackend()
+{
+    // Retain producer/backend CPU upload arenas across frames. This avoids
+    // one heap allocation per dynamic vertex/index buffer unlock.
+    constexpr size_t kInitialUploadBytes = 2u * 1024u * 1024u;
+    constexpr size_t kInitialUploadRecords = 4096u;
+    m_queuedBufferUpdateData.reserve(kInitialUploadBytes);
+    m_pendingBufferUpdateData.reserve(kInitialUploadBytes);
+    m_queuedBufferUpdates.reserve(kInitialUploadRecords);
+    m_pendingBufferUpdates.reserve(kInitialUploadRecords);
+}
 
 VulkanBackend::~VulkanBackend()
 {
@@ -3722,25 +3732,43 @@ bool VulkanBackend::QueueBufferUpdate(
     const void *data,
     size_t size)
 {
-    // This function is intentionally CPU-only: it is called by renderer workers
-    // while the backend may be recording draws into m_commandBuffer.
+    // CPU-only, worker-safe enqueue. Never allocates a payload vector per
+    // unlock and never touches command buffers or the uniform ring.
     if (!destination || !data || size == 0 ||
         (destinationOffset & 3u) != 0 || (size & 3u) != 0 ||
         static_cast<VkDeviceSize>(size) >
             std::numeric_limits<VkDeviceSize>::max() - destinationOffset)
         return false;
 
+    std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
+    const size_t dataOffset = m_queuedBufferUpdateData.size();
+    m_queuedBufferUpdateData.insert(
+        m_queuedBufferUpdateData.end(),
+        static_cast<const uint8_t *>(data),
+        static_cast<const uint8_t *>(data) + size);
+
+    // Merge contiguous writes into one transfer and one uniform-ring allocation.
+    if (!m_queuedBufferUpdates.empty())
+    {
+        QueuedBufferUpdate &previous = m_queuedBufferUpdates.back();
+        if (!previous.mappedWrite &&
+            previous.destination == destination &&
+            previous.destinationOffset + previous.size == destinationOffset &&
+            previous.dataOffset + previous.size == dataOffset)
+        {
+            previous.size += size;
+            m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
+            return true;
+        }
+    }
+
     QueuedBufferUpdate update{};
     update.destination = destination;
     update.destinationOffset = destinationOffset;
-    update.data.resize(size);
-    std::memcpy(update.data.data(), data, size);
-
-    {
-        std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
-        m_queuedBufferUpdates.emplace_back(std::move(update));
-        m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
-    }
+    update.dataOffset = dataOffset;
+    update.size = size;
+    m_queuedBufferUpdates.emplace_back(update);
+    m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
     return true;
 }
 
@@ -3752,28 +3780,26 @@ bool VulkanBackend::QueueMappedBufferUpdate(
     size_t size,
     bool waitForGpu)
 {
-    // Used for NOOVERWRITE writes and the final unaligned tail of a buffer.
-    // The worker copies the bytes now but never writes mapped GPU memory or
-    // submits/waits on the frame. The backend applies the write in queue order.
     if (!destination || !mappedDestination || !data || size == 0 ||
         static_cast<VkDeviceSize>(size) >
             std::numeric_limits<VkDeviceSize>::max() - destinationOffset)
         return false;
 
+    std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
     QueuedBufferUpdate update{};
     update.destination = destination;
     update.destinationOffset = destinationOffset;
     update.mappedDestination = mappedDestination;
     update.mappedWrite = true;
     update.waitForGpu = waitForGpu;
-    update.data.resize(size);
-    std::memcpy(update.data.data(), data, size);
-
-    {
-        std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
-        m_queuedBufferUpdates.emplace_back(std::move(update));
-        m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
-    }
+    update.dataOffset = m_queuedBufferUpdateData.size();
+    update.size = size;
+    m_queuedBufferUpdateData.insert(
+        m_queuedBufferUpdateData.end(),
+        static_cast<const uint8_t *>(data),
+        static_cast<const uint8_t *>(data) + size);
+    m_queuedBufferUpdates.emplace_back(update);
+    m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
     return true;
 }
 
@@ -3784,48 +3810,77 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
     if (!m_frameActive || m_deviceLost || !m_commandBuffer)
         return false;
 
-    std::vector<QueuedBufferUpdate> pending;
+    // Swap producer and backend scratch batches. Workers keep appending while
+    // the backend consumes this batch without holding the producer mutex.
+    m_pendingBufferUpdates.clear();
+    m_pendingBufferUpdateData.clear();
     {
         std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
-        pending.swap(m_queuedBufferUpdates);
+        m_pendingBufferUpdates.swap(m_queuedBufferUpdates);
+        m_pendingBufferUpdateData.swap(m_queuedBufferUpdateData);
         m_hasQueuedBufferUpdates.store(
             !m_queuedBufferUpdates.empty(), std::memory_order_release);
     }
-    if (pending.empty())
+    if (m_pendingBufferUpdates.empty())
         return true;
 
-    // Buffer copies and host writes must be outside dynamic rendering. This
-    // function is called by EnsureRendering on the backend thread, never by a
-    // worker, and rendering is reopened immediately after the updates are made.
     EndRendering();
 
-    const auto requeueRemaining = [this, &pending](size_t first)
+    const auto requeueRemaining = [this](size_t first)
     {
         std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
-        m_queuedBufferUpdates.insert(
-            m_queuedBufferUpdates.begin(),
-            std::make_move_iterator(pending.begin() + first),
-            std::make_move_iterator(pending.end()));
+        std::vector<QueuedBufferUpdate> mergedUpdates;
+        std::vector<uint8_t> mergedData;
+        const size_t remainingCount = m_pendingBufferUpdates.size() - first;
+        mergedUpdates.reserve(remainingCount + m_queuedBufferUpdates.size());
+        mergedData.reserve(
+            m_pendingBufferUpdateData.size() + m_queuedBufferUpdateData.size());
+
+        const auto appendRecord =
+            [&mergedUpdates, &mergedData](
+                const QueuedBufferUpdate &source,
+                const std::vector<uint8_t> &sourceData)
+        {
+            QueuedBufferUpdate copy = source;
+            if (copy.size != 0)
+            {
+                copy.dataOffset = mergedData.size();
+                mergedData.insert(
+                    mergedData.end(),
+                    sourceData.data() + source.dataOffset,
+                    sourceData.data() + source.dataOffset + copy.size);
+            }
+            mergedUpdates.emplace_back(copy);
+        };
+
+        // Failed older writes stay ahead of writes queued during this flush.
+        for (size_t i = first; i < m_pendingBufferUpdates.size(); ++i)
+            appendRecord(m_pendingBufferUpdates[i], m_pendingBufferUpdateData);
+        for (const QueuedBufferUpdate &update : m_queuedBufferUpdates)
+            appendRecord(update, m_queuedBufferUpdateData);
+
+        m_queuedBufferUpdates.swap(mergedUpdates);
+        m_queuedBufferUpdateData.swap(mergedData);
         m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
     };
 
-    for (size_t i = 0; i < pending.size(); ++i)
+    for (size_t i = 0; i < m_pendingBufferUpdates.size(); ++i)
     {
-        QueuedBufferUpdate &update = pending[i];
+        QueuedBufferUpdate &update = m_pendingBufferUpdates[i];
+        const uint8_t *updateData = update.size
+            ? m_pendingBufferUpdateData.data() + update.dataOffset
+            : nullptr;
+
         if (update.mappedWrite)
         {
-            // A normal DISCARD/tail write may overlap bytes referenced by
-            // earlier draws. Only the backend performs this frame split/wait.
             if (update.waitForGpu && !SynchronizeActiveFrame())
             {
                 requeueRemaining(i);
                 return false;
             }
 
-            std::memcpy(
-                update.mappedDestination,
-                update.data.data(),
-                update.data.size());
+            if (update.size != 0)
+                std::memcpy(update.mappedDestination, updateData, update.size);
 
             VkBufferMemoryBarrier hostWrite{};
             hostWrite.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -3838,7 +3893,7 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
             hostWrite.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             hostWrite.buffer = update.destination;
             hostWrite.offset = update.destinationOffset;
-            hostWrite.size = static_cast<VkDeviceSize>(update.data.size());
+            hostWrite.size = static_cast<VkDeviceSize>(update.size);
             vkCmdPipelineBarrier(
                 m_commandBuffer,
                 VK_PIPELINE_STAGE_HOST_BIT,
@@ -3848,12 +3903,10 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
         }
 
         VkDescriptorBufferInfo source{};
-        if (!AllocateUniform(update.data.data(), update.data.size(), &source))
+        if (!AllocateUniform(updateData, update.size, &source))
         {
-            // Ring exhaustion is handled on the backend owner thread. The
-            // completed prefix is submitted before reusing the staging ring.
             if (!SynchronizeActiveFrame() ||
-                !AllocateUniform(update.data.data(), update.data.size(), &source))
+                !AllocateUniform(updateData, update.size, &source))
             {
                 requeueRemaining(i);
                 return false;
@@ -3868,7 +3921,7 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
         beforeCopy[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         beforeCopy[0].buffer = m_uniformRing;
         beforeCopy[0].offset = source.offset;
-        beforeCopy[0].size = static_cast<VkDeviceSize>(update.data.size());
+        beforeCopy[0].size = static_cast<VkDeviceSize>(update.size);
 
         beforeCopy[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
         beforeCopy[1].srcAccessMask =
@@ -3880,7 +3933,7 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
         beforeCopy[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         beforeCopy[1].buffer = update.destination;
         beforeCopy[1].offset = update.destinationOffset;
-        beforeCopy[1].size = static_cast<VkDeviceSize>(update.data.size());
+        beforeCopy[1].size = static_cast<VkDeviceSize>(update.size);
         vkCmdPipelineBarrier(
             m_commandBuffer,
             VK_PIPELINE_STAGE_HOST_BIT |
@@ -3892,7 +3945,7 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
         VkBufferCopy copy{};
         copy.srcOffset = source.offset;
         copy.dstOffset = update.destinationOffset;
-        copy.size = static_cast<VkDeviceSize>(update.data.size());
+        copy.size = static_cast<VkDeviceSize>(update.size);
         vkCmdCopyBuffer(m_commandBuffer, m_uniformRing, update.destination, 1, &copy);
 
         VkBufferMemoryBarrier afterCopy{};
@@ -3904,7 +3957,7 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
         afterCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         afterCopy.buffer = update.destination;
         afterCopy.offset = update.destinationOffset;
-        afterCopy.size = static_cast<VkDeviceSize>(update.data.size());
+        afterCopy.size = static_cast<VkDeviceSize>(update.size);
         vkCmdPipelineBarrier(
             m_commandBuffer,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -3912,10 +3965,6 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
             0, 0, nullptr, 1, &afterCopy, 0, nullptr);
     }
 
-    static std::atomic<bool> loggedQueuedBufferUpdate{false};
-    if (!loggedQueuedBufferUpdate.exchange(true, std::memory_order_relaxed))
-        Switch_LogWrite(
-            "[KisakCOD][VK BUFFER UPDATE] worker uploads queued for backend-owned command recording\n");
     return true;
 }
 

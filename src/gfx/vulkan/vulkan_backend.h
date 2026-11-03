@@ -317,7 +317,8 @@ private:
         void *mappedDestination = nullptr;
         bool mappedWrite = false;
         bool waitForGpu = false;
-        std::vector<uint8_t> data;
+        size_t dataOffset = 0;
+        size_t size = 0;
     };
 
     struct DeferredResource
@@ -377,6 +378,9 @@ private:
     // this queue and is the sole thread that records their Vulkan commands.
     std::mutex m_bufferUpdatesMutex;
     std::vector<QueuedBufferUpdate> m_queuedBufferUpdates;
+    std::vector<uint8_t> m_queuedBufferUpdateData;
+    std::vector<QueuedBufferUpdate> m_pendingBufferUpdates;
+    std::vector<uint8_t> m_pendingBufferUpdateData;
     std::atomic<bool> m_hasQueuedBufferUpdates{false};
 
     FrameSync m_sync{};

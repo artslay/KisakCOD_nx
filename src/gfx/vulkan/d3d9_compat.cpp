@@ -5789,37 +5789,53 @@ HRESULT KisakVkBuffer::Unlock()
             const uint8_t *shadowBytes = shadow.data() + lockOffset;
             uint8_t *mappedBytes =
                 static_cast<uint8_t *>(mapped) + lockOffset;
-            size_t cursor = 0;
-            while (cursor < lockSize)
+            constexpr size_t kCompareChunkBytes = 4096;
+            size_t chunkStart = 0;
+            while (chunkStart < lockSize)
             {
-                while (cursor < lockSize && shadowBytes[cursor] == mappedBytes[cursor])
-                    ++cursor;
-                if (cursor == lockSize)
-                    break;
+                const size_t chunkSize =
+                    std::min<size_t>(kCompareChunkBytes, lockSize - chunkStart);
+                if (std::memcmp(
+                        shadowBytes + chunkStart,
+                        mappedBytes + chunkStart,
+                        chunkSize) == 0)
+                {
+                    chunkStart += chunkSize;
+                    continue;
+                }
 
-                const size_t changedStart = cursor;
-                while (cursor < lockSize && shadowBytes[cursor] != mappedBytes[cursor])
-                    ++cursor;
-                const size_t changedSize = cursor - changedStart;
-                const VkDeviceSize changedOffset =
-                    static_cast<VkDeviceSize>(lockOffset) + changedStart;
-                const bool alignedChangedRange =
-                    (changedOffset & 3u) == 0 && (changedSize & 3u) == 0;
-                const bool queued = alignedChangedRange
-                    ? backend->QueueBufferUpdate(
-                        buffer,
-                        changedOffset,
-                        shadowBytes + changedStart,
-                        changedSize)
-                    : backend->QueueMappedBufferUpdate(
-                        buffer,
-                        changedOffset,
-                        mappedBytes + changedStart,
-                        shadowBytes + changedStart,
-                        changedSize,
-                        true);
-                if (!queued)
-                    return E_FAIL;
+                size_t cursor = chunkStart;
+                const size_t chunkEnd = chunkStart + chunkSize;
+                while (cursor < chunkEnd)
+                {
+                    while (cursor < chunkEnd &&
+                        shadowBytes[cursor] == mappedBytes[cursor])
+                        ++cursor;
+                    if (cursor == chunkEnd)
+                        break;
+
+                    const size_t changedStart = cursor;
+                    while (cursor < chunkEnd &&
+                        shadowBytes[cursor] != mappedBytes[cursor])
+                        ++cursor;
+                    const size_t changedSize = cursor - changedStart;
+                    const VkDeviceSize changedOffset =
+                        static_cast<VkDeviceSize>(lockOffset) + changedStart;
+                    const bool alignedChangedRange =
+                        (changedOffset & 3u) == 0 && (changedSize & 3u) == 0;
+                    const bool queued = alignedChangedRange
+                        ? backend->QueueBufferUpdate(
+                            buffer, changedOffset,
+                            shadowBytes + changedStart, changedSize)
+                        : backend->QueueMappedBufferUpdate(
+                            buffer, changedOffset,
+                            mappedBytes + changedStart,
+                            shadowBytes + changedStart,
+                            changedSize, true);
+                    if (!queued)
+                        return E_FAIL;
+                }
+                chunkStart = chunkEnd;
             }
         }
         else
