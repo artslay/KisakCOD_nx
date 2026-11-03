@@ -1504,7 +1504,7 @@ void __cdecl Scr_EvalMethod(sval_u expr, sval_u func_name, sval_u params, uint32
         }
         entref = Scr_GetEntityIdRef(objectId.stringValue);
         RemoveRefToObject(objectId.stringValue);
-        reinterpret_cast<void (__cdecl *)(uint32_t)>(func_name.block)(entref.entnum); // KISAKTODO: fubar'd union 'entref'
+        reinterpret_cast<void (__cdecl *)(scr_entref_t)>(func_name.block)(entref);
     }
     if (g_script_error_level < 0)
         MyAssertHandler(
