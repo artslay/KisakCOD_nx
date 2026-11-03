@@ -2348,6 +2348,7 @@ void VulkanBackend::BeginQuery(void *queryPtr)
     const uint32_t slot = m_currentFrameSlot;
     query->active[slot] = false;
     query->issued[slot] = false;
+    query->latestIssuedFrameSlot = slot;
 
     if (query->kind == Query::Kind::Event)
     {
