@@ -397,7 +397,15 @@ void CG_RegisterDvars()
     cg_debugEvents = Dvar_RegisterBool("cg_debugevents", 0, 0x80u, "Output event debug information");
     cg_errorDecay = Dvar_RegisterFloat("cg_errordecay", 100.0, 0.0, FLT_MAX, DVAR_CHEAT, "Decay for predicted error");
     cg_nopredict = Dvar_RegisterBool("cg_nopredict", 0, DVAR_ARCHIVE, "Don't do client side prediction");
+#ifdef __SWITCH__
+    // In-game Bink movies are sampled by world materials (for example TV
+    // screens). Do not also composite the same movie as a fullscreen overlay
+    // over the active 3D scene on Switch. Client-state cinematics and loading
+    // movies keep their dedicated fullscreen draw path.
+    cg_cinematicFullscreen = Dvar_RegisterBool("cg_cinematicFullscreen", 0, 0x1000u, "Draw ingame cinematics full screen");
+#else
     cg_cinematicFullscreen = Dvar_RegisterBool("cg_cinematicFullscreen", 1, 0x1000u, "Draw ingame cinematics full screen");
+#endif
     cg_showmiss = Dvar_RegisterInt("cg_showmiss", 0, 0, 2, 0, "Show prediction errors");
     cg_footsteps = Dvar_RegisterBool("cg_footsteps", 1, DVAR_SAVED | DVAR_CHEAT, "Play footstep sounds");
     cg_laserForceOn = Dvar_RegisterBool(
