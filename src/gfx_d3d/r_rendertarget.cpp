@@ -862,8 +862,9 @@ void __cdecl R_ShutdownRenderTargets()
 {
     int renderTargetId; // [esp+0h] [ebp-4h]
 
-    // In single-sample mode the cached pointer owns an additional reference
-    // to the framebuffer depth surface. Release that reference separately.
+    // In single-sample mode the cache owns a reference independent of every
+    // render-target slot, whether it aliases the framebuffer surface or a
+    // dedicated fallback. Release that cache reference separately.
     // With MSAA, the first created surface reference is instead shared with the
     // first render-target slot, so releasing it here would double-release it.
     if (dx.singleSampleDepthStencilSurface &&
