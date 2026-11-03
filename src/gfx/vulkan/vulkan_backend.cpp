@@ -11,6 +11,7 @@ extern bool R_RecoverLostVulkanDevice();
 #include <cstring>
 #include <cstdlib>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <string>
 #include <vector>
@@ -3716,85 +3717,200 @@ bool VulkanBackend::QueueBufferUpdate(
     const void *data,
     size_t size)
 {
-    // Queue-copy uploads are used for dynamic vertex/index buffers. Vulkan copy
-    // ranges must be four-byte aligned; unusual partial ranges keep the safe
-    // synchronized fallback in KisakVkBuffer::Unlock.
-    if (!m_frameActive || m_deviceLost || !m_commandBuffer ||
-        !destination || !data || size == 0 ||
+    // This function is intentionally CPU-only: it is called by renderer workers
+    // while the backend may be recording draws into m_commandBuffer.
+    if (!destination || !data || size == 0 ||
         (destinationOffset & 3u) != 0 || (size & 3u) != 0 ||
         static_cast<VkDeviceSize>(size) >
             std::numeric_limits<VkDeviceSize>::max() - destinationOffset)
         return false;
 
-    VkDescriptorBufferInfo source{};
-    if (!AllocateUniform(data, size, &source))
+    QueuedBufferUpdate update{};
+    update.destination = destination;
+    update.destinationOffset = destinationOffset;
+    update.data.resize(size);
+    std::memcpy(update.data.data(), data, size);
+
+    {
+        std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
+        m_queuedBufferUpdates.emplace_back(std::move(update));
+        m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
+    }
+    return true;
+}
+
+bool VulkanBackend::QueueMappedBufferUpdate(
+    VkBuffer destination,
+    VkDeviceSize destinationOffset,
+    void *mappedDestination,
+    const void *data,
+    size_t size,
+    bool waitForGpu)
+{
+    // Used for NOOVERWRITE writes and the final unaligned tail of a buffer.
+    // The worker copies the bytes now but never writes mapped GPU memory or
+    // submits/waits on the frame. The backend applies the write in queue order.
+    if (!destination || !mappedDestination || !data || size == 0 ||
+        static_cast<VkDeviceSize>(size) >
+            std::numeric_limits<VkDeviceSize>::max() - destinationOffset)
         return false;
 
-    // Dynamic rendering must be ended before buffer barriers/copies. The next
-    // draw's EnsureRendering call reopens it; no queue submit or GPU fence wait
-    // is necessary because old draws, this copy, and new draws stay ordered in
-    // the same command buffer.
+    QueuedBufferUpdate update{};
+    update.destination = destination;
+    update.destinationOffset = destinationOffset;
+    update.mappedDestination = mappedDestination;
+    update.mappedWrite = true;
+    update.waitForGpu = waitForGpu;
+    update.data.resize(size);
+    std::memcpy(update.data.data(), data, size);
+
+    {
+        std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
+        m_queuedBufferUpdates.emplace_back(std::move(update));
+        m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
+    }
+    return true;
+}
+
+bool VulkanBackend::FlushQueuedBufferUpdates()
+{
+    if (!m_hasQueuedBufferUpdates.load(std::memory_order_acquire))
+        return true;
+    if (!m_frameActive || m_deviceLost || !m_commandBuffer)
+        return false;
+
+    std::vector<QueuedBufferUpdate> pending;
+    {
+        std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
+        pending.swap(m_queuedBufferUpdates);
+        m_hasQueuedBufferUpdates.store(
+            !m_queuedBufferUpdates.empty(), std::memory_order_release);
+    }
+    if (pending.empty())
+        return true;
+
+    // Buffer copies and host writes must be outside dynamic rendering. This
+    // function is called by EnsureRendering on the backend thread, never by a
+    // worker, and rendering is reopened immediately after the updates are made.
     EndRendering();
 
-    // The copy source is host-mapped m_uniformRing. Make its newly written
-    // bytes visible to the transfer read, and order writes after prior vertex /
-    // index reads from the destination range. Coherent memory removes the need
-    // to flush, but still use an explicit HOST_WRITE -> TRANSFER_READ dependency.
-    VkBufferMemoryBarrier beforeCopy[2]{};
-    beforeCopy[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    beforeCopy[0].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    beforeCopy[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    beforeCopy[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    beforeCopy[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    beforeCopy[0].buffer = m_uniformRing;
-    beforeCopy[0].offset = source.offset;
-    beforeCopy[0].size = static_cast<VkDeviceSize>(size);
+    const auto requeueRemaining = [this, &pending](size_t first)
+    {
+        std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
+        m_queuedBufferUpdates.insert(
+            m_queuedBufferUpdates.begin(),
+            std::make_move_iterator(pending.begin() + first),
+            std::make_move_iterator(pending.end()));
+        m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
+    };
 
-    beforeCopy[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    beforeCopy[1].srcAccessMask =
-        VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
-        VK_ACCESS_INDEX_READ_BIT |
-        VK_ACCESS_TRANSFER_WRITE_BIT;
-    beforeCopy[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    beforeCopy[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    beforeCopy[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    beforeCopy[1].buffer = destination;
-    beforeCopy[1].offset = destinationOffset;
-    beforeCopy[1].size = static_cast<VkDeviceSize>(size);
-    vkCmdPipelineBarrier(
-        m_commandBuffer,
-        VK_PIPELINE_STAGE_HOST_BIT |
-            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
+    for (size_t i = 0; i < pending.size(); ++i)
+    {
+        QueuedBufferUpdate &update = pending[i];
+        if (update.mappedWrite)
+        {
+            // A normal DISCARD/tail write may overlap bytes referenced by
+            // earlier draws. Only the backend performs this frame split/wait.
+            if (update.waitForGpu && !SynchronizeActiveFrame())
+            {
+                requeueRemaining(i);
+                return false;
+            }
+
+            std::memcpy(
+                update.mappedDestination,
+                update.data.data(),
+                update.data.size());
+
+            VkBufferMemoryBarrier hostWrite{};
+            hostWrite.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            hostWrite.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+            hostWrite.dstAccessMask =
+                VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+                VK_ACCESS_INDEX_READ_BIT |
+                VK_ACCESS_TRANSFER_READ_BIT;
+            hostWrite.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            hostWrite.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            hostWrite.buffer = update.destination;
+            hostWrite.offset = update.destinationOffset;
+            hostWrite.size = static_cast<VkDeviceSize>(update.data.size());
+            vkCmdPipelineBarrier(
+                m_commandBuffer,
+                VK_PIPELINE_STAGE_HOST_BIT,
+                VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0, 0, nullptr, 1, &hostWrite, 0, nullptr);
+            continue;
+        }
+
+        VkDescriptorBufferInfo source{};
+        if (!AllocateUniform(update.data.data(), update.data.size(), &source))
+        {
+            // Ring exhaustion is handled on the backend owner thread. The
+            // completed prefix is submitted before reusing the staging ring.
+            if (!SynchronizeActiveFrame() ||
+                !AllocateUniform(update.data.data(), update.data.size(), &source))
+            {
+                requeueRemaining(i);
+                return false;
+            }
+        }
+
+        VkBufferMemoryBarrier beforeCopy[2]{};
+        beforeCopy[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        beforeCopy[0].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        beforeCopy[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        beforeCopy[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        beforeCopy[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        beforeCopy[0].buffer = m_uniformRing;
+        beforeCopy[0].offset = source.offset;
+        beforeCopy[0].size = static_cast<VkDeviceSize>(update.data.size());
+
+        beforeCopy[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        beforeCopy[1].srcAccessMask =
+            VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+            VK_ACCESS_INDEX_READ_BIT |
+            VK_ACCESS_TRANSFER_WRITE_BIT;
+        beforeCopy[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        beforeCopy[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        beforeCopy[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        beforeCopy[1].buffer = update.destination;
+        beforeCopy[1].offset = update.destinationOffset;
+        beforeCopy[1].size = static_cast<VkDeviceSize>(update.data.size());
+        vkCmdPipelineBarrier(
+            m_commandBuffer,
+            VK_PIPELINE_STAGE_HOST_BIT |
+                VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        0, 0, nullptr, 2, beforeCopy, 0, nullptr);
+            0, 0, nullptr, 2, beforeCopy, 0, nullptr);
 
-    VkBufferCopy copy{};
-    copy.srcOffset = source.offset;
-    copy.dstOffset = destinationOffset;
-    copy.size = static_cast<VkDeviceSize>(size);
-    vkCmdCopyBuffer(m_commandBuffer, m_uniformRing, destination, 1, &copy);
+        VkBufferCopy copy{};
+        copy.srcOffset = source.offset;
+        copy.dstOffset = update.destinationOffset;
+        copy.size = static_cast<VkDeviceSize>(update.data.size());
+        vkCmdCopyBuffer(m_commandBuffer, m_uniformRing, update.destination, 1, &copy);
 
-    VkBufferMemoryBarrier afterCopy{};
-    afterCopy.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    afterCopy.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    afterCopy.dstAccessMask =
-        VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT;
-    afterCopy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    afterCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    afterCopy.buffer = destination;
-    afterCopy.offset = destinationOffset;
-    afterCopy.size = static_cast<VkDeviceSize>(size);
-    vkCmdPipelineBarrier(
-        m_commandBuffer,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-        0, 0, nullptr, 1, &afterCopy, 0, nullptr);
+        VkBufferMemoryBarrier afterCopy{};
+        afterCopy.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        afterCopy.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        afterCopy.dstAccessMask =
+            VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT;
+        afterCopy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        afterCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        afterCopy.buffer = update.destination;
+        afterCopy.offset = update.destinationOffset;
+        afterCopy.size = static_cast<VkDeviceSize>(update.data.size());
+        vkCmdPipelineBarrier(
+            m_commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+            0, 0, nullptr, 1, &afterCopy, 0, nullptr);
+    }
 
     static std::atomic<bool> loggedQueuedBufferUpdate{false};
     if (!loggedQueuedBufferUpdate.exchange(true, std::memory_order_relaxed))
         Switch_LogWrite(
-            "[KisakCOD][VK BUFFER UPDATE] dynamic buffer copies queued without per-unlock GPU waits\n");
+            "[KisakCOD][VK BUFFER UPDATE] worker uploads queued for backend-owned command recording\n");
     return true;
 }
 
@@ -3827,6 +3943,9 @@ bool VulkanBackend::EnsureRendering(
     uint32_t width, uint32_t height)
 {
     if (!m_frameActive || !colorImage || !colorView || colorFormat == VK_FORMAT_UNDEFINED)
+        return false;
+
+    if (!FlushQueuedBufferUpdates())
         return false;
 
     if (m_renderingActive)

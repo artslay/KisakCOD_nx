@@ -5770,27 +5770,52 @@ HRESULT KisakVkBuffer::Unlock()
 
     if (dynamic && !(lockFlags & D3DLOCK_READONLY) && lockSize != 0)
     {
-        if (lockFlags & D3DLOCK_NOOVERWRITE)
+        VulkanBackend *backend = GetVulkanBackend();
+        if (!backend)
         {
-            // NOOVERWRITE promises that prior GPU commands do not read this range.
+            // During teardown there is no active Vulkan backend to consume an
+            // upload queue; preserve the normal mapped-buffer behavior.
             std::memcpy(
                 static_cast<uint8_t *>(mapped) + lockOffset,
                 shadow.data() + lockOffset,
                 lockSize);
         }
+        else if (lockFlags & D3DLOCK_NOOVERWRITE)
+        {
+            // NOOVERWRITE only changes bytes in the append portion of the
+            // dynamic stream. Lock() exposes the whole allocation to the CPU,
+            // so compare against mapped storage and enqueue only changed spans;
+            // never rewrite old vertices that an earlier draw may still read.
+            const uint8_t *shadowBytes = shadow.data() + lockOffset;
+            uint8_t *mappedBytes =
+                static_cast<uint8_t *>(mapped) + lockOffset;
+            size_t cursor = 0;
+            while (cursor < lockSize)
+            {
+                while (cursor < lockSize && shadowBytes[cursor] == mappedBytes[cursor])
+                    ++cursor;
+                if (cursor == lockSize)
+                    break;
+
+                const size_t changedStart = cursor;
+                while (cursor < lockSize && shadowBytes[cursor] != mappedBytes[cursor])
+                    ++cursor;
+                const size_t changedSize = cursor - changedStart;
+                if (!backend->QueueMappedBufferUpdate(
+                        buffer,
+                        static_cast<VkDeviceSize>(lockOffset) + changedStart,
+                        mappedBytes + changedStart,
+                        shadowBytes + changedStart,
+                        changedSize,
+                        false))
+                    return E_FAIL;
+            }
+        }
         else
         {
-            // Upload only the range requested by the engine. Some stock CoD4
-            // paths set D3DLOCK_DISCARD on partial dynamic-buffer updates and
-            // still rely on untouched vertices/indices remaining in the buffer.
-            // Replacing the whole allocation with the zero-filled CPU shadow
-            // erases those ranges, including data needed by frontend UI draws.
-            VulkanBackend *backend = GetVulkanBackend();
-
-            // Vulkan buffer copies require 4-byte aligned ranges. Dynamic
-            // index buffers may be updated in 2-byte increments, so widen the
-            // copy to aligned word boundaries while sourcing the untouched edge
-            // bytes from the authoritative CPU shadow.
+            // Preserve untouched bytes around partial updates by expanding to
+            // aligned words from the authoritative CPU shadow. Any final
+            // 1-3-byte tail is applied by the backend after a GPU-safe split.
             const VkDeviceSize uploadOffset =
                 static_cast<VkDeviceSize>(lockOffset) & ~VkDeviceSize(3u);
             const VkDeviceSize requestedEnd =
@@ -5798,29 +5823,47 @@ HRESULT KisakVkBuffer::Unlock()
             const VkDeviceSize uploadEnd =
                 (requestedEnd + 3u) & ~VkDeviceSize(3u);
             const bool alignedRangeFits = uploadEnd <= size;
-            const size_t uploadSize = alignedRangeFits
-                ? static_cast<size_t>(uploadEnd - uploadOffset)
-                : 0u;
 
-            // Keep earlier draws, the upload, and later draws in one command
-            // buffer. QueueBufferUpdate adds the required transfer barriers;
-            // use the synchronized fallback only if staging genuinely cannot
-            // accommodate this aligned range.
-            const bool queued = backend && alignedRangeFits &&
-                backend->QueueBufferUpdate(
-                    buffer, uploadOffset, shadow.data() + uploadOffset, uploadSize);
-            if (!queued)
+            bool queued = false;
+            if (alignedRangeFits)
             {
-#ifdef __SWITCH__
-                g_switchFrameStage = "frame/resource_lock/dynamic_buffer_unlock_sync";
-#endif
-                if (backend && !backend->SynchronizeActiveFrame())
-                    return E_FAIL;
-                std::memcpy(
-                    static_cast<uint8_t *>(mapped) + lockOffset,
-                    shadow.data() + lockOffset,
-                    lockSize);
+                const size_t uploadSize =
+                    static_cast<size_t>(uploadEnd - uploadOffset);
+                queued = backend->QueueBufferUpdate(
+                    buffer, uploadOffset, shadow.data() + uploadOffset, uploadSize);
             }
+            else
+            {
+                const VkDeviceSize alignedBufferEnd =
+                    static_cast<VkDeviceSize>(size) & ~VkDeviceSize(3u);
+                const VkDeviceSize copySize = alignedBufferEnd > uploadOffset
+                    ? alignedBufferEnd - uploadOffset
+                    : 0;
+                queued = copySize == 0 ||
+                    backend->QueueBufferUpdate(
+                        buffer,
+                        uploadOffset,
+                        shadow.data() + uploadOffset,
+                        static_cast<size_t>(copySize));
+
+                const VkDeviceSize tailOffset =
+                    std::max<VkDeviceSize>(lockOffset, alignedBufferEnd);
+                const VkDeviceSize tailSize =
+                    requestedEnd > tailOffset ? requestedEnd - tailOffset : 0;
+                if (queued && tailSize != 0)
+                {
+                    queued = backend->QueueMappedBufferUpdate(
+                        buffer,
+                        tailOffset,
+                        static_cast<uint8_t *>(mapped) + tailOffset,
+                        shadow.data() + tailOffset,
+                        static_cast<size_t>(tailSize),
+                        true);
+                }
+            }
+
+            if (!queued)
+                return E_FAIL;
         }
     }
 

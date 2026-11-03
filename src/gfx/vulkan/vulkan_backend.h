@@ -244,11 +244,15 @@ public:
 
     bool AllocateUniform(const void *data, size_t size, VkDescriptorBufferInfo *info);
 
-    // Record an ordered update to a dynamic vertex/index buffer without waiting
-    // for the GPU. Requires a 4-byte aligned range and an active frame.
+    // Thread-safe CPU-side enqueue. These functions never touch Vulkan command
+    // buffers; queued writes are recorded by the backend from EnsureRendering.
     bool QueueBufferUpdate(
         VkBuffer destination, VkDeviceSize destinationOffset,
         const void *data, size_t size);
+    bool QueueMappedBufferUpdate(
+        VkBuffer destination, VkDeviceSize destinationOffset,
+        void *mappedDestination, const void *data, size_t size,
+        bool waitForGpu);
 
     void QueuePresentSource(
         VkImage image,
@@ -302,7 +306,18 @@ private:
     void DestroySwapchain();
     void DestroyDefaultDepth();
     void FlushDeferredResources();
+    bool FlushQueuedBufferUpdates();
     void SetError(const char *message, VkResult result = VK_SUCCESS);
+
+    struct QueuedBufferUpdate
+    {
+        VkBuffer destination = VK_NULL_HANDLE;
+        VkDeviceSize destinationOffset = 0;
+        void *mappedDestination = nullptr;
+        bool mappedWrite = false;
+        bool waitForGpu = false;
+        std::vector<uint8_t> data;
+    };
 
     struct DeferredResource
     {
@@ -356,6 +371,13 @@ private:
     std::mutex m_descriptorPoolMutex;
     std::mutex m_deferredResourcesMutex;
     std::vector<DeferredResource> m_deferredResources;
+
+    // Worker threads only append owned CPU copies. The backend thread drains
+    // this queue and is the sole thread that records their Vulkan commands.
+    std::mutex m_bufferUpdatesMutex;
+    std::vector<QueuedBufferUpdate> m_queuedBufferUpdates;
+    std::atomic<bool> m_hasQueuedBufferUpdates{false};
+
     FrameSync m_sync{};
 
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
