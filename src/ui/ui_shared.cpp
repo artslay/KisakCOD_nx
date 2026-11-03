@@ -9955,17 +9955,10 @@ void __cdecl Menu_PaintAll(UiContext *dc)
         // own background and lets the popup's authored blur apply to that frame.
         const bool inGameMenu =
             UI_GetActiveMenu(dc->localClientNum) == UIMENU_INGAME;
-        // Frontend confirmation dialogs (including the video-settings
-        // keep/revert prompt) are fullscreen overlays. They replace the
-        // options menu in the paint range, so explicitly restore the same
-        // main_text backdrop used by the other frontend popup dialogs.
-        const bool isFrontendConfirmation =
-            !inGameMenu && Switch_UI_IsConfirmationMenuName(foregroundName);
         const bool needsMainMenuBackdrop =
             !inGameMenu &&
             (isMainMenu ||
              isOptionsMenu ||
-             isFrontendConfirmation ||
              !I_stricmp(foregroundName, "player_profile") ||
              !I_stricmp(foregroundName, "levels") ||
              !I_stricmp(foregroundName, "multi_popmenu") ||
