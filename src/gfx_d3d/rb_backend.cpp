@@ -149,7 +149,15 @@ void __cdecl R_FinishGpuFence()
 {
     PROF_SCOPED("R_SyncGpu");
 
-    while (!RB_IsGpuFenceFinished());
+    while (!RB_IsGpuFenceFinished())
+    {
+#ifdef __SWITCH__
+        // Do not burn a Switch CPU core while the GPU is still processing the
+        // previous frame. A lost device is handled by GetQueryResult() and
+        // causes this loop to exit.
+        Sys_Sleep(1);
+#endif
+    }
 }
 
 void __cdecl R_AcquireGpuFenceLock()
@@ -3318,6 +3326,11 @@ int RB_AdaptiveGpuSyncFinal()
                 RB_AbandonGpuFence();
                 break;
             }
+#ifdef __SWITCH__
+            // Poll at 1 ms intervals instead of continuously spinning on the
+            // backend thread while Vulkan finishes the previous frame.
+            Sys_Sleep(1);
+#endif
         }
         LODWORD(v0) = KisakRendererClock() - startTime;
         waitedTime = v0;
