@@ -608,6 +608,20 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
         }
         else
         {
+#ifdef __SWITCH__
+            if (traceCloudDrawSurf)
+            {
+                char trace[224];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][FX CLOUD SURF FAIL] n=%u reason=drawsurf_capacity region=%d regionCount=%d regionMax=%d\n",
+                    switchCloudDrawSurfTrace,
+                    region,
+                    scene.drawSurfCount[region],
+                    scene.maxDrawSurfCount[region]);
+                Switch_LogWrite(trace);
+            }
+#endif
             return 0;
         }
     }
