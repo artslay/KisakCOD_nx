@@ -2037,8 +2037,12 @@ uint32_t VM_ExecuteInternal()
     scr_entref_t entref;
     uint32_t stackId;
 
-    uint32_t profileEnable[33];
-    uint32_t *profileEnablePos;
+    // setjmp/longjmp may return here after a script error from any nested
+    // function. These locals are mutated while the VM runs and are then used
+    // again while unwinding/returning from that script frame; C/C++ otherwise
+    // leaves their values indeterminate after longjmp.
+    volatile uint32_t profileEnable[33];
+    volatile uint32_t * volatile profileEnablePos;
     profileEnable[0] = scrVmDebugPub.profileEnable[fs.localId];
     if (profileEnable[0])
         Profile_BeginScripts(profileEnable[0]);
