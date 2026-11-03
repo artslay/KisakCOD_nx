@@ -553,11 +553,31 @@ void __cdecl R_AddWorkerCmd(WorkerCmdType type, uint8_t *data)
                 InterlockedExchangeAdd((LONG*)&workerCmds->endPos, -bufSize);
             memcpy(&workerCmds->buf[endPos], data, dataSize);
             Destination = (LONG*)&workerCmds->syncedEndPos;
-            do
+#ifdef KISAK_SWITCH
+            uint32_t publishWaitSpins = 0;
+#endif
+            for (;;)
             {
-                while (*Destination != endPos)
-                    ;
-            } while (InterlockedCompareExchange(Destination, (dataSize + endPos) % bufSize, endPos) != endPos);
+                // syncedEndPos is modified through Interlocked operations by
+                // other producers. Read it atomically as well: a plain
+                // volatile load is not a synchronization operation on AArch64.
+                while (InterlockedCompareExchange(Destination, 0, 0) != endPos)
+                {
+#ifdef KISAK_SWITCH
+                    // A producer can be descheduled after reserving an earlier
+                    // ring slot. Let that producer run instead of keeping a
+                    // worker core spinning at full speed behind it.
+                    if ((++publishWaitSpins & 0x3ffu) == 0)
+                        Sys_Sleep(1);
+#endif
+                }
+
+                if (InterlockedCompareExchange(
+                        Destination,
+                        (dataSize + endPos) % bufSize,
+                        endPos) == endPos)
+                    break;
+            }
             InterlockedExchangeAdd((LONG*)&workerCmds->outSize, 1);
             R_NotifyWorkerCmdType(type);
             return;
