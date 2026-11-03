@@ -1205,6 +1205,14 @@ bool VulkanBackend::CreateSwapchain()
     {
         return std::find(modes.begin(), modes.end(), wanted) != modes.end();
     };
+#ifdef __SWITCH__
+    // Keep the Switch renderer paced to display refresh. MAILBOX and IMMEDIATE
+    // allow the game to render continuously between refreshes; IMMEDIATE can
+    // also tear the image. Two frame slots still let CPU work overlap the GPU,
+    // while FIFO provides back-pressure instead of saturating the GPU on a
+    // static scene.
+    m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
+#else
     const bool mailboxImageCountSupported =
         !caps.maxImageCount || caps.maxImageCount >= caps.minImageCount + 1u;
     if (mailboxImageCountSupported && hasPresentMode(VK_PRESENT_MODE_MAILBOX_KHR))
@@ -1213,6 +1221,7 @@ bool VulkanBackend::CreateSwapchain()
         m_presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
     else
         m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
+#endif
 
     VkExtent2D extent{};
     if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max())
