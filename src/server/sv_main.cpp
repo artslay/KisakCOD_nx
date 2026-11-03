@@ -222,7 +222,10 @@ int __cdecl SV_ProcessPendingSave(PendingSave *pendingSave)
     result = G_SaveGame(pendingSave, checksum);
     if (!pendingSave)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_main.cpp", 191, 0, "%s", "filename");
-    //if (result)
+    // WriteSaveToDevice returns zero only after the save has been finalized.
+    // Do not queue disconnect/restart/loadgame when the backing file failed:
+    // the subsequent loadgame would target a save that does not exist.
+    if (result == 0)
         AppendCommandsForInternalSave(pendingSave->filename);
     return result;
 }
