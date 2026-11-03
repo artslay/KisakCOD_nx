@@ -1261,6 +1261,27 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
     if (!system->camera.isValid)
         MyAssertHandler(".\\EffectsCore\\fx_draw.cpp", 1511, 0, "%s", "system->camera.isValid");
     system->gfxCloudCount = 0;
+#ifdef __SWITCH__
+    static volatile uint32_t switchCloudFrameTraceCount = 0;
+    const uint32_t switchCloudFrameTrace =
+        __sync_fetch_and_add(&switchCloudFrameTraceCount, 1u);
+    const bool traceCloudFrame = switchCloudFrameTrace < 4u;
+    if (traceCloudFrame)
+    {
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX CLOUD FRAME] n=%u drawTime=%d activeFirst=%u activeNew=%u cameraValid=%u frustum=%u fxClouds=%u\n",
+            switchCloudFrameTrace,
+            drawTime,
+            static_cast<unsigned>(system->firstActiveEffect),
+            static_cast<unsigned>(system->firstNewEffect),
+            system->camera.isValid ? 1u : 0u,
+            static_cast<unsigned>(system->camera.frustumPlaneCount),
+            fx_drawClouds->current.enabled ? 1u : 0u);
+        Switch_LogWrite(trace);
+    }
+#endif
     sprite = &system->sprite;
     system->sprite.indices = 0;
     system->sprite.indexCount = 0;
@@ -1287,6 +1308,20 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
     }
     if (!InterlockedDecrement(&system->iteratorCount) && system->needsGarbageCollection)
         FX_RunGarbageCollection(system);
+#ifdef __SWITCH__
+    if (traceCloudFrame)
+    {
+        char trace[224];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX CLOUD FRAME END] n=%u clouds=%u spriteIndices=%u trails=%d\n",
+            switchCloudFrameTrace,
+            static_cast<unsigned>(system->gfxCloudCount),
+            static_cast<unsigned>(system->sprite.indexCount),
+            numTrailEffects);
+        Switch_LogWrite(trace);
+    }
+#endif
     if (system->sprite.indexCount)
     {
         if (!system->sprite.name)
