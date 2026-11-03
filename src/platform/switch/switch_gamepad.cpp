@@ -245,6 +245,29 @@ void Switch_GamepadFrame()
     constexpr u64 cinematicSkipButtons =
         HidNpadButton_B | HidNpadButton_Plus;
 
+    // Match the original engine's input priority: the console key is handled
+    // before cinematic skip logic, so L3+R3 must remain available while a
+    // movie or queued cinematic is active. Latch the combo edge before any
+    // cinematic branch can return from this frame.
+    if ((g_buttons & kConsoleShortcutButtons) != kConsoleShortcutButtons)
+        g_consoleShortcutConsumed = false;
+
+    const bool consoleShortcutPressed =
+        (g_buttons & kConsoleShortcutButtons) == kConsoleShortcutButtons &&
+        (g_previousButtons & kConsoleShortcutButtons) != kConsoleShortcutButtons;
+
+    if (consoleShortcutPressed)
+    {
+        g_consoleShortcutConsumed = true;
+        if (gameplayActive)
+        {
+            ReleaseForwardedKey(K_AUX6);
+            ReleaseForwardedKey(K_AUX7);
+        }
+        Switch_ShowConsoleKeyboard();
+        return;
+    }
+
     // Scripted intro/fade movies may still be displayed while the pregame
     // fullscreen UI owns KEYCATCH_UI. Handle an active-game movie before the
     // generic UI/gameplay mapping, regardless of that catcher or the load
@@ -338,38 +361,6 @@ void Switch_GamepadFrame()
         g_cinematicSkipKeyDown = false;
     }
 
-    // L3+R3 opens the CoD console and the system software keyboard.
-    // Consume the individual stick bindings for this press so the same gesture
-    // does not also trigger sprint or melee.
-    if ((g_buttons & kConsoleShortcutButtons) != kConsoleShortcutButtons)
-        g_consoleShortcutConsumed = false;
-
-    // Pressed(mask) intentionally means "any bit changed down", which is
-    // correct for multi-button cinematic skip masks but wrong for an AND-style
-    // shortcut. Require both stick-click bits to be down and the pair to have
-    // been incomplete in the previous sample. A single L3 or R3 must not open
-    // the console.
-    const bool consoleShortcutPressed =
-        (g_buttons & kConsoleShortcutButtons) == kConsoleShortcutButtons &&
-        (g_previousButtons & kConsoleShortcutButtons) != kConsoleShortcutButtons;
-
-    if (!cinematicActive && !activeGameCinematic &&
-        !mapLoadingCinematicActive && consoleShortcutPressed)
-    {
-        g_consoleShortcutConsumed = true;
-        if (gameplayActive)
-        {
-            // L3/R3 become a console shortcut when pressed together. Release
-            // their synthetic gameplay keys through the same key-event path.
-            ReleaseForwardedKey(K_AUX6);
-            ReleaseForwardedKey(K_AUX7);
-        }
-        Switch_ShowConsoleKeyboard();
-        // Opening/closing the console may block for the software keyboard.
-        // Do not also process this same controller edge as a gameplay action.
-        return;
-    }
-
     // In the console, A submits the visible command through the engine's
     // normal key path; B removes the previous character. Keep gameplay input
     // blocked while the console owns input.
@@ -381,10 +372,20 @@ void Switch_GamepadFrame()
         return;
     }
 
+    // The pause/back key can change KEYCATCH_UI in CL_KeyEvent. Dispatch it
+    // before routing the other controller buttons, then re-read the catcher:
+    // the state sampled at frame entry is stale after this event.
+    SendKeyEdge(HidNpadButton_Plus, K_ESCAPE);
+    const bool uiActiveNow = Key_IsCatcherActive(0, KEYCATCH_UI);
+    const bool gameplayActiveNow =
+        connectionState == CA_ACTIVE &&
+        !uiActiveNow &&
+        !Key_IsCatcherActive(0, KEYCATCH_CONSOLE);
+
     // UI navigation is fed through the engine's normal key path. Do not send
     // these keys during gameplay, otherwise A/B/D-pad would also execute any
     // matching keyboard binds from config.
-    if (uiActive)
+    if (uiActiveNow)
     {
         SendKeyEdge(HidNpadButton_Up, K_UPARROW);
         SendKeyEdge(HidNpadButton_Down, K_DOWNARROW);
@@ -394,38 +395,34 @@ void Switch_GamepadFrame()
         SendKeyEdge(HidNpadButton_B, K_ESCAPE);
     }
 
-    // PLUS is the controller pause/back action and therefore remains active
-    // outside the menu as well.
-    SendKeyEdge(HidNpadButton_Plus, K_ESCAPE);
-
     // The XBox/PS3 SP control model already exists in cl_input.cpp.
     // X sends the normal R key event so the stock +reload binding and any
     // level-script checks for the R key see the same press/release as a keyboard.
     // Gameplay actions are synthetic AUX key events, not direct calls to
     // IN_* handlers. CL_KeyEvent resolves the configured binding and executes
     // the ordinary +command/-command pair with the correct key number.
-    SendKeyEdge(HidNpadButton_A, K_AUX1, gameplayActive);
-    SendKeyEdge(HidNpadButton_B, K_AUX2, gameplayActive);
-    SendKeyEdge(HidNpadButton_X, 'r', gameplayActive);
+    SendKeyEdge(HidNpadButton_A, K_AUX1, gameplayActiveNow);
+    SendKeyEdge(HidNpadButton_B, K_AUX2, gameplayActiveNow);
+    SendKeyEdge(HidNpadButton_X, 'r', gameplayActiveNow);
     // The trigger must act like the real left mouse button. A K_MOUSE1 event
     // runs the normal attack binding and lets scripts observe the click.
-    SendKeyEdge(HidNpadButton_ZR, K_MOUSE1, gameplayActive);
-    SendKeyEdge(HidNpadButton_ZL, K_AUX3, gameplayActive);
-    SendKeyEdge(HidNpadButton_R, K_AUX4, gameplayActive);
-    SendKeyEdge(HidNpadButton_L, K_AUX5, gameplayActive);
+    SendKeyEdge(HidNpadButton_ZR, K_MOUSE1, gameplayActiveNow);
+    SendKeyEdge(HidNpadButton_ZL, K_AUX3, gameplayActiveNow);
+    SendKeyEdge(HidNpadButton_R, K_AUX4, gameplayActiveNow);
+    SendKeyEdge(HidNpadButton_L, K_AUX5, gameplayActiveNow);
     SendKeyEdge(HidNpadButton_StickL, K_AUX6,
-                gameplayActive && !g_consoleShortcutConsumed);
+                gameplayActiveNow && !g_consoleShortcutConsumed);
     SendKeyEdge(HidNpadButton_StickR, K_AUX7,
-                gameplayActive && !g_consoleShortcutConsumed);
+                gameplayActiveNow && !g_consoleShortcutConsumed);
 
     // Y is mapped to the normal F key for use/pickup. Send both edges
     // through the standard key path so the stock +activate binding runs.
-    SendKeyEdge(HidNpadButton_Y, 'f', gameplayActive);
+    SendKeyEdge(HidNpadButton_Y, 'f', gameplayActiveNow);
 
     // Weapon cycling and night vision also use normal engine key bindings.
-    SendKeyEdge(HidNpadButton_Left, K_AUX9, gameplayActive);
-    SendKeyEdge(HidNpadButton_Right, K_AUX10, gameplayActive);
-    SendKeyEdge(HidNpadButton_Up, K_AUX8, gameplayActive);
+    SendKeyEdge(HidNpadButton_Left, K_AUX9, gameplayActiveNow);
+    SendKeyEdge(HidNpadButton_Right, K_AUX10, gameplayActiveNow);
+    SendKeyEdge(HidNpadButton_Up, K_AUX8, gameplayActiveNow);
 }
 
 void Switch_GamepadShutdown()
