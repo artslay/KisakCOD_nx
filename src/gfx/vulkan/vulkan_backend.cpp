@@ -2250,7 +2250,7 @@ void VulkanBackend::BeginQuery(void *queryPtr)
 void VulkanBackend::EndQuery(void *queryPtr)
 {
     auto *query = static_cast<Query *>(queryPtr);
-    if (!query || !m_commandBuffer || !m_frameActive)
+    if (!query || !m_commandBuffer || !m_frameActive || m_deviceLost)
         return;
 
     if (query->kind == Query::Kind::Event)
@@ -2281,7 +2281,20 @@ void VulkanBackend::EndQuery(void *queryPtr)
 bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
 {
     auto *query = static_cast<Query *>(queryPtr);
-    if (!query || !query->issued || m_deviceLost)
+    if (!query)
+        return false;
+
+    // A lost Vulkan device will never signal outstanding event/occlusion
+    // queries. Treat those GPU operations as cancelled/completed so the D3D9
+    // fence polling loops can unwind instead of spinning forever on S_FALSE.
+    if (m_deviceLost)
+    {
+        if (result)
+            *result = 1;
+        return true;
+    }
+
+    if (!query->issued)
         return false;
 
     if (query->kind == Query::Kind::Event)
