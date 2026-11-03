@@ -897,7 +897,13 @@ int Sys_SpawnServerDemoThread(void (*function)(uint32_t))
     Sys_CreateEvent(false, false, &g_saveHistoryEvent);
     Sys_CreateEvent(false, false, &g_saveHistoryDoneEvent);
     Sys_CreateThread((void (__cdecl *)(uint32_t))function, THREAD_CONTEXT_SERVER_DEMO);
-    return threadHandle[THREAD_CONTEXT_SERVER_DEMO] != nullptr ? 1 : 0;
+    if (!threadHandle[THREAD_CONTEXT_SERVER_DEMO])
+        return 0;
+
+    // Match the original Win32 wrapper: demo-history workers are created
+    // suspended and resumed only after their events and thread state exist.
+    Sys_ResumeThread(THREAD_CONTEXT_SERVER_DEMO);
+    return 1;
 }
 
 void Sys_SetSaveHistoryEvent()
