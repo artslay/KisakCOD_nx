@@ -38,6 +38,10 @@ extern void Switch_ResetPendingBinkUpload();
 CinematicGlob cinematicGlob;
 bool g_cinematicThreadInitialized;
 CinematicThreadState g_cinematicThreadState;
+#ifdef __SWITCH__
+static std::atomic<bool> g_switchNextCinematicWorldOutput{false};
+static std::atomic<bool> g_switchActiveCinematicWorldOutput{false};
+#endif
 
 #ifdef __SWITCH__
 static void Switch_LogCinematicState(
@@ -179,6 +183,10 @@ void __cdecl R_Cinematic_Init()
     iassert(!g_cinematicThreadInitialized || g_cinematicThreadState == CINEMATIC_THREAD_STATE_TO_HOST_BETWEEN_UPDATES);
 
     memset(&cinematicGlob, 0, sizeof(cinematicGlob));
+#ifdef __SWITCH__
+    g_switchNextCinematicWorldOutput.store(false, std::memory_order_relaxed);
+    g_switchActiveCinematicWorldOutput.store(false, std::memory_order_relaxed);
+#endif
 
     cinematicGlob.activeImageFrame = -1;
     R_Cinematic_ReserveMemory();
@@ -1085,6 +1093,10 @@ void __cdecl R_Cinematic_Shutdown()
 void __cdecl R_Cinematic_StartPlayback(char *name, uint32_t playbackFlags, float volume)
 {
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
+#ifdef __SWITCH__
+    // Directly started cinematics use the normal fullscreen client path.
+    g_switchActiveCinematicWorldOutput.store(false, std::memory_order_relaxed);
+#endif
     R_Cinematic_StartPlayback_Internal(name, playbackFlags, volume);
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
@@ -1112,6 +1124,12 @@ void __cdecl R_Cinematic_StartNextPlayback()
     if (R_Cinematic_IsNextReady_Internal())
     {
 #ifdef __SWITCH__
+        // Promote output policy together with the queued clip, not when it is
+        // merely queued: the currently playing cinematic keeps its own mode.
+        g_switchActiveCinematicWorldOutput.store(
+            g_switchNextCinematicWorldOutput.load(std::memory_order_relaxed),
+            std::memory_order_relaxed);
+        g_switchNextCinematicWorldOutput.store(false, std::memory_order_relaxed);
         Switch_LogCinematicState(
             "next_handoff",
             cinematicGlob.nextCinematicName,
@@ -1139,6 +1157,7 @@ void __cdecl R_Cinematic_StopPlayback()
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC_TARGET_CHANGE);
 #ifdef __SWITCH__
+    g_switchActiveCinematicWorldOutput.store(false, std::memory_order_relaxed);
     Switch_LogCinematicState("stop_requested");
 #endif
     cinematicGlob.targetCinematicName[0] = 0;
@@ -1473,10 +1492,28 @@ void R_Cinematic_SetNextPlayback(const char *name, uint32_t playbackFlags)
     I_strncpyz(cinematicGlob.nextCinematicName, name, 256);
     cinematicGlob.nextCinematicPlaybackFlags = playbackFlags;
 #ifdef __SWITCH__
+    g_switchNextCinematicWorldOutput.store(false, std::memory_order_relaxed);
     Switch_LogCinematicState("next_queued", name, playbackFlags);
 #endif
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
+
+#ifdef __SWITCH__
+void R_Cinematic_SetNextWorldPlayback(const char *name, uint32_t playbackFlags)
+{
+    Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
+    I_strncpyz(cinematicGlob.nextCinematicName, name, 256);
+    cinematicGlob.nextCinematicPlaybackFlags = playbackFlags;
+    g_switchNextCinematicWorldOutput.store(true, std::memory_order_relaxed);
+    Switch_LogCinematicState("next_queued_world", name, playbackFlags);
+    Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
+}
+
+bool R_Cinematic_IsWorldMaterialPlayback()
+{
+    return g_switchActiveCinematicWorldOutput.load(std::memory_order_relaxed);
+}
+#endif
 
 void R_Cinematic_UnsetNextPlayback()
 {
@@ -1487,6 +1524,9 @@ void R_Cinematic_UnsetNextPlayback()
 #endif
     I_strncpyz(cinematicGlob.nextCinematicName, "", 256);
     cinematicGlob.nextCinematicPlaybackFlags = 0;
+#ifdef __SWITCH__
+    g_switchNextCinematicWorldOutput.store(false, std::memory_order_relaxed);
+#endif
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
@@ -1514,5 +1554,9 @@ void __cdecl R_Cinematic_BeginLostDevice() { /* THUNK */ }
 void __cdecl R_Cinematic_EndLostDevice() { /* THUNK */ }
 void __cdecl R_Cinematic_SetPaused(CinematicEnum paused) {}
 void R_Cinematic_SetNextPlayback(const char *name, uint32_t playbackFlags) {}
+#ifdef __SWITCH__
+void R_Cinematic_SetNextWorldPlayback(const char *name, uint32_t playbackFlags) {}
+bool R_Cinematic_IsWorldMaterialPlayback() { return false; }
+#endif
 void R_Cinematic_UnsetNextPlayback() {}
 #endif

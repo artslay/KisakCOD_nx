@@ -1627,12 +1627,6 @@ void GScr_SetDvar()
     Dvar_SetFromStringByNameFromSource(String, v10, DVAR_SOURCE_SCRIPT);
 }
 
-#ifdef __SWITCH__
-// A script may explicitly select fullscreen output even when the requested
-// value is already the dvar's default (in which case modified stays clear).
-static bool s_cinematicFullscreenScriptOverride;
-#endif
-
 void GScr_SetSavedDvar()
 {
     const char *String; // r30
@@ -1648,10 +1642,6 @@ void GScr_SetSavedDvar()
     char v10[1056]; // [sp+450h] [-420h] BYREF
 
     String = Scr_GetString(0);
-#ifdef __SWITCH__
-    if (!I_stricmp(String, "cg_cinematicFullscreen"))
-        s_cinematicFullscreenScriptOverride = true;
-#endif
     if (Scr_GetType(1) == 3)
     {
         NumParam = Scr_GetNumParam();
@@ -7114,30 +7104,18 @@ void GScr_Cinematic()
     level.bMissionSuccess = 1;
 }
 
-#ifdef __SWITCH__
-// CinematicInGame* feeds Bink frames to the world's cinematic material. Keep
-// the normal fullscreen option available when a script explicitly sets it,
-// but default these in-world playbacks to the material-only path on Switch.
-static void GScr_UseWorldCinematicOutput()
-{
-    const dvar_s *fullscreen = Dvar_FindVar("cg_cinematicFullscreen");
-
-    if (fullscreen && !fullscreen->modified && !s_cinematicFullscreenScriptOverride)
-        Dvar_SetFromStringByNameFromSource("cg_cinematicFullscreen", "0", DVAR_SOURCE_SCRIPT);
-}
-#endif
-
 void GScr_CinematicInGame()
 {
     const char *String; // r3
 
     if (Scr_GetNumParam() != 1)
         Scr_Error("cinematicingame takes one parameter: cinematicingame(<cinematic name>)\n");
-#ifdef __SWITCH__
-    GScr_UseWorldCinematicOutput();
-#endif
     String = Scr_GetString(0);
+#ifdef __SWITCH__
+    R_Cinematic_SetNextWorldPlayback(String, 0);
+#else
     R_Cinematic_SetNextPlayback(String, 0);
+#endif
 }
 
 void GScr_CinematicInGameSync()
@@ -7146,11 +7124,12 @@ void GScr_CinematicInGameSync()
 
     if (Scr_GetNumParam() != 1)
         Scr_Error("cinematicingamesync takes one parameter: cinematicingamesync(<cinematic name>)\n");
-#ifdef __SWITCH__
-    GScr_UseWorldCinematicOutput();
-#endif
     String = Scr_GetString(0);
+#ifdef __SWITCH__
+    R_Cinematic_SetNextWorldPlayback(String, 5u);
+#else
     R_Cinematic_SetNextPlayback(String, 5u);
+#endif
 }
 
 void GScr_CinematicInGameLoop()
@@ -7159,11 +7138,12 @@ void GScr_CinematicInGameLoop()
 
     if (Scr_GetNumParam() != 1)
         Scr_Error("cinematicingameloop takes one parameter: cinematicingameloop(<cinematic name>)\n");
-#ifdef __SWITCH__
-    GScr_UseWorldCinematicOutput();
-#endif
     String = Scr_GetString(0);
+#ifdef __SWITCH__
+    R_Cinematic_SetNextWorldPlayback(String, 2u);
+#else
     R_Cinematic_SetNextPlayback(String, 2u);
+#endif
 }
 
 void GScr_CinematicInGameLoopResident()
@@ -7172,11 +7152,12 @@ void GScr_CinematicInGameLoopResident()
 
     if (Scr_GetNumParam() != 1)
         Scr_Error("CinematicInGameLoopResident takes one parameter: CinematicInGameLoopResident(<cinematic name>)\n");
-#ifdef __SWITCH__
-    GScr_UseWorldCinematicOutput();
-#endif
     String = Scr_GetString(0);
+#ifdef __SWITCH__
+    R_Cinematic_SetNextWorldPlayback(String, 0x1Au);
+#else
     R_Cinematic_SetNextPlayback(String, 0x1Au);
+#endif
 }
 
 void GScr_CinematicInGameLoopFromFastfile()
@@ -7185,11 +7166,12 @@ void GScr_CinematicInGameLoopFromFastfile()
 
     if (Scr_GetNumParam() != 1)
         Scr_Error("CinematicInGameLoopFromFastfile takes one parameter: CinematicInGameLoopFromFastfile(<cinematic name>)\n");
-#ifdef __SWITCH__
-    GScr_UseWorldCinematicOutput();
-#endif
     String = Scr_GetString(0);
+#ifdef __SWITCH__
+    R_Cinematic_SetNextWorldPlayback(String, 0x3Au);
+#else
     R_Cinematic_SetNextPlayback(String, 0x3Au);
+#endif
 }
 
 void GScr_StopCinematicInGame()

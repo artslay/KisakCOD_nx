@@ -162,3 +162,7 @@ void __cdecl R_Cinematic_EndLostDevice();
 void __cdecl R_Cinematic_SetPaused(CinematicEnum paused);
 void R_Cinematic_SetNextPlayback(const char *name, uint32_t playbackFlags);
 void R_Cinematic_UnsetNextPlayback();
+#ifdef __SWITCH__
+void R_Cinematic_SetNextWorldPlayback(const char *name, uint32_t playbackFlags);
+bool R_Cinematic_IsWorldMaterialPlayback();
+#endif

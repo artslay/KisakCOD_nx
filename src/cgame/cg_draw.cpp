@@ -831,7 +831,11 @@ void __cdecl CG_DrawFadeInCinematic(int localClientNum)
         v2 = 1;
     if (v2)
     {
-        if (cg_cinematicFullscreen->current.enabled)
+        if (cg_cinematicFullscreen->current.enabled
+#ifdef __SWITCH__
+            && !R_Cinematic_IsWorldMaterialPlayback()
+#endif
+        )
             R_Cinematic_DrawStretchPic_Letterboxed();
     }
 }
