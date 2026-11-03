@@ -34,6 +34,15 @@ extern void Switch_LogWrite(const char *msg);
 static SwitchEvent *AsEvent(void *p) { return static_cast<SwitchEvent *>(p); }
 static std::thread g_threads[THREAD_CONTEXT_COUNT];
 static std::atomic<bool> g_threadAlive[THREAD_CONTEXT_COUNT] = {};
+
+struct SwitchThreadControl
+{
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool startReleased = false;
+    bool suspended = true;
+};
+static SwitchThreadControl g_threadControl[THREAD_CONTEXT_COUNT];
 static thread_local ThreadContext_t g_threadContext = THREAD_CONTEXT_MAIN;
 static thread_local const char *g_switchThreadStage = "thread/bootstrap";
 
@@ -51,11 +60,14 @@ volatile int g_timeout = 0;
 
 static void *g_values[THREAD_CONTEXT_COUNT][4] = {};
 extern jmp_buf g_com_error[THREAD_CONTEXT_COUNT];
-static std::mutex g_databaseMutex;
-static std::condition_variable g_databaseCv;
-static bool g_databaseRequested = false;
-static bool g_databasePending = false;
-static bool g_databaseCompleted = false;
+static SwitchEvent g_wakeDatabaseEvent;
+static SwitchEvent g_databaseCompletedEvent;
+static SwitchEvent g_databaseCompletedEvent2;
+static SwitchEvent g_resumedDatabaseEvent;
+static SwitchEvent g_updateSpotLightEffectEvent;
+static SwitchEvent g_updateEffectsEvent;
+static std::mutex g_databaseOwnerMutex;
+static ThreadOwner g_databaseThreadOwner = THREAD_OWNER_NONE;
 
 // Cinematic host/thread hand-off events. These are auto-reset events matching the
 // semantics used by the original Win32 implementation.
@@ -97,11 +109,19 @@ static void InitSwitchEvent(SwitchEvent &event, bool manualReset, bool initialSt
 
 static void SetSwitchEvent(SwitchEvent &event)
 {
+    bool manualReset;
     {
         std::lock_guard<std::mutex> lock(event.mutex);
         event.signaled = true;
+        manualReset = event.manual;
     }
-    event.cv.notify_one();
+
+    // Win32 manual-reset events release every waiter; auto-reset events release
+    // only one. Keep the same contract for the shared Switch event primitive.
+    if (manualReset)
+        event.cv.notify_all();
+    else
+        event.cv.notify_one();
 }
 
 static void ResetSwitchEvent(SwitchEvent &event)
@@ -110,6 +130,24 @@ static void ResetSwitchEvent(SwitchEvent &event)
     event.signaled = false;
 }
 
+static void WaitForThreadStart(ThreadContext_t context)
+{
+    SwitchThreadControl &control = g_threadControl[context];
+    std::unique_lock<std::mutex> lock(control.mutex);
+    control.cv.wait(lock, [&] {
+        return control.startReleased && !control.suspended;
+    });
+}
+
+static void WaitForThreadResume(ThreadContext_t context)
+{
+    if (context < 0 || context >= THREAD_CONTEXT_COUNT)
+        return;
+
+    SwitchThreadControl &control = g_threadControl[context];
+    std::unique_lock<std::mutex> lock(control.mutex);
+    control.cv.wait(lock, [&] { return !control.suspended; });
+}
 
 static uint32_t ThreadId()
 {
@@ -231,6 +269,13 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
         g_threads[context].join();
     }
 
+    {
+        SwitchThreadControl &control = g_threadControl[context];
+        std::lock_guard<std::mutex> lock(control.mutex);
+        control.startReleased = false;
+        control.suspended = true;
+    }
+
     g_switchThreadStage = "create/set_alive";
     g_threadAlive[context] = true;
 
@@ -242,6 +287,7 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
         if (context == THREAD_CONTEXT_CINEMATIC)
             Switch_LogWrite("[KisakCOD][CINEMATIC] before Sys_InitThread\n");
         Sys_InitThread(context);
+        WaitForThreadStart(context);
         if (context == THREAD_CONTEXT_CINEMATIC)
         {
             char line[192];
@@ -277,6 +323,8 @@ char __cdecl Sys_SpawnRenderThread(void (__cdecl *function)(uint32_t))
     InitSwitchEvent(g_rendererRunningEvent, true, true);
     InitSwitchEvent(g_backendEvent[0], true, false);
     InitSwitchEvent(g_backendEvent[1], false, false);
+    InitSwitchEvent(g_updateSpotLightEffectEvent, true, true);
+    InitSwitchEvent(g_updateEffectsEvent, true, true);
 
     g_smpData.store(nullptr, std::memory_order_release);
     g_renderPausedCount = 0;
@@ -284,19 +332,37 @@ char __cdecl Sys_SpawnRenderThread(void (__cdecl *function)(uint32_t))
     g_renderDataLogged = false;
 
     Sys_CreateThread(function, THREAD_CONTEXT_BACKEND);
-    return threadHandle[THREAD_CONTEXT_BACKEND] != nullptr ? 1 : 0;
+    if (!threadHandle[THREAD_CONTEXT_BACKEND])
+        return 0;
+
+    Sys_ResumeThread(THREAD_CONTEXT_BACKEND);
+    return 1;
 }
 
 char __cdecl Sys_SpawnDatabaseThread(void (__cdecl *function)(uint32_t))
 {
+    InitSwitchEvent(g_wakeDatabaseEvent, false, false);
+    InitSwitchEvent(g_databaseCompletedEvent, true, true);
+    InitSwitchEvent(g_databaseCompletedEvent2, true, true);
+    InitSwitchEvent(g_resumedDatabaseEvent, true, true);
+    {
+        std::lock_guard<std::mutex> lock(g_databaseOwnerMutex);
+        g_databaseThreadOwner = THREAD_OWNER_NONE;
+    }
+
     Sys_CreateThread(function, THREAD_CONTEXT_DATABASE);
+    if (!threadHandle[THREAD_CONTEXT_DATABASE])
+        return 0;
+
+    Sys_ResumeThread(THREAD_CONTEXT_DATABASE);
     return 1;
 }
 
 bool __cdecl Sys_SpawnWorkerThread(void (__cdecl *function)(uint32_t), uint32_t index)
 {
-    Sys_CreateThread(function, (ThreadContext_t)(index + 2));
-    return true;
+    const ThreadContext_t context = static_cast<ThreadContext_t>(index + 2);
+    Sys_CreateThread(function, context);
+    return threadHandle[context] != nullptr;
 }
 
 char __cdecl Sys_SpawnCinematicsThread(void (__cdecl *function)(uint32_t))
@@ -308,6 +374,10 @@ char __cdecl Sys_SpawnCinematicsThread(void (__cdecl *function)(uint32_t))
 
     Sys_CreateThread(function, THREAD_CONTEXT_CINEMATIC);
     Switch_LogWrite("[KisakCOD][CINEMATIC] Sys_CreateThread returned\n");
+    if (!threadHandle[THREAD_CONTEXT_CINEMATIC])
+        return 0;
+
+    Sys_ResumeThread(THREAD_CONTEXT_CINEMATIC);
     return 1;
 }
 
@@ -341,50 +411,120 @@ void __cdecl Sys_ResetCinematicsHostOutstandingRequestEvent()
     ResetSwitchEvent(g_cinematicsHostOutstandingRequestEvent);
 }
 
-void __cdecl Sys_ResumeThread(ThreadContext_t) {}
-void __cdecl Sys_SuspendThread(ThreadContext_t) {}
-void __cdecl Sys_SuspendDatabaseThread(ThreadOwner) {}
-void __cdecl Sys_ResumeDatabaseThread(ThreadOwner) {}
-bool __cdecl Sys_HaveSuspendedDatabaseThread(ThreadOwner) { return false; }
-void __cdecl Sys_WaitDatabaseThread() {}
+void __cdecl Sys_ResumeThread(ThreadContext_t context)
+{
+    iassert(context >= 0 && context < THREAD_CONTEXT_COUNT);
+    SwitchThreadControl &control = g_threadControl[context];
+    {
+        std::lock_guard<std::mutex> lock(control.mutex);
+        control.startReleased = true;
+        control.suspended = false;
+    }
+    control.cv.notify_all();
+
+    if (context == THREAD_CONTEXT_WORKER0 ||
+        context == THREAD_CONTEXT_WORKER1)
+        SetSwitchEvent(g_workerCmdEvent);
+}
+
+void __cdecl Sys_SuspendThread(ThreadContext_t context)
+{
+    iassert(context >= 0 && context < THREAD_CONTEXT_COUNT);
+    SwitchThreadControl &control = g_threadControl[context];
+    {
+        std::lock_guard<std::mutex> lock(control.mutex);
+        control.suspended = true;
+    }
+
+    if (context == THREAD_CONTEXT_WORKER0 ||
+        context == THREAD_CONTEXT_WORKER1)
+        SetSwitchEvent(g_workerCmdEvent);
+}
+
+void __cdecl Sys_SuspendDatabaseThread(ThreadOwner owner)
+{
+    iassert(owner != THREAD_OWNER_NONE);
+    {
+        std::lock_guard<std::mutex> lock(g_databaseOwnerMutex);
+        iassert(g_databaseThreadOwner == THREAD_OWNER_NONE);
+        g_databaseThreadOwner = owner;
+        ResetSwitchEvent(g_resumedDatabaseEvent);
+    }
+}
+
+void __cdecl Sys_ResumeDatabaseThread(ThreadOwner owner)
+{
+    iassert(owner != THREAD_OWNER_NONE);
+    {
+        std::lock_guard<std::mutex> lock(g_databaseOwnerMutex);
+        iassert(g_databaseThreadOwner == owner);
+        g_databaseThreadOwner = THREAD_OWNER_NONE;
+    }
+    SetSwitchEvent(g_resumedDatabaseEvent);
+}
+
+bool __cdecl Sys_HaveSuspendedDatabaseThread(ThreadOwner owner)
+{
+    std::lock_guard<std::mutex> lock(g_databaseOwnerMutex);
+    return g_databaseThreadOwner == owner;
+}
+
+void __cdecl Sys_WaitDatabaseThread()
+{
+    WaitSwitchEvent(g_resumedDatabaseEvent, UINT32_MAX);
+}
+
 void __cdecl Sys_SyncDatabase()
 {
-    std::unique_lock<std::mutex> lock(g_databaseMutex);
-    g_databaseCv.wait(lock, [] { return g_databaseCompleted || !g_databasePending; });
-    g_databaseCompleted = false;
-    g_databasePending = false;
+    WaitSwitchEvent(g_databaseCompletedEvent, UINT32_MAX);
 }
 
 void __cdecl Sys_WaitStartDatabase()
 {
-    std::unique_lock<std::mutex> lock(g_databaseMutex);
-    g_databaseCv.wait(lock, [] { return g_databaseRequested; });
-    g_databaseRequested = false;
+    WaitSwitchEvent(g_wakeDatabaseEvent, UINT32_MAX);
 }
 
 void __cdecl Sys_NotifyDatabase()
 {
-    {
-        std::lock_guard<std::mutex> lock(g_databaseMutex);
-        g_databaseRequested = true;
-        g_databasePending = true;
-    }
-    g_databaseCv.notify_one();
+    SetSwitchEvent(g_wakeDatabaseEvent);
 }
 
-void __cdecl Sys_WakeDatabase() {}
+void __cdecl Sys_WakeDatabase()
+{
+    ResetSwitchEvent(g_databaseCompletedEvent);
+}
+
 void __cdecl Sys_DatabaseCompleted()
 {
-    {
-        std::lock_guard<std::mutex> lock(g_databaseMutex);
-        g_databaseCompleted = true;
-    }
-    g_databaseCv.notify_all();
+#ifdef KISAK_SP
+    isDoingDatabaseInit = 1;
+    Sys_WaitForSingleObject(&serverCompletedEvent);
+#endif
+    SetSwitchEvent(g_databaseCompletedEvent);
 }
-void __cdecl Sys_DatabaseCompleted2() { Sys_DatabaseCompleted(); }
-bool __cdecl Sys_IsDatabaseReady() { return true; }
-bool __cdecl Sys_IsDatabaseReady2() { return true; }
-void __cdecl Sys_WakeDatabase2() {}
+
+void __cdecl Sys_DatabaseCompleted2()
+{
+#ifdef KISAK_SP
+    isDoingDatabaseInit = 0;
+#endif
+    SetSwitchEvent(g_databaseCompletedEvent2);
+}
+
+bool __cdecl Sys_IsDatabaseReady()
+{
+    return WaitSwitchEvent(g_databaseCompletedEvent, 0);
+}
+
+bool __cdecl Sys_IsDatabaseReady2()
+{
+    return WaitSwitchEvent(g_databaseCompletedEvent2, 0);
+}
+
+void __cdecl Sys_WakeDatabase2()
+{
+    ResetSwitchEvent(g_databaseCompletedEvent2);
+}
 void __cdecl Sys_SetWorkerCmdEvent()
 {
     SetSwitchEvent(g_workerCmdEvent);
@@ -402,13 +542,30 @@ int __cdecl Sys_WaitBackendEvent()
 
 void __cdecl Sys_WaitForWorkerCmd()
 {
+    WaitForThreadResume(g_threadContext);
     WaitSwitchEvent(g_workerCmdEvent, 1);
+    WaitForThreadResume(g_threadContext);
 }
-void __cdecl Sys_SetUpdateSpotLightEffectEvent() {}
-void __cdecl Sys_ResetUpdateSpotLightEffectEvent() {}
-void __cdecl Sys_WaitUpdateNonDependentEffectsCompleted() {}
-void __cdecl Sys_SetUpdateNonDependentEffectsEvent() {}
-void __cdecl Sys_ResetUpdateNonDependentEffectsEvent() {}
+void __cdecl Sys_SetUpdateSpotLightEffectEvent()
+{
+    SetSwitchEvent(g_updateSpotLightEffectEvent);
+}
+void __cdecl Sys_ResetUpdateSpotLightEffectEvent()
+{
+    ResetSwitchEvent(g_updateSpotLightEffectEvent);
+}
+void __cdecl Sys_WaitUpdateNonDependentEffectsCompleted()
+{
+    WaitSwitchEvent(g_updateEffectsEvent, UINT32_MAX);
+}
+void __cdecl Sys_SetUpdateNonDependentEffectsEvent()
+{
+    SetSwitchEvent(g_updateEffectsEvent);
+}
+void __cdecl Sys_ResetUpdateNonDependentEffectsEvent()
+{
+    ResetSwitchEvent(g_updateEffectsEvent);
+}
 void __cdecl Sys_SuspendOtherThreads() {}
 void __cdecl Sys_ReleaseThreadOwnership()
 {
@@ -611,6 +768,8 @@ int Sys_SpawnServerThread(void (*function)(uint32_t))
     g_switchThreadStage = "spawnServer/after_create";
     const bool serverThreadStarted =
         threadHandle[THREAD_CONTEXT_SERVER] != nullptr;
+    if (serverThreadStarted)
+        Sys_ResumeThread(THREAD_CONTEXT_SERVER);
     g_switchThreadStage = "thread/ready";
     return serverThreadStarted ? 1 : 0;
 }

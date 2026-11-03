@@ -1,4 +1,5 @@
 #include <universal/q_shared.h>
+#include <cstring>
 #include <qcommon/mem_track.h>
 #include "r_init.h"
 #include "r_material.h"
@@ -16,6 +17,7 @@
 #include "r_workercmds.h"
 #include "r_cinematic.h"
 #include "rb_state.h"
+#include "rb_backend.h"
 #include "r_draw_method.h"
 #include "r_dvars.h"
 #include <qcommon/threads.h>
@@ -217,6 +219,26 @@ void R_BeginRegistration(vidConfig_t *out) {
     R_ReleaseThreadOwnership();
 }
 
+
+static void R_ApplySwitchWorkerThreadSettings()
+{
+    for (uint32_t workerIndex = 0; workerIndex < 2; ++workerIndex)
+    {
+        iassert(r_smp_worker_thread[workerIndex]);
+        Dvar_ClearModified((dvar_s *)r_smp_worker_thread[workerIndex]);
+
+        const ThreadContext_t context =
+            static_cast<ThreadContext_t>(workerIndex + 2);
+        if (!threadHandle[context])
+            continue;
+
+        if (r_smp_worker_thread[workerIndex]->current.enabled)
+            Sys_ResumeThread(context);
+        else
+            Sys_SuspendThread(context);
+    }
+}
+
 void R_Init() {
     // Match the original renderer bootstrap order: renderer dvars/commands must
     // exist before R_InitImages()->R_SetPicmip() accesses them.
@@ -233,6 +255,7 @@ void R_Init() {
     // before any BSP camera pass can use scene.drawSurfs[stage].
     R_InitScene();
     R_InitSystems();
+    R_ApplySwitchWorkerThreadSettings();
 }
 char R_InitRendererForWindow(HWND) { R_Init(); return 1; }
 HWND R_CreateSwapChains(int, GfxWindowParms *, int) { return nullptr; }
@@ -559,6 +582,7 @@ char R_InitHardware(const GfxWindowParms *wnd) {
     R_InitGamma();
     R_InitScene();
     R_InitSystems();
+    R_ApplySwitchWorkerThreadSettings();
     return 1;
 }
 void R_StoreWindowSettings(const GfxWindowParms *wnd)
@@ -888,22 +912,29 @@ void R_Register() {
         "Do not use a border in windowed mode");
 }
 void R_InitGlobalStructs() {
-    vidConfig = {};
+    // Keep vidConfig intact here. The original renderer initializes the scene
+    // viewport from the current video configuration during backend bootstrap.
+    // Clearing it before RB_InitBackendGlobalStructs() produces a zero-sized
+    // viewport during vid_restart and map re-registration.
+    std::memset(&rg, 0, sizeof(rg));
+    std::memset(&rgp, 0, sizeof(rgp));
+
     gfxMetrics = {};
     gfxMetrics.canMipCubemaps = true;
     // Vulkan exposes slope-scaled depth bias in core rasterization state.
-    // Enable the renderer's normal slope+bias path instead of the D3D fallback
-    // that doubles only the constant bias when the capability is left unset.
     gfxMetrics.slopeScaleDepthBias = true;
     g_disableRendering = 0;
 
-    // The Switch-specific init must preserve the engine's identity placement.
-    // BSP tessellation switches to rg.identityPlacement before drawing world
-    // surfaces; a zero scale collapses its world matrix to translation only,
-    // so every floor vertex gets the same clip-space position.
-    rg.identityPlacement = {};
+    // This is the original renderer's backend-global reset. It also rebuilds
+    // scene viewport and code-image state for the newly registered world.
+    RB_InitBackendGlobalStructs();
+
     rg.identityPlacement.base.quat[3] = 1.0f;
     rg.identityPlacement.scale = 1.0f;
+    MatrixIdentity44(rg.identityViewParms.viewMatrix.m);
+    MatrixIdentity44(rg.identityViewParms.projectionMatrix.m);
+    MatrixIdentity44(rg.identityViewParms.viewProjectionMatrix.m);
+    MatrixIdentity44(rg.identityViewParms.inverseViewProjectionMatrix.m);
 }
 void R_EndRegistration()
 {
