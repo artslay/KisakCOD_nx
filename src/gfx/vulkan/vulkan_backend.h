@@ -466,10 +466,11 @@ private:
         };
 
         Kind kind = Kind::Occlusion;
-        VkEvent event = VK_NULL_HANDLE;
-        VkQueryPool pool = VK_NULL_HANDLE;
-        bool active = false;
-        bool issued = false;
+        std::array<VkEvent, FramesInFlight> events{};
+        std::array<VkQueryPool, FramesInFlight> pools{};
+        std::array<bool, FramesInFlight> active{};
+        std::array<bool, FramesInFlight> issued{};
+        uint32_t latestIssuedFrameSlot = 0;
     };
 
     mutable std::mutex m_errorMutex;
