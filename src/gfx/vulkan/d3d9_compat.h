@@ -477,6 +477,14 @@ public:
             m_pipelineDirty = true;
         }
     }
+    void SetParticleCloudPassActive(bool active)
+    {
+        if (m_particleCloudPassActive != active)
+        {
+            m_particleCloudPassActive = active;
+            m_pipelineDirty = true;
+        }
+    }
     HRESULT SetSamplerState(uint32_t,uint32_t,uint32_t);
     HRESULT SetScissorRect(const tagRECT*);
     HRESULT SetRenderState(uint32_t,uint32_t);
@@ -513,6 +521,9 @@ private:
     D3DVIEWPORT9 m_viewport{0,0,1280,720,0.0f,1.0f};
     bool m_switchUnlit=false;
     bool m_markMeshPassActive=false;
+    // Procedural particle-cloud quads are camera-facing FX geometry and must
+    // remain visible from either side, independent of the material cull state.
+    bool m_particleCloudPassActive=false;
     bool m_alphaToCoverage=false;
     bool m_depthEnable=true, m_depthWrite=true, m_blendEnable=false;
     uint32_t m_multisampleMask=0xffffffffu;
