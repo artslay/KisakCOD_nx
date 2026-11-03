@@ -2779,7 +2779,11 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
         static_cast<unsigned long long>(pc - pcAligned));
     Switch_LogCrashLine(line);
 
-    if (pcAligned >= 12)
+    // Only inspect faulting instructions when PC is in this module's address
+    // region. A bad indirect branch (for example PC=0x61) must not make the
+    // exception handler fault again while reading around the invalid PC.
+    if (pcAligned >= codeBase + 12 &&
+        (pcAligned >> 32) == (codeBase >> 32))
     {
         // ARM64 instructions are 32-bit. Dump a small window around the
         // faulting PC so the exact memory operand can be decoded directly
@@ -2806,8 +2810,10 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump *ctx)
     // the PC may be an indirect-dispatch thunk, while LR identifies the call site.
     const uintptr_t lr = static_cast<uintptr_t>(ctx->lr.x);
     const uintptr_t lrAligned = lr & ~static_cast<uintptr_t>(3);
-    if (lrAligned >= 12 &&
-        (lrAligned >> 32) == (pcAligned >> 32))
+    // LR is often the only useful call-site address when PC itself is corrupt.
+    // Validate it against this module, independently of the faulting PC.
+    if (lrAligned >= codeBase + 64 &&
+        (lrAligned >> 32) == (codeBase >> 32))
     {
         std::snprintf(
             line,
