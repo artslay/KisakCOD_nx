@@ -540,7 +540,31 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
 
     iassert(rgp.sortedMaterials[material->info.drawSurf.fields.materialSortedIndex] == material);
 
-    if (Material_GetTechnique(material, gfxDrawMethod.emissiveTechType))
+    const MaterialTechnique *cloudTechnique =
+        Material_GetTechnique(material, gfxDrawMethod.emissiveTechType);
+#ifdef __SWITCH__
+    static volatile uint32_t switchCloudDrawSurfTraceCount = 0;
+    const uint32_t switchCloudDrawSurfTrace =
+        __sync_fetch_and_add(&switchCloudDrawSurfTraceCount, 1u);
+    const bool traceCloudDrawSurf = switchCloudDrawSurfTrace < 8u;
+    if (traceCloudDrawSurf)
+    {
+        char trace[384];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX CLOUD SURF] n=%u cloud=%u cloudCount=%u material=%u name=%.96s emissiveTech=%u technique=%p sortKey=%u\n",
+            switchCloudDrawSurfTrace,
+            cloudIndex,
+            static_cast<unsigned>(frontEndDataOut->cloudCount),
+            static_cast<unsigned>(material->info.drawSurf.fields.materialSortedIndex),
+            material->info.name ? material->info.name : "<null>",
+            static_cast<unsigned>(gfxDrawMethod.emissiveTechType),
+            static_cast<const void *>(cloudTechnique),
+            static_cast<unsigned>(material->info.sortKey));
+        Switch_LogWrite(trace);
+    }
+#endif
+    if (cloudTechnique)
     {
         MaterialSortKey = R_GetMaterialSortKey(material);
         region = (MaterialSortKey == 48) + (MaterialSortKey != 24 ? 0 : 2) + 12;
@@ -551,6 +575,23 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
 
             drawSurf->fields.objectId = cloudIndex;
             drawSurf->fields.surfType = SF_PARTICLE_CLOUD;
+#ifdef __SWITCH__
+            if (traceCloudDrawSurf)
+            {
+                char trace[288];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][FX CLOUD SURF QUEUED] n=%u region=%d regionCount=%d regionMax=%d object=%u surfType=%u materialIndex=%u\n",
+                    switchCloudDrawSurfTrace,
+                    region,
+                    scene.drawSurfCount[region],
+                    scene.maxDrawSurfCount[region],
+                    static_cast<unsigned>(drawSurf->fields.objectId),
+                    static_cast<unsigned>(drawSurf->fields.surfType),
+                    static_cast<unsigned>(drawSurf->fields.materialSortedIndex));
+                Switch_LogWrite(trace);
+            }
+#endif
             //packed_high = HIDWORD(drawSurf->packed);
             //*&drawSurf->packed = cloudIndex | *&drawSurf->packed & 0xFFFF0000; // objectID
             //HIDWORD(drawSurf->packed) = packed_high;
@@ -572,6 +613,19 @@ char __cdecl R_AddParticleCloudDrawSurf(uint32_t cloudIndex, Material *material)
     }
     else
     {
+#ifdef __SWITCH__
+        if (traceCloudDrawSurf)
+        {
+            char trace[224];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FX CLOUD SURF REJECT] n=%u reason=no_emissive_technique material=%.112s techType=%u\n",
+                switchCloudDrawSurfTrace,
+                material->info.name ? material->info.name : "<null>",
+                static_cast<unsigned>(gfxDrawMethod.emissiveTechType));
+            Switch_LogWrite(trace);
+        }
+#endif
         R_WarnOncePerFrame(R_WARN_NONEMISSIVE_FX_MATERIAL, material->info.name);
         return 0;
     }
