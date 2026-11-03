@@ -1330,6 +1330,54 @@ void __cdecl DB_UnloadXAssetsMemory(XZone *zone, int32_t sortedIndex)
     }
 }
 
+#ifdef __SWITCH__
+// FastCriticalSection is a writer-gated reader/writer lock. Keep a per-thread
+// depth so callbacks that perform nested asset lookups do not block behind a
+// writer that is already waiting for their outer read section to finish.
+static thread_local uint32_t s_dbHashReadDepth = 0;
+
+static void DB_LockHashRead()
+{
+    if (s_dbHashReadDepth)
+    {
+        ++s_dbHashReadDepth;
+        return;
+    }
+
+    for (;;)
+    {
+        while (__atomic_load_n(&db_hashCritSect.writeCount, __ATOMIC_ACQUIRE))
+            std::this_thread::yield();
+
+        __atomic_add_fetch(&db_hashCritSect.readCount, 1u, __ATOMIC_ACQUIRE);
+        if (!__atomic_load_n(&db_hashCritSect.writeCount, __ATOMIC_ACQUIRE))
+        {
+            s_dbHashReadDepth = 1;
+            return;
+        }
+
+        __atomic_sub_fetch(&db_hashCritSect.readCount, 1u, __ATOMIC_RELEASE);
+    }
+}
+
+static void DB_UnlockHashRead()
+{
+    if (!s_dbHashReadDepth)
+    {
+        MyAssertHandler(
+            ".\\database\\db_registry.cpp",
+            0,
+            0,
+            "%s",
+            "s_dbHashReadDepth > 0");
+        return;
+    }
+
+    if (--s_dbHashReadDepth == 0)
+        __atomic_sub_fetch(&db_hashCritSect.readCount, 1u, __ATOMIC_RELEASE);
+}
+#endif
+
 XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
 {
     const char *v5;
@@ -1379,9 +1427,13 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
 
     // Match the upstream DB hash access pattern: readers may inspect the table
     // concurrently, but creation/linking requires the write lock.
+    #ifdef __SWITCH__
+    DB_LockHashRead();
+    #else
     InterlockedIncrement(&db_hashCritSect.readCount);
     while (db_hashCritSect.writeCount)
         std::this_thread::yield();
+    #endif
 #ifdef __SWITCH__
     if (traceWeaponLookup)
         g_switchDbStage = "weapon/find/read_lock_acquired";
@@ -1399,10 +1451,27 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
         g_switchDbStage = "weapon/find/read_lookup_done";
 #endif
     assetEntry = found ? &found->entry : nullptr;
+    XAssetHeader foundHeader = {};
 
-    if (db_hashCritSect.readCount <= 0)
+    if (assetEntry)
+    {
+        // A writer may recycle the pool entry as soon as this read section
+        // ends. Finish all entry access and copy the public header first.
+        assetEntry->inuse = 1;
+        foundHeader = assetEntry->asset.header;
+    }
+
+#ifdef __SWITCH__
+    if (__atomic_load_n(&db_hashCritSect.readCount, __ATOMIC_RELAXED) == 0)
+#else
+    if (!db_hashCritSect.readCount)
+#endif
         MyAssertHandler(".\\database\\db_registry.cpp", 0, 0, "%s", "db_hashCritSect.readCount > 0");
+#ifdef __SWITCH__
+    DB_UnlockHashRead();
+#else
     InterlockedDecrement(&db_hashCritSect.readCount);
+#endif
 
     if (assetEntry)
     {
@@ -1412,8 +1481,7 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
         if (traceRawFileLookup)
             g_switchDbStage = "rawfile/lookup/read_hit_return";
 #endif
-        assetEntry->inuse = 1;
-        return assetEntry->asset.header;
+        return foundHeader;
     }
 
 
@@ -1459,6 +1527,7 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
     {
         assetEntry = &existing->entry;
         assetEntry->inuse = 1;
+        const XAssetHeader existingHeader = assetEntry->asset.header;
 #ifdef __SWITCH__
         if (traceRawFileLookup)
             g_switchDbStage = "rawfile/lookup/hit_unlock";
@@ -1468,7 +1537,7 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
         if (traceRawFileLookup)
             g_switchDbStage = "rawfile/lookup/hit_return";
 #endif
-        return assetEntry->asset.header;
+        return existingHeader;
     }
 
     if (type == ASSET_TYPE_LOCALIZE_ENTRY || type == ASSET_TYPE_RAWFILE)
@@ -1507,6 +1576,7 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
     if (traceWeaponLookup)
         g_switchDbStage = "weapon/find/unlocked";
 #endif
+    const XAssetHeader newHeader = newEntry ? newEntry->asset.header : XAssetHeader{};
     Sys_UnlockWrite(&db_hashCritSect);
 
 
@@ -1516,7 +1586,7 @@ XAssetHeader __cdecl DB_FindXAssetHeader(XAssetType type, const char *name)
     if (traceWeaponLookup)
         g_switchDbStage = "weapon/find/return";
 #endif
-    return newEntry ? newEntry->asset.header : XAssetHeader{};
+    return newHeader;
 }
 
 bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
@@ -1528,9 +1598,13 @@ bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
 #ifdef __SWITCH__
     g_switchDbStage = "asset/is_default/lock";
 #endif
+    #ifdef __SWITCH__
+    DB_LockHashRead();
+    #else
     InterlockedIncrement(&db_hashCritSect.readCount);
     while (db_hashCritSect.writeCount)
         std::this_thread::yield();
+    #endif
 
 #ifdef __SWITCH__
     // Match DB_FindXAssetEntry: malformed/cyclic hash chains must not hang
@@ -1551,7 +1625,11 @@ bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
         {
             const uint32_t badIndex = assetEntryIndex;
             const uint32_t steps = guard;
+            #ifdef __SWITCH__
+            DB_UnlockHashRead();
+            #else
             InterlockedDecrement(&db_hashCritSect.readCount);
+            #endif
             Com_Error(
                 ERR_DROP,
                 "Switch DB_IsXAssetDefault: corrupt hash chain (type=%u hash=%u index=%u steps=%u)",
@@ -1582,7 +1660,11 @@ bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
                 // prevent an earlier default entry from masking it.
                 if (assetEntry->entry.zoneIndex != 0)
                 {
+                    #ifdef __SWITCH__
+                    DB_UnlockHashRead();
+                    #else
                     InterlockedDecrement(&db_hashCritSect.readCount);
+                    #endif
                     return false;
                 }
             }
@@ -1592,7 +1674,11 @@ bool __cdecl DB_IsXAssetDefault(XAssetType type, const char *name)
 #endif
     }
 
+    #ifdef __SWITCH__
+    DB_UnlockHashRead();
+    #else
     InterlockedDecrement(&db_hashCritSect.readCount);
+    #endif
 #ifdef __SWITCH__
     g_switchDbStage = "asset/is_default/return_default";
 #endif
@@ -2985,9 +3071,13 @@ static void DB_ResolveSwitchFxReferenceFixups()
         if (!fixup.destination || !fixup.name || !*fixup.name)
             continue;
 
+        #ifdef __SWITCH__
+        DB_LockHashRead();
+        #else
         InterlockedIncrement(&db_hashCritSect.readCount);
         while (db_hashCritSect.writeCount)
             std::this_thread::yield();
+        #endif
 
         XAssetEntryPoolEntry *entry =
             DB_FindXAssetEntry(ASSET_TYPE_FX, fixup.name);
@@ -3005,14 +3095,22 @@ static void DB_ResolveSwitchFxReferenceFixups()
             resolved = DB_FindXAssetDefaultHeaderInternal(ASSET_TYPE_FX);
         }
 
+        #ifdef __SWITCH__
+        if (__atomic_load_n(&db_hashCritSect.readCount, __ATOMIC_RELAXED) == 0)
+        #else
         if (db_hashCritSect.readCount <= 0)
+        #endif
             MyAssertHandler(
                 ".\\database\\db_registry.cpp",
                 0,
                 0,
                 "%s",
                 "db_hashCritSect.readCount > 0");
+        #ifdef __SWITCH__
+        DB_UnlockHashRead();
+        #else
         InterlockedDecrement(&db_hashCritSect.readCount);
+        #endif
 
         *reinterpret_cast<XAssetHeader *>(fixup.destination) = resolved;
         if (entry)
@@ -3099,9 +3197,13 @@ int32_t __cdecl DB_GetAllXAssetOfType_FastFile(XAssetType type, XAssetHeader *as
     XAssetEntryPoolEntry *assetEntry; // [esp+10h] [ebp-4h]
 
     assetCount = 0;
+    #ifdef __SWITCH__
+    DB_LockHashRead();
+    #else
     InterlockedIncrement(&db_hashCritSect.readCount);
     while (db_hashCritSect.writeCount)
         NET_Sleep(0);
+    #endif
     for (hash = 0; hash < 0x8000; ++hash)
     {
         for (assetEntryIndex = db_hashTable[hash]; assetEntryIndex; assetEntryIndex = assetEntry->entry.nextHash)
@@ -3119,14 +3221,22 @@ int32_t __cdecl DB_GetAllXAssetOfType_FastFile(XAssetType type, XAssetHeader *as
             }
         }
     }
+    #ifdef __SWITCH__
+    if (__atomic_load_n(&db_hashCritSect.readCount, __ATOMIC_RELAXED) == 0)
+    #else
     if (db_hashCritSect.readCount <= 0)
+    #endif
         MyAssertHandler(
             "c:\\trees\\cod3\\src\\gfx_d3d\\../qcommon/threads_interlock.h",
             76,
             0,
             "%s",
             "critSect->readCount > 0");
+    #ifdef __SWITCH__
+    DB_UnlockHashRead();
+    #else
     InterlockedDecrement(&db_hashCritSect.readCount);
+    #endif
     return assetCount;
 }
 
@@ -3686,9 +3796,13 @@ void __cdecl DB_EnumXAssets_FastFile(
     XAssetEntryPoolEntry *assetEntry;
     uint32_t overrideAssetEntryIndex;
 
+    #ifdef __SWITCH__
+    DB_LockHashRead();
+    #else
     InterlockedIncrement(&db_hashCritSect.readCount);
     while (db_hashCritSect.writeCount)
         NET_Sleep(0);
+    #endif
     for (hash = 0; hash < 0x8000; ++hash)
     {
         for (assetEntryIndex = db_hashTable[hash]; assetEntryIndex; assetEntryIndex = assetEntry->entry.nextHash)
@@ -3709,14 +3823,22 @@ void __cdecl DB_EnumXAssets_FastFile(
             }
         }
     }
+    #ifdef __SWITCH__
+    if (__atomic_load_n(&db_hashCritSect.readCount, __ATOMIC_RELAXED) == 0)
+    #else
     if (db_hashCritSect.readCount <= 0)
+    #endif
         MyAssertHandler(
             "c:\\trees\\cod3\\src\\gfx_d3d\\../qcommon/threads_interlock.h",
             76,
             0,
             "%s",
             "critSect->readCount > 0");
+    #ifdef __SWITCH__
+    DB_UnlockHashRead();
+    #else
     InterlockedDecrement(&db_hashCritSect.readCount);
+    #endif
 }
 
 static void DB_PostLoadXZone()
