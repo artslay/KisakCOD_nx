@@ -4081,7 +4081,7 @@ void __cdecl Sys_Init()
     // Com_InitDvars() registers sys_smp_allowed from Sys_GetCpuCount().
     Com_Printf(
         CON_CHANNEL_SYSTEM,
-        "Switch CPU threads: %u (coreMask=0x%x)\\n",
+        "Switch CPU threads: %u (coreMask=0x%x)\n",
         s_cpuCount,
         s_affinityMaskForProcess);
 }
