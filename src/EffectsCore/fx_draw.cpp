@@ -1317,6 +1317,74 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
     {
         effectHandle = system->allEffectHandles[activeIndex & 0x3FF];
         effect = FX_EffectFromHandle(system, effectHandle);
+#ifdef __SWITCH__
+        if (effect && effect->def)
+        {
+            static const FxEffectDef *switchLoggedFxDefs[256] = {};
+            static volatile uint32_t switchLoggedFxDefCount = 0;
+            bool fxDefAlreadyLogged = false;
+            for (uint32_t defIndex = 0; defIndex < switchLoggedFxDefCount; ++defIndex)
+            {
+                if (switchLoggedFxDefs[defIndex] == effect->def)
+                {
+                    fxDefAlreadyLogged = true;
+                    break;
+                }
+            }
+            if (!fxDefAlreadyLogged && switchLoggedFxDefCount < 256u)
+            {
+                const uint32_t inventoryIndex =
+                    __sync_fetch_and_add(&switchLoggedFxDefCount, 1u);
+                if (inventoryIndex < 256u)
+                {
+                    switchLoggedFxDefs[inventoryIndex] = effect->def;
+                    uint32_t defTypeCounts[8] = {};
+                    const uint32_t defElemCount =
+                        static_cast<uint32_t>(effect->def->elemDefCountOneShot) +
+                        static_cast<uint32_t>(effect->def->elemDefCountLooping);
+                    for (uint32_t i = 0; i < defElemCount; ++i)
+                    {
+                        const uint8_t type = effect->def->elemDefs[i].elemType;
+                        if (type < 8u)
+                            ++defTypeCounts[type];
+                    }
+
+                    uint32_t activeTypeCounts[8] = {};
+                    uint32_t activeClassCounts[3] = {};
+                    for (uint32_t elemClass = 0; elemClass < 3u; ++elemClass)
+                    {
+                        uint16_t handle = effect->firstElemHandle[elemClass];
+                        while (handle != 0xFFFF && activeClassCounts[elemClass] < 2048u)
+                        {
+                            FxElem *activeElem =
+                                &FX_PoolFromHandle_Generic<FxElem, 2048>(system->elems, handle)->item;
+                            const uint8_t type = effect->def->elemDefs[activeElem->defIndex].elemType;
+                            if (type < 8u)
+                                ++activeTypeCounts[type];
+                            ++activeClassCounts[elemClass];
+                            handle = activeElem->nextElemHandleInEffect;
+                        }
+                    }
+
+                    char trace[512];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][FX EFFECT INVENTORY] n=%u name=%.112s defs=%u(one=%u loop=%u) defTypes=(%u,%u,%u,%u,%u,%u,%u,%u) activeClass=(%u,%u,%u) activeTypes=(%u,%u,%u,%u,%u,%u,%u,%u)\\n",
+                        inventoryIndex,
+                        effect->def->name ? effect->def->name : "<null>",
+                        defElemCount,
+                        static_cast<unsigned>(effect->def->elemDefCountOneShot),
+                        static_cast<unsigned>(effect->def->elemDefCountLooping),
+                        defTypeCounts[0], defTypeCounts[1], defTypeCounts[2], defTypeCounts[3],
+                        defTypeCounts[4], defTypeCounts[5], defTypeCounts[6], defTypeCounts[7],
+                        activeClassCounts[0], activeClassCounts[1], activeClassCounts[2],
+                        activeTypeCounts[0], activeTypeCounts[1], activeTypeCounts[2], activeTypeCounts[3],
+                        activeTypeCounts[4], activeTypeCounts[5], activeTypeCounts[6], activeTypeCounts[7]);
+                    Switch_LogWrite(trace);
+                }
+            }
+        }
+#endif
         FX_DrawSpriteEffect(system, effect, drawTime);
         FX_DrawNonSpriteEffect(system, effect, 2u, drawTime);
         if (effect->firstTrailHandle != 0xFFFF)
