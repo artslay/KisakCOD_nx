@@ -1888,7 +1888,10 @@ bool VulkanBackend::SynchronizeActiveFrame()
         return false;
     }
 
-    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    // This may be an intermediate split of the frame. It can contain
+    // graphics and transfer work, so the acquire semaphore must protect all
+    // stages before any later swapchain access is submitted.
+    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     VkSubmitInfo submit{};
     submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     if (m_imageAvailablePending)
@@ -2094,7 +2097,13 @@ bool VulkanBackend::EndFrame()
         return false;
     }
 
-    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    // The normal presentation path blits the offscreen render target into
+    // the acquired swapchain image. Its first swapchain access is a transfer
+    // operation, not color-attachment output. Match the wait stage to the
+    // actual first use so transfer commands cannot race image acquisition.
+    VkPipelineStageFlags waitStage = m_presentSourceImage
+        ? VK_PIPELINE_STAGE_TRANSFER_BIT
+        : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit{};
     submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     if (m_imageAvailablePending)
