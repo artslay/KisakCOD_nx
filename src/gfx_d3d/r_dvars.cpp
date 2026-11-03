@@ -1527,7 +1527,17 @@
      flags = 0;
      defaultState = 1;
      helpString = "Enable worker thread";
-     if (workerIndex + 2 >= Sys_GetCpuCount() || !sys_smp_allowed->current.enabled)
+#ifdef __SWITCH__
+     // Switch threads are not pinned to dedicated cores (Win_SetThreadLock is
+     // intentionally a no-op). Allow two renderer workers on the three CPU
+     // cores exposed to the title; the main/backend threads can share those
+     // cores while either is waiting. A second worker remains disabled on a
+     // two-core process, where it would add contention without spare capacity.
+     const bool insufficientThreads = workerIndex + 2u > Sys_GetCpuCount();
+#else
+     const bool insufficientThreads = workerIndex + 2u >= Sys_GetCpuCount();
+#endif
+     if (insufficientThreads || !sys_smp_allowed->current.enabled)
      {
          flags = 64;
          defaultState = 0;
