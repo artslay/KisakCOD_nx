@@ -175,7 +175,7 @@ static void Switch_InitCpuTopology()
         InfoType_CoreMask,
         CUR_PROCESS_HANDLE,
         0);
-    if (R_FAILED(result))
+    if (result != 0)
     {
         Sys_Error(
             "Switch failed to query process CPU core mask: result=0x%08x",
