@@ -13640,6 +13640,46 @@ void __cdecl Load_LeafBrushArray(bool atStreamStart, int32_t count)
     Load_Stream(atStreamStart, (uint8_t *)varLeafBrush, 2 * count);
 }
 
+#ifdef __SWITCH__
+static DynEntityDef *Switch_AllocClipMapDynEntityDefArray(uint16_t count)
+{
+    // Keep the serialized 32-bit array at its original 16-byte stream
+    // alignment, but never expand its records in the stream buffer. Each
+    // native DynEntityDef contains widened ARM64 pointers and is larger
+    // than the 96-byte fastfile record.
+    (void)AllocLoad_FxElemVisStateSample();
+
+    if (!count)
+        return nullptr;
+
+    const size_t nativeBytes =
+        static_cast<size_t>(count) * sizeof(DynEntityDef);
+    if (nativeBytes > UINT32_MAX)
+    {
+        Com_Error(
+            ERR_DROP,
+            "Switch clipMap dyn entity array is too large (%u entries)",
+            static_cast<unsigned>(count));
+        return nullptr;
+    }
+
+    DynEntityDef *nativeDefs =
+        reinterpret_cast<DynEntityDef *>(
+            DB_AllocSwitchAssetMemory(
+                static_cast<uint32_t>(nativeBytes),
+                "SwitchDynEntityDefArray",
+                22));
+    if (!nativeDefs)
+    {
+        Com_Error(ERR_FATAL, "Switch clipMap dyn entity allocation failed");
+        return nullptr;
+    }
+
+    std::memset(nativeDefs, 0, nativeBytes);
+    return nativeDefs;
+}
+#endif
+
 void __cdecl Load_clipMap_t(bool atStreamStart)
 {
     #ifdef __SWITCH__
@@ -13826,13 +13866,25 @@ void __cdecl Load_clipMap_t(bool atStreamStart)
     }
     if (varclipMap_t->dynEntDefList[0])
     {
-        varclipMap_t->dynEntDefList[0] = (DynEntityDef *)AllocLoad_FxElemVisStateSample();
+#ifdef __SWITCH__
+        varclipMap_t->dynEntDefList[0] =
+            Switch_AllocClipMapDynEntityDefArray(varclipMap_t->dynEntCount[0]);
+#else
+        varclipMap_t->dynEntDefList[0] =
+            (DynEntityDef *)AllocLoad_FxElemVisStateSample();
+#endif
         varDynEntityDef = varclipMap_t->dynEntDefList[0];
         Load_DynEntityDefArray(1, varclipMap_t->dynEntCount[0]);
     }
     if (varclipMap_t->dynEntDefList[1])
     {
-        varclipMap_t->dynEntDefList[1] = (DynEntityDef *)AllocLoad_FxElemVisStateSample();
+#ifdef __SWITCH__
+        varclipMap_t->dynEntDefList[1] =
+            Switch_AllocClipMapDynEntityDefArray(varclipMap_t->dynEntCount[1]);
+#else
+        varclipMap_t->dynEntDefList[1] =
+            (DynEntityDef *)AllocLoad_FxElemVisStateSample();
+#endif
         varDynEntityDef = varclipMap_t->dynEntDefList[1];
         Load_DynEntityDefArray(1, varclipMap_t->dynEntCount[1]);
     }
