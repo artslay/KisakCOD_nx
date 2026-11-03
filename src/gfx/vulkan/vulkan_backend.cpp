@@ -614,6 +614,11 @@ void VulkanBackend::Shutdown()
     std::lock_guard<std::mutex> queueLock(m_queueMutex);
     if (m_device)
         vkDeviceWaitIdle(m_device);
+    {
+        std::lock_guard<std::mutex> bufferUpdateLock(m_bufferUpdatesMutex);
+        m_queuedBufferUpdates.clear();
+        m_hasQueuedBufferUpdates.store(false, std::memory_order_release);
+    }
     FlushDeferredResources();
 
     // Dummy sampler is owned by m_samplers; destroy it only there.

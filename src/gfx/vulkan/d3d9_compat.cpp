@@ -5801,13 +5801,24 @@ HRESULT KisakVkBuffer::Unlock()
                 while (cursor < lockSize && shadowBytes[cursor] != mappedBytes[cursor])
                     ++cursor;
                 const size_t changedSize = cursor - changedStart;
-                if (!backend->QueueMappedBufferUpdate(
+                const VkDeviceSize changedOffset =
+                    static_cast<VkDeviceSize>(lockOffset) + changedStart;
+                const bool alignedChangedRange =
+                    (changedOffset & 3u) == 0 && (changedSize & 3u) == 0;
+                const bool queued = alignedChangedRange
+                    ? backend->QueueBufferUpdate(
                         buffer,
-                        static_cast<VkDeviceSize>(lockOffset) + changedStart,
+                        changedOffset,
+                        shadowBytes + changedStart,
+                        changedSize)
+                    : backend->QueueMappedBufferUpdate(
+                        buffer,
+                        changedOffset,
                         mappedBytes + changedStart,
                         shadowBytes + changedStart,
                         changedSize,
-                        false))
+                        true);
+                if (!queued)
                     return E_FAIL;
             }
         }
