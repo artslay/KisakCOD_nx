@@ -3741,7 +3741,9 @@ bool VulkanBackend::QueueBufferUpdate(
         return false;
 
     std::lock_guard<std::mutex> lock(m_bufferUpdatesMutex);
-    const size_t dataOffset = m_queuedBufferUpdateData.size();
+    const size_t dataOffset =
+        (m_queuedBufferUpdateData.size() + 3u) & ~size_t(3u);
+    m_queuedBufferUpdateData.resize(dataOffset, 0);
     m_queuedBufferUpdateData.insert(
         m_queuedBufferUpdateData.end(),
         static_cast<const uint8_t *>(data),
@@ -3792,8 +3794,10 @@ bool VulkanBackend::QueueMappedBufferUpdate(
     update.mappedDestination = mappedDestination;
     update.mappedWrite = true;
     update.waitForGpu = waitForGpu;
-    update.dataOffset = m_queuedBufferUpdateData.size();
+    update.dataOffset =
+        (m_queuedBufferUpdateData.size() + 3u) & ~size_t(3u);
     update.size = size;
+    m_queuedBufferUpdateData.resize(update.dataOffset, 0);
     m_queuedBufferUpdateData.insert(
         m_queuedBufferUpdateData.end(),
         static_cast<const uint8_t *>(data),
@@ -3844,7 +3848,8 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
             QueuedBufferUpdate copy = source;
             if (copy.size != 0)
             {
-                copy.dataOffset = mergedData.size();
+                copy.dataOffset = (mergedData.size() + 3u) & ~size_t(3u);
+                mergedData.resize(copy.dataOffset, 0);
                 mergedData.insert(
                     mergedData.end(),
                     sourceData.data() + source.dataOffset,
