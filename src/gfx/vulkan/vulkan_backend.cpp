@@ -3864,105 +3864,155 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
         m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
     };
 
-    for (size_t i = 0; i < m_pendingBufferUpdates.size(); ++i)
+    const auto recordMappedWrite = [this](
+        const QueuedBufferUpdate &update,
+        const uint8_t *updateData)
     {
-        QueuedBufferUpdate &update = m_pendingBufferUpdates[i];
-        const uint8_t *updateData = update.size
-            ? m_pendingBufferUpdateData.data() + update.dataOffset
-            : nullptr;
+        if (update.size != 0)
+            std::memcpy(update.mappedDestination, updateData, update.size);
 
-        if (update.mappedWrite)
+        VkBufferMemoryBarrier hostWrite{};
+        hostWrite.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        hostWrite.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        hostWrite.dstAccessMask =
+            VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+            VK_ACCESS_INDEX_READ_BIT |
+            VK_ACCESS_TRANSFER_READ_BIT;
+        hostWrite.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        hostWrite.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        hostWrite.buffer = update.destination;
+        hostWrite.offset = update.destinationOffset;
+        hostWrite.size = static_cast<VkDeviceSize>(update.size);
+        vkCmdPipelineBarrier(
+            m_commandBuffer,
+            VK_PIPELINE_STAGE_HOST_BIT,
+            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 1, &hostWrite, 0, nullptr);
+    };
+
+    size_t i = 0;
+    while (i < m_pendingBufferUpdates.size())
+    {
+        QueuedBufferUpdate &firstUpdate = m_pendingBufferUpdates[i];
+        if (firstUpdate.mappedWrite && firstUpdate.waitForGpu)
         {
-            if (update.waitForGpu && !SynchronizeActiveFrame())
+            // This uncommon unaligned tail can overlap previous GPU reads.
+            // The backend, never a worker, owns the frame split and wait.
+            if (!SynchronizeActiveFrame())
             {
                 requeueRemaining(i);
                 return false;
             }
-
-            if (update.size != 0)
-                std::memcpy(update.mappedDestination, updateData, update.size);
-
-            VkBufferMemoryBarrier hostWrite{};
-            hostWrite.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-            hostWrite.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-            hostWrite.dstAccessMask =
-                VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
-                VK_ACCESS_INDEX_READ_BIT |
-                VK_ACCESS_TRANSFER_READ_BIT;
-            hostWrite.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            hostWrite.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            hostWrite.buffer = update.destination;
-            hostWrite.offset = update.destinationOffset;
-            hostWrite.size = static_cast<VkDeviceSize>(update.size);
-            vkCmdPipelineBarrier(
-                m_commandBuffer,
-                VK_PIPELINE_STAGE_HOST_BIT,
-                VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-                0, 0, nullptr, 1, &hostWrite, 0, nullptr);
+            const uint8_t *updateData = m_pendingBufferUpdateData.data() +
+                firstUpdate.dataOffset;
+            recordMappedWrite(firstUpdate, updateData);
+            ++i;
             continue;
         }
 
-        VkDescriptorBufferInfo source{};
-        if (!AllocateUniform(updateData, update.size, &source))
+        // Stage a whole consecutive batch with one aligned uniform-ring
+        // allocation instead of burning 256 bytes for every tiny menu upload.
+        size_t segmentEnd = i;
+        size_t dataBegin = m_pendingBufferUpdateData.size();
+        size_t dataEnd = 0;
+        while (segmentEnd < m_pendingBufferUpdates.size())
         {
-            if (!SynchronizeActiveFrame() ||
-                !AllocateUniform(updateData, update.size, &source))
+            const QueuedBufferUpdate &update =
+                m_pendingBufferUpdates[segmentEnd];
+            if (update.mappedWrite && update.waitForGpu)
+                break;
+            if (update.size != 0)
             {
-                requeueRemaining(i);
-                return false;
+                dataBegin = std::min(dataBegin, update.dataOffset);
+                dataEnd = std::max(dataEnd, update.dataOffset + update.size);
+            }
+            ++segmentEnd;
+        }
+
+        VkDescriptorBufferInfo source{};
+        const bool hasStagedData = dataEnd > dataBegin;
+        if (hasStagedData)
+        {
+            const size_t stagedSize = dataEnd - dataBegin;
+            const void *stagedData =
+                m_pendingBufferUpdateData.data() + dataBegin;
+            if (!AllocateUniform(stagedData, stagedSize, &source))
+            {
+                if (!SynchronizeActiveFrame() ||
+                    !AllocateUniform(stagedData, stagedSize, &source))
+                {
+                    requeueRemaining(i);
+                    return false;
+                }
             }
         }
 
-        VkBufferMemoryBarrier beforeCopy[2]{};
-        beforeCopy[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        beforeCopy[0].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        beforeCopy[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        beforeCopy[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        beforeCopy[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        beforeCopy[0].buffer = m_uniformRing;
-        beforeCopy[0].offset = source.offset;
-        beforeCopy[0].size = static_cast<VkDeviceSize>(update.size);
+        for (; i < segmentEnd; ++i)
+        {
+            QueuedBufferUpdate &update = m_pendingBufferUpdates[i];
+            const uint8_t *updateData = m_pendingBufferUpdateData.data() +
+                update.dataOffset;
+            if (update.mappedWrite)
+            {
+                recordMappedWrite(update, updateData);
+                continue;
+            }
 
-        beforeCopy[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        beforeCopy[1].srcAccessMask =
-            VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
-            VK_ACCESS_INDEX_READ_BIT |
-            VK_ACCESS_TRANSFER_WRITE_BIT;
-        beforeCopy[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        beforeCopy[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        beforeCopy[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        beforeCopy[1].buffer = update.destination;
-        beforeCopy[1].offset = update.destinationOffset;
-        beforeCopy[1].size = static_cast<VkDeviceSize>(update.size);
-        vkCmdPipelineBarrier(
-            m_commandBuffer,
-            VK_PIPELINE_STAGE_HOST_BIT |
-                VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
+            const VkDeviceSize sourceOffset =
+                source.offset + (update.dataOffset - dataBegin);
+
+            VkBufferMemoryBarrier beforeCopy[2]{};
+            beforeCopy[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            beforeCopy[0].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+            beforeCopy[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            beforeCopy[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            beforeCopy[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            beforeCopy[0].buffer = m_uniformRing;
+            beforeCopy[0].offset = sourceOffset;
+            beforeCopy[0].size = static_cast<VkDeviceSize>(update.size);
+
+            beforeCopy[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            beforeCopy[1].srcAccessMask =
+                VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
+                VK_ACCESS_INDEX_READ_BIT |
+                VK_ACCESS_TRANSFER_WRITE_BIT;
+            beforeCopy[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            beforeCopy[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            beforeCopy[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            beforeCopy[1].buffer = update.destination;
+            beforeCopy[1].offset = update.destinationOffset;
+            beforeCopy[1].size = static_cast<VkDeviceSize>(update.size);
+            vkCmdPipelineBarrier(
+                m_commandBuffer,
+                VK_PIPELINE_STAGE_HOST_BIT |
+                    VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 2, beforeCopy, 0, nullptr);
+                0, 0, nullptr, 2, beforeCopy, 0, nullptr);
 
-        VkBufferCopy copy{};
-        copy.srcOffset = source.offset;
-        copy.dstOffset = update.destinationOffset;
-        copy.size = static_cast<VkDeviceSize>(update.size);
-        vkCmdCopyBuffer(m_commandBuffer, m_uniformRing, update.destination, 1, &copy);
+            VkBufferCopy copy{};
+            copy.srcOffset = sourceOffset;
+            copy.dstOffset = update.destinationOffset;
+            copy.size = static_cast<VkDeviceSize>(update.size);
+            vkCmdCopyBuffer(
+                m_commandBuffer, m_uniformRing, update.destination, 1, &copy);
 
-        VkBufferMemoryBarrier afterCopy{};
-        afterCopy.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        afterCopy.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        afterCopy.dstAccessMask =
-            VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT;
-        afterCopy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        afterCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        afterCopy.buffer = update.destination;
-        afterCopy.offset = update.destinationOffset;
-        afterCopy.size = static_cast<VkDeviceSize>(update.size);
-        vkCmdPipelineBarrier(
-            m_commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
-            0, 0, nullptr, 1, &afterCopy, 0, nullptr);
+            VkBufferMemoryBarrier afterCopy{};
+            afterCopy.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            afterCopy.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            afterCopy.dstAccessMask =
+                VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT;
+            afterCopy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            afterCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            afterCopy.buffer = update.destination;
+            afterCopy.offset = update.destinationOffset;
+            afterCopy.size = static_cast<VkDeviceSize>(update.size);
+            vkCmdPipelineBarrier(
+                m_commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+                0, 0, nullptr, 1, &afterCopy, 0, nullptr);
+        }
     }
 
     return true;
