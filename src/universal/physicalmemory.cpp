@@ -2,6 +2,10 @@
 #include "physicalmemory.h"
 
 #include <cstdlib>
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
 
 #include "assertive.h"
 #include <qcommon/mem_track.h>
@@ -137,10 +141,55 @@ void __cdecl PMem_FreeInPrim(PhysicalMemoryPrim *prim, const char *name)
     {
         if (prim->allocList[allocIndex].name == name)
         {
+#ifdef __SWITCH__
+            const uint32_t freeBefore = PMem_GetFreeAmount();
+            if (allocIndex + 1u < prim->allocListCount)
+            {
+                char trace[256];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][PMEM FREE HOLE] name=%s index=%u count=%u allocType=%u freeBefore=%u\n",
+                    name ? name : "(null)",
+                    allocIndex,
+                    prim->allocListCount,
+                    prim == &g_mem.prim[1] ? 1u : 0u,
+                    freeBefore);
+                Switch_LogWrite(trace);
+            }
+#endif
             PMem_FreeIndex(prim, allocIndex);
+#ifdef __SWITCH__
+            {
+                char trace[256];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][PMEM FREE] name=%s index=%u freeBefore=%u freeAfter=%u lowPos=%u highPos=%u\n",
+                    name ? name : "(null)",
+                    allocIndex,
+                    freeBefore,
+                    PMem_GetFreeAmount(),
+                    g_mem.prim[0].pos,
+                    g_mem.prim[1].pos);
+                Switch_LogWrite(trace);
+            }
+#endif
             return;
         }
     }
+#ifdef __SWITCH__
+    {
+        char trace[256];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][PMEM FREE MISS] name=%s allocType=%u count=%u active=%s free=%u\n",
+            name ? name : "(null)",
+            prim == &g_mem.prim[1] ? 1u : 0u,
+            prim->allocListCount,
+            prim->allocName ? prim->allocName : "(none)",
+            PMem_GetFreeAmount());
+        Switch_LogWrite(trace);
+    }
+#endif
 }
 
 void __cdecl PMem_FreeIndex(PhysicalMemoryPrim *prim, uint32_t allocIndex)
@@ -225,6 +274,60 @@ uint8_t *__cdecl PMem_Alloc(
         g_overAllocatedSize = size + lowPos - g_mem.prim[1].pos;
         if (g_overAllocatedSize > 0)
         {
+#ifdef __SWITCH__
+            {
+                char trace[384];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][PMEM OOM] owner=%s allocType=%u request=%u align=%u free=%u lowPos=%u highPos=%u lowCount=%u highCount=%u shortage=%d\n",
+                    prim->allocName ? prim->allocName : "(none)",
+                    allocType,
+                    size,
+                    alignment,
+                    PMem_GetFreeAmount(),
+                    g_mem.prim[0].pos,
+                    g_mem.prim[1].pos,
+                    g_mem.prim[0].allocListCount,
+                    g_mem.prim[1].allocListCount,
+                    g_overAllocatedSize);
+                Switch_LogWrite(trace);
+            }
+            {
+                uint32_t top = g_mem.prim[0].pos;
+                for (int32_t i = static_cast<int32_t>(g_mem.prim[0].allocListCount) - 1; i >= 0; --i)
+                {
+                    const PhysicalMemoryAllocation &entry = g_mem.prim[0].allocList[i];
+                    const uint32_t used = top - entry.pos;
+                    char trace[256];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][PMEM ACTIVE] pool=low name=%s bytes=%u pos=%u index=%d\n",
+                        entry.name ? entry.name : "(freed)",
+                        used,
+                        entry.pos,
+                        i);
+                    Switch_LogWrite(trace);
+                    top = entry.pos;
+                }
+            }
+            for (uint32_t i = 0; i < g_mem.prim[1].allocListCount; ++i)
+            {
+                const PhysicalMemoryAllocation &entry = g_mem.prim[1].allocList[i];
+                const uint32_t bottom = i + 1u < g_mem.prim[1].allocListCount
+                    ? g_mem.prim[1].allocList[i + 1u].pos
+                    : g_mem.prim[1].pos;
+                const uint32_t used = entry.pos - bottom;
+                char trace[256];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][PMEM ACTIVE] pool=high name=%s bytes=%u pos=%u index=%u\n",
+                    entry.name ? entry.name : "(freed)",
+                    used,
+                    entry.pos,
+                    i);
+                Switch_LogWrite(trace);
+            }
+#endif
             Com_PrintError(CON_CHANNEL_SYSTEM, "Need %i more bytes of ram for alloc to succeed\n", g_overAllocatedSize);
             Sys_OutOfMemErrorInternal(".\\universal\\physicalmemory.cpp", 608);
         }
