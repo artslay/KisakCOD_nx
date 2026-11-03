@@ -186,6 +186,9 @@ void __cdecl SaveMemory_InitializeGameSave(SaveGame *save)
     if (!save->isUsingGlobalBuffer)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\savememory.cpp", 337, 0, "%s", "save->isUsingGlobalBuffer");
     MemFile_InitForWriting(&save->memFile, 1572864, save->memFile.buffer, 1, 0);
+    // A new write attempt must not inherit the previous contents' device
+    // status. Restart-save scheduling uses this flag to verify persistence.
+    save->isWrittenToDevice = 0;
     save->saveState = SAVING;
     saveMemoryGlob.recentLoadTime = 0;
 }
