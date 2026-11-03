@@ -565,7 +565,17 @@ uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, Gf
     g_frameStatsCur.fxIndexCount += 6144;
     RB_TrackImmediatePrims(GFX_PRIM_STATS_FX);
     iassert( g_primStats );
+#ifdef __SWITCH__
+    // Particle-cloud quads are generated FX cards; allow both sides so their
+    // view/velocity-dependent winding cannot cull every rain or snow layer.
+    if (context.state->prim.device)
+        context.state->prim.device->SetParticleCloudPassActive(true);
+#endif
     R_DrawIndexedPrimitive(&context.state->prim, &args);
+#ifdef __SWITCH__
+    if (context.state->prim.device)
+        context.state->prim.device->SetParticleCloudPassActive(false);
+#endif
     iassert( g_primStats );
     g_primStats->staticVertexCount += args.vertexCount;
     g_primStats->staticIndexCount += 3 * args.triCount;
