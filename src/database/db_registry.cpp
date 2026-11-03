@@ -1268,6 +1268,23 @@ void __cdecl DB_FreeXZoneMemory(XZoneMemory *zoneMem)
 
 void __cdecl DB_UnloadXZoneMemory(XZone *zone)
 {
+#ifdef __SWITCH__
+    {
+        uint64_t blockBytes = 0;
+        for (uint32_t i = 0; i < 9; ++i)
+            blockBytes += zone->mem.blocks[i].size;
+        char trace[320];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][DB ZONE FREE BEGIN] name=%s flags=0x%x allocType=%u blocks=%llu pmemFree=%u\n",
+            zone->name,
+            static_cast<unsigned>(zone->flags),
+            static_cast<unsigned>(zone->allocType),
+            static_cast<unsigned long long>(blockBytes),
+            PMem_GetFreeAmount());
+        Switch_LogWrite(trace);
+    }
+#endif
     DB_FreeXZoneMemory(&zone->mem);
     Com_Printf(CON_CHANNEL_SYSTEM, "Unloaded fastfile %s\n", zone->name);
     PMem_Free(zone->name, zone->allocType);
@@ -1906,6 +1923,36 @@ void __cdecl DB_LoadXAssets(XZoneInfo *zoneInfo, uint32_t zoneCount, int32_t syn
     for (j = 0; j < zoneCount; ++j)
     {
         zoneFreeFlags = zoneInfo[j].freeFlags;
+#ifdef __SWITCH__
+        {
+            char trace[320];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][DB UNLOAD REQUEST] incoming=%s allocFlags=0x%x freeFlags=0x%x loadedZones=%u pmemFree=%u\n",
+                zoneInfo[j].name ? zoneInfo[j].name : "(null)",
+                static_cast<unsigned>(zoneInfo[j].allocFlags),
+                static_cast<unsigned>(zoneFreeFlags),
+                static_cast<unsigned>(g_zoneCount),
+                PMem_GetFreeAmount());
+            Switch_LogWrite(trace);
+        }
+        for (i = g_zoneCount - 1; i >= 0; --i)
+        {
+            zoneIndex = g_zoneHandles[i];
+            const XZone &candidate = g_zones[zoneIndex];
+            char trace[256];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][DB ZONE CANDIDATE] incoming=%s slot=%u name=%s flags=0x%x allocType=%u matches=%u\n",
+                zoneInfo[j].name ? zoneInfo[j].name : "(null)",
+                zoneIndex,
+                candidate.name[0] ? candidate.name : "(empty)",
+                static_cast<unsigned>(candidate.flags),
+                static_cast<unsigned>(candidate.allocType),
+                ((zoneFreeFlags & candidate.flags) != 0) ? 1u : 0u);
+            Switch_LogWrite(trace);
+        }
+#endif
         for (i = g_zoneCount - 1; i >= 0; --i)
         {
             zoneIndex = g_zoneHandles[i];
