@@ -10,8 +10,14 @@
 #include <vector>
 #include <atomic>
 #include <setjmp.h>
+
+// libnx exports these routines with the C ABI. Its kernel headers do not
+// provide their own C++ linkage wrapper, so include them explicitly as C.
+extern "C"
+{
 #include <switch/kernel/thread.h>
 #include <switch/kernel/svc.h>
+}
 
 extern void Sys_Print(const char *text);
 extern "C" void SwitchPrepareRustTlsForCurrentThread();
