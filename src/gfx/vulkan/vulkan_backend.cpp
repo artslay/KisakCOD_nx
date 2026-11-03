@@ -2265,27 +2265,33 @@ void *VulkanBackend::CreateQuery(uint32_t queryType)
         return nullptr;
 
     auto *query = new Query;
-
     VkResult result = VK_SUCCESS;
 
     if (queryType == 8) // D3DQUERYTYPE_EVENT
     {
         query->kind = Query::Kind::Event;
-
         VkEventCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
-        result = vkCreateEvent(m_device, &info, nullptr, &query->event);
+        for (uint32_t slot = 0; slot < FramesInFlight; ++slot)
+        {
+            result = vkCreateEvent(m_device, &info, nullptr, &query->events[slot]);
+            if (result != VK_SUCCESS)
+                break;
+        }
     }
     else if (queryType == 9) // D3DQUERYTYPE_OCCLUSION
     {
         query->kind = Query::Kind::Occlusion;
-
         VkQueryPoolCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
         info.queryType = VK_QUERY_TYPE_OCCLUSION;
         info.queryCount = 1;
-
-        result = vkCreateQueryPool(m_device, &info, nullptr, &query->pool);
+        for (uint32_t slot = 0; slot < FramesInFlight; ++slot)
+        {
+            result = vkCreateQueryPool(m_device, &info, nullptr, &query->pools[slot]);
+            if (result != VK_SUCCESS)
+                break;
+        }
     }
     else
     {
@@ -2295,6 +2301,10 @@ void *VulkanBackend::CreateQuery(uint32_t queryType)
 
     if (result != VK_SUCCESS)
     {
+        for (VkEvent event : query->events)
+            if (event) vkDestroyEvent(m_device, event, nullptr);
+        for (VkQueryPool pool : query->pools)
+            if (pool) vkDestroyQueryPool(m_device, pool, nullptr);
         SetError("Vulkan query creation failed", result);
         delete query;
         return nullptr;
@@ -2309,16 +2319,23 @@ void VulkanBackend::ReleaseQuery(void *queryPtr)
     if (!query)
         return;
 
+    // Query objects can be referenced by either in-flight frame slot.
+    // Retain the existing synchronous release contract before destroying them.
     if (m_device && m_graphicsQueue)
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
-        vkQueueWaitIdle(m_graphicsQueue);
+        const VkResult idleResult = vkQueueWaitIdle(m_graphicsQueue);
+        if (idleResult != VK_SUCCESS && idleResult != VK_ERROR_DEVICE_LOST)
+            SetError("vkQueueWaitIdle failed while releasing a query", idleResult);
     }
 
-    if (query->event)
-        vkDestroyEvent(m_device, query->event, nullptr);
-    if (query->pool)
-        vkDestroyQueryPool(m_device, query->pool, nullptr);
+    if (m_device)
+    {
+        for (VkEvent event : query->events)
+            if (event) vkDestroyEvent(m_device, event, nullptr);
+        for (VkQueryPool pool : query->pools)
+            if (pool) vkDestroyQueryPool(m_device, pool, nullptr);
+    }
     delete query;
 }
 
@@ -2328,20 +2345,24 @@ void VulkanBackend::BeginQuery(void *queryPtr)
     if (!query || !m_commandBuffer || !m_frameActive || m_deviceLost)
         return;
 
-    query->active = false;
-    query->issued = false;
+    const uint32_t slot = m_currentFrameSlot;
+    query->active[slot] = false;
+    query->issued[slot] = false;
 
     if (query->kind == Query::Kind::Event)
     {
-        const VkResult result = vkResetEvent(m_device, query->event);
+        // Each frame slot owns its event. BeginFrame has waited for this
+        // slot's fence, so resetting it cannot race the preceding frame.
+        const VkResult result = vkResetEvent(m_device, query->events[slot]);
         if (result != VK_SUCCESS)
             SetError("vkResetEvent failed for event query", result);
         return;
     }
 
-    vkCmdResetQueryPool(m_commandBuffer, query->pool, 0, 1);
-    vkCmdBeginQuery(m_commandBuffer, query->pool, 0, 0);
-    query->active = true;
+    // The pool for this slot is not in flight: BeginFrame waited its fence.
+    vkCmdResetQueryPool(m_commandBuffer, query->pools[slot], 0, 1);
+    vkCmdBeginQuery(m_commandBuffer, query->pools[slot], 0, 0);
+    query->active[slot] = true;
 }
 
 void VulkanBackend::EndQuery(void *queryPtr)
@@ -2350,29 +2371,31 @@ void VulkanBackend::EndQuery(void *queryPtr)
     if (!query || !m_commandBuffer || !m_frameActive || m_deviceLost)
         return;
 
+    const uint32_t slot = m_currentFrameSlot;
     if (query->kind == Query::Kind::Event)
     {
-        // dx.fencePool reuses eight event queries cyclically. Record reset and
-        // set in queue order so a prior signaled event cannot satisfy a newer
-        // D3D9 Issue(END) request.
+        // dx.fencePool cycles event queries. Keeping one VkEvent per frame slot
+        // prevents a new frame from resetting an event still used by the GPU.
         vkCmdResetEvent(
             m_commandBuffer,
-            query->event,
+            query->events[slot],
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
         vkCmdSetEvent(
             m_commandBuffer,
-            query->event,
+            query->events[slot],
             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
-        query->issued = true;
+        query->issued[slot] = true;
+        query->latestIssuedFrameSlot = slot;
         return;
     }
 
-    if (!query->active)
+    if (!query->active[slot])
         return;
 
-    vkCmdEndQuery(m_commandBuffer, query->pool, 0);
-    query->active = false;
-    query->issued = true;
+    vkCmdEndQuery(m_commandBuffer, query->pools[slot], 0);
+    query->active[slot] = false;
+    query->issued[slot] = true;
+    query->latestIssuedFrameSlot = slot;
 }
 
 bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
@@ -2382,8 +2405,7 @@ bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
         return false;
 
     // A lost Vulkan device will never signal outstanding event/occlusion
-    // queries. Treat those GPU operations as cancelled/completed so the D3D9
-    // fence polling loops can unwind instead of spinning forever on S_FALSE.
+    // queries. Treat those GPU operations as cancelled/completed so polling unwinds.
     if (m_deviceLost)
     {
         if (result)
@@ -2391,12 +2413,13 @@ bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
         return true;
     }
 
-    if (!query->issued)
+    const uint32_t slot = query->latestIssuedFrameSlot;
+    if (slot >= FramesInFlight || !query->issued[slot])
         return false;
 
     if (query->kind == Query::Kind::Event)
     {
-        const VkResult status = vkGetEventStatus(m_device, query->event);
+        const VkResult status = vkGetEventStatus(m_device, query->events[slot]);
         if (status != VK_EVENT_SET)
         {
             if (status == VK_ERROR_DEVICE_LOST)
@@ -2412,7 +2435,7 @@ bool VulkanBackend::GetQueryResult(void *queryPtr, uint64_t *result)
     uint64_t values[2]{};
     const VkResult status = vkGetQueryPoolResults(
         m_device,
-        query->pool,
+        query->pools[slot],
         0,
         1,
         sizeof(values),
