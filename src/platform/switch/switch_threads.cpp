@@ -421,10 +421,6 @@ void __cdecl Sys_ResumeThread(ThreadContext_t context)
         control.suspended = false;
     }
     control.cv.notify_all();
-
-    if (context == THREAD_CONTEXT_WORKER0 ||
-        context == THREAD_CONTEXT_WORKER1)
-        SetSwitchEvent(g_workerCmdEvent);
 }
 
 void __cdecl Sys_SuspendThread(ThreadContext_t context)
@@ -435,10 +431,6 @@ void __cdecl Sys_SuspendThread(ThreadContext_t context)
         std::lock_guard<std::mutex> lock(control.mutex);
         control.suspended = true;
     }
-
-    if (context == THREAD_CONTEXT_WORKER0 ||
-        context == THREAD_CONTEXT_WORKER1)
-        SetSwitchEvent(g_workerCmdEvent);
 }
 
 void __cdecl Sys_SuspendDatabaseThread(ThreadOwner owner)
@@ -542,9 +534,19 @@ int __cdecl Sys_WaitBackendEvent()
 
 void __cdecl Sys_WaitForWorkerCmd()
 {
-    WaitForThreadResume(g_threadContext);
+    const bool isWorker =
+        g_threadContext == THREAD_CONTEXT_WORKER0 ||
+        g_threadContext == THREAD_CONTEXT_WORKER1;
+
+    // The main thread also calls this routine while draining worker queues.
+    // Only worker contexts participate in the cooperative suspend gate.
+    if (isWorker)
+        WaitForThreadResume(g_threadContext);
+
     WaitSwitchEvent(g_workerCmdEvent, 1);
-    WaitForThreadResume(g_threadContext);
+
+    if (isWorker)
+        WaitForThreadResume(g_threadContext);
 }
 void __cdecl Sys_SetUpdateSpotLightEffectEvent()
 {
