@@ -10536,6 +10536,15 @@ bool IDirect3DDevice9::PrepareDraw()
         return false;
     }
 
+    // Drain worker-produced uploads before this function records viewport,
+    // scissor, descriptors, or rendering state. A backend-only frame split
+    // therefore cannot discard state belonging to the draw being prepared.
+    if (!m_backend->FlushQueuedBufferUpdates())
+    {
+        Switch_LogWrite("[KisakCOD][VK DRAW] fail=queued_buffer_uploads\n");
+        return false;
+    }
+
     VkImage colorImage = m_color && m_color->texture
         ? m_color->texture->image : m_backend->CurrentSwapchainImage();
     VkImageView colorView = m_color && m_color->texture

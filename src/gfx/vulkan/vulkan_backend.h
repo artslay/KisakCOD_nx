@@ -253,6 +253,8 @@ public:
         VkBuffer destination, VkDeviceSize destinationOffset,
         void *mappedDestination, const void *data, size_t size,
         bool waitForGpu);
+    // Backend draw preparation calls this before recording per-draw Vulkan state.
+    bool FlushQueuedBufferUpdates();
 
     void QueuePresentSource(
         VkImage image,
@@ -306,7 +308,6 @@ private:
     void DestroySwapchain();
     void DestroyDefaultDepth();
     void FlushDeferredResources();
-    bool FlushQueuedBufferUpdates();
     void SetError(const char *message, VkResult result = VK_SUCCESS);
 
     struct QueuedBufferUpdate

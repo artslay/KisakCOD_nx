@@ -3945,9 +3945,6 @@ bool VulkanBackend::EnsureRendering(
     if (!m_frameActive || !colorImage || !colorView || colorFormat == VK_FORMAT_UNDEFINED)
         return false;
 
-    if (!FlushQueuedBufferUpdates())
-        return false;
-
     if (m_renderingActive)
         return true;
 
