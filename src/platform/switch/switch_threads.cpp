@@ -10,8 +10,6 @@
 #include <vector>
 #include <atomic>
 #include <setjmp.h>
-#include <switch/kernel/thread.h>
-#include <switch/kernel/svc.h>
 
 extern void Sys_Print(const char *text);
 extern "C" void SwitchPrepareRustTlsForCurrentThread();
@@ -36,7 +34,6 @@ extern void Switch_LogWrite(const char *msg);
 static SwitchEvent *AsEvent(void *p) { return static_cast<SwitchEvent *>(p); }
 static std::thread g_threads[THREAD_CONTEXT_COUNT];
 static std::atomic<bool> g_threadAlive[THREAD_CONTEXT_COUNT] = {};
-static std::atomic<Thread *> g_nativeThreads[THREAD_CONTEXT_COUNT] = {};
 
 struct SwitchThreadControl
 {
@@ -170,7 +167,6 @@ void __cdecl Sys_InitMainThread()
 {
     g_switchThreadStage = "main/init";
     g_threadContext = THREAD_CONTEXT_MAIN;
-    g_nativeThreads[THREAD_CONTEXT_MAIN].store(threadGetSelf(), std::memory_order_release);
     threadId[THREAD_CONTEXT_MAIN] = Sys_GetCurrentThreadId();
     threadHandle[THREAD_CONTEXT_MAIN] = nullptr;
     g_switchThreadValues[0] = nullptr;
@@ -186,7 +182,6 @@ void __cdecl Sys_InitThread(ThreadContext_t context)
 {
     g_switchThreadStage = "thread/init";
     g_threadContext = context;
-    g_nativeThreads[context].store(threadGetSelf(), std::memory_order_release);
     threadId[context] = Sys_GetCurrentThreadId();
     g_switchThreadValues[0] = g_values[context][0];
 
@@ -307,7 +302,6 @@ void __cdecl Sys_CreateThread(void (__cdecl *function)(uint32_t), ThreadContext_
         g_switchThreadStage = "thread/callback_enter";
         function((uint32_t)context);
         g_switchThreadStage = "thread/callback_return";
-        g_nativeThreads[context].store(nullptr, std::memory_order_release);
         g_threadAlive[context] = false;
     });
     g_switchThreadStage = "create/thread_ctor_done";
@@ -359,25 +353,6 @@ char __cdecl Sys_SpawnDatabaseThread(void (__cdecl *function)(uint32_t))
     Sys_CreateThread(function, THREAD_CONTEXT_DATABASE);
     if (!threadHandle[THREAD_CONTEXT_DATABASE])
         return 0;
-
-    // The Switch pthread layer creates std::threads at libnx's normal
-    // 0x3B priority. Preserve the engine's relative database-thread priority:
-    // one level above normal with multiple CPUs, one below on a single CPU.
-    Thread *databaseThread =
-        g_nativeThreads[THREAD_CONTEXT_DATABASE].load(std::memory_order_acquire);
-    iassert(databaseThread);
-    const uint32_t databasePriority = s_cpuCount > 1 ? 0x3Au : 0x3Cu;
-    const Result priorityResult =
-        svcSetThreadPriority(databaseThread->handle, databasePriority);
-    if (priorityResult != 0)
-    {
-        char error[160];
-        std::snprintf(
-            error, sizeof(error),
-            "[KisakCOD][THREAD] database priority update failed result=0x%08x priority=%u\\n",
-            priorityResult, databasePriority);
-        Switch_LogWrite(error);
-    }
 
     Sys_ResumeThread(THREAD_CONTEXT_DATABASE);
     return 1;
@@ -593,44 +568,7 @@ void __cdecl Sys_ResetUpdateNonDependentEffectsEvent()
 {
     ResetSwitchEvent(g_updateEffectsEvent);
 }
-void __cdecl Sys_SuspendOtherThreads()
-{
-    const uint32_t currentThreadId = Sys_GetCurrentThreadId();
-
-    // Win32 SuspendThread stopped every other engine context immediately.
-    // Use libnx's kernel thread activity API for the same operation rather
-    // than leaving renderer/database/server threads running during shutdown
-    // or while the fatal-error path captures the main-thread state.
-    for (uint32_t contextIndex = 0;
-         contextIndex < THREAD_CONTEXT_COUNT;
-         ++contextIndex)
-    {
-        const ThreadContext_t context =
-            static_cast<ThreadContext_t>(contextIndex);
-        if (context == THREAD_CONTEXT_MAIN ||
-            !threadHandle[context] ||
-            !threadId[context] ||
-            threadId[context] == currentThreadId ||
-            !g_threadAlive[context].load(std::memory_order_acquire))
-            continue;
-
-        Thread *nativeThread =
-            g_nativeThreads[context].load(std::memory_order_acquire);
-        if (!nativeThread)
-            continue;
-
-        const Result pauseResult = threadPause(nativeThread);
-        if (pauseResult != 0)
-        {
-            char error[160];
-            std::snprintf(
-                error, sizeof(error),
-                "[KisakCOD][THREAD] pause failed context=%u result=0x%08x\\n",
-                contextIndex, pauseResult);
-            Switch_LogWrite(error);
-        }
-    }
-}
+void __cdecl Sys_SuspendOtherThreads() {}
 void __cdecl Sys_ReleaseThreadOwnership()
 {
     SetSwitchEvent(g_noThreadOwnershipEvent);

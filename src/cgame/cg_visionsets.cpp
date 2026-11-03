@@ -607,6 +607,13 @@ char __cdecl CG_LookingThroughNightVision(int32_t localClientNum)
     if (CL_GetLocalClientConnectionState(localClientNum) < CA_ACTIVE)
         return 0;
 
+    // The level script advertises night-vision support through the same
+    // configstring used by RegisterNightVisionAssets(). A stale/player-state
+    // NVG flag must not switch the vision channel on maps that did not
+    // precache the goggles.
+    if (*CL_GetConfigString(localClientNum, CS_NIGHTVISION) != '1')
+        return 0;
+
     if (nightVisionDisableEffects->current.enabled)
         return 0;
 
