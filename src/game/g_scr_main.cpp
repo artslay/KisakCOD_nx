@@ -1627,6 +1627,12 @@ void GScr_SetDvar()
     Dvar_SetFromStringByNameFromSource(String, v10, DVAR_SOURCE_SCRIPT);
 }
 
+#ifdef __SWITCH__
+// A script may explicitly select fullscreen output even when the requested
+// value is already the dvar's default (in which case modified stays clear).
+static bool s_cinematicFullscreenScriptOverride;
+#endif
+
 void GScr_SetSavedDvar()
 {
     const char *String; // r30
@@ -1642,6 +1648,10 @@ void GScr_SetSavedDvar()
     char v10[1056]; // [sp+450h] [-420h] BYREF
 
     String = Scr_GetString(0);
+#ifdef __SWITCH__
+    if (!I_stricmp(String, "cg_cinematicFullscreen"))
+        s_cinematicFullscreenScriptOverride = true;
+#endif
     if (Scr_GetType(1) == 3)
     {
         NumParam = Scr_GetNumParam();
@@ -7112,7 +7122,7 @@ static void GScr_UseWorldCinematicOutput()
 {
     const dvar_s *fullscreen = Dvar_FindVar("cg_cinematicFullscreen");
 
-    if (fullscreen && !fullscreen->modified)
+    if (fullscreen && !fullscreen->modified && !s_cinematicFullscreenScriptOverride)
         Dvar_SetFromStringByNameFromSource("cg_cinematicFullscreen", "0", DVAR_SOURCE_SCRIPT);
 }
 #endif
