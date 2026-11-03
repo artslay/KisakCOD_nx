@@ -7104,12 +7104,28 @@ void GScr_Cinematic()
     level.bMissionSuccess = 1;
 }
 
+#ifdef __SWITCH__
+// CinematicInGame* feeds Bink frames to the world's cinematic material. Keep
+// the normal fullscreen option available when a script explicitly sets it,
+// but default these in-world playbacks to the material-only path on Switch.
+static void GScr_UseWorldCinematicOutput()
+{
+    const dvar_s *fullscreen = Dvar_FindVar("cg_cinematicFullscreen");
+
+    if (fullscreen && !fullscreen->modified)
+        Dvar_SetFromStringByNameFromSource("cg_cinematicFullscreen", "0", DVAR_SOURCE_SCRIPT);
+}
+#endif
+
 void GScr_CinematicInGame()
 {
     const char *String; // r3
 
     if (Scr_GetNumParam() != 1)
         Scr_Error("cinematicingame takes one parameter: cinematicingame(<cinematic name>)\n");
+#ifdef __SWITCH__
+    GScr_UseWorldCinematicOutput();
+#endif
     String = Scr_GetString(0);
     R_Cinematic_SetNextPlayback(String, 0);
 }
@@ -7120,6 +7136,9 @@ void GScr_CinematicInGameSync()
 
     if (Scr_GetNumParam() != 1)
         Scr_Error("cinematicingamesync takes one parameter: cinematicingamesync(<cinematic name>)\n");
+#ifdef __SWITCH__
+    GScr_UseWorldCinematicOutput();
+#endif
     String = Scr_GetString(0);
     R_Cinematic_SetNextPlayback(String, 5u);
 }
@@ -7130,6 +7149,9 @@ void GScr_CinematicInGameLoop()
 
     if (Scr_GetNumParam() != 1)
         Scr_Error("cinematicingameloop takes one parameter: cinematicingameloop(<cinematic name>)\n");
+#ifdef __SWITCH__
+    GScr_UseWorldCinematicOutput();
+#endif
     String = Scr_GetString(0);
     R_Cinematic_SetNextPlayback(String, 2u);
 }
@@ -7140,6 +7162,9 @@ void GScr_CinematicInGameLoopResident()
 
     if (Scr_GetNumParam() != 1)
         Scr_Error("CinematicInGameLoopResident takes one parameter: CinematicInGameLoopResident(<cinematic name>)\n");
+#ifdef __SWITCH__
+    GScr_UseWorldCinematicOutput();
+#endif
     String = Scr_GetString(0);
     R_Cinematic_SetNextPlayback(String, 0x1Au);
 }
@@ -7150,6 +7175,9 @@ void GScr_CinematicInGameLoopFromFastfile()
 
     if (Scr_GetNumParam() != 1)
         Scr_Error("CinematicInGameLoopFromFastfile takes one parameter: CinematicInGameLoopFromFastfile(<cinematic name>)\n");
+#ifdef __SWITCH__
+    GScr_UseWorldCinematicOutput();
+#endif
     String = Scr_GetString(0);
     R_Cinematic_SetNextPlayback(String, 0x3Au);
 }
