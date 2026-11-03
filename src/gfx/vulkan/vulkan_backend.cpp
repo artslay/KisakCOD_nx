@@ -3814,8 +3814,6 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
     if (!m_frameActive || m_deviceLost || !m_commandBuffer)
         return false;
 
-    // Swap producer and backend scratch batches. Workers keep appending while
-    // the backend consumes this batch without holding the producer mutex.
     m_pendingBufferUpdates.clear();
     m_pendingBufferUpdateData.clear();
     {
@@ -3827,8 +3825,6 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
     }
     if (m_pendingBufferUpdates.empty())
         return true;
-
-    EndRendering();
 
     const auto requeueRemaining = [this](size_t first)
     {
@@ -3858,9 +3854,8 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
             mergedUpdates.emplace_back(copy);
         };
 
-        // Failed older writes stay ahead of writes queued during this flush.
-        for (size_t i = first; i < m_pendingBufferUpdates.size(); ++i)
-            appendRecord(m_pendingBufferUpdates[i], m_pendingBufferUpdateData);
+        for (size_t n = first; n < m_pendingBufferUpdates.size(); ++n)
+            appendRecord(m_pendingBufferUpdates[n], m_pendingBufferUpdateData);
         for (const QueuedBufferUpdate &update : m_queuedBufferUpdates)
             appendRecord(update, m_queuedBufferUpdateData);
 
@@ -3869,54 +3864,34 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
         m_hasQueuedBufferUpdates.store(true, std::memory_order_release);
     };
 
-    const auto recordMappedWrite = [this](
-        const QueuedBufferUpdate &update,
-        const uint8_t *updateData)
-    {
-        if (update.size != 0)
-            std::memcpy(update.mappedDestination, updateData, update.size);
-
-        VkBufferMemoryBarrier hostWrite{};
-        hostWrite.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        hostWrite.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        hostWrite.dstAccessMask =
-            VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
-            VK_ACCESS_INDEX_READ_BIT |
-            VK_ACCESS_TRANSFER_READ_BIT;
-        hostWrite.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        hostWrite.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        hostWrite.buffer = update.destination;
-        hostWrite.offset = update.destinationOffset;
-        hostWrite.size = static_cast<VkDeviceSize>(update.size);
-        vkCmdPipelineBarrier(
-            m_commandBuffer,
-            VK_PIPELINE_STAGE_HOST_BIT,
-            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 1, &hostWrite, 0, nullptr);
-    };
-
     size_t i = 0;
     while (i < m_pendingBufferUpdates.size())
     {
         QueuedBufferUpdate &firstUpdate = m_pendingBufferUpdates[i];
-        if (firstUpdate.mappedWrite && firstUpdate.waitForGpu)
+        if (firstUpdate.mappedWrite)
         {
-            // This uncommon unaligned tail can overlap previous GPU reads.
-            // The backend, never a worker, owns the frame split and wait.
-            if (!SynchronizeActiveFrame())
+            // NOOVERWRITE targets bytes that earlier draws do not read. Because
+            // these allocations are HOST_VISIBLE|HOST_COHERENT, backend-thread
+            // writes before queue submission need no transfer commands/barrier.
+            if (firstUpdate.waitForGpu && !SynchronizeActiveFrame())
             {
                 requeueRemaining(i);
                 return false;
             }
-            const uint8_t *updateData = m_pendingBufferUpdateData.data() +
-                firstUpdate.dataOffset;
-            recordMappedWrite(firstUpdate, updateData);
+            if (firstUpdate.size != 0)
+            {
+                const uint8_t *updateData =
+                    m_pendingBufferUpdateData.data() + firstUpdate.dataOffset;
+                std::memcpy(
+                    firstUpdate.mappedDestination,
+                    updateData,
+                    firstUpdate.size);
+            }
             ++i;
             continue;
         }
 
-        // Stage a whole consecutive batch with one aligned uniform-ring
-        // allocation instead of burning 256 bytes for every tiny menu upload.
+        // Group consecutive transfer-copy updates into a single staging slice.
         size_t segmentEnd = i;
         size_t dataBegin = m_pendingBufferUpdateData.size();
         size_t dataEnd = 0;
@@ -3924,16 +3899,15 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
         {
             const QueuedBufferUpdate &update =
                 m_pendingBufferUpdates[segmentEnd];
-            if (update.mappedWrite && update.waitForGpu)
+            if (update.mappedWrite)
                 break;
+
             if (update.size != 0)
             {
                 const size_t candidateBegin =
                     std::min(dataBegin, update.dataOffset);
                 const size_t candidateEnd =
                     std::max(dataEnd, update.dataOffset + update.size);
-                // One staging slice must fit in the ring after a frame split.
-                // End this batch before it grows beyond the ring capacity.
                 if (segmentEnd != i &&
                     candidateEnd - candidateBegin > m_uniformCapacity)
                     break;
@@ -3949,10 +3923,9 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
         }
 
         VkDescriptorBufferInfo source{};
-        const bool hasStagedData = dataEnd > dataBegin;
-        if (hasStagedData)
+        const size_t stagedSize = dataEnd > dataBegin ? dataEnd - dataBegin : 0;
+        if (stagedSize != 0)
         {
-            const size_t stagedSize = dataEnd - dataBegin;
             const void *stagedData =
                 m_pendingBufferUpdateData.data() + dataBegin;
             if (!AllocateUniform(stagedData, stagedSize, &source))
@@ -3966,17 +3939,14 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
             }
         }
 
+        // Transfer commands cannot be recorded inside dynamic rendering.
+        // Mapped NOOVERWRITE batches above never reach this path.
+        if (m_renderingActive)
+            EndRendering();
+
         for (; i < segmentEnd; ++i)
         {
             QueuedBufferUpdate &update = m_pendingBufferUpdates[i];
-            const uint8_t *updateData = m_pendingBufferUpdateData.data() +
-                update.dataOffset;
-            if (update.mappedWrite)
-            {
-                recordMappedWrite(update, updateData);
-                continue;
-            }
-
             const VkDeviceSize sourceOffset =
                 source.offset + (update.dataOffset - dataBegin);
 

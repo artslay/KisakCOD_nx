@@ -5811,111 +5811,45 @@ HRESULT KisakVkBuffer::Unlock()
                     static_cast<VkDeviceSize>(lockWriteBegin) & ~VkDeviceSize(3u);
                 const VkDeviceSize uploadEnd =
                     (static_cast<VkDeviceSize>(lockWriteEnd) + 3u) & ~VkDeviceSize(3u);
-                const bool queued = uploadEnd <= size
-                    ? backend->QueueBufferUpdate(
-                        buffer, uploadOffset,
-                        shadow.data() + uploadOffset,
-                        static_cast<size_t>(uploadEnd - uploadOffset))
-                    : backend->QueueMappedBufferUpdate(
+                const bool noOverwrite =
+                    (lockFlags & D3DLOCK_NOOVERWRITE) != 0;
+                const bool queued = noOverwrite
+                    ? backend->QueueMappedBufferUpdate(
                         buffer,
                         lockWriteBegin,
                         static_cast<uint8_t *>(mapped) + lockWriteBegin,
                         shadow.data() + lockWriteBegin,
                         lockWriteEnd - lockWriteBegin,
-                        true);
+                        false)
+                    : (uploadEnd <= size
+                        ? backend->QueueBufferUpdate(
+                            buffer, uploadOffset,
+                            shadow.data() + uploadOffset,
+                            static_cast<size_t>(uploadEnd - uploadOffset))
+                        : backend->QueueMappedBufferUpdate(
+                            buffer,
+                            lockWriteBegin,
+                            static_cast<uint8_t *>(mapped) + lockWriteBegin,
+                            shadow.data() + lockWriteBegin,
+                            lockWriteEnd - lockWriteBegin,
+                            true));
                 if (!queued)
                     return E_FAIL;
             }
         }
         else if (lockFlags & D3DLOCK_NOOVERWRITE)
         {
-            if (lockWriteBegin < lockWriteEnd)
-            {
-                // Mesh reservations report their exact write range. This is
-                // the fast path for CodeMesh/MarkMesh: no full-buffer scan.
-                const VkDeviceSize uploadOffset =
-                    static_cast<VkDeviceSize>(lockWriteBegin) & ~VkDeviceSize(3u);
-                const VkDeviceSize uploadEnd =
-                    (static_cast<VkDeviceSize>(lockWriteEnd) + 3u) & ~VkDeviceSize(3u);
-                bool queued = false;
-                if (uploadEnd <= size)
-                {
-                    queued = backend->QueueBufferUpdate(
-                        buffer,
-                        uploadOffset,
-                        shadow.data() + uploadOffset,
-                        static_cast<size_t>(uploadEnd - uploadOffset));
-                }
-                else
-                {
-                    queued = backend->QueueMappedBufferUpdate(
-                        buffer,
-                        lockWriteBegin,
-                        static_cast<uint8_t *>(mapped) + lockWriteBegin,
-                        shadow.data() + lockWriteBegin,
-                        lockWriteEnd - lockWriteBegin,
-                        true);
-                }
-                if (!queued)
-                    return E_FAIL;
-            }
-            else
-            {
-                // Legacy D3D9 callers may lock a whole buffer and write it
-                // directly without using R_ReserveMeshVerts. Keep the fallback
-                // for those callers, but it is no longer used by mesh streams.
-                const uint8_t *shadowBytes = shadow.data() + lockOffset;
-                uint8_t *mappedBytes =
-                    static_cast<uint8_t *>(mapped) + lockOffset;
-                constexpr size_t kCompareChunkBytes = 4096;
-                size_t chunkStart = 0;
-                while (chunkStart < lockSize)
-                {
-                    const size_t chunkSize =
-                        std::min<size_t>(kCompareChunkBytes, lockSize - chunkStart);
-                    if (std::memcmp(
-                            shadowBytes + chunkStart,
-                            mappedBytes + chunkStart,
-                            chunkSize) == 0)
-                    {
-                        chunkStart += chunkSize;
-                        continue;
-                    }
-
-                    size_t cursor = chunkStart;
-                    const size_t chunkEnd = chunkStart + chunkSize;
-                    while (cursor < chunkEnd)
-                    {
-                        while (cursor < chunkEnd &&
-                            shadowBytes[cursor] == mappedBytes[cursor])
-                            ++cursor;
-                        if (cursor == chunkEnd)
-                            break;
-
-                        const size_t changedStart = cursor;
-                        while (cursor < chunkEnd &&
-                            shadowBytes[cursor] != mappedBytes[cursor])
-                            ++cursor;
-                        const size_t changedSize = cursor - changedStart;
-                        const VkDeviceSize changedOffset =
-                            static_cast<VkDeviceSize>(lockOffset) + changedStart;
-                        const bool alignedChangedRange =
-                            (changedOffset & 3u) == 0 && (changedSize & 3u) == 0;
-                        const bool queued = alignedChangedRange
-                            ? backend->QueueBufferUpdate(
-                                buffer, changedOffset,
-                                shadowBytes + changedStart, changedSize)
-                            : backend->QueueMappedBufferUpdate(
-                                buffer, changedOffset,
-                                mappedBytes + changedStart,
-                                shadowBytes + changedStart,
-                                changedSize, true);
-                        if (!queued)
-                            return E_FAIL;
-                    }
-                    chunkStart = chunkEnd;
-                }
-            }
+            // D3DLOCK_NOOVERWRITE guarantees that the entire locked interval is
+            // not referenced by prior draws. Queue one backend-thread host write
+            // instead of scanning bytes, staging a transfer, and splitting rendering.
+            if (!backend->QueueMappedBufferUpdate(
+                    buffer,
+                    lockOffset,
+                    static_cast<uint8_t *>(mapped) + lockOffset,
+                    shadow.data() + lockOffset,
+                    lockSize,
+                    false))
+                return E_FAIL;
         }
         else
         {
