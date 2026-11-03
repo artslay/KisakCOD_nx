@@ -3672,6 +3672,7 @@ static bool Switch_LogIsFxDiagnostic(const char *msg)
     static constexpr const char *const kFxDiagnosticPrefixes[] =
     {
         "[KisakCOD][FX CLOUD",
+        "[KisakCOD][FX SPRITE ACTIVE]",
         "[KisakCOD][FX CODEMESH SUBMIT]",
         "[KisakCOD][FX CODEMESH DRAW]",
         "[KisakCOD][FX CODEMESH SKIP]",
