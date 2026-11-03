@@ -222,11 +222,20 @@ int __cdecl SV_ProcessPendingSave(PendingSave *pendingSave)
     result = G_SaveGame(pendingSave, checksum);
     if (!pendingSave)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\server\\sv_main.cpp", 191, 0, "%s", "filename");
-    // WriteSaveToDevice returns zero only after the save has been finalized.
-    // Do not queue disconnect/restart/loadgame when the backing file failed:
-    // the subsequent loadgame would target a save that does not exist.
-    if (result == 0)
+    // G_WriteGame() can return zero both when a save was skipped during
+    // serialization and when the file was successfully written. Internal
+    // restart commands require the latter: the queued loadgame must never
+    // target a save file that was not actually finalized on the device.
+    SaveGame *save = SaveMemory_GetSaveHandle(SAVE_GAME_HANDLE);
+    const bool saveWritten = save && SaveMemory_IsWrittenToDevice(save);
+    const bool isRestartSave =
+        !strcmp(pendingSave->filename, "internal/vid_restart") ||
+        !strcmp(pendingSave->filename, "internal/snd_restart");
+
+    if (result == 0 && saveWritten)
         AppendCommandsForInternalSave(pendingSave->filename);
+    else if (result == 0 && isRestartSave)
+        result = 1;
     return result;
 }
 
