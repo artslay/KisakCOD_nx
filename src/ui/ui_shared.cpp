@@ -9881,6 +9881,7 @@ void __cdecl Menu_PaintAll(UiContext *dc)
         }
     }
 
+#ifdef __SWITCH__
     {
         bool profileInMenuStack = false;
         for (int stackIndex = 0; stackIndex < dc->openMenuCount; ++stackIndex)
