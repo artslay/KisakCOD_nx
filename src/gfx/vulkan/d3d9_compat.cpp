@@ -10536,13 +10536,6 @@ bool IDirect3DDevice9::PrepareDraw()
     const uint32_t targetHeight = m_color && m_color->texture
         ? m_color->texture->height : backBufferHeight;
 
-    g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_pipeline";
-    if (!EnsurePipeline())
-    {
-        Switch_LogWrite("[KisakCOD][VK DRAW] fail=pipeline\n");
-        return false;
-    }
-
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/set_viewport";
     VkViewport viewport{};
     // D3D9 viewport coordinates use an upper-left origin with Y increasing
@@ -10646,6 +10639,16 @@ bool IDirect3DDevice9::PrepareDraw()
     {
         m_depth->texture->SetSubresourceLayout(
             m_depth->level, 0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    }
+
+    // Bind after attachment transitions and dynamic-rendering begin. Keep the
+    // graphics pipeline as the final graphics-state change before the caller
+    // records its draw, so NVK sees the selected VTGM shader at draw flush.
+    g_switchFrameStage = "frame/render/vulkan/prepare_draw/ensure_pipeline";
+    if (!EnsurePipeline())
+    {
+        Switch_LogWrite("[KisakCOD][VK DRAW] fail=pipeline\n");
+        return false;
     }
 
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/return";
