@@ -1082,6 +1082,30 @@ void __cdecl FX_DrawNonSpriteEffect(FxSystem *system, FxEffect *effect, uint32_t
                 MyAssertHandler("c:\\trees\\cod3\\src\\effectscore\\fx_system.h", 334, 0, "%s", "system");
             elem = &FX_PoolFromHandle_Generic<FxElem, 2048>(system->elems, elemHandle)->item;
             elemDef = &elemDefs[elem->defIndex];
+#ifdef __SWITCH__
+            if (elemDef->elemType == FX_ELEM_TYPE_CLOUD)
+            {
+                static volatile uint32_t switchCloudActiveTraceCount = 0;
+                const uint32_t traceIndex =
+                    __sync_fetch_and_add(&switchCloudActiveTraceCount, 1u);
+                if (traceIndex < 12u)
+                {
+                    char trace[384];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][FX CLOUD ACTIVE] n=%u effect=%.72s handle=%u elemDef=%u visuals=%u elemBegin=%d drawTime=%d origin=(%.4g,%.4g,%.4g)\\n",
+                        traceIndex,
+                        effect->def && effect->def->name ? effect->def->name : "<null>",
+                        static_cast<unsigned>(elemHandle),
+                        static_cast<unsigned>(elem->defIndex),
+                        static_cast<unsigned>(elemDef->visualCount),
+                        elem->msecBegin,
+                        drawTime,
+                        elem->origin[0], elem->origin[1], elem->origin[2]);
+                    Switch_LogWrite(trace);
+                }
+            }
+#endif
             if (elemDef->elemType <= 3u)
                 MyAssertHandler(
                     ".\\EffectsCore\\fx_draw.cpp",
