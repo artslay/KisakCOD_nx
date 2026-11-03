@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <atomic>
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -284,6 +285,8 @@ public:
     const char *GetLastError() const override;
     bool IsInitialized() const { return m_initialized; }
     bool IsFrameActive() const { return m_frameActive; }
+    uint32_t CurrentFrameSlot() const { return m_currentFrameSlot; }
+    static constexpr uint32_t FramesInFlight = 2;
     bool GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_t *format) const override;
 
 private:
@@ -291,6 +294,9 @@ private:
     {
         VkSemaphore imageAvailable = VK_NULL_HANDLE;
         VkFence fence = VK_NULL_HANDLE;
+        VkCommandPool commandPool = VK_NULL_HANDLE;
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        uint64_t submittedFrameSerial = 0;
     };
 
     bool CreateInstance();
@@ -307,7 +313,7 @@ private:
     bool CreateDummyTexture();
     void DestroySwapchain();
     void DestroyDefaultDepth();
-    void FlushDeferredResources();
+    void FlushDeferredResources(uint64_t completedFrameSerial = ~uint64_t(0));
     void SetError(const char *message, VkResult result = VK_SUCCESS);
 
     struct QueuedBufferUpdate
@@ -330,6 +336,7 @@ private:
         VkImageView view = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
         bool memoryMapped = false;
+        uint64_t retireFrameSerial = 0;
     };
 #ifdef VK_EXT_device_fault
     void LogDeviceFaultInfo();
@@ -365,9 +372,13 @@ private:
 
     // Frame rendering and background cinematic uploads use independent pools.
     // Vulkan requires external synchronization for command-pool and queue host access.
+    // Active aliases point at the currently recording frame-slot resources.
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     VkCommandPool m_immediateCommandPool = VK_NULL_HANDLE;
     VkCommandBuffer m_commandBuffer = VK_NULL_HANDLE;
+    std::array<FrameSync, FramesInFlight> m_frameSync{};
+    uint32_t m_currentFrameSlot = 0;
+    uint32_t m_nextFrameSlot = 0;
     std::mutex m_immediateMutex;
     std::mutex m_queueMutex;
     std::mutex m_descriptorPoolMutex;
@@ -383,7 +394,7 @@ private:
     std::vector<uint8_t> m_pendingBufferUpdateData;
     std::atomic<bool> m_hasQueuedBufferUpdates{false};
 
-    FrameSync m_sync{};
+    std::atomic<uint64_t> m_completedFrameSerial{0};
 
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
     std::atomic<uint64_t> m_frameSerial{0};
@@ -398,7 +409,9 @@ private:
     uint8_t *m_uniformMapped = nullptr;
     // A densely populated world can consume several MiB of per-draw constants and queued copy staging in one frame.
     VkDeviceSize m_uniformCapacity = 16u * 1024u * 1024u;
+    // Each frame slot owns a disjoint range of the shared mapped uniform/staging ring.
     VkDeviceSize m_uniformOffset = 0;
+    VkDeviceSize m_uniformFrameBase = 0;
     VkDeviceSize m_uniformAlignment = 256;
 
     uint32_t m_swapchainIndex = 0;
