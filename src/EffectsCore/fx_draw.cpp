@@ -1369,7 +1369,7 @@ void __cdecl FX_DrawSpriteElems(FxSystem *system, int32_t drawTime)
                     char trace[512];
                     std::snprintf(
                         trace, sizeof(trace),
-                        "[KisakCOD][FX EFFECT INVENTORY] n=%u name=%.112s defs=%u(one=%u loop=%u) defTypes=(%u,%u,%u,%u,%u,%u,%u,%u) activeClass=(%u,%u,%u) activeTypes=(%u,%u,%u,%u,%u,%u,%u,%u)\\n",
+                        "[KisakCOD][FX EFFECT INVENTORY] n=%u name=%.112s defs=%u(one=%u loop=%u) defTypes=(%u,%u,%u,%u,%u,%u,%u,%u) activeClass=(%u,%u,%u) activeTypes=(%u,%u,%u,%u,%u,%u,%u,%u)\n",
                         inventoryIndex,
                         effect->def->name ? effect->def->name : "<null>",
                         defElemCount,
