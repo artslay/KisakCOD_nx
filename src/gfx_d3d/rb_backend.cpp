@@ -1003,6 +1003,29 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
                 Switch_LogWrite(trace);
             }
         }
+        if (drawSurf.fields.surfType == SF_PARTICLE_CLOUD)
+        {
+            static volatile uint32_t switchCloudMaterialSkipTraceCount = 0;
+            const uint32_t traceIndex =
+                __sync_fetch_and_add(&switchCloudMaterialSkipTraceCount, 1u);
+            if (traceIndex < 8u)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][FX CLOUD MATERIAL SKIP] n=%u material=%.96s materialIndex=%u baseTech=%u object=%u primaryLight=%u prepass=%u sortKey=%u\n",
+                    traceIndex,
+                    failedMaterial && failedMaterial->info.name
+                        ? failedMaterial->info.name : "<unresolved>",
+                    static_cast<unsigned>(drawSurf.fields.materialSortedIndex),
+                    static_cast<unsigned>(listArgs->info->baseTechType),
+                    static_cast<unsigned>(drawSurf.fields.objectId),
+                    static_cast<unsigned>(drawSurf.fields.primaryLightIndex),
+                    static_cast<unsigned>(drawSurf.fields.prepass),
+                    static_cast<unsigned>(drawSurf.fields.primarySortKey));
+                Switch_LogWrite(trace);
+            }
+        }
         Switch_LogMaterialSetupSkipped(
             failedMaterial,drawSurf.fields.surfType,drawSurf.fields.objectId,
             drawSurf.fields.materialSortedIndex,
@@ -1011,6 +1034,32 @@ uint32_t __cdecl R_RenderDrawSurfListMaterial(const GfxDrawSurfListArgs *listArg
 #endif
         return R_SkipDrawSurfListMaterial(drawSurfList, drawSurfCount);
     }
+#ifdef __SWITCH__
+    if (drawSurf.fields.surfType == SF_PARTICLE_CLOUD)
+    {
+        static volatile uint32_t switchCloudMaterialReadyTraceCount = 0;
+        const uint32_t traceIndex =
+            __sync_fetch_and_add(&switchCloudMaterialReadyTraceCount, 1u);
+        if (traceIndex < 8u)
+        {
+            const Material *material = listArgs->context.state->material;
+            const MaterialTechnique *technique = listArgs->context.state->technique;
+            char trace[384];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FX CLOUD MATERIAL OK] n=%u material=%.96s materialIndex=%u baseTech=%u selectedTech=%u technique=%.64s passes=%u object=%u\n",
+                traceIndex,
+                material && material->info.name ? material->info.name : "<null>",
+                static_cast<unsigned>(drawSurf.fields.materialSortedIndex),
+                static_cast<unsigned>(listArgs->info->baseTechType),
+                static_cast<unsigned>(listArgs->context.state->techType),
+                technique && technique->name ? technique->name : "<null>",
+                technique ? static_cast<unsigned>(technique->passCount) : 0u,
+                static_cast<unsigned>(drawSurf.fields.objectId));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
     isPixelCostEnabled = pixelCostMode != GFX_PIXEL_COST_MODE_OFF;
     if (pixelCostMode)
         R_PixelCost_BeginSurface(listArgs->context);
