@@ -1497,7 +1497,7 @@ uint8_t SwitchEffectiveShaderElementType(
     // basis. Preserve the full FLOAT4 input only while the FX code-mesh scope is
     // active; ordinary packed-model draws still expose XYZ and receive W=1.
     if (g_switchFxCodeMeshDrawActive &&
-        decl && decl->switchVertDeclType == 1u &&
+        decl &&
         element.Stream == 0u && streamStride == sizeof(GfxPackedVertex) &&
         element.Offset == 0u && element.Usage == 0u &&
         element.UsageIndex == 0u && element.Type == D3DDECLTYPE_FLOAT4)
