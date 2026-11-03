@@ -3673,6 +3673,7 @@ static bool Switch_LogIsFxDiagnostic(const char *msg)
     {
         "[KisakCOD][FX CLOUD",
         "[KisakCOD][FX SPRITE ACTIVE]",
+        "[KisakCOD][FX EFFECT INVENTORY]",
         "[KisakCOD][FX CODEMESH SUBMIT]",
         "[KisakCOD][FX CODEMESH DRAW]",
         "[KisakCOD][FX CODEMESH SKIP]",
