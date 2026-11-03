@@ -798,13 +798,54 @@ void __cdecl FX_DrawElem_Cloud(FxDrawState *draw)
             FXRAND_SCALE,
             draw->preVisState.sampleLerp,
             draw->preVisState.sampleLerpInv);
-        if (draw->visState.scale != 0.0 && !FX_CullElementForDraw_Cloud(draw))
+        const bool cloudScaleVisible = draw->visState.scale != 0.0;
+        const bool cloudCulled =
+            cloudScaleVisible ? FX_CullElementForDraw_Cloud(draw) : false;
+#ifdef __SWITCH__
+        static volatile uint32_t switchCloudElemTraceCount = 0;
+        const uint32_t switchCloudElemTrace =
+            __sync_fetch_and_add(&switchCloudElemTraceCount, 1u);
+        if (switchCloudElemTrace < 8u)
+        {
+            char trace[384];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FX CLOUD ELEM] n=%u visible=%u culled=%u scale=%.4g size=(%.4g,%.4g) pos=(%.4g,%.4g,%.4g) frustum=%u\n",
+                switchCloudElemTrace,
+                cloudScaleVisible ? 1u : 0u,
+                cloudCulled ? 1u : 0u,
+                draw->visState.scale,
+                draw->visState.size[0], draw->visState.size[1],
+                draw->posWorld[0], draw->posWorld[1], draw->posWorld[2],
+                draw->camera ? static_cast<unsigned>(draw->camera->frustumPlaneCount) : 0u);
+            Switch_LogWrite(trace);
+        }
+#endif
+        if (cloudScaleVisible && !cloudCulled)
         {
             InterlockedIncrement(&draw->system->gfxCloudCount);
             visuals.anonymous = FX_GetElemVisuals(draw->elemDef, draw->randomSeed).anonymous;
             if (!visuals.anonymous)
                 MyAssertHandler(".\\EffectsCore\\fx_draw.cpp", 792, 0, "%s", "visuals.material");
             cloud = R_AddParticleCloudToScene(visuals.material);
+#ifdef __SWITCH__
+            static volatile uint32_t switchCloudAcceptTraceCount = 0;
+            const uint32_t switchCloudAcceptTrace =
+                __sync_fetch_and_add(&switchCloudAcceptTraceCount, 1u);
+            if (switchCloudAcceptTrace < 8u)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][FX CLOUD ADD] n=%u material=%.96s result=%s cloud=%p\n",
+                    switchCloudAcceptTrace,
+                    visuals.material && visuals.material->info.name
+                        ? visuals.material->info.name : "<null>",
+                    cloud ? "accepted" : "rejected",
+                    static_cast<void *>(cloud));
+                Switch_LogWrite(trace);
+            }
+#endif
             if (cloud)
             {
                 {
