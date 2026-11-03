@@ -5813,43 +5813,47 @@ HRESULT KisakVkBuffer::Unlock()
                     (static_cast<VkDeviceSize>(lockWriteEnd) + 3u) & ~VkDeviceSize(3u);
                 const bool noOverwrite =
                     (lockFlags & D3DLOCK_NOOVERWRITE) != 0;
-                const bool queued = noOverwrite
-                    ? backend->QueueMappedBufferUpdate(
-                        buffer,
-                        lockWriteBegin,
+                if (noOverwrite)
+                {
+                    // NOOVERWRITE guarantees that this exact reserved span is
+                    // not referenced by an earlier draw. Write it straight to
+                    // coherent mapped memory: routing every tiny mesh span
+                    // through the CPU upload queue adds two copies, a mutex
+                    // acquisition, and one queue record per mesh unlock.
+                    std::memcpy(
                         static_cast<uint8_t *>(mapped) + lockWriteBegin,
                         shadow.data() + lockWriteBegin,
-                        lockWriteEnd - lockWriteBegin,
-                        false)
-                    : (uploadEnd <= size
-                        ? backend->QueueBufferUpdate(
+                        lockWriteEnd - lockWriteBegin);
+                }
+                else if (uploadEnd <= size)
+                {
+                    if (!backend->QueueBufferUpdate(
                             buffer, uploadOffset,
                             shadow.data() + uploadOffset,
-                            static_cast<size_t>(uploadEnd - uploadOffset))
-                        : backend->QueueMappedBufferUpdate(
-                            buffer,
-                            lockWriteBegin,
-                            static_cast<uint8_t *>(mapped) + lockWriteBegin,
-                            shadow.data() + lockWriteBegin,
-                            lockWriteEnd - lockWriteBegin,
-                            true));
-                if (!queued)
+                            static_cast<size_t>(uploadEnd - uploadOffset)))
+                        return E_FAIL;
+                }
+                else if (!backend->QueueMappedBufferUpdate(
+                             buffer,
+                             lockWriteBegin,
+                             static_cast<uint8_t *>(mapped) + lockWriteBegin,
+                             shadow.data() + lockWriteBegin,
+                             lockWriteEnd - lockWriteBegin,
+                             true))
+                {
                     return E_FAIL;
+                }
             }
         }
         else if (lockFlags & D3DLOCK_NOOVERWRITE)
         {
             // D3DLOCK_NOOVERWRITE guarantees that the entire locked interval is
-            // not referenced by prior draws. Queue one backend-thread host write
-            // instead of scanning bytes, staging a transfer, and splitting rendering.
-            if (!backend->QueueMappedBufferUpdate(
-                    buffer,
-                    lockOffset,
-                    static_cast<uint8_t *>(mapped) + lockOffset,
-                    shadow.data() + lockOffset,
-                    lockSize,
-                    false))
-                return E_FAIL;
+            // not referenced by prior draws. Copy directly to coherent mapped
+            // memory; do not enqueue a per-lock CPU copy for the backend to repeat.
+            std::memcpy(
+                static_cast<uint8_t *>(mapped) + lockOffset,
+                shadow.data() + lockOffset,
+                lockSize);
         }
         else
         {
