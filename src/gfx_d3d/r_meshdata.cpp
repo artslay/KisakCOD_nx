@@ -45,6 +45,15 @@ char __cdecl R_ReserveMeshVerts(GfxMeshData *mesh, int vertCount, uint16_t *base
     mesh->vb.used = mesh->vertSize * vertCount + usedCodeMeshVertBytes;
     if (mesh->vb.used > mesh->vb.total)
         return 0;
+#ifdef __SWITCH__
+    // The mesh stream lock covers the whole dynamic VB, but this reservation
+    // identifies the exact bytes written by the worker. Unlock can enqueue only
+    // this range instead of scanning the entire 1 MiB buffer.
+    if (mesh->vb.verts && vertCount > 0)
+        mesh->vb.buffer->MarkWrittenRange(
+            usedCodeMeshVertBytes,
+            static_cast<uint32_t>(mesh->vertSize * vertCount));
+#endif
     *baseVertex = usedCodeMeshVertBytes / mesh->vertSize;
     return 1;
 }
