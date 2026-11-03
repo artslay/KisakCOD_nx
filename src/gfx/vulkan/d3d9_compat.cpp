@@ -5683,6 +5683,8 @@ uint32_t KisakVkBuffer::Release()
 HRESULT KisakVkBuffer::Lock(
     uint32_t offset, uint32_t lockSize, void **out, uint32_t flags)
 {
+    const bool trackMeshWrites = meshWriteTrackingPending;
+    meshWriteTrackingPending = false;
     constexpr uint32_t supportedFlags =
         D3DLOCK_READONLY | D3DLOCK_NOSYSLOCK |
         D3DLOCK_NOOVERWRITE | D3DLOCK_DISCARD;
@@ -5724,10 +5726,10 @@ HRESULT KisakVkBuffer::Lock(
         {
             if (offset == 0 && lockSize == size)
             {
-                // A full-buffer discard makes every byte part of this lock
-                // undefined; initialize the complete shadow for deterministic
-                // subsequent partial writes.
-                std::fill(shadow.begin(), shadow.end(), 0);
+                // Tracked mesh locks publish only the reserved vertex span.
+                // Bytes outside it are discarded and need no CPU memset.
+                if (!trackMeshWrites)
+                    std::fill(shadow.begin(), shadow.end(), 0);
                 shadowInitialized = true;
             }
             else if (!shadowInitialized)
@@ -5759,15 +5761,21 @@ HRESULT KisakVkBuffer::Lock(
     lockOffset = offset;
     this->lockSize = lockSize;
     lockFlags = flags;
+    lockMeshWriteTracking = trackMeshWrites;
     lockWriteBegin = UINT32_MAX;
     lockWriteEnd = 0;
     lockActive = true;
     return S_OK;
 }
 
+void KisakVkBuffer::BeginMeshWriteTracking()
+{
+    meshWriteTrackingPending = true;
+}
+
 void KisakVkBuffer::MarkWrittenRange(uint32_t offset, uint32_t bytes)
 {
-    if (!lockActive || !(lockFlags & D3DLOCK_NOOVERWRITE) || bytes == 0 ||
+    if (!lockActive || !lockMeshWriteTracking || bytes == 0 ||
         offset < lockOffset || offset > lockOffset + lockSize ||
         bytes > lockOffset + lockSize - offset)
         return;
@@ -5792,6 +5800,32 @@ HRESULT KisakVkBuffer::Unlock()
                 static_cast<uint8_t *>(mapped) + lockOffset,
                 shadow.data() + lockOffset,
                 lockSize);
+        }
+        else if (lockMeshWriteTracking)
+        {
+            // CodeMesh/MarkMesh report exact ranges at reservation time.
+            // An empty mesh lock generates no transfer and no full-buffer scan.
+            if (lockWriteBegin < lockWriteEnd)
+            {
+                const VkDeviceSize uploadOffset =
+                    static_cast<VkDeviceSize>(lockWriteBegin) & ~VkDeviceSize(3u);
+                const VkDeviceSize uploadEnd =
+                    (static_cast<VkDeviceSize>(lockWriteEnd) + 3u) & ~VkDeviceSize(3u);
+                const bool queued = uploadEnd <= size
+                    ? backend->QueueBufferUpdate(
+                        buffer, uploadOffset,
+                        shadow.data() + uploadOffset,
+                        static_cast<size_t>(uploadEnd - uploadOffset))
+                    : backend->QueueMappedBufferUpdate(
+                        buffer,
+                        lockWriteBegin,
+                        static_cast<uint8_t *>(mapped) + lockWriteBegin,
+                        shadow.data() + lockWriteBegin,
+                        lockWriteEnd - lockWriteBegin,
+                        true);
+                if (!queued)
+                    return E_FAIL;
+            }
         }
         else if (lockFlags & D3DLOCK_NOOVERWRITE)
         {
@@ -5943,6 +5977,7 @@ HRESULT KisakVkBuffer::Unlock()
     lockOffset = 0;
     lockSize = 0;
     lockFlags = 0;
+    lockMeshWriteTracking = false;
     lockWriteBegin = UINT32_MAX;
     lockWriteEnd = 0;
     return S_OK;
