@@ -374,8 +374,8 @@ int32_t __cdecl DB_ReadData()
     if (g_load.interrupt)
         g_load.interrupt();
 #ifdef __SWITCH__
-    // Keep one synchronous 256-KB input window. The next read happens only
-    // after zlib has consumed the current input buffer.
+    // Keep one synchronous 512-KB input window, matching the complete
+    // Switch input buffer. The next read happens only after zlib consumes it.
     if (g_load.stream.avail_in)
         return 1;
 
@@ -410,7 +410,10 @@ int32_t __cdecl DB_ReadData()
         return 0;
     }
 
-    const ssize_t bytesRead = ::read(fd, fileBuffer, 0x40000);
+    // The Switch buffer spans 0x80000 bytes (compressBufferEnd is set
+    // to buf + 0x80000). Read the full window to halve per-file lseek/read
+    // calls without changing the sequential zlib stream.
+    const ssize_t bytesRead = ::read(fd, fileBuffer, 0x80000);
 #ifdef __SWITCH__
     g_switchDbStage = "file/read_done";
 #endif
