@@ -631,15 +631,42 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     const char *v4; // eax
     const MaterialPass *pass; // [esp+30h] [ebp-14h]
     const Material *material; // [esp+34h] [ebp-10h]
+    const MaterialTechnique *technique;
     const GfxStateBits *refStateBits; // [esp+38h] [ebp-Ch]
     uint32_t stateBits[2]; // [esp+3Ch] [ebp-8h] BYREF
+    uint32_t techType;
+    uint32_t stateEntry;
+    uint32_t stateBitsIndex;
 
     PROF_SCOPED("R_SetupPass");
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/render/setup_pass/entry";
 #endif
-    pass = &context.state->technique->passArray[passIndex];
+    if (!context.state)
+    {
+        Com_Error(ERR_DROP, "R_SetupPass: missing command-buffer state");
+        return;
+    }
+
+    technique = context.state->technique;
+    if (!technique)
+    {
+        Com_Error(ERR_DROP, "R_SetupPass: missing material technique");
+        return;
+    }
+    if (passIndex >= (uint32_t)technique->passCount)
+    {
+        Com_Error(
+            ERR_DROP,
+            "R_SetupPass: pass %u outside technique %s passCount %u",
+            passIndex,
+            technique->name ? technique->name : "<unnamed>",
+            (uint32_t)technique->passCount);
+        return;
+    }
+
+    pass = &technique->passArray[passIndex];
     context.state->pass = pass;
     context.state->passIndex = passIndex;
 #ifdef __SWITCH__
@@ -656,15 +683,58 @@ void __cdecl R_SetupPass(GfxCmdBufContext context, uint32_t passIndex)
     g_switchFrameStage = "frame/render/setup_pass/args_resolved";
 #endif
     material = context.state->material;
-    if (material->stateBitsEntry[context.state->techType] >= (uint32_t)material->stateBitsCount)
-        MyAssertHandler(
-            ".\\r_shade.cpp",
-            787,
-            0,
-            "material->stateBitsEntry[context.state->techType] doesn't index material->stateBitsCount\n\t%i not in [0, %i)",
-            material->stateBitsEntry[context.state->techType],
-            material->stateBitsCount);
-    refStateBits = &material->stateBitsTable[passIndex + material->stateBitsEntry[context.state->techType]];
+    if (!material)
+    {
+        context.state->pass = nullptr;
+        Com_Error(
+            ERR_DROP,
+            "R_SetupPass: technique %s has no material",
+            technique->name ? technique->name : "<unnamed>");
+        return;
+    }
+
+    techType = (uint32_t)context.state->techType;
+    if (techType >= (uint32_t)TECHNIQUE_COUNT)
+    {
+        context.state->pass = nullptr;
+        Com_Error(
+            ERR_DROP,
+            "R_SetupPass: material %s has invalid technique type %u (count %u)",
+            material->info.name ? material->info.name : "<unnamed>",
+            techType,
+            (uint32_t)TECHNIQUE_COUNT);
+        return;
+    }
+
+    if (!material->stateBitsTable)
+    {
+        context.state->pass = nullptr;
+        Com_Error(
+            ERR_DROP,
+            "R_SetupPass: material %s has no stateBitsTable",
+            material->info.name ? material->info.name : "<unnamed>");
+        return;
+    }
+
+    stateEntry = (uint32_t)material->stateBitsEntry[techType];
+    if (stateEntry >= (uint32_t)material->stateBitsCount ||
+        passIndex >= (uint32_t)material->stateBitsCount - stateEntry)
+    {
+        context.state->pass = nullptr;
+        Com_Error(
+            ERR_DROP,
+            "R_SetupPass: material %s state bits out of range "
+            "(tech=%u entry=%u pass=%u count=%u)",
+            material->info.name ? material->info.name : "<unnamed>",
+            techType,
+            stateEntry,
+            passIndex,
+            (uint32_t)material->stateBitsCount);
+        return;
+    }
+
+    stateBitsIndex = stateEntry + passIndex;
+    refStateBits = &material->stateBitsTable[stateBitsIndex];
     stateBits[0] = refStateBits->loadBits[0];
     stateBits[1] = refStateBits->loadBits[1];
     iassert( context.source->viewMode != VIEW_MODE_NONE );
