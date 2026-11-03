@@ -9881,46 +9881,6 @@ void __cdecl Menu_PaintAll(UiContext *dc)
         }
     }
 
-#ifdef __SWITCH__
-    // A frontend confirmation opened from the video/options page is an
-    // overlay, not a replacement screen. Menus_Open() leaves the options page
-    // in menuStack and appends the confirmation menu after it. Keep that
-    // already-open page in the paint range instead of drawing a second,
-    // synthetic main_text backdrop.
-    if (anyFullscreen &&
-        UI_GetActiveMenu(dc->localClientNum) != UIMENU_INGAME &&
-        drawStart > 0)
-    {
-        const menuDef_t *foregroundMenu = dc->menuStack[drawStart];
-        const char *foregroundName =
-            foregroundMenu && foregroundMenu->window.name
-                ? foregroundMenu->window.name : "";
-
-        if (Switch_UI_IsConfirmationMenuName(foregroundName))
-        {
-            for (int stackIndex = drawStart - 1; stackIndex >= 0; --stackIndex)
-            {
-                menuDef_t *underlayMenu = dc->menuStack[stackIndex];
-                if (!underlayMenu || !underlayMenu->window.name ||
-                    !Menu_IsVisible(dc, underlayMenu))
-                {
-                    continue;
-                }
-
-                const char *underlayName = underlayMenu->window.name;
-                const bool isOptionsUnderlay =
-                    !I_stricmp(underlayName, "options") ||
-                    std::strncmp(underlayName, "options_", 8) == 0;
-
-                if (isOptionsUnderlay)
-                {
-                    drawStart = stackIndex;
-                    break;
-                }
-            }
-        }
-    }
-
     {
         bool profileInMenuStack = false;
         for (int stackIndex = 0; stackIndex < dc->openMenuCount; ++stackIndex)
