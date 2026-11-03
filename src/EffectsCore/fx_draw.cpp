@@ -1760,6 +1760,29 @@ void __cdecl FX_DrawSpriteEffect(FxSystem *system, FxEffect *effect, int32_t dra
                 MyAssertHandler("c:\\trees\\cod3\\src\\effectscore\\fx_system.h", 334, 0, "%s", "system");
             elem = (FxElem *)FX_PoolFromHandle_Generic<FxElem, 2048>(system->elems, elemHandle);
             elemDef = &elemDefs[elem->defIndex];
+#ifdef __SWITCH__
+            {
+                static volatile uint32_t switchFxSpriteTraceCount = 0;
+                const uint32_t traceIndex =
+                    __sync_fetch_and_add(&switchFxSpriteTraceCount, 1u);
+                if (traceIndex < 24u)
+                {
+                    char trace[352];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][FX SPRITE ACTIVE] n=%u effect=%.80s type=%u elemDef=%u visuals=%u elemBegin=%d drawTime=%d origin=(%.4g,%.4g,%.4g)\\n",
+                        traceIndex,
+                        effect->def && effect->def->name ? effect->def->name : "<null>",
+                        static_cast<unsigned>(elemDef->elemType),
+                        static_cast<unsigned>(elem->defIndex),
+                        static_cast<unsigned>(elemDef->visualCount),
+                        elem->msecBegin,
+                        drawTime,
+                        elem->origin[0], elem->origin[1], elem->origin[2]);
+                    Switch_LogWrite(trace);
+                }
+            }
+#endif
             if (elemDef->elemType > 3u)
                 MyAssertHandler(
                     ".\\EffectsCore\\fx_draw.cpp",
