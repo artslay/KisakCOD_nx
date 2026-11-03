@@ -1770,7 +1770,7 @@ void __cdecl FX_DrawSpriteEffect(FxSystem *system, FxEffect *effect, int32_t dra
                     char trace[352];
                     std::snprintf(
                         trace, sizeof(trace),
-                        "[KisakCOD][FX SPRITE ACTIVE] n=%u effect=%.80s type=%u elemDef=%u visuals=%u elemBegin=%d drawTime=%d origin=(%.4g,%.4g,%.4g)\\n",
+                        "[KisakCOD][FX SPRITE ACTIVE] n=%u effect=%.80s type=%u elemDef=%u visuals=%u elemBegin=%d drawTime=%d origin=(%.4g,%.4g,%.4g)\n",
                         traceIndex,
                         effect->def && effect->def->name ? effect->def->name : "<null>",
                         static_cast<unsigned>(elemDef->elemType),
