@@ -7700,15 +7700,20 @@ bool IDirect3DDevice9::BindUniformSet(
     if (!parse || !m_backend)
         return false;
 
-    // Cached descriptor sets are only reused after BeginFrame has waited for the
-    // previous frame fence. Serialize cursors and descriptor updates.
+    // Each in-flight frame slot owns a separate descriptor-set cache. The
+    // slot's fence has completed before its cursor is rewound or its sets updated.
     std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
+    const uint32_t frameSlot = m_backend->CurrentFrameSlot();
+    if (frameSlot >= 2u)
+        return false;
     const uint64_t frameSerial = m_backend->FrameSerial();
-    if (m_descriptorCacheFrameSerial != frameSerial)
+    if (m_descriptorCacheFrameSerial[frameSlot] != frameSerial)
     {
-        m_samplerSetCursor[0] = m_samplerSetCursor[1] = 0;
-        m_uniformSetCursor[0] = m_uniformSetCursor[1] = 0;
-        m_descriptorCacheFrameSerial = frameSerial;
+        m_samplerSetCursor[frameSlot][0] = 0;
+        m_samplerSetCursor[frameSlot][1] = 0;
+        m_uniformSetCursor[frameSlot][0] = 0;
+        m_uniformSetCursor[frameSlot][1] = 0;
+        m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
     }
 
     VulkanUniformLayout layout{};
@@ -7944,8 +7949,8 @@ bool IDirect3DDevice9::BindUniformSet(
 #endif
 
     const size_t cacheIndex = setIndex == 1 ? 0 : 1;
-    auto &cachedSets = m_uniformDescriptorSets[cacheIndex];
-    const size_t cursor = m_uniformSetCursor[cacheIndex];
+    auto &cachedSets = m_uniformDescriptorSets[frameSlot][cacheIndex];
+    const size_t cursor = m_uniformSetCursor[frameSlot][cacheIndex];
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_allocate";
     VkDescriptorSet set = VK_NULL_HANDLE;
     if (cursor < cachedSets.size())
@@ -7984,7 +7989,7 @@ bool IDirect3DDevice9::BindUniformSet(
         cachedSets.push_back(set);
         traceUniformBindStage("descriptor_cached", bytes, size, 1);
     }
-    ++m_uniformSetCursor[cacheIndex];
+    ++m_uniformSetCursor[frameSlot][cacheIndex];
 
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_update";
     VkWriteDescriptorSet write{};
@@ -8273,20 +8278,25 @@ bool IDirect3DDevice9::BindSamplerSet(
     if (needsSampledLayoutTransition)
         m_backend->EndRendering();
 
-    // Reuse this layout's set at the current command-buffer slot, once the
-    // preceding frame fence has signaled.
+    // Each in-flight frame slot owns a separate descriptor-set cache. The
+    // slot's fence has completed before its cursor is rewound or its sets updated.
     std::lock_guard<std::mutex> descriptorPoolLock(m_backend->DescriptorPoolMutex());
+    const uint32_t frameSlot = m_backend->CurrentFrameSlot();
+    if (frameSlot >= 2u)
+        return false;
     const uint64_t frameSerial = m_backend->FrameSerial();
-    if (m_descriptorCacheFrameSerial != frameSerial)
+    if (m_descriptorCacheFrameSerial[frameSlot] != frameSerial)
     {
-        m_samplerSetCursor[0] = m_samplerSetCursor[1] = 0;
-        m_uniformSetCursor[0] = m_uniformSetCursor[1] = 0;
-        m_descriptorCacheFrameSerial = frameSerial;
+        m_samplerSetCursor[frameSlot][0] = 0;
+        m_samplerSetCursor[frameSlot][1] = 0;
+        m_uniformSetCursor[frameSlot][0] = 0;
+        m_uniformSetCursor[frameSlot][1] = 0;
+        m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
     }
 
     const size_t cacheIndex = setIndex == 0 ? 0 : 1;
-    auto &cachedSets = m_samplerDescriptorSets[cacheIndex];
-    const size_t cursor = m_samplerSetCursor[cacheIndex];
+    auto &cachedSets = m_samplerDescriptorSets[frameSlot][cacheIndex];
+    const size_t cursor = m_samplerSetCursor[frameSlot][cacheIndex];
     VkDescriptorSet set = VK_NULL_HANDLE;
     if (cursor < cachedSets.size())
     {
@@ -8320,7 +8330,7 @@ bool IDirect3DDevice9::BindSamplerSet(
         }
         cachedSets.push_back(set);
     }
-    ++m_samplerSetCursor[cacheIndex];
+    ++m_samplerSetCursor[frameSlot][cacheIndex];
 
     g_switchFrameStage = "frame/render/vulkan/sampler/build_descriptors";
     std::array<VkDescriptorImageInfo,16> images{};
