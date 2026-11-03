@@ -22,6 +22,11 @@
 
 #include <universal/profile.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 int32_t fx_maxLocalClients;
 int32_t fx_serverVisClient;
 
@@ -1579,7 +1584,45 @@ void __cdecl FX_SpawnElem(
 
     iassert(elemDef->elemType != FX_ELEM_TYPE_TRAIL);
 
-    if (!fx_cull_elem_spawn->current.enabled || !FX_CullElemForSpawn(&system->cameraPrev, elemDef, effectFrameWhenPlayed->origin))
+    const bool elemSpawnCulled =
+        fx_cull_elem_spawn->current.enabled &&
+        FX_CullElemForSpawn(&system->cameraPrev, elemDef, effectFrameWhenPlayed->origin);
+#ifdef __SWITCH__
+    if (elemDef->elemType == FX_ELEM_TYPE_CLOUD)
+    {
+        static volatile uint32_t switchCloudSpawnTraceCount = 0;
+        const uint32_t traceIndex =
+            __sync_fetch_and_add(&switchCloudSpawnTraceCount, 1u);
+        if (traceIndex < 12u)
+        {
+            char trace[512];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][FX CLOUD SPAWN CHECK] n=%u effect=%.72s elemDef=%d culled=%u cullEnabled=%u flags=0x%08x visuals=%u spawnRadius=%.4g spawnRange=(%.4g,%.4g) msecNow=%d msecWhen=%d origin=(%.4g,%.4g,%.4g) camera=(%.4g,%.4g,%.4g) frustum=%u\\n",
+                traceIndex,
+                effect->def && effect->def->name ? effect->def->name : "<null>",
+                elemDefIndex,
+                elemSpawnCulled ? 1u : 0u,
+                fx_cull_elem_spawn->current.enabled ? 1u : 0u,
+                static_cast<unsigned>(elemDef->flags),
+                static_cast<unsigned>(elemDef->visualCount),
+                elemDef->spawnFrustumCullRadius,
+                elemDef->spawnRange.base,
+                elemDef->spawnRange.amplitude,
+                system->msecNow,
+                msecWhenPlayed,
+                effectFrameWhenPlayed->origin[0],
+                effectFrameWhenPlayed->origin[1],
+                effectFrameWhenPlayed->origin[2],
+                system->cameraPrev.origin[0],
+                system->cameraPrev.origin[1],
+                system->cameraPrev.origin[2],
+                static_cast<unsigned>(system->cameraPrev.frustumPlaneCount));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
+    if (!elemSpawnCulled)
     {
         msecBegin = elemDef->spawnDelayMsec.base + msecWhenPlayed;
         if (elemDef->spawnDelayMsec.amplitude)
