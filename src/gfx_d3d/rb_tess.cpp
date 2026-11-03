@@ -542,6 +542,43 @@ uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, Gf
             (uint16_t)drawSurf.fields.objectId,
             data->cloudCount);
     cloud = &data->clouds[drawSurf.fields.objectId];
+#ifdef __SWITCH__
+    static volatile uint32_t switchCloudTessTraceCount = 0;
+    const uint32_t switchCloudTessTrace =
+        __sync_fetch_and_add(&switchCloudTessTraceCount, 1u);
+    const bool traceCloudTess = switchCloudTessTrace < 8u;
+    if (traceCloudTess)
+    {
+        const MaterialTechnique *technique = context.state->technique;
+        const MaterialPass *pass = context.state->pass;
+        char trace[640];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX CLOUD DRAW] n=%u material=%.80s technique=%.64s techType=%u pass=%u/%u vs=%.64s ps=%.64s decl=%p cloud=%u/%u radius=(%.4g,%.4g) origin=(%.4g,%.4g,%.4g) end=(%.4g,%.4g,%.4g) vb=%p ib=%p stride=%u\n",
+            switchCloudTessTrace,
+            context.state->material && context.state->material->info.name
+                ? context.state->material->info.name : "<null>",
+            technique && technique->name ? technique->name : "<null>",
+            static_cast<unsigned>(context.state->techType),
+            static_cast<unsigned>(context.state->passIndex),
+            technique ? static_cast<unsigned>(technique->passCount) : 0u,
+            pass && pass->vertexShader && pass->vertexShader->name
+                ? pass->vertexShader->name : "<null>",
+            pass && pass->pixelShader && pass->pixelShader->name
+                ? pass->pixelShader->name : "<null>",
+            static_cast<void *>(pass ? pass->vertexDecl : nullptr),
+            static_cast<unsigned>(drawSurf.fields.objectId),
+            static_cast<unsigned>(data->cloudCount),
+            cloud->radius[0], cloud->radius[1],
+            cloud->placement.base.origin[0],
+            cloud->placement.base.origin[1],
+            cloud->placement.base.origin[2],
+            cloud->endpos[0], cloud->endpos[1], cloud->endpos[2],
+            static_cast<void *>(gfxBuf.particleCloudVertexBuffer),
+            static_cast<void *>(gfxBuf.particleCloudIndexBuffer), 20u);
+        Switch_LogWrite(trace);
+    }
+#endif
     {
         PROF_SCOPED("RB_SetParticleCloudConstants");
         R_SetParticleCloudConstants(commonSource, cloud);
@@ -573,6 +610,17 @@ uint32_t __cdecl R_TessParticleCloudList(const GfxDrawSurfListArgs *listArgs, Gf
 #endif
     R_DrawIndexedPrimitive(&context.state->prim, &args);
 #ifdef __SWITCH__
+    if (traceCloudTess)
+    {
+        char trace[192];
+        std::snprintf(
+            trace, sizeof(trace),
+            "[KisakCOD][FX CLOUD DRAW END] n=%u drawIssued=1 vertices=%u triangles=%u\n",
+            switchCloudTessTrace,
+            static_cast<unsigned>(args.vertexCount),
+            static_cast<unsigned>(args.triCount));
+        Switch_LogWrite(trace);
+    }
     if (context.state->prim.device)
         context.state->prim.device->SetParticleCloudPassActive(false);
 #endif
