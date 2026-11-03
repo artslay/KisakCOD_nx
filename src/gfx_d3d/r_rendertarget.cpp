@@ -371,9 +371,17 @@ IDirect3DSurface9 *__cdecl R_AssignSingleSampleDepthStencilSurface()
     int depthStencilHeight; // [esp+8h] [ebp-4h] BYREF
 
     if (!dx.singleSampleDepthStencilSurface && dx.multiSampleType == D3DMULTISAMPLE_NONE)
-        dx.singleSampleDepthStencilSurface = gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER].surface.depthStencil;
+    {
+        dx.singleSampleDepthStencilSurface =
+            gfxRenderTargets[R_RENDERTARGET_FRAME_BUFFER].surface.depthStencil;
+        // The cache is released separately in R_ShutdownRenderTargets, so it
+        // must own a reference independent of the framebuffer and target slots.
+        if (dx.singleSampleDepthStencilSurface)
+            dx.singleSampleDepthStencilSurface->AddRef();
+    }
     if (dx.singleSampleDepthStencilSurface)
     {
+        // Each render target receiving this surface owns its own reference.
         dx.singleSampleDepthStencilSurface->AddRef();
         return dx.singleSampleDepthStencilSurface;
     }
@@ -400,6 +408,12 @@ IDirect3DSurface9 *__cdecl R_AssignSingleSampleDepthStencilSurface()
                 v1);
         }
         iassert( dx.singleSampleDepthStencilSurface );
+        // In single-sample mode the initial CreateDepthStencilSurface reference
+        // belongs to the cache; the render-target slot needs an independent one.
+        // In MSAA mode the first target continues to own the initial reference,
+        // matching R_ShutdownRenderTargets' existing shared-cache handling.
+        if (dx.multiSampleType == D3DMULTISAMPLE_NONE)
+            dx.singleSampleDepthStencilSurface->AddRef();
         return dx.singleSampleDepthStencilSurface;
     }
 }
