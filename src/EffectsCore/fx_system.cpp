@@ -1598,7 +1598,7 @@ void __cdecl FX_SpawnElem(
             char trace[512];
             std::snprintf(
                 trace, sizeof(trace),
-                "[KisakCOD][FX CLOUD SPAWN CHECK] n=%u effect=%.72s elemDef=%d culled=%u cullEnabled=%u flags=0x%08x visuals=%u spawnRadius=%.4g spawnRange=(%.4g,%.4g) msecNow=%d msecWhen=%d origin=(%.4g,%.4g,%.4g) camera=(%.4g,%.4g,%.4g) frustum=%u\\n",
+                "[KisakCOD][FX CLOUD SPAWN CHECK] n=%u effect=%.72s elemDef=%d culled=%u cullEnabled=%u flags=0x%08x visuals=%u spawnRadius=%.4g spawnRange=(%.4g,%.4g) msecNow=%d msecWhen=%d origin=(%.4g,%.4g,%.4g) camera=(%.4g,%.4g,%.4g) frustum=%u\n",
                 traceIndex,
                 effect->def && effect->def->name ? effect->def->name : "<null>",
                 elemDefIndex,
