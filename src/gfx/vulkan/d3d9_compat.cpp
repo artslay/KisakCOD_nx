@@ -6457,12 +6457,24 @@ IDirect3DDevice9::IDirect3DDevice9()
 
 IDirect3DDevice9::~IDirect3DDevice9()
 {
-    if (m_backend)
-        m_backend->EndRendering();
+    // EndRendering() only closes the active dynamic-rendering scope. It does
+    // not wait for submissions already queued on the graphics queue. D3D9
+    // device teardown implicitly retires its work; Vulkan requires that
+    // synchronization before destroying pipelines still referenced by those
+    // submissions.
+    VulkanBackend *backend = m_backend;
+    VkDevice vkDevice = backend ? backend->Device() : VK_NULL_HANDLE;
+    if (backend)
+    {
+        backend->EndRendering();
+        backend->WaitForGpu();
+    }
 
     for (auto &pipeline : m_pipelines)
-        if (pipeline.second)
-            vkDestroyPipeline(m_backend->Device(), pipeline.second, nullptr);
+    {
+        if (vkDevice && pipeline.second)
+            vkDestroyPipeline(vkDevice, pipeline.second, nullptr);
+    }
     m_pipelines.clear();
 
     for (auto &stream : m_streams)
