@@ -13641,6 +13641,9 @@ void __cdecl Load_LeafBrushArray(bool atStreamStart, int32_t count)
 }
 
 #ifdef __SWITCH__
+static_assert(sizeof(DynEntityDef) == 120,
+    "Switch DynEntityDef must use the widened ARM64 pointer layout");
+
 static DynEntityDef *Switch_AllocClipMapDynEntityDefArray(uint16_t count)
 {
     // Keep the serialized 32-bit array at its original 16-byte stream
