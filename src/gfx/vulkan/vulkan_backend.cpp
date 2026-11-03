@@ -3923,8 +3923,22 @@ bool VulkanBackend::FlushQueuedBufferUpdates()
                 break;
             if (update.size != 0)
             {
-                dataBegin = std::min(dataBegin, update.dataOffset);
-                dataEnd = std::max(dataEnd, update.dataOffset + update.size);
+                const size_t candidateBegin =
+                    std::min(dataBegin, update.dataOffset);
+                const size_t candidateEnd =
+                    std::max(dataEnd, update.dataOffset + update.size);
+                // One staging slice must fit in the ring after a frame split.
+                // End this batch before it grows beyond the ring capacity.
+                if (segmentEnd != i &&
+                    candidateEnd - candidateBegin > m_uniformCapacity)
+                    break;
+                if (candidateEnd - candidateBegin > m_uniformCapacity)
+                {
+                    requeueRemaining(i);
+                    return false;
+                }
+                dataBegin = candidateBegin;
+                dataEnd = candidateEnd;
             }
             ++segmentEnd;
         }
