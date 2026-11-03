@@ -8752,6 +8752,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     key = HashCombine(key, m_viewport.Height);
     key = HashCombine(key, m_switchUnlit);
     key = HashCombine(key, m_markMeshPassActive);
+    key = HashCombine(key, m_particleCloudPassActive);
     key = HashCombine(key, m_depthEnable && !m_switchUnlit);
     key = HashCombine(key, m_depthWrite && !m_switchUnlit);
     key = HashCombine(key, m_depthFunc);
@@ -9897,14 +9898,16 @@ bool IDirect3DDevice9::EnsurePipeline()
     // D3D9 cull values are NONE=1, CW=2, CCW=3. The negative Vulkan
     // viewport preserves D3D9's top-left origin, so clockwise NDC triangles
     // are Vulkan front faces. Keep the ordinary material cull state.
-    // FX code meshes contain camera-facing sprite/tail cards whose generated
-    // winding can face either side. Match the original two-sided FX draw path
-    // without changing culling for world geometry or XModels.
-    raster.cullMode = (switchFragmentOutputProbeActive || g_switchFxCodeMeshDrawActive)
-        ? VK_CULL_MODE_NONE
-        : (m_cullMode == 1
+    // FX code meshes and particle clouds contain procedural camera-facing
+    // cards. Their generated winding can vary with the effect direction, so
+    // keep these FX-only passes two-sided without changing world/model culling.
+    raster.cullMode =
+        (switchFragmentOutputProbeActive || g_switchFxCodeMeshDrawActive ||
+         m_particleCloudPassActive)
             ? VK_CULL_MODE_NONE
-            : (m_cullMode == 2 ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_BACK_BIT));
+            : (m_cullMode == 1
+                ? VK_CULL_MODE_NONE
+                : (m_cullMode == 2 ? VK_CULL_MODE_FRONT_BIT : VK_CULL_MODE_BACK_BIT));
     raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
     bool useFloatDepthBiasRepresentation = false;
     bool useForceUnormDepthBiasRepresentation = false;
