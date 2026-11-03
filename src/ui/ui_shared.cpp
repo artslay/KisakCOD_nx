@@ -44,6 +44,9 @@ void *captureData;
 #ifdef __SWITCH__
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
+#ifdef KISAK_SP
+extern void __cdecl UI_RunMenuScript(int localClientNum, const char **args, const char *actualScript);
+#endif
 extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern bool Switch_ShowSoftwareKeyboard(const char *initialText, unsigned int maxChars, char *outText, unsigned int outSize);
 
@@ -2920,15 +2923,27 @@ static bool Switch_UI_DispatchCloseOnlyPauseAction(
 
     if (isRestart)
     {
-        // Do not restart yet. The popup's affirmative button invokes Restart.
-        Switch_UI_OpenPauseConfirmation(dc, true);
+        // Prefer the authored confirmation popup when this level/UI set has one.
+        // Some maps do not load a restart popup; in that case dispatch the same
+        // engine menu command instead of consuming the button press.
+        if (!Switch_UI_OpenPauseConfirmation(dc, true))
+        {
+            const char *restartArgs[] = { "Restart" };
+            UI_RunMenuScript(dc->localClientNum, restartArgs, "Restart");
+        }
         return true;
     }
 
     if (isReturnToMenu)
     {
-        // Do not disconnect/quit yet. The popup's affirmative button invokes Leave.
-        Switch_UI_OpenPauseConfirmation(dc, false);
+        // Prefer the authored confirmation popup when it is available. A few
+        // level UI sets omit it; falling back to the engine's Leave command is
+        // required so the action still disconnects and enters UIMENU_MAIN.
+        if (!Switch_UI_OpenPauseConfirmation(dc, false))
+        {
+            const char *leaveArgs[] = { "Leave" };
+            UI_RunMenuScript(dc->localClientNum, leaveArgs, "Leave");
+        }
         return true;
     }
 
