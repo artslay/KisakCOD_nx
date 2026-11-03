@@ -1877,6 +1877,23 @@ bool __cdecl FS_RenameChecked(char *from, char *fromDir, char *to, char *toDir)
         return false;
     }
 
+    // Save files are written to save/temp.svg first, then moved into the
+    // profile tree. Its nested save/autosave and save/internal directories
+    // may not exist on first use, so create the destination parent before
+    // asking rename() to finalize the file.
+    if (FS_CreatePath(b) != 0)
+    {
+        char trace[640];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PROFILE FS] destination directory creation failed: %s errno=%d\n",
+            b,
+            errno);
+        Switch_LogWrite(trace);
+        return false;
+    }
+
     if (std::rename(a, b) != 0)
     {
         char trace[640];
