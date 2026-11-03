@@ -539,11 +539,11 @@ private:
     // frees every set, which currently exposes allocator-list corruption.
     // Descriptor sets are isolated per in-flight frame slot. The GPU may
     // still consume the previous slot while the CPU rewrites this slot's sets.
-    std::array<std::array<std::vector<VkDescriptorSet>,2>,2> m_samplerDescriptorSets{};
-    std::array<std::array<std::vector<VkDescriptorSet>,2>,2> m_uniformDescriptorSets{};
-    std::array<std::array<size_t,2>,2> m_samplerSetCursor{};
-    std::array<std::array<size_t,2>,2> m_uniformSetCursor{};
-    std::array<uint64_t,2> m_descriptorCacheFrameSerial{};
+    std::array<std::array<std::vector<VkDescriptorSet>,2>,VulkanBackend::FramesInFlight> m_samplerDescriptorSets{};
+    std::array<std::array<std::vector<VkDescriptorSet>,2>,VulkanBackend::FramesInFlight> m_uniformDescriptorSets{};
+    std::array<std::array<size_t,2>,VulkanBackend::FramesInFlight> m_samplerSetCursor{};
+    std::array<std::array<size_t,2>,VulkanBackend::FramesInFlight> m_uniformSetCursor{};
+    std::array<uint64_t,VulkanBackend::FramesInFlight> m_descriptorCacheFrameSerial{};
     bool m_pipelineDirty=true;
     std::unordered_map<uint64_t, VkPipeline> m_pipelines;
     void LogGpuDrawCommand(const char *kind, uint32_t primitiveType,
