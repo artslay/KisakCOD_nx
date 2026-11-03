@@ -1093,7 +1093,7 @@ void __cdecl FX_DrawNonSpriteEffect(FxSystem *system, FxEffect *effect, uint32_t
                     char trace[384];
                     std::snprintf(
                         trace, sizeof(trace),
-                        "[KisakCOD][FX CLOUD ACTIVE] n=%u effect=%.72s handle=%u elemDef=%u visuals=%u elemBegin=%d drawTime=%d origin=(%.4g,%.4g,%.4g)\\n",
+                        "[KisakCOD][FX CLOUD ACTIVE] n=%u effect=%.72s handle=%u elemDef=%u visuals=%u elemBegin=%d drawTime=%d origin=(%.4g,%.4g,%.4g)\n",
                         traceIndex,
                         effect->def && effect->def->name ? effect->def->name : "<null>",
                         static_cast<unsigned>(elemHandle),
