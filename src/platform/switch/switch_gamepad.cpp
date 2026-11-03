@@ -96,6 +96,30 @@ static void ReleaseForwardedKey(int key)
     CL_KeyEvent(0, key, 0, Sys_Milliseconds());
 }
 
+// Input routing can change before a physical button is released (for example,
+// B closes KEYCATCH_UI, after which the normal UI branch no longer polls B).
+// Release all synthetic engine keys whose physical sources went up this frame
+// before any state-dependent early return can skip their key-up event.
+static void ReleaseForwardedKeysForReleasedButtons()
+{
+    const u64 releasedButtons = g_previousButtons & ~g_buttons;
+    if (!releasedButtons)
+        return;
+
+    const uint32_t eventTime = Sys_Milliseconds();
+    for (int key = 0; key < 256; ++key)
+    {
+        u64 &forwardedButtons = g_forwardedKeyButtons[key];
+        const u64 releasedSources = forwardedButtons & releasedButtons;
+        if (!releasedSources)
+            continue;
+
+        forwardedButtons &= ~releasedSources;
+        if (forwardedButtons == 0)
+            CL_KeyEvent(0, key, 0, eventTime);
+    }
+}
+
 static u64 ButtonMask(GPadButton button)
 {
     switch (button)
@@ -222,6 +246,11 @@ void Switch_GamepadFrame()
     g_buttons = padGetButtons(&g_pad);
     g_leftStick = padGetStickPos(&g_pad, 0);
     g_rightStick = padGetStickPos(&g_pad, 1);
+
+    // Deliver physical key-up events independently of the current UI,
+    // console, gameplay, and cinematic routing mode. In particular, a B press
+    // that closes the pause menu must still release its synthetic Escape key.
+    ReleaseForwardedKeysForReleasedButtons();
 
     // padUpdate() remains valid for handheld mode and connected standard pads.
     // Consider the pad active whenever the standard input service is producing
