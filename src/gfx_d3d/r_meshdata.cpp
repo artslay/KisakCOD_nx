@@ -72,6 +72,9 @@ void __cdecl R_ResetMesh(GfxMeshData *mesh)
 void __cdecl R_BeginMeshVerts(GfxMeshData *mesh)
 {
     iassert( mesh->vb.verts == NULL );
+#ifdef __SWITCH__
+    mesh->vb.buffer->BeginMeshWriteTracking();
+#endif
     mesh->vb.verts = (uint8_t *)R_LockVertexBuffer(
         mesh->vb.buffer,
         0,
@@ -119,6 +122,11 @@ void __cdecl R_SetQuadMeshData(
     v10 = y + h;
     R_SetVertex2d(verts + 2, v11, v10, s1, t1, color);
     R_SetVertex2d(verts + 3, x, v10, s0, t1, color);
+#ifdef __SWITCH__
+    // This helper writes its complete four-vertex allocation directly rather
+    // than reserving through R_ReserveMeshVerts.
+    mesh->vb.buffer->MarkWrittenRange(0, static_cast<uint32_t>(mesh->vb.total));
+#endif
     R_EndMeshVerts(mesh);
     mesh->indexCount = 6;
     mesh->vb.used = 128;
