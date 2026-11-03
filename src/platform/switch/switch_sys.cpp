@@ -3959,8 +3959,16 @@ uint32_t __cdecl Sys_Milliseconds()
 
 void __cdecl Sys_LockWrite(FastCriticalSection *critSect)
 {
-    if (!critSect) return;
-    while (__atomic_exchange_n(&critSect->writeCount, 1u, __ATOMIC_ACQUIRE)) std::this_thread::yield();
+    if (!critSect)
+        return;
+
+    // Close the writer gate first, then drain readers that entered before it.
+    // DB_LockHashRead backs out and retries if it races this gate transition.
+    while (__atomic_exchange_n(&critSect->writeCount, 1u, __ATOMIC_ACQUIRE))
+        std::this_thread::yield();
+
+    while (__atomic_load_n(&critSect->readCount, __ATOMIC_ACQUIRE))
+        std::this_thread::yield();
 }
 
 void __cdecl Sys_UnlockWrite(FastCriticalSection *critSect)
