@@ -681,13 +681,18 @@ void VulkanBackend::Shutdown()
         vkFreeMemory(m_device, m_uniformRingMemory, nullptr);
     m_uniformRingMemory = VK_NULL_HANDLE;
 
-    if (m_sync.imageAvailable) vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
-    m_sync.imageAvailable = VK_NULL_HANDLE;
-    if (m_sync.fence) vkDestroyFence(m_device, m_sync.fence, nullptr);
-    m_sync.fence = VK_NULL_HANDLE;
+    for (FrameSync &frame : m_frameSync)
+    {
+        if (frame.imageAvailable)
+            vkDestroySemaphore(m_device, frame.imageAvailable, nullptr);
+        if (frame.fence)
+            vkDestroyFence(m_device, frame.fence, nullptr);
+        if (frame.commandPool)
+            vkDestroyCommandPool(m_device, frame.commandPool, nullptr);
+        frame = FrameSync{};
+    }
     if (m_immediateCommandPool)
         vkDestroyCommandPool(m_device, m_immediateCommandPool, nullptr);
-    if (m_commandPool) vkDestroyCommandPool(m_device, m_commandPool, nullptr);
 
     DestroyDefaultDepth();
     DestroySwapchain();
@@ -704,6 +709,9 @@ void VulkanBackend::Shutdown()
     m_commandPool = VK_NULL_HANDLE;
     m_immediateCommandPool = VK_NULL_HANDLE;
     m_commandBuffer = VK_NULL_HANDLE;
+    m_currentFrameSlot = 0;
+    m_nextFrameSlot = 0;
+    m_completedFrameSerial.store(0, std::memory_order_release);
     m_descriptorPool = VK_NULL_HANDLE;
     m_pipelineLayout = VK_NULL_HANDLE;
     m_uniformRing = VK_NULL_HANDLE;
@@ -1193,9 +1201,18 @@ bool VulkanBackend::CreateSwapchain()
     }
     modes.resize(presentCount);
 
-    m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    for (VkPresentModeKHR mode : modes)
-        if (mode == VK_PRESENT_MODE_FIFO_KHR) { m_presentMode = mode; break; }
+    const auto hasPresentMode = [&modes](VkPresentModeKHR wanted)
+    {
+        return std::find(modes.begin(), modes.end(), wanted) != modes.end();
+    };
+    const bool mailboxImageCountSupported =
+        !caps.maxImageCount || caps.maxImageCount >= caps.minImageCount + 1u;
+    if (mailboxImageCountSupported && hasPresentMode(VK_PRESENT_MODE_MAILBOX_KHR))
+        m_presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+    else if (hasPresentMode(VK_PRESENT_MODE_IMMEDIATE_KHR))
+        m_presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    else
+        m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
     VkExtent2D extent{};
     if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max())
@@ -1209,6 +1226,8 @@ bool VulkanBackend::CreateSwapchain()
     m_height = extent.height;
 
     uint32_t imageCount = std::max(3u, caps.minImageCount);
+    if (m_presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+        imageCount = std::max(imageCount, caps.minImageCount + 1u);
     if (caps.maxImageCount && imageCount > caps.maxImageCount)
         imageCount = caps.maxImageCount;
 
@@ -1236,6 +1255,19 @@ bool VulkanBackend::CreateSwapchain()
         static_cast<unsigned>(caps.supportedUsageFlags),
         static_cast<unsigned>(usage));
     Switch_LogWrite(usageTrace);
+    char presentTrace[192];
+    const char *presentName =
+        m_presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "MAILBOX" :
+        m_presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR ? "IMMEDIATE" : "FIFO";
+    std::snprintf(
+        presentTrace, sizeof(presentTrace),
+        "[KisakCOD][VK PRESENT MODE] mode=%s imagesRequested=%u surfaceMin=%u surfaceMax=%u framesInFlight=%u\n",
+        presentName,
+        imageCount,
+        caps.minImageCount,
+        caps.maxImageCount,
+        FramesInFlight);
+    Switch_LogWrite(presentTrace);
 #endif
 
     // Do not inherit a display rotation into the game framebuffer when the
@@ -1347,27 +1379,36 @@ bool VulkanBackend::CreateCommandResources()
     pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     pool.queueFamilyIndex = m_graphicsQueueFamily;
 
-    const VkResult commandPoolResult =
-        vkCreateCommandPool(m_device, &pool, nullptr, &m_commandPool);
-    if (commandPoolResult != VK_SUCCESS)
+    for (uint32_t slotIndex = 0; slotIndex < FramesInFlight; ++slotIndex)
     {
-        SetError("vkCreateCommandPool failed", commandPoolResult);
-        return false;
+        FrameSync &frame = m_frameSync[slotIndex];
+        const VkResult commandPoolResult =
+            vkCreateCommandPool(m_device, &pool, nullptr, &frame.commandPool);
+        if (commandPoolResult != VK_SUCCESS)
+        {
+            SetError("vkCreateCommandPool for frame slot failed", commandPoolResult);
+            return false;
+        }
+
+        VkCommandBufferAllocateInfo alloc{};
+        alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        alloc.commandPool = frame.commandPool;
+        alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        alloc.commandBufferCount = 1;
+
+        const VkResult commandBufferResult =
+            vkAllocateCommandBuffers(m_device, &alloc, &frame.commandBuffer);
+        if (commandBufferResult != VK_SUCCESS)
+        {
+            SetError("vkAllocateCommandBuffers for frame slot failed", commandBufferResult);
+            return false;
+        }
     }
 
-    VkCommandBufferAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc.commandPool = m_commandPool;
-    alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    alloc.commandBufferCount = 1;
-
-    const VkResult commandBufferResult =
-        vkAllocateCommandBuffers(m_device, &alloc, &m_commandBuffer);
-    if (commandBufferResult != VK_SUCCESS)
-    {
-        SetError("vkAllocateCommandBuffers failed", commandBufferResult);
-        return false;
-    }
+    m_currentFrameSlot = 0;
+    m_nextFrameSlot = 0;
+    m_commandPool = m_frameSync[0].commandPool;
+    m_commandBuffer = m_frameSync[0].commandBuffer;
 
     VkCommandPoolCreateInfo immediatePool = pool;
     const VkResult immediatePoolResult = vkCreateCommandPool(
@@ -1411,12 +1452,12 @@ bool VulkanBackend::CreateDescriptorResources()
     // pool every frame. Keep enough capacity for a high-water mark of 8192 draws
     // (two 16-sampler sets and two uniform sets per draw).
     VkDescriptorPoolSize poolSizes[] = {
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 262144},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 16384}
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 262144 * FramesInFlight},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 16384 * FramesInFlight}
     };
     VkDescriptorPoolCreateInfo pool{};
     pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    pool.maxSets = 8192 * 4;
+    pool.maxSets = 8192 * 4 * FramesInFlight;
     pool.poolSizeCount = 2;
     pool.pPoolSizes = poolSizes;
     if (vkCreateDescriptorPool(m_device, &pool, nullptr, &m_descriptorPool) != VK_SUCCESS)
@@ -1435,7 +1476,7 @@ bool VulkanBackend::CreateUniformRing()
         16, props.limits.minUniformBufferOffsetAlignment);
 
     return CreateBuffer(
-        m_uniformCapacity,
+        m_uniformCapacity * FramesInFlight,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1521,25 +1562,35 @@ bool VulkanBackend::CreateSync()
 {
     VkSemaphoreCreateInfo semaphore{};
     semaphore.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    const VkResult imageAvailableResult =
-        vkCreateSemaphore(m_device, &semaphore, nullptr, &m_sync.imageAvailable);
-    if (imageAvailableResult != VK_SUCCESS)
-    {
-        SetError("vkCreateSemaphore imageAvailable failed", imageAvailableResult);
-        return false;
-    }
 
     VkFenceCreateInfo fence{};
     fence.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-    const VkResult fenceResult = vkCreateFence(m_device, &fence, nullptr, &m_sync.fence);
-    if (fenceResult != VK_SUCCESS)
+
+    for (uint32_t slotIndex = 0; slotIndex < FramesInFlight; ++slotIndex)
     {
-        SetError("vkCreateFence failed", fenceResult);
-        vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
-        m_sync.imageAvailable = VK_NULL_HANDLE;
-        return false;
+        FrameSync &frame = m_frameSync[slotIndex];
+        const VkResult semaphoreResult =
+            vkCreateSemaphore(m_device, &semaphore, nullptr, &frame.imageAvailable);
+        if (semaphoreResult != VK_SUCCESS)
+        {
+            SetError("vkCreateSemaphore imageAvailable for frame slot failed", semaphoreResult);
+            return false;
+        }
+
+        const VkResult fenceResult = vkCreateFence(m_device, &fence, nullptr, &frame.fence);
+        if (fenceResult != VK_SUCCESS)
+        {
+            SetError("vkCreateFence for frame slot failed", fenceResult);
+            return false;
+        }
+        frame.submittedFrameSerial = 0;
     }
+
+    m_currentFrameSlot = 0;
+    m_nextFrameSlot = 0;
+    m_commandPool = m_frameSync[0].commandPool;
+    m_commandBuffer = m_frameSync[0].commandBuffer;
     return true;
 }
 
@@ -1585,34 +1636,47 @@ bool VulkanBackend::RecreateSwapchain()
     const uint32_t previousWidth = m_width;
     const uint32_t previousHeight = m_height;
 
+    // Device idle makes both frame slots' command pools and deferred resources
+    // safe to recycle during swapchain recreation.
+    m_completedFrameSerial.store(
+        m_frameSerial.load(std::memory_order_acquire),
+        std::memory_order_release);
+    FlushDeferredResources();
+
     m_frameActive = false;
     m_imageAvailablePending = false;
     m_renderingActive = false;
     m_backbufferClearedThisFrame = false;
     m_uniformOffset = 0;
+    m_uniformFrameBase = 0;
     m_swapchainIndex = 0;
+    m_currentFrameSlot = 0;
+    m_nextFrameSlot = 0;
 
-    if (m_commandPool)
+    for (FrameSync &frame : m_frameSync)
     {
-        const VkResult resetResult =
-            vkResetCommandPool(m_device, m_commandPool, 0);
-        if (resetResult != VK_SUCCESS)
+        if (frame.commandPool)
         {
-            SetError("vkResetCommandPool failed while recreating swapchain", resetResult);
-            return false;
+            const VkResult resetResult =
+                vkResetCommandPool(m_device, frame.commandPool, 0);
+            if (resetResult != VK_SUCCESS)
+            {
+                SetError("vkResetCommandPool failed while recreating swapchain", resetResult);
+                return false;
+            }
         }
+        if (frame.imageAvailable)
+            vkDestroySemaphore(m_device, frame.imageAvailable, nullptr);
+        if (frame.fence)
+            vkDestroyFence(m_device, frame.fence, nullptr);
+        frame.imageAvailable = VK_NULL_HANDLE;
+        frame.fence = VK_NULL_HANDLE;
+        frame.submittedFrameSerial = 0;
     }
+    m_commandPool = m_frameSync[0].commandPool;
+    m_commandBuffer = m_frameSync[0].commandBuffer;
 
     DestroySwapchain();
-
-    // A failed acquire/present can leave the per-frame image-available semaphore
-    // or fence state uncertain. Swapchain-image present semaphores were released
-    // by DestroySwapchain above; recreate the remaining sync objects after idle.
-    if (m_sync.imageAvailable)
-        vkDestroySemaphore(m_device, m_sync.imageAvailable, nullptr);
-    if (m_sync.fence)
-        vkDestroyFence(m_device, m_sync.fence, nullptr);
-    m_sync = FrameSync{};
 
     {
         std::lock_guard<std::mutex> errorLock(m_errorMutex);
@@ -1664,22 +1728,41 @@ bool VulkanBackend::BeginFrame()
     if (m_swapchainNeedsRecreate && !RecreateSwapchain())
         return false;
 
+    // Rotate through independent command/sync slots. Only the slot being
+    // reused waits; the other frame can remain queued on the graphics queue.
+    const uint32_t slotIndex = m_nextFrameSlot;
+    FrameSync &frame = m_frameSync[slotIndex];
     const VkResult waitResult =
-        vkWaitForFences(m_device, 1, &m_sync.fence, VK_TRUE, UINT64_MAX);
+        vkWaitForFences(m_device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
     if (waitResult != VK_SUCCESS)
     {
-        SetError("vkWaitForFences failed", waitResult);
+        SetError("vkWaitForFences failed for frame slot", waitResult);
         return false;
     }
 
-    // The fence proves that commands from the previous frame no longer use
-    // resources released while that frame was being recorded or submitted.
-    FlushDeferredResources();
+    uint64_t completedSerial =
+        m_completedFrameSerial.load(std::memory_order_relaxed);
+    while (completedSerial < frame.submittedFrameSerial &&
+           !m_completedFrameSerial.compare_exchange_weak(
+               completedSerial,
+               frame.submittedFrameSerial,
+               std::memory_order_release,
+               std::memory_order_relaxed))
+    {
+    }
+    FlushDeferredResources(
+        m_completedFrameSerial.load(std::memory_order_acquire));
 
-    // Keep the fence signaled until a command buffer is ready to submit.
-    // Resetting it before vkAcquireNextImageKHR can leave an unsignaled fence
-    // when acquire reports OUT_OF_DATE, making the next BeginFrame wait forever.
-    const VkResult resetPoolResult = vkResetCommandPool(m_device, m_commandPool, 0);
+    m_currentFrameSlot = slotIndex;
+    m_commandPool = frame.commandPool;
+    m_commandBuffer = frame.commandBuffer;
+    m_uniformFrameBase =
+        static_cast<VkDeviceSize>(slotIndex) * m_uniformCapacity;
+    m_uniformOffset = 0;
+
+    // Keep the fence signaled until this frame is ready for final submission.
+    const VkResult resetPoolResult =
+        vkResetCommandPool(m_device, frame.commandPool, 0);
     if (resetPoolResult != VK_SUCCESS)
     {
         SetError("vkResetCommandPool failed at frame start", resetPoolResult);
@@ -1687,16 +1770,12 @@ bool VulkanBackend::BeginFrame()
             (void)RecreateSwapchain();
         return false;
     }
-    // Descriptor sets remain allocated and are reused by the D3D9 compatibility
-    // device after the previous frame fence above has signaled. Resetting the pool
-    // here forces NVK to free every set on every frame and currently crashes in _free_r.
-    m_uniformOffset = 0;
 
     VkResult result = vkAcquireNextImageKHR(
         m_device,
         m_swapchain,
         UINT64_MAX,
-        m_sync.imageAvailable,
+        frame.imageAvailable,
         VK_NULL_HANDLE,
         &m_swapchainIndex);
 
@@ -1732,10 +1811,13 @@ bool VulkanBackend::BeginFrame()
 
     m_frameActive = true;
     m_frameSerial.fetch_add(1, std::memory_order_relaxed);
+    m_nextFrameSlot = (slotIndex + 1u) % FramesInFlight;
     m_renderingActive = false;
     m_backbufferClearedThisFrame = false;
 
-    if (m_defaultDepthImage && m_defaultDepthLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+    // Reuse of the shared default-depth attachment needs a same-layout
+    // dependency from the previous frame's depth writes.
+    if (m_defaultDepthImage)
         TransitionImage(
             m_defaultDepthImage,
             m_defaultDepthLayout,
@@ -1743,6 +1825,18 @@ bool VulkanBackend::BeginFrame()
             DepthAspect(m_depthFormat));
     m_defaultDepthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+#ifdef __SWITCH__
+    char frameTrace[192];
+    std::snprintf(
+        frameTrace, sizeof(frameTrace),
+        "[KisakCOD][VK FRAME SLOT] begin slot=%u serial=%llu completed=%llu swapImage=%u\n",
+        slotIndex,
+        static_cast<unsigned long long>(FrameSerial()),
+        static_cast<unsigned long long>(
+            m_completedFrameSerial.load(std::memory_order_relaxed)),
+        m_swapchainIndex);
+    Switch_LogWrite(frameTrace);
+#endif
     return true;
 }
 
@@ -1791,7 +1885,7 @@ bool VulkanBackend::SynchronizeActiveFrame()
     if (m_imageAvailablePending)
     {
         submit.waitSemaphoreCount = 1;
-        submit.pWaitSemaphores = &m_sync.imageAvailable;
+        submit.pWaitSemaphores = &m_frameSync[m_currentFrameSlot].imageAvailable;
         submit.pWaitDstStageMask = &waitStage;
     }
     submit.commandBufferCount = 1;
@@ -1876,6 +1970,8 @@ bool VulkanBackend::EndFrame()
 #endif
         return true;
     }
+
+    FrameSync &frame = m_frameSync[m_currentFrameSlot];
 
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/present/end_rendering";
@@ -1974,7 +2070,7 @@ bool VulkanBackend::EndFrame()
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/present/reset_fence";
 #endif
-    const VkResult resetFenceResult = vkResetFences(m_device, 1, &m_sync.fence);
+    const VkResult resetFenceResult = vkResetFences(m_device, 1, &frame.fence);
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/present/reset_fence_return";
 #endif
@@ -1995,7 +2091,7 @@ bool VulkanBackend::EndFrame()
     if (m_imageAvailablePending)
     {
         submit.waitSemaphoreCount = 1;
-        submit.pWaitSemaphores = &m_sync.imageAvailable;
+        submit.pWaitSemaphores = &m_frameSync[m_currentFrameSlot].imageAvailable;
         submit.pWaitDstStageMask = &waitStage;
     }
     submit.commandBufferCount = 1;
@@ -2009,7 +2105,7 @@ bool VulkanBackend::EndFrame()
         g_switchFrameStage = "frame/present/queue_submit";
 #endif
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
-        submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, m_sync.fence);
+        submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, frame.fence);
 #ifdef __SWITCH__
         g_switchFrameStage = "frame/present/queue_submit_return";
 #endif
@@ -2036,8 +2132,8 @@ bool VulkanBackend::EndFrame()
             m_imageAvailablePending ? 1u : 0u,
             m_commandBuffer ? 1u : 0u,
             m_graphicsQueue ? 1u : 0u,
-            m_sync.fence ? 1u : 0u,
-            m_sync.imageAvailable ? 1u : 0u,
+            frame.fence ? 1u : 0u,
+            frame.imageAvailable ? 1u : 0u,
             validSignalSemaphore ? 1u : 0u,
             m_presentSourceImage && m_presentSourceView ? 1u : 0u);
         Switch_LogWriteError(submitTrace);
@@ -2048,6 +2144,7 @@ bool VulkanBackend::EndFrame()
         return false;
     }
     m_imageAvailablePending = false;
+    frame.submittedFrameSerial = FrameSerial();
 
 
     VkPresentInfoKHR present{};
@@ -2524,6 +2621,7 @@ void VulkanBackend::DeferDestroyBuffer(
     resource.buffer = buffer;
     resource.memory = memory;
     resource.memoryMapped = memoryMapped;
+    resource.retireFrameSerial = FrameSerial();
     std::lock_guard<std::mutex> lock(m_deferredResourcesMutex);
     m_deferredResources.push_back(resource);
 }
@@ -2539,16 +2637,29 @@ void VulkanBackend::DeferDestroyImage(
     resource.image = image;
     resource.memory = memory;
     resource.view = view;
+    resource.retireFrameSerial = FrameSerial();
     std::lock_guard<std::mutex> lock(m_deferredResourcesMutex);
     m_deferredResources.push_back(resource);
 }
 
-void VulkanBackend::FlushDeferredResources()
+void VulkanBackend::FlushDeferredResources(uint64_t completedFrameSerial)
 {
     std::vector<DeferredResource> pending;
     {
         std::lock_guard<std::mutex> lock(m_deferredResourcesMutex);
-        pending.swap(m_deferredResources);
+        auto it = m_deferredResources.begin();
+        while (it != m_deferredResources.end())
+        {
+            if (it->retireFrameSerial <= completedFrameSerial)
+            {
+                pending.push_back(*it);
+                it = m_deferredResources.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
     }
     if (pending.empty() || !m_device)
         return;
@@ -3730,11 +3841,12 @@ bool VulkanBackend::AllocateUniform(const void *data, size_t size, VkDescriptorB
         return false;
     }
 
-    std::memcpy(m_uniformMapped + offset, data, size);
+    const VkDeviceSize absoluteOffset = m_uniformFrameBase + offset;
+    std::memcpy(m_uniformMapped + absoluteOffset, data, size);
     m_uniformOffset = offset + alignedSize;
 
     info->buffer = m_uniformRing;
-    info->offset = offset;
+    info->offset = absoluteOffset;
     info->range = static_cast<VkDeviceSize>(size);
     return true;
 }
