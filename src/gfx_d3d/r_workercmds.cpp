@@ -62,15 +62,6 @@ struct alignas(64) SwitchStaticDpvsPerfBucket
 SwitchStaticDpvsPerfBucket s_switchStaticDpvsPerf[4];
 }
 
-extern "C" void Switch_ResetStaticDpvsPerf()
-{
-    for (SwitchStaticDpvsPerfBucket &bucket : s_switchStaticDpvsPerf)
-    {
-        bucket.calls.store(0, std::memory_order_relaxed);
-        bucket.elapsedNs.store(0, std::memory_order_relaxed);
-    }
-}
-
 extern "C" void Switch_ReadStaticDpvsPerf(
     uint64_t calls[4],
     uint64_t elapsedNs[4])
