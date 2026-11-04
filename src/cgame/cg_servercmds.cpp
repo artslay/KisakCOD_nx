@@ -951,9 +951,21 @@ void __cdecl CG_SlowServerCommand(int localClientNum)
 void __cdecl CG_SetClientDvarFromServer(const char *dvarname, const char *value)
 {
     if (I_stricmp(dvarname, "hud_drawHUD"))
+    {
         Com_Error(ERR_DROP, "%s is not a valid dvar to set using setclientdvar", dvarname);
-    else
-        Dvar_SetFromStringByName("hud_drawHUD", (char*)value);
+        return;
+    }
+
+    const bool wasHudEnabled = Dvar_GetBool("hud_drawHUD");
+    Dvar_SetFromStringByName("hud_drawHUD", (char*)value);
+
+    // The script HUD dvar gates CG_CheckTimedMenus as well as owner-draw
+    // rendering. When a script re-enables it, restore the timed menus whose
+    // show notifications may have been skipped while HUD drawing was off.
+    // Do this only on an explicit 0 -> 1 transition; never force HUD on at map
+    // startup or override a script that intentionally keeps it disabled.
+    if (!wasHudEnabled && Dvar_GetBool("hud_drawHUD") && cgArray[0].nextSnap)
+        CG_HudMenuShowAllTimed(0);
 }
 
 void CG_ParseAmp()
