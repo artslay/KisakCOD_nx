@@ -7762,6 +7762,8 @@ bool IDirect3DDevice9::BindUniformSet(
         m_uniformSetCursor[frameSlot][1] = 0;
         m_samplerDescriptorFrameCache[frameSlot][0].clear();
         m_samplerDescriptorFrameCache[frameSlot][1].clear();
+        m_uniformDescriptorFrameCache[frameSlot][0].clear();
+        m_uniformDescriptorFrameCache[frameSlot][1].clear();
         m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
     }
 
@@ -7777,7 +7779,27 @@ bool IDirect3DDevice9::BindUniformSet(
         };
     traceUniformBindStage("entry", nullptr, 0, 1);
     g_switchFrameStage = "frame/render/vulkan/uniform/layout";
-    if (!GetUniformLayout(parse, &layout))
+    KisakVkShader *uniformShader =
+        setIndex == 1u ? m_vertexShader :
+        (setIndex == 3u ? m_pixelShader : nullptr);
+    bool uniformLayoutReady = false;
+    if (uniformShader && uniformShader->parseData == parse)
+    {
+        if (!uniformShader->uniformLayoutCached)
+        {
+            uniformShader->uniformLayoutValid =
+                GetUniformLayout(parse, &uniformShader->uniformLayout);
+            uniformShader->uniformLayoutCached = true;
+        }
+        uniformLayoutReady = uniformShader->uniformLayoutValid;
+        if (uniformLayoutReady)
+            layout = uniformShader->uniformLayout;
+    }
+    else
+    {
+        uniformLayoutReady = GetUniformLayout(parse, &layout);
+    }
+    if (!uniformLayoutReady)
     {
         traceUniformBindStage("layout_failed", nullptr, 0, 0);
         return false;
@@ -7970,6 +7992,63 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 #endif
 
+    const size_t cacheIndex = setIndex == 1u ? 0u : 1u;
+    // Small uniform blocks are common across repeated world/material draws.
+    // Keep a bounded exact-content cache so identical blocks can reuse an
+    // immutable descriptor set and its already allocated ring-buffer range.
+    constexpr size_t maxCachedUniformBytes = 1024u;
+    constexpr size_t maxUniformCacheEntries = 512u;
+    const bool uniformCacheEligible = size <= maxCachedUniformBytes;
+    auto &uniformFrameCache =
+        m_uniformDescriptorFrameCache[frameSlot][cacheIndex];
+    uint64_t uniformHash = 1469598103934665603ull;
+    if (uniformCacheEligible)
+    {
+        uniformHash ^= static_cast<uint64_t>(size);
+        uniformHash *= 1099511628211ull;
+        for (size_t i = 0; i < size; ++i)
+        {
+            uniformHash ^= bytes[i];
+            uniformHash *= 1099511628211ull;
+        }
+
+        const auto cacheBucket = uniformFrameCache.find(uniformHash);
+        if (cacheBucket != uniformFrameCache.end())
+        {
+            for (const UniformDescriptorCacheEntry &cached : cacheBucket->second)
+            {
+                if (cached.bytes.size() != size ||
+                    std::memcmp(cached.bytes.data(), bytes, size) != 0)
+                    continue;
+
+                g_switchFrameStage = "frame/render/vulkan/uniform/cache_hit";
+                vkCmdBindDescriptorSets(
+                    m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
+                    setIndex, 1, &cached.set, 0, nullptr);
+                traceUniformBindStage("uniform_descriptor_cache_hit", bytes, size, 1);
+#ifdef __SWITCH__
+                if (setIndex == 1u && g_switchModelTransformDraw.active &&
+                    Switch_IsModelTransformTraceEnabled())
+                {
+                    char trace[512];
+                    std::snprintf(
+                        trace, sizeof(trace),
+                        "[KisakCOD][MODEL XFORM][UBO_BIND] seq=%u xsurf=%p vs=%llu descriptorSet=%p vkBuffer=%p offset=%llu range=%llu setIndex=%u cache=1\\n",
+                        g_switchModelTransformDraw.sequence, g_switchModelTransformDraw.xsurf,
+                        static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
+                        reinterpret_cast<void *>(cached.set),
+                        reinterpret_cast<void *>(cached.bufferInfo.buffer),
+                        static_cast<unsigned long long>(cached.bufferInfo.offset),
+                        static_cast<unsigned long long>(cached.bufferInfo.range), setIndex);
+                    Switch_LogWrite(trace);
+                }
+#endif
+                g_switchFrameStage = "frame/render/vulkan/uniform/return";
+                return true;
+            }
+        }
+    }
+
     g_switchFrameStage = "frame/render/vulkan/uniform/allocate_ring";
     VkDescriptorBufferInfo bufferInfo{};
     if (!m_backend->AllocateUniform(bytes, size, &bufferInfo))
@@ -7997,7 +8076,6 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 #endif
 
-    const size_t cacheIndex = setIndex == 1 ? 0 : 1;
     auto &cachedSets = m_uniformDescriptorSets[frameSlot][cacheIndex];
     const size_t cursor = m_uniformSetCursor[frameSlot][cacheIndex];
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_allocate";
@@ -8050,6 +8128,16 @@ bool IDirect3DDevice9::BindUniformSet(
     write.pBufferInfo = &bufferInfo;
     vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
     traceUniformBindStage("descriptor_updated", bytes, size, 1);
+    if (uniformCacheEligible &&
+        (uniformFrameCache.size() < maxUniformCacheEntries ||
+         uniformFrameCache.find(uniformHash) != uniformFrameCache.end()))
+    {
+        UniformDescriptorCacheEntry cacheEntry{};
+        cacheEntry.set = set;
+        cacheEntry.bufferInfo = bufferInfo;
+        cacheEntry.bytes.assign(bytes, bytes + size);
+        uniformFrameCache[uniformHash].emplace_back(std::move(cacheEntry));
+    }
 
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_bind";
     vkCmdBindDescriptorSets(
