@@ -2832,6 +2832,24 @@ void  Scr_EvalEquality(VariableValue* value1, VariableValue* value2)
 	bool tempInt; // [esp+14h] [ebp-4h]
 	bool tempInta; // [esp+14h] [ebp-4h]
 
+    // Stock maps/_destructible.gsc compares an optional tagName against a
+    // string while searching model parts. A missing tagName is undefined and
+    // must simply compare unequal; routing this pair through
+    // Scr_CastWeakerPair turns an ordinary non-match into a script error.
+    const bool undefinedStringMismatch =
+        (value1->type == VAR_UNDEFINED &&
+            (value2->type == VAR_STRING || value2->type == VAR_ISTRING)) ||
+        (value2->type == VAR_UNDEFINED &&
+            (value1->type == VAR_STRING || value1->type == VAR_ISTRING));
+    if (undefinedStringMismatch)
+    {
+        RemoveRefToValue(value1->type, value1->u);
+        RemoveRefToValue(value2->type, value2->u);
+        value1->type = VAR_INTEGER;
+        value1->u.intValue = 0;
+        return;
+    }
+
 	Scr_CastWeakerPair(value1, value2);
 	iassert(value1->type == value2->type);
 	switch (value1->type)
