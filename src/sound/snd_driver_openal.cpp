@@ -966,7 +966,7 @@ static bool SND_FillStreamBuffers(int index)
         char message[640];
         std::snprintf(
             message, sizeof(message),
-            "[KisakCOD][SND STREAM FILL PERF] calls=120 avg_ms total=%.3f setup=%.3f processed_query=%.3f unqueue=%.3f decode=%.3f pcm=%.3f upload=%.3f queue=%.3f other=%.3f processed_buf=%.2f chunks=%.2f frames=%.0f\\n",
+            "[KisakCOD][SND STREAM FILL PERF] calls=120 avg_ms total=%.3f setup=%.3f processed_query=%.3f unqueue=%.3f decode=%.3f pcm=%.3f upload=%.3f queue=%.3f other=%.3f processed_buf=%.2f chunks=%.2f frames=%.0f\n",
             fillTotalNs * averageMs,
             fillSetupNs * averageMs,
             fillProcessedQueryNs * averageMs,
