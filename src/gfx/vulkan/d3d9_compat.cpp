@@ -8822,6 +8822,17 @@ bool IDirect3DDevice9::EnsurePipeline()
         return false;
     }
 
+    const VkFormat colorFormat = m_color && m_color->texture
+        ? m_color->texture->format : m_backend->SwapchainFormat();
+    const VkFormat depthFormat = m_depth && m_depth->texture
+        ? m_depth->texture->format : m_backend->DepthFormat();
+    const VkSampleCountFlagBits colorSamples = m_color && m_color->texture
+        ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    const VkSampleCountFlagBits depthSamples = m_depth && m_depth->texture
+        ? m_depth->texture->samples : VK_SAMPLE_COUNT_1_BIT;
+    if (colorSamples != depthSamples)
+        return false;
+
     bool allowPipelineFastPath = false;
     const GfxImage *pipelineSunShadowImage =
         gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
@@ -8844,7 +8855,11 @@ bool IDirect3DDevice9::EnsurePipeline()
     if (allowPipelineFastPath && !m_pipelineDirty &&
         m_cachedPipelineFastPathValid &&
         m_cachedPipelineState != VK_NULL_HANDLE &&
-        m_cachedPipelineSunShadowImage == pipelineSunShadowImage)
+        m_cachedPipelineSunShadowImage == pipelineSunShadowImage &&
+        m_cachedPipelineColorFormat == colorFormat &&
+        m_cachedPipelineDepthFormat == depthFormat &&
+        m_cachedPipelineColorSamples == colorSamples &&
+        m_cachedPipelineDepthSamples == depthSamples)
     {
         g_switchFrameStage = "frame/render/vulkan/pipeline/state_cache_hit";
         RecordSwitchVkPipelineTrace(
@@ -8906,17 +8921,6 @@ bool IDirect3DDevice9::EnsurePipeline()
 
     // Dynamic-rendering pipelines are compatible only with their attachment
     // formats; resolve them before attempting to reuse a cached pipeline.
-    const VkFormat colorFormat = m_color && m_color->texture
-        ? m_color->texture->format : m_backend->SwapchainFormat();
-    const VkFormat depthFormat = m_depth && m_depth->texture
-        ? m_depth->texture->format : m_backend->DepthFormat();
-    const VkSampleCountFlagBits colorSamples = m_color && m_color->texture
-        ? m_color->texture->samples : VK_SAMPLE_COUNT_1_BIT;
-    const VkSampleCountFlagBits depthSamples = m_depth && m_depth->texture
-        ? m_depth->texture->samples : VK_SAMPLE_COUNT_1_BIT;
-    if (colorSamples != depthSamples)
-        return false;
-
     uint64_t key = 0x12345678abcdef00ull;
     key = HashCombine(key, m_vertexShader->serial);
     key = HashCombine(key, m_pixelShader->serial);
@@ -9025,6 +9029,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_cachedPipelineStateKey = key;
         m_cachedPipelineState = existing->second;
         m_cachedPipelineSunShadowImage = pipelineSunShadowImage;
+        m_cachedPipelineColorFormat = colorFormat;
+        m_cachedPipelineDepthFormat = depthFormat;
+        m_cachedPipelineColorSamples = colorSamples;
+        m_cachedPipelineDepthSamples = depthSamples;
         m_cachedPipelineFastPathValid = allowPipelineFastPath;
         g_switchFrameStage = "frame/render/vulkan/pipeline/cache_hit_bind";
         BindPipelineIfChanged(existing->second);
@@ -10741,6 +10749,10 @@ bool IDirect3DDevice9::EnsurePipeline()
     m_cachedPipelineStateKey = key;
     m_cachedPipelineState = pipeline;
     m_cachedPipelineSunShadowImage = pipelineSunShadowImage;
+    m_cachedPipelineColorFormat = colorFormat;
+    m_cachedPipelineDepthFormat = depthFormat;
+    m_cachedPipelineColorSamples = colorSamples;
+    m_cachedPipelineDepthSamples = depthSamples;
     m_cachedPipelineFastPathValid = allowPipelineFastPath;
     g_switchFrameStage = "frame/render/vulkan/pipeline/new_pipeline_bind";
     RecordSwitchVkPipelineTrace(
