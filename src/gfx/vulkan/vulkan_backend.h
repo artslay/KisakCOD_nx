@@ -47,6 +47,9 @@ public:
     // End and submit commands recorded so far, wait for completion, then resume
     // recording in the same acquired swapchain frame. Used by synchronous resource locks.
     bool SynchronizeActiveFrame();
+    // Wait for the latest submitted frame without opening or recording a new one.
+    // The SMP frontend uses this before recycling its two CPU-produced GPU buffers.
+    bool WaitForLastSubmittedFrame();
     void Present() override;
     void BeginScene() override;
     void EndScene() override;
