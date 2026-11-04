@@ -20,6 +20,10 @@
 #include "r_model_pose.h"
 
 #include <setjmp.h>
+#ifdef __SWITCH__
+#include <atomic>
+#include <universal/timing.h>
+#endif
 
 void(__cdecl *g_cmdExecFailed[WRKCMD_COUNT])();
 volatile WorkerCmdType g_waitTypeMainThread;
@@ -45,6 +49,39 @@ GfxSpotShadowEntCmd g_spotShadowEntBuf[256];
 ShadowCookieCmd g_shadowCookieBuf[1];
 
 WorkerCmds g_workerCmds[WRKCMD_COUNT];
+
+#ifdef __SWITCH__
+namespace
+{
+struct alignas(64) SwitchStaticDpvsPerfBucket
+{
+    std::atomic<uint64_t> calls{0};
+    std::atomic<uint64_t> elapsedNs{0};
+};
+
+SwitchStaticDpvsPerfBucket s_switchStaticDpvsPerf[4];
+}
+
+extern "C" void Switch_ResetStaticDpvsPerf()
+{
+    for (SwitchStaticDpvsPerfBucket &bucket : s_switchStaticDpvsPerf)
+    {
+        bucket.calls.store(0, std::memory_order_relaxed);
+        bucket.elapsedNs.store(0, std::memory_order_relaxed);
+    }
+}
+
+extern "C" void Switch_ReadStaticDpvsPerf(
+    uint64_t calls[4],
+    uint64_t elapsedNs[4])
+{
+    for (uint32_t index = 0; index < 4; ++index)
+    {
+        calls[index] = s_switchStaticDpvsPerf[index].calls.load(std::memory_order_relaxed);
+        elapsedNs[index] = s_switchStaticDpvsPerf[index].elapsedNs.load(std::memory_order_relaxed);
+    }
+}
+#endif
 
 #ifdef KISAK_SWITCH
 static_assert(sizeof(FxCmd) == 24, "Switch FxCmd ABI");
@@ -330,8 +367,28 @@ void __cdecl R_ProcessWorkerCmdInternal(WorkerCmdType type, void *data)
         R_ProcessCmd_UpdateFxRemaining((FxCmd *)data);
         break;
     case WRKCMD_DPVS_CELL_STATIC:
+#ifdef __SWITCH__
+    {
+        const uint32_t threadContext = Sys_GetSwitchThreadContext();
+        uint32_t bucketIndex = 3;
+        if (threadContext == THREAD_CONTEXT_MAIN)
+            bucketIndex = 0;
+        else if (threadContext == THREAD_CONTEXT_WORKER0)
+            bucketIndex = 1;
+        else if (threadContext == THREAD_CONTEXT_WORKER1)
+            bucketIndex = 2;
+
+        const uint64_t startNs = Kisak_RawTimerTicks();
+        R_AddCellStaticSurfacesInFrustumCmd((DpvsStaticCellCmd *)data);
+        const uint64_t elapsedNs = Kisak_RawTimerTicks() - startNs;
+        s_switchStaticDpvsPerf[bucketIndex].calls.fetch_add(1, std::memory_order_relaxed);
+        s_switchStaticDpvsPerf[bucketIndex].elapsedNs.fetch_add(elapsedNs, std::memory_order_relaxed);
+        break;
+    }
+#else
         R_AddCellStaticSurfacesInFrustumCmd((DpvsStaticCellCmd *)data);
         break;
+#endif
     case WRKCMD_DPVS_CELL_SCENE_ENT:
         R_AddCellSceneEntSurfacesInFrustumCmd((GfxWorldDpvsPlanes *)data);
         break;
