@@ -5793,6 +5793,61 @@ HRESULT KisakVkBuffer::Unlock()
     if (dynamic && !(lockFlags & D3DLOCK_READONLY) && lockSize != 0)
     {
         VulkanBackend *backend = GetVulkanBackend();
+        // NOOVERWRITE is a promise made by the CPU-side allocator, not proof
+        // that an earlier Vulkan submission has finished reading the bytes.
+        // The frontend can be preparing frame N+1 while the GPU still consumes
+        // frame N, so publish these writes as ordered buffer copies instead of
+        // touching HOST_VISIBLE vertex/index storage directly.
+        const auto queueShadowRange =
+            [this, backend](uint32_t begin, uint32_t end) -> bool
+        {
+            if (begin >= end)
+                return true;
+
+            const VkDeviceSize uploadOffset =
+                static_cast<VkDeviceSize>(begin) & ~VkDeviceSize(3u);
+            const VkDeviceSize requestedEnd = static_cast<VkDeviceSize>(end);
+            const VkDeviceSize uploadEnd =
+                (requestedEnd + 3u) & ~VkDeviceSize(3u);
+
+            if (uploadEnd <= size)
+            {
+                return backend->QueueBufferUpdate(
+                    buffer, uploadOffset,
+                    shadow.data() + uploadOffset,
+                    static_cast<size_t>(uploadEnd - uploadOffset));
+            }
+
+            // A final 1-3 byte tail cannot be copied with vkCmdCopyBuffer.
+            // Keep the aligned prefix queued; the rare tail path explicitly
+            // synchronizes the active frame before its mapped write.
+            const VkDeviceSize alignedBufferEnd =
+                static_cast<VkDeviceSize>(size) & ~VkDeviceSize(3u);
+            const VkDeviceSize copySize =
+                alignedBufferEnd > uploadOffset
+                    ? alignedBufferEnd - uploadOffset
+                    : 0;
+            bool queued = copySize == 0 ||
+                backend->QueueBufferUpdate(
+                    buffer, uploadOffset,
+                    shadow.data() + uploadOffset,
+                    static_cast<size_t>(copySize));
+
+            const VkDeviceSize tailOffset =
+                std::max<VkDeviceSize>(begin, alignedBufferEnd);
+            const VkDeviceSize tailSize =
+                requestedEnd > tailOffset ? requestedEnd - tailOffset : 0;
+            if (queued && tailSize != 0)
+            {
+                queued = backend->QueueMappedBufferUpdate(
+                    buffer, tailOffset,
+                    static_cast<uint8_t *>(mapped) + tailOffset,
+                    shadow.data() + tailOffset,
+                    static_cast<size_t>(tailSize), true);
+            }
+            return queued;
+        };
+
         if (!backend)
         {
             // During teardown there is no active Vulkan backend to consume an
@@ -5816,15 +5871,8 @@ HRESULT KisakVkBuffer::Unlock()
                     (lockFlags & D3DLOCK_NOOVERWRITE) != 0;
                 if (noOverwrite)
                 {
-                    // NOOVERWRITE guarantees that this exact reserved span is
-                    // not referenced by an earlier draw. Write it straight to
-                    // coherent mapped memory: routing every tiny mesh span
-                    // through the CPU upload queue adds two copies, a mutex
-                    // acquisition, and one queue record per mesh unlock.
-                    std::memcpy(
-                        static_cast<uint8_t *>(mapped) + lockWriteBegin,
-                        shadow.data() + lockWriteBegin,
-                        lockWriteEnd - lockWriteBegin);
+                    if (!queueShadowRange(lockWriteBegin, lockWriteEnd))
+                        return E_FAIL;
                 }
                 else if (uploadEnd <= size)
                 {
@@ -5848,13 +5896,8 @@ HRESULT KisakVkBuffer::Unlock()
         }
         else if (lockFlags & D3DLOCK_NOOVERWRITE)
         {
-            // D3DLOCK_NOOVERWRITE guarantees that the entire locked interval is
-            // not referenced by prior draws. Copy directly to coherent mapped
-            // memory; do not enqueue a per-lock CPU copy for the backend to repeat.
-            std::memcpy(
-                static_cast<uint8_t *>(mapped) + lockOffset,
-                shadow.data() + lockOffset,
-                lockSize);
+            if (!queueShadowRange(lockOffset, lockOffset + lockSize))
+                return E_FAIL;
         }
         else
         {
