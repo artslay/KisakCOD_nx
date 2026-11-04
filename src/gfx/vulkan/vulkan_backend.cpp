@@ -1298,7 +1298,7 @@ bool VulkanBackend::CreateSwapchain()
         m_presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR ? "IMMEDIATE" : "FIFO";
     std::snprintf(
         presentTrace, sizeof(presentTrace),
-        "[KisakCOD][VK PRESENT MODE] mode=%s vsync=%u imagesRequested=%u surfaceMin=%u surfaceMax=%u framesInFlight=%u\n",
+        "[KisakCOD][VK PRESENT MODE] mode=%s vsync=%u imagesRequested=%u surfaceMin=%u surfaceMax=%u frameSlots=%u gpuInFlightLimit=1 sharedTargets=1\n",
         presentName,
         vsyncEnabled ? 1u : 0u,
         imageCount,
