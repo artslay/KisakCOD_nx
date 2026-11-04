@@ -210,38 +210,6 @@ bool Attach() {
   return block != nullptr;
 }
 
-/*
- * If SaltyNX was loaded into this process (it never is into a homebrew program, but it costs nothing to check), its
- * shared memory is already mapped here. The memory map is walked with svcQueryMemory.
- */
-bool FindOwnSharedMemory() {
-  uint64_t address = 0;
-  for (int regions = 0; regions < 4096; ++regions) {
-    MemoryInfo info{};
-    u32 pages = 0;
-    if (R_FAILED(svcQueryMemory(&info, &pages, address))) {
-      return false;
-    }
-    if (info.size == 0) {
-      return false;
-    }
-    if (info.type == MemType_SharedMem && (info.perm & Perm_R) != 0 && info.size >= kSharedSize) {
-      auto* base = reinterpret_cast<uint8_t*>(uintptr_t(info.addr));
-      const size_t bytes = size_t(info.size) < 0x10000 ? size_t(info.size) : 0x10000;
-      if (FindMagicIn(base, bytes, kMagicFps)) {
-        g_base = base;
-        g_bytes = bytes;
-        return true;
-      }
-    }
-    const uint64_t next = info.addr + info.size;
-    if (next <= address) {
-      return false;
-    }
-    address = next;
-  }
-  return false;
-}
 
 /*
  * A connection error can come from two very different things:
@@ -521,19 +489,16 @@ void Init() {
       g_warned_no_memory = true;
       WarnNum("[saltynx] a port connects but does not give the shared memory; error", rc_handle);
     }
-    // Path 2: no free session. If SaltyNX was loaded into this process, its shared memory is already mapped here.
-    if (!FindOwnSharedMemory()) {
-      ++g_attempts;
-      // The first diagnosis waits until attempt 5, after releasing "sm:" has been tried.
-      if (g_attempts == 5 || g_attempts == 30) {
-        Diagnose(rc_port);
-      } else if (g_attempts % 600 == 0) {
-        WarnNum("[saltynx] still retrying without success. Error", rc_port);
-      }
-      return;
+    // SaltyNX does not inject NX-FPS into homebrew NROs. Without an IPC mapping,
+    // there is no SaltyNX page in this process to discover by walking its address map.
+    ++g_attempts;
+    // The first diagnosis waits until attempt 5, after releasing "sm:" has been tried.
+    if (g_attempts == 5 || g_attempts == 30) {
+      Diagnose(rc_port);
+    } else if (g_attempts % 600 == 0) {
+      WarnNum("[saltynx] still retrying without success. Error", rc_port);
     }
-    g_mapped = true;
-    Warn("[saltynx] no session on the ports, but their shared memory was already mapped here");
+    return;
   }
 
   // The FPS block: if there is one already, it is reused; otherwise the slot reserved through IPC is used.
