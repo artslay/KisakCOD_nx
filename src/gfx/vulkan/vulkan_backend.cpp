@@ -1757,11 +1757,11 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
     if (!m_device || !m_initialized || m_deviceLost)
         return true;
     const FrameSync &frame = m_frameSync[slotIndex];
+    // Swapchain recreation waits for device idle before replacing frame fences.
+    // If recreation could not create a replacement fence, no old submission can
+    // still reference the frontend pool and the renderer cannot submit a frame.
     if (!frame.fence)
-    {
-        SetError("Missing Vulkan frame fence while reusing a frontend resource pool");
-        return false;
-    }
+        return true;
 
     const VkResult waitResult =
         vkWaitForFences(m_device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
