@@ -44,13 +44,6 @@ int __cdecl R_ReserveIndexData(GfxCmdBufPrimState *state, int triCount)
             indexCount);
     if (indexCount + gfxBuf.dynamicIndexBuffer->used > gfxBuf.dynamicIndexBuffer->total)
         gfxBuf.dynamicIndexBuffer->used = 0;
-    if (!gfxBuf.dynamicIndexBuffer->used)
-    {
-        v2 = (gfxBuf.dynamicIndexBuffer - gfxBuf.dynamicIndexBufferPool + 1) & 0x80000000;
-        if (gfxBuf.dynamicIndexBuffer - gfxBuf.dynamicIndexBufferPool + 1 < 0)
-            v2 = 0;
-        gfxBuf.dynamicIndexBuffer = &gfxBuf.dynamicIndexBufferPool[v2];
-    }
     return gfxBuf.dynamicIndexBuffer->used;
 }
 
