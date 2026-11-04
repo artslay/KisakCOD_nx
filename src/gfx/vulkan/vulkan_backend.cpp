@@ -685,6 +685,11 @@ void VulkanBackend::Shutdown()
         vkFreeMemory(m_device, m_uniformRingMemory, nullptr);
     m_uniformRingMemory = VK_NULL_HANDLE;
 
+    std::vector<std::unique_lock<std::mutex>> frameFenceLocks;
+    frameFenceLocks.reserve(FramesInFlight);
+    for (uint32_t slot = 0; slot < FramesInFlight; ++slot)
+        frameFenceLocks.emplace_back(m_frameFenceMutexes[slot]);
+
     for (FrameSync &frame : m_frameSync)
     {
         if (frame.imageAvailable)
@@ -1646,6 +1651,13 @@ bool VulkanBackend::RecreateSwapchain()
         }
     }
 
+    // WaitForFrameSlot may be running on the frontend. Device idle has
+    // completed every submission; lock all fence objects before replacing them.
+    std::vector<std::unique_lock<std::mutex>> frameFenceLocks;
+    frameFenceLocks.reserve(FramesInFlight);
+    for (uint32_t slot = 0; slot < FramesInFlight; ++slot)
+        frameFenceLocks.emplace_back(m_frameFenceMutexes[slot]);
+
     const uint32_t previousWidth = m_width;
     const uint32_t previousHeight = m_height;
 
@@ -1743,6 +1755,7 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
         return false;
     }
 
+    std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[slotIndex]);
     const FrameSync &frame = m_frameSync[slotIndex];
     if (!frame.fence)
     {
@@ -1774,8 +1787,11 @@ bool VulkanBackend::BeginFrame()
     // allocations after its previous submission has completed.
     const uint32_t slotIndex = m_nextFrameSlot;
     FrameSync &frame = m_frameSync[slotIndex];
-    const VkResult waitResult =
-        vkWaitForFences(m_device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
+    VkResult waitResult;
+    {
+        std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[slotIndex]);
+        waitResult = vkWaitForFences(m_device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
+    }
     if (waitResult != VK_SUCCESS)
     {
         SetError("vkWaitForFences failed for frame slot", waitResult);
@@ -2159,7 +2175,11 @@ bool VulkanBackend::EndFrame()
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/present/reset_fence";
 #endif
-    const VkResult resetFenceResult = vkResetFences(m_device, 1, &frame.fence);
+    VkResult resetFenceResult;
+    {
+        std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[m_currentFrameSlot]);
+        resetFenceResult = vkResetFences(m_device, 1, &frame.fence);
+    }
 #ifdef __SWITCH__
     g_switchFrameStage = "frame/present/reset_fence_return";
 #endif
