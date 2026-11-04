@@ -225,9 +225,40 @@ void Switch_PreWaitNextFrontEndResources(uint32_t frameSlot, bool drainAll)
 
 void Switch_WaitForNextFrontEndResources()
 {
-    Switch_WaitForSmpPoolGpuUse(static_cast<uint32_t>(gfxBuf.dynamicBufferFrame));
-    Switch_WaitForFrontEndDataGpuUse(s_smpFrame);
-    Switch_WaitForViewInfoGpuUse(g_frameIndex);
+    // Several frontend rings may have been consumed by the same GPU frame.
+    // Collect their slot ownership and wait each distinct fence only once.
+    const int frameSlots[3] = {
+        s_switchGpuSlotForSmpPool[gfxBuf.dynamicBufferFrame].exchange(-1, std::memory_order_acq_rel),
+        s_switchGpuSlotForBackEndData[s_smpFrame].exchange(-1, std::memory_order_acq_rel),
+        s_switchGpuSlotForViewInfo[g_frameIndex].exchange(-1, std::memory_order_acq_rel)
+    };
+
+    VulkanBackend *backend = GetVulkanBackend();
+    if (!backend)
+        return;
+
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        const int frameSlot = frameSlots[i];
+        if (frameSlot < 0)
+            continue;
+
+        bool alreadyWaited = false;
+        for (uint32_t previous = 0; previous < i; ++previous)
+        {
+            if (frameSlots[previous] == frameSlot)
+            {
+                alreadyWaited = true;
+                break;
+            }
+        }
+        if (!alreadyWaited &&
+            !backend->WaitForFrameSlot(static_cast<uint32_t>(frameSlot)))
+        {
+            Com_Error(ERR_FATAL,
+                "Vulkan frame fence wait failed before reusing Switch frontend GPU resources");
+        }
+    }
 }
 }
 #endif
