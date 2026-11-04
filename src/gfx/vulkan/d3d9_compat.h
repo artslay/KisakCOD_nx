@@ -667,6 +667,7 @@ private:
     // Vulkan command-buffer state persists across draws and dynamic-rendering
     // restarts. Avoid re-emitting identical pipeline, descriptor and dynamic state.
     uint64_t m_cachedCommandFrameSerial = ~uint64_t(0);
+    uint64_t m_cachedCommandRecordingSerial = ~uint64_t(0);
     VkDevice m_cachedCommandDevice = VK_NULL_HANDLE;
     VkCommandBuffer m_cachedCommandBuffer = VK_NULL_HANDLE;
     VkPipeline m_cachedBoundPipeline = VK_NULL_HANDLE;
