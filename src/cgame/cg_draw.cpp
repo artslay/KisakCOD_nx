@@ -1207,19 +1207,6 @@ void __cdecl CG_Draw2D(int localClientNum)
     const int draw2D = cg_draw2D->current.enabled ? 1 : 0;
     const int drawHUD = cg_drawHUD->current.enabled ? 1 : 0;
     const int scriptHUD = hud_drawHUD->current.enabled ? 1 : 0;
-    // Track the actual dvar state at the draw boundary: scripts may change
-    // hud_drawHUD through paths that do not pass CG_SetClientDvarFromServer.
-    // When HUD is explicitly re-enabled, restore the timed menus (including
-    // Compass) exactly once for the 0 -> 1 transition.
-    if (lastScriptHUD == 0 && scriptHUD != 0)
-    {
-        CG_HudMenuShowAllTimed(localClientNum);
-        // The timed-menu helper skips Compass when its timestamp equals the
-        // current snapshot time. A scripted HUD restore must show it even
-        // when the dvar toggles within a single server-time tick.
-        cgArray[0].compassFadeTime = cgArray[0].time;
-        Menus_ShowByName(&cgDC, "Compass");
-    }
     const int compassFadeTime = cgArray[0].compassFadeTime;
     const int compassFadeMode = compassFadeTime < 0 ? -1 : (compassFadeTime == 0 ? 0 : 1);
     const bool hudStateChanged =
