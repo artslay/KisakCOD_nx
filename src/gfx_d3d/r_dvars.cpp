@@ -1528,11 +1528,11 @@
      defaultState = 1;
      helpString = "Enable worker thread";
 #ifdef __SWITCH__
-     // Switch runs the main thread, Vulkan backend and renderer workers on
-     // the process' three available CPU cores. Reserve capacity for the main
-     // and backend threads: with three cores, enable one worker; enable the
-     // second only when a fourth core is available.
-     const bool insufficientThreads = workerIndex + 2u >= Sys_GetCpuCount();
+     // Switch schedules runnable threads across the process core mask; do not
+     // reserve a dedicated core for the backend. Keep up to (CPU count - 1)
+     // renderer workers available so the shared command queues can use both
+     // workers on the normal three-core application mask. Idle workers sleep.
+     const bool insufficientThreads = workerIndex + 1u >= Sys_GetCpuCount();
 #else
      const bool insufficientThreads = workerIndex + 2u >= Sys_GetCpuCount();
 #endif

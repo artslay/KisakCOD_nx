@@ -236,6 +236,18 @@ static void R_ApplySwitchWorkerThreadSettings()
             Sys_ResumeThread(context);
         else
             Sys_SuspendThread(context);
+#ifdef __SWITCH__
+        char workerTrace[160];
+        std::snprintf(
+            workerTrace, sizeof(workerTrace),
+            "[KisakCOD][THREAD WORKER] index=%u context=%u enabled=%u cpuCount=%u created=%u\\n",
+            workerIndex,
+            static_cast<unsigned>(context),
+            r_smp_worker_thread[workerIndex]->current.enabled ? 1u : 0u,
+            Sys_GetCpuCount(),
+            threadHandle[context] ? 1u : 0u);
+        Switch_LogWrite(workerTrace);
+#endif
     }
 }
 
