@@ -65,7 +65,6 @@ void __cdecl CL_UpdateSound();
 extern void Switch_LogWrite(const char *msg);
 extern "C" bool Switch_IsPostCinematicRenderTraceActive(void);
 extern "C" void Switch_LogPostCinematicRenderTrace(const char *phase, const char *detail);
-extern "C" void Switch_ResetStaticDpvsPerf(void);
 extern "C" void Switch_ReadStaticDpvsPerf(uint64_t calls[4], uint64_t elapsedNs[4]);
 
 struct SwitchRenderCpuPerfFrame
@@ -1882,7 +1881,11 @@ void __cdecl R_GenerateSortedDrawSurfs(
     const uint64_t switchPerfViewStart = Kisak_RawTimerTicks();
     uint64_t switchPerfStageStart = switchPerfViewStart;
     SwitchRenderCpuPerfFrame switchPerfFrame = {};
-    Switch_ResetStaticDpvsPerf();
+    uint64_t switchStaticDpvsCallsBefore[4] = {};
+    uint64_t switchStaticDpvsNsBefore[4] = {};
+    Switch_ReadStaticDpvsPerf(
+        switchStaticDpvsCallsBefore,
+        switchStaticDpvsNsBefore);
 #endif
     iassert(frontEndDataOut->viewInfoCount == rg.viewInfoCount);
     viewInfoIndex = rg.viewInfoCount++;
@@ -2264,9 +2267,18 @@ void __cdecl R_GenerateSortedDrawSurfs(
 #ifdef __SWITCH__
     switchPerfFrame.tailNs = Kisak_RawTimerTicks() - switchPerfStageStart;
     switchPerfFrame.totalNs = Kisak_RawTimerTicks() - switchPerfViewStart;
+    uint64_t switchStaticDpvsCallsAfter[4] = {};
+    uint64_t switchStaticDpvsNsAfter[4] = {};
     Switch_ReadStaticDpvsPerf(
-        switchPerfFrame.staticDpvsCalls,
-        switchPerfFrame.staticDpvsNs);
+        switchStaticDpvsCallsAfter,
+        switchStaticDpvsNsAfter);
+    for (uint32_t worker = 0; worker < 4; ++worker)
+    {
+        switchPerfFrame.staticDpvsCalls[worker] =
+            switchStaticDpvsCallsAfter[worker] - switchStaticDpvsCallsBefore[worker];
+        switchPerfFrame.staticDpvsNs[worker] =
+            switchStaticDpvsNsAfter[worker] - switchStaticDpvsNsBefore[worker];
+    }
     Switch_ReportRenderCpuPerf(
         switchPerfFrame,
         rgp.world ? rgp.world->dpvs.staticSurfaceCount : 0u,
