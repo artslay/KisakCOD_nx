@@ -105,11 +105,6 @@ void Switch_AssociateSmpPoolWithGpuSlot(uint32_t poolIndex, uint32_t frameSlot)
     Switch_AssociateGpuPool(s_switchGpuSlotForSmpPool, poolIndex, frameSlot);
 }
 
-int Switch_GetSmpPoolGpuSlot(uint32_t poolIndex)
-{
-    return Switch_GetGpuPoolSlot(s_switchGpuSlotForSmpPool, poolIndex);
-}
-
 void Switch_WaitForSmpPoolGpuUse(uint32_t poolIndex)
 {
     Switch_WaitForGpuPool(s_switchGpuSlotForSmpPool, poolIndex, "skinning/pre-tess");
