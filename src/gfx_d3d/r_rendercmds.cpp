@@ -514,20 +514,27 @@ void __cdecl R_ToggleSmpFrameCmd(char type)
             // so drain this partial frame while the renderer is idle; otherwise
             // waiting on that fence would not protect a pool referenced by the
             // not-yet-submitted command buffer.
-            if (backend->IsFrameActive() && !backend->SynchronizeActiveFrame())
+            const bool continuedFrame = backend->IsFrameActive();
+            if (continuedFrame && !backend->SynchronizeActiveFrame())
                 Com_Error(ERR_FATAL, "Vulkan failed to finish an open frame before Switch SMP handoff");
 
-            const uint32_t frameSlot = backend->IsFrameActive()
+            const uint32_t frameSlot = continuedFrame
                 ? backend->CurrentFrameSlot()
                 : backend->NextFrameSlot();
             Switch_AssociateSmpPoolWithGpuSlot(gfxBuf.dynamicBufferFrame, frameSlot);
+
+            // In the normal alternating case, the pool being recycled belongs
+            // to the other Vulkan slot. Let the renderer start this frame, then
+            // wait on that older slot in R_ToggleSmpFrame. Pre-wait only when
+            // this handoff may reuse the same slot or swapchain recreation will
+            // replace both fences while the wait is outstanding.
+            if (continuedFrame || backend->NeedsSwapchainRecreate())
+            {
+                Switch_WaitForSmpPoolGpuUse(
+                    static_cast<uint32_t>((gfxBuf.dynamicBufferFrame + 1) % 2));
+            }
         }
     }
-    // The pool that R_ToggleSmpFrame is about to select may still be read by
-    // the GPU two submissions behind. Wait before waking the renderer so its
-    // BeginFrame cannot reset/reuse the same VkFence concurrently with us.
-    Switch_WaitForSmpPoolGpuUse(
-        static_cast<uint32_t>((gfxBuf.dynamicBufferFrame + 1) % 2));
 #endif
     Sys_WakeRenderer((void *)frontEndDataOut);
     iassert( !r_glob.haveThreadOwnership );
@@ -650,9 +657,10 @@ DebugGlobals *R_ToggleSmpFrame()
     gfxBuf.preTessBufferFrame = (gfxBuf.preTessBufferFrame + 1) % 2;
 #ifdef __SWITCH__
     iassert(gfxBuf.dynamicBufferFrame == gfxBuf.preTessBufferFrame);
-    // The asynchronous SMP path pre-waits this pool before waking the
-    // renderer; the wait below is then a no-op. In synchronous/abort paths it
-    // still protects the pool before its counters and pointers are recycled.
+    // In the normal asynchronous path this waits after the next frame has
+    // been handed to a different Vulkan slot, allowing CPU/GPU overlap. Same-
+    // slot and swapchain-recreate cases were drained before renderer wakeup.
+    // Synchronous/abort paths also protect the pool before it is recycled.
     Switch_WaitForSmpPoolGpuUse(static_cast<uint32_t>(gfxBuf.dynamicBufferFrame));
 #endif
     frontEndDataOut = &s_backEndData[s_smpFrame];
