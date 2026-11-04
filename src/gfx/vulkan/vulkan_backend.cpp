@@ -1969,6 +1969,48 @@ bool VulkanBackend::SynchronizeActiveFrame()
     return true;
 }
 
+bool VulkanBackend::WaitForLastSubmittedFrame()
+{
+    if (!m_initialized || !m_device || m_deviceLost)
+        return false;
+
+    // This is called by the main thread only after the render thread reports
+    // ready. At that point EndFrame has submitted the frame and dropped
+    // m_frameActive; waiting here protects legacy SMP buffers before the
+    // frontend rotates back to the same CPU-side pool.
+    if (m_frameActive || m_currentFrameSlot >= FramesInFlight)
+    {
+        SetError("SMP buffer reuse requested before the Vulkan frame was submitted");
+        return false;
+    }
+
+    FrameSync &frame = m_frameSync[m_currentFrameSlot];
+    if (!frame.fence || frame.submittedFrameSerial == 0)
+        return true;
+
+    const VkResult waitResult =
+        vkWaitForFences(m_device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
+    if (waitResult != VK_SUCCESS)
+    {
+        SetError("vkWaitForFences failed before SMP buffer reuse", waitResult);
+        return false;
+    }
+
+    uint64_t completedSerial =
+        m_completedFrameSerial.load(std::memory_order_relaxed);
+    while (completedSerial < frame.submittedFrameSerial &&
+           !m_completedFrameSerial.compare_exchange_weak(
+               completedSerial,
+               frame.submittedFrameSerial,
+               std::memory_order_release,
+               std::memory_order_relaxed))
+    {
+    }
+    FlushDeferredResources(
+        m_completedFrameSerial.load(std::memory_order_acquire));
+    return true;
+}
+
 #ifdef __SWITCH__
 static void Switch_SaltyNxFramePresented(uint32_t width, uint32_t height)
 {
