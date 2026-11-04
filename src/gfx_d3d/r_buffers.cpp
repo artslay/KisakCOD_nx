@@ -244,6 +244,7 @@ void __cdecl R_CreateDynamicBuffers()
     for (bufferIterc = 0; bufferIterc != 2; ++bufferIterc)
         R_InitDynamicIndexBufferState(&gfxBuf.preTessIndexBufferPool[bufferIterc], 0x100000);
     gfxBuf.preTessIndexBuffer = gfxBuf.preTessIndexBufferPool;
+    gfxBuf.dynamicBufferFrame = 0;
     gfxBuf.preTessBufferFrame = 0;
 }
 
