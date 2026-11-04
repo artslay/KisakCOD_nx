@@ -496,6 +496,11 @@ public:
 
 private:
     struct StreamBinding { IDirect3DVertexBuffer9 *buffer=nullptr; uint32_t offset=0, stride=0; };
+    struct SamplerDescriptorCacheEntry
+    {
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        std::array<VkDescriptorImageInfo, 16> images{};
+    };
     VulkanBackend *m_backend=nullptr;
     IDirect3DSurface9 *m_color=nullptr, *m_depth=nullptr;
     IDirect3DVertexDeclaration9 *m_decl=nullptr;
@@ -552,6 +557,10 @@ private:
     // still consume the previous slot while the CPU rewrites this slot's sets.
     std::array<std::array<std::vector<VkDescriptorSet>,2>,2> m_samplerDescriptorSets{};
     std::array<std::array<std::vector<VkDescriptorSet>,2>,2> m_uniformDescriptorSets{};
+    // Immutable sampler descriptor snapshots, deduplicated within a frame.
+    // Descriptor sets are never rewritten after a recorded draw has referenced them.
+    std::array<std::array<std::vector<SamplerDescriptorCacheEntry>,2>,2>
+        m_samplerDescriptorFrameCache{};
     std::array<std::array<size_t,2>,2> m_samplerSetCursor{};
     std::array<std::array<size_t,2>,2> m_uniformSetCursor{};
     std::array<uint64_t,2> m_descriptorCacheFrameSerial{};

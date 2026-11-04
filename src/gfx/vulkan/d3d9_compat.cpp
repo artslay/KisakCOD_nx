@@ -7760,6 +7760,8 @@ bool IDirect3DDevice9::BindUniformSet(
         m_samplerSetCursor[frameSlot][1] = 0;
         m_uniformSetCursor[frameSlot][0] = 0;
         m_uniformSetCursor[frameSlot][1] = 0;
+        m_samplerDescriptorFrameCache[frameSlot][0].clear();
+        m_samplerDescriptorFrameCache[frameSlot][1].clear();
         m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
     }
 
@@ -8338,46 +8340,15 @@ bool IDirect3DDevice9::BindSamplerSet(
         m_samplerSetCursor[frameSlot][1] = 0;
         m_uniformSetCursor[frameSlot][0] = 0;
         m_uniformSetCursor[frameSlot][1] = 0;
+        m_samplerDescriptorFrameCache[frameSlot][0].clear();
+        m_samplerDescriptorFrameCache[frameSlot][1].clear();
         m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
     }
 
     const size_t cacheIndex = setIndex == 0 ? 0 : 1;
     auto &cachedSets = m_samplerDescriptorSets[frameSlot][cacheIndex];
-    const size_t cursor = m_samplerSetCursor[frameSlot][cacheIndex];
+    auto &frameCache = m_samplerDescriptorFrameCache[frameSlot][cacheIndex];
     VkDescriptorSet set = VK_NULL_HANDLE;
-    if (cursor < cachedSets.size())
-    {
-        set = cachedSets[cursor];
-    }
-    else
-    {
-        VkDescriptorSetLayout layout = setIndex == 0
-            ? m_backend->VSSamplerLayout() : m_backend->PSSamplerLayout();
-        VkDescriptorSetAllocateInfo alloc{};
-        alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        alloc.descriptorPool = m_backend->DescriptorPool();
-        alloc.descriptorSetCount = 1;
-        alloc.pSetLayouts = &layout;
-        const VkResult allocResult =
-            vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set);
-        if (allocResult != VK_SUCCESS)
-        {
-            char trace[256];
-            std::snprintf(
-                trace,
-                sizeof(trace),
-                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=sampler set=%u frame=%llu cursor=%zu cached=%zu result=%d\n",
-                setIndex,
-                static_cast<unsigned long long>(frameSerial),
-                cursor,
-                cachedSets.size(),
-                static_cast<int>(allocResult));
-            Switch_LogWrite(trace);
-            return false;
-        }
-        cachedSets.push_back(set);
-    }
-    ++m_samplerSetCursor[frameSlot][cacheIndex];
 
     g_switchFrameStage = "frame/render/vulkan/sampler/build_descriptors";
     std::array<VkDescriptorImageInfo,16> images{};
@@ -8621,7 +8592,6 @@ bool IDirect3DDevice9::BindSamplerSet(
         }
 
         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[i].dstSet = set;
         writes[i].dstBinding = i;
         writes[i].descriptorCount = 1;
         writes[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -8678,8 +8648,80 @@ bool IDirect3DDevice9::BindSamplerSet(
     }
 #endif
 
+    // Reuse an immutable descriptor set when all 16 image-view/sampler pairs
+    // match a set already referenced in this frame. Never update a descriptor
+    // set after recording a draw that uses it: Vulkan may consume it later.
+    for (const SamplerDescriptorCacheEntry &cached : frameCache)
+    {
+        bool sameDescriptors = true;
+        for (uint32_t i = 0; i < 16; ++i)
+        {
+            const VkDescriptorImageInfo &oldImage = cached.images[i];
+            const VkDescriptorImageInfo &newImage = images[i];
+            if (oldImage.sampler != newImage.sampler ||
+                oldImage.imageView != newImage.imageView ||
+                oldImage.imageLayout != newImage.imageLayout)
+            {
+                sameDescriptors = false;
+                break;
+            }
+        }
+
+        if (sameDescriptors)
+        {
+            g_switchFrameStage = "frame/render/vulkan/sampler/cache_hit";
+            vkCmdBindDescriptorSets(
+                m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
+                setIndex, 1, &cached.set, 0, nullptr);
+            g_switchFrameStage = "frame/render/vulkan/sampler/return";
+            return true;
+        }
+    }
+
+    const size_t cursor = m_samplerSetCursor[frameSlot][cacheIndex];
+    if (cursor < cachedSets.size())
+    {
+        set = cachedSets[cursor];
+    }
+    else
+    {
+        VkDescriptorSetLayout layout = setIndex == 0
+            ? m_backend->VSSamplerLayout() : m_backend->PSSamplerLayout();
+        VkDescriptorSetAllocateInfo alloc{};
+        alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        alloc.descriptorPool = m_backend->DescriptorPool();
+        alloc.descriptorSetCount = 1;
+        alloc.pSetLayouts = &layout;
+        const VkResult allocResult =
+            vkAllocateDescriptorSets(m_backend->Device(), &alloc, &set);
+        if (allocResult != VK_SUCCESS)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=sampler set=%u frame=%llu cursor=%zu cached=%zu result=%d\\n",
+                setIndex,
+                static_cast<unsigned long long>(frameSerial),
+                cursor,
+                cachedSets.size(),
+                static_cast<int>(allocResult));
+            Switch_LogWrite(trace);
+            return false;
+        }
+        cachedSets.push_back(set);
+    }
+    ++m_samplerSetCursor[frameSlot][cacheIndex];
+
+    for (VkWriteDescriptorSet &write : writes)
+        write.dstSet = set;
+
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_update";
     vkUpdateDescriptorSets(m_backend->Device(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+    SamplerDescriptorCacheEntry cacheEntry{};
+    cacheEntry.set = set;
+    cacheEntry.images = images;
+    frameCache.emplace_back(std::move(cacheEntry));
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_bind";
     vkCmdBindDescriptorSets(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
