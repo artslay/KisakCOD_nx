@@ -10758,6 +10758,10 @@ bool IDirect3DDevice9::PrepareDraw()
         return false;
     }
 
+    // Reset state tracking before recording any dynamic commands. Descriptor
+    // and pipeline binds later in this draw then share the same command-buffer epoch.
+    ResetCachedCommandState();
+
     // Drain worker-produced uploads before this function records viewport,
     // scissor, descriptors, or rendering state. A backend-only frame split
     // therefore cannot discard state belonging to the draw being prepared.
