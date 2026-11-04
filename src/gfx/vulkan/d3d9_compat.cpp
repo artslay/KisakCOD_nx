@@ -8368,24 +8368,13 @@ bool IDirect3DDevice9::BindSamplerSet(
             continue;
         }
 
-        const size_t subresourceCount =
-            static_cast<size_t>(texture->arrayLayers) * texture->mipLevels;
-        if (texture->subresourceLayouts.size() < subresourceCount)
-            texture->subresourceLayouts.resize(subresourceCount, texture->layout);
-
-        bool baseMipInitialized = true;
-        bool allSubresourcesInitialized = true;
-        for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
-        {
-            for (uint32_t level = 0; level < texture->mipLevels; ++level)
-            {
-                const VkImageLayout layout = texture->GetSubresourceLayout(level, layer);
-                if (level == 0 && layout == VK_IMAGE_LAYOUT_UNDEFINED)
-                    baseMipInitialized = false;
-                if (layout == VK_IMAGE_LAYOUT_UNDEFINED)
-                    allSubresourcesInitialized = false;
-            }
-        }
+        bool baseMipInitialized = false;
+        bool allSubresourcesInitialized = false;
+        bool baseMipShaderRead = false;
+        bool allSubresourcesShaderRead = false;
+        texture->GetSubresourceLayoutSummary(
+            &baseMipInitialized, &allSubresourcesInitialized,
+            &baseMipShaderRead, &allSubresourcesShaderRead);
         // A texture may be bound before its first streaming/upload pass. Skip
         // layout transitions for its undefined image; the descriptor setup below
         // binds a dimensionality-correct dummy for this draw and records the asset.
@@ -8394,23 +8383,32 @@ bool IDirect3DDevice9::BindSamplerSet(
             continue;
 
         // For an incomplete mip chain, only level zero is exposed by the
-        // baseMipView and therefore only level zero may need a barrier.
-        const uint32_t transitionMipCount =
-            allSubresourcesInitialized ? texture->mipLevels : 1u;
-        for (uint32_t layer = 0; layer < texture->arrayLayers && !needsSampledLayoutTransition; ++layer)
+        // baseMipView. The cached summary avoids rescanning unchanged mips on
+        // every draw; enumerate subresources only when a barrier is necessary.
+        const bool sampledSubresourcesShaderRead =
+            allSubresourcesInitialized
+                ? allSubresourcesShaderRead : baseMipShaderRead;
+        if (!sampledSubresourcesShaderRead)
         {
-            for (uint32_t level = 0; level < transitionMipCount; ++level)
+            const uint32_t transitionMipCount =
+                allSubresourcesInitialized ? texture->mipLevels : 1u;
+            for (uint32_t layer = 0;
+                 layer < texture->arrayLayers && !needsSampledLayoutTransition;
+                 ++layer)
             {
-                if (texture->GetSubresourceLayout(level, layer) !=
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                for (uint32_t level = 0; level < transitionMipCount; ++level)
                 {
-                    needsSampledLayoutTransition = true;
-                    break;
+                    if (texture->GetSubresourceLayout(level, layer) !=
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                    {
+                        needsSampledLayoutTransition = true;
+                        break;
+                    }
                 }
             }
+            if (needsSampledLayoutTransition)
+                break;
         }
-        if (needsSampledLayoutTransition)
-            break;
     }
     if (needsSampledLayoutTransition)
         m_backend->EndRendering();
@@ -8519,24 +8517,13 @@ bool IDirect3DDevice9::BindSamplerSet(
             if (!texture->image || !texture->view)
                 return false;
 
-            const size_t subresourceCount =
-                static_cast<size_t>(texture->arrayLayers) * texture->mipLevels;
-            if (texture->subresourceLayouts.size() < subresourceCount)
-                texture->subresourceLayouts.resize(subresourceCount, texture->layout);
-
-            bool baseMipInitialized = true;
-            bool allSubresourcesInitialized = true;
-            for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
-            {
-                for (uint32_t level = 0; level < texture->mipLevels; ++level)
-                {
-                    const VkImageLayout layout = texture->GetSubresourceLayout(level, layer);
-                    if (level == 0 && layout == VK_IMAGE_LAYOUT_UNDEFINED)
-                        baseMipInitialized = false;
-                    if (layout == VK_IMAGE_LAYOUT_UNDEFINED)
-                        allSubresourcesInitialized = false;
-                }
-            }
+            bool baseMipInitialized = false;
+            bool allSubresourcesInitialized = false;
+            bool baseMipShaderRead = false;
+            bool allSubresourcesShaderRead = false;
+            texture->GetSubresourceLayoutSummary(
+                &baseMipInitialized, &allSubresourcesInitialized,
+                &baseMipShaderRead, &allSubresourcesShaderRead);
 
             if (!baseMipInitialized ||
                 (!allSubresourcesInitialized && !texture->baseMipView))
@@ -8565,32 +8552,38 @@ bool IDirect3DDevice9::BindSamplerSet(
                 // untouched so the streaming uploader can safely fill them later.
                 const uint32_t viewMipCount =
                     allSubresourcesInitialized ? texture->mipLevels : 1u;
-                for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
+                const bool sampledSubresourcesShaderRead =
+                    allSubresourcesInitialized
+                        ? allSubresourcesShaderRead : baseMipShaderRead;
+                if (!sampledSubresourcesShaderRead)
                 {
-                    for (uint32_t level = 0; level < viewMipCount; ++level)
+                    for (uint32_t layer = 0; layer < texture->arrayLayers; ++layer)
                     {
-                        const VkImageLayout oldLayout =
-                            texture->GetSubresourceLayout(level, layer);
-                        if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-                            continue;
+                        for (uint32_t level = 0; level < viewMipCount; ++level)
+                        {
+                            const VkImageLayout oldLayout =
+                                texture->GetSubresourceLayout(level, layer);
+                            if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                                continue;
 
-                        VkImageSubresourceRange range{};
-                        range.aspectMask = GetTextureFormat(texture->sourceFormat).aspect;
-                        range.baseMipLevel = level;
-                        range.levelCount = 1;
-                        range.baseArrayLayer = layer;
-                        range.layerCount = 1;
-                        m_backend->TransitionImage(
-                            texture->image, oldLayout,
-                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                            range.aspectMask, range);
-                        texture->SetSubresourceLayout(
-                            level, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                            VkImageSubresourceRange range{};
+                            range.aspectMask = GetTextureFormat(texture->sourceFormat).aspect;
+                            range.baseMipLevel = level;
+                            range.levelCount = 1;
+                            range.baseArrayLayer = layer;
+                            range.layerCount = 1;
+                            m_backend->TransitionImage(
+                                texture->image, oldLayout,
+                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                range.aspectMask, range);
+                            texture->SetSubresourceLayout(
+                                level, layer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                        }
                     }
-                }
 
-                if (allSubresourcesInitialized)
-                    texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    if (allSubresourcesInitialized)
+                        texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                }
 
                 uint32_t minFilter = m_samplerState[i][D3DSAMP_MINFILTER];
                 uint32_t magFilter = m_samplerState[i][D3DSAMP_MAGFILTER];
