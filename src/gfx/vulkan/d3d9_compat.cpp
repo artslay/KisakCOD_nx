@@ -7184,6 +7184,9 @@ HRESULT IDirect3DDevice9::SetRenderTarget(uint32_t index, IDirect3DSurface9 *sur
     };
 
     m_targetRendered = false;
+    m_pipelineDirty = true;
+    m_cachedPipelineFastPathValid = false;
+    m_pipelineDirty = true;
     return S_OK;
 }
 
@@ -7197,6 +7200,7 @@ HRESULT IDirect3DDevice9::SetDepthStencilSurface(IDirect3DSurface9 *surface)
     m_depth = surface;
     if (m_depth)
         m_depth->AddRef();
+    m_pipelineDirty = true;
     return S_OK;
 }
 
@@ -7326,6 +7330,8 @@ HRESULT IDirect3DDevice9::SetTexture(uint32_t stage, IDirect3DBaseTexture9 *tex)
         tex->AddRef();
     IDirect3DBaseTexture9 *old = m_textures[stage];
     m_textures[stage] = tex;
+    m_pipelineDirty = true;
+    m_cachedPipelineFastPathValid = false;
     if (old)
         old->Release();
 #ifdef __SWITCH__
@@ -7588,6 +7594,11 @@ HRESULT IDirect3DDevice9::SetViewport(const D3DVIEWPORT9 *vp)
 {
     if (!vp)
         return E_FAIL;
+    if (m_viewport.Width != vp->Width || m_viewport.Height != vp->Height)
+    {
+        m_pipelineDirty = true;
+        m_cachedPipelineFastPathValid = false;
+    }
     m_viewport = *vp;
     return S_OK;
 }
@@ -10967,7 +10978,13 @@ HRESULT IDirect3DDevice9::DrawPrimitiveUP(
     const uint32_t vertexCount = PrimitiveVertexCount(primitiveType, primitiveCount);
     if (!data || !stride || !vertexCount)
         return E_FAIL;
-    m_topology = PrimitiveTopology(primitiveType);
+    const VkPrimitiveTopology topology = PrimitiveTopology(primitiveType);
+    if (m_topology != topology)
+    {
+        m_topology = topology;
+        m_pipelineDirty = true;
+        m_cachedPipelineFastPathValid = false;
+    }
     m_drawPrimitiveUPActive = true;
     m_drawPrimitiveUPStride = stride;
     const bool prepared = PrepareDraw();
@@ -11448,7 +11465,13 @@ HRESULT IDirect3DDevice9::DrawIndexedPrimitive(
     }
 
     g_switchFrameStage = "frame/render/vulkan/draw_indexed/prepare_draw";
-    m_topology = PrimitiveTopology(primitiveType);
+    const VkPrimitiveTopology topology = PrimitiveTopology(primitiveType);
+    if (m_topology != topology)
+    {
+        m_topology = topology;
+        m_pipelineDirty = true;
+        m_cachedPipelineFastPathValid = false;
+    }
 
     if (!PrepareDraw())
     {
