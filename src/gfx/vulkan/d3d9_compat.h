@@ -593,6 +593,7 @@ private:
         uint64_t frameSerial = 0;
         uint64_t revision = 0;
         uint64_t shaderSerial = 0;
+        VkDevice device = VK_NULL_HANDLE;
         const MOJOSHADER_parseData *parse = nullptr;
         VkDescriptorSet set = VK_NULL_HANDLE;
     };
@@ -665,7 +666,8 @@ private:
     uint64_t m_psUniformRevision = 1;
     // Vulkan command-buffer state persists across draws and dynamic-rendering
     // restarts. Avoid re-emitting identical pipeline, descriptor and dynamic state.
-    uint64_t m_cachedCommandFrameSerial = UINT64_MAX;
+    uint64_t m_cachedCommandFrameSerial = ~uint64_t(0);
+    VkDevice m_cachedCommandDevice = VK_NULL_HANDLE;
     VkCommandBuffer m_cachedCommandBuffer = VK_NULL_HANDLE;
     VkPipeline m_cachedBoundPipeline = VK_NULL_HANDLE;
     std::array<VkDescriptorSet,4> m_cachedBoundDescriptorSets{};
@@ -678,6 +680,7 @@ private:
     bool m_cachedPipelineFastPathValid = false;
     uint64_t m_cachedPipelineStateKey = 0;
     VkPipeline m_cachedPipelineState = VK_NULL_HANDLE;
+    VkDevice m_cachedPipelineDevice = VK_NULL_HANDLE;
     const GfxImage *m_cachedPipelineSunShadowImage = nullptr;
     VkFormat m_cachedPipelineColorFormat = VK_FORMAT_UNDEFINED;
     VkFormat m_cachedPipelineDepthFormat = VK_FORMAT_UNDEFINED;
