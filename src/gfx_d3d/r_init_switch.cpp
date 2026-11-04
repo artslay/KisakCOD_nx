@@ -240,7 +240,7 @@ static void R_ApplySwitchWorkerThreadSettings()
         char workerTrace[160];
         std::snprintf(
             workerTrace, sizeof(workerTrace),
-            "[KisakCOD][THREAD WORKER] index=%u context=%u enabled=%u cpuCount=%u created=%u\\n",
+            "[KisakCOD][THREAD WORKER] index=%u context=%u enabled=%u cpuCount=%u created=%u\n",
             workerIndex,
             static_cast<unsigned>(context),
             r_smp_worker_thread[workerIndex]->current.enabled ? 1u : 0u,
