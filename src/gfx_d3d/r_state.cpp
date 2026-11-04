@@ -856,7 +856,15 @@ void __cdecl R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0)
     IDirect3DDevice9 *device; // [esp+38h] [ebp-4h]
 
     changedBits = state->activeStateBits[0] ^ stateBits0;
+#ifdef __SWITCH__
+    // Vulkan's D3D9 compatibility device can have ALPHABLENDENABLE changed
+    // by forced state paths without updating the renderer's legacy bit caches.
+    // Always enter this state update on Switch so the requested blend enable
+    // is reapplied even when activeStateBits/refStateBits are unchanged.
+    if (true)
+#else
     if (changedBits || ((state->refStateBits[0] ^ stateBits0) & 0x7000700) != 0)
+#endif
     {
         if (r_logFile->current.integer)
             RB_LogPrintState_0(stateBits0, changedBits);
