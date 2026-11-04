@@ -8648,33 +8648,50 @@ bool IDirect3DDevice9::BindSamplerSet(
     }
 #endif
 
-    // Reuse an immutable descriptor set when all 16 image-view/sampler pairs
-    // match a set already referenced in this frame. Never update a descriptor
-    // set after recording a draw that uses it: Vulkan may consume it later.
-    for (const SamplerDescriptorCacheEntry &cached : frameCache)
+    // Hash the complete descriptor contents, then compare the bucket exactly
+    // to handle collisions. Cache hits reuse immutable descriptor sets without
+    // rewriting any set that an earlier recorded draw may still reference.
+    uint64_t descriptorHash = 1469598103934665603ull;
+    const auto mixDescriptorHash = [&descriptorHash](uint64_t value)
     {
-        bool sameDescriptors = true;
-        for (uint32_t i = 0; i < 16; ++i)
-        {
-            const VkDescriptorImageInfo &oldImage = cached.images[i];
-            const VkDescriptorImageInfo &newImage = images[i];
-            if (oldImage.sampler != newImage.sampler ||
-                oldImage.imageView != newImage.imageView ||
-                oldImage.imageLayout != newImage.imageLayout)
-            {
-                sameDescriptors = false;
-                break;
-            }
-        }
+        descriptorHash ^= value;
+        descriptorHash *= 1099511628211ull;
+    };
+    for (const VkDescriptorImageInfo &image : images)
+    {
+        mixDescriptorHash(static_cast<uint64_t>(std::hash<VkSampler>{}(image.sampler)));
+        mixDescriptorHash(static_cast<uint64_t>(std::hash<VkImageView>{}(image.imageView)));
+        mixDescriptorHash(static_cast<uint64_t>(image.imageLayout));
+    }
 
-        if (sameDescriptors)
+    const auto cacheBucket = frameCache.find(descriptorHash);
+    if (cacheBucket != frameCache.end())
+    {
+        for (const SamplerDescriptorCacheEntry &cached : cacheBucket->second)
         {
-            g_switchFrameStage = "frame/render/vulkan/sampler/cache_hit";
-            vkCmdBindDescriptorSets(
-                m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
-                setIndex, 1, &cached.set, 0, nullptr);
-            g_switchFrameStage = "frame/render/vulkan/sampler/return";
-            return true;
+            bool sameDescriptors = true;
+            for (uint32_t i = 0; i < 16; ++i)
+            {
+                const VkDescriptorImageInfo &oldImage = cached.images[i];
+                const VkDescriptorImageInfo &newImage = images[i];
+                if (oldImage.sampler != newImage.sampler ||
+                    oldImage.imageView != newImage.imageView ||
+                    oldImage.imageLayout != newImage.imageLayout)
+                {
+                    sameDescriptors = false;
+                    break;
+                }
+            }
+
+            if (sameDescriptors)
+            {
+                g_switchFrameStage = "frame/render/vulkan/sampler/cache_hit";
+                vkCmdBindDescriptorSets(
+                    m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
+                    setIndex, 1, &cached.set, 0, nullptr);
+                g_switchFrameStage = "frame/render/vulkan/sampler/return";
+                return true;
+            }
         }
     }
 
@@ -8721,7 +8738,7 @@ bool IDirect3DDevice9::BindSamplerSet(
     SamplerDescriptorCacheEntry cacheEntry{};
     cacheEntry.set = set;
     cacheEntry.images = images;
-    frameCache.emplace_back(std::move(cacheEntry));
+    frameCache[descriptorHash].emplace_back(std::move(cacheEntry));
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_bind";
     vkCmdBindDescriptorSets(
         m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),

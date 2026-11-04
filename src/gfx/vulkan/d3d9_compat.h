@@ -559,7 +559,8 @@ private:
     std::array<std::array<std::vector<VkDescriptorSet>,2>,2> m_uniformDescriptorSets{};
     // Immutable sampler descriptor snapshots, deduplicated within a frame.
     // Descriptor sets are never rewritten after a recorded draw has referenced them.
-    std::array<std::array<std::vector<SamplerDescriptorCacheEntry>,2>,2>
+    std::array<std::array<
+        std::unordered_map<uint64_t, std::vector<SamplerDescriptorCacheEntry>>,2>,2>
         m_samplerDescriptorFrameCache{};
     std::array<std::array<size_t,2>,2> m_samplerSetCursor{};
     std::array<std::array<size_t,2>,2> m_uniformSetCursor{};
