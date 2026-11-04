@@ -29,6 +29,9 @@ static_assert(sizeof(GfxCmdDrawText2D) == 96);
 #include "r_meshdata.h"
 #include "r_spotshadow.h"
 #include "r_buffers.h"
+#ifdef __SWITCH__
+#include <gfx/vulkan/vulkan_backend.h>
+#endif
 #include "r_model.h"
 #include "r_state.h"
 #include "r_workercmds.h"
@@ -55,6 +58,36 @@ extern MaterialTechnique *Switch_ResolveTechniqueForRender(
 
 //  struct GfxBackEndData *frontEndDataOut 85827c80     gfx_d3d : r_rendercmds.obj
 GfxBackEndData *frontEndDataOut;
+
+#ifdef __SWITCH__
+namespace
+{
+// The frontend alternates two skinned/pre-tess pools. Remember which Vulkan
+// frame slot last consumed each pool; a pool is not reset until that slot's
+// GPU fence has completed.
+std::atomic<int> s_switchGpuSlotForSmpPool[2] = {-1, -1};
+
+void Switch_AssociateSmpPoolWithGpuSlot(uint32_t poolIndex, uint32_t frameSlot)
+{
+    if (poolIndex < 2 && frameSlot < VulkanBackend::FramesInFlight)
+        s_switchGpuSlotForSmpPool[poolIndex].store(static_cast<int>(frameSlot), std::memory_order_release);
+}
+
+void Switch_WaitForSmpPoolGpuUse(uint32_t poolIndex)
+{
+    if (poolIndex >= 2)
+        Com_Error(ERR_FATAL, "Invalid Switch SMP resource pool index %u", poolIndex);
+
+    const int frameSlot = s_switchGpuSlotForSmpPool[poolIndex].exchange(-1, std::memory_order_acq_rel);
+    if (frameSlot < 0)
+        return;
+
+    VulkanBackend *backend = GetVulkanBackend();
+    if (backend && !backend->WaitForFrameSlot(static_cast<uint32_t>(frameSlot)))
+        Com_Error(ERR_FATAL, "Vulkan frame fence wait failed before reusing Switch SMP resource pool %u", poolIndex);
+}
+}
+#endif
 //  int marker_r_rendercmds  85827cb8     gfx_d3d : r_rendercmds.obj
 
 struct GfxDebugFrameGlob // sizeof=0x11E880
@@ -371,6 +404,14 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
                 g_switchFrameStage = "frame/scr/issue_commands/rb_end_frame";
 #endif
                 RB_EndFrame(frontEndDataOut->drawType);
+#ifdef __SWITCH__
+                if ((frontEndDataOut->drawType & 2u) != 0)
+                {
+                    VulkanBackend *backend = GetVulkanBackend();
+                    if (backend && backend->IsInitialized())
+                        Switch_AssociateSmpPoolWithGpuSlot(gfxBuf.dynamicBufferFrame, backend->CurrentFrameSlot());
+                }
+#endif
 
             }
 
@@ -451,6 +492,14 @@ void __cdecl R_ToggleSmpFrameCmd(char type)
     R_UpdateActiveWorkerThreads();
     R_UnlockSkinnedCache();
     KISAK_NULLSUB();
+#ifdef __SWITCH__
+    if ((type & 2) != 0)
+    {
+        VulkanBackend *backend = GetVulkanBackend();
+        if (backend && backend->IsInitialized())
+            Switch_AssociateSmpPoolWithGpuSlot(gfxBuf.dynamicBufferFrame, backend->NextFrameSlot());
+    }
+#endif
     Sys_WakeRenderer((void *)frontEndDataOut);
     iassert( !r_glob.haveThreadOwnership );
     R_ToggleSmpFrame();
@@ -570,6 +619,13 @@ DebugGlobals *R_ToggleSmpFrame()
     ++rg.frontEndFrameCount;
     gfxBuf.dynamicBufferFrame = (gfxBuf.dynamicBufferFrame + 1) % 2;
     gfxBuf.preTessBufferFrame = (gfxBuf.preTessBufferFrame + 1) % 2;
+#ifdef __SWITCH__
+    iassert(gfxBuf.dynamicBufferFrame == gfxBuf.preTessBufferFrame);
+    // This function runs after the next frontend frame has been handed to the
+    // renderer. Waiting here protects only the pool about to be reused, while
+    // the newly handed-off frame can be recorded/submitted in parallel.
+    Switch_WaitForSmpPoolGpuUse(static_cast<uint32_t>(gfxBuf.dynamicBufferFrame));
+#endif
     frontEndDataOut = &s_backEndData[s_smpFrame];
     iassert( rg.frontEndFrameCount > 0 );
     R_FreeTempSkinBuffer();
