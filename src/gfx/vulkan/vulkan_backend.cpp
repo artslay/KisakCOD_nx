@@ -1212,9 +1212,9 @@ bool VulkanBackend::CreateSwapchain()
 #ifdef __SWITCH__
     // Keep the Switch renderer paced to display refresh. MAILBOX and IMMEDIATE
     // allow the game to render continuously between refreshes; IMMEDIATE can
-    // also tear the image. Two frame slots still let CPU work overlap the GPU,
-    // while FIFO provides back-pressure instead of saturating the GPU on a
-    // static scene.
+    // also tear the image. FIFO provides back-pressure instead of saturating
+    // the GPU on a static scene. GPU frame overlap stays disabled until every
+    // legacy frontend resource has explicit Vulkan fence ownership.
     m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
 #else
     const bool mailboxImageCountSupported =
@@ -1649,8 +1649,8 @@ bool VulkanBackend::RecreateSwapchain()
     const uint32_t previousWidth = m_width;
     const uint32_t previousHeight = m_height;
 
-    // Device idle makes both frame slots' command pools and deferred resources
-    // safe to recycle during swapchain recreation.
+    // Device idle makes the frame command pool and deferred resources safe
+    // to recycle during swapchain recreation.
     m_completedFrameSerial.store(
         m_frameSerial.load(std::memory_order_acquire),
         std::memory_order_release);
@@ -2394,8 +2394,8 @@ void VulkanBackend::ReleaseQuery(void *queryPtr)
     if (!query)
         return;
 
-    // Query objects can be referenced by either in-flight frame slot.
-    // Retain the existing synchronous release contract before destroying them.
+    // Retain the existing synchronous release contract before destroying
+    // query objects.
     if (m_device && m_graphicsQueue)
     {
         std::lock_guard<std::mutex> queueLock(m_queueMutex);
