@@ -2125,9 +2125,6 @@ void __cdecl R_GenerateSortedDrawSurfs(
     switchPerfStageStart = Kisak_RawTimerTicks();
 #endif
     
-#ifdef __SWITCH__
-    switchPerfStageStart = Kisak_RawTimerTicks();
-#endif
     if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD
         && dynamicShadowType == SHADOW_MAP
         && Com_BitCheckAssert(frontEndDataOut->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
