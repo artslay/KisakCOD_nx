@@ -652,11 +652,27 @@ private:
     std::array<std::array<size_t,2>,2> m_samplerSetCursor{};
     std::array<std::array<size_t,2>,2> m_uniformSetCursor{};
     std::array<uint64_t,2> m_descriptorCacheFrameSerial{};
+    // Vulkan command-buffer state persists across draws and dynamic-rendering
+    // restarts. Avoid re-emitting identical pipeline, descriptor and dynamic state.
+    uint64_t m_cachedCommandFrameSerial = UINT64_MAX;
+    VkCommandBuffer m_cachedCommandBuffer = VK_NULL_HANDLE;
+    VkPipeline m_cachedBoundPipeline = VK_NULL_HANDLE;
+    std::array<VkDescriptorSet,4> m_cachedBoundDescriptorSets{};
+    VkViewport m_cachedViewport{};
+    VkRect2D m_cachedScissor{};
+    std::array<float,4> m_cachedBlendConstants{};
+    bool m_cachedViewportValid = false;
+    bool m_cachedScissorValid = false;
+    bool m_cachedBlendConstantsValid = false;
     bool m_pipelineDirty=true;
     std::unordered_map<uint64_t, VkPipeline> m_pipelines;
     void LogGpuDrawCommand(const char *kind, uint32_t primitiveType,
         uint32_t primitiveCount, uint32_t vertexCount, uint32_t indexCount,
         uint32_t startIndex, int32_t baseVertexIndex);
+    void ResetCachedCommandState();
+    void BindDescriptorSetIfChanged(
+        VkPipelineBindPoint bindPoint, uint32_t setIndex, VkDescriptorSet set);
+    void BindPipelineIfChanged(VkPipeline pipeline);
     bool BindDescriptorSets();
     bool PrepareDraw();
     bool EnsurePipeline();
