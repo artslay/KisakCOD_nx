@@ -74,6 +74,8 @@ struct SwitchRenderCpuPerfFrame
     uint64_t staticModelNs, dynPiecesNs, dynWaitNs, dynDrawNs;
     uint64_t sceneWaitNs, sceneBuildNs, staticSortNs, lightSurfNs;
     uint64_t addSceneWaitNs, tailNs;
+    uint64_t preWorldNs, shadowSetupNs, shadowSurfsNs, fxWaitNs, shadowSceneNs;
+    uint64_t tailSceneNs, tailMarksNs, tailDecalNs, tailEmissiveNs;
     uint64_t staticDpvsCalls[4], staticDpvsNs[4];
 };
 
@@ -114,6 +116,15 @@ void Switch_ReportRenderCpuPerf(
     total.lightSurfNs += sample.lightSurfNs;
     total.addSceneWaitNs += sample.addSceneWaitNs;
     total.tailNs += sample.tailNs;
+    total.preWorldNs += sample.preWorldNs;
+    total.shadowSetupNs += sample.shadowSetupNs;
+    total.shadowSurfsNs += sample.shadowSurfsNs;
+    total.fxWaitNs += sample.fxWaitNs;
+    total.shadowSceneNs += sample.shadowSceneNs;
+    total.tailSceneNs += sample.tailSceneNs;
+    total.tailMarksNs += sample.tailMarksNs;
+    total.tailDecalNs += sample.tailDecalNs;
+    total.tailEmissiveNs += sample.tailEmissiveNs;
     for (uint32_t worker = 0; worker < 4; ++worker)
     {
         total.staticDpvsCalls[worker] += sample.staticDpvsCalls[worker];
@@ -129,7 +140,9 @@ void Switch_ReportRenderCpuPerf(
         total.beginLightingNs + total.waitFrontendNs + total.waitStaticDpvsNs +
         total.bspNs + total.staticModelNs + total.dynPiecesNs + total.dynWaitNs +
         total.dynDrawNs + total.sceneWaitNs + total.sceneBuildNs +
-        total.staticSortNs + total.lightSurfNs + total.addSceneWaitNs + total.tailNs;
+        total.staticSortNs + total.lightSurfNs + total.addSceneWaitNs +
+        total.preWorldNs + total.shadowSetupNs + total.shadowSurfsNs +
+        total.fxWaitNs + total.shadowSceneNs + total.tailNs;
     const uint64_t otherNs = total.totalNs > measuredNs ? total.totalNs - measuredNs : 0;
 
     const uint64_t staticDpvsCpuNs =
@@ -138,10 +151,10 @@ void Switch_ReportRenderCpuPerf(
     const uint64_t staticDpvsCalls =
         total.staticDpvsCalls[0] + total.staticDpvsCalls[1] +
         total.staticDpvsCalls[2] + total.staticDpvsCalls[3];
-    char message[1600];
+    char message[2048];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][CPU SCENE PERF] samples=%u avg_ms total=%.3f setup_world=%.3f filter_entities=%.3f dpvs_queue=%.3f begin_lighting=%.3f wait_frontend=%.3f wait_static_dpvs=%.3f bsp=%.3f static_models=%.3f dyn_pieces=%.3f dyn_wait=%.3f dyn_draw=%.3f scene_wait=%.3f scene_build=%.3f static_sort=%.3f light_surfs=%.3f wait_add_scene=%.3f other=%.3f static_dpvs{calls=%.1f main=%.1f w0=%.1f w1=%.1f other=%.1f cpu_ms=%.3f main=%.3f w0=%.3f w1=%.3f other=%.3f} counts{world_surfs=%u static_models=%u scene_dobj=%u scene_models=%u dyn_models=%u dyn_brushes=%u draw_surfs=%u smodel_draws=%u/%u/%u}\n",
+        "[KisakCOD][CPU SCENE PERF] samples=%u avg_ms total=%.3f setup_world=%.3f filter_entities=%.3f dpvs_queue=%.3f begin_lighting=%.3f wait_frontend=%.3f wait_static_dpvs=%.3f bsp=%.3f static_models=%.3f dyn_pieces=%.3f dyn_wait=%.3f dyn_draw=%.3f scene_wait=%.3f scene_build=%.3f static_sort=%.3f light_surfs=%.3f wait_add_scene=%.3f pre_world=%.3f shadow_setup=%.3f shadow_surfs=%.3f fx_wait=%.3f shadow_scene=%.3f tail=%.3f tail_scene=%.3f tail_marks=%.3f tail_decal=%.3f tail_emissive=%.3f other=%.3f static_dpvs{calls=%.1f main=%.1f w0=%.1f w1=%.1f other=%.1f cpu_ms=%.3f main=%.3f w0=%.3f w1=%.3f other=%.3f} counts{world_surfs=%u static_models=%u scene_dobj=%u scene_models=%u dyn_models=%u dyn_brushes=%u draw_surfs=%u smodel_draws=%u/%u/%u}\n",
         s_switchRenderCpuPerfSamples,
         total.totalNs * averageMs,
         total.setupWorldNs * averageMs,
@@ -160,6 +173,16 @@ void Switch_ReportRenderCpuPerf(
         total.staticSortNs * averageMs,
         total.lightSurfNs * averageMs,
         total.addSceneWaitNs * averageMs,
+        total.preWorldNs * averageMs,
+        total.shadowSetupNs * averageMs,
+        total.shadowSurfsNs * averageMs,
+        total.fxWaitNs * averageMs,
+        total.shadowSceneNs * averageMs,
+        total.tailNs * averageMs,
+        total.tailSceneNs * averageMs,
+        total.tailMarksNs * averageMs,
+        total.tailDecalNs * averageMs,
+        total.tailEmissiveNs * averageMs,
         otherNs * averageMs,
         static_cast<double>(staticDpvsCalls) / s_switchRenderCpuPerfSamples,
         static_cast<double>(total.staticDpvsCalls[0]) / s_switchRenderCpuPerfSamples,
@@ -1969,6 +1992,7 @@ void __cdecl R_GenerateSortedDrawSurfs(
     R_SetInputCodeConstant(&viewInfo->input, CONST_SRC_CODE_ZNEAR, viewParmsDraw->zNear * 0.984375, 0.0, 0.0, 0.0);
     R_SetFullSceneViewMesh(viewInfoIndex, viewInfo);
 #ifdef __SWITCH__
+    switchPerfFrame.preWorldNs = Kisak_RawTimerTicks() - switchPerfViewStart;
     switchPerfStageStart = Kisak_RawTimerTicks();
 #endif
     R_SetupWorldSurfacesDpvs(viewParmsDpvs);
@@ -2028,6 +2052,7 @@ void __cdecl R_GenerateSortedDrawSurfs(
             R_AddAllBspDrawSurfacesCamera();
 #ifdef __SWITCH__
             switchPerfFrame.bspNs += Kisak_RawTimerTicks() - switchPerfStageStart;
+            switchPerfStageStart = Kisak_RawTimerTicks();
 #endif
             if (!sm_sunEnable->current.enabled && rgp.world->sunPrimaryLightIndex)
                 Com_BitClearAssert(scene.shadowableLightIsUsed, rgp.world->sunPrimaryLightIndex, 128);
@@ -2042,6 +2067,9 @@ void __cdecl R_GenerateSortedDrawSurfs(
                 R_SetSunShadowConstants(&viewInfo->input, &viewInfo->sunShadow.sunProj); // these constants look perfect
                 R_SunShadowMaps();
             }
+#ifdef __SWITCH__
+            switchPerfFrame.shadowSetupNs = Kisak_RawTimerTicks() - switchPerfStageStart;
+#endif
         }
         else
         {
@@ -2097,6 +2125,9 @@ void __cdecl R_GenerateSortedDrawSurfs(
     switchPerfStageStart = Kisak_RawTimerTicks();
 #endif
     
+#ifdef __SWITCH__
+    switchPerfStageStart = Kisak_RawTimerTicks();
+#endif
     if (gfxDrawMethod.drawScene == GFX_DRAW_SCENE_STANDARD
         && dynamicShadowType == SHADOW_MAP
         && Com_BitCheckAssert(frontEndDataOut->shadowableLightHasShadowMap, rgp.world->sunPrimaryLightIndex, 32))
@@ -2114,6 +2145,10 @@ void __cdecl R_GenerateSortedDrawSurfs(
             R_AddAllStaticModelSurfacesSunShadow();
         }
     }
+#ifdef __SWITCH__
+    switchPerfFrame.shadowSurfsNs = Kisak_RawTimerTicks() - switchPerfStageStart;
+    switchPerfStageStart = Kisak_RawTimerTicks();
+#endif
     KISAK_NULLSUB();
     {
         PROF_SCOPED("WaitFX");
@@ -2121,6 +2156,7 @@ void __cdecl R_GenerateSortedDrawSurfs(
         R_WaitWorkerCmdsOfType(WRKCMD_UPDATE_FX_REMAINING);
     }
 #ifdef __SWITCH__
+    switchPerfFrame.fxWaitNs += Kisak_RawTimerTicks() - switchPerfStageStart;
     switchPerfStageStart = Kisak_RawTimerTicks();
 #endif
     R_WaitWorkerCmdsOfType(WRKCMD_DPVS_CELL_SCENE_ENT);
@@ -2180,12 +2216,14 @@ void __cdecl R_GenerateSortedDrawSurfs(
     KISAK_NULLSUB();
     R_EmitShadowCookieSurfs(viewInfo);
 #ifdef __SWITCH__
+    switchPerfFrame.shadowSceneNs = Kisak_RawTimerTicks() - switchPerfStageStart;
     switchPerfStageStart = Kisak_RawTimerTicks();
 #endif
     R_WaitWorkerCmdsOfType(WRKCMD_ADD_SCENE_ENT);
 #ifdef __SWITCH__
     switchPerfFrame.addSceneWaitNs = Kisak_RawTimerTicks() - switchPerfStageStart;
     switchPerfStageStart = Kisak_RawTimerTicks();
+    const uint64_t switchPerfTailStart = switchPerfStageStart;
 #endif
     if (usePreTess)
         R_EndPreTess();
@@ -2214,6 +2252,10 @@ void __cdecl R_GenerateSortedDrawSurfs(
         CL_UpdateSound();
     FX_RunPhysics(viewInfo->localClientNum);
     DynEntCl_ProcessEntities(viewInfo->localClientNum);
+#ifdef __SWITCH__
+    switchPerfFrame.tailSceneNs = Kisak_RawTimerTicks() - switchPerfStageStart;
+    switchPerfStageStart = Kisak_RawTimerTicks();
+#endif
     R_WaitWorkerCmdsOfType(WRKCMD_GENERATE_MARK_VERTS);
     if (!dx.deviceLost && fx_marks->current.enabled)
     {
@@ -2227,6 +2269,10 @@ void __cdecl R_GenerateSortedDrawSurfs(
     }
     KISAK_NULLSUB();
     R_SortDrawSurfs(scene.drawSurfs[6], scene.drawSurfCount[6]);
+#ifdef __SWITCH__
+    switchPerfFrame.tailMarksNs = Kisak_RawTimerTicks() - switchPerfStageStart;
+    switchPerfStageStart = Kisak_RawTimerTicks();
+#endif
     decalInfo = &viewInfo->decalInfo;
     R_InitDrawSurfListInfo(&viewInfo->decalInfo);
     decalInfo->baseTechType = gfxDrawMethod.baseTechType;
@@ -2238,6 +2284,10 @@ void __cdecl R_GenerateSortedDrawSurfs(
     decalInfo->cameraView = 1;
     firstDrawSurfCount = frontEndDataOut->drawSurfCount;
     R_MergeAndEmitDrawSurfLists(DRAW_SURF_BSP_CAMERA_DECAL, 6);
+#ifdef __SWITCH__
+    switchPerfFrame.tailDecalNs = Kisak_RawTimerTicks() - switchPerfStageStart;
+    switchPerfStageStart = Kisak_RawTimerTicks();
+#endif
     decalInfo->drawSurfs = &frontEndDataOut->drawSurfs[firstDrawSurfCount];
     decalInfo->drawSurfCount = frontEndDataOut->drawSurfCount - firstDrawSurfCount;
     R_WaitWorkerCmdsOfType(WRKCMD_GENERATE_FX_VERTS);
@@ -2269,7 +2319,8 @@ void __cdecl R_GenerateSortedDrawSurfs(
     }
     R_ShowCull();
 #ifdef __SWITCH__
-    switchPerfFrame.tailNs = Kisak_RawTimerTicks() - switchPerfStageStart;
+    switchPerfFrame.tailEmissiveNs = Kisak_RawTimerTicks() - switchPerfStageStart;
+    switchPerfFrame.tailNs = Kisak_RawTimerTicks() - switchPerfTailStart;
     switchPerfFrame.totalNs = Kisak_RawTimerTicks() - switchPerfViewStart;
     uint64_t switchStaticDpvsCallsAfter[4] = {};
     uint64_t switchStaticDpvsNsAfter[4] = {};
