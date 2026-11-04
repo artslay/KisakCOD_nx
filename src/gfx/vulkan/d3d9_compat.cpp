@@ -12460,12 +12460,4 @@ HRESULT IDirect3DDevice9::Clear(
     ++g_switchSceneClearCalls;
     return S_OK;
 }
-
-bool Switch_WaitForGpuBeforeSmpFrameReuse()
-{
-    VulkanBackend *backend = GetVulkanBackend();
-    if (!backend || !backend->IsInitialized())
-        return true;
-    return backend->WaitForLastSubmittedFrame();
-}
 #endif
