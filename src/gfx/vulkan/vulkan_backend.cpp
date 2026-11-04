@@ -1731,6 +1731,35 @@ void VulkanBackend::DestroyDefaultDepth()
     m_defaultDepthLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
+bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
+{
+    // No submitted work can still reference this slot before initialization,
+    // and a lost device can no longer consume its resources.
+    if (!m_device || !m_initialized || m_deviceLost)
+        return true;
+    if (slotIndex >= FramesInFlight)
+    {
+        SetError("Invalid Vulkan frame slot while reusing an SMP resource pool");
+        return false;
+    }
+
+    const FrameSync &frame = m_frameSync[slotIndex];
+    if (!frame.fence)
+    {
+        SetError("Missing Vulkan frame fence while reusing an SMP resource pool");
+        return false;
+    }
+
+    const VkResult waitResult =
+        vkWaitForFences(m_device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
+    if (waitResult != VK_SUCCESS)
+    {
+        SetError("vkWaitForFences failed while reusing an SMP resource pool", waitResult);
+        return false;
+    }
+    return true;
+}
+
 bool VulkanBackend::BeginFrame()
 {
     if (m_deviceLost || !m_initialized)
@@ -1741,9 +1770,8 @@ bool VulkanBackend::BeginFrame()
     if (m_swapchainNeedsRecreate && !RecreateSwapchain())
         return false;
 
-    // The Switch path currently has one active slot. Wait for its fence
-    // before beginning the next frame so no legacy shared render resource is
-    // overwritten while the previous submission still reads it.
+    // Reuse only the selected slot's command resources and frame-local
+    // allocations after its previous submission has completed.
     const uint32_t slotIndex = m_nextFrameSlot;
     FrameSync &frame = m_frameSync[slotIndex];
     const VkResult waitResult =
