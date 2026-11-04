@@ -8071,9 +8071,7 @@ bool IDirect3DDevice9::BindUniformSet(
     vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
     traceUniformBindStage("descriptor_updated", bytes, size, 1);
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_bind";
-    vkCmdBindDescriptorSets(
-        m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
-        setIndex, 1, &set, 0, nullptr);
+    BindDescriptorSetIfChanged(bindPoint, setIndex, set);
     traceUniformBindStage("descriptor_bound", bytes, size, 1);
 #ifdef __SWITCH__
     if (setIndex == 1u && g_switchModelTransformDraw.active &&
@@ -8698,9 +8696,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             if (sameDescriptors)
             {
                 g_switchFrameStage = "frame/render/vulkan/sampler/cache_hit";
-                vkCmdBindDescriptorSets(
-                    m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
-                    setIndex, 1, &cached.set, 0, nullptr);
+                BindDescriptorSetIfChanged(bindPoint, setIndex, cached.set);
                 g_switchFrameStage = "frame/render/vulkan/sampler/return";
                 return true;
             }
@@ -8932,7 +8928,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         g_switchLastBoundPixelShaderSerial.store(m_pixelShader->serial, std::memory_order_relaxed);
         m_pipelineDirty = false;
         g_switchFrameStage = "frame/render/vulkan/pipeline/cache_hit_bind";
-        vkCmdBindPipeline(m_backend->CommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, existing->second);
+        BindPipelineIfChanged(existing->second);
         RecordSwitchVkPipelineTrace(
             4u, this, &m_pipelines, m_pipelines.size(), key,
             m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, existing->second);
@@ -10647,11 +10643,59 @@ bool IDirect3DDevice9::EnsurePipeline()
     RecordSwitchVkPipelineTrace(
         10u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
-    vkCmdBindPipeline(m_backend->CommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    BindPipelineIfChanged(pipeline);
     RecordSwitchVkPipelineTrace(
         11u, this, &m_pipelines, m_pipelines.size(), key,
         m_backend->Device(), m_decl, m_vertexShader, m_pixelShader, pipeline);
     return true;
+}
+
+void IDirect3DDevice9::ResetCachedCommandState()
+{
+    if (!m_backend)
+        return;
+
+    const uint64_t frameSerial = m_backend->FrameSerial();
+    const VkCommandBuffer commandBuffer = m_backend->CommandBuffer();
+    if (m_cachedCommandFrameSerial == frameSerial &&
+        m_cachedCommandBuffer == commandBuffer)
+        return;
+
+    // Frame slots may use different command buffers, and a reset command buffer
+    // forgets all graphics state even when the Vk handles happen to be reused.
+    m_cachedCommandFrameSerial = frameSerial;
+    m_cachedCommandBuffer = commandBuffer;
+    m_cachedBoundPipeline = VK_NULL_HANDLE;
+    m_cachedBoundDescriptorSets.fill(VK_NULL_HANDLE);
+    m_cachedViewportValid = false;
+    m_cachedScissorValid = false;
+    m_cachedBlendConstantsValid = false;
+}
+
+void IDirect3DDevice9::BindDescriptorSetIfChanged(
+    VkPipelineBindPoint bindPoint, uint32_t setIndex, VkDescriptorSet set)
+{
+    ResetCachedCommandState();
+    if (setIndex < m_cachedBoundDescriptorSets.size() &&
+        m_cachedBoundDescriptorSets[setIndex] == set)
+        return;
+
+    vkCmdBindDescriptorSets(
+        m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
+        setIndex, 1, &set, 0, nullptr);
+    if (setIndex < m_cachedBoundDescriptorSets.size())
+        m_cachedBoundDescriptorSets[setIndex] = set;
+}
+
+void IDirect3DDevice9::BindPipelineIfChanged(VkPipeline pipeline)
+{
+    ResetCachedCommandState();
+    if (m_cachedBoundPipeline == pipeline)
+        return;
+
+    vkCmdBindPipeline(
+        m_backend->CommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    m_cachedBoundPipeline = pipeline;
 }
 
 bool IDirect3DDevice9::BindDescriptorSets()
@@ -10778,7 +10822,18 @@ bool IDirect3DDevice9::PrepareDraw()
     viewport.height = -static_cast<float>(m_viewport.Height);
     viewport.minDepth = m_viewport.MinZ;
     viewport.maxDepth = m_viewport.MaxZ;
-    vkCmdSetViewport(m_backend->CommandBuffer(), 0, 1, &viewport);
+    if (!m_cachedViewportValid ||
+        m_cachedViewport.x != viewport.x ||
+        m_cachedViewport.y != viewport.y ||
+        m_cachedViewport.width != viewport.width ||
+        m_cachedViewport.height != viewport.height ||
+        m_cachedViewport.minDepth != viewport.minDepth ||
+        m_cachedViewport.maxDepth != viewport.maxDepth)
+    {
+        vkCmdSetViewport(m_backend->CommandBuffer(), 0, 1, &viewport);
+        m_cachedViewport = viewport;
+        m_cachedViewportValid = true;
+    }
 
     VkRect2D scissor{};
     // targetWidth/targetHeight describe the full target; viewport state is separate.
@@ -10805,17 +10860,32 @@ bool IDirect3DDevice9::PrepareDraw()
         static_cast<uint32_t>(right - left),
         static_cast<uint32_t>(bottom - top)
     };
-    vkCmdSetScissor(m_backend->CommandBuffer(), 0, 1, &scissor);
+    if (!m_cachedScissorValid ||
+        m_cachedScissor.offset.x != scissor.offset.x ||
+        m_cachedScissor.offset.y != scissor.offset.y ||
+        m_cachedScissor.extent.width != scissor.extent.width ||
+        m_cachedScissor.extent.height != scissor.extent.height)
+    {
+        vkCmdSetScissor(m_backend->CommandBuffer(), 0, 1, &scissor);
+        m_cachedScissor = scissor;
+        m_cachedScissorValid = true;
+    }
 
     // D3DRS_BLENDFACTOR is an ARGB D3DCOLOR. Vulkan expects normalized RGBA
     // constants and consumes them when a blend factor uses CONSTANT_COLOR.
-    const float blendConstants[4] = {
+    const std::array<float,4> blendConstants = {{
         static_cast<float>((m_blendFactor >> 16) & 0xffu) / 255.0f,
         static_cast<float>((m_blendFactor >> 8) & 0xffu) / 255.0f,
         static_cast<float>(m_blendFactor & 0xffu) / 255.0f,
         static_cast<float>((m_blendFactor >> 24) & 0xffu) / 255.0f
-    };
-    vkCmdSetBlendConstants(m_backend->CommandBuffer(), blendConstants);
+    }};
+    if (!m_cachedBlendConstantsValid ||
+        m_cachedBlendConstants != blendConstants)
+    {
+        vkCmdSetBlendConstants(m_backend->CommandBuffer(), blendConstants.data());
+        m_cachedBlendConstants = blendConstants;
+        m_cachedBlendConstantsValid = true;
+    }
 
     g_switchFrameStage = "frame/render/vulkan/prepare_draw/bind_descriptors";
     if (!BindDescriptorSets())
