@@ -275,6 +275,17 @@ struct KisakVkTexture : IDirect3DResource9 {
     uint32_t width=0, height=0, depth=1, mipLevels=1, arrayLayers=1;
     _D3DFORMAT sourceFormat=D3DFMT_UNKNOWN;
     std::vector<VkImageLayout> subresourceLayouts;
+    // Most sampled images keep the same subresource layouts across many draws.
+    // Cache the mip-chain summary and invalidate it only when a layout changes.
+    uint64_t subresourceLayoutRevision = 1;
+    uint64_t subresourceLayoutSummaryRevision = 0;
+    VkImageLayout subresourceLayoutSummaryFallback = VK_IMAGE_LAYOUT_UNDEFINED;
+    uint32_t subresourceLayoutSummaryMipLevels = 0;
+    uint32_t subresourceLayoutSummaryArrayLayers = 0;
+    bool subresourceLayoutSummaryBaseInitialized = false;
+    bool subresourceLayoutSummaryAllInitialized = false;
+    bool subresourceLayoutSummaryBaseShaderRead = false;
+    bool subresourceLayoutSummaryAllShaderRead = false;
     // D3D9 volume-texture dirty regions are tracked in base-level texels.
     bool dirtyAll = true;
     std::vector<_D3DBOX> dirtyBoxes;
@@ -306,10 +317,81 @@ struct KisakVkTexture : IDirect3DResource9 {
             return;
         const size_t index = static_cast<size_t>(layer) * mipLevels + level;
         if (index >= subresourceLayouts.size())
+        {
             subresourceLayouts.resize(static_cast<size_t>(arrayLayers) * mipLevels,
                                       VK_IMAGE_LAYOUT_UNDEFINED);
-        subresourceLayouts[index] = newLayout;
+            ++subresourceLayoutRevision;
+        }
+        if (subresourceLayouts[index] != newLayout)
+        {
+            subresourceLayouts[index] = newLayout;
+            ++subresourceLayoutRevision;
+        }
         layout = newLayout;
+    }
+    void GetSubresourceLayoutSummary(
+        bool *baseMipInitialized,
+        bool *allSubresourcesInitialized,
+        bool *baseMipShaderRead,
+        bool *allSubresourcesShaderRead)
+    {
+        const size_t subresourceCount =
+            static_cast<size_t>(arrayLayers) * mipLevels;
+        if (subresourceLayouts.size() < subresourceCount)
+        {
+            // Preserve the previous sampler path's fallback for entries that
+            // have not yet received explicit per-subresource layout tracking.
+            subresourceLayouts.resize(subresourceCount, layout);
+            ++subresourceLayoutRevision;
+        }
+
+        if (subresourceLayoutSummaryRevision != subresourceLayoutRevision ||
+            subresourceLayoutSummaryFallback != layout ||
+            subresourceLayoutSummaryMipLevels != mipLevels ||
+            subresourceLayoutSummaryArrayLayers != arrayLayers)
+        {
+            bool baseInitialized = true;
+            bool allInitialized = true;
+            bool baseShaderRead = true;
+            bool allShaderRead = true;
+            for (uint32_t layer = 0; layer < arrayLayers; ++layer)
+            {
+                for (uint32_t level = 0; level < mipLevels; ++level)
+                {
+                    const VkImageLayout subresourceLayout =
+                        GetSubresourceLayout(level, layer);
+                    if (level == 0)
+                    {
+                        if (subresourceLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+                            baseInitialized = false;
+                        if (subresourceLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                            baseShaderRead = false;
+                    }
+                    if (subresourceLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+                        allInitialized = false;
+                    if (subresourceLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                        allShaderRead = false;
+                }
+            }
+
+            subresourceLayoutSummaryBaseInitialized = baseInitialized;
+            subresourceLayoutSummaryAllInitialized = allInitialized;
+            subresourceLayoutSummaryBaseShaderRead = baseShaderRead;
+            subresourceLayoutSummaryAllShaderRead = allShaderRead;
+            subresourceLayoutSummaryFallback = layout;
+            subresourceLayoutSummaryMipLevels = mipLevels;
+            subresourceLayoutSummaryArrayLayers = arrayLayers;
+            subresourceLayoutSummaryRevision = subresourceLayoutRevision;
+        }
+
+        if (baseMipInitialized)
+            *baseMipInitialized = subresourceLayoutSummaryBaseInitialized;
+        if (allSubresourcesInitialized)
+            *allSubresourcesInitialized = subresourceLayoutSummaryAllInitialized;
+        if (baseMipShaderRead)
+            *baseMipShaderRead = subresourceLayoutSummaryBaseShaderRead;
+        if (allSubresourcesShaderRead)
+            *allSubresourcesShaderRead = subresourceLayoutSummaryAllShaderRead;
     }
     HRESULT LockRect(uint32_t level, _D3DLOCKED_RECT *lockedRect, const tagRECT*, uint32_t);
     HRESULT UnlockRect(uint32_t level);
