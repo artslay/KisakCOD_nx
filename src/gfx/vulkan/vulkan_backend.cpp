@@ -64,7 +64,7 @@ extern std::atomic<uint32_t> g_switchLastDrawTextureLayout[4];
 
 namespace
 {
-VulkanBackend *g_backend = nullptr;
+std::atomic<VulkanBackend *> g_backend{nullptr};
 
 bool HasExtension(const std::vector<VkExtensionProperties> &extensions, const char *name)
 {
@@ -186,7 +186,7 @@ VulkanBackend::~VulkanBackend()
 
 VulkanBackend *GetVulkanBackend()
 {
-    return g_backend;
+    return g_backend.load(std::memory_order_acquire);
 }
 
 void VulkanBackend::SetError(const char *message, VkResult result)
@@ -595,7 +595,7 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
         std::lock_guard<std::mutex> errorLock(m_errorMutex);
         m_lastError.clear();
     }
-    g_backend = this;
+    g_backend.store(this, std::memory_order_release);
 
     if (!CreateInstance() ||
         !CreateSurface() ||
@@ -745,8 +745,8 @@ void VulkanBackend::Shutdown()
     m_backbufferClearedThisFrame = false;
     ClearPresentSource();
 
-    if (g_backend == this)
-        g_backend = nullptr;
+    if (g_backend.load(std::memory_order_acquire) == this)
+        g_backend.store(nullptr, std::memory_order_release);
 }
 
 bool VulkanBackend::CreateInstance()
