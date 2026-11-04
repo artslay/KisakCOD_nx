@@ -386,8 +386,8 @@ private:
     // Fence host access is externally synchronized by Vulkan. A per-slot lock
     // allows the frontend to wait for an old slot while the backend uses the other.
     std::array<std::mutex, FramesInFlight> m_frameFenceMutexes{};
-    uint32_t m_currentFrameSlot = 0;
-    uint32_t m_nextFrameSlot = 0;
+    std::atomic<uint32_t> m_currentFrameSlot{0};
+    std::atomic<uint32_t> m_nextFrameSlot{0};
     std::mutex m_immediateMutex;
     std::mutex m_queueMutex;
     std::mutex m_descriptorPoolMutex;
@@ -424,7 +424,7 @@ private:
     VkDeviceSize m_uniformAlignment = 256;
 
     uint32_t m_swapchainIndex = 0;
-    bool m_initialized = false;
+    std::atomic<bool> m_initialized{false};
     std::atomic<bool> m_deviceLost{false};
 #ifdef VK_EXT_device_fault
     PFN_vkGetDeviceFaultInfoEXT m_getDeviceFaultInfo = nullptr;
@@ -441,10 +441,10 @@ private:
 #endif
     float m_maxSamplerAnisotropy = 1.0f;
     float m_maxSamplerLodBias = 0.0f;
-    bool m_frameActive = false;
+    std::atomic<bool> m_frameActive{false};
     bool m_imageAvailablePending = false;
     bool m_renderingActive = false;
-    bool m_swapchainNeedsRecreate = false;
+    std::atomic<bool> m_swapchainNeedsRecreate{false};
     bool m_backbufferClearedThisFrame = false;
 
     VkImage m_presentSourceImage = VK_NULL_HANDLE;
