@@ -290,12 +290,13 @@ static void SND_ReleaseStreamChannel(int index)
         return;
 
     alSourceStop(alGlob.source[index]);
-    ALint queued = 0;
-    alGetSourcei(alGlob.source[index], AL_BUFFERS_QUEUED, &queued);
+    ALint queued = static_cast<ALint>(stream->queuedBufferCount);
     while (queued-- > 0)
     {
         ALuint buf;
         alSourceUnqueueBuffers(alGlob.source[index], 1, &buf);
+        if (stream->queuedBufferCount > 0)
+            --stream->queuedBufferCount;
     }
     if (stream->bufferCount != 0)
         alDeleteBuffers(static_cast<ALsizei>(stream->bufferCount), stream->buffers);
@@ -756,7 +757,7 @@ void SND_ApplyOpenALEq(ALuint source, int entchannel)
 }
 
 // Decodes and queues fresh PCM chunks to bring the channel's buffer queue back up to
-// AL_STREAM_BUFFER_COUNT, first unqueuing/deleting any buffers that finished playing.
+// AL_STREAM_BUFFER_COUNT, first unqueuing processed buffers back into the reusable free pool.
 // Handles looping by seeking back to the start of the audio data when the decoder runs dry.
 // Returns false once the stream has ended (not looping) with nothing left queued - the
 // caller uses that to know when the channel should stop/free itself.
