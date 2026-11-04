@@ -576,8 +576,8 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
                     if (partialFrameActive && !backend->SynchronizeActiveFrame())
                         Com_Error(ERR_FATAL, "Vulkan failed to finish an open frame before reusing a Switch SMP pool");
 
-                    if (v1 && (partialFrameActive ||
-                        (frontEndDataOut->drawType & 2u) != 0))
+                    if (partialFrameActive ||
+                        (v1 && (frontEndDataOut->drawType & 2u) != 0))
                     {
                         Switch_AssociateCurrentFrontEndResourcesWithGpuSlot(
                             backend->CurrentFrameSlot());
