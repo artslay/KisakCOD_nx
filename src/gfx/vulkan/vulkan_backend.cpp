@@ -20,6 +20,7 @@ extern bool R_RecoverLostVulkanDevice();
 #include "../../platform/switch/switch_saltynx.h"
 
 #include <gfx_d3d/r_init.h>
+#include <gfx_d3d/r_dvars.h>
 
 #ifndef VK_USE_PLATFORM_VI_NN
 #define VK_USE_PLATFORM_VI_NN 1
@@ -1214,16 +1215,34 @@ bool VulkanBackend::CreateSwapchain()
     {
         return std::find(modes.begin(), modes.end(), wanted) != modes.end();
     };
-#ifdef __SWITCH__
-    // Keep the Switch renderer paced to display refresh. MAILBOX and IMMEDIATE
-    // allow the game to render continuously between refreshes; IMMEDIATE can
-    // also tear the image. FIFO provides back-pressure instead of saturating
-    // the GPU on a static scene. GPU frame overlap stays disabled until every
-    // legacy frontend resource has explicit Vulkan fence ownership.
-    m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
-#else
-    const bool mailboxImageCountSupported =
+const bool mailboxImageCountSupported =
         !caps.maxImageCount || caps.maxImageCount >= caps.minImageCount + 1u;
+#ifdef __SWITCH__
+    // Honor the engine's VSync setting. MAILBOX remains synchronized to the
+    // display but replaces a queued frame instead of blocking the CPU behind
+    // a full FIFO queue. Without VSync, prefer IMMEDIATE when available.
+    const bool vsyncEnabled = !r_vsync || r_vsync->current.enabled;
+    if (vsyncEnabled)
+    {
+        if (mailboxImageCountSupported && hasPresentMode(VK_PRESENT_MODE_MAILBOX_KHR))
+            m_presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+        else
+            m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    }
+    else if (hasPresentMode(VK_PRESENT_MODE_IMMEDIATE_KHR))
+    {
+        m_presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    }
+    else if (mailboxImageCountSupported && hasPresentMode(VK_PRESENT_MODE_MAILBOX_KHR))
+    {
+        // MAILBOX is the tear-free fallback when IMMEDIATE is unavailable.
+        m_presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+    }
+    else
+    {
+        m_presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    }
+#else
     if (mailboxImageCountSupported && hasPresentMode(VK_PRESENT_MODE_MAILBOX_KHR))
         m_presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
     else if (hasPresentMode(VK_PRESENT_MODE_IMMEDIATE_KHR))
@@ -1279,8 +1298,9 @@ bool VulkanBackend::CreateSwapchain()
         m_presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR ? "IMMEDIATE" : "FIFO";
     std::snprintf(
         presentTrace, sizeof(presentTrace),
-        "[KisakCOD][VK PRESENT MODE] mode=%s imagesRequested=%u surfaceMin=%u surfaceMax=%u framesInFlight=%u\n",
+        "[KisakCOD][VK PRESENT MODE] mode=%s vsync=%u imagesRequested=%u surfaceMin=%u surfaceMax=%u framesInFlight=%u\n",
         presentName,
+        vsyncEnabled ? 1u : 0u,
         imageCount,
         caps.minImageCount,
         caps.maxImageCount,

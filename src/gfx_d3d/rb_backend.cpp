@@ -3697,7 +3697,11 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
         drawType = backEndData->drawType;
         backEndData = 0;
     }
+#ifndef __SWITCH__
+    // On D3D backends, completion means draw commands are recorded; the
+    // swap-fence wait below remains a separate part of the handoff protocol.
     Sys_RenderCompleted();
+#endif
     {
         PROF_SCOPED("WaitRenderSwap");
         R_ProcessWorkerCmdsWithTimeout(RB_BackendTimeout, 1);
@@ -3707,6 +3711,13 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
         KISAK_NULLSUB();
         RB_EndFrame(drawType);
     }
+#ifdef __SWITCH__
+    // The Switch frontend may inspect or synchronize the active Vulkan frame
+    // as soon as this event is signaled. Do not publish completion while
+    // RB_EndFrame/Present can still be using the current command buffer,
+    // frame slot, or frame synchronization objects.
+    Sys_RenderCompleted();
+#endif
 #ifdef __SWITCH__
     if (switchFrameTraceId < 4)
     {
