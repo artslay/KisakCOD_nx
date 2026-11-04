@@ -62,37 +62,83 @@ GfxBackEndData *frontEndDataOut;
 #ifdef __SWITCH__
 namespace
 {
-// The frontend alternates two skinned/pre-tess pools. Remember which Vulkan
-// frame slot last consumed each pool; a pool is not reset until that slot's
-// GPU fence has completed.
+// Every CPU-side frontend ring has a separate last-GPU-slot association.
+// The mesh buffers embedded in GfxBackEndData and GfxViewInfo are GPU resources
+// too; protecting only skinning/pre-tess would still allow those meshes to be
+// overwritten while the previous frame reads them.
 std::atomic<int> s_switchGpuSlotForSmpPool[2] = {-1, -1};
+std::atomic<int> s_switchGpuSlotForBackEndData[2] = {-1, -1};
+std::atomic<int> s_switchGpuSlotForViewInfo[2] = {-1, -1};
 
-void Switch_AssociateSmpPoolWithGpuSlot(uint32_t poolIndex, uint32_t frameSlot)
+void Switch_AssociateGpuPool(std::atomic<int> (&slotMap)[2],
+    uint32_t poolIndex, uint32_t frameSlot)
 {
     if (poolIndex < 2 && frameSlot < VulkanBackend::FramesInFlight)
-        s_switchGpuSlotForSmpPool[poolIndex].store(static_cast<int>(frameSlot), std::memory_order_release);
+        slotMap[poolIndex].store(static_cast<int>(frameSlot), std::memory_order_release);
 }
 
-int Switch_GetSmpPoolGpuSlot(uint32_t poolIndex)
+int Switch_GetGpuPoolSlot(std::atomic<int> (&slotMap)[2], uint32_t poolIndex)
 {
     return poolIndex < 2
-        ? s_switchGpuSlotForSmpPool[poolIndex].load(std::memory_order_acquire)
+        ? slotMap[poolIndex].load(std::memory_order_acquire)
         : -1;
 }
 
-void Switch_WaitForSmpPoolGpuUse(uint32_t poolIndex)
+void Switch_WaitForGpuPool(std::atomic<int> (&slotMap)[2],
+    uint32_t poolIndex, const char *poolName)
 {
     if (poolIndex >= 2)
-        Com_Error(ERR_FATAL, "Invalid Switch SMP resource pool index %u", poolIndex);
+        Com_Error(ERR_FATAL, "Invalid Switch %s pool index %u", poolName, poolIndex);
 
-    const int frameSlot = s_switchGpuSlotForSmpPool[poolIndex].exchange(-1, std::memory_order_acq_rel);
+    const int frameSlot = slotMap[poolIndex].exchange(-1, std::memory_order_acq_rel);
     if (frameSlot < 0)
         return;
 
     VulkanBackend *backend = GetVulkanBackend();
     if (backend && !backend->WaitForFrameSlot(static_cast<uint32_t>(frameSlot)))
-        Com_Error(ERR_FATAL, "Vulkan frame fence wait failed before reusing Switch SMP resource pool %u", poolIndex);
+        Com_Error(ERR_FATAL, "Vulkan frame fence wait failed before reusing Switch %s pool %u",
+            poolName, poolIndex);
 }
+
+void Switch_AssociateSmpPoolWithGpuSlot(uint32_t poolIndex, uint32_t frameSlot)
+{
+    Switch_AssociateGpuPool(s_switchGpuSlotForSmpPool, poolIndex, frameSlot);
+}
+
+int Switch_GetSmpPoolGpuSlot(uint32_t poolIndex)
+{
+    return Switch_GetGpuPoolSlot(s_switchGpuSlotForSmpPool, poolIndex);
+}
+
+void Switch_WaitForSmpPoolGpuUse(uint32_t poolIndex)
+{
+    Switch_WaitForGpuPool(s_switchGpuSlotForSmpPool, poolIndex, "skinning/pre-tess");
+}
+
+void Switch_AssociateFrontEndDataWithGpuSlot(uint32_t poolIndex, uint32_t frameSlot)
+{
+    Switch_AssociateGpuPool(s_switchGpuSlotForBackEndData, poolIndex, frameSlot);
+}
+
+void Switch_WaitForFrontEndDataGpuUse(uint32_t poolIndex)
+{
+    Switch_WaitForGpuPool(s_switchGpuSlotForBackEndData, poolIndex, "backend-data mesh");
+}
+
+void Switch_AssociateViewInfoWithGpuSlot(uint32_t poolIndex, uint32_t frameSlot)
+{
+    Switch_AssociateGpuPool(s_switchGpuSlotForViewInfo, poolIndex, frameSlot);
+}
+
+void Switch_WaitForViewInfoGpuUse(uint32_t poolIndex)
+{
+    Switch_WaitForGpuPool(s_switchGpuSlotForViewInfo, poolIndex, "view-info mesh");
+}
+
+// Definitions of the ring-index helpers follow the frontend arrays below.
+void Switch_AssociateCurrentFrontEndResourcesWithGpuSlot(uint32_t frameSlot);
+void Switch_PreWaitNextFrontEndResources(uint32_t frameSlot, bool drainAll);
+void Switch_WaitForNextFrontEndResources();
 }
 #endif
 //  int marker_r_rendercmds  85827cb8     gfx_d3d : r_rendercmds.obj
@@ -111,6 +157,85 @@ GfxViewInfo g_viewInfo[2][4];
 GfxCmdArray g_frontEndCmds[2];
 GfxDebugFrameGlob s_debugFrameGlob;
 GfxCmdArray g_debugFrontEndCmds;
+
+#ifdef __SWITCH__
+extern uint32_t s_smpFrame;
+extern uint32_t g_frameIndex;
+
+namespace
+{
+uint32_t Switch_CurrentBackEndDataPoolIndex()
+{
+    if (frontEndDataOut == &s_backEndData[0])
+        return 0;
+    if (frontEndDataOut == &s_backEndData[1])
+        return 1;
+    return 2;
+}
+
+uint32_t Switch_CurrentViewInfoPoolIndex()
+{
+    if (!frontEndDataOut || !frontEndDataOut->viewInfo)
+        return 2;
+    if (frontEndDataOut->viewInfo == g_viewInfo[0])
+        return 0;
+    if (frontEndDataOut->viewInfo == g_viewInfo[1])
+        return 1;
+    return 2;
+}
+
+void Switch_AssociateCurrentFrontEndResourcesWithGpuSlot(uint32_t frameSlot)
+{
+    // The legacy frontend ring uses three independently-indexed arrays:
+    // GfxBuffers, s_backEndData, and g_viewInfo. Record each actual owner.
+    Switch_AssociateSmpPoolWithGpuSlot(
+        static_cast<uint32_t>(gfxBuf.dynamicBufferFrame), frameSlot);
+
+    const uint32_t backendDataPool = Switch_CurrentBackEndDataPoolIndex();
+    if (backendDataPool < 2)
+        Switch_AssociateFrontEndDataWithGpuSlot(backendDataPool, frameSlot);
+
+    const uint32_t viewInfoPool = Switch_CurrentViewInfoPoolIndex();
+    if (viewInfoPool < 2)
+        Switch_AssociateViewInfoWithGpuSlot(viewInfoPool, frameSlot);
+}
+
+bool Switch_PoolNeedsPreWait(std::atomic<int> (&slotMap)[2],
+    uint32_t poolIndex, uint32_t frameSlot, bool drainAll)
+{
+    const int previousSlot = Switch_GetGpuPoolSlot(slotMap, poolIndex);
+    return previousSlot >= 0 &&
+        (drainAll || static_cast<uint32_t>(previousSlot) == frameSlot);
+}
+
+void Switch_PreWaitNextFrontEndResources(uint32_t frameSlot, bool drainAll)
+{
+    // These are the three pools that R_ToggleSmpFrame is about to select.
+    // g_frameIndex already points at the next view-info array after R_EndFrame.
+    const uint32_t smpPool =
+        static_cast<uint32_t>((gfxBuf.dynamicBufferFrame + 1) % 2);
+    const uint32_t backendDataPool = (s_smpFrame + 1u) % 2u;
+    const uint32_t viewInfoPool = g_frameIndex;
+
+    if (Switch_PoolNeedsPreWait(
+            s_switchGpuSlotForSmpPool, smpPool, frameSlot, drainAll))
+        Switch_WaitForSmpPoolGpuUse(smpPool);
+    if (Switch_PoolNeedsPreWait(
+            s_switchGpuSlotForBackEndData, backendDataPool, frameSlot, drainAll))
+        Switch_WaitForFrontEndDataGpuUse(backendDataPool);
+    if (Switch_PoolNeedsPreWait(
+            s_switchGpuSlotForViewInfo, viewInfoPool, frameSlot, drainAll))
+        Switch_WaitForViewInfoGpuUse(viewInfoPool);
+}
+
+void Switch_WaitForNextFrontEndResources()
+{
+    Switch_WaitForNextFrontEndResources();
+    Switch_WaitForFrontEndDataGpuUse(s_smpFrame);
+    Switch_WaitForViewInfoGpuUse(g_frameIndex);
+}
+}
+#endif
 
 static uint32_t s_renderCmdBufferSize;
 static int s_renderCmdWarnSize;
@@ -428,8 +553,8 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
                     if (v1 && (partialFrameActive ||
                         (frontEndDataOut->drawType & 2u) != 0))
                     {
-                        Switch_AssociateSmpPoolWithGpuSlot(
-                            gfxBuf.dynamicBufferFrame, backend->CurrentFrameSlot());
+                        Switch_AssociateCurrentFrontEndResourcesWithGpuSlot(
+                            backend->CurrentFrameSlot());
                     }
                 }
             }
@@ -529,20 +654,13 @@ void __cdecl R_ToggleSmpFrameCmd(char type)
             const uint32_t frameSlot = continuedFrame
                 ? backend->CurrentFrameSlot()
                 : backend->NextFrameSlot();
-            Switch_AssociateSmpPoolWithGpuSlot(gfxBuf.dynamicBufferFrame, frameSlot);
+            Switch_AssociateCurrentFrontEndResourcesWithGpuSlot(frameSlot);
 
-            // Normally the pool being recycled belongs to the other Vulkan
-            // slot, so the renderer can start this frame while we wait for that
-            // older slot. Pre-wait if it maps to this frame's slot, or swapchain
-            // recreation may replace both fences during the post-wake wait.
-            const uint32_t reusePool =
-                static_cast<uint32_t>((gfxBuf.dynamicBufferFrame + 1) % 2);
-            const int reuseSlot = Switch_GetSmpPoolGpuSlot(reusePool);
-            if (continuedFrame || backend->NeedsSwapchainRecreate() ||
-                (reuseSlot >= 0 && static_cast<uint32_t>(reuseSlot) == frameSlot))
-            {
-                Switch_WaitForSmpPoolGpuUse(reusePool);
-            }
+            // In the normal alternating case the frontend waits on the other
+            // frame slot after waking the renderer. Same-slot, continued-frame,
+            // and swapchain-recreate cases must be drained before the wake.
+            Switch_PreWaitNextFrontEndResources(
+                frameSlot, continuedFrame || backend->NeedsSwapchainRecreate());
         }
     }
 #endif
