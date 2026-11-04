@@ -372,6 +372,7 @@ void __cdecl R_AddAllStaticModelSurfacesCamera()
         {
             visData[smodelIndex] = 0;
         }
+    }
 #ifdef __SWITCH__
     }
 #endif
