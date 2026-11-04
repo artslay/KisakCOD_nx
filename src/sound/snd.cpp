@@ -12,6 +12,7 @@
 #include <universal/q_parse.h>
 #include <client/client.h>
 #include <universal/profile.h>
+#include <universal/timing.h>
 #include <win32/win_local.h>
 
 #ifdef __SWITCH__
@@ -2813,9 +2814,23 @@ void __cdecl SND_Update()
     int frametime; // [esp+30h] [ebp-20h]
     MemoryFile memFile; // [esp+34h] [ebp-1Ch] BYREF
 
+#ifdef __SWITCH__
+    static uint64_t updateTotalNs = 0;
+    static uint64_t updateSetupNs = 0;
+    static uint64_t updateChannelsNs = 0;
+    static uint64_t updatePhysicsNs = 0;
+    static uint64_t updateDriverNs = 0;
+    static uint64_t updateDebugNs = 0;
+    static uint32_t updatePerfSamples = 0;
+#endif
+
     if (g_snd.Initialized2d)
     {
         PROF_SCOPED("SND_Update");
+#ifdef __SWITCH__
+        const uint64_t updateStart = Kisak_RawTimerTicks();
+        uint64_t stageStart = updateStart;
+#endif
 #ifndef KISAK_OPENAL
         g_snd.cpu = SND_GetDriverCPUPercentage();
 #endif
@@ -2842,12 +2857,32 @@ void __cdecl SND_Update()
             SND_UpdateTimeScale();
             SND_UpdateRoomEffects(frametime);
         }
+#ifdef __SWITCH__
+        const uint64_t updateSetupEnd = Kisak_RawTimerTicks();
+        updateSetupNs += updateSetupEnd - stageStart;
+        stageStart = updateSetupEnd;
+#endif
 #ifdef KISAK_OPENAL
         const auto soundUpdateStart = std::chrono::steady_clock::now();
 #endif
         SND_UpdateAllChannels(frametime);
+#ifdef __SWITCH__
+        const uint64_t updateChannelsEnd = Kisak_RawTimerTicks();
+        updateChannelsNs += updateChannelsEnd - stageStart;
+        stageStart = updateChannelsEnd;
+#endif
         SND_UpdatePhysics();
+#ifdef __SWITCH__
+        const uint64_t updatePhysicsEnd = Kisak_RawTimerTicks();
+        updatePhysicsNs += updatePhysicsEnd - stageStart;
+        stageStart = updatePhysicsEnd;
+#endif
         SND_DriverPostUpdate();
+#ifdef __SWITCH__
+        const uint64_t updateDriverEnd = Kisak_RawTimerTicks();
+        updateDriverNs += updateDriverEnd - stageStart;
+        stageStart = updateDriverEnd;
+#endif
 #ifdef KISAK_OPENAL
         // This is main-thread sound work (channel updates, stream decoding/queueing and
         // driver post-update), not a claim about OpenAL Soft's separate mixer-thread load.
@@ -2863,6 +2898,33 @@ void __cdecl SND_Update()
         g_snd.cpu = static_cast<int>(cpuPercent);
 #endif
         DebugDrawWorldSounds(snd_draw3D->current.integer);
+#ifdef __SWITCH__
+        const uint64_t updateEnd = Kisak_RawTimerTicks();
+        updateDebugNs += updateEnd - stageStart;
+        updateTotalNs += updateEnd - updateStart;
+        if (++updatePerfSamples == 120)
+        {
+            const double averageMs = 1.0 / (120.0 * 1000000.0);
+            char message[384];
+            std::snprintf(
+                message, sizeof(message),
+                "[KisakCOD][SND UPDATE PERF] samples=120 avg_ms total=%.3f setup=%.3f channels=%.3f physics=%.3f driver=%.3f debug=%.3f\\n",
+                updateTotalNs * averageMs,
+                updateSetupNs * averageMs,
+                updateChannelsNs * averageMs,
+                updatePhysicsNs * averageMs,
+                updateDriverNs * averageMs,
+                updateDebugNs * averageMs);
+            Switch_LogWrite(message);
+            updateTotalNs = 0;
+            updateSetupNs = 0;
+            updateChannelsNs = 0;
+            updatePhysicsNs = 0;
+            updateDriverNs = 0;
+            updateDebugNs = 0;
+            updatePerfSamples = 0;
+        }
+#endif
     }
 }
 
