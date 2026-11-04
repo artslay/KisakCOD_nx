@@ -90,16 +90,93 @@ char __cdecl R_PreTessStaticModelCachedList(
     return 1;
 }
 
+#ifdef __SWITCH__
+struct RStaticModelSurfaceTypeCacheEntry
+{
+    const XModel *model;
+    uint32_t generation;
+    uint32_t lod;
+    uint8_t fastFile;
+    uint8_t surfType;
+};
+
+static RStaticModelSurfaceTypeCacheEntry g_staticModelSurfaceTypeCache[1024]{};
+static uint32_t g_staticModelSurfaceTypeCacheGeneration = 0;
+
+static void R_BeginStaticModelSurfaceTypeCacheFrame()
+{
+    if (++g_staticModelSurfaceTypeCacheGeneration == 0)
+    {
+        memset(g_staticModelSurfaceTypeCache, 0, sizeof(g_staticModelSurfaceTypeCache));
+        g_staticModelSurfaceTypeCacheGeneration = 1;
+    }
+}
+
+// Surface deformation is a property of an XModel LOD, not of an individual
+// world instance. Cache the rigid/skinned classification for this scene build
+// so repeated instances of the same model do not rescan the same XSurfaces.
+static uint8_t R_GetStaticModelSurfaceTypeCached(const XModel *model, int lod)
+{
+    const bool fastFile = IsFastFileLoad();
+    const uintptr_t modelAddress = reinterpret_cast<uintptr_t>(model);
+    uint32_t hash = static_cast<uint32_t>(
+        (modelAddress >> 4) ^ (modelAddress >> 17) ^ (modelAddress >> 32));
+    hash ^= static_cast<uint32_t>(lod) * 0x9E3779B9u;
+    hash ^= fastFile ? 0x85EBCA6Bu : 0xC2B2AE35u;
+    hash ^= hash >> 16;
+
+    RStaticModelSurfaceTypeCacheEntry &entry =
+        g_staticModelSurfaceTypeCache[hash & 1023u];
+    if (entry.generation == g_staticModelSurfaceTypeCacheGeneration &&
+        entry.model == model &&
+        entry.lod == static_cast<uint32_t>(lod) &&
+        entry.fastFile == (fastFile ? 1u : 0u))
+    {
+        return entry.surfType;
+    }
+
+    XSurface *surfaces = nullptr;
+    const int surfaceCount = XModelGetSurfaces(model, &surfaces, lod);
+    iassert(surfaceCount);
+
+    uint8_t surfType = SF_STATICMODEL_RIGID;
+    if (!fastFile)
+    {
+        surfType = SF_STATICMODEL_SKINNED;
+    }
+    else
+    {
+        for (int surfaceIndex = 0; surfaceIndex < surfaceCount; ++surfaceIndex)
+        {
+            if (surfaces[surfaceIndex].deformed)
+            {
+                surfType = SF_STATICMODEL_SKINNED;
+                break;
+            }
+        }
+    }
+
+    entry.model = model;
+    entry.generation = g_staticModelSurfaceTypeCacheGeneration;
+    entry.lod = static_cast<uint32_t>(lod);
+    entry.fastFile = fastFile ? 1u : 0u;
+    entry.surfType = surfType;
+    return surfType;
+}
+#endif
+
 GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
 {
     const XModelLodInfo *lodInfo; // [esp+8h] [ebp-20h]
     XModel *model; // [esp+10h] [ebp-18h]
+#ifndef __SWITCH__
     int surfaceIndex; // [esp+14h] [ebp-14h]
     int surfaceCount; // [esp+18h] [ebp-10h]
-    GfxStaticModelId staticModelId; // [esp+1Ch] [ebp-Ch]
-    GfxStaticModelId staticModelIda; // [esp+1Ch] [ebp-Ch]
     XSurface *surfaces; // [esp+20h] [ebp-8h] BYREF
     XSurface *xsurf; // [esp+24h] [ebp-4h]
+#endif
+    GfxStaticModelId staticModelId; // [esp+1Ch] [ebp-Ch]
+    GfxStaticModelId staticModelIda; // [esp+1Ch] [ebp-Ch]
 
     model = rgp.world->dpvs.smodelDrawInsts[smodelIndex].model;
     iassert( R_StaticModelHasLighting( smodelIndex ) );
@@ -113,7 +190,7 @@ GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
             ".\\r_add_staticmodel.cpp",
             473,
             0,
-            "smodelIndex doesn't index rgp.world->dpvs.smodelCount\n\t%i not in [0, %i)",
+            "smodelIndex doesn't index rgp.world->dpvs.smodelCount\\n\\t%i not in [0, %i)",
             smodelIndex,
             rgp.world->dpvs.smodelCount);
     staticModelId.objectId = R_CacheStaticModelSurface(lodInfo->smcIndexPlusOne - 1, smodelIndex, lodInfo);
@@ -125,23 +202,28 @@ GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
     else
     {
     LABEL_9:
-        staticModelIda.surfType = SF_STATICMODEL_RIGID;
         staticModelIda.objectId = smodelIndex;
-        surfaceCount = XModelGetSurfaces(model, &surfaces, lod);
-        iassert( surfaceCount );
-        for (surfaceIndex = 0; surfaceIndex < surfaceCount; ++surfaceIndex)
+#ifdef __SWITCH__
+        staticModelIda.surfType = R_GetStaticModelSurfaceTypeCached(model, lod);
+#else
+        staticModelIda.surfType = SF_STATICMODEL_RIGID;
         {
-            xsurf = &surfaces[surfaceIndex];
-            if (xsurf->deformed || !IsFastFileLoad())
+            surfaceCount = XModelGetSurfaces(model, &surfaces, lod);
+            iassert( surfaceCount );
+            for (surfaceIndex = 0; surfaceIndex < surfaceCount; ++surfaceIndex)
             {
-                staticModelIda.surfType = SF_STATICMODEL_SKINNED;
-                return staticModelIda;
+                xsurf = &surfaces[surfaceIndex];
+                if (xsurf->deformed || !IsFastFileLoad())
+                {
+                    staticModelIda.surfType = SF_STATICMODEL_SKINNED;
+                    return staticModelIda;
+                }
             }
         }
+#endif
         return staticModelIda;
     }
 }
-
 void __cdecl R_AddDelayedStaticModelDrawSurf(
     GfxDelayedCmdBuf *delayedCmdBuf,
     XSurface *xsurf,
@@ -223,6 +305,9 @@ void __cdecl R_AddAllStaticModelSurfacesCamera()
     int smodelIndex; // [esp+1108h] [ebp-4h]
 
     PROF_SCOPED("SModelSurfaces");
+#ifdef __SWITCH__
+    R_BeginStaticModelSurfaceTypeCacheFrame();
+#endif
     smodelCount = rgp.world->dpvs.smodelCount;
     lodData = rgp.world->dpvs.lodData;
     Com_Memset(lodData, 0, 32 * ((smodelCount + 127) / 128));
