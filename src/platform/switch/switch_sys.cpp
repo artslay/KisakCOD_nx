@@ -3729,7 +3729,8 @@ static bool Switch_LogIsImportant(const char *msg)
         "out of memory", "out-of-memory", "not found", "missing", "invalid",
         "unsupported", "null pointer", "overflow", "underflow", "panic",
         "stalled", "no-progress", "deadlock", "aborted", "device lost", "vk_error_",
-        "pipeline_fail", "imagefail", "unable to", "could not", "couldn't"
+        "pipeline_fail", "imagefail", "unable to", "could not", "couldn't",
+        "script bool cast"
     };
 
     for (const char *term : kImportantTerms)
