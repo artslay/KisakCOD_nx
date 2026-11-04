@@ -3697,6 +3697,27 @@ static bool Switch_LogIsFxDiagnostic(const char *msg)
     return false;
 }
 
+static bool Switch_LogIsScriptDiagnostic(const char *msg)
+{
+    if (!msg || !*msg)
+        return false;
+
+    // These bounded VM traces identify the source of undefined script values.
+    // Keep them explicit so the normal Switch log remains filtered.
+    static constexpr const char *const kScriptDiagnosticPrefixes[] =
+    {
+        "[KisakCOD][SCRIPT RETURN]",
+        "[KisakCOD][SCRIPT OBJECT ARG UNDEFINED]",
+        "[KisakCOD][SCRIPT VECTOR ARG UNDEFINED]"
+    };
+    for (const char *prefix : kScriptDiagnosticPrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool Switch_LogIsImportant(const char *msg)
 {
     if (!msg || !*msg)
@@ -3748,6 +3769,7 @@ void Switch_LogWrite(const char *msg)
     if (!msg || !*msg ||
         (!Switch_LogIsImportant(msg) &&
          !Switch_LogIsFxDiagnostic(msg) &&
+         !Switch_LogIsScriptDiagnostic(msg) &&
          !Switch_LogIsStartupMessage(msg) &&
          !Switch_LogIsLevelLoadMessage(msg)))
         return;
