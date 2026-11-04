@@ -1745,19 +1745,15 @@ void VulkanBackend::DestroyDefaultDepth()
 
 bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
 {
-    // No submitted work can still reference this slot before initialization,
-    // and a lost device can no longer consume its resources.
-    if (!m_device || !m_initialized || m_deviceLost)
-        return true;
     if (slotIndex >= FramesInFlight)
     {
         SetError("Invalid Vulkan frame slot while reusing an SMP resource pool");
         return false;
     }
 
+    // The lock also protects the backend/device lifetime while Shutdown
+    // replaces and destroys per-frame synchronization objects.
     std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[slotIndex]);
-    // Shutdown/recreation may have completed while this thread waited to
-    // acquire the slot lock. Recheck before touching the fence handle.
     if (!m_device || !m_initialized || m_deviceLost)
         return true;
     const FrameSync &frame = m_frameSync[slotIndex];
