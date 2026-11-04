@@ -17,6 +17,9 @@
 #include "r_buffers.h"
 #include "r_staticmodelcache.h"
 #include <cgame/cg_local.h>
+#ifdef __SWITCH__
+#include <arm_neon.h>
+#endif
 
 int g_dumpStaticModelCount;
 int g_dumpStaticModelFileHandle;
@@ -251,8 +254,32 @@ void __cdecl R_AddAllStaticModelSurfacesCamera()
     currentProbeIndex = 255;
     currentLightIndex = 0;
 
+#ifdef __SWITCH__
+    // Most world static models are invisible in a given view. Skip complete
+    // zeroed visibility blocks with NEON instead of testing every model byte
+    // through the scalar loop. Visible entries still run through the original
+    // per-model path below, without changing culling, LOD, or lighting logic.
+    for (uint32_t smodelBlockStart = 0;
+         smodelBlockStart < smodelCount;
+         smodelBlockStart += 16)
+    {
+        const uint32_t remaining = smodelCount - smodelBlockStart;
+        if (remaining >= 16 &&
+            vmaxvq_u8(vld1q_u8(visData + smodelBlockStart)) == 0)
+        {
+            continue;
+        }
+
+        const uint32_t smodelBlockEnd =
+            remaining >= 16 ? smodelBlockStart + 16 : smodelCount;
+        for (smodelIndex = static_cast<int>(smodelBlockStart);
+             smodelIndex < static_cast<int>(smodelBlockEnd);
+             ++smodelIndex)
+        {
+#else
     for (smodelIndex = 0; smodelIndex < smodelCount; ++smodelIndex)
     {
+#endif
         if (!visData[smodelIndex])
         {
             continue;
@@ -345,7 +372,9 @@ void __cdecl R_AddAllStaticModelSurfacesCamera()
         {
             visData[smodelIndex] = 0;
         }
+#ifdef __SWITCH__
     }
+#endif
 
     if (r_staticModelDumpLodInfo->current.enabled)
         R_EndDumpStaticModelLodInfo();
