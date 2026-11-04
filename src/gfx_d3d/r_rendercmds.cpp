@@ -451,19 +451,6 @@ void __cdecl R_ToggleSmpFrameCmd(char type)
     R_UpdateActiveWorkerThreads();
     R_UnlockSkinnedCache();
     KISAK_NULLSUB();
-#ifdef __SWITCH__
-    // The render thread being ready only means it submitted the previous frame;
-    // the GPU may still be reading the skinned-cache and pre-tess pools that the
-    // next R_ToggleSmpFrame() is about to hand back to the frontend. Reuse them
-    // only after that submission's fence has signaled.
-    if (!Switch_WaitForGpuBeforeSmpFrameReuse())
-    {
-        Switch_LogWrite(
-            "[KisakCOD][VK SYNC ERROR] GPU frame fence failed before SMP buffer reuse\n");
-        Com_Error(ERR_FATAL, "Vulkan GPU frame did not complete before SMP buffer reuse\n");
-        return;
-    }
-#endif
     Sys_WakeRenderer((void *)frontEndDataOut);
     iassert( !r_glob.haveThreadOwnership );
     R_ToggleSmpFrame();
