@@ -951,12 +951,9 @@ void __cdecl CG_SlowServerCommand(int localClientNum)
 void __cdecl CG_SetClientDvarFromServer(const char *dvarname, const char *value)
 {
     if (I_stricmp(dvarname, "hud_drawHUD"))
-    {
         Com_Error(ERR_DROP, "%s is not a valid dvar to set using setclientdvar", dvarname);
-        return;
-    }
-
-    Dvar_SetFromStringByName("hud_drawHUD", (char*)value);
+    else
+        Dvar_SetFromStringByName("hud_drawHUD", (char*)value);
 }
 
 void CG_ParseAmp()
