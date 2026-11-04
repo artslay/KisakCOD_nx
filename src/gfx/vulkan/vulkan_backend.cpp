@@ -1747,7 +1747,7 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
 {
     if (slotIndex >= FramesInFlight)
     {
-        SetError("Invalid Vulkan frame slot while reusing an SMP resource pool");
+        SetError("Invalid Vulkan frame slot while reusing a frontend resource pool");
         return false;
     }
 
@@ -1759,7 +1759,7 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
     const FrameSync &frame = m_frameSync[slotIndex];
     if (!frame.fence)
     {
-        SetError("Missing Vulkan frame fence while reusing an SMP resource pool");
+        SetError("Missing Vulkan frame fence while reusing a frontend resource pool");
         return false;
     }
 
@@ -1767,7 +1767,7 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
         vkWaitForFences(m_device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
     if (waitResult != VK_SUCCESS)
     {
-        SetError("vkWaitForFences failed while reusing an SMP resource pool", waitResult);
+        SetError("vkWaitForFences failed while reusing a frontend resource pool", waitResult);
         return false;
     }
     return true;
