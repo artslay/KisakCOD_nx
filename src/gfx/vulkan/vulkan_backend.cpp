@@ -2170,30 +2170,6 @@ bool VulkanBackend::EndFrame()
         return false;
     }
 
-    // Reset only when the frame is ready to submit. If submit itself fails,
-    // RecreateSwapchain replaces this unsignaled fence and image-available semaphore.
-#ifdef __SWITCH__
-    g_switchFrameStage = "frame/present/reset_fence";
-#endif
-    VkResult resetFenceResult;
-    {
-        std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[m_currentFrameSlot]);
-        resetFenceResult = vkResetFences(m_device, 1, &frame.fence);
-    }
-#ifdef __SWITCH__
-    g_switchFrameStage = "frame/present/reset_fence_return";
-#endif
-    if (resetFenceResult != VK_SUCCESS)
-    {
-#ifdef __SWITCH__
-        g_switchFrameStage = "frame/present/reset_fence_failed";
-#endif
-        SetError("vkResetFences failed before frame submission", resetFenceResult);
-        if (!m_deviceLost)
-            (void)RecreateSwapchain();
-        return false;
-    }
-
     // The normal presentation path blits the offscreen render target into
     // the acquired swapchain image. Its first swapchain access is a transfer
     // operation, not color-attachment output. Match the wait stage to the
@@ -2214,16 +2190,41 @@ bool VulkanBackend::EndFrame()
     submit.signalSemaphoreCount = 1;
     submit.pSignalSemaphores = &m_renderFinishedSemaphores[m_swapchainIndex];
 
-    VkResult submitResult;
+    // Resetting a fence and passing it to vkQueueSubmit are both host accesses
+    // to the same VkFence. Keep both operations under the slot lock, with the
+    // queue lock acquired first to preserve renderer queue-lock ordering.
+    VkResult resetFenceResult;
+    VkResult submitResult = VK_SUCCESS;
+    {
+        std::lock_guard<std::mutex> queueLock(m_queueMutex);
+        std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[m_currentFrameSlot]);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/present/reset_fence";
+#endif
+        resetFenceResult = vkResetFences(m_device, 1, &frame.fence);
+#ifdef __SWITCH__
+        g_switchFrameStage = "frame/present/reset_fence_return";
+#endif
+        if (resetFenceResult == VK_SUCCESS)
+        {
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/present/queue_submit";
+#endif
+            submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, frame.fence);
+#ifdef __SWITCH__
+            g_switchFrameStage = "frame/present/queue_submit_return";
+#endif
+        }
+    }
+    if (resetFenceResult != VK_SUCCESS)
     {
 #ifdef __SWITCH__
-        g_switchFrameStage = "frame/present/queue_submit";
+        g_switchFrameStage = "frame/present/reset_fence_failed";
 #endif
-        std::lock_guard<std::mutex> queueLock(m_queueMutex);
-        submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submit, frame.fence);
-#ifdef __SWITCH__
-        g_switchFrameStage = "frame/present/queue_submit_return";
-#endif
+        SetError("vkResetFences failed before frame submission", resetFenceResult);
+        if (!m_deviceLost)
+            (void)RecreateSwapchain();
+        return false;
     }
     if (submitResult != VK_SUCCESS)
     {
