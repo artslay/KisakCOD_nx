@@ -8033,7 +8033,7 @@ bool IDirect3DDevice9::BindUniformSet(
                     char trace[512];
                     std::snprintf(
                         trace, sizeof(trace),
-                        "[KisakCOD][MODEL XFORM][UBO_BIND] seq=%u xsurf=%p vs=%llu descriptorSet=%p vkBuffer=%p offset=%llu range=%llu setIndex=%u cache=1\\n",
+                        "[KisakCOD][MODEL XFORM][UBO_BIND] seq=%u xsurf=%p vs=%llu descriptorSet=%p vkBuffer=%p offset=%llu range=%llu setIndex=%u cache=1\n",
                         g_switchModelTransformDraw.sequence, g_switchModelTransformDraw.xsurf,
                         static_cast<unsigned long long>(m_vertexShader ? m_vertexShader->serial : 0u),
                         reinterpret_cast<void *>(cached.set),
@@ -8430,6 +8430,8 @@ bool IDirect3DDevice9::BindSamplerSet(
         m_uniformSetCursor[frameSlot][1] = 0;
         m_samplerDescriptorFrameCache[frameSlot][0].clear();
         m_samplerDescriptorFrameCache[frameSlot][1].clear();
+        m_uniformDescriptorFrameCache[frameSlot][0].clear();
+        m_uniformDescriptorFrameCache[frameSlot][1].clear();
         m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
     }
 
