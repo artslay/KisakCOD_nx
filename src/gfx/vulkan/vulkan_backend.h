@@ -292,9 +292,9 @@ public:
         return m_swapchainNeedsRecreate.load(std::memory_order_acquire)
             ? 0u : m_nextFrameSlot.load(std::memory_order_acquire);
     }
-    // Wait for a submitted frame slot before reusing CPU-side SMP data that
-    // was consumed by that slot. The caller pairs the legacy frontend pool
-    // with the slot that last used it.
+    // Wait for a submitted frame slot before reusing CPU-side frontend
+    // resources that were consumed by that slot. The caller pairs each legacy
+    // ring with the Vulkan slot that last used it.
     bool WaitForFrameSlot(uint32_t slotIndex);
     static constexpr uint32_t FramesInFlight = 2;
     bool GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_t *format) const override;
