@@ -190,7 +190,7 @@ GfxStaticModelId __cdecl R_GetStaticModelId(uint32_t smodelIndex, int lod)
             ".\\r_add_staticmodel.cpp",
             473,
             0,
-            "smodelIndex doesn't index rgp.world->dpvs.smodelCount\\n\\t%i not in [0, %i)",
+            "smodelIndex doesn't index rgp.world->dpvs.smodelCount\n\t%i not in [0, %i)",
             smodelIndex,
             rgp.world->dpvs.smodelCount);
     staticModelId.objectId = R_CacheStaticModelSurface(lodInfo->smcIndexPlusOne - 1, smodelIndex, lodInfo);
