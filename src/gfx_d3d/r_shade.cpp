@@ -30,7 +30,6 @@ extern bool Switch_IsSafeMaterialShaderArgumentRange(
 
 int __cdecl R_ReserveIndexData(GfxCmdBufPrimState *state, int triCount)
 {
-    uint32_t v2; // edx
     int indexCount; // [esp+8h] [ebp-4h]
 
     indexCount = 3 * triCount;
