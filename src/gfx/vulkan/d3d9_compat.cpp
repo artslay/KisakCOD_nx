@@ -7708,7 +7708,10 @@ HRESULT IDirect3DDevice9::SetRenderState(uint32_t state, uint32_t value)
         break;
     case D3DRS_ZWRITEENABLE: m_depthWrite = value != 0; break;
     case D3DRS_ZFUNC: m_depthFunc = value; break;
-    case D3DRS_ALPHABLENDENABLE: m_blendEnable = value != 0; break;
+    case D3DRS_ALPHABLENDENABLE:
+        changed = m_blendEnable != (value != 0);
+        m_blendEnable = value != 0;
+        break;
     case D3DRS_SEPARATEALPHABLENDENABLE: m_separateAlphaBlend = value != 0; break;
     case D3DRS_SRCBLEND: m_srcBlend = value; break;
     case D3DRS_DESTBLEND: m_dstBlend = value; break;
