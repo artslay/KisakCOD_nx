@@ -405,11 +405,23 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
 #endif
                 RB_EndFrame(frontEndDataOut->drawType);
 #ifdef __SWITCH__
-                if ((frontEndDataOut->drawType & 2u) != 0)
                 {
                     VulkanBackend *backend = GetVulkanBackend();
                     if (backend && backend->IsInitialized())
-                        Switch_AssociateSmpPoolWithGpuSlot(gfxBuf.dynamicBufferFrame, backend->CurrentFrameSlot());
+                    {
+                        if (backend->IsFrameActive())
+                        {
+                            if (!backend->SynchronizeActiveFrame())
+                                Com_Error(ERR_FATAL, "Vulkan failed to finish an open frame before reusing a Switch SMP pool");
+                            Switch_AssociateSmpPoolWithGpuSlot(
+                                gfxBuf.dynamicBufferFrame, backend->CurrentFrameSlot());
+                        }
+                        else if ((frontEndDataOut->drawType & 2u) != 0)
+                        {
+                            Switch_AssociateSmpPoolWithGpuSlot(
+                                gfxBuf.dynamicBufferFrame, backend->CurrentFrameSlot());
+                        }
+                    }
                 }
 #endif
 
@@ -493,11 +505,23 @@ void __cdecl R_ToggleSmpFrameCmd(char type)
     R_UnlockSkinnedCache();
     KISAK_NULLSUB();
 #ifdef __SWITCH__
-    if ((type & 2) != 0)
     {
         VulkanBackend *backend = GetVulkanBackend();
         if (backend && backend->IsInitialized())
-            Switch_AssociateSmpPoolWithGpuSlot(gfxBuf.dynamicBufferFrame, backend->NextFrameSlot());
+        {
+            // A frame without Present may leave commands in a recording Vulkan
+            // command buffer. Its slot fence is still signaled until EndFrame,
+            // so drain this partial frame while the renderer is idle; otherwise
+            // waiting on that fence would not protect a pool referenced by the
+            // not-yet-submitted command buffer.
+            if (backend->IsFrameActive() && !backend->SynchronizeActiveFrame())
+                Com_Error(ERR_FATAL, "Vulkan failed to finish an open frame before Switch SMP handoff");
+
+            const uint32_t frameSlot = backend->IsFrameActive()
+                ? backend->CurrentFrameSlot()
+                : backend->NextFrameSlot();
+            Switch_AssociateSmpPoolWithGpuSlot(gfxBuf.dynamicBufferFrame, frameSlot);
+        }
     }
 #endif
     Sys_WakeRenderer((void *)frontEndDataOut);
