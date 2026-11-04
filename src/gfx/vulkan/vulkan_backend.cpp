@@ -1215,7 +1215,7 @@ bool VulkanBackend::CreateSwapchain()
     {
         return std::find(modes.begin(), modes.end(), wanted) != modes.end();
     };
-const bool mailboxImageCountSupported =
+    const bool mailboxImageCountSupported =
         !caps.maxImageCount || caps.maxImageCount >= caps.minImageCount + 1u;
 #ifdef __SWITCH__
     // Honor the engine's VSync setting. MAILBOX remains synchronized to the

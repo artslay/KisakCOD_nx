@@ -3712,13 +3712,6 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
         RB_EndFrame(drawType);
     }
 #ifdef __SWITCH__
-    // The Switch frontend may inspect or synchronize the active Vulkan frame
-    // as soon as this event is signaled. Do not publish completion while
-    // RB_EndFrame/Present can still be using the current command buffer,
-    // frame slot, or frame synchronization objects.
-    Sys_RenderCompleted();
-#endif
-#ifdef __SWITCH__
     if (switchFrameTraceId < 4)
     {
         char trace[256];
@@ -3732,6 +3725,10 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
             g_disableRendering);
         Switch_LogWrite(trace);
     }
+    // All frame data and renderer globals used by RB_RenderCommandFrame are
+    // now finished. The frontend can safely rotate its pools or synchronize
+    // the Vulkan backend after observing this completion event.
+    Sys_RenderCompleted();
 #endif
     //Profile_Begin(172);
 }
