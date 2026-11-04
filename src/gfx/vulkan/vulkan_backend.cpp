@@ -17,6 +17,7 @@ extern bool R_RecoverLostVulkanDevice();
 #include <vector>
 
 #include <switch.h>
+#include "../../platform/switch/switch_saltynx.h"
 
 #include <gfx_d3d/r_init.h>
 
@@ -613,6 +614,9 @@ bool VulkanBackend::Init(const GfxWindowParms *wndParms)
     }
 
     m_initialized = true;
+#ifdef __SWITCH__
+    saltynx::Init();
+#endif
     return true;
 }
 
@@ -1964,6 +1968,50 @@ bool VulkanBackend::SynchronizeActiveFrame()
     return true;
 }
 
+#ifdef __SWITCH__
+static void Switch_SaltyNxFramePresented(uint32_t width, uint32_t height)
+{
+    static uint64_t startTick = 0;
+    static uint64_t windowStartTick = 0;
+    static uint64_t totalFrames = 0;
+    static uint64_t windowFrames = 0;
+
+    const uint64_t now = armGetSystemTick();
+    const uint64_t frequency = armGetSystemTickFreq();
+    if (frequency == 0)
+        return;
+
+    if (startTick == 0)
+    {
+        startTick = now;
+        windowStartTick = now;
+    }
+
+    ++totalFrames;
+    ++windowFrames;
+
+    // The overlay clears this flag and expects it to be restored on every
+    // presented frame, not once per second.
+    saltynx::Heartbeat(width, height);
+
+    const uint64_t elapsed = now - windowStartTick;
+    if (elapsed >= frequency)
+    {
+        const double fps = static_cast<double>(windowFrames) *
+            static_cast<double>(frequency) / static_cast<double>(elapsed);
+        const uint64_t totalElapsed = now - startTick;
+        const double averageFps = totalElapsed != 0
+            ? static_cast<double>(totalFrames) * static_cast<double>(frequency) /
+                static_cast<double>(totalElapsed)
+            : fps;
+
+        saltynx::Update(fps, averageFps, width, height, totalFrames);
+        windowStartTick = now;
+        windowFrames = 0;
+    }
+}
+#endif
+
 bool VulkanBackend::EndFrame()
 {
     if (m_deviceLost)
@@ -2194,6 +2242,11 @@ bool VulkanBackend::EndFrame()
     if (result == VK_SUBOPTIMAL_KHR)
     {
         m_frameActive = false;
+#ifdef __SWITCH__
+        Switch_SaltyNxFramePresented(
+            m_presentSourceImage && m_presentSourceWidth ? m_presentSourceWidth : m_width,
+            m_presentSourceImage && m_presentSourceHeight ? m_presentSourceHeight : m_height);
+#endif
         m_swapchainNeedsRecreate = true;
         return true;
     }
@@ -2204,7 +2257,11 @@ bool VulkanBackend::EndFrame()
     }
 
     m_frameActive = false;
-
+#ifdef __SWITCH__
+    Switch_SaltyNxFramePresented(
+        m_presentSourceImage && m_presentSourceWidth ? m_presentSourceWidth : m_width,
+        m_presentSourceImage && m_presentSourceHeight ? m_presentSourceHeight : m_height);
+#endif
 
     return true;
 }
