@@ -10,6 +10,7 @@
 #include <gfx_d3d/r_cinematic.h>
 #include <universal/com_sndalias.h>
 #include <universal/profile.h>
+#include <universal/timing.h>
 
 #ifdef KISAK_MP
 #include <cgame_mp/cg_local_mp.h>
@@ -768,6 +769,27 @@ static bool SND_FillStreamBuffers(int index)
 
     ALuint source = alGlob.source[index];
 
+#ifdef __SWITCH__
+    static uint64_t fillTotalNs = 0;
+    static uint64_t fillProcessedQueryNs = 0;
+    static uint64_t fillUnqueueNs = 0;
+    static uint64_t fillDecodeNs = 0;
+    static uint64_t fillPcmNs = 0;
+    static uint64_t fillUploadNs = 0;
+    static uint64_t fillQueueNs = 0;
+    static uint64_t fillOtherNs = 0;
+    static uint64_t fillProcessedBuffers = 0;
+    static uint64_t fillChunks = 0;
+    static uint64_t fillFrames = 0;
+    static uint32_t fillPerfSamples = 0;
+    const uint64_t fillStart = Kisak_RawTimerTicks();
+    uint64_t stageStart = fillStart;
+    uint64_t now = fillStart;
+    uint32_t processedThisCall = 0;
+    uint32_t chunksThisCall = 0;
+    uint64_t framesThisCall = 0;
+#endif
+
     // Allocate the four OpenAL buffers once per stream. Processed buffers return to the
     // free list and are refilled/requeued, avoiding per-chunk alDeleteBuffers/alGenBuffers.
     if (stream->bufferCount < AL_STREAM_BUFFER_COUNT)
@@ -794,6 +816,12 @@ static bool SND_FillStreamBuffers(int index)
 
     ALint processed = 0;
     alGetSourcei(source, AL_BUFFERS_PROCESSED, &processed);
+#ifdef __SWITCH__
+    now = Kisak_RawTimerTicks();
+    fillProcessedQueryNs += now - stageStart;
+    stageStart = now;
+    const ALint processedCount = processed;
+#endif
     while (processed-- > 0)
     {
         ALuint buf = 0;
@@ -806,6 +834,12 @@ static bool SND_FillStreamBuffers(int index)
                 --stream->queuedBufferCount;
         }
     }
+#ifdef __SWITCH__
+    now = Kisak_RawTimerTicks();
+    fillUnqueueNs += now - stageStart;
+    stageStart = now;
+    processedThisCall = static_cast<uint32_t>(processedCount > 0 ? processedCount : 0);
+#endif
 
     // The queue count is exact: this code owns every queue and unqueue operation.
     // Avoid a second synchronized OpenAL query on every active stream channel.
@@ -817,6 +851,9 @@ static bool SND_FillStreamBuffers(int index)
 
     for (int i = queued; i < AL_STREAM_BUFFER_COUNT && stream->freeBufferCount > 0; ++i)
     {
+#ifdef __SWITCH__
+        stageStart = Kisak_RawTimerTicks();
+#endif
         uint64_t framesRead = stream->isMp3
             ? drmp3_read_pcm_frames_s16(&stream->mp3, AL_STREAM_BUFFER_FRAMES, chunk)
             : drwav_read_pcm_frames_s16(&stream->wav, AL_STREAM_BUFFER_FRAMES, chunk);
@@ -837,6 +874,13 @@ static bool SND_FillStreamBuffers(int index)
             stream->framesQueued = 0; // starting a fresh loop pass
             memset(stream->eqHistory, 0, sizeof(stream->eqHistory));
         }
+#ifdef __SWITCH__
+        now = Kisak_RawTimerTicks();
+        fillDecodeNs += now - stageStart;
+        stageStart = now;
+        ++chunksThisCall;
+        framesThisCall += framesRead;
+#endif
 
         uint32_t outputChannels = stream->channels;
         if (stream->alias &&
@@ -868,6 +912,11 @@ static bool SND_FillStreamBuffers(int index)
         }
 
         const ALenum format = AL_GetPcmFormat(outputChannels);
+#ifdef __SWITCH__
+        now = Kisak_RawTimerTicks();
+        fillPcmNs += now - stageStart;
+        stageStart = now;
+#endif
         if (format == 0)
         {
             Com_PrintError(CON_CHANNEL_SOUND, "OpenAL has no PCM format for %u-channel stream\n",
@@ -882,11 +931,62 @@ static bool SND_FillStreamBuffers(int index)
             chunk,
             static_cast<ALsizei>(framesRead * outputChannels * sizeof(int16_t)),
             stream->sampleRate);
+#ifdef __SWITCH__
+        now = Kisak_RawTimerTicks();
+        fillUploadNs += now - stageStart;
+        stageStart = now;
+#endif
         alSourceQueueBuffers(source, 1, &buffer);
+#ifdef __SWITCH__
+        now = Kisak_RawTimerTicks();
+        fillQueueNs += now - stageStart;
+        stageStart = now;
+#endif
         stream->framesQueued += framesRead;
         ++stream->queuedBufferCount;
         ++queued;
     }
+
+#ifdef __SWITCH__
+    now = Kisak_RawTimerTicks();
+    fillOtherNs += now - stageStart;
+    fillTotalNs += now - fillStart;
+    fillProcessedBuffers += processedThisCall;
+    fillChunks += chunksThisCall;
+    fillFrames += framesThisCall;
+    if (++fillPerfSamples == 120)
+    {
+        const double averageMs = 1.0 / (120.0 * 1000000.0);
+        char message[640];
+        std::snprintf(
+            message, sizeof(message),
+            "[KisakCOD][SND STREAM FILL PERF] calls=120 avg_ms total=%.3f processed_query=%.3f unqueue=%.3f decode=%.3f pcm=%.3f upload=%.3f queue=%.3f other=%.3f processed_buf=%.2f chunks=%.2f frames=%.0f\\n",
+            fillTotalNs * averageMs,
+            fillProcessedQueryNs * averageMs,
+            fillUnqueueNs * averageMs,
+            fillDecodeNs * averageMs,
+            fillPcmNs * averageMs,
+            fillUploadNs * averageMs,
+            fillQueueNs * averageMs,
+            fillOtherNs * averageMs,
+            fillProcessedBuffers / 120.0,
+            fillChunks / 120.0,
+            fillFrames / 120.0);
+        Switch_LogWrite(message);
+        fillTotalNs = 0;
+        fillProcessedQueryNs = 0;
+        fillUnqueueNs = 0;
+        fillDecodeNs = 0;
+        fillPcmNs = 0;
+        fillUploadNs = 0;
+        fillQueueNs = 0;
+        fillOtherNs = 0;
+        fillProcessedBuffers = 0;
+        fillChunks = 0;
+        fillFrames = 0;
+        fillPerfSamples = 0;
+    }
+#endif
 
     return queued > 0;
 }
