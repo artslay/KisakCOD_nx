@@ -2971,24 +2971,109 @@ void __cdecl SND_UpdateVolume(snd_volume_info_t *volinfo, int frametime)
 
 void __cdecl SND_UpdateAllChannels(int frametime)
 {
+#ifdef __SWITCH__
+    static uint64_t slaveLerpNs = 0;
+    static uint64_t update3DNs = 0;
+    static uint64_t updateStreamNs = 0;
+    static uint64_t update2DNs = 0;
+    static uint64_t active3DCount = 0;
+    static uint64_t unpaused3DCount = 0;
+    static uint64_t activeStreamCount = 0;
+    static uint64_t unpausedStreamCount = 0;
+    static uint64_t active2DCount = 0;
+    static uint64_t unpaused2DCount = 0;
+    static uint32_t channelPerfSamples = 0;
+    uint64_t stageStart = Kisak_RawTimerTicks();
+#endif
+
     SND_UpdateSlaveLerp(frametime);
+#ifdef __SWITCH__
+    uint64_t now = Kisak_RawTimerTicks();
+    slaveLerpNs += now - stageStart;
+    stageStart = now;
+#endif
     for (int i = 8; i < g_snd.max_3D_channels + 8; ++i)
     {
         if (!SND_Is3DChannelFree(i))
+        {
+#ifdef __SWITCH__
+            ++active3DCount;
+            if (!g_snd.chaninfo[i].paused)
+                ++unpaused3DCount;
+#endif
             SND_Update3DChannel(i, frametime);
+        }
     }
+#ifdef __SWITCH__
+    now = Kisak_RawTimerTicks();
+    update3DNs += now - stageStart;
+    stageStart = now;
+#endif
 
     for (int i = SND_FIRST_STREAM_CHANNEL; i < g_snd.max_stream_channels + SND_FIRST_STREAM_CHANNEL; ++i)
     {
         if (!SND_IsStreamChannelFree(i))
+        {
+#ifdef __SWITCH__
+            ++activeStreamCount;
+            if (!g_snd.chaninfo[i].paused)
+                ++unpausedStreamCount;
+#endif
             SND_UpdateStreamChannel(i, frametime);
+        }
     }
+#ifdef __SWITCH__
+    now = Kisak_RawTimerTicks();
+    updateStreamNs += now - stageStart;
+    stageStart = now;
+#endif
 
     for (int i = 0; i < g_snd.max_2D_channels; ++i)
     {
         if (!SND_Is2DChannelFree(i))
+        {
+#ifdef __SWITCH__
+            ++active2DCount;
+            if (!g_snd.chaninfo[i].paused)
+                ++unpaused2DCount;
+#endif
             SND_Update2DChannel(i, frametime);
+        }
     }
+#ifdef __SWITCH__
+    now = Kisak_RawTimerTicks();
+    update2DNs += now - stageStart;
+    if (++channelPerfSamples == 120)
+    {
+        const double averageMs = 1.0 / (120.0 * 1000000.0);
+        char message[512];
+        std::snprintf(
+            message, sizeof(message),
+            "[KisakCOD][SND CHANNEL PERF] samples=120 avg_ms slave=%.3f ch3d=%.3f stream=%.3f ch2d=%.3f active3d=%.1f live3d=%.1f activeStream=%.1f liveStream=%.1f active2d=%.1f live2d=%.1f\\n",
+            slaveLerpNs * averageMs,
+            update3DNs * averageMs,
+            updateStreamNs * averageMs,
+            update2DNs * averageMs,
+            active3DCount / 120.0,
+            unpaused3DCount / 120.0,
+            activeStreamCount / 120.0,
+            unpausedStreamCount / 120.0,
+            active2DCount / 120.0,
+            unpaused2DCount / 120.0);
+        Switch_LogWrite(message);
+        slaveLerpNs = 0;
+        update3DNs = 0;
+        updateStreamNs = 0;
+        update2DNs = 0;
+        active3DCount = 0;
+        unpaused3DCount = 0;
+        activeStreamCount = 0;
+        unpausedStreamCount = 0;
+        active2DCount = 0;
+        unpaused2DCount = 0;
+        channelPerfSamples = 0;
+    }
+#endif
 }
 
 void __cdecl SND_UpdateSlaveLerp(int frametime)
