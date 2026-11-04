@@ -357,6 +357,11 @@ struct KisakVkShader : IDirect3DResource9 {
     VkShaderModule module=VK_NULL_HANDLE;
     VkShaderStageFlagBits stage=VK_SHADER_STAGE_VERTEX_BIT;
     const MOJOSHADER_parseData *parseData=nullptr;
+    // MojoShader uniform register packing is immutable for this shader.
+    // Build it once instead of walking parseData on every draw.
+    VulkanUniformLayout uniformLayout{};
+    bool uniformLayoutCached=false;
+    bool uniformLayoutValid=false;
     std::vector<uint32_t> spirv;
     // The interface-linked fragment module before the optional alpha-test rewrite.
     // Alpha testing is dynamic D3D9 state, so retain this baseline to rebuild the
@@ -501,6 +506,12 @@ private:
         VkDescriptorSet set = VK_NULL_HANDLE;
         std::array<VkDescriptorImageInfo, 16> images{};
     };
+    struct UniformDescriptorCacheEntry
+    {
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        VkDescriptorBufferInfo bufferInfo{};
+        std::vector<uint8_t> bytes;
+    };
     VulkanBackend *m_backend=nullptr;
     IDirect3DSurface9 *m_color=nullptr, *m_depth=nullptr;
     IDirect3DVertexDeclaration9 *m_decl=nullptr;
@@ -562,6 +573,11 @@ private:
     std::array<std::array<
         std::unordered_map<uint64_t, std::vector<SamplerDescriptorCacheEntry>>,2>,2>
         m_samplerDescriptorFrameCache{};
+    // Uniform sets are also immutable once a recorded draw references them.
+    // Exact packed-byte snapshots make identical per-draw constants reusable.
+    std::array<std::array<
+        std::unordered_map<uint64_t, std::vector<UniformDescriptorCacheEntry>>,2>,2>
+        m_uniformDescriptorFrameCache{};
     std::array<std::array<size_t,2>,2> m_samplerSetCursor{};
     std::array<std::array<size_t,2>,2> m_uniformSetCursor{};
     std::array<uint64_t,2> m_descriptorCacheFrameSerial{};
