@@ -7803,9 +7803,19 @@ bool IDirect3DDevice9::BindUniformSet(
         setIndex == 1u ? m_vsUniformRevision : m_psUniformRevision;
     UniformBindCacheEntry &uniformBindCache =
         m_uniformBindCache[frameSlot][cacheIndex];
-    if (uniformBindCache.frameSerial == frameSerial &&
+    bool allowUniformRevisionCache = true;
+#ifdef __SWITCH__
+    // Preserve opt-in diagnostics that inspect each draw's actual packed UBO.
+    allowUniformRevisionCache =
+        !Switch_IsVkGpuDrawTraceEnabled() &&
+        !Switch_IsModelTransformTraceEnabled() &&
+        !Switch_IsFloorAuditContextActive();
+#endif
+    if (allowUniformRevisionCache &&
+        uniformBindCache.frameSerial == frameSerial &&
         uniformBindCache.revision == uniformRevision &&
         uniformBindCache.shaderSerial == shaderSerial &&
+        uniformBindCache.device == m_backend->Device() &&
         uniformBindCache.parse == parse &&
         uniformBindCache.set != VK_NULL_HANDLE)
     {
@@ -8118,6 +8128,7 @@ bool IDirect3DDevice9::BindUniformSet(
     uniformBindCache.frameSerial = frameSerial;
     uniformBindCache.revision = uniformRevision;
     uniformBindCache.shaderSerial = shaderSerial;
+    uniformBindCache.device = m_backend->Device();
     uniformBindCache.parse = parse;
     uniformBindCache.set = set;
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_bind";
@@ -8855,6 +8866,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     if (allowPipelineFastPath && !m_pipelineDirty &&
         m_cachedPipelineFastPathValid &&
         m_cachedPipelineState != VK_NULL_HANDLE &&
+        m_cachedPipelineDevice == m_backend->Device() &&
         m_cachedPipelineSunShadowImage == pipelineSunShadowImage &&
         m_cachedPipelineColorFormat == colorFormat &&
         m_cachedPipelineDepthFormat == depthFormat &&
@@ -9028,6 +9040,7 @@ bool IDirect3DDevice9::EnsurePipeline()
         m_pipelineDirty = false;
         m_cachedPipelineStateKey = key;
         m_cachedPipelineState = existing->second;
+        m_cachedPipelineDevice = m_backend->Device();
         m_cachedPipelineSunShadowImage = pipelineSunShadowImage;
         m_cachedPipelineColorFormat = colorFormat;
         m_cachedPipelineDepthFormat = depthFormat;
@@ -10748,6 +10761,7 @@ bool IDirect3DDevice9::EnsurePipeline()
     m_pipelineDirty = false;
     m_cachedPipelineStateKey = key;
     m_cachedPipelineState = pipeline;
+    m_cachedPipelineDevice = m_backend->Device();
     m_cachedPipelineSunShadowImage = pipelineSunShadowImage;
     m_cachedPipelineColorFormat = colorFormat;
     m_cachedPipelineDepthFormat = depthFormat;
@@ -10771,14 +10785,17 @@ void IDirect3DDevice9::ResetCachedCommandState()
         return;
 
     const uint64_t frameSerial = m_backend->FrameSerial();
+    const VkDevice device = m_backend->Device();
     const VkCommandBuffer commandBuffer = m_backend->CommandBuffer();
     if (m_cachedCommandFrameSerial == frameSerial &&
+        m_cachedCommandDevice == device &&
         m_cachedCommandBuffer == commandBuffer)
         return;
 
     // Frame slots may use different command buffers, and a reset command buffer
     // forgets all graphics state even when the Vk handles happen to be reused.
     m_cachedCommandFrameSerial = frameSerial;
+    m_cachedCommandDevice = device;
     m_cachedCommandBuffer = commandBuffer;
     m_cachedBoundPipeline = VK_NULL_HANDLE;
     m_cachedBoundDescriptorSets.fill(VK_NULL_HANDLE);
