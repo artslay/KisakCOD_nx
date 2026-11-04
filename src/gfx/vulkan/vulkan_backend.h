@@ -283,11 +283,15 @@ public:
     void EndRendering();
 
     const char *GetLastError() const override;
-    bool IsInitialized() const { return m_initialized; }
-    bool IsFrameActive() const { return m_frameActive; }
-    bool NeedsSwapchainRecreate() const { return m_swapchainNeedsRecreate; }
-    uint32_t CurrentFrameSlot() const { return m_currentFrameSlot; }
-    uint32_t NextFrameSlot() const { return m_swapchainNeedsRecreate ? 0u : m_nextFrameSlot; }
+    bool IsInitialized() const { return m_initialized.load(std::memory_order_acquire); }
+    bool IsFrameActive() const { return m_frameActive.load(std::memory_order_acquire); }
+    bool NeedsSwapchainRecreate() const { return m_swapchainNeedsRecreate.load(std::memory_order_acquire); }
+    uint32_t CurrentFrameSlot() const { return m_currentFrameSlot.load(std::memory_order_acquire); }
+    uint32_t NextFrameSlot() const
+    {
+        return m_swapchainNeedsRecreate.load(std::memory_order_acquire)
+            ? 0u : m_nextFrameSlot.load(std::memory_order_acquire);
+    }
     // Wait for a submitted frame slot before reusing CPU-side SMP data that
     // was consumed by that slot. The caller pairs the legacy frontend pool
     // with the slot that last used it.
