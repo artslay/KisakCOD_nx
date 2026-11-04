@@ -160,6 +160,11 @@ struct AlStreamState
     ALBiquadHistory eqHistory[2][3][6];
     uint32_t eqRevision;
     bool eqWasEnabled;
+#ifdef __SWITCH__
+    uint64_t readCallbackNs;
+    uint64_t readCallbackBytes;
+    uint64_t readCallbackCalls;
+#endif
     // OpenAL buffer objects are kept for the lifetime of this stream and recycled after
     // processing instead of being deleted and recreated for every decoded chunk.
     ALuint buffers[AL_STREAM_BUFFER_COUNT];
@@ -201,10 +206,19 @@ static size_t AL_StreamReadCallback(void *pUserData, void *pBufferOut, size_t by
 
     const uint32_t requested = static_cast<uint32_t>(
         std::min<size_t>(bytesToRead, UINT32_MAX));
+#ifdef __SWITCH__
+    const uint64_t readStart = Kisak_RawTimerTicks();
+#endif
     const uint32_t bytesRead = FS_Read(
         static_cast<uint8_t *>(pBufferOut),
         requested,
         stream->fsHandle);
+#ifdef __SWITCH__
+    stream->readCallbackNs += Kisak_RawTimerTicks() - readStart;
+    ++stream->readCallbackCalls;
+    if (bytesRead != UINT32_MAX && bytesRead <= requested)
+        stream->readCallbackBytes += bytesRead;
+#endif
 
     // FS_Read uses UINT32_MAX as its stream-handle error sentinel. Never expose that
     // sentinel as a successful size_t byte count to dr_wav/dr_mp3.
@@ -779,6 +793,13 @@ static bool SND_FillStreamBuffers(int index)
     static uint64_t fillUploadNs = 0;
     static uint64_t fillQueueNs = 0;
     static uint64_t fillOtherNs = 0;
+    static uint64_t fillWavMemoryNs = 0;
+    static uint64_t fillWavFileNs = 0;
+    static uint64_t fillMp3MemoryNs = 0;
+    static uint64_t fillMp3FileNs = 0;
+    static uint64_t fillReadCallbackNs = 0;
+    static uint64_t fillReadCallbackBytes = 0;
+    static uint64_t fillReadCallbackCalls = 0;
     static uint64_t fillProcessedBuffers = 0;
     static uint64_t fillChunks = 0;
     static uint64_t fillFrames = 0;
@@ -786,6 +807,9 @@ static bool SND_FillStreamBuffers(int index)
     const uint64_t fillStart = Kisak_RawTimerTicks();
     uint64_t stageStart = fillStart;
     uint64_t now = fillStart;
+    const uint64_t callbackNsStart = stream->readCallbackNs;
+    const uint64_t callbackBytesStart = stream->readCallbackBytes;
+    const uint64_t callbackCallsStart = stream->readCallbackCalls;
     uint32_t processedThisCall = 0;
     uint32_t chunksThisCall = 0;
     uint64_t framesThisCall = 0;
@@ -882,7 +906,22 @@ static bool SND_FillStreamBuffers(int index)
         }
 #ifdef __SWITCH__
         now = Kisak_RawTimerTicks();
-        fillDecodeNs += now - stageStart;
+        const uint64_t decodeElapsed = now - stageStart;
+        fillDecodeNs += decodeElapsed;
+        if (stream->isMp3)
+        {
+            if (stream->memoryData)
+                fillMp3MemoryNs += decodeElapsed;
+            else
+                fillMp3FileNs += decodeElapsed;
+        }
+        else
+        {
+            if (stream->memoryData)
+                fillWavMemoryNs += decodeElapsed;
+            else
+                fillWavFileNs += decodeElapsed;
+        }
         stageStart = now;
         ++chunksThisCall;
         framesThisCall += framesRead;
@@ -960,18 +999,28 @@ static bool SND_FillStreamBuffers(int index)
     fillProcessedBuffers += processedThisCall;
     fillChunks += chunksThisCall;
     fillFrames += framesThisCall;
+    fillReadCallbackNs += stream->readCallbackNs - callbackNsStart;
+    fillReadCallbackBytes += stream->readCallbackBytes - callbackBytesStart;
+    fillReadCallbackCalls += stream->readCallbackCalls - callbackCallsStart;
     if (++fillPerfSamples == 120)
     {
         const double averageMs = 1.0 / (120.0 * 1000000.0);
         char message[640];
         std::snprintf(
             message, sizeof(message),
-            "[KisakCOD][SND STREAM FILL PERF] calls=120 avg_ms total=%.3f setup=%.3f processed_query=%.3f unqueue=%.3f decode=%.3f pcm=%.3f upload=%.3f queue=%.3f other=%.3f processed_buf=%.2f chunks=%.2f frames=%.0f\n",
+            "[KisakCOD][SND STREAM FILL PERF] calls=120 avg_ms total=%.3f setup=%.3f processed_query=%.3f unqueue=%.3f decode=%.3f wav_mem=%.3f wav_fs=%.3f mp3_mem=%.3f mp3_fs=%.3f read_cb=%.3f read_calls=%.2f read_bytes=%.0f pcm=%.3f upload=%.3f queue=%.3f other=%.3f processed_buf=%.2f chunks=%.2f frames=%.0f\n",
             fillTotalNs * averageMs,
             fillSetupNs * averageMs,
             fillProcessedQueryNs * averageMs,
             fillUnqueueNs * averageMs,
             fillDecodeNs * averageMs,
+            fillWavMemoryNs * averageMs,
+            fillWavFileNs * averageMs,
+            fillMp3MemoryNs * averageMs,
+            fillMp3FileNs * averageMs,
+            fillReadCallbackNs * averageMs,
+            fillReadCallbackCalls / 120.0,
+            fillReadCallbackBytes / 120.0,
             fillPcmNs * averageMs,
             fillUploadNs * averageMs,
             fillQueueNs * averageMs,
@@ -989,6 +1038,13 @@ static bool SND_FillStreamBuffers(int index)
         fillUploadNs = 0;
         fillQueueNs = 0;
         fillOtherNs = 0;
+        fillWavMemoryNs = 0;
+        fillWavFileNs = 0;
+        fillMp3MemoryNs = 0;
+        fillMp3FileNs = 0;
+        fillReadCallbackNs = 0;
+        fillReadCallbackBytes = 0;
+        fillReadCallbackCalls = 0;
         fillProcessedBuffers = 0;
         fillChunks = 0;
         fillFrames = 0;
