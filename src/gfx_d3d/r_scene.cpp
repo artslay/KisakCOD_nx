@@ -128,7 +128,7 @@ void Switch_ReportRenderCpuPerf(
     char message[1200];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][CPU SCENE PERF] samples=%u avg_ms total=%.3f setup_world=%.3f filter_entities=%.3f dpvs_queue=%.3f begin_lighting=%.3f wait_frontend=%.3f wait_static_dpvs=%.3f bsp=%.3f static_models=%.3f dyn_pieces=%.3f dyn_wait=%.3f dyn_draw=%.3f scene_wait=%.3f scene_build=%.3f static_sort=%.3f light_surfs=%.3f add_scene_wait=%.3f other=%.3f counts{world_surfs=%u static_models=%u scene_dobj=%u scene_models=%u dyn_models=%u dyn_brushes=%u draw_surfs=%u smodel_draws=%u/%u/%u}\n",
+        "[KisakCOD][CPU SCENE PERF] samples=%u avg_ms total=%.3f setup_world=%.3f filter_entities=%.3f dpvs_queue=%.3f begin_lighting=%.3f wait_frontend=%.3f wait_static_dpvs=%.3f bsp=%.3f static_models=%.3f dyn_pieces=%.3f dyn_wait=%.3f dyn_draw=%.3f scene_wait=%.3f scene_build=%.3f static_sort=%.3f light_surfs=%.3f wait_add_scene=%.3f other=%.3f counts{world_surfs=%u static_models=%u scene_dobj=%u scene_models=%u dyn_models=%u dyn_brushes=%u draw_surfs=%u smodel_draws=%u/%u/%u}\n",
         s_switchRenderCpuPerfSamples,
         total.totalNs * averageMs,
         total.setupWorldNs * averageMs,
@@ -2152,10 +2152,13 @@ void __cdecl R_GenerateSortedDrawSurfs(
     KISAK_NULLSUB();
     R_EmitShadowCookieSurfs(viewInfo);
 #ifdef __SWITCH__
-    switchPerfFrame.addSceneWaitNs = Kisak_RawTimerTicks() - switchPerfStageStart;
     switchPerfStageStart = Kisak_RawTimerTicks();
 #endif
     R_WaitWorkerCmdsOfType(WRKCMD_ADD_SCENE_ENT);
+#ifdef __SWITCH__
+    switchPerfFrame.addSceneWaitNs = Kisak_RawTimerTicks() - switchPerfStageStart;
+    switchPerfStageStart = Kisak_RawTimerTicks();
+#endif
     if (usePreTess)
         R_EndPreTess();
     litInfo = &viewInfo->litInfo;
