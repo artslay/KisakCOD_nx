@@ -679,6 +679,10 @@ private:
     uint64_t m_cachedPipelineStateKey = 0;
     VkPipeline m_cachedPipelineState = VK_NULL_HANDLE;
     const GfxImage *m_cachedPipelineSunShadowImage = nullptr;
+    VkFormat m_cachedPipelineColorFormat = VK_FORMAT_UNDEFINED;
+    VkFormat m_cachedPipelineDepthFormat = VK_FORMAT_UNDEFINED;
+    VkSampleCountFlagBits m_cachedPipelineColorSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlagBits m_cachedPipelineDepthSamples = VK_SAMPLE_COUNT_1_BIT;
     bool m_pipelineDirty=true;
     std::unordered_map<uint64_t, VkPipeline> m_pipelines;
     void LogGpuDrawCommand(const char *kind, uint32_t primitiveType,
