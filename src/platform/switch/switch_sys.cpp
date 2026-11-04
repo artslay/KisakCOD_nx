@@ -3729,7 +3729,8 @@ static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
     {
         "[KisakCOD][CPU SCENE PERF]",
         "[KisakCOD][CL SOUND PERF]",
-        "[KisakCOD][SND UPDATE PERF]"
+        "[KisakCOD][SND UPDATE PERF]",
+        "[KisakCOD][SND CHANNEL PERF]"
     };
     for (const char *prefix : kPerformancePrefixes)
     {
