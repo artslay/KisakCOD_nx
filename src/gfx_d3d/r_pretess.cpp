@@ -158,6 +158,13 @@ uint16_t *__cdecl R_AllocPreTessIndices(int count)
     if (count + gfxBuf.preTessIndexBuffer->used > gfxBuf.preTessIndexBuffer->total)
         return 0;
     indices = &gfxBuf.preTessIndexBuffer->indices[gfxBuf.preTessIndexBuffer->used];
+#ifdef __SWITCH__
+    const uint32_t writtenOffset = static_cast<uint32_t>(
+        indices - gfxBuf.preTessIndexBuffer->indices) * sizeof(uint16_t);
+    gfxBuf.preTessIndexBuffer->buffer->MarkWrittenRange(
+        writtenOffset,
+        static_cast<uint32_t>(count) * sizeof(uint16_t));
+#endif
     gfxBuf.preTessIndexBuffer->used += count;
     return indices;
 }
@@ -172,6 +179,11 @@ void __cdecl R_EndPreTess()
 void __cdecl R_BeginPreTess()
 {
     iassert( gfxBuf.preTessIndexBuffer->indices == NULL );
+#ifdef __SWITCH__
+    // Pre-tess writes are allocated sequentially through R_AllocPreTessIndices.
+    // Publish only the written prefix when the full DISCARD lock is released.
+    gfxBuf.preTessIndexBuffer->buffer->BeginMeshWriteTracking();
+#endif
     gfxBuf.preTessIndexBuffer->indices = (uint16_t *)R_LockIndexBuffer(
         gfxBuf.preTessIndexBuffer->buffer,
         0,
