@@ -1901,6 +1901,7 @@ bool VulkanBackend::BeginFrame()
 
     m_frameActive = true;
     m_frameSerial.fetch_add(1, std::memory_order_relaxed);
+    m_commandBufferRecordingSerial.fetch_add(1, std::memory_order_relaxed);
     m_nextFrameSlot = (slotIndex + 1u) % FramesInFlight;
     m_renderingActive = false;
     m_backbufferClearedThisFrame = false;
@@ -2038,6 +2039,11 @@ bool VulkanBackend::SynchronizeActiveFrame()
         m_swapchainNeedsRecreate = !m_deviceLost;
         return false;
     }
+
+    // The command pool reset above starts a new recording epoch on the same
+    // VkCommandBuffer handle. Invalidate render-state caches even though the
+    // logical frame serial and command-buffer handle did not change.
+    m_commandBufferRecordingSerial.fetch_add(1, std::memory_order_relaxed);
 
     // Do not advance the frame serial, reset uniform allocation, or reacquire the
     // swapchain image: commands after the synchronous lock belong to the same frame.
