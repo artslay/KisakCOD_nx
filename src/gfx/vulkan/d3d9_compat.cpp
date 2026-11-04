@@ -9,6 +9,7 @@
 #include "../../gfx_d3d/rb_state.h"
 #include "../../xanim/xmodel.h"
 #include "../../gfx_d3d/r_state.h"
+#include "../../gfx_d3d/r_buffers.h"
 #endif
 
 #ifdef __SWITCH__
@@ -6809,8 +6810,11 @@ HRESULT IDirect3DDevice9::BeginScene()
 {
     if (!m_backend)
         return E_FAIL;
+    const bool frameWasActive = m_backend->IsFrameActive();
     if (!m_backend->BeginFrame())
         return E_FAIL;
+    if (!frameWasActive)
+        R_SetDynamicBufferFrame(m_backend->CurrentFrameSlot());
     m_sceneOpen = true;
     m_targetRendered = false;
     g_switchSceneDrawPrimitiveCalls = 0;
