@@ -798,10 +798,13 @@ static bool SND_FillStreamBuffers(int index)
     {
         ALuint buf = 0;
         alSourceUnqueueBuffers(source, 1, &buf);
-        if (buf != 0 && stream->freeBufferCount < stream->bufferCount)
-            stream->freeBuffers[stream->freeBufferCount++] = buf;
-        if (stream->queuedBufferCount > 0)
-            --stream->queuedBufferCount;
+        if (buf != 0)
+        {
+            if (stream->freeBufferCount < stream->bufferCount)
+                stream->freeBuffers[stream->freeBufferCount++] = buf;
+            if (stream->queuedBufferCount > 0)
+                --stream->queuedBufferCount;
+        }
     }
 
     // The queue count is exact: this code owns every queue and unqueue operation.
