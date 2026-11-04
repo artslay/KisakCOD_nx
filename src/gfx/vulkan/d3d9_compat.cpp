@@ -7562,32 +7562,50 @@ HRESULT SetBoolConstants(
 
 HRESULT IDirect3DDevice9::SetVertexShaderConstantF(uint32_t d, const float *p, uint32_t c)
 {
-    return SetFloatConstants(m_vsFloat, d, p, c);
+    const HRESULT result = SetFloatConstants(m_vsFloat, d, p, c);
+    if (result == S_OK && c)
+        ++m_vsUniformRevision;
+    return result;
 }
 
 HRESULT IDirect3DDevice9::SetPixelShaderConstantF(uint32_t d, const float *p, uint32_t c)
 {
-    return SetFloatConstants(m_psFloat, d, p, c);
+    const HRESULT result = SetFloatConstants(m_psFloat, d, p, c);
+    if (result == S_OK && c)
+        ++m_psUniformRevision;
+    return result;
 }
 
 HRESULT IDirect3DDevice9::SetVertexShaderConstantI(uint32_t d, const int32_t *p, uint32_t c)
 {
-    return SetIntConstants(m_vsInt, d, p, c);
+    const HRESULT result = SetIntConstants(m_vsInt, d, p, c);
+    if (result == S_OK && c)
+        ++m_vsUniformRevision;
+    return result;
 }
 
 HRESULT IDirect3DDevice9::SetPixelShaderConstantI(uint32_t d, const int32_t *p, uint32_t c)
 {
-    return SetIntConstants(m_psInt, d, p, c);
+    const HRESULT result = SetIntConstants(m_psInt, d, p, c);
+    if (result == S_OK && c)
+        ++m_psUniformRevision;
+    return result;
 }
 
 HRESULT IDirect3DDevice9::SetVertexShaderConstantB(uint32_t d, const int32_t *p, uint32_t c)
 {
-    return SetBoolConstants(m_vsBool, d, p, c);
+    const HRESULT result = SetBoolConstants(m_vsBool, d, p, c);
+    if (result == S_OK && c)
+        ++m_vsUniformRevision;
+    return result;
 }
 
 HRESULT IDirect3DDevice9::SetPixelShaderConstantB(uint32_t d, const int32_t *p, uint32_t c)
 {
-    return SetBoolConstants(m_psBool, d, p, c);
+    const HRESULT result = SetBoolConstants(m_psBool, d, p, c);
+    if (result == S_OK && c)
+        ++m_psUniformRevision;
+    return result;
 }
 
 HRESULT IDirect3DDevice9::SetViewport(const D3DVIEWPORT9 *vp)
