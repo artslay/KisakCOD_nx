@@ -74,7 +74,7 @@ struct SwitchRenderCpuPerfFrame
     uint64_t staticModelNs, dynPiecesNs, dynWaitNs, dynDrawNs;
     uint64_t sceneWaitNs, sceneBuildNs, staticSortNs, lightSurfNs;
     uint64_t addSceneWaitNs, tailNs;
-    uint64_t preWorldNs, shadowSetupNs, shadowSurfsNs, fxWaitNs, shadowSceneNs;
+    uint64_t preWorldNs, preTessBeginNs, shadowSetupNs, shadowSurfsNs, fxWaitNs, shadowSceneNs;
     uint64_t tailSceneNs, tailMarksNs, tailDecalNs, tailEmissiveNs;
     uint64_t tailPreTessNs, tailLitSetupNs, tailLitMergeNs, tailDlightNs, tailUpdatesNs;
     uint64_t tailSoundNs, tailFxPhysicsNs, tailDynEntNs;
@@ -121,6 +121,7 @@ void Switch_ReportRenderCpuPerf(
     total.addSceneWaitNs += sample.addSceneWaitNs;
     total.tailNs += sample.tailNs;
     total.preWorldNs += sample.preWorldNs;
+    total.preTessBeginNs += sample.preTessBeginNs;
     total.shadowSetupNs += sample.shadowSetupNs;
     total.shadowSurfsNs += sample.shadowSurfsNs;
     total.fxWaitNs += sample.fxWaitNs;
@@ -158,7 +159,7 @@ void Switch_ReportRenderCpuPerf(
         total.bspNs + total.staticModelNs + total.dynPiecesNs + total.dynWaitNs +
         total.dynDrawNs + total.sceneWaitNs + total.sceneBuildNs +
         total.staticSortNs + total.lightSurfNs + total.addSceneWaitNs +
-        total.preWorldNs + total.shadowSetupNs + total.shadowSurfsNs +
+        total.preWorldNs + total.preTessBeginNs + total.shadowSetupNs + total.shadowSurfsNs +
         total.fxWaitNs + total.shadowSceneNs + total.tailNs;
     const uint64_t otherNs = total.totalNs > measuredNs ? total.totalNs - measuredNs : 0;
 
@@ -171,7 +172,7 @@ void Switch_ReportRenderCpuPerf(
     char message[2048];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][CPU SCENE PERF] samples=%u avg_ms total=%.3f setup_world=%.3f filter_entities=%.3f dpvs_queue=%.3f begin_lighting=%.3f wait_frontend=%.3f wait_static_dpvs=%.3f bsp=%.3f static_models=%.3f dyn_pieces=%.3f dyn_wait=%.3f dyn_draw=%.3f scene_wait=%.3f scene_build=%.3f static_sort=%.3f light_surfs=%.3f wait_add_scene=%.3f pre_world=%.3f shadow_setup=%.3f shadow_surfs=%.3f fx_wait=%.3f shadow_scene=%.3f tail=%.3f tail_scene=%.3f tail_pre_tess=%.3f tail_lit_setup=%.3f tail_lit_merge=%.3f tail_dlight=%.3f tail_updates=%.3f tail_sound=%.3f tail_fx_physics=%.3f tail_dynent=%.3f tail_marks=%.3f tail_decal=%.3f tail_emissive=%.3f tail_fx_wait=%.3f tail_emissive_sort=%.3f tail_emissive_setup=%.3f tail_emissive_merge=%.3f tail_floatz=%.3f other=%.3f static_dpvs{calls=%.1f main=%.1f w0=%.1f w1=%.1f other=%.1f cpu_ms=%.3f main=%.3f w0=%.3f w1=%.3f other=%.3f} counts{world_surfs=%u static_models=%u scene_dobj=%u scene_models=%u dyn_models=%u dyn_brushes=%u draw_surfs=%u smodel_draws=%u/%u/%u}\n",
+        "[KisakCOD][CPU SCENE PERF] samples=%u avg_ms total=%.3f setup_world=%.3f filter_entities=%.3f dpvs_queue=%.3f begin_lighting=%.3f wait_frontend=%.3f wait_static_dpvs=%.3f bsp=%.3f static_models=%.3f dyn_pieces=%.3f dyn_wait=%.3f dyn_draw=%.3f scene_wait=%.3f scene_build=%.3f static_sort=%.3f light_surfs=%.3f wait_add_scene=%.3f pre_world=%.3f pretess_begin=%.3f shadow_setup=%.3f shadow_surfs=%.3f fx_wait=%.3f shadow_scene=%.3f tail=%.3f tail_scene=%.3f tail_pre_tess=%.3f tail_lit_setup=%.3f tail_lit_merge=%.3f tail_dlight=%.3f tail_updates=%.3f tail_sound=%.3f tail_fx_physics=%.3f tail_dynent=%.3f tail_marks=%.3f tail_decal=%.3f tail_emissive=%.3f tail_fx_wait=%.3f tail_emissive_sort=%.3f tail_emissive_setup=%.3f tail_emissive_merge=%.3f tail_floatz=%.3f other=%.3f static_dpvs{calls=%.1f main=%.1f w0=%.1f w1=%.1f other=%.1f cpu_ms=%.3f main=%.3f w0=%.3f w1=%.3f other=%.3f} counts{world_surfs=%u static_models=%u scene_dobj=%u scene_models=%u dyn_models=%u dyn_brushes=%u draw_surfs=%u smodel_draws=%u/%u/%u}\n",
         s_switchRenderCpuPerfSamples,
         total.totalNs * averageMs,
         total.setupWorldNs * averageMs,
@@ -191,6 +192,7 @@ void Switch_ReportRenderCpuPerf(
         total.lightSurfNs * averageMs,
         total.addSceneWaitNs * averageMs,
         total.preWorldNs * averageMs,
+        total.preTessBeginNs * averageMs,
         total.shadowSetupNs * averageMs,
         total.shadowSurfsNs * averageMs,
         total.fxWaitNs * averageMs,
@@ -2062,9 +2064,13 @@ void __cdecl R_GenerateSortedDrawSurfs(
 #endif
     R_AddEmissiveSpotLight(viewInfo);
     usePreTess = !dx.deviceLost && r_pretess->current.enabled;
+#ifdef __SWITCH__
+    switchPerfStageStart = Kisak_RawTimerTicks();
+#endif
     if (usePreTess)
         R_BeginPreTess();
 #ifdef __SWITCH__
+    switchPerfFrame.preTessBeginNs = Kisak_RawTimerTicks() - switchPerfStageStart;
     switchPerfStageStart = Kisak_RawTimerTicks();
 #endif
     R_WaitWorkerCmdsOfType(WRKCMD_DPVS_CELL_STATIC);
