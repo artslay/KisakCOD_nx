@@ -3718,6 +3718,17 @@ static bool Switch_LogIsScriptDiagnostic(const char *msg)
     return false;
 }
 
+static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
+{
+    // Aggregated CPU renderer timings are emitted once per 120 scene builds.
+    // Keep this narrow prefix instead of opening general profiling traces.
+    return msg &&
+        std::strncmp(
+            msg,
+            "[KisakCOD][CPU SCENE PERF]",
+            sizeof("[KisakCOD][CPU SCENE PERF]") - 1u) == 0;
+}
+
 static bool Switch_LogIsImportant(const char *msg)
 {
     if (!msg || !*msg)
@@ -3770,6 +3781,7 @@ void Switch_LogWrite(const char *msg)
         (!Switch_LogIsImportant(msg) &&
          !Switch_LogIsFxDiagnostic(msg) &&
          !Switch_LogIsScriptDiagnostic(msg) &&
+         !Switch_LogIsPerformanceDiagnostic(msg) &&
          !Switch_LogIsStartupMessage(msg) &&
          !Switch_LogIsLevelLoadMessage(msg)))
         return;
