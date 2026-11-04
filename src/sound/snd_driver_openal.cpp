@@ -771,6 +771,7 @@ static bool SND_FillStreamBuffers(int index)
 
 #ifdef __SWITCH__
     static uint64_t fillTotalNs = 0;
+    static uint64_t fillSetupNs = 0;
     static uint64_t fillProcessedQueryNs = 0;
     static uint64_t fillUnqueueNs = 0;
     static uint64_t fillDecodeNs = 0;
@@ -814,6 +815,11 @@ static bool SND_FillStreamBuffers(int index)
         stream->eqWasEnabled = eqEnabled;
     }
 
+#ifdef __SWITCH__
+    now = Kisak_RawTimerTicks();
+    fillSetupNs += now - stageStart;
+    stageStart = now;
+#endif
     ALint processed = 0;
     alGetSourcei(source, AL_BUFFERS_PROCESSED, &processed);
 #ifdef __SWITCH__
@@ -960,8 +966,9 @@ static bool SND_FillStreamBuffers(int index)
         char message[640];
         std::snprintf(
             message, sizeof(message),
-            "[KisakCOD][SND STREAM FILL PERF] calls=120 avg_ms total=%.3f processed_query=%.3f unqueue=%.3f decode=%.3f pcm=%.3f upload=%.3f queue=%.3f other=%.3f processed_buf=%.2f chunks=%.2f frames=%.0f\\n",
+            "[KisakCOD][SND STREAM FILL PERF] calls=120 avg_ms total=%.3f setup=%.3f processed_query=%.3f unqueue=%.3f decode=%.3f pcm=%.3f upload=%.3f queue=%.3f other=%.3f processed_buf=%.2f chunks=%.2f frames=%.0f\\n",
             fillTotalNs * averageMs,
+            fillSetupNs * averageMs,
             fillProcessedQueryNs * averageMs,
             fillUnqueueNs * averageMs,
             fillDecodeNs * averageMs,
@@ -974,6 +981,7 @@ static bool SND_FillStreamBuffers(int index)
             fillFrames / 120.0);
         Switch_LogWrite(message);
         fillTotalNs = 0;
+        fillSetupNs = 0;
         fillProcessedQueryNs = 0;
         fillUnqueueNs = 0;
         fillDecodeNs = 0;
