@@ -10861,10 +10861,6 @@ bool IDirect3DDevice9::PrepareDraw()
         return false;
     }
 
-    // Reset state tracking before recording any dynamic commands. Descriptor
-    // and pipeline binds later in this draw then share the same command-buffer epoch.
-    ResetCachedCommandState();
-
     // Drain worker-produced uploads before this function records viewport,
     // scissor, descriptors, or rendering state. A backend-only frame split
     // therefore cannot discard state belonging to the draw being prepared.
@@ -10873,6 +10869,10 @@ bool IDirect3DDevice9::PrepareDraw()
         Switch_LogWrite("[KisakCOD][VK DRAW] fail=queued_buffer_uploads\n");
         return false;
     }
+
+    // Flush may synchronize uploads and advance backend frame state. Reset
+    // tracking only after it has finished, before any dynamic graphics commands.
+    ResetCachedCommandState();
 
     VkImage colorImage = m_color && m_color->texture
         ? m_color->texture->image : m_backend->CurrentSwapchainImage();
