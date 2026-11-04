@@ -8700,7 +8700,7 @@ bool IDirect3DDevice9::BindSamplerSet(
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=sampler set=%u frame=%llu cursor=%zu cached=%zu result=%d\\n",
+                "[KisakCOD][VK DESCRIPTOR ALLOC FAIL] kind=sampler set=%u frame=%llu cursor=%zu cached=%zu result=%d\n",
                 setIndex,
                 static_cast<unsigned long long>(frameSerial),
                 cursor,
