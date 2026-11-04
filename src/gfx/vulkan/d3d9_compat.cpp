@@ -7186,7 +7186,6 @@ HRESULT IDirect3DDevice9::SetRenderTarget(uint32_t index, IDirect3DSurface9 *sur
     m_targetRendered = false;
     m_pipelineDirty = true;
     m_cachedPipelineFastPathValid = false;
-    m_pipelineDirty = true;
     return S_OK;
 }
 
@@ -7201,6 +7200,7 @@ HRESULT IDirect3DDevice9::SetDepthStencilSurface(IDirect3DSurface9 *surface)
     if (m_depth)
         m_depth->AddRef();
     m_pipelineDirty = true;
+    m_cachedPipelineFastPathValid = false;
     return S_OK;
 }
 
