@@ -1741,8 +1741,9 @@ bool VulkanBackend::BeginFrame()
     if (m_swapchainNeedsRecreate && !RecreateSwapchain())
         return false;
 
-    // Rotate through independent command/sync slots. Only the slot being
-    // reused waits; the other frame can remain queued on the graphics queue.
+    // The Switch path currently has one active slot. Wait for its fence
+    // before beginning the next frame so no legacy shared render resource is
+    // overwritten while the previous submission still reads it.
     const uint32_t slotIndex = m_nextFrameSlot;
     FrameSync &frame = m_frameSync[slotIndex];
     const VkResult waitResult =
