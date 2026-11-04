@@ -14,11 +14,46 @@
 #include <universal/q_parse.h>
 #include <cstdint>
 #include <cstdio>
+#ifdef KISAK_SWITCH
+#include <atomic>
+extern function_stack_t fs;
+#endif
 
 #ifdef KISAK_SWITCH
 extern void Switch_LogWrite(const char *msg);
 extern void Switch_LogScriptBoolCastFailure(uint32_t incomingType);
 extern void Switch_LogScriptTypeMismatch(uint32_t leftType, uint32_t rightType);
+#endif
+
+#ifdef KISAK_SWITCH
+static void Switch_LogUndefinedObjectOperand(
+    const char *operation, uint32_t id, const VariableValue *value)
+{
+    static std::atomic<uint32_t> traceCount{0};
+    const uint32_t traceId = traceCount.fetch_add(1u, std::memory_order_relaxed);
+    if (traceId >= 48u)
+        return;
+
+    const char *codePos = fs.pos;
+    char *filename = nullptr;
+    int line = 0;
+    if (codePos && Scr_IsInOpcodeMemory(codePos))
+        Scr_GetFileAndLine(codePos, &filename, &line);
+
+    char trace[416];
+    std::snprintf(
+        trace, sizeof(trace),
+        "[KisakCOD][SCRIPT OBJECT ARG UNDEFINED] n=%u operation=%s id=%u type=%u file=%s line=%d codePos=%p functionCount=%d\n",
+        traceId,
+        operation ? operation : "unknown",
+        id,
+        value ? static_cast<unsigned>(value->type) : static_cast<unsigned>(VAR_UNDEFINED),
+        filename && filename[0] ? filename : "(unknown)",
+        line,
+        static_cast<const void *>(codePos),
+        scrVmPub.function_count);
+    Switch_LogWrite(trace);
+}
 #endif
 
 #undef GetObject
@@ -819,6 +854,10 @@ uint32_t Scr_EvalVariableObject(uint32_t id)
 		}
 	}
 
+#ifdef KISAK_SWITCH
+    if (type == VAR_UNDEFINED)
+        Switch_LogUndefinedObjectOperand("local-variable", id, nullptr);
+#endif
 	Scr_Error(va("%s is not a field object", var_typename[type]));
 	return 0;
 }
@@ -2047,6 +2086,10 @@ uint32_t  Scr_EvalFieldObject(uint32_t tempVariable, VariableValue* value)
 		}
 	}
 
+#ifdef KISAK_SWITCH
+    if (type == VAR_UNDEFINED)
+        Switch_LogUndefinedObjectOperand("expression", 0, value);
+#endif
 	RemoveRefToValue(value->type, value->u);
 	Scr_Error(va("%s is not a field object", var_typename[type]));
 	return 0;

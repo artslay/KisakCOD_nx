@@ -137,8 +137,7 @@ static void Switch_LogScriptReturn(
         Switch_LogInvalidScriptSourceLookup(kind, codePos, callerCodePos);
         return;
     }
-    if (!Switch_IsScriptReturnTraceEnabled())
-        return;
+    const bool traceEnabled = Switch_IsScriptReturnTraceEnabled();
 
     char *filename = nullptr;
     int line = 0;
@@ -149,15 +148,15 @@ static void Switch_LogScriptReturn(
     if (callerCodePos && Scr_IsInOpcodeMemory(callerCodePos))
         Scr_GetFileAndLine(callerCodePos, &callerFilename, &callerLine);
 
-    // When explicitly enabled, trace the value returned to the failing
-    // cover_behavior.gsc call site and other returns in that script.
+    // The return consumed by cover_behavior.gsc:136 is a known runtime
+    // failure. Trace that one callsite unconditionally; keep all other
+    // return tracing opt-in to avoid normal VM log traffic.
     const bool targetCallSite =
         callerFilename &&
         std::strstr(callerFilename, "cover_behavior.gsc") &&
         callerLine >= 134 && callerLine <= 140;
     const bool traceAllCoverReturns =
-        Switch_IsScriptReturnTraceEnabled() &&
-        filename && std::strstr(filename, "cover_behavior.gsc");
+        traceEnabled && filename && std::strstr(filename, "cover_behavior.gsc");
     if (!targetCallSite && !traceAllCoverReturns)
         return;
 
@@ -4446,6 +4445,31 @@ void __cdecl Scr_GetVector(uint32_t index, float* vectorValue)
             return;
         }
         scrVarPub.error_index = index + 1;
+#ifdef KISAK_SWITCH
+        if (value->type == VAR_UNDEFINED)
+        {
+            static std::atomic<uint32_t> undefinedVectorTraceCount{0};
+            const uint32_t traceId =
+                undefinedVectorTraceCount.fetch_add(1u, std::memory_order_relaxed);
+            if (traceId < 32u)
+            {
+                const char *codePos = fs.pos;
+                char *filename = nullptr;
+                int line = 0;
+                if (codePos && Scr_IsInOpcodeMemory(codePos))
+                    Scr_GetFileAndLine(codePos, &filename, &line);
+                char trace[384];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][SCRIPT VECTOR ARG UNDEFINED] n=%u param=%u file=%s line=%d codePos=%p functionCount=%d outparamcount=%u\n",
+                    traceId, index + 1,
+                    filename && filename[0] ? filename : "(unknown)",
+                    line, static_cast<const void *>(codePos),
+                    scrVmPub.function_count, scrVmPub.outparamcount);
+                Switch_LogWrite(trace);
+            }
+        }
+#endif
         v2 = va("type %s is not a vector", var_typename[value->type]);
         Scr_Error(v2);
     }
