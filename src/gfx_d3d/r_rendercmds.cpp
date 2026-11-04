@@ -650,9 +650,9 @@ DebugGlobals *R_ToggleSmpFrame()
     gfxBuf.preTessBufferFrame = (gfxBuf.preTessBufferFrame + 1) % 2;
 #ifdef __SWITCH__
     iassert(gfxBuf.dynamicBufferFrame == gfxBuf.preTessBufferFrame);
-    // This function runs after the next frontend frame has been handed to the
-    // renderer. Waiting here protects only the pool about to be reused, while
-    // the newly handed-off frame can be recorded/submitted in parallel.
+    // The asynchronous SMP path pre-waits this pool before waking the
+    // renderer; the wait below is then a no-op. In synchronous/abort paths it
+    // still protects the pool before its counters and pointers are recycled.
     Switch_WaitForSmpPoolGpuUse(static_cast<uint32_t>(gfxBuf.dynamicBufferFrame));
 #endif
     frontEndDataOut = &s_backEndData[s_smpFrame];
