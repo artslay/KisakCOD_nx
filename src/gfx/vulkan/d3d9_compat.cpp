@@ -8337,9 +8337,9 @@ bool IDirect3DDevice9::BindSamplerSet(
                     }
                 }
             }
-            if (needsSampledLayoutTransition)
-                break;
         }
+        if (needsSampledLayoutTransition)
+            break;
     }
     if (needsSampledLayoutTransition)
         m_backend->EndRendering();
