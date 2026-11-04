@@ -2908,7 +2908,7 @@ void __cdecl SND_Update()
             char message[384];
             std::snprintf(
                 message, sizeof(message),
-                "[KisakCOD][SND UPDATE PERF] samples=120 avg_ms total=%.3f setup=%.3f channels=%.3f physics=%.3f driver=%.3f debug=%.3f\\n",
+                "[KisakCOD][SND UPDATE PERF] samples=120 avg_ms total=%.3f setup=%.3f channels=%.3f physics=%.3f driver=%.3f debug=%.3f\n",
                 updateTotalNs * averageMs,
                 updateSetupNs * averageMs,
                 updateChannelsNs * averageMs,
