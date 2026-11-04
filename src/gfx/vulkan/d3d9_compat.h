@@ -664,6 +664,10 @@ private:
     bool m_cachedViewportValid = false;
     bool m_cachedScissorValid = false;
     bool m_cachedBlendConstantsValid = false;
+    bool m_cachedPipelineFastPathValid = false;
+    uint64_t m_cachedPipelineStateKey = 0;
+    VkPipeline m_cachedPipelineState = VK_NULL_HANDLE;
+    const GfxImage *m_cachedPipelineSunShadowImage = nullptr;
     bool m_pipelineDirty=true;
     std::unordered_map<uint64_t, VkPipeline> m_pipelines;
     void LogGpuDrawCommand(const char *kind, uint32_t primitiveType,
