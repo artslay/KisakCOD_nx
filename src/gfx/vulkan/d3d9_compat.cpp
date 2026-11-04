@@ -8809,9 +8809,10 @@ bool IDirect3DDevice9::BindSamplerSet(
     cacheEntry.images = images;
     frameCache[descriptorHash].emplace_back(std::move(cacheEntry));
     g_switchFrameStage = "frame/render/vulkan/sampler/descriptor_bind";
-    vkCmdBindDescriptorSets(
-        m_backend->CommandBuffer(), bindPoint, m_backend->PipelineLayout(),
-        setIndex, 1, &set, 0, nullptr);
+    // Keep the command-state cache coherent on both descriptor-cache misses
+    // and hits. A raw vkCmdBindDescriptorSets here left the cached set index
+    // unchanged, allowing a later cache hit to skip a required material bind.
+    BindDescriptorSetIfChanged(bindPoint, setIndex, set);
     g_switchFrameStage = "frame/render/vulkan/sampler/return";
     return true;
 }
