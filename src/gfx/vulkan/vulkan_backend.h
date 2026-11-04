@@ -286,7 +286,10 @@ public:
     bool IsInitialized() const { return m_initialized; }
     bool IsFrameActive() const { return m_frameActive; }
     uint32_t CurrentFrameSlot() const { return m_currentFrameSlot; }
-    static constexpr uint32_t FramesInFlight = 2;
+    // Keep GPU execution serial until every shared frontend/render resource is
+    // fenced by Vulkan frame ownership. The two-frame path exposed races in
+    // legacy D3D9 stream/mesh resources that were not all frame-slot allocated.
+    static constexpr uint32_t FramesInFlight = 1;
     bool GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_t *format) const override;
 
 private:
