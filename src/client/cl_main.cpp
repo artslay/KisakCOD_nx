@@ -1958,7 +1958,7 @@ void __cdecl CL_UpdateSound()
         char message[256];
         std::snprintf(
             message, sizeof(message),
-            "[KisakCOD][CL SOUND PERF] samples=120 avg_ms play_fx=%.3f looping=%.3f snd_update=%.3f\\n",
+            "[KisakCOD][CL SOUND PERF] samples=120 avg_ms play_fx=%.3f looping=%.3f snd_update=%.3f\n",
             playFxNsTotal * averageMs,
             loopingNsTotal * averageMs,
             sndUpdateNsTotal * averageMs);
