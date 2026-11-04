@@ -1756,6 +1756,10 @@ bool VulkanBackend::WaitForFrameSlot(uint32_t slotIndex)
     }
 
     std::lock_guard<std::mutex> fenceLock(m_frameFenceMutexes[slotIndex]);
+    // Shutdown/recreation may have completed while this thread waited to
+    // acquire the slot lock. Recheck before touching the fence handle.
+    if (!m_device || !m_initialized || m_deviceLost)
+        return true;
     const FrameSync &frame = m_frameSync[slotIndex];
     if (!frame.fence)
     {
