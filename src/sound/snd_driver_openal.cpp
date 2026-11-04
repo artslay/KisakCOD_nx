@@ -136,6 +136,9 @@ void SND_ReleaseChannelBuffer(int index)
 // SND_StartAlias2D/3DSample and SND_StartAliasStreamOnChannel call it before that point.
 void SND_ApplyReverbSend(int index, const snd_alias_t *alias);
 
+static const int AL_STREAM_BUFFER_COUNT = 4;
+static const int AL_STREAM_BUFFER_FRAMES = 8192;
+
 struct ALBiquadHistory
 {
     float z1;
@@ -156,6 +159,13 @@ struct AlStreamState
     ALBiquadHistory eqHistory[2][3][6];
     uint32_t eqRevision;
     bool eqWasEnabled;
+    // OpenAL buffer objects are kept for the lifetime of this stream and recycled after
+    // processing instead of being deleted and recreated for every decoded chunk.
+    ALuint buffers[AL_STREAM_BUFFER_COUNT];
+    ALuint freeBuffers[AL_STREAM_BUFFER_COUNT];
+    uint32_t bufferCount;
+    uint32_t freeBufferCount;
+    uint32_t queuedBufferCount;
     // Frames decoded/queued since the current loop pass began (reset to the post-seek frame
     // index on start, reset again each time SND_FillStreamBuffers loops back to frame 0).
     // Needed because AL_SEC_OFFSET on a queued streaming source only reports the offset
@@ -177,9 +187,6 @@ struct AlStreamState
 // includes it (e.g. r_cinematic.cpp, which has nothing to do with streaming) to also pull
 // in dr_wav.h/dr_mp3.h.
 static AlStreamState g_streamState[53];
-
-static const int AL_STREAM_BUFFER_COUNT = 4;
-static const int AL_STREAM_BUFFER_FRAMES = 8192;
 
 // Miles' MSS_File*Callback (snd_mss.cpp) bridges AIL's file I/O to FS_*; these do the same
 // for dr_wav/dr_mp3, since neither library has a concept of a game virtual filesystem.
@@ -289,8 +296,9 @@ static void SND_ReleaseStreamChannel(int index)
     {
         ALuint buf;
         alSourceUnqueueBuffers(alGlob.source[index], 1, &buf);
-        alDeleteBuffers(1, &buf);
     }
+    if (stream->bufferCount != 0)
+        alDeleteBuffers(static_cast<ALsizei>(stream->bufferCount), stream->buffers);
     alSourcei(alGlob.source[index], AL_BUFFER, 0);
 
     if (stream->isMp3)
@@ -760,6 +768,22 @@ static bool SND_FillStreamBuffers(int index)
 
     ALuint source = alGlob.source[index];
 
+    // Allocate the four OpenAL buffers once per stream. Processed buffers return to the
+    // free list and are refilled/requeued, avoiding per-chunk alDeleteBuffers/alGenBuffers.
+    if (stream->bufferCount < AL_STREAM_BUFFER_COUNT)
+    {
+        ALuint generated[AL_STREAM_BUFFER_COUNT] = {};
+        const ALsizei needed = static_cast<ALsizei>(AL_STREAM_BUFFER_COUNT - stream->bufferCount);
+        alGenBuffers(needed, generated);
+        for (ALsizei i = 0; i < needed; ++i)
+        {
+            if (generated[i] == 0)
+                continue;
+            stream->buffers[stream->bufferCount++] = generated[i];
+            stream->freeBuffers[stream->freeBufferCount++] = generated[i];
+        }
+    }
+
     const bool eqEnabled = snd_enableEq && snd_enableEq->current.enabled;
     if (stream->eqRevision != g_openALEqRevision || stream->eqWasEnabled != eqEnabled)
     {
@@ -772,19 +796,23 @@ static bool SND_FillStreamBuffers(int index)
     alGetSourcei(source, AL_BUFFERS_PROCESSED, &processed);
     while (processed-- > 0)
     {
-        ALuint buf;
+        ALuint buf = 0;
         alSourceUnqueueBuffers(source, 1, &buf);
-        alDeleteBuffers(1, &buf);
+        if (buf != 0 && stream->freeBufferCount < stream->bufferCount)
+            stream->freeBuffers[stream->freeBufferCount++] = buf;
+        if (stream->queuedBufferCount > 0)
+            --stream->queuedBufferCount;
     }
 
-    ALint queued = 0;
-    alGetSourcei(source, AL_BUFFERS_QUEUED, &queued);
+    // The queue count is exact: this code owns every queue and unqueue operation.
+    // Avoid a second synchronized OpenAL query on every active stream channel.
+    ALint queued = static_cast<ALint>(stream->queuedBufferCount);
 
     // Reused across calls rather than stack-allocated (32KB) each time; safe because stream
     // channels are always filled one at a time, never interleaved, on a single thread.
     static int16_t chunk[AL_STREAM_BUFFER_FRAMES * 6]; // up to 5.1 speaker-map output
 
-    for (int i = queued; i < AL_STREAM_BUFFER_COUNT; ++i)
+    for (int i = queued; i < AL_STREAM_BUFFER_COUNT && stream->freeBufferCount > 0; ++i)
     {
         uint64_t framesRead = stream->isMp3
             ? drmp3_read_pcm_frames_s16(&stream->mp3, AL_STREAM_BUFFER_FRAMES, chunk)
@@ -844,8 +872,7 @@ static bool SND_FillStreamBuffers(int index)
             return queued > 0;
         }
 
-        ALuint buffer;
-        alGenBuffers(1, &buffer);
+        ALuint buffer = stream->freeBuffers[--stream->freeBufferCount];
         alBufferData(
             buffer,
             format,
@@ -854,6 +881,7 @@ static bool SND_FillStreamBuffers(int index)
             stream->sampleRate);
         alSourceQueueBuffers(source, 1, &buffer);
         stream->framesQueued += framesRead;
+        ++stream->queuedBufferCount;
         ++queued;
     }
 
