@@ -8783,6 +8783,51 @@ bool IDirect3DDevice9::EnsurePipeline()
         return false;
     }
 
+    bool allowPipelineFastPath = false;
+    const GfxImage *pipelineSunShadowImage =
+        gfxRenderTargets[R_RENDERTARGET_SHADOWMAP_SUN].image;
+#ifdef __SWITCH__
+    const uint64_t fastPathS0Target = SwitchPsS0UvTestTargetSerial();
+    const uint64_t fastPathColorTarget = SwitchPsColorDebugTargetSerial();
+    const bool fastPathFloorAudit = Switch_IsFloorAuditContextActive();
+    allowPipelineFastPath =
+        !m_drawPrimitiveUPActive &&
+        !g_switchFxCodeMeshDrawActive &&
+        fastPathS0Target == 0u &&
+        fastPathColorTarget == 0u &&
+        !fastPathFloorAudit;
+
+    // All ordinary D3D state that contributes to the pipeline key marks
+    // m_pipelineDirty when changed. Texture bindings are included because the
+    // HSM shadow-sampler shader variant depends on the bound sun-map image.
+    // Diagnostic overrides and temporary FX/UP vertex paths deliberately bypass
+    // this shortcut because their state can change outside the D3D setters.
+    if (allowPipelineFastPath && !m_pipelineDirty &&
+        m_cachedPipelineFastPathValid &&
+        m_cachedPipelineState != VK_NULL_HANDLE &&
+        m_cachedPipelineSunShadowImage == pipelineSunShadowImage)
+    {
+        g_switchFrameStage = "frame/render/vulkan/pipeline/state_cache_hit";
+        RecordSwitchVkPipelineTrace(
+            2u, this, &m_pipelines, m_pipelines.size(),
+            m_cachedPipelineStateKey, m_backend->Device(), m_decl,
+            m_vertexShader, m_pixelShader, m_cachedPipelineState);
+        g_switchLastBoundPipelineKey.store(
+            m_cachedPipelineStateKey, std::memory_order_relaxed);
+        g_switchLastBoundVertexShaderSerial.store(
+            m_vertexShader->serial, std::memory_order_relaxed);
+        g_switchLastBoundPixelShaderSerial.store(
+            m_pixelShader->serial, std::memory_order_relaxed);
+        BindPipelineIfChanged(m_cachedPipelineState);
+        RecordSwitchVkPipelineTrace(
+            4u, this, &m_pipelines, m_pipelines.size(),
+            m_cachedPipelineStateKey, m_backend->Device(), m_decl,
+            m_vertexShader, m_pixelShader, m_cachedPipelineState);
+        return true;
+    }
+#endif
+    m_cachedPipelineFastPathValid = false;
+
     const uint32_t sunShadowCompareMask =
         SwitchGetSunShadowCompareSamplerMask(m_pixelShader, m_textures);
 
@@ -8938,6 +8983,10 @@ bool IDirect3DDevice9::EnsurePipeline()
         g_switchLastBoundVertexShaderSerial.store(m_vertexShader->serial, std::memory_order_relaxed);
         g_switchLastBoundPixelShaderSerial.store(m_pixelShader->serial, std::memory_order_relaxed);
         m_pipelineDirty = false;
+        m_cachedPipelineStateKey = key;
+        m_cachedPipelineState = existing->second;
+        m_cachedPipelineSunShadowImage = pipelineSunShadowImage;
+        m_cachedPipelineFastPathValid = allowPipelineFastPath;
         g_switchFrameStage = "frame/render/vulkan/pipeline/cache_hit_bind";
         BindPipelineIfChanged(existing->second);
         RecordSwitchVkPipelineTrace(
@@ -10650,6 +10699,10 @@ bool IDirect3DDevice9::EnsurePipeline()
     g_switchLastBoundVertexShaderSerial.store(m_vertexShader->serial, std::memory_order_relaxed);
     g_switchLastBoundPixelShaderSerial.store(m_pixelShader->serial, std::memory_order_relaxed);
     m_pipelineDirty = false;
+    m_cachedPipelineStateKey = key;
+    m_cachedPipelineState = pipeline;
+    m_cachedPipelineSunShadowImage = pipelineSunShadowImage;
+    m_cachedPipelineFastPathValid = allowPipelineFastPath;
     g_switchFrameStage = "frame/render/vulkan/pipeline/new_pipeline_bind";
     RecordSwitchVkPipelineTrace(
         10u, this, &m_pipelines, m_pipelines.size(), key,
