@@ -4281,9 +4281,11 @@ bool VulkanBackend::EnsureRendering(
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             DepthAspect(depthFormat));
     }
-    if (resolveImage && resolveView &&
-        resolveOldLayout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+    if (resolveImage && resolveView)
     {
+        // The resolve target is shared by both in-flight frames. Even when it
+        // remains in COLOR_ATTACHMENT_OPTIMAL, the next frame must wait for
+        // the previous frame's color-attachment resolve writes before reusing it.
         TransitionImage(
             resolveImage,
             resolveOldLayout,
