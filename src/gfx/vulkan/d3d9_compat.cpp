@@ -7794,6 +7794,26 @@ bool IDirect3DDevice9::BindUniformSet(
         m_descriptorCacheFrameSerial[frameSlot] = frameSerial;
     }
 
+    const size_t cacheIndex = setIndex == 1u ? 0u : 1u;
+    KisakVkShader *uniformShader =
+        setIndex == 1u ? m_vertexShader :
+        (setIndex == 3u ? m_pixelShader : nullptr);
+    const uint64_t shaderSerial = uniformShader ? uniformShader->serial : 0u;
+    const uint64_t uniformRevision =
+        setIndex == 1u ? m_vsUniformRevision : m_psUniformRevision;
+    UniformBindCacheEntry &uniformBindCache =
+        m_uniformBindCache[frameSlot][cacheIndex];
+    if (uniformBindCache.frameSerial == frameSerial &&
+        uniformBindCache.revision == uniformRevision &&
+        uniformBindCache.shaderSerial == shaderSerial &&
+        uniformBindCache.parse == parse &&
+        uniformBindCache.set != VK_NULL_HANDLE)
+    {
+        g_switchFrameStage = "frame/render/vulkan/uniform/revision_cache_hit";
+        BindDescriptorSetIfChanged(bindPoint, setIndex, uniformBindCache.set);
+        return true;
+    }
+
     VulkanUniformLayout layout{};
     auto traceUniformBindStage =
         [&](const char *stage, const void *buffer, size_t byteCount, int result)
@@ -7806,9 +7826,6 @@ bool IDirect3DDevice9::BindUniformSet(
         };
     traceUniformBindStage("entry", nullptr, 0, 1);
     g_switchFrameStage = "frame/render/vulkan/uniform/layout";
-    KisakVkShader *uniformShader =
-        setIndex == 1u ? m_vertexShader :
-        (setIndex == 3u ? m_pixelShader : nullptr);
     bool uniformLayoutReady = false;
     if (uniformShader && uniformShader->parseData == parse)
     {
@@ -8019,7 +8036,6 @@ bool IDirect3DDevice9::BindUniformSet(
     }
 #endif
 
-    const size_t cacheIndex = setIndex == 1u ? 0u : 1u;
     g_switchFrameStage = "frame/render/vulkan/uniform/allocate_ring";
     VkDescriptorBufferInfo bufferInfo{};
     if (!m_backend->AllocateUniform(bytes, size, &bufferInfo))
@@ -8099,6 +8115,11 @@ bool IDirect3DDevice9::BindUniformSet(
     write.pBufferInfo = &bufferInfo;
     vkUpdateDescriptorSets(m_backend->Device(), 1, &write, 0, nullptr);
     traceUniformBindStage("descriptor_updated", bytes, size, 1);
+    uniformBindCache.frameSerial = frameSerial;
+    uniformBindCache.revision = uniformRevision;
+    uniformBindCache.shaderSerial = shaderSerial;
+    uniformBindCache.parse = parse;
+    uniformBindCache.set = set;
     g_switchFrameStage = "frame/render/vulkan/uniform/descriptor_bind";
     BindDescriptorSetIfChanged(bindPoint, setIndex, set);
     traceUniformBindStage("descriptor_bound", bytes, size, 1);
