@@ -286,10 +286,12 @@ public:
     bool IsInitialized() const { return m_initialized; }
     bool IsFrameActive() const { return m_frameActive; }
     uint32_t CurrentFrameSlot() const { return m_currentFrameSlot; }
-    // Keep GPU execution serial until every shared frontend/render resource is
-    // fenced by Vulkan frame ownership. The two-frame path exposed races in
-    // legacy D3D9 stream/mesh resources that were not all frame-slot allocated.
-    static constexpr uint32_t FramesInFlight = 1;
+    uint32_t NextFrameSlot() const { return m_nextFrameSlot; }
+    // Wait for a submitted frame slot before reusing CPU-side SMP data that
+    // was consumed by that slot. The caller pairs the legacy frontend pool
+    // with the slot that last used it.
+    bool WaitForFrameSlot(uint32_t slotIndex);
+    static constexpr uint32_t FramesInFlight = 2;
     bool GetBackBufferDesc(uint32_t *width, uint32_t *height, uint32_t *format) const override;
 
 private:
