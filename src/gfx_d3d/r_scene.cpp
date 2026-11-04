@@ -135,6 +135,9 @@ void Switch_ReportRenderCpuPerf(
     const uint64_t staticDpvsCpuNs =
         total.staticDpvsNs[0] + total.staticDpvsNs[1] +
         total.staticDpvsNs[2] + total.staticDpvsNs[3];
+    const uint64_t staticDpvsCalls =
+        total.staticDpvsCalls[0] + total.staticDpvsCalls[1] +
+        total.staticDpvsCalls[2] + total.staticDpvsCalls[3];
     char message[1600];
     std::snprintf(
         message, sizeof(message),
@@ -158,6 +161,7 @@ void Switch_ReportRenderCpuPerf(
         total.lightSurfNs * averageMs,
         total.addSceneWaitNs * averageMs,
         otherNs * averageMs,
+        static_cast<double>(staticDpvsCalls) / s_switchRenderCpuPerfSamples,
         static_cast<double>(total.staticDpvsCalls[0]) / s_switchRenderCpuPerfSamples,
         static_cast<double>(total.staticDpvsCalls[1]) / s_switchRenderCpuPerfSamples,
         static_cast<double>(total.staticDpvsCalls[2]) / s_switchRenderCpuPerfSamples,
