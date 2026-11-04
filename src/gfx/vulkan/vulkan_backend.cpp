@@ -1974,13 +1974,15 @@ bool VulkanBackend::WaitForLastSubmittedFrame()
     if (!m_initialized || !m_device || m_deviceLost)
         return false;
 
-    // This is called by the main thread only after the render thread reports
-    // ready. At that point EndFrame has submitted the frame and dropped
-    // m_frameActive; waiting here protects legacy SMP buffers before the
-    // frontend rotates back to the same CPU-side pool.
-    if (m_frameActive || m_currentFrameSlot >= FramesInFlight)
+    // A non-present backend pass can leave the Vulkan frame recording. In
+    // that case submit and wait for the recorded portion, then resume the same
+    // acquired frame; otherwise wait for the final frame fence below.
+    if (m_frameActive)
+        return SynchronizeActiveFrame();
+
+    if (m_currentFrameSlot >= FramesInFlight)
     {
-        SetError("SMP buffer reuse requested before the Vulkan frame was submitted");
+        SetError("SMP buffer reuse requested with an invalid Vulkan frame slot");
         return false;
     }
 
