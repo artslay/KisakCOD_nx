@@ -230,7 +230,7 @@ void Switch_PreWaitNextFrontEndResources(uint32_t frameSlot, bool drainAll)
 
 void Switch_WaitForNextFrontEndResources()
 {
-    Switch_WaitForNextFrontEndResources();
+    Switch_WaitForSmpPoolGpuUse(static_cast<uint32_t>(gfxBuf.dynamicBufferFrame));
     Switch_WaitForFrontEndDataGpuUse(s_smpFrame);
     Switch_WaitForViewInfoGpuUse(g_frameIndex);
 }
@@ -785,11 +785,10 @@ DebugGlobals *R_ToggleSmpFrame()
     gfxBuf.preTessBufferFrame = (gfxBuf.preTessBufferFrame + 1) % 2;
 #ifdef __SWITCH__
     iassert(gfxBuf.dynamicBufferFrame == gfxBuf.preTessBufferFrame);
-    // In the normal asynchronous path this waits after the next frame has
-    // been handed to a different Vulkan slot, allowing CPU/GPU overlap. Same-
-    // slot/partial-frame and swapchain-recreate cases are pre-waited while the
-    // renderer is idle. Synchronous/abort paths wait here as well.
-    Switch_WaitForSmpPoolGpuUse(static_cast<uint32_t>(gfxBuf.dynamicBufferFrame));
+    // Wait before reusing all three legacy frontend rings: skinning/pre-tess,
+    // backend-data meshes, and view-info meshes. In the asynchronous path this
+    // runs after the renderer was woken on the other Vulkan slot.
+    Switch_WaitForNextFrontEndResources();
 #endif
     frontEndDataOut = &s_backEndData[s_smpFrame];
     iassert( rg.frontEndFrameCount > 0 );
