@@ -3720,13 +3720,23 @@ static bool Switch_LogIsScriptDiagnostic(const char *msg)
 
 static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
 {
-    // Aggregated CPU renderer timings are emitted once per 120 scene builds.
-    // Keep this narrow prefix instead of opening general profiling traces.
-    return msg &&
-        std::strncmp(
-            msg,
-            "[KisakCOD][CPU SCENE PERF]",
-            sizeof("[KisakCOD][CPU SCENE PERF]") - 1u) == 0;
+    // Aggregated scene and sound timings are emitted once per 120 samples.
+    // Keep these explicit prefixes instead of opening general profiling traces.
+    if (!msg)
+        return false;
+
+    static constexpr const char *const kPerformancePrefixes[] =
+    {
+        "[KisakCOD][CPU SCENE PERF]",
+        "[KisakCOD][CL SOUND PERF]",
+        "[KisakCOD][SND UPDATE PERF]"
+    };
+    for (const char *prefix : kPerformancePrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+    return false;
 }
 
 static bool Switch_LogIsImportant(const char *msg)
