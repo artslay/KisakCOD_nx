@@ -411,28 +411,29 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
                 g_switchFrameStage = "frame/scr/issue_commands/rb_end_frame";
 #endif
                 RB_EndFrame(frontEndDataOut->drawType);
+            }
+
 #ifdef __SWITCH__
+            {
+                VulkanBackend *backend = GetVulkanBackend();
+                if (backend && backend->IsInitialized())
                 {
-                    VulkanBackend *backend = GetVulkanBackend();
-                    if (backend && backend->IsInitialized())
+                    // Even when this frontend frame was skipped, a prior frame
+                    // may have left commands recording without Present. Drain
+                    // that segment before R_ToggleSmpFrame can recycle its data.
+                    const bool partialFrameActive = backend->IsFrameActive();
+                    if (partialFrameActive && !backend->SynchronizeActiveFrame())
+                        Com_Error(ERR_FATAL, "Vulkan failed to finish an open frame before reusing a Switch SMP pool");
+
+                    if (v1 && (partialFrameActive ||
+                        (frontEndDataOut->drawType & 2u) != 0))
                     {
-                        if (backend->IsFrameActive())
-                        {
-                            if (!backend->SynchronizeActiveFrame())
-                                Com_Error(ERR_FATAL, "Vulkan failed to finish an open frame before reusing a Switch SMP pool");
-                            Switch_AssociateSmpPoolWithGpuSlot(
-                                gfxBuf.dynamicBufferFrame, backend->CurrentFrameSlot());
-                        }
-                        else if ((frontEndDataOut->drawType & 2u) != 0)
-                        {
-                            Switch_AssociateSmpPoolWithGpuSlot(
-                                gfxBuf.dynamicBufferFrame, backend->CurrentFrameSlot());
-                        }
+                        Switch_AssociateSmpPoolWithGpuSlot(
+                            gfxBuf.dynamicBufferFrame, backend->CurrentFrameSlot());
                     }
                 }
-#endif
-
             }
+#endif
 
 #ifndef __SWITCH__
             R_UnlockSkinnedCache();
