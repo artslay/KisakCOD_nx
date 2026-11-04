@@ -290,13 +290,12 @@ static void SND_ReleaseStreamChannel(int index)
         return;
 
     alSourceStop(alGlob.source[index]);
-    ALint queued = static_cast<ALint>(stream->queuedBufferCount);
+    ALint queued = 0;
+    alGetSourcei(alGlob.source[index], AL_BUFFERS_QUEUED, &queued);
     while (queued-- > 0)
     {
         ALuint buf;
         alSourceUnqueueBuffers(alGlob.source[index], 1, &buf);
-        if (stream->queuedBufferCount > 0)
-            --stream->queuedBufferCount;
     }
     if (stream->bufferCount != 0)
         alDeleteBuffers(static_cast<ALsizei>(stream->bufferCount), stream->buffers);
