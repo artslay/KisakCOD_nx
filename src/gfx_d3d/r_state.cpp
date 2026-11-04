@@ -880,7 +880,14 @@ void __cdecl R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0)
             R_HW_SetCullFace(device, stateBits0);
         if (changedBits < 0)
             R_HW_SetPolygonMode(device, stateBits0);
+#ifdef __SWITCH__
+        // refStateBits is the renderer's reference baseline, not the
+        // authoritative ALPHABLENDENABLE value held by the Vulkan D3D9 layer.
+        // Re-apply the requested enable state on each blend-state transition.
+        blendOpRgbWasEnabled = false;
+#else
         blendOpRgbWasEnabled = (state->refStateBits[0] & 0x700) != 0;
+#endif
         if ((stateBits0 & 0x700) != 0)
         {
             if ((stateBits0 & 0x7000000) == 0)
@@ -903,8 +910,14 @@ void __cdecl R_ChangeState_0(GfxCmdBufState *state, uint32_t stateBits0)
             stateBits0 = stateBits0 & 0xF800F800 | state->activeStateBits[0] & 0x7FF07FF;
             changedBits &= 0xF800F800;
             iassert( (stateBits0 ^ state->activeStateBits[0]) == changedBits );
+#ifdef __SWITCH__
+            // Explicitly disable blending for this pass. The compatibility
+            // device tracks this separately from the legacy reference bits.
+            R_HW_DisableBlend(device);
+#else
             if (blendOpRgbWasEnabled)
                 R_HW_DisableBlend(device);
+#endif
         }
         if (gfxMetrics.hasTransparencyMsaa && r_aaAlpha->current.integer && (changedBits & 0xF00) != 0)
             R_SetAlphaAntiAliasingState(device, stateBits0);
