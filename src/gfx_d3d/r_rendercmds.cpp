@@ -523,6 +523,11 @@ void __cdecl R_ToggleSmpFrameCmd(char type)
             Switch_AssociateSmpPoolWithGpuSlot(gfxBuf.dynamicBufferFrame, frameSlot);
         }
     }
+    // The pool that R_ToggleSmpFrame is about to select may still be read by
+    // the GPU two submissions behind. Wait before waking the renderer so its
+    // BeginFrame cannot reset/reuse the same VkFence concurrently with us.
+    Switch_WaitForSmpPoolGpuUse(
+        static_cast<uint32_t>((gfxBuf.dynamicBufferFrame + 1) % 2));
 #endif
     Sys_WakeRenderer((void *)frontEndDataOut);
     iassert( !r_glob.haveThreadOwnership );
