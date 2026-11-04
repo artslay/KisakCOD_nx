@@ -65,6 +65,8 @@ void __cdecl CL_UpdateSound();
 extern void Switch_LogWrite(const char *msg);
 extern "C" bool Switch_IsPostCinematicRenderTraceActive(void);
 extern "C" void Switch_LogPostCinematicRenderTrace(const char *phase, const char *detail);
+extern "C" void Switch_ResetStaticDpvsPerf(void);
+extern "C" void Switch_ReadStaticDpvsPerf(uint64_t calls[4], uint64_t elapsedNs[4]);
 
 struct SwitchRenderCpuPerfFrame
 {
@@ -73,6 +75,7 @@ struct SwitchRenderCpuPerfFrame
     uint64_t staticModelNs, dynPiecesNs, dynWaitNs, dynDrawNs;
     uint64_t sceneWaitNs, sceneBuildNs, staticSortNs, lightSurfNs;
     uint64_t addSceneWaitNs, tailNs;
+    uint64_t staticDpvsCalls[4], staticDpvsNs[4];
 };
 
 namespace
@@ -112,6 +115,11 @@ void Switch_ReportRenderCpuPerf(
     total.lightSurfNs += sample.lightSurfNs;
     total.addSceneWaitNs += sample.addSceneWaitNs;
     total.tailNs += sample.tailNs;
+    for (uint32_t worker = 0; worker < 4; ++worker)
+    {
+        total.staticDpvsCalls[worker] += sample.staticDpvsCalls[worker];
+        total.staticDpvsNs[worker] += sample.staticDpvsNs[worker];
+    }
 
     if (++s_switchRenderCpuPerfSamples < 120)
         return;
@@ -125,10 +133,13 @@ void Switch_ReportRenderCpuPerf(
         total.staticSortNs + total.lightSurfNs + total.addSceneWaitNs + total.tailNs;
     const uint64_t otherNs = total.totalNs > measuredNs ? total.totalNs - measuredNs : 0;
 
-    char message[1200];
+    const uint64_t staticDpvsCpuNs =
+        total.staticDpvsNs[0] + total.staticDpvsNs[1] +
+        total.staticDpvsNs[2] + total.staticDpvsNs[3];
+    char message[1600];
     std::snprintf(
         message, sizeof(message),
-        "[KisakCOD][CPU SCENE PERF] samples=%u avg_ms total=%.3f setup_world=%.3f filter_entities=%.3f dpvs_queue=%.3f begin_lighting=%.3f wait_frontend=%.3f wait_static_dpvs=%.3f bsp=%.3f static_models=%.3f dyn_pieces=%.3f dyn_wait=%.3f dyn_draw=%.3f scene_wait=%.3f scene_build=%.3f static_sort=%.3f light_surfs=%.3f wait_add_scene=%.3f other=%.3f counts{world_surfs=%u static_models=%u scene_dobj=%u scene_models=%u dyn_models=%u dyn_brushes=%u draw_surfs=%u smodel_draws=%u/%u/%u}\n",
+        "[KisakCOD][CPU SCENE PERF] samples=%u avg_ms total=%.3f setup_world=%.3f filter_entities=%.3f dpvs_queue=%.3f begin_lighting=%.3f wait_frontend=%.3f wait_static_dpvs=%.3f bsp=%.3f static_models=%.3f dyn_pieces=%.3f dyn_wait=%.3f dyn_draw=%.3f scene_wait=%.3f scene_build=%.3f static_sort=%.3f light_surfs=%.3f wait_add_scene=%.3f other=%.3f static_dpvs{calls=%.1f main=%.1f w0=%.1f w1=%.1f other=%.1f cpu_ms=%.3f main=%.3f w0=%.3f w1=%.3f other=%.3f} counts{world_surfs=%u static_models=%u scene_dobj=%u scene_models=%u dyn_models=%u dyn_brushes=%u draw_surfs=%u smodel_draws=%u/%u/%u}\n",
         s_switchRenderCpuPerfSamples,
         total.totalNs * averageMs,
         total.setupWorldNs * averageMs,
@@ -148,6 +159,15 @@ void Switch_ReportRenderCpuPerf(
         total.lightSurfNs * averageMs,
         total.addSceneWaitNs * averageMs,
         otherNs * averageMs,
+        static_cast<double>(total.staticDpvsCalls[0]) / s_switchRenderCpuPerfSamples,
+        static_cast<double>(total.staticDpvsCalls[1]) / s_switchRenderCpuPerfSamples,
+        static_cast<double>(total.staticDpvsCalls[2]) / s_switchRenderCpuPerfSamples,
+        static_cast<double>(total.staticDpvsCalls[3]) / s_switchRenderCpuPerfSamples,
+        staticDpvsCpuNs * averageMs,
+        total.staticDpvsNs[0] * averageMs,
+        total.staticDpvsNs[1] * averageMs,
+        total.staticDpvsNs[2] * averageMs,
+        total.staticDpvsNs[3] * averageMs,
         worldSurfaces, staticModels, sceneDObjs, sceneModels,
         dynModels, dynBrushes, drawSurfs,
         smodelLitDrawSurfs, smodelDecalDrawSurfs, smodelEmissiveDrawSurfs);
@@ -1862,6 +1882,7 @@ void __cdecl R_GenerateSortedDrawSurfs(
     const uint64_t switchPerfViewStart = Kisak_RawTimerTicks();
     uint64_t switchPerfStageStart = switchPerfViewStart;
     SwitchRenderCpuPerfFrame switchPerfFrame = {};
+    Switch_ResetStaticDpvsPerf();
 #endif
     iassert(frontEndDataOut->viewInfoCount == rg.viewInfoCount);
     viewInfoIndex = rg.viewInfoCount++;
@@ -2243,6 +2264,9 @@ void __cdecl R_GenerateSortedDrawSurfs(
 #ifdef __SWITCH__
     switchPerfFrame.tailNs = Kisak_RawTimerTicks() - switchPerfStageStart;
     switchPerfFrame.totalNs = Kisak_RawTimerTicks() - switchPerfViewStart;
+    Switch_ReadStaticDpvsPerf(
+        switchPerfFrame.staticDpvsCalls,
+        switchPerfFrame.staticDpvsNs);
     Switch_ReportRenderCpuPerf(
         switchPerfFrame,
         rgp.world ? rgp.world->dpvs.staticSurfaceCount : 0u,
