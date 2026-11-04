@@ -383,6 +383,9 @@ private:
     VkCommandPool m_immediateCommandPool = VK_NULL_HANDLE;
     VkCommandBuffer m_commandBuffer = VK_NULL_HANDLE;
     std::array<FrameSync, FramesInFlight> m_frameSync{};
+    // Fence host access is externally synchronized by Vulkan. A per-slot lock
+    // allows the frontend to wait for an old slot while the backend uses the other.
+    std::array<std::mutex, FramesInFlight> m_frameFenceMutexes{};
     uint32_t m_currentFrameSlot = 0;
     uint32_t m_nextFrameSlot = 0;
     std::mutex m_immediateMutex;
