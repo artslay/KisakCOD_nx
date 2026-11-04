@@ -481,15 +481,80 @@ float const* Scr_AllocVector(float const* v)
 	return result;
 }
 
+static uint32_t Scr_GetVectorMemoryTreeIndex(const void *vectorHeader, const char *operation)
+{
+    char *const canonicalBuffer = MT_GetBuffer();
+    if (scrMemTreePub.mt_buffer != canonicalBuffer)
+    {
+#ifdef KISAK_SWITCH
+        char line[256];
+        std::snprintf(
+            line,
+            sizeof(line),
+            "[KisakCOD][SCRIPT MEMTREE BASE MISMATCH] operation=%s cached=%p canonical=%p caller=0x%llx\n",
+            operation ? operation : "(unknown)",
+            static_cast<void *>(scrMemTreePub.mt_buffer),
+            static_cast<void *>(canonicalBuffer),
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+        Switch_LogWrite(line);
+#endif
+        // MT_Init always binds this alias to scrMemTreeGlob.nodes. Restore that
+        // invariant before any remaining legacy users access the cached field.
+        scrMemTreePub.mt_buffer = canonicalBuffer;
+    }
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(canonicalBuffer);
+    const uintptr_t address = reinterpret_cast<uintptr_t>(vectorHeader);
+    if (address < base)
+    {
+#ifdef KISAK_SWITCH
+        char line[256];
+        std::snprintf(line, sizeof(line),
+            "[KisakCOD][SCRIPT VECTOR INDEX INVALID] operation=%s vector=%p base=%p reason=below-base\n",
+            operation ? operation : "(unknown)", vectorHeader, canonicalBuffer);
+        Switch_LogWrite(line);
+#endif
+        Com_Error(ERR_DROP, "invalid script vector allocation");
+        return UINT32_MAX;
+    }
+
+    const uintptr_t offset = address - base;
+    if (offset >= MT_SIZE || (offset % MT_NODE_SIZE) != 0)
+    {
+#ifdef KISAK_SWITCH
+        char line[256];
+        std::snprintf(line, sizeof(line),
+            "[KisakCOD][SCRIPT VECTOR INDEX INVALID] operation=%s vector=%p base=%p offset=0x%llx\n",
+            operation ? operation : "(unknown)", vectorHeader, canonicalBuffer,
+            static_cast<unsigned long long>(offset));
+        Switch_LogWrite(line);
+#endif
+        Com_Error(ERR_DROP, "invalid script vector allocation");
+        return UINT32_MAX;
+    }
+
+    return static_cast<uint32_t>(offset / MT_NODE_SIZE);
+}
+
 void  AddRefToVector(float const* vectorValue)
 {
 	if (!*((_BYTE*)vectorValue - 1))
 	{
+        uint32_t nodeIndex = UINT32_MAX;
+        if (scrStringDebugGlob)
+        {
+            nodeIndex = Scr_GetVectorMemoryTreeIndex(
+                reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(vectorValue) - offsetof(RefVector, vec)),
+                "AddRefToVector");
+            if (nodeIndex == UINT32_MAX)
+                return;
+        }
+
 		InterlockedIncrement(&scrVarPub.totalVectorRefCount);
 		if (scrStringDebugGlob)
 		{
-			iassert(scrStringDebugGlob->refCount[((char*)vectorValue - 4 - scrMemTreePub.mt_buffer) / MT_NODE_SIZE] >= 0);
-			InterlockedIncrement(&scrStringDebugGlob->refCount[((char*)(vectorValue - 1) - scrMemTreePub.mt_buffer) / MT_NODE_SIZE]);
+			iassert(scrStringDebugGlob->refCount[nodeIndex] >= 0);
+			InterlockedIncrement(&scrStringDebugGlob->refCount[nodeIndex]);
 		}
 		((unsigned short*)vectorValue)[-2]++;
 		iassert(((unsigned short*)vectorValue)[-2]);
@@ -500,11 +565,21 @@ void  RemoveRefToVector(float const* vectorValue)
 {
 	if (!*((_BYTE*)vectorValue - 1))
 	{
+        uint32_t nodeIndex = UINT32_MAX;
+        if (scrStringDebugGlob)
+        {
+            nodeIndex = Scr_GetVectorMemoryTreeIndex(
+                reinterpret_cast<const void *>(reinterpret_cast<uintptr_t>(vectorValue) - offsetof(RefVector, vec)),
+                "RemoveRefToVector");
+            if (nodeIndex == UINT32_MAX)
+                return;
+        }
+
 		InterlockedDecrement(&scrVarPub.totalVectorRefCount);
 		if (scrStringDebugGlob)
 		{
-			iassert(scrStringDebugGlob->refCount[((char*)vectorValue - 4 - scrMemTreePub.mt_buffer) / MT_NODE_SIZE] >= 0);
-			InterlockedDecrement(&scrStringDebugGlob->refCount[((char*)(vectorValue - 1) - scrMemTreePub.mt_buffer) / MT_NODE_SIZE]);
+			iassert(scrStringDebugGlob->refCount[nodeIndex] >= 0);
+			InterlockedDecrement(&scrStringDebugGlob->refCount[nodeIndex]);
 		}
 		if (*((_WORD*)vectorValue - 2))
 			--*((_WORD*)vectorValue - 2);
@@ -3598,9 +3673,17 @@ float* Scr_AllocVector(void)
 	result = &vec->vec[0];
 	vec->head = 0;
 
+    uint32_t nodeIndex = UINT32_MAX;
+    if (scrStringDebugGlob)
+    {
+        nodeIndex = Scr_GetVectorMemoryTreeIndex(vec, "Scr_AllocVector");
+        if (nodeIndex == UINT32_MAX)
+            return result;
+    }
+
 	InterlockedIncrement(&scrVarPub.totalVectorRefCount);
 	if (scrStringDebugGlob)
-		InterlockedIncrement(&scrStringDebugGlob->refCount[((char*)(result - 1) - scrMemTreePub.mt_buffer) / MT_NODE_SIZE]);
+		InterlockedIncrement(&scrStringDebugGlob->refCount[nodeIndex]);
 
 	return result;
 }

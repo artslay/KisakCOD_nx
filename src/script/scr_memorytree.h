@@ -119,3 +119,11 @@ void MT_Error(char const* funcName, int numBytes);
 int MT_GetSize(int numBytes);
 
 extern scrMemTreeGlob_t scrMemTreeGlob;
+
+// Canonical base address of the script memory-tree node array. The legacy
+// scrMemTreePub.mt_buffer field is only a cached alias and must not be used
+// for pointer-to-node calculations.
+inline char *MT_GetBuffer()
+{
+    return reinterpret_cast<char *>(&scrMemTreeGlob.nodes[0]);
+}

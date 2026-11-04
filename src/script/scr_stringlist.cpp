@@ -177,7 +177,7 @@ static void Switch_ReportInvalidStringRef(
         handle,
         refString,
         static_cast<unsigned long long>(caller),
-        static_cast<const void *>(scrMemTreePub.mt_buffer));
+        static_cast<const void *>(MT_GetBuffer()));
     static uint32_t reportCount = 0;
     if (reportCount++ < 4u)
         Switch_LogWrite(line);
@@ -524,14 +524,14 @@ void SL_InitCheckLeaks()
 
 static uint32_t SL_ConvertFromRefString(RefString *refString)
 {
-	return ((char *)refString - scrMemTreePub.mt_buffer) / MT_NODE_SIZE;
+	return ((char *)refString - MT_GetBuffer()) / MT_NODE_SIZE;
 }
 
 void SL_AddUserInternal(RefString* refStr, uint32_t user)
 {
 #ifdef KISAK_SWITCH
-    if (scrMemTreePub.mt_buffer &&
-        reinterpret_cast<const char *>(refStr) == scrMemTreePub.mt_buffer)
+    if (MT_GetBuffer() &&
+        reinterpret_cast<const char *>(refStr) == MT_GetBuffer())
     {
         Switch_ReportInvalidStringRef(
             "SL_AddUserInternal",
@@ -568,7 +568,7 @@ void SL_AddRefToString(uint32_t stringValue)
         Switch_ReportInvalidStringRef(
             "SL_AddRefToString",
             stringValue,
-            scrMemTreePub.mt_buffer,
+            MT_GetBuffer(),
             reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     }
 #endif
@@ -1080,26 +1080,26 @@ RefString* GetRefString(uint32_t stringValue)
         Switch_ReportInvalidStringRef(
             "GetRefString(handle)",
             stringValue,
-            scrMemTreePub.mt_buffer,
+            MT_GetBuffer(),
             reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     }
 #endif
 	iassert(stringValue);
 	iassert(stringValue * MT_NODE_SIZE < MT_SIZE);
 
-	return (RefString*)(&scrMemTreePub.mt_buffer[MT_NODE_SIZE * stringValue]);
+	return (RefString*)(&MT_GetBuffer()[MT_NODE_SIZE * stringValue]);
 }
 RefString* GetRefString(const char* str)
 {
-	iassert(str >= scrMemTreePub.mt_buffer && str < scrMemTreePub.mt_buffer + MT_SIZE);
+	iassert(str >= MT_GetBuffer() && str < MT_GetBuffer() + MT_SIZE);
 #ifdef KISAK_SWITCH
     if (reinterpret_cast<uintptr_t>(str) ==
-        reinterpret_cast<uintptr_t>(scrMemTreePub.mt_buffer) + sizeof(uint32_t))
+        reinterpret_cast<uintptr_t>(MT_GetBuffer()) + sizeof(uint32_t))
     {
         Switch_ReportInvalidStringRef(
             "GetRefString(char*)",
             0,
-            scrMemTreePub.mt_buffer,
+            MT_GetBuffer(),
             reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     }
 #endif
@@ -1191,7 +1191,7 @@ void __cdecl SL_TransferRefToUser(uint32_t stringValue, uint32_t user)
         Switch_ReportInvalidStringRef(
             "SL_TransferRefToUser",
             stringValue,
-            scrMemTreePub.mt_buffer,
+            MT_GetBuffer(),
             reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     }
 #endif
@@ -1257,10 +1257,10 @@ uint32_t SL_GetString(const char* str, uint32_t user)
 int SL_GetRefStringLen(RefString* refString)
 {
 #ifdef KISAK_SWITCH
-	const uintptr_t base = reinterpret_cast<uintptr_t>(scrMemTreePub.mt_buffer);
+	const uintptr_t base = reinterpret_cast<uintptr_t>(MT_GetBuffer());
 	const uintptr_t ptr = reinterpret_cast<uintptr_t>(refString);
 	const uintptr_t end = base + MT_SIZE;
-	if (!scrMemTreePub.mt_buffer || ptr < base || ptr >= end ||
+	if (!MT_GetBuffer() || ptr < base || ptr >= end ||
 		((ptr - base) % MT_NODE_SIZE) != 0)
 	{
 		Com_Error(ERR_DROP, "invalid script string allocation while reading length");
@@ -1296,7 +1296,7 @@ int SL_GetRefStringLen(RefString* refString)
 	// A zero byteLen therefore represents a length divisible by 256, not an
 	// empty string; the loop below resolves the full length by scanning for NUL.
 	int len = (uint8_t)(refString->byteLen - 1);
-	const uintptr_t base = (uintptr_t)scrMemTreePub.mt_buffer;
+	const uintptr_t base = (uintptr_t)MT_GetBuffer();
 	const uintptr_t ptr = (uintptr_t)refString->str;
 	const uintptr_t end = base + MT_SIZE;
 
@@ -1361,7 +1361,7 @@ void SL_RemoveRefToString(uint32_t stringValue)
         Switch_ReportInvalidStringRef(
             "SL_RemoveRefToString",
             stringValue,
-            scrMemTreePub.mt_buffer,
+            MT_GetBuffer(),
             reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
     }
 #endif
