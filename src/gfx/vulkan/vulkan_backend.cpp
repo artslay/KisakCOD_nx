@@ -1969,50 +1969,6 @@ bool VulkanBackend::SynchronizeActiveFrame()
     return true;
 }
 
-bool VulkanBackend::WaitForLastSubmittedFrame()
-{
-    if (!m_initialized || !m_device || m_deviceLost)
-        return false;
-
-    // A non-present backend pass can leave the Vulkan frame recording. In
-    // that case submit and wait for the recorded portion, then resume the same
-    // acquired frame; otherwise wait for the final frame fence below.
-    if (m_frameActive)
-        return SynchronizeActiveFrame();
-
-    if (m_currentFrameSlot >= FramesInFlight)
-    {
-        SetError("SMP buffer reuse requested with an invalid Vulkan frame slot");
-        return false;
-    }
-
-    FrameSync &frame = m_frameSync[m_currentFrameSlot];
-    if (!frame.fence || frame.submittedFrameSerial == 0)
-        return true;
-
-    const VkResult waitResult =
-        vkWaitForFences(m_device, 1, &frame.fence, VK_TRUE, UINT64_MAX);
-    if (waitResult != VK_SUCCESS)
-    {
-        SetError("vkWaitForFences failed before SMP buffer reuse", waitResult);
-        return false;
-    }
-
-    uint64_t completedSerial =
-        m_completedFrameSerial.load(std::memory_order_relaxed);
-    while (completedSerial < frame.submittedFrameSerial &&
-           !m_completedFrameSerial.compare_exchange_weak(
-               completedSerial,
-               frame.submittedFrameSerial,
-               std::memory_order_release,
-               std::memory_order_relaxed))
-    {
-    }
-    FlushDeferredResources(
-        m_completedFrameSerial.load(std::memory_order_acquire));
-    return true;
-}
-
 #ifdef __SWITCH__
 static void Switch_SaltyNxFramePresented(uint32_t width, uint32_t height)
 {
