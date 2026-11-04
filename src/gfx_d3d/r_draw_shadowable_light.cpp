@@ -184,7 +184,6 @@ void __cdecl R_SetShadowableLight(
             255);
     if (source->shadowableLightIndex != shadowableLightIndex)
     {
-        const uint32_t previousShadowableLightIndex = source->shadowableLightIndex;
         source->shadowableLightIndex = shadowableLightIndex;
         if (shadowableLightIndex)
         {
@@ -212,8 +211,11 @@ void __cdecl R_SetShadowableLight(
                         &viewInfo->shadowableLights[shadowableLightIndex], def,
                         shadowableLightIndex, viewInfo->shadowableLightCount))
                 {
+                    // R_ClearLightProperties invalidates the cached indices
+                    // deliberately. Do not restore the previous index: its
+                    // constants were cleared and must be rebound on the next
+                    // valid draw-surface list.
                     R_ClearLightProperties(source);
-                    source->shadowableLightIndex = previousShadowableLightIndex;
                     return;
                 }
                 falloffShift = (double)def->lmapLookupStart * 0.001953125;
