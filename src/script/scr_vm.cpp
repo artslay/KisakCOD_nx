@@ -1916,7 +1916,74 @@ const float *Scr_ReadVector(const char **pos)
 
 uint32_t Scr_GetLocalVar(const char *pos)
 {
-    return scrVmPub.localVars[-*(pos)];
+    // The compiler emits this operand through EmitByte(unsigned __int8).
+    // Decode it as unsigned before negating it; plain char is signed on
+    // AArch64, so offsets 0x80..0xFF otherwise become positive indexes.
+    const uint32_t localVarOffset = static_cast<uint8_t>(*pos);
+    const uintptr_t localVarsBase = reinterpret_cast<uintptr_t>(&scrVmGlob.starttime);
+    const uintptr_t localVarsTop = reinterpret_cast<uintptr_t>(scrVmPub.localVars);
+    const uintptr_t localVarsLast = reinterpret_cast<uintptr_t>(
+        &scrVmGlob.localVarsStack[sizeof(scrVmGlob.localVarsStack) / sizeof(scrVmGlob.localVarsStack[0]) - 1]);
+
+    if (localVarsTop < localVarsBase ||
+        localVarsTop > localVarsLast ||
+        ((localVarsTop - localVarsBase) % sizeof(uint32_t)) != 0)
+    {
+#ifdef KISAK_SWITCH
+        char line[256];
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][SCRIPT LOCAL VAR STACK INVALID] top=%p base=%p last=%p codePos=%p caller=0x%llx\n",
+            reinterpret_cast<void *>(localVarsTop),
+            reinterpret_cast<void *>(localVarsBase),
+            reinterpret_cast<void *>(localVarsLast),
+            static_cast<const void *>(pos),
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+        Switch_LogWrite(line);
+#endif
+        Com_Error(ERR_DROP, "Scr_GetLocalVar: invalid local variable stack pointer");
+        return 0;
+    }
+
+    const uint32_t localVarDepth =
+        static_cast<uint32_t>((localVarsTop - localVarsBase) / sizeof(uint32_t));
+    if (localVarOffset >= localVarDepth)
+    {
+#ifdef KISAK_SWITCH
+        char line[256];
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][SCRIPT LOCAL VAR OFFSET INVALID] offset=%u depth=%u byte=0x%02x codePos=%p caller=0x%llx\n",
+            localVarOffset,
+            localVarDepth,
+            static_cast<unsigned>(static_cast<uint8_t>(*pos)),
+            static_cast<const void *>(pos),
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+        Switch_LogWrite(line);
+#endif
+        Com_Error(ERR_DROP, "Scr_GetLocalVar: local offset exceeds active local stack");
+        return 0;
+    }
+
+    const uint32_t localVarId =
+        scrVmPub.localVars[-static_cast<ptrdiff_t>(localVarOffset)];
+#ifdef KISAK_SWITCH
+    if (localVarOffset >= 128)
+    {
+        static uint32_t highOffsetReports = 0;
+        if (highOffsetReports < 16)
+        {
+            char line[224];
+            std::snprintf(
+                line, sizeof(line),
+                "[KisakCOD][SCRIPT LOCAL VAR HIGH OFFSET] offset=%u depth=%u id=%u codePos=%p\n",
+                localVarOffset, localVarDepth, localVarId, static_cast<const void *>(pos));
+            Switch_LogWrite(line);
+            ++highOffsetReports;
+        }
+    }
+#endif
+    return localVarId;
 }
 
 VariableStackBuffer *VM_ArchiveStack2(int size, const char *codePos, VariableValue *top, uint32_t localVarCount, uint32_t *localId)

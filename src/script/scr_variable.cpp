@@ -768,6 +768,23 @@ uint32_t Scr_EvalVariableObject(uint32_t id)
 	VariableValueInternal* entryValue; // [esp+0h] [ebp-8h]
 	uint32_t type; // [esp+4h] [ebp-4h]
 
+    if (id >= VARIABLELIST_CHILD_SIZE)
+    {
+#ifdef KISAK_SWITCH
+        char line[224];
+        std::snprintf(
+            line, sizeof(line),
+            "[KisakCOD][SCRIPT OBJECT LOCAL ID INVALID] id=%u limit=%u localVars=%p caller=0x%llx\n",
+            id,
+            static_cast<unsigned>(VARIABLELIST_CHILD_SIZE),
+            static_cast<void *>(scrVmPub.localVars),
+            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+        Switch_LogWrite(line);
+#endif
+        Com_Error(ERR_DROP, "Scr_EvalVariableObject: invalid local variable id");
+        return 0;
+    }
+
 	entryValue = &scrVarGlob.variableList[id + VARIABLELIST_CHILD_BEGIN];
 
 	iassert(((entryValue->w.status & VAR_STAT_MASK) != VAR_STAT_FREE) || !id);
@@ -776,11 +793,29 @@ uint32_t Scr_EvalVariableObject(uint32_t id)
 
 	if (type == VAR_POINTER)
 	{
-		type = scrVarGlob.variableList[entryValue->u.u.intValue + VARIABLELIST_PARENT_BEGIN].w.type & VAR_MASK;
+        const uint32_t objectId = entryValue->u.u.intValue;
+        if (objectId >= VARIABLELIST_PARENT_SIZE)
+        {
+#ifdef KISAK_SWITCH
+            char line[224];
+            std::snprintf(
+                line, sizeof(line),
+                "[KisakCOD][SCRIPT OBJECT ID INVALID] localId=%u objectId=%u limit=%u caller=0x%llx\n",
+                id,
+                objectId,
+                static_cast<unsigned>(VARIABLELIST_PARENT_SIZE),
+                static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+            Switch_LogWrite(line);
+#endif
+            Com_Error(ERR_DROP, "Scr_EvalVariableObject: invalid object id");
+            return 0;
+        }
+
+		type = scrVarGlob.variableList[objectId + VARIABLELIST_PARENT_BEGIN].w.type & VAR_MASK;
 		if (type < VAR_ARRAY)
 		{
 			iassert(type >= FIRST_OBJECT);
-			return entryValue->u.u.intValue;
+			return objectId;
 		}
 	}
 
