@@ -73,6 +73,13 @@ void Switch_AssociateSmpPoolWithGpuSlot(uint32_t poolIndex, uint32_t frameSlot)
         s_switchGpuSlotForSmpPool[poolIndex].store(static_cast<int>(frameSlot), std::memory_order_release);
 }
 
+int Switch_GetSmpPoolGpuSlot(uint32_t poolIndex)
+{
+    return poolIndex < 2
+        ? s_switchGpuSlotForSmpPool[poolIndex].load(std::memory_order_acquire)
+        : -1;
+}
+
 void Switch_WaitForSmpPoolGpuUse(uint32_t poolIndex)
 {
     if (poolIndex >= 2)
@@ -523,15 +530,17 @@ void __cdecl R_ToggleSmpFrameCmd(char type)
                 : backend->NextFrameSlot();
             Switch_AssociateSmpPoolWithGpuSlot(gfxBuf.dynamicBufferFrame, frameSlot);
 
-            // In the normal alternating case, the pool being recycled belongs
-            // to the other Vulkan slot. Let the renderer start this frame, then
-            // wait on that older slot in R_ToggleSmpFrame. Pre-wait only when
-            // this handoff may reuse the same slot or swapchain recreation will
-            // replace both fences while the wait is outstanding.
-            if (continuedFrame || backend->NeedsSwapchainRecreate())
+            // Normally the pool being recycled belongs to the other Vulkan
+            // slot, so the renderer can start this frame while we wait for that
+            // older slot. Pre-wait if it maps to this frame's slot, or swapchain
+            // recreation may replace both fences during the post-wake wait.
+            const uint32_t reusePool =
+                static_cast<uint32_t>((gfxBuf.dynamicBufferFrame + 1) % 2);
+            const int reuseSlot = Switch_GetSmpPoolGpuSlot(reusePool);
+            if (continuedFrame || backend->NeedsSwapchainRecreate() ||
+                (reuseSlot >= 0 && static_cast<uint32_t>(reuseSlot) == frameSlot))
             {
-                Switch_WaitForSmpPoolGpuUse(
-                    static_cast<uint32_t>((gfxBuf.dynamicBufferFrame + 1) % 2));
+                Switch_WaitForSmpPoolGpuUse(reusePool);
             }
         }
     }
@@ -659,8 +668,8 @@ DebugGlobals *R_ToggleSmpFrame()
     iassert(gfxBuf.dynamicBufferFrame == gfxBuf.preTessBufferFrame);
     // In the normal asynchronous path this waits after the next frame has
     // been handed to a different Vulkan slot, allowing CPU/GPU overlap. Same-
-    // slot and swapchain-recreate cases were drained before renderer wakeup.
-    // Synchronous/abort paths also protect the pool before it is recycled.
+    // slot/partial-frame and swapchain-recreate cases are pre-waited while the
+    // renderer is idle. Synchronous/abort paths wait here as well.
     Switch_WaitForSmpPoolGpuUse(static_cast<uint32_t>(gfxBuf.dynamicBufferFrame));
 #endif
     frontEndDataOut = &s_backEndData[s_smpFrame];
