@@ -10785,9 +10785,11 @@ void IDirect3DDevice9::ResetCachedCommandState()
         return;
 
     const uint64_t frameSerial = m_backend->FrameSerial();
+    const uint64_t recordingSerial = m_backend->CommandBufferRecordingSerial();
     const VkDevice device = m_backend->Device();
     const VkCommandBuffer commandBuffer = m_backend->CommandBuffer();
     if (m_cachedCommandFrameSerial == frameSerial &&
+        m_cachedCommandRecordingSerial == recordingSerial &&
         m_cachedCommandDevice == device &&
         m_cachedCommandBuffer == commandBuffer)
         return;
@@ -10795,6 +10797,7 @@ void IDirect3DDevice9::ResetCachedCommandState()
     // Frame slots may use different command buffers, and a reset command buffer
     // forgets all graphics state even when the Vk handles happen to be reused.
     m_cachedCommandFrameSerial = frameSerial;
+    m_cachedCommandRecordingSerial = recordingSerial;
     m_cachedCommandDevice = device;
     m_cachedCommandBuffer = commandBuffer;
     m_cachedBoundPipeline = VK_NULL_HANDLE;
