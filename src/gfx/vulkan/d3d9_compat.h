@@ -574,5 +574,6 @@ private:
 
 bool Switch_PrepareVulkanDeviceLossResources(VulkanBackend *backend);
 bool Switch_RestoreVulkanBuffers(VulkanBackend *backend);
+bool Switch_WaitForGpuBeforeSmpFrameReuse();
 
 #endif
