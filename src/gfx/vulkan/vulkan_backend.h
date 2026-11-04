@@ -94,6 +94,12 @@ public:
     VkDescriptorPool DescriptorPool() const { return m_descriptorPool; }
     std::mutex &DescriptorPoolMutex() { return m_descriptorPoolMutex; }
     uint64_t FrameSerial() const { return m_frameSerial.load(std::memory_order_relaxed); }
+    // Changes whenever the active command buffer recording is restarted, even
+    // when a synchronous frame split reuses the same VkCommandBuffer handle.
+    uint64_t CommandBufferRecordingSerial() const
+    {
+        return m_commandBufferRecordingSerial.load(std::memory_order_relaxed);
+    }
     VkDescriptorSetLayout VSSamplerLayout() const { return m_vsSamplerLayout; }
     VkDescriptorSetLayout VSUniformLayout() const { return m_vsUniformLayout; }
     VkDescriptorSetLayout PSSamplerLayout() const { return m_psSamplerLayout; }
@@ -411,6 +417,7 @@ private:
 
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
     std::atomic<uint64_t> m_frameSerial{0};
+    std::atomic<uint64_t> m_commandBufferRecordingSerial{0};
     VkDescriptorSetLayout m_vsSamplerLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_vsUniformLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_psSamplerLayout = VK_NULL_HANDLE;
