@@ -588,6 +588,14 @@ private:
         VkDescriptorSet set = VK_NULL_HANDLE;
         std::array<VkDescriptorImageInfo, 16> images{};
     };
+    struct UniformBindCacheEntry
+    {
+        uint64_t frameSerial = 0;
+        uint64_t revision = 0;
+        uint64_t shaderSerial = 0;
+        const MOJOSHADER_parseData *parse = nullptr;
+        VkDescriptorSet set = VK_NULL_HANDLE;
+    };
     VulkanBackend *m_backend=nullptr;
     IDirect3DSurface9 *m_color=nullptr, *m_depth=nullptr;
     IDirect3DVertexDeclaration9 *m_decl=nullptr;
@@ -652,6 +660,9 @@ private:
     std::array<std::array<size_t,2>,2> m_samplerSetCursor{};
     std::array<std::array<size_t,2>,2> m_uniformSetCursor{};
     std::array<uint64_t,2> m_descriptorCacheFrameSerial{};
+    std::array<std::array<UniformBindCacheEntry,2>,2> m_uniformBindCache{};
+    uint64_t m_vsUniformRevision = 1;
+    uint64_t m_psUniformRevision = 1;
     // Vulkan command-buffer state persists across draws and dynamic-rendering
     // restarts. Avoid re-emitting identical pipeline, descriptor and dynamic state.
     uint64_t m_cachedCommandFrameSerial = UINT64_MAX;
