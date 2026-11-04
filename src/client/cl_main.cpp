@@ -38,6 +38,7 @@ extern void CL_EnforceFadeCinematicSkipRule(void);
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <universal/timing.h>
 extern std::atomic<uint64_t> g_switchScreenFrameSequence;
 extern void CL_BlockCinematicSkipUntilRelease();
 extern void CL_PrepareCinematicSkipInput(int localClientNum);
@@ -1926,9 +1927,48 @@ void __cdecl CL_UpdateSound()
 {
     PROF_SCOPED("update sound");
 
+#ifdef __SWITCH__
+    static uint64_t playFxNsTotal = 0;
+    static uint64_t loopingNsTotal = 0;
+    static uint64_t sndUpdateNsTotal = 0;
+    static uint32_t soundPerfSamples = 0;
+    uint64_t stageStart = Kisak_RawTimerTicks();
+#endif
+
     SND_PlayFXSounds();
+#ifdef __SWITCH__
+    uint64_t now = Kisak_RawTimerTicks();
+    playFxNsTotal += now - stageStart;
+    stageStart = now;
+#endif
     SND_UpdateLoopingSounds();
+#ifdef __SWITCH__
+    now = Kisak_RawTimerTicks();
+    loopingNsTotal += now - stageStart;
+    stageStart = now;
+#endif
     SND_Update();
+#ifdef __SWITCH__
+    now = Kisak_RawTimerTicks();
+    sndUpdateNsTotal += now - stageStart;
+
+    if (++soundPerfSamples == 120)
+    {
+        const double averageMs = 1.0 / (120.0 * 1000000.0);
+        char message[256];
+        std::snprintf(
+            message, sizeof(message),
+            "[KisakCOD][CL SOUND PERF] samples=120 avg_ms play_fx=%.3f looping=%.3f snd_update=%.3f\\n",
+            playFxNsTotal * averageMs,
+            loopingNsTotal * averageMs,
+            sndUpdateNsTotal * averageMs);
+        Switch_LogWrite(message);
+        playFxNsTotal = 0;
+        loopingNsTotal = 0;
+        sndUpdateNsTotal = 0;
+        soundPerfSamples = 0;
+    }
+#endif
 }
 
 void __cdecl CL_ShutdownRenderer(int destroyWindow)
