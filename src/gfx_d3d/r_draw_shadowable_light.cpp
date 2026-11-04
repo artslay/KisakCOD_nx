@@ -283,6 +283,13 @@ void __cdecl R_SetDrawSurfsShadowableLight(GfxCmdBufSourceState *source, const G
     }
     else
     {
+        // This path updates light constants without passing through
+        // R_SetShadowableLight. Invalidate its index caches first: otherwise
+        // a later list using the previous shadowable index can be mistaken
+        // for an already-bound light and keep these unshadowed light values.
+        source->shadowableLightIndex = 0;
+        source->shadowableLightForShadowLookupMatrix = 0;
+
         // Keep the draw-surface list alive when a light lacks its auxiliary
         // definition. R_SetLightProperties validates its inputs and returns
         // before dereferencing def; it must not cause R_DrawSurfs to skip all
