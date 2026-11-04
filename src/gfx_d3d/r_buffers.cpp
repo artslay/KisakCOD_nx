@@ -14,6 +14,12 @@
 GfxBuffers gfxBuf;
 
 #ifdef __SWITCH__
+static constexpr int kDynamicStreamBufferCount = 2;
+#else
+static constexpr int kDynamicStreamBufferCount = 1;
+#endif
+
+#ifdef __SWITCH__
 volatile int32_t g_switchSkinCacheLoadForRenderer = -1;
 volatile uintptr_t g_switchSkinCachePool0 = 0;
 volatile uintptr_t g_switchSkinCachePool1 = 0;
@@ -206,7 +212,7 @@ void __cdecl R_CreateDynamicBuffers()
     int bufferIterb; // [esp+0h] [ebp-4h]
     int bufferIterc; // [esp+0h] [ebp-4h]
 
-    for (bufferIter = 0; bufferIter != 2; ++bufferIter)
+    for (bufferIter = 0; bufferIter != kDynamicStreamBufferCount; ++bufferIter)
 #ifdef KISAK_RADIANT
         // EDITOR VB-overflow fix (#26 render path): the radiant immediate-mode world draw
         // streams the WHOLE map's brush faces + wireframe through this dynamic VB every frame
@@ -232,7 +238,7 @@ void __cdecl R_CreateDynamicBuffers()
     g_switchSkinCachePool1 = reinterpret_cast<uintptr_t>(gfxBuf.skinnedCacheVbPool[1].buffer);
 #endif
     R_InitTempSkinBuf();
-    for (bufferIterb = 0; bufferIterb != 2; ++bufferIterb)
+    for (bufferIterb = 0; bufferIterb != kDynamicStreamBufferCount; ++bufferIterb)
         R_InitDynamicIndexBufferState(&gfxBuf.dynamicIndexBufferPool[bufferIterb], 0x100000);
     gfxBuf.dynamicIndexBuffer = gfxBuf.dynamicIndexBufferPool;
     for (bufferIterc = 0; bufferIterc != 2; ++bufferIterc)
@@ -241,6 +247,7 @@ void __cdecl R_CreateDynamicBuffers()
     gfxBuf.preTessBufferFrame = 0;
 }
 
+#ifdef __SWITCH__
 void __cdecl R_SetDynamicBufferFrame(uint32_t frameSlot)
 {
     iassert(frameSlot < 2);
@@ -253,6 +260,7 @@ void __cdecl R_SetDynamicBufferFrame(uint32_t frameSlot)
     gfxBuf.dynamicVertexBuffer->used = 0;
     gfxBuf.dynamicIndexBuffer->used = 0;
 }
+#endif
 
 void __cdecl R_FinishStaticIndexBuffer(IDirect3DIndexBuffer9 *ib)
 {
@@ -524,7 +532,7 @@ void __cdecl R_DestroyDynamicBuffers()
             } while (alwaysfails);
         }
     }
-    for (bufferItera = 0; bufferItera != 2; ++bufferItera)
+    for (bufferItera = 0; bufferItera != kDynamicStreamBufferCount; ++bufferItera)
     {
         if (gfxBuf.dynamicIndexBufferPool[bufferItera].buffer)
         {
@@ -568,7 +576,7 @@ void __cdecl R_DestroyDynamicBuffers()
             } while (alwaysfails);
         }
     }
-    for (bufferIterc = 0; bufferIterc != 2; ++bufferIterc)
+    for (bufferIterc = 0; bufferIterc != kDynamicStreamBufferCount; ++bufferIterc)
     {
         if (gfxBuf.dynamicVertexBufferPool[bufferIterc].buffer)
         {
