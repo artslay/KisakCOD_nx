@@ -588,12 +588,6 @@ private:
         VkDescriptorSet set = VK_NULL_HANDLE;
         std::array<VkDescriptorImageInfo, 16> images{};
     };
-    struct UniformDescriptorCacheEntry
-    {
-        VkDescriptorSet set = VK_NULL_HANDLE;
-        VkDescriptorBufferInfo bufferInfo{};
-        std::vector<uint8_t> bytes;
-    };
     VulkanBackend *m_backend=nullptr;
     IDirect3DSurface9 *m_color=nullptr, *m_depth=nullptr;
     IDirect3DVertexDeclaration9 *m_decl=nullptr;
@@ -655,11 +649,6 @@ private:
     std::array<std::array<
         std::unordered_map<uint64_t, std::vector<SamplerDescriptorCacheEntry>>,2>,2>
         m_samplerDescriptorFrameCache{};
-    // Uniform sets are also immutable once a recorded draw references them.
-    // Exact packed-byte snapshots make identical per-draw constants reusable.
-    std::array<std::array<
-        std::unordered_map<uint64_t, std::vector<UniformDescriptorCacheEntry>>,2>,2>
-        m_uniformDescriptorFrameCache{};
     std::array<std::array<size_t,2>,2> m_samplerSetCursor{};
     std::array<std::array<size_t,2>,2> m_uniformSetCursor{};
     std::array<uint64_t,2> m_descriptorCacheFrameSerial{};
