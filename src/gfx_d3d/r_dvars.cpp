@@ -1528,12 +1528,11 @@
      defaultState = 1;
      helpString = "Enable worker thread";
 #ifdef __SWITCH__
-     // Switch threads are not pinned to dedicated cores (Win_SetThreadLock is
-     // intentionally a no-op). Allow two renderer workers on the three CPU
-     // cores exposed to the title; the main/backend threads can share those
-     // cores while either is waiting. A second worker remains disabled on a
-     // two-core process, where it would add contention without spare capacity.
-     const bool insufficientThreads = workerIndex + 2u > Sys_GetCpuCount();
+     // Switch runs the main thread, Vulkan backend and renderer workers on
+     // the process' three available CPU cores. Reserve capacity for the main
+     // and backend threads: with three cores, enable one worker; enable the
+     // second only when a fourth core is available.
+     const bool insufficientThreads = workerIndex + 2u >= Sys_GetCpuCount();
 #else
      const bool insufficientThreads = workerIndex + 2u >= Sys_GetCpuCount();
 #endif

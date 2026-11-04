@@ -1803,6 +1803,18 @@ bool VulkanBackend::BeginFrame()
     if (m_swapchainNeedsRecreate && !RecreateSwapchain())
         return false;
 
+    // The D3D9 compatibility renderer still shares its offscreen color and
+    // depth attachments across both CPU/GPU frame slots. A fence for the slot
+    // being reused does not protect those shared images from the other slot.
+    // Retire the immediately preceding GPU frame before recording into them.
+    // CPU frontend work remains overlapped through the two legacy resource
+    // rings; true two-frame GPU overlap must wait until render targets/depth
+    // attachments are duplicated per slot.
+    const uint32_t previousSlot =
+        (m_nextFrameSlot + FramesInFlight - 1u) % FramesInFlight;
+    if (!WaitForFrameSlot(previousSlot))
+        return false;
+
     // Reuse only the selected slot's command resources and frame-local
     // allocations after its previous submission has completed.
     const uint32_t slotIndex = m_nextFrameSlot;
