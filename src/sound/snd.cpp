@@ -3049,7 +3049,7 @@ void __cdecl SND_UpdateAllChannels(int frametime)
         char message[512];
         std::snprintf(
             message, sizeof(message),
-            "[KisakCOD][SND CHANNEL PERF] samples=120 avg_ms slave=%.3f ch3d=%.3f stream=%.3f ch2d=%.3f active3d=%.1f live3d=%.1f activeStream=%.1f liveStream=%.1f active2d=%.1f live2d=%.1f\\n",
+            "[KisakCOD][SND CHANNEL PERF] samples=120 avg_ms slave=%.3f ch3d=%.3f stream=%.3f ch2d=%.3f active3d=%.1f live3d=%.1f activeStream=%.1f liveStream=%.1f active2d=%.1f live2d=%.1f\n",
             slaveLerpNs * averageMs,
             update3DNs * averageMs,
             updateStreamNs * averageMs,
