@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstring>
 #include <gfx/gfx_backend.h>
+#include <gfx/vulkan/vulkan_backend.h>
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char *g_switchFrameStage;
 
@@ -3712,6 +3713,25 @@ void __cdecl RB_RenderCommandFrame(const GfxBackEndData *data)
         RB_EndFrame(drawType);
     }
 #ifdef __SWITCH__
+    // RB_EndFrame presents only when drawType requests it. A command buffer
+    // left active by a frame without Present must be split and retired here,
+    // on the thread that owns Vulkan recording, before the frontend is told
+    // that its data can be recycled. SynchronizeActiveFrame waits for this
+    // segment and resumes recording in the same acquired swapchain frame;
+    // it deliberately does not perform an implicit Present.
+    if ((drawType & 2u) == 0)
+    {
+        VulkanBackend *backend = GetVulkanBackend();
+        if (backend && backend->IsInitialized() && backend->IsFrameActive())
+        {
+            g_switchFrameStage = "frame/render/flush_unpresented_frame";
+            if (!backend->SynchronizeActiveFrame())
+                Com_Error(ERR_FATAL,
+                    "Vulkan failed to flush an unpresented frame on the render thread");
+            g_switchFrameStage = "frame/render/flush_unpresented_frame_done";
+        }
+    }
+
     if (switchFrameTraceId < 4)
     {
         char trace[256];

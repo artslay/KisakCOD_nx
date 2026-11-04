@@ -569,9 +569,11 @@ void __cdecl R_IssueRenderCommands(uint32_t type)
                 VulkanBackend *backend = GetVulkanBackend();
                 if (backend && backend->IsInitialized())
                 {
-                    // Even when this frontend frame was skipped, a prior frame
-                    // may have left commands recording without Present. Drain
-                    // that segment before R_ToggleSmpFrame can recycle its data.
+                    // Synchronous fallback only: R_HandOffToBackend declined
+                    // the SMP handoff above. If called on the frontend thread,
+                    // R_SyncRenderThread has transferred renderer ownership to
+                    // this thread; unlike the asynchronous path, no backend
+                    // thread can be using this command buffer concurrently.
                     const bool partialFrameActive = backend->IsFrameActive();
                     if (partialFrameActive && !backend->SynchronizeActiveFrame())
                         Com_Error(ERR_FATAL, "Vulkan failed to finish an open frame before reusing a Switch SMP pool");
@@ -668,23 +670,19 @@ void __cdecl R_ToggleSmpFrameCmd(char type)
         VulkanBackend *backend = GetVulkanBackend();
         if (backend && backend->IsInitialized())
         {
-            // A frame without Present may leave commands in a recording Vulkan
-            // command buffer. Its slot fence is still signaled until EndFrame,
-            // so drain this partial frame while the renderer is idle; otherwise
-            // waiting on that fence would not protect a pool referenced by the
-            // not-yet-submitted command buffer.
+            // The render thread owns the active Vulkan command buffer. Do not
+            // end or submit it from this frontend handoff: it may still be
+            // recording the previous frame. Unpresented commands are flushed
+            // by RB_RenderCommandFrame before Sys_RenderCompleted is signaled.
             const bool continuedFrame = backend->IsFrameActive();
-            if (continuedFrame && !backend->SynchronizeActiveFrame())
-                Com_Error(ERR_FATAL, "Vulkan failed to finish an open frame before Switch SMP handoff");
-
             const uint32_t frameSlot = continuedFrame
                 ? backend->CurrentFrameSlot()
                 : backend->NextFrameSlot();
             Switch_AssociateCurrentFrontEndResourcesWithGpuSlot(frameSlot);
 
-            // In the normal alternating case the frontend waits on the other
-            // frame slot after waking the renderer. Same-slot, continued-frame,
-            // and swapchain-recreate cases must be drained before the wake.
+            // Wait the fences protecting the pools about to be reused. A
+            // continued recording stays on the same GPU slot, so all pools
+            // that can be selected next must be checked before waking renderer.
             Switch_PreWaitNextFrontEndResources(
                 frameSlot, continuedFrame || backend->NeedsSwapchainRecreate());
         }
