@@ -1228,7 +1228,7 @@ void __cdecl G_UpdateGroundTilt(gclient_s *client)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][PLAYER INPUT] ground-reference update player=%d ref=none\\n",
+                "[KisakCOD][PLAYER INPUT] ground-reference update player=%d ref=none\n",
                 client->ps.clientNum);
             Switch_LogWrite(trace);
         }
@@ -1247,7 +1247,7 @@ void __cdecl G_UpdateGroundTilt(gclient_s *client)
                 std::snprintf(
                     trace,
                     sizeof(trace),
-                    "[KisakCOD][PLAYER INPUT] ground-reference update player=%d ref=%d inuse=1 eType=%d angles=(%.2f,%.2f,%.2f)\\n",
+                    "[KisakCOD][PLAYER INPUT] ground-reference update player=%d ref=%d inuse=1 eType=%d angles=(%.2f,%.2f,%.2f)\n",
                     client->ps.clientNum,
                     groundTiltEntNum,
                     ent->s.eType,
@@ -1265,7 +1265,7 @@ void __cdecl G_UpdateGroundTilt(gclient_s *client)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][PLAYER INPUT] ground-reference update player=%d ref=%d inuse=0\\n",
+                "[KisakCOD][PLAYER INPUT] ground-reference update player=%d ref=%d inuse=0\n",
                 client->ps.clientNum,
                 groundTiltEntNum);
             Switch_LogWrite(trace);
