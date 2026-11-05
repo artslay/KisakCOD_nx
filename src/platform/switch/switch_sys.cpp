@@ -3718,6 +3718,28 @@ static bool Switch_LogIsScriptDiagnostic(const char *msg)
     return false;
 }
 
+// Short-lived traces around player spawn and the first Pmove frames. These are
+// explicitly allowed because the runtime logger otherwise drops routine diagnostics.
+static bool Switch_LogIsPlayerAngleDiagnostic(const char *msg)
+{
+    if (!msg || !*msg)
+        return false;
+
+    static constexpr const char *const kPlayerAnglePrefixes[] =
+    {
+        "[KisakCOD][PLAYER SPAWN ANGLES]",
+        "[KisakCOD][PLAYER INPUT]",
+        "[KisakCOD][PLAYER ANGLES PRE]",
+        "[KisakCOD][PLAYER ANGLES POST]"
+    };
+    for (const char *prefix : kPlayerAnglePrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
 {
     // Aggregated scene and sound timings are emitted once per 120 samples.
@@ -3854,6 +3876,7 @@ void Switch_LogWrite(const char *msg)
         !Switch_LogIsFxDiagnostic(msg) &&
         !Switch_LogIsScriptDiagnostic(msg) &&
         !Switch_LogIsPerformanceDiagnostic(msg) &&
+        !Switch_LogIsPlayerAngleDiagnostic(msg) &&
         !Switch_LogIsHudCinematicDiagnostic(msg) &&
         !Switch_LogIsStartupMessage(msg) &&
         !Switch_LogIsLevelLoadMessage(msg))
