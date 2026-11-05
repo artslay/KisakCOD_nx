@@ -37,6 +37,7 @@
 #include <cstdio>
 extern thread_local const char * volatile g_switchFrameStage;
 extern void Switch_LogWrite(const char *msg);
+extern int g_switchPlayerInputTraceFrames;
 
 // SF_ANIMSCRIPT serializes indices across the adjacent human and dog tables.
 // These checks prevent another ABI change from silently invalidating that map.
@@ -3141,6 +3142,7 @@ void __cdecl G_LoadGame(int /*checksum*/, SaveGame *save)
     // Trace normal and replay-backed autosave loads alike. Keep this outside
     // the !usingDemoSave branch so replay restores cannot skip the diagnostics.
     g_switchPlayerAngleTraceFrames = 8;
+    g_switchPlayerInputTraceFrames = 600;
     gentity_s *player = &g_entities[0];
     if (player->client)
     {
