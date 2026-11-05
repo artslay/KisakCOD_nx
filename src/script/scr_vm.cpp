@@ -1922,29 +1922,33 @@ uint32_t __cdecl GetDummyFieldValue()
 
 const char *Scr_ReadCodePos(const char **pos)
 {
-    const char *value = *(reinterpret_cast<const char **>(const_cast<char *>(*pos)));
-    *pos += sizeof(const char *);
+    const char *value;
+    memcpy(&value, *pos, sizeof(value));
+    *pos += sizeof(value);
     return value;
 }
 
 uintptr_t Scr_ReadUnsigned(const char **pos)
 {
-    uintptr_t value = *(reinterpret_cast<const uintptr_t *>(*pos));
-    *pos += sizeof(uintptr_t);
+    uintptr_t value;
+    memcpy(&value, *pos, sizeof(value));
+    *pos += sizeof(value);
     return value;
 }
 
 int Scr_ReadInt(const char **pos)
 {
-    int value = *(int *)*pos;
-    *pos += sizeof(int);
+    int value;
+    memcpy(&value, *pos, sizeof(value));
+    *pos += sizeof(value);
     return value;
 }
 
 unsigned short Scr_ReadUnsignedShort(const char **pos)
 {
-    unsigned short value = *(reinterpret_cast<const unsigned short *>(*pos));
-    *pos += sizeof(unsigned short);
+    unsigned short value;
+    memcpy(&value, *pos, sizeof(value));
+    *pos += sizeof(value);
     return value;
 }
 
@@ -1959,8 +1963,9 @@ const uint32_t *Scr_ReadIntArray(const char **pos, int count)
 
 float Scr_ReadFloat(const char **pos)
 {
-    float value = *(reinterpret_cast<const float *>(*pos));
-    *pos += sizeof(float);
+    float value;
+    memcpy(&value, *pos, sizeof(value));
+    *pos += sizeof(value);
     return value;
 }
 
