@@ -8,6 +8,9 @@
 #include <gfx_d3d/r_rendercmds.h>
 #include <qcommon/threads.h>
 #include <universal/com_files.h>
+#ifdef __SWITCH__
+#include <cstdio>
+#endif
 #ifndef KISAK_SWITCH
 #include <buildnumber.h>
 #endif
@@ -506,6 +509,30 @@ void __cdecl CL_ConsolePrint(int32_t localClientNum, int32_t channel, const char
 {
     iassert(txt);
 
+#ifdef __SWITCH__
+    if (channel == CON_CHANNEL_SUBTITLE)
+    {
+        static uint32_t switchSubtitlePrintGateTraceCount = 0;
+        if (switchSubtitlePrintGateTraceCount < 96u)
+        {
+            const int printAllowed =
+                cl_noprint && !cl_noprint->current.enabled && channel != 6;
+            char trace[256];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][HUD GAME SUBTITLE FLOW] stage=console_print allowed=%d cl_noprint=%d conInitialized=%d callDepth=%d duration=%d textLen=%u\\n",
+                printAllowed ? 1 : 0,
+                cl_noprint ? (cl_noprint->current.enabled ? 1 : 0) : -1,
+                con.initialized ? 1 : 0,
+                callDepth,
+                duration,
+                static_cast<unsigned>(txt ? strlen(txt) : 0u));
+            Switch_LogWrite(trace);
+            ++switchSubtitlePrintGateTraceCount;
+        }
+    }
+#endif
+
     if (cl_noprint && !cl_noprint->current.enabled && channel != 6)
     {
         if (!con.initialized)
@@ -836,6 +863,25 @@ char __cdecl CL_ConsolePrint_AddLine(
 
     iassert(txt);
     iassert(color >= COLOR_FIRST && color <= COLOR_LAST);
+#ifdef __SWITCH__
+    if (channel == CON_CHANNEL_SUBTITLE)
+    {
+        static uint32_t switchSubtitleAddLineTraceCount = 0;
+        if (switchSubtitleAddLineTraceCount < 96u)
+        {
+            char trace[224];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][HUD GAME SUBTITLE FLOW] stage=add_line callDepth=%d lineOffset=%d flags=0x%x textLen=%u\\n",
+                callDepth,
+                con.lineOffset,
+                static_cast<unsigned>(flags),
+                static_cast<unsigned>(txt ? strlen(txt) : 0u));
+            Switch_LogWrite(trace);
+            ++switchSubtitleAddLineTraceCount;
+        }
+    }
+#endif
     if (callDepth)
         return color;
     callDepth = 1;
@@ -1086,10 +1132,50 @@ void __cdecl Con_UpdateNotifyLineWindow(
 {
     MessageWindow *DestWindow; // eax
 
-    if (Con_IsChannelVisible(dest, channel, flags))
+    const bool channelVisible = Con_IsChannelVisible(dest, channel, flags);
+#ifdef __SWITCH__
+    if (channel == CON_CHANNEL_SUBTITLE &&
+        dest == static_cast<print_msg_dest_t>(CON_DEST_GAME_FIRST + 2) &&
+        lineFeed)
+    {
+        MessageWindow *subtitleWindow = Con_GetDestWindow(localClientNum, dest);
+        static uint32_t switchSubtitleRouteTraceCount = 0;
+        if (switchSubtitleRouteTraceCount < 96u)
+        {
+            char trace[256];
+            std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][HUD GAME SUBTITLE FLOW] stage=route visible=%d before=%d flags=0x%x\\n",
+                channelVisible ? 1 : 0,
+                subtitleWindow ? subtitleWindow->activeLineCount : -1,
+                static_cast<unsigned>(flags));
+            Switch_LogWrite(trace);
+            ++switchSubtitleRouteTraceCount;
+        }
+    }
+#endif
+    if (channelVisible)
     {
         DestWindow = Con_GetDestWindow(localClientNum, dest);
         Con_UpdateMessageWindowLine(localClientNum, DestWindow, lineFeed, flags);
+#ifdef __SWITCH__
+        if (channel == CON_CHANNEL_SUBTITLE &&
+            dest == static_cast<print_msg_dest_t>(CON_DEST_GAME_FIRST + 2) &&
+            lineFeed)
+        {
+            static uint32_t switchSubtitleRouteAfterTraceCount = 0;
+            if (switchSubtitleRouteAfterTraceCount < 96u)
+            {
+                char trace[192];
+                std::snprintf(
+                    trace, sizeof(trace),
+                    "[KisakCOD][HUD GAME SUBTITLE FLOW] stage=route_after active=%d\\n",
+                    DestWindow->activeLineCount);
+                Switch_LogWrite(trace);
+                ++switchSubtitleRouteAfterTraceCount;
+            }
+        }
+#endif
     }
 }
 

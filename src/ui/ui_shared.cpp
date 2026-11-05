@@ -6579,6 +6579,76 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
         !menu->visibleExp.numEntries ||
         IsExpressionTrue(dc->localClientNum, &menu->visibleExp);
 #ifdef __SWITCH__
+    if (menu->window.name && !I_stricmp(menu->window.name, "Compass"))
+    {
+        static bool switchCompassExpressionDumped = false;
+        if (!switchCompassExpressionDumped)
+        {
+            char trace[2800];
+            size_t used = static_cast<size_t>(std::snprintf(
+                trace, sizeof(trace),
+                "[KisakCOD][HUD COMPASS EXPR] visible=%u entries=%d sequence=",
+                visibleWhen ? 1u : 0u,
+                menu->visibleExp.numEntries));
+            for (int entryIndex = 0;
+                 entryIndex < menu->visibleExp.numEntries && used < sizeof(trace) - 1;
+                 ++entryIndex)
+            {
+                const expressionEntry *entry = menu->visibleExp.entries[entryIndex];
+                int written = 0;
+                if (!entry)
+                {
+                    written = std::snprintf(trace + used, sizeof(trace) - used,
+                        "%s%d:null", entryIndex ? ";" : "", entryIndex);
+                }
+                else if (!entry->type)
+                {
+                    written = std::snprintf(trace + used, sizeof(trace) - used,
+                        "%s%d:op%d", entryIndex ? ";" : "", entryIndex,
+                        static_cast<int>(entry->data.op));
+                }
+                else
+                {
+                    const Operand &operand = entry->data.operand;
+                    if (operand.dataType == VAL_FLOAT)
+                    {
+                        written = std::snprintf(trace + used, sizeof(trace) - used,
+                            "%s%d:f%.4f", entryIndex ? ";" : "", entryIndex,
+                            operand.internals.floatVal);
+                    }
+                    else if (operand.dataType == VAL_STRING)
+                    {
+                        const char *value = operand.internals.string;
+                        if (!value || Switch_UI_BadPointer(value))
+                            written = std::snprintf(trace + used, sizeof(trace) - used,
+                                "%s%d:s<bad:%p>", entryIndex ? ";" : "", entryIndex,
+                                static_cast<const void *>(value));
+                        else
+                            written = std::snprintf(trace + used, sizeof(trace) - used,
+                                "%s%d:s'%.48s'", entryIndex ? ";" : "", entryIndex,
+                                value);
+                    }
+                    else
+                    {
+                        written = std::snprintf(trace + used, sizeof(trace) - used,
+                            "%s%d:i%d", entryIndex ? ";" : "", entryIndex,
+                            operand.internals.intVal);
+                    }
+                }
+                if (written <= 0)
+                    break;
+                used += static_cast<size_t>(written) < sizeof(trace) - used
+                    ? static_cast<size_t>(written) : sizeof(trace) - used - 1;
+            }
+            if (used < sizeof(trace) - 2)
+            {
+                trace[used++] = '\\n';
+                trace[used] = '\\0';
+            }
+            Switch_LogWrite(trace);
+            switchCompassExpressionDumped = true;
+        }
+    }
     g_switchFrameStage = "frame/ui/menu_visible/visible_expression_done";
     traceProfileGate(
         visibleWhen ? "visible_when_true" : "visible_when_false",
