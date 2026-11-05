@@ -428,14 +428,22 @@ struct KeyState // sizeof=0xC
     int32_t repeats;
     const char *binding;                // ...
 };
-struct PlayerKeyState // sizeof=0xD28
-{                                       // ...
+#ifdef __SWITCH__
+// Switch controller chords use additional virtual key codes above the stock
+// 0-255 keyboard range. Keep non-Switch builds at the original key count.
+#define MAX_CLIENT_KEYCODES 512
+#else
+#define MAX_CLIENT_KEYCODES 256
+#endif
+
+struct PlayerKeyState
+{
     field_t chatField;
-    int32_t chat_team;                      // ...
-    int32_t overstrikeMode;                 // ...
-    int32_t anyKeyDown;                     // ...
-    KeyState keys[256];                 // ...
-    LocSelInputState locSelInputState;  // ...
+    int32_t chat_team;
+    int32_t overstrikeMode;
+    int32_t anyKeyDown;
+    KeyState keys[MAX_CLIENT_KEYCODES];
+    LocSelInputState locSelInputState;
 };
 void __cdecl TRACK_cl_keys();
 void __cdecl Field_DrawTextOverride(
