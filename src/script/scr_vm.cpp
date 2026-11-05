@@ -110,7 +110,7 @@ void Switch_LogSavedDvarCall(const char *dvarName, const char *value)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=(unavailable) line=0 codePos=%p functionCount=%d sourceLookup=%u\\n",
+            "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=(unavailable) line=0 codePos=%p functionCount=%d sourceLookup=%u\n",
             value ? value : "<null>",
             static_cast<const void *>(codePos),
             scrVmPub.function_count,
@@ -127,7 +127,7 @@ void Switch_LogSavedDvarCall(const char *dvarName, const char *value)
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=%s line=%d codePos=%p functionCount=%d\\n",
+        "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=%s line=%d codePos=%p functionCount=%d\n",
         value ? value : "<null>",
         filename && filename[0] ? filename : "(unknown)",
         line,
