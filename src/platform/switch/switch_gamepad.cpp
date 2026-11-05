@@ -306,7 +306,7 @@ void Switch_GamepadFrame()
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][PLAYER INPUT] poll=hid window=%d initialized=%d connected=%d buttons=0x%llx rawLeft=(%d,%d) rawRight=(%d,%d) axisLeft=(%.3f,%.3f) axisRight=(%.3f,%.3f)\\n",
+            "[KisakCOD][PLAYER INPUT] poll=hid window=%d initialized=%d rawActive=%d buttons=0x%llx rawLeft=(%d,%d) rawRight=(%d,%d) axisLeft=(%.3f,%.3f) axisRight=(%.3f,%.3f)\n",
             inputTraceWindow,
             g_initialized ? 1 : 0,
             rawPadActive ? 1 : 0,
