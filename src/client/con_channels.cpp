@@ -27,6 +27,10 @@ struct PrintChannelGlob // sizeof=0x21E0
 
 PrintChannelGlob pcGlob;
 
+#ifdef __SWITCH__
+static bool switchSubtitleFilterRecoveryAttempted = false;
+#endif
+
 char __cdecl Con_OpenChannel(char *name, bool allowScript)
 {
     int32_t index; // [esp+0h] [ebp-8h]
@@ -116,7 +120,6 @@ bool __cdecl Con_IsChannelVisible(print_msg_dest_t dest, uint32_t channel, int32
         // Rebuild this destination from its configured dvar if the live bitset
         // has drifted. Custom filters remain authoritative; subtitles are not
         // forced on when the configured list excludes them.
-        static bool switchSubtitleFilterRecoveryAttempted = false;
         if (!channelVisible && !switchSubtitleFilterRecoveryAttempted)
         {
             switchSubtitleFilterRecoveryAttempted = true;
@@ -352,6 +355,9 @@ void __cdecl Con_InitChannels()
     uint32_t channel; // [esp+0h] [ebp-4h]
 
     memset((uint8_t *)&pcGlob, 0, 0x2100u);
+#ifdef __SWITCH__
+    switchSubtitleFilterRecoveryAttempted = false;
+#endif
     for (channel = 0; channel < 0x19; ++channel)
         Con_OpenChannel((char *)builtinChannels[channel], 0);
     pcGlob.openChannels[24].allowScript = 1;
