@@ -2127,7 +2127,11 @@ cmd_function_s IN_NightVisionUp_VAR;
 static void CL_SetSwitchDefaultGamepadBinding(int key, const char *command)
 {
     const char *currentBinding = Key_GetBinding(0, static_cast<uint32_t>(key));
-    if (!currentBinding || !*currentBinding)
+    // Migrate the old Switch L3 default from sprint-only to the stock
+    // combined breath-hold/sprint action. Keep every other user binding.
+    const bool legacySprintOnly =
+        key == K_AUX6 && currentBinding && !I_stricmp(currentBinding, "+sprint");
+    if (!currentBinding || !*currentBinding || legacySprintOnly)
         Key_SetBinding(0, key, const_cast<char *>(command));
 }
 #endif
