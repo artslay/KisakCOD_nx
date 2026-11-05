@@ -22,7 +22,6 @@
 extern void Switch_LogWrite(const char *msg);
 extern const dvar_t *input_invertPitch;
 extern const dvar_t *input_viewSensitivity;
-extern const dvar_t *cl_sensitivity;
 #endif
 
 const dvar_t *cl_stanceHoldTime;
@@ -42,6 +41,7 @@ namespace
 {
 float s_switchRightStickYaw = 0.0f;
 float s_switchRightStickPitch = 0.0f;
+bool s_switchPlayerWasDead = false;
 
 // Give the stick a small deadzone and a gentle response curve so tiny physical
 // fluctuations do not shake the view and small intentional movements are easier
@@ -1059,6 +1059,31 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
         return;
     }
 
+    // Pmove intentionally stops accepting view-angle changes while PM_DEAD.
+    // Do not keep changing the local command-space view angles during death:
+    // the server's dead camera is fixed at STAT_DEAD_YAW. On the first
+    // authoritative alive snapshot after respawn, rebuild command-space angles
+    // from world viewangles and delta_angles so camera, body, and movement agree.
+    const playerState_s &snapshotPs = clients[0].snap.ps;
+    if (snapshotPs.pm_type >= PM_DEAD)
+    {
+        s_switchPlayerWasDead = true;
+        Switch_ResetRightStickSmoothing();
+        return;
+    }
+
+    if (s_switchPlayerWasDead)
+    {
+        clients[0].viewangles[0] =
+            snapshotPs.viewangles[0] - snapshotPs.delta_angles[0];
+        clients[0].viewangles[1] =
+            snapshotPs.viewangles[1] - snapshotPs.delta_angles[1];
+        clients[0].viewangles[2] =
+            snapshotPs.viewangles[2] - snapshotPs.delta_angles[2];
+        s_switchPlayerWasDead = false;
+        Switch_ResetRightStickSmoothing();
+    }
+
     const int controller = CL_ControllerIndexFromClientNum(0);
     float rawPitchAxis = CL_GamepadAxisValue(0, 4);
     if (input_invertPitch && input_invertPitch->current.enabled)
@@ -1088,16 +1113,10 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     const float viewSensitivity = input_viewSensitivity
         ? std::clamp(input_viewSensitivity->current.value, 0.0001f, 5.0f)
         : 1.0f;
-    // Switch currently has no mouse-event backend, so keep the familiar
-    // "sensitivity" menu slider useful for the active gamepad look input too.
-    // Normalize it against its registered default so 5.0 retains 1:1 behavior.
-    const float mouseSensitivity = cl_sensitivity && cl_sensitivity->reset.value > 0.0f
-        ? std::clamp(
-            cl_sensitivity->current.value / cl_sensitivity->reset.value,
-            0.01f, 20.0f)
-        : 1.0f;
+    // Mouse sensitivity is a PC mouse setting; the Switch stick has its
+    // own archived input_viewSensitivity control and must not inherit it.
     const float effectiveSensitivity =
-        std::clamp(viewSensitivity * mouseSensitivity, 0.0001f, 20.0f);
+        std::clamp(viewSensitivity, 0.0001f, 5.0f);
     const float effectivePitchAxis = pitchAxis * effectiveSensitivity;
     const float effectiveYawAxis = yawAxis * effectiveSensitivity;
 
