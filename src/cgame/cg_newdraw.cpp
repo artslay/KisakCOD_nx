@@ -19,7 +19,9 @@
 #include "cg_view.h"
 
 #ifdef __SWITCH__
+#include <cstdio>
 extern thread_local const char * volatile g_switchFrameStage;
+extern void Switch_LogWrite(const char *msg);
 #endif
 
 const dvar_t *hud_fade_sprint;
@@ -3220,6 +3222,37 @@ void __cdecl CG_OwnerDraw(
     rect.h = h;
     rect.horzAlign = horzAlign;
     rect.vertAlign = vertAlign;
+
+#ifdef __SWITCH__
+    if ((ownerDraw >= 145 && ownerDraw <= 164) ||
+        (ownerDraw >= 180 && ownerDraw <= 187))
+    {
+        const unsigned traceSlot = ownerDraw >= 180
+            ? 20u + static_cast<unsigned>(ownerDraw - 180)
+            : static_cast<unsigned>(ownerDraw - 145);
+        static uint8_t switchCompassOwnerDrawTraceCount[28] = {};
+        if (switchCompassOwnerDrawTraceCount[traceSlot] < 2u)
+        {
+            char trace[320];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][HUD COMPASS DRAW] ownerDraw=%d flags=0x%x rect=%.1f,%.1f %.1fx%.1f parent=%.1f,%.1f %.1fx%.1f\n",
+                ownerDraw,
+                static_cast<unsigned>(ownerDrawFlags),
+                rect.x,
+                rect.y,
+                rect.w,
+                rect.h,
+                parentRect.x,
+                parentRect.y,
+                parentRect.w,
+                parentRect.h);
+            Switch_LogWrite(trace);
+            ++switchCompassOwnerDrawTraceCount[traceSlot];
+        }
+    }
+#endif
 
     switch (ownerDraw)
     {

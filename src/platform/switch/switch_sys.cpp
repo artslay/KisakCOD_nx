@@ -3764,6 +3764,7 @@ static bool Switch_LogIsHudCinematicDiagnostic(const char *msg)
         "[KisakCOD][HUD GAME MSG ITEM]",
         "[KisakCOD][HUD GAME MSG DRAW]",
         "[KisakCOD][HUD GAME SUBTITLE]",
+        "[KisakCOD][HUD COMPASS DRAW]",
         "[KisakCOD][UI MENU PAINT GATE]",
         "[KisakCOD][FRONTEND MENU OPEN]",
         "[KisakCOD][CIN STATE]",
