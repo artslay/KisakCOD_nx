@@ -124,7 +124,9 @@ bool __cdecl Con_IsChannelVisible(print_msg_dest_t dest, uint32_t channel, int32
         {
             switchSubtitleFilterRecoveryAttempted = true;
             const char *configuredFilter = Dvar_GetString("con_gameMsgWindow2Filter");
-            if (configuredFilter && configuredFilter[0])
+            if (!configuredFilter || !configuredFilter[0] || !I_stricmp(configuredFilter, "0"))
+                configuredFilter = "subtitle";
+            if (configuredFilter[0])
             {
                 Con_InitChannelsForDestFromList(dest, configuredFilter);
                 channelVisible = Com_BitCheckAssert(pcGlob.filters[dest], channel, 32);
@@ -197,6 +199,10 @@ void __cdecl Con_InitGameMsgChannels()
     uint32_t gameWindowIndexa; // [esp+24h] [ebp-8h]
     char *dvarDesc; // [esp+28h] [ebp-4h]
 
+#ifdef __SWITCH__
+    switchSubtitleFilterRecoveryAttempted = false;
+#endif
+
     for (gameWindowIndex = 0; gameWindowIndex < 4; ++gameWindowIndex)
     {
         dvarDesc = con_gameMsgWindowNFilter_Descs[gameWindowIndex];
@@ -227,9 +233,22 @@ void __cdecl Con_InitGameMsgChannels()
             dvarDesc);
     }
     for (gameWindowIndexa = 0; gameWindowIndexa < 4; ++gameWindowIndexa)
+    {
+        const char *channelNames = con_gameMsgWindowNFilter[gameWindowIndexa]->current.string;
+#ifdef __SWITCH__
+        // Window 2 is the stock in-game subtitle window. Its default filter is
+        // "subtitle"; recover it if a saved Switch dvar was cleared/corrupted.
+        if (gameWindowIndexa == 2 &&
+            (!channelNames || !channelNames[0] || !I_stricmp(channelNames, "0")))
+        {
+            channelNames = defaultGameWindowFilters[gameWindowIndexa];
+            Switch_LogWrite("[KisakCOD][HUD SUBTITLE FILTER] stage=init_fallback configured_filter=empty default=subtitle\n");
+        }
+#endif
         Con_InitChannelsForDestFromList(
             (print_msg_dest_t)(gameWindowIndexa + 3),
-            con_gameMsgWindowNFilter[gameWindowIndexa]->current.string);
+            channelNames);
+    }
 #ifdef __SWITCH__
     {
         const bool subtitleOpen = pcGlob.openChannels[CON_CHANNEL_SUBTITLE].name[0] != 0;
