@@ -408,6 +408,20 @@ void __cdecl EmitInt32(int value)
     memcpy(scrCompileGlob.codePos, &value, sizeof(value));
 }
 
+void __cdecl EmitPatchUnsignedShort(void *operand, ptrdiff_t offset)
+{
+    iassert(offset >= 0 && offset < 0x10000);
+    const uint16_t encodedOffset = static_cast<uint16_t>(offset);
+    memcpy(operand, &encodedOffset, sizeof(encodedOffset));
+}
+
+void __cdecl EmitPatchInt32(void *operand, ptrdiff_t offset)
+{
+    iassert(offset >= 0 && offset <= 0x7fffffff);
+    const int32_t encodedOffset = static_cast<int32_t>(offset);
+    memcpy(operand, &encodedOffset, sizeof(encodedOffset));
+}
+
 void __cdecl EmitGetInteger(int value, sval_u sourcePos)
 {
     if (value < 0)
@@ -1682,7 +1696,7 @@ void __cdecl EmitBoolOrExpression(
     offset = TempMalloc(0) - nextPos;
     if (offset >= 0x10000)
         MyAssertHandler(".\\script\\scr_compiler.cpp", 2731, 0, "%s", "offset < 65536");
-    *pos = (unsigned char)offset;
+    EmitPatchUnsignedShort(pos, offset);
 }
 
 char __cdecl EmitOrEvalPrimitiveExpression(sval_u expr, VariableCompileValue *constValue, scr_block_s *block)
@@ -1767,7 +1781,7 @@ void __cdecl EmitBoolAndExpression(
     offset = TempMalloc(0) - nextPos;
     if (offset >= 0x10000)
         MyAssertHandler(".\\script\\scr_compiler.cpp", 2751, 0, "%s", "offset < 65536");
-    *pos = (unsigned char)offset;
+    EmitPatchUnsignedShort(pos, offset);
 }
 
 int Scr_PopValue()
@@ -2233,7 +2247,7 @@ void __cdecl EmitIfStatement(
     offset = TempMalloc(0) - nextPos;
     if (offset >= 0x10000)
         MyAssertHandler(".\\script\\scr_compiler.cpp", 3169, 0, "%s", "offset < 65536");
-    *pos = (unsigned char)offset;
+    EmitPatchUnsignedShort(pos, offset);
 }
 
 void __cdecl EmitIfElseStatement(
@@ -2282,7 +2296,7 @@ void __cdecl EmitIfElseStatement(
     {
         EmitOpcode(OP_jump, 0, 0);
         AddOpcodePos(elseSourcePos.stringValue, 1);
-        EmitCodepos(0);
+        EmitInt32(0);
         pos2 = (char*)scrCompileGlob.codePos;
         nextPos2 = TempMalloc(0);
     }
@@ -2290,14 +2304,14 @@ void __cdecl EmitIfElseStatement(
     offset = TempMalloc(0) - nextPos1;
     if (offset >= 0x10000)
         MyAssertHandler(".\\script\\scr_compiler.cpp", 3233, 0, "%s", "offset < 65536");
-    *pos1 = (unsigned char)offset;
+    EmitPatchUnsignedShort(pos1, offset);
     Scr_TransferBlock(block, elseStatBlock->block);
     EmitStatement(stmt2, lastStatement, endSourcePos, elseStatBlock->block);
     EmitNOP2(lastStatement, endSourcePos, elseStatBlock->block);
     if (elseStatBlock->block->abortLevel == SCR_ABORT_NONE)
         childBlocks[childCount++] = elseStatBlock->block;
     if (!lastStatement)
-        *pos2 = TempMalloc(0) - nextPos2;
+        EmitPatchInt32(pos2, TempMalloc(0) - nextPos2);
     Scr_InitFromChildBlocks(childBlocks, childCount, block);
 }
 
@@ -2334,7 +2348,7 @@ ContinueStatementInfo *ConnectContinueStatements()
     result = scrCompileGlob.currentContinueStatement;
     for (continueStatement = scrCompileGlob.currentContinueStatement; continueStatement; continueStatement = result)
     {
-        *continueStatement->codePos = codePos - continueStatement->nextCodePos;
+        EmitPatchInt32(continueStatement->codePos, codePos - continueStatement->nextCodePos);
         result = continueStatement->next;
     }
     return result;
@@ -2352,7 +2366,7 @@ BreakStatementInfo *ConnectBreakStatements()
     result = scrCompileGlob.currentBreakStatement;
     for (breakStatement = scrCompileGlob.currentBreakStatement; breakStatement; breakStatement = result)
     {
-        *breakStatement->codePos = codePos - breakStatement->nextCodePos;
+        EmitPatchInt32(breakStatement->codePos, codePos - breakStatement->nextCodePos);
         result = breakStatement->next;
     }
     return result;
@@ -2489,12 +2503,12 @@ void __cdecl EmitForStatement(
     EmitShort(0);
     offset = TempMalloc(0) - pos1;
     iassert(offset < 65536);
-    *scrCompileGlob.codePos = offset;
+    EmitPatchUnsignedShort(scrCompileGlob.codePos, offset);
     if (pos2)
     {
         offset = TempMalloc(0) - nextPos2;
         iassert(offset < 65536);
-        *pos2 = offset;
+        EmitPatchUnsignedShort(pos2, offset);
     }
     ConnectBreakStatements();
     scrCompileGlob.bCanBreak = bOldCanBreak;
@@ -2608,12 +2622,12 @@ void __cdecl EmitWhileStatement(
     EmitShort(0);
     offset = TempMalloc(0) - pos1;
     iassert(65536);
-    *scrCompileGlob.codePos = offset;
+    EmitPatchUnsignedShort(scrCompileGlob.codePos, offset);
     if (pos2)
     {
         offset = TempMalloc(0) - nextPos2;
         iassert(offset < 65536);
-        *pos2 = offset;
+        EmitPatchUnsignedShort(pos2, offset);
     }
     ConnectBreakStatements();
     scrCompileGlob.bCanBreak = bOldCanBreak;
@@ -3131,7 +3145,7 @@ void __cdecl EmitBreakStatement(sval_u sourcePos, scr_block_s *block)
         EmitOpcode(OP_jump, 0, 0);
         AddOpcodePos(sourcePos.stringValue, 1);
 
-        EmitCodepos(0);
+        EmitInt32(0);
 
         if (scrCompilePub.developer_statement != 2)
         {
@@ -3162,7 +3176,7 @@ void __cdecl EmitContinueStatement(sval_u sourcePos, scr_block_s *block)
         EmitOpcode(OP_jump, 0, 0);
         AddOpcodePos(sourcePos.stringValue, 1);
 
-        EmitCodepos(0);
+        EmitInt32(0);
 
         if (scrCompilePub.developer_statement != 2)
         {
