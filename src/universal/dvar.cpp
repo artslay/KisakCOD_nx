@@ -2871,6 +2871,24 @@ const dvar_s *__cdecl Dvar_SetFromStringByNameFromSource(const char *dvarName, c
 {
     dvar_s *dvar; // [esp+0h] [ebp-4h]
 
+#ifdef __SWITCH__
+    if (dvarName &&
+        (!strcmp(dvarName, "compass") ||
+         !strcmp(dvarName, "con_gameMsgWindow2Filter")))
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][DVAR ORIGIN] name=%s source=%s requested='%.96s' caller=%p\n",
+            dvarName,
+            Switch_DvarSourceName(source),
+            string ? string : "<null>",
+            __builtin_return_address(0));
+        Switch_LogWrite(trace);
+    }
+#endif
+
     dvar = (dvar_s *)Dvar_FindVar(dvarName);
     if (!dvar)
         return Dvar_RegisterString(dvarName, string, DVAR_EXTERNAL, "External Dvar");
