@@ -1201,8 +1201,15 @@ void __cdecl G_UpdateViewAngleClamp(gclient_s *client, const float *worldAnglesC
 void __cdecl G_UpdateGroundTilt(gclient_s *client)
 {
     int groundTiltEntNum = client->groundTiltEntNum;
-    if (groundTiltEntNum == ENTITYNUM_NONE)
+
+    // A ground-tilt source must be a separate supporting entity. A stale
+    // self-reference (notably one restored from a save) feeds the player's
+    // own world yaw back into the camera and applies it a second time.
+    if (groundTiltEntNum == ENTITYNUM_NONE ||
+        groundTiltEntNum == client->ps.clientNum)
     {
+        if (groundTiltEntNum == client->ps.clientNum)
+            client->groundTiltEntNum = ENTITYNUM_NONE;
         Vec3Clear(client->ps.groundTiltAngles);
     }
     else
