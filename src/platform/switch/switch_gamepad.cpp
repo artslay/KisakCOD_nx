@@ -411,6 +411,10 @@ void Switch_GamepadFrame()
         !uiActiveNow &&
         !Key_IsCatcherActive(0, KEYCATCH_CONSOLE);
 
+    // Minus matches the PC TAB key used by the game's score/objectives screen.
+    // Send it only in active gameplay; menus retain their own navigation path.
+    SendKeyEdge(HidNpadButton_Minus, K_TAB, gameplayActiveNow);
+
     // UI navigation is fed through the engine's normal key path. Do not send
     // these keys during gameplay, otherwise A/B/D-pad would also execute any
     // matching keyboard binds from config.
