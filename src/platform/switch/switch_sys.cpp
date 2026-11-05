@@ -3744,6 +3744,28 @@ static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
 // Bounded HUD and cinematic lifecycle diagnostics. These are deliberately
 // whitelisted by prefix: without this category Switch_LogWrite() drops normal
 // state transitions because they are neither errors nor performance/FX traces.
+// HUD/compass/subtitle tracing was useful during bring-up, but it is now
+// deliberately silent. Filter the whole HUD diagnostic namespace before the
+// generic important-message check so words such as "missing" cannot re-enable
+// these traces through the error whitelist.
+static bool Switch_LogIsHudDiagnostic(const char *msg)
+{
+    if (!msg)
+        return false;
+
+    static constexpr const char *const kHudPrefixes[] =
+    {
+        "[KisakCOD][HUD",
+        "[KisakCOD][FPS HUD"
+    };
+    for (const char *prefix : kHudPrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool Switch_LogIsHudCinematicDiagnostic(const char *msg)
 {
     if (!msg || !*msg)
@@ -3751,23 +3773,6 @@ static bool Switch_LogIsHudCinematicDiagnostic(const char *msg)
 
     static constexpr const char *const kHudCinematicPrefixes[] =
     {
-        "[KisakCOD][FPS HUD TRACE]",
-        "[KisakCOD][HUD MENU LOAD]",
-        "[KisakCOD][HUD COMPASS EVENT]",
-        "[KisakCOD][HUD STATE]",
-        "[KisakCOD][HUD SUBTITLE ITEM]",
-        "[KisakCOD][HUD SUBTITLE TABLE]",
-        "[KisakCOD][HUD SUBTITLE STATE]",
-        "[KisakCOD][HUD SUBTITLE LOOKUP]",
-        "[KisakCOD][HUD SUBTITLE HIT]",
-        "[KisakCOD][HUD MENU PAINT]",
-        "[KisakCOD][HUD GAME MSG ITEM]",
-        "[KisakCOD][HUD GAME MSG DRAW]",
-        "[KisakCOD][HUD GAME SUBTITLE]",
-        "[KisakCOD][HUD COMPASS DRAW]",
-        "[KisakCOD][HUD COMPASS EXPR]",
-        "[KisakCOD][HUD COMPASS EXPR STATE]",
-        "[KisakCOD][HUD SUBTITLE FILTER]",
         "[KisakCOD][DVAR WATCH]",
         "[KisakCOD][DVAR ORIGIN]",
         "[KisakCOD][DVAR SET CALLER]",
@@ -3839,9 +3844,13 @@ static bool Switch_LogIsImportant(const char *msg)
 
 void Switch_LogWrite(const char *msg)
 {
+    // HUD/compass/subtitle diagnostics are fully disabled on Switch.
+    if (!msg || !*msg || Switch_LogIsHudDiagnostic(msg))
+        return;
+
     // The normal Switch log is intentionally error-only. Routine engine output
     // and per-frame/per-draw diagnostics are discarded before any I/O.
-    if (!msg || !*msg ||
+    if (
         (!Switch_LogIsImportant(msg) &&
          !Switch_LogIsFxDiagnostic(msg) &&
          !Switch_LogIsScriptDiagnostic(msg) &&
