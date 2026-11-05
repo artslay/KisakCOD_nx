@@ -6643,7 +6643,7 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
             if (used < sizeof(trace) - 2)
             {
                 trace[used++] = '\n';
-                trace[used] = '\\0';
+                trace[used] = '\0';
             }
             Switch_LogWrite(trace);
             switchCompassExpressionDumped = true;
