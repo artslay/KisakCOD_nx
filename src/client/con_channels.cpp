@@ -242,7 +242,7 @@ void __cdecl Con_InitGameMsgChannels()
             (!channelNames || !channelNames[0] || !I_stricmp(channelNames, "0")))
         {
             channelNames = defaultGameWindowFilters[gameWindowIndexa];
-            Switch_LogWrite("[KisakCOD][HUD SUBTITLE FILTER] stage=init_fallback configured_filter=empty default=subtitle\n");
+            Switch_LogWrite("[KisakCOD][HUD SUBTITLE FILTER] stage=init_fallback configured_filter=empty_or_zero default=subtitle\n");
         }
 #endif
         Con_InitChannelsForDestFromList(
