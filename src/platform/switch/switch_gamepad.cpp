@@ -63,6 +63,31 @@ static bool Released(u64 mask)
 // synthetic engine key. This preserves proper down/up pairing when gameplay
 // becomes blocked while a button is held, and when two sources share a key.
 static u64 g_forwardedKeyButtons[256] = {};
+static bool g_underbarrelChordKeyDown = false;
+
+static void ReleaseUnderbarrelChordKey()
+{
+    if (!g_underbarrelChordKeyDown)
+        return;
+
+    CL_KeyEvent(0, K_AUX12, 0, Sys_Milliseconds());
+    g_underbarrelChordKeyDown = false;
+}
+
+static void UpdateUnderbarrelChordKey(bool allowDown)
+{
+    constexpr u64 chordButtons = HidNpadButton_ZL | HidNpadButton_Right;
+    const bool chordHeld = (g_buttons & chordButtons) == chordButtons;
+
+    if (g_underbarrelChordKeyDown && (!allowDown || !chordHeld))
+        ReleaseUnderbarrelChordKey();
+
+    if (!g_underbarrelChordKeyDown && allowDown && chordHeld)
+    {
+        CL_KeyEvent(0, K_AUX12, 1, Sys_Milliseconds());
+        g_underbarrelChordKeyDown = true;
+    }
+}
 
 static void SendKeyEdge(u64 mask, int key, bool allowDown = true)
 {
@@ -271,6 +296,15 @@ void Switch_GamepadFrame()
     const bool consoleActive = Key_IsCatcherActive(0, KEYCATCH_CONSOLE);
     const bool gameplayActive =
         connectionState == CA_ACTIVE && !uiActive && !consoleActive;
+
+    // Release a held chord before any UI/console/cinematic early return.
+    if (!gameplayActive ||
+        (g_buttons & (HidNpadButton_ZL | HidNpadButton_Right)) !=
+            (HidNpadButton_ZL | HidNpadButton_Right))
+    {
+        ReleaseUnderbarrelChordKey();
+    }
+
     constexpr u64 cinematicSkipButtons =
         HidNpadButton_B | HidNpadButton_Plus;
 
@@ -287,6 +321,7 @@ void Switch_GamepadFrame()
 
     if (consoleShortcutPressed)
     {
+        ReleaseUnderbarrelChordKey();
         g_consoleShortcutConsumed = true;
         if (gameplayActive)
         {
@@ -461,18 +496,12 @@ void Switch_GamepadFrame()
     // weapon mode (the underbarrel launcher where available), and slot 4 is
     // C4/support equipment where available.
     //
-    // Hold ZL before pressing Right for the underbarrel action. If both buttons
-    // arrive in the same input sample, treat that as the same chord. Pressing
-    // Right first remains the standalone equipment action.
-    const bool rightAndZlPressedTogether =
-        Pressed(HidNpadButton_Right) && Pressed(HidNpadButton_ZL);
-    const bool underbarrelChordAllowed =
-        IsDown(g_previousButtons, HidNpadButton_ZL) ||
-        rightAndZlPressedTogether;
+    // Right alone selects equipment. Holding ZL and then pressing Right
+    // generates the separate alternate-weapon action; both buttons must stay
+    // held for its synthetic key to remain down.
     SendKeyEdge(HidNpadButton_Right, K_AUX11,
                 gameplayActiveNow && !IsDown(g_buttons, HidNpadButton_ZL));
-    SendKeyEdge(HidNpadButton_ZL | HidNpadButton_Right, K_AUX12,
-                gameplayActiveNow && underbarrelChordAllowed);
+    UpdateUnderbarrelChordKey(gameplayActiveNow);
     SendKeyEdge(HidNpadButton_Down, K_AUX13, gameplayActiveNow);
 
     // Emulate the normal PC N key so level/config bindings remain authoritative.
@@ -481,6 +510,8 @@ void Switch_GamepadFrame()
 
 void Switch_GamepadShutdown()
 {
+    ReleaseUnderbarrelChordKey();
+
     for (int key = 0; key < 256; ++key)
     {
         if (g_forwardedKeyButtons[key] != 0)
