@@ -126,8 +126,9 @@ void __cdecl SV_ClientThink(usercmd_s *cmd)
     if (traceWindow > 0 && commandAnglesChanged &&
         s_switchServerInputTraceBudget > 0)
     {
-        const gclient_s *player = g_entities[0].client;
-        if (player)
+        gentity_s *playerEnt = SV_GentityNum(0);
+        const gclient_s *player = playerEnt ? playerEnt->client : nullptr;
+        if (player && playerEnt)
         {
             char trace[448];
             std::snprintf(
@@ -152,7 +153,7 @@ void __cdecl SV_ClientThink(usercmd_s *cmd)
                 player->ps.viewAngleClampBase[1],
                 player->ps.viewAngleClampRange[1],
                 player->ps.viewlocked_entNum,
-                static_cast<const void *>(g_entities[0].tagInfo));
+                static_cast<const void *>(playerEnt->tagInfo));
             Switch_LogWrite(trace);
             --s_switchServerInputTraceBudget;
         }
