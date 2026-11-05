@@ -2891,13 +2891,16 @@ void LinkThread(uint32_t threadCountId, VariableValue *pos, bool allowFarCall)
 			return;
 		}
 
-		if (!allowFarCall && *(intptr_t *)value->codePosValue == FUNC_SCOPE_FAR)
+		intptr_t functionScope;
+		memcpy(&functionScope, value->codePosValue, sizeof(functionScope));
+		if (!allowFarCall && functionScope == FUNC_SCOPE_FAR)
 		{
 			CompileError2((char *)value->codePosValue, "unknown function");
 			return;
 		}
 
-		*(const char **)value->codePosValue = pos->u.codePosValue;
+		const char *functionCodePos = pos->u.codePosValue;
+		memcpy(value->codePosValue, &functionCodePos, sizeof(functionCodePos));
 		
 		RemoveVariable(threadCountId, i + 2);// free the per-reference position temp
 	}
