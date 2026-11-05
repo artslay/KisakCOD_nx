@@ -2900,7 +2900,7 @@ void LinkThread(uint32_t threadCountId, VariableValue *pos, bool allowFarCall)
 		}
 
 		const char *functionCodePos = pos->u.codePosValue;
-		memcpy(value->codePosValue, &functionCodePos, sizeof(functionCodePos));
+		memcpy(const_cast<char *>(value->codePosValue), &functionCodePos, sizeof(functionCodePos));
 		
 		RemoveVariable(threadCountId, i + 2);// free the per-reference position temp
 	}
