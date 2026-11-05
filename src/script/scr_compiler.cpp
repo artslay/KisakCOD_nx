@@ -23,7 +23,6 @@ extern void Switch_LogWrite(const char *msg);
 
 // Preserve the original capacity of 1024 child-block pointers on every target.
 static constexpr int SCR_BLOCK_POINTER_ARRAY_BYTES = 1024 * sizeof(scr_block_s *);
-static constexpr size_t SCR_SWITCH_ENTRY_SIZE = sizeof(uintptr_t) + sizeof(const char *);
 
 scrCompilePub_t scrCompilePub;
 scrCompileGlob_t scrCompileGlob;
@@ -170,7 +169,7 @@ void __cdecl EmitCanonicalString(unsigned int stringValue)
 #endif
     if (!stringValue)
         MyAssertHandler(".\\script\\scr_compiler.cpp", 192, 0, "%s", "stringValue");
-    scrCompileGlob.codePos = (unsigned char*)TempMallocAlignStrict(sizeof(uint16_t));
+    scrCompileGlob.codePos = (unsigned char*)TempMallocAlignStrict(2u);
     if (scrCompilePub.developer_statement == 2)
     {
         if (scrVarPub.developer_script)
@@ -179,17 +178,15 @@ void __cdecl EmitCanonicalString(unsigned int stringValue)
     }
     else if (scrCompilePub.developer_statement == 3)
     {
-        const uint16_t canonicalString = static_cast<uint16_t>(Scr_CompileCanonicalString(stringValue));
-        memcpy(scrCompileGlob.codePos, &canonicalString, sizeof(canonicalString));
-        if (!canonicalString)
+        *scrCompileGlob.codePos = Scr_CompileCanonicalString(stringValue);
+        if (!*scrCompileGlob.codePos)
             CompileError(0, "unknown field");
     }
     else
     {
         if (scrCompileGlob.bConstRefCount)
             SL_AddRefToString(stringValue);
-        const uint16_t canonicalString = static_cast<uint16_t>(SL_TransferToCanonicalString(stringValue));
-        memcpy(scrCompileGlob.codePos, &canonicalString, sizeof(canonicalString));
+        *scrCompileGlob.codePos = SL_TransferToCanonicalString(stringValue);
     }
 }
 
@@ -317,8 +314,8 @@ void __cdecl EmitGetUndefined(sval_u sourcePos)
 
 void __cdecl EmitShort(__int16 value)
 {
-    scrCompileGlob.codePos = (unsigned char*)TempMallocAlignStrict(sizeof(value));
-    memcpy(scrCompileGlob.codePos, &value, sizeof(value));
+    scrCompileGlob.codePos = (unsigned char*)TempMallocAlignStrict(2u);
+    *scrCompileGlob.codePos = value;
 }
 
 void __cdecl CompileTransferRefToString(unsigned int stringValue, unsigned int user)
@@ -374,8 +371,8 @@ void __cdecl EmitGetIString(unsigned int value, sval_u sourcePos)
 
 void __cdecl EmitFloat(float value)
 {
-    scrCompileGlob.codePos = (unsigned char*)TempMallocAlignStrict(sizeof(value));
-    memcpy(scrCompileGlob.codePos, &value, sizeof(value));
+    scrCompileGlob.codePos = (unsigned char*)TempMallocAlignStrict(4u);
+    *scrCompileGlob.codePos = value;
 }
 
 void __cdecl EmitGetVector(const float *value, sval_u sourcePos)
@@ -400,26 +397,6 @@ void __cdecl EmitCodepos(const char *pos)
 {
     scrCompileGlob.codePos = (unsigned char*)TempMallocAlignStrict(sizeof(const char *));
     *(const char **)scrCompileGlob.codePos = pos;
-}
-
-void __cdecl EmitInt32(int value)
-{
-    scrCompileGlob.codePos = (unsigned char*)TempMallocAlignStrict(sizeof(value));
-    memcpy(scrCompileGlob.codePos, &value, sizeof(value));
-}
-
-void __cdecl EmitPatchUnsignedShort(void *operand, ptrdiff_t offset)
-{
-    iassert(offset >= 0 && offset < 0x10000);
-    const uint16_t encodedOffset = static_cast<uint16_t>(offset);
-    memcpy(operand, &encodedOffset, sizeof(encodedOffset));
-}
-
-void __cdecl EmitPatchInt32(void *operand, ptrdiff_t offset)
-{
-    iassert(offset >= 0 && offset <= 0x7fffffff);
-    const int32_t encodedOffset = static_cast<int32_t>(offset);
-    memcpy(operand, &encodedOffset, sizeof(encodedOffset));
 }
 
 void __cdecl EmitGetInteger(int value, sval_u sourcePos)
@@ -466,7 +443,7 @@ void __cdecl EmitGetInteger(int value, sval_u sourcePos)
     }
     EmitOpcode(OP_GetInteger, 1, 0);
     AddOpcodePos(sourcePos.stringValue, 1);
-    EmitInt32(value);
+    EmitCodepos((const char*)value);
 }
 
 void __cdecl EmitValue(VariableCompileValue *constValue)
@@ -1696,7 +1673,7 @@ void __cdecl EmitBoolOrExpression(
     offset = TempMalloc(0) - nextPos;
     if (offset >= 0x10000)
         MyAssertHandler(".\\script\\scr_compiler.cpp", 2731, 0, "%s", "offset < 65536");
-    EmitPatchUnsignedShort(pos, offset);
+    *pos = (unsigned char)offset;
 }
 
 char __cdecl EmitOrEvalPrimitiveExpression(sval_u expr, VariableCompileValue *constValue, scr_block_s *block)
@@ -1781,7 +1758,7 @@ void __cdecl EmitBoolAndExpression(
     offset = TempMalloc(0) - nextPos;
     if (offset >= 0x10000)
         MyAssertHandler(".\\script\\scr_compiler.cpp", 2751, 0, "%s", "offset < 65536");
-    EmitPatchUnsignedShort(pos, offset);
+    *pos = (unsigned char)offset;
 }
 
 int Scr_PopValue()
@@ -2247,7 +2224,7 @@ void __cdecl EmitIfStatement(
     offset = TempMalloc(0) - nextPos;
     if (offset >= 0x10000)
         MyAssertHandler(".\\script\\scr_compiler.cpp", 3169, 0, "%s", "offset < 65536");
-    EmitPatchUnsignedShort(pos, offset);
+    *pos = (unsigned char)offset;
 }
 
 void __cdecl EmitIfElseStatement(
@@ -2296,7 +2273,7 @@ void __cdecl EmitIfElseStatement(
     {
         EmitOpcode(OP_jump, 0, 0);
         AddOpcodePos(elseSourcePos.stringValue, 1);
-        EmitInt32(0);
+        EmitCodepos(0);
         pos2 = (char*)scrCompileGlob.codePos;
         nextPos2 = TempMalloc(0);
     }
@@ -2304,14 +2281,14 @@ void __cdecl EmitIfElseStatement(
     offset = TempMalloc(0) - nextPos1;
     if (offset >= 0x10000)
         MyAssertHandler(".\\script\\scr_compiler.cpp", 3233, 0, "%s", "offset < 65536");
-    EmitPatchUnsignedShort(pos1, offset);
+    *pos1 = (unsigned char)offset;
     Scr_TransferBlock(block, elseStatBlock->block);
     EmitStatement(stmt2, lastStatement, endSourcePos, elseStatBlock->block);
     EmitNOP2(lastStatement, endSourcePos, elseStatBlock->block);
     if (elseStatBlock->block->abortLevel == SCR_ABORT_NONE)
         childBlocks[childCount++] = elseStatBlock->block;
     if (!lastStatement)
-        EmitPatchInt32(pos2, TempMalloc(0) - nextPos2);
+        *pos2 = TempMalloc(0) - nextPos2;
     Scr_InitFromChildBlocks(childBlocks, childCount, block);
 }
 
@@ -2348,7 +2325,7 @@ ContinueStatementInfo *ConnectContinueStatements()
     result = scrCompileGlob.currentContinueStatement;
     for (continueStatement = scrCompileGlob.currentContinueStatement; continueStatement; continueStatement = result)
     {
-        EmitPatchInt32(continueStatement->codePos, codePos - continueStatement->nextCodePos);
+        *continueStatement->codePos = codePos - continueStatement->nextCodePos;
         result = continueStatement->next;
     }
     return result;
@@ -2366,7 +2343,7 @@ BreakStatementInfo *ConnectBreakStatements()
     result = scrCompileGlob.currentBreakStatement;
     for (breakStatement = scrCompileGlob.currentBreakStatement; breakStatement; breakStatement = result)
     {
-        EmitPatchInt32(breakStatement->codePos, codePos - breakStatement->nextCodePos);
+        *breakStatement->codePos = codePos - breakStatement->nextCodePos;
         result = breakStatement->next;
     }
     return result;
@@ -2503,12 +2480,12 @@ void __cdecl EmitForStatement(
     EmitShort(0);
     offset = TempMalloc(0) - pos1;
     iassert(offset < 65536);
-    EmitPatchUnsignedShort(scrCompileGlob.codePos, offset);
+    *scrCompileGlob.codePos = offset;
     if (pos2)
     {
         offset = TempMalloc(0) - nextPos2;
         iassert(offset < 65536);
-        EmitPatchUnsignedShort(pos2, offset);
+        *pos2 = offset;
     }
     ConnectBreakStatements();
     scrCompileGlob.bCanBreak = bOldCanBreak;
@@ -2621,13 +2598,13 @@ void __cdecl EmitWhileStatement(
 
     EmitShort(0);
     offset = TempMalloc(0) - pos1;
-    iassert(offset < 65536);
-    EmitPatchUnsignedShort(scrCompileGlob.codePos, offset);
+    iassert(65536);
+    *scrCompileGlob.codePos = offset;
     if (pos2)
     {
         offset = TempMalloc(0) - nextPos2;
         iassert(offset < 65536);
-        EmitPatchUnsignedShort(pos2, offset);
+        *pos2 = offset;
     }
     ConnectBreakStatements();
     scrCompileGlob.bCanBreak = bOldCanBreak;
@@ -2908,7 +2885,7 @@ void __cdecl EmitCaseStatementInfo(unsigned int name, sval_u sourcePos)
     }
     else
     {
-        newCaseStatement = (CaseStatementInfo*)Hunk_AllocateTempMemoryHigh(sizeof(*newCaseStatement), "EmitCaseStatementInfo");
+        newCaseStatement = (CaseStatementInfo*)Hunk_AllocateTempMemoryHigh(16, "EmitCaseStatementInfo");
         newCaseStatement->name = name;
         newCaseStatement->codePos = TempMalloc(0);
         newCaseStatement->sourcePos = sourcePos.stringValue;
@@ -3047,11 +3024,12 @@ void __cdecl EmitSwitchStatementList(sval_u val, bool lastStatement, unsigned in
     scrCompileGlob.breakBlock = oldBreakBlock;
 }
 
-int __cdecl CompareCaseInfo(const void *elem1, const void *elem2)
+int __cdecl CompareCaseInfo(_DWORD *elem1, _DWORD *elem2)
 {
-    const uintptr_t key1 = *static_cast<const uintptr_t *>(elem1);
-    const uintptr_t key2 = *static_cast<const uintptr_t *>(elem2);
-    return key1 < key2 ? -1 : (key1 > key2 ? 1 : 0);
+    if (*elem1 <= *elem2)
+        return *elem1 < *elem2;
+    else
+        return -1;
 }
 
 void __cdecl EmitSwitchStatement(
@@ -3089,39 +3067,34 @@ void __cdecl EmitSwitchStatement(
     AddOpcodePos(sourcePos.stringValue, 0);
     EmitShort(0);
     pos2 = scrCompileGlob.codePos;
-    const uintptr_t switchJumpOffset =
-        static_cast<uintptr_t>(scrCompileGlob.codePos - (unsigned char*)nextPos1);
-    memcpy(pos1, &switchJumpOffset, sizeof(switchJumpOffset));
+    *pos1 = scrCompileGlob.codePos - (unsigned char*)nextPos1;
     pos3 = TempMallocAlignStrict(0);
     num = 0;
     caseStatement = scrCompileGlob.currentCaseStatement;
     while (caseStatement)
     {
-        EmitCodepos((const char*)static_cast<uintptr_t>(caseStatement->name));
+        EmitCodepos((const char*)caseStatement->name);
         EmitCodepos(caseStatement->codePos);
         caseStatement = caseStatement->next;
         ++num;
     }
-    const uint16_t switchCaseCount = static_cast<uint16_t>(num);
-    memcpy(pos2, &switchCaseCount, sizeof(switchCaseCount));
-    qsort(pos3, num, SCR_SWITCH_ENTRY_SIZE, CompareCaseInfo);
-    for (int caseIndex = 0; caseIndex + 1 < num; ++caseIndex)
+    *pos2 = num;
+    qsort(pos3, num, 8u, (int(*)(const void*, const void*))CompareCaseInfo);
+    while (num > 1)
     {
-        const char *currentEntry = pos3 + static_cast<size_t>(caseIndex) * SCR_SWITCH_ENTRY_SIZE;
-        const char *nextEntry = currentEntry + SCR_SWITCH_ENTRY_SIZE;
-        const uintptr_t currentCaseValue = *reinterpret_cast<const uintptr_t *>(currentEntry);
-        const uintptr_t nextCaseValue = *reinterpret_cast<const uintptr_t *>(nextEntry);
-        if (currentCaseValue == nextCaseValue)
+        if (*pos3 == *(pos3 + 2))
         {
             for (caseStatementa = scrCompileGlob.currentCaseStatement; caseStatementa; caseStatementa = caseStatementa->next)
             {
-                if (caseStatementa->name == static_cast<uint32_t>(currentCaseValue))
+                if (caseStatementa->name == *pos3)
                 {
                     CompileError(caseStatementa->sourcePos, "duplicate case expression");
                     return;
                 }
             }
         }
+        --num;
+        pos3 += 8;
     }
     ConnectBreakStatements();
     scrCompileGlob.currentCaseStatement = oldCaseStatement;
@@ -3145,11 +3118,11 @@ void __cdecl EmitBreakStatement(sval_u sourcePos, scr_block_s *block)
         EmitOpcode(OP_jump, 0, 0);
         AddOpcodePos(sourcePos.stringValue, 1);
 
-        EmitInt32(0);
+        EmitCodepos(0);
 
         if (scrCompilePub.developer_statement != 2)
         {
-            newBreakStatement = (BreakStatementInfo*)Hunk_AllocateTempMemoryHigh(sizeof(*newBreakStatement), "EmitBreakStatement");
+            newBreakStatement = (BreakStatementInfo*)Hunk_AllocateTempMemoryHigh(12, "EmitBreakStatement");
             newBreakStatement->codePos = (char*)scrCompileGlob.codePos;
             newBreakStatement->nextCodePos = TempMalloc(0);
             newBreakStatement->next = scrCompileGlob.currentBreakStatement;
@@ -3176,11 +3149,11 @@ void __cdecl EmitContinueStatement(sval_u sourcePos, scr_block_s *block)
         EmitOpcode(OP_jump, 0, 0);
         AddOpcodePos(sourcePos.stringValue, 1);
 
-        EmitInt32(0);
+        EmitCodepos(0);
 
         if (scrCompilePub.developer_statement != 2)
         {
-            newContinueStatement = (ContinueStatementInfo*)Hunk_AllocateTempMemoryHigh(sizeof(*newContinueStatement), "EmitContinueStatement");
+            newContinueStatement = (ContinueStatementInfo*)Hunk_AllocateTempMemoryHigh(12, "EmitContinueStatement");
             newContinueStatement->codePos = (char*)scrCompileGlob.codePos;
             newContinueStatement->nextCodePos = TempMalloc(0);
             newContinueStatement->next = scrCompileGlob.currentContinueStatement;
