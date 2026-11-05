@@ -1007,6 +1007,15 @@ void __cdecl CG_ApplyViewAnimation(int localClientNum)
     weaponInfo_s *weapInfo; // r3
 
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
+#ifdef __SWITCH__
+    const int switchTraceWindow = g_switchPlayerInputTraceFrames;
+    const float switchInputYaw = cgameGlob->predictedPlayerState.viewangles[1];
+    static int s_switchViewModelTraceLastWindow = 0;
+    static int s_switchViewModelTraceBudget = 12;
+    if (switchTraceWindow > s_switchViewModelTraceLastWindow)
+        s_switchViewModelTraceBudget = 12;
+    s_switchViewModelTraceLastWindow = switchTraceWindow;
+#endif
 
     if (cgameGlob->predictedPlayerState.pm_type != PM_UFO
         && cgameGlob->predictedPlayerState.pm_type != PM_NOCLIP
@@ -1040,7 +1049,45 @@ void __cdecl CG_ApplyViewAnimation(int localClientNum)
                     cgameGlob->refdef.vieworg))
                 {
                     AxisToAngles(*(const mat3x3 *)cgameGlob->refdef.viewaxis, cgameGlob->refdefViewAngles);
+#ifdef __SWITCH__
+                    if (switchTraceWindow > 0 && s_switchViewModelTraceBudget > 0)
+                    {
+                        char trace[448];
+                        std::snprintf(
+                            trace,
+                            sizeof(trace),
+                            "[KisakCOD][PLAYER INPUT] viewmodel window=%d weapon=%d model=%p inputYaw=%.2f tagYaw=%.2f poseYaw=%.2f predictedYaw=%.2f deltaYaw=%.2f tagAxis=(%.3f,%.3f,%.3f)\\n",
+                            switchTraceWindow,
+                            weaponIndex,
+                            static_cast<const void *>(weapInfo->viewModelDObj),
+                            switchInputYaw,
+                            cgameGlob->refdefViewAngles[1],
+                            cgameGlob->viewModelPose.angles[1],
+                            cgameGlob->predictedPlayerState.viewangles[1],
+                            cgameGlob->predictedPlayerState.delta_angles[1],
+                            cgameGlob->refdef.viewaxis[0][0],
+                            cgameGlob->refdef.viewaxis[0][1],
+                            cgameGlob->refdef.viewaxis[0][2]);
+                        Switch_LogWrite(trace);
+                        --s_switchViewModelTraceBudget;
+                    }
+#endif
                 }
+#ifdef __SWITCH__
+                else if (switchTraceWindow > 0 && s_switchViewModelTraceBudget > 0)
+                {
+                    char trace[256];
+                    std::snprintf(
+                        trace,
+                        sizeof(trace),
+                        "[KisakCOD][PLAYER INPUT] viewmodel window=%d weapon=%d model=%p tag_camera=missing\\n",
+                        switchTraceWindow,
+                        weaponIndex,
+                        static_cast<const void *>(weapInfo->viewModelDObj));
+                    Switch_LogWrite(trace);
+                    --s_switchViewModelTraceBudget;
+                }
+#endif
             }
         }
     }
