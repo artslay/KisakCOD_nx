@@ -1070,12 +1070,10 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     const float rightTrigger = GPad_GetButton(controller, GPAD_R_TRIG);
     const bool padActive = GPad_IsActive(controller);
 
-    if ((clients[0].snap.ps.pm_flags & 0x800) &&
-        cl_freemove->current.integer != 2)
-    {
-        Switch_ResetRightStickSmoothing();
-        return;
-    }
+    // PMF_FROZEN must not disable the entire controller path. The server's
+    // PmoveSingle() applies the stock freeze behavior to movement/buttons,
+    // while PM_UpdateViewAngles() still permits camera input for a living
+    // frozen player. Keep right-stick camera input active here as well.
 
     // Keep processing a short filtered tail after the stick returns to center.
     // Otherwise GPad_IsActive() becomes false on the first neutral sample and
