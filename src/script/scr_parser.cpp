@@ -83,8 +83,8 @@ static void Switch_LogInvalidSourceLookup(const char *where)
 
 void __cdecl TRACK_scr_parser()
 {
-    track_static_alloc_internal(&scrParserGlob, 52, "scrParserGlob", 7);
-    track_static_alloc_internal(&scrParserPub, 16, "scrParserPub", 7);
+    track_static_alloc_internal(&scrParserGlob, sizeof(scrParserGlob), "scrParserGlob", 7);
+    track_static_alloc_internal(&scrParserPub, sizeof(scrParserPub), "scrParserPub", 7);
 }
 
 void __cdecl Scr_InitOpcodeLookup()
