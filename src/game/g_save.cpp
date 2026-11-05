@@ -1153,7 +1153,7 @@ void __cdecl ReadClient(gclient_s *client, SaveGame *save)
         std::snprintf(
             trace,
             sizeof(trace),
-            "[KisakCOD][PLAYER INPUT] client-load bytes=46104 sizeof=%zu groundOffset=%zu groundEnd=%zu ptrSize=%zu before=%d after=%d\\n",
+            "[KisakCOD][PLAYER INPUT] client-load bytes=46104 sizeof=%zu groundOffset=%zu groundEnd=%zu ptrSize=%zu before=%d after=%d\n",
             sizeof(gclient_s),
             groundTiltOffset,
             groundTiltOffset + sizeof(client->groundTiltEntNum),
