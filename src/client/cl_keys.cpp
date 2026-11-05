@@ -1310,14 +1310,14 @@ const char *__cdecl Key_GetBinding(int32_t localClientNum, uint32_t keynum)
             "localClientNum doesn't index STATIC_MAX_LOCAL_CLIENTS\n\t%i not in [0, %i)",
             localClientNum,
             1);
-    if (keynum >= 0x100)
+    if (keynum >= MAX_CLIENT_KEYCODES)
         MyAssertHandler(
             ".\\client\\cl_keys.cpp",
             1561,
             0,
-            "keynum doesn't index MAX_KEYS\n\t%i not in [0, %i)",
+            "keynum doesn't index MAX_CLIENT_KEYCODES\n\t%i not in [0, %i)",
             keynum,
-            256);
+            MAX_CLIENT_KEYCODES);
     return playerKeys[localClientNum].keys[keynum].binding;
 }
 
