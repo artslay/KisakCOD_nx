@@ -3768,6 +3768,7 @@ static bool Switch_LogIsHudCinematicDiagnostic(const char *msg)
         "[KisakCOD][HUD COMPASS EXPR]",
         "[KisakCOD][HUD COMPASS EXPR STATE]",
         "[KisakCOD][HUD SUBTITLE FILTER]",
+        "[KisakCOD][DVAR WATCH]",
         "[KisakCOD][HUD GAME SUBTITLE FLOW]",
         "[KisakCOD][UI MENU PAINT GATE]",
         "[KisakCOD][FRONTEND MENU OPEN]",
