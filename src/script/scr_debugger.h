@@ -38,6 +38,9 @@ struct scr_block_s // sizeof=0x218
 };
 #ifndef KISAK_SWITCH
 static_assert(sizeof(scr_block_s) == 0x218);
+#else
+static_assert(sizeof(scr_block_s) == 0x218,
+              "script block layout must remain the fixed 536-byte local-variable record");
 #endif
 
 union sval_u // sizeof=0x4
