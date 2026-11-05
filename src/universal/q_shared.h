@@ -39,6 +39,7 @@
 #include <ctype.h>
 #include <cfloat> // FLT_MAX
 #include <cstdint>
+#include <cstddef>
 #include <climits>
 
 #if !defined(_MSC_VER)
@@ -872,6 +873,22 @@ struct dvar_s {
 	bool (__cdecl *domainFunc)(dvar_s*, DvarValue);
 	dvar_s* hashNext;
 };
+
+#ifdef __SWITCH__
+static_assert(sizeof(void *) == 8, "Switch dvars require 64-bit pointers");
+static_assert(sizeof(DvarValue) == 16 && alignof(DvarValue) == 8,
+	"Switch DvarValue must preserve its native pointer/vector union layout");
+static_assert(sizeof(DvarLimits) == 16 && alignof(DvarLimits) == 8,
+	"Switch DvarLimits must preserve its native enum pointer layout");
+static_assert(offsetof(dvar_s, current) == 24,
+	"Switch dvar current value offset changed");
+static_assert(offsetof(dvar_s, domain) == 72,
+	"Switch dvar domain offset changed");
+static_assert(offsetof(dvar_s, domainFunc) == 88,
+	"Switch dvar domain callback offset changed");
+static_assert(offsetof(dvar_s, hashNext) == 96 && sizeof(dvar_s) == 104,
+	"Switch dvar structure size/layout changed");
+#endif
 
 // lol
 using dvar_t = dvar_s;
