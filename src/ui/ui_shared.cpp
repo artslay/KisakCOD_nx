@@ -8223,10 +8223,42 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 	// retaining a fastfile placeholder or a stale table across UI reinitialization.
 	table = uiInfo.videoSubtitles;
 	if (!table)
+	{
+#ifdef __SWITCH__
+		static uint32_t lastMissingTableLog = 0;
+		const uint32_t now = static_cast<uint32_t>(Sys_Milliseconds());
+		if (!lastMissingTableLog || static_cast<uint32_t>(now - lastMissingTableLog) >= 1000u)
+		{
+			lastMissingTableLog = now;
+			char missingTableTrace[160];
+			std::snprintf(
+				missingTableTrace, sizeof(missingTableTrace),
+				"[KisakCOD][HUD SUBTITLE TABLE] result=missing dbDefault=%d\n",
+				DB_IsXAssetDefault(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv") ? 1 : 0);
+			Switch_LogWrite(missingTableTrace);
+		}
+#endif
 		return;
+	}
 
-	if (!cg_subtitles->current.enabled)
+	if (!cg_subtitles || !cg_subtitles->current.enabled)
+	{
+#ifdef __SWITCH__
+		static int lastSubtitleDvarState = -1;
+		const int subtitleDvarState = cg_subtitles ? (cg_subtitles->current.enabled ? 1 : 0) : -1;
+		if (lastSubtitleDvarState != subtitleDvarState)
+		{
+			lastSubtitleDvarState = subtitleDvarState;
+			char subtitleDvarTrace[128];
+			std::snprintf(
+				subtitleDvarTrace, sizeof(subtitleDvarTrace),
+				"[KisakCOD][HUD SUBTITLE STATE] cg_subtitles=%d\n",
+				subtitleDvarState);
+			Switch_LogWrite(subtitleDvarTrace);
+		}
+#endif
 		return;
+	}
 
 	if (R_Cinematic_IsFinished())
 		return;
@@ -8237,7 +8269,7 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 	timeMsec = cinematicGlob.timeInMsec;
 	I_strncpyz(cinematicName, cinematicGlob.currentCinematicName, 64);
 
-	if (ui_cinematicsTimestamp->current.enabled)
+	if (ui_cinematicsTimestamp && ui_cinematicsTimestamp->current.enabled)
 	{
 		Com_sprintf(outText, 1024, "%i.%01is ", timeMsec / 1000, (timeMsec % 1000) / 100);
 		timeRemaining = 1024 - (int)strlen(outText);
@@ -8322,10 +8354,27 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 		
 		low = mid + 1;
 		if (low > high)
-			return;
+			break;
 		
 		high = high;
 	}
+#ifdef __SWITCH__
+	static uint32_t lastSubtitleNoMatchLog = 0;
+	const uint32_t subtitleNoMatchNow = static_cast<uint32_t>(Sys_Milliseconds());
+	if (!lastSubtitleNoMatchLog ||
+		static_cast<uint32_t>(subtitleNoMatchNow - lastSubtitleNoMatchLog) >= 1000u)
+	{
+		lastSubtitleNoMatchLog = subtitleNoMatchNow;
+		char noMatchTrace[192];
+		std::snprintf(
+			noMatchTrace, sizeof(noMatchTrace),
+			"[KisakCOD][HUD SUBTITLE LOOKUP] result=no_row movie=%s time=%u rows=%d\n",
+			cinematicName,
+			timeMsec,
+			table->rowCount);
+		Switch_LogWrite(noMatchTrace);
+	}
+#endif
 }
 #endif
 

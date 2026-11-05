@@ -1238,10 +1238,12 @@ void __cdecl CG_Draw2D(int localClientNum)
     {
         menuDef_t *compassMenu = Menus_FindByName(&cgDC, "Compass");
         const int compassFlags = compassMenu ? compassMenu->window.dynamicFlags[0] : -1;
-        char trace[512];
+        const int compassWindowVisible =
+            compassMenu && Window_IsVisible(localClientNum, &compassMenu->window) ? 1 : 0;
+        char trace[544];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u reason=%s client=%d state=%d pmType=%d cubemap=%d draw2D=%d cgDrawHUD=%d scriptHUD=%d gameTime=%d compassFadeTime=%d compass=%p compassFlags=0x%x cgMenus=%d nextSnap=%p\n",
+            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u reason=%s client=%d state=%d pmType=%d cubemap=%d draw2D=%d cgDrawHUD=%d scriptHUD=%d gameTime=%d compassFadeTime=%d compass=%p compassFlags=0x%x compassVisible=%d cgMenus=%d nextSnap=%p\n",
             switchHudEntryTraceFrame,
             hudStateChanged ? "state-change" : "heartbeat",
             localClientNum,
@@ -1254,7 +1256,8 @@ void __cdecl CG_Draw2D(int localClientNum)
             cgArray[0].time,
             compassFadeTime,
             static_cast<void *>(compassMenu),
-            compassFlags,
+            static_cast<unsigned>(compassFlags),
+            compassWindowVisible,
             cgDC.menuCount,
             static_cast<void *>(cgArray[0].nextSnap));
         Switch_LogWrite(trace);

@@ -826,7 +826,7 @@ void UI_PaintCinematicSubtitles()
                     "[KisakCOD][HUD SUBTITLE ITEM] result=found menu=%s itemType=%d flags=0x%x menuCount=%d\n",
                     menu->window.name ? menu->window.name : "(unnamed)",
                     item->type,
-                    item->itemFlags,
+                    static_cast<unsigned>(item->itemFlags),
                     dc->menuCount);
                 Switch_LogWrite(subtitleItemTrace);
                 subtitleItemFoundLogged = true;

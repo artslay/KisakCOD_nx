@@ -460,18 +460,26 @@ void __cdecl CG_MenuShowNotify(int localClientNum, int menuToShow)
         }
 #ifdef __SWITCH__
         const int compassFlagsAfter = compassMenu ? compassMenu->window.dynamicFlags[0] : -1;
-        char compassTrace[256];
-        Com_sprintf(
-            compassTrace, sizeof(compassTrace),
-            "[KisakCOD][HUD COMPASS EVENT] event=input_notify gameTime=%d oldFade=%d shown=%d menu=%p flagsBefore=0x%x flagsAfter=0x%x scriptHUD=%d\n",
-            cgArray[0].time,
-            oldCompassFadeTime,
-            showCompass ? 1 : 0,
-            static_cast<void *>(compassMenu),
-            compassFlagsBefore,
-            compassFlagsAfter,
-            hud_drawHUD->current.enabled ? 1 : 0);
-        Switch_LogWrite(compassTrace);
+        static uint32_t lastCompassNotifyLog = 0;
+        const uint32_t compassNotifyNow = static_cast<uint32_t>(Sys_Milliseconds());
+        if (!lastCompassNotifyLog ||
+            static_cast<uint32_t>(compassNotifyNow - lastCompassNotifyLog) >= 500u ||
+            compassFlagsBefore != compassFlagsAfter)
+        {
+            lastCompassNotifyLog = compassNotifyNow;
+            char compassTrace[256];
+            Com_sprintf(
+                compassTrace, sizeof(compassTrace),
+                "[KisakCOD][HUD COMPASS EVENT] event=input_notify gameTime=%d oldFade=%d shown=%d menu=%p flagsBefore=0x%x flagsAfter=0x%x scriptHUD=%d\n",
+                cgArray[0].time,
+                oldCompassFadeTime,
+                showCompass ? 1 : 0,
+                static_cast<void *>(compassMenu),
+                static_cast<unsigned>(compassFlagsBefore),
+                static_cast<unsigned>(compassFlagsAfter),
+                hud_drawHUD->current.enabled ? 1 : 0);
+            Switch_LogWrite(compassTrace);
+        }
 #endif
         break;
     }
