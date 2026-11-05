@@ -1286,7 +1286,7 @@ void __cdecl CG_LoadHudMenu(int localClientNum)
         Menus ? Menus->menuCount : -1,
         cgDC.menuCount,
         static_cast<void *>(v3),
-        v3 ? v3->window.dynamicFlags[0] : -1);
+        static_cast<unsigned>(v3 ? v3->window.dynamicFlags[0] : -1));
     Switch_LogWrite(compassLoadTrace);
 #endif
     if (v3)

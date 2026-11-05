@@ -517,7 +517,7 @@ void __cdecl CG_CheckHudCompassDisplay(int localClientNum)
                     elapsed,
                     v1->current.value * 1000.0f,
                     static_cast<void *>(compassMenu),
-                    compassMenu ? compassMenu->window.dynamicFlags[0] : -1);
+                    static_cast<unsigned>(compassMenu ? compassMenu->window.dynamicFlags[0] : -1));
                 Switch_LogWrite(compassHideTrace);
 #endif
                 cgArray[0].compassFadeTime = 0;
