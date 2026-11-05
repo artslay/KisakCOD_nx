@@ -3729,6 +3729,7 @@ static bool Switch_LogIsPlayerAngleDiagnostic(const char *msg)
     {
         "[KisakCOD][PLAYER SPAWN ANGLES]",
         "[KisakCOD][PLAYER INPUT]",
+        "[KisakCOD][PLAYER INPUT GATE]",
         "[KisakCOD][PLAYER ANGLES PRE]",
         "[KisakCOD][PLAYER ANGLES POST]"
     };
