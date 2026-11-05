@@ -1886,6 +1886,7 @@ void __cdecl UI_Refresh()
 
                 if (pregameFinished ||
                     completedLoadingCinematic ||
+                    activeFadeOverlay ||
                     (!pregameVisible && !cinematicStillActive))
                 {
                     Switch_LogWrite("[KisakCOD][CIN LOAD] completing pregame-to-game transition\n");
