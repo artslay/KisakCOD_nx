@@ -9,9 +9,6 @@
 #include <universal/com_math.h>
 #include "actor.h"
 #include <server/sv_game.h>
-#ifdef __SWITCH__
-#include <client/cl_input.h>
-#endif
 
 #ifdef __SWITCH__
 #include <cstdio>
@@ -686,14 +683,6 @@ void __cdecl ClientSpawn(gentity_s *ent)
     client->playerADSTargetTime = 0;
     client->ps.commandTime = level.time - 200;
     ClientThink(v3);
-#ifdef __SWITCH__
-    // Pmove in ClientThink may clamp or otherwise adjust the spawn angles.
-    // Synchronize the local command-space angles from the final server state.
-    if (v3 == 0)
-    {
-        CL_SyncSwitchGamepadAnglesAfterSpawn(client->ps.viewangles, client->ps.delta_angles);
-    }
-#endif
 #ifdef __SWITCH__
     if (switchTraceThisSpawn)
     {

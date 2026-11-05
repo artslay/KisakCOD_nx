@@ -81,21 +81,6 @@ void Switch_ResetRightStickSmoothing()
 }
 }
 
-void CL_SyncSwitchGamepadAnglesAfterSpawn(
-    const float *viewAngles,
-    const float *deltaAngles)
-{
-    if (!viewAngles || !deltaAngles)
-        return;
-
-    // SetClientViewAngle() has just established the authoritative player
-    // orientation and command delta. Convert it back to the client command
-    // angle space before the first post-spawn usercmd is built.
-    for (int i = 0; i < 3; ++i)
-        clients[0].viewangles[i] = viewAngles[i] - deltaAngles[i];
-
-    Switch_ResetRightStickSmoothing();
-}
 #endif
 
 #define KEY_LEFT 0
@@ -1069,16 +1054,6 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
 {
 #ifdef __SWITCH__
     if (cl_paused->current.integer == 1)
-    {
-        Switch_ResetRightStickSmoothing();
-        return;
-    }
-
-    // Do not feed look input while the authoritative snapshot is dead.
-    // Respawn synchronization is performed by ClientSpawn(), when the server
-    // establishes the new viewangles and delta_angles.
-    const playerState_s &snapshotPs = clients[0].snap.ps;
-    if (snapshotPs.pm_type >= PM_DEAD)
     {
         Switch_ResetRightStickSmoothing();
         return;
