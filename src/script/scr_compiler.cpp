@@ -2621,7 +2621,7 @@ void __cdecl EmitWhileStatement(
 
     EmitShort(0);
     offset = TempMalloc(0) - pos1;
-    iassert(65536);
+    iassert(offset < 65536);
     EmitPatchUnsignedShort(scrCompileGlob.codePos, offset);
     if (pos2)
     {
