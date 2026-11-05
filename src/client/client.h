@@ -658,6 +658,10 @@ void __cdecl SCR_DrawCinematic(int32_t localClientNum);
 void __cdecl SCR_StopCinematic(int32_t localClientNum);
 void SCR_ResetMapLoadingCinematicFinished();
 bool SCR_ConsumeMapLoadingCinematicFinished();
+#ifdef __SWITCH__
+void SCR_SetMapLoadingCinematicActive(bool active);
+bool SCR_IsMapLoadingCinematicActive();
+#endif
 
 
 extern int32_t g_console_field_width;
