@@ -28,6 +28,16 @@
 #ifdef __SWITCH__
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern int g_switchPlayerInputTraceFrames;
+
+namespace
+{
+int s_switchCgViewTraceLastWindow = 0;
+int s_switchCgViewTraceActiveBudget = 16;
+int s_switchCgViewTraceIdleBudget = 8;
+float s_switchCgViewTraceLastPredYaw = 0.0f;
+bool s_switchCgViewTraceHasPredYaw = false;
+}
 extern "C" void Switch_LogPostCinematicRenderTrace(const char *phase, const char *detail);
 #endif
 
@@ -1507,6 +1517,72 @@ void __cdecl CG_CalcViewValues(int localClientNum)
     CG_ApplyViewAnimation(localClientNum);
     CG_PerturbCamera(cgArray);
     CG_CalcFov(localClientNum);
+
+#ifdef __SWITCH__
+    const int viewTraceWindow = g_switchPlayerInputTraceFrames;
+    if (viewTraceWindow > s_switchCgViewTraceLastWindow)
+    {
+        s_switchCgViewTraceActiveBudget = 16;
+        s_switchCgViewTraceIdleBudget = 8;
+        s_switchCgViewTraceHasPredYaw = false;
+    }
+    s_switchCgViewTraceLastWindow = viewTraceWindow;
+
+    if (viewTraceWindow > 0)
+    {
+        const float predictedYaw = cgameGlob->predictedPlayerState.viewangles[1];
+        const bool predictedYawChanged =
+            !s_switchCgViewTraceHasPredYaw ||
+            std::fabs(AngleDelta(s_switchCgViewTraceLastPredYaw, predictedYaw)) > 0.05f;
+        const bool logActiveView =
+            predictedYawChanged && s_switchCgViewTraceActiveBudget > 0;
+        const bool logIdleView =
+            !predictedYawChanged && viewTraceWindow % 50 == 0 &&
+            s_switchCgViewTraceIdleBudget > 0;
+
+        s_switchCgViewTraceLastPredYaw = predictedYaw;
+        s_switchCgViewTraceHasPredYaw = true;
+
+        if (logActiveView || logIdleView)
+        {
+            char trace[512];
+            const float snapYaw = cgameGlob->snap
+                ? cgameGlob->snap->ps.viewangles[1] : -999.0f;
+            const float nextSnapYaw = cgameGlob->nextSnap
+                ? cgameGlob->nextSnap->ps.viewangles[1] : -999.0f;
+            const int snapTime = cgameGlob->snap
+                ? cgameGlob->snap->serverTime : -1;
+            const int nextSnapTime = cgameGlob->nextSnap
+                ? cgameGlob->nextSnap->serverTime : -1;
+
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][PLAYER INPUT] cgame window=%d time=%d snap=(%d,%.2f) next=(%d,%.2f) predicted=(%.2f,%.2f) cmdView=(%.2f,%.2f) refAngles=(%.2f,%.2f) axisForward=(%.3f,%.3f,%.3f) pm=%d flags=0x%x validPPS=%d paused=%d\\n",
+                viewTraceWindow,
+                cgameGlob->time,
+                snapTime, snapYaw, nextSnapTime, nextSnapYaw,
+                cgameGlob->predictedPlayerState.viewangles[0],
+                cgameGlob->predictedPlayerState.viewangles[1],
+                clients[0].viewangles[0],
+                clients[0].viewangles[1],
+                cgameGlob->refdefViewAngles[0],
+                cgameGlob->refdefViewAngles[1],
+                cgameGlob->refdef.viewaxis[0][0],
+                cgameGlob->refdef.viewaxis[0][1],
+                cgameGlob->refdef.viewaxis[0][2],
+                cgameGlob->predictedPlayerState.pm_type,
+                cgameGlob->predictedPlayerState.pm_flags,
+                cgameGlob->validPPS,
+                cg_paused->current.integer);
+            Switch_LogWrite(trace);
+            if (logActiveView)
+                --s_switchCgViewTraceActiveBudget;
+            else
+                --s_switchCgViewTraceIdleBudget;
+        }
+    }
+#endif
 
     if (cgameGlob->predictedPlayerState.pm_type == PM_MPVIEWER)
         CG_ModelPreviewerUpdateView(
