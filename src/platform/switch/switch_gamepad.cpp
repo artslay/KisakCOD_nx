@@ -236,6 +236,11 @@ static void Switch_ClearPendingChordInputs()
     g_switchChordConsumedButtons = 0;
 }
 
+static bool Switch_IsStockUnderbarrelChord(int chordKey, const char *binding)
+{
+    return chordKey == K_AUX12 && binding && !I_stricmp(binding, "+actionslot 3");
+}
+
 static bool Switch_HasBoundChordForButton(int buttonIndex)
 {
     for (int other = 0; other < kSwitchBindButtonCount; ++other)
@@ -244,14 +249,15 @@ static bool Switch_HasBoundChordForButton(int buttonIndex)
             continue;
 
         const int chordKey = Switch_ComboKeyForPair(buttonIndex, other);
-        // Preserve the stock ZL press (aim/hold action) for the legacy
-        // ZL + D-pad Right chord; all user-created chords defer their singles.
-        if (chordKey < 0 || chordKey == K_AUX12)
+        if (chordKey < 0)
             continue;
 
         const char *binding = Key_GetBinding(0, static_cast<uint32_t>(chordKey));
-        if (binding && *binding)
+        if (binding && *binding &&
+            !Switch_IsStockUnderbarrelChord(chordKey, binding))
+        {
             return true;
+        }
     }
     return false;
 }
@@ -278,6 +284,8 @@ static void Switch_UpdateBoundChordInputs(bool allowDown)
             const char *binding = chordKey >= 0
                 ? Key_GetBinding(0, static_cast<uint32_t>(chordKey))
                 : nullptr;
+            const bool stockUnderbarrelChord =
+                Switch_IsStockUnderbarrelChord(chordKey, binding);
             const bool chordHeld = allowDown && binding && *binding &&
                 (g_buttons & pairMask) == pairMask;
 
@@ -291,7 +299,7 @@ static void Switch_UpdateBoundChordInputs(bool allowDown)
                 }
                 else
                 {
-                    if (chordKey != K_AUX12)
+                    if (!stockUnderbarrelChord)
                         g_switchChordConsumedButtons |= pairMask;
                     ++pairIndex;
                     continue;
@@ -314,10 +322,10 @@ static void Switch_UpdateBoundChordInputs(bool allowDown)
                 g_switchPendingSingleButtons[first].pending = false;
                 g_switchPendingSingleButtons[second].pending = false;
 
-                if (chordKey == K_AUX12)
+                if (stockUnderbarrelChord)
                 {
                     // When D-pad Right was pressed first, release its normal
-                    // equipment action as soon as ZL completes the chord.
+                    // equipment action as soon as ZL completes the stock chord.
                     if (secondWasHeld && firstPressedNow)
                     {
                         ReleaseForwardedKeySource(secondMask,
