@@ -28,6 +28,7 @@
 
 #ifdef __SWITCH__
 
+extern void CL_RestoreSwitchDefaultGamepadBindings();
 
 // If the user skips a cinematic while holding a pad button, the next movie
 // must not treat that still-held button as a second skip after UI reset.
@@ -283,7 +284,7 @@ void CL_PrepareCinematicSkipInput(int localClientNum)
     if (switchCinematicSkipBlockedUntilRelease)
         return;
 
-    for (int skipKey = 0; skipKey < 256; ++skipKey)
+    for (int skipKey = 0; skipKey < MAX_CLIENT_KEYCODES; ++skipKey)
     {
         if ((skipKey < K_ASCII_FIRST || skipKey == K_MOUSE1) &&
             playerKeys[localClientNum].keys[skipKey].down)
@@ -308,7 +309,7 @@ bool s_hasExactMatch;
 
 void __cdecl TRACK_cl_keys()
 {
-    track_static_alloc_internal(playerKeys, 3368, "playerKeys", 10);
+    track_static_alloc_internal(playerKeys, sizeof(playerKeys), "playerKeys", 10);
     track_static_alloc_internal(&g_consoleField, 280, "g_consoleField", 10);
     track_static_alloc_internal(historyEditLines, 8960, "historyEditLines", 10);
     track_static_alloc_internal(keynames, 768, "keynames", 10);
@@ -1165,13 +1166,40 @@ int32_t __cdecl Key_IsDown(int32_t localClientNum, int32_t keynum)
         return playerKeys[localClientNum].keys[keynum].down;
 }
 
-char tinystr[5];
+char tinystr[8];
 #ifdef __SWITCH__
 // Human-readable names for the physical Switch controls. These are used only
 // for UI binding prompts; the underlying key numbers and config names stay
 // compatible with the engine's AUX bindings.
 static const char *Switch_KeynumToDisplayName(int32_t keynum)
 {
+    static const char *const controllerButtonNames[] =
+    {
+        "B", "X", "Y", "L", "R", "ZL", "ZR", "L3", "R3", "Minus",
+        "D-Pad Up", "D-Pad Down", "D-Pad Left", "D-Pad Right"
+    };
+    static char chordName[64];
+
+    constexpr int buttonCount = sizeof(controllerButtonNames) / sizeof(controllerButtonNames[0]);
+    constexpr int firstChordKey = 256;
+    constexpr int chordKeyCount = buttonCount * (buttonCount - 1) / 2;
+    if (keynum >= firstChordKey && keynum < firstChordKey + chordKeyCount)
+    {
+        int chordIndex = keynum - firstChordKey;
+        for (int first = 0; first < buttonCount; ++first)
+        {
+            for (int second = first + 1; second < buttonCount; ++second)
+            {
+                if (chordIndex-- == 0)
+                {
+                    Com_sprintf(chordName, sizeof(chordName), "%s + %s",
+                        controllerButtonNames[first], controllerButtonNames[second]);
+                    return chordName;
+                }
+            }
+        }
+    }
+
     switch (keynum)
     {
     case K_TAB:          return "Minus";
@@ -1210,7 +1238,7 @@ const char *__cdecl Key_KeynumToString(int32_t keynum, int32_t translate)
 
     if (keynum == -1)
         return "<KEY NOT FOUND>";
-    if (keynum >= 0x100)
+    if (keynum < 0 || keynum >= MAX_CLIENT_KEYCODES)
         return "<OUT OF RANGE>";
 #ifdef __SWITCH__
     if (translate)
@@ -1239,26 +1267,33 @@ const char *__cdecl Key_KeynumToString(int32_t keynum, int32_t translate)
             return kn->name;
         ++kn;
     }
-    i = keynum >> 4;
-    j = keynum & 0xF;
-    qmemcpy(tinystr, "0x", 2);
-    if (keynum >> 4 <= 9)
-        v4 = i + 48;
+    if (keynum <= 0xFF)
+    {
+        i = keynum >> 4;
+        j = keynum & 0xF;
+        qmemcpy(tinystr, "0x", 2);
+        if (i <= 9)
+            v4 = i + 48;
+        else
+            v4 = i + 87;
+        tinystr[2] = v4;
+        if ((keynum & 0xFu) <= 9)
+            v3 = j + 48;
+        else
+            v3 = j + 87;
+        tinystr[3] = v3;
+        tinystr[4] = 0;
+    }
     else
-        v4 = i + 87;
-    tinystr[2] = v4;
-    if ((keynum & 0xFu) <= 9)
-        v3 = j + 48;
-    else
-        v3 = j + 87;
-    tinystr[3] = v3;
-    tinystr[4] = 0;
+    {
+        Com_sprintf(tinystr, sizeof(tinystr), "0x%x", keynum);
+    }
     return tinystr;
 }
 
 void __cdecl Key_SetBinding(int32_t localClientNum, int32_t keynum, char *binding)
 {
-    if (keynum != -1)
+    if (keynum >= 0 && keynum < MAX_CLIENT_KEYCODES)
     {
         ReplaceString(&playerKeys[localClientNum].keys[keynum].binding, binding);
         dvar_modifiedFlags |= 1u;
@@ -1300,7 +1335,7 @@ int32_t __cdecl Key_GetCommandAssignmentInternal(int32_t localClientNum, const c
     twokeys[1] = -1;
     *twokeys = -1;
     count = 0;
-    for (keynum = 0; keynum < 256; ++keynum)
+    for (keynum = 0; keynum < MAX_CLIENT_KEYCODES; ++keynum)
     {
         binding = Key_GetBinding(localClientNum, keynum);
         if (binding)
@@ -1351,66 +1386,54 @@ void __cdecl Key_Unbind_f()
 
 int32_t __cdecl Key_StringToKeynum(const char *str)
 {
-    int32_t n2; // [esp+10h] [ebp-Ch]
-    int32_t n2a; // [esp+10h] [ebp-Ch]
-    int32_t n1; // [esp+14h] [ebp-8h]
-    int32_t n1a; // [esp+14h] [ebp-8h]
     keyname_t *kn; // [esp+18h] [ebp-4h]
 
     if (!str || !*str)
         return -1;
     if (!str[1])
         return *str;
-    if (*str == 48 && str[1] == 120 && strlen(str) == 4)
+    if (str[0] == '0' && str[1] == 'x')
     {
-        n1 = str[2];
-        if (I_isdigit(n1))
+        const size_t hexLength = strlen(str + 2);
+        if (hexLength == 2 || hexLength == 3)
         {
-            n1a = n1 - 48;
+            int32_t keynum = 0;
+            for (size_t i = 2; str[i]; ++i)
+            {
+                const int digit = tolower(static_cast<unsigned char>(str[i]));
+                int32_t value;
+                if (digit >= '0' && digit <= '9')
+                    value = digit - '0';
+                else if (digit >= 'a' && digit <= 'f')
+                    value = digit - 'a' + 10;
+                else
+                    return -1;
+                keynum = (keynum << 4) | value;
+            }
+            return keynum < MAX_CLIENT_KEYCODES ? keynum : -1;
         }
-        else if (n1 < 97 || n1 > 102)
-        {
-            n1a = 0;
-        }
-        else
-        {
-            n1a = n1 - 87;
-        }
-        n2 = str[3];
-        if (I_isdigit(n2))
-        {
-            n2a = n2 - 48;
-        }
-        else if (n2 < 97 || n2 > 102)
-        {
-            n2a = 0;
-        }
-        else
-        {
-            n2a = n2 - 87;
-        }
-        return n2a + 16 * n1a;
     }
-    else
+
+    for (kn = keynames; kn->name; ++kn)
     {
-        for (kn = keynames; kn->name; ++kn)
-        {
-            if (!I_stricmp(str, kn->name))
-                return kn->keynum;
-        }
-        return -1;
+        if (!I_stricmp(str, kn->name))
+            return kn->keynum;
     }
+    return -1;
 }
 
 void __cdecl Key_Unbindall_f()
 {
     int32_t keynum; // [esp+0h] [ebp-Ch]
 
-    for (keynum = 0; keynum < 256; ++keynum)
+    for (keynum = 0; keynum < MAX_CLIENT_KEYCODES; ++keynum)
     {
         if (playerKeys[0].keys[keynum].binding)
             Key_SetBinding(0, keynum, (char *)"");
     }
+#ifdef __SWITCH__
+    CL_RestoreSwitchDefaultGamepadBindings();
+#endif
 }
 
 void __cdecl Key_Bind_f()
@@ -1441,7 +1464,7 @@ void __cdecl Key_Bind_f()
         }
         else
         {
-            keynuma = tolower(keynum);
+            keynuma = keynum < 256 ? tolower(keynum) : keynum;
             if (argc == 2)
             {
                 binding = Key_GetBinding(0, keynuma);
@@ -1489,9 +1512,9 @@ void __cdecl Key_Bind_f()
 
 void __cdecl Key_WriteBindings(int32_t localClientNum, int32_t f)
 {
-    char buffer[8196]; // [esp+0h] [ebp-2008h] BYREF
+    char buffer[32768];
 
-    Key_WriteBindingsToBuffer(localClientNum, buffer, 0x2000);
+    Key_WriteBindingsToBuffer(localClientNum, buffer, sizeof(buffer));
     FS_Printf(f, "%s", buffer);
 }
 
@@ -1509,7 +1532,7 @@ int32_t __cdecl Key_WriteBindingsToBuffer(int32_t localClientNum, char *buffer, 
     keys = playerKeys[localClientNum].keys;
     bufferSizea = bufferSize - 4;
     bytesUsed = 0;
-    for (keyIndex = 0; keyIndex < 256; ++keyIndex)
+    for (keyIndex = 0; keyIndex < MAX_CLIENT_KEYCODES; ++keyIndex)
     {
         if (keys[keyIndex].binding && *keys[keyIndex].binding)
         {
@@ -1539,7 +1562,7 @@ void __cdecl Key_Bindlist_f()
     int32_t keynum; // [esp+0h] [ebp-Ch]
     const char *binding; // [esp+8h] [ebp-4h]
 
-    for (keynum = 0; keynum < 256; ++keynum)
+    for (keynum = 0; keynum < MAX_CLIENT_KEYCODES; ++keynum)
     {
         binding = Key_GetBinding(0, keynum);
         if (binding)
@@ -1592,7 +1615,7 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
     if (switchCinematicSkipBlockedUntilRelease && !down)
     {
         bool anySkipKeyDown = false;
-        for (int skipKey = 0; skipKey < 256; ++skipKey)
+        for (int skipKey = 0; skipKey < MAX_CLIENT_KEYCODES; ++skipKey)
         {
             if ((skipKey < K_ASCII_FIRST || skipKey == K_MOUSE1) && keys[skipKey].down)
             {
@@ -1891,7 +1914,7 @@ void __cdecl CL_KeyEvent(int32_t localClientNum, int32_t key, int32_t down, uint
     if (switchCinematicSkipBlockedUntilRelease && !down)
     {
         bool anySkipKeyDown = false;
-        for (int skipKey = 0; skipKey < 256; ++skipKey)
+        for (int skipKey = 0; skipKey < MAX_CLIENT_KEYCODES; ++skipKey)
         {
             if ((skipKey < K_ASCII_FIRST || skipKey == K_MOUSE1) && keys[skipKey].down)
             {
@@ -2268,7 +2291,7 @@ void __cdecl Key_ClearStates(int32_t localClientNum)
 
     playerKeys[localClientNum].anyKeyDown = 0;
     keys = playerKeys[localClientNum].keys;
-    for (keynum = 0; keynum < 256; ++keynum)
+    for (keynum = 0; keynum < MAX_CLIENT_KEYCODES; ++keynum)
     {
         if (keys[keynum].down)
             CL_KeyEvent(localClientNum, keynum, 0, 0);
@@ -2295,7 +2318,7 @@ int32_t __cdecl CL_GetKeyBindingInternal(int32_t localClientNum, const char *com
     const char *binding;
     int32_t bindCount = 0;
 
-    for (keynum = 0; keynum < 256; ++keynum)
+    for (keynum = 0; keynum < MAX_CLIENT_KEYCODES; ++keynum)
     {
         binding = Key_GetBinding(localClientNum, static_cast<uint32_t>(keynum));
         if (!binding || I_stricmp(binding, command))
@@ -2341,7 +2364,7 @@ void __cdecl Key_Shutdown()
 
     for (client = 0; client < 1; ++client)
     {
-        for (keynum = 0; keynum < 256; ++keynum)
+        for (keynum = 0; keynum < MAX_CLIENT_KEYCODES; ++keynum)
         {
             if (playerKeys[client].keys[keynum].binding)
             {
