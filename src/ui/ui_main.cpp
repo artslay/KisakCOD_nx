@@ -781,8 +781,26 @@ void UI_PaintCinematicSubtitles()
         return;
 
     UiContext *dc = &uiInfo.uiDC;
+    static uint32_t lastMissingSubtitleItemLog = 0;
+    static bool subtitleItemFoundLogged = false;
+    const uint32_t subtitleScanNow = static_cast<uint32_t>(Sys_Milliseconds());
     if (!dc->Menus || dc->menuCount <= 0)
+    {
+#ifdef __SWITCH__
+        if (static_cast<uint32_t>(subtitleScanNow - lastMissingSubtitleItemLog) >= 1000u)
+        {
+            lastMissingSubtitleItemLog = subtitleScanNow;
+            char missingMenuTrace[160];
+            Com_sprintf(
+                missingMenuTrace, sizeof(missingMenuTrace),
+                "[KisakCOD][HUD SUBTITLE ITEM] result=no_ui_menus menuCount=%d menus=%p\n",
+                dc->menuCount,
+                static_cast<void *>(dc->Menus));
+            Switch_LogWrite(missingMenuTrace);
+        }
+#endif
         return;
+    }
 
     // SP cinematic subtitles are authored as a text item carrying bit 1.
     // They belong to the video frame, not to the currently open UI menu:
@@ -799,10 +817,38 @@ void UI_PaintCinematicSubtitles()
             if (!item || (item->itemFlags & 2) == 0)
                 continue;
 
+#ifdef __SWITCH__
+            if (!subtitleItemFoundLogged)
+            {
+                char subtitleItemTrace[192];
+                Com_sprintf(
+                    subtitleItemTrace, sizeof(subtitleItemTrace),
+                    "[KisakCOD][HUD SUBTITLE ITEM] result=found menu=%s itemType=%d flags=0x%x menuCount=%d\n",
+                    menu->window.name ? menu->window.name : "(unnamed)",
+                    item->type,
+                    item->itemFlags,
+                    dc->menuCount);
+                Switch_LogWrite(subtitleItemTrace);
+                subtitleItemFoundLogged = true;
+            }
+#endif
             Item_Text_Paint(dc, item);
             return;
         }
     }
+#ifdef __SWITCH__
+    if (static_cast<uint32_t>(subtitleScanNow - lastMissingSubtitleItemLog) >= 1000u)
+    {
+        lastMissingSubtitleItemLog = subtitleScanNow;
+        char missingItemTrace[192];
+        Com_sprintf(
+            missingItemTrace, sizeof(missingItemTrace),
+            "[KisakCOD][HUD SUBTITLE ITEM] result=not_found menuCount=%d openMenus=%d\n",
+            dc->menuCount,
+            dc->openMenuCount);
+        Switch_LogWrite(missingItemTrace);
+    }
+#endif
 }
 
 void __cdecl UI_LoadIngameMenus()

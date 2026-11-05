@@ -8248,6 +8248,25 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 
 	low = 0;
 	high = table->rowCount - 1;
+#ifdef __SWITCH__
+	static uint32_t lastSubtitleLookupTrace = 0;
+	const uint32_t subtitleLookupNow = static_cast<uint32_t>(Sys_Milliseconds());
+	if (static_cast<uint32_t>(subtitleLookupNow - lastSubtitleLookupTrace) >= 1000u)
+	{
+		lastSubtitleLookupTrace = subtitleLookupNow;
+		char lookupTrace[256];
+		std::snprintf(
+			lookupTrace, sizeof(lookupTrace),
+			"[KisakCOD][HUD SUBTITLE LOOKUP] movie=%s time=%u rows=%d columns=%d table=%p enabled=%d\n",
+			cinematicName,
+			timeMsec,
+			table->rowCount,
+			table->columnCount,
+			static_cast<void *>(table),
+			cg_subtitles->current.enabled ? 1 : 0);
+		Switch_LogWrite(lookupTrace);
+	}
+#endif
 
 	while (high >= 0)
 	{
@@ -8278,6 +8297,27 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 			if (timeMsec < (unsigned int)(atof(endTimeStr) * 1000.0))
 			{
 				subtitleText = StringTable_GetColumnValueForRow(table, mid, 3);
+#ifdef __SWITCH__
+				static char lastSubtitleHitMovie[64] = {};
+				static int lastSubtitleHitStartMs = -1;
+				const int subtitleStartMs = static_cast<int>(atof(startTimeStr) * 1000.0);
+				if (I_stricmp(lastSubtitleHitMovie, cinematicName) ||
+					lastSubtitleHitStartMs != subtitleStartMs)
+				{
+					I_strncpyz(lastSubtitleHitMovie, cinematicName, sizeof(lastSubtitleHitMovie));
+					lastSubtitleHitStartMs = subtitleStartMs;
+					char hitTrace[224];
+					std::snprintf(
+						hitTrace, sizeof(hitTrace),
+						"[KisakCOD][HUD SUBTITLE HIT] movie=%s time=%u row=%d start=%s end=%s\n",
+						cinematicName,
+						timeMsec,
+						mid,
+						startTimeStr,
+						endTimeStr);
+					Switch_LogWrite(hitTrace);
+				}
+#endif
 				I_strncpyz(outText, subtitleText, timeRemaining > 0 ? timeRemaining : 0);
 				return;
 			}

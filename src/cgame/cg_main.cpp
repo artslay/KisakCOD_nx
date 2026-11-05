@@ -1277,6 +1277,18 @@ void __cdecl CG_LoadHudMenu(int localClientNum)
     Menus = UI_LoadMenus((char*)"ui/hud.txt", 7);
     UI_AddMenuList(&cgDC, Menus);
     v3 = Menus_FindByName(&cgDC, "Compass");
+#ifdef __SWITCH__
+    char compassLoadTrace[256];
+    Com_sprintf(
+        compassLoadTrace, sizeof(compassLoadTrace),
+        "[KisakCOD][HUD MENU LOAD] menuList=%p listCount=%d cgMenuCount=%d compass=%p compassFlags=0x%x\n",
+        static_cast<void *>(Menus),
+        Menus ? Menus->menuCount : -1,
+        cgDC.menuCount,
+        static_cast<void *>(v3),
+        v3 ? v3->window.dynamicFlags[0] : -1);
+    Switch_LogWrite(compassLoadTrace);
+#endif
     if (v3)
     {
         if (localClientNum)

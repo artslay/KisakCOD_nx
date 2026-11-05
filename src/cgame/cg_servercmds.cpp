@@ -442,12 +442,35 @@ void __cdecl CG_MenuShowNotify(int localClientNum, int menuToShow)
         }
         break;
     case 2:
-        if (cgArray[0].compassFadeTime < cgArray[0].time)
+    {
+#ifdef __SWITCH__
+        const int oldCompassFadeTime = cgArray[0].compassFadeTime;
+        menuDef_t *compassMenu = Menus_FindByName(&cgDC, "Compass");
+        const int compassFlagsBefore = compassMenu ? compassMenu->window.dynamicFlags[0] : -1;
+#endif
+        const bool showCompass = cgArray[0].compassFadeTime < cgArray[0].time;
+        if (showCompass)
         {
             cgArray[0].compassFadeTime = cgArray[0].time;
             Menus_ShowByName(&cgDC, "Compass");
         }
+#ifdef __SWITCH__
+        const int compassFlagsAfter = compassMenu ? compassMenu->window.dynamicFlags[0] : -1;
+        char compassTrace[256];
+        Com_sprintf(
+            compassTrace, sizeof(compassTrace),
+            "[KisakCOD][HUD COMPASS EVENT] event=input_notify gameTime=%d oldFade=%d shown=%d menu=%p flagsBefore=0x%x flagsAfter=0x%x scriptHUD=%d\n",
+            cgArray[0].time,
+            oldCompassFadeTime,
+            showCompass ? 1 : 0,
+            static_cast<void *>(compassMenu),
+            compassFlagsBefore,
+            compassFlagsAfter,
+            hud_drawHUD->current.enabled ? 1 : 0);
+        Switch_LogWrite(compassTrace);
+#endif
         break;
+    }
     case 3:
         if (cgArray[0].stanceFadeTime < cgArray[0].time)
         {
@@ -951,9 +974,29 @@ void __cdecl CG_SlowServerCommand(int localClientNum)
 void __cdecl CG_SetClientDvarFromServer(const char *dvarname, const char *value)
 {
     if (I_stricmp(dvarname, "hud_drawHUD"))
+    {
         Com_Error(ERR_DROP, "%s is not a valid dvar to set using setclientdvar", dvarname);
+    }
     else
+    {
+#ifdef __SWITCH__
+        const bool oldValue = hud_drawHUD->current.enabled;
+#endif
         Dvar_SetFromStringByName("hud_drawHUD", (char*)value);
+#ifdef __SWITCH__
+        const bool newValue = hud_drawHUD->current.enabled;
+        if (oldValue != newValue)
+        {
+            char hudDvarTrace[160];
+            Com_sprintf(
+                hudDvarTrace, sizeof(hudDvarTrace),
+                "[KisakCOD][HUD STATE] source=setclientdvar hud_drawHUD=%d gameTime=%d\n",
+                newValue ? 1 : 0,
+                cgArray[0].time);
+            Switch_LogWrite(hudDvarTrace);
+        }
+#endif
+    }
 }
 
 void CG_ParseAmp()

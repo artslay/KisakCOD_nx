@@ -506,6 +506,20 @@ void __cdecl CG_CheckHudCompassDisplay(int localClientNum)
             int elapsed = cgArray[0].time - cgArray[0].compassFadeTime;
             if ((float)elapsed > v1->current.value * 1000.0f)
             {
+#ifdef __SWITCH__
+                menuDef_t *compassMenu = Menus_FindByName(&cgDC, "Compass");
+                char compassHideTrace[224];
+                Com_sprintf(
+                    compassHideTrace, sizeof(compassHideTrace),
+                    "[KisakCOD][HUD COMPASS EVENT] event=fade_timeout gameTime=%d startTime=%d elapsed=%d fadeMs=%.0f menu=%p flagsBefore=0x%x\n",
+                    cgArray[0].time,
+                    cgArray[0].compassFadeTime,
+                    elapsed,
+                    v1->current.value * 1000.0f,
+                    static_cast<void *>(compassMenu),
+                    compassMenu ? compassMenu->window.dynamicFlags[0] : -1);
+                Switch_LogWrite(compassHideTrace);
+#endif
                 cgArray[0].compassFadeTime = 0;
                 Menus_HideByName(&cgDC, "Compass");
             }
@@ -1222,10 +1236,12 @@ void __cdecl CG_Draw2D(int localClientNum)
         switchHudEntryTraceFrame % 300u == 0u ||
         hudStateChanged)
     {
-        char trace[448];
+        menuDef_t *compassMenu = Menus_FindByName(&cgDC, "Compass");
+        const int compassFlags = compassMenu ? compassMenu->window.dynamicFlags[0] : -1;
+        char trace[512];
         std::snprintf(
             trace, sizeof(trace),
-            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u reason=%s client=%d state=%d pmType=%d cubemap=%d draw2D=%d cgDrawHUD=%d scriptHUD=%d gameTime=%d compassFadeTime=%d nextSnap=%p\n",
+            "[KisakCOD][FPS HUD TRACE] stage=CG_Draw2D frame=%u reason=%s client=%d state=%d pmType=%d cubemap=%d draw2D=%d cgDrawHUD=%d scriptHUD=%d gameTime=%d compassFadeTime=%d compass=%p compassFlags=0x%x cgMenus=%d nextSnap=%p\n",
             switchHudEntryTraceFrame,
             hudStateChanged ? "state-change" : "heartbeat",
             localClientNum,
@@ -1237,6 +1253,9 @@ void __cdecl CG_Draw2D(int localClientNum)
             scriptHUD,
             cgArray[0].time,
             compassFadeTime,
+            static_cast<void *>(compassMenu),
+            compassFlags,
+            cgDC.menuCount,
             static_cast<void *>(cgArray[0].nextSnap));
         Switch_LogWrite(trace);
     }
