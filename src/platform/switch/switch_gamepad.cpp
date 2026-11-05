@@ -67,30 +67,84 @@ static bool Released(u64 mask)
 // synthetic engine key. This preserves proper down/up pairing when gameplay
 // becomes blocked while a button is held, and when two sources share a key.
 static u64 g_forwardedKeyButtons[256] = {};
-static bool g_underbarrelChordKeyDown = false;
 
-static void ReleaseUnderbarrelChordKey()
+static constexpr int kSwitchBindButtonCount = 14;
+static constexpr int kSwitchComboKeyBase = 256;
+static constexpr int kSwitchComboKeyCount =
+    kSwitchBindButtonCount * (kSwitchBindButtonCount - 1) / 2;
+
+struct SwitchBindCaptureButton
 {
-    if (!g_underbarrelChordKeyDown)
-        return;
+    u64 mask;
+    int key;
+};
 
-    CL_KeyEvent(0, K_AUX12, 0, Sys_Milliseconds());
-    g_underbarrelChordKeyDown = false;
+static constexpr SwitchBindCaptureButton g_switchBindCaptureButtons[kSwitchBindButtonCount] =
+{
+    { HidNpadButton_B,      K_AUX1 },
+    { HidNpadButton_X,      'r' },
+    { HidNpadButton_Y,      'f' },
+    { HidNpadButton_L,      K_AUX5 },
+    { HidNpadButton_R,      K_AUX4 },
+    { HidNpadButton_ZL,     K_AUX3 },
+    { HidNpadButton_ZR,     K_MOUSE1 },
+    { HidNpadButton_StickL, K_AUX6 },
+    { HidNpadButton_StickR, K_AUX7 },
+    { HidNpadButton_Minus,  K_TAB },
+    { HidNpadButton_Up,     'n' },
+    { HidNpadButton_Down,   K_AUX13 },
+    { HidNpadButton_Left,   K_AUX10 },
+    { HidNpadButton_Right,  K_AUX11 }
+};
+
+struct SwitchPendingSingleButton
+{
+    bool pending = false;
+    uint32_t downTime = 0;
+};
+
+static SwitchPendingSingleButton g_switchPendingSingleButtons[kSwitchBindButtonCount] = {};
+static bool g_switchActiveChordKeys[kSwitchComboKeyCount] = {};
+static u64 g_switchChordConsumedButtons = 0;
+
+static bool Pressed(u64 mask)
+{
+    return IsDown(g_buttons, mask) && !IsDown(g_previousButtons, mask);
 }
 
-static void UpdateUnderbarrelChordKey(bool allowDown)
+static bool Released(u64 mask)
 {
-    constexpr u64 chordButtons = HidNpadButton_ZL | HidNpadButton_Right;
-    const bool chordHeld = (g_buttons & chordButtons) == chordButtons;
+    return !IsDown(g_buttons, mask) && IsDown(g_previousButtons, mask);
+}
 
-    if (g_underbarrelChordKeyDown && (!allowDown || !chordHeld))
-        ReleaseUnderbarrelChordKey();
+static int Switch_ComboPairIndex(int first, int second)
+{
+    if (first == second || first < 0 || second < 0 ||
+        first >= kSwitchBindButtonCount || second >= kSwitchBindButtonCount)
+        return -1;
 
-    if (!g_underbarrelChordKeyDown && allowDown && chordHeld)
-    {
-        CL_KeyEvent(0, K_AUX12, 1, Sys_Milliseconds());
-        g_underbarrelChordKeyDown = true;
-    }
+    if (first > second)
+        std::swap(first, second);
+
+    return first * (2 * kSwitchBindButtonCount - first - 1) / 2 +
+        (second - first - 1);
+}
+
+static int Switch_ComboKeyForPair(int first, int second)
+{
+    if (first > second)
+        std::swap(first, second);
+
+    // L3+R3 remains reserved for the console keyboard shortcut.
+    if (first == 7 && second == 8)
+        return -1;
+
+    // Keep the existing ZL + D-pad Right action-slot binding compatible.
+    if (first == 5 && second == 13)
+        return K_AUX12;
+
+    const int pairIndex = Switch_ComboPairIndex(first, second);
+    return pairIndex >= 0 ? kSwitchComboKeyBase + pairIndex : -1;
 }
 
 static void SendKeyEdge(u64 mask, int key, bool allowDown = true)
@@ -149,44 +203,173 @@ static void ReleaseForwardedKeysForReleasedButtons()
     }
 }
 
+static void Switch_ReleaseActiveChordKeys()
+{
+    const uint32_t eventTime = Sys_Milliseconds();
+    int pairIndex = 0;
+    for (int first = 0; first < kSwitchBindButtonCount; ++first)
+    {
+        for (int second = first + 1; second < kSwitchBindButtonCount; ++second)
+        {
+            if (g_switchActiveChordKeys[pairIndex])
+            {
+                const int key = Switch_ComboKeyForPair(first, second);
+                if (key >= 0)
+                    CL_KeyEvent(0, key, 0, eventTime);
+                g_switchActiveChordKeys[pairIndex] = false;
+            }
+            ++pairIndex;
+        }
+    }
+}
+
+static void Switch_ClearPendingChordInputs()
+{
+    for (SwitchPendingSingleButton &button : g_switchPendingSingleButtons)
+        button.pending = false;
+    g_switchChordConsumedButtons = 0;
+}
+
+static bool Switch_HasBoundChordForButton(int buttonIndex)
+{
+    for (int other = 0; other < kSwitchBindButtonCount; ++other)
+    {
+        if (other == buttonIndex)
+            continue;
+
+        const int chordKey = Switch_ComboKeyForPair(buttonIndex, other);
+        if (chordKey < 0)
+            continue;
+
+        const char *binding = Key_GetBinding(0, static_cast<uint32_t>(chordKey));
+        if (binding && *binding)
+            return true;
+    }
+    return false;
+}
+
+// Dispatch a configured chord only when one physical button was already held
+// before the other went down. A button that has chord bindings delays its
+// single-key event until release, preventing the single action from firing
+// alongside the chord.
+static void Switch_UpdateBoundChordInputs(bool allowDown)
+{
+    const uint32_t eventTime = Sys_Milliseconds();
+    const u64 newlyPressed = g_buttons & ~g_previousButtons;
+    g_switchChordConsumedButtons &= g_buttons;
+
+    int pairIndex = 0;
+    for (int first = 0; first < kSwitchBindButtonCount; ++first)
+    {
+        for (int second = first + 1; second < kSwitchBindButtonCount; ++second)
+        {
+            const int chordKey = Switch_ComboKeyForPair(first, second);
+            const u64 firstMask = g_switchBindCaptureButtons[first].mask;
+            const u64 secondMask = g_switchBindCaptureButtons[second].mask;
+            const u64 pairMask = firstMask | secondMask;
+            const char *binding = chordKey >= 0
+                ? Key_GetBinding(0, static_cast<uint32_t>(chordKey))
+                : nullptr;
+            const bool chordHeld = allowDown && binding && *binding &&
+                (g_buttons & pairMask) == pairMask;
+
+            if (g_switchActiveChordKeys[pairIndex])
+            {
+                if (!chordHeld)
+                {
+                    CL_KeyEvent(0, chordKey, 0, eventTime);
+                    g_switchActiveChordKeys[pairIndex] = false;
+                }
+                else
+                {
+                    g_switchChordConsumedButtons |= pairMask;
+                    ++pairIndex;
+                    continue;
+                }
+            }
+
+            const bool firstWasHeld = (g_previousButtons & firstMask) != 0;
+            const bool secondWasHeld = (g_previousButtons & secondMask) != 0;
+            const bool firstPressedNow = (newlyPressed & firstMask) != 0;
+            const bool secondPressedNow = (newlyPressed & secondMask) != 0;
+            const bool orderedChordEdge =
+                (firstWasHeld && secondPressedNow) ||
+                (secondWasHeld && firstPressedNow);
+            const bool alreadyConsumed =
+                (g_switchChordConsumedButtons & pairMask) != 0;
+
+            if (chordHeld && orderedChordEdge && !alreadyConsumed)
+            {
+                g_switchActiveChordKeys[pairIndex] = true;
+                g_switchChordConsumedButtons |= pairMask;
+                g_switchPendingSingleButtons[first].pending = false;
+                g_switchPendingSingleButtons[second].pending = false;
+                CL_KeyEvent(0, chordKey, 1, eventTime);
+            }
+            ++pairIndex;
+        }
+    }
+}
+
+static void Switch_SendControllerButtonEdge(int buttonIndex, bool allowDown)
+{
+    const SwitchBindCaptureButton &button = g_switchBindCaptureButtons[buttonIndex];
+    SwitchPendingSingleButton &pending = g_switchPendingSingleButtons[buttonIndex];
+    const bool pressed = Pressed(button.mask);
+    const bool released = Released(button.mask);
+
+    if (g_switchChordConsumedButtons & button.mask)
+    {
+        pending.pending = false;
+        if (released)
+            g_switchChordConsumedButtons &= ~button.mask;
+        return;
+    }
+
+    if (pressed)
+    {
+        if (!allowDown)
+            return;
+
+        if (Switch_HasBoundChordForButton(buttonIndex))
+        {
+            pending.pending = true;
+            pending.downTime = Sys_Milliseconds();
+        }
+        else
+        {
+            SendKeyEdge(button.mask, button.key, true);
+        }
+        return;
+    }
+
+    if (!released)
+        return;
+
+    if (pending.pending)
+    {
+        if (allowDown)
+        {
+            const uint32_t releaseTime = Sys_Milliseconds();
+            CL_KeyEvent(0, button.key, 1, pending.downTime);
+            CL_KeyEvent(0, button.key, 0, releaseTime);
+        }
+        pending.pending = false;
+        return;
+    }
+
+    SendKeyEdge(button.mask, button.key, allowDown);
+}
+
 /*
- * The stock bind menu captures key-down events. Switch controls are normally
- * routed as gameplay keys only outside KEYCATCH_UI, so a bind capture needs a
- * small input path of its own. Delay a single-button capture until release:
- * while that first button is still held, ZL + D-pad Right can be captured as
- * its distinct action-slot key. Pressing both in the same poll is deliberately
- * not treated as a chord; the first button must already be down.
+ * During a bind prompt the UI does not receive raw controller keys. Wait to
+ * distinguish a tap from a chord: release captures the single button, while
+ * pressing any second allowed button captures that pair. Plus cancels, A is
+ * deliberately excluded, and L3+R3 remains reserved for the console shortcut.
  */
-struct SwitchBindCaptureButton
-{
-    u64 mask;
-    int key;
-};
-
-static constexpr SwitchBindCaptureButton g_switchBindCaptureButtons[] =
-{
-    { HidNpadButton_B,      K_AUX1 },
-    { HidNpadButton_A,      K_AUX2 },
-    { HidNpadButton_ZL,     K_AUX3 },
-    { HidNpadButton_R,      K_AUX4 },
-    { HidNpadButton_L,      K_AUX5 },
-    { HidNpadButton_StickL, K_AUX6 },
-    { HidNpadButton_StickR, K_AUX7 },
-    { HidNpadButton_X,      'r' },
-    { HidNpadButton_ZR,     K_MOUSE1 },
-    { HidNpadButton_Y,      'f' },
-    { HidNpadButton_Left,   K_AUX10 },
-    { HidNpadButton_Right,  K_AUX11 },
-    { HidNpadButton_Down,   K_AUX13 },
-    { HidNpadButton_Up,     'n' },
-    { HidNpadButton_Minus,  K_TAB },
-    { HidNpadButton_Plus,   K_ESCAPE }
-};
-
 static bool g_switchBindCaptureActive = false;
 static u64 g_switchBindCaptureIgnoredButtons = 0;
-static u64 g_switchBindCapturePendingMask = 0;
-static int g_switchBindCapturePendingKey = K_NONE;
+static int g_switchBindCapturePendingButton = -1;
 
 static void Switch_DispatchCapturedBinding(int key)
 {
@@ -201,24 +384,22 @@ static bool Switch_CaptureGamepadBinding()
     {
         g_switchBindCaptureActive = false;
         g_switchBindCaptureIgnoredButtons = 0;
-        g_switchBindCapturePendingMask = 0;
-        g_switchBindCapturePendingKey = K_NONE;
+        g_switchBindCapturePendingButton = -1;
         return false;
     }
 
     if (!g_switchBindCaptureActive)
     {
-        // Release gameplay keys before changing input ownership. In particular,
-        // the underbarrel chord has its own held state outside the forwarded-key table.
+        // Release all active gameplay keys before changing input ownership.
         for (int key = 0; key < 256; ++key)
             ReleaseForwardedKey(key);
-        ReleaseUnderbarrelChordKey();
+        Switch_ReleaseActiveChordKeys();
+        Switch_ClearPendingChordInputs();
 
         // Do not capture the button which opened the "Press a key" prompt.
         g_switchBindCaptureActive = true;
         g_switchBindCaptureIgnoredButtons = g_buttons;
-        g_switchBindCapturePendingMask = 0;
-        g_switchBindCapturePendingKey = K_NONE;
+        g_switchBindCapturePendingButton = -1;
         return true;
     }
 
@@ -227,41 +408,55 @@ static bool Switch_CaptureGamepadBinding()
         (g_buttons & ~g_previousButtons) & ~g_switchBindCaptureIgnoredButtons;
     const u64 newlyReleased = g_previousButtons & ~g_buttons;
 
-    if (g_switchBindCapturePendingMask &&
-        (g_buttons & g_switchBindCapturePendingMask))
+    // Plus is never bindable, but keeps its normal cancel behavior.
+    if (newlyPressed & HidNpadButton_Plus)
     {
-        constexpr u64 underbarrelChord = HidNpadButton_ZL | HidNpadButton_Right;
-        if ((g_switchBindCapturePendingMask == HidNpadButton_ZL &&
-             (newlyPressed & HidNpadButton_Right)) ||
-            (g_switchBindCapturePendingMask == HidNpadButton_Right &&
-             (newlyPressed & HidNpadButton_ZL)))
+        Switch_DispatchCapturedBinding(K_ESCAPE);
+        g_switchBindCapturePendingButton = -1;
+        g_switchBindCaptureIgnoredButtons |= HidNpadButton_Plus;
+        return true;
+    }
+
+    if (g_switchBindCapturePendingButton >= 0)
+    {
+        const int first = g_switchBindCapturePendingButton;
+        const u64 firstMask = g_switchBindCaptureButtons[first].mask;
+        if (g_buttons & firstMask)
         {
-            Switch_DispatchCapturedBinding(K_AUX12);
-            g_switchBindCapturePendingMask = 0;
-            g_switchBindCapturePendingKey = K_NONE;
-            g_switchBindCaptureIgnoredButtons |= underbarrelChord;
+            for (int second = 0; second < kSwitchBindButtonCount; ++second)
+            {
+                if (second == first ||
+                    (newlyPressed & g_switchBindCaptureButtons[second].mask) == 0)
+                    continue;
+
+                const int chordKey = Switch_ComboKeyForPair(first, second);
+                const u64 pairMask = firstMask | g_switchBindCaptureButtons[second].mask;
+                g_switchBindCapturePendingButton = -1;
+                g_switchBindCaptureIgnoredButtons |= pairMask;
+
+                if (chordKey >= 0)
+                    Switch_DispatchCapturedBinding(chordKey);
+                // A reserved L3+R3 chord is ignored instead of becoming a bind.
+                return true;
+            }
+        }
+
+        if (newlyReleased & firstMask)
+        {
+            Switch_DispatchCapturedBinding(g_switchBindCaptureButtons[first].key);
+            g_switchBindCaptureIgnoredButtons |= firstMask;
+            g_switchBindCapturePendingButton = -1;
             return true;
         }
     }
 
-    if (g_switchBindCapturePendingMask &&
-        (newlyReleased & g_switchBindCapturePendingMask))
+    if (g_switchBindCapturePendingButton < 0 && newlyPressed)
     {
-        Switch_DispatchCapturedBinding(g_switchBindCapturePendingKey);
-        g_switchBindCaptureIgnoredButtons |= g_switchBindCapturePendingMask;
-        g_switchBindCapturePendingMask = 0;
-        g_switchBindCapturePendingKey = K_NONE;
-        return true;
-    }
-
-    if (!g_switchBindCapturePendingMask && newlyPressed)
-    {
-        for (const SwitchBindCaptureButton &button : g_switchBindCaptureButtons)
+        for (int button = 0; button < kSwitchBindButtonCount; ++button)
         {
-            if (newlyPressed & button.mask)
+            if (newlyPressed & g_switchBindCaptureButtons[button].mask)
             {
-                g_switchBindCapturePendingMask = button.mask;
-                g_switchBindCapturePendingKey = button.key;
+                g_switchBindCapturePendingButton = button;
                 break;
             }
         }
