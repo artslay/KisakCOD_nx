@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdio>
 extern void Switch_LogWrite(const char *msg);
+extern int g_switchPlayerAngleTraceFrames;
 extern const dvar_t *input_invertPitch;
 extern const dvar_t *input_viewSensitivity;
 #endif
@@ -1151,6 +1152,20 @@ void __cdecl CL_GamepadMove(usercmd_s *cmd)
     aimInput.ps = CG_GetPredictedPlayerState(0);
 
     AimAssist_UpdateGamePadInput(&aimInput, &aimOutput);
+
+    if (g_switchPlayerAngleTraceFrames > 0)
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PLAYER INPUT] remain=%d stick=(%.3f,%.3f) move=(%.2f,%.2f) clientYaw=%.2f->%.2f sensitivity=%.3f cmdMove=(%d,%d)\n",
+            g_switchPlayerAngleTraceFrames,
+            yawAxis, pitchAxis, forwardAxis, rightAxis,
+            clients[0].viewangles[1], aimOutput.yaw,
+            effectiveSensitivity, cmd->forwardmove, cmd->rightmove);
+        Switch_LogWrite(trace);
+    }
 
     clients[0].viewangles[0] = aimOutput.pitch;
     clients[0].viewangles[1] = aimOutput.yaw;

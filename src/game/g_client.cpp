@@ -9,6 +9,10 @@
 #include <universal/com_math.h>
 #include "actor.h"
 #include <server/sv_game.h>
+#ifdef __SWITCH__
+#include <client/client.h>
+extern int g_switchPlayerAngleTraceFrames;
+#endif
 
 #ifdef __SWITCH__
 #include <cstdio>
@@ -587,12 +591,9 @@ void __cdecl ClientSpawn(gentity_s *ent)
         G_EntUnlink(ent);
     gentity_s *switchSpawnPoint = SelectInitialSpawnPoint(v12, v13);
 #ifdef __SWITCH__
-    static bool switchPlayerSpawnLogged = false;
-    bool switchTraceThisSpawn = false;
-    if (!switchPlayerSpawnLogged)
+    const bool switchTraceThisSpawn = (v3 == 0);
+    if (switchTraceThisSpawn)
     {
-        switchPlayerSpawnLogged = true;
-        switchTraceThisSpawn = true;
         char trace[512];
         std::snprintf(
             trace,
@@ -665,6 +666,24 @@ void __cdecl ClientSpawn(gentity_s *ent)
     }
 #endif
     SetClientViewAngle(ent, v13);
+#ifdef __SWITCH__
+    if (v3 == 0)
+    {
+        const int switchCmdIndex = clients[0].cmdNumber & 63;
+        const usercmd_s &switchLatestCmd = clients[0].cmds[switchCmdIndex];
+        Com_Printf(
+            CON_CHANNEL_SERVER,
+            "[KisakCOD][PLAYER SPAWN ANGLES] viewYaw=%.2f deltaYaw=%.2f cmdYaw=%d cmdYawDeg=%.2f localYaw=%.2f ringYaw=%d ringYawDeg=%.2f pmFlags=0x%x tagInfo=%p\n",
+            client->ps.viewangles[1], client->ps.delta_angles[1],
+            client->pers.cmd.angles[1],
+            (float)client->pers.cmd.angles[1] * 0.0054931641f,
+            clients[0].viewangles[1],
+            switchLatestCmd.angles[1],
+            (float)switchLatestCmd.angles[1] * 0.0054931641f,
+            client->ps.pm_flags, static_cast<void *>(ent->tagInfo));
+        g_switchPlayerAngleTraceFrames = 4;
+    }
+#endif
     SV_LinkEntity(ent);
     v9 = client->ps.pm_flags | 0x100;
     client->ps.pm_time = 100;

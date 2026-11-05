@@ -670,12 +670,16 @@ void __cdecl ClientThink_real(gentity_s *ent)
         const playerState_s *ps = &client->ps;
         Com_Printf(
             CON_CHANNEL_SERVER,
-            "[KisakCOD][PLAYER ANGLES PRE] remain=%d pm=%d pmFlags=0x%x eFlags=0x%x health=%d viewYaw=%.1f deltaYaw=%.1f cmdYaw=%d cmdYawDeg=%.1f entityYaw=%.1f lockedEnt=%d linkAnglesLocked=%d frozen=%d tagInfo=%p clampBaseYaw=%.1f clampRangeYaw=%.1f\n",
-            g_switchPlayerAngleTraceFrames, ps->pm_type, ps->pm_flags, ps->eFlags,
+            "[KisakCOD][PLAYER ANGLES PRE] remain=%d pm=%d flags=0x%x health=%d viewYaw=%.2f deltaYaw=%.2f serverCmd=%d/%.2f localYaw=%.2f ringCmd=%d/%.2f entityYaw=%.2f snapPm=%d snapYaw=%.2f snapDelta=%.2f locked=%d linkLocked=%d frozen=%d tag=%p clamp=%.2f/%.2f\n",
+            g_switchPlayerAngleTraceFrames, ps->pm_type, ps->pm_flags,
             ps->stats[STAT_HEALTH], ps->viewangles[1], ps->delta_angles[1],
             (int)p_cmd->angles[1], (float)p_cmd->angles[1] * 0.0054931641f,
-            ent->r.currentAngles[1], ps->viewlocked_entNum,
-            client->linkAnglesLocked, client->bFrozen,
+            clients[0].viewangles[1],
+            (int)clients[0].cmds[clients[0].cmdNumber & 63].angles[1],
+            (float)clients[0].cmds[clients[0].cmdNumber & 63].angles[1] * 0.0054931641f,
+            ent->r.currentAngles[1], clients[0].snap.ps.pm_type,
+            clients[0].snap.ps.viewangles[1], clients[0].snap.ps.delta_angles[1],
+            ps->viewlocked_entNum, client->linkAnglesLocked, client->bFrozen,
             static_cast<void *>(ent->tagInfo),
             ps->viewAngleClampBase[1], ps->viewAngleClampRange[1]);
     }
@@ -709,10 +713,11 @@ void __cdecl ClientThink_real(gentity_s *ent)
     {
         Com_Printf(
             CON_CHANNEL_SERVER,
-            "[KisakCOD][PLAYER ANGLES POST] remain=%d pm=%d pmFlags=0x%x eFlags=0x%x viewYaw=%.1f deltaYaw=%.1f entityStateYaw=%.1f currentYaw=%.1f origin=(%.1f,%.1f,%.1f)\n",
+            "[KisakCOD][PLAYER ANGLES POST] remain=%d pm=%d flags=0x%x viewYaw=%.2f deltaYaw=%.2f entityStateYaw=%.2f currentYaw=%.2f localYaw=%.2f origin=(%.1f,%.1f,%.1f)\n",
             g_switchPlayerAngleTraceFrames, v12->ps.pm_type, v12->ps.pm_flags,
-            v12->ps.eFlags, v12->ps.viewangles[1], v12->ps.delta_angles[1],
+            v12->ps.viewangles[1], v12->ps.delta_angles[1],
             ent->s.lerp.apos.trBase[1], ent->r.currentAngles[1],
+            clients[0].viewangles[1],
             v12->ps.origin[0], v12->ps.origin[1], v12->ps.origin[2]);
         --g_switchPlayerAngleTraceFrames;
     }
