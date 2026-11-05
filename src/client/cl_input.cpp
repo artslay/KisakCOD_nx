@@ -2097,6 +2097,9 @@ void __cdecl CL_InitInput()
     CL_SetSwitchDefaultGamepadBinding(K_AUX7, "+melee");
     CL_SetSwitchDefaultGamepadBinding(K_AUX9, "weapprev");
     CL_SetSwitchDefaultGamepadBinding(K_AUX10, "weapnext");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX11, "+actionslot 2");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX12, "+actionslot 3");
+    CL_SetSwitchDefaultGamepadBinding(K_AUX13, "+actionslot 4");
 #endif
     //cl_analog_attack_threshold = Dvar_RegisterFloat("cl_analog_attack_threshold", 0.80000001, 0.000099999997, 1.0, v1, v0);
     cl_analog_attack_threshold = Dvar_RegisterFloat("cl_analog_attack_threshold", 0.80000001, 0.000099999997, 1.0, 0, 0);
