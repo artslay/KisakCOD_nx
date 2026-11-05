@@ -1056,7 +1056,7 @@ void __cdecl CG_ApplyViewAnimation(int localClientNum)
                         std::snprintf(
                             trace,
                             sizeof(trace),
-                            "[KisakCOD][PLAYER INPUT] viewmodel window=%d weapon=%d model=%p inputYaw=%.2f tagYaw=%.2f poseYaw=%.2f predictedYaw=%.2f deltaYaw=%.2f tagAxis=(%.3f,%.3f,%.3f)\\n",
+                            "[KisakCOD][PLAYER INPUT] viewmodel window=%d weapon=%d model=%p inputYaw=%.2f tagYaw=%.2f poseYaw=%.2f predictedYaw=%.2f deltaYaw=%.2f tagAxis=(%.3f,%.3f,%.3f)\n",
                             switchTraceWindow,
                             weaponIndex,
                             static_cast<const void *>(weapInfo->viewModelDObj),
@@ -1080,7 +1080,7 @@ void __cdecl CG_ApplyViewAnimation(int localClientNum)
                     std::snprintf(
                         trace,
                         sizeof(trace),
-                        "[KisakCOD][PLAYER INPUT] viewmodel window=%d weapon=%d model=%p tag_camera=missing\\n",
+                        "[KisakCOD][PLAYER INPUT] viewmodel window=%d weapon=%d model=%p tag_camera=missing\n",
                         switchTraceWindow,
                         weaponIndex,
                         static_cast<const void *>(weapInfo->viewModelDObj));
