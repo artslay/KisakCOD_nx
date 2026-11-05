@@ -452,9 +452,28 @@ void Switch_GamepadFrame()
     // through the standard key path so the stock +activate binding runs.
     SendKeyEdge(HidNpadButton_Y, 'f', gameplayActiveNow);
 
-    // Keep a single weapon-cycle control on D-pad Right. D-pad Left is
-    // reserved for an action slot; D-pad Down remains available as well.
-    SendKeyEdge(HidNpadButton_Right, K_AUX10, gameplayActiveNow);
+    // Keep one weapon-cycle control on D-pad Left.
+    SendKeyEdge(HidNpadButton_Left, K_AUX10, gameplayActiveNow);
+
+    // CoD4 action slots are populated by the current level's scripts:
+    // slot 2 is the contextual equipment/Claymore action, slot 3 is alternate
+    // weapon mode (the underbarrel launcher where available), and slot 4 is
+    // C4/support equipment where available.
+    //
+    // Hold ZL before pressing Right for the underbarrel action. If both buttons
+    // arrive in the same input sample, treat that as the same chord. Pressing
+    // Right first remains the standalone equipment action.
+    const bool rightAndZlPressedTogether =
+        Pressed(HidNpadButton_Right) && Pressed(HidNpadButton_ZL);
+    const bool underbarrelChordAllowed =
+        IsDown(g_previousButtons, HidNpadButton_ZL) ||
+        rightAndZlPressedTogether;
+    SendKeyEdge(HidNpadButton_Right, K_AUX11,
+                gameplayActiveNow && !IsDown(g_buttons, HidNpadButton_ZL));
+    SendKeyEdge(HidNpadButton_ZL | HidNpadButton_Right, K_AUX12,
+                gameplayActiveNow && underbarrelChordAllowed);
+    SendKeyEdge(HidNpadButton_Down, K_AUX13, gameplayActiveNow);
+
     // Emulate the normal PC N key so level/config bindings remain authoritative.
     SendKeyEdge(HidNpadButton_Up, 'n', gameplayActiveNow);
 }
