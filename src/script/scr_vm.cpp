@@ -128,7 +128,7 @@ void Switch_LogSavedDvarCall(const char *dvarName, const char *value)
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=%s line=%d codePos=%p codeOffset=0x%llx codeValid=%u program=%p endProgram=%p sourceBuf=%p sourceLen=%u sourceCap=%u opcodeLookup=%p opcodeLen=%u opcodeCap=%u sourcePosLookup=%p sourcePosLen=%u sourcePosCap=%u\\n",
+        "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=%s line=%d codePos=%p codeOffset=0x%llx codeValid=%u program=%p endProgram=%p sourceBuf=%p sourceLen=%u sourceCap=%u opcodeLookup=%p opcodeLen=%u opcodeCap=%u sourcePosLookup=%p sourcePosLen=%u sourcePosCap=%u\n",
         value ? value : "<null>",
         sourceResolved ? filename : "(unavailable)",
         sourceResolved ? line : 0,
