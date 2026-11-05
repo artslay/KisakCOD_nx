@@ -609,7 +609,7 @@ unsigned int __cdecl GScr_AllocString(const char *s)
 
 void __cdecl TRACK_g_scr_main()
 {
-    track_static_alloc_internal(&g_scr_data, 3380, "g_scr_data", 7);
+    track_static_alloc_internal(&g_scr_data, sizeof(g_scr_data), "g_scr_data", 7);
 }
 
 void __cdecl Scr_LoadLevel()
@@ -1633,8 +1633,6 @@ void GScr_SetSavedDvar()
     unsigned int NumParam; // r3
     char *v2; // r31
     int i; // r9
-    char *v4; // r11
-    char v5; // r10
     const char *v6; // r3
     const dvar_s *Var; // r3
     const char *v8; // r3
@@ -1653,16 +1651,8 @@ void GScr_SetSavedDvar()
         v2 = (char *)Scr_GetString(1);
     }
     memset(v9, 0, sizeof(v9));
-    for (i = 0; i < 0x2000; ++i)
-    {
-        v4 = &v9[i];
-        v5 = v9[i + v2 - v9];
-        if (!v5)
-            break;
-        *v4 = v5;
-        if (v5 == 34)
-            *v4 = 39;
-    }
+    for (i = 0; i < static_cast<int>(sizeof(v9) - 1) && v2[i]; ++i)
+        v9[i] = (v2[i] == '"') ? '\'' : v2[i];
 #ifdef KISAK_SWITCH
     Switch_LogSavedDvarCall(String, v9);
 #endif
