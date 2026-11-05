@@ -1722,36 +1722,16 @@ void __cdecl GetPlayerStatRangeBitsSet(int localClientNum, OperandList *list, Op
     }
 }
 
-#ifdef __SWITCH__
-static bool UI_IsSwitchButtonDisplayName(const char *name)
-{
-    static const char *const switchButtonNames[] =
-    {
-        "A", "B", "X", "Y",
-        "L", "R", "ZL", "ZR", "L3", "R3",
-        "Minus", "D-Pad Left", "D-Pad Right", "D-Pad Down", "D-Pad Up",
-        "ZL + D-Pad Right"
-    };
-
-    for (const char *buttonName : switchButtonNames)
-    {
-        if (!I_stricmp(name, buttonName))
-            return true;
-    }
-    return false;
-}
-#endif
-
 static const char *UI_GetKeyBindingDisplayName(const char *name)
 {
 #ifdef __SWITCH__
-    // These names are literal platform labels, not StringEd lookup keys.
-    if (UI_IsSwitchButtonDisplayName(name))
-        return name;
-#endif
-
+    // CL_GetKeyBinding() already returns only a physical Switch button label.
+    // Keep it literal instead of running it through keyboard StringEd names.
+    return name;
+#else
     const char *translation = SEH_StringEd_GetString(name);
     return translation ? translation : name;
+#endif
 }
 
 int __cdecl GetKeyBindingLocalizedString(int localClientNum, const char *command, char *keys, bool single)
