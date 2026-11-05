@@ -8182,49 +8182,45 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 	// DB_IsXAssetDefault() against the name is not enough to refresh that pointer.
 	// Retry at a low rate until the real table is available, including after the
 	// loading fastfile has finished (when IsFastFileLoad() is already false).
+	// Check DB ownership at most four times per second. This function is
+	// called from the video-frame paint path, so a DB name lookup every frame
+	// would be unnecessary work on Switch.
 	static uint32_t lastSubtitleTableLookup = 0;
 	static bool subtitleTableLookupAttempted = false;
-	static bool subtitleTableResolved = false;
 	const uint32_t subtitleNow = static_cast<uint32_t>(Sys_Milliseconds());
-	const bool subtitleTableIsDefault =
-		DB_IsXAssetDefault(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv");
-	if (subtitleTableIsDefault)
-	{
-		subtitleTableResolved = false;
-		table = nullptr;
-		uiInfo.videoSubtitles = nullptr;
-	}
-
-	if ((!table || !subtitleTableResolved) &&
-		(!subtitleTableLookupAttempted ||
-		 static_cast<uint32_t>(subtitleNow - lastSubtitleTableLookup) >= 250u))
+	if (!subtitleTableLookupAttempted ||
+		static_cast<uint32_t>(subtitleNow - lastSubtitleTableLookup) >= 250u)
 	{
 		lastSubtitleTableLookup = subtitleNow;
 		subtitleTableLookupAttempted = true;
-		StringTable *loadedTable =
-			DB_FindXAssetHeader(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv").stringTable;
-		if (loadedTable &&
-			!DB_IsXAssetDefault(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv"))
+		if (DB_IsXAssetDefault(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv"))
 		{
-			table = loadedTable;
-			uiInfo.videoSubtitles = loadedTable;
-			subtitleTableResolved = true;
+			uiInfo.videoSubtitles = nullptr;
+		}
+		if (!uiInfo.videoSubtitles)
+		{
+			StringTable *loadedTable =
+				DB_FindXAssetHeader(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv").stringTable;
+			if (loadedTable &&
+				!DB_IsXAssetDefault(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv"))
+			{
+				uiInfo.videoSubtitles = loadedTable;
 #ifdef __SWITCH__
-			char tableTrace[192];
-			std::snprintf(
-				tableTrace, sizeof(tableTrace),
-				"[KisakCOD][HUD SUBTITLE TABLE] resolved rows=%d columns=%d\n",
-				loadedTable->rowCount,
-				loadedTable->columnCount);
-			Switch_LogWrite(tableTrace);
+				char tableTrace[192];
+				std::snprintf(
+					tableTrace, sizeof(tableTrace),
+					"[KisakCOD][HUD SUBTITLE TABLE] resolved rows=%d columns=%d\n",
+					loadedTable->rowCount,
+					loadedTable->columnCount);
+				Switch_LogWrite(tableTrace);
 #endif
+			}
 		}
 	}
-	else if (subtitleTableResolved)
-	{
-		// UI_Init can clear uiInfo while this function's static cache survives.
-		table = uiInfo.videoSubtitles;
-	}
+
+	// UI_Init resets uiInfo; always follow its current pointer rather than
+	// retaining a fastfile placeholder or a stale table across UI reinitialization.
+	table = uiInfo.videoSubtitles;
 	if (!table)
 		return;
 

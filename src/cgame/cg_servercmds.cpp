@@ -24,6 +24,10 @@
 #include <physics/phys_local.h>
 #include "cg_main.h"
 
+#ifdef __SWITCH__
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 struct __declspec(align(4)) $59835072FC2CD3936CE4A4C9F556010B
 {
     char name[64];
