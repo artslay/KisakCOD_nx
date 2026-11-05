@@ -582,8 +582,11 @@ void Switch_GamepadInit()
     g_cinematicSkipKeyDown = false;
     g_switchBindCaptureActive = false;
     g_switchBindCaptureIgnoredButtons = 0;
-    g_switchBindCapturePendingMask = 0;
-    g_switchBindCapturePendingKey = K_NONE;
+    g_switchBindCapturePendingButton = -1;
+    std::fill_n(g_switchPendingSingleButtons, kSwitchBindButtonCount,
+        SwitchPendingSingleButton{});
+    std::fill_n(g_switchActiveChordKeys, kSwitchComboKeyCount, false);
+    g_switchChordConsumedButtons = 0;
     g_initialized = true;
 }
 
@@ -673,12 +676,12 @@ void Switch_GamepadFrame()
     const bool gameplayActive =
         connectionState == CA_ACTIVE && !uiActive && !consoleActive;
 
-    // Release a held chord before any UI/console/cinematic early return.
-    if (!gameplayActive ||
-        (g_buttons & (HidNpadButton_ZL | HidNpadButton_Right)) !=
-            (HidNpadButton_ZL | HidNpadButton_Right))
+    // Never leave a synthetic chord action held across UI, console, or
+    // cinematic routing changes.
+    if (!gameplayActive || cinematicActive)
     {
-        ReleaseUnderbarrelChordKey();
+        Switch_ReleaseActiveChordKeys();
+        Switch_ClearPendingChordInputs();
     }
 
     constexpr u64 cinematicSkipButtons =
@@ -697,7 +700,8 @@ void Switch_GamepadFrame()
 
     if (consoleShortcutPressed)
     {
-        ReleaseUnderbarrelChordKey();
+        Switch_ReleaseActiveChordKeys();
+        Switch_ClearPendingChordInputs();
         g_consoleShortcutConsumed = true;
         if (gameplayActive)
         {
@@ -822,10 +826,6 @@ void Switch_GamepadFrame()
         !uiActiveNow &&
         !Key_IsCatcherActive(0, KEYCATCH_CONSOLE);
 
-    // Minus matches the PC TAB key used by the game's score/objectives screen.
-    // Send it only in active gameplay; menus retain their own navigation path.
-    SendKeyEdge(HidNpadButton_Minus, K_TAB, gameplayActiveNow);
-
     // UI navigation is fed through the engine's normal key path. Do not send
     // these keys during gameplay, otherwise A/B/D-pad would also execute any
     // matching keyboard binds from config.
@@ -839,58 +839,36 @@ void Switch_GamepadFrame()
         SendKeyEdge(HidNpadButton_B, K_ESCAPE);
     }
 
+    // Controller chord bindings use the extended virtual key range. Each
+    // bound pair consumes its two physical buttons until either is released.
+    if (gameplayActiveNow && !g_consoleShortcutConsumed)
+        Switch_UpdateBoundChordInputs(true);
+    else
+    {
+        Switch_ReleaseActiveChordKeys();
+        Switch_ClearPendingChordInputs();
+    }
+
     // The XBox/PS3 SP control model already exists in cl_input.cpp.
-    // X sends the normal R key event so the stock +reload binding and any
-    // level-script checks for the R key see the same press/release as a keyboard.
-    // Gameplay actions are synthetic AUX key events, not direct calls to
-    // IN_* handlers. CL_KeyEvent resolves the configured binding and executes
-    // the ordinary +command/-command pair with the correct key number.
-    // Nintendo layout: B is jump, A is crouch/stance.
-    SendKeyEdge(HidNpadButton_B, K_AUX1, gameplayActiveNow);
+    // Controller inputs still use CL_KeyEvent so original +command/-command
+    // processing and script key-state checks remain authoritative.
     SendKeyEdge(HidNpadButton_A, K_AUX2, gameplayActiveNow);
-    SendKeyEdge(HidNpadButton_X, 'r', gameplayActiveNow);
-    // The trigger must act like the real left mouse button. A K_MOUSE1 event
-    // runs the normal attack binding and lets scripts observe the click.
-    SendKeyEdge(HidNpadButton_ZR, K_MOUSE1, gameplayActiveNow);
-    SendKeyEdge(HidNpadButton_ZL, K_AUX3, gameplayActiveNow);
-    SendKeyEdge(HidNpadButton_R, K_AUX4, gameplayActiveNow);
-    SendKeyEdge(HidNpadButton_L, K_AUX5, gameplayActiveNow);
-    SendKeyEdge(HidNpadButton_StickL, K_AUX6,
-                gameplayActiveNow && !g_consoleShortcutConsumed);
-    SendKeyEdge(HidNpadButton_StickR, K_AUX7,
-                gameplayActiveNow && !g_consoleShortcutConsumed);
-
-    // Y is mapped to the normal F key for use/pickup. Send both edges
-    // through the standard key path so the stock +activate binding runs.
-    SendKeyEdge(HidNpadButton_Y, 'f', gameplayActiveNow);
-
-    // Keep one weapon-cycle control on D-pad Left.
-    SendKeyEdge(HidNpadButton_Left, K_AUX10, gameplayActiveNow);
-
-    // CoD4 action slots are populated by the current level's scripts:
-    // slot 2 is the contextual equipment/Claymore action, slot 3 is alternate
-    // weapon mode (the underbarrel launcher where available), and slot 4 is
-    // C4/support equipment where available.
-    //
-    // Right alone selects equipment. Holding ZL and then pressing Right
-    // generates the separate alternate-weapon action; both buttons must stay
-    // held for its synthetic key to remain down.
-    SendKeyEdge(HidNpadButton_Right, K_AUX11,
-                gameplayActiveNow && !IsDown(g_buttons, HidNpadButton_ZL));
-    UpdateUnderbarrelChordKey(gameplayActiveNow);
-    SendKeyEdge(HidNpadButton_Down, K_AUX13, gameplayActiveNow);
-
-    // Emulate the normal PC N key so level/config bindings remain authoritative.
-    SendKeyEdge(HidNpadButton_Up, 'n', gameplayActiveNow);
+    for (int button = 0; button < kSwitchBindButtonCount; ++button)
+    {
+        const bool allowButtonDown =
+            gameplayActiveNow &&
+            !((button == 7 || button == 8) && g_consoleShortcutConsumed);
+        Switch_SendControllerButtonEdge(button, allowButtonDown);
+    }
 }
 
 void Switch_GamepadShutdown()
 {
-    ReleaseUnderbarrelChordKey();
+    Switch_ReleaseActiveChordKeys();
+    Switch_ClearPendingChordInputs();
     g_switchBindCaptureActive = false;
     g_switchBindCaptureIgnoredButtons = 0;
-    g_switchBindCapturePendingMask = 0;
-    g_switchBindCapturePendingKey = K_NONE;
+    g_switchBindCapturePendingButton = -1;
 
     for (int key = 0; key < 256; ++key)
     {
