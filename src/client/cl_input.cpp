@@ -1837,7 +1837,7 @@ void Switch_LogInputGate(const char *stage, int allowed)
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][PLAYER INPUT GATE] stage=%s allowed=%d paused=%d server=%d freemove=%d demo=%d conn=%d cgameInit=%d cmd=%d snapValid=%d snapPm=%d snapFlags=0x%x localView=(%.2f,%.2f)\\n",
+        "[KisakCOD][PLAYER INPUT GATE] stage=%s allowed=%d paused=%d server=%d freemove=%d demo=%d conn=%d cgameInit=%d cmd=%d snapValid=%d snapPm=%d snapFlags=0x%x localView=(%.2f,%.2f)\n",
         stage,
         allowed,
         cl_paused->current.integer,
