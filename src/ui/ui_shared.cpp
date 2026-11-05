@@ -9884,7 +9884,7 @@ void __cdecl Item_GameMsgWindow_Paint(UiContext *dc, itemDef_s *item)
                     item->window.rect.w,
                     item->window.rect.h,
                     item->gameMsgWindowIndex,
-                    item->gameMsgWindowMode);
+                    static_cast<unsigned>(item->gameMsgWindowMode));
                 Switch_LogWrite(trace);
                 lastSubtitleWindowTraceFrame = frame;
             }

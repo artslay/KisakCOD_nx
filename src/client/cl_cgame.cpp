@@ -28,6 +28,7 @@
 
 #ifdef __SWITCH__
 #include <cstdio>
+#include <cstring>
 extern void Switch_LogWrite(const char *msg);
 extern thread_local const char * volatile g_switchFrameStage;
 extern "C" {
