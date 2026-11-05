@@ -106,6 +106,9 @@ void CL_StanceButtonUpdate();
 void __cdecl CL_AddCurrentStanceToCmd(usercmd_s *cmd);
 void __cdecl CL_KeyMove(usercmd_s *cmd);
 int __cdecl CL_AllowInput();
+#ifdef __SWITCH__
+void CL_SyncSwitchGamepadAnglesAfterSpawn(const float *viewAngles, const float *deltaAngles);
+#endif
 void __cdecl CL_GamepadMove(usercmd_s *cmd);
 void __cdecl CL_GetMouseMovement(clientActive_t *cl, float *mx, float *my);
 void __cdecl CL_MouseMove(usercmd_s *cmd);
