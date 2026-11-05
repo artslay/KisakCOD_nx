@@ -1817,16 +1817,73 @@ void PausedModelPreviewerGamepad()
 #endif
 }
 
+#ifdef __SWITCH__
+namespace
+{
+int s_switchInputGateTraceBudget = 0;
+int s_switchInputGateLastWindow = 0;
+
+void Switch_LogInputGate(const char *stage, int allowed)
+{
+    const int window = g_switchPlayerAngleTraceFrames;
+    if (window > s_switchInputGateLastWindow)
+        s_switchInputGateTraceBudget = 12;
+    s_switchInputGateLastWindow = window;
+
+    if (window <= 0 || s_switchInputGateTraceBudget <= 0)
+        return;
+
+    char trace[448];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][PLAYER INPUT GATE] stage=%s allowed=%d paused=%d server=%d freemove=%d demo=%d conn=%d cgameInit=%d cmd=%d snapValid=%d snapPm=%d snapFlags=0x%x localView=(%.2f,%.2f)\\n",
+        stage,
+        allowed,
+        cl_paused->current.integer,
+        com_sv_running->current.enabled ? 1 : 0,
+        cl_freemove->current.integer,
+        G_DemoPlaying() ? 1 : 0,
+        clientUIActives[0].connectionState,
+        clientUIActives[0].cgameInitialized,
+        clients[0].cmdNumber,
+        clients[0].snap.valid,
+        clients[0].snap.ps.pm_type,
+        clients[0].snap.ps.pm_flags,
+        clients[0].viewangles[0],
+        clients[0].viewangles[1]);
+    Switch_LogWrite(trace);
+    --s_switchInputGateTraceBudget;
+}
+}
+#endif
+
 void __cdecl CL_Input(int localClientNum)
 {
-    if (CL_AllowInput())
+    const int allowInputBeforeFrame = CL_AllowInput();
+    if (allowInputBeforeFrame)
     {
         IN_Frame();
-        if (CL_AllowInput())
+        const int allowInputAfterFrame = CL_AllowInput();
+        if (allowInputAfterFrame)
+        {
             CL_CreateNewCommands();
+#ifdef __SWITCH__
+            Switch_LogInputGate("commands_created", allowInputAfterFrame);
+#endif
+        }
+#ifdef __SWITCH__
+        else
+        {
+            Switch_LogInputGate("blocked_after_in_frame", allowInputAfterFrame);
+        }
+#endif
     }
     else
     {
+#ifdef __SWITCH__
+        Switch_LogInputGate("blocked_before_in_frame", allowInputBeforeFrame);
+#endif
         PausedModelPreviewerGamepad();
     }
 }
