@@ -508,7 +508,7 @@ void __cdecl CG_AddGroundTiltToAngles(int localClientNum, float *angles, const c
 
 void __cdecl OffsetFirstPersonView(int localClientNum, cg_s *cgameGlob)
 {
-    unsigned int weaponIndex; // r3
+    unsigned int weaponIndex = 0; // r3
     WeaponDef *weapDef; // r3
     int pm_type; // r11
     int damageTime; // r11
