@@ -8197,19 +8197,20 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 		{
 			uiInfo.videoSubtitles = nullptr;
 		}
-		if (!uiInfo.videoSubtitles)
+		else
 		{
+			// Refresh even a non-null UI_Init pointer: it may still refer to the
+			// placeholder which was returned before the game fastfile was loaded.
 			StringTable *loadedTable =
 				DB_FindXAssetHeader(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv").stringTable;
-			if (loadedTable &&
-				!DB_IsXAssetDefault(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv"))
+			if (loadedTable && loadedTable != uiInfo.videoSubtitles)
 			{
 				uiInfo.videoSubtitles = loadedTable;
 #ifdef __SWITCH__
 				char tableTrace[192];
 				std::snprintf(
 					tableTrace, sizeof(tableTrace),
-					"[KisakCOD][HUD SUBTITLE TABLE] resolved rows=%d columns=%d\n",
+					"[KisakCOD][HUD SUBTITLE TABLE] refreshed rows=%d columns=%d\n",
 					loadedTable->rowCount,
 					loadedTable->columnCount);
 				Switch_LogWrite(tableTrace);
