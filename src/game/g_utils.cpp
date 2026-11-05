@@ -19,6 +19,11 @@
 #include <script/scr_memorytree.h>
 #include "actor_turret.h"
 #include "actor_event_listeners.h"
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+extern int g_switchPlayerInputTraceFrames;
+#endif
 
 XModel *cached_models[512]{ NULL };
 
@@ -1201,9 +1206,33 @@ void __cdecl G_UpdateViewAngleClamp(gclient_s *client, const float *worldAnglesC
 void __cdecl G_UpdateGroundTilt(gclient_s *client)
 {
     int groundTiltEntNum = client->groundTiltEntNum;
+#ifdef __SWITCH__
+    static bool switchGroundTiltTraceActive = false;
+    static int switchLastGroundTiltEntNum = ENTITYNUM_NONE;
+    const bool switchTraceEnabled = g_switchPlayerInputTraceFrames > 0;
+    const bool switchTraceGroundReference =
+        switchTraceEnabled &&
+        (!switchGroundTiltTraceActive ||
+         groundTiltEntNum != switchLastGroundTiltEntNum);
+    switchGroundTiltTraceActive = switchTraceEnabled;
+    if (switchTraceGroundReference)
+        switchLastGroundTiltEntNum = groundTiltEntNum;
+#endif
     if (groundTiltEntNum == ENTITYNUM_NONE)
     {
         Vec3Clear(client->ps.groundTiltAngles);
+#ifdef __SWITCH__
+        if (switchTraceGroundReference)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][PLAYER INPUT] ground-reference update player=%d ref=none\\n",
+                client->ps.clientNum);
+            Switch_LogWrite(trace);
+        }
+#endif
     }
     else
     {
@@ -1211,7 +1240,37 @@ void __cdecl G_UpdateGroundTilt(gclient_s *client)
         if (ent->r.inuse)
         {
             Vec3Copy(ent->r.currentAngles, client->ps.groundTiltAngles);
+#ifdef __SWITCH__
+            if (switchTraceGroundReference)
+            {
+                char trace[320];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][PLAYER INPUT] ground-reference update player=%d ref=%d inuse=1 eType=%d angles=(%.2f,%.2f,%.2f)\\n",
+                    client->ps.clientNum,
+                    groundTiltEntNum,
+                    ent->s.eType,
+                    ent->r.currentAngles[0],
+                    ent->r.currentAngles[1],
+                    ent->r.currentAngles[2]);
+                Switch_LogWrite(trace);
+            }
+#endif
         }
+#ifdef __SWITCH__
+        else if (switchTraceGroundReference)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][PLAYER INPUT] ground-reference update player=%d ref=%d inuse=0\\n",
+                client->ps.clientNum,
+                groundTiltEntNum);
+            Switch_LogWrite(trace);
+        }
+#endif
     }
 }
 
