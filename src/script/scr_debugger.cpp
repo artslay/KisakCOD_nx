@@ -37,8 +37,8 @@ Scr_Breakpoint *g_breakpointsHead;
 
 void __cdecl TRACK_scr_debugger()
 {
-    track_static_alloc_internal(&scrDebuggerGlob, 696, "scrDebuggerGlob", 0);
-    track_static_alloc_internal(g_breakpoints, 3584, "g_breakpoints", 0);
+    track_static_alloc_internal(&scrDebuggerGlob, sizeof(scrDebuggerGlob), "scrDebuggerGlob", 0);
+    track_static_alloc_internal(g_breakpoints, sizeof(g_breakpoints), "g_breakpoints", 0);
 }
 
 void __cdecl Scr_AddDebugText(char *text)
