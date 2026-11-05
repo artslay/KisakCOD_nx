@@ -6596,7 +6596,7 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
             std::snprintf(
                 stateTrace,
                 sizeof(stateTrace),
-                "[KisakCOD][HUD COMPASS EXPR STATE] visible=%d chaplinCheat=%d compass=%d missionFailed=%d createfx='%.48s' uiActiveType=%d uiActiveRaw=%d dynamic=0x%08x static=0x%08x\\n",
+                "[KisakCOD][HUD COMPASS EXPR STATE] visible=%d chaplinCheat=%d compass=%d missionFailed=%d createfx='%.48s' uiActiveType=%d uiActiveRaw=%d dynamic=0x%08x static=0x%08x\n",
                 expressionState,
                 Dvar_GetBool("chaplinCheat") ? 1 : 0,
                 Dvar_GetBool("compass") ? 1 : 0,
