@@ -20,6 +20,13 @@
 #endif
 #include <sound/snd_public.h>
 
+#ifdef __SWITCH__
+#include <atomic>
+#include <cstdint>
+extern std::atomic<uint64_t> g_switchScreenFrameSequence;
+extern void Switch_LogWrite(const char *msg);
+#endif
+
 enum {
     COLOR_FIRST = 48,
     COLOR_LAST = 57,
