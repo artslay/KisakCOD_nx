@@ -415,6 +415,10 @@ void Scr_DecTime();
 
 void Scr_AddExecEntThreadNum(int entnum, uint32_t classnum, int handle, uint32_t paramcount);
 
+#ifdef KISAK_SWITCH
+void Switch_LogSavedDvarCall(const char *dvarName, const char *value);
+#endif
+
 extern scrVmPub_t scrVmPub;
 extern scrVmDebugPub_t scrVmDebugPub;
 
