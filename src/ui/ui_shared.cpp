@@ -6581,6 +6581,34 @@ char __cdecl Menu_IsVisible(UiContext *dc, menuDef_t *menu)
 #ifdef __SWITCH__
     if (menu->window.name && !I_stricmp(menu->window.name, "Compass"))
     {
+        // The Compass menu is opened by the normal timed-HUD path. Record the
+        // actual operands whenever its visible expression changes so a false
+        // result can be attributed to the original dvar/UI conditions rather
+        // than bypassing the menu's script expression.
+        static int switchCompassLastExpressionState = -1;
+        const int expressionState = visibleWhen ? 1 : 0;
+        if (expressionState != switchCompassLastExpressionState)
+        {
+            Operand uiActiveOperand{};
+            GetUIActive(dc->localClientNum, &uiActiveOperand);
+            const char *createfxValue = Dvar_GetString("createfx");
+            char stateTrace[512];
+            std::snprintf(
+                stateTrace,
+                sizeof(stateTrace),
+                "[KisakCOD][HUD COMPASS EXPR STATE] visible=%d chaplinCheat=%d compass=%d missionFailed=%d createfx='%.48s' uiActiveType=%d uiActiveRaw=%d dynamic=0x%08x static=0x%08x\\n",
+                expressionState,
+                Dvar_GetBool("chaplinCheat") ? 1 : 0,
+                Dvar_GetBool("compass") ? 1 : 0,
+                Dvar_GetBool("hud_missionFailed") ? 1 : 0,
+                createfxValue ? createfxValue : "<null>",
+                static_cast<int>(uiActiveOperand.dataType),
+                uiActiveOperand.internals.intVal,
+                static_cast<unsigned>(menu->window.dynamicFlags[dc->localClientNum]),
+                static_cast<unsigned>(menu->window.staticFlags));
+            Switch_LogWrite(stateTrace);
+            switchCompassLastExpressionState = expressionState;
+        }
         static bool switchCompassExpressionDumped = false;
         if (!switchCompassExpressionDumped)
         {
