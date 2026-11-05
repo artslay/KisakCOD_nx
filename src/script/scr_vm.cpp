@@ -91,6 +91,51 @@ static bool Switch_ScriptSourceLookupIsSane()
         scrParserGlob.sourcePosLookupLen <= maxLookupEntries;
 }
 
+
+// Resolve the script line that invoked setsaveddvar for Compass. This is
+// intentionally restricted to one dvar so normal script execution is quiet.
+void Switch_LogSavedDvarCall(const char *dvarName, const char *value)
+{
+    if (!dvarName || std::strcmp(dvarName, "compass") != 0)
+        return;
+
+    const char *codePos = nullptr;
+    if (scrVmPub.function_count > 0 && scrVmPub.function_frame)
+        codePos = scrVmPub.function_frame->fs.pos;
+
+    if (!codePos || !Scr_IsInOpcodeMemory(codePos) ||
+        !Switch_ScriptSourceLookupIsSane())
+    {
+        char trace[320];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=(unavailable) line=0 codePos=%p functionCount=%d sourceLookup=%u\\n",
+            value ? value : "<null>",
+            static_cast<const void *>(codePos),
+            scrVmPub.function_count,
+            Switch_ScriptSourceLookupIsSane() ? 1u : 0u);
+        Switch_LogWrite(trace);
+        return;
+    }
+
+    char *filename = nullptr;
+    int line = 0;
+    Scr_GetFileAndLine(codePos, &filename, &line);
+
+    char trace[512];
+    std::snprintf(
+        trace,
+        sizeof(trace),
+        "[KisakCOD][SAVED DVAR SCRIPT] dvar=compass value='%.80s' file=%s line=%d codePos=%p functionCount=%d\\n",
+        value ? value : "<null>",
+        filename && filename[0] ? filename : "(unknown)",
+        line,
+        static_cast<const void *>(codePos),
+        scrVmPub.function_count);
+    Switch_LogWrite(trace);
+}
+
 static void Switch_LogInvalidScriptSourceLookup(
     const char *kind, const char *codePos, const char *callerCodePos)
 {
