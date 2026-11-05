@@ -2556,7 +2556,7 @@ void __cdecl ScrCmd_PlayerSetGroundReferenceEnt(scr_entref_t entref)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][PLAYER INPUT] ground-reference set player=%d ref=none\\n",
+                "[KisakCOD][PLAYER INPUT] ground-reference set player=%d ref=none\n",
                 Entity->s.number);
         }
         else
@@ -2565,7 +2565,7 @@ void __cdecl ScrCmd_PlayerSetGroundReferenceEnt(scr_entref_t entref)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][PLAYER INPUT] ground-reference set player=%d ref=%d inuse=%d eType=%d angles=(%.2f,%.2f,%.2f)\\n",
+                "[KisakCOD][PLAYER INPUT] ground-reference set player=%d ref=%d inuse=%d eType=%d angles=(%.2f,%.2f,%.2f)\n",
                 Entity->s.number,
                 number,
                 reference->r.inuse,
