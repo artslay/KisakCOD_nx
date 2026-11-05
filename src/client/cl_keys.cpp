@@ -309,7 +309,7 @@ bool s_hasExactMatch;
 
 void __cdecl TRACK_cl_keys()
 {
-    track_static_alloc_internal(playerKeys, sizeof(playerKeys), "playerKeys", 10);
+    track_static_alloc_internal(playerKeys, static_cast<int>(sizeof(playerKeys)), "playerKeys", 10);
     track_static_alloc_internal(&g_consoleField, 280, "g_consoleField", 10);
     track_static_alloc_internal(historyEditLines, 8960, "historyEditLines", 10);
     track_static_alloc_internal(keynames, 768, "keynames", 10);
