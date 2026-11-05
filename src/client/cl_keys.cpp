@@ -1142,6 +1142,39 @@ int32_t __cdecl Key_IsDown(int32_t localClientNum, int32_t keynum)
 }
 
 char tinystr[5];
+#ifdef __SWITCH__
+// Human-readable names for the physical Switch controls. These are used only
+// for UI binding prompts; the underlying key numbers and config names stay
+// compatible with the engine's AUX bindings.
+static const char *Switch_KeynumToDisplayName(int32_t keynum)
+{
+    switch (keynum)
+    {
+    case K_TAB:          return "Minus";
+    case K_ENTER:        return "A";
+    case K_MOUSE1:       return "ZR";
+    case K_AUX1:         return "B";
+    case K_AUX2:         return "A";
+    case K_AUX3:         return "ZL";
+    case K_AUX4:         return "R";
+    case K_AUX5:         return "L";
+    case K_AUX6:         return "L3";
+    case K_AUX7:         return "R3";
+    case K_AUX10:        return "D-Pad Left";
+    case K_AUX11:        return "D-Pad Right";
+    case K_AUX12:        return "ZL + D-Pad Right";
+    case K_AUX13:        return "D-Pad Down";
+    case K_UPARROW:      return "D-Pad Up";
+    case K_DOWNARROW:    return "D-Pad Down";
+    case K_LEFTARROW:    return "D-Pad Left";
+    case K_RIGHTARROW:   return "D-Pad Right";
+    case 'f':            return "Y";
+    case 'n':            return "D-Pad Up";
+    case 'r':            return "X";
+    default:             return nullptr;
+    }
+}
+#endif
 const char *__cdecl Key_KeynumToString(int32_t keynum, int32_t translate)
 {
     char v3; // [esp+0h] [ebp-14h]
@@ -1154,6 +1187,14 @@ const char *__cdecl Key_KeynumToString(int32_t keynum, int32_t translate)
         return "<KEY NOT FOUND>";
     if (keynum >= 0x100)
         return "<OUT OF RANGE>";
+#ifdef __SWITCH__
+    if (translate)
+    {
+        const char *switchName = Switch_KeynumToDisplayName(keynum);
+        if (switchName)
+            return switchName;
+    }
+#endif
     if (translate && SEH_GetCurrentLanguage() == 1 && keynum >= '0' && keynum <= '9')
         return *(&keynames_localized[72].name + keynum);
     if (keynum > ' ' && keynum < K_BACKSPACE && keynum != '"')
