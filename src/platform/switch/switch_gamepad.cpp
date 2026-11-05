@@ -206,7 +206,7 @@ static void Switch_ReleaseActiveChordKeys()
             if (g_switchActiveChordKeys[pairIndex])
             {
                 const int key = Switch_ComboKeyForPair(first, second);
-                if (key >= 0)
+                if (key >= 0 && Key_IsDown(0, key))
                     CL_KeyEvent(0, key, 0, eventTime);
                 g_switchActiveChordKeys[pairIndex] = false;
             }
@@ -269,7 +269,8 @@ static void Switch_UpdateBoundChordInputs(bool allowDown)
             {
                 if (!chordHeld)
                 {
-                    CL_KeyEvent(0, chordKey, 0, eventTime);
+                    if (Key_IsDown(0, chordKey))
+                        CL_KeyEvent(0, chordKey, 0, eventTime);
                     g_switchActiveChordKeys[pairIndex] = false;
                 }
                 else
