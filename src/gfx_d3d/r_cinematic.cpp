@@ -1499,13 +1499,46 @@ void R_Cinematic_SetNextPlayback(const char *name, uint32_t playbackFlags)
 }
 
 #ifdef __SWITCH__
+// Authored *_fade clips are the handoff overlay between the loading movie and
+// live gameplay. They must remain fullscreen while the camera enters the map;
+// only ordinary in-game cinematics should be routed to world materials.
+static bool Switch_IsFadeTransitionCinematic(const char *name)
+{
+    if (!name || !*name)
+        return false;
+
+    const char *baseName = name;
+    for (const char *p = name; *p; ++p)
+    {
+        if (*p == '/' || *p == '\\')
+            baseName = p + 1;
+    }
+
+    const char *end = name + std::strlen(name);
+    const char *extension = std::strrchr(baseName, '.');
+    if (extension &&
+        (!I_stricmp(extension, ".bik") ||
+         !I_stricmp(extension, ".roq") ||
+         !I_stricmp(extension, ".avi") ||
+         !I_stricmp(extension, ".wmv")))
+    {
+        end = extension;
+    }
+
+    return end - baseName >= 4 && I_strnicmp(end - 4, "fade", 4) == 0;
+}
+
 void R_Cinematic_SetNextWorldPlayback(const char *name, uint32_t playbackFlags)
 {
+    const bool fadeTransition = Switch_IsFadeTransitionCinematic(name);
     Sys_EnterCriticalSection(CRITSECT_CINEMATIC);
     I_strncpyz(cinematicGlob.nextCinematicName, name, 256);
     cinematicGlob.nextCinematicPlaybackFlags = playbackFlags;
-    g_switchNextCinematicWorldOutput.store(true, std::memory_order_relaxed);
-    Switch_LogCinematicState("next_queued_world", name, playbackFlags);
+    g_switchNextCinematicWorldOutput.store(!fadeTransition, std::memory_order_relaxed);
+    Switch_LogCinematicState(
+        fadeTransition ? "next_queued_fade_overlay" : "next_queued_world",
+        name,
+        playbackFlags);
     Sys_LeaveCriticalSection(CRITSECT_CINEMATIC);
 }
 
