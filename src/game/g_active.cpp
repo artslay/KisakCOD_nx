@@ -17,6 +17,7 @@
 
 #ifdef __SWITCH__
 int g_switchPlayerAngleTraceFrames = 0;
+int g_switchPlayerInputTraceFrames = 0;
 #endif
 
 void __cdecl P_DamageFeedback(gentity_s *player)
