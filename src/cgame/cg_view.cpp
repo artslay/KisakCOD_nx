@@ -1487,6 +1487,13 @@ void __cdecl CG_CalcViewValues(int localClientNum)
     __int64 v10; // r11
     double v11; // fp0
 
+#ifdef __SWITCH__
+    float switchBaseYaw = -999.0f;
+    float switchAfterCameraYaw = -999.0f;
+    float switchAfterViewAnimationYaw = -999.0f;
+    float switchAfterPerturbYaw = -999.0f;
+#endif
+
     cg_s *cgameGlob = CG_GetLocalClientGlobals(localClientNum);
 
     cgameGlob->refdef.zNear = cgameGlob->zNear;
@@ -1543,6 +1550,9 @@ void __cdecl CG_CalcViewValues(int localClientNum)
         cgameGlob->refdefViewAngles[0] = cgameGlob->predictedPlayerState.viewangles[0];
         cgameGlob->refdefViewAngles[1] = cgameGlob->predictedPlayerState.viewangles[1];
         cgameGlob->refdefViewAngles[2] = cgameGlob->predictedPlayerState.viewangles[2];
+#ifdef __SWITCH__
+        switchBaseYaw = cgameGlob->refdefViewAngles[1];
+#endif
 
         if (cgameGlob->predictedPlayerState.pm_type != PM_NORMAL_LINKED
             && cgameGlob->predictedPlayerState.pm_type != PM_DEAD_LINKED
@@ -1559,11 +1569,23 @@ void __cdecl CG_CalcViewValues(int localClientNum)
         CalcTurretViewValues(localClientNum);
         OffsetFirstPersonView(localClientNum, cgArray);
         CG_ShakeCamera(localClientNum);
+#ifdef __SWITCH__
+        if (g_switchPlayerInputTraceFrames > 0)
+            switchAfterCameraYaw = cgameGlob->refdefViewAngles[1];
+#endif
     }
 
     AnglesToAxis(cgameGlob->refdefViewAngles, cgameGlob->refdef.viewaxis);
     CG_ApplyViewAnimation(localClientNum);
+#ifdef __SWITCH__
+    if (g_switchPlayerInputTraceFrames > 0)
+        switchAfterViewAnimationYaw = cgameGlob->refdefViewAngles[1];
+#endif
     CG_PerturbCamera(cgArray);
+#ifdef __SWITCH__
+    if (g_switchPlayerInputTraceFrames > 0)
+        switchAfterPerturbYaw = cgameGlob->refdefViewAngles[1];
+#endif
     CG_CalcFov(localClientNum);
 
 #ifdef __SWITCH__
@@ -1593,7 +1615,7 @@ void __cdecl CG_CalcViewValues(int localClientNum)
 
         if (logActiveView || logIdleView)
         {
-            char trace[512];
+            char trace[768];
             const float snapYaw = cgameGlob->snap
                 ? cgameGlob->snap->ps.viewangles[1] : -999.0f;
             const float nextSnapYaw = cgameGlob->nextSnap
@@ -1602,11 +1624,18 @@ void __cdecl CG_CalcViewValues(int localClientNum)
                 ? cgameGlob->snap->serverTime : -1;
             const int nextSnapTime = cgameGlob->nextSnap
                 ? cgameGlob->nextSnap->serverTime : -1;
+            const int snapPm = cgameGlob->snap
+                ? cgameGlob->snap->ps.pm_type : -1;
+            const int nextSnapPm = cgameGlob->nextSnap
+                ? cgameGlob->nextSnap->ps.pm_type : -1;
+            const float deadYaw = cgameGlob->nextSnap
+                ? static_cast<float>(cgameGlob->nextSnap->ps.stats[STAT_DEAD_YAW])
+                : -999.0f;
 
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][PLAYER INPUT] cgame window=%d time=%d snap=(%d,%.2f) next=(%d,%.2f) predicted=(%.2f,%.2f) cmdView=(%.2f,%.2f) refAngles=(%.2f,%.2f) axisForward=(%.3f,%.3f,%.3f) pm=%d flags=0x%x validPPS=%d paused=%d\n",
+                "[KisakCOD][PLAYER INPUT] cgame window=%d time=%d snap=(%d,%.2f) next=(%d,%.2f) predicted=(%.2f,%.2f) cmdView=(%.2f,%.2f) refAngles=(%.2f,%.2f) stages=(%.2f,%.2f,%.2f,%.2f) snapPm=%d nextPm=%d deadYaw=%.2f axisForward=(%.3f,%.3f,%.3f) pm=%d flags=0x%x validPPS=%d paused=%d\n",
                 viewTraceWindow,
                 cgameGlob->time,
                 snapTime, snapYaw, nextSnapTime, nextSnapYaw,
@@ -1616,6 +1645,13 @@ void __cdecl CG_CalcViewValues(int localClientNum)
                 clients[0].viewangles[1],
                 cgameGlob->refdefViewAngles[0],
                 cgameGlob->refdefViewAngles[1],
+                switchBaseYaw,
+                switchAfterCameraYaw,
+                switchAfterViewAnimationYaw,
+                switchAfterPerturbYaw,
+                snapPm,
+                nextSnapPm,
+                deadYaw,
                 cgameGlob->refdef.viewaxis[0][0],
                 cgameGlob->refdef.viewaxis[0][1],
                 cgameGlob->refdef.viewaxis[0][2],
