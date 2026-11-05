@@ -1161,6 +1161,20 @@ void EmitInteger(int value)
 	memcpy(scrCompileGlob.codePos, &value, sizeof(value));
 }
 
+static void EmitPatchUnsignedShort(void *operand, ptrdiff_t offset)
+{
+	iassert(offset >= 0 && offset < 0x10000);
+	const uint16_t encodedOffset = static_cast<uint16_t>(offset);
+	memcpy(operand, &encodedOffset, sizeof(encodedOffset));
+}
+
+static void EmitPatchInt32(void *operand, ptrdiff_t offset)
+{
+	iassert(offset >= 0 && offset <= INT32_MAX);
+	const int32_t encodedOffset = static_cast<int32_t>(offset);
+	memcpy(operand, &encodedOffset, sizeof(encodedOffset));
+}
+
 /*
 ============
 EmitCanonicalString
@@ -2438,7 +2452,7 @@ void EmitBoolAndExpression(sval_u expr1, sval_u expr2, sval_u expr1sourcePos, sv
 
 	iassert(offset >= 0 && offset < 65536);
 
-	*(unsigned short *)pos = offset;
+	EmitPatchUnsignedShort((void *)pos, offset);
 }
 
 /*
@@ -2470,7 +2484,7 @@ void EmitBoolOrExpression(sval_u expr1, sval_u expr2, sval_u expr1sourcePos, sva
 
 	iassert(offset >= 0 && offset < 65536);
 
-	*(unsigned short *)pos = offset;
+	EmitPatchUnsignedShort((void *)pos, offset);
 }
 
 /*
@@ -4799,13 +4813,13 @@ void EmitForStatement(sval_u stmt1, sval_u expr, sval_u stmt2, sval_u stmt, sval
 	offset = TempMalloc(0) - pos1;
 	if (offset < 0 || offset >= 0x10000)
 		MyAssertHandler(".\\script\\scr_compiler.cpp", 3658, 0, "%s", "offset >= 0 && offset < 65536");
-	*(unsigned short*)scrCompileGlob.codePos = offset;
+	EmitPatchUnsignedShort(scrCompileGlob.codePos, offset);
 	if (pos2)
 	{
 		offset = TempMalloc(0) - nextPos2;
 		if (offset < 0 || offset >= 0x10000)
 			MyAssertHandler(".\\script\\scr_compiler.cpp", 3663, 0, "%s", "offset >= 0 && offset < 65536");
-		*(unsigned short *)pos2 = offset;
+		EmitPatchUnsignedShort((void *)pos2, offset);
 	}
 	ConnectBreakStatements();
 	scrCompileGlob.bCanBreak = bOldCanBreak;
@@ -4923,13 +4937,13 @@ void EmitWhileStatement(sval_u expr, sval_u stmt, sval_u sourcePos, sval_u while
 	offset = TempMalloc(0) - pos1;
 	if (offset < 0 || offset >= 0x10000)
 		MyAssertHandler(".\\script\\scr_compiler.cpp", 3429, 0, "%s", "offset >= 0 && offset < 65536");
-	*(unsigned short*)scrCompileGlob.codePos = offset;
+	EmitPatchUnsignedShort(scrCompileGlob.codePos, offset);
 	if (pos2)
 	{
 		offset = TempMalloc(0) - nextPos2;
 		if (offset < 0 || offset >= 0x10000)
 			MyAssertHandler(".\\script\\scr_compiler.cpp", 3434, 0, "%s", "offset >= 0 && offset < 65536");
-		*(unsigned short *)pos2 = offset;
+		EmitPatchUnsignedShort((void *)pos2, offset);
 	}
 	ConnectBreakStatements();
 	scrCompileGlob.bCanBreak = bOldCanBreak;
@@ -5019,7 +5033,8 @@ void EmitSwitchStatement(sval_u expr, sval_u stmtlist, sval_u sourcePos, bool la
 	AddOpcodePos(sourcePos.stringValue, 0);
 	EmitShort(0);
 	pos2 = scrCompileGlob.codePos;
-	*(uintptr_t *)pos1 = (scrCompileGlob.codePos - (byte *)nextPos1);
+	const uintptr_t switchJumpOffset = static_cast<uintptr_t>(scrCompileGlob.codePos - (byte *)nextPos1);
+	memcpy(pos1, &switchJumpOffset, sizeof(switchJumpOffset));
 	pos3 = TempMallocAlignStrict(0);
 	num = 0;
 
@@ -5033,24 +5048,31 @@ void EmitSwitchStatement(sval_u expr, sval_u stmtlist, sval_u sourcePos, bool la
 		num++;
 	}
 
-	*(unsigned short *)pos2 = num;
-	qsort(pos3, num, sizeof(uintptr_t) * 2, CompareCaseInfo);
+	iassert(num >= 0 && num <= MAX_SWITCH_CASES);
+	const uint16_t switchCaseCount = static_cast<uint16_t>(num);
+	memcpy(pos2, &switchCaseCount, sizeof(switchCaseCount));
+	constexpr size_t switchEntrySize = sizeof(uintptr_t) + sizeof(const char *);
+	qsort(pos3, num, switchEntrySize, CompareCaseInfo);
 
-	while (num > 1)
+	for (int caseIndex = 0; caseIndex + 1 < num; ++caseIndex)
 	{
-		if (*(intptr_t *)pos3 == *((intptr_t *)pos3 + 2))
+		const char *currentEntry = pos3 + static_cast<size_t>(caseIndex) * switchEntrySize;
+		const char *nextEntry = currentEntry + switchEntrySize;
+		uintptr_t currentCaseValue;
+		uintptr_t nextCaseValue;
+		memcpy(&currentCaseValue, currentEntry, sizeof(currentCaseValue));
+		memcpy(&nextCaseValue, nextEntry, sizeof(nextCaseValue));
+		if (currentCaseValue == nextCaseValue)
 		{
 			for (CaseStatementInfo *caseStatementa = scrCompileGlob.currentCaseStatement; caseStatementa; caseStatementa = caseStatementa->next)
 			{
-				if (caseStatementa->name == *(intptr_t *)pos3)
+				if (caseStatementa->name == static_cast<uint32_t>(currentCaseValue))
 				{
 					CompileError(caseStatementa->sourcePos, "duplicate case expression");
 					return;
 				}
 			}
 		}
-		--num;
-		pos3 += sizeof(uintptr_t) * 2;
 	}
 
 	ConnectBreakStatements();
@@ -5245,7 +5267,7 @@ void EmitIfElseStatement(sval_u expr, sval_u stmt1, sval_u stmt2, sval_u sourceP
 
 	offset = TempMallocAlignStrict(0) - nextPos1;
 	iassert(offset >= 0 && offset < 65536);
-	*(unsigned short *)pos1 = offset;
+	EmitPatchUnsignedShort((void *)pos1, offset);
 
 	Scr_TransferBlock(block, elseStatBlock->block);
 
@@ -5262,7 +5284,7 @@ void EmitIfElseStatement(sval_u expr, sval_u stmt1, sval_u stmt2, sval_u sourceP
 	{
 		offset = TempMallocAlignStrict(0) - nextPos2;
 		iassert(offset >= 0);
-		*(int32_t *)pos2 = static_cast<int32_t>(offset);
+		EmitPatchInt32((void *)pos2, offset);
 	}
 
 	Scr_InitFromChildBlocks(childBlocks, childCount, block);
@@ -5297,7 +5319,7 @@ void EmitIfStatement(sval_u expr, sval_u stmt, sval_u sourcePos, bool lastStatem
 	//offset = TempMallocAlignStrict(0) - nextPos;
 	offset = (TempMalloc(0) - nextPos);
 	iassert(offset >= 0 && offset < 65536);
-	*(unsigned short *)pos = offset;
+	EmitPatchUnsignedShort((void *)pos, offset);
 }
 
 /*
