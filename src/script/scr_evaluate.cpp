@@ -30,7 +30,7 @@ int g_script_error_level;
 
 void __cdecl TRACK_scr_evaluate()
 {
-    track_static_alloc_internal(&scrEvaluateGlob, 16, "scrEvaluateGlob", 7);
+    track_static_alloc_internal(&scrEvaluateGlob, sizeof(scrEvaluateGlob), "scrEvaluateGlob", 7);
 }
 
 int __cdecl Scr_CompareCanonicalStrings(uint32_t *arg1, uint32_t *arg2)
