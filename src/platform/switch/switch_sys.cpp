@@ -3741,6 +3741,44 @@ static bool Switch_LogIsPerformanceDiagnostic(const char *msg)
     return false;
 }
 
+// Bounded HUD and cinematic lifecycle diagnostics. These are deliberately
+// whitelisted by prefix: without this category Switch_LogWrite() drops normal
+// state transitions because they are neither errors nor performance/FX traces.
+static bool Switch_LogIsHudCinematicDiagnostic(const char *msg)
+{
+    if (!msg || !*msg)
+        return false;
+
+    static constexpr const char *const kHudCinematicPrefixes[] =
+    {
+        "[KisakCOD][FPS HUD TRACE]",
+        "[KisakCOD][HUD MENU LOAD]",
+        "[KisakCOD][HUD COMPASS EVENT]",
+        "[KisakCOD][HUD STATE]",
+        "[KisakCOD][HUD SUBTITLE ITEM]",
+        "[KisakCOD][HUD SUBTITLE TABLE]",
+        "[KisakCOD][HUD SUBTITLE STATE]",
+        "[KisakCOD][HUD SUBTITLE LOOKUP]",
+        "[KisakCOD][HUD SUBTITLE HIT]",
+        "[KisakCOD][FRONTEND MENU OPEN]",
+        "[KisakCOD][CIN STATE]",
+        "[KisakCOD][CIN LOAD]",
+        "[KisakCOD][CIN SKIP]",
+        "[KisakCOD][CIN SKIP FLOW]",
+        "[KisakCOD][CIN SKIP DETAIL]",
+        "[KisakCOD][CINEMATIC COMMAND]",
+        "[KisakCOD][CINEMATIC OPEN FAIL]",
+        "[KisakCOD][POST-CINE RENDER TRACE]"
+    };
+
+    for (const char *prefix : kHudCinematicPrefixes)
+    {
+        if (std::strncmp(msg, prefix, std::strlen(prefix)) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool Switch_LogIsImportant(const char *msg)
 {
     if (!msg || !*msg)
@@ -3794,6 +3832,7 @@ void Switch_LogWrite(const char *msg)
          !Switch_LogIsFxDiagnostic(msg) &&
          !Switch_LogIsScriptDiagnostic(msg) &&
          !Switch_LogIsPerformanceDiagnostic(msg) &&
+         !Switch_LogIsHudCinematicDiagnostic(msg) &&
          !Switch_LogIsStartupMessage(msg) &&
          !Switch_LogIsLevelLoadMessage(msg)))
         return;
