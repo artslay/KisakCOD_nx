@@ -8186,10 +8186,16 @@ void __cdecl Item_Text_GetSubtitle(StringTable *table, char *outText)
 	static bool subtitleTableLookupAttempted = false;
 	static bool subtitleTableResolved = false;
 	const uint32_t subtitleNow = static_cast<uint32_t>(Sys_Milliseconds());
-	if (DB_IsXAssetDefault(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv"))
+	const bool subtitleTableIsDefault =
+		DB_IsXAssetDefault(ASSET_TYPE_STRINGTABLE, "video/subtitles.csv");
+	if (subtitleTableIsDefault)
+	{
 		subtitleTableResolved = false;
+		table = nullptr;
+		uiInfo.videoSubtitles = nullptr;
+	}
 
-	if (!subtitleTableResolved &&
+	if ((!table || !subtitleTableResolved) &&
 		(!subtitleTableLookupAttempted ||
 		 static_cast<uint32_t>(subtitleNow - lastSubtitleTableLookup) >= 250u))
 	{
