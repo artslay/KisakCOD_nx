@@ -27,6 +27,7 @@
 #include <game/g_main.h>
 #ifdef __SWITCH__
 #include <cstdio>
+#include <cmath>
 extern void Switch_LogWrite(const char *msg);
 extern int g_switchPlayerInputTraceFrames;
 
@@ -1558,7 +1559,7 @@ void __cdecl CG_CalcViewValues(int localClientNum)
             std::snprintf(
                 trace,
                 sizeof(trace),
-                "[KisakCOD][PLAYER INPUT] cgame window=%d time=%d snap=(%d,%.2f) next=(%d,%.2f) predicted=(%.2f,%.2f) cmdView=(%.2f,%.2f) refAngles=(%.2f,%.2f) axisForward=(%.3f,%.3f,%.3f) pm=%d flags=0x%x validPPS=%d paused=%d\\n",
+                "[KisakCOD][PLAYER INPUT] cgame window=%d time=%d snap=(%d,%.2f) next=(%d,%.2f) predicted=(%.2f,%.2f) cmdView=(%.2f,%.2f) refAngles=(%.2f,%.2f) axisForward=(%.3f,%.3f,%.3f) pm=%d flags=0x%x validPPS=%d paused=%d\n",
                 viewTraceWindow,
                 cgameGlob->time,
                 snapTime, snapYaw, nextSnapTime, nextSnapYaw,
