@@ -2144,6 +2144,8 @@ void CL_RestoreSwitchDefaultGamepadBindings()
     CL_SetSwitchDefaultGamepadBinding(K_AUX5, "+smoke");
     CL_SetSwitchDefaultGamepadBinding(K_AUX6, "+breath_sprint");
     CL_SetSwitchDefaultGamepadBinding(K_AUX7, "+melee");
+    CL_SetSwitchDefaultGamepadBinding('r', "+reload");
+    CL_SetSwitchDefaultGamepadBinding('f', "+activate");
     CL_SetSwitchDefaultGamepadBinding('n', "+nightvision");
     CL_SetSwitchDefaultGamepadBinding(K_AUX9, "weapprev");
     CL_SetSwitchDefaultGamepadBinding(K_AUX10, "weapnext");
