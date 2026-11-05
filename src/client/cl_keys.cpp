@@ -2319,7 +2319,7 @@ int32_t __cdecl CL_GetKeyBindingInternal(int32_t localClientNum, const char *com
 
     bindCount = Key_GetCommandAssignmentInternal(localClientNum, command, keys);
     if ((uint32_t)bindCount > 2)
-        MyAssertHandler(".\\client\\cl_keys.cpp", 2347, 0, "bindCount not in [0, 2]\\n\\t%i not in [%i, %i]", bindCount, 0, 2);
+        MyAssertHandler(".\\client\\cl_keys.cpp", 2347, 0, "bindCount not in [0, 2]\n\t%i not in [%i, %i]", bindCount, 0, 2);
     if (bindCount)
     {
         Key_KeynumToStringBuf(keys[0], (char *)keyNames, 128);
