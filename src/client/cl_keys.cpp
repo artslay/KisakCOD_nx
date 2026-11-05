@@ -2268,9 +2268,16 @@ int32_t __cdecl CL_GetKeyBindingInternal(int32_t localClientNum, const char *com
         MyAssertHandler(".\\client\\cl_keys.cpp", 2347, 0, "bindCount not in [0, 2]\n\t%i not in [%i, %i]", bindCount, 0, 2);
     if (bindCount)
     {
+#ifdef __SWITCH__
+        // Use the Switch-specific display names for on-screen binding hints.
+        I_strncpyz((char *)keyNames, Key_KeynumToString(keys[0], 1), 128);
+        if (bindCount == 2)
+            I_strncpyz(&(*keyNames)[128], Key_KeynumToString(keys[1], 1), 128);
+#else
         Key_KeynumToStringBuf(keys[0], (char *)keyNames, 128);
         if (bindCount == 2)
             Key_KeynumToStringBuf(keys[1], &(*keyNames)[128], 128);
+#endif
     }
     else
     {
