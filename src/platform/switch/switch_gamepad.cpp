@@ -207,6 +207,12 @@ static bool Switch_CaptureGamepadBinding()
 
     if (!g_switchBindCaptureActive)
     {
+        // Release gameplay keys before changing input ownership. In particular,
+        // the underbarrel chord has its own held state outside the forwarded-key table.
+        for (int key = 0; key < 256; ++key)
+            ReleaseForwardedKey(key);
+        ReleaseUnderbarrelChordKey();
+
         // Do not capture the button which opened the "Press a key" prompt.
         g_switchBindCaptureActive = true;
         g_switchBindCaptureIgnoredButtons = g_buttons;
