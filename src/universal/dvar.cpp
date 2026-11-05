@@ -1477,6 +1477,41 @@ void __cdecl Dvar_SetVariant(dvar_s *dvar, DvarValue value, DvarSetSource source
     iassert(dvar);
     iassert(dvar->name);
 
+#ifdef __SWITCH__
+    if (!strcmp(dvar->name, "compass") ||
+        !strcmp(dvar->name, "con_gameMsgWindow2Filter"))
+    {
+        const bool currentChanged =
+            !Dvar_ValuesEqual(dvar->type, dvar->current, value);
+        const bool latchedChanged =
+            !Dvar_ValuesEqual(dvar->type, dvar->latched, value);
+        if (currentChanged || latchedChanged)
+        {
+            char oldValue[96];
+            char requestedValue[96];
+            char oldLatchedValue[96];
+            I_strncpyz(oldValue, Dvar_ValueToString(dvar, dvar->current), sizeof(oldValue));
+            I_strncpyz(requestedValue, Dvar_ValueToString(dvar, value), sizeof(requestedValue));
+            I_strncpyz(oldLatchedValue, Dvar_ValueToString(dvar, dvar->latched), sizeof(oldLatchedValue));
+
+            char trace[448];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][DVAR WATCH] name=%s source=%s type=%u flags=0x%x current='%s' requested='%s' latched='%s' caller=%p\n",
+                dvar->name,
+                Switch_DvarSourceName(source),
+                static_cast<unsigned>(dvar->type),
+                static_cast<unsigned>(dvar->flags),
+                oldValue,
+                requestedValue,
+                oldLatchedValue,
+                __builtin_return_address(0));
+            Switch_LogWrite(trace);
+        }
+    }
+#endif
+
     if (Com_LogFileOpen())
     {
         v4 = va("      dvar set %s %s\n", dvar->name, Dvar_ValueToString(dvar, value));
