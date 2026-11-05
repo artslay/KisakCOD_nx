@@ -24,6 +24,7 @@ extern bool SCR_IsMapLoadingCinematicActive();
 extern void UI_PlayerStart();
 
 extern void Switch_LogWrite(const char *msg);
+extern int g_switchPlayerInputTraceFrames;
 
 // Stock CoD4 sets this to 0 for the "unskippablecinematic" command.
 // Controller input must honor the same flag as keyboard input.
@@ -37,6 +38,9 @@ static HidAnalogStickState g_rightStick = {};
 static bool g_initialized = false;
 static bool g_connected = false;
 static bool g_cinematicSkipKeyDown = false;
+static int s_switchPadTraceLastWindow = 0;
+static int s_switchPadTraceActiveBudget = 12;
+static int s_switchPadTracePeriodicBudget = 20;
 static float NormalizeStick(int32_t value)
 {
     constexpr float kStickMax = 32767.0f;
@@ -271,6 +275,51 @@ void Switch_GamepadFrame()
     g_buttons = padGetButtons(&g_pad);
     g_leftStick = padGetStickPos(&g_pad, 0);
     g_rightStick = padGetStickPos(&g_pad, 1);
+
+    // Read the HID values before any gamepad-axis normalization or gameplay
+    // routing. This separates a missing libnx pad sample from later input code.
+    const int inputTraceWindow = g_switchPlayerInputTraceFrames;
+    if (inputTraceWindow > s_switchPadTraceLastWindow)
+    {
+        s_switchPadTraceActiveBudget = 12;
+        s_switchPadTracePeriodicBudget = 20;
+    }
+    s_switchPadTraceLastWindow = inputTraceWindow;
+
+    const bool rawPadActive =
+        g_buttons != 0 ||
+        std::abs(g_leftStick.x) > 256 ||
+        std::abs(g_leftStick.y) > 256 ||
+        std::abs(g_rightStick.x) > 256 ||
+        std::abs(g_rightStick.y) > 256;
+    const bool logActivePadSample =
+        inputTraceWindow > 0 && rawPadActive &&
+        s_switchPadTraceActiveBudget > 0;
+    const bool logPeriodicPadSample =
+        inputTraceWindow > 0 && !rawPadActive &&
+        inputTraceWindow % 30 == 0 &&
+        s_switchPadTracePeriodicBudget > 0;
+
+    if (logActivePadSample || logPeriodicPadSample)
+    {
+        char trace[384];
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PLAYER INPUT] poll=hid window=%d initialized=%d connected=%d buttons=0x%llx rawLeft=(%d,%d) rawRight=(%d,%d) axisLeft=(%.3f,%.3f) axisRight=(%.3f,%.3f)\\n",
+            inputTraceWindow,
+            g_initialized ? 1 : 0,
+            rawPadActive ? 1 : 0,
+            static_cast<unsigned long long>(g_buttons),
+            g_leftStick.x, g_leftStick.y, g_rightStick.x, g_rightStick.y,
+            NormalizeStick(g_leftStick.x), NormalizeStick(g_leftStick.y),
+            NormalizeStick(g_rightStick.x), -NormalizeStick(g_rightStick.y));
+        Switch_LogWrite(trace);
+        if (logActivePadSample)
+            --s_switchPadTraceActiveBudget;
+        else
+            --s_switchPadTracePeriodicBudget;
+    }
 
     // Deliver physical key-up events independently of the current UI,
     // console, gameplay, and cinematic routing mode. In particular, a B press
