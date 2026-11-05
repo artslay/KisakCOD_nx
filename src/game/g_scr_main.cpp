@@ -28,7 +28,9 @@
 #include <server/sv_public.h>
 #include <server/server.h>
 #ifdef __SWITCH__
+#include <cstdio>
 extern void Switch_SetProgressStage(const char *stage, uint32_t detail);
+extern void Switch_LogWrite(const char *msg);
 #endif
 #include <universal/com_sndalias.h>
 #include <universal/surfaceflags.h>
@@ -2544,6 +2546,38 @@ void __cdecl ScrCmd_PlayerSetGroundReferenceEnt(scr_entref_t entref)
         number = ENTITYNUM_NONE;
     }
     Entity->client->groundTiltEntNum = number;
+#ifdef __SWITCH__
+    static int switchGroundReferenceSetTraceCount = 0;
+    if (switchGroundReferenceSetTraceCount < 8)
+    {
+        char trace[320];
+        if (number == ENTITYNUM_NONE)
+        {
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][PLAYER INPUT] ground-reference set player=%d ref=none\\n",
+                Entity->s.number);
+        }
+        else
+        {
+            const gentity_s *reference = &g_entities[number];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][PLAYER INPUT] ground-reference set player=%d ref=%d inuse=%d eType=%d angles=(%.2f,%.2f,%.2f)\\n",
+                Entity->s.number,
+                number,
+                reference->r.inuse,
+                reference->s.eType,
+                reference->r.currentAngles[0],
+                reference->r.currentAngles[1],
+                reference->r.currentAngles[2]);
+        }
+        Switch_LogWrite(trace);
+        ++switchGroundReferenceSetTraceCount;
+    }
+#endif
 }
 
 static inline float ClampLinkAngle180(double angle)
