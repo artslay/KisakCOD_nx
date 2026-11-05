@@ -451,7 +451,8 @@ void Switch_GamepadFrame()
     // Weapon cycling and night vision also use normal engine key bindings.
     SendKeyEdge(HidNpadButton_Left, K_AUX9, gameplayActiveNow);
     SendKeyEdge(HidNpadButton_Right, K_AUX10, gameplayActiveNow);
-    SendKeyEdge(HidNpadButton_Up, K_AUX8, gameplayActiveNow);
+    // Emulate the normal PC N key so level/config bindings remain authoritative.
+    SendKeyEdge(HidNpadButton_Up, 'n', gameplayActiveNow);
 }
 
 void Switch_GamepadShutdown()
