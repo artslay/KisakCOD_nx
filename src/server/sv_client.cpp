@@ -10,6 +10,18 @@
 #include "sv_public.h"
 #include <EffectsCore/fx_system.h>
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern void Switch_LogWrite(const char *msg);
+extern int g_switchPlayerInputTraceFrames;
+
+namespace
+{
+int s_switchServerInputTraceLastWindow = 0;
+int s_switchServerInputTraceBudget = 16;
+}
+#endif
+
 
 extern client_t g_sv_clients[1];
 
@@ -94,8 +106,58 @@ void __cdecl SV_ClientThink(usercmd_s *cmd)
             "svs.clients[0].state == CS_ACTIVE");
         clients = svs.clients;
     }
+#ifdef __SWITCH__
+    const int traceWindow = g_switchPlayerInputTraceFrames;
+    if (traceWindow > s_switchServerInputTraceLastWindow)
+        s_switchServerInputTraceBudget = 16;
+    s_switchServerInputTraceLastWindow = traceWindow;
+
+    const int previousPitch = static_cast<int>(clients->lastUsercmd.angles[0]);
+    const int previousYaw = static_cast<int>(clients->lastUsercmd.angles[1]);
+    const bool commandAnglesChanged =
+        previousPitch != static_cast<int>(cmd->angles[0]) ||
+        previousYaw != static_cast<int>(cmd->angles[1]);
+#endif
+
     memcpy(&clients->lastUsercmd, cmd, sizeof(clients->lastUsercmd));
     ClientThink(0);
+
+#ifdef __SWITCH__
+    if (traceWindow > 0 && commandAnglesChanged &&
+        s_switchServerInputTraceBudget > 0)
+    {
+        const gclient_s *player = g_entities[0].client;
+        if (player)
+        {
+            char trace[448];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][PLAYER INPUT] server window=%d cmd=(%d,%d) prev=(%d,%d) buttons=0x%x move=(%d,%d) view=(%.2f,%.2f) delta=(%.2f,%.2f) pm=%d flags=0x%x eFlags=0x%x clamp=(%.2f,%.2f) locked=%d tag=%p\n",
+                traceWindow,
+                static_cast<int>(cmd->angles[0]),
+                static_cast<int>(cmd->angles[1]),
+                previousPitch,
+                previousYaw,
+                static_cast<unsigned int>(cmd->buttons),
+                static_cast<int>(cmd->forwardmove),
+                static_cast<int>(cmd->rightmove),
+                player->ps.viewangles[0],
+                player->ps.viewangles[1],
+                player->ps.delta_angles[0],
+                player->ps.delta_angles[1],
+                player->ps.pm_type,
+                player->ps.pm_flags,
+                player->ps.eFlags,
+                player->ps.viewAngleClampBase[1],
+                player->ps.viewAngleClampRange[1],
+                player->ps.viewlocked_entNum,
+                static_cast<const void *>(g_entities[0].tagInfo));
+            Switch_LogWrite(trace);
+            --s_switchServerInputTraceBudget;
+        }
+    }
+#endif
 }
 
 // attributes: thunk
