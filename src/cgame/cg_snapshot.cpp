@@ -212,20 +212,6 @@ void __cdecl CG_SetInitialSnapshot(int localClientNum)
     cgArray[0].clientNum = nextSnap->ps.clientNum;
     cgArray[0].time = nextSnap->serverTime;
     cgArray[0].oldTime = cgArray[0].time;
-#ifdef __SWITCH__
-    // A new CGame instance can start after the single-player death reload.
-    // Rebuild client command-space angles from the authoritative spawn state;
-    // otherwise the previous life’s local viewangles survive the reload.
-    if (nextSnap->ps.pm_type < PM_DEAD)
-    {
-        float switchSpawnViewAngles[3] = {
-            nextSnap->ps.viewangles[0] - nextSnap->ps.delta_angles[0],
-            nextSnap->ps.viewangles[1] - nextSnap->ps.delta_angles[1],
-            nextSnap->ps.viewangles[2] - nextSnap->ps.delta_angles[2]
-        };
-        CL_SetViewAngles(localClientNum, switchSpawnViewAngles);
-    }
-#endif
     v8[0] = nextSnap->ps.origin[0];
     v8[1] = nextSnap->ps.origin[1];
     v8[2] = nextSnap->ps.viewHeightCurrent + nextSnap->ps.origin[2];
