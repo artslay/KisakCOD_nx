@@ -63,7 +63,9 @@ static void Switch_LogMenuPaintDiagnostic(
     const int connectionState = static_cast<int>(clientUIActives[0].connectionState);
     const bool frontendFullscreen =
         UI_IsFullscreen() && dc->openMenuCount > 0 && connectionState != CA_ACTIVE;
-    if (!frontendFullscreen || frame % 60u != 0u)
+    const bool activeCgameMenus = dc == &cgDC && connectionState == CA_ACTIVE;
+    const uint64_t traceInterval = activeCgameMenus ? 300u : 60u;
+    if ((!frontendFullscreen && !activeCgameMenus) || frame % traceInterval != 0u)
         return;
 
     char stack[640]{};
@@ -96,19 +98,48 @@ static void Switch_LogMenuPaintDiagnostic(
     if (!stack[0])
         std::snprintf(stack, sizeof(stack), "(empty)");
 
-    char trace[1100];
+    menuDef_t *compass = activeCgameMenus ? Menus_FindByName(dc, "Compass") : nullptr;
+    bool compassInStack = false;
+    for (int i = 0; compass && i < dc->openMenuCount; ++i)
+    {
+        if (dc->menuStack[i] == compass)
+        {
+            compassInStack = true;
+            break;
+        }
+    }
+    const bool compassWindowVisible =
+        compass && Window_IsVisible(dc->localClientNum, &compass->window);
+    const bool compassMenuVisible = compass && Menu_IsVisible(dc, compass);
+    const char *fullscreenMenuName =
+        anyFullscreen && drawStart >= 0 && drawStart < dc->openMenuCount &&
+        dc->menuStack[drawStart] && dc->menuStack[drawStart]->window.name
+            ? dc->menuStack[drawStart]->window.name : "(none)";
+
+    char trace[1400];
     std::snprintf(
         trace,
         sizeof(trace),
-        "[KisakCOD][UI PAINT TRACE] frame=%llu conn=%d activeMenu=%d fullscreen=%d stackCount=%d drawStart=%d anyFullscreen=%d paintedOpen=%d stage=%s stack=[%s]\n",
+        "[KisakCOD][HUD MENU PAINT] frame=%llu conn=%d cgame=%u activeMenu=%d fullscreen=%d stackCount=%d drawStart=%d anyFullscreen=%d fullscreenMenu=%s paintedOpen=%d compass=%p windowVisible=%u menuVisible=%u inStack=%u fullScreen=%u items=%d visibleExp=%u static=%08x ownerDraw=%08x stage=%s stack=[%s]\n",
         static_cast<unsigned long long>(frame),
         connectionState,
+        activeCgameMenus ? 1u : 0u,
         UI_GetActiveMenu(0),
         UI_IsFullscreen() ? 1 : 0,
         dc->openMenuCount,
         drawStart,
         anyFullscreen ? 1 : 0,
+        fullscreenMenuName,
         paintedOpenMenus,
+        static_cast<void *>(compass),
+        compassWindowVisible ? 1u : 0u,
+        compassMenuVisible ? 1u : 0u,
+        compassInStack ? 1u : 0u,
+        compass && compass->fullScreen ? 1u : 0u,
+        compass ? compass->itemCount : -1,
+        compass ? compass->visibleExp.numEntries : 0u,
+        compass ? static_cast<unsigned>(compass->window.staticFlags) : 0u,
+        compass ? static_cast<unsigned>(compass->window.ownerDrawFlags) : 0u,
         g_switchFrameStage ? g_switchFrameStage : "(unknown)",
         stack);
     Switch_LogWrite(trace);
@@ -6734,19 +6765,22 @@ char __cdecl Menu_Paint(UiContext *dc, menuDef_t *menu)
 #ifdef __SWITCH__
     const char *switchGateMenuName =
         menu->window.name ? menu->window.name : "<null>";
+    const bool switchIsCompassMenu = !I_stricmp(switchGateMenuName, "Compass");
     const bool switchRelevantGateMenu =
         !I_stricmp(switchGateMenuName, "main_text") ||
         !I_stricmp(switchGateMenuName, "main") ||
         !I_stricmp(switchGateMenuName, "options_graphics") ||
-        !I_stricmp(switchGateMenuName, "player_profile");
+        !I_stricmp(switchGateMenuName, "player_profile") ||
+        switchIsCompassMenu;
     const bool switchMenuVisible = Menu_IsVisible(dc, menu);
     if (switchRelevantGateMenu)
     {
-        static uint32_t switchMenuGateTraceCount[4] = {0, 0, 0, 0};
+        static uint32_t switchMenuGateTraceCount[5] = {0, 0, 0, 0, 0};
         const unsigned switchGateSlot =
             !I_stricmp(switchGateMenuName, "main_text") ? 0u :
             !I_stricmp(switchGateMenuName, "main") ? 1u :
-            !I_stricmp(switchGateMenuName, "options_graphics") ? 2u : 3u;
+            !I_stricmp(switchGateMenuName, "options_graphics") ? 2u :
+            !I_stricmp(switchGateMenuName, "player_profile") ? 3u : 4u;
         if (switchMenuGateTraceCount[switchGateSlot] < 8u)
         {
             char trace[640];
@@ -9827,6 +9861,35 @@ void __cdecl Item_GameMsgWindow_Paint(UiContext *dc, itemDef_s *item)
         MyAssertHandler(".\\ui\\ui_shared.cpp", 5581, 0, "%s", "item");
     if (CL_IsCgameInitialized(dc->localClientNum))
     {
+#ifdef __SWITCH__
+        if (item->gameMsgWindowIndex == 2u)
+        {
+            const uint64_t frame =
+                g_switchScreenFrameSequence.load(std::memory_order_relaxed);
+            static uint64_t lastSubtitleWindowTraceFrame = ~uint64_t(0);
+            if (frame != lastSubtitleWindowTraceFrame && frame % 300u == 0u)
+            {
+                char trace[384];
+                std::snprintf(
+                    trace,
+                    sizeof(trace),
+                    "[KisakCOD][HUD GAME MSG ITEM] frame=%llu menu=%s itemFlags=%08x itemVisible=%u rect=%.1f,%.1f %.1fx%.1f windowIndex=%u mode=%u\n",
+                    static_cast<unsigned long long>(frame),
+                    item->parent && item->parent->window.name
+                        ? item->parent->window.name : "(no-parent)",
+                    static_cast<unsigned>(item->window.dynamicFlags[dc->localClientNum]),
+                    Window_IsVisible(dc->localClientNum, &item->window) ? 1u : 0u,
+                    item->window.rect.x,
+                    item->window.rect.y,
+                    item->window.rect.w,
+                    item->window.rect.h,
+                    item->gameMsgWindowIndex,
+                    item->gameMsgWindowMode);
+                Switch_LogWrite(trace);
+                lastSubtitleWindowTraceFrame = frame;
+            }
+        }
+#endif
         if (item->gameMsgWindowIndex >= 4u)
         {
             v2 = va("Game message window index %d is not valid. Must be in [0, %d).", item->gameMsgWindowIndex, 4);

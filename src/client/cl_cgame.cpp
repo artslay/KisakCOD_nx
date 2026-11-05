@@ -619,6 +619,29 @@ void __cdecl CL_SubtitlePrint(int localClientNum, const char *text, int duration
 {
     const char *String; // r3
 
+#ifdef __SWITCH__
+    {
+        static uint32_t switchSubtitleQueueTraceCount = 0;
+        const int subtitlesEnabled =
+            cg_subtitles && cg_subtitles->current.enabled ? 1 : 0;
+        if (switchSubtitleQueueTraceCount < 96u)
+        {
+            char trace[256];
+            std::snprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][HUD GAME SUBTITLE] event=queue local=%d enabled=%d duration=%d width=%d textLen=%u\n",
+                localClientNum,
+                subtitlesEnabled,
+                duration,
+                pixelWidth,
+                static_cast<unsigned>(text ? std::strlen(text) : 0u));
+            Switch_LogWrite(trace);
+            ++switchSubtitleQueueTraceCount;
+        }
+    }
+#endif
+
     if (cg_subtitles->current.enabled)
     {
         String = SEH_StringEd_GetString(text);

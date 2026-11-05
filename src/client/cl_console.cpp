@@ -1717,6 +1717,50 @@ void __cdecl Con_DrawGameMessageWindow(
     msgwnd_mode_t mode)
 {
 
+#ifdef __SWITCH__
+    if (windowIndex == 2u)
+    {
+        const MessageWindow *subtitleWindow =
+            &con.messageBuffer[localClientNum].gamemsgWindows[windowIndex];
+        const int uiKeyCatcher =
+            (clientUIActives[localClientNum].keyCatchers & KEYCATCH_UI) != 0;
+        const int displayHudWithKeyCatcher =
+            clientUIActives[localClientNum].displayHUDWithKeycatchUI ? 1 : 0;
+        const int suppressForUi =
+            uiKeyCatcher && !displayHudWithKeyCatcher;
+        const int paused = cg_paused->current.integer ? 1 : 0;
+        static int lastActiveLines = -1;
+        static int lastSuppressForUi = -1;
+        static int lastPaused = -1;
+        const uint64_t frame =
+            g_switchScreenFrameSequence.load(std::memory_order_relaxed);
+        if (subtitleWindow->activeLineCount != lastActiveLines ||
+            suppressForUi != lastSuppressForUi ||
+            paused != lastPaused ||
+            frame % 300u == 0u)
+        {
+            char trace[320];
+            Com_sprintf(
+                trace,
+                sizeof(trace),
+                "[KisakCOD][HUD GAME MSG DRAW] frame=%llu index=2 activeLines=%d uiCatcher=%d displayHUDWithKeycatchUI=%d suppressed=%d paused=%d pos=%d,%d scale=%.3f\n",
+                static_cast<unsigned long long>(frame),
+                subtitleWindow->activeLineCount,
+                uiKeyCatcher,
+                displayHudWithKeyCatcher,
+                suppressForUi,
+                paused,
+                xPos,
+                yPos,
+                fontScale);
+            Switch_LogWrite(trace);
+            lastActiveLines = subtitleWindow->activeLineCount;
+            lastSuppressForUi = suppressForUi;
+            lastPaused = paused;
+        }
+    }
+#endif
+
     if (!cg_paused->current.integer)
     {
         bcassert(windowIndex, GAMEMSG_WINDOW_COUNT); // 4
