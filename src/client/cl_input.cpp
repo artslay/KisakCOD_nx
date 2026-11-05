@@ -2095,7 +2095,6 @@ void __cdecl CL_InitInput()
     CL_SetSwitchDefaultGamepadBinding(K_AUX5, "+smoke");
     CL_SetSwitchDefaultGamepadBinding(K_AUX6, "+sprint");
     CL_SetSwitchDefaultGamepadBinding(K_AUX7, "+melee");
-    CL_SetSwitchDefaultGamepadBinding(K_AUX8, "+nightvision");
     CL_SetSwitchDefaultGamepadBinding(K_AUX9, "weapprev");
     CL_SetSwitchDefaultGamepadBinding(K_AUX10, "weapnext");
 #endif
