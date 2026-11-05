@@ -2095,6 +2095,9 @@ void __cdecl CL_InitInput()
     CL_SetSwitchDefaultGamepadBinding(K_AUX5, "+smoke");
     CL_SetSwitchDefaultGamepadBinding(K_AUX6, "+sprint");
     CL_SetSwitchDefaultGamepadBinding(K_AUX7, "+melee");
+    // The Switch D-pad Up emulates the stock PC N key. Ensure the stock
+    // night-vision command is bound there when no user binding exists.
+    CL_SetSwitchDefaultGamepadBinding('n', "+nightvision");
     CL_SetSwitchDefaultGamepadBinding(K_AUX9, "weapprev");
     CL_SetSwitchDefaultGamepadBinding(K_AUX10, "weapnext");
     CL_SetSwitchDefaultGamepadBinding(K_AUX11, "+actionslot 2");
