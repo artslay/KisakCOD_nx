@@ -97,12 +97,13 @@ CompareCaseInfo
 */
 int CompareCaseInfo(const void *elem1, const void *elem2)
 {
-	if (*(intptr_t *)elem1 > *(intptr_t *)elem2)
-	{
+	intptr_t key1;
+	intptr_t key2;
+	memcpy(&key1, elem1, sizeof(key1));
+	memcpy(&key2, elem2, sizeof(key2));
+	if (key1 > key2)
 		return -1;
-	}
-
-	return *(intptr_t *)elem1 < *(intptr_t *)elem2;
+	return key1 < key2;
 }
 
 /*
@@ -666,7 +667,8 @@ void ConnectContinueStatements()
 
 	for (ContinueStatementInfo *statement = scrCompileGlob.currentContinueStatement; statement; statement = statement->next)
 	{
-		*(int32_t *)statement->codePos = static_cast<int32_t>(codePos - statement->nextCodePos);
+		const int32_t offset = static_cast<int32_t>(codePos - statement->nextCodePos);
+		memcpy(statement->codePos, &offset, sizeof(offset));
 	}
 }
 
@@ -724,7 +726,8 @@ void ConnectBreakStatements()
 			Switch_LogWrite(line);
 		}
 #endif
-		*(int32_t *)statement->codePos = static_cast<int32_t>(codePos - statement->nextCodePos);
+		const int32_t offset = static_cast<int32_t>(codePos - statement->nextCodePos);
+		memcpy(statement->codePos, &offset, sizeof(offset));
 	}
 }
 
@@ -805,7 +808,7 @@ void Scr_CopyBlock(scr_block_s *from, scr_block_s **to)
 	if (*to == NULL)
 	{
 		//*to = (scr_block_s *)Hunk_AllocateTempMemoryHighInternal(sizeof(**to));
-		*to = (scr_block_s*)Hunk_AllocateTempMemoryHigh(536, "Scr_CopyBlock");
+		*to = (scr_block_s*)Hunk_AllocateTempMemoryHigh(sizeof(scr_block_s), "Scr_CopyBlock");
 	}
 
 	**to = *from;
@@ -1098,8 +1101,8 @@ EmitCodepos
 */
 void EmitCodepos(const char *pos)
 {
-	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(const char *));
-	*(const char **)scrCompileGlob.codePos = pos;
+	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(pos));
+	memcpy(scrCompileGlob.codePos, &pos, sizeof(pos));
 }
 
 /*
@@ -1109,8 +1112,9 @@ EmitString
 */
 void EmitString(uint32_t value)
 {
-	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(unsigned short));
-	*(unsigned short *)scrCompileGlob.codePos = value;
+	const unsigned short encodedValue = static_cast<unsigned short>(value);
+	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(encodedValue));
+	memcpy(scrCompileGlob.codePos, &encodedValue, sizeof(encodedValue));
 }
 
 /*
@@ -1120,8 +1124,8 @@ EmitFloat
 */
 void EmitFloat(float value)
 {
-	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(float));
-	*(float *)scrCompileGlob.codePos = value;
+	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(value));
+	memcpy(scrCompileGlob.codePos, &value, sizeof(value));
 }
 
 /*
@@ -1131,8 +1135,8 @@ EmitUnsignedShort
 */
 void EmitUnsignedShort(unsigned short value)
 {
-	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(unsigned short));
-	*(unsigned short *)scrCompileGlob.codePos = value;
+	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(value));
+	memcpy(scrCompileGlob.codePos, &value, sizeof(value));
 }
 
 /*
@@ -1142,8 +1146,8 @@ EmitShort
 */
 void EmitShort(short value)
 {
-	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(short));
-	*(short *)scrCompileGlob.codePos = value;
+	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(value));
+	memcpy(scrCompileGlob.codePos, &value, sizeof(value));
 }
 
 /*
@@ -1153,8 +1157,8 @@ EmitInteger
 */
 void EmitInteger(int value)
 {
-	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(int));
-	*(int *)scrCompileGlob.codePos = value;
+	scrCompileGlob.codePos = (byte *)TempMallocAlignStrict(sizeof(value));
+	memcpy(scrCompileGlob.codePos, &value, sizeof(value));
 }
 
 /*
@@ -1193,8 +1197,9 @@ void EmitCanonicalString(uint32_t stringValue)
 	}
 	else if (scrCompilePub.developer_statement == SCR_DEV_EVALUATE)
 	{
-		*(unsigned short*)scrCompileGlob.codePos = Scr_CompileCanonicalString(stringValue);
-		if (!*scrCompileGlob.codePos)
+		const unsigned short canonicalString = Scr_CompileCanonicalString(stringValue);
+		memcpy(scrCompileGlob.codePos, &canonicalString, sizeof(canonicalString));
+		if (!canonicalString)
 			CompileError(0, "unknown field");
 	}
 	else
@@ -1204,7 +1209,8 @@ void EmitCanonicalString(uint32_t stringValue)
 			SL_AddRefToString(stringValue);
 		}
 
-		*(unsigned short *)scrCompileGlob.codePos = SL_TransferToCanonicalString(stringValue);
+		const unsigned short canonicalString = SL_TransferToCanonicalString(stringValue);
+		memcpy(scrCompileGlob.codePos, &canonicalString, sizeof(canonicalString));
 	}
 }
 
