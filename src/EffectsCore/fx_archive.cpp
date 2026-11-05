@@ -7,10 +7,15 @@
 
 void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
 {
-    int32_t v2; // [esp+0h] [ebp-201Ch] BYREF
+    uint32_t savedSystemAddress; // legacy 32-bit archive trailer
     FxEffectDefTable table; // [esp+4h] [ebp-2018h] BYREF
-    int32_t v4; // [esp+200Ch] [ebp-10h]
+#ifndef __SWITCH__
     int32_t relocationDistance; // [esp+2010h] [ebp-Ch]
+#endif
+#ifdef __SWITCH__
+    uintptr_t visStateBufferReadOffset;
+    uintptr_t visStateBufferWriteOffset;
+#endif
     void *p; // [esp+2014h] [ebp-8h]
     FxSystemBuffers *systemBuffers; // [esp+2018h] [ebp-4h]
 
@@ -34,14 +39,38 @@ void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile)
     FxSystem *restoredSystem = static_cast<FxSystem *>(p);
     if (!restoredSystem->isArchiving || restoredSystem->iteratorCount)
         Com_Error(ERR_DROP, "Invalid save file");
-    FX_LinkSystemBuffers((FxSystem *)p, systemBuffers);
+#ifdef __SWITCH__
+    // The archive contains full-width AArch64 pointers in FxSystem, but its
+    // trailing relocation base is still only 32 bits. Do not use that
+    // truncated base to relocate the two pointers into FxSystemBuffers.
+    // Preserve their slot offsets relative to the archived visState base.
+    const uintptr_t savedVisStateBase = reinterpret_cast<uintptr_t>(restoredSystem->visState);
+    const uintptr_t savedVisStateRead = reinterpret_cast<uintptr_t>(restoredSystem->visStateBufferRead);
+    const uintptr_t savedVisStateWrite = reinterpret_cast<uintptr_t>(restoredSystem->visStateBufferWrite);
+    if (savedVisStateRead < savedVisStateBase || savedVisStateWrite < savedVisStateBase)
+        Com_Error(ERR_DROP, "Invalid FX visibility buffer pointers in save file");
+    visStateBufferReadOffset = savedVisStateRead - savedVisStateBase;
+    visStateBufferWriteOffset = savedVisStateWrite - savedVisStateBase;
+    if (!((visStateBufferReadOffset == 0 && visStateBufferWriteOffset == sizeof(FxVisState))
+        || (visStateBufferReadOffset == sizeof(FxVisState) && visStateBufferWriteOffset == 0)))
+        Com_Error(ERR_DROP, "Invalid FX visibility buffer offsets in save file");
+#endif
+    FX_LinkSystemBuffers(restoredSystem, systemBuffers);
     MemFile_ReadData(memFile, 291968, (uint8_t *)systemBuffers);
-    FX_FixupEffectDefHandles((FxSystem *)p, &table);
-    MemFile_ReadData(memFile, 4, (uint8_t *)&v2);
-    v4 = v2;
-    relocationDistance = static_cast<int32_t>(reinterpret_cast<uintptr_t>(p) - static_cast<uintptr_t>(static_cast<uint32_t>(v2)));
-    FX_RelocateSystem((FxSystem *)p, relocationDistance);
-    FX_RestorePhysicsData((FxSystem *)p, memFile);
+    FX_FixupEffectDefHandles(restoredSystem, &table);
+    // Consume the legacy 32-bit system address to keep the save stream layout.
+    MemFile_ReadData(memFile, 4, (uint8_t *)&savedSystemAddress);
+#ifdef __SWITCH__
+    restoredSystem->visStateBufferRead = reinterpret_cast<const FxVisState *>(
+        reinterpret_cast<uintptr_t>(restoredSystem->visState) + visStateBufferReadOffset);
+    restoredSystem->visStateBufferWrite = reinterpret_cast<FxVisState *>(
+        reinterpret_cast<uintptr_t>(restoredSystem->visState) + visStateBufferWriteOffset);
+#else
+    relocationDistance = static_cast<int32_t>(
+        reinterpret_cast<uintptr_t>(p) - static_cast<uintptr_t>(savedSystemAddress));
+    FX_RelocateSystem(restoredSystem, relocationDistance);
+#endif
+    FX_RestorePhysicsData(restoredSystem, memFile);
     restoredSystem->isArchiving = false;
 }
 
