@@ -1142,7 +1142,27 @@ void __cdecl ReadClient(gclient_s *client, SaveGame *save)
 
     if (!save)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\g_save.cpp", 1262, 0, "%s", "save");
+#ifdef __SWITCH__
+    const int switchGroundTiltBeforeRead = client->groundTiltEntNum;
+#endif
     G_ReadStruct(gclientFields, (unsigned __int8 *)client, 46104, save);
+#ifdef __SWITCH__
+    {
+        char trace[320];
+        const size_t groundTiltOffset = offsetof(gclient_s, groundTiltEntNum);
+        std::snprintf(
+            trace,
+            sizeof(trace),
+            "[KisakCOD][PLAYER INPUT] client-load bytes=46104 sizeof=%zu groundOffset=%zu groundEnd=%zu ptrSize=%zu before=%d after=%d\\n",
+            sizeof(gclient_s),
+            groundTiltOffset,
+            groundTiltOffset + sizeof(client->groundTiltEntNum),
+            sizeof(void *),
+            switchGroundTiltBeforeRead,
+            client->groundTiltEntNum);
+        Switch_LogWrite(trace);
+    }
+#endif
     SaveMemory_LoadRead(&client->pers.cmd.buttons, 4, save);
     client->pers.cmd.weapon = ReadWeaponIndex(save);
     WeaponIndex = ReadWeaponIndex(save);
