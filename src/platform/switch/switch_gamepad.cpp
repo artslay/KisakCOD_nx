@@ -149,6 +149,122 @@ static void ReleaseForwardedKeysForReleasedButtons()
     }
 }
 
+/*
+ * The stock bind menu captures key-down events. Switch controls are normally
+ * routed as gameplay keys only outside KEYCATCH_UI, so a bind capture needs a
+ * small input path of its own. Delay a single-button capture until release:
+ * while that first button is still held, ZL + D-pad Right can be captured as
+ * its distinct action-slot key. Pressing both in the same poll is deliberately
+ * not treated as a chord; the first button must already be down.
+ */
+struct SwitchBindCaptureButton
+{
+    u64 mask;
+    int key;
+};
+
+static constexpr SwitchBindCaptureButton g_switchBindCaptureButtons[] =
+{
+    { HidNpadButton_B,      K_AUX1 },
+    { HidNpadButton_A,      K_AUX2 },
+    { HidNpadButton_ZL,     K_AUX3 },
+    { HidNpadButton_R,      K_AUX4 },
+    { HidNpadButton_L,      K_AUX5 },
+    { HidNpadButton_StickL, K_AUX6 },
+    { HidNpadButton_StickR, K_AUX7 },
+    { HidNpadButton_X,      'r' },
+    { HidNpadButton_ZR,     K_MOUSE1 },
+    { HidNpadButton_Y,      'f' },
+    { HidNpadButton_Left,   K_AUX10 },
+    { HidNpadButton_Right,  K_AUX11 },
+    { HidNpadButton_Down,   K_AUX13 },
+    { HidNpadButton_Up,     'n' },
+    { HidNpadButton_Minus,  K_TAB }
+};
+
+static bool g_switchBindCaptureActive = false;
+static u64 g_switchBindCaptureIgnoredButtons = 0;
+static u64 g_switchBindCapturePendingMask = 0;
+static int g_switchBindCapturePendingKey = K_NONE;
+
+static void Switch_DispatchCapturedBinding(int key)
+{
+    const uint32_t eventTime = Sys_Milliseconds();
+    CL_KeyEvent(0, key, 1, eventTime);
+    CL_KeyEvent(0, key, 0, eventTime);
+}
+
+static bool Switch_CaptureGamepadBinding()
+{
+    if (!Display_KeyBindPending())
+    {
+        g_switchBindCaptureActive = false;
+        g_switchBindCaptureIgnoredButtons = 0;
+        g_switchBindCapturePendingMask = 0;
+        g_switchBindCapturePendingKey = K_NONE;
+        return false;
+    }
+
+    if (!g_switchBindCaptureActive)
+    {
+        // Do not capture the button which opened the "Press a key" prompt.
+        g_switchBindCaptureActive = true;
+        g_switchBindCaptureIgnoredButtons = g_buttons;
+        g_switchBindCapturePendingMask = 0;
+        g_switchBindCapturePendingKey = K_NONE;
+        return true;
+    }
+
+    g_switchBindCaptureIgnoredButtons &= g_buttons;
+    const u64 newlyPressed =
+        (g_buttons & ~g_previousButtons) & ~g_switchBindCaptureIgnoredButtons;
+    const u64 newlyReleased = g_previousButtons & ~g_buttons;
+
+    if (g_switchBindCapturePendingMask &&
+        (g_buttons & g_switchBindCapturePendingMask))
+    {
+        constexpr u64 underbarrelChord = HidNpadButton_ZL | HidNpadButton_Right;
+        if ((g_switchBindCapturePendingMask == HidNpadButton_ZL &&
+             (newlyPressed & HidNpadButton_Right)) ||
+            (g_switchBindCapturePendingMask == HidNpadButton_Right &&
+             (newlyPressed & HidNpadButton_ZL)))
+        {
+            Switch_DispatchCapturedBinding(K_AUX12);
+            g_switchBindCapturePendingMask = 0;
+            g_switchBindCapturePendingKey = K_NONE;
+            g_switchBindCaptureIgnoredButtons |= underbarrelChord;
+            return true;
+        }
+    }
+
+    if (g_switchBindCapturePendingMask &&
+        (newlyReleased & g_switchBindCapturePendingMask))
+    {
+        Switch_DispatchCapturedBinding(g_switchBindCapturePendingKey);
+        g_switchBindCaptureIgnoredButtons |= g_switchBindCapturePendingMask;
+        g_switchBindCapturePendingMask = 0;
+        g_switchBindCapturePendingKey = K_NONE;
+        return true;
+    }
+
+    if (!g_switchBindCapturePendingMask && newlyPressed)
+    {
+        for (const SwitchBindCaptureButton &button : g_switchBindCaptureButtons)
+        {
+            if (newlyPressed & button.mask)
+            {
+                g_switchBindCapturePendingMask = button.mask;
+                g_switchBindCapturePendingKey = button.key;
+                break;
+            }
+        }
+    }
+
+    // While waiting for a binding, suppress menu navigation and gameplay
+    // routing so the physical button is delivered exactly once by this path.
+    return true;
+}
+
 static u64 ButtonMask(GPadButton button)
 {
     switch (button)
@@ -262,6 +378,10 @@ void Switch_GamepadInit()
     g_connected = false;
     g_consoleShortcutConsumed = false;
     g_cinematicSkipKeyDown = false;
+    g_switchBindCaptureActive = false;
+    g_switchBindCaptureIgnoredButtons = 0;
+    g_switchBindCapturePendingMask = 0;
+    g_switchBindCapturePendingKey = K_NONE;
     g_initialized = true;
 }
 
@@ -325,6 +445,11 @@ void Switch_GamepadFrame()
     // console, gameplay, and cinematic routing mode. In particular, a B press
     // that closes the pause menu must still release its synthetic Escape key.
     ReleaseForwardedKeysForReleasedButtons();
+
+    // Bind capture must run before console shortcuts and ordinary UI routing,
+    // otherwise L3/R3 and chord buttons are consumed or translated as navigation.
+    if (Switch_CaptureGamepadBinding())
+        return;
 
     // padUpdate() remains valid for handheld mode and connected standard pads.
     // Consider the pad active whenever the standard input service is producing
@@ -560,6 +685,10 @@ void Switch_GamepadFrame()
 void Switch_GamepadShutdown()
 {
     ReleaseUnderbarrelChordKey();
+    g_switchBindCaptureActive = false;
+    g_switchBindCaptureIgnoredButtons = 0;
+    g_switchBindCapturePendingMask = 0;
+    g_switchBindCapturePendingKey = K_NONE;
 
     for (int key = 0; key < 256; ++key)
     {
