@@ -452,8 +452,8 @@ void Switch_GamepadFrame()
     // through the standard key path so the stock +activate binding runs.
     SendKeyEdge(HidNpadButton_Y, 'f', gameplayActiveNow);
 
-    // Weapon cycling and night vision also use normal engine key bindings.
-    SendKeyEdge(HidNpadButton_Left, K_AUX9, gameplayActiveNow);
+    // Keep a single weapon-cycle control on D-pad Right. D-pad Left is
+    // reserved for an action slot; D-pad Down remains available as well.
     SendKeyEdge(HidNpadButton_Right, K_AUX10, gameplayActiveNow);
     // Emulate the normal PC N key so level/config bindings remain authoritative.
     SendKeyEdge(HidNpadButton_Up, 'n', gameplayActiveNow);
