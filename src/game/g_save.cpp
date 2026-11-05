@@ -1147,6 +1147,11 @@ void __cdecl ReadClient(gclient_s *client, SaveGame *save)
 #endif
     G_ReadStruct(gclientFields, (unsigned __int8 *)client, 46104, save);
 #ifdef __SWITCH__
+    // The legacy client snapshot ends at this field's offset on 64-bit Switch.
+    // groundTiltEntNum is not in gclientFields, so it is transient across loads.
+    client->groundTiltEntNum = ENTITYNUM_NONE;
+#endif
+#ifdef __SWITCH__
     {
         char trace[320];
         const size_t groundTiltOffset = offsetof(gclient_s, groundTiltEntNum);
